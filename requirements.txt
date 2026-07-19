@@ -1,0 +1,5 @@
+graphifyy==0.9.17
+claude-mem==1.0.3
+markitdown==0.1.6
+magika==0.6.3
+youtube-transcript-api
