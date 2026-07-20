@@ -14,13 +14,17 @@ Pipeline en deux étapes :
 
 ### Récupérer les résultats sans repasser par Claude Code
 
-La dernière cellule du notebook pousse automatiquement `vix_predictions_{train,test}.parquet`, `vix_models_metadata.parquet` et `VIX_ML3_stacking_report.xlsx` vers la branche `results/vix-ml3-latest` de ce repo (dossier `results/`), à condition d'avoir configuré un secret Colab :
+La dernière cellule du notebook archive automatiquement `vix_predictions_{train,test}.parquet`, `vix_models_metadata.parquet` et `VIX_ML3_stacking_report.xlsx` sur la branche `results/vix-ml3` de ce repo, dans un dossier horodaté `results/{version}/{date}_{heure}/` — **jamais écrasé** : chaque run Colab garde sa propre trace. Condition : avoir configuré un secret Colab :
 
 1. Créer un [Personal Access Token GitHub](https://github.com/settings/personal-access-tokens/new) *fine-grained*, limité à ce repo (`LP-D/claude`), avec la permission **Contents: Read and write**.
 2. Dans Colab : icône clé 🔑 (barre latérale gauche) → *Ajouter un secret* → nom `GITHUB_TOKEN`, valeur = le token → activer l'accès pour ce notebook.
 3. Lancer le notebook normalement ("Exécuter tout"). Sans ce secret, la cellule est simplement ignorée (aucun impact sur le reste).
 
-Les résultats sont ensuite visibles directement sur GitHub, branche `results/vix-ml3-latest`, sans avoir à télécharger quoi que ce soit depuis Colab.
+Les résultats sont ensuite visibles directement sur GitHub, branche `results/vix-ml3`, sans avoir à télécharger quoi que ce soit depuis Colab.
+
+## Versioning
+
+Le notebook porte un numéro de version (`NOTEBOOK_VERSION`, visible au tout début de l'exécution) incrémenté uniquement lors d'une évolution fonctionnelle du pipeline — pas pour un simple correctif de bug. Ce numéro tague les dossiers de résultats archivés (`results/{version}/...`), pour savoir de quelle version du code provient chaque run.
 
 ## `notebooks/archive/`
 
