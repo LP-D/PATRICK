@@ -2,11 +2,17 @@
 
 Workspace de recherche VIX (prédiction directionnelle/amplitude via ML + Deep Learning).
 
-## Notebook courant
+## Notebook courant — modèle unique
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/VIX_CHAMPION_WF.ipynb)
+
+**`notebooks/VIX_CHAMPION_WF.ipynb`** (v1) — validation walk-forward du modèle champion du rapport (STRESS h=5j GradientBoosting N=5, premier à dépasser 0.50 sur les 3 métriques hiérarchiques mais uniquement en split statique), avec le RandomForest GLOBAL h=5j (référence WF-stable) comme comparateur. Sélection des features refaite par SHAP à l'intérieur de chaque fold (anti-fuite de sélection). Résultats archivés sur la branche `results/vix-champion-wf`.
+
+## Notebook stacking (mis en pause)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/VIX_ML3.ipynb)
 
-**`notebooks/VIX_ML3.ipynb`** — version corrigée et à jour. Un clic sur le badge ouvre directement la dernière version sur GitHub dans Colab (pas d'upload/download manuel).
+**`notebooks/VIX_ML3.ipynb`** — pipeline de stacking massif (9465+ modèles), corrigé (fuites, RAM) mais mis en pause : le stacking a systématiquement sous-performé le meilleur modèle individuel sur 4 expériences indépendantes. Conservé exécutable pour référence.
 
 Pipeline en deux étapes :
 1. Entraîne le panel complet de modèles ML (~9465 configs) + 7 architectures DL sur 6 horizons × 4 régimes de VIX, et construit une **base de prédictions** (OOF pour le train, direct pour le test) sauvegardée en `.parquet`.
