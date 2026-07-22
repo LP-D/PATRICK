@@ -11,6 +11,7 @@ notebooks/
   validation/                   — notebooks de validation walk-forward (une question chacun)
   final_campaign/               — campagne finale exhaustive (4 notebooks liés entre eux)
   production/                   — déploiement + recherche appliquée (portefeuille simulé)
+  research/                     — analyse structurelle (économétrie), hors pipeline ML
   archive/                      — itérations précédentes, conservées pour référence
 ```
 
@@ -65,6 +66,12 @@ en parallèle) :
 
 Les deux dépendent du dataset poussé par `VIX_FINAL_FEATURES`.
 
+## `notebooks/research/` — analyse structurelle (hors pipeline ML)
+
+| Notebook | Rôle |
+|---|---|
+| [`VIX_VAR_MACRO`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/research/VIX_VAR_MACRO.ipynb) | VAR structurel VIX ↔ macro (pente des taux, breakeven inflation, conditions financières, taux Fed) : stationnarité (ADF), cointégration (Johansen), causalité de Granger, IRF orthogonalisées (Cholesky), FEVD. Identifie des pistes de features candidates pour le pipeline ML — non validées, à confirmer séparément via SHAP + walk-forward. |
+
 ## `notebooks/VIX_ML3.ipynb` — pipeline de stacking (historique, en pause)
 
 Pipeline de stacking massif (9465+ modèles), corrigé (fuites, RAM) mais mis en pause : le
@@ -96,6 +103,13 @@ en relançant le notebook), pas du code. `main` doit rester limité à `notebook
 `README.md` et `requirements.txt`. GitHub propose automatiquement un lien "Create a pull
 request" après chaque `git push` d'une branche `results/*` — **ne pas cliquer dessus / ne
 pas merger cette PR**.
+
+**Autre piège** : Colab peut re-committer un notebook directement sur `main` à son ancien
+chemin (ex. `notebooks/VIX_OHLC_VOL.ipynb`) si on l'ouvre depuis un lien/onglet resté sur
+l'ancienne arborescence (avant un déplacement dans un sous-dossier) et qu'on utilise
+*Fichier → Enregistrer une copie dans GitHub* — cela recrée un doublon obsolète. Toujours
+ouvrir les notebooks depuis les liens de ce README (ou `notebooks/<sous-dossier>/...` à
+jour) pour éviter ça.
 
 ## Versioning
 
