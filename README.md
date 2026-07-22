@@ -46,6 +46,7 @@ des résultats parfois prometteurs en split statique.
 | [`VIX_PURGED_CV`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_PURGED_CV.ipynb) | Le walk-forward a-t-il un look-ahead subtil aux frontières de fold (purging) ? |
 | [`VIX_OHLC_VOL`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_OHLC_VOL.ipynb) | Les estimateurs de volatilité réalisée OHLC (Parkinson/GK/RS/Yang-Zhang) ajoutent-ils du signal ? |
 | [`VIX_CALIBRATED_THRESHOLD`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_CALIBRATED_THRESHOLD.ipynb) | La calibration + un seuil de décision causal améliorent-ils F1_UP_FORT/F1_DOWN_FORT ? *(oui, hors régime STRESS)* |
+| [`VIX_FEATURE_SELECTION`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_FEATURE_SELECTION.ipynb) | SHAP (méthode actuelle) vs RFE (wrapper) vs LASSO (embedded) pour la sélection de features, à isométrie stricte sur la config GLOBAL RF h=5j N=8 SMOTE — la méthode de sélection est-elle un facteur limitant ? |
 
 ## `notebooks/final_campaign/` — campagne exhaustive "par acquis de confiance"
 
@@ -71,6 +72,8 @@ Les deux dépendent du dataset poussé par `VIX_FINAL_FEATURES`.
 | Notebook | Rôle |
 |---|---|
 | [`VIX_VAR_MACRO`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/research/VIX_VAR_MACRO.ipynb) | VAR structurel VIX ↔ macro (pente des taux, breakeven inflation, conditions financières, taux Fed) : stationnarité (ADF), cointégration (Johansen), causalité de Granger, IRF orthogonalisées (Cholesky), FEVD. Identifie des pistes de features candidates pour le pipeline ML — non validées, à confirmer séparément via SHAP + walk-forward. |
+| [`VIX_VECM`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/research/VIX_VECM.ipynb) | Sur les folds où Johansen détecte une cointégration, un VECM (via sa représentation VAR en niveaux) bat-il la référence ML en walk-forward strict (prévision glissante, paramètres figés par fold) ? |
+| [`VIX_VAR_BENCHMARK`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/research/VIX_VAR_BENCHMARK.ipynb) | Benchmark inconditionnel : un VAR classique estimé en niveaux (sans traitement de la non-stationnarité) contient-il, à lui seul, un signal directionnel comparable au ML ? |
 
 ## `notebooks/VIX_ML3.ipynb` — pipeline de stacking (historique, en pause)
 
