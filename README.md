@@ -47,6 +47,7 @@ des résultats parfois prometteurs en split statique.
 | [`VIX_OHLC_VOL`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_OHLC_VOL.ipynb) | Les estimateurs de volatilité réalisée OHLC (Parkinson/GK/RS/Yang-Zhang) ajoutent-ils du signal ? |
 | [`VIX_CALIBRATED_THRESHOLD`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_CALIBRATED_THRESHOLD.ipynb) | La calibration + un seuil de décision causal améliorent-ils F1_UP_FORT/F1_DOWN_FORT ? *(oui, hors régime STRESS)* |
 | [`VIX_FEATURE_SELECTION`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_FEATURE_SELECTION.ipynb) | SHAP (méthode actuelle) vs RFE (wrapper) vs LASSO (embedded) pour la sélection de features, à isométrie stricte sur la config GLOBAL RF h=5j N=8 SMOTE — la méthode de sélection est-elle un facteur limitant ? |
+| [`VIX_STACKING_WF`](https://colab.research.google.com/github/LP-D/claude/blob/main/notebooks/validation/VIX_STACKING_WF.ipynb) | Le stacking Stage 2 de `VIX_ML3` (panel 5 algos + méta-modèle, gain de +0.0105 F1_dir sur son propre split statique) tient-il en walk-forward face au GLOBAL RandomForest (recalculé dans le même run) ? |
 
 ## `notebooks/final_campaign/` — campagne exhaustive "par acquis de confiance"
 
