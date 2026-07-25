@@ -1,7 +1,8 @@
 # claude
 
 Workspace de recherche VIX (prédiction directionnelle/amplitude via ML + Deep Learning),
-sous forme de notebooks Colab indépendants et résumables.
+sous forme de notebooks Colab indépendants et résumables — et `marketml/`, un cadre
+Python autonome qui généralise cette méthodologie à n'importe quel actif.
 
 ## Structure
 
@@ -13,6 +14,8 @@ notebooks/
   production/                   — déploiement + recherche appliquée (portefeuille simulé)
   research/                     — analyse structurelle (économétrie), hors pipeline ML
   archive/                      — itérations précédentes, conservées pour référence
+marketml/                        — package Python + CLI : la méthodologie ci-dessus,
+                                    généralisée à n'importe quel actif (voir marketml/README.md)
 ```
 
 Chaque notebook :
