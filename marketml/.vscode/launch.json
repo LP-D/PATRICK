@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "marketml run: vix_direction",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "marketml.cli",
+            "args": ["run", "--config", "configs/examples/vix_direction.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "marketml ingest: vix_direction",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "marketml.cli",
+            "args": ["ingest", "--config", "configs/examples/vix_direction.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "pytest: tous les tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["tests", "-v"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
