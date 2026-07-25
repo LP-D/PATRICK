@@ -7,11 +7,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from marketml.features._utils import safe_pct_change
+
 
 def returns(series: pd.Series, windows: list[int] = (1, 5, 10, 20)) -> pd.DataFrame:
     out = {}
     for w in windows:
-        out[f"ret_{w}d"] = series.pct_change(w)
+        out[f"ret_{w}d"] = safe_pct_change(series, w)
     return pd.DataFrame(out, index=series.index)
 
 
@@ -31,7 +33,7 @@ def ma_ratio(series: pd.Series, windows: list[int] = (10, 20, 50)) -> pd.DataFra
 
 
 def rolling_vol(series: pd.Series, windows: list[int] = (10, 20)) -> pd.DataFrame:
-    ret = series.pct_change()
+    ret = safe_pct_change(series)
     out = {}
     for w in windows:
         out[f"vol_{w}d"] = ret.rolling(w).std()
