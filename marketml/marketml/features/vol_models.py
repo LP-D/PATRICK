@@ -13,13 +13,15 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from marketml.features._utils import safe_pct_change
+
 
 def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1) -> pd.Series:
     """Volatilité conditionnelle EGARCH — intrinsèquement causale (récursive sur les
     résidus passés uniquement)."""
     from arch import arch_model
 
-    ret = (series.pct_change().dropna() * 100)
+    ret = (safe_pct_change(series).dropna() * 100)
     try:
         am = arch_model(ret, vol="EGARCH", p=p, o=o, q=q, dist="normal")
         res = am.fit(disp="off")
@@ -58,14 +60,21 @@ def hmm_filtered_stress_prob(series: pd.Series, n_states: int = 2, seed: int = 4
     from scipy.special import logsumexp
     from scipy.stats import norm
 
-    ret = series.pct_change().dropna()
+    ret = safe_pct_change(series).dropna()
     x = ret.values.reshape(-1, 1)
     if len(x) < 100:
         return pd.Series(np.nan, index=series.index, name="hmm_filtered_stress_prob")
 
     model = GaussianHMM(n_components=n_states, covariance_type="diag",
                          random_state=seed, n_iter=100)
-    model.fit(x)
+    try:
+        model.fit(x)
+    except Exception as e:
+        # [FIX] filet de sécurité en plus du safe_pct_change : une série encore
+        # dégénérée (quasi constante, etc.) peut faire échouer l'ajustement HMM
+        # pour d'autres raisons que des inf — ne doit pas planter tout le run.
+        print(f"  [WARN] HMM: {str(e)[:100]}")
+        return pd.Series(np.nan, index=series.index, name="hmm_filtered_stress_prob")
 
     n = len(x)
     means = model.means_.ravel()
@@ -93,7 +102,7 @@ def heston_proxy_features(series: pd.Series, short_window: int = 20,
     variance réalisée, faute de volatilité implicite d'options dans ce cadre :
     `heston_theta` = niveau long terme, `heston_spread` = écart de la variance
     réalisée courante à ce niveau (l'équivalent du gap de retour à la moyenne)."""
-    ret = series.pct_change()
+    ret = safe_pct_change(series)
     rv = (ret ** 2).rolling(short_window).mean() * 252
     theta = rv.rolling(long_window, min_periods=60).mean()
     spread = rv - theta
@@ -104,7 +113,7 @@ def vrp_proxy(series: pd.Series, short_window: int = 10, long_window: int = 60,
               clip: tuple[float, float] = (-0.5, 0.5)) -> pd.Series:
     """Proxy de prime de risque de variance (VRP), tronqué : écart relatif entre
     vol réalisée courte et longue, faute de vol implicite d'options."""
-    ret = series.pct_change()
+    ret = safe_pct_change(series)
     vol_short = ret.rolling(short_window).std() * np.sqrt(252)
     vol_long = ret.rolling(long_window).std() * np.sqrt(252)
     vrp = (vol_short - vol_long) / vol_long.replace(0, np.nan)

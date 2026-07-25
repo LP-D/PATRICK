@@ -8,6 +8,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from marketml.features._utils import safe_pct_change
+
 
 def _hurst_of_window(x: np.ndarray) -> float:
     n = len(x)
@@ -39,13 +41,13 @@ def rolling_hurst(series: pd.Series, window: int = 100) -> pd.Series:
 def rolling_semivariance(series: pd.Series, window: int = 20) -> pd.Series:
     """Volatilité réalisée ne comptant que les rendements négatifs (risque baissier),
     annualisée."""
-    ret = series.pct_change()
+    ret = safe_pct_change(series)
     neg = ret.where(ret < 0, 0.0)
     return np.sqrt((neg ** 2).rolling(window).mean()) * np.sqrt(252)
 
 
 def rolling_skew(series: pd.Series, window: int = 20) -> pd.Series:
-    return series.pct_change().rolling(window).skew()
+    return safe_pct_change(series).rolling(window).skew()
 
 
 def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 42) -> pd.Series:
@@ -54,7 +56,7 @@ def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 4
     (mu, phi, sigma_eta) calibrés grossièrement par corrélation d'ordre 1 sur
     log(r_t^2) — ce n'est pas une MLE complète, mais suffisant pour une feature de
     volatilité filtrée causale (chaque h_t n'utilise que r_1..r_t)."""
-    ret = series.pct_change().fillna(0.0).values
+    ret = safe_pct_change(series).fillna(0.0).values
     n = len(ret)
     log_r2 = np.log(ret ** 2 + 1e-8)
     valid = np.isfinite(log_r2)
