@@ -1,6 +1,6 @@
 import pandas as pd
 
-from marketml.validation.walkforward import build_fold_cuts
+from patrick.validation.walkforward import build_fold_cuts
 
 
 def test_build_fold_cuts_shape_and_monotonic():

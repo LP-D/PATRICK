@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from marketml.models.registry import ML_ALGOS, get_classifier
-from marketml.models.samplers import ALL_SAMPLERS, get_sampler
-from marketml.selection.registry import SELECTION_METHODS, select_features
+from patrick.models.registry import ML_ALGOS, get_classifier
+from patrick.models.samplers import ALL_SAMPLERS, get_sampler
+from patrick.selection.registry import SELECTION_METHODS, select_features
 
 
 def test_get_classifier_known_algos():

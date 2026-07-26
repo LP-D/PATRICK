@@ -1,0 +1,189 @@
+"""Internationalisation minimale (FR/EN) de l'interface web — un dict de
+chaînes + un cookie pour retenir le choix, pas de framework i18n : le site est
+un outil local mono-utilisateur, deux langues suffisent et une dépendance de
+plus (Babel, etc.) n'apporterait rien ici.
+"""
+from __future__ import annotations
+
+from starlette.requests import Request
+
+LANG_COOKIE = "patrick_lang"
+SUPPORTED_LANGS = ("fr", "en")
+DEFAULT_LANG = "fr"
+
+STRINGS: dict[str, dict[str, str]] = {
+    "tagline": {"fr": "walk-forward · SHAP · Optuna — sans YAML",
+                "en": "walk-forward · SHAP · Optuna — no YAML"},
+    "banner_run_active_prefix": {"fr": "Un run est déjà en cours (", "en": "A run is already in progress ("},
+    "banner_run_active_link": {"fr": "voir sa progression", "en": "view its progress"},
+    "banner_run_active_suffix": {"fr": ". Un seul run à la fois est supporté.",
+                                  "en": ". Only one run at a time is supported."},
+    "banner_fix_errors": {"fr": "Corrige avant de lancer :", "en": "Fix before launching:"},
+
+    "movers_title": {"fr": "Plus fortes variations (5 jours)", "en": "Biggest movers (5 days)"},
+    "movers_updated_at": {"fr": "Mis à jour à {time}", "en": "Updated at {time}"},
+    "movers_computing": {"fr": "Calcul en cours (toutes les 30 min)…", "en": "Computing (every 30 min)…"},
+    "movers_gainers": {"fr": "▲ Hausses", "en": "▲ Gainers"},
+    "movers_losers": {"fr": "▼ Baisses", "en": "▼ Losers"},
+
+    "load_example_label": {"fr": "Charger un exemple :", "en": "Load an example:"},
+    "load_example_default": {"fr": "— partir des défauts —", "en": "— start from defaults —"},
+
+    "section_run": {"fr": "Run", "en": "Run"},
+    "field_run_name": {"fr": "Nom du run", "en": "Run name"},
+
+    "section_objective": {"fr": "Objectif — que prédire ?", "en": "Objective — what to predict?"},
+    "field_target": {"fr": "Cible", "en": "Target"},
+    "news_recent": {"fr": "Actualités récentes :", "en": "Recent news:"},
+    "field_horizons": {"fr": "Horizons (jours, séparés par des virgules)", "en": "Horizons (days, comma-separated)"},
+    "field_flat_thr": {"fr": 'Seuil "flat" (mouvement neutre, ex. 0.003 = 0.3%)',
+                        "en": 'Flat threshold (neutral move, e.g. 0.003 = 0.3%)'},
+    "field_regimes": {"fr": "Régimes (séparés par des virgules, ex. GLOBAL)",
+                       "en": "Regimes (comma-separated, e.g. GLOBAL)"},
+
+    "section_universe": {"fr": "Univers — features brutes", "en": "Universe — raw features"},
+    "universe_hint": {"fr": ("Toute la base disponible est utilisée automatiquement (tickers yfinance + "
+                             "séries FRED), à l'exclusion de la cible choisie ci-dessus."),
+                       "en": ("The whole available base is used automatically (yfinance tickers + FRED "
+                              "series), excluding the target chosen above.")},
+    "field_start_date": {"fr": "Date de début", "en": "Start date"},
+    "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
+
+    "section_features": {"fr": "Familles de features", "en": "Feature families"},
+    "vol_models_hint": {"fr": "Modèles de volatilité (famille vol_models) :",
+                         "en": "Volatility models (vol_models family):"},
+    "field_interact_base": {"fr": "Interactions — base", "en": "Interactions — base"},
+    "field_interact_pairs": {"fr": "Interactions — paires", "en": "Interactions — pairs"},
+    "field_interact_final": {"fr": "Interactions — final N", "en": "Interactions — final N"},
+    "field_pool_prefilter": {"fr": "Pool prefilter", "en": "Pool prefilter"},
+
+    "section_validation": {"fr": "Validation walk-forward", "en": "Walk-forward validation"},
+    "field_n_wf_folds": {"fr": "Nombre de folds", "en": "Number of folds"},
+    "field_min_train_frac": {"fr": "Fraction min. d'entraînement", "en": "Min. training fraction"},
+    "field_min_train_rows": {"fr": "Lignes min. train", "en": "Min. train rows"},
+    "field_min_test_rows": {"fr": "Lignes min. test", "en": "Min. test rows"},
+    "field_purge": {"fr": "Purge (retire les lignes proches de la frontière train/test)",
+                     "en": "Purge (removes rows near the train/test boundary)"},
+
+    "section_selection": {"fr": "Sélection de features", "en": "Feature selection"},
+    "field_method": {"fr": "Méthode", "en": "Method"},
+    "field_n_features_grid": {"fr": "Grille N (séparée par des virgules, ex. 5,6,7,8 ou 5-15)",
+                               "en": "N grid (comma-separated, e.g. 5,6,7,8 or 5-15)"},
+    "field_shap_sample": {"fr": "Échantillon SHAP", "en": "SHAP sample"},
+
+    "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
+
+    "section_models": {"fr": "Modèles", "en": "Models"},
+    "field_calibration": {"fr": "Calibration (probabilités)", "en": "Calibration (probabilities)"},
+    "field_stacking": {"fr": "Stacking", "en": "Stacking"},
+
+    "section_tuning": {"fr": "Tuning Optuna", "en": "Optuna tuning"},
+    "field_enabled": {"fr": "Activé", "en": "Enabled"},
+    "field_top_k": {"fr": "Top-K configs affinées", "en": "Top-K refined configs"},
+    "field_n_trials": {"fr": "Essais Optuna", "en": "Optuna trials"},
+    "field_cv_splits": {"fr": "Folds CV", "en": "CV folds"},
+
+    "section_output": {"fr": "Sortie", "en": "Output"},
+    "field_output_dir": {"fr": "Dossier de sortie", "en": "Output directory"},
+    "field_seed": {"fr": "Seed", "en": "Seed"},
+
+    "btn_launch_run": {"fr": "Lancer le run", "en": "Launch run"},
+
+    # run.html
+    "back_to_new_run": {"fr": "← nouveau run", "en": "← new run"},
+
+    # app.js (injectées via window.I18N)
+    "phase_ingestion": {"fr": "Ingestion des données…", "en": "Ingesting data…"},
+    "phase_features": {"fr": "Construction des features…", "en": "Building features…"},
+    "phase_scan": {"fr": "Grille sélection × sampler × algo…", "en": "Selection × sampler × algo grid…"},
+    "phase_tuning": {"fr": "Affinage Optuna des meilleures configs…", "en": "Optuna tuning of the best configs…"},
+    "phase_export": {"fr": "Export du modèle final…", "en": "Exporting final model…"},
+    "phase_done": {"fr": "Terminé.", "en": "Done."},
+    "status_connection_lost": {"fr": "Connexion au serveur perdue — nouvelle tentative…",
+                                "en": "Connection to server lost — retrying…"},
+    "status_running": {"fr": "{phase} ({pct}%, {elapsed}s écoulées)", "en": "{phase} ({pct}%, {elapsed}s elapsed)"},
+    "status_error": {"fr": "Erreur : {error}", "en": "Error: {error}"},
+    "status_done": {"fr": "Terminé en {elapsed}s.", "en": "Done in {elapsed}s."},
+    "results_title": {"fr": "Résultats", "en": "Results"},
+    "results_summary": {"fr": "{n} évaluations{tuned}.", "en": "{n} evaluations{tuned}."},
+    "results_summary_tuned": {"fr": " + {n} après tuning", "en": " + {n} after tuning"},
+    "results_best_config": {"fr": "Meilleure config", "en": "Best config"},
+    "results_leaderboard": {"fr": "Leaderboard (top {n}, triable par colonne)",
+                             "en": "Leaderboard (top {n}, sortable by column)"},
+    "artifact_leaderboard_csv": {"fr": "Leaderboard (CSV)", "en": "Leaderboard (CSV)"},
+    "artifact_leaderboard_xlsx": {"fr": "Leaderboard (Excel)", "en": "Leaderboard (Excel)"},
+    "artifact_tuned_csv": {"fr": "Configs affinées (CSV)", "en": "Refined configs (CSV)"},
+    "artifact_best_model": {"fr": "Meilleur modèle (joblib)", "en": "Best model (joblib)"},
+    "artifact_best_model_meta": {"fr": "Métadonnées (JSON)", "en": "Metadata (JSON)"},
+
+    # market.js
+    "preview_loading": {"fr": "Chargement…", "en": "Loading…"},
+    "preview_no_data": {"fr": "Pas de données pour cette période.", "en": "No data for this period."},
+    "preview_unavailable": {"fr": "Indisponible : {error}", "en": "Unavailable: {error}"},
+    "preview_load_error": {"fr": "Erreur de chargement.", "en": "Loading error."},
+    "news_loading": {"fr": "Chargement…", "en": "Loading…"},
+    "news_none": {"fr": "Pas d'actualité disponible pour cette cible.", "en": "No news available for this target."},
+    "news_load_error": {"fr": "Erreur de chargement des actualités.", "en": "Error loading news."},
+    "movers_no_data": {"fr": "Pas encore de données.", "en": "No data yet."},
+
+    # target group category names (optgroups)
+    "group_indices": {"fr": "Indices", "en": "Indices"},
+    "group_broad_etfs": {"fr": "ETFs larges & style", "en": "Broad & style ETFs"},
+    "group_sector_etfs": {"fr": "ETFs sectoriels & thématiques", "en": "Sector & thematic ETFs"},
+    "group_bonds_etfs": {"fr": "Obligataire & taux (ETFs)", "en": "Bonds & rates (ETFs)"},
+    "group_commodities_fx_etfs": {"fr": "Matières premières & devises (ETFs)", "en": "Commodities & FX (ETFs)"},
+    "group_volatility": {"fr": "Volatilité", "en": "Volatility"},
+    "group_crypto": {"fr": "Crypto", "en": "Crypto"},
+    "group_international_etfs": {"fr": "International (ETFs pays)", "en": "International (country ETFs)"},
+    "group_stocks": {"fr": "Actions individuelles", "en": "Individual stocks"},
+    "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
+}
+
+
+def get_lang(request: Request) -> str:
+    lang = request.query_params.get("lang") or request.cookies.get(LANG_COOKIE)
+    return lang if lang in SUPPORTED_LANGS else DEFAULT_LANG
+
+
+def translator(lang: str):
+    def t(key: str, **kwargs) -> str:
+        entry = STRINGS.get(key)
+        if entry is None:
+            return key
+        text = entry.get(lang) or entry.get(DEFAULT_LANG) or key
+        return text.format(**kwargs) if kwargs else text
+    return t
+
+
+def js_strings(lang: str) -> dict[str, str]:
+    """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
+    aplati sur la langue courante — évite d'embarquer les deux langues."""
+    keys = [
+        "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done",
+        "status_connection_lost", "status_running", "status_error", "status_done",
+        "results_title", "results_summary", "results_summary_tuned", "results_best_config",
+        "results_leaderboard", "artifact_leaderboard_csv", "artifact_leaderboard_xlsx",
+        "artifact_tuned_csv", "artifact_best_model", "artifact_best_model_meta",
+        "preview_loading", "preview_no_data", "preview_unavailable", "preview_load_error",
+        "news_loading", "news_none", "news_load_error", "movers_no_data",
+        "movers_updated_at", "movers_computing",
+    ]
+    t = translator(lang)
+    return {k: t(k) for k in keys}
+
+
+# Libellés traduits des groupes de cibles (les clés internes de
+# DEFAULT_TARGET_GROUPS restent en français — sentinelles de logique dans
+# config/defaults.py — seul l'affichage change).
+TARGET_GROUP_LABEL_KEYS = {
+    "Indices": "group_indices",
+    "ETFs larges & style": "group_broad_etfs",
+    "ETFs sectoriels & thématiques": "group_sector_etfs",
+    "Obligataire & taux (ETFs)": "group_bonds_etfs",
+    "Matières premières & devises (ETFs)": "group_commodities_fx_etfs",
+    "Volatilité": "group_volatility",
+    "Crypto": "group_crypto",
+    "International (ETFs pays)": "group_international_etfs",
+    "Actions individuelles": "group_stocks",
+    "Macro (FRED)": "group_fred_macro",
+}

@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from marketml.config.schema import RunConfig
-from marketml.data.store import DataStore
-from marketml.pipeline import engine as engine_module
+from patrick.config.schema import RunConfig
+from patrick.data.store import DataStore
+from patrick.pipeline import engine as engine_module
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:

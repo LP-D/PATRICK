@@ -2,17 +2,17 @@
 d'une inversion, EFFR quasi nul pendant le ZIRP) faisait planter le pipeline en
 conditions réelles — `pct_change()` renvoie +/-inf (pas NaN) dans ce cas, non
 retiré par `dropna()`, ce qui faisait échouer `GaussianHMM.fit()` avec
-'Input contains infinity'. Voir marketml/features/_utils.py::safe_pct_change.
+'Input contains infinity'. Voir patrick/features/_utils.py::safe_pct_change.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from marketml.features._utils import safe_pct_change
-from marketml.features.spike import build_spike_features
-from marketml.features.technical import build_technical_features
-from marketml.features.vol_models import build_vol_model_features
+from patrick.features._utils import safe_pct_change
+from patrick.features.spike import build_spike_features
+from patrick.features.technical import build_technical_features
+from patrick.features.vol_models import build_vol_model_features
 
 
 def _series_crossing_zero(n=400, seed=0) -> pd.Series:
@@ -33,6 +33,21 @@ def test_vol_model_features_do_not_crash_on_zero_crossing_series():
     s = _series_crossing_zero()
     df = build_vol_model_features(s, prefix="test")
     assert len(df) == len(s)
+    numeric = df.select_dtypes(include=[np.number])
+    assert not np.isinf(numeric.to_numpy(dtype=float)).any()
+
+
+def test_vol_model_features_respects_models_selection():
+    s = _series_crossing_zero()
+    df = build_vol_model_features(s, prefix="test", models=["kalman"])
+    assert list(df.columns) == ["test_kalman_filtered"]
+
+
+def test_vol_model_features_ar_ma_arma_arima_do_not_crash():
+    s = _series_crossing_zero()
+    df = build_vol_model_features(s, prefix="test", models=["ar", "ma", "arma", "arima"])
+    assert len(df) == len(s)
+    assert set(df.columns) == {"test_ar_resid", "test_ma_resid", "test_arma_resid", "test_arima_resid"}
     numeric = df.select_dtypes(include=[np.number])
     assert not np.isinf(numeric.to_numpy(dtype=float)).any()
 

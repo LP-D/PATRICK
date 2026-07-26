@@ -12,16 +12,16 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from marketml.pipeline import engine as engine_module
-from marketml.webapp import run_manager
-from marketml.webapp.app import app
+from patrick.pipeline import engine as engine_module
+from patrick.webapp import run_manager
+from patrick.webapp.app import app
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     idx = pd.bdate_range("2015-01-01", periods=n)
     target = 15 + np.cumsum(rng.normal(0, 0.5, n)).clip(min=-10)
-    df = pd.DataFrame({"IDX_TEST": target}, index=idx)
+    df = pd.DataFrame({"IDX_VIX": target}, index=idx)
     df["SPX_LIKE"] = 3000 + np.cumsum(rng.normal(0, 5, n))
     df["NFCI"] = np.cumsum(rng.normal(0, 0.02, n))
     df["T10Y2Y"] = np.cumsum(rng.normal(0, 0.01, n))
@@ -38,13 +38,10 @@ def _clean_runs():
 def _form_data(tmp_path) -> dict:
     return {
         "name": "smoke_web_test",
-        "target_symbol": "^TEST",
-        "target_source": "yfinance",
+        "target_symbol": "^VIX",
         "horizons": "3,5",
         "flat_thr": "0.003",
         "regimes": "GLOBAL",
-        "yf_tickers": "SPX_LIKE",
-        "fred_series": "NFCI: NFCI\nT10Y2Y: T10Y2Y",
         "start_date": "2015-01-01",
         "yf_coverage": "0.85",
         "interact_top_base": "15",
@@ -65,6 +62,7 @@ def _form_data(tmp_path) -> dict:
         "output_dir": str(tmp_path / "runs"),
         "seed": "42",
         "families": ["technical", "interactions", "spike", "vol_models", "macro"],
+        "vol_models": ["egarch", "kalman"],
         "sampler_candidates": ["SMOTE"],
         "algos": ["RandomForest", "XGBoost"],
     }

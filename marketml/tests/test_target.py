@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from marketml.features.target import build_target, classify_return
+from patrick.features.target import build_target, classify_return
 
 
 def _synthetic_series(n=1000, seed=0):

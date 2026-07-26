@@ -1,4 +1,4 @@
-# marketml
+# patrick
 
 Cadre ML/DL multi-actifs autonome — généralise la méthodologie du projet VIX
 (`../notebooks/`) : walk-forward strict, features avancées (Heston/EGARCH/Kalman/
@@ -16,11 +16,12 @@ pip install -e .
 ## Utilisation
 
 ```bash
-marketml ingest --config configs/examples/vix_direction.yaml
-marketml run --config configs/examples/vix_direction.yaml
+patrick ingest --config configs/examples/vix_direction.yaml
+patrick run --config configs/examples/vix_direction.yaml
+patrick serve
 ```
 
-`ingest` télécharge et met en cache (Parquet local, `~/.marketml/store`) la cible
+`ingest` télécharge et met en cache (Parquet local, `~/.patrick/store`) la cible
 et l'univers de features. `run` construit les features, boucle le walk-forward
 (horizon × fold × régime), sélectionne les features (SHAP par défaut), teste la
 grille sampler × N(5-15) × algo, affine les meilleures configs par Optuna, et
@@ -52,14 +53,14 @@ YAML — rien n'est retiré du code, seulement pas activé sans le demander.
 Le moteur complet (ingestion -> features -> walk-forward -> sélection -> grille ->
 Optuna -> export) est validé par un test de fumée bout-en-bout sur données
 synthétiques (`tests/test_pipeline_smoke.py`) et 17 tests unitaires (`pytest
-tests/`). **La vérification avec de vraies données** (`marketml run --config
+tests/`). **La vérification avec de vraies données** (`patrick run --config
 configs/examples/vix_direction.yaml` doit retrouver F1_dir≈0.610±0.025) reste à
 faire sur une machine avec accès réseau à yfinance/FRED — l'environnement de
 développement de cette session n'a pas cet accès.
 
 ## Feuille de route (pas construit dans cette session)
 
-- Suivi SQLite complet des runs + `marketml report`/`resume`
+- Suivi SQLite complet des runs + `patrick report`/`resume`
 - Modèles DL (TFT, LSTM, etc.) — jamais gagné en walk-forward dans le projet VIX,
   resteront désactivés par défaut
 - Simulation de portefeuille, commande de mise en production / inférence sur la

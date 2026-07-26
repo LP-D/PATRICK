@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="{{ lang | default('fr') }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}PATRICK{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">P</span>
+            <span class="brand-name">PATRICK</span>
+        </a>
+        <span class="tagline">{{ t('tagline') if t else 'walk-forward · SHAP · Optuna — sans YAML' }}</span>
+        <nav class="lang-switch" aria-label="Langue / Language">
+            <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">FR</a>
+            <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">EN</a>
+        </nav>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="glossary-popover" class="glossary-popover hidden" role="tooltip">
+        <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
+        <div id="glossary-popover-title" class="glossary-popover-title"></div>
+        <div id="glossary-popover-body" class="glossary-popover-body"></div>
+    </div>
+    <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
+    <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
+    <script src="/static/glossary.js"></script>
+    <script src="/static/market.js"></script>
+</body>
+</html>

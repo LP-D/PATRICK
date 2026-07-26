@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from marketml.validation.purge import compute_would_purge, purge_mask
+from patrick.validation.purge import compute_would_purge, purge_mask
 
 
 def test_compute_would_purge_flags_rows_near_cut():

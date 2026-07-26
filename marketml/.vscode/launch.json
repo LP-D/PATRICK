@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "marketml run (vix_direction)",
+            "name": "patrick run (vix_direction)",
             "type": "python",
             "request": "launch",
-            "module": "marketml.cli",
+            "module": "patrick.cli",
             "args": ["run", "--config", "configs/examples/vix_direction.yaml"],
             "console": "integratedTerminal",
             "justMyCode": true,

@@ -1,6 +1,6 @@
 import numpy as np
 
-from marketml.validation.metrics import metrics
+from patrick.validation.metrics import metrics
 
 
 def test_metrics_1d_arrays():
