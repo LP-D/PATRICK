@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+web = ["fastapi", "uvicorn[standard]", "jinja2", "python-multipart"]
 
 [project.scripts]
 marketml = "marketml.cli:app"

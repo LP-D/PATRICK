@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "marketml run (vix_direction)",
+            "type": "python",
+            "request": "launch",
+            "module": "marketml.cli",
+            "args": ["run", "--config", "configs/examples/vix_direction.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}

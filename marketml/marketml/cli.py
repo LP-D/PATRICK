@@ -40,5 +40,23 @@ def run_cmd(
         typer.echo(f"Modèle exporté : {result['model_path']}")
 
 
+@app.command(name="serve")
+def serve_cmd(
+    host: str = typer.Option("127.0.0.1", "--host", help="Adresse d'écoute"),
+    port: int = typer.Option(8000, "--port", help="Port d'écoute"),
+    reload: bool = typer.Option(False, "--reload", help="Recharge à chaud (dev)"),
+) -> None:
+    """Lance l'interface web (formulaire de config + suivi de run + leaderboard),
+    en remplacement de l'édition manuelle du YAML. Nécessite l'extra `web`
+    (`pip install -e ".[web]"`)."""
+    try:
+        import uvicorn
+    except ImportError:
+        typer.echo("Dépendances web manquantes. Installe-les avec : pip install -e \".[web]\"")
+        raise typer.Exit(code=1)
+    typer.echo(f"marketml web sur http://{host}:{port}")
+    uvicorn.run("marketml.webapp.app:app", host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     app()

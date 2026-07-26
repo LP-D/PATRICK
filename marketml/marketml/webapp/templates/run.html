@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}marketml — run {{ config_name }}{% endblock %}
+{% block content %}
+
+<h1>Run <code>{{ config_name }}</code></h1>
+<p><a href="/">&larr; nouveau run</a></p>
+
+<section id="status-panel">
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <p id="status-line">Démarrage…</p>
+    <pre id="log-tail" class="log-tail"></pre>
+</section>
+
+<section id="results-panel" class="hidden"></section>
+
+<script>const RUN_ID = {{ run_id|tojson }};</script>
+<script src="/static/app.js"></script>
+{% endblock %}

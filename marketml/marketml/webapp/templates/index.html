@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}marketml — nouveau run{% endblock %}
+{% block content %}
+
+{% if active_run %}
+<div class="banner banner-warning">
+    Un run est déjà en cours (<code>{{ active_run.config.name }}</code>) —
+    <a href="/runs/{{ active_run.id }}">voir sa progression</a>. Un seul run
+    à la fois est supporté.
+</div>
+{% endif %}
+
+{% if errors %}
+<div class="banner banner-error">
+    <strong>Corrige avant de lancer :</strong>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="get" action="/" class="example-picker">
+    <label for="load">Charger un exemple :</label>
+    <select name="load" id="load" onchange="this.form.submit()">
+        <option value="">— partir des défauts —</option>
+        {% for ex in examples %}
+        <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<form method="post" action="/runs" class="run-form">
+
+    <fieldset>
+        <legend>Run</legend>
+        <label>Nom du run
+            <input type="text" name="name" value="{{ view.name }}" required>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Objectif — que prédire ?</legend>
+        <label>Symbole cible (yfinance/FRED, ex. <code>^VIX</code>, <code>AAPL</code>)
+            <input type="text" name="target_symbol" value="{{ view.target_symbol }}" required>
+        </label>
+        <label>Source
+            <select name="target_source">
+                {% for s in target_sources %}
+                <option value="{{ s }}" {% if view.target_source == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Horizons (jours, séparés par des virgules)
+            <input type="text" name="horizons" value="{{ view.horizons }}" required>
+        </label>
+        <label>Seuil "flat" (mouvement neutre, ex. 0.003 = 0.3%)
+            <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
+        </label>
+        <label>Régimes (séparés par des virgules, ex. <code>GLOBAL</code>)
+            <input type="text" name="regimes" value="{{ view.regimes }}" required>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Univers — features brutes</legend>
+        <label>Tickers yfinance (séparés par des virgules)
+            <input type="text" name="yf_tickers" value="{{ view.yf_tickers }}" placeholder="^GSPC, ^VIX3M, SPY, TLT">
+        </label>
+        <label>Séries FRED (une par ligne, <code>CODE: nom</code>)
+            <textarea name="fred_series" rows="4" placeholder="NFCI: NFCI&#10;T10Y2Y: T10Y2Y">{{ view.fred_series }}</textarea>
+        </label>
+        <label>Date de début
+            <input type="date" name="start_date" value="{{ view.start_date }}">
+        </label>
+        <label>Couverture minimale yfinance (0-1)
+            <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Familles de features</legend>
+        {% for f in all_families %}
+        <label class="checkbox">
+            <input type="checkbox" name="families" value="{{ f }}" {% if f in view.families %}checked{% endif %}>
+            {{ f }}
+        </label>
+        {% endfor %}
+        <div class="subgrid">
+            <label>Interactions — base
+                <input type="number" name="interact_top_base" value="{{ view.interact_top_base }}">
+            </label>
+            <label>Interactions — paires
+                <input type="number" name="interact_top_pairs" value="{{ view.interact_top_pairs }}">
+            </label>
+            <label>Interactions — final N
+                <input type="number" name="interact_final_n" value="{{ view.interact_final_n }}">
+            </label>
+            <label>Pool prefilter
+                <input type="number" name="pool_prefilter" value="{{ view.pool_prefilter }}">
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Validation walk-forward</legend>
+        <div class="subgrid">
+            <label>Nombre de folds
+                <input type="number" name="n_wf_folds" value="{{ view.n_wf_folds }}">
+            </label>
+            <label>Fraction min. d'entraînement
+                <input type="number" step="any" name="min_train_frac" value="{{ view.min_train_frac }}">
+            </label>
+            <label>Lignes min. train
+                <input type="number" name="min_train_rows" value="{{ view.min_train_rows }}">
+            </label>
+            <label>Lignes min. test
+                <input type="number" name="min_test_rows" value="{{ view.min_test_rows }}">
+            </label>
+        </div>
+        <label class="checkbox">
+            <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>
+            Purge (retire les lignes proches de la frontière train/test)
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Sélection de features</legend>
+        <label>Méthode
+            <select name="selection_method">
+                {% for m in selection_methods %}
+                <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Grille N (séparée par des virgules, ex. <code>5,6,7,8</code> ou <code>5-15</code>)
+            <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
+        </label>
+        <label>Échantillon SHAP
+            <input type="number" name="shap_sample" value="{{ view.shap_sample }}">
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Sampler (rééquilibrage des classes)</legend>
+        {% for s in all_samplers %}
+        <label class="checkbox">
+            <input type="checkbox" name="sampler_candidates" value="{{ s }}" {% if s in view.sampler_candidates %}checked{% endif %}>
+            {{ s }}
+        </label>
+        {% endfor %}
+    </fieldset>
+
+    <fieldset>
+        <legend>Modèles</legend>
+        {% for a in all_algos %}
+        <label class="checkbox">
+            <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
+            {{ a }}
+        </label>
+        {% endfor %}
+        <label class="checkbox">
+            <input type="checkbox" name="calibration" {% if view.calibration %}checked{% endif %}>
+            Calibration (probabilités)
+        </label>
+        <label class="checkbox">
+            <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
+            Stacking
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Tuning Optuna</legend>
+        <label class="checkbox">
+            <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
+            Activé
+        </label>
+        <div class="subgrid">
+            <label>Top-K configs affinées
+                <input type="number" name="top_k" value="{{ view.top_k }}">
+            </label>
+            <label>Essais Optuna
+                <input type="number" name="n_trials" value="{{ view.n_trials }}">
+            </label>
+            <label>Folds CV
+                <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Sortie</legend>
+        <label>Dossier de sortie
+            <input type="text" name="output_dir" value="{{ view.output_dir }}">
+        </label>
+        <label>Seed
+            <input type="number" name="seed" value="{{ view.seed }}">
+        </label>
+    </fieldset>
+
+    <button type="submit" class="primary" {% if active_run %}disabled{% endif %}>
+        Lancer le run
+    </button>
+</form>
+
+{% endblock %}
