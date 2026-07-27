@@ -28,7 +28,8 @@ def zscore(series: pd.Series, windows: list[int] = (10, 20, 60)) -> pd.DataFrame
 def ma_ratio(series: pd.Series, windows: list[int] = (10, 20, 50)) -> pd.DataFrame:
     out = {}
     for w in windows:
-        out[f"vs_ma{w}"] = series / series.rolling(w).mean() - 1
+        ma = series.rolling(w).mean().replace(0, np.nan)
+        out[f"vs_ma{w}"] = series / ma - 1
     return pd.DataFrame(out, index=series.index)
 
 

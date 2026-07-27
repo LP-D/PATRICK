@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from patrick.features._utils import safe_pct_change
+
 
 def build_macro_features(df: pd.DataFrame, macro_cols: list[str],
                           lags: tuple[int, ...] = (1, 5, 10)) -> pd.DataFrame:
@@ -13,8 +15,8 @@ def build_macro_features(df: pd.DataFrame, macro_cols: list[str],
             continue
         s = df[col]
         out[f"{col}_level"] = s
-        out[f"{col}_ret_5d"] = s.pct_change(5)
-        out[f"{col}_vol_20d"] = s.pct_change().rolling(20).std()
+        out[f"{col}_ret_5d"] = safe_pct_change(s, 5)
+        out[f"{col}_vol_20d"] = safe_pct_change(s).rolling(20).std()
         for lag in lags:
             out[f"{col}_lag{lag}"] = s.shift(lag)
     if not out:
