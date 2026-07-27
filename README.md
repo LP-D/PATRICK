@@ -14,8 +14,9 @@ notebooks/
   production/                   — déploiement + recherche appliquée (portefeuille simulé)
   research/                     — analyse structurelle (économétrie), hors pipeline ML
   archive/                      — itérations précédentes, conservées pour référence
-marketml/                        — package Python + CLI : la méthodologie ci-dessus,
-                                    généralisée à n'importe quel actif (voir marketml/README.md)
+marketml/                        — package Python + CLI (nom du projet : PATRICK) : la
+                                    méthodologie ci-dessus, généralisée à n'importe quel
+                                    actif, + interface web (voir marketml/README.md)
 ```
 
 Chaque notebook :

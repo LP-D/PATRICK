@@ -19,6 +19,7 @@ dependencies = [
     "shap",
     "yfinance",
     "pandas_datareader",
+    "requests",
     "arch",
     "pykalman",
     "hmmlearn",
