@@ -33,6 +33,16 @@ DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
 DEFAULT_STACKING_ENABLED = False
 
+# Embargo (Phase 0 correctness, distinct de la purge ci-dessus) : retire du TEST
+# les `embargo_bars` premières barres qui suivent la coupure train/test, contre les
+# fenêtres glissantes (rolling mean/std...) calculées juste après la coupure et
+# encore corrélées au train. Contrairement à la purge (effet mesuré négligeable
+# dans le projet VIX d'origine), il n'existe pas encore de mesure empirique pour
+# l'embargo sur ce cadre généralisé — activé par défaut par prudence (coût faible :
+# quelques barres de test en moins par fold), à la différence de la purge.
+DEFAULT_EMBARGO_ENABLED = True
+DEFAULT_EMBARGO_BARS = None  # None -> dérivé de l'horizon courant (e = horizon)
+
 # Modèles de la famille "vol_models" (patrick/features/vol_models.py), sélectionnables
 # individuellement depuis l'interface web. Les 5 premiers sont ceux du pipeline VIX
 # d'origine (toujours calculés ensemble jusqu'ici) — restent activés par défaut pour ne

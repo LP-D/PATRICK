@@ -59,27 +59,77 @@ stacking), `tuning` (Optuna).
 
 SHAP par défaut (bat RFE/LASSO), stacking désactivé par défaut (perd sur 93% des
 cas testés en walk-forward), DL désactivé par défaut (jamais gagné), sampler par
-défaut = SMOTE seul, purge désactivée par défaut (effet négligeable), calibration
-désactivée par défaut (gain conditionnel au régime). Tout reste activable dans le
-YAML — rien n'est retiré du code, seulement pas activé sans le demander.
+défaut = SMOTE seul, purge désactivée par défaut (effet négligeable, mesuré dans
+VIX_PURGED_CV), embargo **activé** par défaut (pas de mesure empirique équivalente
+sur ce cadre généralisé, coût faible — cf. section Phase 0 ci-dessous), calibration
+désactivée par défaut (gain conditionnel au régime). Tout reste activable/
+désactivable dans le YAML — rien n'est retiré du code, seulement pas activé sans
+le demander.
+
+## Phase 0 — correctness (walk-forward sans fuite)
+
+Trouvé et corrigé en écrivant le test de corruption du futur
+(`tests/test_leakage.py`) : les features paramétriques (EGARCH/Kalman/HMM/AR/MA/
+ARMA/ARIMA de `features/vol_models.py`, filtre particulaire de
+`features/spike.py`) estimaient leurs paramètres une seule fois sur tout
+l'historique avant ce fix — même si la sortie point-par-point était causale, les
+PARAMÈTRES eux-mêmes étaient informés par le test. Réajustés par fold
+(`fit_end_idx`, train uniquement) depuis. Une fuite plus fine a aussi été trouvée
+et corrigée dans `features/target.py::build_target` (seuils de classification
+fittés sur des fenêtres de label chevauchant la coupure) et dans le repli `.fix()`
+d'EGARCH (backcast/bornes de variance internes à `arch`, calculés sur la série
+entière même à paramètres figés — cf. docstring de `vol_models.py`).
+
+Autres ajouts Phase 0 :
+- **Embargo** (`validation/embargo.py`, distinct de la purge) : retire les
+  premières barres de test après la coupure, contre les features à fenêtre
+  glissante encore corrélées au train juste après la frontière.
+- **Alignement temporel par classe d'actif** (`data/session_calendar.py`) :
+  décale d'une barre les features yfinance dont la classe d'actif clôture après
+  celle de la cible (ex. feature US utilisée "du jour" pour une cible qui a déjà
+  clôturé plus tôt dans la même journée UTC) — approximation à la barre près,
+  pas un vrai as-of join intrajournalier (barres yfinance quotidiennes, sans
+  horodatage de clôture réel).
+- **Vintages FRED / ALFRED** (`data/sources/fred_source.py::download_series`,
+  paramètre `realtime_date`) : récupère une série FRED telle que connue à une
+  date passée plutôt que telle que révisée aujourd'hui — capacité disponible et
+  testée (mocks), **pas encore branchée par fold** dans le moteur walk-forward
+  (ça demanderait la même généralisation "par fold" que les features
+  paramétriques ci-dessus, pas faite dans cette phase — limite connue). Le repli
+  scrape (sans `FRED_API_KEY`) émet un warning explicite : il ne peut renvoyer
+  que la version actuelle de chaque série.
+- **Baselines systématiques** (`validation/baselines.py`) : classe majoritaire,
+  persistance, HAR-RV — calculées par fold et ajoutées au leaderboard (lignes
+  `BASELINE_*`) à côté des modèles.
+- **Métriques** (`validation/metrics.py`) : balanced accuracy, MCC et AUC (ovr)
+  ajoutées à côté de F1_dir/Acc_dir — F1_dir reste la métrique de tri/tuning du
+  pipeline (continuité avec la référence F1_dir≈0.610 du projet VIX d'origine),
+  les nouvelles métriques ne la remplacent pas silencieusement.
 
 ## État de la vérification
 
 Le moteur complet (ingestion -> features -> walk-forward -> sélection -> grille ->
 Optuna -> export) est validé par un test de fumée bout-en-bout sur données
-synthétiques (`tests/test_pipeline_smoke.py`) et 28 tests unitaires (`pytest
-tests/`), dont un test de fumée de l'interface web (`test_webapp_smoke.py`).
+synthétiques (`tests/test_pipeline_smoke.py`) et 40 tests unitaires (`pytest
+tests/`, 42 avec les paramétrisations), dont un test de fumée de l'interface web
+(`test_webapp_smoke.py`) et les tests de fuite de la Phase 0
+(`test_leakage.py`).
 **La vérification avec de vraies données** a été faite sur une machine avec
 accès réseau yfinance/FRED (`patrick run --config
 configs/examples/vix_direction.yaml`) ; un bug sur les séries FRED traversant
 zéro (T10Y2Y, EFFR) a été trouvé et corrigé à cette occasion (`safe_pct_change`,
 cf. `features/_utils.py`), et un problème plus récent de fiabilité du scraping
-FRED a mené à l'ajout du chemin API authentifié ci-dessus.
+FRED a mené à l'ajout du chemin API authentifié ci-dessus. **La Phase 0 n'a en
+revanche pas encore été revérifiée avec de vraies données** — les corrections
+(fold-dépendance des features paramétriques notamment) changeront probablement
+la référence F1_dir≈0.610, à revalider sur une machine avec accès réseau.
 
 ## Feuille de route
 
-- Suivi SQLite complet des runs + `patrick report`/`resume`
+- Phase 1+ (persistance SQLite, validité statistique, exécution robuste,
+  simulation d'investissement, hygiène) — voir le plan en 5 phases fourni,
+  Phase 0 seule traitée pour l'instant.
+- Vintages FRED branchés par fold dans le moteur walk-forward (cf. limite
+  documentée ci-dessus).
 - Modèles DL (TFT, LSTM, etc.) — jamais gagné en walk-forward dans le projet VIX,
-  resteront désactivés par défaut
-- Simulation de portefeuille, commande de mise en production / inférence sur la
-  dernière ligne non labellisée
+  resteront désactivés par défaut.

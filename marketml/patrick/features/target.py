@@ -15,7 +15,19 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     """Retourne (target, regime_par_date, seuils_par_regime). Les seuils de régime
     (CALM/NORMAL/STRESS, quantiles 33%/67% du niveau) et de classification (quantiles
     25%/75% du rendement, par régime) sont fittés uniquement sur `series[:split_idx]`
-    (train du fold) — aucune fuite du futur."""
+    (train du fold) — aucune fuite du futur.
+
+    Phase 0 (correctness) : les seuils de classification étaient fittés sur
+    `ret.loc[ret.index < cut_date]`, mais `ret[d] = s[d+horizon]/s[d] - 1` — pour
+    les dates `d` situées dans les `horizon` derniers points avant `cut_date`, cette
+    fenêtre déborde sur le test, donc `ret[d]` (et par extension les quantiles
+    fittés dessus) est partiellement informé par des valeurs post-coupure, même en
+    excluant `d` lui-même. C'est une fuite distincte de celle que corrige
+    `validation/purge.py` (qui n'agit qu'en aval, sur les LIGNES de train déjà
+    construites, pas sur le calcul des seuils eux-mêmes) — détectée par le test de
+    corruption du futur (`tests/test_leakage.py`). `ret_tr` exclut donc aussi ces
+    `horizon` derniers points : seules des fenêtres de label entièrement
+    antérieures à `cut_date` contribuent au fit des seuils."""
     s = series.ffill().bfill()
     s_tr = s.iloc[:split_idx]
     calm_thr = s_tr.quantile(0.33)
@@ -30,7 +42,9 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     reg_r = regime.reindex(ret.index)
 
     cut_date = s.index[min(split_idx, len(s) - 1)]
-    ret_tr = ret.loc[ret.index < cut_date]
+    safe_fit_idx = max(split_idx - horizon, 0)
+    safe_fit_cut_date = s.index[safe_fit_idx]
+    ret_tr = ret.loc[ret.index < safe_fit_cut_date]
     reg_tr = reg_r.loc[ret_tr.index]
 
     thr = {}

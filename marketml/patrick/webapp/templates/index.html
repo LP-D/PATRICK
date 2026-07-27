@@ -180,6 +180,13 @@
             <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>
             {{ t('field_purge') }}{{ info('purge') }}
         </label>
+        <label class="checkbox">
+            <input type="checkbox" name="embargo_enabled" {% if view.embargo_enabled %}checked{% endif %}>
+            {{ t('field_embargo_enabled') }}{{ info('embargo_enabled') }}
+        </label>
+        <label>{{ t('field_embargo_bars') }}
+            <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
+        </label>
     </fieldset>
 
     <fieldset>

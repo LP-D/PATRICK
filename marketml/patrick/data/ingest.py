@@ -8,8 +8,31 @@ import time
 import pandas as pd
 
 from patrick.config.schema import ObjectiveConfig, UniverseConfig
+from patrick.data.session_calendar import session_lag_days
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
+
+
+def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: ObjectiveConfig) -> pd.DataFrame:
+    """Décale d'une barre les colonnes dont la classe d'actif clôture après celle
+    de la cible (Phase 0.4 — cf. `data/session_calendar.py`) : une jointure "même
+    date calendaire" traite implicitement comme simultanées des clôtures de
+    marché qui ne le sont pas (ex. clôture US utilisée "du jour" pour une cible
+    qui a déjà clôturé plus tôt dans la même journée UTC)."""
+    reverse = {yfinance_source.clean_symbol(t): t for t in tickers}
+    out = yf_df.copy()
+    lagged = []
+    for col in out.columns:
+        original_symbol = reverse.get(col, col)
+        if session_lag_days(original_symbol, "yfinance",
+                             objective.target_symbol, objective.target_source):
+            out[col] = out[col].shift(1)
+            lagged.append(original_symbol)
+    if lagged:
+        print(f"  [ALIGNEMENT] {len(lagged)} tickers décalés d'une barre "
+              f"(clôture postérieure à celle de la cible) : {', '.join(lagged[:8])}"
+              f"{'...' if len(lagged) > 8 else ''}")
+    return out
 
 
 def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
@@ -35,6 +58,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if universe.yf_tickers:
         yf_df = yfinance_source.download_universe(universe.yf_tickers, universe.start_date,
                                                     universe.yf_coverage, t0=t0)
+        yf_df = _apply_session_lag(yf_df, universe.yf_tickers, objective)
         df = df.join(yf_df, how="outer")
 
     if universe.fred_series:

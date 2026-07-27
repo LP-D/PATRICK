@@ -74,6 +74,8 @@ def default_config_dict() -> dict:
             "n_wf_folds": D.DEFAULT_N_WF_FOLDS,
             "min_train_frac": D.DEFAULT_MIN_TRAIN_FRAC,
             "purge": D.DEFAULT_PURGE_ENABLED,
+            "embargo_enabled": D.DEFAULT_EMBARGO_ENABLED,
+            "embargo_bars": D.DEFAULT_EMBARGO_BARS,
             "min_train_rows": 100,
             "min_test_rows": 20,
         },
@@ -204,6 +206,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         n_trials = int(form.get("n_trials", D.DEFAULT_TUNING_N_TRIALS))
         cv_splits = int(form.get("cv_splits", D.DEFAULT_TUNING_CV_SPLITS))
         seed = int(form.get("seed", D.DEFAULT_SEED))
+        embargo_bars_raw = (form.get("embargo_bars") or "").strip()
+        embargo_bars = int(embargo_bars_raw) if embargo_bars_raw else None
     except ValueError:
         errors.append("Un champ numérique entier est invalide.")
         n_wf_folds = D.DEFAULT_N_WF_FOLDS
@@ -211,6 +215,7 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         interact_top_base, interact_top_pairs, interact_final_n = 40, 20, 30
         pool_prefilter, shap_sample = D.DEFAULT_POOL_PREFILTER, D.DEFAULT_SHAP_SAMPLE
         top_k, n_trials, cv_splits = D.DEFAULT_TUNING_TOP_K, D.DEFAULT_TUNING_N_TRIALS, D.DEFAULT_TUNING_CV_SPLITS
+        embargo_bars = D.DEFAULT_EMBARGO_BARS
         seed = D.DEFAULT_SEED
 
     config_dict = {
@@ -240,6 +245,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "n_wf_folds": n_wf_folds,
             "min_train_frac": min_train_frac,
             "purge": _checked(form, "purge"),
+            "embargo_enabled": _checked(form, "embargo_enabled"),
+            "embargo_bars": embargo_bars,
             "min_train_rows": min_train_rows,
             "min_test_rows": min_test_rows,
         },
@@ -290,6 +297,8 @@ def to_view(cfg: dict) -> dict:
         "n_wf_folds": val.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS),
         "min_train_frac": val.get("min_train_frac", D.DEFAULT_MIN_TRAIN_FRAC),
         "purge": bool(val.get("purge", False)),
+        "embargo_enabled": bool(val.get("embargo_enabled", D.DEFAULT_EMBARGO_ENABLED)),
+        "embargo_bars": val.get("embargo_bars", D.DEFAULT_EMBARGO_BARS),
         "min_train_rows": val.get("min_train_rows", 100),
         "min_test_rows": val.get("min_test_rows", 20),
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),

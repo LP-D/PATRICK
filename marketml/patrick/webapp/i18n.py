@@ -64,6 +64,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_min_test_rows": {"fr": "Lignes min. test", "en": "Min. test rows"},
     "field_purge": {"fr": "Purge (retire les lignes proches de la frontière train/test)",
                      "en": "Purge (removes rows near the train/test boundary)"},
+    "field_embargo_enabled": {"fr": "Embargo (retire les premières lignes de test après la coupure)",
+                               "en": "Embargo (removes the first test rows after the cut)"},
+    "field_embargo_bars": {"fr": "Barres d'embargo (vide = horizon)",
+                            "en": "Embargo bars (blank = horizon)"},
 
     "section_selection": {"fr": "Sélection de features", "en": "Feature selection"},
     "field_method": {"fr": "Méthode", "en": "Method"},

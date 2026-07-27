@@ -50,12 +50,19 @@ def rolling_skew(series: pd.Series, window: int = 20) -> pd.Series:
     return safe_pct_change(series).rolling(window).skew()
 
 
-def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 42) -> pd.Series:
+def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 42,
+                         fit_end_idx: int | None = None) -> pd.Series:
     """Filtre particulaire bootstrap sur un modèle de volatilité stochastique
     log-AR(1) : h_t = mu + phi*(h_{t-1}-mu) + eta_t, r_t | h_t ~ N(0, exp(h_t)).
     (mu, phi, sigma_eta) calibrés grossièrement par corrélation d'ordre 1 sur
     log(r_t^2) — ce n'est pas une MLE complète, mais suffisant pour une feature de
-    volatilité filtrée causale (chaque h_t n'utilise que r_1..r_t)."""
+    volatilité filtrée causale (chaque h_t n'utilise que r_1..r_t).
+
+    `fit_end_idx`, quand fourni, restreint la calibration de (mu, phi, sigma_eta) à
+    `series.iloc[:fit_end_idx]` (train du fold) — sinon (comme avant ce fix) ces
+    trois statistiques étaient calculées sur toute la série, donc informées par le
+    test de folds ultérieurs même si la récursion particulaire elle-même est
+    causale (cf. vol_models.py, même classe de fuite, même fix)."""
     ret = safe_pct_change(series).fillna(0.0).values
     n = len(ret)
     log_r2 = np.log(ret ** 2 + 1e-8)
@@ -63,7 +70,15 @@ def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 4
     if valid.sum() < 50:
         return pd.Series(np.nan, index=series.index, name="particle_filtered_vol")
 
-    y = log_r2[valid]
+    if fit_end_idx is not None:
+        fit_end = min(fit_end_idx, n)
+        fit_valid = valid.copy()
+        fit_valid[fit_end:] = False
+        if fit_valid.sum() < 50:
+            fit_valid = valid
+    else:
+        fit_valid = valid
+    y = log_r2[fit_valid]
     mu = float(y.mean())
     y_c = y - mu
     phi = float(np.clip(np.corrcoef(y_c[:-1], y_c[1:])[0, 1], -0.98, 0.98)) if len(y_c) > 2 else 0.9
@@ -96,11 +111,31 @@ def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 4
     return pd.Series(np.exp(filtered / 2), index=series.index, name="particle_filtered_vol")
 
 
-def build_spike_features(series: pd.Series, prefix: str = "px") -> pd.DataFrame:
-    df = pd.DataFrame({
+def build_spike_features_base(series: pd.Series, prefix: str = "px") -> pd.DataFrame:
+    """hurst/semivar/skew — fenêtres glissantes pures, causal par construction,
+    calculé une seule fois pour tout un run (partagé par tous les folds)."""
+    return pd.DataFrame({
         f"{prefix}_hurst_100d": rolling_hurst(series, 100),
         f"{prefix}_semivar_20d": rolling_semivariance(series, 20),
         f"{prefix}_skew_20d": rolling_skew(series, 20),
-        f"{prefix}_particle_vol": particle_filter_vol(series),
     }, index=series.index)
-    return df
+
+
+def build_spike_features_parametric(series: pd.Series, prefix: str = "px",
+                                     fit_end_idx: int | None = None) -> pd.DataFrame:
+    """particle_filter_vol seul — paramètres (mu/phi/sigma_eta) à recalculer par
+    fold via `fit_end_idx` (cf. docstring de `particle_filter_vol`)."""
+    return pd.DataFrame({
+        f"{prefix}_particle_vol": particle_filter_vol(series, fit_end_idx=fit_end_idx),
+    }, index=series.index)
+
+
+def build_spike_features(series: pd.Series, prefix: str = "px",
+                          fit_end_idx: int | None = None) -> pd.DataFrame:
+    """Combine `build_spike_features_base` + `_parametric` — utilisé tel quel pour
+    un calcul ponctuel (tests) ; le moteur walk-forward appelle les deux variantes
+    séparément pour ne recalculer par fold que la partie paramétrique."""
+    return pd.concat([
+        build_spike_features_base(series, prefix),
+        build_spike_features_parametric(series, prefix, fit_end_idx),
+    ], axis=1)

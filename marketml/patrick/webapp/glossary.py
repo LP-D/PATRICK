@@ -240,6 +240,18 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "train/test boundary, to avoid a prediction-horizon information "
                "leak biasing the evaluation."),
     },
+    "embargo_enabled": {
+        "fr": ("Embargo (walk-forward) : retire les premières barres de test qui "
+               "suivent la coupure train/test — des features à fenêtre glissante "
+               "calculées juste après la coupure incluent encore des observations "
+               "du train, donc restent corrélées avec lui même une fois la purge "
+               "appliquée. Distinct de la purge (qui agit côté train)."),
+        "en": ("Embargo (walk-forward): removes the first test bars right after "
+               "the train/test cut — rolling-window features computed just after "
+               "the cut still include train observations, so remain correlated "
+               "with it even after purging. Distinct from purge (which acts on "
+               "the train side)."),
+    },
     "calibration": {
         "fr": ("Calibration des probabilités prédites (ex. Platt scaling / "
                "isotonic), pour que les scores du modèle reflètent mieux de "

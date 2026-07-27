@@ -4,6 +4,24 @@ modèle -> tuning Optuna sur le top-K -> leaderboard + modèle exporté.
 
 Généralise, en une seule commande, la séquence manuelle
 VIX_FINAL_FEATURES -> VIX_FINAL_ML_SCAN -> VIX_FINAL_OPTUNA.
+
+Phase 0 (correctness) : les features "paramétriques" (EGARCH/Kalman/HMM/AR/MA/
+ARMA/ARIMA de vol_models.py, filtre particulaire de spike.py) estiment des
+paramètres globaux avant de produire une sortie récursive causale — les estimer
+une seule fois sur tout l'historique (comme avant ce fix) fait fuir de
+l'information du test d'un fold vers le train d'un autre, même si la sortie
+point-par-point est elle-même causale (cf. `tests/test_leakage.py`, test de
+corruption du futur). Le pool de features est donc scindé en deux :
+- `build_base_feature_pool` : technical/spike(hors filtre particulaire)/macro —
+  fenêtres glissantes pures, aucun paramètre global, calculé une seule fois.
+- `build_parametric_pool` : vol_models paramétriques + filtre particulaire,
+  réajustés par fold via `fit_end_idx` (train du fold uniquement), mis en cache
+  par coupure de fold (indépendante de l'horizon, donc `n_wf_folds` variantes,
+  pas `n_wf_folds × n_horizons`).
+Les interactions sont découvertes une fois sur le fold pilote (comme avant) mais
+leurs FORMULES (déterministes, algébriques) sont réappliquées à chaque pool de
+fold — pas de fuite : une formule appliquée à des valeurs déjà correctement
+recalculées par fold ne réintroduit rien.
 """
 from __future__ import annotations
 
@@ -28,24 +46,19 @@ from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
+from patrick.validation.baselines import compute_baselines
+from patrick.validation.embargo import embargo_mask
 from patrick.validation.metrics import metrics
 from patrick.validation.purge import purge_mask
 from patrick.validation.walkforward import build_fold_cuts, describe_folds
 
 
-def build_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str,
-                        pilot_split_idx: int | None = None) -> pd.DataFrame:
-    """Applique les familles de features activées à chaque colonne numérique du
-    DataFrame brut ingéré (cible + univers de tickers), plus les jointures macro
-    FRED et les estimateurs de vol OHLC de la cible.
-
-    Les interactions (VIX_FINAL_FEATURES) sont découvertes une seule fois, sur un
-    horizon "pilote" (le milieu de la grille) et le train du premier fold
-    (`pilot_split_idx`) — pas re-découvertes par horizon/fold — puis les mêmes
-    formules sont appliquées à tout l'historique. C'est la même architecture que
-    le projet VIX : le POOL de features est construit une fois, partagé par tous
-    les horizons du scan ; seule la sélection SHAP/RFE/LASSO (dans le moteur
-    walk-forward, sur le train de CHAQUE fold) varie par horizon/fold."""
+def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
+    """Features causales par construction (fenêtres glissantes/lags, aucun
+    paramètre estimé globalement) : technical, spike (hors filtre particulaire),
+    macro, + estimateurs de vol OHLC de la cible. Calculé une seule fois, partagé
+    par tous les folds/horizons d'un run — sans risque de fuite (cf. docstring de
+    module)."""
     families = config.features.families
     parts: list[pd.DataFrame] = [raw]
 
@@ -54,9 +67,9 @@ def build_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str,
         if "technical" in families:
             parts.append(technical.build_technical_features(s, prefix=col))
         if "spike" in families:
-            parts.append(spike.build_spike_features(s, prefix=col))
+            parts.append(spike.build_spike_features_base(s, prefix=col))
         if "vol_models" in families:
-            parts.append(vol_models.build_vol_model_features(
+            parts.append(vol_models.build_vol_model_features_base(
                 s, prefix=col, models=config.features.vol_models))
 
     if "macro" in families and config.universe.fred_series:
@@ -71,15 +84,41 @@ def build_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str,
 
     pool = pd.concat(parts, axis=1)
     pool = pool.loc[:, ~pool.columns.duplicated()]
-
-    if "interactions" in families and pilot_split_idx is not None:
-        pool = _add_interactions(pool, config, target_col, pilot_split_idx)
-
     return pool
 
 
-def _add_interactions(pool: pd.DataFrame, config: RunConfig, target_col: str,
-                       pilot_split_idx: int) -> pd.DataFrame:
+def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
+                           fit_end_idx: int | None) -> pd.DataFrame:
+    """vol_models paramétriques (EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA) + filtre
+    particulaire (spike) — réestimés sur `raw.iloc[:fit_end_idx]` uniquement
+    (train du fold), appliqués causalement sur tout l'historique sans
+    ré-estimation. `fit_end_idx=None` : fit sur toute la série (utilisé pour le
+    modèle de production final, qui n'a plus de test à protéger)."""
+    families = config.features.families
+    parts: list[pd.DataFrame] = []
+
+    for col in raw.columns:
+        s = raw[col]
+        if "vol_models" in families:
+            parts.append(vol_models.build_vol_model_features_parametric(
+                s, prefix=col, models=config.features.vol_models, fit_end_idx=fit_end_idx))
+        if "spike" in families:
+            parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
+
+    if not parts:
+        return pd.DataFrame(index=raw.index)
+    pool = pd.concat(parts, axis=1)
+    pool = pool.loc[:, ~pool.columns.duplicated()]
+    return pool
+
+
+def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
+                                     target_col: str, pilot_split_idx: int) -> list[str]:
+    """Découvre les formules d'interaction (VIX_FINAL_FEATURES) sur le fold
+    pilote (train du premier fold) — retourne les noms de colonnes retenues, qui
+    encodent la paire de features + le type d'interaction (cf.
+    `INTERACTION_TYPES`), réutilisables tels quels par `_apply_interaction_formulas`
+    sur le pool (base + paramétrique) de n'importe quel fold."""
     pilot_horizon = config.objective.horizons[len(config.objective.horizons) // 2]
     pilot_target, _, _ = build_target(pool[target_col], pilot_horizon, pilot_split_idx,
                                        config.objective.flat_thr)
@@ -89,7 +128,7 @@ def _add_interactions(pool: pd.DataFrame, config: RunConfig, target_col: str,
     y_pilot_tr = pilot_target.values[pilot_train_mask].astype(int)
     if len(y_pilot_tr) < 100:
         print("  [INTERACTIONS] pas assez de données sur le fold pilote — étape sautée.")
-        return pool
+        return []
 
     feature_cols = [c for c in pool.columns if c != target_col]
     X_pilot_tr = pool.loc[pilot_idx[pilot_train_mask], feature_cols].fillna(0.0)
@@ -101,48 +140,94 @@ def _add_interactions(pool: pd.DataFrame, config: RunConfig, target_col: str,
         final_n=config.features.interact_final_n,
         seed=config.output.seed,
     )
-    if inter_df.empty:
-        return pool
+    return list(inter_df.columns)
 
+
+def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) -> pd.DataFrame:
+    """Applique des formules d'interaction déjà découvertes (noms de colonnes
+    encodant paire + type) aux valeurs de `pool` — opération algébrique/fenêtre
+    glissante déterministe, sans risque de fuite tant que `pool` lui-même est
+    correct pour le fold considéré."""
+    if not formula_names:
+        return pd.DataFrame(index=pool.index)
     full_inter = pd.DataFrame(index=pool.index)
-    for col_name in inter_df.columns:
+    for col_name in formula_names:
         for tname, fn in INTERACTION_TYPES.items():
             marker = f"__{tname}__"
             if marker in col_name:
                 a_name, b_name = col_name.split(marker, 1)
-                try:
-                    full_inter[col_name] = fn(pool[a_name], pool[b_name])
-                except Exception:
-                    pass
+                if a_name in pool.columns and b_name in pool.columns:
+                    try:
+                        full_inter[col_name] = fn(pool[a_name], pool[b_name])
+                    except Exception:
+                        pass
                 break
+    return full_inter
 
-    print(f"  [INTERACTIONS] {full_inter.shape[1]} features d'interaction ajoutées "
-          f"(pilote: h={pilot_horizon}j).")
-    return pd.concat([pool, full_inter], axis=1)
+
+class _FoldPoolBuilder:
+    """Construit et met en cache (par coupure de fold, indépendante de l'horizon)
+    le pool complet base+paramétrique+interactions d'un fold."""
+
+    def __init__(self, raw: pd.DataFrame, config: RunConfig, target_col: str,
+                 base_pool: pd.DataFrame, fold_cuts: list[int]):
+        self.raw = raw
+        self.config = config
+        self.target_col = target_col
+        self.base_pool = base_pool
+        self.fold_cuts = fold_cuts
+        self._cache: dict[int, pd.DataFrame] = {}
+        self.interaction_formulas: list[str] = []
+        if "interactions" in config.features.families:
+            self._init_interactions()
+
+    def _merge_base_and_parametric(self, cut_idx: int) -> pd.DataFrame:
+        param_pool = build_parametric_pool(self.raw, self.config, fit_end_idx=cut_idx)
+        merged = pd.concat([self.base_pool, param_pool], axis=1)
+        return merged.loc[:, ~merged.columns.duplicated()]
+
+    def _init_interactions(self) -> None:
+        pilot_cut = self.fold_cuts[0]
+        pilot_pool = self._merge_base_and_parametric(pilot_cut)
+        self.interaction_formulas = _discover_interaction_formulas(
+            pilot_pool, self.config, self.target_col, pilot_cut)
+        print(f"  [INTERACTIONS] {len(self.interaction_formulas)} formules découvertes (fold pilote).")
+        inter = _apply_interaction_formulas(pilot_pool, self.interaction_formulas)
+        self._cache[pilot_cut] = pd.concat([pilot_pool, inter], axis=1)
+
+    def get(self, cut_idx: int) -> pd.DataFrame:
+        if cut_idx not in self._cache:
+            merged = self._merge_base_and_parametric(cut_idx)
+            if self.interaction_formulas:
+                inter = _apply_interaction_formulas(merged, self.interaction_formulas)
+                merged = pd.concat([merged, inter], axis=1)
+            self._cache[cut_idx] = merged
+        return self._cache[cut_idx]
 
 
 class _FoldContext:
     """Prépare X_tr/y_tr/X_te/y_te pour un (horizon, fold, régime) donné — utilisé
     à la fois par le scan principal et par la ré-évaluation post-Optuna, pour
     garantir que les deux passes appliquent exactement la même logique (masques,
-    purge, mise à l'échelle)."""
+    purge, embargo, mise à l'échelle)."""
 
-    def __init__(self, pool: pd.DataFrame, target_col: str, feature_pool: list[str],
+    def __init__(self, pool_builder: _FoldPoolBuilder, target_col: str, feature_pool: list[str],
                  config: RunConfig, all_dates: pd.DatetimeIndex, fold_cuts: list[int]):
-        self.pool = pool
+        self.pool_builder = pool_builder
         self.target_col = target_col
         self.feature_pool = feature_pool
         self.config = config
         self.all_dates = all_dates
         self.fold_cuts = fold_cuts
 
-    def prepare(self, horizon: int, fold_idx: int, regime: str):
+    def prepare(self, horizon: int, fold_idx: int, regime: str, want_baselines: bool = False):
         cfg = self.config
         cut, nxt = self.fold_cuts[fold_idx], self.fold_cuts[fold_idx + 1]
         cut_date, nxt_date = self.all_dates[cut], self.all_dates[nxt - 1]
+        pool = self.pool_builder.get(cut)
 
-        target_series, reg_r, _thr = build_target(
-            self.pool[self.target_col], horizon, cut, cfg.objective.flat_thr)
+        target_series, reg_r, thr = build_target(
+            pool[self.target_col], horizon, cut, cfg.objective.flat_thr)
         idx = target_series.index
         tr_mask = np.asarray(idx < cut_date)
         te_mask = np.asarray((idx >= cut_date) & (idx <= nxt_date))
@@ -153,6 +238,9 @@ class _FoldContext:
 
         if cfg.validation.purge:
             tr_mask = purge_mask(idx, tr_mask, self.all_dates, horizon, cut_date)
+        if cfg.validation.embargo_enabled:
+            e = cfg.validation.embargo_bars if cfg.validation.embargo_bars is not None else horizon
+            te_mask = embargo_mask(idx, te_mask, cut_date, e)
 
         y_tr = target_series.values[tr_mask].astype(int)
         y_te = target_series.values[te_mask].astype(int)
@@ -160,11 +248,17 @@ class _FoldContext:
                 or len(y_te) < cfg.validation.min_test_rows):
             return None
 
-        X_pool_df = self.pool[self.feature_pool].reindex(idx)
+        X_pool_df = pool[self.feature_pool].reindex(idx)
         sc = RobustScaler()
         X_tr = sc.fit_transform(np.nan_to_num(X_pool_df.values[tr_mask]))
         X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
-        return X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date())
+
+        baselines = None
+        if want_baselines:
+            baselines = compute_baselines(pool[self.target_col], target_series, idx,
+                                           tr_mask, te_mask, y_tr, y_te, horizon, thr, reg_r)
+
+        return X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()), baselines
 
 
 def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
@@ -181,7 +275,14 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
         Xr, yr = X_tr, y_tr
     clf = get_classifier(algo, seed=seed, **algo_overrides)
     clf.fit(Xr, yr)
-    return metrics(y_te, clf.predict(X_te))
+    y_pred = clf.predict(X_te)
+    y_proba = None
+    if hasattr(clf, "predict_proba"):
+        try:
+            y_proba = clf.predict_proba(X_te)
+        except Exception:
+            y_proba = None
+    return metrics(y_te, y_pred, y_proba=y_proba)
 
 
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
@@ -198,23 +299,33 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                  config.validation.min_train_frac)
     describe_folds(all_dates, fold_cuts)
 
-    print("[FEATURES] construction du pool de features...")
-    pool = build_feature_pool(raw, config, target_col, pilot_split_idx=fold_cuts[0])
-    feature_pool = [c for c in pool.columns if c != target_col]
-    print(f"[FEATURES] pool: {len(feature_pool)} colonnes ({time.time()-t0:.1f}s)")
-    assert (pool.index == all_dates).all(), "la construction des features ne doit pas changer l'index de dates"
-    ctx = _FoldContext(pool, target_col, feature_pool, config, all_dates, fold_cuts)
+    print("[FEATURES] construction du pool de base (causal, partagé par tous les folds)...")
+    base_pool = build_base_feature_pool(raw, config, target_col)
+    print(f"[FEATURES] pool de base: {base_pool.shape[1]} colonnes ({time.time()-t0:.1f}s)")
+    assert (base_pool.index == all_dates).all(), "la construction des features ne doit pas changer l'index de dates"
+
+    pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
+    feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
+    print(f"[FEATURES] pool complet (fold 1, base+paramétrique+interactions): {len(feature_pool)} colonnes")
+    ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
 
     board = Leaderboard()
+    baseline_rows: list[dict] = []
     last_fold = config.validation.n_wf_folds - 1
 
     for horizon in config.objective.horizons:
         for k in range(config.validation.n_wf_folds):
             for regime in config.objective.regimes:
-                prepared = ctx.prepare(horizon, k, regime)
+                prepared = ctx.prepare(horizon, k, regime, want_baselines=True)
                 if prepared is None:
                     continue
-                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end = prepared
+                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end, baselines = prepared
+
+                for baseline_name, base_met in (baselines or {}).items():
+                    baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
+                                           "N": None, "sampler": None, "algo": baseline_name,
+                                           "features": "", "n_train": len(y_tr), "n_test": len(y_te),
+                                           "test_start": test_start, "test_end": test_end, **base_met})
 
                 for n_feat in config.selection.n_features_grid:
                     cols = _select(config, X_tr_full, y_tr, n_feat, seed)
@@ -251,7 +362,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             prepared = ctx.prepare(horizon, last_fold, regime)
             if prepared is None:
                 continue
-            X_tr_full, y_tr, _, _, _, _ = prepared
+            X_tr_full, y_tr, _, _, _, _, _ = prepared
             if len(y_tr) < config.validation.min_train_rows * 2:
                 continue
             cols = _select(config, X_tr_full, y_tr, n_feat, seed)
@@ -267,7 +378,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 prepared = ctx.prepare(horizon, k, regime)
                 if prepared is None:
                     continue
-                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end = prepared
+                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end, _ = prepared
                 cols = _select(config, X_tr_full, y_tr, n_feat, seed)
                 X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
                 met = _fit_eval(X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed, **best_params)
@@ -277,6 +388,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                     "test_start": test_start, "test_end": test_end, **met})
 
     tuned_df = pd.DataFrame(tuned_rows)
+    if baseline_rows:
+        board.rows.extend(baseline_rows)
     csv_path = board.export(config.output.dir, config.name)
     if len(tuned_df):
         os.makedirs(config.output.dir, exist_ok=True)
@@ -295,7 +408,13 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
 
     model_path = None
     if final_best is not None:
-        model_path = export_best_model(pool, target_col, feature_pool, config,
+        full_pool = pd.concat(
+            [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
+        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
+        if pool_builder.interaction_formulas:
+            full_inter = _apply_interaction_formulas(full_pool, pool_builder.interaction_formulas)
+            full_pool = pd.concat([full_pool, full_inter], axis=1)
+        model_path = export_best_model(full_pool, target_col, feature_pool, config,
                                         final_best, config.output.dir, seed=seed)
 
     return {

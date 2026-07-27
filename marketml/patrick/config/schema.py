@@ -42,6 +42,8 @@ class ValidationConfig(BaseModel):
     n_wf_folds: int = D.DEFAULT_N_WF_FOLDS
     min_train_frac: float = D.DEFAULT_MIN_TRAIN_FRAC
     purge: bool = D.DEFAULT_PURGE_ENABLED
+    embargo_enabled: bool = D.DEFAULT_EMBARGO_ENABLED
+    embargo_bars: int | None = D.DEFAULT_EMBARGO_BARS
     min_train_rows: int = 100
     min_test_rows: int = 20
 
