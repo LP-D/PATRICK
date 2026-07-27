@@ -21,6 +21,12 @@ patrick run --config configs/examples/vix_direction.yaml
 patrick serve
 ```
 
+**Windows, lancement rapide** : `PATRICK.bat` (à la racine de `marketml/`)
+active le `.venv` et lance `patrick serve` en un double-clic — ou, en ajoutant
+le dossier `marketml/` au `PATH` (une seule fois, Panneau de configuration ->
+Variables d'environnement), en tapant simplement `PATRICK` (ou `start PATRICK`)
+dans n'importe quel invite de commandes.
+
 `ingest` télécharge et met en cache (Parquet local, `~/.patrick/store`) la cible
 et l'univers de features. `run` construit les features, boucle le walk-forward
 (horizon × fold × régime), sélectionne les features (SHAP par défaut), teste la
