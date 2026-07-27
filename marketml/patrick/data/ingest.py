@@ -3,6 +3,7 @@ alignés sur un même index, mis en cache dans le data lake local.
 """
 from __future__ import annotations
 
+import os
 import time
 
 import pandas as pd
@@ -10,6 +11,7 @@ import pandas as pd
 from patrick.config.schema import ObjectiveConfig, UniverseConfig
 from patrick.data.session_calendar import session_lag_days
 from patrick.data.sources import fred_source, yfinance_source
+from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 from patrick.data.store import DataStore
 
 
@@ -35,12 +37,23 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
     return out
 
 
+def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig) -> None:
+    """Métadonnées de contexte (Phase 1.6) transportées via `DataFrame.attrs` —
+    lues par `pipeline/engine.py` pour peupler la table `snapshot` sans changer
+    la signature de `ingest()` (qui reste "retourne un DataFrame", ce que
+    monkeypatchent déjà tous les tests existants)."""
+    df.attrs["n_tickers"] = len(universe.yf_tickers)
+    df.attrs["n_fred_series"] = len(universe.fred_series)
+    df.attrs["fred_source"] = "api" if os.environ.get(FRED_API_KEY_ENV) else "scrape"
+
+
 def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
            store: DataStore | None = None, force: bool = False) -> pd.DataFrame:
     store = store or DataStore()
     cache_key = f"raw_{objective.target_symbol}"
     if not force and store.exists(cache_key):
         df = store.load(cache_key)
+        _attach_snapshot_context(df, universe)
         print(f"[CACHE] {cache_key}: {df.shape} déjà en cache (force=True pour rafraîchir).")
         return df
 
@@ -70,4 +83,5 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     df = df.sort_index().ffill().dropna(subset=[target.name])
     print(f"[INGEST] {df.shape} ({time.time()-t0:.1f}s) | cible={target.name}")
     store.save(cache_key, df)
+    _attach_snapshot_context(df, universe)
     return df

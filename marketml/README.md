@@ -106,30 +106,76 @@ Autres ajouts Phase 0 :
   pipeline (continuité avec la référence F1_dir≈0.610 du projet VIX d'origine),
   les nouvelles métriques ne la remplacent pas silencieusement.
 
+## Phase 1 — persistance SQLite
+
+`~/.patrick/patrick.db` (WAL, `foreign_keys=ON`, `busy_timeout=5000`), migré
+automatiquement à la connexion (`tracking/db.py::connect`, scripts SQL numérotés
+dans `tracking/migrations/`, table `schema_version` — pas d'Alembic, ce projet
+ne passe pas par SQLAlchemy). Chaque `run_pipeline()` écrit :
+- **`snapshot`** : un par contenu de données ingéré (hash déterministe, déduplique
+  automatiquement deux ingestions identiques — cf. Parquet ci-dessous).
+- **`run`** : un par (cible, horizon) de la config — une config à plusieurs
+  horizons écrit plusieurs `run`, qui partagent le même `snapshot_id`,
+  `config_hash`, `git_sha`. **Écart assumé par rapport au DDL fourni** : `run`
+  n'a pas de colonne `regime` (le moteur boucle aussi dessus) — ajoutée à
+  `trial` à la place (sinon deux trials de régimes différents partageant
+  horizon/N/sampler/algo seraient indiscernables).
+- **`trial`** : un par combinaison (régime, N, sampler, algo, params) réellement
+  testée — pas seulement la gagnante (prérequis direct de la Phase 2 : PBO/DSR
+  ont besoin de savoir combien de configurations ont été essayées).
+- **`fold_metric`** : toutes les métriques (F1_dir, BalAcc, MCC, AUC...) par
+  (trial, fold).
+- **`baseline_metric`** : majorité/persistance/HAR-RV, agrégées (moyenne) par
+  run — le DDL fourni n'a pas de colonne `fold_index` sur cette table, donc pas
+  de granularité par fold ici (contrairement au CSV `_leaderboard.csv`, qui
+  garde le détail par fold).
+- **`prediction`** : une ligne par observation de test (`y_true`, `y_pred`,
+  confiance de la classe prédite) — prérequis direct de la Phase 4 (simulateur
+  d'investissement, qui ne doit jamais relancer un modèle).
+
+Le data lake Parquet (`data/store.py`) est maintenant partitionné par snapshot
+immuable (`~/.patrick/store/snapshot=<date>/<clé>__<hash>.parquet`) plutôt que
+réécrit à chaque ingestion — deux ingestions identiques retombent sur le même
+snapshot (déduplication par hash), deux ingestions différentes le même jour
+coexistent sans s'écraser. `DataStore.query()` lit directement les Parquet par
+SQL via DuckDB, sans les recharger un par un en pandas.
+
+**Limite connue** : les vintages FRED (Phase 0.5) ne sont pas branchés par fold
+dans `run_pipeline` — le `snapshot` enregistré est donc celui de l'ingestion
+"aujourd'hui", pas un vintage par fold. Brancher ça demanderait la même
+généralisation "par coupure de fold" déjà faite pour les features paramétriques.
+
 ## État de la vérification
 
 Le moteur complet (ingestion -> features -> walk-forward -> sélection -> grille ->
-Optuna -> export) est validé par un test de fumée bout-en-bout sur données
-synthétiques (`tests/test_pipeline_smoke.py`) et 40 tests unitaires (`pytest
-tests/`, 42 avec les paramétrisations), dont un test de fumée de l'interface web
-(`test_webapp_smoke.py`) et les tests de fuite de la Phase 0
-(`test_leakage.py`).
+Optuna -> export -> persistance SQLite) est validé par des tests de fumée
+bout-en-bout sur données synthétiques (`tests/test_pipeline_smoke.py`,
+`test_webapp_smoke.py`) et 56 tests unitaires (`pytest tests/`, 58 avec les
+paramétrisations), dont les tests de fuite de la Phase 0 (`test_leakage.py`) et
+les tests de persistance de la Phase 1 (`test_db.py`, `test_store_snapshot.py`).
+Le critère de sortie Phase 1 (deux runs identiques sur le même snapshot
+produisent des métriques identiques, et écrivent snapshot+run+trials+
+fold_metrics+baselines+predictions) est vérifié explicitement par
+`test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot`.
+
 **La vérification avec de vraies données** a été faite sur une machine avec
 accès réseau yfinance/FRED (`patrick run --config
 configs/examples/vix_direction.yaml`) ; un bug sur les séries FRED traversant
 zéro (T10Y2Y, EFFR) a été trouvé et corrigé à cette occasion (`safe_pct_change`,
 cf. `features/_utils.py`), et un problème plus récent de fiabilité du scraping
-FRED a mené à l'ajout du chemin API authentifié ci-dessus. **La Phase 0 n'a en
-revanche pas encore été revérifiée avec de vraies données** — les corrections
-(fold-dépendance des features paramétriques notamment) changeront probablement
-la référence F1_dir≈0.610, à revalider sur une machine avec accès réseau.
+FRED a mené à l'ajout du chemin API authentifié ci-dessus. **Les Phases 0 et 1
+n'ont en revanche pas encore été revérifiées avec de vraies données** — les
+corrections de fuite (fold-dépendance des features paramétriques notamment)
+changeront probablement la référence F1_dir≈0.610, à revalider sur une machine
+avec accès réseau.
 
 ## Feuille de route
 
-- Phase 1+ (persistance SQLite, validité statistique, exécution robuste,
-  simulation d'investissement, hygiène) — voir le plan en 5 phases fourni,
-  Phase 0 seule traitée pour l'instant.
+- Phase 2+ (validité statistique — holdout terminal, DSR, PBO, Diebold-Mariano ;
+  exécution robuste ; simulation d'investissement ; hygiène) — voir le plan en 5
+  phases fourni, Phases 0 et 1 seules traitées pour l'instant.
 - Vintages FRED branchés par fold dans le moteur walk-forward (cf. limite
   documentée ci-dessus).
+- `patrick report`/`resume` s'appuyant sur la base SQLite désormais en place.
 - Modèles DL (TFT, LSTM, etc.) — jamais gagné en walk-forward dans le projet VIX,
   resteront désactivés par défaut.

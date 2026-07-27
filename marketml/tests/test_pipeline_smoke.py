@@ -7,6 +7,8 @@ doit être relancée par un humain sur une machine avec accès réseau.
 """
 from __future__ import annotations
 
+import sqlite3
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -58,14 +60,15 @@ def tiny_config(tmp_path) -> RunConfig:
     return RunConfig.model_validate(raw_yaml)
 
 
-def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch):
+def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tmp_path):
     def fake_ingest(objective, universe, store=None, force=False):
         return _synthetic_raw()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
 
-    result = engine_module.run_pipeline(tiny_config, store=DataStore(root=str(
-        tiny_config.output.dir) + "_store"))
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_store"),
+        db_path=str(tmp_path / "patrick_test.db"))
 
     board = result["leaderboard"]
     assert len(board) > 0
@@ -76,3 +79,49 @@ def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch):
     assert result["model_path"] is not None
     import os
     assert os.path.exists(result["model_path"])
+
+
+def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_config, monkeypatch, tmp_path):
+    """Critère de sortie Phase 1 : un run complet écrit snapshot + run + N trials
+    + fold_metrics + baselines + predictions ; deux runs identiques sur le même
+    snapshot produisent des métriques identiques."""
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test.db")
+    store = DataStore(root=str(tmp_path / "store"))
+
+    result1 = engine_module.run_pipeline(tiny_config, store=store, db_path=db_path)
+    result2 = engine_module.run_pipeline(tiny_config, store=store, db_path=db_path)
+
+    board1 = result1["leaderboard"].drop(columns=["test_start", "test_end"], errors="ignore")
+    board2 = result2["leaderboard"].drop(columns=["test_start", "test_end"], errors="ignore")
+    pd.testing.assert_frame_equal(
+        board1.sort_values(list(board1.columns)).reset_index(drop=True),
+        board2.sort_values(list(board2.columns)).reset_index(drop=True),
+    )
+
+    conn = sqlite3.connect(db_path)
+    n_snapshots = conn.execute("SELECT count(*) FROM snapshot").fetchone()[0]
+    n_runs = conn.execute("SELECT count(*) FROM run").fetchone()[0]
+    n_trials = conn.execute("SELECT count(*) FROM trial").fetchone()[0]
+    n_fold_metrics = conn.execute("SELECT count(*) FROM fold_metric").fetchone()[0]
+    n_baselines = conn.execute("SELECT count(*) FROM baseline_metric").fetchone()[0]
+    n_predictions = conn.execute("SELECT count(*) FROM prediction").fetchone()[0]
+
+    # deux runs sur données identiques -> un seul snapshot (dédupliqué par hash),
+    # mais deux fois plus de runs/trials/predictions (deux exécutions distinctes).
+    assert n_snapshots == 1
+    assert n_runs == 2 * len(tiny_config.objective.horizons)
+    assert n_trials > 0
+    assert n_fold_metrics > 0
+    assert n_baselines > 0
+    assert n_predictions > 0
+
+    statuses = [r[0] for r in conn.execute("SELECT status FROM run").fetchall()]
+    assert all(s == "done" for s in statuses)
+
+    best_trials = conn.execute("SELECT count(*) FROM trial WHERE is_best = 1").fetchall()
+    assert best_trials[0][0] >= 1  # au moins un trial marqué gagnant sur les deux runs
+    conn.close()

@@ -30,6 +30,7 @@ dependencies = [
     "openpyxl",
     "xlsxwriter",
     "optuna",
+    "duckdb",
 ]
 
 [project.optional-dependencies]

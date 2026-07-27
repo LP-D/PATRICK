@@ -22,11 +22,24 @@ Les interactions sont découvertes une fois sur le fold pilote (comme avant) mai
 leurs FORMULES (déterministes, algébriques) sont réappliquées à chaque pool de
 fold — pas de fuite : une formule appliquée à des valeurs déjà correctement
 recalculées par fold ne réintroduit rien.
+
+Phase 1 (persistance SQLite) : chaque évaluation (pas seulement la gagnante) est
+écrite dans `~/.patrick/patrick.db` — une ligne `run` par (target, horizon) de la
+config (ils partagent le même `snapshot_id`), une ligne `trial` par combinaison
+(régime, N, sampler, algo) réellement testée, une ligne `fold_metric` par
+(trial, fold, métrique), une ligne `prediction` par observation de test. Le CSV/
+leaderboard existant n'est pas remplacé, seulement complété : la base sert la
+Phase 2 (validité statistique), pas un remplacement de l'export actuel.
 """
 from __future__ import annotations
 
+import ast
+import hashlib
+import json
 import os
 import time
+import uuid
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -44,6 +57,7 @@ from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
+from patrick.tracking import db as trackdb
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
 from patrick.validation.baselines import compute_baselines
@@ -205,6 +219,23 @@ class _FoldPoolBuilder:
         return self._cache[cut_idx]
 
 
+@dataclass
+class FoldData:
+    """Sortie de `_FoldContext.prepare()` — un objet nommé plutôt qu'un tuple
+    positionnel : la Phase 1 (persistance) a besoin de `test_dates` (une date par
+    ligne de test, pour la table `prediction`) en plus de ce qu'utilisait déjà la
+    Phase 0, et un 8e élément positionnel commençait à être illisible/fragile à
+    l'appel."""
+    X_tr: np.ndarray
+    y_tr: np.ndarray
+    X_te: np.ndarray
+    y_te: np.ndarray
+    test_start: str
+    test_end: str
+    test_dates: list[str]
+    baselines: dict | None = None
+
+
 class _FoldContext:
     """Prépare X_tr/y_tr/X_te/y_te pour un (horizon, fold, régime) donné — utilisé
     à la fois par le scan principal et par la ré-évaluation post-Optuna, pour
@@ -220,7 +251,8 @@ class _FoldContext:
         self.all_dates = all_dates
         self.fold_cuts = fold_cuts
 
-    def prepare(self, horizon: int, fold_idx: int, regime: str, want_baselines: bool = False):
+    def prepare(self, horizon: int, fold_idx: int, regime: str,
+                want_baselines: bool = False) -> FoldData | None:
         cfg = self.config
         cut, nxt = self.fold_cuts[fold_idx], self.fold_cuts[fold_idx + 1]
         cut_date, nxt_date = self.all_dates[cut], self.all_dates[nxt - 1]
@@ -252,13 +284,15 @@ class _FoldContext:
         sc = RobustScaler()
         X_tr = sc.fit_transform(np.nan_to_num(X_pool_df.values[tr_mask]))
         X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
+        test_dates = [str(d.date()) for d in idx[te_mask]]
 
         baselines = None
         if want_baselines:
             baselines = compute_baselines(pool[self.target_col], target_series, idx,
                                            tr_mask, te_mask, y_tr, y_te, horizon, thr, reg_r)
 
-        return X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()), baselines
+        return FoldData(X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()),
+                         test_dates, baselines)
 
 
 def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
@@ -268,31 +302,71 @@ def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, 
 
 
 def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
-              sampler_name: str, algo: str, seed: int, **algo_overrides) -> dict:
+              sampler_name: str, algo: str, seed: int, **algo_overrides):
+    """Retourne (metrics_dict, y_pred, confiance_prédite) — `confiance_prédite`
+    (probabilité de la classe prédite, une valeur par ligne de test) alimente
+    `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe)."""
     try:
         Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
     except Exception:
         Xr, yr = X_tr, y_tr
     clf = get_classifier(algo, seed=seed, **algo_overrides)
     clf.fit(Xr, yr)
-    y_pred = clf.predict(X_te)
+    y_pred = np.asarray(clf.predict(X_te)).ravel()
     y_proba = None
+    confidence = None
     if hasattr(clf, "predict_proba"):
         try:
             y_proba = clf.predict_proba(X_te)
+            confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
         except Exception:
             y_proba = None
-    return metrics(y_te, y_pred, y_proba=y_proba)
+    met = metrics(y_te, y_pred, y_proba=y_proba)
+    return met, y_pred, confidence
+
+
+def _config_hash(config: RunConfig) -> str:
+    return hashlib.sha256(config.model_dump_json().encode()).hexdigest()[:16]
+
+
+def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None]:
+    """Lit le contexte de snapshot déposé par `ingest()` sur `raw.attrs` (Phase
+    1.6). En repli — `raw` vient d'un `ingest` monkeypatché par un test, sans
+    `.attrs` — calcule un identifiant ad-hoc à partir du contenu, pour que la
+    persistance reste fonctionnelle/testable même sans le vrai `ingest()`."""
+    snapshot_id = raw.attrs.get("snapshot_id")
+    data_hash = raw.attrs.get("data_hash")
+    if not snapshot_id:
+        data_hash = hashlib.sha256(
+            pd.util.hash_pandas_object(raw, index=True).values.tobytes()).hexdigest()[:12]
+        snapshot_id = f"adhoc__{data_hash}"
+    return snapshot_id, data_hash or snapshot_id, raw.attrs.get("n_tickers"), \
+        raw.attrs.get("n_fred_series"), raw.attrs.get("fred_source")
 
 
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
-                  force_ingest: bool = False) -> dict:
+                  force_ingest: bool = False, db_path: str | None = None) -> dict:
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
 
     raw = ingest(config.objective, config.universe, store, force=force_ingest)
     target_col = clean_symbol(config.objective.target_symbol)
+
+    conn = trackdb.connect(db_path or trackdb.DEFAULT_DB_PATH)
+    snapshot_id, data_hash, n_tickers, n_fred_series, fred_src = _snapshot_context(raw)
+    trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
+    config_json = config.model_dump_json()
+    config_hash = _config_hash(config)
+    git_sha = trackdb.current_git_sha()
+
+    run_ids: dict[int, str] = {}
+    for horizon in config.objective.horizons:
+        run_id = f"{config.name}_h{horizon}_{uuid.uuid4().hex[:8]}"
+        trackdb.create_run(conn, run_id, target=config.objective.target_symbol, horizon=horizon,
+                            snapshot_id=snapshot_id, config_json=config_json,
+                            config_hash=config_hash, git_sha=git_sha, seed=seed)
+        run_ids[horizon] = run_id
 
     all_dates = raw.index
     fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds,
@@ -311,35 +385,53 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
 
     board = Leaderboard()
     baseline_rows: list[dict] = []
+    baseline_accum: dict[tuple[str, str], list[dict]] = {}
+    trial_ids: dict[tuple, int] = {}
+    n_trials_per_run: dict[str, int] = {h: 0 for h in run_ids.values()}
     last_fold = config.validation.n_wf_folds - 1
 
     for horizon in config.objective.horizons:
+        run_id = run_ids[horizon]
         for k in range(config.validation.n_wf_folds):
             for regime in config.objective.regimes:
-                prepared = ctx.prepare(horizon, k, regime, want_baselines=True)
-                if prepared is None:
+                fd = ctx.prepare(horizon, k, regime, want_baselines=True)
+                if fd is None:
                     continue
-                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end, baselines = prepared
 
-                for baseline_name, base_met in (baselines or {}).items():
+                for baseline_name, base_met in (fd.baselines or {}).items():
                     baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
                                            "N": None, "sampler": None, "algo": baseline_name,
-                                           "features": "", "n_train": len(y_tr), "n_test": len(y_te),
-                                           "test_start": test_start, "test_end": test_end, **base_met})
+                                           "features": "", "n_train": len(fd.y_tr), "n_test": len(fd.y_te),
+                                           "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
+                    baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
 
                 for n_feat in config.selection.n_features_grid:
-                    cols = _select(config, X_tr_full, y_tr, n_feat, seed)
-                    X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
+                    cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+                    X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
                     feat_names = [feature_pool[c] for c in cols]
 
                     for sampler_name in config.sampler.candidates:
                         for algo in config.models.algos:
-                            met = _fit_eval(X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed)
+                            met, y_pred, confidence = _fit_eval(
+                                X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed)
                             board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
                                       sampler=sampler_name, algo=algo,
                                       features="|".join(feat_names),
-                                      n_train=len(y_tr), n_test=len(y_te),
-                                      test_start=test_start, test_end=test_end, **met)
+                                      n_train=len(fd.y_tr), n_test=len(fd.y_te),
+                                      test_start=fd.test_start, test_end=fd.test_end, **met)
+
+                            trial_key = (horizon, regime, n_feat, sampler_name, algo)
+                            if trial_key not in trial_ids:
+                                trial_ids[trial_key] = trackdb.create_trial(
+                                    conn, run_id, regime, algo, sampler_name, n_feat,
+                                    selector=config.selection.method)
+                                n_trials_per_run[run_id] += 1
+                            trial_id = trial_ids[trial_key]
+                            trackdb.add_fold_metrics(conn, trial_id, fold_index=k + 1,
+                                                      split="test", metrics=met)
+                            trackdb.add_predictions(conn, trial_id, fold_index=k + 1, split="test",
+                                                     ts=fd.test_dates, y_true=fd.y_te,
+                                                     y_pred=y_pred, y_proba=confidence)
 
             print(f"  h={horizon:2d}j fold{k+1}: {len(board.rows)} lignes cumulées "
                   f"[{time.time()-t0:.0f}s]")
@@ -351,6 +443,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
               f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
 
     tuned_rows = []
+    tuned_trial_ids: dict[tuple, int] = {}
     if config.tuning.enabled and len(board.rows):
         top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
         print(f"\n[OPTUNA] affinage des {len(top_configs)} meilleures configs "
@@ -358,34 +451,44 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         for cfg in top_configs:
             horizon, regime, n_feat = int(cfg["horizon"]), cfg["regime"], int(cfg["N"])
             sampler_name, algo = cfg["sampler"], cfg["algo"]
+            run_id = run_ids[horizon]
 
-            prepared = ctx.prepare(horizon, last_fold, regime)
-            if prepared is None:
+            fd = ctx.prepare(horizon, last_fold, regime)
+            if fd is None:
                 continue
-            X_tr_full, y_tr, _, _, _, _, _ = prepared
-            if len(y_tr) < config.validation.min_train_rows * 2:
+            if len(fd.y_tr) < config.validation.min_train_rows * 2:
                 continue
-            cols = _select(config, X_tr_full, y_tr, n_feat, seed)
-            X_tr_n = X_tr_full[:, cols]
+            cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+            X_tr_n = fd.X_tr[:, cols]
 
-            best_params, best_cv = tune_config(X_tr_n, y_tr, algo, sampler_name,
+            best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
                                                 n_trials=config.tuning.n_trials,
                                                 cv_splits=config.tuning.cv_splits, seed=seed)
             print(f"  h={horizon}j {regime} N={n_feat} {sampler_name} {algo}: "
                   f"cv_F1_dir={best_cv:.4f} params={best_params}")
 
+            tuned_key = (horizon, regime, n_feat, sampler_name, algo, json.dumps(best_params, sort_keys=True))
+            tuned_trial_ids[tuned_key] = trackdb.create_trial(
+                conn, run_id, regime, algo, sampler_name, n_feat,
+                selector=config.selection.method, params_json=json.dumps(best_params))
+            n_trials_per_run[run_id] += 1
+            tuned_trial_id = tuned_trial_ids[tuned_key]
+
             for k in range(config.validation.n_wf_folds):
-                prepared = ctx.prepare(horizon, k, regime)
-                if prepared is None:
+                fd = ctx.prepare(horizon, k, regime)
+                if fd is None:
                     continue
-                X_tr_full, y_tr, X_te_full, y_te, test_start, test_end, _ = prepared
-                cols = _select(config, X_tr_full, y_tr, n_feat, seed)
-                X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
-                met = _fit_eval(X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed, **best_params)
+                cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+                X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
+                met, y_pred, confidence = _fit_eval(
+                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed, **best_params)
                 tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
                                     "N": n_feat, "sampler": sampler_name, "algo": algo,
                                     "best_params": str(best_params),
-                                    "test_start": test_start, "test_end": test_end, **met})
+                                    "test_start": fd.test_start, "test_end": fd.test_end, **met})
+                trackdb.add_fold_metrics(conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
+                trackdb.add_predictions(conn, tuned_trial_id, fold_index=k + 1, split="test",
+                                         ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
 
     tuned_df = pd.DataFrame(tuned_rows)
     if baseline_rows:
@@ -397,6 +500,16 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         tuned_df.to_csv(tuned_path, index=False)
         print(f"[EXPORT] {tuned_path}")
     print(f"[EXPORT] {csv_path}")
+
+    # baseline_metric n'a pas de colonne fold_index (schéma Phase 1.2) : agrégée
+    # (moyenne) par run plutôt qu'écrite par fold — cf. rapport de phase.
+    for (run_id, baseline_name), fold_dicts in baseline_accum.items():
+        agg = {}
+        for m in {k for d in fold_dicts for k in d}:
+            values = [v for v in (d.get(m) for d in fold_dicts) if v is not None and v == v]
+            if values:
+                agg[m] = float(np.mean(values))
+        trackdb.add_baseline_metrics(conn, run_id, baseline_name, split="test", metrics=agg)
 
     final_best = dict(best) if best else None
     if len(tuned_df):
@@ -416,6 +529,21 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             full_pool = pd.concat([full_pool, full_inter], axis=1)
         model_path = export_best_model(full_pool, target_col, feature_pool, config,
                                         final_best, config.output.dir, seed=seed)
+
+        best_key = (int(final_best["horizon"]), final_best["regime"], int(final_best["N"]),
+                    final_best["sampler"], final_best["algo"])
+        best_trial_id = trial_ids.get(best_key)
+        if best_trial_id is None and "best_params" in final_best:
+            raw_params = final_best["best_params"]
+            parsed_params = ast.literal_eval(raw_params) if isinstance(raw_params, str) else raw_params
+            tuned_key = best_key + (json.dumps(parsed_params, sort_keys=True),)
+            best_trial_id = tuned_trial_ids.get(tuned_key)
+        if best_trial_id is not None:
+            trackdb.mark_best_trial(conn, best_trial_id, artifact_path=model_path)
+
+    for run_id in run_ids.values():
+        trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])
+    conn.close()
 
     return {
         "leaderboard": board.as_df(),

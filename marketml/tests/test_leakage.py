@@ -142,8 +142,8 @@ def test_corrupting_the_future_does_not_change_train_features_or_model():
     assert prepared_orig is not None and prepared_corr is not None
     assert feat_orig == feat_corr, "les deux pools doivent avoir les mêmes colonnes (mêmes noms)"
 
-    X_tr_o, y_tr_o, _, _, _, _, _ = prepared_orig
-    X_tr_c, y_tr_c, _, _, _, _, _ = prepared_corr
+    X_tr_o, y_tr_o = prepared_orig.X_tr, prepared_orig.y_tr
+    X_tr_c, y_tr_c = prepared_corr.X_tr, prepared_corr.y_tr
 
     np.testing.assert_array_equal(y_tr_o, y_tr_c)
     np.testing.assert_allclose(
@@ -182,8 +182,8 @@ def test_corrupting_the_future_changes_test_set_predictably():
     prepared_orig, _ = _prepare_fold(raw, config, fold_idx=0)
     prepared_corr, _ = _prepare_fold(raw_corrupted, config, fold_idx=0)
 
-    _, _, X_te_o, _, _, _, _ = prepared_orig
-    _, _, X_te_c, _, _, _, _ = prepared_corr
+    X_te_o = prepared_orig.X_te
+    X_te_c = prepared_corr.X_te
     # le bruit énorme de corruption change aussi le nombre de lignes "non plates"
     # retenues par build_target -> une forme différente est déjà la preuve que le
     # test a changé ; sinon comparaison de valeurs.
@@ -217,7 +217,7 @@ def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed):
 
     prepared, feature_pool = _prepare_fold(raw, config, fold_idx=0)
     assert prepared is not None
-    X_tr, y_tr, X_te, y_te, _, _, _ = prepared
+    X_tr, y_tr, X_te, y_te = prepared.X_tr, prepared.y_tr, prepared.X_te, prepared.y_te
 
     cols_true = _select(config, X_tr, y_tr, 3, seed=42)
     clf_true = get_classifier("RandomForest", seed=42)
