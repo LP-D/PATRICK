@@ -4,10 +4,12 @@ progression que via `print()` (pas de callback/logger exposé côté moteur) —
 on l'exécute dans un thread et on capture stdout pour en tirer logs +
 progression, sans toucher à `patrick.pipeline.engine`.
 
-Un seul run actif à la fois : `sys.stdout` est un objet global du process,
-donc capturer stdout par thread n'est fiable que si les runs ne se chevauchent
-pas (cf. plan). C'est une contrainte assumée pour cet outil local mono-
-utilisateur, pas un oubli.
+Un seul run actif (en exécution) à la fois : `sys.stdout` est un objet global
+du process, donc capturer stdout par thread n'est fiable que si les runs ne se
+chevauchent pas (cf. plan). C'est une contrainte assumée pour cet outil local
+mono-utilisateur, pas un oubli — les runs suivants ne sont pas rejetés pour
+autant : `start_run` les met en file d'attente (`status="queued"`, `_QUEUE`)
+et `_advance_queue` démarre le prochain dès que l'actif se termine.
 """
 from __future__ import annotations
 
@@ -42,7 +44,7 @@ _PHASE_MARKERS = [
 class RunState:
     id: str
     config: RunConfig
-    status: str = "running"  # running | done | error
+    status: str = "running"  # running | queued | done | error
     phase: str = "ingestion"
     log_lines: deque = field(default_factory=lambda: deque(maxlen=500))
     progress_done: int = 0
@@ -54,15 +56,28 @@ class RunState:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def snapshot(self) -> dict:
+        # `_RUNS_LOCK` (file d'attente) puis `self.lock` (ce run) séparément,
+        # jamais imbriqués : évite tout risque d'inversion d'ordre de verrous
+        # avec `start_run`/`_advance_queue`, qui prennent l'un ou l'autre mais
+        # jamais les deux à la fois.
+        queue_position = None
+        if self.status == "queued":
+            with _RUNS_LOCK:
+                try:
+                    queue_position = _QUEUE.index(self) + 1
+                except ValueError:
+                    queue_position = None
         with self.lock:
             return {
                 "id": self.id,
+                "name": self.config.name,
                 "status": self.status,
                 "phase": self.phase,
                 "progress": {"done": self.progress_done, "total": self.progress_total},
                 "log_tail": list(self.log_lines)[-200:],
                 "error": self.error,
                 "elapsed_s": (self.finished_at or time.time()) - self.started_at,
+                "queue_position": queue_position,
             }
 
 
@@ -101,6 +116,7 @@ class _TeeCapture:
 
 _RUNS: dict[str, RunState] = {}
 _RUNS_LOCK = threading.Lock()
+_QUEUE: deque[RunState] = deque()
 
 
 def _estimate_total(config: RunConfig) -> int:
@@ -115,6 +131,11 @@ def _estimate_total(config: RunConfig) -> int:
     return max(total, 1)
 
 
+def _has_active_run_locked() -> bool:
+    """Suppose `_RUNS_LOCK` déjà tenu par l'appelant."""
+    return any(s.status == "running" for s in _RUNS.values())
+
+
 def active_run() -> RunState | None:
     with _RUNS_LOCK:
         for state in _RUNS.values():
@@ -123,22 +144,53 @@ def active_run() -> RunState | None:
     return None
 
 
+def queued_runs() -> list[RunState]:
+    with _RUNS_LOCK:
+        return list(_QUEUE)
+
+
 def get_run(run_id: str) -> RunState | None:
     return _RUNS.get(run_id)
 
 
 def start_run(config: RunConfig) -> RunState:
-    if active_run() is not None:
-        raise RuntimeError("Un run est déjà en cours — attends qu'il se termine.")
-
+    """Lance le run tout de suite s'il n'y en a pas d'actif, sinon le met en
+    file d'attente (`status="queued"`) — plus d'erreur "un run est déjà en
+    cours" : préparer et soumettre le run suivant pendant que l'actif tourne
+    est le cas d'usage normal (formulaire settings visible/utilisable en
+    permanence côté web)."""
     run_id = uuid.uuid4().hex[:12]
     state = RunState(id=run_id, config=config, progress_total=_estimate_total(config))
     with _RUNS_LOCK:
+        # Vérifier AVANT d'enregistrer ce nouveau state dans `_RUNS` : sinon
+        # `_has_active_run_locked` le voit lui-même (status par défaut =
+        # "running") et il se retrouve mis en attente derrière lui-même.
+        must_queue = _has_active_run_locked()
         _RUNS[run_id] = state
+        if must_queue:
+            _QUEUE.append(state)
+    if must_queue:
+        with state.lock:
+            state.status = "queued"
+        return state
+    _launch(state)
+    return state
 
+
+def _launch(state: RunState) -> None:
+    with state.lock:
+        state.status = "running"
+        state.started_at = time.time()
     thread = threading.Thread(target=_run_worker, args=(state,), daemon=True)
     thread.start()
-    return state
+
+
+def _advance_queue() -> None:
+    with _RUNS_LOCK:
+        if _has_active_run_locked() or not _QUEUE:
+            return
+        next_state = _QUEUE.popleft()
+    _launch(next_state)
 
 
 def _run_worker(state: RunState) -> None:
@@ -157,6 +209,7 @@ def _run_worker(state: RunState) -> None:
     finally:
         with state.lock:
             state.finished_at = time.time()
+        _advance_queue()
 
 
 def _run_with_stdout_captured(config: RunConfig, capture: _TeeCapture) -> dict:

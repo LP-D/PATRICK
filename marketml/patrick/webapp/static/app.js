@@ -14,26 +14,88 @@
         done: tr("phase_done", "Done."),
     };
 
+    const form = document.getElementById("run-form");
+    const errorsBanner = document.getElementById("run-errors");
+    const errorsList = document.getElementById("run-errors-list");
+    const launchBtn = document.getElementById("launch-btn");
+    const noRunMessage = document.getElementById("no-run-message");
+    const statusPanel = document.getElementById("status-panel");
+    const runNameLine = document.getElementById("run-name-line");
     const fill = document.getElementById("progress-fill");
     const statusLine = document.getElementById("status-line");
     const logTail = document.getElementById("log-tail");
     const resultsPanel = document.getElementById("results-panel");
+    const queuePanel = document.getElementById("queue-panel");
+    const queueSummary = document.getElementById("queue-summary");
 
+    let trackedRunId = null;
     let resultsLoaded = false;
-    let pollTimer = null;
+    let detailPollTimer = null;
 
-    async function poll() {
+    // scaleX plutôt que width : évite le reflow (transform anime en GPU).
+    function setProgress(pct) {
+        fill.style.transform = `scaleX(${Math.max(0, Math.min(100, pct)) / 100})`;
+    }
+
+    // --- bandeau d'erreurs de validation (soumission AJAX) ---
+
+    function showErrors(errors) {
+        errorsList.innerHTML = "";
+        (errors || []).forEach((e) => {
+            const li = document.createElement("li");
+            li.textContent = e;
+            errorsList.appendChild(li);
+        });
+        errorsBanner.classList.remove("hidden");
+        errorsBanner.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function clearErrors() {
+        errorsBanner.classList.add("hidden");
+        errorsList.innerHTML = "";
+    }
+
+    // --- suivi détaillé d'un run (progression/logs/résultats) ---
+
+    function startTracking(runId) {
+        if (runId === trackedRunId && detailPollTimer) return;
+        trackedRunId = runId;
+        resultsLoaded = false;
+        noRunMessage.classList.add("hidden");
+        statusPanel.classList.remove("hidden");
+        resultsPanel.classList.add("hidden");
+        resultsPanel.innerHTML = "";
+        setProgress(0);
+        logTail.textContent = "";
+        statusLine.textContent = "…";
+        if (detailPollTimer) clearInterval(detailPollTimer);
+        detailPoll();
+        detailPollTimer = setInterval(detailPoll, 1500);
+    }
+
+    async function detailPoll() {
+        if (!trackedRunId) return;
         let data;
         try {
-            const res = await fetch(`/runs/${RUN_ID}/status`);
+            const res = await fetch(`/runs/${trackedRunId}/status`);
             data = await res.json();
         } catch (e) {
             statusLine.textContent = tr("status_connection_lost", "Connection to server lost — retrying…");
             return;
         }
 
+        if (runNameLine) runNameLine.textContent = data.name || "";
+
+        if (data.status === "queued") {
+            setProgress(0);
+            logTail.textContent = "";
+            statusLine.textContent = fmtStr(tr("run_queued_confirm", "Run “{name}” queued (position {position})."),
+                { name: data.name || trackedRunId, position: data.queue_position ?? "?" });
+            return;
+        }
+
         const pct = Math.min(100, Math.round((data.progress.done / data.progress.total) * 100));
-        fill.style.width = pct + "%";
+        setProgress(pct);
         logTail.textContent = data.log_tail.join("\n");
         logTail.scrollTop = logTail.scrollHeight;
 
@@ -43,28 +105,28 @@
             });
         } else if (data.status === "error") {
             statusLine.innerHTML = `<span class="error-text">${escapeHtml(fmtStr(tr("status_error", "Error: {error}"), { error: data.error }))}</span>`;
-            clearInterval(pollTimer);
+            clearInterval(detailPollTimer);
         } else if (data.status === "done") {
             statusLine.textContent = fmtStr(tr("status_done", "Done in {elapsed}s."), { elapsed: Math.round(data.elapsed_s) });
-            fill.style.width = "100%";
-            clearInterval(pollTimer);
+            setProgress(100);
+            clearInterval(detailPollTimer);
             if (!resultsLoaded) {
                 resultsLoaded = true;
-                loadResults();
+                loadResults(trackedRunId);
             }
         }
     }
 
-    async function loadResults() {
-        const res = await fetch(`/runs/${RUN_ID}/results`);
+    async function loadResults(runId) {
+        const res = await fetch(`/runs/${runId}/results`);
         if (!res.ok) return;
         const data = await res.json();
         resultsPanel.classList.remove("hidden");
-        resultsPanel.innerHTML = renderResults(data);
+        resultsPanel.innerHTML = renderResults(data, runId);
         attachSort(data.top_rows);
     }
 
-    function renderResults(data) {
+    function renderResults(data, runId) {
         const best = data.final_best;
         const bestHtml = best
             ? `<div class="best-box">
@@ -75,7 +137,7 @@
             : "";
 
         const downloads = Object.entries(data.artifacts || {})
-            .map(([key, _]) => `<a href="/runs/${RUN_ID}/download/${key}" download>${labelFor(key)}</a>`)
+            .map(([key, _]) => `<a href="/runs/${runId}/download/${key}" download>${labelFor(key)}</a>`)
             .join("");
 
         const cols = data.leaderboard_columns || [];
@@ -92,11 +154,11 @@
             { n: (data.top_rows || []).length });
 
         return `
-            <h2>${tr("results_title", "Results")}</h2>
+            <h3>${tr("results_title", "Results")}</h3>
             <p>${summary}</p>
             ${bestHtml}
             <div class="downloads">${downloads}</div>
-            <h3>${leaderboardTitle}</h3>
+            <h4>${leaderboardTitle}</h4>
             <div style="overflow-x:auto">
                 <table class="leaderboard" id="leaderboard-table">
                     <thead><tr>${head}</tr></thead>
@@ -152,6 +214,67 @@
         return div.innerHTML;
     }
 
-    poll();
-    pollTimer = setInterval(poll, 1500);
+    // --- état agrégé (file d'attente + détection du run actif courant) ---
+
+    async function runStatePoll() {
+        let data;
+        try {
+            const res = await fetch("/api/run-state");
+            data = await res.json();
+        } catch (e) {
+            return;
+        }
+
+        if (data.queue && data.queue.length) {
+            const names = data.queue.map((q) => q.name).join(", ");
+            queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued: {names}"),
+                { n: data.queue.length, names: names });
+            queuePanel.classList.remove("hidden");
+        } else {
+            queuePanel.classList.add("hidden");
+        }
+
+        // Le run actif côté serveur a changé (ex: la file d'attente a avancé
+        // automatiquement) : on bascule le suivi dessus sans recharger la page.
+        if (data.active_run && data.active_run.id !== trackedRunId) {
+            startTracking(data.active_run.id);
+        }
+    }
+
+    // --- soumission du formulaire settings, sans rechargement de page ---
+
+    if (form) {
+        form.addEventListener("submit", async (ev) => {
+            ev.preventDefault();
+            clearErrors();
+            launchBtn.disabled = true;
+            try {
+                const res = await fetch("/runs", { method: "POST", body: new FormData(form) });
+                const data = await res.json();
+                if (!res.ok) {
+                    showErrors(data.errors || [tr("run_launch_error", "Error launching the run.")]);
+                    return;
+                }
+                if (data.status === "running") {
+                    startTracking(data.run_id);
+                } else {
+                    // "queued" : le run affiché reste celui déjà actif ; on
+                    // rafraîchit juste la file d'attente tout de suite plutôt
+                    // que d'attendre le prochain tick de runStatePoll.
+                    runStatePoll();
+                }
+            } catch (e) {
+                showErrors([tr("run_launch_error", "Error launching the run.")]);
+            } finally {
+                launchBtn.disabled = false;
+            }
+        });
+    }
+
+    if (window.INITIAL_RUN_ID) {
+        startTracking(window.INITIAL_RUN_ID);
+    }
+
+    runStatePoll();
+    setInterval(runStatePoll, 4000);
 })();

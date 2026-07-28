@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -59,7 +59,9 @@ def set_lang(lang: str, next: str = "/"):
     return resp
 
 
-def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200):
+def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
+                   initial_run_id: str | None = None):
+    active = run_manager.active_run()
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -67,7 +69,9 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "view": view,
             "errors": errors,
             "examples": forms.list_example_configs(),
-            "active_run": run_manager.active_run(),
+            "active_run": active,
+            "queued_runs": run_manager.queued_runs(),
+            "initial_run_id": initial_run_id if initial_run_id is not None else (active.id if active else None),
             "movers": alerts.get_cached(),
             **FORM_OPTIONS,
             **_i18n_context(request),
@@ -111,6 +115,10 @@ def movers():
 
 @app.post("/runs")
 async def create_run(request: Request):
+    """Répond en JSON (consommé par `app.js` en AJAX, sans rechargement de
+    page) : un run est démarré immédiatement s'il n'y en a pas d'actif, sinon
+    mis en file d'attente — jamais rejeté, `start_run` ne lève plus d'erreur
+    dans ce cas (cf. `run_manager.py`)."""
     form = await request.form()
     config_dict, errors = forms.build_config_dict(form)
 
@@ -124,14 +132,27 @@ async def create_run(request: Request):
         config = None
 
     if errors:
-        return _render_index(request, forms.to_view(config_dict), errors, status_code=400)
+        return JSONResponse({"errors": errors}, status_code=400)
 
-    try:
-        state = run_manager.start_run(config)
-    except RuntimeError as exc:
-        return _render_index(request, forms.to_view(config_dict), [str(exc)], status_code=409)
+    state = run_manager.start_run(config)
+    snap = state.snapshot()
+    return JSONResponse({
+        "run_id": state.id,
+        "status": snap["status"],
+        "queue_position": snap["queue_position"],
+    })
 
-    return RedirectResponse(f"/runs/{state.id}", status_code=303)
+
+@app.get("/api/run-state")
+def run_state():
+    """État agrégé léger (run actif + file d'attente) — poll périodique côté
+    JS pour suivre l'avancement de la file, distinct du polling détaillé
+    `/runs/{run_id}/status` (progression/logs d'un run précis)."""
+    active = run_manager.active_run()
+    return {
+        "active_run": {"id": active.id, "name": active.config.name} if active else None,
+        "queue": [{"id": s.id, "name": s.config.name} for s in run_manager.queued_runs()],
+    }
 
 
 def _get_run_or_404(run_id: str):
@@ -143,11 +164,14 @@ def _get_run_or_404(run_id: str):
 
 @app.get("/runs/{run_id}")
 def run_page(request: Request, run_id: str):
+    """Même tableau de bord qu'`index()` (un seul gabarit, `index.html`) —
+    seul `initial_run_id` change, forcé sur ce run précis plutôt que sur le
+    run actif courant. Permet de rouvrir/partager le lien d'un run passé ou en
+    cours sans dupliquer le template. Le formulaire settings est prérempli
+    avec la config réelle de ce run (pas les défauts)."""
     state = _get_run_or_404(run_id)
-    return templates.TemplateResponse(
-        request, "run.html",
-        {"run_id": run_id, "config_name": state.config.name, **_i18n_context(request)},
-    )
+    view = forms.to_view(state.config.model_dump())
+    return _render_index(request, view, [], initial_run_id=run_id)
 
 
 @app.get("/runs/{run_id}/status")

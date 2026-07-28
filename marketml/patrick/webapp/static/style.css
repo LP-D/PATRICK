@@ -89,7 +89,54 @@ body {
 }
 .lang-switch a:hover { color: var(--text); }
 .lang-switch a.active { color: var(--gold-1); border-color: var(--border); background: var(--panel-2); }
-.container { max-width: 900px; margin: 0 auto; padding: 24px; }
+.container { max-width: 1560px; margin: 0 auto; padding: 24px; }
+
+/* Tableau de bord : 4 encarts (settings / avancement / marché / movers)
+   formant un plus grand rectangle. Chaque encart défile indépendamment
+   (contenus de longueurs très différentes) plutôt que d'étirer la page. */
+.dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(2, minmax(420px, 1fr));
+    gap: 20px;
+    height: calc(100vh - 120px);
+    min-height: 640px;
+}
+/* En-tête de chaque encart fixe (hors flux de défilement) ; seul
+   .dash-panel-body défile — évite tout chevauchement entre l'en-tête et le
+   contenu qui remonte sous lui (ex. <legend> d'un fieldset, qui déborde par
+   nature au-dessus de sa boîte). */
+.dash-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px 0;
+}
+.dash-panel-title {
+    flex: 0 0 auto;
+    margin: 0 0 14px;
+    padding-bottom: 10px;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: var(--text);
+}
+.dash-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 22px;
+}
+.dash-movers .movers-header { margin-bottom: 0; padding-bottom: 14px; flex: 0 0 auto; }
+.dash-movers .dash-panel-title { padding-bottom: 0; margin-bottom: 0; }
+
+@media (max-width: 980px) {
+    .dashboard { grid-template-columns: 1fr; grid-template-rows: none; height: auto; }
+    .dash-panel { max-height: 70vh; }
+}
 
 .banner { padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; }
 .banner-error { background: rgba(193, 84, 76, 0.12); border: 1px solid var(--error); }
@@ -103,7 +150,10 @@ fieldset {
     border-radius: 14px;
     padding: 18px 18px 14px;
     margin-bottom: 16px;
-    background: var(--panel);
+    /* Un cran plus clair que le fond de l'encart settings (var(--panel)) :
+       les champs de saisie (var(--bg), plus sombres) restent ainsi visibles
+       en creux à l'intérieur, au lieu de se fondre dans le fieldset. */
+    background: var(--panel-2);
     transition: border-color 0.15s ease;
 }
 fieldset:focus-within { border-color: var(--gold-1); }
@@ -179,11 +229,28 @@ button.primary:hover { box-shadow: 0 6px 18px rgba(232, 201, 122, 0.3); }
 button.primary:active { transform: translateY(1px); }
 button.primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 
+.queue-panel {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+}
+.queue-panel .hint { margin: 0; }
+.run-name-line { font-family: var(--font-serif); font-weight: 600; font-size: 1.05rem; margin: 0 0 8px; }
+
 .progress-bar { height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
-.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold-1), var(--gold-2)); transition: width 0.4s ease; }
+.progress-fill {
+    height: 100%;
+    width: 100%;
+    transform: scaleX(0);
+    transform-origin: left;
+    background: linear-gradient(90deg, var(--gold-1), var(--gold-2));
+    transition: transform 0.4s ease;
+}
 #status-line { color: var(--muted); margin: 8px 0; }
 .log-tail {
-    background: var(--panel);
+    /* --panel-2 : reste visible en creux dans l'encart avancement (--panel). */
+    background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 12px;
@@ -249,7 +316,7 @@ table.leaderboard th, table.leaderboard td {
 }
 table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.04em; }
 .best-box {
-    background: var(--panel);
+    background: var(--panel-2);
     border: 1px solid var(--ok);
     border-radius: 14px;
     padding: 14px 16px;
@@ -303,14 +370,7 @@ table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; t
 .news-list a:hover { color: var(--gold-1); border-color: var(--gold-1); }
 .news-publisher { font-size: 0.78rem; }
 
-/* Panneau d'alertes (movers) */
-.movers-panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 16px;
-}
+/* Panneau d'alertes (movers) — l'encart lui-même est stylé par .dash-panel */
 .movers-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
 .movers-header h2 { margin: 0; font-family: var(--font-serif); font-weight: 600; font-size: 1.15rem; }
 .movers-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px; }

@@ -5,27 +5,272 @@
 
 {% block content %}
 
-{% if active_run %}
-<div class="banner banner-warning">
-    {{ t('banner_run_active_prefix') }}<code>{{ active_run.config.name }}</code>) —
-    <a href="/runs/{{ active_run.id }}">{{ t('banner_run_active_link') }}</a>{{ t('banner_run_active_suffix') }}
-</div>
-{% endif %}
+<div class="dashboard">
 
-{% if errors %}
-<div class="banner banner-error">
-    <strong>{{ t('banner_fix_errors') }}</strong>
-    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-</div>
-{% endif %}
+<section class="dash-panel dash-settings" aria-labelledby="settings-title">
+    <h2 id="settings-title" class="dash-panel-title">{{ t('section_settings') }}</h2>
+    <div class="dash-panel-body">
 
-<section class="movers-panel">
+    <div id="run-errors" class="banner banner-error {% if not errors %}hidden{% endif %}">
+        <strong>{{ t('banner_fix_errors') }}</strong>
+        <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+
+    <form method="get" action="/" class="example-picker">
+        <label for="load">{{ t('load_example_label') }}</label>
+        <select name="load" id="load" onchange="this.form.submit()">
+            <option value="">{{ t('load_example_default') }}</option>
+            {% for ex in examples %}
+            <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    <form method="post" action="/runs" class="run-form" id="run-form">
+
+        <fieldset>
+            <legend>{{ t('section_run') }}</legend>
+            <label>{{ t('field_run_name') }}
+                <input type="text" name="name" value="{{ view.name }}" required>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_objective') }}</legend>
+            <label>{{ t('field_target') }}
+                <select name="target_symbol" id="target_symbol" required>
+                    {% for group, items in target_groups.items() %}
+                    <optgroup label="{{ group_labels.get(group, group) }}">
+                        {% for sym, sym_label in items %}
+                        <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>{{ t('field_horizons') }}
+                <input type="text" name="horizons" value="{{ view.horizons }}" required>
+            </label>
+            <label>{{ t('field_flat_thr') }}
+                <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
+            </label>
+            <label>{{ t('field_regimes') }}
+                <input type="text" name="regimes" value="{{ view.regimes }}" required>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_universe') }}</legend>
+            <p class="hint">{{ t('universe_hint') }}</p>
+            <label>{{ t('field_start_date') }}
+                <input type="date" name="start_date" value="{{ view.start_date }}">
+            </label>
+            <label>{{ t('field_yf_coverage') }}
+                <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_features') }}</legend>
+            {% for f in all_families %}
+            <label class="checkbox">
+                <input type="checkbox" name="families" value="{{ f }}" {% if f in view.families %}checked{% endif %}>
+                {{ f }}{{ info(f) }}
+            </label>
+            {% endfor %}
+
+            <div class="subfieldset">
+                <p class="hint">{{ t('vol_models_hint') }}</p>
+                {% for m in all_vol_models %}
+                <label class="checkbox">
+                    <input type="checkbox" name="vol_models" value="{{ m }}" {% if m in view.vol_models %}checked{% endif %}>
+                    {{ vol_model_labels.get(m, m) }}{{ info(m, vol_model_labels.get(m, m)) }}
+                </label>
+                {% endfor %}
+            </div>
+
+            <div class="subgrid">
+                <label>{{ t('field_interact_base') }}
+                    <input type="number" name="interact_top_base" value="{{ view.interact_top_base }}">
+                </label>
+                <label>{{ t('field_interact_pairs') }}
+                    <input type="number" name="interact_top_pairs" value="{{ view.interact_top_pairs }}">
+                </label>
+                <label>{{ t('field_interact_final') }}
+                    <input type="number" name="interact_final_n" value="{{ view.interact_final_n }}">
+                </label>
+                <label>{{ t('field_pool_prefilter') }}
+                    <input type="number" name="pool_prefilter" value="{{ view.pool_prefilter }}">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_validation') }}</legend>
+            <div class="subgrid">
+                <label>{{ t('field_n_wf_folds') }}
+                    <input type="number" name="n_wf_folds" value="{{ view.n_wf_folds }}">
+                </label>
+                <label>{{ t('field_min_train_frac') }}
+                    <input type="number" step="any" name="min_train_frac" value="{{ view.min_train_frac }}">
+                </label>
+                <label>{{ t('field_min_train_rows') }}
+                    <input type="number" name="min_train_rows" value="{{ view.min_train_rows }}">
+                </label>
+                <label>{{ t('field_min_test_rows') }}
+                    <input type="number" name="min_test_rows" value="{{ view.min_test_rows }}">
+                </label>
+            </div>
+            <label class="checkbox">
+                <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>
+                {{ t('field_purge') }}{{ info('purge') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="embargo_enabled" {% if view.embargo_enabled %}checked{% endif %}>
+                {{ t('field_embargo_enabled') }}{{ info('embargo_enabled') }}
+            </label>
+            <label>{{ t('field_embargo_bars') }}
+                <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_selection') }}</legend>
+            <label>{{ t('field_method') }}
+                <select name="selection_method">
+                    {% for m in selection_methods %}
+                    <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
+                    {% endfor %}
+                </select>
+                {% for m in selection_methods %}{{ info(m, m|upper) }}{% endfor %}
+            </label>
+            <label>{{ t('field_n_features_grid') }}
+                <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
+            </label>
+            <label>{{ t('field_shap_sample') }}
+                <input type="number" name="shap_sample" value="{{ view.shap_sample }}">
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_sampler') }}</legend>
+            {% for s in all_samplers %}
+            <label class="checkbox">
+                <input type="checkbox" name="sampler_candidates" value="{{ s }}" {% if s in view.sampler_candidates %}checked{% endif %}>
+                {{ s }}{{ info(s) }}
+            </label>
+            {% endfor %}
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_models') }}</legend>
+            {% for a in all_algos %}
+            <label class="checkbox">
+                <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
+                {{ a }}{{ info(a) }}
+            </label>
+            {% endfor %}
+            <label class="checkbox">
+                <input type="checkbox" name="calibration" {% if view.calibration %}checked{% endif %}>
+                {{ t('field_calibration') }}{{ info('calibration') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
+                {{ t('field_stacking') }}{{ info('stacking') }}
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_tuning') }}</legend>
+            <label class="checkbox">
+                <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
+                {{ t('field_enabled') }}{{ info('tuning_enabled') }}
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_top_k') }}
+                    <input type="number" name="top_k" value="{{ view.top_k }}">
+                </label>
+                <label>{{ t('field_n_trials') }}
+                    <input type="number" name="n_trials" value="{{ view.n_trials }}">
+                </label>
+                <label>{{ t('field_cv_splits') }}
+                    <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_output') }}</legend>
+            <label>{{ t('field_output_dir') }}
+                <input type="text" name="output_dir" value="{{ view.output_dir }}">
+            </label>
+            <label>{{ t('field_seed') }}
+                <input type="number" name="seed" value="{{ view.seed }}">
+            </label>
+        </fieldset>
+
+        <button type="submit" class="primary" id="launch-btn">
+            {{ t('btn_launch_run') }}
+        </button>
+    </form>
+    </div>
+</section>
+
+<section class="dash-panel dash-progress" aria-labelledby="progress-title">
+    <h2 id="progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
+    <div class="dash-panel-body">
+
+    <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
+        <p class="hint" id="queue-summary"></p>
+    </div>
+
+    <p id="no-run-message" class="hint {% if initial_run_id %}hidden{% endif %}">{{ t('no_run_yet') }}</p>
+
+    <div id="status-panel" class="{% if not initial_run_id %}hidden{% endif %}">
+        <p id="run-name-line" class="run-name-line"></p>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <p id="status-line">…</p>
+        <pre id="log-tail" class="log-tail"></pre>
+    </div>
+    <div id="results-panel" class="hidden"></div>
+    </div>
+</section>
+
+<section class="dash-panel dash-stock" aria-labelledby="stock-title">
+    <h2 id="stock-title" class="dash-panel-title">{{ t('section_stock') }}</h2>
+    <div class="dash-panel-body">
+    <div class="target-preview" id="target-preview">
+        <div class="preview-range-buttons" id="preview-ranges">
+            <button type="button" class="range-btn" data-period="1mo">1M</button>
+            <button type="button" class="range-btn" data-period="3mo">3M</button>
+            <button type="button" class="range-btn" data-period="6mo">6M</button>
+            <button type="button" class="range-btn active" data-period="1y">1Y</button>
+            <button type="button" class="range-btn" data-period="5y">5Y</button>
+            <button type="button" class="range-btn" data-period="max">Max</button>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="preview-canvas" width="700" height="180"></canvas>
+            <div id="preview-tooltip" class="chart-tooltip hidden"></div>
+        </div>
+        <p class="hint" id="preview-status"></p>
+    </div>
+
+    <div class="target-news" id="target-news">
+        <p class="hint">{{ t('news_recent') }}</p>
+        <ul id="news-list" class="news-list"></ul>
+    </div>
+    </div>
+</section>
+
+<section class="dash-panel dash-movers" aria-labelledby="movers-title">
     <div class="movers-header">
-        <h2>{{ t('movers_title') }}</h2>
+        <h2 id="movers-title" class="dash-panel-title">{{ t('movers_title') }}</h2>
         <span class="hint" id="movers-updated">
             {% if movers.updated_at %}{{ t('movers_updated_at', time=movers.updated_at) }}{% else %}{{ t('movers_computing') }}{% endif %}
         </span>
     </div>
+    <div class="dash-panel-body">
     {% if movers.error %}
     <p class="hint">{{ movers.error }}</p>
     {% endif %}
@@ -47,226 +292,13 @@
             </ul>
         </div>
     </div>
+    </div>
 </section>
 
-<form method="get" action="/" class="example-picker">
-    <label for="load">{{ t('load_example_label') }}</label>
-    <select name="load" id="load" onchange="this.form.submit()">
-        <option value="">{{ t('load_example_default') }}</option>
-        {% for ex in examples %}
-        <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
-        {% endfor %}
-    </select>
-</form>
+</div>
 
-<form method="post" action="/runs" class="run-form">
-
-    <fieldset>
-        <legend>{{ t('section_run') }}</legend>
-        <label>{{ t('field_run_name') }}
-            <input type="text" name="name" value="{{ view.name }}" required>
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_objective') }}</legend>
-        <label>{{ t('field_target') }}
-            <select name="target_symbol" id="target_symbol" required>
-                {% for group, items in target_groups.items() %}
-                <optgroup label="{{ group_labels.get(group, group) }}">
-                    {% for sym, sym_label in items %}
-                    <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
-                    {% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-        </label>
-
-        <div class="target-preview" id="target-preview">
-            <div class="preview-range-buttons" id="preview-ranges">
-                <button type="button" class="range-btn" data-period="1mo">1M</button>
-                <button type="button" class="range-btn" data-period="3mo">3M</button>
-                <button type="button" class="range-btn" data-period="6mo">6M</button>
-                <button type="button" class="range-btn active" data-period="1y">1Y</button>
-                <button type="button" class="range-btn" data-period="5y">5Y</button>
-                <button type="button" class="range-btn" data-period="max">Max</button>
-            </div>
-            <div class="chart-wrap">
-                <canvas id="preview-canvas" width="700" height="180"></canvas>
-                <div id="preview-tooltip" class="chart-tooltip hidden"></div>
-            </div>
-            <p class="hint" id="preview-status"></p>
-        </div>
-
-        <div class="target-news" id="target-news">
-            <p class="hint">{{ t('news_recent') }}</p>
-            <ul id="news-list" class="news-list"></ul>
-        </div>
-
-        <label>{{ t('field_horizons') }}
-            <input type="text" name="horizons" value="{{ view.horizons }}" required>
-        </label>
-        <label>{{ t('field_flat_thr') }}
-            <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
-        </label>
-        <label>{{ t('field_regimes') }}
-            <input type="text" name="regimes" value="{{ view.regimes }}" required>
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_universe') }}</legend>
-        <p class="hint">{{ t('universe_hint') }}</p>
-        <label>{{ t('field_start_date') }}
-            <input type="date" name="start_date" value="{{ view.start_date }}">
-        </label>
-        <label>{{ t('field_yf_coverage') }}
-            <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_features') }}</legend>
-        {% for f in all_families %}
-        <label class="checkbox">
-            <input type="checkbox" name="families" value="{{ f }}" {% if f in view.families %}checked{% endif %}>
-            {{ f }}{{ info(f) }}
-        </label>
-        {% endfor %}
-
-        <div class="subfieldset">
-            <p class="hint">{{ t('vol_models_hint') }}</p>
-            {% for m in all_vol_models %}
-            <label class="checkbox">
-                <input type="checkbox" name="vol_models" value="{{ m }}" {% if m in view.vol_models %}checked{% endif %}>
-                {{ vol_model_labels.get(m, m) }}{{ info(m, vol_model_labels.get(m, m)) }}
-            </label>
-            {% endfor %}
-        </div>
-
-        <div class="subgrid">
-            <label>{{ t('field_interact_base') }}
-                <input type="number" name="interact_top_base" value="{{ view.interact_top_base }}">
-            </label>
-            <label>{{ t('field_interact_pairs') }}
-                <input type="number" name="interact_top_pairs" value="{{ view.interact_top_pairs }}">
-            </label>
-            <label>{{ t('field_interact_final') }}
-                <input type="number" name="interact_final_n" value="{{ view.interact_final_n }}">
-            </label>
-            <label>{{ t('field_pool_prefilter') }}
-                <input type="number" name="pool_prefilter" value="{{ view.pool_prefilter }}">
-            </label>
-        </div>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_validation') }}</legend>
-        <div class="subgrid">
-            <label>{{ t('field_n_wf_folds') }}
-                <input type="number" name="n_wf_folds" value="{{ view.n_wf_folds }}">
-            </label>
-            <label>{{ t('field_min_train_frac') }}
-                <input type="number" step="any" name="min_train_frac" value="{{ view.min_train_frac }}">
-            </label>
-            <label>{{ t('field_min_train_rows') }}
-                <input type="number" name="min_train_rows" value="{{ view.min_train_rows }}">
-            </label>
-            <label>{{ t('field_min_test_rows') }}
-                <input type="number" name="min_test_rows" value="{{ view.min_test_rows }}">
-            </label>
-        </div>
-        <label class="checkbox">
-            <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>
-            {{ t('field_purge') }}{{ info('purge') }}
-        </label>
-        <label class="checkbox">
-            <input type="checkbox" name="embargo_enabled" {% if view.embargo_enabled %}checked{% endif %}>
-            {{ t('field_embargo_enabled') }}{{ info('embargo_enabled') }}
-        </label>
-        <label>{{ t('field_embargo_bars') }}
-            <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_selection') }}</legend>
-        <label>{{ t('field_method') }}
-            <select name="selection_method">
-                {% for m in selection_methods %}
-                <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
-                {% endfor %}
-            </select>
-            {% for m in selection_methods %}{{ info(m, m|upper) }}{% endfor %}
-        </label>
-        <label>{{ t('field_n_features_grid') }}
-            <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
-        </label>
-        <label>{{ t('field_shap_sample') }}
-            <input type="number" name="shap_sample" value="{{ view.shap_sample }}">
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_sampler') }}</legend>
-        {% for s in all_samplers %}
-        <label class="checkbox">
-            <input type="checkbox" name="sampler_candidates" value="{{ s }}" {% if s in view.sampler_candidates %}checked{% endif %}>
-            {{ s }}{{ info(s) }}
-        </label>
-        {% endfor %}
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_models') }}</legend>
-        {% for a in all_algos %}
-        <label class="checkbox">
-            <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
-            {{ a }}{{ info(a) }}
-        </label>
-        {% endfor %}
-        <label class="checkbox">
-            <input type="checkbox" name="calibration" {% if view.calibration %}checked{% endif %}>
-            {{ t('field_calibration') }}{{ info('calibration') }}
-        </label>
-        <label class="checkbox">
-            <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
-            {{ t('field_stacking') }}{{ info('stacking') }}
-        </label>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_tuning') }}</legend>
-        <label class="checkbox">
-            <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
-            {{ t('field_enabled') }}{{ info('tuning_enabled') }}
-        </label>
-        <div class="subgrid">
-            <label>{{ t('field_top_k') }}
-                <input type="number" name="top_k" value="{{ view.top_k }}">
-            </label>
-            <label>{{ t('field_n_trials') }}
-                <input type="number" name="n_trials" value="{{ view.n_trials }}">
-            </label>
-            <label>{{ t('field_cv_splits') }}
-                <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
-            </label>
-        </div>
-    </fieldset>
-
-    <fieldset>
-        <legend>{{ t('section_output') }}</legend>
-        <label>{{ t('field_output_dir') }}
-            <input type="text" name="output_dir" value="{{ view.output_dir }}">
-        </label>
-        <label>{{ t('field_seed') }}
-            <input type="number" name="seed" value="{{ view.seed }}">
-        </label>
-    </fieldset>
-
-    <button type="submit" class="primary" {% if active_run %}disabled{% endif %}>
-        {{ t('btn_launch_run') }}
-    </button>
-</form>
-
+<script>
+    window.INITIAL_RUN_ID = {{ initial_run_id | tojson }};
+</script>
+<script src="/static/app.js"></script>
 {% endblock %}

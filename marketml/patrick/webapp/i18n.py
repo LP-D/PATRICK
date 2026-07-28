@@ -14,11 +14,17 @@ DEFAULT_LANG = "fr"
 STRINGS: dict[str, dict[str, str]] = {
     "tagline": {"fr": "walk-forward · SHAP · Optuna — sans YAML",
                 "en": "walk-forward · SHAP · Optuna — no YAML"},
-    "banner_run_active_prefix": {"fr": "Un run est déjà en cours (", "en": "A run is already in progress ("},
-    "banner_run_active_link": {"fr": "voir sa progression", "en": "view its progress"},
-    "banner_run_active_suffix": {"fr": ". Un seul run à la fois est supporté.",
-                                  "en": ". Only one run at a time is supported."},
     "banner_fix_errors": {"fr": "Corrige avant de lancer :", "en": "Fix before launching:"},
+
+    "section_settings": {"fr": "Configuration du run", "en": "Run configuration"},
+    "section_progress": {"fr": "Avancement", "en": "Progress"},
+    "section_stock": {"fr": "Aperçu marché — cible choisie", "en": "Market overview — chosen target"},
+    "no_run_yet": {"fr": "Aucun run pour l'instant — configure et lance à gauche.",
+                   "en": "No run yet — configure and launch on the left."},
+    "queue_summary": {"fr": "{n} run(s) en attente : {names}", "en": "{n} run(s) queued: {names}"},
+    "run_queued_confirm": {"fr": "Run « {name} » mis en file d'attente (position {position}).",
+                            "en": "Run “{name}” queued (position {position})."},
+    "run_launch_error": {"fr": "Erreur lors du lancement.", "en": "Error launching the run."},
 
     "movers_title": {"fr": "Plus fortes variations (5 jours)", "en": "Biggest movers (5 days)"},
     "movers_updated_at": {"fr": "Mis à jour à {time}", "en": "Updated at {time}"},
@@ -92,9 +98,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_seed": {"fr": "Seed", "en": "Seed"},
 
     "btn_launch_run": {"fr": "Lancer le run", "en": "Launch run"},
-
-    # run.html
-    "back_to_new_run": {"fr": "← nouveau run", "en": "← new run"},
 
     # app.js (injectées via window.I18N)
     "phase_ingestion": {"fr": "Ingestion des données…", "en": "Ingesting data…"},
@@ -171,6 +174,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "preview_loading", "preview_no_data", "preview_unavailable", "preview_load_error",
         "news_loading", "news_none", "news_load_error", "movers_no_data",
         "movers_updated_at", "movers_computing",
+        "queue_summary", "run_queued_confirm", "run_launch_error", "banner_fix_errors",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}
