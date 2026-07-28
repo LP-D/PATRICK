@@ -37,6 +37,11 @@ body {
     background: var(--panel);
     box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
+/* Phase 5.4 (hygiène) : monogramme CSS ("P" + anneau doré) = PLACEHOLDER en
+   attendant un vrai logo. À remplacer si/quand une image de marque est
+   fournie : suffit de remplacer le contenu de `.brand-mark` (span "P",
+   base.html) par un `<img>`/SVG et de retirer `.brand-mark::before` (l'anneau
+   dégradé n'a de sens que pour un monogramme texte). */
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
 .brand-mark {
     position: relative;

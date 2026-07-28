@@ -101,7 +101,7 @@ def default_config_dict() -> dict:
 
 
 ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
-ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN"]
+ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
 TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)

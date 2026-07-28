@@ -53,6 +53,7 @@ from patrick.features import macro as feat_macro
 from patrick.features import spike, technical, vol_models
 from patrick.features.interactions import INTERACTION_TYPES, discover_interactions
 from patrick.features.target import build_target
+from patrick.models.calibration import calibrate_classifier, predict_with_threshold, search_threshold
 from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
 from patrick.pipeline.leaderboard import Leaderboard
@@ -311,25 +312,55 @@ def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, 
 
 
 def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
-              sampler_name: str, algo: str, seed: int, **algo_overrides):
+              sampler_name: str, algo: str, seed: int, calibration: bool = False,
+              **algo_overrides):
     """Retourne (metrics_dict, y_pred, confiance_prédite) — `confiance_prédite`
     (probabilité de la classe prédite, une valeur par ligne de test) alimente
-    `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe)."""
-    try:
-        Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
-    except Exception:
+    `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe).
+
+    `sampler_name="none"` (Phase 5.3) : pas de rééchantillonnage, s'appuie
+    sur `class_weight`/`auto_class_weights` déjà câblé en dur pour
+    RandomForest/LightGBM/CatBoost (`models/registry.py`) -- XGBoost/
+    GradientBoosting n'ont pas d'équivalent natif en multiclasse et restent
+    donc non pondérés dans ce cas.
+
+    `calibration=True` (Phase 5.3, `config.models.calibration`) : calibration
+    isotonique + recherche de seuil causal (`models/calibration.py`,
+    jusqu'ici non branché) plutôt qu'un simple `argmax`. La tranche de
+    validation du seuil est les 15% les PLUS RÉCENTS du train rééchantillonné
+    (les lignes sont déjà en ordre chronologique à ce stade) -- jamais le
+    test, cohérent avec le reste du pipeline."""
+    if sampler_name == "none":
         Xr, yr = X_tr, y_tr
-    clf = get_classifier(algo, seed=seed, **algo_overrides)
-    clf.fit(Xr, yr)
-    y_pred = np.asarray(clf.predict(X_te)).ravel()
-    y_proba = None
-    confidence = None
-    if hasattr(clf, "predict_proba"):
+    else:
         try:
-            y_proba = clf.predict_proba(X_te)
-            confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
+            Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
         except Exception:
-            y_proba = None
+            Xr, yr = X_tr, y_tr
+    clf = get_classifier(algo, seed=seed, **algo_overrides)
+
+    n_val = max(int(len(Xr) * 0.15), 20)
+    if calibration and n_val < len(Xr) - 20:
+        X_fit, y_fit = Xr[:-n_val], yr[:-n_val]
+        X_val, y_val = Xr[-n_val:], yr[-n_val:]
+        cal_clf = calibrate_classifier(clf, X_fit, y_fit)
+        threshold, _ = search_threshold(cal_clf, X_val, y_val)
+        y_pred = predict_with_threshold(cal_clf, X_te, threshold)
+        y_proba = cal_clf.predict_proba(X_te)
+        classes = list(cal_clf.classes_)
+        confidence = np.array([row[classes.index(p)] if p in classes else np.nan
+                                for row, p in zip(y_proba, y_pred)])
+    else:
+        clf.fit(Xr, yr)
+        y_pred = np.asarray(clf.predict(X_te)).ravel()
+        y_proba = None
+        confidence = None
+        if hasattr(clf, "predict_proba"):
+            try:
+                y_proba = clf.predict_proba(X_te)
+                confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
+            except Exception:
+                y_proba = None
     met = metrics(y_te, y_pred, y_proba=y_proba)
     return met, y_pred, confidence
 
@@ -401,7 +432,8 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
     X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
     cols = _select(config, X_tr, y_tr, n_feat, seed)
     met, y_pred, confidence = _fit_eval(X_tr[:, cols], y_tr, X_te[:, cols], y_te,
-                                         sampler_name, algo, seed, **best_params)
+                                         sampler_name, algo, seed,
+                                         calibration=config.models.calibration, **best_params)
     test_dates = [str(d.date()) for d in idx[te_mask]]
     return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te,
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te)}
@@ -421,7 +453,8 @@ def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: in
         return None
     cols = _select(ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
     _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
-                              sampler_name, algo, seed, **best_params)
+                              sampler_name, algo, seed,
+                              calibration=ctx.config.models.calibration, **best_params)
 
     best_baseline_name, best_baseline_pred, best_f1 = None, None, -1.0
     for name, pred in fd.baseline_predictions.items():
@@ -537,7 +570,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     for sampler_name in config.sampler.candidates:
                         for algo in config.models.algos:
                             met, y_pred, confidence = _fit_eval(
-                                X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed)
+                                X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
+                                calibration=config.models.calibration)
                             board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
                                       sampler=sampler_name, algo=algo,
                                       features="|".join(feat_names),
@@ -615,7 +649,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
                 X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
                 met, y_pred, confidence = _fit_eval(
-                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed, **best_params)
+                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
+                    calibration=config.models.calibration, **best_params)
                 tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
                                     "N": n_feat, "sampler": sampler_name, "algo": algo,
                                     "best_params": str(best_params),

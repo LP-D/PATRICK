@@ -6,6 +6,10 @@ HMM/VRP/spike/interactions), sélection SHAP/RFE/LASSO, grille de samplers/algos
 tuning Optuna — configurable en YAML, exécutable sur n'importe quel actif/indice
 via `yfinance`/FRED, pas seulement le VIX.
 
+Voir `METHODOLOGY.md` pour le détail des garanties anti-fuite/anti-surapprentissage
+(walk-forward, purge/embargo, vintages point-in-time, correction multi-tests,
+holdout, baselines) et leurs limites connues.
+
 ## Installation
 
 ```bash
@@ -228,18 +232,27 @@ web, sous le "Best config").*
 ## État de la vérification
 
 Le moteur complet (ingestion -> features -> walk-forward -> sélection -> grille ->
-Optuna -> export -> persistance SQLite -> validité statistique) est validé par
-des tests de fumée bout-en-bout sur données synthétiques
-(`tests/test_pipeline_smoke.py`, `test_webapp_smoke.py`) et des tests unitaires
-(`pytest tests/`, 77 au total avec les paramétrisations), dont les tests de
+Optuna -> export -> persistance SQLite -> validité statistique -> file de jobs/
+worker séparé -> simulation d'investissement) est validé par des tests de fumée
+bout-en-bout sur données synthétiques (`tests/test_pipeline_smoke.py`,
+`test_webapp_smoke.py`, `test_worker.py`, `test_simulate.py`,
+`test_simulate_webapp.py`, `test_predict_live.py`) et des tests unitaires
+(`pytest tests/`, 98 au total avec les paramétrisations), dont les tests de
 fuite de la Phase 0 (`test_leakage.py`), les tests de persistance de la Phase 1
-(`test_db.py`, `test_store_snapshot.py`) et les tests de validité statistique de
+(`test_db.py`, `test_store_snapshot.py`), les tests de validité statistique de
 la Phase 2 (`test_dsr.py`, `test_pbo.py`, `test_diebold_mariano.py`,
-`test_stats.py`). Le critère de sortie Phase 1 (deux runs identiques sur le
-même snapshot produisent des métriques identiques, et écrivent snapshot+run+
-trials+fold_metrics+baselines+predictions) est vérifié explicitement par
+`test_stats.py`), les tests d'exécution robuste de la Phase 3 (`test_worker.py`,
+`test_optuna_resume.py`, `test_report.py`) et les tests du simulateur de la
+Phase 4 (`test_simulate.py`, `test_simulate_webapp.py`, `test_predict_live.py`).
+Le critère de sortie Phase 1 (deux runs identiques sur le même snapshot
+produisent des métriques identiques, et écrivent snapshot+run+trials+
+fold_metrics+baselines+predictions) est vérifié explicitement par
 `test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot` ; celui de
-la Phase 2 par `test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated`.
+la Phase 2 par `test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated` ;
+celui de la Phase 3 (tuer le process web pendant un run ne perd pas le run) par
+`test_real_worker_subprocess_survives_without_web_server` ; celui de la Phase 4
+(simulation -> courbe + comparaison buy-and-hold + coût de rentabilité +
+compteur de configs testées) par `test_api_simulate_end_to_end`.
 
 **La vérification avec de vraies données** a été faite sur une machine avec
 accès réseau yfinance/FRED (`patrick run --config
@@ -256,12 +269,16 @@ F1_dir≈0.610, à revalider sur une machine avec accès réseau.
 
 ## Feuille de route
 
-- Phase 3+ (exécution robuste — file de jobs SQLite/worker séparé, `patrick
-  resume`/`report` ; simulation d'investissement ; hygiène) — voir le plan en 5
-  phases fourni, Phases 0 à 2 traitées pour l'instant.
-- DSR (Phase 2.3) implémenté mais pas encore branché : attend une vraie courbe
-  de P&L (Phase 4).
+Phases 0 à 4 du plan en 5 phases terminées (correctness, persistance SQLite,
+validité statistique, exécution robuste, simulation d'investissement). Phase 5
+(hygiène) en cours : `METHODOLOGY.md`, A/B test SMOTE vs `class_weight`, note
+logo. Le renommage du dossier racine `marketml/` -> `patrick/` (le code est
+déjà le package `patrick` ; seul le dossier du dépôt garde l'ancien nom) et le
+renommage du dépôt GitHub lui-même restent en attente d'une confirmation
+explicite (changement structurel large / hors de portée des outils
+disponibles pour le second).
+
 - Vintages FRED branchés par fold dans le moteur walk-forward (cf. limite
-  documentée ci-dessus).
+  documentée dans `METHODOLOGY.md`).
 - Modèles DL (TFT, LSTM, etc.) — jamais gagné en walk-forward dans le projet VIX,
   resteront désactivés par défaut.
