@@ -37,6 +37,11 @@ body {
     background: var(--panel);
     box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
+/* Phase 5.4 (hygiène) : `.brand-mark` (monogramme "P" en cercle doré,
+   ci-dessous) est un PLACEHOLDER en attendant un vrai logo. Si un logo est
+   fourni un jour : remplacer `<span class="brand-mark">P</span>` (base.html)
+   par une balise <img>, et cette règle + `.brand-mark::before` deviennent
+   inutiles (à supprimer, pas à garder en double). */
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
 .brand-mark {
     position: relative;
