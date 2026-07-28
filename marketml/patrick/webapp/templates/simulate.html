@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}PATRICK — {{ t('sim_title') }}{% endblock %}
+
+{% block content %}
+<h1 class="sim-title">{{ t('sim_title') }}</h1>
+
+<div class="sim-grid">
+
+<section class="dash-panel sim-panel-config" aria-labelledby="sim-config-title">
+    <h2 id="sim-config-title" class="dash-panel-title">{{ t('sim_section_config') }}</h2>
+    <div class="dash-panel-body">
+        <form id="sim-form" class="run-form">
+            <label>{{ t('sim_field_run') }}
+                <select id="sim-run-select">
+                    <option value="">—</option>
+                    {% for r in runs %}
+                    <option value="{{ r.run_id }}" {% if r.run_id == initial_run_id %}selected{% endif %}>
+                        {{ r.name or r.run_id }} — {{ r.target }} h={{ r.horizon }}j ({{ r.started_at }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>{{ t('sim_field_trial') }}
+                <select id="sim-trial-select"><option value="">—</option></select>
+            </label>
+
+            <fieldset>
+                <legend>{{ t('sim_field_mode') }}</legend>
+                <label>{{ t('sim_field_mode') }}
+                    <select id="sim-mode">
+                        <option value="threshold">{{ t('sim_mode_threshold') }}</option>
+                        <option value="proportional">{{ t('sim_mode_proportional') }}</option>
+                        <option value="kelly">{{ t('sim_mode_kelly') }}</option>
+                    </select>
+                </label>
+                <div class="subgrid">
+                    <label>{{ t('sim_field_threshold') }}
+                        <input type="number" id="sim-threshold" step="0.01" min="0.5" max="1" value="0.55">
+                    </label>
+                    <label>{{ t('sim_field_kelly_fraction') }}
+                        <input type="number" id="sim-kelly-fraction" step="0.05" min="0" max="1" value="0.5">
+                    </label>
+                    <label>{{ t('sim_field_max_leverage') }}
+                        <input type="number" id="sim-max-leverage" step="0.1" min="0" value="1.0">
+                    </label>
+                    <label>{{ t('sim_field_max_position') }}
+                        <input type="number" id="sim-max-position" step="0.1" min="0" value="1.0">
+                    </label>
+                </div>
+                <label class="checkbox"><input type="checkbox" id="sim-short-allowed" checked> {{ t('sim_field_short_allowed') }}</label>
+                <label>{{ t('sim_field_overlap_mode') }}
+                    <select id="sim-overlap-mode">
+                        <option value="tranches">{{ t('sim_overlap_tranches') }}</option>
+                        <option value="renewed">{{ t('sim_overlap_renewed') }}</option>
+                    </select>
+                </label>
+            </fieldset>
+
+            <fieldset>
+                <legend>{{ t('sim_section_metrics') }} — frictions</legend>
+                <label>{{ t('sim_field_asset_class') }}
+                    <select id="sim-asset-class">
+                        <option value="">—</option>
+                        <option value="futures_liquid">Futures liquides (1bp)</option>
+                        <option value="us_large_cap">US large cap (3bp)</option>
+                        <option value="eu_mid_cap">EU mid cap (15bp)</option>
+                        <option value="crypto_non_major">Crypto hors majors (30bp)</option>
+                    </select>
+                </label>
+                <div class="subgrid">
+                    <label>{{ t('sim_field_spread_bps') }}
+                        <input type="number" id="sim-spread-bps" step="0.5" min="0" value="0">
+                    </label>
+                    <label>{{ t('sim_field_commission_bps') }}
+                        <input type="number" id="sim-commission-bps" step="0.5" min="0" value="0">
+                    </label>
+                    <label>{{ t('sim_field_carry_bps') }}
+                        <input type="number" id="sim-carry-bps" step="1" min="0" value="0">
+                    </label>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="primary" id="sim-run-btn">{{ t('sim_run_button') }}</button>
+        </form>
+        <p id="sim-status" class="hint">{{ t('sim_no_run_selected') }}</p>
+    </div>
+</section>
+
+<section class="dash-panel sim-panel-equity" aria-labelledby="sim-equity-title">
+    <h2 id="sim-equity-title" class="dash-panel-title">{{ t('sim_section_equity') }}</h2>
+    <div class="dash-panel-body">
+        <p id="sim-overfitting-guard" class="hint sim-guard hidden"></p>
+        <canvas id="sim-equity-canvas" width="520" height="180"></canvas>
+        <canvas id="sim-drawdown-canvas" width="520" height="90"></canvas>
+    </div>
+</section>
+
+<section class="dash-panel sim-panel-metrics" aria-labelledby="sim-metrics-title">
+    <h2 id="sim-metrics-title" class="dash-panel-title">{{ t('sim_section_metrics') }}</h2>
+    <div class="dash-panel-body">
+        <table class="leaderboard" id="sim-metrics-table">
+            <thead><tr><th></th><th>{{ t('sim_col_strategy') }}</th><th>{{ t('sim_col_buy_hold') }}</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</section>
+
+<section class="dash-panel sim-panel-distribution" aria-labelledby="sim-dist-title">
+    <h2 id="sim-dist-title" class="dash-panel-title">{{ t('sim_section_distribution') }}</h2>
+    <div class="dash-panel-body">
+        <canvas id="sim-dist-canvas" width="520" height="160"></canvas>
+    </div>
+</section>
+
+<section class="dash-panel sim-panel-trades" aria-labelledby="sim-trades-title">
+    <h2 id="sim-trades-title" class="dash-panel-title">{{ t('sim_section_trades') }}</h2>
+    <div class="dash-panel-body">
+        <a href="#" id="sim-trades-download" class="hidden">{{ t('sim_trades_download') }}</a>
+        <table class="leaderboard" id="sim-trades-table">
+            <thead><tr><th>#</th><th>{{ t('sim_col_strategy') }}</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</section>
+
+</div>
+
+<script>window.SIM_INITIAL_RUN_ID = {{ initial_run_id | tojson }};</script>
+<script src="/static/simulate.js"></script>
+{% endblock %}

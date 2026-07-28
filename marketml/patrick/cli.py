@@ -11,6 +11,7 @@ from patrick.data.store import DataStore
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
+from patrick import predict as predict_module
 from patrick import worker as worker_module
 
 app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
@@ -87,6 +88,30 @@ def report_cmd(
         typer.echo(str(exc))
         raise typer.Exit(code=1)
     typer.echo(f"Rapport généré : {path}")
+
+
+@app.command(name="predict")
+def predict_cmd(
+    run_id: str = typer.Option(..., "--run-id", help="Identifiant du run (table `run`)"),
+    live: bool = typer.Option(False, "--live", help="Score le modèle sur les données du jour (paper trading)"),
+) -> None:
+    """Prédiction en production (Phase 4.6), sans réentraîner ni resélectionner
+    quoi que ce soit -- charge le modèle déjà exporté du run. `--live` : écrit
+    la prédiction du jour dans `prediction` (split='live') AVANT de connaître
+    le résultat, et complète au passage les prédictions live passées dont
+    l'horizon est désormais écoulé.
+
+    Exemple de cron (tous les jours ouvrés à 22h, après clôture US) :
+
+    \b
+        0 22 * * 1-5 cd /chemin/vers/patrick && patrick predict --run-id <id> --live
+    """
+    if not live:
+        typer.echo("Seul --live est supporté pour l'instant (patrick predict --run-id <id> --live).")
+        raise typer.Exit(code=1)
+    result = predict_module.predict_live(run_id)
+    typer.echo(f"[LIVE] {result['ts']} -> classe prédite={result['y_pred']} "
+               f"(confiance={result['y_proba']:.3f}) | {result['n_outcomes_updated']} résultat(s) live mis à jour")
 
 
 @app.command(name="worker")

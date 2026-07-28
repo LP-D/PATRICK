@@ -149,6 +149,34 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
+def list_done_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """Runs terminés (`status='done'`), les plus récents d'abord -- alimente le
+    sélecteur de run du simulateur (Phase 4.7)."""
+    rows = conn.execute(
+        "SELECT run_id, target, horizon, started_at, finished_at, config_json "
+        "FROM run WHERE status = 'done' ORDER BY started_at DESC LIMIT ?", (limit,),
+    ).fetchall()
+    out = []
+    for run_id, target, horizon, started_at, finished_at, config_json in rows:
+        name = None
+        try:
+            name = json.loads(config_json).get("name")
+        except (TypeError, ValueError, AttributeError):
+            pass
+        out.append({"run_id": run_id, "target": target, "horizon": horizon, "name": name,
+                     "started_at": started_at, "finished_at": finished_at})
+    return out
+
+
+def list_trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT trial_id, regime, algo, sampler, n_features, selector, is_best "
+        "FROM trial WHERE run_id = ? ORDER BY is_best DESC, trial_id", (run_id,),
+    ).fetchall()
+    return [{"trial_id": r[0], "regime": r[1], "algo": r[2], "sampler": r[3],
+             "n_features": r[4], "selector": r[5], "is_best": bool(r[6])} for r in rows]
+
+
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
                   sampler: str, n_features: int, selector: str,
                   params_json: str = "{}") -> int:
@@ -193,8 +221,12 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
                      ts: list[str], y_true, y_pred, y_proba=None) -> None:
+    """`y_true` peut contenir `None` (Phase 4.6, `split='live'` : la prédiction
+    est écrite AVANT que le résultat soit connu) -- stocké en NULL plutôt que
+    de planter sur `float(None)`, complété plus tard par
+    `update_prediction_outcome`."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
-    rows = [(trial_id, str(t), fold_index, split, float(yt), float(yp),
+    rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
               float(yp_proba) if yp_proba is not None else None)
             for t, yt, yp, yp_proba in zip(ts, y_true, y_pred, proba)]
     with conn:
@@ -202,4 +234,23 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
             "y_pred, y_proba) VALUES (?, ?, ?, ?, ?, ?, ?)",
             rows,
+        )
+
+
+def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int) -> list[dict]:
+    """Prédictions `split='live'` dont le résultat n'est pas encore connu
+    (Phase 4.6) -- candidates pour `update_prediction_outcome` une fois leur
+    horizon écoulé."""
+    rows = conn.execute(
+        "SELECT ts FROM prediction WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
+        (trial_id,),
+    ).fetchall()
+    return [{"ts": r[0]} for r in rows]
+
+
+def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: float) -> None:
+    with conn:
+        conn.execute(
+            "UPDATE prediction SET y_true = ? WHERE trial_id = ? AND ts = ?",
+            (float(y_true), trial_id, ts),
         )

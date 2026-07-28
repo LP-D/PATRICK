@@ -400,3 +400,48 @@ table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; t
 .movers-pct { font-weight: 600; }
 .movers-up { color: var(--ok); }
 .movers-down { color: var(--error); }
+
+/* Phase 4 — page simulateur (/simulate), gabarit propre (extends base.html)
+   plutôt que la grille 2x2 fixe du dashboard (.dashboard) : contenu de
+   hauteur variable (formulaire + graphiques + tableaux + journal des
+   trades), pas adapté à des lignes de hauteur figée. */
+.topnav { display: flex; gap: 4px; }
+.topnav a {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--border);
+}
+.topnav a:hover { color: var(--gold-1); border-color: var(--gold-1); }
+
+.sim-title { font-family: var(--font-serif); font-weight: 600; font-size: 1.6rem; margin: 4px 0 18px; }
+.sim-grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-auto-rows: minmax(220px, auto);
+    gap: 20px;
+}
+.sim-panel-config { grid-row: 1 / span 3; }
+.sim-panel-equity { grid-column: 2; }
+.sim-panel-metrics { grid-column: 2; }
+.sim-panel-distribution { grid-column: 2; }
+.sim-panel-trades { grid-column: 1 / span 2; max-height: 420px; }
+@media (max-width: 980px) {
+    .sim-grid { grid-template-columns: 1fr; }
+    .sim-panel-config, .sim-panel-equity, .sim-panel-metrics, .sim-panel-distribution, .sim-panel-trades {
+        grid-column: 1; grid-row: auto;
+    }
+}
+#sim-equity-canvas, #sim-drawdown-canvas, #sim-dist-canvas {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    margin-bottom: 10px;
+}
+.sim-guard { color: var(--warning); }
+#sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+#sim-trades-table { max-height: 320px; }

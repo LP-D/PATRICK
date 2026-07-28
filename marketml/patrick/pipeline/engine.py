@@ -666,7 +666,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             full_inter = _apply_interaction_formulas(full_pool, pool_builder.interaction_formulas)
             full_pool = pd.concat([full_pool, full_inter], axis=1)
         model_path = export_best_model(full_pool, target_col, feature_pool, config,
-                                        final_best, config.output.dir, seed=seed)
+                                        final_best, config.output.dir, seed=seed,
+                                        interaction_formulas=pool_builder.interaction_formulas)
 
         best_key = (int(final_best["horizon"]), final_best["regime"], int(final_best["N"]),
                     final_best["sampler"], final_best["algo"])

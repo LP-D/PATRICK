@@ -24,7 +24,8 @@ from patrick.selection.registry import select_features
 
 
 def export_best_model(pool, target_col: str, feature_pool: list[str], config: RunConfig,
-                       best_cfg: dict, out_dir: str, seed: int = 42) -> str:
+                       best_cfg: dict, out_dir: str, seed: int = 42,
+                       interaction_formulas: list[str] | None = None) -> str:
     horizon = int(best_cfg["horizon"])
     regime = best_cfg["regime"]
     n_feat = int(best_cfg["N"])
@@ -59,11 +60,20 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
 
     os.makedirs(out_dir, exist_ok=True)
     model_path = os.path.join(out_dir, f"{config.name}_best_model.joblib")
+    # `feature_pool`/`interaction_formulas` (Phase 4.6, `patrick predict
+    # --live`) : le pool COMPLET (avant sélection) et la recette pour le
+    # reconstruire à l'identique sur des données fraîches -- `scaler.transform`
+    # exige le même nombre de colonnes, dans le même ordre, que celles vues
+    # par `.fit`. Les formules d'interaction sont découvertes une fois par run
+    # (fold pilote, cf. `_FoldPoolBuilder`) et sans elles, `predict --live` ne
+    # peut pas reproduire les colonnes d'interaction du pool d'entraînement.
     joblib.dump({"model": clf, "scaler": sc, "feature_names": feat_names,
+                 "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
                  "target_col": target_col}, model_path)
 
     meta = {"horizon": horizon, "regime": regime, "N": n_feat, "sampler": sampler_name,
             "algo": algo, "best_params": best_params, "feature_names": feat_names,
+            "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
             "n_train_rows": int(len(y))}
     meta_path = os.path.join(out_dir, f"{config.name}_best_model_meta.json")
     with open(meta_path, "w") as f:

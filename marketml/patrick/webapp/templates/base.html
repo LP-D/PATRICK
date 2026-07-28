@@ -10,6 +10,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
+    <script>
+        // app.js/market.js/simulate.js lisent window.I18N (fallback vers leur
+        // texte en dur si absent) : doit s'executer avant tout script propre
+        // a une page (charge plus bas dans le corps de page) -- place dans le
+        // head, donc garanti en premier, sinon la traduction JS est
+        // silencieusement toujours ignoree (repli permanent), quelle que
+        // soit la langue choisie.
+        window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
+    </script>
 </head>
 <body>
     <header class="topbar">
@@ -18,6 +28,9 @@
             <span class="brand-name">PATRICK</span>
         </a>
         <span class="tagline">{{ t('tagline') if t else 'walk-forward · SHAP · Optuna — sans YAML' }}</span>
+        <nav class="topnav">
+            <a href="/simulate">{{ t('nav_simulate') if t else 'Simulateur' }}</a>
+        </nav>
         <nav class="lang-switch" aria-label="Langue / Language">
             <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">FR</a>
             <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">EN</a>
@@ -33,7 +46,6 @@
         <div id="glossary-popover-body" class="glossary-popover-body"></div>
     </div>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
-    <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
     <script src="/static/glossary.js"></script>
     <script src="/static/market.js"></script>
 </body>

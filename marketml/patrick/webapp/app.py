@@ -14,6 +14,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from patrick.config.schema import RunConfig
+from patrick.simulate import engine as sim_engine
+from patrick.tracking import db as trackdb
 from patrick.webapp import alerts, forms, i18n, market_data, run_manager
 from patrick.webapp.glossary import GLOSSARY
 
@@ -209,6 +211,89 @@ def download_artifact(run_id: str, artifact: str):
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Artefact introuvable")
     return FileResponse(path, filename=os.path.basename(path))
+
+
+@app.get("/simulate")
+def simulate_page(request: Request, run_id: str | None = None):
+    """Phase 4 -- vue dédiée (pas la grille 2x2 du dashboard : contenu de
+    hauteur variable). Le simulateur ne ré-exécute jamais de modèle : il lit
+    seulement les runs déjà `done` et leurs `prediction` persistées."""
+    conn = trackdb.connect()
+    try:
+        runs = trackdb.list_done_runs(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "simulate.html",
+        {"runs": runs, "initial_run_id": run_id, **_i18n_context(request)},
+    )
+
+
+@app.get("/api/runs/{run_id}/trials")
+def api_list_trials(run_id: str):
+    conn = trackdb.connect()
+    try:
+        return {"trials": trackdb.list_trials_for_run(conn, run_id)}
+    finally:
+        conn.close()
+
+
+_SIM_PARAM_FIELDS = set(sim_engine.SimParams.__dataclass_fields__)
+
+
+@app.post("/api/simulate")
+async def api_simulate(request: Request):
+    """Lance une simulation (Phase 4) et la journalise TOUJOURS en base (Phase
+    4.5, garde-fou anti-surapprentissage), succès ou échec -- le nombre de
+    configurations essayées ne doit jamais être caché."""
+    body = await request.json()
+    try:
+        trial_id = int(body["trial_id"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="trial_id manquant ou invalide")
+
+    raw_params = {k: v for k, v in (body.get("params") or {}).items() if k in _SIM_PARAM_FIELDS}
+    try:
+        params = sim_engine.SimParams(**raw_params)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    try:
+        result = sim_engine.simulate(trial_id, params)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Données de la cible introuvables : {exc}")
+
+    conn = trackdb.connect()
+    try:
+        simulation_id = sim_engine.save_simulation(conn, trial_id, params, result)
+    finally:
+        conn.close()
+    result["simulation_id"] = simulation_id
+    return result
+
+
+@app.get("/api/simulate/{simulation_id}")
+def api_get_simulation(simulation_id: str):
+    import json as _json
+    conn = trackdb.connect()
+    try:
+        row = conn.execute(
+            "SELECT trial_id, params_json, metrics_json, error FROM simulation WHERE simulation_id = ?",
+            (simulation_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Simulation introuvable")
+    trial_id, params_json, metrics_json, error = row
+    return {
+        "trial_id": trial_id,
+        "params": _json.loads(params_json),
+        "result": _json.loads(metrics_json) if metrics_json else None,
+        "error": error,
+    }
 
 
 def main() -> None:
