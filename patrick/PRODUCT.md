@@ -34,11 +34,11 @@ Contrairement aux notebooks ad hoc du projet VIX d'origine, `patrick` est pilota
 
 ## Brand Commitments
 
-Nom du produit : « PATRICK » (titre affiché dans l'onglet navigateur). Aucune identité visuelle formalisée au-delà du CSS existant (`patrick/webapp/static/style.css`) — monde visuel non documenté à ce stade (relève de `/impeccable document`, pas de cet init).
+Nom du produit : « PATRICK » (titre affiché dans l'onglet navigateur). Aucune identité visuelle formalisée au-delà du CSS existant (`patrick/webapp/static/style.css`) — monde visuel non documenté à ce stade (relève de `/impeccable document`, pas de cet init). Le monogramme « P » en cercle doré (`.brand-mark`, en-tête de toutes les pages) est un placeholder CSS, pas un logo réel — à remplacer si un logo est un jour fourni (cf. commentaire au-dessus de `.brand-mark` dans `style.css`).
 
 ## Evidence on Hand
 
-- `marketml/README.md` : méthodologie complète et justification des défauts.
+- `patrick/README.md` : méthodologie complète et justification des défauts.
 - Templates existants : `index.html` (formulaire de config), `run.html` (suivi + résultats).
 - Assets existants : `static/style.css`, `app.js`, `market.js`, `glossary.js`.
 - Exemples de config réels : `configs/examples/vix_direction.yaml`, `aapl_direction.yaml`.

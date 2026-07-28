@@ -318,11 +318,11 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     (probabilité de la classe prédite, une valeur par ligne de test) alimente
     `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe).
 
-    `sampler_name="none"` (Phase 5.3) : pas de rééchantillonnage, s'appuie
-    sur `class_weight`/`auto_class_weights` déjà câblé en dur pour
-    RandomForest/LightGBM/CatBoost (`models/registry.py`) -- XGBoost/
-    GradientBoosting n'ont pas d'équivalent natif en multiclasse et restent
-    donc non pondérés dans ce cas.
+    `sampler_name="none"` (Phase 5.3, `models/samplers.py::_NoResample`) : pas
+    de rééchantillonnage, s'appuie sur `class_weight`/`auto_class_weights`
+    déjà câblé en dur pour RandomForest/LightGBM/CatBoost
+    (`models/registry.py`) -- XGBoost/GradientBoosting n'ont pas d'équivalent
+    natif en multiclasse et restent donc non pondérés dans ce cas.
 
     `calibration=True` (Phase 5.3, `config.models.calibration`) : calibration
     isotonique + recherche de seuil causal (`models/calibration.py`,
@@ -330,13 +330,10 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     validation du seuil est les 15% les PLUS RÉCENTS du train rééchantillonné
     (les lignes sont déjà en ordre chronologique à ce stade) -- jamais le
     test, cohérent avec le reste du pipeline."""
-    if sampler_name == "none":
+    try:
+        Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
+    except Exception:
         Xr, yr = X_tr, y_tr
-    else:
-        try:
-            Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
-        except Exception:
-            Xr, yr = X_tr, y_tr
     clf = get_classifier(algo, seed=seed, **algo_overrides)
 
     n_val = max(int(len(Xr) * 0.15), 20)

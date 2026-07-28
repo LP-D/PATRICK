@@ -1,7 +1,7 @@
 # claude
 
 Workspace de recherche VIX (prédiction directionnelle/amplitude via ML + Deep Learning),
-sous forme de notebooks Colab indépendants et résumables — et `marketml/`, un cadre
+sous forme de notebooks Colab indépendants et résumables — et `patrick/`, un cadre
 Python autonome qui généralise cette méthodologie à n'importe quel actif.
 
 ## Structure
@@ -14,9 +14,9 @@ notebooks/
   production/                   — déploiement + recherche appliquée (portefeuille simulé)
   research/                     — analyse structurelle (économétrie), hors pipeline ML
   archive/                      — itérations précédentes, conservées pour référence
-marketml/                        — package Python + CLI (nom du projet : PATRICK) : la
+patrick/                          — package Python + CLI (nom du projet : PATRICK) : la
                                     méthodologie ci-dessus, généralisée à n'importe quel
-                                    actif, + interface web (voir marketml/README.md)
+                                    actif, + interface web (voir patrick/README.md)
 ```
 
 Chaque notebook :

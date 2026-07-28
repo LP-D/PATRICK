@@ -13,7 +13,7 @@ holdout, baselines) et leurs limites connues.
 ## Installation
 
 ```bash
-cd marketml
+cd patrick
 pip install -e .
 ```
 
@@ -25,9 +25,9 @@ patrick run --config configs/examples/vix_direction.yaml
 patrick serve
 ```
 
-**Windows, lancement rapide** : `PATRICK.bat` (à la racine de `marketml/`)
+**Windows, lancement rapide** : `PATRICK.bat` (à la racine de `patrick/`)
 active le `.venv` et lance `patrick serve` en un double-clic — ou, en ajoutant
-le dossier `marketml/` au `PATH` (une seule fois, Panneau de configuration ->
+le dossier `patrick/` au `PATH` (une seule fois, Panneau de configuration ->
 Variables d'environnement), en tapant simplement `PATRICK` (ou `start PATRICK`)
 dans n'importe quel invite de commandes.
 
@@ -269,14 +269,12 @@ F1_dir≈0.610, à revalider sur une machine avec accès réseau.
 
 ## Feuille de route
 
-Phases 0 à 4 du plan en 5 phases terminées (correctness, persistance SQLite,
-validité statistique, exécution robuste, simulation d'investissement). Phase 5
-(hygiène) en cours : `METHODOLOGY.md`, A/B test SMOTE vs `class_weight`, note
-logo. Le renommage du dossier racine `marketml/` -> `patrick/` (le code est
-déjà le package `patrick` ; seul le dossier du dépôt garde l'ancien nom) et le
-renommage du dépôt GitHub lui-même restent en attente d'une confirmation
-explicite (changement structurel large / hors de portée des outils
-disponibles pour le second).
+Les 5 phases du plan sont terminées (correctness, persistance SQLite,
+validité statistique, exécution robuste, simulation d'investissement,
+hygiène — `METHODOLOGY.md`, A/B test SMOTE vs `class_weight` infrastructure,
+note logo, renommage du dossier racine `marketml/` -> `patrick/`). Le
+renommage du dépôt GitHub lui-même (`LP-D/claude`) reste hors de portée des
+outils disponibles ici — nécessite une action côté réglages GitHub.
 
 - Vintages FRED branchés par fold dans le moteur walk-forward (cf. limite
   documentée dans `METHODOLOGY.md`).
