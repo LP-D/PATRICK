@@ -9,7 +9,7 @@ via `yfinance`/FRED, pas seulement le VIX.
 ## Installation
 
 ```bash
-cd marketml
+cd patrick
 pip install -e .
 ```
 
@@ -21,9 +21,9 @@ patrick run --config configs/examples/vix_direction.yaml
 patrick serve
 ```
 
-**Windows, lancement rapide** : `PATRICK.bat` (à la racine de `marketml/`)
+**Windows, lancement rapide** : `PATRICK.bat` (à la racine de `patrick/`)
 active le `.venv` et lance `patrick serve` en un double-clic — ou, en ajoutant
-le dossier `marketml/` au `PATH` (une seule fois, Panneau de configuration ->
+le dossier `patrick/` au `PATH` (une seule fois, Panneau de configuration ->
 Variables d'environnement), en tapant simplement `PATRICK` (ou `start PATRICK`)
 dans n'importe quel invite de commandes.
 

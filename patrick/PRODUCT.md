@@ -38,7 +38,7 @@ Nom du produit : « PATRICK » (titre affiché dans l'onglet navigateur). Aucune
 
 ## Evidence on Hand
 
-- `marketml/README.md` : méthodologie complète et justification des défauts.
+- `patrick/README.md` : méthodologie complète et justification des défauts.
 - Templates existants : `index.html` (formulaire de config), `run.html` (suivi + résultats).
 - Assets existants : `static/style.css`, `app.js`, `market.js`, `glossary.js`.
 - Exemples de config réels : `configs/examples/vix_direction.yaml`, `aapl_direction.yaml`.
