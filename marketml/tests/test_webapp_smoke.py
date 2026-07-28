@@ -1,7 +1,16 @@
-"""Test de fumée de l'interface web : `ingest()` est monkeypatché (même
-donnée synthétique que `test_pipeline_smoke.py`, pas de réseau) ; le reste
-(formulaire -> RunConfig -> run en arrière-plan -> polling -> résultats) tourne
-pour de vrai via `TestClient`.
+"""Test de fumée de l'interface web : le pipeline tourne pour de vrai, dans un
+vrai `patrick worker` en process séparé (Phase 3.1) — pas de réseau : au lieu
+de monkeypatcher `ingest()` (invisible pour un process séparé, qui ne partage
+aucun état Python avec le process de test), on pré-remplit le cache disque du
+`DataStore` avec la même donnée synthétique que `test_pipeline_smoke.py` ;
+`ingest()` la retrouve normalement via son chemin de cache habituel, que ce
+soit exécuté en process ou dans le worker séparé.
+
+Chaque test isole sa propre base SQLite et son propre data lake sur
+`tmp_path` via les variables d'environnement `PATRICK_DB_PATH`/
+`PATRICK_STORE_ROOT` (lues à chaque appel, pas figées à l'import — cf.
+`tracking.db.default_db_path`/`data.store._default_store_dir`), sans quoi
+tous les tests partageraient la vraie base `~/.patrick/patrick.db`.
 """
 from __future__ import annotations
 
@@ -12,9 +21,10 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.pipeline import engine as engine_module
-from patrick.webapp import run_manager
+from patrick.data.store import DataStore
 from patrick.webapp.app import app
+
+TARGET_SYMBOL = "^VIX"
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
@@ -29,18 +39,19 @@ def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
 
 
 @pytest.fixture(autouse=True)
-def _clean_runs():
-    run_manager._RUNS.clear()
-    run_manager._QUEUE.clear()
-    yield
-    run_manager._RUNS.clear()
-    run_manager._QUEUE.clear()
+def _isolated_env(tmp_path, monkeypatch):
+    """Base + data lake dédiés à ce test, et arrêt automatique rapide du
+    worker séparé une fois la file vide (pas de process fantôme entre tests)."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    monkeypatch.setenv("PATRICK_WORKER_IDLE_TIMEOUT", "8")
+    DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw())
 
 
 def _form_data(tmp_path) -> dict:
     return {
         "name": "smoke_web_test",
-        "target_symbol": "^VIX",
+        "target_symbol": TARGET_SYMBOL,
         "horizons": "3,5",
         "flat_thr": "0.003",
         "regimes": "GLOBAL",
@@ -70,27 +81,30 @@ def _form_data(tmp_path) -> dict:
     }
 
 
-def test_run_via_web_form_end_to_end(tmp_path, monkeypatch):
-    def fake_ingest(objective, universe, store=None, force=False):
-        return _synthetic_raw()
+def _wait_for_status(client, run_id, *, not_in: set[str], deadline_s: float) -> dict:
+    deadline = time.time() + deadline_s
+    status = None
+    while time.time() < deadline:
+        status = client.get(f"/runs/{run_id}/status").json()
+        if status["status"] not in not_in:
+            return status
+        time.sleep(0.5)
+    assert status is not None, "aucune réponse du serveur"
+    raise AssertionError(f"délai dépassé, statut encore {status['status']!r}: {status}")
 
-    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
 
+def test_run_via_web_form_end_to_end(tmp_path):
     client = TestClient(app)
     resp = client.post("/runs", data=_form_data(tmp_path))
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["status"] == "running", body
+    # `start_run` enfile désormais toujours en base ('queued') : la transition
+    # vers 'running' est décidée par le worker séparé, jamais immédiate.
+    assert body["status"] == "queued", body
     run_id = body["run_id"]
 
-    deadline = time.time() + 120
-    status = None
-    while time.time() < deadline:
-        status = client.get(f"/runs/{run_id}/status").json()
-        if status["status"] != "running":
-            break
-        time.sleep(0.5)
-    assert status is not None and status["status"] == "done", status
+    status = _wait_for_status(client, run_id, not_in={"queued", "running"}, deadline_s=240)
+    assert status["status"] == "done", status
 
     results = client.get(f"/runs/{run_id}/results").json()
     assert results["n_evaluations"] > 0
@@ -102,14 +116,10 @@ def test_run_via_web_form_end_to_end(tmp_path, monkeypatch):
     assert download.status_code == 200
 
 
-def test_second_run_queues_then_auto_starts(tmp_path, monkeypatch):
-    """Un run soumis pendant qu'un autre tourne ne doit plus être rejeté
-    (ancien comportement 409) mais mis en file d'attente, puis démarré
-    automatiquement dès que l'actif se termine (cf. run_manager._advance_queue)."""
-    def fake_ingest(objective, universe, store=None, force=False):
-        return _synthetic_raw()
-
-    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+def test_second_run_queues_then_auto_starts(tmp_path):
+    """Un run soumis pendant qu'un autre tourne/attend n'est jamais rejeté
+    (pas de 409) mais mis en file d'attente, puis démarré automatiquement dès
+    que l'actif se termine (le worker séparé les traite un par un, FIFO)."""
     client = TestClient(app)
 
     form_a = _form_data(tmp_path)
@@ -118,7 +128,7 @@ def test_second_run_queues_then_auto_starts(tmp_path, monkeypatch):
     resp_a = client.post("/runs", data=form_a)
     assert resp_a.status_code == 200, resp_a.text
     run_a = resp_a.json()
-    assert run_a["status"] == "running"
+    assert run_a["status"] == "queued"
 
     form_b = _form_data(tmp_path)
     form_b["name"] = "run_b"
@@ -127,17 +137,14 @@ def test_second_run_queues_then_auto_starts(tmp_path, monkeypatch):
     assert resp_b.status_code == 200, resp_b.text
     run_b = resp_b.json()
     assert run_b["status"] == "queued"
-    assert run_b["queue_position"] == 1
+
+    # run_a doit être réclamé par le worker (unique) avant run_b : file FIFO.
+    a_status = _wait_for_status(client, run_a["run_id"], not_in={"queued"}, deadline_s=90)
+    assert a_status["status"] == "running", a_status
 
     state = client.get("/api/run-state").json()
     assert state["active_run"]["id"] == run_a["run_id"]
     assert [q["id"] for q in state["queue"]] == [run_b["run_id"]]
 
-    deadline = time.time() + 120
-    b_status = None
-    while time.time() < deadline:
-        b_status = client.get(f"/runs/{run_b['run_id']}/status").json()
-        if b_status["status"] != "queued":
-            break
-        time.sleep(0.5)
-    assert b_status is not None and b_status["status"] == "running", b_status
+    b_status = _wait_for_status(client, run_b["run_id"], not_in={"queued"}, deadline_s=180)
+    assert b_status["status"] in ("running", "done"), b_status

@@ -17,8 +17,23 @@ import sys
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
-DEFAULT_DB_PATH = os.path.expanduser("~/.patrick/patrick.db")
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+
+
+def default_db_path() -> str:
+    """Lu depuis l'environnement à CHAQUE appel (pas une constante figée à
+    l'import) : `patrick worker`, lancé en process séparé par
+    `run_manager.ensure_worker_running`, doit partager la même base que le
+    process web qui l'a fait naître (héritage d'environnement via
+    `subprocess.Popen`) sans qu'il faille se passer le chemin en argument CLI
+    — et les tests doivent pouvoir isoler chaque run sur un `tmp_path` en
+    positionnant `PATRICK_DB_PATH` avant d'appeler `connect()`, ce qu'une
+    valeur par défaut de paramètre (évaluée une seule fois à l'import du
+    module) ne permettrait pas."""
+    return os.environ.get("PATRICK_DB_PATH") or os.path.expanduser("~/.patrick/patrick.db")
+
+
+DEFAULT_DB_PATH = default_db_path()  # valeur au chargement du module, pour affichage/CLI seulement
 
 _TRACKED_LIBS = (
     "numpy", "pandas", "scikit-learn", "xgboost", "lightgbm", "catboost",
@@ -26,7 +41,8 @@ _TRACKED_LIBS = (
 )
 
 
-def connect(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def connect(path: str | None = None) -> sqlite3.Connection:
+    path = path or default_db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA journal_mode = WAL")
@@ -100,14 +116,14 @@ def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
 
 def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
                 snapshot_id: str, config_json: str, config_hash: str,
-                git_sha: str, seed: int) -> None:
+                git_sha: str, seed: int, job_id: str | None = None) -> None:
     with conn:
         conn.execute(
             "INSERT INTO run (run_id, started_at, status, target, horizon, snapshot_id, "
-            "config_json, config_hash, git_sha, seed, lib_versions) "
-            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
+            "config_json, config_hash, git_sha, seed, lib_versions, job_id) "
+            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, target, horizon, snapshot_id, config_json, config_hash,
-             git_sha, seed, library_versions()),
+             git_sha, seed, library_versions(), job_id),
         )
 
 
@@ -119,6 +135,18 @@ def finish_run(conn: sqlite3.Connection, run_id: str, status: str,
             "error = ? WHERE run_id = ?",
             (status, n_trials, error, run_id),
         )
+
+
+_RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",
+                "git_sha", "seed", "lib_versions", "status", "started_at", "finished_at",
+                "n_trials", "error", "job_id"]
+
+
+def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
+    row = conn.execute(
+        f"SELECT {', '.join(_RUN_COLUMNS)} FROM run WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,

@@ -71,7 +71,7 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "examples": forms.list_example_configs(),
             "active_run": active,
             "queued_runs": run_manager.queued_runs(),
-            "initial_run_id": initial_run_id if initial_run_id is not None else (active.id if active else None),
+            "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
             "movers": alerts.get_cached(),
             **FORM_OPTIONS,
             **_i18n_context(request),
@@ -134,12 +134,11 @@ async def create_run(request: Request):
     if errors:
         return JSONResponse({"errors": errors}, status_code=400)
 
-    state = run_manager.start_run(config)
-    snap = state.snapshot()
+    job_view = run_manager.start_run(config)
     return JSONResponse({
-        "run_id": state.id,
-        "status": snap["status"],
-        "queue_position": snap["queue_position"],
+        "run_id": job_view["id"],
+        "status": job_view["status"],
+        "queue_position": job_view["queue_position"],
     })
 
 
@@ -150,16 +149,16 @@ def run_state():
     `/runs/{run_id}/status` (progression/logs d'un run précis)."""
     active = run_manager.active_run()
     return {
-        "active_run": {"id": active.id, "name": active.config.name} if active else None,
-        "queue": [{"id": s.id, "name": s.config.name} for s in run_manager.queued_runs()],
+        "active_run": {"id": active["id"], "name": active["name"]} if active else None,
+        "queue": [{"id": s["id"], "name": s["name"]} for s in run_manager.queued_runs()],
     }
 
 
-def _get_run_or_404(run_id: str):
-    state = run_manager.get_run(run_id)
-    if state is None:
+def _get_run_or_404(run_id: str) -> dict:
+    job = run_manager.get_run(run_id)
+    if job is None:
         raise HTTPException(status_code=404, detail="Run introuvable (redémarrage du serveur ?)")
-    return state
+    return job
 
 
 @app.get("/runs/{run_id}")
@@ -169,22 +168,26 @@ def run_page(request: Request, run_id: str):
     run actif courant. Permet de rouvrir/partager le lien d'un run passé ou en
     cours sans dupliquer le template. Le formulaire settings est prérempli
     avec la config réelle de ce run (pas les défauts)."""
-    state = _get_run_or_404(run_id)
-    view = forms.to_view(state.config.model_dump())
+    _get_run_or_404(run_id)
+    config = run_manager.get_run_config(run_id)
+    view = forms.to_view(config.model_dump())
     return _render_index(request, view, [], initial_run_id=run_id)
 
 
 @app.get("/runs/{run_id}/status")
 def run_status(run_id: str):
-    return _get_run_or_404(run_id).snapshot()
+    return _get_run_or_404(run_id)
 
 
 @app.get("/runs/{run_id}/results")
 def run_results(run_id: str):
-    state = _get_run_or_404(run_id)
-    if state.status != "done":
-        raise HTTPException(status_code=409, detail=f"Run pas encore terminé (status={state.status})")
-    return state.result
+    job = _get_run_or_404(run_id)
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail=f"Run pas encore terminé (status={job['status']})")
+    result = run_manager.get_run_result(run_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Résultat introuvable")
+    return result
 
 
 ARTIFACT_LABELS = {
@@ -198,10 +201,11 @@ ARTIFACT_LABELS = {
 
 @app.get("/runs/{run_id}/download/{artifact}")
 def download_artifact(run_id: str, artifact: str):
-    state = _get_run_or_404(run_id)
-    if state.status != "done" or not state.result:
+    job = _get_run_or_404(run_id)
+    if job["status"] != "done":
         raise HTTPException(status_code=409, detail="Run pas encore terminé")
-    path = state.result.get("artifacts", {}).get(artifact)
+    result = run_manager.get_run_result(run_id) or {}
+    path = result.get("artifacts", {}).get(artifact)
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Artefact introuvable")
     return FileResponse(path, filename=os.path.basename(path))

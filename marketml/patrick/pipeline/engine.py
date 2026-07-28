@@ -458,7 +458,8 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
 
 
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
-                  force_ingest: bool = False, db_path: str | None = None) -> dict:
+                  force_ingest: bool = False, db_path: str | None = None,
+                  job_id: str | None = None) -> dict:
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
@@ -466,7 +467,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     raw = ingest(config.objective, config.universe, store, force=force_ingest)
     target_col = clean_symbol(config.objective.target_symbol)
 
-    conn = trackdb.connect(db_path or trackdb.DEFAULT_DB_PATH)
+    conn = trackdb.connect(db_path)
     snapshot_id, data_hash, n_tickers, n_fred_series, fred_src = _snapshot_context(raw)
     trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
     config_json = config.model_dump_json()
@@ -478,7 +479,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         run_id = f"{config.name}_h{horizon}_{uuid.uuid4().hex[:8]}"
         trackdb.create_run(conn, run_id, target=config.objective.target_symbol, horizon=horizon,
                             snapshot_id=snapshot_id, config_json=config_json,
-                            config_hash=config_hash, git_sha=git_sha, seed=seed)
+                            config_hash=config_hash, git_sha=git_sha, seed=seed, job_id=job_id)
         run_ids[horizon] = run_id
 
     all_dates_full = raw.index
@@ -571,6 +572,14 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
         print(f"\n[OPTUNA] affinage des {len(top_configs)} meilleures configs "
               f"({config.tuning.n_trials} essais, CV={config.tuning.cv_splits})...")
+        # Phase 3.2 (`patrick resume`) : étude Optuna persistée dans un fichier
+        # SQLite dédié (jamais `patrick.db`), un `study_name` déterministe par
+        # config testée -> un `patrick run`/`patrick resume` relancé sur la
+        # même config (même config_hash, donc même nom d'étude) après une
+        # interruption reprend les essais déjà faits au lieu de repartir à
+        # zéro (cf. `tune_config`, `optuna_runner.py`).
+        os.makedirs(config.output.dir, exist_ok=True)
+        optuna_storage_path = os.path.join(config.output.dir, "optuna.db")
         for cfg in top_configs:
             horizon, regime, n_feat = int(cfg["horizon"]), cfg["regime"], int(cfg["N"])
             sampler_name, algo = cfg["sampler"], cfg["algo"]
@@ -584,9 +593,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
             X_tr_n = fd.X_tr[:, cols]
 
+            study_name = f"{config.name}_{config_hash}_h{horizon}_{regime}_N{n_feat}_{sampler_name}_{algo}"
             best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
                                                 n_trials=config.tuning.n_trials,
-                                                cv_splits=config.tuning.cv_splits, seed=seed)
+                                                cv_splits=config.tuning.cv_splits, seed=seed,
+                                                storage_path=optuna_storage_path, study_name=study_name)
             print(f"  h={horizon}j {regime} N={n_feat} {sampler_name} {algo}: "
                   f"cv_F1_dir={best_cv:.4f} params={best_params}")
 

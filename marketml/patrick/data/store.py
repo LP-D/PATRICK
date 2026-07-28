@@ -24,7 +24,15 @@ from glob import glob
 
 import pandas as pd
 
-DEFAULT_STORE_DIR = os.path.expanduser("~/.patrick/store")
+def _default_store_dir() -> str:
+    """Cf. `tracking.db.default_db_path` : lu depuis l'environnement à CHAQUE
+    appel (pas figé à l'import) pour que le worker (process séparé) partage le
+    même data lake que le process web qui l'a lancé, et pour l'isolation des
+    tests (`PATRICK_STORE_ROOT` positionné avant d'instancier `DataStore()`)."""
+    return os.environ.get("PATRICK_STORE_ROOT") or os.path.expanduser("~/.patrick/store")
+
+
+DEFAULT_STORE_DIR = _default_store_dir()  # valeur au chargement du module, pour affichage/CLI seulement
 
 
 def _content_hash(df: pd.DataFrame) -> str:
@@ -36,8 +44,8 @@ def _content_hash(df: pd.DataFrame) -> str:
 
 
 class DataStore:
-    def __init__(self, root: str = DEFAULT_STORE_DIR):
-        self.root = root
+    def __init__(self, root: str | None = None):
+        self.root = root or _default_store_dir()
         os.makedirs(self.root, exist_ok=True)
 
     def _safe_key(self, key: str) -> str:

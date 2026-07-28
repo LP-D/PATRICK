@@ -36,7 +36,8 @@ def test_migrate_is_idempotent(tmp_path):
     version2 = conn2.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
     assert version1 == version2
     row_count = conn2.execute("SELECT count(*) FROM schema_version").fetchone()[0]
-    assert row_count == 1  # une seule ligne pour la version 1, pas rejouée
+    n_migrations = len(list(db.MIGRATIONS_DIR.glob("*.sql")))
+    assert row_count == n_migrations  # une ligne par migration, aucune rejouée deux fois
     conn2.close()
 
 
