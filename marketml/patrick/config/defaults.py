@@ -19,6 +19,13 @@ DEFAULT_MIN_TRAIN_FRAC = 0.40
 DEFAULT_FLAT_THR = 0.003
 DEFAULT_SEED = 42
 
+# Phase 2.1 (validité statistique) : derniers mois réservés en holdout terminal,
+# jamais vus par la sélection de features/le tuning/le tri du leaderboard. Le plan
+# fourni laisse un intervalle (12-18 mois) sans trancher lequel ; 15 = milieu de
+# l'intervalle, aucun argument fort pour l'un ou l'autre bord. 0 désactive le
+# holdout (utile pour les tests synthétiques à faible historique).
+DEFAULT_HOLDOUT_MONTHS = 15
+
 # Optuna fait partie de la boucle par défaut (demande explicite) : sélectionner le
 # meilleur modèle sans l'affiner ne répond pas au besoin "ressort le meilleur modèle".
 DEFAULT_TUNING_ENABLED = True

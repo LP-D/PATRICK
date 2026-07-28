@@ -46,6 +46,7 @@ class ValidationConfig(BaseModel):
     embargo_bars: int | None = D.DEFAULT_EMBARGO_BARS
     min_train_rows: int = 100
     min_test_rows: int = 20
+    holdout_months: int = D.DEFAULT_HOLDOUT_MONTHS
 
 
 class SelectionConfig(BaseModel):

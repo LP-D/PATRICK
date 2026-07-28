@@ -81,6 +81,73 @@ def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tm
     assert os.path.exists(result["model_path"])
 
 
+def _synthetic_raw_no_floor(n=1500, seed=0) -> pd.DataFrame:
+    """Variante de `_synthetic_raw` sans `.clip(min=-10)` sur la marche
+    aléatoire cumulée. Ce clip fait "coller" la cible à un plancher exact
+    pendant des séries de jours consécutifs dès que la marche aléatoire
+    dérive suffisamment bas (attendu sur 1500 pas, écart-type cumulé ~19 pour
+    un floor à 10 en dessous du niveau de départ) : ~40% des rendements à
+    horizon 5j tombent alors exactement à 0.0 (prix collé au plancher des
+    deux côtés de la fenêtre), quel que soit `flat_thr` (le filtre "flat" de
+    `build_target` ne peut rien contre un rendement EXACTEMENT nul, pas
+    seulement petit) — le dernier fold walk-forward s'effondre alors à
+    quelques lignes de test. Découvert en écrivant les tests Phase 2 ; propre
+    à ce test, ne touche pas `_synthetic_raw` (utilisé ailleurs avec ce
+    comportement déjà implicitement accepté)."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2015-01-01", periods=n)
+    target = 100 + np.cumsum(rng.normal(0, 0.5, n))
+    df = pd.DataFrame({"IDX_TEST": target}, index=idx)
+    df["SPX_LIKE"] = 3000 + np.cumsum(rng.normal(0, 5, n))
+    df["NFCI"] = np.cumsum(rng.normal(0, 0.02, n))
+    df["T10Y2Y"] = np.cumsum(rng.normal(0, 0.01, n))
+    return df
+
+
+def test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated(tiny_config, monkeypatch, tmp_path):
+    """Critère de sortie Phase 2 : pour la config gagnante, le pipeline produit
+    une métrique holdout, une p-value Diebold-Mariano vs la meilleure baseline,
+    et un compteur d'essais cumulé — avec les réglages par défaut
+    (holdout_months=15, min_test_rows=20, flat_thr=0.003), sur un historique
+    synthétique sans l'artefact de `_synthetic_raw` (cf.
+    `_synthetic_raw_no_floor`)."""
+
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_stats_store"),
+        db_path=db_path)
+
+    assert result["final_best"] is not None
+
+    assert result["holdout"] is not None, "le holdout ne doit pas se désactiver sur 1500 lignes"
+    assert 0 <= result["holdout"]["F1_dir"] <= 1
+
+    assert result["diebold_mariano"] is not None
+    assert result["diebold_mariano"]["baseline"] in (
+        "BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv")
+    assert 0 <= result["diebold_mariano"]["p_value"] <= 1
+
+    assert result["cumulative_trials"] > 0
+
+    assert result["pbo"] is not None
+    # 2 folds (tiny_config) -> pair, CSCV utilisable tel quel (pas de recadrage).
+    assert result["pbo"]["n_blocks"] == 2
+
+    conn = sqlite3.connect(db_path)
+    holdout_rows = conn.execute(
+        "SELECT count(*) FROM fold_metric WHERE split = 'holdout'").fetchone()[0]
+    assert holdout_rows > 0
+    holdout_preds = conn.execute(
+        "SELECT count(*) FROM prediction WHERE split = 'holdout'").fetchone()[0]
+    assert holdout_preds > 0
+    conn.close()
+
+
 def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_config, monkeypatch, tmp_path):
     """Critère de sortie Phase 1 : un run complet écrit snapshot + run + N trials
     + fold_metrics + baselines + predictions ; deux runs identiques sur le même

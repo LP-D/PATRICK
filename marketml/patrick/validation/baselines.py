@@ -102,16 +102,25 @@ def har_rv_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
 def compute_baselines(price_series: pd.Series, target_series: pd.Series,
                        idx: pd.DatetimeIndex, tr_mask: np.ndarray, te_mask: np.ndarray,
                        y_tr: np.ndarray, y_te: np.ndarray, horizon: int,
-                       thr: dict, reg_r: pd.Series) -> dict[str, dict]:
+                       thr: dict, reg_r: pd.Series,
+                       return_predictions: bool = False) -> dict[str, dict] | dict[str, np.ndarray]:
     """Retourne {nom_baseline: metrics(...)} pour toutes les baselines calculables
-    sur ce fold. HAR-RV est absent du dict (pas de clé) si l'historique de train
-    est trop court, plutôt que de polluer le leaderboard avec des NaN."""
-    out = {
-        "BASELINE_majority": metrics(y_te, majority_class_predictions(y_tr, len(y_te))),
-        "BASELINE_persistence": metrics(
-            y_te, persistence_predictions(target_series, idx, te_mask, horizon)),
+    sur ce fold (comportement historique, `return_predictions=False`). HAR-RV est
+    absent du dict (pas de clé) si l'historique de train est trop court, plutôt
+    que de polluer le leaderboard avec des NaN.
+
+    `return_predictions=True` (Phase 2.5, Diebold-Mariano) : renvoie
+    {nom_baseline: y_pred} à la place — les prédictions brutes, alignées sur
+    `y_te`, nécessaires pour comparer la perte du modèle gagnant à celle d'une
+    baseline observation par observation (une moyenne de métriques ne le permet
+    pas). Un seul calcul sous-jacent dans les deux cas, pas de duplication."""
+    preds: dict[str, np.ndarray] = {
+        "BASELINE_majority": majority_class_predictions(y_tr, len(y_te)),
+        "BASELINE_persistence": persistence_predictions(target_series, idx, te_mask, horizon),
     }
     har_pred = har_rv_predictions(price_series, idx, tr_mask, te_mask, thr, reg_r)
     if har_pred is not None:
-        out["BASELINE_har_rv"] = metrics(y_te, har_pred)
-    return out
+        preds["BASELINE_har_rv"] = har_pred
+    if return_predictions:
+        return preds
+    return {name: metrics(y_te, pred) for name, pred in preds.items()}

@@ -151,37 +151,117 @@ dans `run_pipeline` — le `snapshot` enregistré est donc celui de l'ingestion
 "aujourd'hui", pas un vintage par fold. Brancher ça demanderait la même
 généralisation "par coupure de fold" déjà faite pour les features paramétriques.
 
+## Phase 2 — validité statistique
+
+Le leaderboard trie déjà sur une métrique optimisée (F1_dir, sur la grille
+sampler×N×algo puis Optuna) : sans correction, il classe le maximum d'un
+échantillon de bruit, pas des modèles. La Phase 2 ajoute cette correction —
+calculée une seule fois pour la config gagnante d'un run, jamais pour
+recalculer/trier le scan (cf. anti-pattern documenté ci-dessous).
+
+- **Holdout terminal** (`config.validation.holdout_months`, 15 par défaut —
+  milieu de l'intervalle 12-18 mois donné, aucun argument fort pour l'un ou
+  l'autre bord) : les derniers mois d'historique sont exclus du domaine
+  walk-forward (`pipeline/engine.py::_walk_forward_span`) — jamais vus par la
+  construction des features paramétriques, la sélection ou le tuning. Une
+  seule réévaluation de la config déjà choisie (`_evaluate_holdout`), jamais
+  utilisée pour choisir entre plusieurs configs. Si l'historique est trop
+  court pour à la fois entraîner et garder un holdout de cette durée, il est
+  désactivé pour ce run avec un avertissement explicite plutôt que de
+  planter. Résultat écrit en base (`fold_metric`/`prediction`, `split='holdout'`,
+  `fold_index=0`) et renvoyé dans `result["holdout"]`.
+- **Compteur d'essais cumulé** (`tracking/stats.py::count_cumulative_trials`) :
+  nombre total de `trial` pour une (cible, horizon), sur **tout l'historique
+  de runs**, pas seulement le run courant — c'est ce nombre qui doit corriger
+  un Sharpe/PBO, pas celui d'un seul run isolé.
+- **PBO** (`validation/pbo.py`, `tracking/stats.py::pbo_for_target`) :
+  Probability of Backtest Overfitting par CSCV (Bailey/Borwein/López de
+  Prado/Zhu 2017). Écart assumé par rapport au papier : les "blocs" CSCV sont
+  directement les folds walk-forward déjà en base (`fold_metric`), pas un
+  découpage temporel arbitraire séparé — respecte la structure temporelle par
+  construction. `n_wf_folds` (5 par défaut, impair) est réduit au nombre pair
+  inférieur pour la combinatoire CSCV (donc 4 blocs par défaut) ; un
+  `n_wf_folds` plus élevé donne un PBO plus robuste.
+- **Diebold-Mariano** (`validation/diebold_mariano.py`) : perte 0/1 (mal
+  classé/bien classé) plutôt que quadratique (formulation originale pensée
+  pour la régression), entre la config gagnante et la meilleure des baselines
+  systématiques (Phase 0.6), sur le dernier fold walk-forward. p-value dans
+  `result["diebold_mariano"]`, marquée visuellement comme non significative
+  (p≥0.05) dans l'interface web.
+- **Sharpe déflaté / DSR** (`validation/dsr.py`, Bailey & López de Prado
+  2014) : implémenté et testé, **pas encore appelé depuis le pipeline** — le
+  plan fourni le lie explicitement à la Phase 4 ("utilisé dès qu'une courbe
+  de P&L existe") ; ce pipeline ne calcule que des métriques de
+  classification pour l'instant, pas de série de rendements à déflater.
+  Module autonome prêt à être branché une fois le simulateur d'investissement
+  en place.
+
+Tout ceci reste calculé pour la config gagnante uniquement, pas pour chaque
+ligne du scan : réévaluer chaque trial sur le holdout en ferait une seconde
+surface de sur-optimisation (le nombre de configurations comparées au
+holdout doit rester minimal), et le coût de calcul serait prohibitif sur une
+grille de centaines/milliers de trials.
+
+**Bug de fuite/robustesse trouvé en écrivant les tests de cette phase** :
+`safe_pct_change` (`features/_utils.py`, déjà en place depuis la Phase 0)
+neutralisait `+/-inf` (dénominateur exactement nul) mais pas un dénominateur
+**proche** de zéro, qui produit un rendement énorme mais fini — sur une série
+qui traverse zéro (T10Y2Y typiquement), ça déborde ensuite en overflow ->
+`inf` après mise à l'échelle (`RobustScaler`) plus loin dans le pipeline et
+fait planter XGBoost (`Input data contains inf`). `safe_pct_change` clippe
+maintenant à +/-1000% par période — au-delà, ce n'est de toute façon jamais
+un signal exploitable, quel que soit l'actif/la série. Trouvé sur les proxys
+Heston/VRP (`vol_models.py`) appliqués à T10Y2Y avec un historique
+synthétique sans l'artefact de plancher de `_synthetic_raw` (cf.
+`tests/test_pipeline_smoke.py::_synthetic_raw_no_floor`) — pas rencontré
+dans les Phases 0/1 car les tests précédents n'exerçaient jamais ce chemin
+précis (réévaluation sur une fenêtre de données différente du scan
+walk-forward habituel).
+
+*Critère de sortie Phase 2 (vérifié par
+`test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated`) : pour la
+config gagnante d'un run, holdout + p-value Diebold-Mariano vs meilleure
+baseline + compteur d'essais cumulé + PBO sont calculés, persistés (holdout)
+et exposés (`run_pipeline` -> `run_manager._summarize_result` -> interface
+web, sous le "Best config").*
+
 ## État de la vérification
 
 Le moteur complet (ingestion -> features -> walk-forward -> sélection -> grille ->
-Optuna -> export -> persistance SQLite) est validé par des tests de fumée
-bout-en-bout sur données synthétiques (`tests/test_pipeline_smoke.py`,
-`test_webapp_smoke.py`) et 56 tests unitaires (`pytest tests/`, 58 avec les
-paramétrisations), dont les tests de fuite de la Phase 0 (`test_leakage.py`) et
-les tests de persistance de la Phase 1 (`test_db.py`, `test_store_snapshot.py`).
-Le critère de sortie Phase 1 (deux runs identiques sur le même snapshot
-produisent des métriques identiques, et écrivent snapshot+run+trials+
-fold_metrics+baselines+predictions) est vérifié explicitement par
-`test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot`.
+Optuna -> export -> persistance SQLite -> validité statistique) est validé par
+des tests de fumée bout-en-bout sur données synthétiques
+(`tests/test_pipeline_smoke.py`, `test_webapp_smoke.py`) et des tests unitaires
+(`pytest tests/`, 77 au total avec les paramétrisations), dont les tests de
+fuite de la Phase 0 (`test_leakage.py`), les tests de persistance de la Phase 1
+(`test_db.py`, `test_store_snapshot.py`) et les tests de validité statistique de
+la Phase 2 (`test_dsr.py`, `test_pbo.py`, `test_diebold_mariano.py`,
+`test_stats.py`). Le critère de sortie Phase 1 (deux runs identiques sur le
+même snapshot produisent des métriques identiques, et écrivent snapshot+run+
+trials+fold_metrics+baselines+predictions) est vérifié explicitement par
+`test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot` ; celui de
+la Phase 2 par `test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated`.
 
 **La vérification avec de vraies données** a été faite sur une machine avec
 accès réseau yfinance/FRED (`patrick run --config
 configs/examples/vix_direction.yaml`) ; un bug sur les séries FRED traversant
 zéro (T10Y2Y, EFFR) a été trouvé et corrigé à cette occasion (`safe_pct_change`,
 cf. `features/_utils.py`), et un problème plus récent de fiabilité du scraping
-FRED a mené à l'ajout du chemin API authentifié ci-dessus. **Les Phases 0 et 1
-n'ont en revanche pas encore été revérifiées avec de vraies données** — les
-corrections de fuite (fold-dépendance des features paramétriques notamment)
-changeront probablement la référence F1_dir≈0.610, à revalider sur une machine
-avec accès réseau.
+FRED a mené à l'ajout du chemin API authentifié ci-dessus. Un renforcement de
+`safe_pct_change` (dénominateur proche de zéro, pas seulement nul — cf. Phase 2
+ci-dessus) a été trouvé et corrigé en sandbox, pas encore revérifié avec de
+vraies données. **Les Phases 0 à 2 n'ont pas encore été revérifiées ensemble
+avec de vraies données** — les corrections de fuite (fold-dépendance des
+features paramétriques notamment) changeront probablement la référence
+F1_dir≈0.610, à revalider sur une machine avec accès réseau.
 
 ## Feuille de route
 
-- Phase 2+ (validité statistique — holdout terminal, DSR, PBO, Diebold-Mariano ;
-  exécution robuste ; simulation d'investissement ; hygiène) — voir le plan en 5
-  phases fourni, Phases 0 et 1 seules traitées pour l'instant.
+- Phase 3+ (exécution robuste — file de jobs SQLite/worker séparé, `patrick
+  resume`/`report` ; simulation d'investissement ; hygiène) — voir le plan en 5
+  phases fourni, Phases 0 à 2 traitées pour l'instant.
+- DSR (Phase 2.3) implémenté mais pas encore branché : attend une vraie courbe
+  de P&L (Phase 4).
 - Vintages FRED branchés par fold dans le moteur walk-forward (cf. limite
   documentée ci-dessus).
-- `patrick report`/`resume` s'appuyant sur la base SQLite désormais en place.
 - Modèles DL (TFT, LSTM, etc.) — jamais gagné en walk-forward dans le projet VIX,
   resteront désactivés par défaut.

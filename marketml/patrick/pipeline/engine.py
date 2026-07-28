@@ -58,9 +58,11 @@ from patrick.models.samplers import get_sampler
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.tracking import db as trackdb
+from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
 from patrick.validation.baselines import compute_baselines
+from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
 from patrick.validation.metrics import metrics
 from patrick.validation.purge import purge_mask
@@ -234,6 +236,7 @@ class FoldData:
     test_end: str
     test_dates: list[str]
     baselines: dict | None = None
+    baseline_predictions: dict | None = None
 
 
 class _FoldContext:
@@ -287,12 +290,18 @@ class _FoldContext:
         test_dates = [str(d.date()) for d in idx[te_mask]]
 
         baselines = None
+        baseline_predictions = None
         if want_baselines:
-            baselines = compute_baselines(pool[self.target_col], target_series, idx,
-                                           tr_mask, te_mask, y_tr, y_te, horizon, thr, reg_r)
+            # Un seul calcul (return_predictions=True) : les métriques agrégées
+            # (leaderboard) ET les prédictions brutes (Diebold-Mariano, Phase 2.5)
+            # viennent de la même passe, pas de deux appels redondants.
+            baseline_predictions = compute_baselines(
+                pool[self.target_col], target_series, idx, tr_mask, te_mask,
+                y_tr, y_te, horizon, thr, reg_r, return_predictions=True)
+            baselines = {name: metrics(y_te, pred) for name, pred in baseline_predictions.items()}
 
         return FoldData(X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()),
-                         test_dates, baselines)
+                         test_dates, baselines, baseline_predictions)
 
 
 def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
@@ -323,6 +332,110 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
             y_proba = None
     met = metrics(y_te, y_pred, y_proba=y_proba)
     return met, y_pred, confidence
+
+
+def _parse_params(raw_params) -> dict:
+    if not raw_params:
+        return {}
+    if isinstance(raw_params, str):
+        return ast.literal_eval(raw_params)
+    return raw_params
+
+
+def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_train_frac: float) -> int:
+    """Position (exclue) où s'arrête le domaine walk-forward : les
+    `holdout_months` derniers mois d'historique sont réservés (Phase 2.1),
+    jamais vus par la sélection de features, le tuning ou le tri du
+    leaderboard — seulement par une unique réévaluation finale de la config
+    déjà choisie (`_evaluate_holdout`). Renvoie `len(all_dates)` (holdout
+    désactivé) si `holdout_months<=0` ou si l'historique est trop court pour à
+    la fois entraîner (`min_train_frac`) et garder un holdout de la durée
+    demandée — le run continue sans holdout plutôt que de planter, avec un
+    avertissement explicite."""
+    n = len(all_dates)
+    if holdout_months <= 0 or n == 0:
+        return n
+    holdout_start_date = all_dates[-1] - pd.DateOffset(months=holdout_months)
+    n_wf = int((all_dates < holdout_start_date).sum())
+    if n_wf < max(int(n * min_train_frac) + 1, 100):
+        print(f"  [WARN] historique trop court pour un holdout de {holdout_months} mois "
+              f"en plus de l'entraînement walk-forward — holdout désactivé pour ce run.")
+        return n
+    return n_wf
+
+
+def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature_pool: list[str],
+                       config: RunConfig, all_dates_full: pd.DatetimeIndex, n_wf: int,
+                       best_cfg: dict, seed: int) -> dict | None:
+    """Réévalue la config gagnante (Phase 2.1) sur le holdout terminal : le
+    modèle est réentraîné UNIQUEMENT sur les données antérieures au holdout
+    (`pool_builder.get(n_wf)` -> paramétrique fit sur `raw.iloc[:n_wf]`, même
+    mécanisme causal que les folds walk-forward), puis testé sur les lignes
+    jamais vues. Une seule config évaluée ici — celle déjà choisie par le scan
+    walk-forward — jamais utilisée pour choisir entre plusieurs (anti-pattern
+    #1 du plan fourni : ne rien trier/sélectionner sur le holdout)."""
+    horizon = int(best_cfg["horizon"])
+    regime = best_cfg["regime"]
+    n_feat = int(best_cfg["N"])
+    sampler_name, algo = best_cfg["sampler"], best_cfg["algo"]
+    best_params = _parse_params(best_cfg.get("best_params"))
+
+    pool = pool_builder.get(n_wf)
+    target_series, reg_r, _thr = build_target(pool[target_col], horizon, n_wf, config.objective.flat_thr)
+    idx = target_series.index
+    holdout_start_date = all_dates_full[n_wf]
+    tr_mask = np.asarray(idx < holdout_start_date)
+    te_mask = np.asarray(idx >= holdout_start_date)
+    reg_al = reg_r.reindex(idx).fillna("NORMAL").values
+    sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
+    tr_mask, te_mask = tr_mask & sel, te_mask & sel
+
+    y_tr = target_series.values[tr_mask].astype(int)
+    y_te = target_series.values[te_mask].astype(int)
+    if len(y_tr) < config.validation.min_train_rows or len(y_te) < config.validation.min_test_rows:
+        return None
+
+    X_pool_df = pool[feature_pool].reindex(idx)
+    sc = RobustScaler()
+    X_tr = sc.fit_transform(np.nan_to_num(X_pool_df.values[tr_mask]))
+    X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
+    cols = _select(config, X_tr, y_tr, n_feat, seed)
+    met, y_pred, confidence = _fit_eval(X_tr[:, cols], y_tr, X_te[:, cols], y_te,
+                                         sampler_name, algo, seed, **best_params)
+    test_dates = [str(d.date()) for d in idx[te_mask]]
+    return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te,
+            "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te)}
+
+
+def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: int, seed: int) -> dict | None:
+    """DM (Phase 2.5) entre la config gagnante et la meilleure des baselines
+    systématiques (Phase 0.6), sur le fold walk-forward le plus récent — la
+    période la plus proche du régime de marché actuel, plutôt qu'une moyenne
+    sur tout l'historique qui diluerait un éventuel changement de régime."""
+    horizon, regime = int(best_cfg["horizon"]), best_cfg["regime"]
+    n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
+    best_params = _parse_params(best_cfg.get("best_params"))
+
+    fd = ctx.prepare(horizon, last_fold, regime, want_baselines=True)
+    if fd is None or not fd.baseline_predictions:
+        return None
+    cols = _select(ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
+    _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
+                              sampler_name, algo, seed, **best_params)
+
+    best_baseline_name, best_baseline_pred, best_f1 = None, None, -1.0
+    for name, pred in fd.baseline_predictions.items():
+        f1 = (fd.baselines or {}).get(name, {}).get("F1_dir")
+        if f1 is not None and f1 == f1 and f1 > best_f1:
+            best_f1, best_baseline_name, best_baseline_pred = f1, name, pred
+    if best_baseline_pred is None:
+        return None
+
+    loss_model = (np.asarray(y_pred).ravel() != fd.y_te).astype(float)
+    loss_baseline = (np.asarray(best_baseline_pred).ravel() != fd.y_te).astype(float)
+    dm = diebold_mariano(loss_model, loss_baseline, h=horizon)
+    dm["baseline"] = best_baseline_name
+    return dm
 
 
 def _config_hash(config: RunConfig) -> str:
@@ -368,15 +481,25 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                             config_hash=config_hash, git_sha=git_sha, seed=seed)
         run_ids[horizon] = run_id
 
-    all_dates = raw.index
+    all_dates_full = raw.index
+    n_wf = _walk_forward_span(all_dates_full, config.validation.holdout_months,
+                               config.validation.min_train_frac)
+    all_dates = all_dates_full[:n_wf]
     fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds,
                                  config.validation.min_train_frac)
     describe_folds(all_dates, fold_cuts)
+    if n_wf < len(all_dates_full):
+        print(f"[HOLDOUT] {len(all_dates_full) - n_wf} lignes réservées "
+              f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
+              "jamais vues par la sélection/le tuning.")
 
     print("[FEATURES] construction du pool de base (causal, partagé par tous les folds)...")
     base_pool = build_base_feature_pool(raw, config, target_col)
     print(f"[FEATURES] pool de base: {base_pool.shape[1]} colonnes ({time.time()-t0:.1f}s)")
-    assert (base_pool.index == all_dates).all(), "la construction des features ne doit pas changer l'index de dates"
+    # base_pool est construit sur `raw` (historique complet, holdout inclus) :
+    # comparer à all_dates_full, pas à all_dates (domaine walk-forward tronqué
+    # du holdout, cf. _walk_forward_span).
+    assert (base_pool.index == all_dates_full).all(), "la construction des features ne doit pas changer l'index de dates"
 
     pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
     feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
@@ -520,6 +643,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             final_best = tuned_agg.iloc[0].to_dict()
 
     model_path = None
+    holdout_result = None
+    dm_result = None
+    pbo_result = None
+    cumulative_trials = 0
     if final_best is not None:
         full_pool = pd.concat(
             [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
@@ -534,12 +661,36 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     final_best["sampler"], final_best["algo"])
         best_trial_id = trial_ids.get(best_key)
         if best_trial_id is None and "best_params" in final_best:
-            raw_params = final_best["best_params"]
-            parsed_params = ast.literal_eval(raw_params) if isinstance(raw_params, str) else raw_params
+            parsed_params = _parse_params(final_best["best_params"])
             tuned_key = best_key + (json.dumps(parsed_params, sort_keys=True),)
             best_trial_id = tuned_trial_ids.get(tuned_key)
         if best_trial_id is not None:
             trackdb.mark_best_trial(conn, best_trial_id, artifact_path=model_path)
+
+        # Phase 2.1 — holdout terminal : une seule réévaluation de la config déjà
+        # choisie, jamais utilisée pour choisir entre plusieurs (cf. docstring
+        # de _evaluate_holdout).
+        if n_wf < len(all_dates_full):
+            holdout_eval = _evaluate_holdout(pool_builder, target_col, feature_pool, config,
+                                              all_dates_full, n_wf, final_best, seed)
+            if holdout_eval is not None:
+                holdout_result = holdout_eval["metrics"]
+                if best_trial_id is not None:
+                    trackdb.add_fold_metrics(conn, best_trial_id, fold_index=0, split="holdout",
+                                              metrics=holdout_result)
+                    trackdb.add_predictions(conn, best_trial_id, fold_index=0, split="holdout",
+                                             ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
+                                             y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
+
+        # Phase 2.5 — Diebold-Mariano vs meilleure baseline (dernier fold walk-forward).
+        dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
+
+        # Phase 2.2 — essais cumulés sur cette cible/horizon, tout l'historique de
+        # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique.
+        cumulative_trials = trackstats.count_cumulative_trials(
+            conn, config.objective.target_symbol, int(final_best["horizon"]))
+        pbo_result = trackstats.pbo_for_target(
+            conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
 
     for run_id in run_ids.values():
         trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])
@@ -552,4 +703,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         "final_best": final_best,
         "model_path": model_path,
         "elapsed_s": time.time() - t0,
+        "holdout": holdout_result,
+        "diebold_mariano": dm_result,
+        "cumulative_trials": cumulative_trials,
+        "pbo": pbo_result,
     }

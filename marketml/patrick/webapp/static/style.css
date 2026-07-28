@@ -324,6 +324,17 @@ table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; t
     font-family: var(--font-serif);
     font-size: 1.05rem;
 }
+.stats-box {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    font-size: 0.85rem;
+}
+.stats-box p { margin: 4px 0; }
+.stats-box .hint { color: var(--muted); }
+
 .downloads a {
     display: inline-block;
     margin: 4px 8px 4px 0;

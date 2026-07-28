@@ -123,6 +123,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "artifact_best_model": {"fr": "Meilleur modèle (joblib)", "en": "Best model (joblib)"},
     "artifact_best_model_meta": {"fr": "Métadonnées (JSON)", "en": "Metadata (JSON)"},
 
+    # Phase 2 — validité statistique
+    "stat_holdout": {"fr": "Holdout terminal ({n} obs. jamais vues) : F1_dir={f1}",
+                      "en": "Terminal holdout ({n} unseen obs.): F1_dir={f1}"},
+    "stat_dm_significant": {"fr": "Diebold-Mariano vs {baseline} : p={p} — significatif",
+                             "en": "Diebold-Mariano vs {baseline}: p={p} — significant"},
+    "stat_dm_not_significant": {"fr": "Diebold-Mariano vs {baseline} : p={p} — non significatif",
+                                 "en": "Diebold-Mariano vs {baseline}: p={p} — not significant"},
+    "stat_cumulative_trials": {"fr": "{n} essais cumulés sur cette cible/horizon (tout l'historique)",
+                                "en": "{n} cumulative trials on this target/horizon (full history)"},
+    "stat_pbo": {"fr": "PBO (surapprentissage de backtest) : {pbo} ({n} combinaisons)",
+                 "en": "PBO (backtest overfitting): {pbo} ({n} combinations)"},
+
     # market.js
     "preview_loading": {"fr": "Chargement…", "en": "Loading…"},
     "preview_no_data": {"fr": "Pas de données pour cette période.", "en": "No data for this period."},
@@ -175,6 +187,8 @@ def js_strings(lang: str) -> dict[str, str]:
         "news_loading", "news_none", "news_load_error", "movers_no_data",
         "movers_updated_at", "movers_computing",
         "queue_summary", "run_queued_confirm", "run_launch_error", "banner_fix_errors",
+        "stat_holdout", "stat_dm_significant", "stat_dm_not_significant",
+        "stat_cumulative_trials", "stat_pbo",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

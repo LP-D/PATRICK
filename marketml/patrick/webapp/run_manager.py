@@ -278,4 +278,12 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
         "final_best": result.get("final_best"),
         "elapsed_s": result.get("elapsed_s"),
         "artifacts": artifacts,
+        # Phase 2 (validité statistique) — calculés une fois pour la config
+        # gagnante uniquement, pas pour chaque ligne du leaderboard (cf.
+        # rapport de phase : réévaluer chaque trial sur le holdout en ferait
+        # une seconde surface de sur-optimisation).
+        "holdout": result.get("holdout"),
+        "diebold_mariano": result.get("diebold_mariano"),
+        "cumulative_trials": result.get("cumulative_trials"),
+        "pbo": result.get("pbo"),
     })

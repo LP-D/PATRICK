@@ -157,6 +157,7 @@
             <h3>${tr("results_title", "Results")}</h3>
             <p>${summary}</p>
             ${bestHtml}
+            ${renderStatsBox(data)}
             <div class="downloads">${downloads}</div>
             <h4>${leaderboardTitle}</h4>
             <div style="overflow-x:auto">
@@ -166,6 +167,46 @@
                 </table>
             </div>
         `;
+    }
+
+    // Phase 2 (validité statistique) — holdout / Diebold-Mariano / essais
+    // cumulés / PBO, calculés une fois pour la config gagnante (cf.
+    // run_manager._summarize_result). Absents (null) si pas de config gagnante
+    // ou d'historique insuffisant (holdout désactivé, moins de 10 obs. pour DM...).
+    function renderStatsBox(data) {
+        const lines = [];
+
+        if (data.holdout && data.holdout.metrics) {
+            const h = data.holdout.metrics;
+            lines.push(fmtStr(tr("stat_holdout", "Terminal holdout ({n} unseen obs.): F1_dir={f1}"),
+                { n: data.holdout.n_test ?? "?", f1: fmt(h.F1_dir) }));
+        }
+
+        const dm = data.diebold_mariano;
+        if (dm && dm.p_value !== null && dm.p_value !== undefined) {
+            const significant = dm.p_value < 0.05;
+            const key = significant ? "stat_dm_significant" : "stat_dm_not_significant";
+            const fallback = significant
+                ? "Diebold-Mariano vs {baseline}: p={p} — significant"
+                : "Diebold-Mariano vs {baseline}: p={p} — not significant";
+            const cls = significant ? "" : ' class="hint"';
+            lines.push(`<span${cls}>${fmtStr(tr(key, fallback),
+                { baseline: dm.baseline || "?", p: fmt(dm.p_value) })}</span>`);
+        }
+
+        if (data.cumulative_trials) {
+            lines.push(fmtStr(tr("stat_cumulative_trials", "{n} cumulative trials on this target/horizon (full history)"),
+                { n: data.cumulative_trials }));
+        }
+
+        const pbo = data.pbo;
+        if (pbo && pbo.pbo !== null && pbo.pbo !== undefined) {
+            lines.push(fmtStr(tr("stat_pbo", "PBO (backtest overfitting): {pbo} ({n} combinations)"),
+                { pbo: fmt(pbo.pbo), n: pbo.n_combinations ?? 0 }));
+        }
+
+        if (!lines.length) return "";
+        return `<div class="stats-box">${lines.map((l) => `<p>${l}</p>`).join("")}</div>`;
     }
 
     function attachSort(rows) {
