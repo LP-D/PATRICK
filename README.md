@@ -1,4 +1,4 @@
-# claude
+# PATRICK
 
 Workspace de recherche VIX (prédiction directionnelle/amplitude via ML + Deep Learning),
 sous forme de notebooks Colab indépendants et résumables — et `marketml/`, un cadre
