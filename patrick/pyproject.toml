@@ -43,3 +43,16 @@ patrick = "patrick.cli:app"
 
 [tool.setuptools.packages.find]
 include = ["patrick*"]
+
+[tool.pytest.ini_options]
+# Rapport de correction, D1 : la suite complète (26 fichiers, ~130 tests)
+# prend ~55-60 min -- impraticable pour itérer. `pytest` sans argument
+# n'exécute que les tests rapides (<~10s chacun, mesurés individuellement,
+# cf. rapport de correction) et reste sous les 2 minutes. `pytest -m slow`
+# exécute le reste (entraînements de modèles/pipelines complets/EGARCH-HMM-
+# ARIMA/sous-processus worker réels). Les deux commandes sont documentées
+# dans le README.
+addopts = "-m 'not slow'"
+markers = [
+    "slow: tests dépassant ~10s (entraînement de modèles, pipeline complet, sous-processus worker réel) -- exclus par défaut, lancer avec `pytest -m slow`.",
+]

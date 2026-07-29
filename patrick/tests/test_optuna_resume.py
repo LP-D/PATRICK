@@ -6,11 +6,13 @@ ne pas perdre le travail de tuning déjà effectué avant une interruption.
 from __future__ import annotations
 
 import optuna
+import pytest
 from sklearn.datasets import make_classification
 
 from patrick.tuning.optuna_runner import tune_config
 
 
+@pytest.mark.slow  # ~12s mesuré (rapport de correction, D1) : 3 appels tune_config successifs
 def test_tune_config_resumes_from_persistent_storage(tmp_path):
     X, y = make_classification(n_samples=200, n_features=10, n_informative=6, random_state=0)
     storage_path = str(tmp_path / "optuna.db")

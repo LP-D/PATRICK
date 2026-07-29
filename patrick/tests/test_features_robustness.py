@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from patrick.features._utils import safe_pct_change
 from patrick.features.spike import build_spike_features
@@ -43,6 +44,7 @@ def test_vol_model_features_respects_models_selection():
     assert list(df.columns) == ["test_kalman_filtered"]
 
 
+@pytest.mark.slow  # ~11.4s mesuré (rapport de correction, D1) : 4 modèles ARIMA/ARMA/AR/MA
 def test_vol_model_features_ar_ma_arma_arima_do_not_crash():
     s = _series_crossing_zero()
     df = build_vol_model_features(s, prefix="test", models=["ar", "ma", "arma", "arima"])

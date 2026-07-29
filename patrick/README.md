@@ -237,7 +237,7 @@ worker séparé -> simulation d'investissement) est validé par des tests de fum
 bout-en-bout sur données synthétiques (`tests/test_pipeline_smoke.py`,
 `test_webapp_smoke.py`, `test_worker.py`, `test_simulate.py`,
 `test_simulate_webapp.py`, `test_predict_live.py`) et des tests unitaires
-(`pytest tests/`, 98 au total avec les paramétrisations), dont les tests de
+(`pytest tests/`, 137 au total avec les paramétrisations), dont les tests de
 fuite de la Phase 0 (`test_leakage.py`), les tests de persistance de la Phase 1
 (`test_db.py`, `test_store_snapshot.py`), les tests de validité statistique de
 la Phase 2 (`test_dsr.py`, `test_pbo.py`, `test_diebold_mariano.py`,
@@ -253,6 +253,20 @@ celui de la Phase 3 (tuer le process web pendant un run ne perd pas le run) par
 `test_real_worker_subprocess_survives_without_web_server` ; celui de la Phase 4
 (simulation -> courbe + comparaison buy-and-hold + coût de rentabilité +
 compteur de configs testées) par `test_api_simulate_end_to_end`.
+
+**Suite de tests découpée rapide/lente** (rapport de correction, D1) : la suite
+complète prend trop longtemps pour une itération de développement courante.
+Les tests dépassant ~10s (entraînement de modèles, pipeline complet,
+sous-processus worker réel) portent `@pytest.mark.slow` et sont exclus par
+défaut (`addopts = -m "not slow"` dans `pyproject.toml`) :
+
+```bash
+pytest                # tests rapides seulement (109 tests, ~33s mesuré)
+pytest -m slow        # tests lents seulement (28 tests, pipeline/worker/webapp/EGARCH...)
+```
+
+Lancer `pytest` (sans argument) pendant le développement ; lancer
+`pytest -m slow` avant un commit/push ou en CI.
 
 **La vérification avec de vraies données** a été faite sur une machine avec
 accès réseau yfinance/FRED (`patrick run --config

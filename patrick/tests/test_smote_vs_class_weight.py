@@ -11,6 +11,7 @@ phase pour la marche à suivre en environnement avec accès réseau.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from patrick.models.samplers import ALL_SAMPLERS, get_sampler
 
@@ -29,6 +30,7 @@ def test_none_is_listed_alongside_smote():
     assert "SMOTE" in ALL_SAMPLERS
 
 
+@pytest.mark.slow  # ~11.4s mesuré (rapport de correction, D1) : run pipeline complet
 def test_pipeline_accepts_none_in_sampler_grid(tmp_path, monkeypatch):
     """Bout-en-bout (données synthétiques, sans réseau) : une config avec
     `sampler.candidates: ["SMOTE", "none"]` tourne sans erreur et produit des

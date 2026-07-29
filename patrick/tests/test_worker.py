@@ -25,6 +25,10 @@ from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick import worker as worker_module
 
+# Rapport de correction, D1 : les deux tests lancent un vrai sous-processus
+# `patrick worker` (76s/69s mesurés) -- exclus par défaut, cf. pyproject.toml.
+pytestmark = pytest.mark.slow
+
 TARGET_SYMBOL = "^TEST"
 
 

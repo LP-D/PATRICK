@@ -141,6 +141,7 @@ def _prepare_fold(raw: pd.DataFrame, config: RunConfig, fold_idx: int = 0):
 # doit strictement rien changer si on corrompt tout ce qui est postérieur à la
 # coupure du fold.
 # ---------------------------------------------------------------------------
+@pytest.mark.slow  # ~23s mesuré (rapport de correction, D1) : features+sélection+entraînement complets
 def test_corrupting_the_future_does_not_change_train_features_or_model():
     config = _make_config()
     raw = _synthetic_raw()
@@ -183,6 +184,7 @@ def test_corrupting_the_future_does_not_change_train_features_or_model():
     )
 
 
+@pytest.mark.slow  # ~17s mesuré (rapport de correction, D1)
 def test_corrupting_the_future_changes_test_set_predictably():
     """Contre-épreuve du test précédent : corrompre le futur DOIT changer le
     comportement sur le TEST (qui, lui, se trouve dans la zone corrompue) — sinon
@@ -207,6 +209,7 @@ def test_corrupting_the_future_changes_test_set_predictably():
     assert changed, "le test aurait dû changer (il est dans la zone corrompue)."
 
 
+@pytest.mark.slow  # ~20s/cas mesuré (rapport de correction, D1)
 @pytest.mark.parametrize("shift_magnitude,purge_enabled,expect_detected", [
     (1, False, True),
     (1, True, False),    # magnitude(1) <= horizon(5) -> masqué par le purge (propriété documentée, pas un bug)
@@ -318,8 +321,14 @@ def test_future_leak_detection_by_magnitude_and_purge(shift_magnitude, purge_ena
            "inspection de code. Correction hors périmètre de cette session (nécessite "
            "de rendre le `.fix()` EGARCH incrémental/causal pour le TEST, ce qui casse "
            "le cache par coupure de fold documenté en tête de module) -- rapporté pour "
-           "décision séparée, PAS corrigé ici (cf. rapport de session correction, C2.a).",
+           "décision séparée, PAS corrigé ici (cf. rapport de session correction, C2.a). "
+           "MàJ D2 : mesuré sur données réalistes (non adversariales), le canal est INERTE "
+           "(variance_bounds ne clippe jamais, écart 0.0 vs référence causale, 3 graines) -- "
+           "il ne s'active que sur des futurs ~100 000x hors échelle des rendements réels "
+           "(comme la corruption de CE test). Recommandation N1 (tronquer la série à la fin "
+           "du fold) mesurée gratuite en coût -- non appliquée ici, décision séparée.",
 )
+@pytest.mark.slow  # ~17s mesuré (rapport de correction, D1)
 def test_corrupting_beyond_test_fold_does_not_change_test_features_or_predictions():
     """Rapport d'audit, C2.a — contrôle distinct de
     `test_corrupting_the_future_does_not_change_train_features_or_model` : ce

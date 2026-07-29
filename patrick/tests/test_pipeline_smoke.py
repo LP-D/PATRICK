@@ -17,6 +17,11 @@ from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
 
+# Rapport de correction, D1 : tous les tests de ce fichier lancent un run
+# pipeline complet (16-120s mesurés selon le test) -- exclus par défaut,
+# cf. pyproject.toml.
+pytestmark = pytest.mark.slow
+
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)

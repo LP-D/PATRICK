@@ -24,6 +24,11 @@ from fastapi.testclient import TestClient
 from patrick.data.store import DataStore
 from patrick.webapp.app import app
 
+# Rapport de correction, D1 : les deux tests lancent un run pipeline complet
+# via un vrai worker séparé (~50s chacun mesurés) -- exclus par défaut,
+# cf. pyproject.toml.
+pytestmark = pytest.mark.slow
+
 TARGET_SYMBOL = "^VIX"
 
 

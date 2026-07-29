@@ -9,6 +9,7 @@ import sqlite3
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
@@ -17,6 +18,10 @@ from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import report as report_module
 from patrick import worker as worker_module
+
+# Rapport de correction, D1 : les deux tests de ce fichier lancent un run
+# pipeline complet (73s/70s mesurés) -- exclus par défaut, cf. pyproject.toml.
+pytestmark = pytest.mark.slow
 
 TARGET_SYMBOL = "^TEST"
 

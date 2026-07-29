@@ -10,6 +10,7 @@ import sqlite3
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from patrick import predict as predict_module
 from patrick.config.schema import RunConfig
@@ -72,6 +73,7 @@ def _tiny_config(tmp_path) -> RunConfig:
     return RunConfig.model_validate(raw_yaml)
 
 
+@pytest.mark.slow  # ~69s mesuré (rapport de correction, D1) : run pipeline complet + 2 appels predict_live
 def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
     raw_v1 = _synthetic_raw()
     monkeypatch.setattr(engine_module, "ingest", lambda objective, universe, store=None, force=False: raw_v1)
@@ -119,6 +121,5 @@ def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
 
 
 def test_predict_live_unknown_run_raises(tmp_path):
-    import pytest
     with pytest.raises(ValueError):
         predict_module.predict_live("no-such-run", db_path=str(tmp_path / "patrick.db"))

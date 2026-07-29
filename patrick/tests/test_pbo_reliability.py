@@ -70,6 +70,7 @@ def test_pbo_reliability_computes_ci_above_min_blocks():
     assert abs(result["pbo"] - ref["pbo"]) < 1e-6
 
 
+@pytest.mark.slow  # ~22s mesuré (rapport de correction, D1) : n_bootstrap=2000
 def test_pbo_reliability_single_draw_wide_ci_matches_audit_finding():
     """Rapport d'audit, section E : sur un tirage aléatoire unique (n_blocks
     proche de 16), le PBO seul peut être loin de 0.5 -- l'intervalle de
@@ -84,6 +85,7 @@ def test_pbo_reliability_single_draw_wide_ci_matches_audit_finding():
     assert width > 0.15, f"intervalle de confiance suspicieusement étroit ({width:.3f}) pour un tirage unique."
 
 
+@pytest.mark.slow  # ~10.2s mesuré (rapport de correction, D1) : 20 tirages x n_bootstrap=200
 def test_pbo_reliability_expectation_near_half_on_purely_random_data_many_draws():
     """Contrôle de cohérence avec l'audit (section E) : sur des données
     purement aléatoires, la moyenne du PBO sur PLUSIEURS tirages indépendants
