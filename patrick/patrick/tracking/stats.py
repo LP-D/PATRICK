@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.validation.pbo import compute_pbo
+from patrick.validation.pbo_reliability import pbo_reliability
 
 
 def count_cumulative_trials(conn: sqlite3.Connection, target: str, horizon: int | None = None) -> int:
@@ -56,5 +57,13 @@ def pbo_for_target(conn: sqlite3.Connection, target: str, horizon: int, regime: 
     df = pd.DataFrame(rows, columns=["trial_id", "fold_index", "value"])
     pivot = df.pivot_table(index="trial_id", columns="fold_index", values="value").dropna()
     if pivot.empty:
-        return {"pbo": np.nan, "n_combinations": 0, "n_trials": 0, "n_blocks": 0, "mean_logit": np.nan}
-    return compute_pbo(pivot.values)
+        return {"pbo": np.nan, "n_combinations": 0, "n_trials": 0, "n_blocks": 0, "mean_logit": np.nan,
+                "reliability": pbo_reliability(np.empty((0, 0)))}
+    result = compute_pbo(pivot.values)
+    # Rapport de correction, C5 -- diagnostic de fiabilité calculé séparément
+    # (cf. `validation/pbo_reliability.py`, n'importe/ne modifie pas
+    # `compute_pbo`) : intervalle de confiance par bootstrap + refus explicite
+    # sous un nombre minimal de blocs -- un PBO ponctuel isolé n'est pas
+    # interprétable seul (cf. rapport d'audit, section E).
+    result["reliability"] = pbo_reliability(pivot.values)
+    return result

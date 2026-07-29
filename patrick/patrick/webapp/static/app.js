@@ -204,6 +204,18 @@
             lines.push(fmtStr(tr("stat_pbo", "PBO (backtest overfitting): {pbo} ({n} combinations)"),
                 { pbo: fmt(pbo.pbo), n: pbo.n_combinations ?? 0 }));
         }
+        // Rapport de correction, C5 : un PBO ponctuel isolé n'est pas
+        // interprétable seul (audit : écart-type ~0.16 sur un tirage unique) --
+        // toujours afficher l'intervalle de confiance ou le refus explicite à
+        // côté, jamais le chiffre nu seul.
+        const rel = pbo && pbo.reliability;
+        if (rel && rel.ok) {
+            lines.push(`<span class="hint">${fmtStr(
+                tr("stat_pbo_reliability", "PBO 90% CI (bootstrap, {n} combinations): [{lo}, {hi}] — a single-run PBO is not interpretable in isolation"),
+                { n: rel.n_combinations, lo: fmt(rel.ci_low), hi: fmt(rel.ci_high) })}</span>`);
+        } else if (rel && !rel.ok) {
+            lines.push(`<span class="flag">${rel.message}</span>`);
+        }
 
         if (!lines.length) return "";
         return `<div class="stats-box">${lines.map((l) => `<p>${l}</p>`).join("")}</div>`;

@@ -135,6 +135,12 @@ STRINGS: dict[str, dict[str, str]] = {
                                 "en": "{n} cumulative trials on this target/horizon (full history)"},
     "stat_pbo": {"fr": "PBO (surapprentissage de backtest) : {pbo} ({n} combinaisons)",
                  "en": "PBO (backtest overfitting): {pbo} ({n} combinations)"},
+    "stat_pbo_reliability": {
+        "fr": "IC 90% du PBO (bootstrap, {n} combinaisons) : [{lo}, {hi}] — un PBO issu d'un run "
+              "unique n'est pas interprétable isolément",
+        "en": "PBO 90% CI (bootstrap, {n} combinations): [{lo}, {hi}] — a single-run PBO is not "
+              "interpretable in isolation",
+    },
 
     # market.js
     "preview_loading": {"fr": "Chargement…", "en": "Loading…"},

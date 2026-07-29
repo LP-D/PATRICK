@@ -95,6 +95,25 @@ def _section(title: str, body: str) -> str:
     return f"<section class='card'><h2>{html.escape(title)}</h2>{body}</section>"
 
 
+def _fmt_pbo_reliability(reliability: dict | None) -> str:
+    """Rapport de correction, C5 -- un PBO ponctuel isolé n'est pas
+    interprétable seul (audit : écart-type ~0.16 sur un tirage unique à
+    n_blocks=16, pire à n_blocks=4). Affiche l'intervalle de confiance par
+    bootstrap à côté du point, ou le message de refus explicite si trop peu
+    de blocs -- jamais un chiffre nu sans ce contexte."""
+    if not reliability:
+        return ""
+    if not reliability.get("ok"):
+        return f"<br><span class='flag'>{html.escape(reliability.get('message', ''))}</span>"
+    return (
+        f"<br><span class='hint'>IC 90% (bootstrap, {reliability['n_combinations']} combinaisons) : "
+        f"[{reliability['ci_low']:.3f}, {reliability['ci_high']:.3f}] "
+        f"(écart-type bootstrap {reliability['bootstrap_std']:.3f}) -- "
+        "<strong>un PBO issu d'un run unique n'est pas interprétable isolément</strong>, "
+        "cf. rapport d'audit.</span>"
+    )
+
+
 def generate_report_html(run_id: str, db_path: str | None = None) -> str:
     conn = trackdb.connect(db_path)
     try:
@@ -142,7 +161,8 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
            p-value = {f"{dm['p_value']:.4f}" if dm else '—'}
            {" <span class='flag'>non significatif (p ≥ 0.05)</span>" if dm and dm['p_value'] >= 0.05 else ''}</p>
         <p><strong>PBO</strong> (CSCV, {pbo['n_blocks'] if pbo else '—'} blocs) :
-           {f"{pbo['pbo']:.3f}" if pbo else '—'}</p>
+           {f"{pbo['pbo']:.3f}" if pbo else '—'}
+           {_fmt_pbo_reliability(pbo.get('reliability') if pbo else None)}</p>
         <p><strong>Holdout terminal</strong> (job) : {_fmt_metrics_table(job_stats.get('holdout') or {})}</p>
         """
     else:
