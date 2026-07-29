@@ -95,6 +95,7 @@ def default_config_dict() -> dict:
             "top_k": D.DEFAULT_TUNING_TOP_K,
             "n_trials": D.DEFAULT_TUNING_N_TRIALS,
             "cv_splits": D.DEFAULT_TUNING_CV_SPLITS,
+            "optuna_trials_per_horizon": D.DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON,
         },
         "output": {"dir": "runs/mon_run", "seed": D.DEFAULT_SEED},
     }
@@ -266,6 +267,7 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "top_k": top_k,
             "n_trials": n_trials,
             "cv_splits": cv_splits,
+            "optuna_trials_per_horizon": _checked(form, "optuna_trials_per_horizon"),
         },
         "output": {"dir": out_dir, "seed": seed},
     }
@@ -312,6 +314,8 @@ def to_view(cfg: dict) -> dict:
         "top_k": tun.get("top_k", D.DEFAULT_TUNING_TOP_K),
         "n_trials": tun.get("n_trials", D.DEFAULT_TUNING_N_TRIALS),
         "cv_splits": tun.get("cv_splits", D.DEFAULT_TUNING_CV_SPLITS),
+        "optuna_trials_per_horizon": bool(
+            tun.get("optuna_trials_per_horizon", D.DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON)),
         "output_dir": out.get("dir", "runs"),
         "seed": out.get("seed", D.DEFAULT_SEED),
     }

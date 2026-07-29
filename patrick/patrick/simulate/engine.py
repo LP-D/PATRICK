@@ -25,10 +25,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import brentq
 
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
@@ -178,6 +180,57 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
     return pd.Series(exposure, index=daily_index)
 
 
+def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
+                               hard_ceiling_bps: float = 1000.0) -> float:
+    """Coût (spread+commission) par unité de turnover, en bps, qui ramène le
+    rendement total COMPOSÉ à zéro. `gross_returns` : rendement par période
+    net du carry mais avant coût de transaction (`exposure * underlying_ret -
+    carry_cost`). `turnover` : |Δexposition| par période, alignée sur
+    `gross_returns`.
+
+    Résolution numérique (`brentq`), pas une division linéaire : les coûts de
+    transaction s'appliquent période par période sur une équité qui COMPOSE
+    (`cumprod`), donc `retour_brut_total / turnover_total` sous-estime
+    fortement le coût réel dès que la position est maintenue sur plusieurs
+    périodes (cf. rapport d'audit, section F.3 -- réconciliation exacte
+    vérifiée par `tests/test_simulate.py::test_break_even_cost_reconciles_...`).
+    """
+    total_turnover = float(turnover.sum())
+    if total_turnover <= 1e-9:
+        return float("nan")
+
+    gross_arr = gross_returns.values
+    turn_arr = turnover.values
+
+    def net_total_return(c: float) -> float:
+        # Clip à 1e-9 (pas 0/négatif) : une fois l'équité "en faillite" sur une
+        # période, un coût plus élevé ne peut pas creuser davantage un facteur
+        # déjà nul -- sans ce clip, `cumprod` pourrait changer de signe et
+        # casser la monotonie décroissante que `brentq` suppose.
+        factors = np.clip(1.0 + gross_arr - turn_arr * c, 1e-9, None)
+        return float(np.prod(factors) - 1.0)
+
+    gross_total_return = net_total_return(0.0)
+    if gross_total_return <= 0.0:
+        return 0.0
+
+    hard_ceiling = hard_ceiling_bps / 10000.0
+    c_hi = 1e-4  # 1 bp en décimal
+    while net_total_return(c_hi) > 0.0 and c_hi < hard_ceiling:
+        c_hi *= 2
+    c_hi = min(c_hi, hard_ceiling)
+
+    if net_total_return(c_hi) > 0.0:
+        warnings.warn(
+            f"break_even_cost_bps : rendement encore positif au plafond dur de "
+            f"{hard_ceiling_bps:.0f} bps -- pas de changement de signe trouvé, "
+            "coût de rentabilité indéterminé.", stacklevel=2)
+        return float("nan")
+
+    c_star = brentq(net_total_return, 0.0, c_hi, xtol=1e-14, rtol=1e-12)
+    return c_star * 10000.0
+
+
 def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
              store_root: str | None = None) -> dict:
     conn = trackdb.connect(db_path)
@@ -238,10 +291,7 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         strat_summary["hit_rate"] = simmetrics.hit_rate(trade_returns)
         strat_summary["profit_factor"] = simmetrics.profit_factor(trade_returns)
 
-        gross_total_return = float(gross_equity.iloc[-1] - 1) if len(gross_equity) else float("nan")
-        total_turnover_units = float(turnover.sum())
-        break_even_bps = (gross_total_return / total_turnover_units * 10000.0
-                           if total_turnover_units > 1e-9 else float("nan"))
+        break_even_bps = solve_break_even_cost_bps(gross_returns, turnover)
         strat_summary["break_even_cost_bps"] = break_even_bps
 
         n_configs = count_simulations_for_target(conn, run["target"])

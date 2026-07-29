@@ -114,6 +114,64 @@ def test_asset_class_prefills_frictions():
     assert params.commission_bps == pytest.approx(1.5)
 
 
+def test_break_even_cost_reconciles_exactly_realistic_signal(tmp_path):
+    """Rapport d'audit, section F.3 (critique) : l'ancienne formule linéaire
+    (`gross_total_return / total_turnover_units`) sous-estimait fortement le
+    coût réel car les rendements composent (`cumprod`). Cas repris de l'audit
+    (signal ~58% de précision, equity brute non triviale) : au coût
+    spread+commission exactement égal à `break_even_cost_bps`, le rendement
+    total réalisé doit être ~0, pas -77%."""
+    db_path, store_root, trial_id, _ = _setup_run_with_predictions(
+        tmp_path, seed=55, n=800, horizon=5, good_signal=True)
+    r0 = sim.simulate(trial_id, sim.SimParams(spread_bps=0.0, commission_bps=0.0),
+                       db_path=db_path, store_root=store_root)
+    assert r0["ok"] is True
+    be_bps = r0["strategy"]["break_even_cost_bps"]
+    assert be_bps == be_bps and be_bps > 0.0  # pas NaN, pas nul (il y a bien du turnover et un gain brut)
+
+    half = be_bps / 2
+    r1 = sim.simulate(trial_id, sim.SimParams(spread_bps=half, commission_bps=half),
+                       db_path=db_path, store_root=store_root)
+    assert r1["ok"] is True
+    final_equity = r1["equity_curve"][-1]["v"]
+    total_return = final_equity - 1.0
+    assert abs(total_return) < 1e-6, (
+        f"réconciliation break-even ratée : rendement total = {total_return}, attendu ~0 "
+        f"(tolérance 1e-6) au coût calculé de {be_bps} bps")
+
+
+def test_break_even_cost_reconciles_at_low_return(tmp_path):
+    """Cas complémentaire : rendement/turnover faibles, régime où l'ancienne
+    formule linéaire était quasi correcte (peu de composition sur peu de
+    périodes) -- doit rester exact avec la résolution numérique."""
+    db_path, store_root, trial_id, _ = _setup_run_with_predictions(
+        tmp_path, seed=3, n=150, horizon=5, good_signal=False)
+    r0 = sim.simulate(trial_id, sim.SimParams(spread_bps=0.0, commission_bps=0.0),
+                       db_path=db_path, store_root=store_root)
+    assert r0["ok"] is True
+    be_bps = r0["strategy"]["break_even_cost_bps"]
+    if be_bps != be_bps or be_bps <= 0.0:
+        pytest.skip("pas de turnover/gain brut positif sur ce tirage -- break-even non défini")
+
+    half = be_bps / 2
+    r1 = sim.simulate(trial_id, sim.SimParams(spread_bps=half, commission_bps=half),
+                       db_path=db_path, store_root=store_root)
+    assert r1["ok"] is True
+    total_return = r1["equity_curve"][-1]["v"] - 1.0
+    assert abs(total_return) < 1e-6
+
+
+def test_solve_break_even_cost_bps_edge_cases():
+    idx = pd.bdate_range("2020-01-01", periods=10)
+    zero_turnover = pd.Series(0.0, index=idx)
+    some_returns = pd.Series(0.001, index=idx)
+    assert sim.solve_break_even_cost_bps(some_returns, zero_turnover) != sim.solve_break_even_cost_bps(some_returns, zero_turnover)  # NaN != NaN
+
+    negative_gross = pd.Series(-0.01, index=idx)
+    turnover = pd.Series(0.5, index=idx)
+    assert sim.solve_break_even_cost_bps(negative_gross, turnover) == 0.0
+
+
 def test_overlap_modes_produce_different_exposure(tmp_path):
     db_path, store_root, trial_id, _ = _setup_run_with_predictions(tmp_path, good_signal=True)
     tranches = sim.simulate(trial_id, sim.SimParams(overlap_mode="tranches"), db_path=db_path, store_root=store_root)

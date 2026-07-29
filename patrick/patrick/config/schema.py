@@ -70,6 +70,13 @@ class TuningConfig(BaseModel):
     top_k: int = D.DEFAULT_TUNING_TOP_K
     n_trials: int = D.DEFAULT_TUNING_N_TRIALS
     cv_splits: int = D.DEFAULT_TUNING_CV_SPLITS
+    # Rapport d'audit, C3 : True (défaut) = `top_k` est sélectionné INDÉPENDAMMENT
+    # pour chaque horizon (chaque horizon reçoit ses propres `top_k` configs
+    # affinées par `n_trials` essais Optuna) -- corrige la sélection globale
+    # cross-horizon d'origine, qui pouvait allouer 100% du budget Optuna à un
+    # seul horizon. False = ancien comportement (top_k global tous horizons
+    # confondus), conservé pour compatibilité explicite.
+    optuna_trials_per_horizon: bool = D.DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON
 
 
 class OutputConfig(BaseModel):

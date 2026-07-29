@@ -69,6 +69,7 @@ def _form_data(tmp_path) -> dict:
         "n_features_grid": "5,8",
         "shap_sample": "200",
         "tuning_enabled": "on",
+        "optuna_trials_per_horizon": "on",
         "top_k": "2",
         "n_trials": "3",
         "cv_splits": "2",

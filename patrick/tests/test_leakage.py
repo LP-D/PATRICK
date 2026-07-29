@@ -80,6 +80,22 @@ def _corrupt_future(raw: pd.DataFrame, cut_date, seed: int = 999) -> pd.DataFram
     return corrupted
 
 
+def _corrupt_strictly_after(raw: pd.DataFrame, boundary_date, seed: int = 999) -> pd.DataFrame:
+    """Comme `_corrupt_future` mais corrompt seulement les lignes STRICTEMENT
+    postérieures à `boundary_date` (pas `>=`) — utilisé pour isoler une fuite
+    qui affecterait le TEST via des données situées au-delà de la FIN de son
+    propre fold (ex. une fenêtre glissante ou un as-of join qui déborderait sur
+    le fold suivant), par opposition à `_corrupt_future` qui corrompt aussi la
+    zone de test elle-même et ne peut donc pas isoler ce cas précis."""
+    corrupted = raw.copy()
+    future_mask = corrupted.index > boundary_date
+    rng = np.random.default_rng(seed)
+    n_future = int(future_mask.sum())
+    for col in corrupted.columns:
+        corrupted.loc[future_mask, col] = rng.normal(loc=1_000_000, scale=100_000, size=n_future)
+    return corrupted
+
+
 def _make_config(**overrides) -> RunConfig:
     raw_yaml = {
         "name": "leak_test",
@@ -189,6 +205,189 @@ def test_corrupting_the_future_changes_test_set_predictably():
     # test a changé ; sinon comparaison de valeurs.
     changed = X_te_o.shape != X_te_c.shape or not np.allclose(X_te_o, X_te_c)
     assert changed, "le test aurait dû changer (il est dans la zone corrompue)."
+
+
+@pytest.mark.parametrize("shift_magnitude,purge_enabled,expect_detected", [
+    (1, False, True),
+    (1, True, False),    # magnitude(1) <= horizon(5) -> masqué par le purge (propriété documentée, pas un bug)
+    (3, False, True),
+    (3, True, False),    # magnitude(3) <= horizon(5) -> masqué par le purge, idem
+    (10, False, True),
+    (10, True, True),    # magnitude(10) > horizon(5) -> le purge ne peut plus masquer, détecté
+])
+def test_future_leak_detection_by_magnitude_and_purge(shift_magnitude, purge_enabled, expect_detected):
+    """Rapport d'audit, C2.b — l'audit a montré (mutation M2, session d'audit)
+    qu'une fuite `.shift(-1)` avec horizon=5/purge=True est ABSORBÉE par la
+    marge de purge et non détectée par
+    `test_corrupting_the_future_does_not_change_train_features_or_model`. Ce
+    n'est PAS un test cassé : le purge retire du train toute ligne dont la
+    fenêtre de label déborderait sur le test (`purge_mask`), donc toute ligne
+    de train dont la fuite pointerait dans la zone corrompue est
+    structurellement retirée AVANT même de pouvoir révéler la fuite — une
+    PROPRIÉTÉ DU DISPOSITIF (documentée et vérifiée ici par la paramétrisation
+    ci-dessus), pas une lacune du test 0.2 lui-même. Seuil vérifié
+    empiriquement : masqué ssi `shift_magnitude <= horizon` (ici horizon=5) ;
+    ce test échoue si ce seuil venait à changer sans être remarqué.
+
+    Objectif explicite de l'audit : qu'aucune magnitude ne passe inaperçue
+    dans AU MOINS UNE configuration testée — satisfait ici puisque chaque
+    magnitude est testée à la fois avec purge désactivé (où la détection est
+    garantie) et purge actif (où la détection dépend du seuil ci-dessus).
+
+    La fuite est injectée en donnée BRUTE (pas une modification du pipeline) :
+    `build_base_feature_pool` inclut `raw` tel quel dans le pool
+    (`parts = [raw]`), donc une colonne brute contenant la cible décalée dans
+    le futur apparaît comme feature sans toucher à
+    `patrick/pipeline/engine.py`.
+
+    `flat_thr=0.0` (comme le test 0.3) : `build_target` retire les lignes dont
+    le rendement label est "plat" (`abs(ret) < flat_thr`) -- corrompre le
+    futur change ce rendement pour les lignes de train proches de la coupure
+    dont la fenêtre de label déborde dessus, ce qui peut faire BASCULER leur
+    statut plat/non-plat et changer le NOMBRE de lignes de train entre
+    original et corrompu (confondu avec l'effet de la fuite elle-même,
+    surtout quand purge=False ne retire plus ces lignes). Sans rapport avec la
+    fuite testée ici -- neutralisé en désactivant le filtre plat."""
+    horizon = 5
+    config = _make_config(
+        objective={"flat_thr": 0.0},
+        validation={"purge": purge_enabled, "embargo_enabled": purge_enabled},
+    )
+    assert config.objective.horizons[0] == horizon  # prérequis : le seuil documenté suppose horizon=5
+
+    raw = _synthetic_raw()
+    target_col = clean_symbol(config.objective.target_symbol)
+    leak_col = f"LEAK_SHIFT_{shift_magnitude}"
+
+    all_dates = raw.index
+    fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds, config.validation.min_train_frac)
+    cut_date = all_dates[fold_cuts[0]]
+    raw_corrupted = _corrupt_future(raw, cut_date)
+    assert raw.loc[raw.index < cut_date].equals(raw_corrupted.loc[raw_corrupted.index < cut_date])
+
+    # La colonne de fuite est ajoutée APRÈS corruption, séparément sur `raw` et
+    # `raw_corrupted`, chacune calculée à partir de SA PROPRE colonne cible --
+    # sinon un `.shift()` unique calculé AVANT corruption "gèlerait" la
+    # relation dans les lignes de train, empêchant mécaniquement la fuite de
+    # se manifester (reproduit ce que fait la mutation M2 de l'audit : le
+    # `.shift()` est recalculé à l'intérieur de `build_base_feature_pool`,
+    # donc à partir de la version de `raw` qui lui est passée).
+    raw[leak_col] = raw[target_col].shift(-shift_magnitude)
+    raw_corrupted[leak_col] = raw_corrupted[target_col].shift(-shift_magnitude)
+
+    prepared_orig, feat_orig = _prepare_fold(raw, config, fold_idx=0)
+    prepared_corr, feat_corr = _prepare_fold(raw_corrupted, config, fold_idx=0)
+    assert prepared_orig is not None and prepared_corr is not None
+    assert feat_orig == feat_corr
+
+    leak_idx = feat_orig.index(leak_col)
+    col_o = prepared_orig.X_tr[:, leak_idx]
+    col_c = prepared_corr.X_tr[:, leak_idx]
+    detected = bool(np.any(np.abs(col_o - col_c) > 1e-8))
+
+    if expect_detected:
+        assert detected, (
+            f"fuite shift={shift_magnitude} purge={purge_enabled} NON détectée alors qu'elle "
+            f"devrait l'être (magnitude {shift_magnitude} vs horizon {horizon})."
+        )
+    else:
+        assert not detected, (
+            f"fuite shift={shift_magnitude} purge={purge_enabled} détectée alors que le purge "
+            f"devrait la masquer (magnitude {shift_magnitude} <= horizon {horizon}) -- le seuil "
+            f"documenté (masqué ssi magnitude <= horizon) a changé, à revérifier."
+        )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="Fuite CONFIRMÉE (pas un bug de ce test) : `egarch_conditional_vol` "
+           "(patrick/features/vol_models.py) calcule la portion TEST via "
+           "`am_full = arch_model(ret, ...); am_full.fix(...)` sur `ret` = LA SÉRIE "
+           "COMPLÈTE (train+test+tout ce qui suit, pas juste jusqu'à la marge de "
+           "label légitime). `arch` recalcule en interne, à partir de ce `ret` "
+           "complet, le backcast et `variance_bounds` (statistiques GLOBALES type "
+           "np.var/np.max sur tout l'array) qui influencent `conditional_volatility` "
+           "même sur les lignes de TEST. Le docstring de la fonction documentait déjà "
+           "ce canal pour le TRAIN (corrigé en isolant `res`, le fit train-only) mais "
+           "ne traitait pas le TEST -- confirmé ici par ce test qui corrompt "
+           "STRICTEMENT au-delà de la marge de label légitime (fin de fold de test + "
+           "horizon) et observe un changement des colonnes *_egarch_vol sur le TEST. "
+           "Kalman/HMM/AR/MA/ARMA/ARIMA (les autres modèles paramétriques du même "
+           "module) sont des passes forward causales pures ou utilisent `.apply()` "
+           "sans recalcul de statistiques globales -- non affectés, vérifié par "
+           "inspection de code. Correction hors périmètre de cette session (nécessite "
+           "de rendre le `.fix()` EGARCH incrémental/causal pour le TEST, ce qui casse "
+           "le cache par coupure de fold documenté en tête de module) -- rapporté pour "
+           "décision séparée, PAS corrigé ici (cf. rapport de session correction, C2.a).",
+)
+def test_corrupting_beyond_test_fold_does_not_change_test_features_or_predictions():
+    """Rapport d'audit, C2.a — contrôle distinct de
+    `test_corrupting_the_future_does_not_change_train_features_or_model` : ce
+    dernier protège le TRAIN contre une fuite venant du futur, mais corrompt
+    tout ce qui est >= cut_date, donc corrompt AUSSI la zone de test elle-même
+    — il ne peut pas distinguer "le test a changé parce qu'il contient la
+    corruption qu'on vient d'y injecter" de "le test a changé À CAUSE d'une
+    fuite venant d'AU-DELÀ de sa propre fin" (ex. une feature calculée pour une
+    ligne de test à la date t qui utiliserait des données à t+k avec k
+    supérieur à la marge de purge/embargo -- invisible au test 0.2 principal).
+    Ici, seules les données STRICTEMENT postérieures à la fin du fold de test
+    sont corrompues : le test lui-même (et tout ce qui précède) reste
+    bit-identique, donc toute divergence dans `X_te`/les prédictions ne peut
+    venir que d'une fuite depuis au-delà du fold de test."""
+    config = _make_config()
+    raw = _synthetic_raw()
+    all_dates = raw.index
+    horizon = config.objective.horizons[0]
+    fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds, config.validation.min_train_frac)
+    cut_date = all_dates[fold_cuts[0]]
+    nxt_idx = fold_cuts[1] - 1
+
+    # La cible de la DERNIÈRE ligne de test a légitimement besoin du prix à
+    # nxt_idx + horizon (`build_target` : `ret = s.shift(-horizon) / s - 1`) --
+    # ce n'est pas une fuite, c'est ainsi qu'un label est construit. La marge à
+    # corrompre doit donc commencer STRICTEMENT APRÈS cette borne légitime, pas
+    # juste après la fin nominale du fold de test.
+    boundary_idx = min(nxt_idx + horizon, len(all_dates) - 1)
+    boundary_date = all_dates[boundary_idx]
+    assert boundary_date < all_dates[-1], (
+        "prérequis du test : il doit rester des données au-delà de la marge de label "
+        "légitime (fin de fold de test + horizon) pour pouvoir les corrompre."
+    )
+
+    raw_corrupted = _corrupt_strictly_after(raw, boundary_date)
+    assert raw.loc[raw.index <= boundary_date].equals(raw_corrupted.loc[raw_corrupted.index <= boundary_date]), (
+        "prérequis : train+test+marge de label doivent être bit-identiques, seul l'au-delà "
+        "de cette marge doit être corrompu -- sinon ce test ne prouve rien de plus que le "
+        "0.2 principal (et confondrait le calcul légitime du label avec une fuite)."
+    )
+
+    prepared_orig, feat_orig = _prepare_fold(raw, config, fold_idx=0)
+    prepared_corr, feat_corr = _prepare_fold(raw_corrupted, config, fold_idx=0)
+    assert prepared_orig is not None and prepared_corr is not None
+    assert feat_orig == feat_corr, "les deux pools doivent avoir les mêmes colonnes (mêmes noms)"
+
+    X_te_o, y_te_o = prepared_orig.X_te, prepared_orig.y_te
+    X_te_c, y_te_c = prepared_corr.X_te, prepared_corr.y_te
+    np.testing.assert_array_equal(y_te_o, y_te_c)
+    np.testing.assert_allclose(
+        X_te_o, X_te_c, rtol=1e-8, atol=1e-10,
+        err_msg="Le TEST a changé quand on a corrompu des données strictement postérieures à "
+                "la fin de son propre fold -> fuite dans la construction des features de test "
+                "(fenêtre/as-of join qui déborde au-delà du fold de test).",
+    )
+
+    # étend à la prédiction : un modèle entraîné sur le train (identique dans les
+    # deux cas, cf. test 0.2 principal) doit produire des prédictions identiques
+    # sur ce X_te identique -- pas seulement des features numériquement égales.
+    X_tr_o, y_tr_o = prepared_orig.X_tr, prepared_orig.y_tr
+    cols_o = list(_select(config, X_tr_o, y_tr_o, 5, seed=42))
+    clf_o = get_classifier("RandomForest", seed=42)
+    clf_o.fit(X_tr_o[:, cols_o], y_tr_o)
+    np.testing.assert_array_equal(
+        clf_o.predict(X_te_o[:, cols_o]), clf_o.predict(X_te_c[:, cols_o]),
+        err_msg="Les prédictions sur le test diffèrent selon que l'au-delà du fold de test "
+                "est corrompu ou non -> fuite.",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -275,4 +275,17 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "best configs found by the grid, via a Bayesian search (Optuna), "
                "before the final export."),
     },
+    "optuna_trials_per_horizon": {
+        "fr": ("Coché (recommandé) : chaque horizon reçoit son propre budget "
+               "Top-K/essais Optuna, indépendamment des autres horizons. "
+               "Décoché : le Top-K est sélectionné globalement tous horizons "
+               "confondus -- un horizon dont les meilleures configs dominent "
+               "peut alors capter tout le budget Optuna, laissant les autres "
+               "horizons sans aucun essai de tuning."),
+        "en": ("Checked (recommended): each horizon gets its own Top-K/Optuna "
+               "trial budget, independently of the other horizons. Unchecked: "
+               "Top-K is selected globally across all horizons -- a horizon "
+               "whose best configs dominate can then capture the entire Optuna "
+               "budget, leaving the other horizons with zero tuning trials."),
+    },
 }

@@ -32,6 +32,12 @@ DEFAULT_TUNING_ENABLED = True
 DEFAULT_TUNING_TOP_K = 5
 DEFAULT_TUNING_N_TRIALS = 100
 DEFAULT_TUNING_CV_SPLITS = 3
+# Rapport d'audit, C3 : `top_k` était sélectionné GLOBALEMENT tous horizons
+# confondus -- un run à plusieurs horizons pouvait voir 100% du budget Optuna
+# concentré sur un seul horizon (celui dont le meilleur essai SCAN dominait),
+# les autres n'en recevant aucun. True = chaque horizon reçoit son propre
+# top_k/n_trials, indépendamment des autres (comportement corrigé, par défaut).
+DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON = True
 
 # Options désactivées par défaut mais câblées dans le pipeline (pas en annexe) :
 # purge (VIX_PURGED_CV : delta F1_dir négligeable), calibration (VIX_CALIBRATED_THRESHOLD :

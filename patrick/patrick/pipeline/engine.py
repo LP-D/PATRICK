@@ -59,6 +59,7 @@ from patrick.models.samplers import get_sampler
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.tracking import db as trackdb
+from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
@@ -597,12 +598,39 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         print(f"[BEST avant Optuna] h={best['horizon']}j {best['regime']} N={best['N']} "
               f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
 
+    # Rapport d'audit, C4 -- diagnostic holdout de TOUTE la grille SCAN (pas
+    # seulement le gagnant final), écrit dans `holdout_diagnostic` (table
+    # séparée de `fold_metric`, jamais lue par la sélection/le tuning) : permet
+    # une corrélation de rang test/holdout après coup, sans jamais influencer
+    # le choix de la config gagnante.
+    if n_wf < len(all_dates_full) and trial_ids:
+        print(f"[HOLDOUT DIAGNOSTIC] évaluation de {len(trial_ids)} trials sur le holdout "
+              "(lecture seule, ne choisit rien)...")
+        for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
+            diag_cfg = {"horizon": h, "regime": regime, "N": n_feat,
+                        "sampler": sampler_name, "algo": algo, "best_params": {}}
+            diag_eval = _evaluate_holdout(pool_builder, target_col, feature_pool, config,
+                                           all_dates_full, n_wf, diag_cfg, seed)
+            if diag_eval is not None:
+                trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
+
     tuned_rows = []
     tuned_trial_ids: dict[tuple, int] = {}
     if config.tuning.enabled and len(board.rows):
-        top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
+        if config.tuning.optuna_trials_per_horizon:
+            # Rapport d'audit, C3 : sélection top_k PAR horizon (pas globale) --
+            # sinon un horizon dont le meilleur essai SCAN domine peut capter
+            # 100% du budget Optuna, laissant les autres horizons à zéro essai.
+            top_configs = []
+            for horizon in config.objective.horizons:
+                board_h = Leaderboard()
+                board_h.rows = [r for r in board.rows if r.get("horizon") == horizon]
+                top_configs.extend(board_h.top_k(config.tuning.top_k, metric="F1_dir"))
+        else:
+            top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
         print(f"\n[OPTUNA] affinage des {len(top_configs)} meilleures configs "
-              f"({config.tuning.n_trials} essais, CV={config.tuning.cv_splits})...")
+              f"({config.tuning.n_trials} essais, CV={config.tuning.cv_splits}, "
+              f"par_horizon={config.tuning.optuna_trials_per_horizon})...")
         # Phase 3.2 (`patrick resume`) : étude Optuna persistée dans un fichier
         # SQLite dédié (jamais `patrick.db`), un `study_name` déterministe par
         # config testée -> un `patrick run`/`patrick resume` relancé sur la
@@ -690,6 +718,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     dm_result = None
     pbo_result = None
     cumulative_trials = 0
+    holdout_diagnostic_result = None
     if final_best is not None:
         full_pool = pd.concat(
             [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
@@ -736,6 +765,12 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         pbo_result = trackstats.pbo_for_target(
             conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
 
+        # Rapport d'audit, C4 -- diagnostic (LECTURE SEULE, cf. holdout_diagnostic.py) :
+        # la procédure de sélection généralise-t-elle du test vers le holdout ?
+        # N'influence jamais final_best, calculé après coup uniquement.
+        holdout_diagnostic_result = trackholdout.spearman_test_vs_holdout(
+            conn, run_ids[int(final_best["horizon"])], metric="F1_dir")
+
     for run_id in run_ids.values():
         trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])
     conn.close()
@@ -751,4 +786,5 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         "diebold_mariano": dm_result,
         "cumulative_trials": cumulative_trials,
         "pbo": pbo_result,
+        "holdout_diagnostic": holdout_diagnostic_result,
     }

@@ -81,6 +81,71 @@ def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tm
     assert os.path.exists(result["model_path"])
 
 
+def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, tmp_path):
+    """Rapport d'audit, C3 : `top_k` était sélectionné GLOBALEMENT tous
+    horizons confondus -- si les meilleures configs SCAN d'un seul horizon
+    dominaient le classement, cet horizon captait 100% du budget Optuna et les
+    autres horizons n'en recevaient aucun (observé dans l'audit : h=5j à zéro
+    essai Optuna alors que h=3j en recevait deux). `tiny_config` a deux
+    horizons (3, 5) et `tuning.top_k=2` -- avec la sélection par horizon
+    (`optuna_trials_per_horizon=True`, défaut corrigé), CHAQUE horizon doit
+    recevoir ses propres configs affinées, pas seulement celui qui gagne
+    globalement.
+
+    Utilise `_synthetic_raw_no_floor` (pas `_synthetic_raw`) : le `.clip(min=-10)`
+    de `_synthetic_raw` fait "coller" la cible à un plancher, ce qui fait
+    s'effondrer le dernier fold walk-forward à quelques lignes de test à peine
+    (cf. docstring de `_synthetic_raw_no_floor` ci-dessous) -- confondu au
+    premier essai avec un bug C3, ce n'en était pas un (root-cause tracée :
+    `ctx.prepare(horizon, last_fold, "GLOBAL")` retournait déjà `None` pour
+    CE fixture-là, y compris dans le code d'origine, avant même mes
+    modifications -- juste jamais exercé par un test qui vérifie
+    `result["tuned"]`)."""
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    assert tiny_config.tuning.optuna_trials_per_horizon is True  # comportement corrigé par défaut
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_c3_store"),
+        db_path=str(tmp_path / "patrick_test_c3.db"))
+
+    tuned_df = result["tuned"]
+    assert len(tuned_df) > 0, "aucune config affinée par Optuna -- le tuning n'a pas tourné du tout."
+    horizons_with_tuning = set(tuned_df["horizon"].unique())
+    expected_horizons = set(tiny_config.objective.horizons)
+    assert horizons_with_tuning == expected_horizons, (
+        f"budget Optuna non alloué à tous les horizons : attendu {expected_horizons}, "
+        f"obtenu {horizons_with_tuning} -- au moins un horizon n'a reçu aucun essai Optuna."
+    )
+
+
+def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, tmp_path):
+    """Contre-épreuve : `optuna_trials_per_horizon=False` restaure l'ancien
+    comportement (sélection top_k globale, tous horizons confondus) --
+    conservé explicitement pour compatibilité, cf. C3. N'assert pas que les
+    deux horizons sont couverts (c'est justement le comportement qu'on
+    réactive), seulement que le run se termine et produit des configs
+    affinées quand même. Cf. `_synthetic_raw_no_floor` : même remarque que le
+    test précédent sur le choix du générateur synthétique."""
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    tiny_config.tuning.optuna_trials_per_horizon = False
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_c3_global_store"),
+        db_path=str(tmp_path / "patrick_test_c3_global.db"))
+
+    tuned_df = result["tuned"]
+    assert len(tuned_df) > 0
+    # top_k=2 global -> au plus 2 configs distinctes affinées au total (pas 2 par horizon).
+    n_distinct_configs = tuned_df.drop_duplicates(subset=["horizon", "regime", "N", "sampler", "algo"]).shape[0]
+    assert n_distinct_configs <= tiny_config.tuning.top_k
+
+
 def _synthetic_raw_no_floor(n=1500, seed=0) -> pd.DataFrame:
     """Variante de `_synthetic_raw` sans `.clip(min=-10)` sur la marche
     aléatoire cumulée. Ce clip fait "coller" la cible à un plancher exact
@@ -146,6 +211,52 @@ def test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated(tiny_config, 
         "SELECT count(*) FROM prediction WHERE split = 'holdout'").fetchone()[0]
     assert holdout_preds > 0
     conn.close()
+
+
+def test_holdout_diagnostic_covers_full_scan_grid_not_just_winner(tiny_config, monkeypatch, tmp_path):
+    """Rapport d'audit, C4 : `fold_metric[split='holdout']` (Phase 2.1)
+    n'existe que pour le trial gagnant (`is_best=1`) -- `holdout_diagnostic`
+    (table séparée) doit couvrir TOUTE la grille SCAN, pour permettre le
+    diagnostic de corrélation test/holdout que l'audit demandait (section E)
+    et que le schéma d'origine ne permettait pas de calculer (n=1)."""
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_c4.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_c4_store"),
+        db_path=db_path)
+
+    assert result["final_best"] is not None
+    assert result["holdout"] is not None, "prérequis : le holdout doit être actif sur ce fixture."
+
+    conn = sqlite3.connect(db_path)
+    n_trials = conn.execute("SELECT COUNT(*) FROM trial").fetchone()[0]
+    n_diag_trials = conn.execute(
+        "SELECT COUNT(DISTINCT trial_id) FROM holdout_diagnostic").fetchone()[0]
+    n_diag_rows = conn.execute("SELECT COUNT(*) FROM holdout_diagnostic").fetchone()[0]
+    n_holdout_fold_metric_trials = conn.execute(
+        "SELECT COUNT(DISTINCT trial_id) FROM fold_metric WHERE split = 'holdout'").fetchone()[0]
+    conn.close()
+
+    assert n_diag_rows > 0, "holdout_diagnostic n'a reçu aucune ligne."
+    # C'est précisément l'écart que corrige C4 : fold_metric[holdout] = 1 seul
+    # trial (le gagnant), holdout_diagnostic doit en couvrir strictement plus.
+    assert n_holdout_fold_metric_trials == 1
+    assert n_diag_trials > n_holdout_fold_metric_trials, (
+        f"holdout_diagnostic ({n_diag_trials} trials) ne couvre pas plus que "
+        f"fold_metric[holdout] ({n_holdout_fold_metric_trials}) -- la grille SCAN complète "
+        f"({n_trials} trials au total) n'a pas été évaluée sur le holdout."
+    )
+
+    diag = result["holdout_diagnostic"]
+    assert diag is not None
+    assert diag["n_trials"] == n_diag_trials
+    if diag["n_trials"] >= 3:
+        assert -1.0 <= diag["rho"] <= 1.0
+        assert 0.0 <= diag["p_value"] <= 1.0
 
 
 def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_config, monkeypatch, tmp_path):

@@ -187,6 +187,10 @@
                 <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
                 {{ t('field_enabled') }}{{ info('tuning_enabled') }}
             </label>
+            <label class="checkbox">
+                <input type="checkbox" name="optuna_trials_per_horizon" {% if view.optuna_trials_per_horizon %}checked{% endif %}>
+                {{ t('field_optuna_trials_per_horizon') }}{{ info('optuna_trials_per_horizon') }}
+            </label>
             <div class="subgrid">
                 <label>{{ t('field_top_k') }}
                     <input type="number" name="top_k" value="{{ view.top_k }}">

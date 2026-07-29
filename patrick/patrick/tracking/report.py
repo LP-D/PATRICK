@@ -16,6 +16,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from patrick.tracking import db as trackdb
+from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import jobs as jobs_db
 
 DEFAULT_REPORTS_DIR = os.path.expanduser("~/.patrick/reports")
@@ -103,6 +104,12 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         trials = _trials_for_run(conn, run_id)
         baselines = _baselines_for_run(conn, run_id)
         job_stats = _job_stats_for_run(conn, run.get("job_id"))
+        # Rapport d'audit, C4 -- diagnostic LECTURE SEULE (jamais utilisé pour
+        # choisir une config, cf. patrick/tracking/holdout_diagnostic.py) :
+        # lu directement en base (contrairement à holdout/DM/PBO ci-dessus,
+        # persisté par run, disponible aussi pour un `patrick run`/`resume` CLI
+        # sans job web associé).
+        holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
     finally:
         conn.close()
 
@@ -145,6 +152,19 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
                        "<code>patrick resume</code> en CLI.</p>")
         if holdout_from_trial:
             stats_html += f"<p><strong>Holdout (essai gagnant, table fold_metric)</strong></p>{_fmt_metrics_table(holdout_from_trial)}"
+
+    if holdout_diag["n_trials"] >= 3:
+        diag_html = (f"ρ = {holdout_diag['rho']:.4f} (p = {holdout_diag['p_value']:.4f}, "
+                     f"n = {holdout_diag['n_trials']} trials)")
+    else:
+        diag_html = f"non calculable (n = {holdout_diag['n_trials']} trials avec test+holdout, minimum 3)"
+    stats_html += (
+        "<p><strong>Diagnostic — corrélation de rang test vs holdout (F1_dir), "
+        "grille SCAN complète</strong> : "
+        f"{diag_html} "
+        "<span class='hint'>Lecture seule : ne choisit jamais une config, n'informe que ce rapport "
+        "(cf. rapport d'audit, C4).</span></p>"
+    )
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 

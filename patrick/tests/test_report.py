@@ -81,6 +81,10 @@ def test_report_for_cli_run_without_job_id(tmp_path, monkeypatch):
     assert "report_test" in content
     assert "Non disponible" in content  # pas de job_id -> stats Phase 2 absentes, pas inventées
     assert "<table" in content
+    # Rapport d'audit, C4 : contrairement à holdout/DM/PBO (job-scopés
+    # ci-dessus), le diagnostic test-vs-holdout est lu directement en base --
+    # disponible même pour un run CLI sans job_id.
+    assert "corrélation de rang test vs holdout" in content
 
 
 def test_report_for_web_run_includes_phase2_stats(tmp_path):
