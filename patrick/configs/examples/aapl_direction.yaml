@@ -49,7 +49,7 @@ tuning:
   top_k: 3
   n_trials: 50
   cv_splits: 3
-  optuna_trials_per_horizon: true  # cf. rapport d'audit C3 -- budget Optuna independant par horizon
+  optuna_select_top_k_per_horizon: true  # cf. rapport d'audit C3 -- budget Optuna independant par horizon
 
 output:
   dir: "runs/aapl_direction"

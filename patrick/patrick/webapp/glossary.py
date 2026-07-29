@@ -275,7 +275,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "best configs found by the grid, via a Bayesian search (Optuna), "
                "before the final export."),
     },
-    "optuna_trials_per_horizon": {
+    "optuna_select_top_k_per_horizon": {
         "fr": ("Coché (recommandé) : chaque horizon reçoit son propre budget "
                "Top-K/essais Optuna, indépendamment des autres horizons. "
                "Décoché : le Top-K est sélectionné globalement tous horizons "

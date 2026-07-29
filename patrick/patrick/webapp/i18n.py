@@ -92,7 +92,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_top_k": {"fr": "Top-K configs affinées", "en": "Top-K refined configs"},
     "field_n_trials": {"fr": "Essais Optuna", "en": "Optuna trials"},
     "field_cv_splits": {"fr": "Folds CV", "en": "CV folds"},
-    "field_optuna_trials_per_horizon": {"fr": "Budget Optuna par horizon", "en": "Optuna budget per horizon"},
+    "field_optuna_select_top_k_per_horizon": {"fr": "Budget Optuna par horizon", "en": "Optuna budget per horizon"},
 
     "section_output": {"fr": "Sortie", "en": "Output"},
     "field_output_dir": {"fr": "Dossier de sortie", "en": "Output directory"},

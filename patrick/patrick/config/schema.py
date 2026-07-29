@@ -45,6 +45,16 @@ class ValidationConfig(BaseModel):
     embargo_enabled: bool = D.DEFAULT_EMBARGO_ENABLED
     embargo_bars: int | None = D.DEFAULT_EMBARGO_BARS
     min_train_rows: int = 100
+    # Rapport de correction, D3 : garde de taille de fold déjà existante
+    # (vérifiée, pas ajoutée) -- `_FoldContext.prepare`/`_evaluate_holdout`
+    # excluent (désormais avec avertissement explicite, cf. `pipeline/engine.py`)
+    # tout fold sous ce seuil plutôt que de calculer des métriques sur trop peu
+    # de lignes. 20 conservé (déjà la valeur en place) : la cible a 4 classes
+    # (DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT), à peu près équilibrées par
+    # construction (seuils par quartile fittés sur le train) -- règle usuelle
+    # d'au moins ~5 observations par catégorie pour qu'un MCC/F1 par classe/AUC
+    # one-vs-rest ne soit pas dégénéré (effectif nul dans une classe) donne
+    # 5 x 4 = 20, exactement la valeur déjà en place.
     min_test_rows: int = 20
     holdout_months: int = D.DEFAULT_HOLDOUT_MONTHS
 
@@ -76,7 +86,7 @@ class TuningConfig(BaseModel):
     # cross-horizon d'origine, qui pouvait allouer 100% du budget Optuna à un
     # seul horizon. False = ancien comportement (top_k global tous horizons
     # confondus), conservé pour compatibilité explicite.
-    optuna_trials_per_horizon: bool = D.DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON
+    optuna_select_top_k_per_horizon: bool = D.DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON
 
 
 class OutputConfig(BaseModel):

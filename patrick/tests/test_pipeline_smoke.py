@@ -88,7 +88,7 @@ def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, t
     autres horizons n'en recevaient aucun (observé dans l'audit : h=5j à zéro
     essai Optuna alors que h=3j en recevait deux). `tiny_config` a deux
     horizons (3, 5) et `tuning.top_k=2` -- avec la sélection par horizon
-    (`optuna_trials_per_horizon=True`, défaut corrigé), CHAQUE horizon doit
+    (`optuna_select_top_k_per_horizon=True`, défaut corrigé), CHAQUE horizon doit
     recevoir ses propres configs affinées, pas seulement celui qui gagne
     globalement.
 
@@ -105,7 +105,7 @@ def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, t
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
-    assert tiny_config.tuning.optuna_trials_per_horizon is True  # comportement corrigé par défaut
+    assert tiny_config.tuning.optuna_select_top_k_per_horizon is True  # comportement corrigé par défaut
 
     result = engine_module.run_pipeline(
         tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_c3_store"),
@@ -122,7 +122,7 @@ def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, t
 
 
 def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, tmp_path):
-    """Contre-épreuve : `optuna_trials_per_horizon=False` restaure l'ancien
+    """Contre-épreuve : `optuna_select_top_k_per_horizon=False` restaure l'ancien
     comportement (sélection top_k globale, tous horizons confondus) --
     conservé explicitement pour compatibilité, cf. C3. N'assert pas que les
     deux horizons sont couverts (c'est justement le comportement qu'on
@@ -133,7 +133,7 @@ def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, 
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
-    tiny_config.tuning.optuna_trials_per_horizon = False
+    tiny_config.tuning.optuna_select_top_k_per_horizon = False
 
     result = engine_module.run_pipeline(
         tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_c3_global_store"),
@@ -277,6 +277,36 @@ def test_holdout_diagnostic_covers_full_scan_grid_not_just_winner(tiny_config, m
     if diag["n_trials"] >= 3:
         assert -1.0 <= diag["rho"] <= 1.0
         assert 0.0 <= diag["p_value"] <= 1.0
+
+
+def test_undersized_fold_is_excluded_with_explicit_warning(tiny_config, monkeypatch, tmp_path, capsys):
+    """Rapport de correction, D3 : la garde de taille de fold (`min_train_rows`/
+    `min_test_rows`, `ValidationConfig`) existait déjà -- `_FoldContext.prepare`
+    et `_evaluate_holdout` excluaient un fold trop petit en renvoyant `None`,
+    mais SILENCIEUSEMENT. L'incident de débogage C3 (dernier fold walk-forward
+    effondré à 10-13 lignes de test, `None` renvoyé sans un mot) a forcé à
+    instrumenter le code à la main pour comprendre un budget Optuna/SCAN
+    incomplet -- corrigé en ajoutant un avertissement explicite à chaque
+    exclusion. Ici, `min_test_rows` est forcé à une valeur qu'aucun fold ne
+    peut satisfaire -> vérifie que l'avertissement apparaît (pas seulement que
+    le run se termine sans planter)."""
+    def fake_ingest(objective, universe, store=None, force=False):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    tiny_config.validation.min_test_rows = 10_000  # aucun fold ne peut fournir autant de lignes de test
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_d3_store"),
+        db_path=str(tmp_path / "patrick_test_d3.db"))
+
+    captured = capsys.readouterr()
+    assert "[WARN] fold" in captured.out and "exclu" in captured.out, (
+        "aucun avertissement explicite alors qu'un fold aurait dû être exclu pour taille insuffisante."
+    )
+    assert "min 10000" in captured.out or "(min 10000)" in captured.out
+    assert len(result["leaderboard"]) == 0, "aucun fold ne satisfaisant le seuil, la grille SCAN doit être vide."
+    assert result["final_best"] is None
 
 
 def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_config, monkeypatch, tmp_path):

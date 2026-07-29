@@ -283,6 +283,15 @@ class _FoldContext:
         y_te = target_series.values[te_mask].astype(int)
         if (len(y_tr) < cfg.validation.min_train_rows
                 or len(y_te) < cfg.validation.min_test_rows):
+            # Rapport de correction, D3 : la garde existait déjà (min_train_rows/
+            # min_test_rows) mais excluait le fold SILENCIEUSEMENT -- l'incident
+            # de débogage C3 (dernier fold walk-forward effondré à 10-13 lignes de
+            # test, `None` renvoyé sans un mot) a montré que ça oblige à
+            # instrumenter le code à la main pour comprendre un budget Optuna/SCAN
+            # incomplet. Avertissement explicite désormais systématique.
+            print(f"  [WARN] fold {fold_idx + 1} exclu (h={horizon}j régime={regime}) : "
+                  f"train={len(y_tr)} (min {cfg.validation.min_train_rows}), "
+                  f"test={len(y_te)} (min {cfg.validation.min_test_rows}).")
             return None
 
         X_pool_df = pool[self.feature_pool].reindex(idx)
@@ -422,6 +431,9 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
     y_tr = target_series.values[tr_mask].astype(int)
     y_te = target_series.values[te_mask].astype(int)
     if len(y_tr) < config.validation.min_train_rows or len(y_te) < config.validation.min_test_rows:
+        print(f"  [WARN] holdout exclu (h={horizon}j régime={regime}) : "
+              f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
+              f"test={len(y_te)} (min {config.validation.min_test_rows}).")
         return None
 
     X_pool_df = pool[feature_pool].reindex(idx)
@@ -617,7 +629,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     tuned_rows = []
     tuned_trial_ids: dict[tuple, int] = {}
     if config.tuning.enabled and len(board.rows):
-        if config.tuning.optuna_trials_per_horizon:
+        if config.tuning.optuna_select_top_k_per_horizon:
             # Rapport d'audit, C3 : sélection top_k PAR horizon (pas globale) --
             # sinon un horizon dont le meilleur essai SCAN domine peut capter
             # 100% du budget Optuna, laissant les autres horizons à zéro essai.
@@ -630,7 +642,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
         print(f"\n[OPTUNA] affinage des {len(top_configs)} meilleures configs "
               f"({config.tuning.n_trials} essais, CV={config.tuning.cv_splits}, "
-              f"par_horizon={config.tuning.optuna_trials_per_horizon})...")
+              f"par_horizon={config.tuning.optuna_select_top_k_per_horizon})...")
         # Phase 3.2 (`patrick resume`) : étude Optuna persistée dans un fichier
         # SQLite dédié (jamais `patrick.db`), un `study_name` déterministe par
         # config testée -> un `patrick run`/`patrick resume` relancé sur la

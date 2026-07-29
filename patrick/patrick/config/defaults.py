@@ -37,7 +37,7 @@ DEFAULT_TUNING_CV_SPLITS = 3
 # concentré sur un seul horizon (celui dont le meilleur essai SCAN dominait),
 # les autres n'en recevant aucun. True = chaque horizon reçoit son propre
 # top_k/n_trials, indépendamment des autres (comportement corrigé, par défaut).
-DEFAULT_TUNING_OPTUNA_TRIALS_PER_HORIZON = True
+DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 
 # Options désactivées par défaut mais câblées dans le pipeline (pas en annexe) :
 # purge (VIX_PURGED_CV : delta F1_dir négligeable), calibration (VIX_CALIBRATED_THRESHOLD :

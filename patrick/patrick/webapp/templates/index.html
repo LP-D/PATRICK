@@ -188,8 +188,8 @@
                 {{ t('field_enabled') }}{{ info('tuning_enabled') }}
             </label>
             <label class="checkbox">
-                <input type="checkbox" name="optuna_trials_per_horizon" {% if view.optuna_trials_per_horizon %}checked{% endif %}>
-                {{ t('field_optuna_trials_per_horizon') }}{{ info('optuna_trials_per_horizon') }}
+                <input type="checkbox" name="optuna_select_top_k_per_horizon" {% if view.optuna_select_top_k_per_horizon %}checked{% endif %}>
+                {{ t('field_optuna_select_top_k_per_horizon') }}{{ info('optuna_select_top_k_per_horizon') }}
             </label>
             <div class="subgrid">
                 <label>{{ t('field_top_k') }}
