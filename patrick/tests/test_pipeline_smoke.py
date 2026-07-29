@@ -251,9 +251,29 @@ def test_holdout_diagnostic_covers_full_scan_grid_not_just_winner(tiny_config, m
         f"({n_trials} trials au total) n'a pas été évaluée sur le holdout."
     )
 
+    # `result["holdout_diagnostic"]` (Spearman) est scopé au run_id de
+    # `final_best` (un seul horizon, même convention que holdout/DM/PBO
+    # ci-dessus) -- `n_diag_trials` compte, lui, TOUS les trials de
+    # `holdout_diagnostic` tous horizons confondus de cet appel
+    # `run_pipeline` (`tiny_config` a 2 horizons) : ne pas comparer les deux
+    # bruts, revérifier le compte scopé au bon run_id à la place.
+    conn = sqlite3.connect(db_path)
+    final_best_run_id = next(
+        rid for h, rid in conn.execute("SELECT horizon, run_id FROM run").fetchall()
+        if h == int(result["final_best"]["horizon"])
+    )
+    n_diag_trials_for_best_horizon = conn.execute(
+        "SELECT COUNT(DISTINCT hd.trial_id) FROM holdout_diagnostic hd "
+        "JOIN trial t ON t.trial_id = hd.trial_id WHERE t.run_id = ?",
+        (final_best_run_id,),
+    ).fetchone()[0]
+    conn.close()
+
     diag = result["holdout_diagnostic"]
     assert diag is not None
-    assert diag["n_trials"] == n_diag_trials
+    assert diag["n_trials"] == n_diag_trials_for_best_horizon
+    assert diag["n_trials"] > 0
+    assert diag["n_trials"] <= n_diag_trials  # scopé à un horizon <= tous horizons confondus
     if diag["n_trials"] >= 3:
         assert -1.0 <= diag["rho"] <= 1.0
         assert 0.0 <= diag["p_value"] <= 1.0
