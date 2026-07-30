@@ -132,6 +132,39 @@ rendement réalisé de l'actif sous-jacent. Il ne charge, ne réentraîne, ni ne
 resélectionne jamais de modèle — la seule chose qu'il ajoute au run existant
 est une politique de position et un jeu de frictions.
 
+### Convention de timing (rapport de correction, C6)
+
+Le plan de phase 4 prescrivait une convention `open_next` (exécution à
+l'ouverture du jour suivant) — **non implémentable ici** : le simulateur ne
+modélise qu'une seule série de clôtures par actif (close-to-close), pas
+d'open/high/low. Le seul paramètre de timing est `execution_lag_bars`, et
+c'est exactement ce qu'il fait (aucune mention d'`open_next` ne subsiste dans
+le code, l'UI, les YAMLs ou le glossaire).
+
+Convention réelle (`simulate/engine.py::_build_exposure`) : le signal est
+connu à la clôture du jour `t` ; l'exposition démarre à la ligne
+`t + execution_lag_bars` de la grille quotidienne. Comme
+`underlying_ret[i] = close[i]/close[i-1] - 1` (le rendement qui SE TERMINE au
+jour `i`, pas celui qui en part), le premier rendement capté par cette entrée
+est celui de `t+lag-1` à `t+lag`. Avec le minimum imposé
+`execution_lag_bars=1` (anti-pattern #5, section 10), ce premier rendement
+capté est donc exactement celui de `t` à `t+1` — le mouvement qui suit
+immédiatement la clôture du signal, sans latence réelle ajoutée au-delà de
+cette clôture. `execution_lag_bars=0` capterait le rendement de `t-1` à `t`,
+déjà connu au moment où le signal est calculé — du look-ahead pur,
+structurellement interdit par `SimParams.__post_init__`.
+
+**Revisite du finding F.2 de l'audit** ("lag=0 donne un Sharpe plus bas que
+lag=1", non résolu) : un signal oracle (prédiction parfaite, par
+construction, du mouvement `t`→`t+1`) injecté dans `_build_exposure` réel
+(lag=0 testé en contournant la validation, diagnostic seul) confirme que ce
+n'est **pas un bug d'alignement** — sur série synthétique (20000 jours,
+signaux isolés espacés de 5 jours, horizon=1), lag=1 capte exactement ce que
+l'oracle prédit (Sharpe ≈ 6, quasi parfait), tandis que lag=0/2/3 captent un
+rendement sans rapport avec la prédiction (Sharpe proche de 0 : 0.07/0.20/0.10,
+jamais négatif ni anormal). `_build_exposure` fonctionne comme attendu ; le
+finding F.2 s'explique entièrement par cette convention une fois comprise.
+
 ## 7. SMOTE vs `class_weight` + seuil calibré
 
 Défaut actuel : SMOTE (suréchantillonnage, `sampler.candidates: ["SMOTE"]`).

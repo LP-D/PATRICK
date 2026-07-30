@@ -36,7 +36,8 @@ def _fit_cutoff_date(series: pd.Series, fit_end_idx: int | None):
 
 
 def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1,
-                            fit_end_idx: int | None = None) -> pd.Series:
+                            fit_end_idx: int | None = None,
+                            test_end_idx: int | None = None) -> pd.Series:
     """Volatilité conditionnelle EGARCH — récursive sur les résidus passés
     uniquement, mais dont les paramètres (omega/alpha/beta) sont estimés sur
     `series.iloc[:fit_end_idx]` seulement (walk-forward), puis figés et appliqués
@@ -52,7 +53,17 @@ def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1
     documentées), la portion TRAIN est prise directement du fit train-only (`res`,
     qui n'a par construction jamais vu le test) ; seule la portion TEST utilise la
     série complète via `.fix()`, où ces artefacts numériques résiduels n'ont pas
-    d'impact sur la correction du train."""
+    d'impact sur la correction du train.
+
+    `test_end_idx` (rapport de correction, D2 -> N1) : le backcast est confirmé
+    non rétrospectif (calculé sur les seules premières observations), mais
+    `variance_bounds` reste un canal de fuite réel bien que mesuré inerte sur
+    données réalistes (D2 : écart 0.0 vs référence causale, 0 observation
+    clippée, 3 graines) -- actif seulement sous corruption ~100000x hors
+    échelle. Le fermer par construction ne coûte rien (mesuré gratuit, D2) :
+    quand fourni, la série passée à `.fix()` (`ret`) est tronquée à la fin du
+    fold de TEST courant plutôt que de s'étendre à tout l'historique restant
+    (`self.raw` en amont couvre tout le dataset, pas seulement ce fold)."""
     from arch import arch_model
 
     ret = (safe_pct_change(series).dropna() * 100)
@@ -65,7 +76,11 @@ def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1
             cv = res.conditional_volatility / 100
             return cv.reindex(series.index).rename("egarch_vol")
 
-        am_full = arch_model(ret, vol="EGARCH", p=p, o=o, q=q, dist="normal")
+        ret_for_fix = ret
+        if test_end_idx is not None:
+            test_end_date = series.index[min(test_end_idx, len(series) - 1)]
+            ret_for_fix = ret[ret.index <= test_end_date]
+        am_full = arch_model(ret_for_fix, vol="EGARCH", p=p, o=o, q=q, dist="normal")
         fixed = am_full.fix(res.params)
         cv = fixed.conditional_volatility.copy()
         cv.loc[res.conditional_volatility.index] = res.conditional_volatility.values
@@ -231,20 +246,25 @@ def arima_resid(series: pd.Series, p: int = 1, d: int = 1, q: int = 1,
 
 
 # Modèles dont les paramètres sont estimés globalement et doivent donc être
-# réajustés par fold (`fit_end_idx`) pour rester walk-forward-safe.
+# réajustés par fold (`fit_end_idx`) pour rester walk-forward-safe. `test_end_idx`
+# n'est consommé que par EGARCH (cf. N1, docstring d'`egarch_conditional_vol`) --
+# les autres l'ignorent : leur récursion causale (Kalman `.filter()`, HMM forward,
+# résidus AR/MA/ARMA/ARIMA appliqués pas à pas) n'est pas affectée par la portion
+# de `series` postérieure au fold, contrairement à `arch_model(...).fix()`.
 _PARAMETRIC_MODELS = {
-    "egarch": lambda s, fit_end_idx: egarch_conditional_vol(s, fit_end_idx=fit_end_idx).to_frame(),
-    "kalman": lambda s, fit_end_idx: kalman_filtered_level(s, fit_end_idx=fit_end_idx).to_frame(),
-    "hmm": lambda s, fit_end_idx: hmm_filtered_stress_prob(s, fit_end_idx=fit_end_idx).to_frame(),
-    "ar": lambda s, fit_end_idx: ar_resid(s, fit_end_idx=fit_end_idx).to_frame(),
-    "ma": lambda s, fit_end_idx: ma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
-    "arma": lambda s, fit_end_idx: arma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
-    "arima": lambda s, fit_end_idx: arima_resid(s, fit_end_idx=fit_end_idx).to_frame(),
+    "egarch": lambda s, fit_end_idx, test_end_idx: egarch_conditional_vol(
+        s, fit_end_idx=fit_end_idx, test_end_idx=test_end_idx).to_frame(),
+    "kalman": lambda s, fit_end_idx, test_end_idx: kalman_filtered_level(s, fit_end_idx=fit_end_idx).to_frame(),
+    "hmm": lambda s, fit_end_idx, test_end_idx: hmm_filtered_stress_prob(s, fit_end_idx=fit_end_idx).to_frame(),
+    "ar": lambda s, fit_end_idx, test_end_idx: ar_resid(s, fit_end_idx=fit_end_idx).to_frame(),
+    "ma": lambda s, fit_end_idx, test_end_idx: ma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
+    "arma": lambda s, fit_end_idx, test_end_idx: arma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
+    "arima": lambda s, fit_end_idx, test_end_idx: arima_resid(s, fit_end_idx=fit_end_idx).to_frame(),
 }
-# Fenêtres glissantes pures — aucun paramètre global, `fit_end_idx` ignoré.
+# Fenêtres glissantes pures — aucun paramètre global, `fit_end_idx`/`test_end_idx` ignorés.
 _NONPARAMETRIC_MODELS = {
-    "heston_proxy": lambda s, fit_end_idx: heston_proxy_features(s),
-    "vrp_proxy": lambda s, fit_end_idx: vrp_proxy(s).to_frame(),
+    "heston_proxy": lambda s, fit_end_idx, test_end_idx: heston_proxy_features(s),
+    "vrp_proxy": lambda s, fit_end_idx, test_end_idx: vrp_proxy(s).to_frame(),
 }
 _VOL_MODEL_BUILDERS = {**_PARAMETRIC_MODELS, **_NONPARAMETRIC_MODELS}
 
@@ -264,36 +284,42 @@ def build_vol_model_features_base(series: pd.Series, prefix: str = "px",
     selected = [m for m in models if m in _NONPARAMETRIC_MODELS]
     if not selected:
         return pd.DataFrame(index=series.index)
-    df = pd.concat([_NONPARAMETRIC_MODELS[m](series, None) for m in selected], axis=1)
+    df = pd.concat([_NONPARAMETRIC_MODELS[m](series, None, None) for m in selected], axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     return df
 
 
 def build_vol_model_features_parametric(series: pd.Series, prefix: str = "px",
                                          models: list[str] | None = None,
-                                         fit_end_idx: int | None = None) -> pd.DataFrame:
+                                         fit_end_idx: int | None = None,
+                                         test_end_idx: int | None = None) -> pd.DataFrame:
     """Sous-ensemble paramétrique de `models` (egarch/kalman/hmm/ar/ma/arma/arima
     par défaut) — à recalculer par fold via `fit_end_idx` (cf. docstring de
-    module) : paramètres réestimés uniquement sur le train de chaque fold."""
+    module) : paramètres réestimés uniquement sur le train de chaque fold.
+    `test_end_idx` (D2 -> N1) : fin du fold de TEST courant, pour EGARCH
+    uniquement (cf. docstring d'`egarch_conditional_vol`)."""
     models = models if models is not None else _DEFAULT_MODELS
     selected = [m for m in models if m in _PARAMETRIC_MODELS]
     if not selected:
         return pd.DataFrame(index=series.index)
-    df = pd.concat([_PARAMETRIC_MODELS[m](series, fit_end_idx) for m in selected], axis=1)
+    df = pd.concat([_PARAMETRIC_MODELS[m](series, fit_end_idx, test_end_idx) for m in selected], axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     return df
 
 
 def build_vol_model_features(series: pd.Series, prefix: str = "px",
                               models: list[str] | None = None,
-                              fit_end_idx: int | None = None) -> pd.DataFrame:
+                              fit_end_idx: int | None = None,
+                              test_end_idx: int | None = None) -> pd.DataFrame:
     """`models` : sous-ensemble de `_VOL_MODEL_BUILDERS` à calculer (défaut :
     les 5 modèles historiques du pipeline VIX). Un nom inconnu est ignoré plutôt
     que de faire planter tout le run. `fit_end_idx` : borne d'estimation des
     modèles paramétriques (egarch/kalman/hmm/ar/ma/arma/arima) — cf. docstring
-    de module. Les proxys Heston/VRP (fenêtres glissantes pures) l'ignorent."""
+    de module. `test_end_idx` : fin du fold de test, pour EGARCH uniquement
+    (D2 -> N1). Les proxys Heston/VRP (fenêtres glissantes pures) ignorent les deux."""
     models = models if models is not None else _DEFAULT_MODELS
-    parts = [_VOL_MODEL_BUILDERS[m](series, fit_end_idx) for m in models if m in _VOL_MODEL_BUILDERS]
+    parts = [_VOL_MODEL_BUILDERS[m](series, fit_end_idx, test_end_idx)
+             for m in models if m in _VOL_MODEL_BUILDERS]
     if not parts:
         return pd.DataFrame(index=series.index)
     df = pd.concat(parts, axis=1)

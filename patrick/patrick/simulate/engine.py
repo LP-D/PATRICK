@@ -5,10 +5,29 @@ Contraintes non négociables du plan, appliquées ici :
   holdout/live) + la donnée brute immuable du snapshot associé au run (pour
   calculer le rendement réalisé de l'actif sous-jacent -- un chargement de
   données, pas une inférence).
-- timing d'exécution explicite : le signal calculé à la clôture de `t` ne peut
-  jamais s'exécuter avant l'ouverture de `t+1` (`execution_lag_bars >= 1`,
-  jamais 0 -- l'anti-pattern #5 du plan, "exécuter un signal sur la bougie qui
-  l'a produit", est structurellement impossible ici).
+- timing d'exécution explicite (rapport de correction, C6 -- remplace la
+  convention `open_next` du plan de phase 4, jamais implémentable ici : le
+  simulateur ne modélise qu'une série de clôtures close-to-close, pas
+  d'open/high/low par actif) : seul `execution_lag_bars` pilote le timing, et
+  c'est tout ce qu'il fait. Convention réelle (`_build_exposure`) : le signal
+  est connu à la clôture du jour `t` ; l'exposition démarre à la ligne
+  `t + execution_lag_bars` de la grille quotidienne ; comme
+  `underlying_ret[i] = close[i]/close[i-1] - 1` (le rendement qui SE TERMINE
+  au jour i), le PREMIER rendement capté est celui de `t+lag-1` à `t+lag`.
+  Avec le minimum imposé `execution_lag_bars=1`, ce premier rendement capté
+  est donc exactement celui de `t` à `t+1` -- le mouvement qui suit
+  immédiatement la clôture du signal, sans latence réelle supplémentaire.
+  `execution_lag_bars=0` est structurellement interdit (`SimParams.
+  __post_init__`, anti-pattern #5 du plan) : il ferait capter le rendement de
+  `t-1` à `t`, déjà connu au moment où le signal est calculé, donc du
+  look-ahead pur. Revisite F.2 (rapport d'audit, "lag=0 donne un Sharpe plus
+  bas que lag=1", non résolu) : un signal oracle (prédiction parfaite du
+  mouvement `t`->`t+1`) confirme que ce n'est PAS un bug d'alignement --
+  lag=1 capte exactement ce que l'oracle prédit (Sharpe ~6, quasi parfait sur
+  série synthétique), lag=0/2/3 captent un rendement sans rapport avec la
+  prédiction (Sharpe proche de 0, jamais négatif ni anormal). `_build_exposure`
+  fonctionne comme attendu ; script de diagnostic non conservé dans le dépôt
+  (mesure ponctuelle, comme D2).
 - horizons chevauchants explicitement résolus : `overlap_mode` "tranches"
   (moyenne des signaux actifs, par défaut) ou "renewed" (position unique
   renouvelée), jamais un choix implicite.
@@ -57,7 +76,6 @@ class SimParams:
     max_leverage: float = 1.0
     max_position: float = 1.0
     short_allowed: bool = True
-    execution_timing: str = "open_next"  # open_next | close_next -- jamais implicite
     execution_lag_bars: int = 1
     overlap_mode: str = "tranches"  # tranches | renewed
     spread_bps: float = 0.0
@@ -145,8 +163,11 @@ def _load_predictions(conn: sqlite3.Connection, trial_id: int) -> pd.DataFrame:
 
 def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
                      daily_index: pd.DatetimeIndex, horizon: int, params: SimParams) -> pd.Series:
-    """Place chaque signal sur la grille quotidienne à `entry_date = date du
-    signal + execution_lag_bars` (jamais avant, cf. `SimParams.__post_init__`),
+    """Place chaque signal sur la grille quotidienne à `entry_idx = position du
+    signal + execution_lag_bars` (jamais avant, cf. `SimParams.__post_init__`) ;
+    le premier rendement capté à cette entrée est `underlying_ret[entry_idx]`,
+    c.-à-d. le rendement close-to-close de `entry_idx-1` à `entry_idx` (cf.
+    convention détaillée, docstring de module, rapport de correction C6) --
     puis résout les horizons chevauchants (Phase 4, contrainte non
     négociable) : "tranches" moyenne les signaux actifs sur [entry, entry+H),
     "renewed" fait tenir le dernier signal jusqu'au suivant."""

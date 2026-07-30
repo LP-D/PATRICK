@@ -210,3 +210,33 @@ def test_simulate_never_touches_model_or_trains_anything(tmp_path):
 
     result = sim.simulate(trial_id, sim.SimParams(), db_path=db_path, store_root=store_root)
     assert result["ok"] is True
+
+
+def test_execution_lag_one_captures_return_from_signal_close_to_next_close():
+    """Rapport de correction, C6 -- fige la convention de timing réelle
+    (`_build_exposure`, remplace `open_next` du plan de phase 4, non
+    implémentable ici) : signal connu à la clôture de `t`, entrée à la ligne
+    `t + execution_lag_bars` de la grille quotidienne. Comme
+    `underlying_ret[i] = close[i]/close[i-1] - 1` (rendement qui SE TERMINE au
+    jour i), le premier rendement capté à `execution_lag_bars=1` doit être
+    EXACTEMENT celui de `t` à `t+1` -- pas `t+1` à `t+2`. Protège aussi contre
+    une régression sur le finding F.2 (revisité en C6 avec un signal oracle,
+    cf. METHODOLOGY.md section 6 -- pas un bug, expliqué par cette convention)."""
+    idx = pd.bdate_range("2021-01-01", periods=10)
+    prices = pd.Series([100.0, 101.0, 99.0, 105.0, 103.0, 110.0, 108.0, 120.0, 115.0, 130.0], index=idx)
+    underlying_ret = prices.pct_change().fillna(0.0)
+
+    t = 3  # idx[3], prix 105.0
+    params = sim.SimParams(execution_lag_bars=1)
+    exposure = sim._build_exposure(
+        signal_dates=idx[[t]], target_pos=np.array([1.0]), daily_index=idx, horizon=1, params=params)
+
+    entry_idx = t + 1  # execution_lag_bars=1
+    assert exposure.iloc[entry_idx] == 1.0
+    assert (exposure.drop(exposure.index[entry_idx]) == 0.0).all()
+
+    captured_return = (exposure * underlying_ret).iloc[entry_idx]
+    expected_t_to_t_plus_1 = prices.iloc[t + 1] / prices.iloc[t] - 1  # 103/105 - 1
+    expected_t_plus_1_to_t_plus_2 = prices.iloc[t + 2] / prices.iloc[t + 1] - 1  # 110/103 - 1
+    assert captured_return == pytest.approx(expected_t_to_t_plus_1)
+    assert captured_return != pytest.approx(expected_t_plus_1_to_t_plus_2)

@@ -301,33 +301,6 @@ def test_future_leak_detection_by_magnitude_and_purge(shift_magnitude, purge_ena
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Fuite CONFIRMÉE (pas un bug de ce test) : `egarch_conditional_vol` "
-           "(patrick/features/vol_models.py) calcule la portion TEST via "
-           "`am_full = arch_model(ret, ...); am_full.fix(...)` sur `ret` = LA SÉRIE "
-           "COMPLÈTE (train+test+tout ce qui suit, pas juste jusqu'à la marge de "
-           "label légitime). `arch` recalcule en interne, à partir de ce `ret` "
-           "complet, le backcast et `variance_bounds` (statistiques GLOBALES type "
-           "np.var/np.max sur tout l'array) qui influencent `conditional_volatility` "
-           "même sur les lignes de TEST. Le docstring de la fonction documentait déjà "
-           "ce canal pour le TRAIN (corrigé en isolant `res`, le fit train-only) mais "
-           "ne traitait pas le TEST -- confirmé ici par ce test qui corrompt "
-           "STRICTEMENT au-delà de la marge de label légitime (fin de fold de test + "
-           "horizon) et observe un changement des colonnes *_egarch_vol sur le TEST. "
-           "Kalman/HMM/AR/MA/ARMA/ARIMA (les autres modèles paramétriques du même "
-           "module) sont des passes forward causales pures ou utilisent `.apply()` "
-           "sans recalcul de statistiques globales -- non affectés, vérifié par "
-           "inspection de code. Correction hors périmètre de cette session (nécessite "
-           "de rendre le `.fix()` EGARCH incrémental/causal pour le TEST, ce qui casse "
-           "le cache par coupure de fold documenté en tête de module) -- rapporté pour "
-           "décision séparée, PAS corrigé ici (cf. rapport de session correction, C2.a). "
-           "MàJ D2 : mesuré sur données réalistes (non adversariales), le canal est INERTE "
-           "(variance_bounds ne clippe jamais, écart 0.0 vs référence causale, 3 graines) -- "
-           "il ne s'active que sur des futurs ~100 000x hors échelle des rendements réels "
-           "(comme la corruption de CE test). Recommandation N1 (tronquer la série à la fin "
-           "du fold) mesurée gratuite en coût -- non appliquée ici, décision séparée.",
-)
 @pytest.mark.slow  # ~17s mesuré (rapport de correction, D1)
 def test_corrupting_beyond_test_fold_does_not_change_test_features_or_predictions():
     """Rapport d'audit, C2.a — contrôle distinct de
@@ -342,7 +315,22 @@ def test_corrupting_beyond_test_fold_does_not_change_test_features_or_prediction
     Ici, seules les données STRICTEMENT postérieures à la fin du fold de test
     sont corrompues : le test lui-même (et tout ce qui précède) reste
     bit-identique, donc toute divergence dans `X_te`/les prédictions ne peut
-    venir que d'une fuite depuis au-delà du fold de test."""
+    venir que d'une fuite depuis au-delà du fold de test.
+
+    Historique (rapport de correction, C2.a puis D2/N1) : ce test était
+    `xfail(strict=True)` -- une fuite était CONFIRMÉE : `egarch_conditional_vol`
+    calculait la portion TEST via `arch_model(ret, ...).fix(...)` sur `ret` = la
+    série complète (train+test+tout ce qui suit), et `arch` recalcule en interne,
+    à partir de ce `ret` complet, le backcast et `variance_bounds` (statistiques
+    GLOBALES type np.var/np.max) qui influencent `conditional_volatility` même
+    sur les lignes de TEST. D2 a mesuré ce canal réel mais INERTE sur données
+    réalistes (0.0 d'écart vs référence causale, 0 observation clippée par
+    `variance_bounds`, 3 graines) -- actif seulement sous corruption ~100000x
+    hors échelle, comme celle injectée ici. N1 (tronquer la série passée à
+    `.fix()` à la fin du fold de test courant, `vol_models.egarch_conditional_vol`
+    paramètre `test_end_idx`) a été appliqué : mesuré gratuit en coût (D2), ferme
+    le canal par construction. Ce test vérifie maintenant positivement la
+    fermeture du canal plutôt que de documenter la fuite."""
     config = _make_config()
     raw = _synthetic_raw()
     all_dates = raw.index

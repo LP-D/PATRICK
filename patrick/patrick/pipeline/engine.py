@@ -106,12 +106,21 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
 
 
 def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
-                           fit_end_idx: int | None) -> pd.DataFrame:
+                           fit_end_idx: int | None,
+                           test_end_idx: int | None = None) -> pd.DataFrame:
     """vol_models paramétriques (EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA) + filtre
     particulaire (spike) — réestimés sur `raw.iloc[:fit_end_idx]` uniquement
     (train du fold), appliqués causalement sur tout l'historique sans
     ré-estimation. `fit_end_idx=None` : fit sur toute la série (utilisé pour le
-    modèle de production final, qui n'a plus de test à protéger)."""
+    modèle de production final, qui n'a plus de test à protéger).
+
+    `test_end_idx` (rapport de correction, D2 -> N1) : fin du fold de TEST
+    courant. `raw` couvre tout le dataset (pas seulement ce fold), donc sans
+    cette borne EGARCH appliquerait `.fix()` sur une série s'étendant bien
+    au-delà du fold -- canal de fuite `variance_bounds` mesuré réel mais inerte
+    sur données réalistes (D2), fermé ici par construction à coût nul (mesuré
+    gratuit). Ignoré par les autres modèles paramétriques (récursions causales
+    non affectées, cf. docstring de `vol_models._PARAMETRIC_MODELS`)."""
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
@@ -119,7 +128,8 @@ def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
         s = raw[col]
         if "vol_models" in families:
             parts.append(vol_models.build_vol_model_features_parametric(
-                s, prefix=col, models=config.features.vol_models, fit_end_idx=fit_end_idx))
+                s, prefix=col, models=config.features.vol_models,
+                fit_end_idx=fit_end_idx, test_end_idx=test_end_idx))
         if "spike" in families:
             parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
 
@@ -200,7 +210,14 @@ class _FoldPoolBuilder:
             self._init_interactions()
 
     def _merge_base_and_parametric(self, cut_idx: int) -> pd.DataFrame:
-        param_pool = build_parametric_pool(self.raw, self.config, fit_end_idx=cut_idx)
+        # D2 -> N1 : `cut_idx` est à la fois la fin du train et le début du test
+        # de son fold (`fold_cuts[k]`) -- la fin de CE fold de test est donc la
+        # coupure suivante dans la même liste (`fold_cuts[k+1]`), ou None au-delà
+        # du dernier fold connu (pas de troncature, comportement d'origine).
+        pos = self.fold_cuts.index(cut_idx)
+        test_end_idx = self.fold_cuts[pos + 1] if pos + 1 < len(self.fold_cuts) else None
+        param_pool = build_parametric_pool(self.raw, self.config, fit_end_idx=cut_idx,
+                                            test_end_idx=test_end_idx)
         merged = pd.concat([self.base_pool, param_pool], axis=1)
         return merged.loc[:, ~merged.columns.duplicated()]
 
