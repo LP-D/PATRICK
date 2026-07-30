@@ -41,6 +41,29 @@ exporte :
 - `runs/<name>_best_model.joblib` + `_best_model_meta.json` : le modèle gagnant,
   ré-entraîné sur 100% de l'historique (comme `VIX_PRODUCTION`)
 
+### `patrick audit degradation` (rapport de correction, C7)
+
+Mesure l'impact réel des corrections de fuite de la phase 0 (purge/embargo,
+alignement as-of par classe d'actif, vintages FRED/ALFRED) en comparant 4
+configurations empilées (`baseline_avant` -> `+purge` -> `+vintages` ->
+`complet`) sur le même univers de cibles et le même seed :
+
+```bash
+export FRED_API_KEY=...   # requis -- +vintages est dénué de sens sans lui
+patrick audit degradation
+patrick audit degradation --targets "^GSPC,BTC-USD" --seed 7 --output-dir runs/mon_audit
+```
+
+Défaut (sans `--targets`) : un indice US, une action européenne, une paire
+FX, une matière première, une crypto (`patrick/audit.py::DEFAULT_TARGETS`).
+Exécute le pipeline réel (accès réseau requis, jamais lancé en CI/sandbox) et
+exporte `<output-dir>/degradation_audit.csv` + `.md` (colonnes : cible,
+configuration, BalAcc_4cls, MCC_4cls, F1_dir, fred_source, n_evaluations).
+Échoue explicitement si `FRED_API_KEY` n'est pas défini. Validé sans réseau
+par `tests/test_audit_degradation.py` (sources monkeypatchées sous
+`ingest()`, pas `ingest()` lui-même — pour vérifier que `snapshot.fred_source`
+est bien peuplé sur ce chemin, cf. rapport de correction C7).
+
 ## Config (YAML)
 
 Voir `configs/examples/vix_direction.yaml` (reproduit le pipeline VIX établi) et

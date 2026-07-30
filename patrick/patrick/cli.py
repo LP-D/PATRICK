@@ -15,6 +15,8 @@ from patrick import predict as predict_module
 from patrick import worker as worker_module
 
 app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
+audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraînent jamais un modèle de production.")
+app.add_typer(audit_app, name="audit")
 
 
 @app.command(name="ingest")
@@ -145,6 +147,45 @@ def serve_cmd(
         raise typer.Exit(code=1)
     typer.echo(f"patrick web sur http://{host}:{port}")
     uvicorn.run("patrick.webapp.app:app", host=host, port=port, reload=reload)
+
+
+@audit_app.command(name="degradation")
+def audit_degradation_cmd(
+    targets: str = typer.Option(
+        None, "--targets",
+        help="Symboles cibles séparés par des virgules (défaut : 1 indice US, 1 action "
+             "europe, 1 paire FX, 1 matière première, 1 crypto -- cf. patrick/audit.py::DEFAULT_TARGETS)"),
+    seed: int = typer.Option(42, "--seed", help="Seed unique, identique aux 4 configurations"),
+    output_dir: str = typer.Option(
+        "runs/audit_degradation", "--output-dir", help="Dossier de sortie des runs + du CSV/markdown"),
+) -> None:
+    """Rapport de correction, C7 -- mesure l'impact réel des corrections de
+    fuite de la phase 0 (purge/embargo, alignement as-of, vintages FRED) en
+    comparant 4 configurations empilées (baseline_avant -> +purge ->
+    +vintages -> complet) sur le même univers de cibles/seed. Exécute le
+    pipeline réel (accès réseau yfinance/FRED requis) ; échoue explicitement
+    si FRED_API_KEY n'est pas défini (la configuration +vintages n'a pas de
+    sens sans lui)."""
+    from patrick import audit as audit_module
+
+    target_list = None
+    if targets:
+        symbols = [s.strip() for s in targets.split(",") if s.strip()]
+        by_symbol = {t["target_symbol"]: t for t in audit_module.DEFAULT_TARGETS}
+        target_list = [
+            by_symbol.get(sym, {"label": sym, "target_symbol": sym, "target_source": "yfinance",
+                                 "yf_tickers": [], "fred_series": {}, "start_date": "2015-01-01"})
+            for sym in symbols
+        ]
+
+    try:
+        result = audit_module.run_degradation_audit(targets=target_list, seed=seed, output_dir=output_dir)
+    except RuntimeError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1)
+
+    typer.echo(f"\n[TERMINÉ] {len(result['rows'])} lignes -- "
+               f"CSV : {result['csv_path']} -- markdown : {result['md_path']}")
 
 
 if __name__ == "__main__":

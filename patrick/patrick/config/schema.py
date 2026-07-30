@@ -18,6 +18,12 @@ class ObjectiveConfig(BaseModel):
     horizons: list[int] = Field(default_factory=lambda: list(D.DEFAULT_HORIZONS))
     flat_thr: float = D.DEFAULT_FLAT_THR
     regimes: list[str] = Field(default_factory=lambda: list(D.DEFAULT_REGIMES))
+    # Rapport de correction, C7 -- Phase 0.4 (alignement as-of par classe d'actif,
+    # `data/ingest.py::_apply_session_lag`) était jusqu'ici inconditionnelle, sans
+    # bascule : ajoutée UNIQUEMENT pour que `patrick audit degradation` puisse la
+    # désactiver sélectivement et mesurer son impact. False (défaut) = comportement
+    # de production inchangé (correction toujours appliquée) pour tout run existant.
+    disable_session_lag: bool = False
 
 
 class UniverseConfig(BaseModel):
@@ -26,6 +32,18 @@ class UniverseConfig(BaseModel):
     fred_series: dict[str, str] = Field(default_factory=dict)
     start_date: str = "2000-01-01"
     yf_coverage: float = 0.85
+    # Rapport de correction, C7 -- Phase 0.5 (vintages ALFRED, `data/sources/
+    # fred_source.py`) existait comme capacité mais n'était appelée nulle part
+    # dans `ingest()` : ajouté ici pour que la config puisse la déclencher, et
+    # que `patrick audit degradation` puisse mesurer son impact. None (défaut) =
+    # comportement de production inchangé (pas de vintage, séries "telles que
+    # révisées aujourd'hui"). Limite assumée : une SEULE date de vintage globale
+    # pour tout l'historique (pas un vintage par fold walk-forward) -- protège
+    # contre les révisions survenues APRÈS cette date, pas contre le look-ahead
+    # de révision propre à chaque coupure de fold. Documenté, pas résolu ici
+    # (hors périmètre C7 : mesurer l'impact des corrections existantes, pas en
+    # construire une nouvelle plus fine).
+    vintage_realtime_date: str | None = None
 
 
 class FeaturesConfig(BaseModel):

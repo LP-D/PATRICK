@@ -20,7 +20,13 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
     de la cible (Phase 0.4 — cf. `data/session_calendar.py`) : une jointure "même
     date calendaire" traite implicitement comme simultanées des clôtures de
     marché qui ne le sont pas (ex. clôture US utilisée "du jour" pour une cible
-    qui a déjà clôturé plus tôt dans la même journée UTC)."""
+    qui a déjà clôturé plus tôt dans la même journée UTC).
+
+    `objective.disable_session_lag` (rapport de correction, C7) : bascule
+    ajoutée uniquement pour `patrick audit degradation`, jamais utilisée en
+    production (défaut False -- correction toujours appliquée)."""
+    if objective.disable_session_lag:
+        return yf_df
     reverse = {yfinance_source.clean_symbol(t): t for t in tickers}
     out = yf_df.copy()
     lagged = []
@@ -49,6 +55,11 @@ def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig) -> None
 
 def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
            store: DataStore | None = None, force: bool = False) -> pd.DataFrame:
+    """`cache_key` ne dépend que de `target_symbol`, pas de `universe.
+    vintage_realtime_date`/`objective.disable_session_lag` (rapport de
+    correction, C7) : un cache existant peut donc masquer un changement de ces
+    deux bascules. Appelants qui les font varier pour un même `target_symbol`
+    (ex. `patrick audit degradation`) DOIVENT passer `force=True`."""
     store = store or DataStore()
     cache_key = f"raw_{objective.target_symbol}"
     if not force and store.exists(cache_key):
@@ -75,7 +86,8 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         df = df.join(yf_df, how="outer")
 
     if universe.fred_series:
-        fred_df = fred_source.download_fred_universe(universe.fred_series, universe.start_date)
+        fred_df = fred_source.download_fred_universe(
+            universe.fred_series, universe.start_date, realtime_date=universe.vintage_realtime_date)
         if len(fred_df):
             fred_df = fred_df.reindex(df.index, method="ffill")
             df = pd.concat([df, fred_df], axis=1)
