@@ -362,7 +362,7 @@ DEFAULT_TARGET_GROUPS = {
     ],
     "Matières premières & devises (ETFs)": [
         ("BZF", "BZF_BrazilReal"),
-        ("CBOT_W", "Wheat"),
+        ("WEAT", "WEAT_Wheat"),
         ("CEW", "CEW_EM_FX"),
         ("CORN", "CORN_Corn"),
         ("CYB", "CYB_ChineseYuan"),
@@ -541,7 +541,7 @@ DEFAULT_TARGET_GROUPS = {
         ("JNJ", "JNJ"),
         ("JPM", "JPM"),
         ("KO", "KO"),
-        ("L3HARRIS", "L3H_L3Harris"),
+        ("LHX", "LHX_L3Harris"),
         ("LDOS", "LDOS_LeadosSecurity"),
         ("LLY", "LLY"),
         ("LMT", "LMT_LockheedMartin"),
