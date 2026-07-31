@@ -358,3 +358,85 @@ def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_conf
     best_trials = conn.execute("SELECT count(*) FROM trial WHERE is_best = 1").fetchall()
     assert best_trials[0][0] >= 1  # au moins un trial marqué gagnant sur les deux runs
     conn.close()
+
+
+def test_cpcv_scheme_runs_end_to_end_and_reports_a_path_distribution(tiny_config, monkeypatch, tmp_path):
+    """Phase 6.1 (P6.1) -- `validation.scheme: cpcv` bout-en-bout : le pipeline
+    complet (features avancées incluses) tourne sans planter sur le chemin
+    d'export final (`_run_cpcv_scan` -> branchement finalize de `run_pipeline`,
+    qui référence `pool_builder`/`ctx`/`last_fold` -- tous `None` en CPCV --
+    donc ce test couvre précisément le risque de crash identifié pendant le
+    développement). Un seul horizon (le scan CPCV boucle sur tous les horizons
+    en interne PAR construction du pool, pas besoin de plusieurs ici) et
+    n_groups=5/k_test_groups=2 (plus petit que le défaut 7/2, pour rester
+    rapide en test) -> C(4,1) = 4 chemins."""
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    tiny_config.objective.horizons = [5]
+    tiny_config.validation.scheme = "cpcv"
+    tiny_config.validation.n_groups = 5
+    tiny_config.validation.k_test_groups = 2
+    tiny_config.tuning.enabled = False  # affinage Optuna hors périmètre CPCV (cf. _run_cpcv_scan)
+    db_path = str(tmp_path / "patrick_test_cpcv.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_cpcv_store"),
+        db_path=db_path)
+
+    board = result["leaderboard"]
+    assert len(board) > 0
+    assert set(board["scheme"].dropna().unique()) == {"cpcv"}
+    # n_groups=5, k_test_groups=2 -> C(4,1) = 4 chemins, constant pour toute la grille.
+    assert set(board["n_paths"].dropna().unique()) == {4}
+    for col in ("F1_dir_median", "F1_dir_q05", "F1_dir_q95", "F1_dir_std"):
+        assert col in board.columns
+        assert board[col].notna().any()
+    # jamais un point unique : la médiane doit provenir d'une vraie distribution.
+    assert (board["F1_dir_q05"] <= board["F1_dir_median"]).all()
+    assert (board["F1_dir_median"] <= board["F1_dir_q95"]).all()
+
+    assert result["final_best"] is not None
+    assert result["model_path"] is not None
+    import os
+    assert os.path.exists(result["model_path"])
+    # non applicables en CPCV (cf. _run_cpcv_scan) : jamais silencieusement
+    # remplis avec une valeur walk-forward.
+    assert result["holdout"] is None
+    assert result["diebold_mariano"] is None
+    assert result["holdout_diagnostic"] is None
+
+    assert result["pbo"] is not None
+    # branché sur les CHEMINS cpcv (split='test_path'), pas les blocs walk-forward.
+    assert result["pbo"]["n_blocks"] == 4
+
+    conn = sqlite3.connect(db_path)
+    n_path_predictions = conn.execute(
+        "SELECT COUNT(DISTINCT path_id) FROM prediction WHERE path_id != -1").fetchone()[0]
+    assert n_path_predictions == 4
+    n_test_path_metrics = conn.execute(
+        "SELECT COUNT(*) FROM fold_metric WHERE split = 'test_path'").fetchone()[0]
+    assert n_test_path_metrics > 0
+    conn.close()
+
+
+def test_walkforward_scheme_is_default_and_bit_identical_to_before_p61(tiny_config, monkeypatch, tmp_path):
+    """Contre-épreuve P6.1 : ne pas définir `validation.scheme` (ou le mettre
+    explicitement à "walkforward") doit laisser le comportement walk-forward
+    INCHANGÉ -- CPCV est une option, jamais un remplacement silencieux."""
+    assert tiny_config.validation.scheme == "walkforward"  # défaut, sans que le test le force
+
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_wf_unchanged.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_wf_unchanged_store"),
+        db_path=db_path)
+
+    assert "scheme" not in result["leaderboard"].columns or result["leaderboard"]["scheme"].isna().all()
+    assert result["holdout"] is not None
+    assert result["diebold_mariano"] is not None
