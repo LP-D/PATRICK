@@ -47,6 +47,12 @@ DEFAULT_QUALITY_MAX_GAP_BDAYS = 10
 DEFAULT_QUALITY_MAX_ROBUST_Z = 40.0
 DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
 
+# Phase 6.1 (P6.1) -- CPCV : couple minimal (N, k=2) qui rend le PBO
+# satisfiable (garde C5, MIN_BLOCKS=6) sans calcul combinatoire superflu --
+# cf. justification détaillée dans `validation/cpcv.py`.
+DEFAULT_CPCV_N_GROUPS = 7
+DEFAULT_CPCV_K_TEST_GROUPS = 2
+
 # Options désactivées par défaut mais câblées dans le pipeline (pas en annexe) :
 # purge (VIX_PURGED_CV : delta F1_dir négligeable), calibration (VIX_CALIBRATED_THRESHOLD :
 # gain conditionnel au régime, nuit en STRESS), stacking (VIX_STACKING_WF : perd 28/30).
@@ -76,7 +82,7 @@ DEFAULT_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
 # groupées par catégorie pour un menu déroulant navigable malgré leur nombre — plus
 # de champ libre. Chaque entrée fixe aussi sa source (yfinance sauf le groupe
 # "Macro (FRED)"), donc il n'y a plus de choix de source à faire séparément.
-# Liste blanche gérée manuellement : tickers déjà connus pour être délistés, mal
+# Liste blanche gérée manuellement : tickers déjà connus pour être delistés, mal
 # formés pour yfinance, ou renommés depuis — à exclure si jamais réinjectés dans
 # YF_TICKERS_RAW/MANUAL_YF_NAMES ci-dessus lors d'une future extension.
 BAD_TICKERS = {
@@ -305,7 +311,7 @@ DEFAULT_TARGET_GROUPS = {
         ("VYMI", "VYMI_HighDivYield"),
         ("XYLD", "XYLD_XYieldETF"),
     ],
-    "ETFs sectoriels & thÃ©matiques": [
+    "ETFs sectoriels & thématiques": [
         ("IBB", "IBB_Biotech2"),
         ("ICLN", "ICLN_CleanEnergy"),
         ("ITA", "ITA_Defense"),
@@ -354,7 +360,7 @@ DEFAULT_TARGET_GROUPS = {
         ("VCIT", "VCIT_CorpIG"),
         ("VCSH", "VCSH_CorpST"),
     ],
-    "MatiÃ¨res premiÃ¨res & devises (ETFs)": [
+    "Matières premières & devises (ETFs)": [
         ("BZF", "BZF_BrazilReal"),
         ("CBOT_W", "Wheat"),
         ("CEW", "CEW_EM_FX"),
@@ -380,7 +386,7 @@ DEFAULT_TARGET_GROUPS = {
         ("USO", "USO_Oil"),
         ("UUP", "UUP_Dollar"),
     ],
-    "VolatilitÃ©": [
+    "Volatilité": [
         ("SVXY", "SVXY"),
         ("UVXY", "UVXY"),
         ("VIXM", "VIXM"),
