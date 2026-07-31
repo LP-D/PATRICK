@@ -1096,6 +1096,12 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # CPCV (`ctx is None`), cf. limites documentées dans `_run_cpcv_scan`.
         if config.validation.scheme == "walkforward":
             dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
+            if dm_result is not None:
+                # Phase 6.4 (P6.4) : persisté dans une table dédiée (dm_result,
+                # migration 0009), pas seulement dans job.result_json -- queryable
+                # à travers tout l'historique de runs (y compris CLI, sans job web
+                # associé), nécessaire à `trackstats.fdr_across_targets`.
+                trackdb.save_dm_result(conn, run_ids[int(final_best["horizon"])], dm_result)
 
         # Phase 2.2 — essais cumulés sur cette cible/horizon, tout l'historique de
         # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique
