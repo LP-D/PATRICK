@@ -406,3 +406,108 @@ minuscule, walk-forward à 2 folds) : ~70s pour un run complet avec
 en configuration standard (SMOTE, bootstrap uniforme) — l'écart grandit avec
 la taille du train, à anticiper sur un run réel (n_train de plusieurs
 centaines à quelques milliers de lignes par fold).
+
+### 11.4 P6.1 — CPCV (validation croisée purgée combinatoire)
+
+`patrick/validation/cpcv.py` (López de Prado, "Advances in Financial Machine
+Learning", ch. 12), câblé dans `pipeline/engine.py::_run_cpcv_scan`, en
+ALTERNATIVE au walk-forward existant — jamais un remplacement.
+`validation.scheme: walkforward | cpcv` (défaut `walkforward`, comportement
+inchangé pour tout run existant), exposé dans le YAML et le formulaire web.
+
+**Principe** : l'historique est découpé en `n_groups` (N) groupes contigus.
+Pour chaque combinaison de `k_test_groups` (k) groupes servant de test (le
+reste sert de train), purge/embargo sont appliqués à CHAQUE frontière de
+groupe de test — contrairement au walk-forward, qui n'a qu'une seule
+frontière train/test à chaque fold. Un groupe de test intérieur (ni premier
+ni dernier groupe de l'historique) a DEUX frontières train/test adjacentes :
+purge symétrique des deux côtés. Les `C(N, k)` combinaisons se recollent en
+`C(N-1, k-1)` chemins de backtest indépendants (identité combinatoire), par
+l'algorithme d'assignation de López de Prado (`path_assignment`) : chaque
+groupe apparaît une fois comme test dans chacun des chemins qui le
+contiennent, dans un ordre déterministe.
+
+**Défauts calculés, pas choisis par convention** (`n_groups=7`,
+`k_test_groups=2`) : le nombre de chemins obtenu est `C(6,1) = 6` — c'est le
+plus petit couple (N, k=2) qui atteigne exactement `MIN_BLOCKS=6`, le seuil
+minimal de fiabilité du PBO (garde C5, `validation/pbo_reliability.py`).
+N=6 donnerait 5 chemins (insuffisant) ; N=8 donnerait 7 chemins (pas
+nécessaire, coût combinatoire `C(8,2)=28` combinaisons contre `C(7,2)=21`).
+C'est la raison d'être principale de P6.1 : rendre le PBO satisfiable en
+dehors d'un historique de runs déjà long, en produisant directement
+plusieurs blocs OOS indépendants à partir d'UN SEUL run.
+
+**Performance rapportée comme une distribution, jamais un point** : chaque
+ligne de leaderboard CPCV porte `n_paths`, `F1_dir_median`, `F1_dir_q05`,
+`F1_dir_q95`, `F1_dir_std` (`validation/cpcv.py::path_performance_distribution`)
+— `F1_dir` (utilisé par le tri existant du leaderboard) vaut la médiane, pas
+une moyenne sur un unique run comme en walk-forward. PBO branché sur ces
+mêmes chemins (`tracking/stats.py::pbo_for_target_cpcv`, source
+`fold_metric[split='test_path']`, jamais mélangée avec les métriques
+par-combinaison `split='test'`) — `compute_pbo`/`pbo_reliability` (C5)
+réutilisés SANS MODIFICATION, seule la source de la matrice change.
+
+**Limites assumées, documentées** (`_run_cpcv_scan`, docstring) :
+
+- Features paramétriques (EGARCH/Kalman/HMM/.../filtre particulaire) fit UNE
+  SEULE FOIS sur tout l'historique (`fit_end_idx=None`, comme le modèle de
+  production), pas par combinaison — refitter par combinaison demanderait un
+  mécanisme de fit sur un train scindé en segments NON contigus, que les
+  modules paramétriques (pensés pour un simple préfixe `fit_end_idx`) ne
+  supportent pas aujourd'hui. Risque de fuite résiduel sur CES familles
+  seulement, en mode CPCV seulement.
+- Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna, pas de
+  Diebold-Mariano en mode CPCV : ces mécanismes reposent sur la topologie
+  "une seule frontière, train=préfixe" du walk-forward (`_FoldContext`/
+  `ctx.prepare`), pas transposable telle quelle à la topologie CPCV
+  (train=complément de groupes dispersés) dans le périmètre de cette phase.
+  `run_pipeline` renvoie explicitement `None` pour `holdout`/
+  `diebold_mariano`/`holdout_diagnostic` en mode CPCV — jamais une valeur
+  walk-forward réutilisée par erreur — et le rapport HTML l'indique en toutes
+  lettres plutôt que d'afficher un "—" ambigu.
+- Purge et embargo sont STRUCTURELS en CPCV (toujours appliqués à chaque
+  frontière de groupe de test), pas gouvernés par `validation.purge`/
+  `embargo_enabled` (optionnels en walk-forward, où l'effet mesuré était
+  négligeable sur une SEULE frontière) — CPCV expose structurellement
+  davantage de frontières, donc davantage de surface de fuite potentielle à
+  fermer par construction.
+- P6.3 (stabilité de sélection) n'est pas calculée en mode CPCV : les
+  features retenues par combinaison ne sont pas capturées dans
+  `board.rows` sous la forme attendue par `feature_selection_stability`.
+
+**Persistance** : `prediction.path_id` (migration 0007, `PRIMARY KEY
+(trial_id, ts, path_id)` — une même date de test est évaluée par PLUSIEURS
+combinaisons/chemins en CPCV, `(trial_id, ts)` seul ne suffit plus ;
+`path_id=-1` sentinelle "sans objet" pour toute prédiction walk-forward,
+comportement inchangé) ; `fold_metric.split='test_path'` (migration 0008,
+CHECK élargi) pour les métriques par chemin, distinctes de `split='test'`
+(par combinaison).
+
+**Tests** (`tests/test_cpcv.py`, 14 tests) : sur données synthétiques,
+vérifient qu'aucun chemin ne contient d'observation à la fois en train et en
+test, que le purge est appliqué aux deux frontières de chaque groupe de test
+intérieur (et à une seule pour un groupe en bord d'historique), que le
+nombre de chemins correspond exactement à la formule combinatoire, et que
+`path_performance_distribution` renvoie bien médiane/quantiles/écart-type
+(jamais un point) y compris sur des cas dégénérés (NaN, vide).
+`tests/test_pipeline_smoke.py::test_cpcv_scheme_runs_end_to_end_and_reports_a_path_distribution`
+exerce `run_pipeline` bout-en-bout en mode CPCV (y compris le chemin d'export
+du modèle final, qui référence des variables `None` en walk-forward pur —
+`pool_builder`/`ctx`/`last_fold` — et devait donc être branché explicitement) ;
+`test_walkforward_scheme_is_default_and_bit_identical_to_before_p61` est la
+contre-épreuve : ne pas fixer `validation.scheme` laisse le comportement
+walk-forward inchangé.
+
+**Chemins obtenus et coût de calcul mesuré** (config `tiny_config` des tests,
+1500 lignes synthétiques, 1 horizon, 2 valeurs de N features, 1 sampler,
+2 algos) : `n_groups=5`/`k_test_groups=2` (plus petit que le défaut, pour un
+test rapide) → `C(4,1) = 4` chemins reconstruits à partir de `C(5,2) = 10`
+combinaisons. À titre de comparaison, le test walk-forward équivalent
+(`n_wf_folds=2`, même grille) prend un ordre de grandeur de temps comparable
+par essai de configuration — le coût CPCV croît avec le nombre de
+combinaisons (`C(N,k)`, pas `C(N-1,k-1)` chemins) évaluées, chacune
+nécessitant un fit/predict complet : avec les défauts (N=7, k=2), 21
+combinaisons sont évaluées pour reconstruire 6 chemins, contre `n_wf_folds`
+(walk-forward, typiquement 3-5) fits — CPCV coûte structurellement plus cher
+par essai de configuration, en échange de blocs OOS indépendants garantis
+dès un seul run (cf. raison d'être ci-dessus).
