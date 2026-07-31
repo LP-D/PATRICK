@@ -55,9 +55,20 @@ selection:
   method: shap
   n_features_grid: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
   shap_sample: 500
+  # Phase 6.3 -- stabilité de la sélection entre folds (Jaccard + fréquence
+  # de sélection), actif par défaut.
+  track_stability: true
 
 sampler:
   candidates: ["SMOTE"]
+
+# Phase 6.2 -- poids d'unicité + bootstrap séquentiel (López de Prado ch. 4) :
+# actifs par défaut (`uniqueness_weights: true`), mais ne s'appliquent
+# concrètement (sample_weight, RandomForest à bootstrap séquentiel) que si
+# `sampler.candidates` contient "none" (SMOTE synthétise des observations
+# sans span réel). La taille d'échantillon effective est toujours rapportée.
+sampling:
+  uniqueness_weights: true
 
 models:
   algos: ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]

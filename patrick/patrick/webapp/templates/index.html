@@ -189,6 +189,10 @@
                 {{ s }}{{ info(s) }}
             </label>
             {% endfor %}
+            <label class="checkbox">
+                <input type="checkbox" name="uniqueness_weights" {% if view.uniqueness_weights %}checked{% endif %}>
+                {{ t('field_uniqueness_weights') }}{{ info('uniqueness_weights') }}
+            </label>
         </fieldset>
 
         <fieldset>

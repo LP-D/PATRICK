@@ -56,6 +56,8 @@ from patrick.features.target import build_target
 from patrick.models.calibration import calibrate_classifier, predict_with_threshold, search_threshold
 from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
+from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
+from patrick.models.uniqueness import average_uniqueness, build_indicator_matrix, effective_sample_size
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability
@@ -257,6 +259,13 @@ class FoldData:
     test_dates: list[str]
     baselines: dict | None = None
     baseline_predictions: dict | None = None
+    # Phase 6.2 (P6.2) -- poids d'unicité (une valeur par ligne de X_tr, même
+    # ordre) + matrice indicatrice observation x barre (pour le bootstrap
+    # séquentiel) + taille d'échantillon effective (somme des unicités,
+    # TOUJOURS calculée -- propriété des labels, indépendante du sampler).
+    sample_weight: np.ndarray | None = None
+    ind_matrix: np.ndarray | None = None
+    effective_n: float | None = None
 
 
 class _FoldContext:
@@ -318,6 +327,27 @@ class _FoldContext:
         X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
         test_dates = [str(d.date()) for d in idx[te_mask]]
 
+        # Phase 6.2 (P6.2) : spans de label [position, position+horizon] des
+        # observations de TRAIN sur la grille de barres du fold (`self.
+        # all_dates`, pas `idx` -- `idx` a des trous, cf. `build_target`, lignes
+        # "flat" et fin de série retirées, alors que le chevauchement de labels
+        # se raisonne sur le calendrier réel des barres). Fenêtre locale (pas
+        # tout l'historique) : borne la taille de la matrice indicatrice à la
+        # taille réelle du bloc train, pas à des milliers de jours d'historique.
+        train_dates = idx[tr_mask]
+        start_positions_global = self.all_dates.get_indexer(train_dates)
+        valid = start_positions_global >= 0
+        if valid.all() and len(start_positions_global):
+            min_pos = int(start_positions_global.min())
+            n_bars_local = int(start_positions_global.max()) + horizon - min_pos + 1
+            local_positions = start_positions_global - min_pos
+            ind_matrix = build_indicator_matrix(local_positions, horizon, n_bars_local)
+            avg_uniqueness = average_uniqueness(ind_matrix)
+            effective_n = effective_sample_size(avg_uniqueness)
+            sample_weight = avg_uniqueness
+        else:
+            ind_matrix, sample_weight, effective_n = None, None, float(len(y_tr))
+
         baselines = None
         baseline_predictions = None
         if want_baselines:
@@ -330,7 +360,8 @@ class _FoldContext:
             baselines = {name: metrics(y_te, pred) for name, pred in baseline_predictions.items()}
 
         return FoldData(X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()),
-                         test_dates, baselines, baseline_predictions)
+                         test_dates, baselines, baseline_predictions,
+                         sample_weight, ind_matrix, effective_n)
 
 
 def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
@@ -341,7 +372,8 @@ def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, 
 
 def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
               sampler_name: str, algo: str, seed: int, calibration: bool = False,
-              **algo_overrides):
+              sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
+              uniqueness_weights_enabled: bool = True, **algo_overrides):
     """Retourne (metrics_dict, y_pred, confiance_prédite) — `confiance_prédite`
     (probabilité de la classe prédite, une valeur par ligne de test) alimente
     `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe).
@@ -357,11 +389,26 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     jusqu'ici non branché) plutôt qu'un simple `argmax`. La tranche de
     validation du seuil est les 15% les PLUS RÉCENTS du train rééchantillonné
     (les lignes sont déjà en ordre chronologique à ce stade) -- jamais le
-    test, cohérent avec le reste du pipeline."""
+    test, cohérent avec le reste du pipeline.
+
+    `sample_weight`/`ind_matrix` (Phase 6.2, P6.2) : poids d'unicité et
+    matrice indicatrice observation x barre, calculés sur `X_tr`/`y_tr` AVANT
+    rééchantillonnage. Appliqués seulement si `sampler_name=="none"` (`Xr`
+    reste alors X_tr inchangé, même ordre/nombre de lignes -- SMOTE et les
+    autres suréchantillonneurs synthétisent des observations sans span réel,
+    limite assumée documentée dans `SamplingConfig`). Pour RandomForest :
+    bootstrap séquentiel (`SequentialBootstrapRandomForestClassifier`) plutôt
+    que le bootstrap uniforme de sklearn. Pour les autres algos qui le
+    supportent : `sample_weight` passé directement à `.fit()`. Combinaison
+    avec `calibration=True` non gérée (hors périmètre P6.2, limite documentée) :
+    le chemin calibré reste non pondéré même si les poids sont disponibles."""
+    apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
+                         and sample_weight is not None)
     try:
         Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
     except Exception:
         Xr, yr = X_tr, y_tr
+    weight_applies = apply_uniqueness and len(Xr) == len(X_tr)
     clf = get_classifier(algo, seed=seed, **algo_overrides)
 
     n_val = max(int(len(Xr) * 0.15), 20)
@@ -376,7 +423,16 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
         confidence = np.array([row[classes.index(p)] if p in classes else np.nan
                                 for row, p in zip(y_proba, y_pred)])
     else:
-        clf.fit(Xr, yr)
+        if weight_applies and algo == "RandomForest":
+            clf = SequentialBootstrapRandomForestClassifier(seed=seed)
+            clf.fit(Xr, yr, ind_matrix=ind_matrix, sample_weight=sample_weight)
+        elif weight_applies:
+            try:
+                clf.fit(Xr, yr, sample_weight=sample_weight)
+            except TypeError:
+                clf.fit(Xr, yr)
+        else:
+            clf.fit(Xr, yr)
         y_pred = np.asarray(clf.predict(X_te)).ravel()
         y_proba = None
         confidence = None
@@ -604,11 +660,16 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                         for algo in config.models.algos:
                             met, y_pred, confidence = _fit_eval(
                                 X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
-                                calibration=config.models.calibration)
+                                calibration=config.models.calibration,
+                                sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+                                uniqueness_weights_enabled=config.sampling.uniqueness_weights)
                             board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
                                       sampler=sampler_name, algo=algo,
                                       features="|".join(feat_names),
                                       n_train=len(fd.y_tr), n_test=len(fd.y_te),
+                                      # Phase 6.2 (P6.2) : taille d'échantillon effective (somme
+                                      # des unicités) à côté de n_train -- toujours calculée.
+                                      effective_n_train=fd.effective_n,
                                       test_start=fd.test_start, test_end=fd.test_end, **met)
 
                             trial_key = (horizon, regime, n_feat, sampler_name, algo)
@@ -618,8 +679,15 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                     selector=config.selection.method)
                                 n_trials_per_run[run_id] += 1
                             trial_id = trial_ids[trial_key]
+                            # Phase 6.2 (P6.2) : n_eff stocké comme un "metric" de plus
+                            # (schéma générique trial/fold_index/split/metric/value, pas de
+                            # colonne dédiée) -- lu par le rapport HTML à côté de F1_dir/etc.
+                            met_with_n = dict(met)
+                            met_with_n["n_train"] = float(len(fd.y_tr))
+                            if fd.effective_n is not None:
+                                met_with_n["effective_n_train"] = fd.effective_n
                             trackdb.add_fold_metrics(conn, trial_id, fold_index=k + 1,
-                                                      split="test", metrics=met)
+                                                      split="test", metrics=met_with_n)
                             trackdb.add_predictions(conn, trial_id, fold_index=k + 1, split="test",
                                                      ts=fd.test_dates, y_true=fd.y_te,
                                                      y_pred=y_pred, y_proba=confidence)
@@ -736,10 +804,12 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
                 met, y_pred, confidence = _fit_eval(
                     X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
-                    calibration=config.models.calibration, **best_params)
+                    calibration=config.models.calibration,
+                    sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+                    uniqueness_weights_enabled=config.sampling.uniqueness_weights, **best_params)
                 tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
                                     "N": n_feat, "sampler": sampler_name, "algo": algo,
-                                    "best_params": str(best_params),
+                                    "best_params": str(best_params), "effective_n_train": fd.effective_n,
                                     "test_start": fd.test_start, "test_end": fd.test_end, **met})
                 trackdb.add_fold_metrics(conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
                 trackdb.add_predictions(conn, tuned_trial_id, fold_index=k + 1, split="test",

@@ -242,6 +242,30 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         )
     quality_html += stability_html
 
+    sampling_cfg = config.get("sampling", {})
+    uniqueness_enabled = sampling_cfg.get("uniqueness_weights", True)
+    best_test_metrics = best_trial["test_metrics"] if best_trial else {}
+    n_train = best_test_metrics.get("n_train")
+    n_eff = best_test_metrics.get("effective_n_train")
+    if not uniqueness_enabled:
+        sampling_html = ("<p><strong>Poids d'unicité / bootstrap séquentiel</strong> : "
+                          "<span class='off'>désactivés</span> pour ce run "
+                          "(<code>sampling.uniqueness_weights: false</code>).</p>")
+    elif n_train is not None and n_eff is not None:
+        ratio = n_eff / n_train if n_train else float("nan")
+        sampling_html = (
+            f"<p><strong>Taille d'échantillon effective</strong> (config gagnante, moyenne folds) : "
+            f"<span class='on'>n_eff={n_eff:.1f}</span> pour <strong>n={n_train:.0f}</strong> "
+            f"(ratio {ratio:.1%}) — les fenêtres de label se chevauchent (horizon &gt; 1), "
+            f"les observations d'entraînement ne sont pas indépendantes ; l'incertitude "
+            f"statistique de toute métrique ci-dessus est celle d'un échantillon de "
+            f"~{n_eff:.0f} lignes, pas {n_train:.0f}.</p>"
+        )
+    else:
+        sampling_html = ("<p><strong>Taille d'échantillon effective</strong> : "
+                          "<span class='off'>non disponible</span> pour ce run.</p>")
+    quality_html += sampling_html
+
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!doctype html>

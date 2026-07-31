@@ -93,6 +93,7 @@ def default_config_dict() -> dict:
             "track_stability": True,
         },
         "sampler": {"candidates": list(D.DEFAULT_SAMPLER)},
+        "sampling": {"uniqueness_weights": True},
         "models": {
             "algos": list(D.DEFAULT_ML_ALGOS),
             "calibration": D.DEFAULT_CALIBRATION_ENABLED,
@@ -282,6 +283,7 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "track_stability": _checked(form, "track_stability"),
         },
         "sampler": {"candidates": sampler_candidates},
+        "sampling": {"uniqueness_weights": _checked(form, "uniqueness_weights")},
         "models": {
             "algos": algos,
             "calibration": _checked(form, "calibration"),
@@ -340,6 +342,7 @@ def to_view(cfg: dict) -> dict:
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),
         "track_stability": bool(sel.get("track_stability", True)),
         "sampler_candidates": sam.get("candidates", []),
+        "uniqueness_weights": bool(cfg.get("sampling", {}).get("uniqueness_weights", True)),
         "algos": mod.get("algos", []),
         "calibration": bool(mod.get("calibration", False)),
         "stacking": bool(mod.get("stacking", False)),

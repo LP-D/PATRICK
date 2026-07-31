@@ -105,6 +105,20 @@ class SamplerConfig(BaseModel):
     candidates: list[str] = Field(default_factory=lambda: list(D.DEFAULT_SAMPLER))
 
 
+class SamplingConfig(BaseModel):
+    """Phase 6.2 (P6.2) -- poids d'unicité + bootstrap séquentiel
+    (`models/uniqueness.py`, `models/sequential_forest.py`). True (défaut) :
+    jamais un défaut silencieusement désactivé (contrainte transversale
+    phase 6). Ne s'applique concrètement (sample_weight passé au classifieur,
+    RandomForest à bootstrap séquentiel) que lorsque `sampler_name="none"` --
+    SMOTE et les autres suréchantillonneurs synthétisent des observations
+    sans date/span réels, auxquelles un poids d'unicité ne peut pas être
+    rattaché proprement (limite assumée, documentée dans `pipeline/engine.py`).
+    La taille d'échantillon effective, elle, est TOUJOURS calculée et
+    rapportée (propriété de la structure des labels, indépendante du sampler)."""
+    uniqueness_weights: bool = True
+
+
 class ModelsConfig(BaseModel):
     algos: list[str] = Field(default_factory=lambda: list(D.DEFAULT_ML_ALGOS))
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
@@ -139,6 +153,7 @@ class RunConfig(BaseModel):
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     selection: SelectionConfig = Field(default_factory=SelectionConfig)
     sampler: SamplerConfig = Field(default_factory=SamplerConfig)
+    sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     tuning: TuningConfig = Field(default_factory=TuningConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)

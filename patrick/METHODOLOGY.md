@@ -347,3 +347,62 @@ folds par la seule structure de corrélation — une formule combinatoire naïve
 features corrélées sont choisies ENSEMBLE par un sélecteur basé sur
 l'importance, pas indépendamment. En dessous de 0.40, la stabilité observée
 est indiscernable de cet artefact — pas la preuve d'un signal reproductible.
+
+### 11.3 P6.2 — Poids d'unicité et bootstrap séquentiel
+
+`patrick/models/uniqueness.py` + `patrick/models/sequential_forest.py`
+(López de Prado, "Advances in Financial Machine Learning", ch. 4). Avec un
+horizon `h > 1` et une prédiction par barre, les fenêtres de label se
+chevauchent : l'observation à la barre `t` prédit `[t, t+h]`, donc deux
+observations à moins de `h` barres l'une de l'autre partagent une partie du
+même mouvement de marché sous-jacent — les observations d'entraînement ne
+sont PAS indépendantes.
+
+- **Concurrence par barre** : nombre de spans d'observation qui la recouvrent.
+- **Unicité moyenne par observation** : moyenne de `1/concurrence` sur les
+  barres qu'elle couvre.
+- **Taille d'échantillon effective** (`n_eff`) : somme des unicités —
+  toujours calculée et rapportée à côté de `n_train` (`fold_metric`, métriques
+  `n_train`/`effective_n_train`), quel que soit le sampler.
+- **Poids d'unicité en `sample_weight`** + **bootstrap séquentiel pour
+  RandomForest** (`SequentialBootstrapRandomForestClassifier`, tirage
+  favorisant dynamiquement les observations les moins concurrentes avec le
+  tirage en cours) : ne s'appliquent concrètement QUE si `sampler_name=
+  "none"` — SMOTE et les autres suréchantillonneurs synthétisent des
+  observations sans date/span réels, auxquelles un poids d'unicité ne peut
+  pas être rattaché proprement. Limite assumée, documentée dans
+  `SamplingConfig`/`pipeline/engine.py::_fit_eval`.
+
+Toggle `sampling.uniqueness_weights` (défaut `true`, jamais un défaut
+silencieux).
+
+**Mesure sur cible synthétique** (déliverable P6.2, observations
+consécutives, une par barre — cf. `tests/test_uniqueness.py::
+test_effective_sample_size_matches_1_over_horizon_plus_1`) : `n_eff/n`
+converge vers `1/(horizon+1)` (résultat analytique, confirmé numériquement) :
+
+| horizon (jours) | n_eff / n | Exemple (n=1000) |
+|---|---|---|
+| 1  | 0.500 | 500 |
+| 3  | 0.251 | 251 |
+| 5  | 0.167 | 167 |
+| 10 | 0.092 | 92 |
+| 20 | 0.049 | 49 |
+
+Le chiffre est délibérément surprenant : à l'horizon par défaut du pipeline
+VIX (5 jours), un run avec `n_train=1000` a l'incertitude statistique d'un
+échantillon d'environ **170 lignes**, pas 1000 — cf. justification du seuil
+`min_test_rows`/`MIN_BLOCKS` (rapports de correction D3/C5), qui raisonnaient
+déjà en observations réellement indépendantes sans le formaliser aussi
+explicitement.
+
+**Coût de calcul assumé** : le bootstrap séquentiel coûte O(n_obs x n_bars)
+PAR ARBRE (contre O(n_obs) pour un bootstrap uniforme) — `n_estimators`
+réduit à 100 par défaut pour la variante séquentielle (200 pour la forêt
+standard, `models/registry.py`), compromis documenté dans
+`models/sequential_forest.py`. Mesuré sur `tests/test_uniqueness.py` (config
+minuscule, walk-forward à 2 folds) : ~70s pour un run complet avec
+`sampler="none"`+RandomForest+bootstrap séquentiel, contre quelques secondes
+en configuration standard (SMOTE, bootstrap uniforme) — l'écart grandit avec
+la taille du train, à anticiper sur un run réel (n_train de plusieurs
+centaines à quelques milliers de lignes par fold).

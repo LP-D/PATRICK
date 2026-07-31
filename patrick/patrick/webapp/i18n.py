@@ -104,6 +104,8 @@ STRINGS: dict[str, dict[str, str]] = {
                                "en": "Track selection stability (Jaccard across folds)"},
 
     "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
+    "field_uniqueness_weights": {"fr": "Poids d'unicité / bootstrap séquentiel (horizons chevauchants)",
+                                  "en": "Uniqueness weights / sequential bootstrap (overlapping horizons)"},
 
     "section_models": {"fr": "Modèles", "en": "Models"},
     "field_calibration": {"fr": "Calibration (probabilités)", "en": "Calibration (probabilities)"},

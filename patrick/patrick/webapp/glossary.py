@@ -282,6 +282,31 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "almost entirely from fold to fold — the identified signal is "
                "not shown to be reproducible."),
     },
+    "uniqueness_weights": {
+        "fr": ("Poids d'unicité et bootstrap séquentiel (Phase 6.2, López de "
+               "Prado ch. 4) : avec un horizon &gt; 1, les fenêtres de label se "
+               "chevauchent -- les observations d'entraînement ne sont pas "
+               "indépendantes. Calcule l'unicité moyenne de chaque observation "
+               "(inverse de sa concurrence avec les autres), l'utilise comme "
+               "sample_weight, et pour RandomForest, tire chaque arbre par "
+               "bootstrap séquentiel (favorise les observations les moins "
+               "concurrentes) plutôt qu'un bootstrap uniforme. Ne s'applique "
+               "concrètement que si le sampler est \"none\" (SMOTE synthétise "
+               "des observations sans span réel). La taille d'échantillon "
+               "effective (somme des unicités) est toujours rapportée à côté "
+               "de n -- c'est souvent une fraction surprenamment faible."),
+        "en": ("Uniqueness weights and sequential bootstrap (Phase 6.2, López "
+               "de Prado ch. 4): with horizon &gt; 1, label windows overlap -- "
+               "training observations aren't independent. Computes each "
+               "observation's average uniqueness (inverse of its concurrency "
+               "with others), uses it as sample_weight, and for RandomForest, "
+               "draws each tree via sequential bootstrap (favors the least "
+               "concurrent observations) instead of uniform bootstrap. Only "
+               "actually applies when the sampler is \"none\" (SMOTE "
+               "synthesizes observations with no real span). The effective "
+               "sample size (sum of uniquenesses) is always reported next to "
+               "n -- often a surprisingly small fraction of it."),
+    },
     "calibration": {
         "fr": ("Calibration des probabilités prédites (ex. Platt scaling / "
                "isotonic), pour que les scores du modèle reflètent mieux de "
