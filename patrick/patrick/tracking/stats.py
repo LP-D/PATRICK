@@ -9,6 +9,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
+from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
 from patrick.validation.pbo_reliability import pbo_reliability
 
@@ -103,3 +104,23 @@ def pbo_for_target_cpcv(conn: sqlite3.Connection, target: str, horizon: int, reg
     result = compute_pbo(pivot.values)
     result["reliability"] = pbo_reliability(pivot.values)
     return result
+
+
+def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
+    """Phase 6.4 (P6.4) -- correction FDR (Benjamini-Hochberg) à travers
+    TOUTES les cibles ayant un résultat Diebold-Mariano dans l'historique de
+    runs (`dm_result`, migration 0009) : pour chaque cible, la MEILLEURE
+    (plus petite) p-value DM obtenue sur n'importe lequel de ses runs est
+    retenue -- essayer plusieurs cibles et ne retenir que la meilleure
+    soulève le même problème de tests multiples qu'essayer plusieurs configs
+    sur une seule cible (section 4, METHODOLOGY.md), à l'échelle des cibles
+    cette fois. `compute_pbo`/`benjamini_hochberg` eux-mêmes ne sont jamais
+    modifiés ici (même discipline que C5/P6.1) -- seule la requête source
+    change."""
+    rows = conn.execute(
+        "SELECT run.target, MIN(dm_result.p_value) FROM dm_result "
+        "JOIN run ON dm_result.run_id = run.run_id "
+        "GROUP BY run.target"
+    ).fetchall()
+    p_values = {target: p for target, p in rows}
+    return benjamini_hochberg(p_values, alpha=alpha)

@@ -180,6 +180,22 @@ def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
             "selection_freq": [{"feature": f, "selection_freq": freq} for f, freq in freq_rows]}
 
 
+def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict) -> None:
+    """Phase 6.4 (P6.4). Persiste le résultat Diebold-Mariano (Phase 2.5) de
+    CE run pour qu'il soit queryable à travers tout l'historique (cf.
+    migration 0009) -- `dm_result` vient de `validation.diebold_mariano.
+    diebold_mariano()` avec un champ `baseline` en plus (ajouté par
+    `pipeline/engine.py::_evaluate_diebold_mariano`)."""
+    with conn:
+        conn.execute(
+            "INSERT INTO dm_result (run_id, baseline, dm_stat, p_value) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(run_id) DO UPDATE SET baseline = excluded.baseline, "
+            "dm_stat = excluded.dm_stat, p_value = excluded.p_value, "
+            "computed_at = datetime('now')",
+            (run_id, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"]),
+        )
+
+
 def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
                 snapshot_id: str, config_json: str, config_hash: str,
                 git_sha: str, seed: int, job_id: str | None = None) -> None:
