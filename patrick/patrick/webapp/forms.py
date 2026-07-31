@@ -90,6 +90,7 @@ def default_config_dict() -> dict:
             "method": D.DEFAULT_SELECTION_METHOD,
             "n_features_grid": list(D.DEFAULT_N_FEATURES_GRID),
             "shap_sample": D.DEFAULT_SHAP_SAMPLE,
+            "track_stability": True,
         },
         "sampler": {"candidates": list(D.DEFAULT_SAMPLER)},
         "models": {
@@ -278,6 +279,7 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "method": form.get("selection_method", D.DEFAULT_SELECTION_METHOD),
             "n_features_grid": n_features_grid,
             "shap_sample": shap_sample,
+            "track_stability": _checked(form, "track_stability"),
         },
         "sampler": {"candidates": sampler_candidates},
         "models": {
@@ -336,6 +338,7 @@ def to_view(cfg: dict) -> dict:
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),
         "n_features_grid": ",".join(str(n) for n in sel.get("n_features_grid", [])),
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),
+        "track_stability": bool(sel.get("track_stability", True)),
         "sampler_candidates": sam.get("candidates", []),
         "algos": mod.get("algos", []),
         "calibration": bool(mod.get("calibration", False)),

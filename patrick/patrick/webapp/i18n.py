@@ -100,6 +100,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_n_features_grid": {"fr": "Grille N (séparée par des virgules, ex. 5,6,7,8 ou 5-15)",
                                "en": "N grid (comma-separated, e.g. 5,6,7,8 or 5-15)"},
     "field_shap_sample": {"fr": "Échantillon SHAP", "en": "SHAP sample"},
+    "field_track_stability": {"fr": "Suivre la stabilité de la sélection (Jaccard entre folds)",
+                               "en": "Track selection stability (Jaccard across folds)"},
 
     "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
 

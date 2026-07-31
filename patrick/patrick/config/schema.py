@@ -95,6 +95,10 @@ class SelectionConfig(BaseModel):
     method: Literal["shap", "rfe", "lasso"] = D.DEFAULT_SELECTION_METHOD
     n_features_grid: list[int] = Field(default_factory=lambda: list(D.DEFAULT_N_FEATURES_GRID))
     shap_sample: int = D.DEFAULT_SHAP_SAMPLE
+    # Phase 6.3 (P6.3) -- stabilité de la sélection entre folds (Jaccard +
+    # fréquence de sélection, `selection/stability.py`). True (défaut) : jamais
+    # un défaut silencieusement désactivé (contrainte transversale phase 6).
+    track_stability: bool = True
 
 
 class SamplerConfig(BaseModel):

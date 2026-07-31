@@ -140,6 +140,38 @@ def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list
     return [dict(zip(("series", "reason", "detail"), row)) for row in rows]
 
 
+def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: float,
+                            n_folds: int, selection_freq: dict[str, float]) -> None:
+    """Phase 6.3 (P6.3). `mean_jaccard` peut être NaN (moins de 2 folds
+    utilisables) -- stocké tel quel (SQLite REAL accepte NaN), le rapport
+    l'affiche comme "non calculable", pas comme un chiffre trompeur."""
+    with conn:
+        conn.execute(
+            "INSERT INTO run_feature_stability (run_id, mean_jaccard, n_folds) VALUES (?, ?, ?) "
+            "ON CONFLICT(run_id) DO UPDATE SET mean_jaccard = excluded.mean_jaccard, "
+            "n_folds = excluded.n_folds",
+            (run_id, mean_jaccard, n_folds),
+        )
+        conn.execute("DELETE FROM feature_stability WHERE run_id = ?", (run_id,))
+        if selection_freq:
+            conn.executemany(
+                "INSERT INTO feature_stability (run_id, feature, selection_freq) VALUES (?, ?, ?)",
+                [(run_id, feat, freq) for feat, freq in selection_freq.items()],
+            )
+
+
+def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
+    row = conn.execute(
+        "SELECT mean_jaccard, n_folds FROM run_feature_stability WHERE run_id = ?", (run_id,)).fetchone()
+    if row is None:
+        return None
+    freq_rows = conn.execute(
+        "SELECT feature, selection_freq FROM feature_stability WHERE run_id = ? "
+        "ORDER BY selection_freq DESC, feature", (run_id,)).fetchall()
+    return {"mean_jaccard": row[0], "n_folds": row[1],
+            "selection_freq": [{"feature": f, "selection_freq": freq} for f, freq in freq_rows]}
+
+
 def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
                 snapshot_id: str, config_json: str, config_hash: str,
                 git_sha: str, seed: int, job_id: str | None = None) -> None:

@@ -175,6 +175,10 @@
             <label>{{ t('field_shap_sample') }}
                 <input type="number" name="shap_sample" value="{{ view.shap_sample }}">
             </label>
+            <label class="checkbox">
+                <input type="checkbox" name="track_stability" {% if view.track_stability %}checked{% endif %}>
+                {{ t('field_track_stability') }}{{ info('track_stability') }}
+            </label>
         </fieldset>
 
         <fieldset>

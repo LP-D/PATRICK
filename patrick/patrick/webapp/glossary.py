@@ -268,6 +268,20 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "(never a warning lost in the logs). Ingestion fails if too much of "
                "the requested universe is excluded."),
     },
+    "track_stability": {
+        "fr": ("Stabilité de la sélection de features (Phase 6.3) : calcule "
+               "l'indice de Jaccard des ensembles de features retenues entre "
+               "chaque paire de folds (config gagnante de l'horizon), et la "
+               "fréquence de sélection de chaque feature. Un Jaccard moyen bas "
+               "signale une sélection qui change presque entièrement d'un fold "
+               "à l'autre — le signal identifié n'est pas démontré reproductible."),
+        "en": ("Feature selection stability (Phase 6.3): computes the Jaccard "
+               "index of the selected feature sets between each pair of folds "
+               "(the horizon's winning config), and each feature's selection "
+               "frequency. A low mean Jaccard signals a selection that changes "
+               "almost entirely from fold to fold — the identified signal is "
+               "not shown to be reproducible."),
+    },
     "calibration": {
         "fr": ("Calibration des probabilités prédites (ex. Platt scaling / "
                "isotonic), pour que les scores du modèle reflètent mieux de "

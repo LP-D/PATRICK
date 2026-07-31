@@ -58,6 +58,7 @@ from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
+from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
@@ -631,6 +632,32 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     if best:
         print(f"[BEST avant Optuna] h={best['horizon']}j {best['regime']} N={best['N']} "
               f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
+
+    # Phase 6.3 (P6.3) -- stabilité de la sélection de features, PAR HORIZON
+    # (chaque run_id est scopé à un horizon, cf. schéma Phase 1.2) : pour la
+    # config (regime, N) localement gagnante de CET horizon (moyenne F1_dir
+    # sur ses folds, indépendant du choix global `final_best` ci-dessous, qui
+    # ne retient qu'UN SEUL horizon), stabilité mesurée sur les features
+    # réellement retenues par fold (déjà capturées dans `board.rows[...]
+    # ["features"]`, pas de re-sélection). sampler/algo n'influencent pas la
+    # sélection (faite avant leur boucle) : les dédupliquer avant Jaccard.
+    if config.selection.track_stability:
+        for horizon in config.objective.horizons:
+            board_h = Leaderboard()
+            board_h.rows = [r for r in board.rows if r.get("horizon") == horizon and r.get("N") is not None]
+            top_h = board_h.top_k(1, metric="F1_dir")
+            if not top_h:
+                continue
+            winner = top_h[0]
+            fold_feature_sets: dict[int, list[str]] = {}
+            for r in board_h.rows:
+                if r["regime"] == winner["regime"] and r["N"] == winner["N"]:
+                    fold_feature_sets.setdefault(r["fold"], r["features"].split("|") if r["features"] else [])
+            stability = feature_selection_stability(fold_feature_sets)
+            trackdb.save_feature_stability(conn, run_ids[horizon], stability["mean_jaccard"],
+                                            stability["n_folds"], stability["selection_freq"])
+            if stability["warning"]:
+                print(f"  [STABILITÉ] h={horizon}j : {stability['warning']}")
 
     # Rapport d'audit, C4 -- diagnostic holdout de TOUTE la grille SCAN (pas
     # seulement le gagnant final), écrit dans `holdout_diagnostic` (table

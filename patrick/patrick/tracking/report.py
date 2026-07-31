@@ -15,6 +15,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import jobs as jobs_db
@@ -130,6 +131,7 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         # sans job web associé).
         holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
         quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
+        feature_stability = trackdb.get_feature_stability(conn, run_id)
     finally:
         conn.close()
 
@@ -207,6 +209,38 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         quality_html = ("<p><strong>Portes de qualité de données</strong> : "
                          "<span class='off'>désactivées</span> pour ce run "
                          "(<code>data_quality.enabled: false</code>).</p>")
+
+    stability_enabled = config.get("selection", {}).get("track_stability", True)
+    if not stability_enabled:
+        stability_html = ("<p><strong>Stabilité de la sélection de features</strong> : "
+                           "<span class='off'>désactivée</span> pour ce run "
+                           "(<code>selection.track_stability: false</code>).</p>")
+    elif feature_stability is None:
+        stability_html = ("<p><strong>Stabilité de la sélection de features</strong> : "
+                           "<span class='off'>non calculée</span> (aucune config n'a pu être "
+                           "évaluée sur au moins 2 folds pour cet horizon).</p>")
+    else:
+        mj = feature_stability["mean_jaccard"]
+        mj_str = f"{mj:.3f}" if mj == mj else "non calculable (< 2 folds)"
+        warn_html = ""
+        if mj == mj and mj < stability_module.MIN_MEAN_JACCARD_WARNING:
+            warn_html = (f"<p class='flag'>Sous le seuil ({stability_module.MIN_MEAN_JACCARD_WARNING}) -- "
+                          "sélection instable, indiscernable de l'artefact de corrélation mesuré sur "
+                          "données sans signal réel (cf. rapport de correction P6.3). Le signal "
+                          "identifié n'est pas démontré reproductible.</p>")
+        freq_rows_html = "".join(
+            f"<tr><td>{html.escape(r['feature'])}</td><td class='num'>{r['selection_freq']:.0%}</td></tr>"
+            for r in feature_stability["selection_freq"][:20]
+        ) or "<tr><td colspan='2' class='hint'>Aucune donnée.</td></tr>"
+        stability_html = (
+            f"<p><strong>Stabilité de la sélection de features</strong> (Jaccard moyen entre "
+            f"{feature_stability['n_folds']} folds, config gagnante de cet horizon) : "
+            f"<span class='on'>{mj_str}</span></p>{warn_html}"
+            f"<p class='hint'>Fréquence de sélection par feature (top 20) :</p>"
+            f"<table><thead><tr><th>Feature</th><th class='num'>Sélectionnée (folds)</th></tr></thead>"
+            f"<tbody>{freq_rows_html}</tbody></table>"
+        )
+    quality_html += stability_html
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 

@@ -315,3 +315,35 @@ couverte par le contrôle 1 — convergence assumée, documentée dans
 `data/ingest.py::_run_extra_quality_checks`, pas un trou dans la garantie. Les
 contrôles 2 et 4 (trous/fin précoce) s'appliquent tels quels aux séries FRED
 (non pré-remplies à ce stade).
+
+### 11.2 P6.3 — Stabilité de la sélection de features
+
+`patrick/selection/stability.py`, câblé dans `pipeline/engine.py` après le
+scan (toggle `selection.track_stability`, défaut `true`). Pour la
+configuration (régime, N) localement gagnante de CHAQUE horizon (moyenne
+F1_dir sur ses folds — indépendant du choix global `final_best`, qui ne
+retient qu'un seul horizon pour le modèle exporté), calcule :
+
+- l'indice de **Jaccard** des ensembles de features retenues entre chaque
+  paire de folds walk-forward (chemins CPCV demain, P6.1) — moyenné en
+  `mean_jaccard` ;
+- la **fréquence de sélection** de chaque feature sur l'ensemble des folds.
+
+Persisté dans `feature_stability(run_id, feature, selection_freq)` +
+`run_feature_stability(run_id, mean_jaccard, n_folds)` (migration 0006).
+Affiché dans le rapport HTML de run : Jaccard moyen, classement des features
+par fréquence de sélection, et un avertissement explicite si le Jaccard moyen
+tombe sous `MIN_MEAN_JACCARD_WARNING = 0.40`.
+
+**Seuil mesuré, pas choisi par convention** (cf.
+`tests/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`) :
+sur des données synthétiques SANS lien réel entre X et y (cible pur bruit),
+avec des features corrélées entre elles comme le sont les familles
+technical/interactions du pipeline réel, la sélection SHAP RÉELLE (pas une
+formule combinatoire naïve) produit déjà un Jaccard moyen jusqu'à ~0.40 entre
+folds par la seule structure de corrélation — une formule combinatoire naïve
+(deux sous-ensembles aléatoires indépendants) donnerait un seuil de hasard
+~100x plus bas (~0.01), largement sous-estimé car elle ignore que des
+features corrélées sont choisies ENSEMBLE par un sélecteur basé sur
+l'importance, pas indépendamment. En dessous de 0.40, la stabilité observée
+est indiscernable de cet artefact — pas la preuve d'un signal reproductible.
