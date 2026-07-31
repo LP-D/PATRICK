@@ -72,6 +72,30 @@
         </fieldset>
 
         <fieldset>
+            <legend>{{ t('section_data_quality') }}</legend>
+            <p class="hint">{{ t('data_quality_hint') }}</p>
+            <label class="checkbox">
+                <input type="checkbox" name="data_quality_enabled" {% if view.data_quality_enabled %}checked{% endif %}>
+                {{ t('field_data_quality_enabled') }}{{ info('data_quality_enabled') }}
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_max_frozen_run') }}
+                    <input type="number" name="max_frozen_run" value="{{ view.max_frozen_run }}">
+                </label>
+                <label>{{ t('field_max_gap_bdays') }}
+                    <input type="number" name="max_gap_bdays" value="{{ view.max_gap_bdays }}">
+                </label>
+                <label>{{ t('field_max_robust_z') }}
+                    <input type="number" step="any" name="max_robust_z" value="{{ view.max_robust_z }}">
+                </label>
+                <label>{{ t('field_max_universe_exclusion_frac') }}
+                    <input type="number" step="any" min="0" max="1" name="max_universe_exclusion_frac"
+                           value="{{ view.max_universe_exclusion_frac }}">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
             <legend>{{ t('section_features') }}</legend>
             {% for f in all_families %}
             <label class="checkbox">

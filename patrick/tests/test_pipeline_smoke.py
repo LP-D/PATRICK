@@ -66,7 +66,7 @@ def tiny_config(tmp_path) -> RunConfig:
 
 
 def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tmp_path):
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -106,7 +106,7 @@ def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, t
     CE fixture-là, y compris dans le code d'origine, avant même mes
     modifications -- juste jamais exercé par un test qui vérifie
     `result["tuned"]`)."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -134,7 +134,7 @@ def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, 
     réactive), seulement que le run se termine et produit des configs
     affinées quand même. Cf. `_synthetic_raw_no_floor` : même remarque que le
     test précédent sur le choix du générateur synthétique."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -182,7 +182,7 @@ def test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated(tiny_config, 
     synthétique sans l'artefact de `_synthetic_raw` (cf.
     `_synthetic_raw_no_floor`)."""
 
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -224,7 +224,7 @@ def test_holdout_diagnostic_covers_full_scan_grid_not_just_winner(tiny_config, m
     (table séparée) doit couvrir TOUTE la grille SCAN, pour permettre le
     diagnostic de corrélation test/holdout que l'audit demandait (section E)
     et que le schéma d'origine ne permettait pas de calculer (n=1)."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -295,7 +295,7 @@ def test_undersized_fold_is_excluded_with_explicit_warning(tiny_config, monkeypa
     exclusion. Ici, `min_test_rows` est forcé à une valeur qu'aucun fold ne
     peut satisfaire -> vérifie que l'avertissement apparaît (pas seulement que
     le run se termine sans planter)."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
@@ -318,7 +318,7 @@ def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_conf
     """Critère de sortie Phase 1 : un run complet écrit snapshot + run + N trials
     + fold_metrics + baselines + predictions ; deux runs identiques sur le même
     snapshot produisent des métriques identiques."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)

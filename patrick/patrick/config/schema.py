@@ -46,6 +46,20 @@ class UniverseConfig(BaseModel):
     vintage_realtime_date: str | None = None
 
 
+class DataQualityConfig(BaseModel):
+    """Phase 6.5 (P6.5) -- portes de qualité de données à l'ingestion
+    (`data/quality.py`). `enabled=False` restaure le comportement d'avant
+    P6.5 (aucune exclusion au-delà du filtre de couverture déjà en place) --
+    jamais le défaut : une brique de qualité inactive sans le dire serait
+    exactement la même classe de défaut que le repli FRED silencieux déjà
+    corrigé (cf. contrainte transversale, rapport de correction phase 6)."""
+    enabled: bool = True
+    max_frozen_run: int = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
+    max_gap_bdays: int = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
+    max_robust_z: float = D.DEFAULT_QUALITY_MAX_ROBUST_Z
+    max_universe_exclusion_frac: float = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
+
+
 class FeaturesConfig(BaseModel):
     """Quelles familles de features construire (toutes réutilisées du projet VIX)."""
     families: list[str] = Field(default_factory=lambda: list(D.DEFAULT_FEATURE_FAMILIES))
@@ -116,6 +130,7 @@ class RunConfig(BaseModel):
     name: str
     objective: ObjectiveConfig
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
+    data_quality: DataQualityConfig = Field(default_factory=DataQualityConfig)
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     selection: SelectionConfig = Field(default_factory=SelectionConfig)

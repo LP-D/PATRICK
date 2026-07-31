@@ -129,6 +129,7 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         # persisté par run, disponible aussi pour un `patrick run`/`resume` CLI
         # sans job web associé).
         holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
+        quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
     finally:
         conn.close()
 
@@ -186,6 +187,27 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         "(cf. rapport d'audit, C4).</span></p>"
     )
 
+    dq_cfg = config.get("data_quality", {})
+    dq_enabled = dq_cfg.get("enabled", True)
+    if dq_enabled:
+        if quality_issues:
+            issues_html = "".join(
+                f"<tr><td>{html.escape(i['series'])}</td><td>{html.escape(i['reason'])}</td>"
+                f"<td>{html.escape(i['detail'])}</td></tr>" for i in quality_issues)
+            quality_html = (
+                f"<p><strong>Portes de qualité de données</strong> : <span class='on'>actives</span> "
+                f"— {len(quality_issues)} série(s) exclue(s) de l'univers de ce snapshot.</p>"
+                f"<table><thead><tr><th>Série</th><th>Motif</th><th>Détail</th></tr></thead>"
+                f"<tbody>{issues_html}</tbody></table>"
+            )
+        else:
+            quality_html = ("<p><strong>Portes de qualité de données</strong> : "
+                             "<span class='on'>actives</span> — aucune exclusion sur ce snapshot.</p>")
+    else:
+        quality_html = ("<p><strong>Portes de qualité de données</strong> : "
+                         "<span class='off'>désactivées</span> pour ce run "
+                         "(<code>data_quality.enabled: false</code>).</p>")
+
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!doctype html>
@@ -208,6 +230,8 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
   tr.best {{ background: rgba(232,201,122,0.08); }}
   .hint {{ color: var(--muted); font-size: .9rem; }}
   .flag {{ color: #E39A9A; font-size: .85rem; }}
+  .on {{ color: #3FA985; }}
+  .off {{ color: #C1544C; }}
   pre {{ background: var(--panel-2); border-radius: 8px; padding: .9rem; overflow-x: auto; font-size: .85rem; }}
   code {{ background: var(--panel-2); padding: .1rem .3rem; border-radius: 4px; }}
   table.metrics {{ margin: .25rem 0 0; }}
@@ -230,6 +254,8 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
 <p class="hint">Versions des dépendances :</p>
 <pre>{html.escape(json.dumps(lib_versions, indent=1, sort_keys=True))}</pre>
 ''')}
+
+{_section("Corrections phase 6 (rigueur d'échantillonnage)", quality_html)}
 
 {_section("Configuration", f"<pre>{html.escape(json.dumps(config, indent=1, ensure_ascii=False))}</pre>")}
 

@@ -39,6 +39,14 @@ DEFAULT_TUNING_CV_SPLITS = 3
 # top_k/n_trials, indépendamment des autres (comportement corrigé, par défaut).
 DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 
+# Phase 6.5 (P6.5) -- portes de qualité de données à l'ingestion : seuils
+# MESURÉS par simulation, pas choisis par convention -- cf. justification
+# détaillée dans `data/quality.py` (docstring de module).
+DEFAULT_QUALITY_MAX_FROZEN_RUN = 4
+DEFAULT_QUALITY_MAX_GAP_BDAYS = 10
+DEFAULT_QUALITY_MAX_ROBUST_Z = 40.0
+DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
+
 # Options désactivées par défaut mais câblées dans le pipeline (pas en annexe) :
 # purge (VIX_PURGED_CV : delta F1_dir négligeable), calibration (VIX_CALIBRATED_THRESHOLD :
 # gain conditionnel au régime, nuit en STRESS), stacking (VIX_STACKING_WF : perd 28/30).

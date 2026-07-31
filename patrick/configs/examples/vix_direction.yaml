@@ -28,6 +28,17 @@ universe:
     T10YIE: "T10YIE"
     EFFR: "EFFR"
 
+# Phase 6.5 -- portes de qualité de données à l'ingestion (prix figés, trous de
+# cotation, rendements aberrants, fin de série précoce, séries FRED absentes) :
+# actives par défaut (`enabled: true`), jamais un défaut silencieux. Seuils
+# mesurés, cf. patrick/data/quality.py.
+data_quality:
+  enabled: true
+  max_frozen_run: 4
+  max_gap_bdays: 10
+  max_robust_z: 40.0
+  max_universe_exclusion_frac: 0.30
+
 features:
   families: ["technical", "interactions", "spike", "vol_models", "macro"]
   interact_top_base: 40

@@ -260,3 +260,58 @@ Ces pratiques cassent une ou plusieurs des garanties ci-dessus — le code les
 6. Afficher un Sharpe sans le nombre d'essais qui l'ont produit.
 7. Écraser un snapshot de données existant au lieu d'en créer un nouveau
    (`data/store.py` — dédupliqué par hash de contenu, jamais réécrit).
+8. Exclure une série de l'univers sans motif explicite persisté (Phase 6.5 --
+   `data/quality.py` : chaque exclusion porte un `reason`, jamais un simple
+   `[WARN]` de log).
+
+## 11. Phase 6 — rigueur d'échantillonnage
+
+Contrainte transversale à toute la phase 6 : aucune des briques ci-dessous ne
+doit devenir un défaut silencieux. Chacune est explicitement activable/
+désactivable dans le YAML (`RunConfig`) et le formulaire web, et le rapport
+HTML de run indique lesquelles étaient actives (section "Corrections phase 6",
+`tracking/report.py`).
+
+### 11.1 P6.5 — Portes de qualité de données à l'ingestion
+
+`patrick/data/quality.py`, câblé dans `data/ingest.py` (toggle
+`data_quality.enabled`, défaut `true`). Chaque série candidate (yfinance ou
+FRED) passe six contrôles avant d'entrer dans l'univers de features :
+
+1. **Prix figés** : `n` clôtures consécutives identiques (défaut 4).
+2. **Trous de cotation** : plus de `n` jours ouvrés sans observation (défaut 10).
+3. **Rendements aberrants** : au-delà de `n` écarts-types **robustes** (MAD ×
+   1.4826, résistant aux queues épaisses — pas un écart-type classique, qui
+   serait lui-même gonflé par l'aberration qu'on cherche à détecter). Défaut 40.
+4. **Fin de série précoce** : dernière observation trop antérieure à la date de
+   fin demandée (probable délistage) — même seuil que 2.
+5. **Série FRED absente ou discontinuée** : aucune observation renvoyée.
+6. **Couverture insuffisante** : réutilise `universe.yf_coverage` (Phase 0,
+   0.85 par défaut), pas un nouveau seuil inventé.
+
+**Seuils mesurés, pas choisis par convention** (cf. docstring de module et
+`tests/test_data_quality.py::test_thresholds_measured_not_arbitrary_*`) :
+simulation de centaines de séries synthétiques à queues épaisses réalistes
+(Student-t, df=5) — le seuil de prix figés (4) et le seuil de rendement
+aberrant (40 écarts-types robustes) ne se déclenchent JAMAIS sur ces séries
+propres, mais se déclenchent nettement sur une corruption injectée réaliste
+(split boursier non ajusté, erreur de décimale). Le seuil de trou de cotation
+(10 jours ouvrés) est calé sur le plus long cluster de jours fériés de marché
+connu (~5 jours), doublé par marge de sécurité.
+
+Comportement : une série qui échoue un contrôle est EXCLUE avec un motif
+explicite (`reason` + `detail`), persisté en base (table `data_quality_issue`,
+liée au `snapshot_id`) — jamais un `[WARN]` perdu dans les logs (même classe de
+défaut que le repli FRED silencieux, déjà corrigé, cf. section "Accès aux
+données" du README). Si plus de `max_universe_exclusion_frac` (défaut 30%) de
+l'univers demandé est exclu, l'ingestion **échoue** plutôt que de continuer sur
+un univers décimé silencieusement.
+
+Limite assumée : `download_universe` (yfinance) ffille déjà en interne avant
+de renvoyer les colonnes retenues (couverture) — les trous de cotation y sont
+donc déjà comblés au moment où `data/quality.py` les voit. Une interruption
+prolongée y apparaît comme une clôture figée (valeur ffillée répétée), déjà
+couverte par le contrôle 1 — convergence assumée, documentée dans
+`data/ingest.py::_run_extra_quality_checks`, pas un trou dans la garantie. Les
+contrôles 2 et 4 (trous/fin précoce) s'appliquent tels quels aux séries FRED
+(non pré-remplies à ce stade).

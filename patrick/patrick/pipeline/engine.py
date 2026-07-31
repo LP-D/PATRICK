@@ -502,11 +502,14 @@ def _config_hash(config: RunConfig) -> str:
     return hashlib.sha256(config.model_dump_json().encode()).hexdigest()[:16]
 
 
-def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None]:
+def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None, list]:
     """Lit le contexte de snapshot déposé par `ingest()` sur `raw.attrs` (Phase
     1.6). En repli — `raw` vient d'un `ingest` monkeypatché par un test, sans
     `.attrs` — calcule un identifiant ad-hoc à partir du contenu, pour que la
-    persistance reste fonctionnelle/testable même sans le vrai `ingest()`."""
+    persistance reste fonctionnelle/testable même sans le vrai `ingest()`.
+
+    `quality_issues` (Phase 6.5, P6.5) : liste de dicts (`[]` par défaut sur un
+    `ingest` monkeypatché, cf. `data/ingest.py::_attach_snapshot_context`)."""
     snapshot_id = raw.attrs.get("snapshot_id")
     data_hash = raw.attrs.get("data_hash")
     if not snapshot_id:
@@ -514,7 +517,7 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
             pd.util.hash_pandas_object(raw, index=True).values.tobytes()).hexdigest()[:12]
         snapshot_id = f"adhoc__{data_hash}"
     return snapshot_id, data_hash or snapshot_id, raw.attrs.get("n_tickers"), \
-        raw.attrs.get("n_fred_series"), raw.attrs.get("fred_source")
+        raw.attrs.get("n_fred_series"), raw.attrs.get("fred_source"), raw.attrs.get("quality_issues", [])
 
 
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
@@ -524,12 +527,14 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     seed = config.output.seed
     t0 = time.time()
 
-    raw = ingest(config.objective, config.universe, store, force=force_ingest)
+    raw = ingest(config.objective, config.universe, store, force=force_ingest,
+                 data_quality=config.data_quality)
     target_col = clean_symbol(config.objective.target_symbol)
 
     conn = trackdb.connect(db_path)
-    snapshot_id, data_hash, n_tickers, n_fred_series, fred_src = _snapshot_context(raw)
+    snapshot_id, data_hash, n_tickers, n_fred_series, fred_src, quality_issues = _snapshot_context(raw)
     trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
+    trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
     config_json = config.model_dump_json()
     config_hash = _config_hash(config)
     git_sha = trackdb.current_git_sha()

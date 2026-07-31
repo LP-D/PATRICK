@@ -26,7 +26,7 @@ def ingest_cmd(
 ) -> None:
     cfg = RunConfig.from_yaml(config)
     store = DataStore()
-    df = ingest(cfg.objective, cfg.universe, store, force=force)
+    df = ingest(cfg.objective, cfg.universe, store, force=force, data_quality=cfg.data_quality)
     typer.echo(f"Ingestion terminée : {df.shape[0]} lignes x {df.shape[1]} colonnes.")
 
 

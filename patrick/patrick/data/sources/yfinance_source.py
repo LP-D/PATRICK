@@ -48,24 +48,46 @@ def download_one(ticker: str, start: str) -> pd.Series | None:
 
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
-                       t0: float | None = None) -> pd.DataFrame:
+                       t0: float | None = None, issues: list | None = None) -> pd.DataFrame:
     """Télécharge un univers de tickers avec repli individuel sur les échecs/faible
     couverture. Retourne un DataFrame indexé par date, une colonne par ticker retenu.
+
+    `issues` (Phase 6.5, P6.5) : si fourni, chaque ticker exclu par CE filtre de
+    couverture (le seul déjà en place ici) y ajoute un `QualityIssue` -- motif
+    réel constaté au point de décision, pas reconstruit après coup. Les autres
+    contrôles de qualité (prix figés, trous, rendements aberrants, fin de
+    série précoce) tournent séparément dans `data/ingest.py` sur les séries
+    survivantes, via `data/quality.py`.
     """
+    from patrick.data.quality import QualityIssue
+
     t0 = t0 or time.time()
     raw = download_batch(tickers, start)
     if len(raw):
+        coverage = raw.notna().mean()
+        low_coverage = coverage[coverage < coverage_min]
+        if issues is not None:
+            for col, cov in low_coverage.items():
+                issues.append(QualityIssue(col, "couverture_insuffisante",
+                                            f"{cov:.1%} de jours ouvrés renseignés (seuil {coverage_min:.0%})"))
         raw = raw.loc[:, raw.notna().mean() >= coverage_min].ffill().dropna(how="all")
     kept = set(raw.columns) if len(raw) else set()
     missing = [t for t in tickers if _clean_col(t) not in kept]
     for t in missing:
         s = download_one(t, start)
         if s is None:
+            if issues is not None:
+                issues.append(QualityIssue(_clean_col(t), "echec_telechargement",
+                                            "aucune donnée renvoyée par yfinance (repli individuel)"))
             continue
         if len(raw):
             s = s.reindex(raw.index).ffill()
-        if s.notna().mean() >= coverage_min:
+        cov = s.notna().mean()
+        if cov >= coverage_min:
             raw[s.name] = s
+        elif issues is not None:
+            issues.append(QualityIssue(s.name, "couverture_insuffisante",
+                                        f"{cov:.1%} de jours ouvrés renseignés (seuil {coverage_min:.0%})"))
     print(f"  [yfinance] {raw.shape[1] if len(raw) else 0}/{len(tickers)} tickers retenus "
           f"(couverture>={coverage_min:.0%}) en {time.time()-t0:.1f}s")
     return raw

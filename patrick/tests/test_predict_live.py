@@ -76,7 +76,7 @@ def _tiny_config(tmp_path) -> RunConfig:
 @pytest.mark.slow  # ~69s mesuré (rapport de correction, D1) : run pipeline complet + 2 appels predict_live
 def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
     raw_v1 = _synthetic_raw()
-    monkeypatch.setattr(engine_module, "ingest", lambda objective, universe, store=None, force=False: raw_v1)
+    monkeypatch.setattr(engine_module, "ingest", lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
 
     db_path = str(tmp_path / "patrick.db")
     store = DataStore(root=str(tmp_path / "store"))
@@ -88,7 +88,7 @@ def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
     conn.close()
 
     raw_v2 = _extend_raw(raw_v1, extra_days=10, seed=1)
-    monkeypatch.setattr(predict_module, "ingest", lambda objective, universe, store=None, force=False: raw_v2)
+    monkeypatch.setattr(predict_module, "ingest", lambda objective, universe, store=None, force=False, data_quality=None: raw_v2)
 
     live1 = predict_module.predict_live(run_id, db_path=db_path, store=store)
     assert live1["y_pred"] in (0, 1, 2, 3)
@@ -106,7 +106,7 @@ def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
     assert row[0] is None  # résultat pas encore connu
 
     raw_v3 = _extend_raw(raw_v2, extra_days=10, seed=2)
-    monkeypatch.setattr(predict_module, "ingest", lambda objective, universe, store=None, force=False: raw_v3)
+    monkeypatch.setattr(predict_module, "ingest", lambda objective, universe, store=None, force=False, data_quality=None: raw_v3)
 
     live2 = predict_module.predict_live(run_id, db_path=db_path, store=store)
     assert live2["n_outcomes_updated"] == 1  # la prédiction de live1 est désormais résolue

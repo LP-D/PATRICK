@@ -62,6 +62,13 @@ def default_config_dict() -> dict:
             "start_date": "2000-01-01",
             "yf_coverage": 0.85,
         },
+        "data_quality": {
+            "enabled": True,
+            "max_frozen_run": D.DEFAULT_QUALITY_MAX_FROZEN_RUN,
+            "max_gap_bdays": D.DEFAULT_QUALITY_MAX_GAP_BDAYS,
+            "max_robust_z": D.DEFAULT_QUALITY_MAX_ROBUST_Z,
+            "max_universe_exclusion_frac": D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC,
+        },
         "features": {
             "families": list(D.DEFAULT_FEATURE_FAMILIES),
             "vol_models": list(D.DEFAULT_VOL_MODELS),
@@ -190,9 +197,14 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         flat_thr = float(form.get("flat_thr", D.DEFAULT_FLAT_THR))
         yf_coverage = float(form.get("yf_coverage", 0.85))
         min_train_frac = float(form.get("min_train_frac", D.DEFAULT_MIN_TRAIN_FRAC))
+        max_robust_z = float(form.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z))
+        max_universe_exclusion_frac = float(
+            form.get("max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC))
     except ValueError:
         errors.append("Un champ numérique décimal est invalide.")
         flat_thr, yf_coverage, min_train_frac = D.DEFAULT_FLAT_THR, 0.85, D.DEFAULT_MIN_TRAIN_FRAC
+        max_robust_z = D.DEFAULT_QUALITY_MAX_ROBUST_Z
+        max_universe_exclusion_frac = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
 
     try:
         n_wf_folds = int(form.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS))
@@ -209,6 +221,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         seed = int(form.get("seed", D.DEFAULT_SEED))
         embargo_bars_raw = (form.get("embargo_bars") or "").strip()
         embargo_bars = int(embargo_bars_raw) if embargo_bars_raw else None
+        max_frozen_run = int(form.get("max_frozen_run", D.DEFAULT_QUALITY_MAX_FROZEN_RUN))
+        max_gap_bdays = int(form.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS))
     except ValueError:
         errors.append("Un champ numérique entier est invalide.")
         n_wf_folds = D.DEFAULT_N_WF_FOLDS
@@ -218,6 +232,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         top_k, n_trials, cv_splits = D.DEFAULT_TUNING_TOP_K, D.DEFAULT_TUNING_N_TRIALS, D.DEFAULT_TUNING_CV_SPLITS
         embargo_bars = D.DEFAULT_EMBARGO_BARS
         seed = D.DEFAULT_SEED
+        max_frozen_run = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
+        max_gap_bdays = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
 
     config_dict = {
         "name": name,
@@ -233,6 +249,13 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "fred_series": fred_series,
             "start_date": (form.get("start_date") or "2000-01-01").strip(),
             "yf_coverage": yf_coverage,
+        },
+        "data_quality": {
+            "enabled": _checked(form, "data_quality_enabled"),
+            "max_frozen_run": max_frozen_run,
+            "max_gap_bdays": max_gap_bdays,
+            "max_robust_z": max_robust_z,
+            "max_universe_exclusion_frac": max_universe_exclusion_frac,
         },
         "features": {
             "families": families,
@@ -278,6 +301,7 @@ def to_view(cfg: dict) -> dict:
     """Convertit un dict de config (types réels, listes/dicts) en valeurs
     plates pour préremplir les champs du formulaire `index.html`."""
     obj, uni = cfg.get("objective", {}), cfg.get("universe", {})
+    dq = cfg.get("data_quality", {})
     feat, val = cfg.get("features", {}), cfg.get("validation", {})
     sel, sam = cfg.get("selection", {}), cfg.get("sampler", {})
     mod, tun = cfg.get("models", {}), cfg.get("tuning", {})
@@ -290,6 +314,12 @@ def to_view(cfg: dict) -> dict:
         "regimes": ",".join(obj.get("regimes", [])),
         "start_date": uni.get("start_date", "2000-01-01"),
         "yf_coverage": uni.get("yf_coverage", 0.85),
+        "data_quality_enabled": bool(dq.get("enabled", True)),
+        "max_frozen_run": dq.get("max_frozen_run", D.DEFAULT_QUALITY_MAX_FROZEN_RUN),
+        "max_gap_bdays": dq.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS),
+        "max_robust_z": dq.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z),
+        "max_universe_exclusion_frac": dq.get(
+            "max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC),
         "families": feat.get("families", []),
         "vol_models": feat.get("vol_models") or list(D.DEFAULT_VOL_MODELS),
         "interact_top_base": feat.get("interact_top_base", 40),

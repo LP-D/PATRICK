@@ -55,6 +55,26 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_start_date": {"fr": "Date de début", "en": "Start date"},
     "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
 
+    "section_data_quality": {"fr": "Qualité de données (portes à l'ingestion)",
+                              "en": "Data quality (ingestion gates)"},
+    "data_quality_hint": {"fr": ("Chaque série est contrôlée avant d'entrer dans l'univers de features "
+                                 "(prix figés, trous de cotation, rendements aberrants, fin de série "
+                                 "précoce, séries FRED absentes) — exclusion motivée et persistée, "
+                                 "jamais silencieuse."),
+                           "en": ("Every series is checked before entering the feature universe (frozen "
+                                  "prices, quote gaps, aberrant returns, early series end, missing FRED "
+                                  "series) — exclusions are explicit and persisted, never silent.")},
+    "field_data_quality_enabled": {"fr": "Portes de qualité actives",
+                                    "en": "Data quality gates active"},
+    "field_max_frozen_run": {"fr": "Clôtures identiques consécutives max.",
+                              "en": "Max. consecutive identical closes"},
+    "field_max_gap_bdays": {"fr": "Trou de cotation max. (jours ouvrés)",
+                             "en": "Max. quote gap (business days)"},
+    "field_max_robust_z": {"fr": "Rendement aberrant — z robuste max.",
+                            "en": "Aberrant return — max. robust z"},
+    "field_max_universe_exclusion_frac": {"fr": "Fraction max. de l'univers exclue avant échec",
+                                           "en": "Max. excluded universe fraction before failure"},
+
     "section_features": {"fr": "Familles de features", "en": "Feature families"},
     "vol_models_hint": {"fr": "Modèles de volatilité (famille vol_models) :",
                          "en": "Volatility models (vol_models family):"},

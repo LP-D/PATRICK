@@ -64,7 +64,7 @@ def _tiny_config(tmp_path) -> RunConfig:
 def test_report_for_cli_run_without_job_id(tmp_path, monkeypatch):
     """Un run lancé en CLI (`patrick run`) n'a pas de `job_id` -> le rapport
     l'indique clairement plutôt que d'afficher des chiffres inventés."""
-    def fake_ingest(objective, universe, store=None, force=False):
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)

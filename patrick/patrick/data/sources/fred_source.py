@@ -77,9 +77,14 @@ def download_series(name: str, series_id: str, start: str,
 
 
 def download_fred_universe(series_map: dict[str, str], start: str,
-                            realtime_date: str | None = None) -> pd.DataFrame:
+                            realtime_date: str | None = None, issues: list | None = None) -> pd.DataFrame:
     """series_map: {nom_colonne: identifiant_FRED}. `realtime_date` : cf.
-    `download_series` — propagé à chaque série de l'univers."""
+    `download_series` — propagé à chaque série de l'univers.
+
+    `issues` (Phase 6.5, P6.5) : si fourni, chaque série sans donnée (échec de
+    récupération ou série discontinuée) y ajoute un `QualityIssue`."""
+    from patrick.data.quality import check_fred_missing
+
     api_key = os.environ.get(FRED_API_KEY_ENV)
     if not api_key:
         print("  [WARN] FRED_API_KEY non défini : repli sur le scrape CSV public, qui ne "
@@ -93,6 +98,10 @@ def download_fred_universe(series_map: dict[str, str], start: str,
         s = download_series(name, sid, start, realtime_date=realtime_date)
         if s is not None:
             cols.append(s)
+        elif issues is not None:
+            issue = check_fred_missing(name, s)
+            if issue is not None:
+                issues.append(issue)
     if not cols:
         return pd.DataFrame()
     return pd.concat(cols, axis=1)

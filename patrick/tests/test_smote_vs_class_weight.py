@@ -52,7 +52,7 @@ def test_pipeline_accepts_none_in_sampler_grid(tmp_path, monkeypatch):
         return df
 
     monkeypatch.setattr(engine_module, "ingest",
-                         lambda objective, universe, store=None, force=False: _synthetic_raw())
+                         lambda objective, universe, store=None, force=False, data_quality=None: _synthetic_raw())
 
     config = RunConfig.model_validate({
         "name": "ab_test_smoke",

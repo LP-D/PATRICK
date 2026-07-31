@@ -114,6 +114,32 @@ def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
         )
 
 
+def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
+    """Phase 6.5 (P6.5). Idempotent par snapshot : si ce `snapshot_id` a déjà
+    des lignes (même contenu déjà ingéré via un `force=True` répété), on ne
+    duplique pas -- le snapshot lui-même est déjà dédupliqué par hash de
+    contenu (`data/store.py`), les motifs d'exclusion qui l'ont produit le
+    sont donc aussi par construction."""
+    if not issues:
+        return
+    with conn:
+        existing = conn.execute(
+            "SELECT 1 FROM data_quality_issue WHERE snapshot_id = ? LIMIT 1", (snapshot_id,)).fetchone()
+        if existing:
+            return
+        conn.executemany(
+            "INSERT INTO data_quality_issue (snapshot_id, series, reason, detail) VALUES (?, ?, ?, ?)",
+            [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues],
+        )
+
+
+def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT series, reason, detail FROM data_quality_issue WHERE snapshot_id = ? ORDER BY id",
+        (snapshot_id,)).fetchall()
+    return [dict(zip(("series", "reason", "detail"), row)) for row in rows]
+
+
 def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
                 snapshot_id: str, config_json: str, config_hash: str,
                 git_sha: str, seed: int, job_id: str | None = None) -> None:

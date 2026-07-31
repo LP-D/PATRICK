@@ -85,7 +85,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
 
         config = RunConfig.model_validate_json(run["config_json"])
         store = store or DataStore()
-        raw = ingest(config.objective, config.universe, store, force=True)
+        raw = ingest(config.objective, config.universe, store, force=True, data_quality=config.data_quality)
 
         base_pool = build_base_feature_pool(raw, config, target_col)
         full_pool = pd.concat([base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)

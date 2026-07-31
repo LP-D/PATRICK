@@ -252,6 +252,22 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "with it even after purging. Distinct from purge (which acts on "
                "the train side)."),
     },
+    "data_quality_enabled": {
+        "fr": ("Portes de qualité de données (Phase 6.5) : chaque série candidate "
+               "est contrôlée avant d'entrer dans l'univers de features (prix figés, "
+               "trous de cotation, rendements aberrants au-delà d'un z robuste, fin "
+               "de série précoce probablement délistée, séries FRED absentes ou "
+               "discontinuées). Une série qui échoue un contrôle est exclue avec un "
+               "motif explicite, persisté (jamais un avertissement perdu dans les "
+               "logs). L'ingestion échoue si trop de l'univers demandé est exclu."),
+        "en": ("Data quality gates (Phase 6.5): every candidate series is checked "
+               "before entering the feature universe (frozen prices, quote gaps, "
+               "aberrant returns beyond a robust z-score, an early series end likely "
+               "meaning delisting, missing or discontinued FRED series). A series "
+               "that fails a check is excluded with an explicit, persisted reason "
+               "(never a warning lost in the logs). Ingestion fails if too much of "
+               "the requested universe is excluded."),
+    },
     "calibration": {
         "fr": ("Calibration des probabilités prédites (ex. Platt scaling / "
                "isotonic), pour que les scores du modèle reflètent mieux de "
