@@ -143,14 +143,17 @@ def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list
 def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: float,
                             n_folds: int, selection_freq: dict[str, float]) -> None:
     """Phase 6.3 (P6.3). `mean_jaccard` peut être NaN (moins de 2 folds
-    utilisables) -- stocké tel quel (SQLite REAL accepte NaN), le rapport
-    l'affiche comme "non calculable", pas comme un chiffre trompeur."""
+    utilisables) -- converti en NULL SQL avant stockage (colonne nullable,
+    cf. migration 0006 ; sqlite3/le driver Python ne garantit pas qu'un NaN
+    Python survive le binding en `REAL`), le rapport l'affiche comme "non
+    calculable", jamais comme un chiffre trompeur."""
+    mean_jaccard_sql = mean_jaccard if mean_jaccard == mean_jaccard else None  # NaN != NaN
     with conn:
         conn.execute(
             "INSERT INTO run_feature_stability (run_id, mean_jaccard, n_folds) VALUES (?, ?, ?) "
             "ON CONFLICT(run_id) DO UPDATE SET mean_jaccard = excluded.mean_jaccard, "
             "n_folds = excluded.n_folds",
-            (run_id, mean_jaccard, n_folds),
+            (run_id, mean_jaccard_sql, n_folds),
         )
         conn.execute("DELETE FROM feature_stability WHERE run_id = ?", (run_id,))
         if selection_freq:
@@ -161,14 +164,19 @@ def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: 
 
 
 def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
+    """`mean_jaccard` revient en NaN (pas `None`) quand non calculable --
+    NULL SQL uniquement à la persistance (cf. `save_feature_stability`),
+    NaN côté Python pour que les comparaisons numériques existantes
+    (`mj == mj`) restent valables sans traiter `None` séparément partout."""
     row = conn.execute(
         "SELECT mean_jaccard, n_folds FROM run_feature_stability WHERE run_id = ?", (run_id,)).fetchone()
     if row is None:
         return None
+    mean_jaccard = row[0] if row[0] is not None else float("nan")
     freq_rows = conn.execute(
         "SELECT feature, selection_freq FROM feature_stability WHERE run_id = ? "
         "ORDER BY selection_freq DESC, feature", (run_id,)).fetchall()
-    return {"mean_jaccard": row[0], "n_folds": row[1],
+    return {"mean_jaccard": mean_jaccard, "n_folds": row[1],
             "selection_freq": [{"feature": f, "selection_freq": freq} for f, freq in freq_rows]}
 
 
