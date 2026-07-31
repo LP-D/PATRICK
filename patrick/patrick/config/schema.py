@@ -71,6 +71,14 @@ class FeaturesConfig(BaseModel):
 
 
 class ValidationConfig(BaseModel):
+    # Phase 6.1 (P6.1) -- CPCV en ALTERNATIVE au walk-forward, jamais un
+    # remplacement : "walkforward" reste le défaut, comportement inchangé
+    # pour tout run existant. cf. patrick/validation/cpcv.py pour la
+    # justification calculée de n_groups/k_test_groups par défaut (rend le
+    # PBO satisfiable au sens de la garde C5, MIN_BLOCKS=6).
+    scheme: Literal["walkforward", "cpcv"] = "walkforward"
+    n_groups: int = D.DEFAULT_CPCV_N_GROUPS
+    k_test_groups: int = D.DEFAULT_CPCV_K_TEST_GROUPS
     n_wf_folds: int = D.DEFAULT_N_WF_FOLDS
     min_train_frac: float = D.DEFAULT_MIN_TRAIN_FRAC
     purge: bool = D.DEFAULT_PURGE_ENABLED
