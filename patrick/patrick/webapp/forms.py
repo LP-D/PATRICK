@@ -78,6 +78,9 @@ def default_config_dict() -> dict:
             "pool_prefilter": D.DEFAULT_POOL_PREFILTER,
         },
         "validation": {
+            "scheme": "walkforward",
+            "n_groups": D.DEFAULT_CPCV_N_GROUPS,
+            "k_test_groups": D.DEFAULT_CPCV_K_TEST_GROUPS,
             "n_wf_folds": D.DEFAULT_N_WF_FOLDS,
             "min_train_frac": D.DEFAULT_MIN_TRAIN_FRAC,
             "purge": D.DEFAULT_PURGE_ENABLED,
@@ -209,6 +212,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         max_universe_exclusion_frac = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
 
     try:
+        n_groups = int(form.get("n_groups", D.DEFAULT_CPCV_N_GROUPS))
+        k_test_groups = int(form.get("k_test_groups", D.DEFAULT_CPCV_K_TEST_GROUPS))
         n_wf_folds = int(form.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS))
         min_train_rows = int(form.get("min_train_rows", 100))
         min_test_rows = int(form.get("min_test_rows", 20))
@@ -227,6 +232,8 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
         max_gap_bdays = int(form.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS))
     except ValueError:
         errors.append("Un champ numérique entier est invalide.")
+        n_groups = D.DEFAULT_CPCV_N_GROUPS
+        k_test_groups = D.DEFAULT_CPCV_K_TEST_GROUPS
         n_wf_folds = D.DEFAULT_N_WF_FOLDS
         min_train_rows, min_test_rows = 100, 20
         interact_top_base, interact_top_pairs, interact_final_n = 40, 20, 30
@@ -268,6 +275,9 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             "pool_prefilter": pool_prefilter,
         },
         "validation": {
+            "scheme": form.get("scheme", "walkforward"),
+            "n_groups": n_groups,
+            "k_test_groups": k_test_groups,
             "n_wf_folds": n_wf_folds,
             "min_train_frac": min_train_frac,
             "purge": _checked(form, "purge"),
@@ -330,6 +340,9 @@ def to_view(cfg: dict) -> dict:
         "interact_top_pairs": feat.get("interact_top_pairs", 20),
         "interact_final_n": feat.get("interact_final_n", 30),
         "pool_prefilter": feat.get("pool_prefilter", D.DEFAULT_POOL_PREFILTER),
+        "scheme": val.get("scheme", "walkforward"),
+        "n_groups": val.get("n_groups", D.DEFAULT_CPCV_N_GROUPS),
+        "k_test_groups": val.get("k_test_groups", D.DEFAULT_CPCV_K_TEST_GROUPS),
         "n_wf_folds": val.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS),
         "min_train_frac": val.get("min_train_frac", D.DEFAULT_MIN_TRAIN_FRAC),
         "purge": bool(val.get("purge", False)),
