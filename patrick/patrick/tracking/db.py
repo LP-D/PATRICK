@@ -286,19 +286,25 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
-                     ts: list[str], y_true, y_pred, y_proba=None) -> None:
+                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1) -> None:
     """`y_true` peut contenir `None` (Phase 4.6, `split='live'` : la prédiction
     est écrite AVANT que le résultat soit connu) -- stocké en NULL plutôt que
     de planter sur `float(None)`, complété plus tard par
-    `update_prediction_outcome`."""
+    `update_prediction_outcome`.
+
+    `path_id` (Phase 6.1, P6.1) : `-1` (défaut) = sans objet (walk-forward,
+    comportement inchangé) ; sous CPCV, un chemin de backtest distinct
+    (`validation/cpcv.py::path_assignment`) -- une même date peut alors
+    apparaître dans plusieurs lignes `prediction` (une par chemin qui la
+    couvre), (trial_id, ts, path_id) les distingue."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
-              float(yp_proba) if yp_proba is not None else None)
+              float(yp_proba) if yp_proba is not None else None, path_id)
             for t, yt, yp, yp_proba in zip(ts, y_true, y_pred, proba)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
-            "y_pred, y_proba) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "y_pred, y_proba, path_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
 

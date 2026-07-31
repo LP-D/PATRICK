@@ -67,3 +67,39 @@ def pbo_for_target(conn: sqlite3.Connection, target: str, horizon: int, regime: 
     # interprétable seul (cf. rapport d'audit, section E).
     result["reliability"] = pbo_reliability(pivot.values)
     return result
+
+
+def pbo_for_target_cpcv(conn: sqlite3.Connection, target: str, horizon: int, regime: str,
+                         metric: str = "F1_dir") -> dict:
+    """Phase 6.1 (P6.1) -- PBO branché sur les CHEMINS de backtest CPCV
+    (`validation/cpcv.py::path_assignment`) plutôt que sur les blocs
+    walk-forward -- raison d'être principale de cette brique : avec
+    `n_groups=7`/`k_test_groups=2` par défaut, 6 chemins sont TOUJOURS
+    disponibles par (cible, horizon, régime) dès qu'un seul run CPCV a
+    tourné, contre potentiellement moins de `MIN_BLOCKS` blocs walk-forward
+    (garde C5) sur un historique de runs encore court. Même mécanisme que
+    `pbo_for_target` (`compute_pbo` non modifié, cf. C5), juste une source
+    différente : `split='test_path'` (fold_index=chemin), écrit par
+    `pipeline/engine.py::_run_cpcv_scan`, jamais mélangé avec les métriques
+    par combinaison (`split='test'`, fold_index=combinaison)."""
+    rows = conn.execute(
+        "SELECT trial.trial_id, fold_metric.fold_index, fold_metric.value "
+        "FROM trial "
+        "JOIN run ON trial.run_id = run.run_id "
+        "JOIN fold_metric ON fold_metric.trial_id = trial.trial_id "
+        "WHERE run.target = ? AND run.horizon = ? AND trial.regime = ? "
+        "AND fold_metric.split = 'test_path' AND fold_metric.metric = ?",
+        (target, horizon, regime, metric),
+    ).fetchall()
+    if not rows:
+        return {"pbo": np.nan, "n_combinations": 0, "n_trials": 0, "n_blocks": 0, "mean_logit": np.nan,
+                "reliability": pbo_reliability(np.empty((0, 0)))}
+
+    df = pd.DataFrame(rows, columns=["trial_id", "fold_index", "value"])
+    pivot = df.pivot_table(index="trial_id", columns="fold_index", values="value").dropna()
+    if pivot.empty:
+        return {"pbo": np.nan, "n_combinations": 0, "n_trials": 0, "n_blocks": 0, "mean_logit": np.nan,
+                "reliability": pbo_reliability(np.empty((0, 0)))}
+    result = compute_pbo(pivot.values)
+    result["reliability"] = pbo_reliability(pivot.values)
+    return result
