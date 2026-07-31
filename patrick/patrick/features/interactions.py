@@ -20,6 +20,24 @@ INTERACTION_TYPES = {
 }
 
 
+def apply_interaction(fn, a: pd.Series, b: pd.Series) -> pd.Series:
+    """Rapport de correction, N2 -- SEUL point d'application autorisé des
+    fonctions d'`INTERACTION_TYPES`, pour que la garde anti-inf ne puisse plus
+    être oubliée par un appelant.
+
+    `ratio`/`zrel` neutralisent déjà un dénominateur EXACTEMENT nul
+    (`.replace(0, np.nan)`), mais pas un dénominateur simplement très petit :
+    ce cas produit un ±inf réel (pas un NaN), que XGBoost rejette sans
+    condition ("Input data contains `inf`"). La garde vivait jusqu'ici dans
+    `discover_interactions` seulement, alors que les formules retenues sur le
+    fold pilote sont ensuite APPLIQUÉES aux autres folds (`_apply_interaction_
+    formulas`, pipeline/engine.py) -- là où le dénominateur peut justement
+    devenir ~0 alors qu'il était sain sur le pilote. C'était le chemin
+    reproduit en production. Un ±inf n'a ici aucun sens numérique : traité
+    comme valeur manquante, au même titre que le dénominateur nul."""
+    return fn(a, b).replace([np.inf, -np.inf], np.nan)
+
+
 def _prefilter_top(X: np.ndarray, y: np.ndarray, names: list[str], top_n: int,
                     seed: int = 42) -> list[str]:
     top_n = min(top_n, len(names))
@@ -44,13 +62,7 @@ def discover_interactions(X_df: pd.DataFrame, y: np.ndarray, top_base: int = 40,
         for b in pair_names[i + 1:]:
             for tname, fn in INTERACTION_TYPES.items():
                 try:
-                    # `ratio`/`zrel` gardent déjà un dénominateur EXACTEMENT nul
-                    # (`.replace(0, np.nan)`), mais pas un dénominateur simplement
-                    # très petit -- ce cas produit un +-inf réel (pas NaN), que
-                    # XGBoost (utilisé par `_prefilter_top` juste après) rejette
-                    # sans condition (`Input data contains inf`). Traité comme
-                    # une valeur manquante, au même titre que le cas déjà géré.
-                    col = fn(X_df[a], X_df[b]).replace([np.inf, -np.inf], np.nan)
+                    col = apply_interaction(fn, X_df[a], X_df[b])
                     if col.notna().sum() > 20:
                         candidates[f"{a}__{tname}__{b}"] = col
                 except Exception:

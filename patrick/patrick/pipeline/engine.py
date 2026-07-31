@@ -51,7 +51,7 @@ from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
 from patrick.features import macro as feat_macro
 from patrick.features import spike, technical, vol_models
-from patrick.features.interactions import INTERACTION_TYPES, discover_interactions
+from patrick.features.interactions import INTERACTION_TYPES, apply_interaction, discover_interactions
 from patrick.features.target import build_target
 from patrick.models.calibration import calibrate_classifier, predict_with_threshold, search_threshold
 from patrick.models.registry import get_classifier
@@ -73,6 +73,52 @@ from patrick.validation.embargo import embargo_mask
 from patrick.validation.metrics import metrics
 from patrick.validation.purge import purge_mask
 from patrick.validation.walkforward import build_fold_cuts, describe_folds
+
+
+def _finite_features(values: np.ndarray, where: str) -> np.ndarray:
+    """Rapport de correction, N2 -- remplace `np.nan_to_num(...)` aux trois
+    endroits où la matrice de features est construite (walk-forward, holdout,
+    CPCV).
+
+    `np.nan_to_num` seul ne suffit PAS, et donnait une fausse sécurité : il
+    mappe ±inf sur ±1.797e308 (le maximum float64), valeur finie sur l'instant
+    mais astronomique, que le `RobustScaler` appliqué juste après divise par
+    l'IQR de la colonne. Dès que cet IQR est < 1 -- cas courant parmi des
+    milliers de colonnes (rendements, z-scores, indicateurs bornés) -- la
+    division REDONNE ±inf, et XGBoost refuse la matrice ("Input data contains
+    `inf` or a value too large, while `missing` is not set to `inf`"). Mesuré :
+    une seule cellule infinie dans une colonne d'IQR 0.025 suffit à reproduire
+    l'erreur ; le scaler étant ajusté sur le train seul, un inf présent
+    uniquement dans le TEST passe aussi par ce chemin.
+
+    Un ±inf en amont vient toujours d'un calcul dégénéré (division par un
+    dénominateur ~0 dans un ratio/une interaction, log d'une valeur <= 0) : il
+    ne porte aucune information numérique exploitable, il est donc traité comme
+    une valeur MANQUANTE -- exactement le même chemin que NaN, déjà converti en
+    0.0 ici -- et jamais comme "un nombre très grand". Compté et signalé, jamais
+    silencieux (même discipline que la garde D3 sur les folds exclus)."""
+    n_inf = int(np.isinf(values).sum())
+    if n_inf:
+        print(f"  [WARN] {where} : {n_inf} valeur(s) infinie(s) dans le pool de features "
+              f"(calcul dégénéré : dénominateur ~0, log d'une valeur <= 0) — "
+              f"traitées comme manquantes.")
+    return np.nan_to_num(np.where(np.isfinite(values), values, np.nan))
+
+
+def _finite_scaled(scaled: np.ndarray, where: str) -> np.ndarray:
+    """Rapport de correction, N2 -- garantit après mise à l'échelle l'invariant
+    dont XGBoost a besoin (matrice entièrement finie), que `_finite_features`
+    ne suffit pas à assurer à lui seul : une valeur d'entrée simplement TRÈS
+    GRANDE mais finie (jamais un inf, donc invisible en amont) peut encore
+    déborder en divisant par un IQR minuscule. Filet de sécurité en sortie,
+    pas un remplacement du nettoyage en entrée -- les deux sont nécessaires."""
+    if not np.isfinite(scaled).all():
+        n_bad = int((~np.isfinite(scaled)).sum())
+        print(f"  [WARN] {where} : {n_bad} valeur(s) non finie(s) APRÈS mise à l'échelle "
+              f"(débordement d'une valeur extrême divisée par un IQR minuscule) — "
+              f"ramenées à la médiane (0 après RobustScaler).")
+        scaled = np.nan_to_num(np.where(np.isfinite(scaled), scaled, np.nan))
+    return scaled
 
 
 def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
@@ -190,7 +236,11 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
                 a_name, b_name = col_name.split(marker, 1)
                 if a_name in pool.columns and b_name in pool.columns:
                     try:
-                        full_inter[col_name] = fn(pool[a_name], pool[b_name])
+                        # N2 : `apply_interaction` (jamais `fn` directement) --
+                        # porte la garde anti-inf, indispensable ICI : une
+                        # formule saine sur le fold pilote peut voir son
+                        # dénominateur passer à ~0 sur un autre fold.
+                        full_inter[col_name] = apply_interaction(fn, pool[a_name], pool[b_name])
                     except Exception:
                         pass
                 break
@@ -323,9 +373,12 @@ class _FoldContext:
             return None
 
         X_pool_df = pool[self.feature_pool].reindex(idx)
+        where = f"fold {fold_idx + 1} (h={horizon}j régime={regime})"
         sc = RobustScaler()
-        X_tr = sc.fit_transform(np.nan_to_num(X_pool_df.values[tr_mask]))
-        X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
+        X_tr = _finite_scaled(
+            sc.fit_transform(_finite_features(X_pool_df.values[tr_mask], f"{where} train")), where)
+        X_te = _finite_scaled(
+            sc.transform(_finite_features(X_pool_df.values[te_mask], f"{where} test")), where)
         test_dates = [str(d.date()) for d in idx[te_mask]]
 
         # Phase 6.2 (P6.2) : spans de label [position, position+horizon] des
@@ -512,9 +565,12 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
         return None
 
     X_pool_df = pool[feature_pool].reindex(idx)
+    where = f"holdout (h={horizon}j régime={regime})"
     sc = RobustScaler()
-    X_tr = sc.fit_transform(np.nan_to_num(X_pool_df.values[tr_mask]))
-    X_te = sc.transform(np.nan_to_num(X_pool_df.values[te_mask]))
+    X_tr = _finite_scaled(
+        sc.fit_transform(_finite_features(X_pool_df.values[tr_mask], f"{where} train")), where)
+    X_te = _finite_scaled(
+        sc.transform(_finite_features(X_pool_df.values[te_mask], f"{where} test")), where)
     cols = _select(config, X_tr, y_tr, n_feat, seed)
     met, y_pred, confidence = _fit_eval(X_tr[:, cols], y_tr, X_te[:, cols], y_te,
                                          sampler_name, algo, seed,
@@ -655,7 +711,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         date_group = group_of_date.reindex(idx)
         reg_al = reg_r.reindex(idx).fillna("NORMAL").values
         X_pool_df = full_pool[feature_pool].reindex(idx)
-        X_all = np.nan_to_num(X_pool_df.values)
+        X_all = _finite_features(X_pool_df.values, f"CPCV (h={horizon}j)")
         y_all = target_series.values.astype(int)
 
         for regime in config.objective.regimes:
@@ -683,9 +739,10 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                       f"test={len(y_te)} (min {config.validation.min_test_rows}).")
                                 continue
 
+                            where = f"CPCV combo {combo} (h={horizon}j régime={regime})"
                             sc = RobustScaler()
-                            X_tr_full = sc.fit_transform(X_all[tr_mask])
-                            X_te_full = sc.transform(X_all[te_mask])
+                            X_tr_full = _finite_scaled(sc.fit_transform(X_all[tr_mask]), where)
+                            X_te_full = _finite_scaled(sc.transform(X_all[te_mask]), where)
                             cols = _select(config, X_tr_full, y_tr, n_feat, seed)
                             X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
 
