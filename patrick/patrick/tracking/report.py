@@ -19,6 +19,7 @@ from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import jobs as jobs_db
+from patrick.tracking import stats as trackstats
 from patrick.validation.cpcv import n_paths as cpcv_n_paths
 from patrick.validation.cpcv import path_performance_distribution
 
@@ -131,7 +132,7 @@ def _fmt_pbo_reliability(reliability: dict | None) -> str:
     )
 
 
-def generate_report_html(run_id: str, db_path: str | None = None) -> str:
+def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: float = 0.10) -> str:
     conn = trackdb.connect(db_path)
     try:
         run = trackdb.get_run(conn, run_id)
@@ -153,6 +154,11 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
         quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
         feature_stability = trackdb.get_feature_stability(conn, run_id)
+        # Phase 6.4 (P6.4) : correction FDR entre TOUTES les cibles ayant un
+        # résultat Diebold-Mariano dans l'historique (pas seulement celle de
+        # ce run) -- calculée pendant que la connexion est encore ouverte.
+        # `fdr_alpha` paramétrable (défaut 0.10), cf. `patrick report --fdr-alpha`.
+        fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
     finally:
         conn.close()
 
@@ -257,6 +263,47 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         "<span class='hint'>Lecture seule : ne choisit jamais une config, n'informe que ce rapport "
         "(cf. rapport d'audit, C4).</span></p>"
     )
+
+    # Phase 6.4 (P6.4) -- correction FDR entre cibles : la MEILLEURE p-value
+    # DM historique de CETTE cible, resituée parmi toutes les cibles ayant un
+    # résultat DM (jamais un chiffre isolé -- même principe que C5 pour le
+    # PBO). `run["target"]` peut être absent de `fdr_result["results"]` si
+    # aucun de ses runs walk-forward n'a encore de `dm_result` (run CPCV
+    # seul, ou aucun `final_best` obtenu jusqu'ici).
+    this_target_fdr = fdr_result["results"].get(run["target"])
+    if fdr_result["n_tested"] == 0:
+        fdr_html = ("<p class='hint'>Aucun résultat Diebold-Mariano disponible dans l'historique "
+                     "(aucun run walk-forward n'a encore produit de config gagnante) — "
+                     "correction FDR non calculable.</p>")
+    else:
+        fdr_html = (
+            f"<p><strong>Cibles testées (avec résultat DM)</strong> : {fdr_result['n_tested']} · "
+            f"<strong>significatives (p brut ≤ {fdr_result['alpha']})</strong> : "
+            f"{fdr_result['n_raw_significant']} · "
+            f"<strong>significatives après correction BH</strong> : "
+            f"<span class='on'>{fdr_result['n_bh_significant']}</span></p>"
+        )
+        if this_target_fdr:
+            sig_class = "on" if this_target_fdr["significant"] else "off"
+            sig_label = "significatif" if this_target_fdr["significant"] else "non significatif"
+            fdr_html += (
+                f"<p><strong>Cette cible</strong> ({html.escape(run['target'])}) : "
+                f"meilleure p-value DM historique = {this_target_fdr['p_value']:.4f}, "
+                f"p-value ajustée (BH) = {this_target_fdr['adjusted_p_value']:.4f} "
+                f"(rang {this_target_fdr['rank']}/{fdr_result['n_tested']}) — "
+                f"<span class='{sig_class}'>{sig_label}</span> au seuil FDR {fdr_result['alpha']}.</p>"
+            )
+        else:
+            fdr_html += (
+                "<p class='hint'>Cette cible n'a pas encore de résultat Diebold-Mariano "
+                "(pas de run walk-forward avec config gagnante à ce jour).</p>"
+            )
+        fdr_html += (
+            "<p class='hint'>Chercher un signal en essayant plusieurs cibles soulève le même "
+            "problème de tests multiples qu'essayer plusieurs configs sur une seule cible "
+            "(section 4, METHODOLOGY.md) — la p-value ajustée, pas la p-value brute, est celle "
+            "qui compte pour juger une cible significative.</p>"
+        )
 
     dq_cfg = config.get("data_quality", {})
     dq_enabled = dq_cfg.get("enabled", True)
@@ -402,6 +449,8 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
 
 {_section("Validité statistique (Phase 2)", stats_html)}
 
+{_section("Correction FDR entre cibles (Phase 6.4)", fdr_html)}
+
 {_section("Importances SHAP", "<p class='hint'>Non incluses : les features sélectionnées "
           "ne sont actuellement pas persistées par nom en base (seul le nombre `N` l'est) — "
           "limite connue, hors scope Phase 3.</p>")}
@@ -409,8 +458,9 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
 </body></html>"""
 
 
-def save_report(run_id: str, output_path: str | None = None, db_path: str | None = None) -> str:
-    html_content = generate_report_html(run_id, db_path=db_path)
+def save_report(run_id: str, output_path: str | None = None, db_path: str | None = None,
+                 fdr_alpha: float = 0.10) -> str:
+    html_content = generate_report_html(run_id, db_path=db_path, fdr_alpha=fdr_alpha)
     if output_path is None:
         os.makedirs(DEFAULT_REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(DEFAULT_REPORTS_DIR, f"{run_id}.html")

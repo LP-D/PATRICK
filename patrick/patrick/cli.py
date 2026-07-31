@@ -79,13 +79,16 @@ def report_cmd(
     run_id: str = typer.Option(..., "--run-id", help="Identifiant du run (table `run`)"),
     output: str = typer.Option(
         None, "--output", help="Chemin du fichier HTML (défaut : ~/.patrick/reports/<run_id>.html)"),
+    fdr_alpha: float = typer.Option(
+        0.10, "--fdr-alpha",
+        help="Seuil FDR (Phase 6.4) pour la correction Benjamini-Hochberg entre cibles"),
 ) -> None:
     """Export HTML d'un run (Phase 3.3) : config, essais, métriques, baselines,
     validité statistique (holdout/DM/PBO si le run vient de l'interface web),
     contexte de reproductibilité — lu uniquement depuis `patrick.db`, sans
     dépendre des artefacts CSV/joblib du run."""
     try:
-        path = report_module.save_report(run_id, output_path=output)
+        path = report_module.save_report(run_id, output_path=output, fdr_alpha=fdr_alpha)
     except ValueError as exc:
         typer.echo(str(exc))
         raise typer.Exit(code=1)
