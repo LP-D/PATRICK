@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T00:00:00Z",
+  "title": "Design System: PATRICK",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Encre",
+        "canonical": "#0B0D12",
+        "tonalRamp": ["#05060A", "#0B0D12", "#12151C", "#1B1F28", "#2A2F3B", "#454B5A", "#6D7382", "#A9AEB9"]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Ardoise",
+        "canonical": "#151822",
+        "tonalRamp": ["#090B10", "#0F1119", "#151822", "#1F2330", "#2E3444", "#48506490", "#727A8F", "#ADB3C0"]
+      },
+      "panel-2": {
+        "role": "neutral",
+        "displayName": "Ardoise Claire",
+        "canonical": "#1b1f2b",
+        "tonalRamp": ["#0C0E14", "#13161E", "#1b1f2b", "#262B3A", "#373E52", "#535C76", "#7D869E", "#B4BAC8"]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Ivoire",
+        "canonical": "#F3EFE7",
+        "tonalRamp": ["#3A362E", "#544F44", "#6F695B", "#8B8474", "#A8A190", "#C6BFAE", "#DFD9CC", "#F3EFE7"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Sable Éteint",
+        "canonical": "#9A9587",
+        "tonalRamp": ["#26241F", "#3B382F", "#524E42", "#6A6555", "#837D6A", "#9A9587", "#B8B4A9", "#D6D3CB"]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Graduation Dorée",
+        "canonical": "rgba(201, 162, 75, 0.25)",
+        "tonalRamp": ["rgba(201,162,75,0.05)", "rgba(201,162,75,0.10)", "rgba(201,162,75,0.15)", "rgba(201,162,75,0.25)", "rgba(201,162,75,0.40)", "rgba(201,162,75,0.60)", "rgba(201,162,75,0.80)", "rgba(201,162,75,1)"]
+      },
+      "gold-1": {
+        "role": "primary",
+        "displayName": "Or Pâle",
+        "canonical": "#E8C97A",
+        "tonalRamp": ["#2E2513", "#4A3B1E", "#68522A", "#8A6A2F", "#B08F4B", "#CFAE63", "#E8C97A", "#F4E2B4"]
+      },
+      "gold-2": {
+        "role": "primary",
+        "displayName": "Or Brûlé",
+        "canonical": "#8A6A2F",
+        "tonalRamp": ["#1F1709", "#332612", "#4A381A", "#644B24", "#8A6A2F", "#AC8845", "#CBA968", "#E4CB9C"]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Vert Éprouvé",
+        "canonical": "#3FA985",
+        "tonalRamp": ["#0C241D", "#133A2E", "#1C5241", "#276C56", "#32886B", "#3FA985", "#6BC4A6", "#A3DEC9"]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Ambre d'Alerte",
+        "canonical": "#D9A441",
+        "tonalRamp": ["#2C1F07", "#45300C", "#5F4313", "#7C581C", "#9C7027", "#BC8A33", "#D9A441", "#EDC880"]
+      },
+      "error": {
+        "role": "secondary",
+        "displayName": "Rouge Sourd",
+        "canonical": "#C1544C",
+        "tonalRamp": ["#2A0F0D", "#421815", "#5C221E", "#782E28", "#963C34", "#B24A41", "#C1544C", "#DC8C86"]
+      },
+      "neutral": {
+        "role": "tertiary",
+        "displayName": "Bleu Ardoise",
+        "canonical": "#6E8CAE",
+        "tonalRamp": ["#111A25", "#1B2939", "#26394F", "#334B67", "#425F80", "#55759A", "#6E8CAE", "#A3B6CC"]
+      },
+      "pending": {
+        "role": "tertiary",
+        "displayName": "Indigo d'Attente",
+        "canonical": "#6E7FD8",
+        "tonalRamp": ["#12162E", "#1C2247", "#283062", "#36407F", "#46529D", "#5865BC", "#6E7FD8", "#A3AEE9"]
+      },
+      "disabled": {
+        "role": "tertiary",
+        "displayName": "Gris Étouffé",
+        "canonical": "#6B6558",
+        "tonalRamp": ["#16150F", "#242219", "#343125", "#464232", "#595442", "#6B6558", "#8F8878", "#B7B1A3"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Titre de page. Un seul par écran." },
+      "headline": { "displayName": "Headline", "purpose": "Titre de vue majeure (simulateur)." },
+      "title": { "displayName": "Title", "purpose": "Titre d'encart, de carte, de section." },
+      "body": { "displayName": "Body", "purpose": "Texte courant et valeurs de formulaire." },
+      "label": { "displayName": "Label", "purpose": "En-têtes de tableau et libellés de métrique, en capitales. Seul rôle autorisé à passer en capitales." }
+    },
+    "shadows": [
+      { "name": "sticky-bar", "value": "0 2px 14px rgba(0, 0, 0, 0.35)", "purpose": "Uniquement sous la barre supérieure collante, pour la détacher du contenu qui défile." },
+      { "name": "overlay-float", "value": "0 8px 24px rgba(0, 0, 0, 0.45)", "purpose": "Uniquement pour l'infobulle de glossaire, qui sort du flux." },
+      { "name": "action-glow", "value": "0 4px 14px rgba(232, 201, 122, 0.2)", "purpose": "Unique ombre colorée du système, réservée à l'action principale au repos." },
+      { "name": "action-glow-hover", "value": "0 6px 18px rgba(232, 201, 122, 0.3)", "purpose": "Intensification de la lueur d'action au survol." },
+      { "name": "focus-ring", "value": "0 0 0 3px rgba(232, 201, 122, 0.15)", "purpose": "Anneau de focus des champs, doublé d'un passage du bord en or plein." }
+    ],
+    "motion": [
+      { "name": "state-transition", "value": "border-color 0.15s ease, box-shadow 0.15s ease", "purpose": "Transition par défaut des changements d'état (bord, focus, survol)." },
+      { "name": "press", "value": "transform 0.1s ease", "purpose": "Enfoncement de l'action principale au clic." },
+      { "name": "progress", "value": "transform 0.4s ease", "purpose": "Avancement de la barre de progression, seule animation longue du système." }
+    ],
+    "breakpoints": [
+      { "name": "collapse", "value": "980px" },
+      { "name": "container-max", "value": "1560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Lance un run ou une simulation. Unique inversion de contraste du système.",
+      "html": "<button class=\"ds-btn-primary\">Lancer le run</button>",
+      "css": ".ds-btn-primary { padding: 12px 26px; border: none; border-radius: 10px; background: linear-gradient(135deg, var(--gold-1, #E8C97A), var(--gold-2, #8A6A2F)); color: var(--bg, #0B0D12); font-family: var(--font-sans, Inter, sans-serif); font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(232,201,122,0.2); transition: transform 0.1s ease, box-shadow 0.15s ease; } .ds-btn-primary:hover { box-shadow: 0 6px 18px rgba(232,201,122,0.3); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(232,201,122,0.35); } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Six états sémantiques. Le point en currentColor rend l'état lisible sans dépendre uniquement de la teinte.",
+      "html": "<span class=\"ds-badge ds-badge--ok\">terminé</span> <span class=\"ds-badge ds-badge--warning\">non significatif</span> <span class=\"ds-badge ds-badge--error\">échec</span> <span class=\"ds-badge ds-badge--neutral\">walk-forward</span> <span class=\"ds-badge ds-badge--pending\">en file</span> <span class=\"ds-badge ds-badge--disabled\">non calculable</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; margin: 0 4px 4px 0; border-radius: 999px; border: 1px solid transparent; font-family: var(--font-sans, Inter, sans-serif); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; } .ds-badge::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; background: currentColor; } .ds-badge--ok { color: var(--ok, #3FA985); background: rgba(63,169,133,0.12); border-color: rgba(63,169,133,0.3); } .ds-badge--warning { color: var(--warning, #D9A441); background: rgba(217,164,65,0.12); border-color: rgba(217,164,65,0.3); } .ds-badge--error { color: var(--error, #C1544C); background: rgba(193,84,76,0.12); border-color: rgba(193,84,76,0.3); } .ds-badge--neutral { color: var(--neutral, #6E8CAE); background: rgba(110,140,174,0.12); border-color: rgba(110,140,174,0.3); } .ds-badge--pending { color: var(--pending, #6E7FD8); background: rgba(110,127,216,0.12); border-color: rgba(110,127,216,0.3); } .ds-badge--disabled { color: var(--disabled, #6B6558); background: rgba(107,101,88,0.15); border-color: rgba(107,101,88,0.35); }"
+    },
+    {
+      "name": "Metric with Reliability",
+      "kind": "custom",
+      "refersTo": "metric",
+      "description": "Composant signature. Trois parties obligatoires : libellé, valeur, contrepartie de fiabilité. La troisième ne peut pas être omise.",
+      "html": "<div class=\"ds-metric\"><div class=\"ds-metric__label\">PBO (blocs walk-forward)</div><div class=\"ds-metric__value ds-metric__value--ok\">0.412</div><div class=\"ds-metric__rel\">IC 90% [0.287, 0.559] (bootstrap, 20 combinaisons)</div></div><div class=\"ds-metric\"><div class=\"ds-metric__label\">Diebold-Mariano</div><div class=\"ds-metric__value ds-metric__value--disabled\">—</div><div class=\"ds-metric__rel\">Sans objet en mode CPCV (repose sur la topologie « train=préfixe »).</div></div>",
+      "css": ".ds-metric { display: inline-block; vertical-align: top; width: 260px; margin: 0 12px 12px 0; padding: 16px; border: 1px solid var(--border, rgba(201,162,75,0.25)); border-radius: 12px; background: var(--panel-2, #1b1f2b); font-family: var(--font-sans, Inter, sans-serif); } .ds-metric__label { color: var(--muted, #9A9587); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; } .ds-metric__value { font-family: var(--font-serif, 'Cormorant Garamond', Georgia, serif); font-weight: 600; font-size: 1.6rem; font-variant-numeric: tabular-nums; color: var(--text, #F3EFE7); } .ds-metric__value--ok { color: var(--ok, #3FA985); } .ds-metric__value--disabled { color: var(--disabled, #6B6558); } .ds-metric__rel { margin-top: 8px; font-size: 0.75rem; line-height: 1.4; color: var(--muted, #9A9587); }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "data-table",
+      "description": "Tableau de résultats. En-têtes en capitales, chiffres tabulaires, ligne gagnante surlignée en or très dilué.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Run</th><th>Schéma</th><th>F1_dir</th><th>DM p-value</th></tr></thead><tbody><tr class=\"ds-table__best\"><td>vix_direction</td><td>walk-forward</td><td>0.6120</td><td>0.0300</td></tr><tr><td>aapl_direction</td><td>CPCV</td><td>0.5480</td><td>—</td></tr></tbody></table>",
+      "css": ".ds-table { width: 100%; border-collapse: collapse; font-family: var(--font-sans, Inter, sans-serif); font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--text, #F3EFE7); } .ds-table th, .ds-table td { border-bottom: 1px solid var(--border, rgba(201,162,75,0.25)); padding: 6px 8px; text-align: left; } .ds-table th { color: var(--muted, #9A9587); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.04em; } .ds-table tbody tr:hover { background: var(--panel-2, #1b1f2b); } .ds-table tr.ds-table__best { background: rgba(232,201,122,0.08); }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Champ en creux : fond plus sombre que son conteneur. Le focus remplace le contour natif, il ne le supprime pas.",
+      "html": "<label class=\"ds-field\">Horizons (jours, séparés par des virgules)<input class=\"ds-input\" type=\"text\" value=\"3,5,10\"></label>",
+      "css": ".ds-field { display: block; font-family: var(--font-sans, Inter, sans-serif); font-size: 0.9rem; color: var(--muted, #9A9587); } .ds-input { width: 100%; padding: 8px 10px; margin-top: 4px; border-radius: 8px; border: 1px solid var(--border, rgba(201,162,75,0.25)); background: var(--bg, #0B0D12); color: var(--text, #F3EFE7); font-family: var(--font-sans, Inter, sans-serif); font-size: 0.95rem; font-variant-numeric: tabular-nums; transition: border-color 0.15s ease, box-shadow 0.15s ease; } .ds-input:focus { outline: none; border-color: var(--gold-1, #E8C97A); box-shadow: 0 0 0 3px rgba(232,201,122,0.15); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Conteneur de section. Plat au repos : la profondeur vient du fond et du bord, jamais d'une ombre.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card__title\">Validité statistique</h2><p class=\"ds-card__body\">Essais cumulés sur cette cible : 148.</p></section>",
+      "css": ".ds-card { background: var(--panel, #151822); border: 1px solid var(--border, rgba(201,162,75,0.25)); border-radius: 14px; padding: 20px 24px; font-family: var(--font-sans, Inter, sans-serif); color: var(--text, #F3EFE7); } .ds-card__title { font-family: var(--font-serif, 'Cormorant Garamond', Georgia, serif); font-weight: 600; font-size: 1.2rem; margin: 0 0 12px; } .ds-card__body { margin: 0; font-size: 0.95rem; }"
+    },
+    {
+      "name": "Empty State",
+      "kind": "custom",
+      "refersTo": "empty-state",
+      "description": "Absence de données, distincte d'une erreur. Bord tireté : le contenant existe, son contenu pas encore.",
+      "html": "<div class=\"ds-empty\"><p class=\"ds-empty__msg\">Aucun run pour cette cible.</p><p class=\"ds-empty__hint\">Configure et lance un run depuis la page d'accueil.</p></div>",
+      "css": ".ds-empty { text-align: center; padding: 32px 20px; border: 1px dashed var(--border, rgba(201,162,75,0.25)); border-radius: 14px; background: var(--panel-2, #1b1f2b); font-family: var(--font-sans, Inter, sans-serif); } .ds-empty__msg { color: var(--muted, #9A9587); font-family: var(--font-serif, 'Cormorant Garamond', Georgia, serif); font-size: 1.2rem; margin: 0 0 8px; } .ds-empty__hint { color: var(--muted, #9A9587); font-size: 0.85rem; margin: 0; }"
+    },
+    {
+      "name": "Glossary Icon",
+      "kind": "custom",
+      "refersTo": "info-icon",
+      "description": "Composant signature. Garde le vocabulaire quant intact tout en rendant l'explication disponible à la demande.",
+      "html": "<span class=\"ds-term\">Purge<button class=\"ds-info\" type=\"button\" aria-label=\"Définition\">i</button></span>",
+      "css": ".ds-term { font-family: var(--font-sans, Inter, sans-serif); font-size: 0.9rem; color: var(--text, #F3EFE7); } .ds-info { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 5px; padding: 0; border-radius: 50%; border: 1px solid var(--muted, #9A9587); background: transparent; color: var(--muted, #9A9587); font-family: var(--font-sans, Inter, sans-serif); font-size: 0.7rem; line-height: 1; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease; } .ds-info:hover, .ds-info:focus-visible { outline: none; border-color: var(--gold-1, #E8C97A); color: var(--gold-1, #E8C97A); }"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "refersTo": "topnav",
+      "description": "Liens bordés, transparents au repos, passant à l'or au survol. Aucune action secondaire n'est un bouton plein.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\">Historique</a><a href=\"#\">Univers</a><a href=\"#\">Simulateur</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 4px; font-family: var(--font-sans, Inter, sans-serif); } .ds-nav a { padding: 6px 12px; border: 1px solid var(--border, rgba(201,162,75,0.25)); border-radius: 8px; font-size: 0.85rem; font-weight: 600; color: var(--muted, #9A9587); text-decoration: none; transition: border-color 0.15s ease, color 0.15s ease; } .ds-nav a:hover, .ds-nav a:focus-visible { outline: none; color: var(--gold-1, #E8C97A); border-color: var(--gold-1, #E8C97A); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "L'Instrument de Laboratoire",
+    "overview": "Un instrument de mesure, pas un tableau de bord de trading. La référence n'est ni la salle de marché (rouge/vert clignotant, densité maximale, urgence) ni l'outil SaaS générique : c'est l'appareil scientifique posé sur une paillasse — boîtier sombre, graduations dorées gravées, cadrans qui affichent une valeur et sa tolérance. On ne le consulte pas pour être stimulé, on le consulte pour lire une mesure et savoir si elle est fiable.\n\nCette métaphore explique les trois traits qui autrement paraîtraient arbitraires. Le fond très sombre n'est pas une mode « dark UI » : il fait du chiffre le seul élément lumineux de l'écran. L'or n'est pas décoratif : il est rare, réservé aux bords, aux graduations et à l'action principale — c'est la gravure sur l'instrument, jamais la donnée elle-même. Et le serif Cormorant en titres, sur un outil technique, ancre le projet du côté du carnet de recherche plutôt que du terminal : ce qu'on lit ici est un compte rendu, pas un flux.\n\nL'interface est en mode Operate sur toutes ses surfaces : on y accomplit une tâche, jamais on n'y contemple. Aucun moment spectaculaire, aucune illustration, aucune photographie. La qualité se joue entièrement dans la précision — alignement des chiffres, cohérence des états, justesse des libellés. Un écran qui impressionne mais qu'on ne peut pas piloter est un échec ici.",
+    "keyCharacteristics": [
+      "Fond sombre quasi-noir : le chiffre est la seule source de lumière",
+      "Or rare et structural (bords, graduations, action principale) — jamais porteur de donnée",
+      "Serif éditorial en titres, sans-serif tabulaire en données",
+      "Six états sémantiques distincts, dont trois qui ne sont ni succès ni échec",
+      "Chiffres en chasse fixe (tabular-nums) partout, sans exception",
+      "Zéro imagerie : aucune photo, aucune illustration, aucune icône décorative"
+    ],
+    "rules": [
+      { "name": "La Règle de l'Or Structural", "body": "L'or décrit la structure, jamais la donnée. Un bord, un focus, une graduation, l'action principale : oui. Une valeur, un statut, une métrique : jamais. Test : si l'or disparaissait, aucune information ne devrait être perdue — seulement le relief.", "section": "colors" },
+      { "name": "La Règle des Trois États Neutres", "body": "« Non calculable », « désactivé pour ce run » et « en attente » ne sont ni verts ni rouges. Forcer l'un de ces cas dans le vert ou le rouge est un bug de conception, pas un raccourci : cela transforme une absence de mesure en jugement.", "section": "colors" },
+      { "name": "La Règle de l'Échec Sourd", "body": "Les couleurs d'échec sont désaturées par rapport à leur équivalent web standard. Un verdict négatif est un livrable normal de cet outil — il s'affiche avec la même dignité qu'un succès.", "section": "colors" },
+      { "name": "La Règle des Chiffres Alignés", "body": "font-variant-numeric: tabular-nums est posé sur body et ne doit jamais être annulé. Deux nombres l'un sous l'autre doivent pouvoir se comparer en colonne, sans lecture. C'est non négociable dans un outil de mesure.", "section": "typography" },
+      { "name": "La Règle du Serif Nommant", "body": "Le serif nomme, le sans-serif mesure. Un chiffre en Cormorant est une faute ; un titre de section en Inter aussi.", "section": "typography" },
+      { "name": "La Règle du Plancher Explicite", "body": "Toute grille répétable déclare une largeur minimale de cellule. Un tableau qui se comprime jusqu'à l'illisible pour tenir sur une ligne trahit l'outil : on préfère le défilement horizontal contenu.", "section": "layout" },
+      { "name": "La Règle du Plat au Repos", "body": "Une surface au repos n'a pas d'ombre. L'ombre est une réponse à un état (collé, flottant, survolé, focalisé) ou n'existe pas. Une carte, un encart, une métrique, un tableau : plats, toujours.", "section": "elevation" },
+      { "name": "La Règle du Rayon Croissant", "body": "Le rayon suit la taille : contrôle 8, bloc 10, conteneur 14. Un petit élément très arrondi ou un grand conteneur à angle vif casse la lecture de hiérarchie.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do afficher la contrepartie de fiabilité de chaque chiffre — IC, n, ou motif de non-calculabilité — dans la troisième ligne de la métrique.",
+      "Do utiliser disabled (gris) pour « non calculable » et « désactivé pour ce run », et pending (indigo) pour « en cours ».",
+      "Do conserver tabular-nums sur toute donnée numérique.",
+      "Do déclarer une largeur minimale de cellule sur toute grille répétable.",
+      "Do remplacer le contour de focus natif par le bord or + l'anneau ; ne jamais se contenter de le retirer.",
+      "Do garder le serif pour nommer et l'Inter pour mesurer."
+    ],
+    "donts": [
+      "Don't utiliser l'or pour porter une donnée ou un statut — il est structural.",
+      "Don't afficher nan, Infinity, null ou une cellule vide : un chiffre non calculable s'écrit « — » avec son motif.",
+      "Don't ajouter une ombre à une surface au repos.",
+      "Don't introduire une septième couleur sémantique ni une teinte hors palette ; les six états couvrent les cas, et un cas nouveau se discute avant de s'ajouter.",
+      "Don't arrondir complètement (999px) autre chose qu'une pastille d'état.",
+      "Don't ajouter photographie, illustration ou icône décorative : le système est sans imagerie par construction.",
+      "Don't saturer les couleurs d'échec pour « alerter davantage ».",
+      "Don't traiter le monogramme « P » comme un logo : c'est un placeholder CSS explicitement documenté."
+    ]
+  }
+}
