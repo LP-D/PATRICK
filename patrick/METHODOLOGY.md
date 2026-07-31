@@ -511,3 +511,56 @@ combinaisons sont évaluées pour reconstruire 6 chemins, contre `n_wf_folds`
 (walk-forward, typiquement 3-5) fits — CPCV coûte structurellement plus cher
 par essai de configuration, en échange de blocs OOS indépendants garantis
 dès un seul run (cf. raison d'être ci-dessus).
+
+### 11.5 P6.4 — Correction FDR (Benjamini-Hochberg) entre cibles
+
+`patrick/validation/fdr.py` (fonction pure `benjamini_hochberg`, Benjamini &
+Hochberg 1995), câblée via `tracking/stats.py::fdr_across_targets`.
+
+**Raison d'être** : les garde-fous multi-tests de la section 4 (compteur
+d'essais cumulé, DSR, PBO, Diebold-Mariano) corrigent le nombre d'ESSAIS DE
+CONFIG au sein d'une même (cible, horizon). Ils ne corrigent PAS le fait
+d'essayer successivement plusieurs CIBLES différentes (VIX, puis GSPC, puis
+SPY...) et de ne retenir que celle dont le test Diebold-Mariano est
+significatif — un problème de tests multiples à une échelle différente. Sur
+20 cibles sans aucun vrai signal, environ 1 apparaîtrait "significative" à
+p<0.05 par pur hasard rien qu'en cherchant assez.
+
+**Mécanisme** : `pipeline/engine.py::run_pipeline` persiste désormais le
+résultat Diebold-Mariano (Phase 2.5) dans une table dédiée `dm_result`
+(migration 0009, une ligne par run walk-forward ayant produit un
+`final_best` — jamais en mode CPCV, cf. limite 11.4) plutôt que seulement
+dans `job.result_json` (limite antérieure : invisible pour un `patrick run`/
+`patrick resume` CLI, et impossible à agréger PAR CIBLE à travers plusieurs
+runs). `fdr_across_targets` prend, pour chaque cible ayant au moins un
+`dm_result`, la MEILLEURE (plus petite) p-value obtenue sur n'importe lequel
+de ses runs, puis applique `benjamini_hochberg` — jamais modifié lui-même
+(même discipline que C5/P6.1 : seule la requête source change), renvoyant
+pour chaque cible une p-value ajustée (q-value) et un statut significatif au
+seuil FDR choisi (`alpha`, défaut 0.10, paramétrable via
+`patrick report --fdr-alpha` ou l'argument `alpha` de `fdr_across_targets`).
+
+**Affichage** : nouvelle section "Correction FDR entre cibles" dans le
+rapport HTML de run (`tracking/report.py`) — nombre de cibles testées,
+nombre de significatives brutes (p ≤ alpha), nombre de significatives après
+correction BH, et le statut de LA cible de ce run (p brute, p ajustée, rang)
+resitué parmi toutes les autres — jamais un chiffre isolé, même principe que
+l'intervalle de confiance bootstrap du PBO (C5).
+
+**Tests** (`tests/test_fdr.py`, 7 tests) : exemple calculé à la main (m=5,
+q-values vérifiées terme à terme), monotonie des p-values ajustées par rang,
+équivalence `significant ⟺ q≤alpha`. Déliverable explicitement demandé :
+sur des p-values simulées Uniform(0,1) pour TOUTES les cibles (vrai null
+partout, 300 tirages de m=50 cibles), le nombre moyen de découvertes BH par
+tirage est proche de alpha (~0.10 — résultat classique : sous le null
+complet, P(≥1 découverte BH) = alpha exactement), très en dessous du nombre
+de "significatifs" bruts non corrigés qui converge vers m·alpha (~5) ; sur
+un mélange (moitié cibles à vrai null Uniform(0,1), moitié à vraie
+alternative Beta(0.5,8) concentrée près de 0, simulant un DM réellement
+significatif), BH retrouve une puissance substantielle (>40% de vrais
+positifs détectés) tout en bornant la proportion de fausses découvertes.
+`tests/test_fdr_integration.py` (2 tests lents) : `run_pipeline` sur deux
+cibles distinctes écrit bien deux lignes `dm_result`, agrégées correctement
+par `fdr_across_targets` ; contre-épreuve — un run CPCV n'écrit jamais de
+`dm_result` (jamais une p-value walk-forward réutilisée par erreur pour une
+cible qui n'a en réalité tourné qu'en CPCV).
