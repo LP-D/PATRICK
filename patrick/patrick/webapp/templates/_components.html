@@ -1,0 +1,63 @@
+{# Phase 7.0 (P7.0) -- composants Jinja partagés par les pages d'historique
+   (`/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`). Importés avec
+   `{% from "_components.html" import ... %}`. CSS correspondant dans
+   `static/style.css` (section "P7.0 -- composants"), jetons dans
+   `static/tokens.css`.
+
+   `metric()` force un troisième argument `reliability` (chaîne, jamais
+   `None` implicite) : principe directeur de la Phase 7, "aucun chiffre
+   affiché sans sa contrepartie de fiabilité" -- l'appelant doit explicitement
+   écrire quelque chose (même "non calculable"), le gabarit ne le devine pas. #}
+
+{% macro status_badge(label, state='neutral') %}<span class="status-badge status-{{ state }}">{{ label }}</span>{% endmacro %}
+
+{% macro metric(label, value, reliability, state='neutral') %}
+<div class="metric">
+  <div class="metric-label">{{ label }}</div>
+  <div class="metric-value status-{{ state }}">{{ value }}</div>
+  <div class="metric-reliability hint">{{ reliability }}</div>
+</div>
+{% endmacro %}
+
+{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none) %}
+{% if rows %}
+<table class="data-table">
+<thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+<tbody>
+{% for row in rows %}
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td>{{ cell | safe }}</td>{% endfor %}</tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}
+<p class="hint">{{ empty_message }}</p>
+{% endif %}
+{% endmacro %}
+
+{% macro sparkline(values, width=120, height=28, color='var(--gold-1)') %}
+{% if values and values|length > 1 %}
+{% set vmin = values|min %}
+{% set vmax = values|max %}
+{% set vrange = (vmax - vmin) if (vmax - vmin) > 0 else 1 %}
+{% set step = width / (values|length - 1) %}
+<svg class="sparkline" width="{{ width }}" height="{{ height }}" viewBox="0 0 {{ width }} {{ height }}" preserveAspectRatio="none" role="img" aria-label="tendance">
+<polyline points="{% for v in values %}{{ (loop.index0 * step) | round(1) }},{{ (height - ((v - vmin) / vrange) * height) | round(1) }}{% if not loop.last %} {% endif %}{% endfor %}" fill="none" stroke="{{ color }}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+</svg>
+{% else %}
+<span class="sparkline-empty hint">—</span>
+{% endif %}
+{% endmacro %}
+
+{% macro empty_state(message, hint='') %}
+<div class="empty-state">
+  <p class="empty-state-message">{{ message }}</p>
+  {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro error_state(message, hint='') %}
+<div class="error-state">
+  <p class="error-state-message">{{ message }}</p>
+  {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+</div>
+{% endmacro %}

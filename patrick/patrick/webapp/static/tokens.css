@@ -1,0 +1,54 @@
+/* Phase 7.0 (P7.0) -- design system : jetons partagés par toutes les pages
+   (existantes et nouvelles, `/runs`, `/runs/{id}`, `/targets/{ticker}`,
+   `/universe`). Extrait de l'ancienne palette de `style.css` (couleurs
+   inchangées, même charte sombre/or) + ajout d'une échelle typographique,
+   d'une échelle d'espacement, et de 3 états sémantiques neufs.
+
+   États sémantiques : `--ok`/`--warning`/`--error` existaient déjà (résultat
+   bon/à surveiller/mauvais). Insuffisants pour la fiabilité d'un chiffre --
+   "non calculable" (pas assez de données) ou "désactivé pour ce run" ne sont
+   ni une réussite ni un échec, et "en file d'attente" n'est pas encore
+   tranché : 3 états neufs pour ne pas forcer ces cas dans le vert/rouge
+   (`.status-badge`, cf. `_components.html`). */
+:root {
+    /* Couleurs -- identiques à l'ancien :root de style.css. */
+    --bg: #0B0D12;
+    --panel: #151822;
+    --panel-2: #1b1f2b;
+    --border: rgba(201, 162, 75, 0.25);
+    --text: #F3EFE7;
+    --muted: #9A9587;
+    --gold-1: #E8C97A;
+    --gold-2: #8A6A2F;
+    --accent: #E8C97A;
+    --error: #C1544C;
+    --warning: #D9A441;
+    --ok: #3FA985;
+
+    /* États neufs (P7.0) : ni bon ni mauvais. */
+    --neutral: #6E8CAE;   /* informatif, ex. schéma de validation, comptage */
+    --pending: #6E7FD8;   /* en cours / en file d'attente */
+    --disabled: #6B6558;  /* désactivé pour ce run, ou non calculable */
+
+    --font-serif: "Cormorant Garamond", Georgia, serif;
+    --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+
+    /* Échelle typographique (P7.0). */
+    --text-xs: 0.75rem;
+    --text-sm: 0.85rem;
+    --text-base: 0.95rem;
+    --text-md: 1.05rem;
+    --text-lg: 1.2rem;
+    --text-xl: 1.6rem;
+    --text-2xl: 2.2rem;
+
+    /* Échelle d'espacement (P7.0), base 4px. */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 48px;
+}
