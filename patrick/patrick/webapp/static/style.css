@@ -1,19 +1,6 @@
-:root {
-    --bg: #0B0D12;
-    --panel: #151822;
-    --panel-2: #1b1f2b;
-    --border: rgba(201, 162, 75, 0.25);
-    --text: #F3EFE7;
-    --muted: #9A9587;
-    --gold-1: #E8C97A;
-    --gold-2: #8A6A2F;
-    --accent: #E8C97A;
-    --error: #C1544C;
-    --warning: #D9A441;
-    --ok: #3FA985;
-    --font-serif: "Cormorant Garamond", Georgia, serif;
-    --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
-}
+/* Phase 7.0 (P7.0) : les jetons (couleurs/typo/espacement) ont déménagé dans
+   `tokens.css`, chargé avant ce fichier par `base.html` -- ce `:root` n'existe
+   plus ici pour éviter deux sources de vérité sur la même variable. */
 
 * { box-sizing: border-box; }
 h1, h2, h3 { font-family: var(--font-serif); font-weight: 600; }
@@ -450,3 +437,74 @@ table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; t
 .sim-guard { color: var(--warning); }
 #sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
 #sim-trades-table { max-height: 320px; }
+
+/* Phase 7.0 (P7.0) -- composants (`_components.html`) partagés par les pages
+   d'historique (P7.1-P7.5). Jetons : `tokens.css`. */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-badge.status-ok { color: var(--ok); background: rgba(63, 169, 133, 0.12); border-color: rgba(63, 169, 133, 0.3); }
+.status-badge.status-warning { color: var(--warning); background: rgba(217, 164, 65, 0.12); border-color: rgba(217, 164, 65, 0.3); }
+.status-badge.status-error { color: var(--error); background: rgba(193, 84, 76, 0.12); border-color: rgba(193, 84, 76, 0.3); }
+.status-badge.status-neutral { color: var(--neutral); background: rgba(110, 140, 174, 0.12); border-color: rgba(110, 140, 174, 0.3); }
+.status-badge.status-pending { color: var(--pending); background: rgba(110, 127, 216, 0.12); border-color: rgba(110, 127, 216, 0.3); }
+.status-badge.status-disabled { color: var(--disabled); background: rgba(107, 101, 88, 0.15); border-color: rgba(107, 101, 88, 0.35); }
+
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-5); margin: var(--space-4) 0; }
+.metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: var(--space-4); }
+.metric-label { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: var(--space-2); }
+.metric-value { font-family: var(--font-serif); font-weight: 600; font-size: var(--text-xl); }
+.metric-value.status-ok { color: var(--ok); }
+.metric-value.status-warning { color: var(--warning); }
+.metric-value.status-error { color: var(--error); }
+.metric-value.status-neutral { color: var(--text); }
+.metric-value.status-pending { color: var(--pending); }
+.metric-value.status-disabled { color: var(--disabled); }
+.metric-reliability { margin-top: var(--space-2); font-size: var(--text-xs); }
+
+table.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin: var(--space-3) 0; }
+table.data-table th, table.data-table td { border-bottom: 1px solid var(--border); padding: 6px var(--space-2); text-align: left; }
+table.data-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: var(--text-xs); letter-spacing: 0.04em; }
+table.data-table td.num, table.data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data-table tr.best { background: rgba(232, 201, 122, 0.08); }
+table.data-table tr:hover { background: var(--panel-2); }
+
+.sparkline { vertical-align: middle; }
+.sparkline-empty { display: inline-block; }
+
+.empty-state, .error-state {
+    text-align: center;
+    padding: var(--space-7) var(--space-5);
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    background: var(--panel-2);
+    margin: var(--space-4) 0;
+}
+.empty-state-message { color: var(--muted); font-family: var(--font-serif); font-size: var(--text-lg); margin: 0 0 var(--space-2); }
+.error-state-message { color: var(--error); font-family: var(--font-serif); font-size: var(--text-lg); margin: 0 0 var(--space-2); }
+
+/* Phase 7.1-7.5 -- pages d'historique. */
+.page-title { font-family: var(--font-serif); font-weight: 600; font-size: var(--text-2xl); margin: var(--space-2) 0 var(--space-1); }
+.page-subtitle { color: var(--muted); margin: 0 0 var(--space-5); }
+.filter-bar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); }
+.filter-bar select, .filter-bar input { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: var(--text-sm); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: var(--space-5) var(--space-6); margin-bottom: var(--space-5); }
+.card h2 { font-family: var(--font-serif); font-weight: 600; font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: var(--space-5); flex-wrap: wrap; }
+.tabs a { padding: 8px 14px; font-size: var(--text-sm); font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+.tabs a.active { color: var(--gold-1); border-color: var(--gold-1); }
+.tabs a:hover { color: var(--text); }
+
+.group-block { margin-bottom: var(--space-6); }
+.group-title { font-family: var(--font-serif); font-weight: 600; font-size: var(--text-md); margin: 0 0 var(--space-2); }
