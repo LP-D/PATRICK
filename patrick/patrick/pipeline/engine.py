@@ -66,6 +66,7 @@ from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
+from patrick.validation import cpcv as cpcv_module
 from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
@@ -577,6 +578,183 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
         raw.attrs.get("n_fred_series"), raw.attrs.get("fred_source"), raw.attrs.get("quality_issues", [])
 
 
+def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame, target_col: str,
+                    conn, run_ids: dict[int, str], seed: int
+                    ) -> tuple[Leaderboard, dict, dict, pd.DataFrame, list[str], list[str]]:
+    """Phase 6.1 (P6.1) -- scan CPCV, EN ALTERNATIVE au scan walk-forward
+    (`config.validation.scheme == "cpcv"`), jamais un remplacement.
+
+    Limites assumées, documentées (hors périmètre P6.1, dont l'objet est de
+    rendre le PBO satisfiable via plus de blocs -- pas de refermer d'autres
+    canaux) :
+    - Features paramétriques (EGARCH/Kalman/.../filtre particulaire) fit UNE
+      SEULE FOIS sur tout l'historique (`fit_end_idx=None`, comme le modèle
+      de production), pas par combinaison -- refitter par combinaison
+      demanderait un mécanisme de fit sur train SCINDÉ EN SEGMENTS NON
+      CONTIGUS que `vol_models.py`/`spike.py` (pensés pour un simple préfixe
+      `fit_end_idx`) ne supportent pas aujourd'hui. Risque de fuite résiduel
+      sur CES familles seulement, en mode CPCV seulement.
+    - Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna par
+      combinaison, pas de Diebold-Mariano : ces mécanismes reposent sur la
+      topologie "une seule frontière, train=préfixe" du walk-forward
+      (`_FoldContext`/`ctx.prepare`), pas transposable telle quelle à la
+      topologie CPCV (train=complément de groupes dispersés) dans le
+      périmètre de cette session.
+    - Purge et embargo sont STRUCTURELS ici (toujours appliqués aux deux
+      frontières de chaque groupe de test, `validation/cpcv.py`), pas
+      gouvernés par `validation.purge`/`embargo_enabled` (optionnels en
+      walk-forward, où l'effet mesuré était négligeable sur une SEULE
+      frontière) -- CPCV expose structurellement plus de frontières, donc
+      plus de surface de fuite potentielle à fermer par construction.
+
+    Renvoie (board, trial_ids, n_trials_per_run, full_pool, feature_pool,
+    interaction_formulas) -- les trois premiers éléments suivent le même
+    contrat que le scan walk-forward (branchable sur le reste de
+    `run_pipeline` : export CSV, `final_best`, etc.) ; les trois derniers
+    exposent le pool complet déjà construit sur tout l'historique (fit
+    unique, cf. limite ci-dessus) pour que le bloc export-modèle final le
+    RÉUTILISE tel quel plutôt que de le reconstruire une deuxième fois."""
+    n_groups, k_test = config.validation.n_groups, config.validation.k_test_groups
+    all_dates = raw.index
+    n_bars = len(all_dates)
+    groups = cpcv_module.build_groups(n_bars, n_groups)
+    combos = cpcv_module.all_combinations(n_groups, k_test)
+    paths = cpcv_module.path_assignment(n_groups, k_test)
+    group_combo_to_path = {(g, ci): p for p, entries in paths.items() for g, ci in entries}
+    group_of_date = np.empty(n_bars, dtype=int)
+    for gi, (start, end) in enumerate(groups):
+        group_of_date[start:end + 1] = gi
+    group_of_date = pd.Series(group_of_date, index=all_dates)
+
+    print(f"[CPCV] N={n_groups} groupes, k={k_test} -> {len(combos)} combinaisons, "
+          f"{len(paths)} chemins de backtest reconstruits.")
+
+    param_pool = build_parametric_pool(raw, config, fit_end_idx=None)
+    full_pool = pd.concat([base_pool, param_pool], axis=1)
+    full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
+
+    interaction_formulas: list[str] = []
+    if "interactions" in config.features.families:
+        pilot_split_idx = groups[0][1] + 1
+        interaction_formulas = _discover_interaction_formulas(full_pool, config, target_col, pilot_split_idx)
+        print(f"  [INTERACTIONS] {len(interaction_formulas)} formules découvertes (groupe pilote).")
+        inter = _apply_interaction_formulas(full_pool, interaction_formulas)
+        full_pool = pd.concat([full_pool, inter], axis=1)
+
+    feature_pool = [c for c in full_pool.columns if c != target_col]
+
+    board = Leaderboard()
+    trial_ids: dict[tuple, int] = {}
+    n_trials_per_run: dict[str, int] = {h: 0 for h in run_ids.values()}
+
+    for horizon in config.objective.horizons:
+        run_id = run_ids[horizon]
+        target_series, reg_r, _thr = build_target(full_pool[target_col], horizon,
+                                                    groups[0][1] + 1, config.objective.flat_thr)
+        idx = target_series.index
+        date_group = group_of_date.reindex(idx)
+        reg_al = reg_r.reindex(idx).fillna("NORMAL").values
+        X_pool_df = full_pool[feature_pool].reindex(idx)
+        X_all = np.nan_to_num(X_pool_df.values)
+        y_all = target_series.values.astype(int)
+
+        for regime in config.objective.regimes:
+            regime_sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
+
+            for n_feat in config.selection.n_features_grid:
+                for sampler_name in config.sampler.candidates:
+                    for algo in config.models.algos:
+                        path_buf = {p: {"dates": [], "y_true": [], "y_pred": [], "y_proba": []}
+                                    for p in paths}
+
+                        for ci, combo in enumerate(combos):
+                            split = cpcv_module.build_split(groups, combo, horizon,
+                                                             embargo_bars=config.validation.embargo_bars)
+                            train_dates = set(all_dates[split.train_mask])
+                            test_dates = set(all_dates[split.test_mask])
+                            tr_mask = np.asarray([d in train_dates for d in idx]) & regime_sel
+                            te_mask = np.asarray([d in test_dates for d in idx]) & regime_sel
+
+                            y_tr, y_te = y_all[tr_mask], y_all[te_mask]
+                            if (len(y_tr) < config.validation.min_train_rows
+                                    or len(y_te) < config.validation.min_test_rows):
+                                print(f"  [WARN] CPCV combo {combo} exclu (h={horizon}j régime={regime}) : "
+                                      f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
+                                      f"test={len(y_te)} (min {config.validation.min_test_rows}).")
+                                continue
+
+                            sc = RobustScaler()
+                            X_tr_full = sc.fit_transform(X_all[tr_mask])
+                            X_te_full = sc.transform(X_all[te_mask])
+                            cols = _select(config, X_tr_full, y_tr, n_feat, seed)
+                            X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
+
+                            met, y_pred, confidence = _fit_eval(
+                                X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed,
+                                calibration=config.models.calibration,
+                                uniqueness_weights_enabled=False)  # P6.2 : spans non définis sur train dispersé
+
+                            test_idx_dates = idx[te_mask]
+                            test_groups_of_rows = date_group.reindex(test_idx_dates).values
+                            for gi in combo:
+                                row_sel = test_groups_of_rows == gi
+                                if not row_sel.any():
+                                    continue
+                                p = group_combo_to_path.get((gi, ci))
+                                if p is None:
+                                    continue
+                                buf = path_buf[p]
+                                buf["dates"].extend(str(d.date()) for d in test_idx_dates[row_sel])
+                                buf["y_true"].extend(y_te[row_sel].tolist())
+                                buf["y_pred"].extend(np.asarray(y_pred)[row_sel].tolist())
+                                buf["y_proba"].extend(
+                                    (confidence[row_sel].tolist() if confidence is not None
+                                     else [None] * int(row_sel.sum())))
+
+                            trial_key = (horizon, regime, n_feat, sampler_name, algo)
+                            if trial_key not in trial_ids:
+                                trial_ids[trial_key] = trackdb.create_trial(
+                                    conn, run_id, regime, algo, sampler_name, n_feat,
+                                    selector=config.selection.method)
+                                n_trials_per_run[run_id] += 1
+                            trial_id = trial_ids[trial_key]
+                            trackdb.add_fold_metrics(conn, trial_id, fold_index=ci, split="test", metrics=met)
+
+                        # Recollage des chemins (P6.1) : une ligne prediction par chemin,
+                        # métrique de performance PAR CHEMIN -- jamais un point unique.
+                        path_metric_values: dict[int, float] = {}
+                        trial_id = trial_ids.get((horizon, regime, n_feat, sampler_name, algo))
+                        for p, buf in path_buf.items():
+                            if not buf["dates"] or trial_id is None:
+                                continue
+                            trackdb.add_predictions(
+                                conn, trial_id, fold_index=p, split="test",
+                                ts=buf["dates"], y_true=buf["y_true"], y_pred=buf["y_pred"],
+                                y_proba=buf["y_proba"] if any(v is not None for v in buf["y_proba"]) else None,
+                                path_id=p,
+                            )
+                            path_met = metrics(np.array(buf["y_true"]), np.array(buf["y_pred"]))
+                            path_metric_values[p] = path_met.get("F1_dir", float("nan"))
+                            # `split="test_path"` (jamais "test", déjà utilisé par-combinaison
+                            # ci-dessus) : permet à `stats.pbo_for_target_cpcv` de reconstruire
+                            # une matrice (trial x chemin) sans se mélanger avec les métriques
+                            # par combinaison -- même mécanisme que `pbo_for_target` (walk-forward),
+                            # juste un autre `split`/`fold_index` (chemin, pas fold).
+                            trackdb.add_fold_metrics(conn, trial_id, fold_index=p,
+                                                      split="test_path", metrics=path_met)
+
+                        dist = cpcv_module.path_performance_distribution(path_metric_values)
+                        board.add(horizon=horizon, regime=regime, N=n_feat, sampler=sampler_name, algo=algo,
+                                  scheme="cpcv", n_paths=dist["n_paths"],
+                                  F1_dir_median=dist["median"], F1_dir_q05=dist["q05"],
+                                  F1_dir_q95=dist["q95"], F1_dir_std=dist["std"],
+                                  # `F1_dir` (médiane) alimente le tri existant du leaderboard
+                                  # (`board.best(metric="F1_dir")`) sans dupliquer cette logique.
+                                  F1_dir=dist["median"])
+
+    return board, trial_ids, n_trials_per_run, full_pool, feature_pool, interaction_formulas
+
+
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
                   force_ingest: bool = False, db_path: str | None = None,
                   job_id: str | None = None) -> dict:
@@ -605,95 +783,109 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         run_ids[horizon] = run_id
 
     all_dates_full = raw.index
-    n_wf = _walk_forward_span(all_dates_full, config.validation.holdout_months,
-                               config.validation.min_train_frac)
-    all_dates = all_dates_full[:n_wf]
-    fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds,
-                                 config.validation.min_train_frac)
-    describe_folds(all_dates, fold_cuts)
-    if n_wf < len(all_dates_full):
-        print(f"[HOLDOUT] {len(all_dates_full) - n_wf} lignes réservées "
-              f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
-              "jamais vues par la sélection/le tuning.")
-
     print("[FEATURES] construction du pool de base (causal, partagé par tous les folds)...")
     base_pool = build_base_feature_pool(raw, config, target_col)
     print(f"[FEATURES] pool de base: {base_pool.shape[1]} colonnes ({time.time()-t0:.1f}s)")
-    # base_pool est construit sur `raw` (historique complet, holdout inclus) :
-    # comparer à all_dates_full, pas à all_dates (domaine walk-forward tronqué
-    # du holdout, cf. _walk_forward_span).
     assert (base_pool.index == all_dates_full).all(), "la construction des features ne doit pas changer l'index de dates"
 
-    pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
-    feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
-    print(f"[FEATURES] pool complet (fold 1, base+paramétrique+interactions): {len(feature_pool)} colonnes")
-    ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
-
-    board = Leaderboard()
     baseline_rows: list[dict] = []
     baseline_accum: dict[tuple[str, str], list[dict]] = {}
-    trial_ids: dict[tuple, int] = {}
-    n_trials_per_run: dict[str, int] = {h: 0 for h in run_ids.values()}
-    last_fold = config.validation.n_wf_folds - 1
+    tuned_rows: list[dict] = []
+    tuned_trial_ids: dict[tuple, int] = {}
 
-    for horizon in config.objective.horizons:
-        run_id = run_ids[horizon]
-        for k in range(config.validation.n_wf_folds):
-            for regime in config.objective.regimes:
-                fd = ctx.prepare(horizon, k, regime, want_baselines=True)
-                if fd is None:
-                    continue
+    # Phase 6.1 (P6.1) -- CPCV en ALTERNATIVE au walk-forward
+    # (`validation.scheme`), jamais un remplacement : la branche walk-forward
+    # ci-dessous est BIT-IDENTIQUE au comportement d'avant P6.1.
+    cpcv_full_pool = None
+    cpcv_interaction_formulas = None
+    if config.validation.scheme == "cpcv":
+        board, trial_ids, n_trials_per_run, cpcv_full_pool, feature_pool, cpcv_interaction_formulas = (
+            _run_cpcv_scan(raw, config, base_pool, target_col, conn, run_ids, seed))
+        pool_builder = None
+        ctx = None
+        all_dates = all_dates_full
+        n_wf = len(all_dates_full)  # CPCV : pas de holdout terminal (limite assumée, cf. _run_cpcv_scan)
+        last_fold = None
+    else:
+        n_wf = _walk_forward_span(all_dates_full, config.validation.holdout_months,
+                                   config.validation.min_train_frac)
+        all_dates = all_dates_full[:n_wf]
+        fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds,
+                                     config.validation.min_train_frac)
+        describe_folds(all_dates, fold_cuts)
+        if n_wf < len(all_dates_full):
+            print(f"[HOLDOUT] {len(all_dates_full) - n_wf} lignes réservées "
+                  f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
+                  "jamais vues par la sélection/le tuning.")
 
-                for baseline_name, base_met in (fd.baselines or {}).items():
-                    baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
-                                           "N": None, "sampler": None, "algo": baseline_name,
-                                           "features": "", "n_train": len(fd.y_tr), "n_test": len(fd.y_te),
-                                           "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
-                    baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
+        pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
+        feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
+        print(f"[FEATURES] pool complet (fold 1, base+paramétrique+interactions): {len(feature_pool)} colonnes")
+        ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
 
-                for n_feat in config.selection.n_features_grid:
-                    cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
-                    X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-                    feat_names = [feature_pool[c] for c in cols]
+        board = Leaderboard()
+        trial_ids: dict[tuple, int] = {}
+        n_trials_per_run: dict[str, int] = {h: 0 for h in run_ids.values()}
+        last_fold = config.validation.n_wf_folds - 1
 
-                    for sampler_name in config.sampler.candidates:
-                        for algo in config.models.algos:
-                            met, y_pred, confidence = _fit_eval(
-                                X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
-                                calibration=config.models.calibration,
-                                sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
-                                uniqueness_weights_enabled=config.sampling.uniqueness_weights)
-                            board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
-                                      sampler=sampler_name, algo=algo,
-                                      features="|".join(feat_names),
-                                      n_train=len(fd.y_tr), n_test=len(fd.y_te),
-                                      # Phase 6.2 (P6.2) : taille d'échantillon effective (somme
-                                      # des unicités) à côté de n_train -- toujours calculée.
-                                      effective_n_train=fd.effective_n,
-                                      test_start=fd.test_start, test_end=fd.test_end, **met)
+        for horizon in config.objective.horizons:
+            run_id = run_ids[horizon]
+            for k in range(config.validation.n_wf_folds):
+                for regime in config.objective.regimes:
+                    fd = ctx.prepare(horizon, k, regime, want_baselines=True)
+                    if fd is None:
+                        continue
 
-                            trial_key = (horizon, regime, n_feat, sampler_name, algo)
-                            if trial_key not in trial_ids:
-                                trial_ids[trial_key] = trackdb.create_trial(
-                                    conn, run_id, regime, algo, sampler_name, n_feat,
-                                    selector=config.selection.method)
-                                n_trials_per_run[run_id] += 1
-                            trial_id = trial_ids[trial_key]
-                            # Phase 6.2 (P6.2) : n_eff stocké comme un "metric" de plus
-                            # (schéma générique trial/fold_index/split/metric/value, pas de
-                            # colonne dédiée) -- lu par le rapport HTML à côté de F1_dir/etc.
-                            met_with_n = dict(met)
-                            met_with_n["n_train"] = float(len(fd.y_tr))
-                            if fd.effective_n is not None:
-                                met_with_n["effective_n_train"] = fd.effective_n
-                            trackdb.add_fold_metrics(conn, trial_id, fold_index=k + 1,
-                                                      split="test", metrics=met_with_n)
-                            trackdb.add_predictions(conn, trial_id, fold_index=k + 1, split="test",
-                                                     ts=fd.test_dates, y_true=fd.y_te,
-                                                     y_pred=y_pred, y_proba=confidence)
+                    for baseline_name, base_met in (fd.baselines or {}).items():
+                        baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
+                                               "N": None, "sampler": None, "algo": baseline_name,
+                                               "features": "", "n_train": len(fd.y_tr), "n_test": len(fd.y_te),
+                                               "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
+                        baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
 
-            print(f"  h={horizon:2d}j fold{k+1}: {len(board.rows)} lignes cumulées "
-                  f"[{time.time()-t0:.0f}s]")
+                    for n_feat in config.selection.n_features_grid:
+                        cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+                        X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
+                        feat_names = [feature_pool[c] for c in cols]
+
+                        for sampler_name in config.sampler.candidates:
+                            for algo in config.models.algos:
+                                met, y_pred, confidence = _fit_eval(
+                                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
+                                    calibration=config.models.calibration,
+                                    sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+                                    uniqueness_weights_enabled=config.sampling.uniqueness_weights)
+                                board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
+                                          sampler=sampler_name, algo=algo,
+                                          features="|".join(feat_names),
+                                          n_train=len(fd.y_tr), n_test=len(fd.y_te),
+                                          # Phase 6.2 (P6.2) : taille d'échantillon effective (somme
+                                          # des unicités) à côté de n_train -- toujours calculée.
+                                          effective_n_train=fd.effective_n,
+                                          test_start=fd.test_start, test_end=fd.test_end, **met)
+
+                                trial_key = (horizon, regime, n_feat, sampler_name, algo)
+                                if trial_key not in trial_ids:
+                                    trial_ids[trial_key] = trackdb.create_trial(
+                                        conn, run_id, regime, algo, sampler_name, n_feat,
+                                        selector=config.selection.method)
+                                    n_trials_per_run[run_id] += 1
+                                trial_id = trial_ids[trial_key]
+                                # Phase 6.2 (P6.2) : n_eff stocké comme un "metric" de plus
+                                # (schéma générique trial/fold_index/split/metric/value, pas de
+                                # colonne dédiée) -- lu par le rapport HTML à côté de F1_dir/etc.
+                                met_with_n = dict(met)
+                                met_with_n["n_train"] = float(len(fd.y_tr))
+                                if fd.effective_n is not None:
+                                    met_with_n["effective_n_train"] = fd.effective_n
+                                trackdb.add_fold_metrics(conn, trial_id, fold_index=k + 1,
+                                                          split="test", metrics=met_with_n)
+                                trackdb.add_predictions(conn, trial_id, fold_index=k + 1, split="test",
+                                                         ts=fd.test_dates, y_true=fd.y_te,
+                                                         y_pred=y_pred, y_proba=confidence)
+
+                print(f"  h={horizon:2d}j fold{k+1}: {len(board.rows)} lignes cumulées "
+                      f"[{time.time()-t0:.0f}s]")
 
     print(f"\n[SCAN] {len(board.rows)} évaluations en {(time.time()-t0)/60:.1f}min")
     best = board.best(metric="F1_dir")
@@ -709,7 +901,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     # réellement retenues par fold (déjà capturées dans `board.rows[...]
     # ["features"]`, pas de re-sélection). sampler/algo n'influencent pas la
     # sélection (faite avant leur boucle) : les dédupliquer avant Jaccard.
-    if config.selection.track_stability:
+    # Non calculée en mode CPCV (les features sélectionnées par combinaison
+    # ne sont pas capturées dans `board.rows` sous la même forme -- limite
+    # assumée, hors périmètre P6.1).
+    if config.selection.track_stability and config.validation.scheme == "walkforward":
         for horizon in config.objective.horizons:
             board_h = Leaderboard()
             board_h.rows = [r for r in board.rows if r.get("horizon") == horizon and r.get("N") is not None]
@@ -731,8 +926,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     # seulement le gagnant final), écrit dans `holdout_diagnostic` (table
     # séparée de `fold_metric`, jamais lue par la sélection/le tuning) : permet
     # une corrélation de rang test/holdout après coup, sans jamais influencer
-    # le choix de la config gagnante.
-    if n_wf < len(all_dates_full) and trial_ids:
+    # le choix de la config gagnante. Non applicable en mode CPCV (pas de
+    # holdout terminal, cf. _run_cpcv_scan).
+    if config.validation.scheme == "walkforward" and n_wf < len(all_dates_full) and trial_ids:
         print(f"[HOLDOUT DIAGNOSTIC] évaluation de {len(trial_ids)} trials sur le holdout "
               "(lecture seule, ne choisit rien)...")
         for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
@@ -743,9 +939,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if diag_eval is not None:
                 trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
 
-    tuned_rows = []
-    tuned_trial_ids: dict[tuple, int] = {}
-    if config.tuning.enabled and len(board.rows):
+    # Affinage Optuna : walk-forward uniquement (repose sur `ctx.prepare`,
+    # topologie "train=préfixe" -- pas transposable telle quelle à CPCV dans
+    # ce périmètre, cf. _run_cpcv_scan).
+    if config.validation.scheme == "walkforward" and config.tuning.enabled and len(board.rows):
         if config.tuning.optuna_select_top_k_per_horizon:
             # Rapport d'audit, C3 : sélection top_k PAR horizon (pas globale) --
             # sinon un horizon dont le meilleur essai SCAN domine peut capter
@@ -851,15 +1048,23 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     cumulative_trials = 0
     holdout_diagnostic_result = None
     if final_best is not None:
-        full_pool = pd.concat(
-            [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
-        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
-        if pool_builder.interaction_formulas:
-            full_inter = _apply_interaction_formulas(full_pool, pool_builder.interaction_formulas)
-            full_pool = pd.concat([full_pool, full_inter], axis=1)
+        # CPCV (P6.1) : `_run_cpcv_scan` a déjà construit ce pool complet (fit
+        # unique sur tout l'historique, mêmes formules d'interaction) --
+        # réutilisé tel quel plutôt que reconstruit une deuxième fois.
+        if config.validation.scheme == "cpcv":
+            full_pool = cpcv_full_pool
+            interaction_formulas = cpcv_interaction_formulas
+        else:
+            full_pool = pd.concat(
+                [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
+            full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
+            interaction_formulas = pool_builder.interaction_formulas
+            if interaction_formulas:
+                full_inter = _apply_interaction_formulas(full_pool, interaction_formulas)
+                full_pool = pd.concat([full_pool, full_inter], axis=1)
         model_path = export_best_model(full_pool, target_col, feature_pool, config,
                                         final_best, config.output.dir, seed=seed,
-                                        interaction_formulas=pool_builder.interaction_formulas)
+                                        interaction_formulas=interaction_formulas)
 
         best_key = (int(final_best["horizon"]), final_best["regime"], int(final_best["N"]),
                     final_best["sampler"], final_best["algo"])
@@ -887,20 +1092,31 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                              y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
 
         # Phase 2.5 — Diebold-Mariano vs meilleure baseline (dernier fold walk-forward).
-        dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
+        # Repose sur `ctx.prepare` (topologie train=préfixe) : sans objet en
+        # CPCV (`ctx is None`), cf. limites documentées dans `_run_cpcv_scan`.
+        if config.validation.scheme == "walkforward":
+            dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
 
         # Phase 2.2 — essais cumulés sur cette cible/horizon, tout l'historique de
-        # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique.
+        # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique
+        # (P6.1 : branché sur les chemins CPCV plutôt que les blocs walk-forward
+        # quand ce schéma est actif, cf. `stats.pbo_for_target_cpcv`).
         cumulative_trials = trackstats.count_cumulative_trials(
             conn, config.objective.target_symbol, int(final_best["horizon"]))
-        pbo_result = trackstats.pbo_for_target(
-            conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
+        if config.validation.scheme == "cpcv":
+            pbo_result = trackstats.pbo_for_target_cpcv(
+                conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
+        else:
+            pbo_result = trackstats.pbo_for_target(
+                conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
 
         # Rapport d'audit, C4 -- diagnostic (LECTURE SEULE, cf. holdout_diagnostic.py) :
         # la procédure de sélection généralise-t-elle du test vers le holdout ?
-        # N'influence jamais final_best, calculé après coup uniquement.
-        holdout_diagnostic_result = trackholdout.spearman_test_vs_holdout(
-            conn, run_ids[int(final_best["horizon"])], metric="F1_dir")
+        # N'influence jamais final_best, calculé après coup uniquement. Sans
+        # objet en CPCV (pas de holdout terminal, cf. `_run_cpcv_scan`).
+        if config.validation.scheme == "walkforward":
+            holdout_diagnostic_result = trackholdout.spearman_test_vs_holdout(
+                conn, run_ids[int(final_best["horizon"])], metric="F1_dir")
 
     for run_id in run_ids.values():
         trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])

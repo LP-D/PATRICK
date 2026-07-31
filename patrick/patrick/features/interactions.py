@@ -44,7 +44,13 @@ def discover_interactions(X_df: pd.DataFrame, y: np.ndarray, top_base: int = 40,
         for b in pair_names[i + 1:]:
             for tname, fn in INTERACTION_TYPES.items():
                 try:
-                    col = fn(X_df[a], X_df[b])
+                    # `ratio`/`zrel` gardent déjà un dénominateur EXACTEMENT nul
+                    # (`.replace(0, np.nan)`), mais pas un dénominateur simplement
+                    # très petit -- ce cas produit un +-inf réel (pas NaN), que
+                    # XGBoost (utilisé par `_prefilter_top` juste après) rejette
+                    # sans condition (`Input data contains inf`). Traité comme
+                    # une valeur manquante, au même titre que le cas déjà géré.
+                    col = fn(X_df[a], X_df[b]).replace([np.inf, -np.inf], np.nan)
                     if col.notna().sum() > 20:
                         candidates[f"{a}__{tname}__{b}"] = col
                 except Exception:
