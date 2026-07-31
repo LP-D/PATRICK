@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table, empty_state %}
+{% block title %}PATRICK — Historique des runs{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Historique des runs</h1>
+<p class="page-subtitle">Tout run persisté en base (`patrick.db`), lancé depuis l'interface web ou en CLI (<code>patrick run</code>/<code>patrick resume</code>) — lecture seule, ne relance ni ne modifie rien.</p>
+
+<form class="filter-bar" method="get" action="/runs">
+    <label>Cible
+        <select name="target" onchange="this.form.submit()">
+            <option value="">— toutes —</option>
+            {% for t in targets %}
+            <option value="{{ t.target }}" {% if t.target == filter_target %}selected{% endif %}>{{ t.target }} ({{ t.n_runs }})</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Statut
+        <select name="status" onchange="this.form.submit()">
+            <option value="">— tous —</option>
+            {% for s in ["done", "running", "queued", "failed"] %}
+            <option value="{{ s }}" {% if s == filter_status %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Schéma
+        <select name="scheme" onchange="this.form.submit()">
+            <option value="">— tous —</option>
+            <option value="walkforward" {% if filter_scheme == "walkforward" %}selected{% endif %}>walk-forward</option>
+            <option value="cpcv" {% if filter_scheme == "cpcv" %}selected{% endif %}>CPCV</option>
+        </select>
+    </label>
+    <noscript><button type="submit">Filtrer</button></noscript>
+</form>
+
+{% if runs %}
+{% set rows = [] %}
+{% for r in runs %}
+{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else 'neutral') %}
+{% set _ = rows.append([
+    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.target ~ '</a>',
+    r.horizon ~ 'j',
+    ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
+    status_badge(r.status, state),
+    r.started_at or '—',
+    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—'),
+    ('%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—'),
+]) %}
+{% endfor %}
+{{ data_table(["Run", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "F1_dir (meilleur essai)", "DM p-value"], rows) }}
+{% else %}
+{{ empty_state("Aucun run pour l'instant.", "Configure et lance un run depuis la page d'accueil.") }}
+{% endif %}
+{% endblock %}

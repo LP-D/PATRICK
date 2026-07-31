@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table %}
+{% block title %}PATRICK — Univers de cibles{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Univers de cibles</h1>
+<p class="page-subtitle">Toutes les cibles configurables (mêmes groupes que le formulaire de lancement, <code>config/defaults.py::DEFAULT_TARGET_GROUPS</code>), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.</p>
+
+{% for g in groups %}
+<div class="group-block">
+    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.symbols | length }})</span></h2>
+    {% set rows = [] %}
+    {% for s in g.symbols %}
+    {% set state = 'ok' if s.n_done > 0 else ('neutral' if s.n_runs > 0 else 'disabled') %}
+    {% set label = (s.n_done ~ ' run(s) terminé(s)') if s.n_done > 0 else (s.n_runs ~ ' run(s) en cours' if s.n_runs > 0 else 'jamais lancée') %}
+    {% set _ = rows.append([
+        '<a href="/targets/' ~ s.symbol ~ '">' ~ s.symbol ~ '</a>',
+        s.label,
+        s.source,
+        status_badge(label, state),
+        s.last_started_at or '—',
+    ]) %}
+    {% endfor %}
+    {{ data_table(["Symbole", "Libellé", "Source", "Historique", "Dernier run"], rows) }}
+</div>
+{% endfor %}
+{% endblock %}
