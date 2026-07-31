@@ -19,6 +19,8 @@ from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import jobs as jobs_db
+from patrick.validation.cpcv import n_paths as cpcv_n_paths
+from patrick.validation.cpcv import path_performance_distribution
 
 DEFAULT_REPORTS_DIR = os.path.expanduser("~/.patrick/reports")
 
@@ -47,6 +49,20 @@ def _trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
             "holdout_metrics": _fold_metrics_summary(conn, trial_id, "holdout"),
         })
     return trials
+
+
+def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict | None:
+    """Phase 6.1 (P6.1) -- distribution de performance par CHEMIN CPCV
+    (`fold_metric[split='test_path']`, écrit par `pipeline/engine.py::
+    _run_cpcv_scan`) pour un trial donné -- jamais un point unique en mode
+    CPCV, cf. `validation/cpcv.py::path_performance_distribution`."""
+    rows = conn.execute(
+        "SELECT value FROM fold_metric WHERE trial_id = ? AND split = 'test_path' AND metric = 'F1_dir'",
+        (trial_id,),
+    ).fetchall()
+    if not rows:
+        return None
+    return path_performance_distribution({i: v for i, (v,) in enumerate(rows)})
 
 
 def _baselines_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
@@ -122,6 +138,11 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
         if run is None:
             raise ValueError(f"Run introuvable : {run_id}")
         trials = _trials_for_run(conn, run_id)
+        # Phase 6.1 (P6.1) -- distribution par chemin CPCV, lue pendant que la
+        # connexion est encore ouverte (utilisée plus bas seulement si le
+        # schéma de CE run est "cpcv", cf. `config` extrait après fermeture).
+        path_distributions = {t["trial_id"]: _path_distribution_for_trial(conn, t["trial_id"])
+                               for t in trials}
         baselines = _baselines_for_run(conn, run_id)
         job_stats = _job_stats_for_run(conn, run.get("job_id"))
         # Rapport d'audit, C4 -- diagnostic LECTURE SEULE (jamais utilisé pour
@@ -138,14 +159,50 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
     config = json.loads(run["config_json"])
     lib_versions = json.loads(run.get("lib_versions") or "{}") if run.get("lib_versions") else {}
 
-    trials_html = "".join(f"""
+    # Phase 6.1 (P6.1) -- schéma de validation actif pour CE run, jamais
+    # implicite : affiché en tête de rapport, et change la lecture de toute
+    # la section "Validité statistique" ci-dessous (holdout/DM structurellement
+    # non calculés en CPCV, cf. `pipeline/engine.py::_run_cpcv_scan`).
+    val_cfg = config.get("validation", {})
+    scheme = val_cfg.get("scheme", "walkforward")
+    is_cpcv = scheme == "cpcv"
+    if is_cpcv:
+        n_groups_cfg = val_cfg.get("n_groups")
+        k_test_cfg = val_cfg.get("k_test_groups")
+        n_paths_cfg = cpcv_n_paths(n_groups_cfg, k_test_cfg) if n_groups_cfg and k_test_cfg else None
+        scheme_html = (
+            f"<p><strong>Schéma de validation</strong> : <span class='on'>CPCV</span> "
+            f"(N={n_groups_cfg} groupes, k={k_test_cfg} groupes de test -&gt; "
+            f"{n_paths_cfg if n_paths_cfg is not None else '?'} chemins de backtest). "
+            "Alternative au walk-forward (cf. glossaire) -- holdout terminal, "
+            "affinage Optuna et Diebold-Mariano non calculés dans ce mode "
+            "(limites assumées, cf. METHODOLOGY.md).</p>"
+        )
+    else:
+        scheme_html = "<p><strong>Schéma de validation</strong> : <span class='on'>walk-forward</span></p>"
+
+    def _trial_row(t: dict) -> str:
+        if is_cpcv:
+            dist = path_distributions.get(t["trial_id"])
+            if dist and dist["n_paths"]:
+                perf_cell = (
+                    f"médiane={dist['median']:.4f} [{dist['q05']:.4f}, {dist['q95']:.4f}] "
+                    f"(std={dist['std']:.4f}, {dist['n_paths']} chemins)"
+                )
+            else:
+                perf_cell = "—"
+        else:
+            perf_cell = f"{t['test_metrics'].get('F1_dir', float('nan')):.4f}"
+        return f"""
         <tr class="{'best' if t['is_best'] else ''}">
             <td>{t['trial_id']}</td><td>{html.escape(t['regime'])}</td>
             <td>{html.escape(t['algo'])}</td><td>{html.escape(t['sampler'])}</td>
             <td class="num">{t['n_features']}</td><td>{html.escape(t['selector'])}</td>
-            <td class="num">{t['test_metrics'].get('F1_dir', float('nan')):.4f}</td>
+            <td class="num">{perf_cell}</td>
             <td>{'★ meilleur' if t['is_best'] else ''}</td>
-        </tr>""" for t in trials)
+        </tr>"""
+
+    trials_html = "".join(_trial_row(t) for t in trials)
 
     best_trial = next((t for t in trials if t["is_best"]), None)
     holdout_from_trial = best_trial["holdout_metrics"] if best_trial else {}
@@ -158,15 +215,27 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
     if job_stats:
         dm = job_stats.get("diebold_mariano")
         pbo = job_stats.get("pbo")
+        if is_cpcv:
+            dm_html = ("non calculé -- <span class='hint'>sans objet en mode CPCV (repose sur la "
+                       "topologie \"train=préfixe\" du walk-forward, cf. METHODOLOGY.md)</span>")
+            holdout_html = ("non calculé -- <span class='hint'>pas de holdout terminal en mode CPCV "
+                            "(toutes les combinaisons participent au scan, cf. METHODOLOGY.md)</span>")
+            pbo_label = "chemins CPCV" if pbo else "—"
+        else:
+            dm_pvalue = f"{dm['p_value']:.4f}" if dm else "—"
+            dm_flag = (" <span class='flag'>non significatif (p ≥ 0.05)</span>"
+                       if dm and dm['p_value'] >= 0.05 else "")
+            dm_baseline = html.escape(dm['baseline']) if dm else "—"
+            dm_html = f"p-value = {dm_pvalue}{dm_flag} (vs {dm_baseline})"
+            holdout_html = _fmt_metrics_table(job_stats.get('holdout') or {})
+            pbo_label = "blocs walk-forward"
         stats_html = f"""
         <p><strong>Essais cumulés (tout historique, table `trial`)</strong> : {job_stats.get('cumulative_trials', '—')}</p>
-        <p><strong>Diebold-Mariano</strong> (meilleur modèle vs {html.escape(dm['baseline']) if dm else '—'}) :
-           p-value = {f"{dm['p_value']:.4f}" if dm else '—'}
-           {" <span class='flag'>non significatif (p ≥ 0.05)</span>" if dm and dm['p_value'] >= 0.05 else ''}</p>
-        <p><strong>PBO</strong> (CSCV, {pbo['n_blocks'] if pbo else '—'} blocs) :
+        <p><strong>Diebold-Mariano</strong> : {dm_html}</p>
+        <p><strong>PBO</strong> ({pbo['n_blocks'] if pbo else '—'} {pbo_label}) :
            {f"{pbo['pbo']:.3f}" if pbo else '—'}
            {_fmt_pbo_reliability(pbo.get('reliability') if pbo else None)}</p>
-        <p><strong>Holdout terminal</strong> (job) : {_fmt_metrics_table(job_stats.get('holdout') or {})}</p>
+        <p><strong>Holdout terminal</strong> (job) : {holdout_html}</p>
         """
     else:
         stats_html = ("<p class='hint'>Non disponible : run lancé hors interface web "
@@ -300,6 +369,7 @@ def generate_report_html(run_id: str, db_path: str | None = None) -> str:
    statut={html.escape(run['status'])} · généré le {generated_at}</p>
 
 {_section("Reproductibilité", f'''
+{scheme_html}
 <table><tbody>
 <tr><td>Snapshot</td><td>{html.escape(run["snapshot_id"])}</td></tr>
 <tr><td>Config hash</td><td>{html.escape(run["config_hash"])}</td></tr>
