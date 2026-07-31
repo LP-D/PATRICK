@@ -35,10 +35,13 @@
 {% set pbo_rows = [] %}
 {% for horizon, by_scheme in detail.pbo_by_horizon.items() %}
 {% for scheme_name, pbo in [("walk-forward", by_scheme.walkforward), ("CPCV", by_scheme.cpcv)] %}
+{# Même règle que la page de détail (C5) : pas de point PBO tant que le
+   diagnostic de fiabilité refuse — sinon on affiche un chiffre à côté d'un
+   message disant qu'il n'a pas été calculé. #}
 {% if pbo.n_blocks > 0 %}
 {% set rel = pbo.reliability %}
 {% set rel_text = ("IC 90% [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (rel.message if (rel and rel.message) else "non calculable") %}
-{% set pbo_text = ("%.3f" | format(pbo.pbo)) if pbo.pbo == pbo.pbo else "—" %}
+{% set pbo_text = ("%.3f" | format(pbo.pbo)) if (rel and rel.ok) else "—" %}
 {% set _ = pbo_rows.append([horizon ~ "j", scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
 {% endif %}
 {% endfor %}

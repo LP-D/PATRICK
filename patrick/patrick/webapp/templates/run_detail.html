@@ -25,11 +25,16 @@
 {{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
           "Toutes les configurations testées sur cette cible/horizon, tout run confondu.", "neutral") }}
 
+{# Le point PBO n'est affiché QUE si le diagnostic de fiabilité l'accepte
+   (C5) : sous MIN_BLOCKS, `pbo_reliability` refuse explicitement, et son
+   message dit « PBO non calculé ». Afficher quand même la valeur ponctuelle
+   à côté de ce message se contredisait — un PBO à 4 blocs n'est pas
+   interprétable, c'est précisément ce que C5 a établi. #}
 {% set rel = detail.pbo.reliability %}
-{% if detail.pbo.pbo == detail.pbo.pbo %}
+{% if rel and rel.ok %}
 {{ metric("PBO (" ~ detail.pbo_label ~ ")", "%.3f" | format(detail.pbo.pbo),
-          ("IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations)) if rel and rel.ok else (rel.message if rel else "non calculable"),
-          "ok" if (rel and rel.ok) else "warning") }}
+          "IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations),
+          "ok") }}
 {% else %}
 {{ metric("PBO (" ~ detail.pbo_label ~ ")", "—",
           rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.",
