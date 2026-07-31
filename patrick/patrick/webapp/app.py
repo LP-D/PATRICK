@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from patrick.config.schema import RunConfig
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
+from patrick.tracking import history as trackhistory
 from patrick.webapp import alerts, forms, i18n, market_data, run_manager
 from patrick.webapp.glossary import GLOSSARY
 
@@ -169,11 +170,83 @@ def run_page(request: Request, run_id: str):
     seul `initial_run_id` change, forcé sur ce run précis plutôt que sur le
     run actif courant. Permet de rouvrir/partager le lien d'un run passé ou en
     cours sans dupliquer le template. Le formulaire settings est prérempli
-    avec la config réelle de ce run (pas les défauts)."""
-    _get_run_or_404(run_id)
-    config = run_manager.get_run_config(run_id)
-    view = forms.to_view(config.model_dump())
-    return _render_index(request, view, [], initial_run_id=run_id)
+    avec la config réelle de ce run (pas les défauts).
+
+    Phase 7.2 (P7.2) -- `run_manager.get_run` ne connaît que les runs lancés
+    depuis l'interface web (table `job`) : un `patrick run`/`patrick resume`
+    CLI n'a jamais de ligne `job` associée, et ne s'y trouve donc jamais. Si
+    ce run_id n'a pas de job mais existe dans `run` (table remplie par tout
+    run, CLI ou web), on bascule sur la page de détail lecture seule
+    (`run_detail.html`) plutôt que de renvoyer une 404 -- l'historique ne
+    doit jamais devenir inaccessible par ce lien (cf. PRODUCT.md, "rien
+    n'est silencieusement perdu")."""
+    if run_manager.get_run(run_id) is not None:
+        config = run_manager.get_run_config(run_id)
+        view = forms.to_view(config.model_dump())
+        return _render_index(request, view, [], initial_run_id=run_id)
+
+    conn = trackdb.connect()
+    try:
+        detail = trackhistory.run_detail(conn, run_id)
+    finally:
+        conn.close()
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Run introuvable (ni en mémoire, ni en base)")
+    return templates.TemplateResponse(
+        request, "run_detail.html", {"detail": detail, **_i18n_context(request)},
+    )
+
+
+@app.get("/runs")
+def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
+                   scheme: str | None = None):
+    """Phase 7.1 (P7.1) -- explorateur de l'historique complet de runs (table
+    `run`), lecture seule -- distinct de la file d'attente en mémoire de
+    `run_manager` (runs terminés/anciens y compris, tout redémarrage
+    confondu)."""
+    conn = trackdb.connect()
+    try:
+        runs = trackhistory.list_runs(conn, target=target, status=status, scheme=scheme)
+        targets = trackhistory.list_distinct_targets(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "runs.html",
+        {"runs": runs, "targets": targets, "filter_target": target or "",
+         "filter_status": status or "", "filter_scheme": scheme or "",
+         **_i18n_context(request)},
+    )
+
+
+@app.get("/targets/{ticker}")
+def target_page(request: Request, ticker: str):
+    """Phase 7.3 (P7.3) -- vue agrégée de tout l'historique de runs d'UNE
+    cible (tous horizons/schémas confondus), y compris la correction FDR
+    resituant sa meilleure p-value DM parmi toutes les cibles testées."""
+    conn = trackdb.connect()
+    try:
+        detail = trackhistory.target_detail(conn, ticker)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "target.html", {"target": ticker, "detail": detail, **_i18n_context(request)},
+    )
+
+
+@app.get("/universe")
+def universe_page(request: Request):
+    """Phase 7.5 (P7.5) -- univers de cibles configurables
+    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, déjà utilisé par le
+    formulaire de lancement), croisé avec l'historique réel de runs -- aucune
+    donnée nouvelle, juste la jointure des deux."""
+    conn = trackdb.connect()
+    try:
+        groups = trackhistory.universe_overview(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "universe.html", {"groups": groups, **_i18n_context(request)},
+    )
 
 
 @app.get("/runs/{run_id}/status")

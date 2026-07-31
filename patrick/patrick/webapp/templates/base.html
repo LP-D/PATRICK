@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/tokens.css">
     <link rel="stylesheet" href="/static/style.css">
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
     <script>
@@ -29,6 +30,8 @@
         </a>
         <span class="tagline">{{ t('tagline') if t else 'walk-forward · SHAP · Optuna — sans YAML' }}</span>
         <nav class="topnav">
+            <a href="/runs">{{ t('nav_runs') if t else 'Historique' }}</a>
+            <a href="/universe">{{ t('nav_universe') if t else 'Univers' }}</a>
             <a href="/simulate">{{ t('nav_simulate') if t else 'Simulateur' }}</a>
         </nav>
         <nav class="lang-switch" aria-label="Langue / Language">
