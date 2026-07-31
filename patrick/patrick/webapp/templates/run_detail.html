@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
+
+{% block content %}
+{% set run = detail.run %}
+{% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else 'neutral') %}
+<h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
+<p class="page-subtitle">
+    <a href="/targets/{{ run.target }}">{{ run.target }}</a> · horizon {{ run.horizon }}j ·
+    {{ status_badge('CPCV' if detail.is_cpcv else 'walk-forward', 'neutral') }}
+    {{ status_badge(run.status, state) }} ·
+    lancé le {{ run.started_at or '—' }}{% if run.finished_at %}, terminé le {{ run.finished_at }}{% endif %}
+</p>
+
+<nav class="tabs">
+    <a href="#resume">Résumé</a>
+    <a href="#essais">Essais</a>
+    <a href="#config">Configuration</a>
+</nav>
+
+<section id="resume">
+
+<div class="metric-grid">
+{{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
+          "Toutes les configurations testées sur cette cible/horizon, tout run confondu.", "neutral") }}
+
+{% set rel = detail.pbo.reliability %}
+{% if detail.pbo.pbo == detail.pbo.pbo %}
+{{ metric("PBO (" ~ detail.pbo_label ~ ")", "%.3f" | format(detail.pbo.pbo),
+          ("IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations)) if rel and rel.ok else (rel.message if rel else "non calculable"),
+          "ok" if (rel and rel.ok) else "warning") }}
+{% else %}
+{{ metric("PBO (" ~ detail.pbo_label ~ ")", "—",
+          rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.",
+          "disabled") }}
+{% endif %}
+
+{% if detail.is_cpcv %}
+{{ metric("Diebold-Mariano", "non calculé", "Sans objet en mode CPCV (repose sur la topologie « train=préfixe » du walk-forward).", "disabled") }}
+{% elif detail.dm_result %}
+{{ metric("Diebold-Mariano (vs " ~ detail.dm_result.baseline ~ ")", "p = %.4f" | format(detail.dm_result.p_value),
+          "significatif (p < 0.05)" if detail.dm_result.p_value < 0.05 else "non significatif (p ≥ 0.05)",
+          "ok" if detail.dm_result.p_value < 0.05 else "warning") }}
+{% else %}
+{{ metric("Diebold-Mariano", "—", "Non calculé (aucun trial gagnant n'a produit ce résultat pour ce run).", "disabled") }}
+{% endif %}
+
+{% if detail.is_cpcv %}
+{{ metric("Holdout terminal", "non calculé", "Sans objet en mode CPCV (toutes les combinaisons participent au scan).", "disabled") }}
+{% elif detail.holdout_f1_dir is not none %}
+{{ metric("Holdout terminal (F1_dir)", "%.4f" | format(detail.holdout_f1_dir), "Essai gagnant, jamais vu pendant la sélection.", "ok") }}
+{% else %}
+{{ metric("Holdout terminal", "—", "Non calculé pour ce run.", "disabled") }}
+{% endif %}
+
+{% if detail.target_fdr %}
+{{ metric("Correction FDR (cette cible)", "p ajustée = %.4f" | format(detail.target_fdr.adjusted_p_value),
+          "rang " ~ detail.target_fdr.rank ~ "/" ~ detail.fdr_result.n_tested ~ " cibles testées (BH, α=" ~ detail.fdr_result.alpha ~ ") — " ~
+          ("significatif" if detail.target_fdr.significant else "non significatif"),
+          "ok" if detail.target_fdr.significant else "warning") }}
+{% else %}
+{{ metric("Correction FDR (cette cible)", "—", "Pas de résultat Diebold-Mariano à situer parmi les autres cibles.", "disabled") }}
+{% endif %}
+
+{% if detail.holdout_diag.n_trials >= 3 %}
+{{ metric("Corrélation test/holdout (Spearman, grille complète)", "ρ = %.3f" | format(detail.holdout_diag.rho),
+          "p = %.4f, n = %d essais — diagnostic lecture seule (n'influence jamais une sélection)." | format(detail.holdout_diag.p_value, detail.holdout_diag.n_trials),
+          "neutral") }}
+{% else %}
+{{ metric("Corrélation test/holdout", "—", "Non calculable (n = " ~ detail.holdout_diag.n_trials ~ " essais avec test+holdout, minimum 3).", "disabled") }}
+{% endif %}
+</div>
+
+<section class="card">
+<h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>
+{% if detail.data_quality_enabled %}
+<p><strong>Portes de qualité de données</strong> : {{ status_badge('actives', 'ok') }}
+   {% if detail.quality_issues %} — {{ detail.quality_issues | length }} série(s) exclue(s) de l'univers de ce snapshot.{% else %} — aucune exclusion sur ce snapshot.{% endif %}</p>
+{% else %}
+<p><strong>Portes de qualité de données</strong> : {{ status_badge('désactivées pour ce run', 'disabled') }}</p>
+{% endif %}
+
+{% if not detail.stability_enabled %}
+<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('désactivée pour ce run', 'disabled') }}</p>
+{% elif detail.feature_stability is none %}
+<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('non calculée', 'disabled') }} (aucune config évaluée sur ≥ 2 folds pour cet horizon).</p>
+{% else %}
+{% set mj = detail.feature_stability.mean_jaccard %}
+<p><strong>Stabilité de la sélection de features</strong> (Jaccard moyen, {{ detail.feature_stability.n_folds }} folds) :
+   {% if mj == mj %}
+   {{ status_badge('%.3f' | format(mj), 'ok' if mj >= detail.min_mean_jaccard_warning else 'warning') }}
+   {% if mj < detail.min_mean_jaccard_warning %}<br><span class="hint">Sous le seuil ({{ detail.min_mean_jaccard_warning }}) — sélection instable, signal non démontré reproductible.</span>{% endif %}
+   {% else %}
+   {{ status_badge('non calculable (< 2 folds)', 'disabled') }}
+   {% endif %}
+</p>
+{% endif %}
+</section>
+
+</section>
+
+<section id="essais" class="card">
+<h2>Essais (table <code>trial</code>)</h2>
+{% set rows = [] %}
+{% set row_classes = [] %}
+{% for t in detail.trials %}
+{% if detail.is_cpcv %}
+{% set dist = detail.path_distributions.get(t.trial_id) %}
+{% set perf = ("médiane=%.4f [%.4f, %.4f] (std=%.4f, %d chemins)" | format(dist.median, dist.q05, dist.q95, dist.std, dist.n_paths)) if dist and dist.n_paths else '—' %}
+{% else %}
+{% set perf = ("%.4f" | format(t.test_f1_dir)) if t.test_f1_dir is not none else '—' %}
+{% endif %}
+{% set _ = rows.append([
+    t.trial_id, t.regime, t.algo, t.sampler, t.n_features, t.selector, perf,
+    ('★ meilleur' if t.is_best else ''),
+]) %}
+{% set _ = row_classes.append('best' if t.is_best else '') %}
+{% endfor %}
+{{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows, row_classes=row_classes) }}
+
+<h2>Baselines systématiques</h2>
+{% set brows = [] %}
+{% for b in detail.baselines %}
+{% set _ = brows.append([b.baseline, b.metrics.items() | map('join', '=') | join(', ')]) %}
+{% endfor %}
+{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.") }}
+</section>
+
+<section id="config" class="card">
+<h2>Configuration</h2>
+<pre>{{ detail.config | tojson(indent=1) }}</pre>
+<p class="hint">Snapshot : {{ run.snapshot_id }} · config hash : {{ run.config_hash }} · git SHA : {{ run.git_sha }} · seed : {{ run.seed }}</p>
+</section>
+{% endblock %}

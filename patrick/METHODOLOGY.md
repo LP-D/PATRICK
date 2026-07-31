@@ -564,3 +564,131 @@ cibles distinctes écrit bien deux lignes `dm_result`, agrégées correctement
 par `fdr_across_targets` ; contre-épreuve — un run CPCV n'écrit jamais de
 `dm_result` (jamais une p-value walk-forward réutilisée par erreur pour une
 cible qui n'a en réalité tourné qu'en CPCV).
+
+## 12. Phase 7 — interface (historique de runs, cibles, univers)
+
+Refonte de l'interface web autour d'un principe directeur : **aucun chiffre
+affiché sans sa contrepartie de fiabilité** (intervalle de confiance, taille
+d'échantillon, ou message explicite de non-calculabilité — jamais un nombre
+nu). Lecture seule : aucune de ces pages ne relance, ne modifie ni
+n'influence un run ; elles lisent uniquement `patrick.db` (mêmes briques de
+validité que `tracking/report.py`/`tracking/stats.py`, jamais réimplémentées
+différemment).
+
+### 12.0 Système de design (P7.0)
+
+- `webapp/static/tokens.css` : jetons (couleurs, typographie, espacement)
+  extraits de l'ancien `:root` de `style.css` — même charte sombre/or,
+  aucune couleur changée. Deux ajouts : une échelle typographique
+  (`--text-xs` à `--text-2xl`) et une échelle d'espacement (`--space-1` à
+  `--space-8`, base 4px).
+- **3 états sémantiques neufs**, en plus de `--ok`/`--warning`/`--error`
+  (déjà existants) : `--neutral` (informatif, ex. schéma de validation),
+  `--pending` (en cours/en file d'attente), `--disabled` (désactivé pour ce
+  run, ou non calculable — ni un succès ni un échec, ne doit pas se confondre
+  visuellement avec une erreur réelle). Portés par `.status-badge`/
+  `.metric-value` (`static/style.css`).
+- `webapp/templates/_components.html` : composants Jinja partagés —
+  `metric()` (force un troisième argument `reliability`, jamais implicite),
+  `status_badge()`, `data_table()`, `sparkline()` (SVG inline, sans JS),
+  `empty_state()` (pas de données) et `error_state()` (donnée manquante
+  inattendue) — deux sémantiques distinctes, jamais confondues.
+
+### 12.1-12.3 `/runs`, `/runs/{id}`, `/targets/{ticker}` (P7.1-P7.3)
+
+Nouveau module `tracking/history.py` : requêtes lecture seule, réutilisant
+`trackstats.pbo_for_target[_cpcv]`, `trackstats.fdr_across_targets`,
+`trackholdout.spearman_test_vs_holdout` sans les modifier (même discipline
+que P6.1/C5). Contrairement à `report.py` (dont holdout/DM/PBO ne
+s'affichent que pour un run lancé depuis l'interface web, limite du
+mécanisme `job.result_json`), ces requêtes recalculent PBO/essais cumulés à
+la volée pour N'IMPORTE QUEL run (CLI ou web) et lisent `dm_result`
+(migration 0009, P6.4) directement — disponible pour tout run walk-forward
+quelle que soit son origine.
+
+- `/runs` (P7.1) : explorateur de tout l'historique (`run`), filtrable par
+  cible/statut/schéma.
+- `/runs/{id}` (P7.2) : page de détail (essais, baselines, PBO, DM, holdout,
+  diagnostic de corrélation test/holdout, FDR, qualité de données, stabilité
+  des features). **Décision de routage** : `/runs/{run_id}` existait déjà
+  (suivi d'un run en cours/en file, pointant vers `index.html`) — plutôt que
+  de créer une collision d'URL, la route existante bascule sur cette
+  nouvelle page de détail lecture seule uniquement quand `run_manager` ne
+  connaît PAS ce run (pas de ligne `job` associée — cas d'un `patrick run`/
+  `patrick resume` CLI, qui n'a jamais de `job_id`) ; le comportement du
+  lancement/suivi en direct est inchangé à l'identique.
+- `/targets/{ticker}` (P7.3) : vue agrégée de tout l'historique d'une cible,
+  PBO par horizon (walk-forward et CPCV séparément), et statut FDR de la
+  cible parmi toutes les autres testées.
+
+### 12.4 Page d'accueil (P7.4)
+
+**Décision** : `/` reste le formulaire de lancement + tableau de bord de
+suivi existant (Phase 3), inchangé — une refonte du contenu de `/` n'a pas
+été tentée sans un brief exact de sa nouvelle maquette (risque de casser un
+flux déjà testé bout-en-bout, `test_webapp_smoke.py`). La découvrabilité des
+nouvelles pages est assurée par deux liens ajoutés à la barre de navigation
+commune (`base.html`) : « Historique » (`/runs`) et « Univers » (`/universe`).
+
+### 12.5 `/universe` (P7.5)
+
+Croise `config/defaults.py::DEFAULT_TARGET_GROUPS` (déjà l'univers de cibles
+du formulaire de lancement) avec l'historique réel de runs — aucune donnée
+nouvelle, juste la jointure des deux : pour chaque cible configurable, le
+nombre de runs et le dernier lancé, ou « jamais lancée » sinon.
+
+### 12.6 Tests
+
+`tests/test_history.py` (11 tests) : requêtes de `tracking/history.py` sur
+base SQLite directe (filtre, tri, agrégation par cible, structure
+walk-forward vs CPCV, cas vide). `tests/test_history_webapp_smoke.py` (8
+tests) : rendu FastAPI réel des 4 nouvelles pages (base pré-remplie
+directement, sans run pipeline complet — rapide, contrairement à
+`test_webapp_smoke.py`), y compris le cas 404 et les états vides.
+
+## 13. Correction N2 — une valeur infinie ne peut plus atteindre un modèle
+
+Un run réel sur `^VIX` échouait après 380s de construction de features avec
+`Input data contains "inf" or a value too large, while "missing" is not set
+to "inf"` (XGBoost). Diagnostic mesuré, pas supposé.
+
+**Cause racine** : `np.nan_to_num`, utilisé aux trois endroits où la matrice
+de features est construite (walk-forward, holdout, CPCV), donnait une fausse
+sécurité. Il mappe ±inf sur ±1.797e308 (le maximum float64) — valeur finie
+sur l'instant, mais le `RobustScaler` appliqué juste après divise par l'IQR
+de la colonne. Dès que cet IQR est < 1 — cas courant parmi 6632 colonnes
+(rendements, z-scores, indicateurs bornés) — la division **redonne ±inf**.
+Mesuré : une seule cellule infinie dans une colonne d'IQR 0.025 suffit à
+reproduire l'erreur. Le scaler étant ajusté sur le train seul, un inf présent
+uniquement dans le TEST emprunte aussi ce chemin.
+
+**Origine de l'inf** : la garde anti-inf existait dans
+`discover_interactions` (features/interactions.py) mais PAS dans
+`_apply_interaction_formulas` (pipeline/engine.py) — or les formules retenues
+sur le fold pilote sont ensuite *appliquées* aux autres folds, là où un
+dénominateur sain sur le pilote peut devenir ~0. `ratio`/`zrel` neutralisent
+un dénominateur exactement nul (`.replace(0, np.nan)`) mais pas un
+dénominateur simplement très petit, qui produit un ±inf réel. C'est le chemin
+reproduit en production.
+
+**Correctif, à deux étages plus la source** :
+
+- `_finite_features` remplace `np.nan_to_num` : un ±inf vient toujours d'un
+  calcul dégénéré (division par ~0, log d'une valeur <= 0) et ne porte aucune
+  information numérique — il suit donc le chemin des valeurs MANQUANTES
+  (comme NaN, déjà converti en 0.0), jamais celui d'un « nombre très grand ».
+  Compté et signalé, jamais silencieux (même discipline que la garde D3).
+- `_finite_scaled` garantit l'invariant en SORTIE de mise à l'échelle : une
+  valeur simplement très grande mais finie (donc invisible en amont) peut
+  encore déborder en étant divisée par un IQR minuscule. Les deux étages sont
+  nécessaires, l'un ne remplace pas l'autre.
+- `apply_interaction` devient le seul point d'application autorisé du registre
+  `INTERACTION_TYPES`, pour que la garde ne puisse plus être oubliée par un
+  appelant — la cause de l'asymétrie d'origine.
+
+**Tests** (`tests/test_inf_features.py`, 7 tests) : reproduction explicite de
+la cause racine (verrou anti-retrait du correctif : si `nan_to_num` seul
+cessait de réintroduire l'inf, le test le signale), équivalence inf/NaN,
+non-silence, débordement depuis une valeur finie, garde d'interaction sur
+dénominateur ~0 ET exactement nul, et surtout : XGBoost accepte réellement la
+matrice nettoyée là où il rejette la matrice naïve.
