@@ -194,6 +194,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_stocks": {"fr": "Actions individuelles", "en": "Individual stocks"},
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
 
+    # Phase 7 — historique/univers
+    "nav_runs": {"fr": "Historique", "en": "History"},
+    "nav_universe": {"fr": "Univers", "en": "Universe"},
+
     # Phase 4 — simulateur d'investissement
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
     "sim_title": {"fr": "Simulateur d'investissement (mono-actif)", "en": "Investment simulator (single-asset)"},
