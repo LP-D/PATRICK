@@ -132,6 +132,20 @@
 
         <fieldset>
             <legend>{{ t('section_validation') }}</legend>
+            <label>{{ t('field_scheme') }}{{ info('scheme') }}
+                <select name="scheme">
+                    <option value="walkforward" {% if view.scheme == 'walkforward' %}selected{% endif %}>{{ t('field_scheme_walkforward') }}</option>
+                    <option value="cpcv" {% if view.scheme == 'cpcv' %}selected{% endif %}>{{ t('field_scheme_cpcv') }}</option>
+                </select>
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_n_groups') }}{{ info('n_groups') }}
+                    <input type="number" name="n_groups" value="{{ view.n_groups }}">
+                </label>
+                <label>{{ t('field_k_test_groups') }}{{ info('k_test_groups') }}
+                    <input type="number" name="k_test_groups" value="{{ view.k_test_groups }}">
+                </label>
+            </div>
             <div class="subgrid">
                 <label>{{ t('field_n_wf_folds') }}
                     <input type="number" name="n_wf_folds" value="{{ view.n_wf_folds }}">

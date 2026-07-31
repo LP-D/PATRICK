@@ -93,7 +93,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "(without options) the premium the market pays to hedge volatility."),
     },
     "ar": {
-        "fr": ("AR (AutoRégressif) : modélise un rendement comme combinaison linéaire de "
+        "fr": ("AR (Autorégressif) : modélise un rendement comme combinaison linéaire de "
                "ses valeurs passées. La feature retenue est le résidu (la part du "
                "rendement que ce modèle linéaire simple n'explique pas)."),
         "en": ("AR (AutoRegressive): models a return as a linear combination of "
@@ -252,11 +252,58 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "with it even after purging. Distinct from purge (which acts on "
                "the train side)."),
     },
+    "scheme": {
+        "fr": ("Schéma de validation. Walk-forward : une seule frontière train/test "
+               "qui avance dans le temps. CPCV (Phase 6.1, López de Prado ch. 12) : "
+               "l'historique est découpé en N groupes contigus ; chaque combinaison "
+               "de k groupes de test est évaluée avec purge/embargo à CHAQUE "
+               "frontière de groupe de test (pas une seule), et les combinaisons "
+               "se recollent en plusieurs chemins de backtest indépendants — la "
+               "performance est alors rapportée comme une distribution (médiane, "
+               "quantiles), jamais un point unique. Alternative au walk-forward, "
+               "jamais un remplacement : pas de holdout terminal, pas d'affinage "
+               "Optuna, pas de Diebold-Mariano en mode CPCV (limites assumées, "
+               "cf. METHODOLOGY.md)."),
+        "en": ("Validation scheme. Walk-forward: a single train/test boundary "
+               "moving forward in time. CPCV (Phase 6.1, López de Prado ch. 12): "
+               "history is split into N contiguous groups; every combination of "
+               "k test groups is evaluated with purge/embargo at EACH test-group "
+               "boundary (not just one), and combinations are reassembled into "
+               "several independent backtest paths — performance is then reported "
+               "as a distribution (median, quantiles), never a single point. An "
+               "alternative to walk-forward, never a replacement: no terminal "
+               "holdout, no Optuna tuning, no Diebold-Mariano in CPCV mode "
+               "(assumed limitations, cf. METHODOLOGY.md)."),
+    },
+    "n_groups": {
+        "fr": ("CPCV : nombre de groupes contigus dans lesquels l'historique est "
+               "découpé. Avec k_test_groups groupes de test par combinaison, "
+               "le nombre de chemins de backtest reconstruits vaut C(N-1, k-1) "
+               "(formule combinatoire). Défaut (7) choisi comme le plus petit N "
+               "donnant au moins 6 chemins avec k=2 — 6 est le seuil minimal de "
+               "fiabilité du PBO (garde C5)."),
+        "en": ("CPCV: number of contiguous groups the history is split into. "
+               "With k_test_groups test groups per combination, the number of "
+               "reconstructed backtest paths is C(N-1, k-1) (combinatorial "
+               "formula). Default (7) chosen as the smallest N giving at least "
+               "6 paths with k=2 — 6 is the minimal PBO reliability threshold "
+               "(C5 guard)."),
+    },
+    "k_test_groups": {
+        "fr": ("CPCV : nombre de groupes de test par combinaison. Avec n_groups "
+               "groupes au total, chaque groupe sert de train dans certaines "
+               "combinaisons et de test dans d'autres — k_test_groups=2 (défaut) "
+               "avec n_groups=7 donne exactement 6 chemins de backtest."),
+        "en": ("CPCV: number of test groups per combination. With n_groups "
+               "groups total, each group is used as train in some combinations "
+               "and as test in others — k_test_groups=2 (default) with "
+               "n_groups=7 gives exactly 6 backtest paths."),
+    },
     "data_quality_enabled": {
         "fr": ("Portes de qualité de données (Phase 6.5) : chaque série candidate "
                "est contrôlée avant d'entrer dans l'univers de features (prix figés, "
                "trous de cotation, rendements aberrants au-delà d'un z robuste, fin "
-               "de série précoce probablement délistée, séries FRED absentes ou "
+               "de série précoce probablement delistée, séries FRED absentes ou "
                "discontinuées). Une série qui échoue un contrôle est exclue avec un "
                "motif explicite, persisté (jamais un avertissement perdu dans les "
                "logs). L'ingestion échoue si trop de l'univers demandé est exclu."),
