@@ -15,7 +15,7 @@
 
 {% block content %}
 {% set run = detail.run %}
-{% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else 'neutral') %}
+{% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
 <p class="page-subtitle">
     <a href="/targets/{{ run.target }}">{{ run.target }}</a> · horizon {{ run.horizon }}j ·

@@ -36,7 +36,7 @@
 {% if runs %}
 {% set rows = [] %}
 {% for r in runs %}
-{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else 'neutral') %}
+{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
     '<a href="/targets/' ~ r.target ~ '">' ~ r.target ~ '</a>',
@@ -44,7 +44,7 @@
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',
-    r.n_trials if r.n_trials is not none else '—',
+    r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
     ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
     ('%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '<span class="na">—</span>'),
 ]) %}

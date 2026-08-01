@@ -123,7 +123,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 /* ---------------------------------------------------------------------------
    Titres. Un listing ne crie pas : le titre de page est petit, en capitales
-   espacées, et c'est le FILET sous lui qui fait l'annonce.
+   espacées. Il ne porte PAS de filet -- le premier filet de la page est celui
+   du bloc de résultats qui suit, pleine largeur comme tous les autres.
    --------------------------------------------------------------------------- */
 h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 
@@ -307,7 +308,8 @@ table.leaderboard tbody tr.best td { font-weight: 700; color: var(--text); }
    à droite met les décimales en colonne. La classe est POSÉE par l'appelant
    de `data_table()` (argument `num_cols`) -- une cellule numérique ne se
    devine pas : elle peut porter un badge, un intervalle ou un NA. */
-table.data-table td.num, table.data-table th.num { text-align: right; }
+table.data-table td.num, table.data-table th.num,
+table.leaderboard td.num, table.leaderboard th.num { text-align: right; }
 
 /* Pied de listing. Une sortie de solveur ferme toujours sa table : combien de
    lignes, sur quelle portée, et quelles réserves pèsent sur les chiffres
@@ -322,8 +324,11 @@ table.data-table td.num, table.data-table th.num { text-align: right; }
     color: var(--text-3);
     max-width: 120ch;
 }
-table.leaderboard th { cursor: pointer; }
-table.leaderboard th:hover { color: var(--accent); }
+/* Seul `#leaderboard-table` est trie (`app.js::attachSort`). Les tables du
+   simulateur portent la meme classe de grammaire mais aucun tri : leur poser
+   un curseur de main et un survol d'accent promettait un geste inexistant. */
+table#leaderboard-table th { cursor: pointer; }
+table#leaderboard-table th:hover { color: var(--accent); }
 
 /* ---------------------------------------------------------------------------
    Avertissement en ligne. Dans une sortie de solveur, `Warning:` s'imprime
@@ -446,7 +451,8 @@ legend {
 }
 .downloads a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
-/* Onglets : un chemin, pas des boutons. */
+/* Index de sections -- PAS des onglets : les cibles sont des sections de la
+   même page, toutes rendues. Aucun état d'onglet actif n'existe ici. */
 .section-index {
     display: flex;
     flex-wrap: wrap;

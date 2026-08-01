@@ -275,7 +275,10 @@
         <p class="hint" id="queue-summary"></p>
     </div>
 
-    <p id="no-run-message" class="hint {% if initial_run_id %}hidden{% endif %}">{{ t('no_run_yet') }}</p>
+    {# Ce message ne vaut que si la colonne est REELLEMENT vide. Avec la liste
+       des derniers runs juste en dessous, « aucun run pour l'instant » etait
+       une contre-verite imprimee sur le premier ecran du produit. #}
+    <p id="no-run-message" class="hint {% if initial_run_id or recent_runs %}hidden{% endif %}">{{ t('no_run_yet') }}</p>
 
     {# Au repos, cette colonne n'avait rien à montrer sur toute la hauteur du
        premier viewport. La base a de quoi la remplir : les derniers runs,

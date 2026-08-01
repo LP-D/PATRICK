@@ -170,7 +170,7 @@
         ];
         var tbody = document.querySelector("#sim-metrics-table tbody");
         tbody.innerHTML = rows.map(function (r) {
-            return "<tr><td>" + tr(r[0], r[0]) + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>";
+            return "<tr><td>" + tr(r[0], r[0]) + '</td><td class="num">' + r[1] + '</td><td class="num">' + r[2] + "</td></tr>";
         }).join("");
     }
 
@@ -183,7 +183,7 @@
             return;
         }
         tbody.innerHTML = tradeReturns.map(function (r, i) {
-            return "<tr><td>" + (i + 1) + "</td><td>" + fmtPct(r, 2) + "</td></tr>";
+            return '<tr><td class="num">' + (i + 1) + '</td><td class="num">' + fmtPct(r, 2) + "</td></tr>";
         }).join("");
         var csv = "trade,return\n" + tradeReturns.map(function (r, i) { return (i + 1) + "," + r; }).join("\n");
         var blob = new Blob([csv], { type: "text/csv" });

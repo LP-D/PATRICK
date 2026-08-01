@@ -19,7 +19,11 @@
     --ground: #0D0F12;   /* la page */
     --surface: #14171B;  /* bloc de résultats, en-tête de session */
     --raise: #1B1F24;    /* second niveau : champ de saisie, ligne survolée */
-    --rule: #262B32;     /* filet HORIZONTAL. Il n'existe pas de filet vertical. */
+    --rule: #262B32;     /* filet, toujours HORIZONTAL : aucun filet vertical ne
+       sépare ni ne décore quoi que ce soit dans ce monde -- pas de colonne
+       rayée, pas d'accent latéral, pas de bord de carte. Seuls les CONTRÔLES
+       (champ, bouton, infobulle) gardent un contour fermé : un contrôle est
+       un objet qu'on manipule, pas une séparation entre deux contenus. */
     --rule-strong: #39404A; /* filet de séparation majeure (haut/bas d'un bloc) */
 
     /* --- Texte : la hiérarchie se fait par la TAILLE et la casse,

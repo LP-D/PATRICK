@@ -56,7 +56,7 @@
 <h2>Runs</h2>
 {% set rows = [] %}
 {% for r in detail.runs %}
-{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else 'neutral') %}
+{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
 {% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '<span class="na">—</span>' %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
