@@ -36,7 +36,8 @@
     <a href="#config">Configuration</a>
 </nav>
 
-<section id="resume">
+<section id="resume" class="card">
+<h2>Résumé</h2>
 
 <div class="metric-grid">
 {{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
@@ -101,7 +102,10 @@
 {% if refus_rest is defined and refus_rest %}
 <p class="block-note"><span class="block-note-marker">†</span> {{ refus_rest }}</p>
 {% endif %}
+</section>
 
+{# Panneau frère, pas imbriqué : un panneau DANS un panneau ne dit rien de plus
+   que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}
 <section class="card">
 <h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>
 {% if detail.data_quality_enabled %}
@@ -126,8 +130,6 @@
    {% endif %}
 </p>
 {% endif %}
-</section>
-
 </section>
 
 <section id="essais" class="card">

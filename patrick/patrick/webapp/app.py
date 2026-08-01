@@ -135,6 +135,44 @@ def movers():
     return alerts.get_cached()
 
 
+@app.get("/api/activity")
+def activity(limit: int = 120):
+    """Alimente la bande d'enregistrement du bandeau (`observatory.js`) — une
+    marque par run, posée à son heure de départ, hauteur portée par le nombre
+    d'essais et couleur par l'état.
+
+    Lecture seule et échec silencieux, comme `_recent_runs` : la bande est un
+    élément de gabarit partagé par TOUTES les pages, une base absente
+    (première installation) ne doit pas rendre l'interface inutilisable. Le
+    front distingue « pas encore de run » (`runs: []`) de « base illisible »
+    (`available: false`) et l'écrit dans la légende — la bande ne doit jamais
+    laisser croire à une station muette quand c'est la lecture qui a échoué."""
+    try:
+        conn = trackdb.connect()
+    except Exception:
+        return {"available": False, "runs": []}
+    try:
+        rows = trackhistory.list_runs(conn, limit=limit)
+    except Exception:
+        return {"available": False, "runs": []}
+    finally:
+        conn.close()
+    return {
+        "available": True,
+        "runs": [
+            {
+                "run_id": r["run_id"],
+                "name": r["name"] or r["run_id"],
+                "target": r["target"],
+                "status": r["status"],
+                "started_at": r["started_at"],
+                "n_trials": r["n_trials"],
+            }
+            for r in rows
+        ],
+    }
+
+
 @app.post("/runs")
 async def create_run(request: Request):
     """Répond en JSON (consommé par `app.js` en AJAX, sans rechargement de

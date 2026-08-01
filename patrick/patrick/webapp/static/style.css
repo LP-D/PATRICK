@@ -1,16 +1,24 @@
-/* PATRICK — monde visuel « Sortie de solveur ». Contrat de direction : en tête
-   de `templates/base.html`. Jetons : `tokens.css`.
+/* PATRICK — monde visuel « Station d'observation ». Contrat de direction : en
+   tête de `templates/base.html`. Jetons : `tokens.css`.
 
-   Trois règles gouvernent tout ce fichier :
-   1. Les filets sont HORIZONTAUX. Il n'y a pas de filet vertical, pas de
-      carte, pas de boîte fermée. Un listing sépare par des lignes, pas par
-      des conteneurs -- c'est la convention de la table économétrique publiée.
-   2. Toute donnée est en chasse fixe et alignée à la décimale. C'est le geste
-      central : deux nombres l'un sous l'autre se comparent en colonne.
-   3. L'accent ne dit que « interactif ou actif ». Il ne porte jamais une
-      donnée ni un jugement. */
+   Quatre règles gouvernent tout ce fichier :
+
+   1. DEUX MATIÈRES, jamais un dégradé de gris. Le boîtier de l'instrument est
+      en encre (`--ink`) : bandeau, bande d'enregistrement, plaques de tracé.
+      L'enregistrement se lit sur papier (`--surface` posé sur `--ground`).
+      Une toile est TOUJOURS sur le boîtier, dans les deux thèmes.
+   2. UN PANNEAU EST UN OBJET POSÉ : rayon, ombre à décalage ET flou. Le monde
+      précédent séparait par des filets nus et se lisait comme inachevé ; ici
+      le filet ne sert plus qu'à séparer deux lignes DANS un panneau.
+   3. LA DONNÉE EST EN CHASSE FIXE, alignée à la décimale ; le chrome (titre,
+      libellé, bouton, navigation) est en Archivo. Le contraste des deux
+      familles porte la hiérarchie — ce n'est plus la taille seule.
+   4. L'ACCENT NE DIT QUE « interactif ou actif ». Il ne porte jamais une
+      donnée ni un jugement : les jugements ont leurs propres jetons. */
 
 * { box-sizing: border-box; }
+
+html { background: var(--ground); }
 
 body {
     margin: 0;
@@ -18,12 +26,13 @@ body {
     color: var(--text);
     font-family: var(--ui);
     font-size: var(--t-body);
-    line-height: 1.5;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 /* Toute donnée numérique : chasse fixe + chiffres tabulaires. Non négociable,
-   c'est ce qui permet l'alignement décimal. */
+   c'est ce qui permet l'alignement décimal d'une colonne à l'autre. */
 table, .num, .mono, code, pre, .metric-value, input, select, textarea {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
@@ -32,136 +41,246 @@ table, .num, .mono, code, pre, .metric-value, input, select, textarea {
 
 /* Un bloc de config JSON a des lignes longues et indentées : les replier
    détruirait l'indentation, qui EST la structure. Il défile donc dans son
-   propre conteneur -- « règle du plancher explicite », la même qui régit
-   `.table-scroll`. Mesuré : sans cette règle, `/runs/{id}` débordait de
-   250px en 390px de large et c'était la PAGE qui défilait. */
+   propre conteneur — même règle que `.table-scroll`. Mesuré : sans elle,
+   `/runs/{id}` débordait de 250px en 390px de large, et c'était la PAGE qui
+   défilait. */
 pre {
     overflow-x: auto;
     overscroll-behavior-x: contain;
     max-width: 100%;
 }
-/* Vidage de config : entier, jamais tronqué, mais borné en hauteur -- un
-   listing imprime sa config, il ne lui laisse pas 12 000 px. */
+/* Vidage de config : entier, jamais tronqué, mais borné en hauteur — une
+   station imprime sa configuration, elle ne lui laisse pas 12 000 px. */
 .config-dump {
     max-height: 480px;
     overflow: auto;
     overscroll-behavior: contain;
-    border-top: 1px solid var(--rule);
-    border-bottom: 1px solid var(--rule);
-    padding: var(--s3) 0;
+    background: var(--raise);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-control);
+    padding: var(--s3) var(--s4);
     font-size: var(--t-micro);
-    line-height: 1.5;
+    line-height: 1.6;
     color: var(--text-2);
 }
 
 a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; text-underline-offset: 2px; }
-a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+:focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 1px;
+    outline-offset: 2px;
+    border-radius: 3px;
 }
 
-/* ---------------------------------------------------------------------------
-   Bandeau de session -- l'en-tête qu'un listing imprime avant tout résultat.
-   Il est collant, bas, en chasse fixe : une ligne de statut, pas une barre de
-   marque.
-   --------------------------------------------------------------------------- */
-.session {
+/* ===========================================================================
+   LE BOÎTIER — bandeau de la station.
+   Encre pleine largeur dans les deux thèmes : c'est l'appareil, pas une barre
+   de navigation habillée. Il est collant et bas ; la bande d'enregistrement,
+   elle, défile (on la lit en arrivant, pas en permanence).
+   =========================================================================== */
+.station {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 30;
     display: flex;
     align-items: center;
     gap: var(--s5);
-    padding: var(--s2) var(--s5);
-    background: var(--surface);
-    border-bottom: 1px solid var(--rule-strong);
+    padding: var(--s3) var(--s6);
+    background: var(--ink);
+    color: var(--ink-text);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+/* Le produit s'identifie par son nom en chasse fixe — aucun logo, aucun
+   monogramme : c'est un engagement de marque, pas un manque à combler. */
+.station-id {
     font-family: var(--mono);
+    font-size: var(--t-lead);
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    color: var(--ink-text);
+    padding-right: var(--s2);
+}
+.station-id:hover { color: var(--ink-text); text-decoration: none; }
+.station-id:hover::after { transform: scaleX(1); }
+.station-id::after {
+    content: "";
+    display: block;
+    height: 2px;
+    margin-top: 3px;
+    background: var(--accent-ink);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.station-nav { display: flex; align-items: center; gap: var(--s1); margin-right: auto; }
+.station-nav a {
+    padding: 6px var(--s3);
+    border-radius: var(--r-control);
+    color: var(--ink-text-2);
     font-size: var(--t-small);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: background 140ms ease-out, color 140ms ease-out;
 }
-.session-id {
-    color: var(--text);
-    font-weight: 700;
-    letter-spacing: 0.14em;
-}
-.session-id:hover { text-decoration: none; color: var(--accent); }
-.session-nav { display: flex; gap: var(--s4); margin-right: auto; }
-.session-nav a { color: var(--text-2); }
-.session-nav a::before { content: "/"; color: var(--text-3); margin-right: 2px; }
-.session-nav a:hover { color: var(--accent); text-decoration: none; }
-.session-lang { display: flex; gap: var(--s2); }
-.session-lang a { color: var(--text-3); }
-.session-lang a.active { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.station-nav a:hover { background: rgba(255, 255, 255, 0.08); color: var(--ink-text); text-decoration: none; }
+.station-nav a[aria-current="page"] { background: rgba(126, 166, 255, 0.16); color: var(--accent-ink); }
 
-/* Ligne de contexte de run, sous le bandeau : cible, snapshot, hash de
-   config, git SHA, seed. Le contrat de direction l'exige dans le PREMIER
-   viewport -- c'est le quadruplet sans lequel aucun chiffre de la page n'est
-   refaisable, et un listing imprime sa provenance avant son premier résultat.
-   Elle défile avec la page (contrairement au bandeau) : on la lit une fois,
-   on n'y revient pas. */
+.station-tools { display: flex; align-items: center; gap: var(--s4); }
+.station-lang { display: flex; gap: 2px; }
+.station-lang a {
+    padding: 4px var(--s2);
+    border-radius: var(--r-small);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    color: var(--ink-text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.station-lang a:hover { color: var(--ink-text); text-decoration: none; background: rgba(255, 255, 255, 0.08); }
+.station-lang a.active { background: rgba(255, 255, 255, 0.14); color: var(--ink-text); }
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: 5px var(--s3);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: var(--r-control);
+    background: transparent;
+    color: var(--ink-text-2);
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 140ms ease-out, color 140ms ease-out, background 140ms ease-out;
+}
+.theme-toggle:hover { border-color: rgba(255, 255, 255, 0.34); color: var(--ink-text); background: rgba(255, 255, 255, 0.06); }
+/* La pastille EST l'indicateur d'état : pleine en sombre, creuse en clair. */
+.theme-toggle::before {
+    content: "";
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    background: currentColor;
+}
+:root:not([data-theme="dark"]) .theme-toggle::before { background: transparent; }
+
+/* ---------------------------------------------------------------------------
+   LA BANDE D'ENREGISTREMENT — la signature du monde.
+   Un héliocorder trace en continu : la station montre son activité même quand
+   rien ne tourne. Chaque marque est un run, posé à son heure de départ ;
+   la hauteur porte le nombre d'essais (échelle logarithmique, plafond
+   étiqueté), la couleur porte l'état. C'est la seule chose de l'interface qui
+   parle du produit AVANT qu'on lui demande quoi que ce soit.
+   --------------------------------------------------------------------------- */
+.record {
+    position: relative;
+    background: var(--ink);
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding: var(--s3) var(--s6) var(--s2);
+}
+.record-canvas {
+    display: block;
+    width: 100%;
+    height: 72px;
+    border-radius: var(--r-small);
+    background: var(--ink-2);
+    cursor: crosshair;
+}
+/* Sans données, la bande ne feint pas un tracé : elle le dit. */
+.record-canvas[data-state="empty"] { cursor: default; }
+.record-caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s1) var(--s5);
+    margin: var(--s2) 0 0;
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--ink-text-2);
+}
+.record-caption b { font-weight: 600; color: var(--ink-text); }
+.record-tooltip {
+    position: absolute;
+    z-index: 40;
+    pointer-events: none;
+    padding: var(--s2) var(--s3);
+    border-radius: var(--r-control);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-raised);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.record-tooltip b { color: var(--text); font-weight: 600; }
+.record-tooltip span { color: var(--text-3); }
+
+/* Contexte de reproductibilité : cible, snapshot, hash de config, git SHA,
+   seed. Imprimé SUR le boîtier, avant le premier résultat — sans ces champs
+   aucun chiffre de la page n'est refaisable. */
 .session-context {
     display: flex;
     flex-wrap: wrap;
     gap: var(--s1) var(--s5);
-    padding: var(--s2) var(--s5);
-    background: var(--ground);
-    border-bottom: 1px solid var(--rule);
+    padding: var(--s2) var(--s6) var(--s3);
+    background: var(--ink);
     font-family: var(--mono);
     font-size: var(--t-micro);
-    color: var(--text-2);
+    color: var(--ink-text-2);
     overflow-wrap: anywhere;
 }
 .session-context b {
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-3);
+    letter-spacing: 0.1em;
+    color: rgba(159, 174, 198, 0.72);
     margin-right: var(--s1);
 }
 
-.container { max-width: 1680px; margin: 0 auto; padding: var(--s6) var(--s5) var(--s8); }
+.container { max-width: 1680px; margin: 0 auto; padding: var(--s7) var(--s6) var(--s8); }
 
-/* ---------------------------------------------------------------------------
-   Titres. Un listing ne crie pas : le titre de page est petit, en capitales
-   espacées. Il ne porte PAS de filet -- le premier filet de la page est celui
-   du bloc de résultats qui suit, pleine largeur comme tous les autres.
-   --------------------------------------------------------------------------- */
-h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
+/* ===========================================================================
+   Titres. Archivo, resserré. Plus d'air AU-DESSUS d'un titre qu'en dessous.
+   =========================================================================== */
+h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; }
 
 .page-title {
     font-size: var(--t-head);
     font-weight: 700;
-    letter-spacing: -0.01em;
-    margin-bottom: var(--s1);
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin-bottom: var(--s2);
 }
-/* Le sous-titre garde sa mesure de LECTURE (90ch) mais ne porte plus de
-   filet : un filet à 90ch au-dessus de filets pleine largeur donnait trois
-   longueurs de trait en 60px de hauteur, sur la première chose que voit un
-   visiteur. Le premier filet structurel de la page est désormais celui du
-   bloc qui suit -- pleine largeur, comme tous les autres. */
 .page-subtitle {
     color: var(--text-2);
-    font-size: var(--t-small);
-    max-width: 90ch;
-    margin: 0 0 var(--s5);
+    font-size: var(--t-body);
+    max-width: 72ch;
+    margin: 0 0 var(--s6);
 }
 
-/* Bloc de résultats : ouvert en haut par un filet fort et un titre en
-   capitales. Aucun fond, aucun cadre -- la séparation suffit. */
+/* ===========================================================================
+   LE PANNEAU — objet posé sur le plan de travail.
+   =========================================================================== */
 .card {
-    background: none;
-    border: 0;
-    border-top: 1px solid var(--rule-strong);
-    border-radius: 0;
-    padding: var(--s5) 0 var(--s6);
-    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
+    padding: var(--s5) var(--s6) var(--s6);
+    margin: 0 0 var(--s5);
 }
 .card > h2, .card-title {
-    font-family: var(--mono);
-    font-size: var(--t-small);
+    font-family: var(--display);
+    font-size: var(--t-micro);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     color: var(--text-2);
     margin: 0 0 var(--s4);
 }
@@ -169,44 +288,42 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 .hint { color: var(--text-3); font-size: var(--t-small); margin: 0 0 var(--s3); }
 .error-text { color: var(--error); }
 
-/* Valeur absente. Un solveur n'imprime pas une case vide : il imprime NA, et
-   la case reste alignée avec les chiffres de la colonne. Le tiret cadratin
-   tient ce rôle ici, en gris, jamais dans la couleur d'une mesure. */
+/* Valeur absente. Une station n'imprime pas une case vide : elle imprime NA, et
+   la case reste alignée avec les chiffres de sa colonne. Jamais dans la
+   couleur d'une mesure — trois absences sur une ligne ont la même couleur. */
 .na { color: var(--text-3); }
 
 /* ---------------------------------------------------------------------------
-   Le bloc de mesure -- composant signature du monde.
-   Un estimé ne s'imprime jamais sans son incertitude : le libellé, la valeur
-   et la ligne de fiabilité forment UN bloc indivisible, exactement comme
-   `coef  std.err  p` sort d'un solveur. Disposé en colonnes, pas en cartes.
+   LE BLOC DE MESURE — composant signature du produit.
+   Une station publie une magnitude AVEC son incertitude : le libellé, la
+   valeur et la ligne de fiabilité forment un bloc indivisible. La ligne de
+   fiabilité est décrochée par un filet vertical de 1px — c'est la seule
+   verticale du système, et elle sert à dire « ceci appartient au chiffre
+   au-dessus », pas à décorer.
    --------------------------------------------------------------------------- */
 .metric-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 0;
-    border-top: 1px solid var(--rule);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--s5) var(--s6);
 }
-.metric {
-    background: none;
-    border: 0;
-    border-bottom: 1px solid var(--rule);
-    border-radius: 0;
-    padding: var(--s3) var(--s5) var(--s4) 0;
-}
+.metric { min-width: 0; }
 .metric-label {
-    font-family: var(--mono);
+    font-family: var(--display);
     font-size: var(--t-micro);
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     color: var(--text-2);
     margin-bottom: var(--s2);
 }
 .metric-value {
     font-family: var(--mono);
-    font-size: var(--t-lead);
+    font-size: var(--t-value);
     font-weight: 500;
+    letter-spacing: -0.02em;
     color: var(--text);
-    line-height: 1.2;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
 }
 .metric-value.status-ok { color: var(--ok); }
 .metric-value.status-warning { color: var(--warn); }
@@ -214,64 +331,74 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 .metric-value.status-neutral { color: var(--text); }
 .metric-value.status-pending { color: var(--pending); }
 .metric-value.status-disabled { color: var(--text-3); }
-/* La ligne de fiabilité est indentée sous la valeur, comme une erreur-type
-   sous son coefficient. Elle n'est jamais optionnelle. */
 .metric-reliability {
     margin-top: var(--s2);
     padding-left: var(--s3);
+    border-left: 1px solid var(--rule-strong);
     font-family: var(--mono);
     font-size: var(--t-micro);
-    line-height: 1.45;
+    line-height: 1.5;
     color: var(--text-3);
 }
 
-/* Note de bloc -- l'équivalent de la note sous une table économétrique : une
-   justification méthodologique longue se lit sous le bloc, en petit, pas dans
-   une colonne de mesure où elle écraserait toute la rangée. */
+/* Note de bloc — l'équivalent de la note sous une table publiée : une
+   justification méthodologique longue se lit sous le bloc, pas dans une
+   colonne de mesure où elle écraserait toute la rangée. */
 .block-note {
-    margin: 0;
-    padding: var(--s3) 0 0;
+    margin: var(--s5) 0 0;
+    padding: var(--s3) var(--s4);
+    border-radius: var(--r-control);
+    background: var(--raise);
     max-width: 100ch;
-    font-family: var(--mono);
     font-size: var(--t-micro);
-    line-height: 1.55;
+    line-height: 1.6;
     color: var(--text-3);
 }
-.block-note-marker { color: var(--text-2); margin-right: var(--s1); }
+.block-note-marker { color: var(--text-2); font-weight: 600; margin-right: var(--s1); }
 
 /* ---------------------------------------------------------------------------
-   Marqueur d'état. Pas une pilule : un préfixe de listing, comme `[OK]`,
-   `Warning:` ou un code de convergence. Les crochets sont dessinés en CSS
-   pour que le libellé traduit reste seul dans le HTML.
+   Marqueur d'état — pastille. Le texte porte l'état, la couleur ne fait que
+   le doubler : lisible en monochrome, lisible pour un daltonien.
    --------------------------------------------------------------------------- */
 .status-badge {
-    display: inline;
-    font-family: var(--mono);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px var(--s2) 2px 7px;
+    border-radius: var(--r-chip);
+    font-family: var(--display);
     font-size: var(--t-micro);
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
-    background: none;
-    border: 0;
-    border-radius: 0;
-    padding: 0;
+    vertical-align: baseline;
 }
-.status-badge::before { content: "["; }
-.status-badge::after  { content: "]"; }
-.status-badge.status-ok { color: var(--ok); }
-.status-badge.status-warning { color: var(--warn); }
-.status-badge.status-error { color: var(--error); }
-.status-badge.status-neutral { color: var(--text); }
-.status-badge.status-pending { color: var(--pending); }
-.status-badge.status-disabled { color: var(--text-3); }
+.status-badge::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+}
+.status-badge.status-ok { color: var(--ok); background: var(--ok-weak); }
+.status-badge.status-warning { color: var(--warn); background: var(--warn-weak); }
+.status-badge.status-error { color: var(--error); background: var(--error-weak); }
+.status-badge.status-neutral { color: var(--text-2); background: var(--raise); }
+.status-badge.status-pending { color: var(--pending); background: var(--pending-weak); }
+.status-badge.status-disabled { color: var(--text-3); background: var(--raise); }
 
 /* ---------------------------------------------------------------------------
-   Tables. Filets horizontaux uniquement. En-têtes en capitales micro.
-   Colonnes numériques alignées à droite : c'est là que l'alignement décimal
-   devient lisible.
+   Tables. Filets horizontaux, en-tête collant dans son conteneur, colonnes de
+   mesure alignées à droite : c'est là que l'alignement décimal se lit.
    --------------------------------------------------------------------------- */
-.table-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.table-scroll {
+    overflow: auto;
+    overscroll-behavior-x: contain;
+    border: 1px solid var(--rule);
+    border-radius: var(--r-control);
+    background: var(--surface);
+}
 
 table.data-table, table.leaderboard {
     width: 100%;
@@ -279,87 +406,90 @@ table.data-table, table.leaderboard {
     font-family: var(--mono);
     font-size: var(--t-body);
     font-variant-numeric: tabular-nums;
-    margin: 0 0 var(--s3);
+    margin: 0;
 }
 table.data-table thead th, table.leaderboard thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    font-family: var(--display);
     font-size: var(--t-micro);
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-2);
     text-align: left;
-    padding: var(--s2) var(--s4) var(--s2) 0;
+    padding: var(--s3) var(--s4);
+    background: var(--raise);
     border-bottom: 1px solid var(--rule-strong);
     white-space: nowrap;
 }
 table.data-table tbody td, table.leaderboard tbody td {
-    padding: var(--s2) var(--s4) var(--s2) 0;
+    padding: var(--s3) var(--s4);
     border-bottom: 1px solid var(--rule);
     vertical-align: baseline;
 }
+table.data-table tbody tr:last-child td,
+table.leaderboard tbody tr:last-child td { border-bottom: 0; }
 table.data-table tbody tr:hover, table.leaderboard tbody tr:hover { background: var(--raise); }
-/* La ligne retenue se marque en GRAISSE et par le mot « meilleur » dans sa
-   derniere colonne -- pas par un filet vertical (il n'en existe pas dans ce
-   monde) ni par un aplat colore derriere des chiffres. */
+/* La ligne retenue se marque en graisse et par le mot « meilleur » dans sa
+   dernière colonne — pas par un aplat coloré derrière des chiffres. */
 table.data-table tbody tr.best td,
-table.leaderboard tbody tr.best td { font-weight: 700; color: var(--text); }
-/* Alignement décimal : le geste central du monde. `font-variant-numeric:
-   tabular-nums` (plus haut) donne des chiffres de largeur égale, l'alignement
-   à droite met les décimales en colonne. La classe est POSÉE par l'appelant
-   de `data_table()` (argument `num_cols`) -- une cellule numérique ne se
-   devine pas : elle peut porter un badge, un intervalle ou un NA. */
+table.leaderboard tbody tr.best td { font-weight: 600; color: var(--text); }
+table.data-table tbody tr.best td:first-child,
+table.leaderboard tbody tr.best td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 table.data-table td.num, table.data-table th.num,
 table.leaderboard td.num, table.leaderboard th.num { text-align: right; }
 
-/* Pied de listing. Une sortie de solveur ferme toujours sa table : combien de
-   lignes, sur quelle portée, et quelles réserves pèsent sur les chiffres
-   ci-dessus. Sans ce pied, une table courte se lit comme tronquée. */
+/* Pied de listing : combien de lignes, sur quelle portée, quelles réserves
+   pèsent sur les chiffres au-dessus. Sans lui, une table courte se lit comme
+   tronquée. */
 .table-footer {
-    margin: 0 0 var(--s5);
-    padding-top: var(--s2);
-    border-top: 1px solid var(--rule);
-    font-family: var(--mono);
+    margin: var(--s3) 0 var(--s5);
     font-size: var(--t-micro);
-    line-height: 1.5;
+    line-height: 1.6;
     color: var(--text-3);
-    max-width: 120ch;
+    max-width: 110ch;
 }
-/* Seul `#leaderboard-table` est trie (`app.js::attachSort`). Les tables du
-   simulateur portent la meme classe de grammaire mais aucun tri : leur poser
-   un curseur de main et un survol d'accent promettait un geste inexistant. */
-table#leaderboard-table th { cursor: pointer; }
+/* Seul `#leaderboard-table` est trié (`app.js::attachSort`). Les tables du
+   simulateur portent la même grammaire mais aucun tri : leur poser un curseur
+   de main promettrait un geste inexistant. */
+table#leaderboard-table th { cursor: pointer; user-select: none; }
 table#leaderboard-table th:hover { color: var(--accent); }
 
 /* ---------------------------------------------------------------------------
-   Avertissement en ligne. Dans une sortie de solveur, `Warning:` s'imprime
-   DANS le flux, à sa place chronologique -- jamais relégué dans un encart.
+   Avertissement. Une station imprime ses alarmes dans le flux, à leur place
+   chronologique — jamais reléguées dans un encart de bas de page.
    --------------------------------------------------------------------------- */
 .banner {
-    padding: var(--s3) 0;
+    display: block;
+    padding: var(--s3) var(--s4);
     margin: 0 0 var(--s4);
-    border: 0;
-    border-top: 1px solid var(--rule-strong);
-    border-bottom: 1px solid var(--rule-strong);
-    border-radius: 0;
-    font-family: var(--mono);
+    border: 1px solid;
+    border-radius: var(--r-control);
     font-size: var(--t-small);
+    line-height: 1.55;
+}
+.banner::before { font-weight: 700; margin-right: var(--s2); letter-spacing: 0.06em; }
+.banner-error {
+    background: var(--error-weak);
+    border-color: var(--error);
     color: var(--text);
 }
-/* La severite se lit dans le marqueur en tete de ligne, pas dans un filet
-   vertical : `Warning:` s'imprime, il ne se decore pas. */
-.banner::before { font-weight: 700; margin-right: var(--s2); }
-.banner-error { border-color: var(--error); }
-.banner-error::before { content: "[ERREUR]"; color: var(--error); }
-.banner-warning { border-color: var(--warn); }
-.banner-warning::before { content: "[AVERT]"; color: var(--warn); }
+.banner-error::before { content: "ALERTE"; color: var(--error); }
+.banner-warning {
+    background: var(--warn-weak);
+    border-color: var(--warn);
+    color: var(--text);
+}
+.banner-warning::before { content: "RÉSERVE"; color: var(--warn); }
 .banner ul { margin: var(--s2) 0 0; padding-left: var(--s5); }
 
 .empty-state, .error-state {
-    padding: var(--s5) 0;
-    border: 0;
-    border-top: 1px solid var(--rule);
-    border-radius: 0;
-    background: none;
+    padding: var(--s6) var(--s5);
+    border: 1px dashed var(--rule-strong);
+    border-radius: var(--r-control);
+    background: var(--raise);
     text-align: left;
     margin: 0;
 }
@@ -370,102 +500,151 @@ table#leaderboard-table th:hover { color: var(--accent); }
 }
 .empty-state-message { color: var(--text-2); }
 .error-state-message { color: var(--error); }
-/* Le vide s'écrit comme un solveur l'écrit : un jeton, pas une illustration. */
+/* Le vide s'écrit comme une station l'écrit : un jeton, pas une illustration. */
 .empty-state-message::before { content: "NA  "; color: var(--text-3); }
 
-/* ---------------------------------------------------------------------------
-   Contrôles. Rectangles, rayon 2px, fond en creux. Le bouton principal est
-   plein en accent -- unique surface colorée de l'interface.
-   --------------------------------------------------------------------------- */
+/* ===========================================================================
+   Contrôles.
+   =========================================================================== */
 button.primary {
-    padding: var(--s2) var(--s5);
-    border: 1px solid var(--accent);
+    padding: 9px var(--s5);
+    border: 1px solid transparent;
     border-radius: var(--r-control);
     background: var(--accent);
-    color: var(--ground);
-    font-family: var(--mono);
+    color: #FFFFFF;
+    font-family: var(--display);
     font-size: var(--t-body);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    transition: background 0.12s linear, border-color 0.12s linear;
+    box-shadow: var(--shadow-control);
+    transition: background 140ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 140ms ease-out;
 }
-button.primary:hover { background: transparent; color: var(--accent); }
-button.primary:disabled { opacity: 0.45; cursor: not-allowed; background: transparent; color: var(--text-3); border-color: var(--rule-strong); }
+button.primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-panel); }
+button.primary:active { transform: translateY(0); }
+button.primary:disabled {
+    background: var(--raise);
+    color: var(--text-3);
+    border-color: var(--rule);
+    box-shadow: none;
+    transform: none;
+    cursor: not-allowed;
+}
 
 .run-form label {
     display: block;
-    margin-bottom: var(--s3);
+    margin-bottom: var(--s4);
     font-size: var(--t-small);
+    font-weight: 500;
     color: var(--text-2);
 }
-.run-form label.checkbox { display: inline-flex; align-items: center; gap: var(--s2); margin-right: var(--s4); color: var(--text); }
+.run-form label.checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    margin-right: var(--s4);
+    margin-bottom: var(--s3);
+    color: var(--text);
+}
+.run-form input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
 .run-form input[type="text"], .run-form input[type="number"], .run-form input[type="date"],
 .run-form select, .run-form textarea, .filter-bar select, .filter-bar input {
     width: 100%;
-    padding: 5px var(--s2);
-    margin-top: var(--s1);
+    padding: 7px var(--s3);
+    margin-top: 5px;
     border: 1px solid var(--rule-strong);
     border-radius: var(--r-control);
-    background: var(--ground);
+    background: var(--raise);
     color: var(--text);
     font-family: var(--mono);
     font-size: var(--t-body);
-    transition: border-color 0.12s linear;
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out, background 140ms ease-out;
 }
-.run-form input:focus, .run-form select:focus, .run-form textarea:focus { border-color: var(--accent); }
+.run-form input:hover, .run-form select:hover, .run-form textarea:hover { border-color: var(--text-3); }
+.run-form input:focus, .run-form select:focus, .run-form textarea:focus,
+.filter-bar select:focus, .filter-bar input:focus {
+    outline: none;
+    background: var(--surface);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-weak);
+}
 
 fieldset {
     border: 0;
     border-top: 1px solid var(--rule);
-    border-radius: 0;
-    background: none;
-    padding: var(--s4) 0 var(--s2);
-    margin: 0 0 var(--s3);
+    padding: var(--s5) 0 var(--s2);
+    margin: 0 0 var(--s2);
 }
 legend {
-    padding: 0;
-    font-family: var(--mono);
+    padding: 0 var(--s3) 0 0;
+    font-family: var(--display);
     font-size: var(--t-micro);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     color: var(--text-2);
 }
-.subgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 var(--s5); }
-.subfieldset { border-top: 1px solid var(--rule); margin: var(--s2) 0 var(--s3); padding-top: var(--s3); }
+.subgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 var(--s5); }
+.subfieldset {
+    border-top: 1px solid var(--rule);
+    margin: var(--s3) 0 var(--s4);
+    padding-top: var(--s4);
+}
 
-.filter-bar { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: flex-end; margin-bottom: var(--s5); font-family: var(--mono); font-size: var(--t-small); color: var(--text-2); }
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s3) var(--s4);
+    align-items: flex-end;
+    margin-bottom: var(--s5);
+    padding: var(--s4) var(--s5);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
+    font-size: var(--t-small);
+    color: var(--text-2);
+}
 .filter-bar select, .filter-bar input { width: auto; }
 
 .downloads a {
-    display: inline-block;
-    margin: 0 var(--s3) var(--s2) 0;
-    padding: var(--s1) var(--s3);
+    display: inline-flex;
+    align-items: center;
+    margin: 0 var(--s2) var(--s2) 0;
+    padding: 5px var(--s3);
     border: 1px solid var(--rule-strong);
     border-radius: var(--r-control);
+    background: var(--surface);
     color: var(--text-2);
-    font-family: var(--mono);
     font-size: var(--t-small);
+    font-weight: 500;
+    transition: border-color 140ms ease-out, color 140ms ease-out, box-shadow 140ms ease-out;
 }
-.downloads a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.downloads a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    text-decoration: none;
+    box-shadow: var(--shadow-control);
+}
 
-/* Index de sections -- PAS des onglets : les cibles sont des sections de la
+/* Index de sections — PAS des onglets : les cibles sont des sections de la
    même page, toutes rendues. Aucun état d'onglet actif n'existe ici. */
 .section-index {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--s2) var(--s5);
-    padding: var(--s2) 0;
-    border-top: 1px solid var(--rule-strong);
-    border-bottom: 1px solid var(--rule-strong);
+    gap: var(--s2) var(--s4);
+    padding: var(--s3) var(--s5);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
     margin-bottom: var(--s5);
-    font-family: var(--mono);
     font-size: var(--t-micro);
     text-transform: uppercase;
     letter-spacing: 0.08em;
+    font-weight: 600;
 }
 .section-index-label { color: var(--text-3); }
 .section-index a { color: var(--text-2); }
@@ -474,18 +653,24 @@ legend {
 /* ---------------------------------------------------------------------------
    Suivi de run : progression, journal.
    --------------------------------------------------------------------------- */
-.progress-bar { height: 3px; background: var(--rule); overflow: hidden; border-radius: 0; }
+.progress-bar {
+    height: 6px;
+    background: var(--rule);
+    border-radius: var(--r-chip);
+    overflow: hidden;
+}
 .progress-fill {
     height: 100%;
     width: 100%;
     transform: scaleX(0);
     transform-origin: left;
     background: var(--accent);
+    border-radius: var(--r-chip);
     transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* Phase non mesurable : `worker.py` n'incrémente `progress_done` que sur les
    lignes de fold ; pendant l'ingestion et les features il vaut 0. La jauge ne
-   prétend alors à aucune valeur, elle balaie. Cf. le commit `animate`. */
+   prétend alors à aucune valeur — elle balaie. */
 .progress-bar[data-progress-mode="measuring"] .progress-fill {
     transform: none;
     transition: none;
@@ -503,44 +688,49 @@ legend {
 }
 html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 
-#status-line { color: var(--text-2); font-family: var(--mono); font-size: var(--t-small); margin: var(--s2) 0; }
-.run-name-line { font-family: var(--mono); font-size: var(--t-body); font-weight: 700; margin: 0 0 var(--s2); }
+#status-line { color: var(--text-2); font-family: var(--mono); font-size: var(--t-small); margin: var(--s3) 0; }
+.run-name-line { font-family: var(--mono); font-size: var(--t-lead); font-weight: 600; margin: 0 0 var(--s2); }
 .log-tail {
-    background: var(--ground);
-    border: 0;
-    border-top: 1px solid var(--rule);
-    border-radius: 0;
-    padding: var(--s2) var(--s3);
+    background: var(--ink);
+    border-radius: var(--r-control);
+    padding: var(--s3) var(--s4);
     max-height: 320px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     font-family: var(--mono);
     font-size: var(--t-micro);
-    line-height: 1.5;
-    color: var(--text-2);
+    line-height: 1.6;
+    color: var(--ink-text-2);
     white-space: pre-wrap;
 }
-.queue-panel { margin: 0 0 var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: var(--t-small); }
+.queue-panel {
+    margin: 0 0 var(--s4);
+    padding: var(--s3) var(--s4);
+    border-radius: var(--r-control);
+    background: var(--raise);
+    font-size: var(--t-small);
+}
 .queue-panel .hint { margin: 0; }
 
 .best-box {
-    background: none;
-    border: 0;
-    border-top: 1px solid var(--ok);
-    border-radius: 0;
-    padding: var(--s3) 0 var(--s2);
+    padding: var(--s4);
     margin: var(--s4) 0;
+    border-radius: var(--r-control);
+    background: var(--ok-weak);
+    box-shadow: inset 2px 0 0 var(--ok);
     font-family: var(--mono);
     font-size: var(--t-body);
 }
-/* Derniers runs -- occupe la colonne « avancement » au repos. Un listing,
-   pas des cartes : une ligne par run, la valeur alignée à droite, sa
-   contrepartie de fiabilité (n essais) juste en dessous, comme dans le bloc
-   de mesure. Même grammaire, échelle réduite. */
-.recent-runs { margin: var(--s3) 0 0; font-family: var(--mono); }
+/* Derniers runs — occupe la colonne « avancement » au repos. Une ligne par
+   run, la valeur alignée à droite, sa contrepartie de fiabilité juste en
+   dessous : même grammaire que le bloc de mesure, échelle réduite. */
+.recent-runs { margin: var(--s2) 0 0; font-family: var(--mono); }
 .recent-runs-title {
+    font-family: var(--display);
     font-size: var(--t-micro);
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
     color: var(--text-2);
     margin: 0 0 var(--s2);
     padding-bottom: var(--s2);
@@ -551,152 +741,324 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     display: grid;
     grid-template-columns: 1fr auto;
     column-gap: var(--s4);
-    padding: var(--s2) 0;
+    padding: var(--s3) 0;
     border-bottom: 1px solid var(--rule);
     font-size: var(--t-small);
 }
-.recent-runs-list a { grid-column: 1; color: var(--text); }
+.recent-runs-list a { grid-column: 1; color: var(--text); font-weight: 500; }
 .recent-runs-value { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; }
 .recent-runs-meta { grid-column: 1; font-size: var(--t-micro); color: var(--text-2); }
 .recent-runs-rel { grid-column: 2; text-align: right; font-size: var(--t-micro); color: var(--text-3); }
 .recent-runs-foot { margin: var(--s3) 0 0; font-size: var(--t-micro); }
 
-.stats-box { background: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: var(--s3) 0 0; margin: 0 0 var(--s4); font-family: var(--mono); font-size: var(--t-small); }
+.stats-box {
+    padding: var(--s3) var(--s4);
+    margin: 0 0 var(--s4);
+    border-radius: var(--r-control);
+    background: var(--raise);
+    font-family: var(--mono);
+    font-size: var(--t-small);
+}
 .stats-box p { margin: var(--s1) 0; }
 .stats-box .hint { color: var(--text-3); }
 
 .hidden { display: none; }
 
-/* ---------------------------------------------------------------------------
-   Tableau de bord d'accueil : quatre régions séparées par des filets, pas
-   quatre cartes flottantes.
-   --------------------------------------------------------------------------- */
-.dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--s7); }
+/* ===========================================================================
+   Tableau de bord d'accueil : quatre panneaux posés, pas quatre zones tracées.
+   =========================================================================== */
+/* `align-items` reste sur `stretch` (défaut) : deux panneaux côte à côte
+   s'alignent en bas. Mesuré en `start` : le panneau « movers » finissait à
+   1/4 de la hauteur de son voisin, laissant un vide blanc que rien
+   n'expliquait. Le corps de panneau défile, il ne raccourcit pas le panneau. */
+.dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s5);
+}
 .dash-panel {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    max-height: calc(100vh - 160px);
-    background: none;
-    border: 0;
-    border-top: 1px solid var(--rule-strong);
-    border-radius: 0;
-    padding: var(--s4) 0 var(--s6);
+    max-height: calc(100vh - 210px);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-panel);
+    padding: var(--s5);
 }
 .dash-panel-title {
     flex: 0 0 auto;
-    margin: 0 0 var(--s3);
-    font-family: var(--mono);
+    margin: 0 0 var(--s4);
+    font-family: var(--display);
     font-size: var(--t-micro);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     color: var(--text-2);
 }
-.dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: var(--s4); }
+.dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: var(--s1); }
+/* Un panneau qui défile doit le dire : le filet apparaît sous le titre dès que
+   le contenu dépasse. Sinon le panneau se lit comme complet alors qu'il est
+   coupé. */
+.dash-panel-body { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
 
 .group-block { margin-bottom: var(--s6); }
-.group-title { font-family: var(--mono); font-size: var(--t-small); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); margin: 0 0 var(--s2); }
-
-/* Glossaire : le terme reste intact, l'explication est disponible. Le
-   marqueur est un appel de note, pas un cercle. */
-.info-icon {
-    display: inline;
-    width: auto; height: auto;
-    margin-left: 2px; padding: 0;
-    border: 0; background: none;
-    color: var(--text-3);
-    font-family: var(--mono);
-    font-size: var(--t-micro);
-    cursor: pointer;
-    vertical-align: super;
+.group-title {
+    font-family: var(--display);
+    font-size: var(--t-small);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-2);
+    margin: 0 0 var(--s3);
 }
-.info-icon::before { content: "(?)"; }
-.info-icon:hover, .info-icon:focus { color: var(--accent); }
+
+/* Glossaire : le terme reste intact, l'explication est disponible. */
+.info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px; height: 15px;
+    margin-left: 3px; padding: 0;
+    border: 1px solid var(--rule-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-3);
+    font-family: var(--display);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: 1px;
+    transition: border-color 140ms ease-out, color 140ms ease-out, background 140ms ease-out;
+}
+.info-icon::before { content: "?"; }
+.info-icon:hover, .info-icon:focus { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); }
 
 .glossary-popover {
     position: absolute;
     z-index: 50;
     max-width: 380px;
     background: var(--surface);
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--r-control);
-    padding: var(--s3) var(--s6) var(--s3) var(--s3);
-    font-family: var(--mono);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-panel);
+    box-shadow: var(--shadow-raised);
+    padding: var(--s4) var(--s7) var(--s4) var(--s4);
     font-size: var(--t-small);
     color: var(--text);
     opacity: 1;
     transform: translateY(0);
-    transition: opacity 140ms linear, transform 140ms cubic-bezier(0.16, 1, 0.3, 1), display 140ms allow-discrete;
+    transition: opacity 140ms linear, transform 160ms cubic-bezier(0.16, 1, 0.3, 1), display 160ms allow-discrete;
 }
-.glossary-popover.hidden { display: none; opacity: 0; transform: translateY(-3px); transition: opacity 100ms linear, transform 100ms linear, display 100ms allow-discrete; }
-@starting-style { .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-3px); } }
-.glossary-popover-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-micro); color: var(--text-2); margin-bottom: var(--s2); }
-.glossary-popover-body { line-height: 1.5; }
-.glossary-popover-close { position: absolute; top: var(--s2); right: var(--s2); border: 0; background: none; color: var(--text-3); font-family: var(--mono); cursor: pointer; }
-.glossary-popover-close:hover { color: var(--text); }
+.glossary-popover.hidden { display: none; opacity: 0; transform: translateY(-4px); transition: opacity 100ms linear, transform 100ms linear, display 100ms allow-discrete; }
+@starting-style { .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-4px); } }
+.glossary-popover-title {
+    font-family: var(--display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--t-micro);
+    color: var(--text-2);
+    margin-bottom: var(--s2);
+}
+.glossary-popover-body { line-height: 1.6; }
+.glossary-popover-close {
+    position: absolute;
+    top: var(--s2); right: var(--s2);
+    width: 24px; height: 24px;
+    border: 0;
+    border-radius: var(--r-small);
+    background: none;
+    color: var(--text-3);
+    font-size: var(--t-lead);
+    line-height: 1;
+    cursor: pointer;
+}
+.glossary-popover-close:hover { color: var(--text); background: var(--raise); }
 
-/* Aperçu marché / movers */
-.target-preview { margin: 0 0 var(--s4); }
-.preview-range-buttons { display: flex; gap: var(--s2); margin-bottom: var(--s2); }
-.range-btn { padding: 2px var(--s2); border: 1px solid var(--rule-strong); border-radius: var(--r-control); background: none; color: var(--text-3); font-family: var(--mono); font-size: var(--t-micro); cursor: pointer; }
-.range-btn.active, .range-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* ---------------------------------------------------------------------------
+   Aperçu marché / movers. La toile est une PLAQUE : encre dans les deux
+   thèmes, coins adoucis, jamais un rectangle blanc bordé.
+   --------------------------------------------------------------------------- */
+.target-preview { margin: 0 0 var(--s5); }
+.preview-range-buttons { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
+.range-btn {
+    padding: 3px var(--s3);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r-chip);
+    background: var(--surface);
+    color: var(--text-3);
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 140ms ease-out, color 140ms ease-out, background 140ms ease-out;
+}
+.range-btn:hover { border-color: var(--accent); color: var(--accent); }
+.range-btn.active { border-color: transparent; background: var(--accent); color: #FFFFFF; }
+:root[data-theme="dark"] .range-btn.active { color: var(--ink); }
 .chart-wrap { position: relative; }
-#preview-canvas { width: 100%; height: 170px; border: 1px solid var(--rule); border-radius: 0; background: var(--ground); }
-.chart-tooltip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--r-control); padding: 2px var(--s2); font-family: var(--mono); font-size: var(--t-micro); color: var(--text); white-space: nowrap; }
-.target-news { margin-bottom: var(--s4); }
+#preview-canvas {
+    width: 100%;
+    height: 180px;
+    border-radius: var(--r-control);
+    background: var(--ink);
+}
+.chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-control);
+    box-shadow: var(--shadow-raised);
+    padding: 4px var(--s3);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    color: var(--text);
+    white-space: nowrap;
+}
+.target-news { margin-bottom: var(--s5); }
 .news-list { list-style: none; padding: 0; margin: 0; }
-.news-list li { margin-bottom: var(--s2); font-size: var(--t-small); }
+.news-list li { margin-bottom: var(--s3); font-size: var(--t-small); line-height: 1.5; }
 .news-list a { color: var(--text); }
 .news-list a:hover { color: var(--accent); }
 .news-publisher { font-size: var(--t-micro); color: var(--text-3); }
 
 .movers-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--s2); }
-.movers-header h2 { font-family: var(--mono); font-size: var(--t-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-2); }
-.movers-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s5); margin-top: var(--s3); }
-.movers-col-title { margin: 0 0 var(--s2); font-family: var(--mono); font-size: var(--t-micro); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.movers-header h2 {
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-2);
+}
+.movers-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--s5); margin-top: var(--s4); }
+.movers-col-title {
+    margin: 0 0 var(--s2);
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
 .movers-list { list-style: none; margin: 0; padding: 0; font-family: var(--mono); }
-.movers-list li { display: flex; align-items: baseline; gap: var(--s2); padding: 3px 0; border-bottom: 1px solid var(--rule); font-size: var(--t-small); }
-.movers-symbol { font-weight: 700; min-width: 62px; }
+.movers-list li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: var(--t-small);
+}
+.movers-symbol { font-weight: 600; min-width: 64px; }
 .movers-label { color: var(--text-3); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .movers-pct { font-variant-numeric: tabular-nums; }
 .movers-up { color: var(--ok); }
 .movers-down { color: var(--error); }
 
-/* Simulateur */
-.sim-title { font-family: var(--mono); font-size: var(--t-head); font-weight: 700; margin: 0 0 var(--s5); padding-bottom: var(--s4); border-bottom: 1px solid var(--rule-strong); }
-.sim-grid { display: grid; grid-template-columns: 320px 1fr; gap: 0 var(--s7); }
+/* ---------------------------------------------------------------------------
+   Simulateur.
+   --------------------------------------------------------------------------- */
+.sim-title {
+    font-family: var(--display);
+    font-size: var(--t-head);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--s6);
+}
+.sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: var(--s5); align-items: start; }
 .sim-panel-config { grid-row: 1 / span 3; }
 .sim-panel-equity, .sim-panel-metrics, .sim-panel-distribution { grid-column: 2; }
-.sim-panel-trades { grid-column: 1 / span 2; max-height: 420px; }
+.sim-panel-trades { grid-column: 1 / span 2; max-height: 460px; }
 #sim-equity-canvas, #sim-drawdown-canvas, #sim-dist-canvas {
-    width: 100%; border: 1px solid var(--rule); border-radius: 0; background: var(--ground); margin-bottom: var(--s3);
+    width: 100%;
+    border-radius: var(--r-control);
+    background: var(--ink);
+    margin-bottom: var(--s3);
 }
+/* Simulateur au repos. Une plaque de tracé vide de 400px de haut est un trou
+   noir, pas un état : tant qu'aucune simulation n'a tourné, les toiles se
+   réduisent à une bande et le panneau porte sa phrase d'attente. Le drapeau
+   est posé par `simulate.js` au premier rendu, jamais avant. */
+.sim-empty {
+    margin: 0 0 var(--s3);
+    padding: var(--s4);
+    border: 1px dashed var(--rule-strong);
+    border-radius: var(--r-control);
+    background: var(--raise);
+    color: var(--text-2);
+    font-size: var(--t-small);
+    line-height: 1.6;
+    max-width: 62ch;
+}
+body[data-sim-loaded] .sim-empty { display: none; }
+/* La plaque est retirée, pas atténuée : une toile vide laissée à 50% d'opacité
+   sur fond clair donne un aplat gris que rien n'explique -- pire que le trou
+   noir qu'elle remplaçait. Tant qu'il n'y a rien à tracer, il n'y a pas de
+   plaque. */
+body:not([data-sim-loaded]) #sim-equity-canvas,
+body:not([data-sim-loaded]) #sim-drawdown-canvas,
+body:not([data-sim-loaded]) #sim-dist-canvas,
+body:not([data-sim-loaded]) #sim-metrics-table,
+body:not([data-sim-loaded]) #sim-trades-table { display: none; }
+
+/* Les panneaux du simulateur ne se plafonnent pas en hauteur : le formulaire
+   de configuration doit être lu d'un bloc, pas dans une lucarne qui défile. */
+.sim-grid .dash-panel { max-height: none; }
+
 .sim-guard { color: var(--warn); }
 #sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; }
 #sim-trades-table { max-height: 320px; }
 
-.example-picker { margin-bottom: var(--s4); display: flex; gap: var(--s2); align-items: center; font-family: var(--mono); font-size: var(--t-small); }
+.example-picker { margin-bottom: var(--s5); display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: center; font-size: var(--t-small); }
+.example-picker label { color: var(--text-2); white-space: nowrap; }
+/* `min-width: 0` sur un enfant de flex : sans lui, un `select` prend la
+   largeur de sa plus longue option et pousse le panneau hors de l'écran.
+   Mesuré : 24px de débordement de PAGE en 390px de large. */
+.example-picker select {
+    flex: 1 1 200px;
+    min-width: 0;
+    padding: 6px var(--s3);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r-control);
+    background: var(--raise);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: var(--t-small);
+}
 .sparkline { vertical-align: middle; }
 .sparkline-empty { display: inline-block; color: var(--text-3); }
 
-/* ---------------------------------------------------------------------------
-   Étroit : la grille passe en colonne, le bandeau de session s'enroule.
-   --------------------------------------------------------------------------- */
-@media (max-width: 980px) {
-    .dashboard { grid-template-columns: 1fr; }
-    .dash-panel { max-height: none; }
+/* ===========================================================================
+   Étroit. Le boîtier reste un boîtier : il s'enroule, il ne se démonte pas.
+   =========================================================================== */
+@media (max-width: 1100px) {
     .sim-grid { grid-template-columns: 1fr; }
     .sim-panel-config, .sim-panel-equity, .sim-panel-metrics,
     .sim-panel-distribution, .sim-panel-trades { grid-column: 1; grid-row: auto; }
-    .session { flex-wrap: wrap; gap: var(--s2) var(--s4); padding: var(--s2) var(--s4); }
+}
+@media (max-width: 980px) {
+    .dashboard { grid-template-columns: 1fr; }
+    .dash-panel { max-height: none; }
+    .station { flex-wrap: wrap; gap: var(--s3) var(--s4); padding: var(--s3) var(--s4); }
+    .station-nav { order: 3; width: 100%; overflow-x: auto; }
+    .station-tools { margin-left: auto; }
+    .record { padding: var(--s3) var(--s4) var(--s2); }
+    .record-canvas { height: 56px; }
+    .session-context { padding: var(--s2) var(--s4) var(--s3); }
     .container { padding: var(--s5) var(--s4) var(--s7); }
-    .metric-grid { grid-template-columns: 1fr; }
+    .card { padding: var(--s4); }
+    .metric-grid { grid-template-columns: 1fr; gap: var(--s4); }
+    .page-title { font-size: 1.5rem; }
 }
 
 /* Le mouvement porte de l'information (mesurable vs non mesurable) : on retire
    le mouvement, jamais l'information. */
 @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
     .progress-fill { transition: none; }
     .progress-bar[data-progress-mode="measuring"] .progress-fill {
         animation: none;
@@ -709,8 +1071,9 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     .leaderboard tbody tr.flip-move { transition: none; }
     .glossary-popover, .glossary-popover.hidden { transition: none; }
     #results-panel.results-arriving { animation: none; }
+    button.primary, .station-id::after { transition: none; }
 }
 
 .leaderboard tbody tr.flip-move { transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1); }
-#results-panel.results-arriving { animation: patrick-arrive 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-@keyframes patrick-arrive { from { opacity: 0; } to { opacity: 1; } }
+#results-panel.results-arriving { animation: patrick-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes patrick-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

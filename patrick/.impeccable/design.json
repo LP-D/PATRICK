@@ -4,389 +4,474 @@
   "title": "Design System: PATRICK",
   "extensions": {
     "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Boîtier",
+        "canonical": "#0B1220",
+        "tonalRamp": [
+          "#080D17",
+          "#121E35",
+          "#1F335B",
+          "#2F4D89",
+          "#416BBE",
+          "#7694D0",
+          "#ACBEE2",
+          "#D9E1F2"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Boîtier, second niveau",
+        "canonical": "#16213A",
+        "tonalRamp": [
+          "#080D16",
+          "#141D34",
+          "#223259",
+          "#324C85",
+          "#4669B9",
+          "#7A93CD",
+          "#AEBDE0",
+          "#DAE1F1"
+        ]
+      },
+      "ink-text": {
+        "role": "neutral",
+        "displayName": "Texte sur boîtier",
+        "canonical": "#EDF1F7",
+        "tonalRamp": [
+          "#090E15",
+          "#162131",
+          "#263855",
+          "#38557F",
+          "#4E76B1",
+          "#809CC7",
+          "#B1C3DC",
+          "#DCE4EF"
+        ]
+      },
+      "ink-text-2": {
+        "role": "neutral",
+        "displayName": "Libellé sur boîtier",
+        "canonical": "#9FAEC6",
+        "tonalRamp": [
+          "#0B0E13",
+          "#1B222D",
+          "#2E3A4D",
+          "#445673",
+          "#5F78A0",
+          "#8C9EBB",
+          "#B9C4D5",
+          "#DFE4EC"
+        ]
+      },
       "ground": {
         "role": "neutral",
-        "displayName": "Fond",
-        "canonical": "#0D0F12",
+        "displayName": "Plan de travail",
+        "canonical": "#ECEFF4",
         "tonalRamp": [
-          "#06070A",
-          "#0D0F12",
-          "#14171B",
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#6B737F",
-          "#98A0AC"
+          "#0B0E13",
+          "#1A212D",
+          "#2D394E",
+          "#435674",
+          "#5D77A2",
+          "#8B9DBC",
+          "#B8C3D6",
+          "#DFE4EC"
         ]
       },
       "surface": {
         "role": "neutral",
-        "displayName": "Bloc",
-        "canonical": "#14171B",
+        "displayName": "Panneau",
+        "canonical": "#FFFFFF",
         "tonalRamp": [
-          "#080A0C",
-          "#0D0F12",
-          "#14171B",
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#6B737F",
-          "#98A0AC"
+          "#0F0F0F",
+          "#242424",
+          "#3D3D3D",
+          "#5C5C5C",
+          "#808080",
+          "#A3A3A3",
+          "#C7C7C7",
+          "#E6E6E6"
         ]
       },
       "raise": {
         "role": "neutral",
-        "displayName": "Second niveau",
-        "canonical": "#1B1F24",
+        "displayName": "Creux / champ",
+        "canonical": "#F4F6FA",
         "tonalRamp": [
-          "#0D0F12",
-          "#14171B",
-          "#1B1F24",
-          "#22272E",
-          "#262B32",
-          "#39404A",
-          "#6B737F",
-          "#98A0AC"
+          "#0A0D15",
+          "#161F31",
+          "#263654",
+          "#39507E",
+          "#5070AF",
+          "#8198C6",
+          "#B2C0DC",
+          "#DCE2EF"
         ]
       },
       "rule": {
         "role": "neutral",
-        "displayName": "Filet",
-        "canonical": "#262B32",
+        "displayName": "Filet interne",
+        "canonical": "#DEE3EC",
         "tonalRamp": [
-          "#0D0F12",
-          "#14171B",
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#5A626E",
-          "#8E96A2",
-          "#E4E7EC"
+          "#0B0E13",
+          "#1A212D",
+          "#2D384E",
+          "#435575",
+          "#5D76A2",
+          "#8A9CBC",
+          "#B8C3D6",
+          "#DFE4EC"
         ]
       },
       "rule-strong": {
         "role": "neutral",
-        "displayName": "Filet fort",
-        "canonical": "#39404A",
+        "displayName": "Contour d'objet manipulable",
+        "canonical": "#C3CBD8",
         "tonalRamp": [
-          "#0D0F12",
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#4C5561",
-          "#6B737F",
-          "#98A0AC",
-          "#E4E7EC"
+          "#0C0F13",
+          "#1C222B",
+          "#303A4A",
+          "#48576F",
+          "#64799B",
+          "#909FB7",
+          "#BBC4D3",
+          "#E0E4EB"
         ]
       },
       "text": {
         "role": "neutral",
-        "displayName": "Donnée",
-        "canonical": "#E4E7EC",
+        "displayName": "Texte principal",
+        "canonical": "#0F1626",
         "tonalRamp": [
-          "#262B32",
-          "#39404A",
-          "#5A626E",
-          "#7A828E",
-          "#98A0AC",
-          "#B8BEC7",
-          "#D0D5DC",
-          "#E4E7EC"
+          "#090D16",
+          "#141E33",
+          "#233358",
+          "#344C84",
+          "#486AB7",
+          "#7B94CB",
+          "#AFBDDF",
+          "#DAE1F1"
         ]
       },
       "text-2": {
         "role": "neutral",
-        "displayName": "Libellé",
-        "canonical": "#98A0AC",
+        "displayName": "Texte secondaire",
+        "canonical": "#47536A",
         "tonalRamp": [
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#5A626E",
-          "#7A828E",
-          "#98A0AC",
-          "#C0C6CE",
-          "#E4E7EC"
+          "#0C0E12",
+          "#1D212B",
+          "#313949",
+          "#4A566E",
+          "#667899",
+          "#919DB5",
+          "#BCC3D2",
+          "#E0E4EB"
         ]
       },
       "text-3": {
         "role": "neutral",
-        "displayName": "Incertitude",
-        "canonical": "#8E96A2",
+        "displayName": "Incertitude / NA",
+        "canonical": "#626D80",
         "tonalRamp": [
-          "#1B1F24",
-          "#262B32",
-          "#39404A",
-          "#565E69",
-          "#727A86",
-          "#8E96A2",
-          "#B6BCC5",
-          "#E4E7EC"
+          "#0D0F11",
+          "#1F2228",
+          "#353B45",
+          "#505968",
+          "#6F7B90",
+          "#97A0AF",
+          "#BFC5CE",
+          "#E2E5E9"
         ]
       },
       "accent": {
         "role": "primary",
-        "displayName": "Interactif",
-        "canonical": "#5B9DFF",
+        "displayName": "Accent — interactif",
+        "canonical": "#1B4FD8",
         "tonalRamp": [
-          "#0B1A2E",
-          "#12294A",
-          "#1A3D6E",
-          "#2456A0",
-          "#3B79D4",
-          "#5B9DFF",
-          "#93BFFF",
-          "#C9DEFF"
+          "#030A1B",
+          "#08173F",
+          "#0E286D",
+          "#143CA3",
+          "#1C53E3",
+          "#5C83EB",
+          "#9BB3F3",
+          "#D2DDF9"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Accent, survol",
+        "canonical": "#143CAB",
+        "tonalRamp": [
+          "#030A1B",
+          "#071640",
+          "#0D266E",
+          "#133AA4",
+          "#1B50E4",
+          "#5B81EC",
+          "#9BB2F3",
+          "#D1DCFA"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Accent sur boîtier",
+        "canonical": "#7EA6FF",
+        "tonalRamp": [
+          "#00091F",
+          "#001647",
+          "#00267A",
+          "#0039B8",
+          "#004FFF",
+          "#4780FF",
+          "#8FB2FF",
+          "#CCDCFF"
         ]
       },
       "ok": {
         "role": "success",
-        "displayName": "Concluant",
-        "canonical": "#4FB286",
+        "displayName": "Mesure concluante",
+        "canonical": "#0B6E4F",
         "tonalRamp": [
-          "#0A1E17",
-          "#0F3227",
-          "#164B39",
-          "#1F6B50",
-          "#2F8E6A",
-          "#4FB286",
-          "#88CFAF",
-          "#C2E7D6"
+          "#031C14",
+          "#06412F",
+          "#0B6F50",
+          "#11A778",
+          "#17E8A6",
+          "#58EEBF",
+          "#99F5D8",
+          "#D1FAED"
         ]
       },
       "warn": {
         "role": "warning",
         "displayName": "Réserve",
-        "canonical": "#D9A03F",
+        "canonical": "#8A5A08",
         "tonalRamp": [
-          "#2A1D07",
-          "#43300C",
-          "#5F4614",
-          "#84631F",
-          "#AE822C",
-          "#D9A03F",
-          "#E9C280",
-          "#F4DEBB"
+          "#1D1302",
+          "#432C04",
+          "#744B07",
+          "#AE710A",
+          "#F19D0E",
+          "#F5B951",
+          "#F9D495",
+          "#FCEBCF"
         ]
       },
       "error": {
         "role": "danger",
-        "displayName": "Échec",
-        "canonical": "#E0736B",
+        "displayName": "Échec / exclusion",
+        "canonical": "#B32D22",
         "tonalRamp": [
-          "#2C100E",
-          "#461916",
-          "#66261F",
-          "#8C362D",
-          "#B55044",
-          "#E0736B",
-          "#ECA39D",
-          "#F6D0CD"
+          "#1A0605",
+          "#3C0F0B",
+          "#671A14",
+          "#9A271D",
+          "#D63629",
+          "#E26E65",
+          "#EDA7A1",
+          "#F7D7D4"
         ]
       },
       "pending": {
         "role": "info",
         "displayName": "En cours",
-        "canonical": "#C39BE8",
+        "canonical": "#5B34B0",
         "tonalRamp": [
-          "#1F1329",
-          "#331E42",
-          "#4B2C60",
-          "#673E82",
-          "#8F5FAD",
-          "#C39BE8",
-          "#DAC1F1",
-          "#EDE0F8"
+          "#0C0718",
+          "#1C1037",
+          "#311C5E",
+          "#492A8E",
+          "#663AC5",
+          "#9171D5",
+          "#BCA8E5",
+          "#E0D8F3"
+        ]
+      },
+      "ok-ink": {
+        "role": "success",
+        "displayName": "Concluant sur boîtier",
+        "canonical": "#35C08A",
+        "tonalRamp": [
+          "#071811",
+          "#0F3828",
+          "#1A6045",
+          "#289067",
+          "#37C890",
+          "#6FD7AF",
+          "#A7E7CE",
+          "#D7F4E9"
+        ]
+      },
+      "warn-ink": {
+        "role": "warning",
+        "displayName": "Réserve sur boîtier",
+        "canonical": "#E0A94E",
+        "tonalRamp": [
+          "#1A1205",
+          "#3D2A0B",
+          "#684812",
+          "#9C6C1B",
+          "#D99626",
+          "#E4B363",
+          "#EED1A0",
+          "#F7EAD4"
+        ]
+      },
+      "error-ink": {
+        "role": "danger",
+        "displayName": "Échec sur boîtier",
+        "canonical": "#FF8172",
+        "tonalRamp": [
+          "#1F0300",
+          "#470800",
+          "#7A0D00",
+          "#B81400",
+          "#FF1B00",
+          "#FF5B47",
+          "#FF9B8F",
+          "#FFD1CC"
         ]
       }
     },
     "typographyMeta": {
       "head": {
         "displayName": "Titre de page",
-        "purpose": "22px, chasse fixe, 700. Un seul par écran ; il ne porte pas de filet."
+        "face": "Archivo"
+      },
+      "value": {
+        "displayName": "Valeur de mesure",
+        "face": "Spline Sans Mono"
       },
       "lead": {
-        "displayName": "Valeur",
-        "purpose": "16px, chasse fixe, 500. Valeur mise en avant d'un bloc de mesure, titre de bloc."
+        "displayName": "Titre de panneau",
+        "face": "Archivo"
       },
       "body": {
-        "displayName": "Donnée",
-        "purpose": "13px, chasse fixe. Cellule de table, donnée courante. Chiffres tabulaires obligatoires."
+        "displayName": "Donnée courante",
+        "face": "Spline Sans Mono"
       },
       "small": {
-        "displayName": "Chrome",
-        "purpose": "12px, pile système. Libellé de formulaire, prose, métadonnée — l'habillage, pas le contenu."
+        "displayName": "Libellé",
+        "face": "Archivo"
       },
       "micro": {
-        "displayName": "Note",
-        "purpose": "11px, chasse fixe, capitales espacées. En-tête de colonne, ligne de fiabilité, marqueur d'état, pied de listing."
+        "displayName": "En-tête de colonne / note",
+        "face": "Archivo"
       }
     },
-    "shadows": [],
-    "motion": [
-      {
-        "name": "state-transition",
-        "value": "background 0.12s linear, border-color 0.12s linear",
-        "purpose": "Changement d'état d'un contrôle (bord de champ au focus, fond de bouton au survol)."
+    "shadows": {
+      "panel": {
+        "light": "0 1px 2px rgba(11,18,32,.05), 0 10px 28px -14px rgba(11,18,32,.22)",
+        "dark": "0 1px 0 rgba(255,255,255,.05) inset, 0 12px 30px -16px rgba(0,0,0,.85)"
       },
-      {
-        "name": "progress-settle",
-        "value": "transform 0.55s cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "La jauge se pose sur sa valeur réelle au premier fold, après la phase non mesurable."
+      "raised": {
+        "light": "0 2px 4px rgba(11,18,32,.07), 0 18px 44px -18px rgba(11,18,32,.30)",
+        "dark": "0 1px 0 rgba(255,255,255,.07) inset, 0 20px 48px -20px rgba(0,0,0,.92)"
       },
-      {
-        "name": "measuring",
-        "value": "1900ms cubic-bezier(0.45, 0, 0.55, 1) infinite",
-        "purpose": "Balayage de masque pendant une phase qui ne produit AUCUNE mesure : la jauge ne prétend à aucune valeur plutôt que d'afficher 0%."
-      },
-      {
-        "name": "flip-move",
-        "value": "transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Continuité de lecture au tri du leaderboard (technique FLIP) : la ligne suivie reste suivie."
-      },
-      {
-        "name": "arrive",
-        "value": "opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Arrivée du panneau de résultats en fin de run — même séquence que la pose de la jauge, pas un effet indépendant."
+      "control": {
+        "light": "0 1px 2px rgba(11,18,32,.08)",
+        "dark": "0 1px 2px rgba(0,0,0,.45)"
       }
-    ],
-    "breakpoints": [
-      {
-        "name": "collapse",
-        "value": "980px"
+    },
+    "motion": {
+      "record-reveal": {
+        "duration": "620ms",
+        "easing": "cubic-bezier(0.16,1,0.3,1) (sortie cubique en JS)",
+        "note": "Le seul moment authoré : la bande se révèle de gauche à droite au chargement."
       },
-      {
-        "name": "container-max",
-        "value": "1680px"
+      "progress-sweep": {
+        "duration": "1900ms",
+        "easing": "cubic-bezier(0.45,0,0.55,1)",
+        "note": "Uniquement pendant les phases NON mesurables ; en reduced-motion devient un motif rayé statique."
+      },
+      "control": {
+        "duration": "140ms",
+        "easing": "ease-out"
+      },
+      "panel-arrive": {
+        "duration": "260ms",
+        "easing": "cubic-bezier(0.16,1,0.3,1)"
       }
-    ]
-  },
-  "components": [
-    {
-      "name": "Primary Button",
-      "kind": "button",
-      "refersTo": "button-primary",
-      "description": "Lance un run ou une simulation. Seule inversion de contraste du système : plein accent au repos, contour accent sur fond transparent au survol.",
-      "html": "<button class=\"ds-btn-primary\">Lancer le run</button>",
-      "css": ".ds-btn-primary { padding: 8px 20px; border: 1px solid var(--accent, #5B9DFF); border-radius: 2px; background: var(--accent, #5B9DFF); color: var(--ground, #0D0F12); font-family: var(--mono, ui-monospace, monospace); font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; transition: background 0.12s linear, border-color 0.12s linear; }\n.ds-btn-primary:hover { background: transparent; color: var(--accent, #5B9DFF); }"
     },
-    {
-      "name": "Status Badge",
-      "kind": "badge",
-      "refersTo": "status-badge",
-      "description": "Etat en TEXTE entre crochets, jamais une pastille. Les crochets viennent de ::before/::after ; la couleur ne fait que doubler une information deja portee par le mot.",
-      "html": "<span class=\"ds-badge ds-badge-pending\">running</span>",
-      "css": ".ds-badge { font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; background: none; border: 0; border-radius: 0; padding: 0; }\n.ds-badge::before { content: \"[\"; }\n.ds-badge::after { content: \"]\"; }\n.ds-badge-pending { color: var(--pending, #C39BE8); }"
+    "breakpoints": {
+      "wide": "1100px",
+      "narrow": "980px"
     },
-    {
-      "name": "Metric with Reliability",
-      "kind": "data-display",
-      "refersTo": "metric-value",
-      "description": "Composant signature. La ligne de fiabilite n'est JAMAIS optionnelle : la signature du macro Jinja force un troisieme argument. Elle est indentee sous la valeur, comme une erreur-type sous son coefficient.",
-      "html": "<div class=\"ds-metric\"><div class=\"ds-metric-label\">PBO (blocs walk-forward)</div><div class=\"ds-metric-value\">0.312</div><div class=\"ds-metric-rel\">IC 90% [0.240, 0.395] (bootstrap, 20 combinaisons)</div></div>",
-      "css": ".ds-metric { background: none; border: 0; border-bottom: 1px solid var(--rule, #262B32); border-radius: 0; padding: 12px 20px 16px 0; }\n.ds-metric-label { font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2, #98A0AC); margin-bottom: 8px; }\n.ds-metric-value { font-family: var(--mono, ui-monospace, monospace); font-size: 1rem; font-weight: 500; color: var(--text, #E4E7EC); line-height: 1.2; }\n.ds-metric-rel { margin-top: 8px; padding-left: 12px; font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; line-height: 1.45; color: var(--text-3, #8E96A2); }"
+    "themes": {
+      "strategy": "Deux rendus écrits séparément, jamais une inversion. :root = clair (défaut), :root[data-theme=dark] = sombre.",
+      "inkTokensAreThemeInvariant": [
+        "ink",
+        "ink-2",
+        "ink-text",
+        "ink-text-2",
+        "accent-ink",
+        "ok-ink",
+        "warn-ink",
+        "error-ink"
+      ],
+      "dark": {
+        "ink": "#05080F",
+        "ink-2": "#101827",
+        "ground": "#0A0F18",
+        "surface": "#121A26",
+        "raise": "#1A2432",
+        "rule": "#222D3D",
+        "rule-strong": "#354356",
+        "text": "#E9EDF4",
+        "text-2": "#A6B2C4",
+        "text-3": "#8996AA",
+        "accent": "#74A0FF",
+        "accent-hover": "#9DBBFF",
+        "ok": "#3BC493",
+        "warn": "#E0A94E",
+        "error": "#FF8172",
+        "pending": "#BE95F7"
+      }
     },
-    {
-      "name": "Refusal to Compute",
-      "kind": "data-display",
-      "refersTo": "metric-value",
-      "description": "Doctrine, pas variante. Une mesure non interpretable n'est PAS imprimee a cote d'un message disant qu'elle n'a pas ete calculee : elle vaut tiret cadratin, le motif en clair, et un appel de note qui renvoie la justification longue sous le bloc.",
-      "html": "<div class=\"ds-metric\"><div class=\"ds-metric-label\">PBO (blocs walk-forward)</div><div class=\"ds-metric-value ds-disabled\">—</div><div class=\"ds-metric-rel\">PBO non calculé (2 blocs disponibles) †</div></div>\n<p class=\"ds-block-note\"><span>†</span> PBO nécessite au moins 6 blocs temporels…</p>",
-      "css": ".ds-disabled { color: var(--text-3, #8E96A2); }\n.ds-block-note { margin: 12px 0 0; max-width: 100ch; font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; line-height: 1.5; color: var(--text-3, #8E96A2); }"
-    },
-    {
-      "name": "Data Table",
-      "kind": "table",
-      "refersTo": "table-cell",
-      "description": "Filets horizontaux seuls. Les colonnes de MESURE portent la classe `num`, posee par l'appelant (argument `num_cols`) et jamais devinee. La ligne retenue se marque en graisse, pas par un filet lateral ni un aplat.",
-      "html": "<div class=\"ds-table-scroll\"><table class=\"ds-table\"><thead><tr><th>Run</th><th class=\"num\">Essais</th><th class=\"num\">F1_dir</th></tr></thead><tbody><tr class=\"best\"><td>run_a</td><td class=\"num\">6</td><td class=\"num\">0.5705</td></tr></tbody></table></div>\n<p class=\"ds-table-footer\">18 run(s) affiché(s) · F1_dir = meilleur essai sur n, non déflaté</p>",
-      "css": ".ds-table-scroll { overflow-x: auto; overscroll-behavior-x: contain; }\n.ds-table { width: 100%; border-collapse: collapse; font-family: var(--mono, ui-monospace, monospace); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }\n.ds-table thead th { font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2, #98A0AC); text-align: left; padding: 8px 16px 8px 0; border-bottom: 1px solid var(--rule-strong, #39404A); white-space: nowrap; }\n.ds-table tbody td { padding: 8px 16px 8px 0; border-bottom: 1px solid var(--rule, #262B32); vertical-align: baseline; }\n.ds-table td.num, .ds-table th.num { text-align: right; }\n.ds-table tbody tr.best td { font-weight: 700; color: var(--text, #E4E7EC); }\n.ds-table-footer { margin: 0 0 20px; padding-top: 8px; border-top: 1px solid var(--rule, #262B32); font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; line-height: 1.5; color: var(--text-3, #8E96A2); max-width: 120ch; }"
-    },
-    {
-      "name": "Input Field",
-      "kind": "input",
-      "refersTo": "input",
-      "description": "Contour ferme assume : un controle est un objet qu'on manipule, pas une separation entre deux contenus. Le bord passe a l'accent au focus, sans anneau ni ombre.",
-      "html": "<label>Nom du run <input type=\"text\" class=\"ds-input\" value=\"mon_run\"></label>",
-      "css": ".ds-input { width: 100%; padding: 5px 8px; margin-top: 4px; border: 1px solid var(--rule-strong, #39404A); border-radius: 2px; background: var(--ground, #0D0F12); color: var(--text, #E4E7EC); font-family: var(--mono, ui-monospace, monospace); font-size: 0.8125rem; transition: border-color 0.12s linear; }\n.ds-input:focus { border-color: var(--accent, #5B9DFF); outline: none; }"
-    },
-    {
-      "name": "Result Block",
-      "kind": "container",
-      "refersTo": null,
-      "description": "Remplace la carte. Aucun fond, aucun cadre, aucun rayon : un filet fort en haut et un titre en capitales micro suffisent a ouvrir un bloc.",
-      "html": "<section class=\"ds-block\"><h2>Essais (table trial)</h2></section>",
-      "css": ".ds-block { background: none; border: 0; border-top: 1px solid var(--rule-strong, #39404A); border-radius: 0; padding: 20px 0 24px; margin: 0; }\n.ds-block > h2 { font-family: var(--mono, ui-monospace, monospace); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-2, #98A0AC); margin: 0 0 16px; }"
-    },
-    {
-      "name": "Session Banner",
-      "kind": "navigation",
-      "refersTo": null,
-      "description": "En-tete qu'un listing imprime avant tout resultat. Pas une barre de marque : la navigation y est un champ parmi d'autres. La ligne de contexte en dessous porte le quadruplet de reproductibilite exige par le contrat pour le premier viewport.",
-      "html": "<header class=\"ds-session\"><a class=\"ds-session-id\" href=\"/\">PATRICK</a><nav class=\"ds-session-nav\"><a href=\"/runs\">Historique</a></nav></header>\n<div class=\"ds-session-context\"><span><b>cible</b> ^VIX/5j</span><span><b>seed</b> 42</span></div>",
-      "css": ".ds-session { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 20px; padding: 8px 20px; background: var(--surface, #14171B); border-bottom: 1px solid var(--rule-strong, #39404A); font-family: var(--mono, ui-monospace, monospace); font-size: 0.75rem; }\n.ds-session-id { color: var(--text, #E4E7EC); font-weight: 700; letter-spacing: 0.14em; text-decoration: none; }\n.ds-session-nav a::before { content: \"/\"; color: var(--text-3, #8E96A2); margin-right: 2px; }\n.ds-session-context { display: flex; flex-wrap: wrap; gap: 4px 20px; padding: 8px 20px; background: var(--ground, #0D0F12); border-bottom: 1px solid var(--rule, #262B32); font-family: var(--mono, ui-monospace, monospace); font-size: 0.6875rem; color: var(--text-2, #98A0AC); overflow-wrap: anywhere; }\n.ds-session-context b { font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3, #8E96A2); margin-right: 4px; }"
-    },
-    {
-      "name": "Progress Gauge",
-      "kind": "feedback",
-      "refersTo": null,
-      "description": "Trois pixels de haut. Pendant une phase non mesurable (le worker n'incremente qu'aux lignes de fold), elle BALAIE au lieu d'afficher 0% : un chiffre qui ne mesure rien ne se presente pas comme une mesure. Le balayage se met en pause hors ecran.",
-      "html": "<div class=\"ds-progress\" data-progress-mode=\"measuring\"><div class=\"ds-progress-fill\"></div></div>",
-      "css": ".ds-progress { height: 3px; background: var(--rule, #262B32); overflow: hidden; border-radius: 0; }\n.ds-progress-fill { height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: var(--accent, #5B9DFF); transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }\n.ds-progress[data-progress-mode=\"measuring\"] .ds-progress-fill { transform: none; transition: none; mask-image: linear-gradient(90deg, transparent 0%, #000 38%, #000 62%, transparent 100%); mask-size: 46% 100%; mask-repeat: no-repeat; animation: ds-measuring 1900ms cubic-bezier(0.45, 0, 0.55, 1) infinite; }\n@keyframes ds-measuring { from { mask-position: -50% 0; } to { mask-position: 110% 0; } }\n@media (prefers-reduced-motion: reduce) { .ds-progress-fill { transition: none; } .ds-progress[data-progress-mode=\"measuring\"] .ds-progress-fill { animation: none; } }"
-    },
-    {
-      "name": "Empty State",
-      "kind": "feedback",
-      "refersTo": null,
-      "description": "Le vide s'ecrit comme un solveur l'ecrit : un jeton et une phrase, jamais une illustration.",
-      "html": "<div class=\"ds-empty\"><p class=\"ds-empty-msg\">Aucun run pour cette cible.</p><p class=\"ds-hint\">Configure et lance un run depuis la page d'accueil.</p></div>",
-      "css": ".ds-empty { padding: 20px 0; border: 0; border-top: 1px solid var(--rule, #262B32); border-radius: 0; background: none; text-align: left; margin: 0; }\n.ds-empty-msg { font-family: var(--mono, ui-monospace, monospace); font-size: 0.8125rem; color: var(--text-2, #98A0AC); margin: 0 0 8px; }\n.ds-hint { color: var(--text-3, #8E96A2); font-size: 0.75rem; margin: 0; }"
-    }
-  ],
-  "narrative": {
-    "northStar": "La sortie d'un solveur statistique : estimé, incertitude et seuil dans un même bloc aligné. Un chiffre ne s'écrit jamais seul.",
-    "overview": "Monde « Sortie de solveur ». Noir neutre à trois fonds très proches ; la structure vient de filets HORIZONTAUX seuls, jamais de cartes ni de verticaux. Donnée en chasse fixe alignée à la décimale, chrome en pile système. Un seul accent bleu, qui ne dit que « interactif ». Rayons quasi nuls, aucune pilule, aucun cercle, aucune imagerie. Remplace intégralement la charte sombre/or à sérif Cormorant Garamond : aucune valeur de l'ancien monde n'a été conservée.",
-    "keyCharacteristics": [
-      "La fiabilité est structurelle, pas éditoriale : la signature du macro `metric()` force un troisième argument",
-      "Le refus explicite de calculer — tiret cadratin, motif en clair, note de bas de bloc — plutôt qu'une valeur non interprétable",
-      "Alignement décimal en chasse fixe : le geste central, déclaré par l'appelant via `num_cols`",
-      "Filets horizontaux seuls ; seuls les contrôles gardent un contour fermé",
-      "États écrits `[TEXTE]` entre crochets, jamais en pastilles — lisibles en monochrome",
-      "Un accent unique qui ne porte ni donnée ni jugement, et pas de jeton « info »",
-      "Zéro ombre, zéro imagerie, zéro logo : le produit s'identifie par son nom en chasse fixe"
-    ],
+    "northStar": "Un appareil de mesure en service : boîtier d'encre, feuilles de papier posées dessus. Un chiffre ne s'écrit jamais seul, et la station enregistre même quand personne ne regarde.",
     "rules": [
-      "Aucun chiffre affiché sans sa contrepartie de fiabilité (n, intervalle, ou motif de non-calculabilité).",
-      "Une mesure non interprétable ne s'imprime pas : `—` + motif, jamais la valeur à côté du démenti.",
-      "L'accent ne signifie que « interactif ou actif ». Il ne porte jamais une donnée ni un jugement.",
-      "Il n'existe aucun filet vertical décoratif ; l'indentation seule marque la subordination.",
-      "Toute colonne de mesure porte `num` et s'aligne à droite ; l'appelant la déclare, le gabarit ne la devine pas.",
-      "Toute liste se ferme par un pied : compte de lignes, filtres actifs, réserves sur les colonnes.",
-      "Tables et blocs de code défilent dans leur propre conteneur ; la page ne défile jamais horizontalement.",
-      "Le premier viewport porte cible, snapshot, hash de config, git SHA et seed.",
-      "Le mouvement porte de l'information ; sous `prefers-reduced-motion` on retire le mouvement, jamais l'information.",
-      "Les couleurs de toile sont lues depuis les jetons, sans valeur de repli codée en dur.",
-      "Le contraste se vérifie sur le fond composité réel, avant construction — plancher 4,5:1."
+      "Deux matières, pas un dégradé de gris : toute toile est sur --ink dans LES DEUX thèmes.",
+      "Un panneau est un objet posé (rayon + ombre à décalage et flou), pas une zone délimitée par un trait.",
+      "L'accent ne dit que « interactif ou actif » — jamais une donnée, jamais un jugement.",
+      "La donnée est en Spline Sans Mono alignée à la décimale ; le chrome est en Archivo.",
+      "Le texte porte l'état, la couleur ne fait que le doubler.",
+      "Aucun chiffre sans sa contrepartie de fiabilité ; une mesure non interprétable n'est pas imprimée."
     ],
+    "components": {
+      "status-badge": {
+        "html": "<span class=\"status-badge status-ok\">done</span>",
+        "css": ".status-badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 7px;border-radius:999px;font-family:Archivo,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}.status-badge.status-ok{color:#0B6E4F;background:rgba(11,110,79,.11)}"
+      },
+      "metric": {
+        "html": "<div class=\"metric\"><div class=\"metric-label\">PBO (blocs walk-forward)</div><div class=\"metric-value\">0.412</div><div class=\"metric-reliability\">IC 90% [0.31, 0.52] (bootstrap, 20 combinaisons)</div></div>",
+        "css": ".metric-label{font-family:Archivo,sans-serif;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#47536A;margin-bottom:8px}.metric-value{font-family:'Spline Sans Mono',monospace;font-size:1.5rem;font-weight:500;letter-spacing:-.02em;color:#0F1626;line-height:1.15}.metric-reliability{margin-top:8px;padding-left:12px;border-left:1px solid #C3CBD8;font-family:'Spline Sans Mono',monospace;font-size:.75rem;line-height:1.5;color:#626D80}"
+      },
+      "button-primary": {
+        "html": "<button class=\"primary\">Lancer le run</button>",
+        "css": "button.primary{padding:9px 20px;border:1px solid transparent;border-radius:8px;background:#1B4FD8;color:#fff;font-family:Archivo,sans-serif;font-size:.875rem;font-weight:600;letter-spacing:.02em;cursor:pointer;box-shadow:0 1px 2px rgba(11,18,32,.08);transition:background 140ms ease-out,transform 140ms cubic-bezier(.16,1,.3,1)}button.primary:hover{background:#143CAB;transform:translateY(-1px)}"
+      },
+      "input": {
+        "html": "<input type=\"text\" value=\"mon_run\">",
+        "css": "input{width:100%;padding:7px 12px;border:1px solid #C3CBD8;border-radius:8px;background:#F4F6FA;color:#0F1626;font-family:'Spline Sans Mono',monospace;font-size:.875rem}input:focus{outline:none;background:#fff;border-color:#1B4FD8;box-shadow:0 0 0 3px rgba(27,79,216,.10)}"
+      },
+      "panel": {
+        "html": "<section class=\"card\"><h2>Résumé</h2><p>…</p></section>",
+        "css": ".card{background:#fff;border:1px solid #DEE3EC;border-radius:12px;box-shadow:0 1px 2px rgba(11,18,32,.05),0 10px 28px -14px rgba(11,18,32,.22);padding:20px 24px 24px}.card>h2{font-family:Archivo,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#47536A;margin:0 0 16px}"
+      }
+    },
     "dos": [
-      "Écrire la contrepartie de fiabilité de chaque chiffre",
-      "Refuser d'imprimer une mesure non interprétable, et dire pourquoi en clair",
-      "Déclarer `num_cols` sur toute table portant des mesures",
-      "Fermer chaque liste par un pied portant compte et réserves",
-      "Écrire les états en `[TEXTE]`, la couleur ne faisant que doubler",
-      "Faire défiler tables et blocs de code dans leur propre conteneur",
-      "Lire les couleurs de toile depuis les jetons, sans repli"
+      "Écrire la contrepartie de fiabilité de chaque chiffre.",
+      "Poser toute toile sur --ink et lire ses couleurs dans les jetons « sur boîtier », sans repli.",
+      "Donner à toute surface au repos son état vide écrit."
     ],
     "donts": [
-      "Afficher un chiffre nu, sans son dénominateur ni sa réserve",
-      "Afficher une valeur ponctuelle à côté d'un message disant qu'elle n'a pas été calculée",
-      "Dessiner un filet vertical, un bord de carte, une pilule ou un cercle",
-      "Utiliser l'accent pour porter une donnée ou un jugement",
-      "Introduire un sixième neutre bleuté « informatif »",
-      "Afficher « 0 % » pendant une phase qui ne produit aucune mesure",
-      "Poser un `cursor: pointer` ou un survol d'accent sur un élément que rien n'active",
-      "Ajouter une ombre portée : le système n'a aucune élévation",
-      "Réintroduire un logo, un monogramme ou un placeholder de logo"
+      "Afficher un chiffre nu.",
+      "Utiliser l'accent pour porter une donnée ou un jugement.",
+      "Imbriquer un panneau dans un panneau.",
+      "Dériver le thème sombre par inversion du clair.",
+      "Réintroduire un logo, un monogramme ou un placeholder de logo."
     ]
   }
 }

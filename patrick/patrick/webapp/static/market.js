@@ -38,7 +38,7 @@
 
         var closes = series.closes || [];
         if (closes.length < 2) {
-            ctx.fillStyle = token("--text-2");
+            ctx.fillStyle = token("--ink-text-2");
             ctx.font = "13px " + MONO;
             ctx.fillText(tr("preview_no_data", "No data for this period."), pad, h / 2);
             return;
@@ -48,12 +48,27 @@
         var max = Math.max.apply(null, closes);
         if (min === max) { min -= 1; max += 1; }
         var xStep = (w - 2 * pad) / (closes.length - 1);
-        var accent = token("--accent");
-        var muted = token("--text-2");
-        var rule = token("--rule-strong");
+        var accent = token("--accent-ink");
+        var muted = token("--ink-text-2");
+        var rule = token("--ink-2");
 
         function xAt(i) { return pad + i * xStep; }
         function yAt(v) { return h - pad + ((v - min) / (max - min)) * -(h - 2 * pad); }
+
+        // Grille de la plaque : sans elle, la toile est un aplat d'encre avec
+        // une courbe posee dessus. Une plaque d'instrument porte ses
+        // graduations -- c'est ce qui la fait lire comme une mesure et non
+        // comme une decoration. Quatre lignes, jamais plus : au-dela elles
+        // concurrencent la courbe.
+        ctx.strokeStyle = rule;
+        ctx.lineWidth = 1;
+        for (var gi = 0; gi <= 3; gi++) {
+            var gy = Math.round(pad + (gi / 3) * (h - 2 * pad)) + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(pad, gy);
+            ctx.lineTo(w - pad, gy);
+            ctx.stroke();
+        }
 
         // axis labels (min/max)
         ctx.fillStyle = muted;

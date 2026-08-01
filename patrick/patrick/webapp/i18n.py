@@ -195,8 +195,32 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
 
     # Phase 7 — historique/univers
+    "nav_home": {"fr": "Poste", "en": "Station"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
+
+    # Monde « Station d'observation » — boîtier : bascule de thème et bande
+    # d'enregistrement. Le bouton de thème nomme l'ÉTAT courant, pas l'action
+    # (c'est un indicateur avec pastille) : « Jour » = on est en clair.
+    "theme_light": {"fr": "Jour", "en": "Day"},
+    "theme_dark": {"fr": "Nuit", "en": "Night"},
+    "record_aria": {"fr": "Activité des runs dans le temps",
+                    "en": "Run activity over time"},
+    "record_loading": {"fr": "Lecture de la bande…", "en": "Reading the record…"},
+    "record_unavailable": {"fr": "Bande illisible : la base de suivi n'a pas pu être ouverte.",
+                           "en": "Record unreadable: the tracking database could not be opened."},
+    "record_empty": {"fr": "Aucun run enregistré — la bande se remplira au premier run lancé.",
+                     "en": "No run recorded yet — the record fills from the first run launched."},
+    "record_runs": {"fr": "runs", "en": "runs"},
+    "record_span": {"fr": "du {from} à maintenant", "en": "from {from} to now"},
+    "record_scale": {"fr": "hauteur = essais (log, max {max})",
+                     "en": "height = trials (log, max {max})"},
+    "record_counts": {"fr": "{done} terminés · {running} en cours · {failed} échoués",
+                      "en": "{done} done · {running} running · {failed} failed"},
+    "record_unknown": {"fr": "{n} sans compte d'essais (hauteur plancher)",
+                       "en": "{n} with no trial count (floor height)"},
+    "record_trials": {"fr": "essais", "en": "trials"},
+    "record_no_trials": {"fr": "essais inconnus", "en": "trial count unknown"},
 
     # Phase 4 — simulateur d'investissement
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
@@ -241,6 +265,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_metric_profit_factor": {"fr": "Profit factor", "en": "Profit factor"},
     "sim_metric_avg_exposure": {"fr": "Exposition moyenne", "en": "Average exposure"},
     "sim_metric_break_even": {"fr": "Coût de rentabilité (break-even)", "en": "Break-even cost"},
+    # États vides du simulateur au repos. Sans eux, `/simulate` ouvre sur trois
+    # plaques de tracé noires et deux tables à en-têtes seuls : la surface la
+    # moins dense du produit se lisait comme cassée plutôt que comme en attente.
+    "sim_empty_curves": {"fr": "Aucune simulation lancée — choisis un run et un modèle, puis lance la simulation pour tracer la courbe de capital et le drawdown.",
+                         "en": "No simulation run yet — pick a run and a model, then launch to plot the equity curve and drawdown."},
+    "sim_empty_metrics": {"fr": "Les métriques apparaîtront ici, comparées au buy-and-hold, une fois la simulation lancée.",
+                          "en": "Metrics will appear here, compared against buy-and-hold, once the simulation runs."},
+    "sim_empty_distribution": {"fr": "La distribution des rendements par trade se calcule à partir des trades simulés — aucun pour l'instant.",
+                               "en": "The per-trade return distribution is computed from simulated trades — none yet."},
+    "sim_empty_trades": {"fr": "Aucun trade simulé. Le journal complet, exportable en CSV, s'affiche après le lancement.",
+                         "en": "No simulated trades. The full log, exportable as CSV, appears after launching."},
     "sim_col_strategy": {"fr": "Stratégie", "en": "Strategy"},
     "sim_col_buy_hold": {"fr": "Buy & hold", "en": "Buy & hold"},
     "sim_trades_download": {"fr": "Exporter en CSV", "en": "Export as CSV"},
@@ -284,6 +319,9 @@ def js_strings(lang: str) -> dict[str, str]:
         "sim_metric_max_dd", "sim_metric_turnover", "sim_metric_hit_rate",
         "sim_metric_profit_factor", "sim_metric_avg_exposure", "sim_metric_break_even",
         "sim_col_strategy", "sim_col_buy_hold",
+        "record_unavailable", "record_empty", "record_runs", "record_span",
+        "record_scale", "record_counts", "record_unknown", "record_trials",
+        "record_no_trials",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

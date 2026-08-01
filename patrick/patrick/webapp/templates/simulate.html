@@ -90,6 +90,10 @@
     <h2 id="sim-equity-title" class="dash-panel-title">{{ t('sim_section_equity') }}</h2>
     <div class="dash-panel-body">
         <p id="sim-overfitting-guard" class="hint sim-guard hidden"></p>
+        {# Au repos, la plaque est vide : elle le DIT, elle ne reste pas noire.
+           `simulate.js` pose `body[data-sim-loaded]` au premier rendu, le CSS
+           retire alors l'état vide et rend les toiles à leur taille. #}
+        <p class="sim-empty">{{ t('sim_empty_curves') }}</p>
         <canvas id="sim-equity-canvas" width="520" height="180"></canvas>
         <canvas id="sim-drawdown-canvas" width="520" height="90"></canvas>
     </div>
@@ -98,6 +102,7 @@
 <section class="dash-panel sim-panel-metrics" aria-labelledby="sim-metrics-title">
     <h2 id="sim-metrics-title" class="dash-panel-title">{{ t('sim_section_metrics') }}</h2>
     <div class="dash-panel-body">
+        <p class="sim-empty">{{ t('sim_empty_metrics') }}</p>
         <table class="leaderboard" id="sim-metrics-table">
             <thead><tr><th></th><th>{{ t('sim_col_strategy') }}</th><th>{{ t('sim_col_buy_hold') }}</th></tr></thead>
             <tbody></tbody>
@@ -108,6 +113,7 @@
 <section class="dash-panel sim-panel-distribution" aria-labelledby="sim-dist-title">
     <h2 id="sim-dist-title" class="dash-panel-title">{{ t('sim_section_distribution') }}</h2>
     <div class="dash-panel-body">
+        <p class="sim-empty">{{ t('sim_empty_distribution') }}</p>
         <canvas id="sim-dist-canvas" width="520" height="160"></canvas>
     </div>
 </section>
@@ -116,6 +122,7 @@
     <h2 id="sim-trades-title" class="dash-panel-title">{{ t('sim_section_trades') }}</h2>
     <div class="dash-panel-body">
         <a href="#" id="sim-trades-download" class="hidden">{{ t('sim_trades_download') }}</a>
+        <p class="sim-empty">{{ t('sim_empty_trades') }}</p>
         <table class="leaderboard" id="sim-trades-table">
             <thead><tr><th>#</th><th>{{ t('sim_col_strategy') }}</th></tr></thead>
             <tbody></tbody>

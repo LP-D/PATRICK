@@ -129,6 +129,11 @@
     }
 
     function renderResult(data) {
+        // Une plaque de tracé vide est un trou noir de 400px : au repos, les
+        // trois panneaux de résultat portent leur état vide, et c'est ce
+        // drapeau qui le retire au premier rendu. Marqué sur `<body>` pour que
+        // le CSS le lise sans que chaque panneau ait à connaître les autres.
+        document.body.dataset.simLoaded = "";
         if (data.n_simulation_configs_on_target) {
             var dsr = data.strategy && data.strategy.deflated_sharpe;
             guardEl.textContent = fmtStr(tr("sim_overfitting_guard",
@@ -205,8 +210,8 @@
         var min = isDrawdown ? Math.min.apply(null, all) : Math.min.apply(null, all);
         var max = isDrawdown ? 0 : Math.max.apply(null, all);
         if (min === max) { min -= 0.01; max += 0.01; }
-        var axis = token("--text-2");
-        var line = token("--accent");
+        var axis = token("--ink-text-2");
+        var line = token("--accent-ink");
 
         function plot(series, color) {
             if (!series.length) return;
@@ -230,8 +235,8 @@
         ctx.fillText(fmtNum(max, 2), 2, pad);
         ctx.fillText(fmtNum(min, 2), 2, h - pad + 4);
 
-        if (series2 && series2.length) plot(series2, token("--rule-strong"));
-        plot(series1, isDrawdown ? token("--error") : line);
+        if (series2 && series2.length) plot(series2, token("--ink-2"));
+        plot(series1, isDrawdown ? token("--error-ink") : line);
     }
 
     function drawHistogram(canvas, values) {
@@ -251,7 +256,7 @@
         });
         var maxCount = Math.max.apply(null, bins);
         var barW = (w - 2 * pad) / nBins;
-        var gain = token("--ok"), loss = token("--error");
+        var gain = token("--ok-ink"), loss = token("--error-ink");
         var zeroBin = (0 - min) / binW;
         for (var i = 0; i < nBins; i++) {
             var barH = (bins[i] / maxCount) * (h - 2 * pad);

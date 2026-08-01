@@ -1,80 +1,208 @@
-/* PATRICK — jetons du monde visuel « Sortie de solveur ».
-   Remplace intégralement la charte sombre/or de la Phase 7. Aucune valeur
-   n'a été conservée : c'est un remplacement d'identité, pas un ajustement.
+/* PATRICK — jetons du monde visuel « Station d'observation ».
+   Remplace intégralement le monde « Sortie de solveur » (noir plat, filets
+   horizontaux seuls, chasse fixe partout, rayons nuls). Aucune valeur n'a été
+   reprise : c'est un remplacement d'identité demandé, pas un ajustement.
+   Contrat de direction complet : en tête de `templates/base.html`.
 
-   Contraintes de dérivation :
-   - Fond sombre imposé par la scène physique (longues sessions en soirée,
-     l'écran est la principale source de lumière) -- pas par habitude de
-     catégorie. Noir NEUTRE, jamais le bleu-nuit de l'ancien monde.
-   - Stratégie « Restrained » : neutres + un seul accent fonctionnel.
-     L'accent ne dit qu'une chose -- « ceci est interactif ou actif ». Il ne
-     porte jamais de donnée, jamais de jugement.
-   - Toute la palette tient 4,5:1 sur ses trois fonds ET sur un fond de
-     pastille composite à 12% (pire ratio mesuré : 4,57). Vérifié avant
-     construction, pas après. */
+   Ce que le monde emprunte à une station d'observation (sismique, météo) :
+   - Le BOÎTIER de l'instrument est en encre profonde, l'ENREGISTREMENT est sur
+     papier clair. D'où deux matières, pas un dégradé de gris : `--ink` pour le
+     bandeau et les plaques de tracé, `--ground`/`--surface` pour la lecture.
+   - Une station publie une magnitude AVEC son incertitude, et refuse de
+     localiser un événement quand il lui manque des stations. C'est déjà la
+     doctrine du produit ; le monde visuel lui donne enfin sa forme.
+   - Les panneaux sont des objets posés (rayon, ombre portée réelle avec
+     décalage ET flou), pas des zones délimitées par un trait.
+
+   Deux rendus travaillés séparément, pas une inversion :
+   `:root` = clair (défaut), `[data-theme="dark"]` = sombre. La scène le
+   justifie — Patrick sert autant en journée qu'en soirée, donc aucun des deux
+   n'est le repli de l'autre. Le choix est explicite (bouton) et mémorisé ;
+   sans choix exprimé, `prefers-color-scheme` tranche.
+
+   Contraste : tout texte tient 4,5:1 sur SON fond réel (fond composité des
+   pastilles teintées inclus), tout texte large 3:1. Vérifié avant
+   construction, pas après. */
+
+/* --- Familles ------------------------------------------------------------
+   Deux faces téléchargées, aucune requête réseau : les .woff2 sont servis
+   depuis `/static/fonts/` — un outil local ne doit pas dépendre d'un CDN pour
+   s'afficher correctement hors ligne.
+
+   Archivo (chrome, titres, libellés) : grotesque de large chasse dessinée pour
+   la signalétique et l'étiquette d'appareil — elle tient en capitales serrées
+   comme en titre de 28px, ce qu'une UI-face neutre ne fait pas.
+   Spline Sans Mono (toute donnée) : chasse fixe contemporaine, chiffres
+   tabulaires, formes ouvertes — elle aligne les décimales sans le costume de
+   terminal des monos de code. --- */
+@font-face {
+    font-family: "Archivo";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/static/fonts/archivo-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Archivo";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/static/fonts/archivo-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Spline Sans Mono";
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url("/static/fonts/splinesansmono-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Spline Sans Mono";
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url("/static/fonts/splinesansmono-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-    /* --- Fonds : trois niveaux, écart volontairement faible.
-       Un listing de solveur n'empile pas des cartes ; il sépare par des
-       filets. Les fonds situent, les filets structurent. --- */
-    --ground: #0D0F12;   /* la page */
-    --surface: #14171B;  /* bloc de résultats, en-tête de session */
-    --raise: #1B1F24;    /* second niveau : champ de saisie, ligne survolée */
-    --rule: #262B32;     /* filet, toujours HORIZONTAL : aucun filet vertical ne
-       sépare ni ne décore quoi que ce soit dans ce monde -- pas de colonne
-       rayée, pas d'accent latéral, pas de bord de carte. Seuls les CONTRÔLES
-       (champ, bouton, infobulle) gardent un contour fermé : un contrôle est
-       un objet qu'on manipule, pas une séparation entre deux contenus. */
-    --rule-strong: #39404A; /* filet de séparation majeure (haut/bas d'un bloc) */
+    color-scheme: light;
 
-    /* --- Texte : la hiérarchie se fait par la TAILLE et la casse,
-       pas par le contraste. Trois niveaux suffisent. --- */
-    --text: #E4E7EC;     /* valeur, donnée, titre */
-    --text-2: #98A0AC;   /* libellé, en-tête de colonne, unité */
-    --text-3: #8E96A2;   /* incertitude, note de bas de bloc, NA */
+    /* --- Matières.
+       `--ink` n'est PAS le fond de page en clair : c'est le boîtier. Il porte
+       le bandeau, la bande d'enregistrement et les plaques de graphique. Le
+       même jeton existe dans les deux thèmes, ce qui fait que les toiles
+       (market.js, simulate.js) n'ont jamais à savoir dans quel thème elles
+       tracent. --- */
+    --ink: #0B1220;
+    --ink-2: #16213A;      /* second niveau DANS le boîtier (grille de tracé) */
+    --ink-text: #EDF1F7;   /* texte posé sur --ink — 15,1:1 */
+    --ink-text-2: #9FAEC6; /* libellé sur --ink — 6,9:1 */
 
-    /* --- Accent unique, fonctionnel. --- */
-    --accent: #5B9DFF;
+    --ground: #ECEFF4;     /* la page : le plan de travail, pas une feuille */
+    --surface: #FFFFFF;    /* le panneau : la feuille posée dessus */
+    --raise: #F4F6FA;      /* champ de saisie, ligne survolée */
+    --rule: #DEE3EC;       /* filet interne (entre deux lignes d'une table) */
+    --rule-strong: #C3CBD8; /* contour d'un objet manipulable (champ, bouton) */
 
-    /* --- États sémantiques. Aucun n'est décoratif : chacun répond à une
-       question que l'outil pose déjà. --- */
-    --ok: #4FB286;       /* mesure concluante */
-    --warn: #D9A03F;     /* réserve, seuil non atteint, fiabilité faible */
-    --error: #E0736B;    /* échec, exclusion, valeur invalide */
-    --pending: #C39BE8;  /* en cours, issue non connue.
-       Violet (271°) et non plus bleu-indigo (234°) : à 234° il n'était qu'à
-       20° de l'accent, et les deux se rencontraient dans la même ligne de
-       `/runs` -- l'accent cessait alors de ne dire que « interactif ».
-       55° d'écart, contraste le plus défavorable mesuré 5,82:1.
-       Il n'y a PAS de jeton « info » : un état sans jugement n'a pas de
-       couleur, il s'écrit dans la couleur du texte. Un sixième bleu neutre
-       ne se distinguait ni de l'accent ni du texte secondaire à 11px. */
+    /* --- Texte. Hiérarchie par taille ET par contraste : un monde clair peut
+       se permettre trois vrais niveaux, un monde sombre non. --- */
+    --text: #0F1626;       /* valeur, donnée, titre — 16,4:1 sur --surface */
+    --text-2: #47536A;     /* libellé, en-tête de colonne — 8,4:1 */
+    --text-3: #626D80;     /* incertitude, note, NA — 5,4:1 sur --surface et
+                              4,8:1 sur --ground : les deux fonds tiennent */
 
-    /* --- Familles.
-       La donnée est en chasse fixe : c'est la seule façon d'aligner des
-       décimales, et l'alignement décimal est le geste central de ce monde.
-       Le chrome (navigation, formulaire, prose) est en pile système : dans
-       une sortie de solveur, le contenu est du listing et l'habillage est
-       celui du système d'exploitation. Aucune police n'est téléchargée pour
-       le chrome. --- */
-    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    /* --- Accent unique, fonctionnel : « ceci est interactif ou actif ».
+       Il ne porte jamais une donnée ni un jugement — c'est ce qui permet de
+       lire la page sans se demander si le bleu veut dire « bon ». --- */
+    --accent: #1B4FD8;     /* 7,3:1 sur --surface ; blanc dessus : 7,3:1 */
+    --accent-hover: #143CAB;
+    --accent-weak: rgba(27, 79, 216, 0.10);  /* fond d'état actif discret */
+
+    /* --- Jeux « sur boîtier ». Toute toile (graphique, bande
+       d'enregistrement) est tracée sur `--ink` dans LES DEUX thèmes : une
+       plaque de tracé ne change pas de matière quand la pièce s'éclaire.
+       Ces cinq jetons sont donc identiques en clair et en sombre, et c'est
+       ce qui permet à `market.js`/`simulate.js` de ne jamais savoir dans
+       quel thème ils tracent. Contrastes mesurés sur #0B1220. --- */
+    --accent-ink: #7EA6FF; /* 6,4:1 */
+    --ok-ink: #35C08A;     /* 8,4:1 */
+    --warn-ink: #E0A94E;   /* 9,5:1 */
+    --error-ink: #FF8172;  /* 7,4:1 */
+
+    /* --- États sémantiques. Chacun répond à une question que l'outil pose
+       déjà ; aucun n'est décoratif. Les `-weak` sont les fonds de pastille :
+       leur composité sur --surface laisse le texte de la même famille
+       au-dessus de 4,5:1. --- */
+    --ok: #0B6E4F;         --ok-weak: rgba(11, 110, 79, 0.11);
+    --warn: #8A5A08;       --warn-weak: rgba(138, 90, 8, 0.12);
+    --error: #B32D22;      --error-weak: rgba(179, 45, 34, 0.10);
+    --pending: #5B34B0;    --pending-weak: rgba(91, 52, 176, 0.10);
+
+    /* --- Profondeur. Un panneau est un objet posé : décalage vertical + flou.
+       Jamais un halo coloré à décalage nul. --- */
+    --shadow-panel: 0 1px 2px rgba(11, 18, 32, 0.05),
+                    0 10px 28px -14px rgba(11, 18, 32, 0.22);
+    --shadow-raised: 0 2px 4px rgba(11, 18, 32, 0.07),
+                     0 18px 44px -18px rgba(11, 18, 32, 0.30);
+    --shadow-control: 0 1px 2px rgba(11, 18, 32, 0.08);
+
+    /* --- Familles. --- */
+    --display: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+    --ui: var(--display);
+    --mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
             Consolas, "Liberation Mono", monospace;
-    --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-    /* --- Échelle typographique, resserrée : un listing dense ne peut pas
-       se permettre sept tailles. Cinq pas, tous utiles. --- */
-    --t-micro: 0.6875rem;  /* 11px — en-tête de colonne, note, unité */
-    --t-small: 0.75rem;    /* 12px — libellé, métadonnée de session */
-    --t-body: 0.8125rem;   /* 13px — donnée courante, cellule de table */
-    --t-lead: 1rem;        /* 16px — valeur mise en avant, titre de bloc */
-    --t-head: 1.375rem;    /* 22px — titre de page */
+    /* --- Échelle typographique. Le monde précédent plafonnait le corps à 13px
+       et le titre de page à 22px : dense, mais illisible comme produit. Six
+       pas, écarts nets. --- */
+    --t-micro: 0.75rem;    /* 12px — en-tête de colonne, note, unité */
+    --t-small: 0.8125rem;  /* 13px — libellé, métadonnée */
+    --t-body: 0.875rem;    /* 14px — donnée courante, cellule de table */
+    --t-lead: 1.0625rem;   /* 17px — titre de panneau, valeur secondaire */
+    --t-value: 1.5rem;     /* 24px — valeur d'un bloc de mesure */
+    --t-head: 1.75rem;     /* 28px — titre de page */
 
     /* --- Espacement, base 4px. --- */
     --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
     --s5: 20px; --s6: 24px; --s7: 32px; --s8: 48px;
 
-    /* --- Rayons : quasi nuls. Un listing n'a pas de coins arrondis ; les
-       2px servent uniquement à ne pas faire d'angle vif agressif sur les
-       contrôles. Aucune pilule, aucun cercle. --- */
-    --r-none: 0;
-    --r-control: 2px;
+    /* --- Rayons. Le monde précédent les mettait à zéro par doctrine ; c'est
+       le premier signe extérieur qui faisait lire l'outil comme inachevé. Un
+       instrument moderne a des angles adoucis, pas vifs. --- */
+    --r-small: 6px;        /* plaque de tracé, micro-contrôle du bandeau */
+    --r-control: 8px;
+    --r-panel: 12px;
+    --r-chip: 999px;       /* pastille d'état : la seule forme pleinement ronde */
+}
+
+/* --- Rendu sombre. Écrit séparément, pas dérivé par inversion : les fonds
+   sont bleutés-froids (le boîtier vu de nuit), les accents sont remontés en
+   clarté pour tenir 4,5:1 sur fond sombre, et l'ombre devient profondeur +
+   liseré haut (lumière rasante) — une ombre noire seule est invisible sur un
+   fond noir. --- */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --ink: #05080F;
+    --ink-2: #101827;
+    --ink-text: #E9EEF6;
+    --ink-text-2: #97A6BE;
+
+    --ground: #0A0F18;
+    --surface: #121A26;
+    --raise: #1A2432;
+    --rule: #222D3D;
+    --rule-strong: #354356;
+
+    --text: #E9EDF4;       /* 14,2:1 sur --surface */
+    --text-2: #A6B2C4;     /* 7,3:1 */
+    --text-3: #8996AA;     /* 5,4:1 */
+
+    --accent: #74A0FF;     /* 6,6:1 sur --surface */
+    --accent-hover: #9DBBFF;
+    --accent-weak: rgba(116, 160, 255, 0.14);
+    /* Les jeux « sur boîtier » ne sont PAS redéfinis ici : la plaque de tracé
+       reste la même matière dans les deux thèmes (cf. bloc clair). */
+
+    --ok: #3BC493;         --ok-weak: rgba(59, 196, 147, 0.14);
+    --warn: #E0A94E;       --warn-weak: rgba(224, 169, 78, 0.14);
+    --error: #FF8172;      --error-weak: rgba(255, 129, 114, 0.14);
+    --pending: #BE95F7;    --pending-weak: rgba(190, 149, 247, 0.14);
+
+    --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
+                    0 12px 30px -16px rgba(0, 0, 0, 0.85);
+    --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.07) inset,
+                     0 20px 48px -20px rgba(0, 0, 0, 0.92);
+    --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
