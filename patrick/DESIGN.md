@@ -1,258 +1,374 @@
 ---
 name: PATRICK
-description: Banc d'essai quant sombre et doré, où chaque chiffre affiche sa fiabilité
+description: Sortie de solveur — un chiffre ne s'écrit jamais seul.
 colors:
-  bg: "#0B0D12"
-  panel: "#151822"
-  panel-2: "#1b1f2b"
-  border: "rgba(201, 162, 75, 0.25)"
-  text: "#F3EFE7"
-  muted: "#9A9587"
-  gold-1: "#E8C97A"
-  gold-2: "#8A6A2F"
-  ok: "#3FA985"
-  warning: "#D9A441"
-  error: "#D07E78"
-  neutral: "#6E8CAE"
-  pending: "#808FDD"
-  disabled: "#8D95A0"
+  ground: "#0D0F12"
+  surface: "#14171B"
+  raise: "#1B1F24"
+  rule: "#262B32"
+  rule-strong: "#39404A"
+  text: "#E4E7EC"
+  text-2: "#98A0AC"
+  text-3: "#8E96A2"
+  accent: "#5B9DFF"
+  ok: "#4FB286"
+  warn: "#D9A03F"
+  error: "#E0736B"
+  pending: "#C39BE8"
 typography:
-  display:
-    fontFamily: "Cormorant Garamond, Georgia, serif"
-    fontSize: "2.2rem"
-    fontWeight: 600
-  headline:
-    fontFamily: "Cormorant Garamond, Georgia, serif"
-    fontSize: "1.6rem"
-    fontWeight: 600
-  title:
-    fontFamily: "Cormorant Garamond, Georgia, serif"
-    fontSize: "1.2rem"
-    fontWeight: 600
+  head:
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontSize: "1.375rem"
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: "-0.01em"
+  lead:
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontSize: "1rem"
+    fontWeight: 500
+    lineHeight: 1.2
+    letterSpacing: "normal"
   body:
-    fontFamily: "Inter, -apple-system, Segoe UI, Roboto, sans-serif"
-    fontSize: "0.95rem"
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontSize: "0.8125rem"
     fontWeight: 400
-  label:
-    fontFamily: "Inter, -apple-system, Segoe UI, Roboto, sans-serif"
+    lineHeight: 1.5
+    letterSpacing: "normal"
+  small:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     fontSize: "0.75rem"
-    fontWeight: 600
-    letterSpacing: "0.04em"
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: "normal"
+  micro:
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontSize: "0.6875rem"
+    fontWeight: 500
+    lineHeight: 1.45
+    letterSpacing: "0.08em"
 rounded:
-  pill: "999px"
-  sm: "8px"
-  md: "10px"
-  lg: "12px"
-  xl: "14px"
+  none: "0"
+  control: "2px"
 spacing:
-  "1": "4px"
-  "2": "8px"
-  "3": "12px"
-  "4": "16px"
-  "5": "20px"
-  "6": "24px"
-  "7": "32px"
-  "8": "48px"
+  s1: "4px"
+  s2: "8px"
+  s3: "12px"
+  s4: "16px"
+  s5: "20px"
+  s6: "24px"
+  s7: "32px"
+  s8: "48px"
 components:
   button-primary:
-    textColor: "{colors.bg}"
-    rounded: "{rounded.md}"
-    padding: "12px 26px"
-  status-badge:
-    rounded: "{rounded.pill}"
-    padding: "2px 9px"
-    typography: "{typography.label}"
-  metric:
-    backgroundColor: "{colors.panel-2}"
-    rounded: "{rounded.lg}"
-    padding: "{spacing.4}"
-  card:
-    backgroundColor: "{colors.panel}"
-    rounded: "{rounded.xl}"
-    padding: "20px 24px"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.ground}"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
+    padding: "8px 20px"
+  button-primary-hover:
+    backgroundColor: "transparent"
+    textColor: "{colors.accent}"
   input:
-    backgroundColor: "{colors.bg}"
+    backgroundColor: "{colors.ground}"
     textColor: "{colors.text}"
-    rounded: "{rounded.sm}"
-    padding: "8px 10px"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
+    padding: "5px 8px"
+  metric-value:
+    textColor: "{colors.text}"
+    typography: "{typography.lead}"
+    rounded: "{rounded.none}"
+  metric-reliability:
+    textColor: "{colors.text-3}"
+    typography: "{typography.micro}"
+    padding: "8px 0 0 12px"
+  status-badge:
+    backgroundColor: "transparent"
+    textColor: "{colors.text}"
+    typography: "{typography.micro}"
+    rounded: "{rounded.none}"
+    padding: "0"
+  table-cell:
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    padding: "8px 16px 8px 0"
+  table-footer:
+    textColor: "{colors.text-3}"
+    typography: "{typography.micro}"
+    padding: "8px 0 0"
 ---
 
-# Design System: PATRICK
+# DESIGN.md — PATRICK
+
+Généré depuis le code construit (`patrick/webapp/`), pas depuis une intention.
+Le contrat de direction dont ce document est la mise à plat est en commentaire
+HTML en tête de `templates/base.html` (blocs THESIS / OWN-WORLD / STORY /
+FIRST VIEWPORT / FORM). Les jetons normatifs vivent dans `static/tokens.css` ;
+ce fichier explique **comment les appliquer**, il ne les remplace pas.
 
 ## Overview
 
-**Creative North Star: "L'Instrument de Laboratoire"**
+Le monde s'appelle **« Sortie de solveur »**. Il refuse le tableau de bord
+quant — panneaux sombres, chiffres verts et rouges, KPI en gros — et adopte la
+forme que tout quant lit déjà : la sortie d'un solveur statistique (R, Stata),
+où l'estimé, son incertitude et son seuil s'impriment dans un même bloc aligné.
 
-Un instrument de mesure, pas un tableau de bord de trading. La référence n'est ni la salle de marché (rouge/vert clignotant, densité maximale, urgence) ni l'outil SaaS générique : c'est l'appareil scientifique posé sur une paillasse — boîtier sombre, graduations dorées gravées, cadrans qui affichent une valeur *et* sa tolérance. On ne le consulte pas pour être stimulé, on le consulte pour lire une mesure et savoir si elle est fiable.
+Il remplace **intégralement** la charte précédente (fond bleu-nuit, accent or,
+sérif Cormorant Garamond en titres, Inter en texte, monogramme `.brand-mark`).
+Aucune valeur n'a été conservée. Si vous trouvez `--gold-1`, `--muted`,
+`.brand-mark` ou une police sérif quelque part, c'est un résidu à supprimer,
+pas une variante à respecter.
 
-Cette métaphore explique les trois traits qui autrement paraîtraient arbitraires. Le fond très sombre (`bg`) n'est pas une mode « dark UI » : il fait du chiffre le seul élément lumineux de l'écran. L'or n'est pas décoratif : il est rare, réservé aux bords, aux graduations et à l'action principale — c'est la gravure sur l'instrument, jamais la donnée elle-même. Et le serif Cormorant en titres, sur un outil technique, ancre le projet du côté du carnet de recherche plutôt que du terminal : ce qu'on lit ici est un compte rendu, pas un flux.
+**La thèse, en une phrase : un chiffre ne s'écrit jamais seul.** Tout le
+système en découle. La signature de `metric()` (`_components.html:14`) force un
+troisième argument `reliability` — le gabarit ne devine jamais l'incertitude,
+l'appelant doit l'écrire, même pour dire « non calculable ». Les tables portent
+un pied qui énonce les réserves pesant sur leurs colonnes. Et quand une mesure
+n'est pas interprétable, le produit **refuse de l'imprimer** : il affiche `—`,
+le motif en clair, et renvoie la justification longue en note `†` sous le bloc.
 
-L'interface est en mode Operate sur toutes ses surfaces : on y accomplit une tâche, jamais on n'y contemple. Aucun moment spectaculaire, aucune illustration, aucune photographie. La qualité se joue entièrement dans la précision — alignement des chiffres, cohérence des états, justesse des libellés. Un écran qui impressionne mais qu'on ne peut pas piloter est un échec ici.
-
-**Key Characteristics:**
-- Fond sombre quasi-noir : le chiffre est la seule source de lumière
-- Or rare et structural (bords, graduations, action principale) — jamais porteur de donnée
-- Serif éditorial en titres, sans-serif tabulaire en données
-- Six états sémantiques distincts, dont trois qui ne sont ni succès ni échec
-- Chiffres en chasse fixe (`tabular-nums`) partout, sans exception
-- Zéro imagerie : aucune photo, aucune illustration, aucune icône décorative
+Mode : **Operate**. Le visiteur accomplit une tâche — lire une session de
+calcul et savoir si le signal tient. La scannabilité et la densité priment sur
+l'expression ; la marque vit dans la précision des détails, pas dans un logo.
 
 ## Colors
 
-Palette sombre à accent unique : un or froid porte toute l'identité, six teintes sémantiques portent tout le sens, et rien d'autre n'a le droit d'exister.
+Trois fonds, volontairement très proches. Un listing de solveur n'empile pas
+des cartes, il sépare par des filets : les fonds **situent**, les filets
+**structurent**.
 
-### Primary
-- **Or Pâle** (`gold-1`) : l'accent unique. Bords au repos (à 25 % d'opacité via `border`), texte actif, focus, dégradé de l'action principale, graduation du monogramme. Il signale « ceci est vivant / sélectionné / actionnable », jamais « ceci est bon ».
-- **Or Brûlé** (`gold-2`) : uniquement l'extrémité sombre des dégradés (bouton principal, barre de progression, pastille de `legend`). Ne s'emploie jamais seul, en aplat ni en texte.
+| Jeton | Valeur | Emploi |
+|---|---|---|
+| `--ground` | `#0D0F12` | La page. Noir **neutre**, jamais le bleu-nuit remplacé. |
+| `--surface` | `#14171B` | Bandeau de session, bloc de résultats. |
+| `--raise` | `#1B1F24` | Second niveau : champ de saisie, ligne survolée. |
+| `--rule` | `#262B32` | Filet ordinaire. |
+| `--rule-strong` | `#39404A` | Séparation majeure (haut d'un bloc, en-tête de table). |
+| `--text` | `#E4E7EC` | Valeur, donnée, titre. |
+| `--text-2` | `#98A0AC` | Libellé, en-tête de colonne, unité. |
+| `--text-3` | `#8E96A2` | Incertitude, note de bas de bloc, valeur absente. |
+| `--accent` | `#5B9DFF` | **Interactif ou actif. Rien d'autre.** |
+| `--ok` | `#4FB286` | Mesure concluante. |
+| `--warn` | `#D9A03F` | Réserve, seuil non atteint, fiabilité faible. |
+| `--error` | `#E0736B` | Échec, exclusion, valeur invalide. |
+| `--pending` | `#C39BE8` | En cours, issue non connue. |
 
-### Secondary
-- **Vert Éprouvé** (`ok`) : résultat validé, porte de qualité active, run terminé.
-- **Ambre d'Alerte** (`warning`) : résultat à surveiller — sous un seuil, non significatif, fiabilité faible. **Pas une erreur** : une réserve.
-- **Rouge Sourd** (`error`) : échec réel, exclusion, valeur invalide. Volontairement sourd, jamais saturé : un échec méthodologique se lit, il ne crie pas. Éclairci lors de la passe `polish` (mesure : 3,63:1, sous le seuil) — la saturation est restée identique, seule la clarté a monté : il reste sourd, il est devenu lisible.
+Trois règles gouvernent la couleur :
 
-### Tertiary
-Trois états ajoutés en Phase 7 pour les cas que le triptyque vert/ambre/rouge écrasait :
-- **Bleu Ardoise** (`neutral`) : informatif, sans jugement — schéma de validation, comptage, rang.
-- **Indigo d'Attente** (`pending`) : en cours ou en file. L'issue n'est pas encore connue. Légèrement éclairci lors de la passe `polish` (4,45:1, juste sous le seuil).
-- **Gris Froid** (`disabled`) : désactivé pour ce run, ou non calculable. **Ni un succès ni un échec.** Basculé du gris chaud au gris froid lors de la passe `polish` : à la clarté nécessaire pour être lisible (2,84:1 auparavant, sous le seuil même pour du gros texte), le gris chaud devenait indiscernable de `muted`. Le froid le distingue et le dit mieux : l'absence de mesure n'est pas du texte secondaire.
+1. **L'accent ne porte jamais une donnée ni un jugement.** Il dit « ceci est
+   interactif ». Un chiffre bleu serait une erreur de catégorie.
+2. **Il n'existe pas de jeton « info ».** Un état sans jugement s'écrit dans la
+   couleur du texte. Le jeton `--info` a existé et a été supprimé : à 11 px il
+   ne se distinguait ni de l'accent ni de `--text-3`, et il n'apportait aucune
+   information que la casse et la position ne portaient déjà.
+3. **La hiérarchie se fait par la taille et la casse, pas par le contraste.**
+   Trois niveaux de texte suffisent.
 
-### Neutral
-- **Ivoire** (`text`) : texte courant. Légèrement chaud, jamais blanc pur.
-- **Sable Éteint** (`muted`) : texte secondaire, en-têtes de colonne, contreparties de fiabilité, libellés d'axe.
-- **Encre** (`bg`) : fond de page et fond des champs de saisie — les entrées sont *en creux*, plus sombres que leur conteneur.
-- **Ardoise** (`panel`) : encarts et barre supérieure.
-- **Ardoise Claire** (`panel-2`) : second niveau — fieldsets, cartes de métrique, journaux, survol de ligne. Un cran plus clair pour que les champs en `bg` restent visibles en creux à l'intérieur.
+`--pending` est à 271° et l'accent à 216° : **55° d'écart**, délibérés. La
+valeur précédente (`#8A93E8`, 234°) n'était qu'à 20° de l'accent, et les deux
+se rencontraient dans la même ligne de `/runs` — l'accent cessait alors de ne
+dire que « interactif ».
 
-### Named Rules
-
-**La Règle de l'Or Structural.** L'or décrit la structure, jamais la donnée. Un bord, un focus, une graduation, l'action principale : oui. Une valeur, un statut, une métrique : jamais. Test : si l'or disparaissait, aucune information ne devrait être perdue — seulement le relief.
-
-**La Règle des Trois États Neutres.** « Non calculable », « désactivé pour ce run » et « en attente » ne sont ni verts ni rouges. Forcer l'un de ces cas dans le vert ou le rouge est un bug de conception, pas un raccourci : cela transforme une absence de mesure en jugement.
-
-**La Règle du Seuil Mesuré.** Toute couleur portant du texte tient 4,5:1 sur *son fond réel* -- pour une pastille, le fond composite teinté à 12%, pas l'encart nu. Trois jetons ont été relevés sur cette mesure ; aucune teinte n'a été saturée pour autant.
-
-**La Règle de l'Échec Sourd.** Les couleurs d'échec sont désaturées par rapport à leur équivalent web standard. Un verdict négatif est un livrable normal de cet outil (cf. PRODUCT.md) — il s'affiche avec la même dignité qu'un succès.
+Toute la palette a été vérifiée **avant construction**, à 4,5:1 minimum sur les
+trois fonds *et* sur un fond composite de pastille à 12 %. Pire ratio mesuré :
+**4,57:1**. Mesurez sur le fond composité réel, jamais sur le panneau nu —
+c'est là que les échecs se cachent.
 
 ## Typography
 
-**Display Font:** Cormorant Garamond (avec Georgia, serif)
-**Body Font:** Inter (avec -apple-system, Segoe UI, Roboto)
+Deux familles, une frontière nette :
 
-**Character:** Un serif éditorial à fort contraste pour tout ce qui nomme, un grotesque neutre pour tout ce qui mesure. Le contraste entre les deux est la seule ornementation du système : le Cormorant apporte la voix du carnet de recherche, l'Inter disparaît pour laisser lire les chiffres.
+- **La donnée est en chasse fixe** (`--mono`, JetBrains Mono 400/500/700).
+  C'est la seule façon d'aligner des décimales, et l'alignement décimal est le
+  geste central de ce monde.
+- **Le chrome est en pile système** (`--ui`). Dans une sortie de solveur, le
+  contenu est du listing et l'habillage est celui du système d'exploitation.
+  Aucune police n'est téléchargée pour le chrome.
 
-### Hierarchy
-- **Display** (serif, 600, 2.2rem) : titre de page. Un seul par écran.
-- **Headline** (serif, 600, 1.6rem) : titre de vue majeure (simulateur).
-- **Title** (serif, 600, 1.2rem) : titre d'encart, de carte, de section.
-- **Body** (Inter, 400, 0.95rem) : texte courant, valeurs de formulaire.
-- **Label** (Inter, 600, 0.75rem, `letter-spacing` 0.04em, capitales) : en-têtes de tableau, libellés de métrique, marque temporelle. Les capitales sont réservées à ce rôle.
-- **Hint** (Inter, 400, 0.85rem, en `muted`) : la contrepartie de fiabilité. Rôle à part entière, pas une note de bas de page.
+Cinq pas seulement, tous utiles — un listing dense ne peut pas se permettre
+sept tailles :
 
-### Named Rules
+| Jeton | Taille | Emploi |
+|---|---|---|
+| `--t-micro` | 11 px | En-tête de colonne, note, unité, marqueur d'état |
+| `--t-small` | 12 px | Libellé, métadonnée de session |
+| `--t-body` | 13 px | Donnée courante, cellule de table |
+| `--t-lead` | 16 px | Valeur mise en avant, titre de bloc |
+| `--t-head` | 22 px | Titre de page — **un seul par écran** |
 
-**La Règle des Chiffres Alignés.** `font-variant-numeric: tabular-nums` est posé sur `body` et ne doit jamais être annulé. Deux nombres l'un sous l'autre doivent pouvoir se comparer en colonne, sans lecture. C'est non négociable dans un outil de mesure.
+`font-variant-numeric: tabular-nums` et `font-feature-settings: "tnum" 1,
+"zero" 1` sont posés globalement sur `table, .num, .mono, code, pre,
+.metric-value, input, select, textarea` (`style.css:27`). Non négociable :
+c'est ce qui permet l'alignement décimal.
 
-**La Règle du Serif Nommant.** Le serif nomme, le sans-serif mesure. Un chiffre en Cormorant est une faute ; un titre de section en Inter aussi.
+**Réserve connue :** JetBrains Mono est chargée depuis Google Fonts alors que
+l'outil tourne sur `127.0.0.1`, souvent hors ligne. Hors ligne, le repli
+`ui-monospace` prend le relais — la grammaire tient (chasse fixe, chiffres
+tabulaires), le visage change.
 
 ## Layout
 
-Conteneur centré à 1560px avec 24px de marge — large, parce que les tableaux de résultats portent beaucoup de colonnes et que les tronquer coûte plus que la longueur de ligne ne gagne.
+Colonne de contenu : `max-width: 1680px`, gouttières `--s5`. Un seul point de
+rupture, **980 px** (`style.css:686`), où les grilles à deux colonnes passent à
+une, le bandeau de session se replie et la grille de mesures s'empile.
 
-Deux topologies coexistantes selon le rythme d'usage :
-- **Grille fixe** (tableau de bord) : 2×2, lignes de 420px minimum, hauteur calée sur la fenêtre (`100vh - 120px`, plancher 640px). Chaque encart défile **indépendamment** ; seule sa zone de corps bouge, son en-tête reste fixe. Choix délibéré : des contenus de longueurs très inégales ne doivent pas étirer la page.
-- **Flux libre** (simulateur, pages d'historique) : hauteur variable, la page défile normalement. Le simulateur pose une colonne de configuration fixe à 340px contre une zone de résultats fluide.
+**Les filets sont horizontaux. Il n'existe aucun filet vertical**, ni
+séparateur de colonne, ni accent latéral, ni bord de carte. Seuls les
+**contrôles** (champ, bouton, infobulle) gardent un contour fermé : un contrôle
+est un objet qu'on manipule, pas une séparation entre deux contenus. Cinq
+`border-left` décoratifs ont existé dans ce fichier et ont été supprimés ; ne
+les réintroduisez pas pour marquer une subordination — **l'indentation seule la
+marque** (`.metric-reliability`).
 
-Rythme d'espacement en base 4px, huit pas (`spacing.1` à `spacing.8`). Les grilles de contenu répétable utilisent `auto-fit` avec un plancher explicite plutôt qu'un nombre de colonnes figé : 180px pour les métriques, 220px pour les listes de variations, 140px pour les sous-champs de formulaire.
+**Le plancher explicite.** Une table de résultats porte beaucoup de colonnes ;
+les comprimer jusqu'à l'illisible coûte plus cher que le défilement. Les tables
+défilent donc dans `.table-scroll`, et le vidage de config dans `.config-dump`
+— **dans leur propre conteneur, jamais la page**. Mesuré : sans cette règle,
+`/runs/{id}` débordait de 250 px en 390 px de large, et le bloc de config seul
+portait la page à 13 266 px de haut.
 
-Point de rupture unique : **980px**. En dessous, la grille 2×2 s'effondre en colonne unique avec des encarts plafonnés à 70vh, et la grille du simulateur passe en pile. Il n'y a pas d'échelle de points de rupture : l'outil est pensé pour un écran de travail, le mobile est une dégradation gracieuse, pas une cible.
+**Le premier viewport porte la provenance.** `base.html` expose
+`{% block session_context %}` : une ligne pleine largeur sous le bandeau,
+portant cible / snapshot / hash de config / git SHA / seed. C'est le quadruplet
+sans lequel aucun chiffre de la page n'est refaisable, et un listing imprime sa
+provenance **avant** son premier résultat. Ne le reléguez pas en bas de page.
 
-**La Règle du Plancher Explicite.** Toute grille répétable déclare une largeur minimale de cellule. Un tableau qui se comprime jusqu'à l'illisible pour tenir sur une ligne trahit l'outil : on préfère le défilement horizontal contenu.
+**Fermez vos listes.** Chaque `data_table()` accepte un `footer` : compte de
+lignes, filtres actifs, et les réserves qui pèsent sur les colonnes (« F1_dir =
+meilleur essai sur n, non déflaté ; p-value DM brute, non corrigée du test
+multiple »). Une table sans pied se lit comme tronquée.
 
 ## Elevation & Depth
 
-Système **essentiellement plat, à profondeur tonale**. La hiérarchie vient de trois niveaux de fond empilés (`bg` → `panel` → `panel-2`) et d'un bord doré à 25 % d'opacité, pas d'un système d'ombres. Le bord fait le travail que l'ombre ferait ailleurs.
+**Il n'y a pas d'élévation.** Zéro `box-shadow` dans tout le système. La
+profondeur, quand elle est nécessaire, vient de l'écart de fond (trois niveaux)
+et du filet, jamais d'une ombre portée. Le bandeau de session est `sticky` sans
+ombre : c'est son fond `--surface` et son filet bas qui le détachent.
 
-L'ombre est réservée à quatre rôles précis, jamais décoratifs :
+Le mouvement est rare et **toujours informatif** :
 
-### Shadow Vocabulary
-- **Séparation de barre fixe** (`0 2px 14px rgba(0,0,0,0.35)`) : uniquement sous la barre supérieure collante, pour la détacher du contenu qui défile dessous.
-- **Flottement de surcouche** (`0 8px 24px rgba(0,0,0,0.45)`) : uniquement pour l'infobulle de glossaire, qui sort du flux.
-- **Lueur d'action** (`0 4px 14px rgba(232,201,122,0.2)`, au survol `0 6px 18px .../0.3`) : uniquement sur l'action principale. C'est la seule ombre colorée du système.
-- **Anneau de focus** (`0 0 0 3px rgba(232,201,122,0.15)`) : sur les champs actifs, doublé d'un passage du bord en or plein.
+| Nom | Valeur | Objet |
+|---|---|---|
+| `state-transition` | `0.12s linear` | Bord de champ, fond de bouton |
+| `progress-settle` | `transform 0.55s cubic-bezier(0.16,1,0.3,1)` | La jauge se pose sur sa valeur |
+| `measuring` | `1900ms cubic-bezier(0.45,0,0.55,1) infinite` | Balayage de phase non mesurable |
+| `flip-move` | `transform 0.42s cubic-bezier(0.16,1,0.3,1)` | Continuité de tri du leaderboard |
+| `arrive` | `opacity 220ms` | Arrivée des résultats en fin de run |
 
-### Named Rules
+**Le geste signature :** `worker.py` n'incrémente `progress_done` que sur les
+lignes de fold ; pendant l'ingestion et la construction des features (~380 s)
+il vaut 0. Afficher « 0 % » y serait **un chiffre qui ne mesure rien présenté
+comme une mesure**. La jauge balaie donc au lieu d'afficher une valeur, et se
+pose sur sa vraie valeur au premier fold. Le balayage s'arrête quand l'onglet
+passe en arrière-plan (`html[data-page-hidden]`).
 
-**La Règle du Plat au Repos.** Une surface au repos n'a pas d'ombre. L'ombre est une réponse à un état (collé, flottant, survolé, focalisé) ou n'existe pas. Une carte, un encart, une métrique, un tableau : plats, toujours.
+Sous `prefers-reduced-motion: reduce`, tout le mouvement est retiré et **aucune
+information ne l'est** : le balayage disparaît, l'état « non mesurable » reste
+lisible dans la ligne de statut.
 
 ## Shapes
 
-Langage de formes **doux mais non arrondi** : le rayon augmente avec la surface, ce qui donne une hiérarchie lisible sans variation de couleur.
+Rayons quasi nuls : `--r-none: 0` partout, `--r-control: 2px` uniquement sur
+les contrôles, et seulement pour ne pas faire d'angle vif agressif.
 
-- **8px** — champs de saisie, liens de téléchargement, onglets de navigation supérieure. L'échelle du contrôle.
-- **10px** — bouton principal, journaux, zones de graphique, infobulle. L'échelle du bloc.
-- **12px** — cartes de métrique, bannières. Palier intermédiaire.
-- **14px** — encarts, cartes, fieldsets, états vides. L'échelle du conteneur.
-- **999px** — exclusivement les pastilles d'état (`status-badge`). La pilule est réservée au statut ; rien d'autre n'est complètement arrondi.
-- **50%** — points et anneaux uniquement : monogramme, pastille de `legend`, icône d'information, point de la pastille d'état.
+**Aucune pilule, aucun cercle, aucune icône décorative, aucune imagerie.** Les
+états ne sont pas des pastilles : ils s'écrivent entre crochets, via
+`::before`/`::after` sur `.status-badge` — `[DONE]`, `[RUNNING]`, `[ACTIVES]`,
+`[NON CALCULÉE]`. Le texte porte l'information ; la couleur ne fait que la
+doubler, ce qui rend l'état lisible même en monochrome.
 
-Les bords sont systématiquement 1px en `border` (or à 25 %). Deux exceptions expressives et volontaires : le tiret (`1px dashed`) marque le provisoire ou le contenant sans contenu — file d'attente, état vide, séparateur de sous-groupe ; le pointillé (`1px dotted`) souligne les liens d'actualité.
-
-**La Règle du Rayon Croissant.** Le rayon suit la taille : contrôle 8, bloc 10, conteneur 14. Un petit élément très arrondi ou un grand conteneur à angle vif casse la lecture de hiérarchie.
+La ligne retenue d'une table se marque **en graisse et par le mot « meilleur »
+dans sa dernière colonne** — pas par un filet latéral (il n'en existe pas), pas
+par un aplat coloré derrière des chiffres, qui nuirait à leur lecture.
 
 ## Components
 
-### Buttons
-- **Shape:** rayon de bloc (10px), sans bord.
-- **Primary:** dégradé or (135°, `gold-1` → `gold-2`), texte en `bg` — l'unique inversion de contraste du système, réservée à l'action qui lance un run ou une simulation. Padding 12px 26px, 600.
-- **Hover / Focus:** la lueur d'action s'intensifie ; l'appui descend d'1px (`translateY(1px)`).
-- **Disabled:** opacité 0.5, ombre retirée, curseur interdit.
-- **Secondary:** il n'existe pas de bouton secondaire plein. Les actions secondaires sont des liens bordés (`downloads`, `topnav`, `range-btn`) : transparents au repos, bord et texte passant à l'or au survol.
+Composants Jinja partagés dans `templates/_components.html`, CSS dans
+`static/style.css`.
 
-### Chips
-- **`status-badge`** — pilule 999px, texte 0.75rem 600, avec un **point de 6px en `currentColor`** en préfixe. Fond et bord dérivent de la couleur d'état à 12 % et 30 % d'opacité.
-- **Six variantes obligatoires** : `ok`, `warning`, `error`, `neutral`, `pending`, `disabled`. Le point coloré rend l'état lisible sans dépendre uniquement de la teinte.
+**`metric(label, value, reliability, state)`** — le composant signature. Le
+troisième argument est **obligatoire** : c'est la mise en œuvre mécanique de la
+thèse. Le libellé, la valeur et la ligne de fiabilité forment un bloc
+indivisible, exactement comme `coef  std.err  p` sort d'un solveur. La ligne de
+fiabilité est indentée sous la valeur, en `--t-micro`, en `--text-3`.
 
-### Cards / Containers
-- **`card`** : fond `panel`, bord or 25 %, rayon 14px, padding 20px/24px. Titre en serif 1.2rem.
-- **`dash-panel`** : même habillage, mais en colonne flex avec en-tête figé et corps défilant indépendamment.
-- **`metric`** : fond `panel-2`, rayon 12px, padding 16px. **Structure en trois parties, non négociable** : libellé en capitales `muted`, valeur en serif 1.6rem colorée par l'état, puis contrepartie de fiabilité en `hint`.
-- **Shadow Strategy:** aucune (cf. Règle du Plat au Repos).
+**`data_table(headers, rows, empty_message, row_classes, num_cols, footer)`** —
+`num_cols` porte les indices (base 0) des colonnes de **mesure** ; elles seules
+reçoivent la classe `num` qui déclenche l'alignement à droite. L'appelant
+déclare, le gabarit ne devine pas : une cellule peut contenir un badge, un
+intervalle ou un NA, et aucun de ces cas ne se détecte de façon fiable. Le
+sélecteur couvre `table.data-table` **et** `table.leaderboard`.
 
-### Inputs / Fields
-- **Style:** fond `bg` (plus sombre que le conteneur — en creux), bord or 25 %, rayon 8px, padding 8px 10px.
-- **Focus:** bord en `gold-1` plein + anneau de focus. Le contour natif est retiré, remplacé — jamais simplement supprimé.
-- **Fieldset:** fond `panel-2`, rayon 14px, bord passant à l'or plein au `focus-within` — le groupe entier signale qu'on travaille dedans.
-- **Legend:** serif 1.05rem, précédé d'une pastille dégradée or de 8px.
+**`status_badge(label, state)`** — six états : `ok`, `warning`, `error`,
+`neutral`, `pending`, `disabled`. `neutral` prend la couleur du texte (pas de
+teinte propre) ; `disabled` prend `--text-3`. Un run **échoué** doit prendre
+`error`, jamais `neutral`.
 
-### Navigation
-- **Barre supérieure** collante, fond `panel`, séparée par la seule ombre de barre fixe. Monogramme + nom en serif espacé (0.06em), accroche en capitales `muted`, puis navigation et sélecteur de langue poussés à droite.
-- **`topnav`** : liens bordés, rayon 8px, 0.85rem 600 en `muted` ; bord et texte passent à l'or au survol.
-- **`tabs`** (pages de détail) : soulignement de 2px transparent au repos, or à l'actif. Pas de fond, pas de pilule.
+**`empty_state` / `error_state`** — le vide s'écrit comme un solveur l'écrit :
+un jeton et une phrase, pas une illustration.
 
-### Signature: la métrique à contrepartie
+**Le refus de calculer.** Ce n'est pas un composant, c'est une doctrine, et
+c'est ce qui distingue ce rendu d'un monospace en costume. Quand
+`pbo_reliability` refuse (moins de 6 blocs), la page n'affiche **pas** la
+valeur ponctuelle à côté d'un message disant qu'elle n'a pas été calculée —
+elle affiche `—`, la première phrase du motif, un appel de note `†`, et renvoie
+les ~500 caractères de justification sous le bloc en `.block-note`. Rien n'est
+masqué ; tout est déplacé là où ça se lit.
 
-Le composant qui porte la thèse du produit. Aucune valeur ne s'affiche sans sa troisième ligne : intervalle de confiance, taille d'échantillon, ou raison explicite de non-calculabilité. Le gabarit force ce troisième argument — il ne peut pas être omis par distraction. Quand la valeur n'est pas calculable, elle s'affiche « — » en `disabled` accompagnée du motif, **jamais** `nan`, `0`, ou un blanc.
+**Valeur absente.** Un solveur n'imprime pas une case vide : il imprime NA, et
+la case reste alignée avec les chiffres de sa colonne. Le tiret cadratin tient
+ce rôle, dans `<span class="na">`, en gris — **jamais dans la couleur d'une
+mesure**. Trois absences sur une même ligne doivent avoir la même couleur.
 
-### Signature: l'icône de glossaire
+**Contrôles.** `button.primary` est plein accent au repos et s'inverse au
+survol (fond transparent, texte accent) — la seule inversion de contraste du
+système. Les champs sont sur `--ground` avec un bord `--rule-strong` qui passe
+à `--accent` au focus. `fieldset` n'a qu'un `border-top`.
 
-Un cercle de 16px bordé en `muted`, portant « i », posé après un terme technique. Au survol il passe à l'or, au clic il ouvre une infobulle flottante. C'est le compromis assumé du produit : le vocabulaire quant reste intact (cf. PRODUCT.md), l'explication est disponible à la demande sans diluer le libellé.
+**Toiles (canvas).** Une toile ne peut pas hériter d'une couleur CSS : elle
+doit la **lire**. `simulate.js` et `market.js` exposent chacun un helper
+`token(name)` **sans valeur de repli codée en dur**. C'est délibéré : un repli
+survit à un remplacement d'identité et repeint silencieusement l'ancien monde —
+c'est exactement ce qui s'est produit avec `--gold-1`. Si le jeton disparaît,
+on veut le voir tout de suite.
 
 ## Do's and Don'ts
 
-### Do:
-- **Do** afficher la contrepartie de fiabilité de chaque chiffre — IC, n, ou motif de non-calculabilité — dans la troisième ligne de la métrique.
-- **Do** utiliser `disabled` (gris) pour « non calculable » et « désactivé pour ce run », et `pending` (indigo) pour « en cours ».
-- **Do** conserver `tabular-nums` sur toute donnée numérique.
-- **Do** déclarer une largeur minimale de cellule sur toute grille répétable.
-- **Do** remplacer le contour de focus natif par le bord or + l'anneau ; ne jamais se contenter de le retirer.
-- **Do** garder le serif pour nommer et l'Inter pour mesurer.
+**À faire**
 
-### Don't:
-- **Don't** utiliser l'or pour porter une donnée ou un statut — il est structural (Règle de l'Or Structural).
-- **Don't** afficher `nan`, `Infinity`, `null` ou une cellule vide : un chiffre non calculable s'écrit « — » avec son motif.
-- **Don't** ajouter une ombre à une surface au repos.
-- **Don't** introduire une septième couleur sémantique ni une teinte hors palette ; les six états couvrent les cas, et un cas nouveau se discute avant de s'ajouter.
-- **Don't** arrondir complètement (999px) autre chose qu'une pastille d'état.
-- **Don't** ajouter photographie, illustration ou icône décorative : le système est sans imagerie par construction.
-- **Don't** saturer les couleurs d'échec pour « alerter davantage » (Règle de l'Échec Sourd).
-- **Don't** traiter le monogramme « P » comme un logo : c'est un placeholder CSS explicitement documenté.
+- Écrire la contrepartie de fiabilité de chaque chiffre — n, intervalle, ou le
+  motif de sa non-calculabilité.
+- Refuser d'imprimer une mesure non interprétable, et dire pourquoi en clair.
+- Déclarer `num_cols` sur toute table portant des mesures.
+- Fermer chaque liste par un pied portant compte et réserves.
+- Écrire les états en `[TEXTE]`, la couleur ne faisant que doubler.
+- Faire défiler tables et blocs de code dans leur propre conteneur.
+- Lire les couleurs de toile depuis les jetons, sans repli.
+- Vérifier le contraste sur le fond **composité réel**, avant de construire.
+
+**À ne pas faire**
+
+- Afficher un chiffre nu, sans son dénominateur ni sa réserve.
+- Afficher une valeur ponctuelle à côté d'un message disant qu'elle n'a pas été
+  calculée.
+- Dessiner un filet vertical, un bord de carte, une pilule ou un cercle.
+- Utiliser l'accent pour porter une donnée ou un jugement.
+- Introduire un sixième neutre bleuté « informatif ».
+- Afficher « 0 % » pendant une phase qui ne produit aucune mesure.
+- Poser un `cursor: pointer` ou un survol d'accent sur un élément que rien
+  n'active.
+- Réintroduire un logo, un monogramme ou un placeholder de logo : le produit
+  s'identifie par son nom en chasse fixe, et c'est un choix, pas un manque.
+
+## Écarts connus entre le contrat et le code
+
+Documentés parce qu'ils sont réels, pas corrigés ici :
+
+- **`/simulate` au repos** ne rend ni pied de listing ni état vide : deux toiles
+  vides et deux tables à en-têtes seuls. C'est la surface la moins dense du
+  produit.
+- **`sparkline()`** est déclarée dans `_components.html` mais n'est importée ni
+  appelée nulle part — code mort.
+- **Aucune capture ne montre une toile avec données** : le repointage des
+  couleurs de graphique est vérifié en lecture de code, jamais observé au
+  rendu.

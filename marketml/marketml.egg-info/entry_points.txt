@@ -1,0 +1,2 @@
+[console_scripts]
+marketml = marketml.cli:app

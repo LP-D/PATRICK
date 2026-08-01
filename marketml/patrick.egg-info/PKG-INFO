@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: patrick
+Version: 0.1.0
+Summary: Cadre ML/DL multi-actifs autonome : walk-forward, features avancées (Heston/EGARCH/Kalman/HMM/VRP/spike), sélection SHAP/RFE/LASSO, samplers, tuning Optuna — méthodologie issue du projet VIX, généralisée à n'importe quel actif.
+Requires-Python: >=3.10
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: pyarrow
+Requires-Dist: scikit-learn
+Requires-Dist: xgboost
+Requires-Dist: lightgbm
+Requires-Dist: catboost
+Requires-Dist: imbalanced-learn
+Requires-Dist: shap
+Requires-Dist: yfinance
+Requires-Dist: pandas_datareader
+Requires-Dist: requests
+Requires-Dist: arch
+Requires-Dist: pykalman
+Requires-Dist: hmmlearn
+Requires-Dist: pydantic>=2
+Requires-Dist: PyYAML
+Requires-Dist: typer
+Requires-Dist: joblib
+Requires-Dist: openpyxl
+Requires-Dist: xlsxwriter
+Requires-Dist: optuna
+Requires-Dist: duckdb
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Provides-Extra: web
+Requires-Dist: fastapi; extra == "web"
+Requires-Dist: uvicorn[standard]; extra == "web"
+Requires-Dist: jinja2; extra == "web"
+Requires-Dist: python-multipart; extra == "web"
