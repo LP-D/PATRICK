@@ -1,14 +1,33 @@
 <!doctype html>
 <html lang="{{ lang | default('fr') }}">
+<!--
+THESIS: Un chiffre ne s'écrit jamais seul. Ce monde refuse le tableau de bord
+quant (panneaux sombres, chiffres verts/rouges, KPI en gros) et adopte la
+sortie de solveur que tout quant lit déjà : estimé, incertitude et seuil dans
+un même bloc aligné.
+OWN-WORLD: Noir neutre à trois fonds très proches ; la structure vient de
+filets HORIZONTAUX seuls, jamais de cartes ni de verticaux. Donnée en chasse
+fixe alignée à la décimale, chrome en pile système. Un seul accent bleu, qui
+ne dit que « interactif ». Rayons quasi nuls, aucune pilule, aucun cercle.
+STORY: Le visiteur voit une session de calcul lisible — d'où viennent les
+données, ce qui a été mesuré, avec quelle fiabilité, et ce qui n'a pas pu
+l'être. Il repart en sachant si le signal tient.
+FIRST VIEWPORT: Bandeau de session (cible, snapshot, seed, git SHA) sur toute
+la largeur, puis les blocs de résultats séparés par filets, avertissements en
+ligne dans le flux.
+FORM: Sortie de solveur (R/Stata), candidat 4 de la liste ordonnée, tirage
+dégradé sans challenger, clé 74cc3ec9.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0B0D12">
+    <meta name="theme-color" content="#0D0F12">
     <meta name="color-scheme" content="dark">
     <title>{% block title %}PATRICK{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/tokens.css">
     <link rel="stylesheet" href="/static/style.css">
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
@@ -21,10 +40,10 @@
         // soit la langue choisie.
         window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
 
-        // Les seules boucles de l'interface (balayage de la jauge en phase non
-        // mesurable, respiration du point « en cours ») s'arretent quand
-        // l'onglet passe en arriere-plan : une animation non essentielle ne
-        // doit pas continuer a consommer hors ecran. CSS : `html[data-page-hidden]`.
+        // La seule boucle de l'interface (balayage de la jauge en phase non
+        // mesurable) s'arrete quand l'onglet passe en arriere-plan : une
+        // animation non essentielle ne doit pas continuer a consommer hors
+        // ecran. CSS : `html[data-page-hidden]`.
         (function () {
             function sync() {
                 if (document.hidden) document.documentElement.dataset.pageHidden = "";
@@ -36,20 +55,19 @@
     </script>
 </head>
 <body>
-    <header class="topbar">
-        <a class="brand" href="/">
-            <span class="brand-mark">P</span>
-            <span class="brand-name">PATRICK</span>
-        </a>
-        <span class="tagline">{{ t('tagline') if t else 'walk-forward · SHAP · Optuna — sans YAML' }}</span>
-        <nav class="topnav">
+    <!-- Bandeau de session : ce qu'un listing imprime en tete avant tout
+         resultat -- qui tourne, sur quoi, dans quelle langue. Pas une barre
+         de navigation deguisee : la navigation y est un champ parmi d'autres. -->
+    <header class="session">
+        <a class="session-id" href="/">PATRICK</a>
+        <nav class="session-nav">
             <a href="/runs">{{ t('nav_runs') if t else 'Historique' }}</a>
             <a href="/universe">{{ t('nav_universe') if t else 'Univers' }}</a>
             <a href="/simulate">{{ t('nav_simulate') if t else 'Simulateur' }}</a>
         </nav>
-        <nav class="lang-switch" aria-label="Langue / Language">
-            <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">FR</a>
-            <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">EN</a>
+        <nav class="session-lang" aria-label="Langue / Language">
+            <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>
+            <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
         </nav>
     </header>
     <main class="container">

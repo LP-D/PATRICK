@@ -36,9 +36,14 @@
           "IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations),
           "ok") }}
 {% else %}
-{{ metric("PBO (" ~ detail.pbo_label ~ ")", "—",
-          rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.",
-          "disabled") }}
+{# La justification complète du refus (C5) fait ~500 caractères : dans une
+   colonne de mesure elle écrase toute la rangée. Elle part donc en NOTE sous
+   le bloc, comme une note de table économétrique -- rien n'est masqué, tout
+   est déplacé là où ça se lit. #}
+{% set refus = (rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.") %}
+{% set refus_head = refus.split('. ')[0] %}
+{% set refus_rest = refus[refus_head|length + 2:] if '. ' in refus else '' %}
+{{ metric("PBO (" ~ detail.pbo_label ~ ")", "—", refus_head ~ (" †" if refus_rest else ""), "disabled") }}
 {% endif %}
 
 {% if detail.is_cpcv %}
@@ -76,6 +81,9 @@
 {{ metric("Corrélation test/holdout", "—", "Non calculable (n = " ~ detail.holdout_diag.n_trials ~ " essais avec test+holdout, minimum 3).", "disabled") }}
 {% endif %}
 </div>
+{% if refus_rest is defined and refus_rest %}
+<p class="block-note"><span class="block-note-marker">†</span> {{ refus_rest }}</p>
+{% endif %}
 
 <section class="card">
 <h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>

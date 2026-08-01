@@ -1,64 +1,70 @@
-/* Phase 7.0 (P7.0) -- design system : jetons partagés par toutes les pages
-   (existantes et nouvelles, `/runs`, `/runs/{id}`, `/targets/{ticker}`,
-   `/universe`). Extrait de l'ancienne palette de `style.css` (couleurs
-   inchangées, même charte sombre/or) + ajout d'une échelle typographique,
-   d'une échelle d'espacement, et de 3 états sémantiques neufs.
+/* PATRICK — jetons du monde visuel « Sortie de solveur ».
+   Remplace intégralement la charte sombre/or de la Phase 7. Aucune valeur
+   n'a été conservée : c'est un remplacement d'identité, pas un ajustement.
 
-   États sémantiques : `--ok`/`--warning`/`--error` existaient déjà (résultat
-   bon/à surveiller/mauvais). Insuffisants pour la fiabilité d'un chiffre --
-   "non calculable" (pas assez de données) ou "désactivé pour ce run" ne sont
-   ni une réussite ni un échec, et "en file d'attente" n'est pas encore
-   tranché : 3 états neufs pour ne pas forcer ces cas dans le vert/rouge
-   (`.status-badge`, cf. `_components.html`). */
+   Contraintes de dérivation :
+   - Fond sombre imposé par la scène physique (longues sessions en soirée,
+     l'écran est la principale source de lumière) -- pas par habitude de
+     catégorie. Noir NEUTRE, jamais le bleu-nuit de l'ancien monde.
+   - Stratégie « Restrained » : neutres + un seul accent fonctionnel.
+     L'accent ne dit qu'une chose -- « ceci est interactif ou actif ». Il ne
+     porte jamais de donnée, jamais de jugement.
+   - Toute la palette tient 4,5:1 sur ses trois fonds ET sur un fond de
+     pastille composite à 12% (pire ratio mesuré : 4,57). Vérifié avant
+     construction, pas après. */
 :root {
-    /* Couleurs -- identiques à l'ancien :root de style.css. */
-    --bg: #0B0D12;
-    --panel: #151822;
-    --panel-2: #1b1f2b;
-    --border: rgba(201, 162, 75, 0.25);
-    --text: #F3EFE7;
-    --muted: #9A9587;
-    --gold-1: #E8C97A;
-    --gold-2: #8A6A2F;
-    --accent: #E8C97A;
-    --error: #D07E78;
-    --warning: #D9A441;
-    --ok: #3FA985;
+    /* --- Fonds : trois niveaux, écart volontairement faible.
+       Un listing de solveur n'empile pas des cartes ; il sépare par des
+       filets. Les fonds situent, les filets structurent. --- */
+    --ground: #0D0F12;   /* la page */
+    --surface: #14171B;  /* bloc de résultats, en-tête de session */
+    --raise: #1B1F24;    /* second niveau : champ de saisie, ligne survolée */
+    --rule: #262B32;     /* filet HORIZONTAL. Il n'existe pas de filet vertical. */
+    --rule-strong: #39404A; /* filet de séparation majeure (haut/bas d'un bloc) */
 
-    /* États neufs (P7.0) : ni bon ni mauvais. */
-    --neutral: #6E8CAE;   /* informatif, ex. schéma de validation, comptage */
-    --pending: #808FDD;   /* en cours / en file d'attente */
-    --disabled: #8D95A0;  /* désactivé pour ce run, ou non calculable */
+    /* --- Texte : la hiérarchie se fait par la TAILLE et la casse,
+       pas par le contraste. Trois niveaux suffisent. --- */
+    --text: #E4E7EC;     /* valeur, donnée, titre */
+    --text-2: #98A0AC;   /* libellé, en-tête de colonne, unité */
+    --text-3: #8E96A2;   /* incertitude, note de bas de bloc, NA */
 
-    --font-serif: "Cormorant Garamond", Georgia, serif;
-    --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* --- Accent unique, fonctionnel. --- */
+    --accent: #5B9DFF;
 
-    /* Échelle typographique (P7.0). */
-    --text-xs: 0.75rem;
-    --text-sm: 0.85rem;
-    --text-base: 0.95rem;
-    --text-md: 1.05rem;
-    --text-lg: 1.2rem;
-    --text-xl: 1.6rem;
-    --text-2xl: 2.2rem;
+    /* --- États sémantiques. Aucun n'est décoratif : chacun répond à une
+       question que l'outil pose déjà. --- */
+    --ok: #4FB286;       /* mesure concluante */
+    --warn: #D9A03F;     /* réserve, seuil non atteint, fiabilité faible */
+    --error: #E0736B;    /* échec, exclusion, valeur invalide */
+    --info: #8AA3BE;     /* informatif, sans jugement */
+    --pending: #8A93E8;  /* en cours, issue non connue */
 
-    /* Échelle de rayons. DESIGN.md la documentait déjà (« Règle du Rayon
-       Croissant » : contrôle 8, bloc 10, conteneur 14) mais elle n'existait
-       nulle part en CSS -- chaque règle réécrivait sa valeur, et deux rayons
-       avaient dérivé hors échelle. */
-    --radius-sm: 8px;     /* contrôle : champ, lien bordé, onglet */
-    --radius-md: 10px;    /* bloc : bouton principal, journal, graphique */
-    --radius-lg: 12px;    /* palier intermédiaire : carte de métrique, bannière */
-    --radius-xl: 14px;    /* conteneur : encart, carte, fieldset, état vide */
-    --radius-pill: 999px; /* réservé aux pastilles d'état et aux jauges */
+    /* --- Familles.
+       La donnée est en chasse fixe : c'est la seule façon d'aligner des
+       décimales, et l'alignement décimal est le geste central de ce monde.
+       Le chrome (navigation, formulaire, prose) est en pile système : dans
+       une sortie de solveur, le contenu est du listing et l'habillage est
+       celui du système d'exploitation. Aucune police n'est téléchargée pour
+       le chrome. --- */
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+            Consolas, "Liberation Mono", monospace;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-    /* Échelle d'espacement (P7.0), base 4px. */
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 20px;
-    --space-6: 24px;
-    --space-7: 32px;
-    --space-8: 48px;
+    /* --- Échelle typographique, resserrée : un listing dense ne peut pas
+       se permettre sept tailles. Cinq pas, tous utiles. --- */
+    --t-micro: 0.6875rem;  /* 11px — en-tête de colonne, note, unité */
+    --t-small: 0.75rem;    /* 12px — libellé, métadonnée de session */
+    --t-body: 0.8125rem;   /* 13px — donnée courante, cellule de table */
+    --t-lead: 1rem;        /* 16px — valeur mise en avant, titre de bloc */
+    --t-head: 1.375rem;    /* 22px — titre de page */
+
+    /* --- Espacement, base 4px. --- */
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+    --s5: 20px; --s6: 24px; --s7: 32px; --s8: 48px;
+
+    /* --- Rayons : quasi nuls. Un listing n'a pas de coins arrondis ; les
+       2px servent uniquement à ne pas faire d'angle vif agressif sur les
+       contrôles. Aucune pilule, aucun cercle. --- */
+    --r-none: 0;
+    --r-control: 2px;
 }
