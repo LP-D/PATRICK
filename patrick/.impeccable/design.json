@@ -67,8 +67,8 @@
       "error": {
         "role": "secondary",
         "displayName": "Rouge Sourd",
-        "canonical": "#C1544C",
-        "tonalRamp": ["#2A0F0D", "#421815", "#5C221E", "#782E28", "#963C34", "#B24A41", "#C1544C", "#DC8C86"]
+        "canonical": "#D07E78",
+        "tonalRamp": ["#2A0F0D", "#421815", "#5C221E", "#7A342E", "#9C4841", "#B96259", "#D07E78", "#E7ADA9"]
       },
       "neutral": {
         "role": "tertiary",
@@ -79,14 +79,14 @@
       "pending": {
         "role": "tertiary",
         "displayName": "Indigo d'Attente",
-        "canonical": "#6E7FD8",
-        "tonalRamp": ["#12162E", "#1C2247", "#283062", "#36407F", "#46529D", "#5865BC", "#6E7FD8", "#A3AEE9"]
+        "canonical": "#808FDD",
+        "tonalRamp": ["#12162E", "#1C2247", "#283062", "#36407F", "#4B57A8", "#6470C6", "#808FDD", "#AEB7EA"]
       },
       "disabled": {
         "role": "tertiary",
-        "displayName": "Gris Étouffé",
-        "canonical": "#6B6558",
-        "tonalRamp": ["#16150F", "#242219", "#343125", "#464232", "#595442", "#6B6558", "#8F8878", "#B7B1A3"]
+        "displayName": "Gris Froid",
+        "canonical": "#8D95A0",
+        "tonalRamp": ["#12151A", "#1D2229", "#2B323C", "#3C4552", "#54606F", "#6F7B8B", "#8D95A0", "#B8BEC6"]
       }
     },
     "typographyMeta": {
@@ -199,6 +199,7 @@
       "Zéro imagerie : aucune photo, aucune illustration, aucune icône décorative"
     ],
     "rules": [
+      { "name": "La Règle du Seuil Mesuré", "body": "Toute couleur portant du texte tient 4,5:1 sur son fond réel -- pour une pastille, le fond composite teinté à 12%, pas l'encart nu. Trois jetons ont été relevés sur cette mesure ; aucune teinte n'a été saturée pour autant.", "section": "colors" },
       { "name": "La Règle de l'Or Structural", "body": "L'or décrit la structure, jamais la donnée. Un bord, un focus, une graduation, l'action principale : oui. Une valeur, un statut, une métrique : jamais. Test : si l'or disparaissait, aucune information ne devrait être perdue — seulement le relief.", "section": "colors" },
       { "name": "La Règle des Trois États Neutres", "body": "« Non calculable », « désactivé pour ce run » et « en attente » ne sont ni verts ni rouges. Forcer l'un de ces cas dans le vert ou le rouge est un bug de conception, pas un raccourci : cela transforme une absence de mesure en jugement.", "section": "colors" },
       { "name": "La Règle de l'Échec Sourd", "body": "Les couleurs d'échec sont désaturées par rapport à leur équivalent web standard. Un verdict négatif est un livrable normal de cet outil — il s'affiche avec la même dignité qu'un succès.", "section": "colors" },

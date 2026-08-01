@@ -21,14 +21,14 @@
     --gold-1: #E8C97A;
     --gold-2: #8A6A2F;
     --accent: #E8C97A;
-    --error: #C1544C;
+    --error: #D07E78;
     --warning: #D9A441;
     --ok: #3FA985;
 
     /* États neufs (P7.0) : ni bon ni mauvais. */
     --neutral: #6E8CAE;   /* informatif, ex. schéma de validation, comptage */
-    --pending: #6E7FD8;   /* en cours / en file d'attente */
-    --disabled: #6B6558;  /* désactivé pour ce run, ou non calculable */
+    --pending: #808FDD;   /* en cours / en file d'attente */
+    --disabled: #8D95A0;  /* désactivé pour ce run, ou non calculable */
 
     --font-serif: "Cormorant Garamond", Georgia, serif;
     --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -41,6 +41,16 @@
     --text-lg: 1.2rem;
     --text-xl: 1.6rem;
     --text-2xl: 2.2rem;
+
+    /* Échelle de rayons. DESIGN.md la documentait déjà (« Règle du Rayon
+       Croissant » : contrôle 8, bloc 10, conteneur 14) mais elle n'existait
+       nulle part en CSS -- chaque règle réécrivait sa valeur, et deux rayons
+       avaient dérivé hors échelle. */
+    --radius-sm: 8px;     /* contrôle : champ, lien bordé, onglet */
+    --radius-md: 10px;    /* bloc : bouton principal, journal, graphique */
+    --radius-lg: 12px;    /* palier intermédiaire : carte de métrique, bannière */
+    --radius-xl: 14px;    /* conteneur : encart, carte, fieldset, état vide */
+    --radius-pill: 999px; /* réservé aux pastilles d'état et aux jauges */
 
     /* Échelle d'espacement (P7.0), base 4px. */
     --space-1: 4px;

@@ -12,10 +12,10 @@ colors:
   gold-2: "#8A6A2F"
   ok: "#3FA985"
   warning: "#D9A441"
-  error: "#C1544C"
+  error: "#D07E78"
   neutral: "#6E8CAE"
-  pending: "#6E7FD8"
-  disabled: "#6B6558"
+  pending: "#808FDD"
+  disabled: "#8D95A0"
 typography:
   display:
     fontFamily: "Cormorant Garamond, Georgia, serif"
@@ -108,13 +108,13 @@ Palette sombre à accent unique : un or froid porte toute l'identité, six teint
 ### Secondary
 - **Vert Éprouvé** (`ok`) : résultat validé, porte de qualité active, run terminé.
 - **Ambre d'Alerte** (`warning`) : résultat à surveiller — sous un seuil, non significatif, fiabilité faible. **Pas une erreur** : une réserve.
-- **Rouge Sourd** (`error`) : échec réel, exclusion, valeur invalide. Volontairement sourd, jamais saturé : un échec méthodologique se lit, il ne crie pas.
+- **Rouge Sourd** (`error`) : échec réel, exclusion, valeur invalide. Volontairement sourd, jamais saturé : un échec méthodologique se lit, il ne crie pas. Éclairci lors de la passe `polish` (mesure : 3,63:1, sous le seuil) — la saturation est restée identique, seule la clarté a monté : il reste sourd, il est devenu lisible.
 
 ### Tertiary
 Trois états ajoutés en Phase 7 pour les cas que le triptyque vert/ambre/rouge écrasait :
 - **Bleu Ardoise** (`neutral`) : informatif, sans jugement — schéma de validation, comptage, rang.
-- **Indigo d'Attente** (`pending`) : en cours ou en file. L'issue n'est pas encore connue.
-- **Gris Étouffé** (`disabled`) : désactivé pour ce run, ou non calculable. **Ni un succès ni un échec.**
+- **Indigo d'Attente** (`pending`) : en cours ou en file. L'issue n'est pas encore connue. Légèrement éclairci lors de la passe `polish` (4,45:1, juste sous le seuil).
+- **Gris Froid** (`disabled`) : désactivé pour ce run, ou non calculable. **Ni un succès ni un échec.** Basculé du gris chaud au gris froid lors de la passe `polish` : à la clarté nécessaire pour être lisible (2,84:1 auparavant, sous le seuil même pour du gros texte), le gris chaud devenait indiscernable de `muted`. Le froid le distingue et le dit mieux : l'absence de mesure n'est pas du texte secondaire.
 
 ### Neutral
 - **Ivoire** (`text`) : texte courant. Légèrement chaud, jamais blanc pur.
@@ -128,6 +128,8 @@ Trois états ajoutés en Phase 7 pour les cas que le triptyque vert/ambre/rouge 
 **La Règle de l'Or Structural.** L'or décrit la structure, jamais la donnée. Un bord, un focus, une graduation, l'action principale : oui. Une valeur, un statut, une métrique : jamais. Test : si l'or disparaissait, aucune information ne devrait être perdue — seulement le relief.
 
 **La Règle des Trois États Neutres.** « Non calculable », « désactivé pour ce run » et « en attente » ne sont ni verts ni rouges. Forcer l'un de ces cas dans le vert ou le rouge est un bug de conception, pas un raccourci : cela transforme une absence de mesure en jugement.
+
+**La Règle du Seuil Mesuré.** Toute couleur portant du texte tient 4,5:1 sur *son fond réel* -- pour une pastille, le fond composite teinté à 12%, pas l'encart nu. Trois jetons ont été relevés sur cette mesure ; aucune teinte n'a été saturée pour autant.
 
 **La Règle de l'Échec Sourd.** Les couleurs d'échec sont désaturées par rapport à leur équivalent web standard. Un verdict négatif est un livrable normal de cet outil (cf. PRODUCT.md) — il s'affiche avec la même dignité qu'un succès.
 
