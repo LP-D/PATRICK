@@ -36,8 +36,14 @@
     --ok: #4FB286;       /* mesure concluante */
     --warn: #D9A03F;     /* réserve, seuil non atteint, fiabilité faible */
     --error: #E0736B;    /* échec, exclusion, valeur invalide */
-    --info: #8AA3BE;     /* informatif, sans jugement */
-    --pending: #8A93E8;  /* en cours, issue non connue */
+    --pending: #C39BE8;  /* en cours, issue non connue.
+       Violet (271°) et non plus bleu-indigo (234°) : à 234° il n'était qu'à
+       20° de l'accent, et les deux se rencontraient dans la même ligne de
+       `/runs` -- l'accent cessait alors de ne dire que « interactif ».
+       55° d'écart, contraste le plus défavorable mesuré 5,82:1.
+       Il n'y a PAS de jeton « info » : un état sans jugement n'a pas de
+       couleur, il s'écrit dans la couleur du texte. Un sixième bleu neutre
+       ne se distinguait ni de l'accent ni du texte secondaire à 11px. */
 
     /* --- Familles.
        La donnée est en chasse fixe : c'est la seule façon d'aligner des

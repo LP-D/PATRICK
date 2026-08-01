@@ -47,7 +47,9 @@
 {% endfor %}
 {% endfor %}
 {{ data_table(["Horizon", "Schéma", "PBO", "N blocs/chemins", "Fiabilité (bootstrap)"], pbo_rows,
-              "Pas assez d'essais avec folds/chemins complets pour calculer un PBO sur cette cible.") }}
+              "Pas assez d'essais avec folds/chemins complets pour calculer un PBO sur cette cible.",
+              num_cols=[0, 2, 3],
+              footer="PBO affiché uniquement quand le diagnostic de fiabilité l'accepte (≥ 6 blocs) ; sinon « — » et le motif du refus en clair. Un PBO sous ce seuil n'est pas interprétable.") }}
 </section>
 
 <section class="card">
@@ -55,18 +57,21 @@
 {% set rows = [] %}
 {% for r in detail.runs %}
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else 'neutral') %}
-{% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '—' %}
+{% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '<span class="na">—</span>' %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
     r.horizon ~ 'j',
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',
-    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—'),
+    r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
+    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
     dm_cell,
 ]) %}
 {% endfor %}
-{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "F1_dir (meilleur essai)", "DM p-value"], rows) }}
+{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "DM p-value"],
+              rows, num_cols=[1, 5, 6, 7],
+              footer=(detail.runs | length) ~ " run(s) · F1_dir = meilleur essai sur n, non déflaté ; p-value DM brute — la version corrigée du test multiple (BH entre cibles) est le bloc de mesure en haut de cette page.") }}
 </section>
 
 {% endif %}

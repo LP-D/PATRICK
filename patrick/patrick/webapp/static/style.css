@@ -30,6 +30,30 @@ table, .num, .mono, code, pre, .metric-value, input, select, textarea {
     font-feature-settings: "tnum" 1, "zero" 1;
 }
 
+/* Un bloc de config JSON a des lignes longues et indentées : les replier
+   détruirait l'indentation, qui EST la structure. Il défile donc dans son
+   propre conteneur -- « règle du plancher explicite », la même qui régit
+   `.table-scroll`. Mesuré : sans cette règle, `/runs/{id}` débordait de
+   250px en 390px de large et c'était la PAGE qui défilait. */
+pre {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    max-width: 100%;
+}
+/* Vidage de config : entier, jamais tronqué, mais borné en hauteur -- un
+   listing imprime sa config, il ne lui laisse pas 12 000 px. */
+.config-dump {
+    max-height: 480px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: var(--s3) 0;
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 2px; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
@@ -69,6 +93,32 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .session-lang a { color: var(--text-3); }
 .session-lang a.active { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 
+/* Ligne de contexte de run, sous le bandeau : cible, snapshot, hash de
+   config, git SHA, seed. Le contrat de direction l'exige dans le PREMIER
+   viewport -- c'est le quadruplet sans lequel aucun chiffre de la page n'est
+   refaisable, et un listing imprime sa provenance avant son premier résultat.
+   Elle défile avec la page (contrairement au bandeau) : on la lit une fois,
+   on n'y revient pas. */
+.session-context {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1) var(--s5);
+    padding: var(--s2) var(--s5);
+    background: var(--ground);
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+}
+.session-context b {
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    margin-right: var(--s1);
+}
+
 .container { max-width: 1680px; margin: 0 auto; padding: var(--s6) var(--s5) var(--s8); }
 
 /* ---------------------------------------------------------------------------
@@ -83,13 +133,16 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
     letter-spacing: -0.01em;
     margin-bottom: var(--s1);
 }
+/* Le sous-titre garde sa mesure de LECTURE (90ch) mais ne porte plus de
+   filet : un filet à 90ch au-dessus de filets pleine largeur donnait trois
+   longueurs de trait en 60px de hauteur, sur la première chose que voit un
+   visiteur. Le premier filet structurel de la page est désormais celui du
+   bloc qui suit -- pleine largeur, comme tous les autres. */
 .page-subtitle {
     color: var(--text-2);
     font-size: var(--t-small);
     max-width: 90ch;
     margin: 0 0 var(--s5);
-    padding-bottom: var(--s4);
-    border-bottom: 1px solid var(--rule-strong);
 }
 
 /* Bloc de résultats : ouvert en haut par un filet fort et un titre en
@@ -114,6 +167,11 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 
 .hint { color: var(--text-3); font-size: var(--t-small); margin: 0 0 var(--s3); }
 .error-text { color: var(--error); }
+
+/* Valeur absente. Un solveur n'imprime pas une case vide : il imprime NA, et
+   la case reste alignée avec les chiffres de la colonne. Le tiret cadratin
+   tient ce rôle ici, en gris, jamais dans la couleur d'une mesure. */
+.na { color: var(--text-3); }
 
 /* ---------------------------------------------------------------------------
    Le bloc de mesure -- composant signature du monde.
@@ -160,7 +218,6 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 .metric-reliability {
     margin-top: var(--s2);
     padding-left: var(--s3);
-    border-left: 1px solid var(--rule);
     font-family: var(--mono);
     font-size: var(--t-micro);
     line-height: 1.45;
@@ -204,7 +261,7 @@ h1, h2, h3, h4 { font-family: var(--mono); font-weight: 500; margin: 0; }
 .status-badge.status-ok { color: var(--ok); }
 .status-badge.status-warning { color: var(--warn); }
 .status-badge.status-error { color: var(--error); }
-.status-badge.status-neutral { color: var(--info); }
+.status-badge.status-neutral { color: var(--text); }
 .status-badge.status-pending { color: var(--pending); }
 .status-badge.status-disabled { color: var(--text-3); }
 
@@ -240,11 +297,31 @@ table.data-table tbody td, table.leaderboard tbody td {
     vertical-align: baseline;
 }
 table.data-table tbody tr:hover, table.leaderboard tbody tr:hover { background: var(--raise); }
-/* La ligne retenue est marquée par un filet d'appui à gauche, pas par un
-   aplat : un aplat coloré derrière des chiffres nuit à leur lecture. */
-table.data-table tbody tr.best td:first-child,
-table.leaderboard tbody tr.best td:first-child { box-shadow: inset 2px 0 0 var(--accent); padding-left: var(--s2); }
+/* La ligne retenue se marque en GRAISSE et par le mot « meilleur » dans sa
+   derniere colonne -- pas par un filet vertical (il n'en existe pas dans ce
+   monde) ni par un aplat colore derriere des chiffres. */
+table.data-table tbody tr.best td,
+table.leaderboard tbody tr.best td { font-weight: 700; color: var(--text); }
+/* Alignement décimal : le geste central du monde. `font-variant-numeric:
+   tabular-nums` (plus haut) donne des chiffres de largeur égale, l'alignement
+   à droite met les décimales en colonne. La classe est POSÉE par l'appelant
+   de `data_table()` (argument `num_cols`) -- une cellule numérique ne se
+   devine pas : elle peut porter un badge, un intervalle ou un NA. */
 table.data-table td.num, table.data-table th.num { text-align: right; }
+
+/* Pied de listing. Une sortie de solveur ferme toujours sa table : combien de
+   lignes, sur quelle portée, et quelles réserves pèsent sur les chiffres
+   ci-dessus. Sans ce pied, une table courte se lit comme tronquée. */
+.table-footer {
+    margin: 0 0 var(--s5);
+    padding-top: var(--s2);
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--text-3);
+    max-width: 120ch;
+}
 table.leaderboard th { cursor: pointer; }
 table.leaderboard th:hover { color: var(--accent); }
 
@@ -253,16 +330,23 @@ table.leaderboard th:hover { color: var(--accent); }
    DANS le flux, à sa place chronologique -- jamais relégué dans un encart.
    --------------------------------------------------------------------------- */
 .banner {
-    padding: var(--s3) 0 var(--s3) var(--s3);
+    padding: var(--s3) 0;
     margin: 0 0 var(--s4);
     border: 0;
-    border-left: 1px solid var(--rule-strong);
+    border-top: 1px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
     border-radius: 0;
     font-family: var(--mono);
     font-size: var(--t-small);
+    color: var(--text);
 }
-.banner-error { border-left-color: var(--error); color: var(--text); }
-.banner-warning { border-left-color: var(--warn); color: var(--text); }
+/* La severite se lit dans le marqueur en tete de ligne, pas dans un filet
+   vertical : `Warning:` s'imprime, il ne se decore pas. */
+.banner::before { font-weight: 700; margin-right: var(--s2); }
+.banner-error { border-color: var(--error); }
+.banner-error::before { content: "[ERREUR]"; color: var(--error); }
+.banner-warning { border-color: var(--warn); }
+.banner-warning::before { content: "[AVERT]"; color: var(--warn); }
 .banner ul { margin: var(--s2) 0 0; padding-left: var(--s5); }
 
 .empty-state, .error-state {
@@ -363,10 +447,23 @@ legend {
 .downloads a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
 /* Onglets : un chemin, pas des boutons. */
-.tabs { display: flex; gap: var(--s5); border-bottom: 1px solid var(--rule-strong); margin-bottom: var(--s5); font-family: var(--mono); font-size: var(--t-small); }
-.tabs a { padding: var(--s2) 0; color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.tabs a:hover { color: var(--accent); text-decoration: none; }
-.tabs a.active { color: var(--text); border-bottom-color: var(--accent); }
+.section-index {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s2) var(--s5);
+    padding: var(--s2) 0;
+    border-top: 1px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
+    margin-bottom: var(--s5);
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.section-index-label { color: var(--text-3); }
+.section-index a { color: var(--text-2); }
+.section-index a:hover, .section-index a:focus-visible { color: var(--accent); }
 
 /* ---------------------------------------------------------------------------
    Suivi de run : progression, journal.
@@ -405,7 +502,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .log-tail {
     background: var(--ground);
     border: 0;
-    border-left: 1px solid var(--rule);
+    border-top: 1px solid var(--rule);
     border-radius: 0;
     padding: var(--s2) var(--s3);
     max-height: 320px;
@@ -416,19 +513,48 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     color: var(--text-2);
     white-space: pre-wrap;
 }
-.queue-panel { margin: 0 0 var(--s3); padding: var(--s2) 0 var(--s2) var(--s3); border-left: 1px solid var(--rule-strong); font-family: var(--mono); font-size: var(--t-small); }
+.queue-panel { margin: 0 0 var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: var(--t-small); }
 .queue-panel .hint { margin: 0; }
 
 .best-box {
     background: none;
     border: 0;
-    border-left: 1px solid var(--ok);
+    border-top: 1px solid var(--ok);
     border-radius: 0;
-    padding: var(--s2) 0 var(--s2) var(--s3);
+    padding: var(--s3) 0 var(--s2);
     margin: var(--s4) 0;
     font-family: var(--mono);
     font-size: var(--t-body);
 }
+/* Derniers runs -- occupe la colonne « avancement » au repos. Un listing,
+   pas des cartes : une ligne par run, la valeur alignée à droite, sa
+   contrepartie de fiabilité (n essais) juste en dessous, comme dans le bloc
+   de mesure. Même grammaire, échelle réduite. */
+.recent-runs { margin: var(--s3) 0 0; font-family: var(--mono); }
+.recent-runs-title {
+    font-size: var(--t-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-2);
+    margin: 0 0 var(--s2);
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--rule-strong);
+}
+.recent-runs-list { list-style: none; margin: 0; padding: 0; }
+.recent-runs-list li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: var(--s4);
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: var(--t-small);
+}
+.recent-runs-list a { grid-column: 1; color: var(--text); }
+.recent-runs-value { grid-column: 2; grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; }
+.recent-runs-meta { grid-column: 1; font-size: var(--t-micro); color: var(--text-2); }
+.recent-runs-rel { grid-column: 2; text-align: right; font-size: var(--t-micro); color: var(--text-3); }
+.recent-runs-foot { margin: var(--s3) 0 0; font-size: var(--t-micro); }
+
 .stats-box { background: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: var(--s3) 0 0; margin: 0 0 var(--s4); font-family: var(--mono); font-size: var(--t-small); }
 .stats-box p { margin: var(--s1) 0; }
 .stats-box .hint { color: var(--text-3); }

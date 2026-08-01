@@ -44,11 +44,25 @@
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',
-    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—'),
-    ('%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—'),
+    r.n_trials if r.n_trials is not none else '—',
+    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
+    ('%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '<span class="na">—</span>'),
 ]) %}
 {% endfor %}
-{{ data_table(["Run", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "F1_dir (meilleur essai)", "DM p-value"], rows) }}
+{# La colonne « Essais » n'est pas décorative : sans elle, `F1_dir` est un
+   maximum d'échantillon sans dénominateur, ce que la thèse du monde interdit
+   (« un chiffre ne s'écrit jamais seul »). Le pied porte le reste de la
+   contrepartie -- ni déflation ni correction du multiple ne sont appliquées
+   ICI, et il faut le dire là où le chiffre est lu, pas ailleurs. #}
+{{ data_table(
+    ["Run", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "DM p-value"],
+    rows, num_cols=[2, 6, 7, 8],
+    footer=(runs | length) ~ " run(s) affiché(s)"
+        ~ (" · cible = " ~ filter_target if filter_target else "")
+        ~ (" · statut = " ~ filter_status if filter_status else "")
+        ~ (" · schéma = " ~ filter_scheme if filter_scheme else "")
+        ~ " · F1_dir = meilleur essai sur n, non déflaté du nombre d'essais (Sharpe déflaté et PBO sur la page du run)"
+        ~ " · p-value DM brute, non corrigée du test multiple (correction BH sur la page de la cible)") }}
 {% else %}
 {{ empty_state("Aucun run pour l'instant.", "Configure et lance un run depuis la page d'accueil.") }}
 {% endif %}

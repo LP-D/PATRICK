@@ -21,7 +21,11 @@
         s.last_started_at or '—',
     ]) %}
     {% endfor %}
-    {{ data_table(["Symbole", "Libellé", "Source", "Historique", "Dernier run"], rows) }}
+    {% set n_done = g.symbols | selectattr('n_done', 'gt', 0) | list | length %}
+    {% set n_never = g.symbols | selectattr('n_runs', 'eq', 0) | list | length %}
+    {{ data_table(["Symbole", "Libellé", "Source", "Historique", "Dernier run"], rows,
+                  footer=(g.symbols | length) ~ " cible(s) · " ~ n_done ~ " avec au moins un run terminé · "
+                         ~ n_never ~ " jamais lancée(s)") }}
 </div>
 {% endfor %}
 {% endblock %}

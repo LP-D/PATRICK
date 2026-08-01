@@ -232,15 +232,15 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     """P7.3 -- page `/targets/{ticker}` : vue agrégée de tout l'historique de
     runs pour UNE cible (tous horizons/schémas confondus)."""
     runs = conn.execute(
-        "SELECT run_id, horizon, status, started_at, finished_at, config_json "
-        "FROM run WHERE target = ? ORDER BY started_at DESC", (target,),
+        "SELECT run_id, horizon, status, started_at, finished_at, config_json, n_trials "
+        "FROM run WHERE target = ? ORDER BY started_at DESC, rowid DESC", (target,),
     ).fetchall()
     if not runs:
         return None
 
     run_rows = []
     horizons = set()
-    for run_id, horizon, status_, started_at, finished_at, config_json in runs:
+    for run_id, horizon, status_, started_at, finished_at, config_json, n_trials in runs:
         horizons.add(horizon)
         best_id = _best_trial_id(conn, run_id)
         best_f1 = (_avg_metric(conn, best_id, ("test", "test_path")) if best_id is not None else None)
@@ -248,6 +248,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "run_id": run_id, "horizon": horizon, "status": status_,
             "started_at": started_at, "finished_at": finished_at,
             "name": _run_name(config_json), "scheme": _run_scheme(config_json),
+            "n_trials": n_trials,
             "best_f1_dir": best_f1, "dm_result": _dm_result_for_run(conn, run_id),
         })
 

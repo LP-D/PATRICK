@@ -241,9 +241,13 @@ qui justifierait de changer le défaut sans revalidation. **Le défaut reste
 
 ## 9. Logo
 
-Le monogramme "P" dans l'anneau doré (`webapp/static/style.css::.brand-mark`,
-`webapp/templates/base.html`) est un **placeholder CSS**, pas un logo — à
-remplacer par une vraie image/SVG de marque si/quand elle est fournie.
+Il n'y en a pas, et c'est un choix, pas un manque. Le monogramme "P" en anneau
+doré (`.brand-mark`) appartenait à la charte remplacée ; il a disparu avec elle
+lors du remplacement d'identité (§14). Le produit s'identifie par son nom en
+chasse fixe, en tête de bandeau de session (`.session-id`) — la forme qu'un
+listing de calcul donne à son en-tête. Aucun placeholder de logo n'a été
+réintroduit : en poser un supposerait qu'une marque manque, alors que le monde
+visuel courant n'en veut pas.
 
 ## 10. Anti-patterns explicitement refusés
 

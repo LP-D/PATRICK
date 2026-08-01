@@ -19,6 +19,9 @@
     const errorsList = document.getElementById("run-errors-list");
     const launchBtn = document.getElementById("launch-btn");
     const noRunMessage = document.getElementById("no-run-message");
+    // Liste des derniers runs : occupe la colonne « avancement » AU REPOS,
+    // s'efface des qu'un run reel prend sa place (le suivi en direct prime).
+    const recentRuns = document.getElementById("recent-runs");
     const statusPanel = document.getElementById("status-panel");
     const runNameLine = document.getElementById("run-name-line");
     const fill = document.getElementById("progress-fill");
@@ -90,6 +93,7 @@
         trackedRunId = runId;
         resultsLoaded = false;
         noRunMessage.classList.add("hidden");
+        if (recentRuns) recentRuns.classList.add("hidden");
         statusPanel.classList.remove("hidden");
         resultsPanel.classList.add("hidden");
         resultsPanel.innerHTML = "";

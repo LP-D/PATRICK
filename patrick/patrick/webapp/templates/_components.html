@@ -23,24 +23,37 @@
    Plancher Explicite » (DESIGN.md) -- un tableau de résultats porte beaucoup
    de colonnes, les comprimer jusqu'à l'illisible coûte plus que le défilement.
    Sans ce conteneur, c'est le body qui déborde en mobile. #}
-{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none) %}
+{# `num_cols` = indices (base 0) des colonnes qui portent une MESURE. Elles
+   reçoivent la classe `num`, seule à déclencher `table.data-table td.num
+   { text-align: right }` : l'alignement à la décimale est le geste central du
+   monde visuel (voir l'en-tête de tokens.css), il ne peut pas être deviné par
+   le gabarit -- une cellule peut contenir un badge HTML, un tiret cadratin ou
+   un intervalle, aucun de ces cas ne se détecte de façon fiable. L'appelant
+   déclare, comme pour `reliability` dans `metric()`.
+
+   `footer` = ligne de pied du listing (compte de lignes, portée, horodatage).
+   Une sortie de solveur ferme toujours sa table ; laisser une liste sans pied
+   est ce qui fait lire un tableau comme tronqué. #}
+{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none, num_cols=none, footer=none) %}
 {% if rows %}
+{% set nc = num_cols or [] %}
 <div class="table-scroll">
 <table class="data-table">
-<thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+<thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% for row in rows %}
-<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td>{{ cell | safe }}</td>{% endfor %}</tr>
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td{% if loop.index0 in nc %} class="num"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
+{% if footer %}<p class="table-footer">{{ footer | safe }}</p>{% endif %}
 {% else %}
 <p class="hint">{{ empty_message }}</p>
 {% endif %}
 {% endmacro %}
 
-{% macro sparkline(values, width=120, height=28, color='var(--gold-1)') %}
+{% macro sparkline(values, width=120, height=28, color='var(--accent)') %}
 {% if values and values|length > 1 %}
 {% set vmin = values|min %}
 {% set vmax = values|max %}

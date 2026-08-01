@@ -3,6 +3,14 @@
 
     var I18N = window.I18N || {};
     function tr(key, fallback) { return I18N[key] || fallback || key; }
+
+    // Lecture des jetons sans repli code en dur : voir la note identique
+    // dans simulate.js -- un repli survit au remplacement d'identite et
+    // repeint l'ancien monde sans que rien ne le signale.
+    function token(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    var MONO = token("--mono") || "monospace";
     function fmtStr(str, params) {
         return str.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; });
     }
@@ -30,8 +38,8 @@
 
         var closes = series.closes || [];
         if (closes.length < 2) {
-            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--muted") || "#888";
-            ctx.font = "13px sans-serif";
+            ctx.fillStyle = token("--text-2");
+            ctx.font = "13px " + MONO;
             ctx.fillText(tr("preview_no_data", "No data for this period."), pad, h / 2);
             return;
         }
@@ -40,15 +48,16 @@
         var max = Math.max.apply(null, closes);
         if (min === max) { min -= 1; max += 1; }
         var xStep = (w - 2 * pad) / (closes.length - 1);
-        var accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4f8cff";
-        var muted = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#9aa1ac";
+        var accent = token("--accent");
+        var muted = token("--text-2");
+        var rule = token("--rule-strong");
 
         function xAt(i) { return pad + i * xStep; }
         function yAt(v) { return h - pad + ((v - min) / (max - min)) * -(h - 2 * pad); }
 
         // axis labels (min/max)
         ctx.fillStyle = muted;
-        ctx.font = "11px sans-serif";
+        ctx.font = "11px " + MONO;
         ctx.fillText(fmtNum(max), 2, yAt(max) + 4);
         ctx.fillText(fmtNum(min), 2, yAt(min) + 4);
 
@@ -71,7 +80,7 @@
 
             ctx.putImageData(canvas._baseImage, 0, 0);
             ctx.beginPath();
-            ctx.strokeStyle = muted;
+            ctx.strokeStyle = rule;
             ctx.lineWidth = 1;
             ctx.setLineDash([3, 3]);
             ctx.moveTo(x, pad);

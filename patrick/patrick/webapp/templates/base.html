@@ -70,6 +70,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
         </nav>
     </header>
+    {# Contexte de reproductibilite : le contrat de direction exige cible /
+       snapshot / seed / git SHA DANS le premier viewport, pas en gris 12px
+       au bas de la page. Un listing de solveur imprime sa provenance avant
+       son premier resultat -- sans ces quatre champs, aucun chiffre de la
+       page n'est refaisable. Les pages sans run laissent le bloc vide. #}
+    {% block session_context %}{% endblock %}
     <main class="container">
         {% block content %}{% endblock %}
     </main>

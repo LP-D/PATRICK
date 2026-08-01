@@ -2,6 +2,17 @@
 {% from "_components.html" import status_badge, data_table, metric, empty_state %}
 {% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
 
+{% block session_context %}
+{% set r = detail.run %}
+<div class="session-context">
+    <span><b>cible</b> {{ r.target }}/{{ r.horizon }}j</span>
+    <span><b>snapshot</b> {{ r.snapshot_id or '—' }}</span>
+    <span><b>config</b> {{ r.config_hash or '—' }}</span>
+    <span><b>git</b> {{ r.git_sha or '—' }}</span>
+    <span><b>seed</b> {{ r.seed if r.seed is not none else '—' }}</span>
+</div>
+{% endblock %}
+
 {% block content %}
 {% set run = detail.run %}
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else 'neutral') %}
@@ -13,7 +24,13 @@
     lancé le {{ run.started_at or '—' }}{% if run.finished_at %}, terminé le {{ run.finished_at }}{% endif %}
 </p>
 
-<nav class="tabs">
+{# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
+   page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement
+   d'actif) faisait mentir le style sur le comportement — aucun état n'aurait
+   jamais posé l'onglet actif. C'est un index de sections, il s'écrit comme
+   tel, comme la table des matières en tête d'un listing. #}
+<nav class="section-index" aria-label="Sections de la page">
+    <span class="section-index-label">Sections</span>
     <a href="#resume">Résumé</a>
     <a href="#essais">Essais</a>
     <a href="#config">Configuration</a>
@@ -122,27 +139,37 @@
 {% set dist = detail.path_distributions.get(t.trial_id) %}
 {% set perf = ("médiane=%.4f [%.4f, %.4f] (std=%.4f, %d chemins)" | format(dist.median, dist.q05, dist.q95, dist.std, dist.n_paths)) if dist and dist.n_paths else '—' %}
 {% else %}
-{% set perf = ("%.4f" | format(t.test_f1_dir)) if t.test_f1_dir is not none else '—' %}
+{% set perf = ("%.4f" | format(t.test_f1_dir)) if t.test_f1_dir is not none else '<span class="na">—</span>' %}
 {% endif %}
 {% set _ = rows.append([
     t.trial_id, t.regime, t.algo, t.sampler, t.n_features, t.selector, perf,
-    ('★ meilleur' if t.is_best else ''),
+    ('meilleur' if t.is_best else ''),
 ]) %}
 {% set _ = row_classes.append('best' if t.is_best else '') %}
 {% endfor %}
-{{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows, row_classes=row_classes) }}
+{{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows,
+              row_classes=row_classes, num_cols=[0, 4, 6],
+              footer=(detail.trials | length) ~ " essai(s) pour CE run · " ~ detail.cumulative_trials
+                     ~ " cumulés sur la cible/horizon — c'est le second nombre qui doit servir à lire la ligne « meilleur », "
+                     ~ ("médiane et intervalle inter-chemins donnés par ligne (CPCV)." if detail.is_cpcv
+                        else "la performance affichée est une moyenne de folds sans intervalle (walk-forward).")) }}
 
 <h2>Baselines systématiques</h2>
 {% set brows = [] %}
 {% for b in detail.baselines %}
 {% set _ = brows.append([b.baseline, b.metrics.items() | map('join', '=') | join(', ')]) %}
 {% endfor %}
-{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.") }}
+{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.",
+              footer=(detail.baselines | length) ~ " baseline(s) · même découpage, mêmes folds que les essais ci-dessus — un modèle qui ne les bat pas n'a rien démontré.") }}
 </section>
 
 <section id="config" class="card">
 <h2>Configuration</h2>
-<pre>{{ detail.config | tojson(indent=1) }}</pre>
-<p class="hint">Snapshot : {{ run.snapshot_id }} · config hash : {{ run.config_hash }} · git SHA : {{ run.git_sha }} · seed : {{ run.seed }}</p>
+{# La config complète fait plusieurs milliers de lignes (l'univers de tickers
+   y est développé) : laissée libre, elle occupait 12 000 px et devenait
+   l'essentiel de la page. Elle reste ENTIÈRE et copiable -- rien n'est
+   tronqué -- mais défile dans son propre conteneur, comme les tables. #}
+<pre class="config-dump">{{ detail.config | tojson(indent=1) }}</pre>
+<p class="hint">Le quadruplet de reproductibilité (snapshot, hash de config, git SHA, seed) est en tête de page, dans le bandeau de session.</p>
 </section>
 {% endblock %}

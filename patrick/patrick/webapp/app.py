@@ -62,6 +62,24 @@ def set_lang(lang: str, next: str = "/"):
     return resp
 
 
+def _recent_runs(limit: int = 8) -> list[dict]:
+    """Derniers runs persistés, pour la colonne « avancement » de l'accueil
+    AU REPOS. Sans eux, cette colonne est vide sur toute la hauteur du premier
+    viewport tant qu'aucun run ne tourne -- alors que la base a précisément de
+    quoi la remplir. Lecture seule, échec silencieux : l'accueil doit
+    s'afficher même si la base n'existe pas encore (première installation)."""
+    try:
+        conn = trackdb.connect()
+    except Exception:
+        return []
+    try:
+        return trackhistory.list_runs(conn, limit=limit)
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
 def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
                    initial_run_id: str | None = None):
     active = run_manager.active_run()
@@ -76,6 +94,7 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "queued_runs": run_manager.queued_runs(),
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
             "movers": alerts.get_cached(),
+            "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
             **_i18n_context(request),
         },

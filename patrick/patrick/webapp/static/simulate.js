@@ -3,6 +3,16 @@
 
     var I18N = window.I18N || {};
     function tr(key, fallback) { return I18N[key] || fallback || key; }
+
+    // Une toile ne peut pas heriter d'une couleur CSS : elle doit la LIRE.
+    // Les jetons sont donc la seule source, sans valeur de repli codee en
+    // dur -- un repli survit aux remplacements d'identite et repeint
+    // silencieusement l'ancien monde (c'est exactement ce qui s'est produit
+    // avec `--gold-1`). Si le jeton disparait, on veut le voir tout de suite.
+    function token(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    var MONO = token("--mono") || "monospace";
     function fmtStr(str, params) {
         return str.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; });
     }
@@ -195,9 +205,8 @@
         var min = isDrawdown ? Math.min.apply(null, all) : Math.min.apply(null, all);
         var max = isDrawdown ? 0 : Math.max.apply(null, all);
         if (min === max) { min -= 0.01; max += 0.01; }
-        var muted = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#9aa1ac";
-        var gold = getComputedStyle(document.documentElement).getPropertyValue("--gold-1").trim() || "#E8C97A";
-        var accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4f8cff";
+        var axis = token("--text-2");
+        var line = token("--accent");
 
         function plot(series, color) {
             if (!series.length) return;
@@ -216,13 +225,13 @@
             ctx.stroke();
         }
 
-        ctx.fillStyle = muted;
-        ctx.font = "10px sans-serif";
+        ctx.fillStyle = axis;
+        ctx.font = "10px " + MONO;
         ctx.fillText(fmtNum(max, 2), 2, pad);
         ctx.fillText(fmtNum(min, 2), 2, h - pad + 4);
 
-        if (series2 && series2.length) plot(series2, muted);
-        plot(series1, isDrawdown ? "#C1544C" : gold);
+        if (series2 && series2.length) plot(series2, token("--rule-strong"));
+        plot(series1, isDrawdown ? token("--error") : line);
     }
 
     function drawHistogram(canvas, values) {
@@ -242,11 +251,11 @@
         });
         var maxCount = Math.max.apply(null, bins);
         var barW = (w - 2 * pad) / nBins;
-        var gold = getComputedStyle(document.documentElement).getPropertyValue("--gold-1").trim() || "#E8C97A";
+        var gain = token("--ok"), loss = token("--error");
         var zeroBin = (0 - min) / binW;
         for (var i = 0; i < nBins; i++) {
             var barH = (bins[i] / maxCount) * (h - 2 * pad);
-            ctx.fillStyle = (i + 0.5) >= zeroBin ? "#3FA985" : "#C1544C";
+            ctx.fillStyle = (i + 0.5) >= zeroBin ? gain : loss;
             ctx.fillRect(pad + i * barW, h - pad - barH, barW - 1, barH);
         }
     }

@@ -54,7 +54,9 @@ Ce qu'un outil voisin ne pourrait pas copier honnêtement : la chaîne de validi
 
 ## Brand Commitments
 
-Nom du produit : « PATRICK » (titre affiché dans l'onglet navigateur). Le monogramme « P » en cercle doré (`.brand-mark`, en-tête de toutes les pages) est un **placeholder CSS, pas un logo réel** — à remplacer si un logo est un jour fourni (cf. commentaire au-dessus de `.brand-mark` dans `static/style.css`). Charte visuelle existante : fond sombre, accent or, sérif Cormorant Garamond pour les titres, Inter pour le texte ; jetons centralisés dans `static/tokens.css`.
+Nom du produit : « PATRICK » — contrainte intouchable, le nom reste quelle que soit l'identité visuelle. Il s'écrit comme un identifiant de session en tête de listing (`.session-id`), pas comme une marque : aucun logo, aucun monogramme, aucun placeholder de logo. C'est délibéré et non un manque à combler — un outil de calcul s'identifie par son nom en chasse fixe.
+
+Monde visuel courant : **« Sortie de solveur »** (remplace intégralement la charte sombre/or à sérif Cormorant Garamond de la Phase 7 ; aucune valeur de l'ancienne charte n'a été conservée). Noir neutre à trois fonds très proches, structure par filets **horizontaux uniquement**, donnée en chasse fixe (JetBrains Mono) alignée à la décimale, chrome en pile système, un seul accent bleu qui ne signifie que « interactif » — il ne porte jamais de donnée ni de jugement. Rayons quasi nuls, aucune pilule, aucun cercle : les états s'écrivent `[DONE]`, `[RUNNING]`, pas en pastilles. Jetons centralisés dans `static/tokens.css` ; le contrat de direction complet (thèse, premier viewport, forme) est en commentaire en tête de `templates/base.html` ; `DESIGN.md` en donne le détail.
 
 ## Evidence on Hand
 
