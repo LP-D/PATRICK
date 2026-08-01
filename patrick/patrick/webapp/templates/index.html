@@ -5,7 +5,18 @@
 
 {% block content %}
 
-<div class="dashboard">
+{# Le titre de page manquait : `/` était la seule surface du produit sans
+   `h1`, donc la seule où la navigation par titres d'un lecteur d'écran
+   sautait directement aux `h2` sans jamais nommer la page. #}
+<h1 class="page-title">{{ t('index_title') }}</h1>
+<p class="page-subtitle">{{ t('index_subtitle') }}</p>
+
+{# Grille ASYMÉTRIQUE, et c'est le geste central de cette passe. L'ancienne
+   2×2 de panneaux égaux était un défaut de gabarit : elle donnait le même
+   poids à la tâche principale (configurer et lancer) et à un widget de
+   variations relié à rien. Ici la colonne de configuration mène, la colonne
+   de droite suit — état de la station puis aide au choix de la cible. #}
+<div class="station-grid">
 
 <section class="dash-panel dash-settings" aria-labelledby="settings-title">
     <h2 id="settings-title" class="dash-panel-title">{{ t('section_settings') }}</h2>
@@ -60,8 +71,12 @@
             </label>
         </fieldset>
 
-        <fieldset>
-            <legend>{{ t('section_universe') }}</legend>
+        <details class="adv" data-adv="section_universe">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_universe') }}</span>
+                <span class="adv-state" data-adv-state="section_universe"></span>
+            </summary>
+            <div class="adv-body">
             <p class="hint">{{ t('universe_hint') }}</p>
             <label>{{ t('field_start_date') }}
                 <input type="date" name="start_date" value="{{ view.start_date }}">
@@ -69,10 +84,15 @@
             <label>{{ t('field_yf_coverage') }}
                 <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_data_quality') }}</legend>
+        <details class="adv" data-adv="section_data_quality">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_data_quality') }}</span>
+                <span class="adv-state" data-adv-state="section_data_quality"></span>
+            </summary>
+            <div class="adv-body">
             <p class="hint">{{ t('data_quality_hint') }}</p>
             <label class="checkbox">
                 <input type="checkbox" name="data_quality_enabled" {% if view.data_quality_enabled %}checked{% endif %}>
@@ -93,10 +113,15 @@
                            value="{{ view.max_universe_exclusion_frac }}">
                 </label>
             </div>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_features') }}</legend>
+        <details class="adv" data-adv="section_features">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_features') }}</span>
+                <span class="adv-state" data-adv-state="section_features"></span>
+            </summary>
+            <div class="adv-body">
             {% for f in all_families %}
             <label class="checkbox">
                 <input type="checkbox" name="families" value="{{ f }}" {% if f in view.families %}checked{% endif %}>
@@ -128,10 +153,15 @@
                     <input type="number" name="pool_prefilter" value="{{ view.pool_prefilter }}">
                 </label>
             </div>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_validation') }}</legend>
+        <details class="adv" data-adv="section_validation">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_validation') }}</span>
+                <span class="adv-state" data-adv-state="section_validation"></span>
+            </summary>
+            <div class="adv-body">
             <label>{{ t('field_scheme') }}{{ info('scheme') }}
                 <select name="scheme">
                     <option value="walkforward" {% if view.scheme == 'walkforward' %}selected{% endif %}>{{ t('field_scheme_walkforward') }}</option>
@@ -171,10 +201,15 @@
             <label>{{ t('field_embargo_bars') }}
                 <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_selection') }}</legend>
+        <details class="adv" data-adv="section_selection">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_selection') }}</span>
+                <span class="adv-state" data-adv-state="section_selection"></span>
+            </summary>
+            <div class="adv-body">
             <label>{{ t('field_method') }}
                 <select name="selection_method">
                     {% for m in selection_methods %}
@@ -193,10 +228,15 @@
                 <input type="checkbox" name="track_stability" {% if view.track_stability %}checked{% endif %}>
                 {{ t('field_track_stability') }}{{ info('track_stability') }}
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_sampler') }}</legend>
+        <details class="adv" data-adv="section_sampler">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_sampler') }}</span>
+                <span class="adv-state" data-adv-state="section_sampler"></span>
+            </summary>
+            <div class="adv-body">
             {% for s in all_samplers %}
             <label class="checkbox">
                 <input type="checkbox" name="sampler_candidates" value="{{ s }}" {% if s in view.sampler_candidates %}checked{% endif %}>
@@ -207,10 +247,15 @@
                 <input type="checkbox" name="uniqueness_weights" {% if view.uniqueness_weights %}checked{% endif %}>
                 {{ t('field_uniqueness_weights') }}{{ info('uniqueness_weights') }}
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_models') }}</legend>
+        <details class="adv" data-adv="section_models">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_models') }}</span>
+                <span class="adv-state" data-adv-state="section_models"></span>
+            </summary>
+            <div class="adv-body">
             {% for a in all_algos %}
             <label class="checkbox">
                 <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
@@ -225,10 +270,15 @@
                 <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
                 {{ t('field_stacking') }}{{ info('stacking') }}
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_tuning') }}</legend>
+        <details class="adv" data-adv="section_tuning">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_tuning') }}</span>
+                <span class="adv-state" data-adv-state="section_tuning"></span>
+            </summary>
+            <div class="adv-body">
             <label class="checkbox">
                 <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
                 {{ t('field_enabled') }}{{ info('tuning_enabled') }}
@@ -248,21 +298,36 @@
                     <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
                 </label>
             </div>
-        </fieldset>
+            </div>
+        </details>
 
-        <fieldset>
-            <legend>{{ t('section_output') }}</legend>
+        <details class="adv" data-adv="section_output">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_output') }}</span>
+                <span class="adv-state" data-adv-state="section_output"></span>
+            </summary>
+            <div class="adv-body">
             <label>{{ t('field_output_dir') }}
                 <input type="text" name="output_dir" value="{{ view.output_dir }}">
             </label>
             <label>{{ t('field_seed') }}
                 <input type="number" name="seed" value="{{ view.seed }}">
             </label>
-        </fieldset>
+            </div>
+        </details>
 
-        <button type="submit" class="primary" id="launch-btn">
-            {{ t('btn_launch_run') }}
-        </button>
+        {# Barre de lancement COLLANTE en bas de la colonne. Avant, le bouton
+           vivait au fond d'un panneau à défilement interne de 613px pour
+           3042px de contenu : il n'apparaissait dans aucun viewport, et
+           l'action principale du produit n'était jamais visible. Le
+           récapitulatif à côté rappelle les trois champs qui déterminent le
+           run, parce qu'ils sont 9 blocs plus haut au moment du clic. #}
+        <div class="launch-bar">
+            <p class="launch-recap" id="launch-recap" aria-live="polite"></p>
+            <button type="submit" class="primary" id="launch-btn">
+                {{ t('btn_launch_run') }}
+            </button>
+        </div>
     </form>
     </div>
 </section>
@@ -348,22 +413,31 @@
     {% if movers.error %}
     <p class="hint">{{ movers.error }}</p>
     {% endif %}
+    {# Chaque ligne est un BOUTON qui pose le symbole dans `target_symbol` et
+       recharge l'aperçu. Avant, ce panneau était le bloc le plus visible de
+       la page et le seul relié à aucune tâche : un widget de portail boursier
+       posé dans un outil de recherche. Relié, il devient ce qu'il aurait dû
+       être — l'aide au choix de la cible. Les symboles absents de la liste
+       des cibles ne sont pas cliquables et le disent. #}
+    <p class="hint movers-hint">{{ t('movers_pick_hint') }}</p>
     <div class="movers-columns" id="movers-columns">
         <div class="movers-col">
             <h3 class="movers-col-title movers-up">{{ t('movers_gainers') }}</h3>
             <ul id="movers-gainers" class="movers-list">
                 {% for row in movers.gainers %}
-                <li><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-up">+{{ row.pct }}%</span></li>
+                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-up">+{{ row.pct }}%</span></button></li>
                 {% endfor %}
             </ul>
+            <p class="movers-empty hint {% if movers.gainers %}hidden{% endif %}" id="movers-gainers-empty">{{ t('movers_no_data') }}</p>
         </div>
         <div class="movers-col">
             <h3 class="movers-col-title movers-down">{{ t('movers_losers') }}</h3>
             <ul id="movers-losers" class="movers-list">
                 {% for row in movers.losers %}
-                <li><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-down">{{ row.pct }}%</span></li>
+                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-down">{{ row.pct }}%</span></button></li>
                 {% endfor %}
             </ul>
+            <p class="movers-empty hint {% if movers.losers %}hidden{% endif %}" id="movers-losers-empty">{{ t('movers_no_data') }}</p>
         </div>
     </div>
     </div>

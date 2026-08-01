@@ -398,6 +398,141 @@
         });
     }
 
+    /* -----------------------------------------------------------------------
+       Divulgation progressive : résumé d'état des blocs repliés.
+
+       Un bloc replié qui ne dit rien de son contenu ne réduit pas la charge,
+       il la déplace — il faut l'ouvrir pour savoir. Chaque `<details.adv>`
+       affiche donc ce que ses contrôles valent réellement : cases cochées,
+       valeurs de listes. Sans ça, replier neuf blocs revenait à cacher les
+       réglages plutôt qu'à les hiérarchiser.
+
+       Le marqueur « modifié » compare à l'état AU CHARGEMENT de la page, pas
+       aux défauts du produit : c'est la seule référence dont le navigateur
+       dispose honnêtement. Charger un exemple recharge la page, donc la
+       référence se réaligne — ce qui est le comportement voulu.
+       ----------------------------------------------------------------------- */
+    const advBlocks = Array.from(document.querySelectorAll("details.adv"));
+    const advBaseline = new Map();
+
+    function advSignature(block) {
+        return Array.from(block.querySelectorAll("input, select, textarea"))
+            .map((el) => (el.type === "checkbox" || el.type === "radio" ? String(el.checked) : el.value))
+            .join("");
+    }
+
+    /* Le libellé d'une case, sans son appel de glossaire. Sans ce nettoyage le
+       « i » du bouton `.info-icon` se collait au résumé (« Activéi »,
+       « Portes de qualité activési ») : `textContent` d'un label inclut le
+       texte de TOUS ses descendants, bouton compris. */
+    function labelTextOf(el) {
+        const label = el.closest("label");
+        if (!label) return el.name;
+        const clone = label.cloneNode(true);
+        clone.querySelectorAll(".info-icon, input, select, textarea").forEach((n) => n.remove());
+        return clone.textContent.replace(/\s+/g, " ").trim();
+    }
+
+    /* Deux éléments au plus, puis un compte. Le résumé tient sur UNE ligne à
+       côté de son titre : mesuré à trois éléments, « Embargo (retire les
+       premières lignes de test après la coupure) » repoussait le titre sur
+       une deuxième ligne et le résumé cessait d'être un résumé. */
+    const ADV_STATE_MAX = 2;
+
+    function advSummaryText(block) {
+        const parts = [];
+        // Une case sans `value` porte son sens dans son libellé (« Purge »,
+        // « Embargo ») ; une case avec `value` porte un nom de famille ou
+        // d'algo. Les deux se résument, mais pas par la même chaîne.
+        Array.from(block.querySelectorAll("input[type=checkbox]:checked")).forEach((el) => {
+            const v = el.getAttribute("value");
+            parts.push(v || labelTextOf(el));
+        });
+        Array.from(block.querySelectorAll("select")).forEach((sel) => {
+            if (sel.selectedIndex >= 0) parts.push(sel.options[sel.selectedIndex].textContent.trim());
+        });
+        if (!parts.length) {
+            const n = block.querySelectorAll("input, select, textarea").length;
+            return fmtStr(tr("adv_state_fields", "{n} réglage(s)"), { n: n });
+        }
+        // Un libellé de case peut être une phrase entière ; on le borne, sinon
+        // c'est lui qui déborde au lieu du nombre d'éléments.
+        const shown = parts.slice(0, ADV_STATE_MAX)
+            .map((s) => (s.length > 26 ? s.slice(0, 25).trimEnd() + "…" : s))
+            .join(" · ");
+        return parts.length > ADV_STATE_MAX
+            ? shown + " " + fmtStr(tr("adv_state_more", "+{n}"), { n: parts.length - ADV_STATE_MAX })
+            : shown;
+    }
+
+    function refreshAdvStates() {
+        advBlocks.forEach((block) => {
+            const out = block.querySelector(".adv-state");
+            if (!out) return;
+            out.textContent = advSummaryText(block);
+            const base = advBaseline.get(block);
+            if (base !== undefined && advSignature(block) !== base) {
+                out.dataset.modified = "";
+                out.title = tr("adv_state_modified", "Modifié depuis le chargement de la page");
+            } else {
+                delete out.dataset.modified;
+                out.removeAttribute("title");
+            }
+        });
+    }
+
+    /* Récapitulatif de la barre de lancement : au moment du clic, la cible et
+       les horizons sont neuf blocs plus haut et hors du champ de vision. */
+    const launchRecap = document.getElementById("launch-recap");
+    function refreshRecap() {
+        if (!launchRecap || !form) return;
+        const target = form.querySelector("#target_symbol");
+        const horizons = form.querySelector("[name=horizons]");
+        const scheme = form.querySelector("[name=scheme]");
+        const bits = [];
+        if (target && target.value) bits.push("<b>" + target.value + "</b>");
+        if (horizons && horizons.value) {
+            bits.push(fmtStr(tr("recap_horizons", "horizons {h}"), { h: horizons.value }));
+        }
+        if (scheme && scheme.selectedIndex >= 0) bits.push(scheme.options[scheme.selectedIndex].textContent.trim());
+        launchRecap.innerHTML = bits.join(" · ");
+    }
+
+    if (advBlocks.length || launchRecap) {
+        advBlocks.forEach((block) => advBaseline.set(block, advSignature(block)));
+        refreshAdvStates();
+        refreshRecap();
+        if (form) {
+            form.addEventListener("change", function () { refreshAdvStates(); refreshRecap(); });
+            form.addEventListener("input", refreshRecap);
+        }
+    }
+
+    /* Les lignes de « plus fortes variations » posent leur symbole dans le
+       champ Cible. Un symbole absent de la liste des cibles ne peut pas être
+       choisi : on le dit au lieu d'échouer en silence. */
+    const moversColumns = document.getElementById("movers-columns");
+    if (moversColumns) {
+        moversColumns.addEventListener("click", function (ev) {
+            const btn = ev.target.closest(".movers-pick");
+            if (!btn) return;
+            const select = document.getElementById("target_symbol");
+            if (!select) return;
+            const symbol = btn.dataset.symbol;
+            const match = Array.from(select.options).some((o) => o.value === symbol);
+            if (!match) {
+                btn.title = fmtStr(tr("movers_not_a_target", "{s} n'est pas une cible disponible."), { s: symbol });
+                return;
+            }
+            select.value = symbol;
+            // `change` déclenche le rechargement de l'aperçu marché (market.js)
+            // et le rafraîchissement du récapitulatif : poser `.value` seul ne
+            // notifie personne.
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            select.focus({ preventScroll: false });
+        });
+    }
+
     if (window.INITIAL_RUN_ID) {
         startTracking(window.INITIAL_RUN_ID);
     }

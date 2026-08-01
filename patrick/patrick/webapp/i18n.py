@@ -17,6 +17,23 @@ STRINGS: dict[str, dict[str, str]] = {
     "banner_fix_errors": {"fr": "Corrige avant de lancer :", "en": "Fix before launching:"},
 
     "section_settings": {"fr": "Configuration du run", "en": "Run configuration"},
+
+    # Accueil : titre de page (la surface en manquait un) et divulgation
+    # progressive du formulaire.
+    "index_title": {"fr": "Poste de lancement", "en": "Launch station"},
+    "index_subtitle": {
+        "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés — leur résumé les affiche sans qu'il faille les ouvrir.",
+        "en": "Configure a run, launch it, follow it. Collapsed blocks carry defaults derived from measured results — their summary shows them without opening.",
+    },
+    "adv_state_fields": {"fr": "{n} réglage(s)", "en": "{n} setting(s)"},
+    "adv_state_more": {"fr": "+{n}", "en": "+{n}"},
+    "adv_state_modified": {"fr": "Modifié depuis le chargement de la page",
+                           "en": "Changed since the page was loaded"},
+    "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
+    "movers_pick_hint": {"fr": "Clique un symbole pour en faire la cible du run.",
+                         "en": "Click a symbol to make it the run's target."},
+    "movers_not_a_target": {"fr": "{s} n'est pas une cible disponible.",
+                            "en": "{s} is not an available target."},
     "section_progress": {"fr": "Avancement", "en": "Progress"},
     "section_stock": {"fr": "Aperçu marché — cible choisie", "en": "Market overview — chosen target"},
     "no_run_yet": {"fr": "Aucun run pour l'instant — configure et lance à gauche.",
@@ -322,6 +339,8 @@ def js_strings(lang: str) -> dict[str, str]:
         "record_unavailable", "record_empty", "record_runs", "record_span",
         "record_scale", "record_counts", "record_unknown", "record_trials",
         "record_no_trials",
+        "adv_state_fields", "adv_state_more", "adv_state_modified",
+        "recap_horizons", "movers_not_a_target",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}
