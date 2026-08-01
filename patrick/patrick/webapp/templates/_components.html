@@ -19,8 +19,13 @@
 </div>
 {% endmacro %}
 
+{# Le tableau défile DANS son propre conteneur, jamais la page : « Règle du
+   Plancher Explicite » (DESIGN.md) -- un tableau de résultats porte beaucoup
+   de colonnes, les comprimer jusqu'à l'illisible coûte plus que le défilement.
+   Sans ce conteneur, c'est le body qui déborde en mobile. #}
 {% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none) %}
 {% if rows %}
+<div class="table-scroll">
 <table class="data-table">
 <thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
@@ -29,6 +34,7 @@
 {% endfor %}
 </tbody>
 </table>
+</div>
 {% else %}
 <p class="hint">{{ empty_message }}</p>
 {% endif %}

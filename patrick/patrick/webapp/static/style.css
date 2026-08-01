@@ -128,6 +128,14 @@ body {
 @media (max-width: 980px) {
     .dashboard { grid-template-columns: 1fr; grid-template-rows: none; height: auto; }
     .dash-panel { max-height: 70vh; }
+
+    /* La barre du haut porte 3 liens de navigation depuis la Phase 7 : sans
+       retour à la ligne elle poussait la page en débordement horizontal.
+       L'accroche disparaît la première -- c'est du contexte, pas de la
+       navigation, et la navigation doit rester atteignable. */
+    .topbar { flex-wrap: wrap; gap: 10px 12px; padding: 10px 16px; }
+    .tagline { display: none; }
+    .topnav { flex: 1 1 auto; flex-wrap: wrap; }
 }
 
 .banner { padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; }
@@ -237,7 +245,112 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
     transform: scaleX(0);
     transform-origin: left;
     background: linear-gradient(90deg, var(--gold-1), var(--gold-2));
-    transition: transform 0.4s ease;
+    /* Décélération exponentielle : l'aiguille se pose sur sa valeur, elle n'y
+       glisse pas linéairement. */
+    transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Le moment autorisé de l'interface : la bascule « je mesure » -> « voici la
+   mesure ».
+
+   `worker.py` n'incrémente `progress_done` que sur les lignes de fold. Pendant
+   l'ingestion et la construction des features -- les ~380s qui dominent
+   l'attente d'un run réel -- il vaut 0. Afficher une barre à 0% y était un
+   chiffre qui ne mesure rien présenté comme une mesure : exactement ce que le
+   principe « aucun chiffre sans sa contrepartie de fiabilité » interdit
+   ailleurs dans le produit.
+
+   En mode `measuring`, la barre ne prétend donc plus à une valeur : elle
+   balaie. Le balayage est un MASQUE qui se déplace sur le dégradé complet
+   (pas une pastille qui glisse) -- la lumière passe derrière la graduation,
+   l'instrument prend sa mesure. Quand le premier fold tombe, le balayage
+   s'arrête et la jauge se pose sur sa vraie valeur (cf. `setProgress`). */
+.progress-bar[data-progress-mode="measuring"] .progress-fill {
+    transform: none;
+    transition: none;
+    background: linear-gradient(90deg, var(--gold-2), var(--gold-1), var(--gold-2));
+    /* `#000` est ici un canal ALPHA de masque (opaque), pas une couleur
+       visible : rien à ajouter à la palette de DESIGN.md. */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%, #000 62%, transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 38%, #000 62%, transparent 100%);
+    -webkit-mask-size: 46% 100%;
+            mask-size: 46% 100%;
+    -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+    animation: patrick-measuring 1900ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes patrick-measuring {
+    from { -webkit-mask-position: -50% 0; mask-position: -50% 0; }
+    to   { -webkit-mask-position: 110% 0; mask-position: 110% 0; }
+}
+
+/* Le point d'une pastille « en attente / en cours » respire : c'est ce qui
+   distingue un run vivant d'un run figé, sur une page qui ne se rafraîchit
+   pas. Aucune autre pastille ne bouge -- seul l'état non tranché le fait. */
+.status-badge.status-pending::before {
+    animation: patrick-alive 2200ms ease-in-out infinite;
+}
+@keyframes patrick-alive {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.45; transform: scale(0.82); }
+}
+
+/* Boucles non essentielles arrêtées quand l'onglet est caché (cf. base.html). */
+html[data-page-hidden] .progress-fill,
+html[data-page-hidden] .status-badge::before { animation-play-state: paused; }
+
+/* Continuité du tri du leaderboard : les lignes voyagent vers leur nouveau
+   rang au lieu de s'y téléporter, pour qu'on puisse suivre des yeux où sa
+   ligne est partie (technique FLIP, cf. `attachSort`). */
+.leaderboard tbody tr.flip-move { transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Arrivée du popover de glossaire : entrée courte, sortie plus courte.
+   `allow-discrete`/`@starting-style` dégradent en affichage instantané (le
+   comportement actuel) sur un navigateur qui ne les connaît pas. */
+.glossary-popover {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 160ms ease, transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                display 160ms allow-discrete;
+}
+.glossary-popover.hidden {
+    display: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 110ms ease, transform 110ms ease, display 110ms allow-discrete;
+}
+@starting-style {
+    .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Arrivée des résultats : fin de la même séquence que la pose de la jauge,
+   pas un second effet. */
+#results-panel.results-arriving { animation: patrick-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes patrick-arrive {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* Le mouvement porte ici de l'information (mesurable vs non mesurable). Sous
+   `prefers-reduced-motion` on retire le mouvement, jamais l'information : le
+   mode « measuring » garde une graduation statique, distincte d'une jauge
+   pleine, et le texte de phase continue de dire où en est le run. */
+@media (prefers-reduced-motion: reduce) {
+    .progress-fill { transition: none; }
+    .progress-bar[data-progress-mode="measuring"] .progress-fill {
+        animation: none;
+        -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
+                mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
+        -webkit-mask-size: auto;
+                mask-size: auto;
+        -webkit-mask-repeat: repeat;
+                mask-repeat: repeat;
+        opacity: 0.55;
+    }
+    .status-badge.status-pending::before { animation: none; opacity: 0.6; }
+    .leaderboard tbody tr.flip-move { transition: none; }
+    .glossary-popover, .glossary-popover.hidden { transition: none; }
+    #results-panel.results-arriving { animation: none; }
 }
 #status-line { color: var(--muted); margin: 8px 0; }
 .log-tail {
@@ -472,6 +585,8 @@ table.leaderboard th { cursor: pointer; color: var(--muted); font-weight: 600; t
 .metric-value.status-disabled { color: var(--disabled); }
 .metric-reliability { margin-top: var(--space-2); font-size: var(--text-xs); }
 
+/* Le défilement appartient au tableau, pas à la page (cf. `data_table`). */
+.table-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
 table.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin: var(--space-3) 0; }
 table.data-table th, table.data-table td { border-bottom: 1px solid var(--border); padding: 6px var(--space-2); text-align: left; }
 table.data-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: var(--text-xs); letter-spacing: 0.04em; }

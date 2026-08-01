@@ -20,6 +20,19 @@
         // silencieusement toujours ignoree (repli permanent), quelle que
         // soit la langue choisie.
         window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
+
+        // Les seules boucles de l'interface (balayage de la jauge en phase non
+        // mesurable, respiration du point « en cours ») s'arretent quand
+        // l'onglet passe en arriere-plan : une animation non essentielle ne
+        // doit pas continuer a consommer hors ecran. CSS : `html[data-page-hidden]`.
+        (function () {
+            function sync() {
+                if (document.hidden) document.documentElement.dataset.pageHidden = "";
+                else delete document.documentElement.dataset.pageHidden;
+            }
+            document.addEventListener("visibilitychange", sync);
+            sync();
+        })();
     </script>
 </head>
 <body>
