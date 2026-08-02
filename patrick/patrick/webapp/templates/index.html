@@ -27,9 +27,13 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
-    <form method="get" action="/" class="example-picker">
+    {# `onchange="this.form.submit()"` rechargeait la page et écrasait les 65
+       champs saisis, sans un mot. Le seul accélérateur de la page était aussi
+       son seul destructeur de travail. La soumission passe désormais par
+       `app.js`, qui demande confirmation si le formulaire a été modifié. #}
+    <form method="get" action="/" class="example-picker" id="example-form">
         <label for="load">{{ t('load_example_label') }}</label>
-        <select name="load" id="load" onchange="this.form.submit()">
+        <select name="load" id="load">
             <option value="">{{ t('load_example_default') }}</option>
             {% for ex in examples %}
             <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
@@ -389,7 +393,11 @@
             <button type="button" class="range-btn" data-period="max">Max</button>
         </div>
         <div class="chart-wrap">
-            <canvas id="preview-canvas" width="700" height="180"></canvas>
+            {# Une toile est un trou noir pour un lecteur d'écran : elle porte un rôle et
+               un libellé, et `market.js` réécrit ce libellé avec les vraies bornes
+               de la série une fois tracée. #}
+            <canvas id="preview-canvas" width="700" height="180" role="img"
+                    aria-label="{{ t('preview_aria_empty') }}"></canvas>
             <div id="preview-tooltip" class="chart-tooltip hidden"></div>
         </div>
         <p class="hint" id="preview-status"></p>
@@ -410,8 +418,11 @@
         </span>
     </div>
     <div class="dash-panel-body">
+    {# Une panne rendue en `.hint` gris était typographiquement identique à un
+       texte d'aide : on ne distinguait pas « voici comment ça marche » de
+       « ça ne marche pas ». #}
     {% if movers.error %}
-    <p class="hint">{{ movers.error }}</p>
+    <p class="banner banner-warning">{{ movers.error }}</p>
     {% endif %}
     {# Chaque ligne est un BOUTON qui pose le symbole dans `target_symbol` et
        recharge l'aperçu. Avant, ce panneau était le bloc le plus visible de

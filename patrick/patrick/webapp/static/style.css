@@ -925,6 +925,30 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .launch-recap b { font-weight: 600; color: var(--text); }
 .launch-bar button.primary { flex: none; }
 
+/* État armé : la barre change de matière pour dire que le prochain clic
+   engage. Pas de fenêtre modale — l'action n'a pas besoin d'interrompre,
+   seulement d'être relue avant d'être confirmée. */
+.launch-bar[data-confirm] {
+    background: var(--warn-weak);
+    border-top-color: var(--warn);
+}
+.launch-bar[data-confirm] .launch-recap { color: var(--text); }
+.launch-cancel {
+    flex: none;
+    padding: 9px var(--s4);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r-control);
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--display);
+    font-size: var(--t-body);
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 140ms ease-out, color 140ms ease-out;
+}
+.launch-cancel:hover { border-color: var(--text-3); color: var(--text); }
+.launch-cancel[hidden] { display: none; }
+
 .group-block { margin-bottom: var(--s6); }
 .group-title {
     font-family: var(--display);

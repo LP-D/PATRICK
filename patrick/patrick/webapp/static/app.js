@@ -44,6 +44,7 @@
     // alors au lieu d'afficher une valeur, et se pose sur sa vraie valeur au
     // premier fold -- c'est le seul moment de mouvement autorisé de l'app.
     const progressBar = fill ? fill.parentElement : null;
+    let queuedCount = 0;
     let wasMeasuring = false;
 
     function setProgress(pct, measuring) {
@@ -352,6 +353,11 @@
             return;
         }
 
+        // Retenu pour le récapitulatif de confirmation : « suis-je 3e ? » est
+        // la seule question temporelle qui change le comportement avant de
+        // lancer, et elle n'était visible nulle part au moment du clic.
+        queuedCount = (data.queue && data.queue.length) || 0;
+
         if (data.queue && data.queue.length) {
             const names = data.queue.map((q) => q.name).join(", ");
             queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued: {names}"),
@@ -373,6 +379,16 @@
     if (form) {
         form.addEventListener("submit", async (ev) => {
             ev.preventDefault();
+            /* Un run engage plusieurs heures de calcul — le contexte produit
+               parle de ~380s rien que pour le pool de features, et de runs
+               lancés la nuit. Il était déclenché comme un lien : pas de
+               confirmation, pas de récapitulatif, pas de rang en file.
+               Deux temps désormais, dans la barre elle-même : le premier clic
+               déplie ce qui va tourner, le second lance. Pas de fenêtre
+               modale — l'action n'a pas besoin d'interrompre, juste d'être
+               relue. */
+            if (!confirmArmed) { armConfirm(); return; }
+            disarmConfirm();
             clearErrors();
             launchBtn.disabled = true;
             try {
@@ -395,6 +411,136 @@
             } finally {
                 launchBtn.disabled = false;
             }
+        });
+    }
+
+    /* -----------------------------------------------------------------------
+       Chargement d'un exemple : confirmer avant d'écraser la saisie.
+       ----------------------------------------------------------------------- */
+    const exampleForm = document.getElementById("example-form");
+    const exampleSelect = document.getElementById("load");
+    if (exampleForm && exampleSelect && form) {
+        // Empreinte du formulaire au chargement : c'est la seule référence
+        // honnête dont dispose le navigateur pour dire « tu as saisi quelque
+        // chose ». Charger un exemple recharge la page, donc elle se réaligne.
+        const formBaseline = new URLSearchParams(new FormData(form)).toString();
+        exampleSelect.addEventListener("change", function () {
+            if (!exampleSelect.value) return;
+            const dirty = new URLSearchParams(new FormData(form)).toString() !== formBaseline;
+            if (dirty && !window.confirm(fmtStr(
+                tr("load_example_confirm",
+                   "Charger « {name} » remplacera toute la configuration en cours. Continuer ?"),
+                { name: exampleSelect.value }))) {
+                exampleSelect.value = "";
+                return;
+            }
+            exampleForm.submit();
+        });
+    }
+
+    /* -----------------------------------------------------------------------
+       Validation en langue de l'interface.
+       Le navigateur affiche ses bulles natives dans la langue du NAVIGATEUR,
+       pas dans celle de la page : « Please fill out this field. » apparaissait
+       sur une interface en français. On remplace le message, sans toucher à la
+       validation elle-même.
+       ----------------------------------------------------------------------- */
+    if (form) {
+        form.addEventListener("invalid", function (ev) {
+            const el = ev.target;
+            if (!el.setCustomValidity) return;
+            if (el.validity.valueMissing) el.setCustomValidity(tr("validation_required", "Ce champ est obligatoire."));
+            else if (el.validity.rangeUnderflow || el.validity.rangeOverflow)
+                el.setCustomValidity(tr("validation_range", "Valeur hors des bornes autorisées."));
+            else if (el.validity.badInput || el.validity.typeMismatch)
+                el.setCustomValidity(tr("validation_type", "Format attendu non respecté."));
+        }, true);
+        // Le message personnalisé colle au champ tant qu'on ne le vide pas :
+        // sans ce nettoyage, un champ corrigé resterait invalide.
+        form.addEventListener("input", function (ev) {
+            if (ev.target.setCustomValidity) ev.target.setCustomValidity("");
+        });
+    }
+
+    /* -----------------------------------------------------------------------
+       Confirmation de lancement, en deux temps et sans fenêtre modale.
+       ----------------------------------------------------------------------- */
+    var confirmArmed = false;
+    var launchBar = launchBtn ? launchBtn.closest(".launch-bar") : null;
+    var launchLabel = launchBtn ? launchBtn.textContent.trim() : "";
+    var cancelBtn = null;
+
+    function countList(value) {
+        if (!value) return 0;
+        return value.split(",").map(function (x) { return x.trim(); }).filter(Boolean).length;
+    }
+
+    /* Nombre de combinaisons que le scan va évaluer. Calculé, pas estimé :
+       c'est le produit des cardinalités que le formulaire porte déjà. Une
+       durée en minutes serait une invention — la machine et la cible la
+       déterminent, pas le formulaire. */
+    function projectedCombinations() {
+        if (!form) return null;
+        var grid = countList((form.querySelector("[name=n_features_grid]") || {}).value);
+        var horizons = countList((form.querySelector("[name=horizons]") || {}).value);
+        var regimes = countList((form.querySelector("[name=regimes]") || {}).value);
+        var algos = form.querySelectorAll("[name=algos]:checked").length;
+        var samplers = form.querySelectorAll("[name=sampler_candidates]:checked").length;
+        if (!grid || !horizons || !algos) return null;
+        return grid * horizons * Math.max(1, regimes) * algos * Math.max(1, samplers);
+    }
+
+    function armConfirm() {
+        if (!launchBar || !launchBtn) return;
+        confirmArmed = true;
+        launchBar.dataset.confirm = "";
+        var target = (form.querySelector("#target_symbol") || {}).value || "?";
+        var horizons = (form.querySelector("[name=horizons]") || {}).value || "?";
+        var regimes = (form.querySelector("[name=regimes]") || {}).value || "?";
+        var schemeSel = form.querySelector("[name=scheme]");
+        var scheme = schemeSel && schemeSel.selectedIndex >= 0
+            ? schemeSel.options[schemeSel.selectedIndex].textContent.trim() : "?";
+        var combos = projectedCombinations();
+        var bits = [
+            fmtStr(tr("confirm_line_target", "Cible {t}, horizons {h}, régimes {r}."),
+                { t: target, h: horizons, r: regimes }),
+            fmtStr(tr("confirm_line_scheme", "Schéma {s}."), { s: scheme }),
+            combos !== null
+                ? fmtStr(tr("confirm_line_combos", "{n} combinaisons à évaluer."), { n: combos })
+                : tr("confirm_line_combos_unknown", "Nombre de combinaisons non calculable depuis ce formulaire."),
+            queuedCount > 0
+                ? fmtStr(tr("confirm_line_queue", "{n} run(s) déjà en file : celui-ci démarrera après."), { n: queuedCount })
+                : tr("confirm_line_queue_free", "Aucun run en file : celui-ci démarre immédiatement."),
+        ];
+        if (launchRecap) launchRecap.innerHTML = bits.join(" ");
+        launchBtn.textContent = tr("btn_confirm_launch", "Confirmer le lancement");
+        if (!cancelBtn) {
+            cancelBtn = document.createElement("button");
+            cancelBtn.type = "button";
+            cancelBtn.className = "launch-cancel";
+            cancelBtn.addEventListener("click", function () { disarmConfirm(); launchBtn.focus(); });
+            launchBar.appendChild(cancelBtn);
+        }
+        cancelBtn.textContent = tr("btn_cancel", "Annuler");
+        cancelBtn.hidden = false;
+        launchBtn.focus();
+    }
+
+    function disarmConfirm() {
+        confirmArmed = false;
+        if (launchBar) delete launchBar.dataset.confirm;
+        if (launchBtn) launchBtn.textContent = launchLabel;
+        if (cancelBtn) cancelBtn.hidden = true;
+        refreshRecap();
+    }
+
+    /* Toute modification du formulaire désarme la confirmation : sinon on
+       confirme un récapitulatif qui ne décrit plus ce qu'on va lancer. */
+    if (form) {
+        form.addEventListener("input", function () { if (confirmArmed) disarmConfirm(); });
+        form.addEventListener("change", function () { if (confirmArmed) disarmConfirm(); });
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape" && confirmArmed) disarmConfirm();
         });
     }
 

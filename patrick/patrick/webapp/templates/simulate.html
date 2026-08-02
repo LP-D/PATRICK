@@ -94,8 +94,10 @@
            `simulate.js` pose `body[data-sim-loaded]` au premier rendu, le CSS
            retire alors l'état vide et rend les toiles à leur taille. #}
         <p class="sim-empty">{{ t('sim_empty_curves') }}</p>
-        <canvas id="sim-equity-canvas" width="520" height="180"></canvas>
-        <canvas id="sim-drawdown-canvas" width="520" height="90"></canvas>
+        <canvas id="sim-equity-canvas" width="520" height="180" role="img"
+                aria-label="{{ t('sim_aria_equity_empty') }}"></canvas>
+        <canvas id="sim-drawdown-canvas" width="520" height="90" role="img"
+                aria-label="{{ t('sim_aria_drawdown_empty') }}"></canvas>
     </div>
 </section>
 
@@ -114,7 +116,8 @@
     <h2 id="sim-dist-title" class="dash-panel-title">{{ t('sim_section_distribution') }}</h2>
     <div class="dash-panel-body">
         <p class="sim-empty">{{ t('sim_empty_distribution') }}</p>
-        <canvas id="sim-dist-canvas" width="520" height="160"></canvas>
+        <canvas id="sim-dist-canvas" width="520" height="160" role="img"
+                aria-label="{{ t('sim_aria_dist_empty') }}"></canvas>
     </div>
 </section>
 
