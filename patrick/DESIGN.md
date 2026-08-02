@@ -16,6 +16,7 @@ colors:
   text-3: "#626D80"
   accent: "#1B4FD8"
   accent-hover: "#143CAB"
+  on-accent: "#FFFFFF"
   accent-ink: "#7EA6FF"
   ok: "#0B6E4F"
   warn: "#8A5A08"
@@ -91,13 +92,13 @@ components:
     height: "72px"
   button-primary:
     backgroundColor: "{colors.accent}"
-    textColor: "#FFFFFF"
+    textColor: "{colors.on-accent}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
     padding: "9px 20px"
   button-primary-hover:
     backgroundColor: "{colors.accent-hover}"
-    textColor: "#FFFFFF"
+    textColor: "{colors.on-accent}"
   input:
     backgroundColor: "{colors.raise}"
     textColor: "{colors.text}"
@@ -195,11 +196,30 @@ de toucher une couleur.
 - **Le papier** (`--ground` pour le plan de travail, `--surface` pour la
   feuille posée dessus, `--raise` pour le creux d'un champ) porte la lecture.
 
-**Les jetons « sur boîtier » sont identiques dans les deux thèmes** :
-`--ink`, `--ink-2`, `--ink-text`, `--ink-text-2`, `--accent-ink`, `--ok-ink`,
-`--warn-ink`, `--error-ink`. Une plaque d'instrument ne change pas de matière
-quand la pièce s'éclaire, et c'est ce qui permet à `market.js` et
-`simulate.js` de tracer sans jamais savoir dans quel thème ils sont.
+**Quatre jetons « sur boîtier » sont identiques dans les deux thèmes** :
+`--accent-ink`, `--ok-ink`, `--warn-ink`, `--error-ink`. Ce sont eux les
+invariants, parce qu'ils tiennent sur les deux valeurs d'encre — mesuré :
+7,83:1 et 8,38:1 pour l'accent, 7,70:1 et 8,24:1 pour l'erreur. C'est ce qui
+permet à `market.js` et `simulate.js` de tracer sans jamais savoir dans quel
+thème ils sont.
+
+**`--ink` lui-même, en revanche, descend en thème sombre** (`#0B1220` →
+`#05080F`), et ce n'est pas une entorse : sans ça, la plaque deviendrait plus
+claire que la page qu'elle est censée trouer. La plaque est toujours la
+matière la plus profonde de la scène — c'est la règle, pas sa valeur.
+
+Conséquence mesurée et assumée : en clair la plaque se détache par la
+luminance (18,72:1 contre `--surface`), en sombre elle ne le peut plus
+(1,15:1). Elle se détache donc par un **bord explicite**, `--plate-edge`,
+posé sur `.record-canvas`, `#preview-canvas`, les trois toiles du simulateur
+et `.log-tail`. Aucun écart de luminance atteignable ne remplacerait ce bord :
+poussé jusqu'à la limite du contraste de texte, l'écart entre deux fonds
+sombres plafonne à 1,30:1.
+
+**`--on-accent`** porte le texte posé sur l'accent plein. Le blanc tient sur
+l'accent clair (6,65:1) mais pas sur l'accent sombre éclairci (2,56:1) : sans
+ce jeton, l'action principale du produit était le seul texte illisible de
+l'interface, et seulement la nuit.
 
 ### Stratégie : Restrained
 
@@ -259,6 +279,25 @@ C'est non négociable — c'est ce qui permet l'alignement décimal d'une colonn
 
 Six pas (`--t-micro` 12px → `--t-head` 28px). Le monde précédent plafonnait le
 corps à 13px et le titre de page à 22px : dense, mais illisible comme produit.
+
+## Focus
+
+**Un seul régime, sans exception** :
+
+```css
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-small);
+}
+```
+
+Le formulaire de run a porté pendant une passe sa propre règle — `outline:
+none` compensé par un anneau à 10 % d'opacité. Mesuré : 1,15:1 contre le
+blanc, c'est-à-dire rien, pendant que les liens et boutons voisins avaient
+bien leur contour. L'incohérence est pire que l'absence : elle laisse croire
+que le focus est visible jusqu'à ce qu'il disparaisse. Toute règle qui repose
+`outline: none` sur un élément focusable est un défaut, pas un choix.
 
 ## Depth, radius, motion
 
@@ -380,7 +419,11 @@ silencieusement l'ancien monde. Elles lisent les jetons « sur boîtier », et
 - Imbriquer un panneau dans un panneau : il ne dit rien de plus que le filet
   qu'il remplace et brouille la hiérarchie du plan de travail.
 - Dériver le thème sombre par inversion du clair.
-- Redéfinir un jeton « sur boîtier » dans le bloc `[data-theme="dark"]`.
+- Redéfinir `--accent-ink`, `--ok-ink`, `--warn-ink` ou `--error-ink` dans le
+  bloc `[data-theme="dark"]` : ces quatre-là sont les invariants.
+- Poser du blanc codé en dur sur un fond d'accent — c'est `--on-accent`.
+- Reposer `outline: none` sur un élément focusable, quelle que soit la
+  compensation prévue à côté.
 - Afficher « 0 % » pendant une phase qui ne produit aucune mesure.
 - Poser un `cursor: pointer` ou un survol d'accent sur un élément que rien
   n'active.

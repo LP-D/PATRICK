@@ -66,10 +66,19 @@ pre {
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
-:focus-visible {
+
+/* UN SEUL RÉGIME DE FOCUS, sans exception, et c'est une règle dure.
+   Le formulaire de run portait sa propre règle (`outline: none` + un anneau à
+   10 % d'opacité) : mesuré, cet anneau donnait 1,15:1 contre le blanc, donc
+   rien. Les liens, boutons et `summary` voisins, eux, avaient bien leur
+   contour — l'incohérence est pire que l'absence, parce qu'elle laisse croire
+   que le focus est visible jusqu'à ce qu'il disparaisse.
+   Toute règle qui repose `outline: none` sur un élément focusable est un
+   défaut, pas un choix esthétique. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: var(--r-small);
 }
 
 /* ===========================================================================
@@ -187,6 +196,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     height: 72px;
     border-radius: var(--r-small);
     background: var(--ink-2);
+    box-shadow: var(--plate-edge);
     cursor: crosshair;
 }
 /* Sans données, la bande ne feint pas un tracé : elle le dit. */
@@ -511,7 +521,7 @@ button.primary {
     border: 1px solid transparent;
     border-radius: var(--r-control);
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--on-accent);
     font-family: var(--display);
     font-size: var(--t-body);
     font-weight: 600;
@@ -521,7 +531,7 @@ button.primary {
     transition: background 140ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
                 box-shadow 140ms ease-out;
 }
-button.primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-panel); }
+button.primary:hover { background: var(--accent-hover); color: var(--on-accent); transform: translateY(-1px); box-shadow: var(--shadow-panel); }
 button.primary:active { transform: translateY(0); }
 button.primary:disabled {
     background: var(--raise);
@@ -564,10 +574,8 @@ button.primary:disabled {
 .run-form input:hover, .run-form select:hover, .run-form textarea:hover { border-color: var(--text-3); }
 .run-form input:focus, .run-form select:focus, .run-form textarea:focus,
 .filter-bar select:focus, .filter-bar input:focus {
-    outline: none;
     background: var(--surface);
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
 fieldset {
@@ -693,6 +701,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .log-tail {
     background: var(--ink);
     border-radius: var(--r-control);
+    box-shadow: var(--plate-edge);
     padding: var(--s3) var(--s4);
     max-height: 320px;
     overflow-y: auto;
@@ -1008,14 +1017,14 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     transition: border-color 140ms ease-out, color 140ms ease-out, background 140ms ease-out;
 }
 .range-btn:hover { border-color: var(--accent); color: var(--accent); }
-.range-btn.active { border-color: transparent; background: var(--accent); color: #FFFFFF; }
-:root[data-theme="dark"] .range-btn.active { color: var(--ink); }
+.range-btn.active { border-color: transparent; background: var(--accent); color: var(--on-accent); }
 .chart-wrap { position: relative; }
 #preview-canvas {
     width: 100%;
     height: 180px;
     border-radius: var(--r-control);
     background: var(--ink);
+    box-shadow: var(--plate-edge);
 }
 .chart-tooltip {
     position: absolute;
@@ -1106,6 +1115,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     width: 100%;
     border-radius: var(--r-control);
     background: var(--ink);
+    box-shadow: var(--plate-edge);
     margin-bottom: var(--s3);
 }
 /* Simulateur au repos. Une plaque de tracé vide de 400px de haut est un trou

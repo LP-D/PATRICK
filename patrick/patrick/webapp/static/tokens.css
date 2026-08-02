@@ -107,13 +107,30 @@
     --accent: #1B4FD8;     /* 7,3:1 sur --surface ; blanc dessus : 7,3:1 */
     --accent-hover: #143CAB;
     --accent-weak: rgba(27, 79, 216, 0.10);  /* fond d'état actif discret */
+    /* Texte posé SUR l'accent plein. Mesuré : blanc sur l'accent clair
+       #1B4FD8 donne 6,65:1, mais blanc sur l'accent sombre #74A0FF ne donne
+       que 2,56:1 — l'action principale du produit était le seul texte
+       illisible de l'interface, et seulement la nuit. */
+    --on-accent: #FFFFFF;
 
     /* --- Jeux « sur boîtier ». Toute toile (graphique, bande
-       d'enregistrement) est tracée sur `--ink` dans LES DEUX thèmes : une
-       plaque de tracé ne change pas de matière quand la pièce s'éclaire.
-       Ces cinq jetons sont donc identiques en clair et en sombre, et c'est
-       ce qui permet à `market.js`/`simulate.js` de ne jamais savoir dans
-       quel thème ils tracent. Contrastes mesurés sur #0B1220. --- */
+       d'enregistrement, journal) est tracée sur `--ink`, qui est TOUJOURS la
+       matière la plus profonde de la scène — plus sombre que `--ground`.
+
+       Ce sont CES QUATRE JETONS qui sont invariants, pas `--ink` lui-même :
+       ils tiennent sur les deux valeurs d'encre, donc `market.js` et
+       `simulate.js` n'ont jamais à savoir dans quel thème ils tracent.
+       Mesuré : accent-ink 7,83:1 (clair) / 8,38:1 (sombre) ; ok-ink 8,08 /
+       8,64 ; warn-ink 8,88 / 9,50 ; error-ink 7,70 / 8,24.
+
+       `--ink` lui-même, en revanche, DOIT descendre en thème sombre, sinon il
+       devient plus clair que la page qu'il est censé trouer. Conséquence
+       mesurée et assumée : en sombre la plaque ne se détache plus par la
+       luminance (1,15:1 contre `--surface`, contre 18,72:1 en clair), donc
+       elle se détache par un BORD explicite — `--plate-edge`. Aucun écart de
+       luminance atteignable entre deux fonds sombres ne remplacerait ce bord :
+       poussé jusqu'à la limite du contraste de texte, l'écart plafonne à
+       1,30:1. --- */
     --accent-ink: #7EA6FF; /* 6,4:1 */
     --ok-ink: #35C08A;     /* 8,4:1 */
     --warn-ink: #E0A94E;   /* 9,5:1 */
@@ -135,6 +152,9 @@
     --shadow-raised: 0 2px 4px rgba(11, 18, 32, 0.07),
                      0 18px 44px -18px rgba(11, 18, 32, 0.30);
     --shadow-control: 0 1px 2px rgba(11, 18, 32, 0.08);
+    /* Bord de plaque : le seul indice de matière qui survive au thème sombre,
+       où l'écart de luminance entre l'encre et le papier tombe à 1,15:1. */
+    --plate-edge: inset 0 0 0 1px rgba(159, 174, 198, 0.14);
 
     /* --- Familles. --- */
     --display: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
@@ -192,8 +212,10 @@
     --accent: #74A0FF;     /* 6,6:1 sur --surface */
     --accent-hover: #9DBBFF;
     --accent-weak: rgba(116, 160, 255, 0.14);
-    /* Les jeux « sur boîtier » ne sont PAS redéfinis ici : la plaque de tracé
-       reste la même matière dans les deux thèmes (cf. bloc clair). */
+    --on-accent: #05080F;  /* 7,84:1 sur #74A0FF */
+    /* Les quatre jeux « sur boîtier » (--accent-ink, --ok-ink, --warn-ink,
+       --error-ink) ne sont PAS redéfinis ici : ce sont eux les invariants.
+       `--ink` et ses fonds, eux, descendent — cf. la note du bloc clair. */
 
     --ok: #3BC493;         --ok-weak: rgba(59, 196, 147, 0.14);
     --warn: #E0A94E;       --warn-weak: rgba(224, 169, 78, 0.14);
@@ -205,4 +227,6 @@
     --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.07) inset,
                      0 20px 48px -20px rgba(0, 0, 0, 0.92);
     --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.45);
+    /* Plus marqué en sombre : c'est là qu'il porte seul la séparation. */
+    --plate-edge: inset 0 0 0 1px rgba(159, 174, 198, 0.22);
 }

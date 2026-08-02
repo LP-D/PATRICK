@@ -333,6 +333,21 @@
           "#FF9B8F",
           "#FFD1CC"
         ]
+      },
+      "on-accent": {
+        "role": "neutral",
+        "displayName": "Texte sur accent plein",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0F1113",
+          "#242629",
+          "#3C3F44",
+          "#5A5E64",
+          "#7B7F86",
+          "#9EA2A9",
+          "#C6C9CE",
+          "#FFFFFF"
+        ]
       }
     },
     "typographyMeta": {
@@ -373,6 +388,11 @@
       "control": {
         "light": "0 1px 2px rgba(11,18,32,.08)",
         "dark": "0 1px 2px rgba(0,0,0,.45)"
+      },
+      "plate-edge": {
+        "light": "inset 0 0 0 1px rgba(159,174,198,.14)",
+        "dark": "inset 0 0 0 1px rgba(159,174,198,.22)",
+        "note": "Bord de plaque : seul indice de matiere qui survive au theme sombre (1,15:1 de luminance contre --surface)."
       }
     },
     "motion": {
@@ -402,10 +422,6 @@
     "themes": {
       "strategy": "Deux rendus écrits séparément, jamais une inversion. :root = clair (défaut), :root[data-theme=dark] = sombre.",
       "inkTokensAreThemeInvariant": [
-        "ink",
-        "ink-2",
-        "ink-text",
-        "ink-text-2",
         "accent-ink",
         "ok-ink",
         "warn-ink",
@@ -427,17 +443,19 @@
         "ok": "#3BC493",
         "warn": "#E0A94E",
         "error": "#FF8172",
-        "pending": "#BE95F7"
+        "pending": "#BE95F7",
+        "on-accent": "#05080F"
       }
     },
     "northStar": "Un appareil de mesure en service : boîtier d'encre, feuilles de papier posées dessus. Un chiffre ne s'écrit jamais seul, et la station enregistre même quand personne ne regarde.",
     "rules": [
-      "Deux matières, pas un dégradé de gris : toute toile est sur --ink dans LES DEUX thèmes.",
+      "Deux matieres : toute toile est sur --ink, toujours la matiere la plus profonde de la scene. En sombre la separation est portee par --plate-edge, pas par la luminance.",
       "Un panneau est un objet posé (rayon + ombre à décalage et flou), pas une zone délimitée par un trait.",
       "L'accent ne dit que « interactif ou actif » — jamais une donnée, jamais un jugement.",
       "La donnée est en Spline Sans Mono alignée à la décimale ; le chrome est en Archivo.",
       "Le texte porte l'état, la couleur ne fait que le doubler.",
-      "Aucun chiffre sans sa contrepartie de fiabilité ; une mesure non interprétable n'est pas imprimée."
+      "Aucun chiffre sans sa contrepartie de fiabilité ; une mesure non interprétable n'est pas imprimée.",
+      "Un seul regime de focus : aucun element focusable ne repose outline:none."
     ],
     "components": {
       "status-badge": {
@@ -450,7 +468,7 @@
       },
       "button-primary": {
         "html": "<button class=\"primary\">Lancer le run</button>",
-        "css": "button.primary{padding:9px 20px;border:1px solid transparent;border-radius:8px;background:#1B4FD8;color:#fff;font-family:Archivo,sans-serif;font-size:.875rem;font-weight:600;letter-spacing:.02em;cursor:pointer;box-shadow:0 1px 2px rgba(11,18,32,.08);transition:background 140ms ease-out,transform 140ms cubic-bezier(.16,1,.3,1)}button.primary:hover{background:#143CAB;transform:translateY(-1px)}"
+        "css": "button.primary{padding:9px 20px;border:1px solid transparent;border-radius:8px;background:#1B4FD8;color:var(--on-accent,#fff);font-family:Archivo,sans-serif;font-size:.875rem;font-weight:600;letter-spacing:.02em;cursor:pointer;box-shadow:0 1px 2px rgba(11,18,32,.08);transition:background 140ms ease-out,transform 140ms cubic-bezier(.16,1,.3,1)}button.primary:hover{background:#143CAB;transform:translateY(-1px)}"
       },
       "input": {
         "html": "<input type=\"text\" value=\"mon_run\">",
@@ -471,7 +489,8 @@
       "Utiliser l'accent pour porter une donnée ou un jugement.",
       "Imbriquer un panneau dans un panneau.",
       "Dériver le thème sombre par inversion du clair.",
-      "Réintroduire un logo, un monogramme ou un placeholder de logo."
+      "Réintroduire un logo, un monogramme ou un placeholder de logo.",
+      "Poser du blanc code en dur sur un fond d'accent : c'est --on-accent."
     ]
   }
 }
