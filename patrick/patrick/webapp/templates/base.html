@@ -106,7 +106,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
        état. Alimentée par `/api/activity`, dessinée par `observatory.js`. #}
     <section class="record" aria-labelledby="record-caption">
         <canvas id="record-canvas" class="record-canvas" role="img"
-                aria-label="{{ t('record_aria') if t else 'Activité des runs dans le temps' }}"></canvas>
+                aria-label="{{ t('record_kbd') if t else 'Activité des runs — flèches pour parcourir, Entrée pour ouvrir' }}"></canvas>
         <p class="record-caption" id="record-caption">{{ t('record_loading') if t else 'Lecture de la bande…' }}</p>
         <div id="record-tooltip" class="record-tooltip hidden" role="tooltip"></div>
     </section>

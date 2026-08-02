@@ -216,11 +216,15 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
 }
 /* Sans données, la bande ne feint pas un tracé : elle le dit. */
 .record-canvas[data-state="empty"] { cursor: default; }
+/* La légende s'étalait sur 5 lignes de chasse fixe sous une bande de 40px en
+   mobile : le texte pesait plus que la donnée qu'il légende. Bornée à deux
+   lignes, le texte complet restant dans le DOM pour les technologies
+   d'assistance. */
 .record-caption {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--s1) var(--s5);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     margin: var(--s2) 0 0;
     font-family: var(--mono);
     font-size: var(--t-micro);
@@ -228,6 +232,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--ink-text-2);
 }
 .record-caption b { font-weight: 600; color: var(--ink-text); }
+.record-canvas:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 .record-tooltip {
     position: absolute;
     z-index: 40;
@@ -1284,7 +1289,10 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     .station-nav { order: 3; width: 100%; min-width: 0; overflow-x: auto; }
     .station-tools { margin-left: auto; }
     .record { padding: var(--s3) var(--s4) var(--s2); }
-    .record-canvas { height: 56px; }
+    /* Bande + légende consommaient ~350px des 844 du premier écran mobile —
+       41 % — et sur TOUTES les pages. Ramenées à ~90px. */
+    .record-canvas { height: 44px; }
+    .record-caption { -webkit-line-clamp: 2; }
     .session-context { padding: var(--s2) var(--s4) var(--s3); }
     .container { padding: var(--s5) var(--s4) var(--s7); }
     .card { padding: var(--s4); }

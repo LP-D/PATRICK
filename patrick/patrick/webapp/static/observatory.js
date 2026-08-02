@@ -135,24 +135,44 @@
         return { ctx: ctx, w: cssW, h: cssH };
     }
 
+    /* LA COORDONNÉE EST LA SÉQUENCE, PLUS LE TEMPS ÉCOULÉ.
+
+       C'est la coupe de cette passe, et elle est structurelle. Un axe de temps
+       absolu était le choix intuitif — une station enregistre dans le temps —
+       mais il dépensait toute la largeur en durée plutôt qu'en runs. Mesuré
+       sur la bande réelle : 18 runs concentrés sur ~90 secondes, étalés sur
+       une échelle de 6 jours, soit deux amas dans 3 % de la surface et 97 %
+       d'encre vide. Le survol ne répondait que sur 12px de 1392, et neuf runs
+       superposés se résumaient à une seule infobulle.
+
+       Une colonne par run supprime le problème au lieu de le compenser :
+       aucune superposition à regrouper, une cible de survol qui vaut la
+       largeur d'une colonne, et une lecture qui répond à la question qu'on se
+       pose vraiment en arrivant — qu'est-ce qui a tourné, dans quel état, avec
+       quel effort.
+
+       Ce que la coupe abandonne, et c'est assumé : l'axe daté et la lecture du
+       SILENCE (« rien depuis quatre jours »). L'information n'est pas perdue,
+       elle change de porteur — l'étendue va dans la légende, l'horodatage
+       exact dans l'infobulle, là où ils coûtent zéro pixel de tracé. */
+    var MAX_MARKS = 40;
+
     function computeMarks(w, h) {
         marks = [];
-        var runs = state.runs;
-        if (!runs.length) return null;
+        var all = state.runs;
+        if (!all.length) return null;
+
+        /* Au-delà de 40 colonnes, chaque run vaut moins de 3px et la bande
+           redevient un aplat. On garde les plus récents — ce sont eux qu'on
+           vient voir — et la légende dit combien sont hors champ. */
+        var runs = all.slice(0, MAX_MARKS);
+        var hidden = all.length - runs.length;
 
         var times = [];
-        for (var i = 0; i < runs.length; i++) {
-            var t = parseTime(runs[i].started_at);
+        for (var i = 0; i < all.length; i++) {
+            var t = parseTime(all[i].started_at);
             if (t !== null) times.push(t);
         }
-        if (!times.length) return null;
-
-        var now = Date.now();
-        var tMin = Math.min.apply(null, times);
-        var tMax = Math.max(now, Math.max.apply(null, times));
-        // Une bande d'une seule journée n'a pas d'étendue : on lui en donne
-        // une (12h) plutôt que de diviser par zéro.
-        if (tMax - tMin < 432e5) tMin = tMax - 432e5;
 
         var maxTrials = 0;
         for (i = 0; i < runs.length; i++) {
@@ -161,18 +181,36 @@
         var span = h - BASE_Y - 6;
         var logMax = Math.log1p(maxTrials);
 
+        var inner = w - 2 * PAD_X;
+        var slot = inner / runs.length;
+        // Barre lisible sans devenir un pavé : bornée des deux côtés.
+        var barW = Math.max(3, Math.min(10, slot - 3));
+
+        // Le plus ANCIEN à gauche, le plus récent à droite : `list_runs` rend
+        // les plus récents d'abord, on inverse.
         for (i = 0; i < runs.length; i++) {
-            var run = runs[i];
-            var ts = parseTime(run.started_at);
-            if (ts === null) continue;
-            var x = PAD_X + ((ts - tMin) / (tMax - tMin)) * (w - 2 * PAD_X);
+            var run = runs[runs.length - 1 - i];
             var hh = FLOOR_H;
             if (typeof run.n_trials === "number" && run.n_trials > 0 && logMax > 0) {
                 hh = FLOOR_H + (Math.log1p(run.n_trials) / logMax) * (span - FLOOR_H);
             }
-            marks.push({ x: x, h: hh, color: colorFor(run.status), run: run, t: ts });
+            marks.push({
+                x: PAD_X + slot * (i + 0.5),
+                slot: slot,
+                barW: barW,
+                h: hh,
+                color: colorFor(run.status),
+                run: run,
+                t: parseTime(run.started_at),
+            });
         }
-        return { tMin: tMin, tMax: tMax, maxTrials: maxTrials };
+        return {
+            tMin: times.length ? Math.min.apply(null, times) : null,
+            tMax: times.length ? Math.max.apply(null, times) : null,
+            maxTrials: maxTrials,
+            hidden: hidden,
+            total: all.length,
+        };
     }
 
     var scale = null;
@@ -183,65 +221,18 @@
         ctx.clearRect(0, 0, w, h);
 
         var baseY = h - BASE_Y;
-        var inner = w - 2 * PAD_X;
         var muted = token("--ink-text-2");
 
-        // Repères et ÉTIQUETTES de temps. Sans elles, une bande où les runs
-        // sont groupés d'un côté se lit comme un défaut d'affichage ; avec
-        // elles, elle se lit pour ce qu'elle est -- une station qui n'a rien
-        // enregistré depuis. Quatre étiquettes, jamais plus : au-delà elles se
-        // chevauchent avant 700px de large.
-        if (scale) {
-            ctx.strokeStyle = token("--ink");
-            ctx.lineWidth = 1;
-            for (var k = 1; k < 8; k++) {
-                var gx = Math.round(PAD_X + (k / 8) * inner) + 0.5;
-                ctx.beginPath();
-                ctx.moveTo(gx, 6);
-                ctx.lineTo(gx, baseY);
-                ctx.stroke();
-            }
-
-            ctx.fillStyle = muted;
-            ctx.globalAlpha = 0.85;
-            ctx.font = "10px " + (token("--mono") || "monospace");
-            var labels = 4;
-            for (k = 0; k < labels; k++) {
-                var f = k / (labels - 1);
-                var lx = PAD_X + f * inner;
-                var txt = fmtDate(scale.tMin + f * (scale.tMax - scale.tMin));
-                ctx.textAlign = k === 0 ? "left" : (k === labels - 1 ? "right" : "center");
-                ctx.fillText(txt, lx, h - 6);
-            }
-            ctx.textAlign = "left";
-            ctx.globalAlpha = 1;
-        }
-
-        // Ligne de base : le papier défile même quand rien ne se produit.
+        // Ligne de base : le papier de l'enregistreur. Seul repère qui reste —
+        // la grille datée est partie avec l'axe de temps.
         ctx.strokeStyle = muted;
-        ctx.globalAlpha = 0.35;
+        ctx.globalAlpha = 0.3;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(PAD_X, baseY + 0.5);
         ctx.lineTo(w - PAD_X, baseY + 0.5);
         ctx.stroke();
         ctx.globalAlpha = 1;
-
-        // Repère « maintenant » : le bord droit EST l'instant présent, et
-        // c'est ce qui donne son sens à l'espace vide qui le précède.
-        if (scale) {
-            var nx = w - PAD_X + 0.5;
-            ctx.strokeStyle = token("--accent-ink");
-            ctx.globalAlpha = 0.55;
-            ctx.setLineDash([2, 3]);
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(nx, 6);
-            ctx.lineTo(nx, baseY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.globalAlpha = 1;
-        }
 
         if (!marks.length) return;
 
@@ -250,15 +241,21 @@
         for (var i = 0; i < marks.length; i++) {
             var m = marks[i];
             if (m.x > cutoff) continue;
-            var isHover = (i === hoverIdx);
-            ctx.strokeStyle = m.color;
-            ctx.globalAlpha = isHover ? 1 : 0.92;
-            ctx.lineWidth = isHover ? 4 : 3;
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.moveTo(m.x, baseY);
-            ctx.lineTo(m.x, baseY - m.h);
-            ctx.stroke();
+            var active = (i === hoverIdx);
+
+            // Colonne de sélection : la cible vaut toute la largeur du créneau,
+            // pas les quelques pixels de la barre.
+            if (active) {
+                ctx.fillStyle = token("--accent-ink");
+                ctx.globalAlpha = 0.14;
+                ctx.fillRect(m.x - m.slot / 2, 4, m.slot, baseY - 4);
+                ctx.globalAlpha = 1;
+            }
+
+            ctx.fillStyle = m.color;
+            ctx.globalAlpha = active ? 1 : 0.9;
+            var bw = active ? m.barW + 2 : m.barW;
+            ctx.fillRect(Math.round(m.x - bw / 2), Math.round(baseY - m.h), Math.round(bw), Math.round(m.h));
         }
         ctx.globalAlpha = 1;
     }
@@ -287,9 +284,19 @@
         // Une hauteur sans son plafond n'est pas une mesure : l'échelle est
         // écrite, et les runs sans compte d'essais sont dits, pas fondus.
         var parts = [
-            "<b>" + marks.length + "</b> " + tr("record_runs", "runs"),
-            fmtStr(tr("record_span", "du {from} à maintenant"),
-                { from: scale ? fmtDate(scale.tMin) : "?" }),
+            "<b>" + (scale ? scale.total : marks.length) + "</b> " + tr("record_runs", "runs")
+                + (scale && scale.hidden
+                    ? " " + fmtStr(tr("record_hidden", "({n} hors champ)"), { n: scale.hidden })
+                    : ""),
+            // L'étendue a quitté le tracé : c'est ici qu'elle vit désormais.
+            // « du 28 juil. au 28 juil. » se lit comme un bug : quand tout
+            // tient dans une journée, la journée suffit.
+            scale && scale.tMin !== null
+                ? (fmtDate(scale.tMin) === fmtDate(scale.tMax)
+                    ? fmtStr(tr("record_span_day", "le {d}"), { d: fmtDate(scale.tMin) })
+                    : fmtStr(tr("record_span_range", "du {from} au {to}"),
+                        { from: fmtDate(scale.tMin), to: fmtDate(scale.tMax) }))
+                : "",
             fmtStr(tr("record_scale", "hauteur = essais (log, max {max})"),
                 { max: scale ? scale.maxTrials : 0 }),
             fmtStr(tr("record_counts", "{done} terminés · {running} en cours · {failed} échoués"),
@@ -306,6 +313,8 @@
         var g = layout();
         scale = computeMarks(g.w, g.h);
         canvas.dataset.state = marks.length ? "drawn" : "empty";
+        if (marks.length) canvas.setAttribute("tabindex", "0");
+        else canvas.removeAttribute("tabindex");
         draw(-1);
         writeCaption();
     }
@@ -329,15 +338,15 @@
     // peuvent être distantes de 2px — sans cette ouverture, viser au doigt
     // revient à ne jamais rien sélectionner.
     var coarse = window.matchMedia("(pointer: coarse)").matches;
-    var PICK_TOLERANCE = coarse ? 18 : 9;
 
+    /* La sélection se fait au CRÉNEAU, plus à la tolérance en pixels : avec une
+       colonne par run, la cible vaut toute la largeur du créneau. La tolérance
+       de 9px (18 au doigt) qui rendait la bande quasi impointable n'a plus de
+       raison d'être. */
     function nearest(mx) {
-        var best = -1, bestD = PICK_TOLERANCE;
-        for (var i = 0; i < marks.length; i++) {
-            var d = Math.abs(marks[i].x - mx);
-            if (d < bestD) { bestD = d; best = i; }
-        }
-        return best;
+        if (!marks.length) return -1;
+        var i = Math.floor((mx - PAD_X) / marks[0].slot);
+        return (i >= 0 && i < marks.length) ? i : -1;
     }
 
     // Détail d'une marque, factorisé : le survol et la tape doivent afficher
@@ -402,6 +411,46 @@
             return;
         }
         window.location.href = "/runs/" + encodeURIComponent(marks[idx].run.run_id);
+    });
+
+    /* La bande était un `role="img"` inerte : 18 runs valaient un mot pour un
+       lecteur d'écran, et aucune marque n'était atteignable au clavier. Elle
+       devient un contrôle — flèches pour parcourir, Entrée pour ouvrir — et
+       l'infobulle est annoncée. C'est la contrepartie de la coupe : puisque
+       chaque run a maintenant sa colonne, il peut avoir son arrêt. */
+    var kbIndex = -1;
+
+    function selectMark(i, announce) {
+        if (!marks.length) return;
+        kbIndex = Math.max(0, Math.min(marks.length - 1, i));
+        draw(kbIndex);
+        showTooltip(kbIndex);
+        if (announce && tooltip) tooltip.setAttribute("aria-live", "polite");
+    }
+
+    canvas.addEventListener("focus", function () {
+        if (marks.length && kbIndex < 0) selectMark(marks.length - 1, true);
+    });
+    canvas.addEventListener("blur", function () {
+        kbIndex = -1;
+        if (tooltip) tooltip.classList.add("hidden");
+        draw(-1);
+    });
+    canvas.addEventListener("keydown", function (ev) {
+        if (!marks.length) return;
+        var handled = true;
+        if (ev.key === "ArrowRight") selectMark(kbIndex < 0 ? 0 : kbIndex + 1, true);
+        else if (ev.key === "ArrowLeft") selectMark(kbIndex < 0 ? marks.length - 1 : kbIndex - 1, true);
+        else if (ev.key === "Home") selectMark(0, true);
+        else if (ev.key === "End") selectMark(marks.length - 1, true);
+        else if ((ev.key === "Enter" || ev.key === " ") && kbIndex >= 0) {
+            window.location.href = "/runs/" + encodeURIComponent(marks[kbIndex].run.run_id);
+        } else if (ev.key === "Escape") {
+            kbIndex = -1;
+            if (tooltip) tooltip.classList.add("hidden");
+            draw(-1);
+        } else handled = false;
+        if (handled) ev.preventDefault();
     });
 
     window.addEventListener("resize", function () { if (state.loaded) rebuild(); });
