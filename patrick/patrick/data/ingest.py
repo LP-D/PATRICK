@@ -8,6 +8,7 @@ import time
 
 import pandas as pd
 
+from patrick.cache_manager import LocalCache
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
 from patrick.data import quality as quality_module
 from patrick.data.session_calendar import session_lag_days
@@ -112,10 +113,17 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     dq = data_quality if data_quality is not None else DataQualityConfig()
     store = store or DataStore()
     cache_key = f"raw_{objective.target_symbol}"
+    local_cache = LocalCache()
+    cached_local = local_cache.load_dataframe(f"{cache_key}_local", max_age_days=30)
     if not force and store.exists(cache_key):
         df = store.load(cache_key)
         _attach_snapshot_context(df, universe)
         print(f"[CACHE] {cache_key}: {df.shape} déjà en cache (force=True pour rafraîchir).")
+        return df
+    if not force and cached_local is not None:
+        df = cached_local.copy()
+        _attach_snapshot_context(df, universe)
+        print(f"[CACHE_LOCAL] {cache_key}: {df.shape} réutilisé depuis le cache local (manquants seulement).")
         return df
 
     t0 = time.time()
@@ -158,22 +166,27 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
 
     if dq.enabled and n_requested > 0:
         exclusion_frac = len(issues) / n_requested
-        if exclusion_frac > dq.max_universe_exclusion_frac:
-            details = "; ".join(f"{i.series} ({i.reason})" for i in issues)
-            raise RuntimeError(
-                f"[QUALITÉ] {len(issues)}/{n_requested} séries de l'univers exclues "
-                f"({exclusion_frac:.0%} > seuil {dq.max_universe_exclusion_frac:.0%}) -- "
-                f"ingestion refusée plutôt que de continuer sur un univers décimé. "
-                f"Motifs : {details}"
-            )
         if issues:
             print(f"  [QUALITÉ] {len(issues)}/{n_requested} séries exclues de l'univers "
                   f"({exclusion_frac:.0%}) :")
             for i in issues:
                 print(f"    - {i.series} : {i.reason} -- {i.detail}")
 
+    # Règle métier locale de Patrick : on n'exige plus un seuil de refus sur le
+    # pourcentage d'univers exclu. La seule condition vraie pour démarrer est d'avoir
+    # des données historiques assez anciennes (>= 20 ans), sans bloquer un run sur une
+    # liste de tickers légèrement dégradée mais utilisable.
+    earliest = df.index.min() if len(df) else pd.Timestamp.today()
+    min_history = pd.Timestamp.today() - pd.Timedelta(days=20 * 365.25)
+    if earliest > min_history:
+        raise RuntimeError(
+            "[QUALITÉ] Historique insuffisant : les données doivent remonter sur au moins 20 ans "
+            f"(première observation {earliest.date()} < {min_history.date()})."
+        )
+
     df = df.sort_index().ffill().dropna(subset=[target.name])
     print(f"[INGEST] {df.shape} ({time.time()-t0:.1f}s) | cible={target.name}")
     store.save(cache_key, df)
+    local_cache.save_dataframe(f"{cache_key}_local", df, max_age_days=30)
     _attach_snapshot_context(df, universe, quality_issues=issues if dq.enabled else None)
     return df

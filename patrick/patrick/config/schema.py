@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from patrick.config import defaults as D
 
@@ -153,7 +153,7 @@ class OutputConfig(BaseModel):
 
 
 class RunConfig(BaseModel):
-    name: str
+    name: str = ""
     objective: ObjectiveConfig
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
     data_quality: DataQualityConfig = Field(default_factory=DataQualityConfig)
@@ -165,6 +165,17 @@ class RunConfig(BaseModel):
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     tuning: TuningConfig = Field(default_factory=TuningConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_name(cls, data):
+        if isinstance(data, dict):
+            target = data.get("objective", {}).get("target_symbol") if isinstance(data.get("objective"), dict) else None
+            if not data.get("name"):
+                target_name = str(target or "run")
+                slug = target_name.replace("^", "IDX_").replace("-", "_").replace("/", "_").replace(" ", "_")
+                data["name"] = f"{slug}_run"
+        return data
 
     @classmethod
     def from_yaml(cls, path: str) -> "RunConfig":

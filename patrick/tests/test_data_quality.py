@@ -175,18 +175,17 @@ def test_ingest_excludes_series_with_explicit_reason_and_persists(tmp_path, monk
     assert any(i["series"] == yfinance_source.clean_symbol(bad) and i["reason"] == "prix_figes" for i in issues)
 
 
-def test_ingest_fails_when_exclusion_fraction_exceeds_threshold(tmp_path, monkeypatch):
+def test_ingest_ignores_exclusion_fraction_when_history_is_old_enough(tmp_path, monkeypatch):
     bad1, bad2, bad3 = "BAD1", "BAD2", "BAD3"
-    monkeypatch.setattr(yfinance_source.yf, "download", _make_yf_fake([], bad1))
 
     def fake_download_all_frozen(tickers, start=None, auto_adjust=True, progress=False):
-        idx = pd.bdate_range("2018-01-01", periods=500)
+        idx = pd.bdate_range("2000-01-03", periods=5000)
         is_batch = isinstance(tickers, list)
         syms = tickers if is_batch else [tickers]
         cols = {}
         for field in ("Open", "High", "Low", "Close"):
             for s in syms:
-                cols[(field, s)] = np.full(500, 50.0)  # tout figé -> tout exclu
+                cols[(field, s)] = np.full(len(idx), 50.0)
         df = pd.DataFrame(cols, index=idx)
         df.columns = pd.MultiIndex.from_tuples(df.columns)
         if not is_batch:
@@ -199,11 +198,12 @@ def test_ingest_fails_when_exclusion_fraction_exceeds_threshold(tmp_path, monkey
     monkeypatch.delenv(fred_source.FRED_API_KEY_ENV, raising=False)
 
     objective = ObjectiveConfig(target_symbol="^TEST", target_source="yfinance", disable_session_lag=True)
-    universe = UniverseConfig(yf_tickers=[bad1, bad2, bad3], start_date="2018-01-01")
+    universe = UniverseConfig(yf_tickers=[bad1, bad2, bad3], start_date="2000-01-01")
     store = DataStore(root=str(tmp_path / "store"))
 
-    with pytest.raises(RuntimeError, match="QUALITÉ"):
-        ingest_module.ingest(objective, universe, store=store, force=True)
+    df = ingest_module.ingest(objective, universe, store=store, force=True)
+    assert len(df) > 0
+    assert df.index.min() <= pd.Timestamp("2006-08-02")
 
 
 def test_data_quality_disabled_restores_pre_p6_5_behavior(tmp_path, monkeypatch):

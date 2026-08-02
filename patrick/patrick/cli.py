@@ -35,8 +35,11 @@ def run_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
     force_ingest: bool = typer.Option(False, "--force-ingest",
                                        help="Retélécharge les données même si en cache"),
+    name: str | None = typer.Option(None, "--name", help="Nom du run ; par défaut, déduit de la cible"),
 ) -> None:
     cfg = RunConfig.from_yaml(config)
+    if name:
+        cfg.name = name
     result = run_pipeline(cfg, force_ingest=force_ingest)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")

@@ -35,8 +35,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
-web = ["fastapi", "uvicorn[standard]", "jinja2", "python-multipart"]
+dev = ["pytest", "httpx"]
+web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 
 [project.scripts]
 patrick = "patrick.cli:app"
