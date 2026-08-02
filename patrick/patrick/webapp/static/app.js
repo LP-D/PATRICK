@@ -478,6 +478,21 @@
        ----------------------------------------------------------------------- */
     var confirmArmed = false;
     var launchBar = launchBtn ? launchBtn.closest(".launch-bar") : null;
+
+    /* Publie la hauteur réelle de la barre collante dans `--launch-bar-h`, que
+       `html { scroll-padding-bottom }` consomme. Elle varie de 68 à 165px selon
+       l'état armé, la largeur et l'enroulement du récapitulatif : une valeur
+       figée dans le CSS aurait été fausse la moitié du temps. */
+    if (launchBar && window.ResizeObserver) {
+        new ResizeObserver(function (entries) {
+            // `contentRect` EXCLUT le remplissage : mesuré, il rendait 35px pour
+            // une barre qui en fait 68 — la réserve de défilement valait la
+            // moitié de ce qu'il fallait. C'est la boîte de bordure qui compte.
+            var box = entries[0].borderBoxSize && entries[0].borderBoxSize[0];
+            var h = Math.round(box ? box.blockSize : entries[0].target.getBoundingClientRect().height);
+            document.documentElement.style.setProperty("--launch-bar-h", h + "px");
+        }).observe(launchBar);
+    }
     var launchLabel = launchBtn ? launchBtn.textContent.trim() : "";
     var cancelBtn = null;
 
@@ -512,6 +527,14 @@
         var scheme = schemeSel && schemeSel.selectedIndex >= 0
             ? schemeSel.options[schemeSel.selectedIndex].textContent.trim() : "?";
         var combos = projectedCombinations();
+        // L'état des briques de rigueur, à l'instant où le refus coûte encore
+        // zéro seconde de calcul. Les nommer seulement dans les blocs repliés
+        // ne suffit pas : on confirme sans les avoir rouverts.
+        var gates = RIGOR_GATES.map(function (name) {
+            var el = form.querySelector('input[type=checkbox][name="' + name + '"]');
+            if (!el) return null;
+            return tr("gate_" + name, name) + " " + (el.checked ? "ON" : "OFF");
+        }).filter(Boolean);
         var bits = [
             fmtStr(tr("confirm_line_target", "Cible {t}, horizons {h}, régimes {r}."),
                 { t: target, h: horizons, r: regimes }),
@@ -523,7 +546,10 @@
                 ? fmtStr(tr("confirm_line_queue", "{n} run(s) déjà en file : celui-ci démarrera après."), { n: queuedCount })
                 : tr("confirm_line_queue_free", "Aucun run en file : celui-ci démarre immédiatement."),
         ];
-        if (launchRecap) launchRecap.innerHTML = bits.join(" ");
+        if (gates.length) {
+            bits.push(fmtStr(tr("confirm_line_gates", "Rigueur : {g}."), { g: gates.join(", ") }));
+        }
+        if (launchRecap) launchRecap.textContent = bits.join(" ");
         launchBtn.textContent = tr("btn_confirm_launch", "Confirmer le lancement");
         if (!cancelBtn) {
             cancelBtn = document.createElement("button");
@@ -590,43 +616,102 @@
         return clone.textContent.replace(/\s+/g, " ").trim();
     }
 
-    /* Deux éléments au plus, puis un compte. Le résumé tient sur UNE ligne à
-       côté de son titre : mesuré à trois éléments, « Embargo (retire les
-       premières lignes de test après la coupure) » repoussait le titre sur
-       une deuxième ligne et le résumé cessait d'être un résumé. */
+    /* LES BRIQUES DE RIGUEUR SONT TOUJOURS RENDUES, ON COMME OFF.
+
+       Défaut introduit par le repli du formulaire et rattrapé ici : le résumé
+       n'itérait que sur les cases COCHÉES. Or `purge`, `calibration` et
+       `stacking` valent `false` par défaut — le mot « purge » n'apparaissait
+       donc nulle part, et on pouvait lancer un run sans purge sans l'avoir su,
+       sur un produit dont l'argument est que la fuite est structurellement
+       empêchée. PRODUCT.md l'interdit en toutes lettres : « aucune ne doit
+       devenir un défaut silencieux. »
+
+       Une case ordinaire ne se résume que si elle est cochée — c'est un
+       réglage. Une brique de rigueur se résume TOUJOURS — c'est une garantie,
+       et son absence est précisément l'information qui compte. */
+    const RIGOR_GATES = [
+        "data_quality_enabled", "purge", "embargo_enabled",
+        "uniqueness_weights", "calibration", "stacking",
+    ];
+
+    /* Deux éléments au plus après les briques, puis un compte. Le résumé tient
+       sur UNE ligne à côté de son titre : mesuré à trois éléments, « Embargo
+       (retire les premières lignes de test après la coupure) » repoussait le
+       titre sur une deuxième ligne et le résumé cessait d'être un résumé. */
     const ADV_STATE_MAX = 2;
 
-    function advSummaryText(block) {
+    /* Coupe sur une frontière de mot plutôt qu'au caractère près : les résumés
+       tronquaient en plein mot (« Poids d'unicité / bootstr… »). */
+    function ellipsize(text, max) {
+        if (text.length <= max) return text;
+        const cut = text.slice(0, max);
+        const boundary = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("("), cut.lastIndexOf("/"));
+        return (boundary > max * 0.5 ? cut.slice(0, boundary) : cut).trimEnd() + "…";
+    }
+
+    function advGates(block) {
+        const out = [];
+        RIGOR_GATES.forEach((name) => {
+            const el = block.querySelector(`input[type=checkbox][name="${name}"]`);
+            if (el) out.push({ name: name, on: el.checked });
+        });
+        return out;
+    }
+
+    function advSummaryParts(block) {
+        const gateNames = advGates(block).map((g) => g.name);
         const parts = [];
         // Une case sans `value` porte son sens dans son libellé (« Purge »,
         // « Embargo ») ; une case avec `value` porte un nom de famille ou
         // d'algo. Les deux se résument, mais pas par la même chaîne.
         Array.from(block.querySelectorAll("input[type=checkbox]:checked")).forEach((el) => {
+            if (gateNames.indexOf(el.name) !== -1) return;   // déjà rendue comme brique
             const v = el.getAttribute("value");
             parts.push(v || labelTextOf(el));
         });
         Array.from(block.querySelectorAll("select")).forEach((sel) => {
             if (sel.selectedIndex >= 0) parts.push(sel.options[sel.selectedIndex].textContent.trim());
         });
+        return parts;
+    }
+
+    /* Écrit le résumé en NŒUDS, pas en chaîne : l'état d'une brique doit être
+       lisible sans lire, donc « OFF » se colore. Construit par le DOM et jamais
+       par `innerHTML` — les libellés viennent de la traduction, ils n'ont rien
+       à faire dans un analyseur HTML. */
+    function writeAdvState(out, block) {
+        out.textContent = "";
+        const gates = advGates(block);
+        gates.forEach((g) => {
+            const chip = document.createElement("span");
+            chip.className = "adv-gate";
+            if (!g.on) chip.dataset.off = "";
+            chip.textContent = tr("gate_" + g.name, g.name) + " " + (g.on ? "ON" : "OFF");
+            out.appendChild(chip);
+        });
+        const parts = advSummaryParts(block);
+        let text;
         if (!parts.length) {
+            if (gates.length) return;   // les briques disent déjà tout
             const n = block.querySelectorAll("input, select, textarea").length;
-            return fmtStr(tr("adv_state_fields", "{n} réglage(s)"), { n: n });
+            text = fmtStr(tr("adv_state_fields", "{n} réglage(s)"), { n: n });
+        } else {
+            const shown = parts.slice(0, ADV_STATE_MAX).map((x) => ellipsize(x, 26)).join(" · ");
+            text = parts.length > ADV_STATE_MAX
+                ? shown + " " + fmtStr(tr("adv_state_more", "+{n}"), { n: parts.length - ADV_STATE_MAX })
+                : shown;
         }
-        // Un libellé de case peut être une phrase entière ; on le borne, sinon
-        // c'est lui qui déborde au lieu du nombre d'éléments.
-        const shown = parts.slice(0, ADV_STATE_MAX)
-            .map((s) => (s.length > 26 ? s.slice(0, 25).trimEnd() + "…" : s))
-            .join(" · ");
-        return parts.length > ADV_STATE_MAX
-            ? shown + " " + fmtStr(tr("adv_state_more", "+{n}"), { n: parts.length - ADV_STATE_MAX })
-            : shown;
+        const tail = document.createElement("span");
+        tail.className = "adv-tail";
+        tail.textContent = text;
+        out.appendChild(tail);
     }
 
     function refreshAdvStates() {
         advBlocks.forEach((block) => {
             const out = block.querySelector(".adv-state");
             if (!out) return;
-            out.textContent = advSummaryText(block);
+            writeAdvState(out, block);
             const base = advBaseline.get(block);
             if (base !== undefined && advSignature(block) !== base) {
                 out.dataset.modified = "";
@@ -668,6 +753,22 @@
     /* Les lignes de « plus fortes variations » posent leur symbole dans le
        champ Cible. Un symbole absent de la liste des cibles ne peut pas être
        choisi : on le dit au lieu d'échouer en silence. */
+    /* L'appel de note suit la méthode choisie : une définition n'a d'intérêt
+       que pour la méthode active. */
+    const selectionInfo = document.getElementById("selection-method-info");
+    const selectionSelect = form ? form.querySelector("[name=selection_method]") : null;
+    if (selectionInfo && selectionSelect) {
+        selectionSelect.addEventListener("change", function () {
+            const m = selectionSelect.value;
+            const btn = selectionInfo.querySelector(".info-icon");
+            if (!btn) return;
+            btn.dataset.term = m;
+            btn.dataset.termLabel = m.toUpperCase();
+            btn.setAttribute("aria-label", fmtStr(tr("glossary_open_aria", "Définition : {term}"),
+                { term: m.toUpperCase() }));
+        });
+    }
+
     const moversColumns = document.getElementById("movers-columns");
     if (moversColumns) {
         moversColumns.addEventListener("click", function (ev) {

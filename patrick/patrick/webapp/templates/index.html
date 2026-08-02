@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}PATRICK{% endblock %}
+{% block title %}PATRICK — {{ t('index_title') }}{% endblock %}
 
 {# Appel de note du glossaire.
 
@@ -229,7 +229,12 @@
                     <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
                     {% endfor %}
                 </select>
-                {% for m in selection_methods %}{{ info(m, m|upper) }}{% endfor %}
+                {# Un seul appel de note, sur la méthode sélectionnée, mis à
+                   jour par `app.js` au changement. Trois « ? » identiques en
+                   file à 18px d'écart portaient chacun une zone de contact de
+                   44px : elles se chevauchaient de 26px, et rien ne disait
+                   lequel était SHAP, RFE ou LASSO. #}
+                <span id="selection-method-info">{{ info(view.selection_method, view.selection_method|upper) }}</span>
             </label>
             <label>{{ t('field_n_features_grid') }}
                 <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
@@ -377,7 +382,10 @@
                 <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
                 <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}j · {{ r.status }}</span>
                 <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
-                <span class="recent-runs-rel">F1_dir, meilleur de {{ r.n_trials or 0 }} essai(s)</span>
+                {# « meilleur de 0 essai(s) » sur un run en cours était une
+                   contrepartie de fiabilité qui affirmait une fausseté : il n'y
+                   a pas de meilleur essai tant qu'aucun n'est fini. #}
+                <span class="recent-runs-rel">{% if r.n_trials %}{{ t('recent_rel_trials', n=r.n_trials) }}{% elif r.status in ('running', 'queued') %}{{ t('recent_rel_running') }}{% else %}{{ t('recent_rel_none') }}{% endif %}</span>
             </li>
             {% endfor %}
         </ol>
@@ -445,7 +453,8 @@
        posé dans un outil de recherche. Relié, il devient ce qu'il aurait dû
        être — l'aide au choix de la cible. Les symboles absents de la liste
        des cibles ne sont pas cliquables et le disent. #}
-    <p class="hint movers-hint">{{ t('movers_pick_hint') }}</p>
+    <p class="hint movers-hint {% if not movers.gainers and not movers.losers %}hidden{% endif %}"
+       id="movers-hint">{{ t('movers_pick_hint') }}</p>
     <div class="movers-columns" id="movers-columns">
         <div class="movers-col">
             <h3 class="movers-col-title movers-up">{{ t('movers_gainers') }}</h3>

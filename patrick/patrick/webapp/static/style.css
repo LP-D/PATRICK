@@ -18,7 +18,16 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--ground); }
+html {
+    background: var(--ground);
+    /* La barre de lancement est collante en bas : sans cette réserve, un champ
+       situé derrière elle est « dans le viewport » pour le navigateur, qui ne
+       défile donc pas quand on l'atteint au clavier — on tape dans un champ
+       invisible. Mesuré : barre à `top: 832`, `input[name=regimes]` à
+       `835 → 867`. La hauteur réelle varie de 68 à 165px selon l'état armé et
+       la largeur ; `app.js` la publie dans `--launch-bar-h`. */
+    scroll-padding-bottom: calc(var(--launch-bar-h, 0px) + var(--s5));
+}
 
 body {
     margin: 0;
@@ -99,6 +108,11 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     background: var(--ink);
     color: var(--ink-text);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    /* Le bandeau ne pousse jamais le document. Mesuré à 200 % de zoom texte en
+       390px : le lien « Simulateur » atteignait 548px et faisait déborder la
+       PAGE de 64px. `clip` plutôt que `hidden` — il borne sans créer de
+       conteneur de défilement, donc le `position: sticky` du bandeau tient. */
+    overflow-x: clip;
 }
 /* Le produit s'identifie par son nom en chasse fixe — aucun logo, aucun
    monogramme : c'est un engagement de marque, pas un manque à combler. */
@@ -266,8 +280,18 @@ h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; }
     letter-spacing: -0.02em;
     line-height: 1.15;
     text-wrap: balance;
+    /* À 200 % de zoom texte en 390px, « d'investissement » fait à lui seul
+       438px pour 358 disponibles : un mot plus large que sa colonne ne peut
+       pas se replier, et c'est LUI qui poussait la page de 64px. Coupable
+       identifié par `scrollWidth > clientWidth` sur le titre, pas par un
+       élément dont la boîte dépassait — elle ne dépassait pas. */
+    overflow-wrap: break-word;
     margin-bottom: var(--s2);
 }
+/* Un chemin de code dans le sous-titre (`config/defaults.py::DEFAULT_...`) est
+   un jeton insécable : à 200 % de zoom il poussait `/universe` 333px hors de
+   l'écran. */
+.page-subtitle code, .table-footer code, .hint code { overflow-wrap: anywhere; }
 .page-subtitle {
     color: var(--text-2);
     font-size: var(--t-body);
@@ -570,6 +594,13 @@ button.primary:disabled {
     color: var(--text);
     font-family: var(--mono);
     font-size: var(--t-body);
+    /* Sans `min-width: 0`, la largeur MIN-CONTENT d'un `select` (« run_b — ^VIX
+       h=5j (2026-07-28 13:16:14) ») dimensionne la piste de grille qui le
+       contient. Mesuré à 200 % de zoom texte en 390px : `main.container` avait
+       un `scrollWidth` de 454 pour un `clientWidth` de 390 — la page débordait
+       de 64px sans qu'aucun élément ne dépasse visiblement, parce que c'est la
+       piste elle-même qui était trop large. */
+    min-width: 0;
     transition: border-color 140ms ease-out, box-shadow 140ms ease-out, background 140ms ease-out;
 }
 .run-form input:hover, .run-form select:hover, .run-form textarea:hover { border-color: var(--text-3); }
@@ -890,6 +921,24 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 /* Un bloc modifié par rapport à ses défauts se signale : c'est la seule chose
    qui distingue un réglage d'une leçon héritée. */
 .adv-state[data-modified] { color: var(--accent); font-weight: 600; }
+/* État d'une brique de rigueur. Toujours rendu, ON comme OFF — et OFF se voit,
+   parce qu'une garantie absente est l'information qui compte. */
+.adv-gate {
+    display: inline-block;
+    margin-left: var(--s2);
+    padding: 1px 6px;
+    border-radius: var(--r-small);
+    background: var(--raise);
+    color: var(--text-2);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.adv-gate[data-off] { background: var(--warn-weak); color: var(--warn); }
+.adv-tail { margin-left: var(--s2); }
+/* Le résumé peut désormais porter plusieurs pastilles : il s'enroule plutôt
+   que de pousser le titre hors du panneau. */
+.adv-state { white-space: normal; text-overflow: clip; }
 .adv-body { padding: var(--s2) var(--s1) var(--s5); }
 .adv-body > .hint:first-child { margin-top: 0; }
 
@@ -927,12 +976,24 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 
 /* État armé : la barre change de matière pour dire que le prochain clic
    engage. Pas de fenêtre modale — l'action n'a pas besoin d'interrompre,
-   seulement d'être relue avant d'être confirmée. */
+   seulement d'être relue avant d'être confirmée.
+
+   Le teinté est COMPOSÉ SUR la surface, jamais posé à sa place. Mesuré sur la
+   version précédente : `background: var(--warn-weak)` remplaçait le fond
+   opaque par un `rgba(…, 0.12)`, et comme la barre est collante, le formulaire
+   défilait dessous et transparaissait au travers — en 390px le récapitulatif
+   s'imprimait sur le champ « Nom du run ». Illisible à l'instant précis où il
+   sert. Le repli couvre les navigateurs sans `color-mix`.
+
+   `--pending` et non `--warn` : armer un lancement n'est pas un
+   avertissement, c'est une attente de confirmation. */
 .launch-bar[data-confirm] {
-    background: var(--warn-weak);
-    border-top-color: var(--warn);
+    background: var(--surface);
+    background: color-mix(in srgb, var(--pending) 10%, var(--surface));
+    border-top-color: var(--pending);
 }
 .launch-bar[data-confirm] .launch-recap { color: var(--text); }
+.launch-bar[data-confirm] button.primary { background: var(--pending); border-color: var(--pending); }
 .launch-cancel {
     flex: none;
     padding: 9px var(--s4);
@@ -1028,7 +1089,9 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
    thèmes, coins adoucis, jamais un rectangle blanc bordé.
    --------------------------------------------------------------------------- */
 .target-preview { margin: 0 0 var(--s5); }
-.preview-range-buttons { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
+/* `flex-wrap` : à 200 % de zoom texte en 390px, « 5Y » et « Max » sortaient de
+   l'écran de 100px — aucun ancêtre ne les clippait. Mesuré. */
+.preview-range-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s3); }
 .range-btn {
     padding: 3px var(--s3);
     border: 1px solid var(--rule-strong);
@@ -1130,6 +1193,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     font-size: var(--t-head);
     font-weight: 700;
     letter-spacing: -0.02em;
+    overflow-wrap: break-word;
     margin: 0 0 var(--s6);
 }
 .sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: var(--s5); align-items: start; }
@@ -1217,7 +1281,7 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
         grid-row: auto;
     }
     .station { flex-wrap: wrap; gap: var(--s3) var(--s4); padding: var(--s3) var(--s4); }
-    .station-nav { order: 3; width: 100%; overflow-x: auto; }
+    .station-nav { order: 3; width: 100%; min-width: 0; overflow-x: auto; }
     .station-tools { margin-left: auto; }
     .record { padding: var(--s3) var(--s4) var(--s2); }
     .record-canvas { height: 56px; }

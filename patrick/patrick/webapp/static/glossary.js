@@ -60,12 +60,20 @@
         });
 
         var rect = anchorEl.getBoundingClientRect();
-        var top = window.scrollY + rect.bottom + 6;
         var left = window.scrollX + rect.left;
         var maxLeft = window.scrollX + document.documentElement.clientWidth - popover.offsetWidth - 12;
         if (left > maxLeft) left = Math.max(12, maxLeft);
-        popover.style.top = top + "px";
         popover.style.left = left + "px";
+
+        /* Bascule au-dessus de l'appel de note quand il n'y a plus la place
+           dessous. Mesuré : le popover atteignait `bottom: 904` pour un
+           viewport de 900 — la définition sortait de l'écran par le bas, et
+           c'est justement quand on est en bas de formulaire qu'on la demande. */
+        var h = popover.offsetHeight;
+        var below = rect.bottom + 6 + h <= document.documentElement.clientHeight - 8;
+        popover.style.top = (below
+            ? window.scrollY + rect.bottom + 6
+            : Math.max(window.scrollY + 8, window.scrollY + rect.top - h - 6)) + "px";
     }
 
     document.addEventListener("click", function (ev) {

@@ -22,8 +22,8 @@ STRINGS: dict[str, dict[str, str]] = {
     # progressive du formulaire.
     "index_title": {"fr": "Poste de lancement", "en": "Launch station"},
     "index_subtitle": {
-        "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés — leur résumé les affiche sans qu'il faille les ouvrir.",
-        "en": "Configure a run, launch it, follow it. Collapsed blocks carry defaults derived from measured results — their summary shows them without opening.",
+        "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés ; chaque brique de rigueur affiche son état, ON comme OFF, sans qu'il faille les ouvrir.",
+        "en": "Configure a run, launch it, follow it. Collapsed blocks carry defaults derived from measured results; every rigor gate shows its state, ON or OFF, without opening them.",
     },
     "adv_state_fields": {"fr": "{n} réglage(s)", "en": "{n} setting(s)"},
     "adv_state_more": {"fr": "+{n}", "en": "+{n}"},
@@ -32,6 +32,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
     # Garde-fous : confirmation de lancement, écrasement de configuration,
     # validation dans la langue de la PAGE (le navigateur, lui, parle la sienne).
+    # Noms courts des briques de rigueur, pour les résumés de blocs et le
+    # récapitulatif de lancement. Leur état est TOUJOURS rendu, ON comme OFF :
+    # une garantie absente est précisément l'information qui compte.
+    "recent_rel_trials": {"fr": "F1_dir, meilleur de {n} essai(s)",
+                          "en": "F1_dir, best of {n} trial(s)"},
+    "recent_rel_running": {"fr": "essais en cours", "en": "trials in progress"},
+    "recent_rel_none": {"fr": "aucun essai enregistré", "en": "no trial recorded"},
+
+    "gate_data_quality_enabled": {"fr": "Qualité", "en": "Quality"},
+    "gate_purge": {"fr": "Purge", "en": "Purge"},
+    "gate_embargo_enabled": {"fr": "Embargo", "en": "Embargo"},
+    "gate_uniqueness_weights": {"fr": "Unicité", "en": "Uniqueness"},
+    "gate_calibration": {"fr": "Calibration", "en": "Calibration"},
+    "gate_stacking": {"fr": "Stacking", "en": "Stacking"},
+    "confirm_line_gates": {"fr": "Rigueur : {g}.", "en": "Rigor: {g}."},
+
     "btn_confirm_launch": {"fr": "Confirmer le lancement", "en": "Confirm launch"},
     "btn_cancel": {"fr": "Annuler", "en": "Cancel"},
     "confirm_line_target": {"fr": "Cible {t}, horizons {h}, régimes {r}.",
@@ -387,6 +403,9 @@ def js_strings(lang: str) -> dict[str, str]:
         "sim_aria_equity", "sim_aria_drawdown", "sim_aria_dist",
         "btn_confirm_launch", "btn_cancel", "confirm_line_target", "confirm_line_scheme",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_queue",
+        "confirm_line_gates",
+        "gate_data_quality_enabled", "gate_purge", "gate_embargo_enabled",
+        "gate_uniqueness_weights", "gate_calibration", "gate_stacking",
         "confirm_line_queue_free", "load_example_confirm",
         "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
