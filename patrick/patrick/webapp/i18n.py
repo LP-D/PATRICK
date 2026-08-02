@@ -238,6 +238,7 @@ STRINGS: dict[str, dict[str, str]] = {
                        "en": "{n} with no trial count (floor height)"},
     "record_trials": {"fr": "essais", "en": "trials"},
     "record_no_trials": {"fr": "essais inconnus", "en": "trial count unknown"},
+    "record_tap_again": {"fr": "touche à nouveau pour ouvrir", "en": "tap again to open"},
 
     # Phase 4 — simulateur d'investissement
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
@@ -338,7 +339,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "sim_col_strategy", "sim_col_buy_hold",
         "record_unavailable", "record_empty", "record_runs", "record_span",
         "record_scale", "record_counts", "record_unknown", "record_trials",
-        "record_no_trials",
+        "record_no_trials", "record_tap_again",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
         "recap_horizons", "movers_not_a_target",
     ]

@@ -324,8 +324,15 @@
         requestAnimationFrame(step);
     }
 
+    // Un doigt ne vise pas au pixel : la tolérance de sélection s'ouvre quand
+    // le pointeur est grossier. Mesuré sur la bande réelle, les marques
+    // peuvent être distantes de 2px — sans cette ouverture, viser au doigt
+    // revient à ne jamais rien sélectionner.
+    var coarse = window.matchMedia("(pointer: coarse)").matches;
+    var PICK_TOLERANCE = coarse ? 18 : 9;
+
     function nearest(mx) {
-        var best = -1, bestD = 9;
+        var best = -1, bestD = PICK_TOLERANCE;
         for (var i = 0; i < marks.length; i++) {
             var d = Math.abs(marks[i].x - mx);
             if (d < bestD) { bestD = d; best = i; }
@@ -333,20 +340,21 @@
         return best;
     }
 
-    canvas.addEventListener("mousemove", function (ev) {
-        if (!marks.length) return;
-        var rect = canvas.getBoundingClientRect();
-        var idx = nearest(ev.clientX - rect.left);
-        draw(idx);
-        if (idx < 0) { if (tooltip) tooltip.classList.add("hidden"); return; }
-        if (!tooltip) return;
+    // Détail d'une marque, factorisé : le survol et la tape doivent afficher
+    // exactement la même chose, sinon l'un des deux chemins ment.
+    function showTooltip(idx) {
+        if (!tooltip || idx < 0) return;
         var m = marks[idx];
         var trials = typeof m.run.n_trials === "number"
             ? m.run.n_trials + " " + tr("record_trials", "essais")
             : tr("record_no_trials", "essais inconnus");
+        var line2 = fmtDateTime(m.t) + " · " + trials + " · " + m.run.status;
+        // Au doigt, la tape sélectionne : il faut dire ce que fait la suivante,
+        // sinon on ouvre un run qu'on n'a jamais pu lire.
+        if (coarse) line2 += " — " + tr("record_tap_again", "touche à nouveau pour ouvrir");
         tooltip.innerHTML = "<b></b><br><span></span>";
         tooltip.firstChild.textContent = m.run.name + " — " + m.run.target;
-        tooltip.lastChild.textContent = fmtDateTime(m.t) + " · " + trials + " · " + m.run.status;
+        tooltip.lastChild.textContent = line2;
         tooltip.classList.remove("hidden");
         var box = canvas.getBoundingClientRect();
         var host = canvas.parentElement.getBoundingClientRect();
@@ -356,16 +364,44 @@
         // elle recouvrait la légende chiffrée -- on masquait l'échelle de la
         // bande au moment précis où l'on interroge une de ses marques.
         tooltip.style.top = (box.top - host.top + 4) + "px";
+    }
+
+    canvas.addEventListener("mousemove", function (ev) {
+        if (!marks.length || coarse) return;
+        var rect = canvas.getBoundingClientRect();
+        var idx = nearest(ev.clientX - rect.left);
+        draw(idx);
+        if (idx < 0) { if (tooltip) tooltip.classList.add("hidden"); return; }
+        showTooltip(idx);
     });
     canvas.addEventListener("mouseleave", function () {
+        if (coarse) return;
         if (tooltip) tooltip.classList.add("hidden");
         draw(-1);
     });
+
+    /* La bande était pilotée au SURVOL pour lire, au CLIC pour ouvrir. Au
+       doigt, le survol n'existe pas : une tape ouvrait donc un run qu'on
+       n'avait jamais pu identifier. Sur pointeur grossier, la première tape
+       révèle la marque, la seconde ouvre — et l'infobulle le dit. */
+    var tapped = -1;
     canvas.addEventListener("click", function (ev) {
         if (!marks.length) return;
         var rect = canvas.getBoundingClientRect();
         var idx = nearest(ev.clientX - rect.left);
-        if (idx >= 0) window.location.href = "/runs/" + encodeURIComponent(marks[idx].run.run_id);
+        if (idx < 0) {
+            tapped = -1;
+            if (tooltip) tooltip.classList.add("hidden");
+            draw(-1);
+            return;
+        }
+        if (coarse && tapped !== idx) {
+            tapped = idx;
+            draw(idx);
+            showTooltip(idx);
+            return;
+        }
+        window.location.href = "/runs/" + encodeURIComponent(marks[idx].run.run_id);
     });
 
     window.addEventListener("resize", function () { if (state.loaded) rebuild(); });

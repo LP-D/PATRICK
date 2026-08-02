@@ -94,7 +94,8 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     display: flex;
     align-items: center;
     gap: var(--s5);
-    padding: var(--s3) var(--s6);
+    padding: max(var(--s3), env(safe-area-inset-top)) max(var(--s6), env(safe-area-inset-right))
+             var(--s3) max(var(--s6), env(safe-area-inset-left));
     background: var(--ink);
     color: var(--ink-text);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
@@ -905,7 +906,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     gap: var(--s4);
     flex-wrap: wrap;
     margin: var(--s5) calc(-1 * var(--s5)) calc(-1 * var(--s5));
-    padding: var(--s4) var(--s5);
+    padding: var(--s4) var(--s5) max(var(--s4), env(safe-area-inset-bottom));
     background: var(--surface);
     border-top: 1px solid var(--rule);
     border-radius: 0 0 var(--r-panel) var(--r-panel);
@@ -1201,6 +1202,87 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     .card { padding: var(--s4); }
     .metric-grid { grid-template-columns: 1fr; gap: var(--s4); }
     .page-title { font-size: 1.5rem; }
+}
+
+/* ===========================================================================
+   POINTEUR GROSSIER — doigt, stylet.
+   Choisi sur `pointer: coarse` et non sur une largeur de viewport : une
+   tablette de 1024px se touche, un portable de 1366px à écran tactile aussi,
+   et une fenêtre de navigateur réduite à 390px se pilote toujours à la
+   souris. Adapter sur la largeur aurait épaissi les tables denses de
+   quelqu'un qui vise au pixel près, et laissé les vraies cibles tactiles à
+   15px.
+
+   Deux seuils, pas un : 44px pour tout ce qui est un CONTRÔLE (WCAG 2.5.5,
+   AAA), 24px pour un lien de texte DANS une table dense (WCAG 2.5.8, AA).
+   Imposer 44px à `/universe` reviendrait à étirer 550 lignes à 24 000px de
+   défilement pour un gain que la norme n'exige pas.
+   =========================================================================== */
+@media (pointer: coarse) {
+    /* Chrome de la station */
+    .station-nav a, .station-lang a, .theme-toggle {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* « fr » et « en » font deux caractères : la hauteur suffisait, la largeur
+       non — mesuré à 32px. */
+    .station-lang a { min-width: 44px; }
+    .station-id { min-height: 44px; display: inline-flex; align-items: center; }
+
+    /* Contrôles du formulaire. La case native reste petite : c'est le LABEL
+       qui est la cible réelle, et il l'était déjà — on lui donne juste la
+       hauteur qui le prouve. */
+    .run-form label.checkbox { min-height: 44px; align-items: center; }
+    .run-form input[type="checkbox"] { width: 20px; height: 20px; }
+    .run-form input[type="text"], .run-form input[type="number"],
+    .run-form input[type="date"], .run-form select, .run-form textarea,
+    .filter-bar select, .filter-bar input, .example-picker select {
+        min-height: 44px;
+    }
+    .adv-summary { min-height: 44px; align-items: center; }
+    .movers-pick { min-height: 44px; }
+    .range-btn { min-height: 44px; padding-left: var(--s4); padding-right: var(--s4); }
+    button.primary { min-height: 44px; }
+    .downloads a, .section-index a { min-height: 44px; display: inline-flex; align-items: center; }
+
+    /* Liens de texte dans les tables denses : 24px, la valeur que la norme
+       demande réellement à ce niveau. La cellule porte la hauteur, le lien la
+       remplit — sinon on agrandit la ligne sans agrandir la cible. */
+    table.data-table tbody td, table.leaderboard tbody td { padding-top: 10px; padding-bottom: 10px; }
+    table.data-table tbody td a, table.leaderboard tbody td a,
+    .recent-runs-list a, .news-list a {
+        display: inline-block;
+        min-height: 24px;
+        /* Un symbole de deux lettres mesurait 17px de large : la hauteur
+           n'est que la moitié de la cible. */
+        min-width: 24px;
+        padding: 2px 0;
+    }
+    /* Lien dans du texte courant. Le `padding-block` étend la zone de contact
+       SANS passer le lien en bloc : un `inline-block` au milieu d'un
+       paragraphe casserait le retour à la ligne. Le remplissage est
+       transparent, il ne déplace rien. */
+    .container p a, .container li a, .page-subtitle a, .table-footer a, .block-note a {
+        padding-block: 5px;
+    }
+    /* La bande d'enregistrement se pilote au doigt : voir observatory.js, le
+       survol n'existe pas ici. */
+    .record-canvas { cursor: pointer; }
+}
+
+/* L'appel de glossaire garde son gabarit de 15px — c'est un appel de note, il
+   ne doit pas peser autant qu'un bouton — mais sa zone de contact est étendue
+   au-delà de sa marque visible. C'est la règle générale du système : une
+   petite marque n'impose pas une petite cible. */
+.info-icon { position: relative; }
+.info-icon::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
 }
 
 /* Le mouvement porte de l'information (mesurable vs non mesurable) : on retire
