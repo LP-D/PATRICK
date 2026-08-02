@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -33,6 +34,15 @@ def load_example_config(filename: str) -> dict:
 
 
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
+
+_SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def slug_target(symbol: str) -> str:
+    """`^VIX` -> `VIX`, `EURUSD=X` -> `EURUSD_X`, `000001.SS` -> `000001_SS`
+    -- dérive un nom de run/dossier de sortie sûr (pas de caractère spécial)
+    à partir d'un symbole de cible."""
+    return _SLUG_RE.sub("_", symbol).strip("_")
 
 
 def universe_excluding(target_symbol: str) -> tuple[list[str], dict[str, str]]:
