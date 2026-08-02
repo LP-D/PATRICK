@@ -23,6 +23,16 @@
     // s'efface des qu'un run reel prend sa place (le suivi en direct prime).
     const recentRuns = document.getElementById("recent-runs");
     const statusPanel = document.getElementById("status-panel");
+    const progressTitle = document.getElementById("progress-title");
+
+    /* Le titre du panneau suit son contenu : « Avancement » quand un run est
+       suivi, « Derniers runs » au repos. Un titre qui décrit autre chose que ce
+       qu'il surmonte est une erreur de copie, pas un détail. */
+    function setProgressTitle(active) {
+        if (!progressTitle) return;
+        const next = active ? progressTitle.dataset.titleActive : progressTitle.dataset.titleIdle;
+        if (next) progressTitle.textContent = next;
+    }
     const runNameLine = document.getElementById("run-name-line");
     const fill = document.getElementById("progress-fill");
     const statusLine = document.getElementById("status-line");
@@ -96,6 +106,7 @@
         noRunMessage.classList.add("hidden");
         if (recentRuns) recentRuns.classList.add("hidden");
         statusPanel.classList.remove("hidden");
+        setProgressTitle(true);
         resultsPanel.classList.add("hidden");
         resultsPanel.innerHTML = "";
         setProgress(0, false);

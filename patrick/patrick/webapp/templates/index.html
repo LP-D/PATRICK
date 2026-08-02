@@ -1,7 +1,16 @@
 {% extends "base.html" %}
 {% block title %}PATRICK{% endblock %}
 
-{% macro info(term, label=None) %}<button type="button" class="info-icon" data-term="{{ term }}" {% if label %}data-term-label="{{ label }}"{% endif %} aria-label="{{ label or term }}">i</button>{% endmacro %}
+{# Appel de note du glossaire.
+
+   Le nom accessible dit ce que fait le bouton et sur QUOI il porte
+   (« Définition : Portes de qualité actives »), pas la clé de configuration
+   brute : un lecteur d'écran annonçait « data_quality_enabled, bouton », et
+   l'encart se titrait en MAJUSCULES_SNAKE_CASE. Ordre de résolution du nom :
+   l'étiquette explicite passée par l'appelant, sinon `glossary_labels`
+   (clé technique -> libellé traduit), sinon le terme lui-même — les termes
+   comme `technical` ou `XGBoost` SONT déjà leur propre libellé. #}
+{% macro info(term, label=None) %}{% set shown = label or (glossary_labels.get(term) if glossary_labels else none) or term %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ shown }}" aria-label="{{ t('glossary_open_aria', term=shown) if t else shown }}">i</button>{% endmacro %}
 
 {% block content %}
 
@@ -336,8 +345,15 @@
     </div>
 </section>
 
+{# Le titre suit l'état du panneau. « Avancement » au-dessus d'une liste de
+   runs passés décrivait une chose et en montrait une autre : au repos, ce
+   panneau ne montre pas l'avancement de quoi que ce soit, il montre
+   l'historique récent. `app.js` bascule le titre en même temps que le
+   contenu. #}
 <section class="dash-panel dash-progress" aria-labelledby="progress-title">
-    <h2 id="progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
+    <h2 id="progress-title" class="dash-panel-title"
+        data-title-idle="{{ t('section_recent') }}"
+        data-title-active="{{ t('section_progress') }}">{{ t('section_progress') if initial_run_id else t('section_recent') }}</h2>
     <div class="dash-panel-body">
 
     <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
@@ -355,7 +371,6 @@
        nombre d'essais dont le F1_dir affiché est le maximum. #}
     {% if recent_runs %}
     <div id="recent-runs" class="recent-runs {% if initial_run_id %}hidden{% endif %}">
-        <p class="recent-runs-title">Derniers runs</p>
         <ol class="recent-runs-list">
             {% for r in recent_runs %}
             <li>

@@ -140,8 +140,13 @@
                 currentSeries = data;
                 drawChart(data);
                 if (statusEl) {
-                    statusEl.textContent = data.error ? fmtStr(tr("preview_unavailable", "Unavailable: {error}"), { error: data.error })
-                        : (data.closes && data.closes.length ? "" : tr("preview_no_data", "No data for this period."));
+                    // La plaque écrit déjà « Pas de données pour cette période »
+                    // quand la série est vide : le répéter juste en dessous
+                    // disait deux fois la même chose. Cette ligne ne porte donc
+                    // plus que ce que la plaque ne peut pas dire — la cause.
+                    statusEl.textContent = data.error
+                        ? fmtStr(tr("preview_unavailable", "Unavailable: {error}"), { error: data.error })
+                        : "";
                 }
             })
             .catch(function () {

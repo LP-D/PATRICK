@@ -18,7 +18,7 @@ from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.webapp import alerts, forms, i18n, market_data, run_manager
-from patrick.webapp.glossary import GLOSSARY
+from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -50,6 +50,10 @@ def _i18n_context(request: Request) -> dict:
         "t": t,
         "glossary": {k: t_entry.get(lang) or t_entry.get(i18n.DEFAULT_LANG) for k, t_entry in GLOSSARY.items()},
         "group_labels": {k: t(v) for k, v in i18n.TARGET_GROUP_LABEL_KEYS.items()},
+        # Nom lisible par terme de glossaire ; les termes qui portent déjà leur
+        # nom (`technical`, `XGBoost`…) n'y figurent pas et le gabarit retombe
+        # sur le terme lui-même.
+        "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
         "i18n_js": i18n.js_strings(lang),
     }
 
