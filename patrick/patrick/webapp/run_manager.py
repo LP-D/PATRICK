@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from patrick.config.schema import RunConfig
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
+from patrick.webapp import forms
 
 _IDLE_TIMEOUT_ENV = "PATRICK_WORKER_IDLE_TIMEOUT"
 _DEFAULT_IDLE_TIMEOUT_S = 600.0
@@ -27,6 +28,21 @@ _DEFAULT_IDLE_TIMEOUT_S = 600.0
 def _connect():
     return trackdb.connect(trackdb.default_db_path())
 
+
+
+def next_run_name(target_symbol: str) -> str:
+    """Nom de run généré = slug(cible) + numéro de séquence (1 + nombre de
+    runs déjà enregistrés pour cette cible, tout statut confondu). Seule
+    règle de nommage du produit (cf. spec batch-run-launch §2) -- jamais de
+    saisie libre, ni en soumission simple, ni en batch, ni en relance."""
+    conn = _connect()
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM run WHERE target = ?", (target_symbol,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return f"{forms.slug_target(target_symbol)}_{count + 1}"
 
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:
