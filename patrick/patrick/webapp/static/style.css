@@ -1323,6 +1323,76 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
 
 .sim-guard { color: var(--warn); }
 #sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; }
+
+.sim-graph-container { margin-bottom: var(--s5); }
+.sim-graph-title {
+    font-family: var(--display);
+    font-size: var(--t-small);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--s2);
+}
+.sim-graph-hint {
+    font-size: var(--t-micro);
+    color: var(--text-2);
+    margin-bottom: var(--s3);
+    line-height: 1.5;
+}
+
+.metric-row { position: relative; }
+.metric-row:hover { background: var(--raise); cursor: help; }
+.metric-label { position: relative; }
+.metric-help {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+    background: var(--text-3);
+    color: var(--surface);
+    font-size: 9px;
+    font-weight: bold;
+    margin-left: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help { opacity: 1; color: var(--accent); background: var(--text-3); }
+.metric-help::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1F2937;
+    color: #FFF;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    width: 200px;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::after { opacity: 1; }
+.metric-help::before {
+    content: "";
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1F2937;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::before { opacity: 1; }
+
 #sim-trades-table { max-height: 320px; }
 
 .example-picker { margin-bottom: var(--s5); display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: center; font-size: var(--t-small); }
