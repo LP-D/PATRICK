@@ -30,6 +30,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "adv_state_modified": {"fr": "Modifié depuis le chargement de la page",
                            "en": "Changed since the page was loaded"},
     "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
+    "recap_targets_count": {"fr": "{n} cibles", "en": "{n} targets"},
     "movers_pick_hint": {"fr": "Clique un symbole pour en faire la cible du run.",
                          "en": "Click a symbol to make it the run's target."},
     "movers_not_a_target": {"fr": "{s} n'est pas une cible disponible.",
@@ -344,7 +345,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "record_scale", "record_counts", "record_unknown", "record_trials",
         "record_no_trials",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
-        "recap_horizons", "movers_not_a_target",
+        "recap_horizons", "recap_targets_count", "movers_not_a_target",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

@@ -490,7 +490,7 @@
         if (target) {
             const selected = Array.from(target.selectedOptions).map((o) => o.value);
             if (selected.length === 1) bits.push("<b>" + selected[0] + "</b>");
-            else if (selected.length > 1) bits.push("<b>" + selected.length + " cibles</b>");
+            else if (selected.length > 1) bits.push(fmtStr(tr("recap_targets_count", "{n} targets"), { n: selected.length }));
         }
         if (horizons && horizons.value) {
             bits.push(fmtStr(tr("recap_horizons", "horizons {h}"), { h: horizons.value }));
