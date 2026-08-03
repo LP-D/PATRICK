@@ -133,6 +133,28 @@ components:
     typography: "{typography.small}"
     rounded: "{rounded.control}"
     padding: "16px"
+  verdict-value:
+    textColor: "{colors.ink-text}"
+    typography: "{typography.micro}"
+  verdict-label:
+    textColor: "{colors.ink-text-2}"
+    typography: "{typography.micro}"
+  scope-line:
+    textColor: "{colors.text-3}"
+    typography: "{typography.small}"
+  adv-gate:
+    backgroundColor: "{colors.raise}"
+    textColor: "{colors.text-2}"
+    typography: "{typography.micro}"
+    rounded: "{rounded.small}"
+    padding: "1px 6px"
+  adv-gate-off:
+    backgroundColor: "{colors.warn}"
+    textColor: "{colors.warn}"
+  launch-bar-armed:
+    backgroundColor: "{colors.pending}"
+    textColor: "{colors.text}"
+    padding: "16px 20px"
 ---
 
 # DESIGN.md — PATRICK
@@ -147,142 +169,217 @@ ce fichier explique **comment les appliquer**, il ne les remplace pas.
 
 Le monde s'appelle **« Station d'observation »**. Il rend l'outil comme un
 appareil de mesure en service : un boîtier d'encre profonde qui porte
-l'identité et l'enregistrement, des feuilles de papier posées dessus qui
-portent la lecture.
+l'identité, l'enregistrement et le verdict ; des feuilles de papier posées
+dessus qui portent la lecture.
 
 Il remplace **intégralement** le monde précédent, « Sortie de solveur » (noir
-plat à trois fonds quasi identiques, structure par filets horizontaux seuls,
-chasse fixe partout y compris le chrome, rayons à zéro, états écrits
-`[DONE]`). Aucune valeur n'a été conservée. Si vous trouvez `--r-none`,
-`JetBrains Mono`, un `border-radius: 0` posé par doctrine ou un badge à
-crochets, c'est un résidu à supprimer, pas une variante à respecter. Le monde
-d'avant remplaçait lui-même une charte sombre/or à sérif Cormorant ; ces deux
-généalogies sont mortes.
+plat, filets horizontaux seuls, chasse fixe partout, rayons à zéro, états
+écrits `[DONE]`). Si vous trouvez `--r-none`, `JetBrains Mono`, un
+`border-radius: 0` posé par doctrine ou un badge à crochets, c'est un résidu à
+supprimer, pas une variante à respecter.
 
-**La thèse tient en deux propositions.** La première est conservée du monde
-précédent parce qu'elle appartient au produit, pas à son habillage : *un
-chiffre ne s'écrit jamais seul*. La signature de `metric()`
-(`_components.html:14`) force un troisième argument `reliability` — le gabarit
-ne devine jamais l'incertitude, l'appelant doit l'écrire, même pour dire « non
-calculable ». Les tables portent un pied qui énonce les réserves pesant sur
-leurs colonnes. Et quand une mesure n'est pas interprétable, le produit
-**refuse de l'imprimer** : il affiche `—`, le motif en clair, et renvoie la
-justification longue en note `†` sous le bloc.
+**La thèse tient en deux propositions.**
 
-La seconde est propre à ce monde : *la station enregistre même quand personne
-ne regarde*. La bande d'enregistrement du bandeau (`observatory.js`) trace
-l'activité des runs dans le temps, sur toutes les pages, avant qu'on lui
-demande quoi que ce soit — et une bande vide sur quatre jours est une
-information, pas un défaut d'affichage, ce que ses étiquettes de temps et son
-repère « maintenant » rendent lisible.
+La première appartient au produit, pas à son habillage : *un chiffre ne
+s'écrit jamais seul*. La signature de `metric()` force un troisième argument
+`reliability` — le gabarit ne devine jamais l'incertitude. Quand une mesure
+n'est pas interprétable, le produit **refuse de l'imprimer** : il affiche `—`,
+le motif en clair, et renvoie la justification longue en note sous le bloc.
+Cette règle vaut jusque dans le bandeau : le verdict de la station imprime un
+tiret et son motif tant qu'aucune cible n'a de résultat Diebold-Mariano,
+jamais « 0 / 0 » qui se lirait comme un échec.
 
-Mode : **Operate**. Le visiteur accomplit une tâche — configurer un run, suivre
-son avancement, lire un verdict, simuler un rendement. La scannabilité et la
-densité priment sur l'expression ; la marque vit dans la précision des détails,
-et il n'y a **ni logo ni monogramme** : le produit s'identifie par son nom en
-chasse fixe (`.station-id`), c'est un choix et non un manque à combler.
+La seconde est propre à ce monde : *la station montre ce qu'elle a enregistré
+avant qu'on le demande*. Le bandeau porte, sur les cinq surfaces, la bande des
+runs récents et les deux chiffres du verdict — ce qui tient, et ce que ça a
+coûté.
+
+Mode : **Operate**. La scannabilité et la densité priment sur l'expression ; la
+marque vit dans la précision des détails.
+
+### Identité
+
+Le nom **PATRICK** est une contrainte intouchable, quelle que soit l'identité
+visuelle. Il s'écrit en chasse fixe (`.station-id`), à gauche du bandeau.
+
+Un **logo existe** — fourni par l'utilisateur : une marque circulaire, anneau
+et glyphe, accompagnée du nom en petites capitales sérif. Il **n'est pas
+encore posé** dans l'interface, et il ne l'est pas par défaut : ses matières
+d'origine (or, sérif, fond bleu-nuit) appartiennent au monde précédent, pas à
+celui-ci. L'intégrer suppose de décider ce qu'on garde — vraisemblablement la
+marque seule, recolorée sur les jetons du boîtier, le nom restant en chasse
+fixe.
+
+Une version antérieure de ce document interdisait tout logo. C'était une
+consigne de départ, elle a été levée : l'interdit ne s'applique plus, mais
+l'absence actuelle est un état, pas un oubli.
 
 ## Colors
 
 ### Deux matières, pas un dégradé de gris
 
-C'est la règle structurante du monde, et la première chose à comprendre avant
-de toucher une couleur.
+Règle structurante du monde, à comprendre avant de toucher une couleur.
 
 - **Le boîtier** (`--ink`, `--ink-2`) porte le bandeau, la bande
-  d'enregistrement, le contexte de reproductibilité, le journal de run, et
-  **toutes les plaques de tracé** (`#preview-canvas`, `#sim-equity-canvas`,
-  `#sim-drawdown-canvas`, `#sim-dist-canvas`).
-- **Le papier** (`--ground` pour le plan de travail, `--surface` pour la
-  feuille posée dessus, `--raise` pour le creux d'un champ) porte la lecture.
+  d'enregistrement, le verdict, le contexte de reproductibilité, le journal de
+  run, et **toutes les plaques de tracé**.
+- **Le papier** (`--ground` plan de travail, `--surface` feuille posée dessus,
+  `--raise` creux d'un champ) porte la lecture.
 
 **Quatre jetons « sur boîtier » sont identiques dans les deux thèmes** :
 `--accent-ink`, `--ok-ink`, `--warn-ink`, `--error-ink`. Ce sont eux les
 invariants, parce qu'ils tiennent sur les deux valeurs d'encre — mesuré :
 7,83:1 et 8,38:1 pour l'accent, 7,70:1 et 8,24:1 pour l'erreur. C'est ce qui
-permet à `market.js` et `simulate.js` de tracer sans jamais savoir dans quel
-thème ils sont.
+permet à `market.js` et `simulate.js` de tracer sans savoir dans quel thème.
 
-**`--ink` lui-même, en revanche, descend en thème sombre** (`#0B1220` →
-`#05080F`), et ce n'est pas une entorse : sans ça, la plaque deviendrait plus
-claire que la page qu'elle est censée trouer. La plaque est toujours la
-matière la plus profonde de la scène — c'est la règle, pas sa valeur.
+**`--ink` lui-même descend en thème sombre** (`#0B1220` → `#05080F`), et ce
+n'est pas une entorse : sans ça, la plaque deviendrait plus claire que la page
+qu'elle troue. La plaque est toujours la matière la plus profonde de la scène
+— c'est la règle, pas sa valeur.
 
 Conséquence mesurée et assumée : en clair la plaque se détache par la
 luminance (18,72:1 contre `--surface`), en sombre elle ne le peut plus
-(1,15:1). Elle se détache donc par un **bord explicite**, `--plate-edge`,
-posé sur `.record-canvas`, `#preview-canvas`, les trois toiles du simulateur
-et `.log-tail`. Aucun écart de luminance atteignable ne remplacerait ce bord :
-poussé jusqu'à la limite du contraste de texte, l'écart entre deux fonds
-sombres plafonne à 1,30:1.
+(1,15:1). Elle se détache donc par un **bord explicite**, `--plate-edge`.
+Aucun écart de luminance atteignable ne le remplacerait : poussé jusqu'à la
+limite du contraste de texte, l'écart entre deux fonds sombres plafonne à
+1,30:1.
 
 **`--on-accent`** porte le texte posé sur l'accent plein. Le blanc tient sur
-l'accent clair (6,65:1) mais pas sur l'accent sombre éclairci (2,56:1) : sans
-ce jeton, l'action principale du produit était le seul texte illisible de
-l'interface, et seulement la nuit.
+l'accent clair (6,65:1) mais pas sur l'accent sombre éclairci (2,56:1).
 
 ### Stratégie : Restrained
 
 Neutres + un accent unique. **L'accent ne dit qu'une chose : « ceci est
 interactif ou actif ».** Il ne porte jamais une donnée, jamais un jugement.
-C'est ce qui permet de lire une page sans se demander si le bleu veut dire
-« bon ». Les jugements ont leurs propres jetons (`--ok`, `--warn`, `--error`,
+Les jugements ont leurs propres jetons (`--ok`, `--warn`, `--error`,
 `--pending`) et ceux-là ne servent qu'à ça.
 
-Il n'existe **pas** de jeton « info ». Un état sans jugement n'a pas de
-couleur : il s'écrit dans la couleur du texte (`.status-badge.status-neutral`
-prend `--text-2` sur `--raise`).
+Il n'existe **pas** de jeton « info ». Un état sans jugement s'écrit dans la
+couleur du texte.
+
+`--pending` porte aussi l'attente de confirmation (barre de lancement armée) :
+armer n'est pas avertir.
 
 ### Deux rendus, écrits séparément
 
 `:root` est clair, `:root[data-theme="dark"]` est sombre. Le second n'est
-**pas** une inversion du premier : ses fonds sont bleutés-froids, ses accents
-sont remontés en clarté pour tenir 4,5:1 sur fond sombre, et ses ombres
-deviennent profondeur + liseré haut (une ombre noire seule est invisible sur
-fond noir). La scène le justifie : Patrick sert autant en journée qu'en
-soirée, donc aucun des deux n'est le repli de l'autre.
-
-Le choix est explicite (`#theme-toggle`), mémorisé dans `localStorage`, et
-posé **avant le premier rendu** par un script bloquant dans le `<head>` —
-sinon la page peint en clair puis bascule, ce qui est pire que de n'avoir
-aucun mode sombre. Sans choix exprimé, `prefers-color-scheme` tranche, et
-continue à trancher si le système change en cours de session.
+**pas** une inversion : fonds bleutés-froids, accents remontés en clarté,
+ombres devenues profondeur + liseré haut. Le choix est explicite, mémorisé, et
+posé **avant le premier rendu** par un script bloquant dans le `<head>`.
 
 ### Contraste
 
 Tout texte tient 4,5:1 sur **son fond réel**, fond composité des pastilles
-teintées inclus ; tout texte large tient 3:1. Vérifié avant construction. Les
-valeurs mesurées sont en commentaire dans `tokens.css`, ligne par ligne — ne
-pas modifier une couleur sans refaire le calcul sur les deux thèmes.
+teintées inclus ; tout texte large tient 3:1. Les valeurs mesurées sont en
+commentaire dans `tokens.css`, ligne par ligne — ne pas modifier une couleur
+sans refaire le calcul sur les deux thèmes.
 
 ## Typography
 
-Deux familles, téléchargées et servies depuis `/static/fonts/` — **aucune
-requête CDN** : un outil local doit s'afficher correctement hors ligne.
+Deux familles, servies depuis `/static/fonts/` — **aucune requête CDN**.
 
 - **Archivo** (`--display`, aliasée `--ui`) : chrome, titres, libellés,
-  boutons, en-têtes de colonne, pastilles d'état. Grotesque de large chasse
-  dessinée pour la signalétique et l'étiquette d'appareil ; elle tient en
-  capitales serrées comme en titre de 28px.
-- **Spline Sans Mono** (`--mono`) : **toute donnée**. Chasse fixe
-  contemporaine, chiffres tabulaires, formes ouvertes — elle aligne les
-  décimales sans le costume de terminal des monos de code.
+  boutons, en-têtes de colonne, pastilles d'état.
+- **Spline Sans Mono** (`--mono`) : **toute donnée**, plus le nom du produit.
 
 **Le contraste des deux familles porte la hiérarchie**, pas la taille seule.
-C'est la différence la plus visible avec le monde précédent, où tout était en
-chasse fixe et où la hiérarchie reposait uniquement sur la taille et la casse.
 
 Règle mécanique : `table, .num, .mono, code, pre, .metric-value, input,
 select, textarea` reçoivent `--mono` + `tabular-nums` + `"tnum" 1, "zero" 1`.
-C'est non négociable — c'est ce qui permet l'alignement décimal d'une colonne
-à l'autre.
+Non négociable — c'est ce qui permet l'alignement décimal.
 
-Six pas (`--t-micro` 12px → `--t-head` 28px). Le monde précédent plafonnait le
-corps à 13px et le titre de page à 22px : dense, mais illisible comme produit.
+Six pas (`--t-micro` 12px → `--t-head` 28px). Tout titre porte
+`overflow-wrap: break-word` : mesuré à 200 % de zoom texte en 390px, le mot
+« d'investissement » fait 438px pour 358 disponibles et poussait la page.
 
-## Focus
+## Layout
 
-**Un seul régime, sans exception** :
+### La grille du poste
+
+Asymétrique et délibérée : `1.3fr / 1fr`. La colonne gauche porte la tâche
+principale, la droite ce qui la sert. Une grille de panneaux égaux donnait le
+même poids à un formulaire de 65 contrôles et à un widget de variations.
+
+**Aucun panneau ne défile en interne.** Mesuré sur la version qui le faisait :
+613px visibles pour 3042px de contenu, deux barres de défilement concurrentes,
+`Ctrl+F` inopérant hors flux, bouton de lancement absent de tout viewport. Le
+seul défilement d'une page est celui de la page.
+
+### Divulgation progressive
+
+Deux blocs de formulaire restent ouverts — le nom du run et l'objectif, les
+seuls réglés à chaque lancement. Les neuf autres se replient en `<details>`
+portant leur état en résumé. Gain mesuré : le chemin clavier vers l'action
+principale est passé d'environ 105 arrêts à 24, les blocs repliés retirant
+leur contenu de l'ordre de tabulation.
+
+### Barre de lancement collante
+
+En bas de la colonne de configuration, avec le rappel cible / horizons /
+schéma. `html` réserve `scroll-padding-bottom` égal à `--launch-bar-h`,
+publiée par un `ResizeObserver` : sans cette réserve, un champ derrière la
+barre est « dans le viewport » pour le navigateur, qui ne défile donc pas
+quand on l'atteint au clavier. Mesurer la boîte de **bordure**, pas
+`contentRect` — celui-ci exclut le remplissage et rendait 35px pour une barre
+de 68.
+
+### Adaptation : le pointeur, pas la largeur
+
+Les cibles tactiles s'adaptent sur `pointer: coarse`, jamais sur une largeur
+de viewport. Une tablette de 1024px se touche ; une fenêtre réduite à 390px se
+pilote à la souris. Vérifié : `/universe` fait la même hauteur à la souris
+avant et après.
+
+**Deux seuils, pas un.** 44px pour un **contrôle** (WCAG 2.5.5). 24px pour un
+lien de texte **dans une table dense** (WCAG 2.5.8) : imposer 44px à 550
+lignes ajouterait plus de 24 000px de défilement pour un gain que la norme
+n'exige pas.
+
+Une petite marque n'impose pas une petite cible : l'appel de glossaire garde
+son gabarit de 15px et porte une zone de contact de 44px par pseudo-élément.
+
+Zones sûres : `viewport-fit=cover` et `env(safe-area-inset-*)` sur le bandeau
+et la barre de lancement.
+
+Ruptures : 1100px (le simulateur passe en colonne), 980px (la grille du poste
+passe en colonne, le bandeau s'enroule). Zéro débordement horizontal sur les
+20 contextes mesurés, et zéro à 200 % de zoom texte.
+
+## Elevation & Depth
+
+**Un panneau est un objet posé**, pas une zone délimitée par un trait :
+`--surface`, `1px solid var(--rule)`, `--r-panel`, et `--shadow-panel` — une
+ombre avec **décalage vertical ET flou**. Un halo coloré à décalage nul est de
+la décoration, pas de la profondeur.
+
+Le filet ne structure plus la page : il sépare deux lignes **dans** un panneau
+(`--rule`) ou cerne un objet manipulable (`--rule-strong`).
+
+`--plate-edge` est le seul indice de matière qui survive au thème sombre : un
+liseré interne posé sur la bande d'enregistrement, l'aperçu marché, les trois
+toiles du simulateur et le journal de run.
+
+**Jamais de panneau dans un panneau** : il ne dit rien de plus que le filet
+qu'il remplace et brouille la hiérarchie.
+
+### Mouvement
+
+**Un seul moment authoré** : la bande se révèle de gauche à droite en 620ms
+(sortie cubique) au chargement — le mouvement natif d'un enregistreur. Le
+reste est fonctionnel : la jauge balaie **uniquement** pendant les phases non
+mesurables, le leaderboard glisse au tri (FLIP), le panneau de résultats
+apparaît. `prefers-reduced-motion` retire le mouvement, **jamais**
+l'information : la jauge non mesurable devient un motif rayé statique.
+
+## Shapes
+
+`--r-small` 6px (plaque de tracé, micro-contrôle du bandeau, pastille d'état
+de brique), `--r-control` 8px (champ, bouton, état vide), `--r-panel` 12px
+(panneau), `--r-chip` 999px (pastille d'état, bouton de plage). Le monde
+précédent les mettait à zéro par doctrine ; c'est le premier signe extérieur
+qui faisait lire l'outil comme inachevé.
+
+### Focus — un seul régime, sans exception
 
 ```css
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
@@ -292,37 +389,10 @@ corps à 13px et le titre de page à 22px : dense, mais illisible comme produit.
 }
 ```
 
-Le formulaire de run a porté pendant une passe sa propre règle — `outline:
-none` compensé par un anneau à 10 % d'opacité. Mesuré : 1,15:1 contre le
-blanc, c'est-à-dire rien, pendant que les liens et boutons voisins avaient
-bien leur contour. L'incohérence est pire que l'absence : elle laisse croire
-que le focus est visible jusqu'à ce qu'il disparaisse. Toute règle qui repose
-`outline: none` sur un élément focusable est un défaut, pas un choix.
-
-## Depth, radius, motion
-
-**Un panneau est un objet posé**, pas une zone délimitée par un trait :
-`--surface`, `1px solid var(--rule)`, `--r-panel` (12px), et `--shadow-panel`
-— une ombre avec **décalage vertical ET flou**. Un halo coloré à décalage nul
-est de la décoration, pas de la profondeur.
-
-Le filet ne sert plus à structurer la page : il sépare deux lignes **dans** un
-panneau (`--rule`) ou cerne un objet manipulable (`--rule-strong`).
-
-Rayons : `--r-small` 6px (plaque de tracé, micro-contrôle du bandeau),
-`--r-control` 8px (champ, bouton, état vide), `--r-panel` 12px (panneau),
-`--r-chip` 999px (pastille d'état, bouton de plage). Le monde
-précédent les mettait à zéro par doctrine ; c'est le premier signe extérieur
-qui faisait lire l'outil comme inachevé.
-
-**Un seul moment de mouvement authoré** : la bande d'enregistrement se révèle
-de gauche à droite en 620ms (sortie cubique) au chargement — le mouvement
-natif d'un enregistreur. Tout le reste est fonctionnel : la jauge de
-progression balaie **uniquement** pendant les phases non mesurables (le worker
-n'incrémente `progress_done` que sur les lignes de fold), le leaderboard fait
-glisser ses lignes au tri (FLIP), le panneau de résultats apparaît.
-`prefers-reduced-motion` retire le mouvement, **jamais** l'information : la
-jauge non mesurable devient un motif rayé statique.
+Le formulaire a porté pendant une passe sa propre règle — `outline: none`
+compensé par un anneau à 10 % d'opacité, mesuré à 1,15:1 contre le blanc,
+c'est-à-dire rien. L'incohérence est pire que l'absence. **Toute règle qui
+repose `outline: none` sur un élément focusable est un défaut.**
 
 ## Components
 
@@ -330,119 +400,125 @@ Composants Jinja partagés dans `templates/_components.html`, CSS dans
 `static/style.css`, jetons dans `static/tokens.css`.
 
 **`metric(label, value, reliability, state)`** — le composant signature. Le
-troisième argument est **obligatoire** : c'est la mise en œuvre mécanique de
-la première thèse. La valeur est en `--t-value` (24px) en chasse fixe ; la
-ligne de fiabilité est décrochée sous elle par un filet vertical de 1px
-(`border-left: 1px solid var(--rule-strong)`). **C'est la seule verticale du
-système**, et elle dit « ceci appartient au chiffre au-dessus » — elle ne
-décore pas.
+troisième argument est **obligatoire**. Valeur en `--t-value` (24px) en chasse
+fixe ; ligne de fiabilité décrochée par un filet vertical de 1px. **C'est la
+seule verticale du système**, et elle dit « ceci appartient au chiffre
+au-dessus ».
 
 **`data_table(headers, rows, empty_message, row_classes, num_cols, footer)`** —
-`num_cols` porte les indices (base 0) des colonnes de **mesure** ; elles seules
-reçoivent la classe `num` qui déclenche l'alignement à droite. L'appelant
-déclare, le gabarit ne devine pas : une cellule peut contenir une pastille, un
-intervalle ou un NA, et aucun de ces cas ne se détecte de façon fiable. Le
-conteneur `.table-scroll` porte le cadre et le rayon ; l'en-tête est
-**collant** (`position: sticky`) sur fond `--raise`. Le sélecteur couvre
-`table.data-table` **et** `table.leaderboard`.
+`num_cols` porte les indices des colonnes de **mesure** ; elles seules
+reçoivent la classe `num`. L'appelant déclare, le gabarit ne devine pas.
+En-tête collant sur fond `--raise`.
 
-**`status_badge(label, state)`** — pastille : `inline-flex`, rayon `--r-chip`,
-fond teinté `-weak`, précédée d'un point de 6px en `currentColor`. Six états :
-`ok`, `warning`, `error`, `neutral`, `pending`, `disabled`. **Le texte porte
-l'état, la couleur ne fait que le doubler** — lisible en monochrome, lisible
-pour un daltonien. Un run **échoué** prend `error`, jamais `neutral`.
+**`status_badge(label, state)`** — pastille avec point de 6px en
+`currentColor`. Six états. **Le texte porte l'état, la couleur ne fait que le
+doubler.** Un run échoué prend `error`, jamais `neutral`.
 
-**`empty_state` / `error_state`** — encadré pointillé sur `--raise`. Le
-message d'état vide est préfixé de `NA` en gris : le vide s'écrit comme une
-station l'écrit, un jeton et une phrase, pas une illustration.
+**`empty_state` / `error_state`** — encadré pointillé sur `--raise`, message
+préfixé de `NA`.
 
-**La bande d'enregistrement** (`.record`, `observatory.js`) — signature du
-monde, présente sur toutes les pages via `base.html`. Une marque = un run,
-posée à son heure de départ ; **hauteur = nombre d'essais** (échelle
-logarithmique) ; **couleur = état**. Trois refus inscrits dans le code, qui ne
-sont pas des oublis :
+**Le verdict de la station** (`.verdict`, rendu côté serveur dans le bandeau)
+— deux chiffres sur les cinq surfaces : *ce qui tient* (cibles survivant à la
+correction Benjamini-Hochberg entre cibles) et *ce que ça a coûté* (essais
+cumulés). Registre du **boîtier**, pas de la valeur : chasse fixe au corps de
+la ligne de provenance, contrepartie en ligne. Deux grands chiffres ici
+feraient une barre de KPI. `survivors = None` tant qu'aucune cible n'a de
+résultat DM : on imprime `—` et le motif.
 
-1. elle ne relie pas les marques par une courbe — les runs sont des événements
-   ponctuels, les relier inventerait une continuité que les données n'ont pas ;
-2. elle n'invente pas de hauteur pour un run sans compte d'essais — la marque
-   tombe à la hauteur plancher et le run est compté séparément dans la légende ;
-3. sa légende porte **toujours** le plafond de l'échelle et l'étendue
-   temporelle — une hauteur sans son maximum n'est pas une mesure.
+**Les lignes de portée locale** (`.scope-line`, en tête de `/universe` et
+`/runs`) — même grammaire, posée sur le papier. Elles ne répètent **jamais**
+le verdict global : chacune répond à la question de sa surface.
 
-Elle distingue aussi « pas encore de run » (`runs: []`) de « base illisible »
-(`available: false`) : `/api/activity` échoue en silence côté serveur, mais le
-front l'écrit en clair — une station muette et une station en panne ne se
-ressemblent pas.
+**La bande d'enregistrement** (`.record`, `observatory.js`) — une colonne par
+run, la plus récente à droite. **La coordonnée est la séquence, pas le temps
+écoulé** : un axe de temps absolu dépensait toute la largeur en durée plutôt
+qu'en runs (mesuré : 18 runs sur 90 secondes étalés sur 6 jours, deux amas
+dans 3 % de la surface). Hauteur = essais (log), couleur = état, plafond de 40
+colonnes. C'est un **contrôle** : `tabindex=0`, flèches, Home/End, Entrée pour
+ouvrir, Échap pour lâcher.
 
-**Le refus de calculer.** Ce n'est pas un composant, c'est une doctrine, et
-c'est ce qui distingue ce produit d'un tableau de bord. Quand
-`pbo_reliability` refuse (moins de 6 blocs), la page n'affiche **pas** la
-valeur ponctuelle à côté d'un message disant qu'elle n'a pas été calculée —
-elle affiche `—`, la première phrase du motif, un appel de note `†`, et renvoie
-les ~500 caractères de justification sous le bloc en `.block-note`. Rien n'est
-masqué ; tout est déplacé là où ça se lit.
+Trois refus inscrits dans le code, qui ne sont pas des oublis : pas de courbe
+entre les marques (les runs sont des événements ponctuels) ; pas de hauteur
+inventée sans compte d'essais ; la légende porte **toujours** le plafond de
+l'échelle et l'étendue temporelle, qui a quitté le tracé pour elle.
 
-**Valeur absente.** Le tiret cadratin dans `<span class="na">`, en `--text-3`,
-**jamais dans la couleur d'une mesure** : trois absences sur une même ligne
-doivent avoir la même couleur.
+**Les briques de rigueur dans les blocs repliés** (`.adv-gate`) — six
+garanties (`data_quality_enabled`, `purge`, `embargo_enabled`,
+`uniqueness_weights`, `calibration`, `stacking`) dont l'état est **toujours
+rendu, ON comme OFF**, et OFF se colore. Une case ordinaire ne se résume que
+si elle est cochée — c'est un réglage ; une brique se résume toujours — c'est
+une garantie, et son absence est l'information qui compte. La même ligne est
+reprise par le récapitulatif de lancement.
 
-**Toiles (canvas).** Une toile ne peut pas hériter d'une couleur CSS : elle
-doit la **lire**. `observatory.js`, `market.js` et `simulate.js` exposent
-chacun un helper `token(name)` **sans valeur de repli codée en dur**. C'est
-délibéré : un repli survit à un remplacement d'identité et repeint
-silencieusement l'ancien monde. Elles lisent les jetons « sur boîtier », et
-`observatory.js` les redessine sur l'événement `patrick:theme`.
+**La barre de lancement à deux temps** — le premier clic arme et déplie ce qui
+va tourner (cible, horizons, régimes, schéma, combinaisons **calculées**, rang
+en file, état des briques) ; le second lance. Pas de fenêtre modale : l'action
+n'a pas besoin d'interrompre, seulement d'être relue. Échap ou toute
+modification désarme. Le teinté d'armement est **composé sur** la surface,
+jamais posé à sa place — une barre collante translucide laisse voir le
+formulaire au travers.
+
+**Le glossaire** — `role="dialog"`, prend le focus à l'ouverture, Échap le
+rend au déclencheur, tabuler hors de lui le referme. Le focus est posé à la
+frame suivante : le popover sort de `display: none` par une transition
+`allow-discrete` et un `focus()` synchrone est ignoré. Nom accessible =
+« Définition : <libellé humain> », via `TERM_LABEL_KEYS` — le glossaire ne peut
+pas être le seul endroit qui laisse ses clés brutes.
+
+**Toiles (canvas)** — une toile ne peut pas hériter d'une couleur CSS : elle
+doit la **lire**, sans repli codé en dur (un repli survit à un remplacement
+d'identité et repeint l'ancien monde). Toutes portent `role="img"` et un
+`aria-label` **réécrit à partir des vraies séries** après tracé.
 
 ## Do's and Don'ts
 
 **À faire**
 
-- Écrire la contrepartie de fiabilité de chaque chiffre — n, intervalle, ou le
-  motif de sa non-calculabilité.
-- Refuser d'imprimer une mesure non interprétable, et dire pourquoi en clair.
+- Écrire la contrepartie de fiabilité de chaque chiffre.
+- Refuser d'imprimer une mesure non interprétable, et dire pourquoi.
+- Rendre l'état d'une brique de rigueur en permanence, ON comme OFF.
 - Déclarer `num_cols` sur toute table portant des mesures.
 - Fermer chaque liste par un pied portant compte et réserves.
-- Poser toute toile sur le boîtier (`--ink`) et lire ses couleurs dans les
-  jetons « sur boîtier », sans repli.
-- Donner à toute surface au repos son état vide écrit — une plaque de tracé
-  vide de 400px est un trou, pas un état.
-- Vérifier le contraste sur le fond **composité réel**, dans les deux thèmes,
-  avant de construire.
+- Poser toute toile sur le boîtier et lire ses couleurs sans repli.
+- Donner à toute surface au repos son état vide écrit.
+- Adapter les cibles tactiles sur `pointer: coarse`, jamais sur la largeur.
+- Vérifier le contraste sur le fond **composité réel**, dans les deux thèmes.
 
 **À ne pas faire**
 
-- Afficher un chiffre nu, sans son dénominateur ni sa réserve.
+- Afficher un chiffre nu, sans dénominateur ni réserve.
 - Afficher une valeur ponctuelle à côté d'un message disant qu'elle n'a pas
   été calculée.
+- Résumer un bloc replié en ne listant que ce qui est activé : une garantie
+  désactivée devient alors un défaut silencieux.
 - Utiliser l'accent pour porter une donnée ou un jugement.
 - Introduire un sixième neutre bleuté « informatif ».
-- Imbriquer un panneau dans un panneau : il ne dit rien de plus que le filet
-  qu'il remplace et brouille la hiérarchie du plan de travail.
+- Imbriquer un panneau dans un panneau.
 - Dériver le thème sombre par inversion du clair.
 - Redéfinir `--accent-ink`, `--ok-ink`, `--warn-ink` ou `--error-ink` dans le
-  bloc `[data-theme="dark"]` : ces quatre-là sont les invariants.
+  bloc sombre : ces quatre-là sont les invariants.
 - Poser du blanc codé en dur sur un fond d'accent — c'est `--on-accent`.
-- Reposer `outline: none` sur un élément focusable, quelle que soit la
-  compensation prévue à côté.
+- Reposer `outline: none` sur un élément focusable.
+- Remplacer le fond d'un élément collant par une couleur translucide.
 - Afficher « 0 % » pendant une phase qui ne produit aucune mesure.
-- Poser un `cursor: pointer` ou un survol d'accent sur un élément que rien
-  n'active.
-- Réintroduire un logo, un monogramme ou un placeholder de logo.
+- Poser un `cursor: pointer` sur un élément que rien n'active.
 
 ## Écarts connus entre le contrat et le code
 
 Documentés parce qu'ils sont réels, pas corrigés ici :
 
-- **La bande d'enregistrement ne porte que l'heure de DÉPART d'un run**, pas sa
-  durée. Une station enregistre la durée d'un événement ; ici un run de 10
-  minutes et un run de 9 heures produisent la même marque. `finished_at` existe
-  en base et n'est pas encore exploité.
-- **`sparkline()`** est déclarée dans `_components.html` mais n'est importée ni
-  appelée nulle part — code mort.
+- **`metric()` n'apparaît nulle part sur `/`**, et la page n'affiche aucun
+  chiffre en typographie de valeur : mesuré, un seul objet au-dessus de 17px
+  (le `h1`). Décision explicite de l'utilisateur — le verdict vit dans le
+  bandeau, qui est le boîtier et non le papier. La critique le remonte, et
+  c'est assumé.
+- **La bande ne porte pas la durée d'un run**, seulement son rang et son
+  effort. `finished_at` existe en base et n'est pas exploité.
+- **`sparkline()`** est déclarée dans `_components.html` et jamais appelée.
 - **Aucune capture ne montre une toile de marché avec données** : le réseau
-  yfinance étant coupé dans l'environnement de construction, la grille de
-  plaque ajoutée à `market.js` est vérifiée en lecture de code, pas au rendu.
-- **`/simulate` au repos** ne rend aucune plaque : toiles et tables sont
-  masquées tant que `body[data-sim-loaded]` est absent, et chaque panneau porte
-  sa phrase d'attente. C'est un état écrit, mais la surface reste la moins
-  dense du produit.
+  yfinance est coupé dans l'environnement de construction.
+- **Aucun lien d'évitement** : la première tabulation atterrit sur le nom du
+  produit, pas sur un « aller au contenu ».
+- **Le logo fourni n'est pas intégré** à l'interface (cf. Overview) : il
+  existe, il est enregistré comme acquis, mais aucune surface ne le pose
+  encore.

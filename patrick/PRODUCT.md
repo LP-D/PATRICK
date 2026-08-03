@@ -54,25 +54,15 @@ Ce qu'un outil voisin ne pourrait pas copier honnêtement : la chaîne de validi
 
 ## Brand Commitments
 
-Nom du produit : « PATRICK » — contrainte intouchable, le nom reste quelle que soit l'identité visuelle. Il s'écrit comme un identifiant de session en tête de listing (`.session-id`), pas comme une marque : aucun logo, aucun monogramme, aucun placeholder de logo. C'est délibéré et non un manque à combler — un outil de calcul s'identifie par son nom en chasse fixe.
+Nom du produit : « PATRICK » — contrainte intouchable, le nom reste quelle que
+soit l'identité visuelle. Il s'écrit en chasse fixe en tête du bandeau
+(`.station-id`), pas en lettrage de marque.
 
-Monde visuel courant : **« Sortie de solveur »** (remplace intégralement la charte sombre/or à sérif Cormorant Garamond de la Phase 7 ; aucune valeur de l'ancienne charte n'a été conservée). Noir neutre à trois fonds très proches, structure par filets **horizontaux uniquement**, donnée en chasse fixe (JetBrains Mono) alignée à la décimale, chrome en pile système, un seul accent bleu qui ne signifie que « interactif » — il ne porte jamais de donnée ni de jugement. Rayons quasi nuls, aucune pilule, aucun cercle : les états s'écrivent `[DONE]`, `[RUNNING]`, pas en pastilles. Jetons centralisés dans `static/tokens.css` ; le contrat de direction complet (thèse, premier viewport, forme) est en commentaire en tête de `templates/base.html` ; `DESIGN.md` en donne le détail.
+**Un logo existe** (fourni par l'utilisateur : marque circulaire, anneau et
+glyphe, nom en petites capitales sérif). Il n'est pas encore intégré à
+l'interface. Une version antérieure de ce document interdisait tout logo et
+tout monogramme — cette consigne a été levée explicitement ; elle ne doit plus
+être invoquée pour refuser une intégration.
 
-## Evidence on Hand
-
-- `METHODOLOGY.md` : document de référence principal (13 sections) — justification mesurée de chaque choix méthodologique, limites connues, anti-patterns explicitement refusés, et les rapports de correction (fuite, PBO, holdout, inf).
-- `README.md` : méthodologie et justification des défauts.
-- Gabarits : `index.html`, `simulate.html`, `runs.html`, `run_detail.html`, `target.html`, `universe.html`, `base.html`, `_components.html`.
-- Assets : `static/tokens.css`, `style.css`, `app.js`, `market.js`, `glossary.js`, `simulate.js`.
-- Exemples de config réels : `configs/examples/vix_direction.yaml`, `aapl_direction.yaml`.
-- Données de marché réelles via yfinance/FRED — **pas de données fictives/mock en usage normal** ; les tests utilisent des sources monkeypatchées, jamais le réseau.
-- Absence à ne pas combler par invention : aucun résultat de performance publié, aucun track record réel, aucun utilisateur tiers à ce jour.
-
-## Product Principles
-
-- **Config avant code** : tout choix du pipeline doit être atteignable depuis le formulaire, sans édition manuelle de YAML pour un usage standard.
-- **La rigueur reste visible, pas masquée** : les choix de validation et leurs limites restent lisibles dans l'UI, jamais abstraits ni enjolivés.
-- **Aucun chiffre sans sa contrepartie de fiabilité** : intervalle de confiance, taille d'échantillon, ou mention explicite de non-calculabilité — jamais un nombre nu.
-- **Rien n'est silencieusement perdu ni silencieusement par défaut** : historique complet persisté, exclusions et garde-fous motivés et annoncés.
-- **Un verdict négatif est un livrable** : l'outil doit rendre aussi lisible « ce signal ne tient pas » que « ce signal tient » — c'est la valeur principale.
-- **Bilingue par défaut (FR/EN)** : reflète l'usage réel (francophone principal, repli anglais).
+Le monde visuel courant s'appelle « Station d'observation » ; ses règles
+normatives sont dans `DESIGN.md` et `webapp/static/tokens.css`, pas ici.
