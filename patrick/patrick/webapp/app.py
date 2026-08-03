@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -171,6 +171,16 @@ def activity(limit: int = 120):
             for r in rows
         ],
     }
+
+
+@app.get("/api/next-run-names")
+def next_run_names(target: list[str] = Query(default=[])):
+    """Aperçu (lecture seule) du nom qui sera attribué à chaque cible si le
+    formulaire est soumis maintenant — appelé par `app.js` quand la
+    sélection de cibles change. Ne réserve rien : le nombre réel peut
+    différer si d'autres runs pour la même cible s'intercalent avant la
+    soumission (cf. spec batch-run-launch, limite connue)."""
+    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
 
 
 @app.post("/runs")

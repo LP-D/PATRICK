@@ -3,9 +3,12 @@ explicites (plus jamais lus dans `form`) -- un lancement peut soumettre
 plusieurs cibles à la fois, une par appel (cf. patrick/webapp/app.py)."""
 from __future__ import annotations
 
+import pytest
+from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
 from patrick.webapp import forms
+from patrick.webapp.app import app
 
 
 def _minimal_form(**overrides) -> FormData:
@@ -25,6 +28,24 @@ def _minimal_form(**overrides) -> FormData:
         else:
             items.append((k, v))
     return FormData(items)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+
+
+def test_next_run_names_endpoint_returns_one_name_per_target():
+    client = TestClient(app)
+    resp = client.get("/api/next-run-names", params=[("target", "^VIX"), ("target", "^AORD")])
+    assert resp.status_code == 200
+    assert resp.json() == {"^VIX": "VIX_1", "^AORD": "AORD_1"}
+
+
+def test_next_run_names_endpoint_dedupes_repeated_targets():
+    client = TestClient(app)
+    resp = client.get("/api/next-run-names", params=[("target", "^VIX"), ("target", "^VIX")])
+    assert resp.json() == {"^VIX": "VIX_1"}
 
 
 def test_build_config_dict_uses_explicit_target_and_name():
