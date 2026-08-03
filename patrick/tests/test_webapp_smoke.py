@@ -201,3 +201,28 @@ def test_batch_submit_queues_one_job_per_target(tmp_path):
         output_dirs.add(config.output.dir)
 
     assert len(output_dirs) == 2
+
+
+def test_relaunch_reuses_config_with_fresh_name(tmp_path):
+    client = TestClient(app)
+    resp = client.post("/runs", data=_form_data(tmp_path))
+    run_id = resp.json()["runs"][0]["run_id"]
+    _wait_for_status(client, run_id, not_in={"queued", "running"}, deadline_s=240)
+
+    relaunch_resp = client.post(f"/runs/{run_id}/relaunch", follow_redirects=False)
+    assert relaunch_resp.status_code == 303, relaunch_resp.text
+    new_run_id = relaunch_resp.headers["location"].rsplit("/", 1)[-1]
+    assert new_run_id != run_id
+
+    old_config = run_manager.get_run_config(run_id)
+    new_config = run_manager.get_run_config(new_run_id)
+    assert new_config.objective.target_symbol == old_config.objective.target_symbol
+    assert new_config.objective.horizons == old_config.objective.horizons
+    assert new_config.name != old_config.name
+    assert new_config.name.startswith(forms.slug_target(old_config.objective.target_symbol))
+
+
+def test_relaunch_404_on_unknown_run():
+    client = TestClient(app)
+    resp = client.post("/runs/does-not-exist/relaunch")
+    assert resp.status_code == 404

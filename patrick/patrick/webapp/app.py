@@ -237,6 +237,37 @@ async def create_run(request: Request):
     return JSONResponse({"runs": runs})
 
 
+@app.post("/runs/{run_id}/relaunch")
+def relaunch_run(run_id: str):
+    """Relance un run passé à l'identique, sauf nom/dossier de sortie
+    (nouveau numéro, cf. `run_manager.next_run_name`) -- une nouvelle
+    tentative doit être distinguable dans l'historique, pas confondue avec
+    l'originale. Fonctionne pour un run soumis via le web (config retrouvée
+    dans la table `job`) et pour un run lancé en CLI (repli sur
+    `run.config_json`, absent de `job`)."""
+    config = run_manager.get_run_config(run_id)
+    if config is None:
+        conn = trackdb.connect()
+        try:
+            row = conn.execute(
+                "SELECT config_json FROM run WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None or not row[0]:
+            raise HTTPException(status_code=404, detail="Run introuvable (config indisponible)")
+        config = RunConfig.model_validate_json(row[0])
+
+    new_name = run_manager.next_run_name(config.objective.target_symbol)
+    cfg_dict = config.model_dump()
+    cfg_dict["name"] = new_name
+    cfg_dict["output"]["dir"] = f"runs/{new_name}"
+    new_config = RunConfig.model_validate(cfg_dict)
+
+    job_view = run_manager.start_run(new_config)
+    return RedirectResponse(f"/runs/{job_view['id']}", status_code=303)
+
+
 @app.get("/api/run-state")
 def run_state():
     """État agrégé léger (run actif + file d'attente) — poll périodique côté
