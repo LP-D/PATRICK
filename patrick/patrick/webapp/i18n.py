@@ -381,6 +381,91 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_col_buy_hold": {"fr": "Buy & hold", "en": "Buy & hold"},
     "sim_trades_download": {"fr": "Exporter en CSV", "en": "Export as CSV"},
     "sim_trades_none": {"fr": "Aucun trade.", "en": "No trades."},
+
+    # Phase 5 — surfaces exploratoires (explorateur, historique, détails)
+    # Colonnes partagées
+    "col_run": {"fr": "Run", "en": "Run"},
+    "col_target": {"fr": "Cible", "en": "Target"},
+    "col_horizon": {"fr": "Horizon", "en": "Horizon"},
+    "col_scheme": {"fr": "Schéma", "en": "Scheme"},
+    "col_status": {"fr": "Statut", "en": "Status"},
+    "col_started": {"fr": "Lancé", "en": "Started"},
+    "col_trials": {"fr": "Essais", "en": "Trials"},
+    "col_best_f1": {"fr": "F1_dir", "en": "F1_dir"},
+    "col_dm_p": {"fr": "p-value DM", "en": "DM p-value"},
+
+    # Helpers partagés
+    "h_horizon_unit": {"fr": "{h}j", "en": "{h}d"},
+    "h_significant": {"fr": "significatif (p < 0.05)", "en": "significant (p < 0.05)"},
+    "h_not_significant": {"fr": "non significatif (p ≥ 0.05)", "en": "not significant (p ≥ 0.05)"},
+    "h_not_computed": {"fr": "non calculé", "en": "not computed"},
+    "h_not_computable": {"fr": "non calculable", "en": "not computable"},
+    "h_ci90": {"fr": "IC 90%", "en": "90% CI"},
+    "h_table_empty": {"fr": "Aucune donnée.", "en": "No data."},
+
+    # Runs explorer (rl_*)
+    "rl_title": {"fr": "Historique des runs", "en": "Runs history"},
+    "rl_subtitle": {"fr": "Tous les runs exécutés depuis le démarrage du serveur (entièrement lu de la base SQLite), ordonnés par date décroissante. Chaque ligne montre la cible, l'horizon, le statut, la date de lancement et le nombre d'essais.", "en": "All runs executed since server startup (fully read from SQLite database), sorted by decreasing date. Each row shows the target, horizon, status, launch date, and number of trials."},
+    "rl_filter_all_f": {"fr": "toutes", "en": "all"},
+    "rl_filter_all_m": {"fr": "tous", "en": "all"},
+    "rl_filter_submit": {"fr": "Filtrer", "en": "Filter"},
+    "rl_footer_count": {"fr": "run(s)", "en": "run(s)"},
+    "rl_footer_target": {"fr": "cibles uniques", "en": "unique targets"},
+    "rl_footer_status": {"fr": "statuts", "en": "statuses"},
+    "rl_footer_scheme": {"fr": "schémas", "en": "schemes"},
+    "rl_footer_note": {"fr": "Phase 5 : explorateur des runs avec filtrage et métriques détaillées à venir.", "en": "Phase 5: runs explorer with filtering and detailed metrics coming soon."},
+    "rl_empty": {"fr": "Aucun run.", "en": "No runs."},
+    "rl_empty_hint": {"fr": "Lance un run depuis l'onglet Configuration pour en créer un.", "en": "Launch a run from the Configuration tab to create one."},
+
+    # Universe explorer (un_*)
+    "un_title": {"fr": "Univers de cibles", "en": "Targets universe"},
+    "un_subtitle": {"fr": "Toutes les cibles configurables (mêmes groupes que le formulaire de lancement), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.", "en": "All configurable targets (same groups as the launch form), crossed with actual run history — no new data, just the join of the two."},
+    "un_col_symbol": {"fr": "Symbole", "en": "Symbol"},
+    "un_col_label": {"fr": "Libellé", "en": "Label"},
+    "un_col_source": {"fr": "Source", "en": "Source"},
+    "un_col_history": {"fr": "Historique", "en": "History"},
+    "un_col_last_run": {"fr": "Dernier run", "en": "Last run"},
+    "un_state_done": {"fr": "{n} run(s) terminé(s)", "en": "{n} run(s) done"},
+    "un_state_running": {"fr": "{n} run(s) en cours", "en": "{n} run(s) running"},
+    "un_state_never": {"fr": "jamais lancée", "en": "never launched"},
+    "un_footer": {"fr": "{n} cible(s) · {d} avec au moins un run terminé · {v} jamais lancée(s)", "en": "{n} target(s) · {d} with at least one completed run · {v} never launched"},
+
+    # Targets explorer (tg_*)
+    "tg_subtitle": {"fr": "Agrégation sur cette cible : tous les runs, tous les horizons. Métriques cumulées et historique des runs.", "en": "Aggregation for this target: all runs, all horizons. Cumulative metrics and runs history."},
+    "tg_empty": {"fr": "Aucun run pour cette cible.", "en": "No runs for this target."},
+    "tg_empty_hint": {"fr": "Aucun run n'a été exécuté sur cette cible — lance-en un depuis Configuration.", "en": "No run has been executed on this target — launch one from Configuration."},
+    "tg_metric_cumulative": {"fr": "Essais cumulés", "en": "Cumulative trials"},
+    "tg_rel_cumulative": {"fr": "Toutes les configurations testées sur cette cible, tout run confondu.", "en": "All configurations tested on this target, across all runs."},
+    "tg_metric_runs": {"fr": "Nombre de runs", "en": "Number of runs"},
+    "tg_rel_runs": {"fr": "Runs complètement exécutés sur cette cible.", "en": "Completed runs on this target."},
+    "tg_section_runs": {"fr": "Historique des runs", "en": "Runs history"},
+    "tg_runs_footer": {"fr": "run(s) complètement exécutés sur cette cible", "en": "run(s) completed on this target"},
+    "tg_section_pbo": {"fr": "Analyse PBO", "en": "PBO analysis"},
+    "tg_pbo_hint": {"fr": "Nombre de blocs satisfont le diagnostic de fiabilité pour PBO sur cette cible.", "en": "Number of blocks satisfy the reliability diagnostic for PBO on this target."},
+    "tg_col_nblocks": {"fr": "Blocs", "en": "Blocks"},
+    "tg_col_reliability": {"fr": "Fiabilité", "en": "Reliability"},
+    "tg_pbo_empty": {"fr": "Pas d'analyse PBO disponible.", "en": "No PBO analysis available."},
+    "tg_pbo_footer": {"fr": "Chaque ligne représente un horizon différent.", "en": "Each row represents a different horizon."},
+
+    # Run detail (rd_*)
+    "rd_title": {"fr": "Détails du run", "en": "Run details"},
+    "rd_ctx_target": {"fr": "cible", "en": "target"},
+    "rd_ctx_snapshot": {"fr": "snapshot", "en": "snapshot"},
+    "rd_ctx_config": {"fr": "config", "en": "config"},
+    "rd_ctx_git": {"fr": "git", "en": "git"},
+    "rd_ctx_seed": {"fr": "seed", "en": "seed"},
+    "rd_horizon": {"fr": "horizon", "en": "horizon"},
+    "rd_started": {"fr": "lancé", "en": "started"},
+    "rd_finished": {"fr": "terminé", "en": "finished"},
+    "rd_sections": {"fr": "Sections", "en": "Sections"},
+    "rd_sections_aria": {"fr": "Sections de la page", "en": "Page sections"},
+    "rd_section_summary": {"fr": "Résumé", "en": "Summary"},
+    "rd_section_trials": {"fr": "Essais", "en": "Trials"},
+    "rd_section_config": {"fr": "Configuration", "en": "Configuration"},
+
+    # Scope lines (shared)
+    "scope_universe": {"fr": "Portée de l'univers", "en": "Universe scope"},
+    "scope_universe_rel": {"fr": "{done} avec un run complètement exécuté, {never} jamais lancée(s)", "en": "{done} with a completed run, {never} never launched"},
 }
 
 
