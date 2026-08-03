@@ -108,6 +108,37 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <canvas id="record-canvas" class="record-canvas" role="img"
                 aria-label="{{ t('record_kbd') if t else 'Activité des runs — flèches pour parcourir, Entrée pour ouvrir' }}"></canvas>
         <p class="record-caption" id="record-caption">{{ t('record_loading') if t else 'Lecture de la bande…' }}</p>
+
+        {# LE VERDICT DE LA STATION. Les deux seuls chiffres que le produit
+           sait établir sur tout l'historique : ce qui tient, et ce que ça a
+           coûté. Rendus dans le REGISTRE DU BOÎTIER — chasse fixe, corps de la
+           ligne de provenance, contrepartie en ligne — et non à l'échelle de
+           valeur : deux grands chiffres dans le bandeau seraient une barre de
+           KPI, exactement le gabarit que ce monde a remplacé.
+
+           `survivors` vaut `None` tant qu'aucune cible n'a de résultat
+           Diebold-Mariano. C'est l'état nominal d'une base jeune : on imprime
+           un tiret et le motif, jamais « 0 / 0 » qui se lirait comme un échec
+           alors que la mesure n'est pas encore calculable. #}
+        {% if verdict and verdict.n_runs %}
+        <p class="verdict">
+            <span class="verdict-item">
+                <b>{{ t('verdict_survivors') }}</b>
+                {% if verdict.survivors is none %}
+                <span class="na">—</span>
+                <span class="verdict-rel">{{ t('verdict_not_computable') }}</span>
+                {% else %}
+                <span class="verdict-value">{{ verdict.survivors }} / {{ verdict.n_tested }}</span>
+                <span class="verdict-rel">{{ t('verdict_survivors_rel', alpha=verdict.alpha) }}</span>
+                {% endif %}
+            </span>
+            <span class="verdict-item">
+                <b>{{ t('verdict_cost') }}</b>
+                <span class="verdict-value">{{ "{:,}".format(verdict.cumulative_trials).replace(",", "\u202f") }}</span>
+                <span class="verdict-rel">{{ t('verdict_cost_rel', runs=verdict.n_runs, targets=verdict.n_targets) }}</span>
+            </span>
+        </p>
+        {% endif %}
         <div id="record-tooltip" class="record-tooltip hidden" role="tooltip"></div>
     </section>
 

@@ -42,6 +42,24 @@ def _on_startup() -> None:
     alerts.start_background_refresh()
 
 
+def _station_verdict() -> dict | None:
+    """Le verdict de la station, rendu côté SERVEUR dans le bandeau de chaque
+    page. Pas d'appel AJAX comme la bande d'enregistrement : c'est une donnée
+    de chrome, elle doit être là au premier rendu plutôt que d'apparaître après
+    coup. Une seule requête agrégée, lecture seule, échec silencieux — le
+    bandeau doit s'afficher même sans base (première installation)."""
+    try:
+        conn = trackdb.connect()
+    except Exception:
+        return None
+    try:
+        return trackhistory.station_verdict(conn)
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 def _i18n_context(request: Request) -> dict:
     lang = i18n.get_lang(request)
     t = i18n.translator(lang)
@@ -55,6 +73,7 @@ def _i18n_context(request: Request) -> dict:
         # sur le terme lui-même.
         "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
         "i18n_js": i18n.js_strings(lang),
+        "verdict": _station_verdict(),
     }
 
 

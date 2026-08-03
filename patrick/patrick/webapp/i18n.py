@@ -268,6 +268,27 @@ STRINGS: dict[str, dict[str, str]] = {
                      "en": "No run recorded yet — the record fills from the first run launched."},
     "record_runs": {"fr": "runs", "en": "runs"},
     "record_span_range": {"fr": "du {from} au {to}", "en": "from {from} to {to}"},
+    # Verdict de la station. « Ce qui tient » n'est pas coloré en --ok : le
+    # produit soutient qu'un « non » clairement établi est un résultat réussi,
+    # donc zéro survivant n'est pas un mauvais état.
+    "verdict_survivors": {"fr": "CE QUI TIENT", "en": "WHAT HOLDS"},
+    "verdict_survivors_rel": {"fr": "cibles dont le signal survit à la correction entre cibles (BH, α={alpha})",
+                              "en": "targets whose signal survives the across-target correction (BH, α={alpha})"},
+    "verdict_not_computable": {"fr": "aucune cible n'a encore de résultat Diebold-Mariano",
+                               "en": "no target has a Diebold-Mariano result yet"},
+    "verdict_cost": {"fr": "CE QUE ÇA A COÛTÉ", "en": "WHAT IT COST"},
+    "verdict_cost_rel": {"fr": "essais cumulés sur {runs} run(s), {targets} cible(s)",
+                         "en": "cumulative trials over {runs} run(s), {targets} target(s)"},
+
+    # Lignes de portée locale : chaque surface dense répond à SA question, sans
+    # répéter le verdict global que le bandeau porte déjà.
+    "scope_universe": {"fr": "CIBLES EXPLORÉES", "en": "TARGETS EXPLORED"},
+    "scope_universe_rel": {"fr": "dont {done} avec au moins un run terminé · {never} jamais lancées",
+                           "en": "of which {done} with at least one finished run · {never} never launched"},
+    "scope_runs": {"fr": "RUNS COMPARÉS AUX BASELINES", "en": "RUNS COMPARED TO BASELINES"},
+    "scope_runs_rel": {"fr": "runs affichés ayant produit un résultat Diebold-Mariano",
+                       "en": "listed runs that produced a Diebold-Mariano result"},
+
     "record_span_day": {"fr": "le {d}", "en": "on {d}"},
     "record_hidden": {"fr": "({n} hors champ)", "en": "({n} off-strip)"},
     "record_kbd": {"fr": "Activité des runs — flèches pour parcourir, Entrée pour ouvrir",

@@ -250,6 +250,64 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
 .record-tooltip b { color: var(--text); font-weight: 600; }
 .record-tooltip span { color: var(--text-3); }
 
+/* ---------------------------------------------------------------------------
+   LE VERDICT DE LA STATION — ce qui tient, ce que ça a coûté.
+
+   Registre du BOÎTIER, pas de la valeur : chasse fixe au corps de la ligne de
+   provenance, libellé en capitales espacées, contrepartie en ligne juste
+   après. Deux grands chiffres ici auraient fait une barre de KPI — le gabarit
+   « gros chiffre, petit libellé, stats de soutien » que ce monde a remplacé,
+   et que DESIGN.md refuse explicitement.
+
+   Aucune couleur de jugement sur le nombre de survivants : le produit soutient
+   qu'un « non » clairement établi est un résultat réussi, donc zéro survivant
+   n'est pas un mauvais état et ne se peint pas comme tel.
+   --------------------------------------------------------------------------- */
+.verdict {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1) var(--s6);
+    margin: var(--s2) 0 0;
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--ink-text-2);
+}
+.verdict-item { display: inline-flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; min-width: 0; }
+.verdict b {
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: rgba(159, 174, 198, 0.72);
+}
+.verdict-value { color: var(--ink-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* La contrepartie n'est jamais optionnelle : c'est la règle du produit, elle
+   vaut ici comme dans `metric()`. */
+.verdict-rel { color: var(--ink-text-2); opacity: 0.85; }
+.verdict .na { color: var(--ink-text-2); }
+
+/* Ligne de portée locale, en tête d'une surface dense. Même grammaire que le
+   verdict du bandeau — libellé, valeur, contrepartie — mais posée sur le
+   PAPIER, donc dans les couleurs de la page. Elle ne répète jamais le verdict
+   global : elle répond à la question propre à sa surface. */
+.scope-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s2) var(--s3);
+    margin: 0 0 var(--s5);
+    font-family: var(--mono);
+    font-size: var(--t-small);
+    color: var(--text-3);
+}
+.scope-line b {
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-2);
+}
+.scope-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
 /* Contexte de reproductibilité : cible, snapshot, hash de config, git SHA,
    seed. Imprimé SUR le boîtier, avant le premier résultat — sans ces champs
    aucun chiffre de la page n'est refaisable. */
@@ -1293,6 +1351,9 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
        41 % — et sur TOUTES les pages. Ramenées à ~90px. */
     .record-canvas { height: 44px; }
     .record-caption { -webkit-line-clamp: 2; }
+    /* En une colonne, chaque verdict prend sa ligne avec sa contrepartie —
+       côte à côte ils se réduiraient à deux fragments illisibles. */
+    .verdict { flex-direction: column; gap: var(--s2); }
     .session-context { padding: var(--s2) var(--s4) var(--s3); }
     .container { padding: var(--s5) var(--s4) var(--s7); }
     .card { padding: var(--s4); }

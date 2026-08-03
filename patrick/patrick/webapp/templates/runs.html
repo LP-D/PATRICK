@@ -6,6 +6,18 @@
 <h1 class="page-title">Historique des runs</h1>
 <p class="page-subtitle">Tout run persisté en base (<code>patrick.db</code>), lancé depuis l'interface web ou en CLI (<code>patrick run</code>/<code>patrick resume</code>) — lecture seule, ne relance ni ne modifie rien.</p>
 
+{# Portée LOCALE, même règle que sur `/universe` : le bandeau porte le verdict
+   global, cette ligne répond à la question de CETTE page — parmi les runs
+   listés, combien sont allés jusqu'à un résultat Diebold-Mariano, c'est-à-dire
+   jusqu'à une comparaison contre les baselines. Sans ça, une colonne pleine de
+   tirets ne dit pas si c'est un défaut d'affichage ou l'état réel. #}
+{% set with_dm = runs | selectattr('dm_p_value', 'ne', none) | list | length %}
+<p class="scope-line">
+    <b>{{ t('scope_runs') }}</b>
+    <span class="scope-value">{{ with_dm }} / {{ runs | length }}</span>
+    <span class="scope-rel">{{ t('scope_runs_rel') }}</span>
+</p>
+
 <form class="filter-bar" method="get" action="/runs">
     <label>Cible
         <select name="target" onchange="this.form.submit()">
