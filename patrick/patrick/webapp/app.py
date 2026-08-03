@@ -249,14 +249,12 @@ def relaunch_run(run_id: str):
     if config is None:
         conn = trackdb.connect()
         try:
-            row = conn.execute(
-                "SELECT config_json FROM run WHERE run_id = ?", (run_id,)
-            ).fetchone()
+            row = trackdb.get_run(conn, run_id)
         finally:
             conn.close()
-        if row is None or not row[0]:
+        if row is None or not row["config_json"]:
             raise HTTPException(status_code=404, detail="Run introuvable (config indisponible)")
-        config = RunConfig.model_validate_json(row[0])
+        config = RunConfig.model_validate_json(row["config_json"])
 
     new_name = run_manager.next_run_name(config.objective.target_symbol)
     cfg_dict = config.model_dump()

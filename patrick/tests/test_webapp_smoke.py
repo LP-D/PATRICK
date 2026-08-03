@@ -20,8 +20,11 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from starlette.datastructures import FormData
 
+from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.tracking import db as trackdb
 from patrick.webapp import forms, run_manager
 from patrick.webapp.app import app
 
@@ -85,6 +88,20 @@ def _form_data(tmp_path) -> dict:
         "sampler_candidates": ["SMOTE"],
         "algos": ["RandomForest", "XGBoost"],
     }
+
+
+def _to_formdata(d: dict) -> FormData:
+    """Convertit le dict de `_form_data` (valeurs `list` pour les champs
+    multi-sélection) en `starlette.datastructures.FormData` -- la même forme
+    que celle que `forms.build_config_dict` reçoit en production via `await
+    request.form()`, sans passer par un aller-retour HTTP réel."""
+    pairs = []
+    for k, v in d.items():
+        if isinstance(v, list):
+            pairs.extend((k, item) for item in v)
+        else:
+            pairs.append((k, v))
+    return FormData(pairs)
 
 
 def _wait_for_status(client, run_id, *, not_in: set[str], deadline_s: float) -> dict:
@@ -220,6 +237,61 @@ def test_relaunch_reuses_config_with_fresh_name(tmp_path):
     assert new_config.objective.horizons == old_config.objective.horizons
     assert new_config.name != old_config.name
     assert new_config.name.startswith(forms.slug_target(old_config.objective.target_symbol))
+
+
+def test_relaunch_falls_back_to_run_table_for_cli_only_run(tmp_path):
+    """Un run lancé en CLI (`patrick run`) n'écrit jamais de ligne `job` --
+    seule une soumission via le formulaire web le fait (`run_manager.
+    start_run`). `run_manager.get_run_config` (qui ne lit que `job`) renvoie
+    donc `None` pour un tel run, et la relance doit basculer sur
+    `run.config_json` (table remplie par TOUT run, CLI ou web) plutôt que de
+    le traiter comme introuvable -- exactement le scénario que le repli de
+    `relaunch_run` existe pour couvrir.
+
+    On simule ce cas en insérant directement une ligne `run` (via
+    `trackdb.upsert_snapshot`/`create_run`, sans ligne `job` correspondante)
+    plutôt qu'en soumettant via `/runs` -- construire la config passe quand
+    même par `forms.build_config_dict` (le même code que `create_run` en
+    production), juste sans l'aller-retour HTTP. On n'attend pas que le
+    pipeline relancé atteigne `done` (inutile pour vérifier le repli et le
+    round-trip de config) : seule la réponse immédiate de `/relaunch` est
+    vérifiée, comme suggéré en revue -- réel (vraie DB, vraie route, vraie
+    queue), pas mocké."""
+    client = TestClient(app)
+
+    config_dict, errs = forms.build_config_dict(
+        _to_formdata(_form_data(tmp_path)), target_symbol=TARGET_SYMBOL, name="cli_manual_run",
+    )
+    assert not errs, errs
+    config_dict["output"]["dir"] = str(tmp_path / "cli_runs" / "cli_manual_run")
+    config = RunConfig.model_validate(config_dict)
+
+    run_id = "cli_only_run"
+    conn = trackdb.connect()
+    try:
+        trackdb.upsert_snapshot(conn, f"snap_{run_id}", "hash", None, None, None)
+        trackdb.create_run(
+            conn, run_id, TARGET_SYMBOL, config.objective.horizons[0], f"snap_{run_id}",
+            config.model_dump_json(), "cfghash", "sha", 42,
+        )
+        trackdb.finish_run(conn, run_id, status="done", n_trials=3)
+    finally:
+        conn.close()
+
+    # Confirme qu'on exerce bien le repli (pas de ligne `job` pour ce run_id) --
+    # sans quoi le test passerait même si `relaunch_run` ignorait le repli.
+    assert run_manager.get_run_config(run_id) is None
+
+    relaunch_resp = client.post(f"/runs/{run_id}/relaunch", follow_redirects=False)
+    assert relaunch_resp.status_code == 303, relaunch_resp.text
+    new_run_id = relaunch_resp.headers["location"].rsplit("/", 1)[-1]
+    assert new_run_id != run_id
+
+    new_config = run_manager.get_run_config(new_run_id)
+    assert new_config.objective.target_symbol == TARGET_SYMBOL
+    assert new_config.objective.horizons == config.objective.horizons
+    assert new_config.name != config.name
+    assert new_config.name.startswith(forms.slug_target(TARGET_SYMBOL))
 
 
 def test_relaunch_404_on_unknown_run():
