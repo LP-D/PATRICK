@@ -86,6 +86,10 @@ components:
     backgroundColor: "{colors.ink}"
     textColor: "{colors.ink-text}"
     padding: "12px 24px"
+  station-mark:
+    textColor: "{colors.ink-text}"
+    accentColor: "{colors.accent-ink}"
+    size: "1.3em"
   record-plate:
     backgroundColor: "{colors.ink-2}"
     rounded: "6px"
@@ -200,19 +204,34 @@ marque vit dans la précision des détails.
 ### Identité
 
 Le nom **PATRICK** est une contrainte intouchable, quelle que soit l'identité
-visuelle. Il s'écrit en chasse fixe (`.station-id`), à gauche du bandeau.
+visuelle. Il s'écrit en chasse fixe (`.station-name`), à gauche du bandeau.
 
-Un **logo existe** — fourni par l'utilisateur : une marque circulaire, anneau
-et glyphe, accompagnée du nom en petites capitales sérif. Il **n'est pas
-encore posé** dans l'interface, et il ne l'est pas par défaut : ses matières
-d'origine (or, sérif, fond bleu-nuit) appartiennent au monde précédent, pas à
-celui-ci. L'intégrer suppose de décider ce qu'on garde — vraisemblablement la
-marque seule, recolorée sur les jetons du boîtier, le nom restant en chasse
-fixe.
+**La marque** (`.station-mark`) le précède : un anneau qui enferme trois barres
+montantes, la dernière coiffée d'un point d'accent. C'est un relevé, pas un
+emblème — la même lecture que la bande d'enregistrement posée juste dessous :
+des événements ponctuels, de hauteur inégale, le plus récent à droite.
 
-Une version antérieure de ce document interdisait tout logo. C'était une
-consigne de départ, elle a été levée : l'interdit ne s'applique plus, mais
-l'absence actuelle est un état, pas un oubli.
+Elle est **redessinée** d'après le logo fourni par l'utilisateur (marque
+circulaire, anneau et glyphe), pas importée. Ce qui a été gardé : la forme
+circulaire et le glyphe enfermé. Ce qui a été laissé : l'or, le sérif et le
+lettrage en petites capitales, qui appartiennent au monde précédent. Une
+version antérieure de ce document interdisait tout logo ; cette consigne a été
+levée.
+
+Trois règles la tiennent :
+
+- **Un seul lien** porte la marque et le nom. Deux liens voisins vers la même
+  destination seraient deux arrêts de tabulation pour un seul geste ; le SVG
+  est `aria-hidden`, le nom qu'il accompagne étant déjà le nom accessible.
+- **Aucune couleur codée en dur.** L'anneau et les barres prennent
+  `currentColor`, donc `--ink-text` ; la tête reçoit `--accent-ink` par CSS.
+  Une couleur écrite dans le SVG survivrait à un remplacement d'identité et
+  repeindrait l'ancien monde.
+- **Taille en `em`.** À 200 % de zoom texte, une marque en pixels devient une
+  vignette accrochée à un mot.
+
+Le favicon porte la **même géométrie** — seule l'échelle change. Deux dessins
+différents pour un même produit se contrediraient.
 
 ## Colors
 
@@ -517,8 +536,9 @@ Documentés parce qu'ils sont réels, pas corrigés ici :
 - **`sparkline()`** est déclarée dans `_components.html` et jamais appelée.
 - **Aucune capture ne montre une toile de marché avec données** : le réseau
   yfinance est coupé dans l'environnement de construction.
-- **Aucun lien d'évitement** : la première tabulation atterrit sur le nom du
-  produit, pas sur un « aller au contenu ».
-- **Le logo fourni n'est pas intégré** à l'interface (cf. Overview) : il
-  existe, il est enregistré comme acquis, mais aucune surface ne le pose
-  encore.
+- **Aucun lien d'évitement** : la première tabulation atterrit sur la marque et
+  le nom du produit, pas sur un « aller au contenu ».
+- **La marque est une interprétation du logo fourni**, redessinée de mémoire et
+  non tracée sur le fichier d'origine (aucun fichier n'a été transmis, seulement
+  une image). Les proportions de l'anneau et le nombre de barres sont des choix,
+  pas une reprise — à valider ou corriger par l'utilisateur.

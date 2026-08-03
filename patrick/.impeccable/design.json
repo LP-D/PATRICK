@@ -492,6 +492,10 @@
       "scope-line": {
         "html": "<p class=\"scope-line\"><b>CIBLES EXPLOREES</b> <span class=\"scope-value\">1 / 550</span> <span>dont 1 avec au moins un run termine</span></p>",
         "css": ".scope-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;font-family:'Spline Sans Mono',monospace;font-size:.8125rem;color:#626D80}.scope-line b{font-family:Archivo,sans-serif;font-size:.75rem;font-weight:700;letter-spacing:.12em;color:#47536A}.scope-value{color:#0F1626;font-weight:600;font-variant-numeric:tabular-nums}"
+      },
+      "station-mark": {
+        "html": "<a class=\"station-id\" href=\"/\"><svg class=\"station-mark\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"12\" cy=\"12\" r=\"9.25\" fill=\"none\" stroke=\"currentColor\" stroke-opacity=\".6\" stroke-width=\"1.4\"/><g stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" fill=\"none\"><path d=\"M8.2 15.6V14\"/><path d=\"M12 15.6v-3.2\"/><path d=\"M15.8 15.6v-4.4\"/></g><circle class=\"mark-head\" cx=\"15.8\" cy=\"8.8\" r=\"1.9\"/></svg><span class=\"station-name\">PATRICK</span></a>",
+        "css": ".station-id{display:inline-flex;align-items:center;gap:8px;font-family:'Spline Sans Mono',monospace;font-size:1.0625rem;font-weight:600;letter-spacing:.22em;color:#EDF1F7;padding-right:8px}.station-mark{flex:none;width:1.3em;height:1.3em;margin-right:1px}.station-mark .mark-head{fill:#7EA6FF}.station-name::after{content:'';display:block;height:2px;margin-top:3px;background:#7EA6FF;transform:scaleX(0);transform-origin:left;transition:transform 220ms cubic-bezier(.16,1,.3,1)}.station-id:hover .station-name::after{transform:scaleX(1)}"
       }
     },
     "dos": [

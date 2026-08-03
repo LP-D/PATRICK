@@ -56,11 +56,13 @@ Ce qu'un outil voisin ne pourrait pas copier honnêtement : la chaîne de validi
 
 Nom du produit : « PATRICK » — contrainte intouchable, le nom reste quelle que
 soit l'identité visuelle. Il s'écrit en chasse fixe en tête du bandeau
-(`.station-id`), pas en lettrage de marque.
+(`.station-name`), pas en lettrage de marque.
 
 **Un logo existe** (fourni par l'utilisateur : marque circulaire, anneau et
-glyphe, nom en petites capitales sérif). Il n'est pas encore intégré à
-l'interface. Une version antérieure de ce document interdisait tout logo et
+glyphe, nom en petites capitales sérif). Il est désormais intégré, sous forme
+d'une **marque redessinée** (`.station-mark`) qui en garde la forme circulaire
+et le glyphe enfermé, recolorée sur les jetons du boîtier ; le nom reste en
+chasse fixe. Une version antérieure de ce document interdisait tout logo et
 tout monogramme — cette consigne a été levée explicitement ; elle ne doit plus
 être invoquée pour refuser une intégration.
 
