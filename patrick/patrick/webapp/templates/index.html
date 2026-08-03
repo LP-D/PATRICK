@@ -42,14 +42,14 @@
         <fieldset>
             <legend>{{ t('section_run') }}</legend>
             <label>{{ t('field_run_name') }}
-                <input type="text" name="name" value="{{ view.name }}" required>
+                <input type="text" id="run-name-preview" value="{{ view.name }}" readonly>
             </label>
         </fieldset>
 
         <fieldset>
             <legend>{{ t('section_objective') }}</legend>
             <label>{{ t('field_target') }}
-                <select name="target_symbol" id="target_symbol" required>
+                <select name="target_symbols" id="target_symbols" multiple required size="8">
                     {% for group, items in target_groups.items() %}
                     <optgroup label="{{ group_labels.get(group, group) }}">
                         {% for sym, sym_label in items %}
@@ -58,6 +58,7 @@
                     </optgroup>
                     {% endfor %}
                 </select>
+                <p class="hint">{{ t('target_multiselect_hint') }}</p>
             </label>
 
             <label>{{ t('field_horizons') }}

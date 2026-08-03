@@ -53,10 +53,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "load_example_default": {"fr": "— partir des défauts —", "en": "— start from defaults —"},
 
     "section_run": {"fr": "Run", "en": "Run"},
-    "field_run_name": {"fr": "Nom du run", "en": "Run name"},
+    "field_run_name": {"fr": "Nom du run (généré automatiquement)", "en": "Run name (auto-generated)"},
 
     "section_objective": {"fr": "Objectif — que prédire ?", "en": "Objective — what to predict?"},
-    "field_target": {"fr": "Cible", "en": "Target"},
+    "field_target": {"fr": "Cible(s)", "en": "Target(s)"},
+    "target_multiselect_hint": {
+        "fr": "Ctrl/Cmd + clic (ou glisser) pour sélectionner plusieurs cibles — un run est lancé par cible, à la suite.",
+        "en": "Ctrl/Cmd + click (or drag) to pick multiple targets — one run launches per target, in sequence.",
+    },
     "news_recent": {"fr": "Actualités récentes :", "en": "Recent news:"},
     "field_horizons": {"fr": "Horizons (jours, séparés par des virgules)", "en": "Horizons (days, comma-separated)"},
     "field_flat_thr": {"fr": 'Seuil "flat" (mouvement neutre, ex. 0.003 = 0.3%)',
