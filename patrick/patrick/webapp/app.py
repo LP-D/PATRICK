@@ -277,56 +277,6 @@ def run_page(request: Request, run_id: str):
     )
 
 
-@app.get("/runs")
-def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
-                   scheme: str | None = None):
-    """Phase 7.1 (P7.1) -- explorateur de l'historique complet de runs (table
-    `run`), lecture seule -- distinct de la file d'attente en mémoire de
-    `run_manager` (runs terminés/anciens y compris, tout redémarrage
-    confondu)."""
-    conn = trackdb.connect()
-    try:
-        runs = trackhistory.list_runs(conn, target=target, status=status, scheme=scheme)
-        targets = trackhistory.list_distinct_targets(conn)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(
-        request, "runs.html",
-        {"runs": runs, "targets": targets, "filter_target": target or "",
-         "filter_status": status or "", "filter_scheme": scheme or "",
-         **_i18n_context(request)},
-    )
-
-
-@app.get("/targets/{ticker}")
-def target_page(request: Request, ticker: str):
-    """Phase 7.3 (P7.3) -- vue agrégée de tout l'historique de runs d'UNE
-    cible (tous horizons/schémas confondus), y compris la correction FDR
-    resituant sa meilleure p-value DM parmi toutes les cibles testées."""
-    conn = trackdb.connect()
-    try:
-        detail = trackhistory.target_detail(conn, ticker)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(
-        request, "target.html", {"target": ticker, "detail": detail, **_i18n_context(request)},
-    )
-
-
-@app.get("/universe")
-def universe_page(request: Request):
-    """Phase 7.5 (P7.5) -- univers de cibles configurables
-    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, déjà utilisé par le
-    formulaire de lancement), croisé avec l'historique réel de runs -- aucune
-    donnée nouvelle, juste la jointure des deux."""
-    conn = trackdb.connect()
-    try:
-        groups = trackhistory.universe_overview(conn)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(
-        request, "universe.html", {"groups": groups, **_i18n_context(request)},
-    )
 
 
 @app.get("/runs/{run_id}/status")
@@ -367,17 +317,51 @@ def download_artifact(run_id: str, artifact: str):
 
 
 @app.get("/runs")
-def runs_explorer(request: Request):
-    """Explorateur : tous les runs exécutés."""
+def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
+                   scheme: str | None = None):
+    """Phase 7.1 — explorateur de l'historique complet de runs."""
     conn = trackdb.connect()
     try:
-        runs = trackdb.list_all_runs(conn)
+        all_runs = trackdb.list_all_runs(conn)
     finally:
         conn.close()
+
+    # Filtrage côté serveur (scheme) et client (target/status) — cf. critique P2
+    runs = all_runs
+    if target:
+        runs = [r for r in runs if r.get("target") == target]
+    if status:
+        runs = [r for r in runs if r.get("status") == status]
+    if scheme:
+        # Schéma stocké dans config_json — extraction côté Python
+        runs = [r for r in runs if _extract_scheme(r) == scheme]
+
+    # Compter les runs par cible pour le filtre dropdown
+    target_counts = {}
+    for r in all_runs:
+        tgt = r.get("target")
+        if tgt:
+            target_counts[tgt] = target_counts.get(tgt, 0) + 1
+    targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
+
     return templates.TemplateResponse(
         request, "runs.html",
-        {"runs": runs, **_i18n_context(request)},
+        {"runs": runs, "targets": targets, "filter_target": target or "",
+         "filter_status": status or "", "filter_scheme": scheme or "",
+         **_i18n_context(request)},
     )
+
+
+def _extract_scheme(run: dict) -> str:
+    """Extraire le schéma de validation depuis le run (stocké en config_json)."""
+    import json
+    try:
+        if run.get("config_json"):
+            cfg = json.loads(run["config_json"])
+            return cfg.get("validation", {}).get("scheme", "walkforward")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return "walkforward"
 
 
 @app.get("/universe")
@@ -423,7 +407,7 @@ def universe_page(request: Request):
 
 @app.get("/targets/{ticker}")
 def target_page(request: Request, ticker: str):
-    """Agrégation sur une cible."""
+    """Phase 7.3 — vue agrégée de tous les runs d'une cible."""
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
 
@@ -442,23 +426,31 @@ def target_page(request: Request, ticker: str):
     detail = {
         "cumulative_trials": sum(r.get("n_trials") or 0 for r in target_runs),
         "n_runs": len(target_runs),
-        "best_dm_result": None,
+        "runs": target_runs,
+        "target_fdr": None,  # Phase 5+ : PBO/FDR requiert stats.py
+        "fdr_result": {"n_tested": 0, "alpha": 0.10},
+        "pbo_by_horizon": {},  # Phase 5+ : à remplir depuis stats
     }
 
     return templates.TemplateResponse(
         request, "target.html",
-        {"target": ticker, "detail": detail, "pbo_blocks": [], "target_runs": target_runs,
-         **_i18n_context(request)},
+        {"target": ticker, "detail": detail, **_i18n_context(request)},
     )
 
 
 @app.get("/runs/{run_id}/detail")
 def run_detail_page(request: Request, run_id: str):
-    """Détails d'un run."""
-    run = _get_run_or_404(run_id)
+    """Phase 7.2 — page détail lecture seule d'un run (CLI ou web)."""
+    conn = trackdb.connect()
+    try:
+        detail = trackhistory.run_detail(conn, run_id)
+    finally:
+        conn.close()
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"run": run, "run_id": run_id, **_i18n_context(request)},
+        {"detail": detail, **_i18n_context(request)},
     )
 
 

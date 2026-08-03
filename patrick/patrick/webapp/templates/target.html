@@ -3,8 +3,14 @@
 {% block title %}PATRICK — {{ target }}{% endblock %}
 
 {% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <a href="/universe">{{ t('nav_universe') or 'Univers' }}</a>
+    <span aria-current="page">{{ target }}</span>
+</nav>
+
 <h1 class="page-title">{{ target }}</h1>
-<p class="page-subtitle">Vue agrégée de tout l'historique de runs pour cette cible (tous horizons/schémas confondus) — lecture seule.</p>
+<p class="page-subtitle">Vue agrégée de tout l'historique de runs pour cette cible (tous horizons/schémas confondus) — lecture seule. <a href="/runs?target={{ target }}">Voir tous les runs de cette cible</a></p>
 
 {% if detail is none %}
 {{ empty_state("Aucun run pour cette cible.", "Configure et lance un run depuis la page d'accueil pour commencer à bâtir un historique.") }}
@@ -59,7 +65,7 @@
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
 {% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '<span class="na">—</span>' %}
 {% set _ = rows.append([
-    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
+    '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
     r.horizon ~ 'j',
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),

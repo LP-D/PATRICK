@@ -3,7 +3,12 @@
 {% block title %}PATRICK — Univers de cibles{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Univers de cibles</h1>
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_universe') or 'Univers' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_universe') or 'Univers de cibles' }}</h1>
 <p class="page-subtitle">Toutes les cibles configurables (mêmes groupes que le formulaire de lancement, <code>config/defaults.py::DEFAULT_TARGET_GROUPS</code>), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.</p>
 
 {# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici
