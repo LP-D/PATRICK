@@ -31,12 +31,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0B1220">
     <title>{% block title %}PATRICK{% endblock %}</title>
-    {# Icône d'onglet : la bande d'enregistrement elle-même, réduite à trois
-       marques sur le boîtier. Ce n'est ni un logo ni un monogramme -- aucune
-       lettre, aucune forme de marque : c'est le tracé du produit, la seule
-       chose qui reste lisible à 16px. En SVG en ligne, donc aucune requête
-       supplémentaire et aucun 404 d'onglet. #}
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1220'/%3E%3Cpath d='M6 24h20' stroke='%239FAEC6' stroke-opacity='.45' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M11 24V12' stroke='%2335C08A' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M17 24v-6' stroke='%237EA6FF' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M23 24V8' stroke='%2335C08A' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+    {# Icône d'onglet : la MÊME marque que le bandeau (anneau, trois barres
+       montantes, point d'accent en tête de la dernière), posée sur le boîtier.
+       Deux dessins différents pour un même produit se contrediraient : l'onglet
+       et l'en-tête portent la même géométrie, seule l'échelle change. En SVG en
+       ligne, donc aucune requête supplémentaire et aucun 404 d'onglet. #}
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1220'/%3E%3Ccircle cx='16' cy='16' r='12.3' fill='none' stroke='%23EDF1F7' stroke-opacity='.6' stroke-width='1.9'/%3E%3Cg stroke='%23EDF1F7' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10.9 20.8v-2.1'/%3E%3Cpath d='M16 20.8v-4.3'/%3E%3Cpath d='M21.1 20.8v-5.9'/%3E%3C/g%3E%3Ccircle cx='21.1' cy='11.7' r='2.5' fill='%237EA6FF'/%3E%3C/svg%3E">
     <link rel="preload" href="/static/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/static/fonts/splinesansmono-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/static/tokens.css">
@@ -76,11 +76,40 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     </script>
 </head>
 <body>
-    {# Le boîtier de la station : le nom, où aller, la langue, la lumière.
-       Ce n'est pas une barre de marque -- il n'y a ni logo ni monogramme, le
-       produit s'identifie par son nom en chasse fixe. #}
+    {# Le boîtier de la station : la marque, le nom, où aller, la langue, la
+       lumière.
+
+       LA MARQUE. Un anneau qui enferme trois barres montantes, la dernière
+       coiffée d'un point d'accent. C'est un relevé, pas un emblème : la même
+       lecture que la bande d'enregistrement juste dessous -- des événements
+       ponctuels, de hauteur inégale, le plus récent à droite.
+
+       Elle est REDESSINÉE d'après le logo fourni (anneau + glyphe circulaire),
+       pas importée : le fichier d'origine porte un or et un sérif qui
+       appartiennent au monde précédent. Ici l'anneau et les barres prennent
+       `currentColor` -- donc `--ink-text`, le texte du boîtier -- et le seul
+       point coloré est `--accent-ink`, invariant dans les deux thèmes. Aucune
+       couleur codée en dur, aucune requête réseau : SVG en ligne.
+
+       Un SEUL lien porte la marque ET le nom : deux liens voisins vers la même
+       destination sont deux arrêts de tabulation pour un seul geste. Le SVG est
+       `aria-hidden` parce que le nom qu'il accompagne est déjà le nom
+       accessible du lien -- l'annoncer deux fois serait du bruit. #}
     <header class="station">
-        <a class="station-id" href="/">PATRICK</a>
+        <a class="station-id" href="/">
+            <svg class="station-mark" viewBox="0 0 24 24" width="22" height="22"
+                 aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="9.25" fill="none"
+                        stroke="currentColor" stroke-opacity=".6" stroke-width="1.4"/>
+                <g stroke="currentColor" stroke-width="2.25" stroke-linecap="round" fill="none">
+                    <path d="M8.2 15.6V14"/>
+                    <path d="M12 15.6v-3.2"/>
+                    <path d="M15.8 15.6v-4.4"/>
+                </g>
+                <circle class="mark-head" cx="15.8" cy="8.8" r="1.9"/>
+            </svg>
+            <span class="station-name">PATRICK</span>
+        </a>
         <nav class="station-nav">
             <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Poste' }}</a>
             <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>

@@ -114,9 +114,13 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
        conteneur de défilement, donc le `position: sticky` du bandeau tient. */
     overflow-x: clip;
 }
-/* Le produit s'identifie par son nom en chasse fixe — aucun logo, aucun
-   monogramme : c'est un engagement de marque, pas un manque à combler. */
+/* L'identité du produit tient en deux pièces dans un seul lien : la marque
+   (SVG en ligne, cf. base.html) puis le nom en chasse fixe. La marque ajoute la
+   reconnaissance, le nom reste ce qui se lit — elle ne le remplace pas. */
 .station-id {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
     font-family: var(--mono);
     font-size: var(--t-lead);
     font-weight: 600;
@@ -124,9 +128,26 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--ink-text);
     padding-right: var(--s2);
 }
+.station-mark {
+    flex: none;
+    /* En `em`, pas en pixels : à 200 % de zoom texte le nom passait de 17 à
+       34px et la marque restait à 22 — elle devenait une vignette accrochée à
+       un mot. 1.3em = 22px à la taille nominale. */
+    width: 1.3em;
+    height: 1.3em;
+    /* Le mono du nom porte 0.22em de chasse : sans ce recul, la marque colle à
+       la lettre P alors que le nom, lui, respire. */
+    margin-right: 1px;
+}
+/* La tête de la dernière barre — le seul point coloré de la marque. Posée en
+   CSS et non en attribut : une couleur codée en dur dans le SVG survivrait à un
+   remplacement d'identité et repeindrait l'ancien monde. */
+.station-mark .mark-head { fill: var(--accent-ink); }
 .station-id:hover { color: var(--ink-text); text-decoration: none; }
-.station-id:hover::after { transform: scaleX(1); }
-.station-id::after {
+.station-id:hover .station-name::after { transform: scaleX(1); }
+/* Le trait de survol souligne le NOM, pas le lien entier : porté par
+   `.station-id`, il passait sous la marque et la barrait. */
+.station-name::after {
     content: "";
     display: block;
     height: 2px;
