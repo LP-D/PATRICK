@@ -176,8 +176,13 @@ def _checked(form, name: str) -> bool:
     return form.get(name) in ("on", "true", "1")
 
 
-def build_config_dict(form) -> tuple[dict, list[str]]:
-    """`form` est une `starlette.datastructures.FormData`. Renvoie
+def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, list[str]]:
+    """`form` est une `starlette.datastructures.FormData`. `target_symbol`/
+    `name` sont passés explicitement par l'appelant (`app.py`, une fois par
+    cible d'une soumission) plutôt que lus dans `form` : un lancement peut
+    soumettre plusieurs cibles à la fois (`<select multiple>`), et le nom
+    est toujours dérivé de la cible + un numéro de séquence
+    (`run_manager.next_run_name`), jamais saisi à la main. Renvoie
     (config_dict, erreurs) — `config_dict` reste utilisable même avec des
     erreurs (pour repeupler le formulaire), mais ne doit pas être passé à
     `RunConfig.model_validate` si `erreurs` est non vide."""
@@ -188,7 +193,6 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
             errors.append(f"« {label} » ne peut pas être vide.")
         return lst
 
-    name = (form.get("name") or "").strip() or "mon_run"
     horizons = _require_non_empty(_int_list(form.get("horizons", "")), "Horizons")
     regimes = _require_non_empty(_split_list(form.get("regimes", "GLOBAL")), "Régimes")
     families = _require_non_empty(form.getlist("families"), "Familles de features")
@@ -200,7 +204,6 @@ def build_config_dict(form) -> tuple[dict, list[str]]:
     sampler_candidates = _require_non_empty(form.getlist("sampler_candidates"), "Samplers")
     algos = _require_non_empty(form.getlist("algos"), "Algorithmes")
 
-    target_symbol = (form.get("target_symbol") or "").strip()
     if target_symbol not in TARGET_SOURCE_BY_SYMBOL:
         errors.append("« Que prédire » : choix invalide.")
     target_source = TARGET_SOURCE_BY_SYMBOL.get(target_symbol, "yfinance")
