@@ -188,28 +188,53 @@ async def create_run(request: Request):
     """Répond en JSON (consommé par `app.js` en AJAX, sans rechargement de
     page) : un run est démarré immédiatement s'il n'y en a pas d'actif, sinon
     mis en file d'attente — jamais rejeté, `start_run` ne lève plus d'erreur
-    dans ce cas (cf. `run_manager.py`)."""
-    form = await request.form()
-    config_dict, errors = forms.build_config_dict(form)
+    dans ce cas (cf. `run_manager.py`).
 
-    if not errors:
+    Une soumission peut cibler plusieurs symboles à la fois (`<select
+    multiple name="target_symbols">`) : un job est enfilé par cible, avec un
+    nom/dossier de sortie distincts (`run_manager.next_run_name`) — la queue
+    FIFO existante les enchaîne, aucun nouvel orchestrateur. Si une seule
+    config est invalide parmi les cibles soumises, rien n'est enqueue."""
+    form = await request.form()
+    targets = form.getlist("target_symbols")
+    if not targets:
+        return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
+
+    raw_output_dir = (form.get("output_dir") or "").strip()
+    errors: list[str] = []
+    configs: list[RunConfig] = []
+    for sym in targets:
+        name = run_manager.next_run_name(sym)
+        config_dict, errs = forms.build_config_dict(form, target_symbol=sym, name=name)
+        if errs:
+            errors.extend(f"{sym} : {e}" for e in errs)
+            continue
+        # Un dossier de sortie saisi à la main s'applique tel quel à une
+        # cible unique ; pour un batch, il est partagé par le formulaire --
+        # sans ce garde-fou, N cibles avec le même `output_dir` explicite
+        # écraseraient les artefacts les unes des autres.
+        if len(targets) > 1 and raw_output_dir:
+            config_dict["output"]["dir"] = f"{raw_output_dir}/{name}"
         try:
-            config = RunConfig.model_validate(config_dict)
+            configs.append(RunConfig.model_validate(config_dict))
         except ValidationError as exc:
-            errors = [f"{'.'.join(str(p) for p in e['loc'])} : {e['msg']}" for e in exc.errors()]
-            config = None
-    else:
-        config = None
+            errors.extend(
+                f"{sym} : {'.'.join(str(p) for p in e['loc'])} : {e['msg']}" for e in exc.errors()
+            )
 
     if errors:
         return JSONResponse({"errors": errors}, status_code=400)
 
-    job_view = run_manager.start_run(config)
-    return JSONResponse({
-        "run_id": job_view["id"],
-        "status": job_view["status"],
-        "queue_position": job_view["queue_position"],
-    })
+    runs = []
+    for config in configs:
+        job_view = run_manager.start_run(config)
+        runs.append({
+            "run_id": job_view["id"],
+            "status": job_view["status"],
+            "queue_position": job_view["queue_position"],
+            "target": config.objective.target_symbol,
+        })
+    return JSONResponse({"runs": runs})
 
 
 @app.get("/api/run-state")

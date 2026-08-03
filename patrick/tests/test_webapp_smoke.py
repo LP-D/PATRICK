@@ -22,6 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from patrick.data.store import DataStore
+from patrick.webapp import forms, run_manager
 from patrick.webapp.app import app
 
 # Rapport de correction, D1 : les deux tests lancent un run pipeline complet
@@ -55,8 +56,7 @@ def _isolated_env(tmp_path, monkeypatch):
 
 def _form_data(tmp_path) -> dict:
     return {
-        "name": "smoke_web_test",
-        "target_symbol": TARGET_SYMBOL,
+        "target_symbols": [TARGET_SYMBOL],
         "horizons": "3,5",
         "flat_thr": "0.003",
         "regimes": "GLOBAL",
@@ -104,10 +104,12 @@ def test_run_via_web_form_end_to_end(tmp_path):
     resp = client.post("/runs", data=_form_data(tmp_path))
     assert resp.status_code == 200, resp.text
     body = resp.json()
+    assert len(body["runs"]) == 1, body
+    run = body["runs"][0]
     # `start_run` enfile désormais toujours en base ('queued') : la transition
     # vers 'running' est décidée par le worker séparé, jamais immédiate.
-    assert body["status"] == "queued", body
-    run_id = body["run_id"]
+    assert run["status"] == "queued", run
+    run_id = run["run_id"]
 
     status = _wait_for_status(client, run_id, not_in={"queued", "running"}, deadline_s=240)
     assert status["status"] == "done", status
@@ -129,19 +131,17 @@ def test_second_run_queues_then_auto_starts(tmp_path):
     client = TestClient(app)
 
     form_a = _form_data(tmp_path)
-    form_a["name"] = "run_a"
     form_a["output_dir"] = str(tmp_path / "runs_a")
     resp_a = client.post("/runs", data=form_a)
     assert resp_a.status_code == 200, resp_a.text
-    run_a = resp_a.json()
+    run_a = resp_a.json()["runs"][0]
     assert run_a["status"] == "queued"
 
     form_b = _form_data(tmp_path)
-    form_b["name"] = "run_b"
     form_b["output_dir"] = str(tmp_path / "runs_b")
     resp_b = client.post("/runs", data=form_b)
     assert resp_b.status_code == 200, resp_b.text
-    run_b = resp_b.json()
+    run_b = resp_b.json()["runs"][0]
     assert run_b["status"] == "queued"
 
     # run_a doit être réclamé par le worker (unique) avant run_b : file FIFO.
@@ -154,3 +154,30 @@ def test_second_run_queues_then_auto_starts(tmp_path):
 
     b_status = _wait_for_status(client, run_b["run_id"], not_in={"queued"}, deadline_s=180)
     assert b_status["status"] in ("running", "done"), b_status
+
+
+def test_batch_submit_queues_one_job_per_target(tmp_path):
+    """Sélectionner plusieurs cibles dans le formulaire enfile un job par
+    cible, chacun avec un nom/dossier de sortie distinct -- pas de nouvel
+    orchestrateur, juste plusieurs jobs pour la même queue FIFO."""
+    DataStore(root=str(tmp_path / "store")).save("raw_^AORD", _synthetic_raw(seed=1))
+    client = TestClient(app)
+
+    form = _form_data(tmp_path)
+    form["target_symbols"] = [TARGET_SYMBOL, "^AORD"]
+    resp = client.post("/runs", data=form)
+    assert resp.status_code == 200, resp.text
+    runs = resp.json()["runs"]
+
+    assert len(runs) == 2
+    assert {r["target"] for r in runs} == {TARGET_SYMBOL, "^AORD"}
+    assert len({r["run_id"] for r in runs}) == 2
+
+    # Chaque job existe bien côté serveur, dans un état actif légitime, avec
+    # un nom distinct dérivé de SA cible -- pas seulement "la réponse HTTP
+    # avait 2 entrées" (assertion trop faible pour détecter un job perdu ou
+    # mal routé).
+    for r in runs:
+        status = client.get(f"/runs/{r['run_id']}/status").json()
+        assert status["status"] in ("queued", "running"), status
+        assert status["name"].startswith(forms.slug_target(r["target"])), status
