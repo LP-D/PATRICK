@@ -366,6 +366,102 @@ def download_artifact(run_id: str, artifact: str):
     return FileResponse(path, filename=os.path.basename(path))
 
 
+@app.get("/runs")
+def runs_explorer(request: Request):
+    """Explorateur : tous les runs exécutés."""
+    conn = trackdb.connect()
+    try:
+        runs = trackdb.list_all_runs(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "runs.html",
+        {"runs": runs, **_i18n_context(request)},
+    )
+
+
+@app.get("/universe")
+def universe_page(request: Request):
+    """Univers de cibles croisé avec historique de runs."""
+    from patrick.config import defaults
+    symbol_info = {s: (label, src) for s, label, src in defaults.DEFAULT_TARGET_CHOICES}
+    conn = trackdb.connect()
+    try:
+        symbol_stats = {s: {"n_runs": 0, "n_done": 0, "last_started_at": None}
+                       for targets in defaults.DEFAULT_TARGET_GROUPS.values()
+                       for s in targets}
+        for run in trackdb.list_all_runs(conn):
+            if run["target"] in symbol_stats:
+                symbol_stats[run["target"]]["n_runs"] += 1
+                if run["status"] == "done":
+                    symbol_stats[run["target"]]["n_done"] += 1
+                if not symbol_stats[run["target"]]["last_started_at"] or run["started_at"] > symbol_stats[run["target"]]["last_started_at"]:
+                    symbol_stats[run["target"]]["last_started_at"] = run["started_at"]
+    finally:
+        conn.close()
+
+    t = i18n.translator(i18n.get_lang(request))
+    groups = []
+    for group_name, group_targets in defaults.DEFAULT_TARGET_GROUPS.items():
+        symbols = []
+        for target in group_targets:
+            if target in symbol_info:
+                label, source = symbol_info[target]
+                stats = symbol_stats.get(target, {"n_runs": 0, "n_done": 0, "last_started_at": None})
+                symbols.append({"symbol": target, "label": label, "source": source,
+                               "n_runs": stats["n_runs"], "n_done": stats["n_done"],
+                               "last_started_at": stats["last_started_at"]})
+        if symbols:
+            translated_group = t(i18n.TARGET_GROUP_LABEL_KEYS.get(group_name, f"group_{group_name}"))
+            groups.append({"group": translated_group, "symbols": symbols})
+
+    return templates.TemplateResponse(
+        request, "universe.html",
+        {"groups": groups, **_i18n_context(request)},
+    )
+
+
+@app.get("/targets/{ticker}")
+def target_page(request: Request, ticker: str):
+    """Agrégation sur une cible."""
+    if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+
+    conn = trackdb.connect()
+    try:
+        target_runs = [r for r in trackdb.list_all_runs(conn) if r["target"] == ticker]
+    finally:
+        conn.close()
+
+    if not target_runs:
+        return templates.TemplateResponse(
+            request, "target.html",
+            {"target": ticker, "detail": None, **_i18n_context(request)},
+        )
+
+    detail = {
+        "cumulative_trials": sum(r.get("n_trials") or 0 for r in target_runs),
+        "n_runs": len(target_runs),
+        "best_dm_result": None,
+    }
+
+    return templates.TemplateResponse(
+        request, "target.html",
+        {"target": ticker, "detail": detail, "pbo_blocks": [], "target_runs": target_runs,
+         **_i18n_context(request)},
+    )
+
+
+@app.get("/runs/{run_id}/detail")
+def run_detail_page(request: Request, run_id: str):
+    """Détails d'un run."""
+    run = _get_run_or_404(run_id)
+    return templates.TemplateResponse(
+        request, "run_detail.html",
+        {"run": run, "run_id": run_id, **_i18n_context(request)},
+    )
+
+
 @app.get("/simulate")
 def simulate_page(request: Request, run_id: str | None = None):
     """Phase 4 -- vue dédiée (pas la grille 2x2 du dashboard : contenu de

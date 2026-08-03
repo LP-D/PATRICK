@@ -231,6 +231,27 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
+def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
+    """Tous les runs, les plus récents d'abord — pour surfaces exploratoires (Phase 5)."""
+    rows = conn.execute(
+        "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials "
+        "FROM run ORDER BY started_at DESC",
+    ).fetchall()
+    out = []
+    for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
+        name = None
+        try:
+            name = json.loads(config_json).get("name") if config_json else None
+        except (TypeError, ValueError, AttributeError):
+            pass
+        out.append({
+            "run_id": run_id, "target": target, "horizon": horizon,
+            "status": status, "started_at": started_at, "finished_at": finished_at,
+            "n_trials": n_trials, "name": name,
+        })
+    return out
+
+
 def list_done_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
     """Runs terminés (`status='done'`), les plus récents d'abord -- alimente le
     sélecteur de run du simulateur (Phase 4.7)."""
