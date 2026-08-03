@@ -542,6 +542,8 @@ button.primary:disabled {
     cursor: not-allowed;
 }
 
+.inline-form { display: inline; }
+
 .run-form label {
     display: block;
     margin-bottom: var(--s4);
