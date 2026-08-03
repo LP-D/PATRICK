@@ -1486,6 +1486,10 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
 #results-panel.results-arriving { animation: patrick-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes patrick-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
+/* Layout improvements — Phase 5 layout */
+.page-title { margin-top: 2rem; margin-bottom: 0.5rem; }
+.page-subtitle { margin-top: 0.5rem; margin-bottom: 2rem; line-height: 1.6; }
+
 /* Navigation breadcrumbs — Phase 5 hardening */
 nav.breadcrumb {
     display: flex;
@@ -1493,7 +1497,9 @@ nav.breadcrumb {
     gap: 0.5rem;
     font-size: 0.875rem;
     margin-bottom: 1.5rem;
-    padding: 0;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color, #E5E7EB);
     color: var(--ink-secondary, #6B7280);
 }
 nav.breadcrumb a { color: inherit; text-decoration: none; border-bottom: 1px solid transparent; }
@@ -1501,8 +1507,28 @@ nav.breadcrumb a:hover { border-bottom-color: var(--ink-text, #1F2937); }
 nav.breadcrumb span[aria-current="page"] { font-weight: 500; color: var(--ink-text, #1F2937); }
 nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: 0.5rem; }
 
+/* Filter bar styling — Phase 5 layout */
+.filter-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--bg-secondary, #F9FAFB);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+.filter-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
+.filter-bar select { padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color, #D1D5DB); border-radius: 4px; }
+@media (max-width: 640px) { .filter-bar { flex-direction: column; } }
+
 /* Empty states — Phase 5 hardening */
 .empty-state-title { font-weight: 500; margin: 0 0 0.5rem 0; color: var(--ink-text, #1F2937); }
 .empty-state-hint { margin: 0; color: var(--ink-secondary, #6B7280); line-height: 1.5; }
 .empty-state-hint a { color: var(--accent-ink, #7EA6FF); text-decoration: none; border-bottom: 1px solid currentColor; }
 .empty-state-hint a:hover { text-decoration: underline; }
+
+/* Group separation — Phase 5 layout */
+.group-block { margin-bottom: 3rem; }
+.group-block:not(:last-child) { padding-bottom: 2rem; border-bottom: 1px solid var(--border-color, #E5E7EB); }
+.group-title { font-size: 1.125rem; font-weight: 600; margin: 0 0 1rem 0; }
+.group-title .hint { font-weight: 400; font-size: 0.875rem; color: var(--ink-secondary, #6B7280); }
