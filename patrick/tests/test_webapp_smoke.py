@@ -159,12 +159,20 @@ def test_second_run_queues_then_auto_starts(tmp_path):
 def test_batch_submit_queues_one_job_per_target(tmp_path):
     """Sélectionner plusieurs cibles dans le formulaire enfile un job par
     cible, chacun avec un nom/dossier de sortie distinct -- pas de nouvel
-    orchestrateur, juste plusieurs jobs pour la même queue FIFO."""
+    orchestrateur, juste plusieurs jobs pour la même queue FIFO.
+
+    Soumet aussi un `output_dir` explicite : c'est la seule combinaison qui
+    exerce le garde-fou anti-collision de `create_run`
+    (`len(targets) > 1 and raw_output_dir`) -- sans elle, un dossier partagé
+    entre plusieurs cibles écraserait leurs artefacts les uns les autres, et
+    rien ne le détecterait."""
     DataStore(root=str(tmp_path / "store")).save("raw_^AORD", _synthetic_raw(seed=1))
     client = TestClient(app)
 
+    base_output_dir = str(tmp_path / "shared_runs")
     form = _form_data(tmp_path)
     form["target_symbols"] = [TARGET_SYMBOL, "^AORD"]
+    form["output_dir"] = base_output_dir
     resp = client.post("/runs", data=form)
     assert resp.status_code == 200, resp.text
     runs = resp.json()["runs"]
@@ -177,7 +185,19 @@ def test_batch_submit_queues_one_job_per_target(tmp_path):
     # un nom distinct dérivé de SA cible -- pas seulement "la réponse HTTP
     # avait 2 entrées" (assertion trop faible pour détecter un job perdu ou
     # mal routé).
+    output_dirs = set()
     for r in runs:
         status = client.get(f"/runs/{r['run_id']}/status").json()
         assert status["status"] in ("queued", "running"), status
         assert status["name"].startswith(forms.slug_target(r["target"])), status
+
+        # Le dossier de sortie réellement persisté (config du job, pas
+        # simplement la réponse HTTP) doit être suffixé par le nom généré de
+        # CE job, sous le dossier partagé soumis dans le formulaire -- et
+        # donc distinct de celui de l'autre cible.
+        config = run_manager.get_run_config(r["run_id"])
+        expected_dir = f"{base_output_dir}/{status['name']}"
+        assert config.output.dir == expected_dir, config.output.dir
+        output_dirs.add(config.output.dir)
+
+    assert len(output_dirs) == 2
