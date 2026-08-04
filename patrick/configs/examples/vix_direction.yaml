@@ -50,6 +50,7 @@ validation:
   n_wf_folds: 5
   min_train_frac: 0.40
   purge: false
+  holdout_months: 15  # Terminal holdout window (months, 12-24 range)
 
 selection:
   method: shap

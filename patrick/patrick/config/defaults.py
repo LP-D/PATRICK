@@ -21,9 +21,8 @@ DEFAULT_SEED = 42
 
 # Phase 2.1 (validité statistique) : derniers mois réservés en holdout terminal,
 # jamais vus par la sélection de features/le tuning/le tri du leaderboard. Le plan
-# fourni laisse un intervalle (12-18 mois) sans trancher lequel ; 15 = milieu de
-# l'intervalle, aucun argument fort pour l'un ou l'autre bord. 0 désactive le
-# holdout (utile pour les tests synthétiques à faible historique).
+# fourni laisse un intervalle (12-24 mois) ; 15 = milieu raisonnable. Configurable
+# via validation.holdout_months dans le YAML (range: 12-24, défaut: 15).
 DEFAULT_HOLDOUT_MONTHS = 15
 
 # Optuna fait partie de la boucle par défaut (demande explicite) : sélectionner le
