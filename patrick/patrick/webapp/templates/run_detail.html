@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
+
+{% block session_context %}
+{% set r = detail.run %}
+<div class="session-context">
+    <span><b>cible</b> {{ r.target }}/{{ r.horizon }}j</span>
+    <span><b>snapshot</b> {{ r.snapshot_id or '—' }}</span>
+    <span><b>config</b> {{ r.config_hash or '—' }}</span>
+    <span><b>git</b> {{ r.git_sha or '—' }}</span>
+    <span><b>seed</b> {{ r.seed if r.seed is not none else '—' }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set run = detail.run %}
+{% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
+<h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
+<p class="page-subtitle">
+    <a href="/targets/{{ run.target }}">{{ run.target }}</a> · horizon {{ run.horizon }}j ·
+    {{ status_badge('CPCV' if detail.is_cpcv else 'walk-forward', 'neutral') }}
+    {{ status_badge(run.status, state) }} ·
+    lancé le {{ run.started_at or '—' }}{% if run.finished_at %}, terminé le {{ run.finished_at }}{% endif %}
+</p>
+<form method="post" action="/runs/{{ run.run_id }}/relaunch" class="inline-form">
+    <button type="submit" class="primary">Relancer (config complète, tous horizons)</button>
+</form>
+
+{# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
+   page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement
+   d'actif) faisait mentir le style sur le comportement — aucun état n'aurait
+   jamais posé l'onglet actif. C'est un index de sections, il s'écrit comme
+   tel, comme la table des matières en tête d'un listing. #}
+<nav class="section-index" aria-label="Sections de la page">
+    <span class="section-index-label">Sections</span>
+    <a href="#resume">Résumé</a>
+    <a href="#essais">Essais</a>
+    <a href="#config">Configuration</a>
+</nav>
+
+<section id="resume" class="card">
+<h2>Résumé</h2>
+
+<div class="metric-grid">
+{{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
+          "Toutes les configurations testées sur cette cible/horizon, tout run confondu.", "neutral") }}
+
+{# Le point PBO n'est affiché QUE si le diagnostic de fiabilité l'accepte
+   (C5) : sous MIN_BLOCKS, `pbo_reliability` refuse explicitement, et son
+   message dit « PBO non calculé ». Afficher quand même la valeur ponctuelle
+   à côté de ce message se contredisait — un PBO à 4 blocs n'est pas
+   interprétable, c'est précisément ce que C5 a établi. #}
+{% set rel = detail.pbo.reliability %}
+{% if rel and rel.ok %}
+{{ metric("PBO (" ~ detail.pbo_label ~ ")", "%.3f" | format(detail.pbo.pbo),
+          "IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations),
+          "ok") }}
+{% else %}
+{# La justification complète du refus (C5) fait ~500 caractères : dans une
+   colonne de mesure elle écrase toute la rangée. Elle part donc en NOTE sous
+   le bloc, comme une note de table économétrique -- rien n'est masqué, tout
+   est déplacé là où ça se lit. #}
+{% set refus = (rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.") %}
+{% set refus_head = refus.split('. ')[0] %}
+{% set refus_rest = refus[refus_head|length + 2:] if '. ' in refus else '' %}
+{{ metric("PBO (" ~ detail.pbo_label ~ ")", "—", refus_head ~ (" †" if refus_rest else ""), "disabled") }}
+{% endif %}
+
+{% if detail.is_cpcv %}
+{{ metric("Diebold-Mariano", "non calculé", "Sans objet en mode CPCV (repose sur la topologie « train=préfixe » du walk-forward).", "disabled") }}
+{% elif detail.dm_result %}
+{{ metric("Diebold-Mariano (vs " ~ detail.dm_result.baseline ~ ")", "p = %.4f" | format(detail.dm_result.p_value),
+          "significatif (p < 0.05)" if detail.dm_result.p_value < 0.05 else "non significatif (p ≥ 0.05)",
+          "ok" if detail.dm_result.p_value < 0.05 else "warning") }}
+{% else %}
+{{ metric("Diebold-Mariano", "—", "Non calculé (aucun trial gagnant n'a produit ce résultat pour ce run).", "disabled") }}
+{% endif %}
+
+{% if detail.is_cpcv %}
+{{ metric("Holdout terminal", "non calculé", "Sans objet en mode CPCV (toutes les combinaisons participent au scan).", "disabled") }}
+{% elif detail.holdout_f1_dir is not none %}
+{{ metric("Holdout terminal (F1_dir)", "%.4f" | format(detail.holdout_f1_dir), "Essai gagnant, jamais vu pendant la sélection.", "ok") }}
+{% else %}
+{{ metric("Holdout terminal", "—", "Non calculé pour ce run.", "disabled") }}
+{% endif %}
+
+{% if detail.target_fdr %}
+{{ metric("Correction FDR (cette cible)", "p ajustée = %.4f" | format(detail.target_fdr.adjusted_p_value),
+          "rang " ~ detail.target_fdr.rank ~ "/" ~ detail.fdr_result.n_tested ~ " cibles testées (BH, α=" ~ detail.fdr_result.alpha ~ ") — " ~
+          ("significatif" if detail.target_fdr.significant else "non significatif"),
+          "ok" if detail.target_fdr.significant else "warning") }}
+{% else %}
+{{ metric("Correction FDR (cette cible)", "—", "Pas de résultat Diebold-Mariano à situer parmi les autres cibles.", "disabled") }}
+{% endif %}
+
+{% if detail.holdout_diag.n_trials >= 3 %}
+{{ metric("Corrélation test/holdout (Spearman, grille complète)", "ρ = %.3f" | format(detail.holdout_diag.rho),
+          "p = %.4f, n = %d essais — diagnostic lecture seule (n'influence jamais une sélection)." | format(detail.holdout_diag.p_value, detail.holdout_diag.n_trials),
+          "neutral") }}
+{% else %}
+{{ metric("Corrélation test/holdout", "—", "Non calculable (n = " ~ detail.holdout_diag.n_trials ~ " essais avec test+holdout, minimum 3).", "disabled") }}
+{% endif %}
+</div>
+{% if refus_rest is defined and refus_rest %}
+<p class="block-note"><span class="block-note-marker">†</span> {{ refus_rest }}</p>
+{% endif %}
+</section>
+
+{# Panneau frère, pas imbriqué : un panneau DANS un panneau ne dit rien de plus
+   que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}
+<section class="card">
+<h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>
+{% if detail.data_quality_enabled %}
+<p><strong>Portes de qualité de données</strong> : {{ status_badge('actives', 'ok') }}
+   {% if detail.quality_issues %} — {{ detail.quality_issues | length }} série(s) exclue(s) de l'univers de ce snapshot.{% else %} — aucune exclusion sur ce snapshot.{% endif %}</p>
+{% else %}
+<p><strong>Portes de qualité de données</strong> : {{ status_badge('désactivées pour ce run', 'disabled') }}</p>
+{% endif %}
+
+{% if not detail.stability_enabled %}
+<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('désactivée pour ce run', 'disabled') }}</p>
+{% elif detail.feature_stability is none %}
+<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('non calculée', 'disabled') }} (aucune config évaluée sur ≥ 2 folds pour cet horizon).</p>
+{% else %}
+{% set mj = detail.feature_stability.mean_jaccard %}
+<p><strong>Stabilité de la sélection de features</strong> (Jaccard moyen, {{ detail.feature_stability.n_folds }} folds) :
+   {% if mj == mj %}
+   {{ status_badge('%.3f' | format(mj), 'ok' if mj >= detail.min_mean_jaccard_warning else 'warning') }}
+   {% if mj < detail.min_mean_jaccard_warning %}<br><span class="hint">Sous le seuil ({{ detail.min_mean_jaccard_warning }}) — sélection instable, signal non démontré reproductible.</span>{% endif %}
+   {% else %}
+   {{ status_badge('non calculable (< 2 folds)', 'disabled') }}
+   {% endif %}
+</p>
+{% endif %}
+</section>
+
+<section id="essais" class="card">
+<h2>Essais (table <code>trial</code>)</h2>
+{% set rows = [] %}
+{% set row_classes = [] %}
+{% for t in detail.trials %}
+{% if detail.is_cpcv %}
+{% set dist = detail.path_distributions.get(t.trial_id) %}
+{% set perf = ("médiane=%.4f [%.4f, %.4f] (std=%.4f, %d chemins)" | format(dist.median, dist.q05, dist.q95, dist.std, dist.n_paths)) if dist and dist.n_paths else '—' %}
+{% else %}
+{% set perf = ("%.4f" | format(t.test_f1_dir)) if t.test_f1_dir is not none else '<span class="na">—</span>' %}
+{% endif %}
+{% set _ = rows.append([
+    t.trial_id, t.regime, t.algo, t.sampler, t.n_features, t.selector, perf,
+    ('meilleur' if t.is_best else ''),
+]) %}
+{% set _ = row_classes.append('best' if t.is_best else '') %}
+{% endfor %}
+{{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows,
+              row_classes=row_classes, num_cols=[0, 4, 6],
+              footer=(detail.trials | length) ~ " essai(s) pour CE run · " ~ detail.cumulative_trials
+                     ~ " cumulés sur la cible/horizon — c'est le second nombre qui doit servir à lire la ligne « meilleur », "
+                     ~ ("médiane et intervalle inter-chemins donnés par ligne (CPCV)." if detail.is_cpcv
+                        else "la performance affichée est une moyenne de folds sans intervalle (walk-forward).")) }}
+
+<h2>Baselines systématiques</h2>
+{% set brows = [] %}
+{% for b in detail.baselines %}
+{% set _ = brows.append([b.baseline, b.metrics.items() | map('join', '=') | join(', ')]) %}
+{% endfor %}
+{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.",
+              footer=(detail.baselines | length) ~ " baseline(s) · même découpage, mêmes folds que les essais ci-dessus — un modèle qui ne les bat pas n'a rien démontré.") }}
+</section>
+
+<section id="config" class="card">
+<h2>Configuration</h2>
+{# La config complète fait plusieurs milliers de lignes (l'univers de tickers
+   y est développé) : laissée libre, elle occupait 12 000 px et devenait
+   l'essentiel de la page. Elle reste ENTIÈRE et copiable -- rien n'est
+   tronqué -- mais défile dans son propre conteneur, comme les tables. #}
+<pre class="config-dump">{{ detail.config | tojson(indent=1) }}</pre>
+<p class="hint">Le quadruplet de reproductibilité (snapshot, hash de config, git SHA, seed) est en tête de page, dans le bandeau de session.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,56 @@
+# Second exemple sur un actif différent (AAPL) — preuve que rien n'est câblé en
+# dur sur le VIX : mêmes familles de features, même protocole walk-forward, juste
+# une cible et un univers différents.
+name: aapl_direction
+
+objective:
+  target_symbol: "AAPL"
+  target_source: yfinance
+  horizons: [1, 5, 10]
+  flat_thr: 0.003
+  regimes: ["GLOBAL"]
+
+universe:
+  start_date: "2010-01-01"
+  yf_coverage: 0.85
+  yf_tickers:
+    - "^GSPC"
+    - "QQQ"
+    - "MSFT"
+    - "GOOG"
+    - "^VIX"
+    - "TLT"
+  fred_series:
+    NFCI: "NFCI"
+    T10Y2Y: "T10Y2Y"
+
+features:
+  families: ["technical", "interactions", "spike", "vol_models", "macro"]
+  pool_prefilter: 300
+
+validation:
+  n_wf_folds: 5
+  min_train_frac: 0.40
+  purge: false
+
+selection:
+  method: shap
+  n_features_grid: [5, 8, 11, 15]
+  shap_sample: 500
+
+sampler:
+  candidates: ["SMOTE"]
+
+models:
+  algos: ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
+
+tuning:
+  enabled: true
+  top_k: 3
+  n_trials: 50
+  cv_splits: 3
+  optuna_select_top_k_per_horizon: true  # cf. rapport d'audit C3 -- budget Optuna independant par horizon
+
+output:
+  dir: "runs/aapl_direction"
+  seed: 42

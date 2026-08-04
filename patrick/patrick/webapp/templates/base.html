@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="{{ lang | default('fr') }}">
+<!--
+THESIS: Un chiffre ne s'écrit jamais seul, et la station enregistre même quand
+personne ne regarde. Ce monde refuse à la fois le tableau de bord SaaS
+(cartes identiques, dégradés, sidebar) et la sortie de solveur monochrome qui
+le précédait ici : il rend l'outil comme un appareil de mesure en service.
+OWN-WORLD: Deux matières — un boîtier en encre profonde (bandeau, bande
+d'enregistrement, toutes les plaques de tracé, dans les DEUX thèmes) et des
+panneaux de papier posés dessus (rayon 12px, ombre à décalage et flou).
+Archivo pour le chrome et les titres, Spline Sans Mono pour toute donnée.
+Un seul accent cobalt qui ne dit que « interactif » ; états en pastilles
+texte + pastille de couleur. Clair par défaut, sombre commuté, écrits
+séparément.
+STORY: Le visiteur voit d'abord une station qui tourne — la bande dit combien
+de runs, quand, avec quel effort d'essais. Puis il lit chaque mesure avec sa
+contrepartie de fiabilité, et ce qui n'a pas pu être calculé.
+FIRST VIEWPORT: Bandeau d'encre pleine largeur (nom en chasse fixe, navigation,
+langue, bascule de thème), puis la bande d'enregistrement des runs avec sa
+légende chiffrée, puis la ligne de provenance, puis les panneaux de travail.
+FORM: Station d'observation, candidat 6 de la liste ordonnée, tirage dégradé
+sans challenger, clé c81bdabf.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0B1220">
+    <title>{% block title %}PATRICK{% endblock %}</title>
+    {# Icône d'onglet : la bande d'enregistrement elle-même, réduite à trois
+       marques sur le boîtier. Ce n'est ni un logo ni un monogramme -- aucune
+       lettre, aucune forme de marque : c'est le tracé du produit, la seule
+       chose qui reste lisible à 16px. En SVG en ligne, donc aucune requête
+       supplémentaire et aucun 404 d'onglet. #}
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230B1220'/%3E%3Cpath d='M6 24h20' stroke='%239FAEC6' stroke-opacity='.45' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M11 24V12' stroke='%2335C08A' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M17 24v-6' stroke='%237EA6FF' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M23 24V8' stroke='%2335C08A' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="preload" href="/static/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/fonts/splinesansmono-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/static/tokens.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
+    <script>
+        // Thème : le choix explicite gagne, sinon la préférence système. Posé
+        // AVANT le premier rendu (script bloquant dans le head) -- sinon la
+        // page peint en clair puis bascule en sombre, ce qui est pire que de
+        // n'avoir aucun mode sombre.
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem("patrick-theme"); } catch (e) { /* stockage refusé */ }
+            var dark = saved ? saved === "dark"
+                : window.matchMedia("(prefers-color-scheme: dark)").matches;
+            if (dark) document.documentElement.dataset.theme = "dark";
+        })();
+
+        // app.js/market.js/simulate.js lisent window.I18N (repli vers leur
+        // texte en dur si absent) : doit s'exécuter avant tout script propre à
+        // une page (chargé plus bas dans le corps), donc placé dans le head --
+        // sinon la traduction JS est silencieusement toujours ignorée.
+        window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
+
+        // La seule boucle de l'interface (balayage de la jauge en phase non
+        // mesurable) s'arrête quand l'onglet passe en arrière-plan : une
+        // animation non essentielle ne doit pas continuer à consommer hors
+        // écran. CSS : `html[data-page-hidden]`.
+        (function () {
+            function sync() {
+                if (document.hidden) document.documentElement.dataset.pageHidden = "";
+                else delete document.documentElement.dataset.pageHidden;
+            }
+            document.addEventListener("visibilitychange", sync);
+            sync();
+        })();
+    </script>
+</head>
+<body>
+    {# Le boîtier de la station : le nom, où aller, la langue, la lumière.
+       Ce n'est pas une barre de marque -- il n'y a ni logo ni monogramme, le
+       produit s'identifie par son nom en chasse fixe. #}
+    <header class="station">
+        <a class="station-id" href="/">PATRICK</a>
+        <nav class="station-nav">
+            <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Poste' }}</a>
+            <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
+            <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
+            <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
+        </nav>
+        <div class="station-tools">
+            <nav class="station-lang" aria-label="Langue / Language">
+                <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>
+                <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
+            </nav>
+            <button type="button" id="theme-toggle" class="theme-toggle"
+                    data-label-light="{{ t('theme_light') if t else 'Jour' }}"
+                    data-label-dark="{{ t('theme_dark') if t else 'Nuit' }}"
+                    aria-live="polite">{{ t('theme_light') if t else 'Jour' }}</button>
+        </div>
+    </header>
+
+    {# LA BANDE D'ENREGISTREMENT -- signature du monde. Un héliocorder trace en
+       continu : la station montre son activité avant qu'on lui demande quoi
+       que ce soit. Une marque = un run, posé à son heure de départ ; hauteur =
+       nombre d'essais (log, plafond étiqueté dans la légende), couleur =
+       état. Alimentée par `/api/activity`, dessinée par `observatory.js`. #}
+    <section class="record" aria-labelledby="record-caption">
+        <canvas id="record-canvas" class="record-canvas" role="img"
+                aria-label="{{ t('record_aria') if t else 'Activité des runs dans le temps' }}"></canvas>
+        <p class="record-caption" id="record-caption">{{ t('record_loading') if t else 'Lecture de la bande…' }}</p>
+        <div id="record-tooltip" class="record-tooltip hidden" role="tooltip"></div>
+    </section>
+
+    {# Contexte de reproductibilité : le contrat de direction exige cible /
+       snapshot / seed / git SHA DANS le premier viewport, pas en gris 12px au
+       bas de la page. Sans ces quatre champs, aucun chiffre de la page n'est
+       refaisable. Les pages sans run laissent le bloc vide. #}
+    {% block session_context %}{% endblock %}
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="glossary-popover" class="glossary-popover hidden" role="tooltip">
+        <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
+        <div id="glossary-popover-title" class="glossary-popover-title"></div>
+        <div id="glossary-popover-body" class="glossary-popover-body"></div>
+    </div>
+    <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
+    <script src="/static/observatory.js"></script>
+    <script src="/static/glossary.js"></script>
+    <script src="/static/market.js"></script>
+</body>
+</html>

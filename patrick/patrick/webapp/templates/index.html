@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+{% block title %}PATRICK{% endblock %}
+
+{% macro info(term, label=None) %}<button type="button" class="info-icon" data-term="{{ term }}" {% if label %}data-term-label="{{ label }}"{% endif %} aria-label="{{ label or term }}">i</button>{% endmacro %}
+
+{% block content %}
+
+{# Le titre de page manquait : `/` était la seule surface du produit sans
+   `h1`, donc la seule où la navigation par titres d'un lecteur d'écran
+   sautait directement aux `h2` sans jamais nommer la page. #}
+<h1 class="page-title">{{ t('index_title') }}</h1>
+<p class="page-subtitle">{{ t('index_subtitle') }}</p>
+
+{# Grille ASYMÉTRIQUE, et c'est le geste central de cette passe. L'ancienne
+   2×2 de panneaux égaux était un défaut de gabarit : elle donnait le même
+   poids à la tâche principale (configurer et lancer) et à un widget de
+   variations relié à rien. Ici la colonne de configuration mène, la colonne
+   de droite suit — état de la station puis aide au choix de la cible. #}
+<div class="station-grid">
+
+<section class="dash-panel dash-settings" aria-labelledby="settings-title">
+    <h2 id="settings-title" class="dash-panel-title">{{ t('section_settings') }}</h2>
+    <div class="dash-panel-body">
+
+    <div id="run-errors" class="banner banner-error {% if not errors %}hidden{% endif %}">
+        <strong>{{ t('banner_fix_errors') }}</strong>
+        <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+
+    <form method="get" action="/" class="example-picker">
+        <label for="load">{{ t('load_example_label') }}</label>
+        <select name="load" id="load" onchange="this.form.submit()">
+            <option value="">{{ t('load_example_default') }}</option>
+            {% for ex in examples %}
+            <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    <form method="post" action="/runs" class="run-form" id="run-form">
+
+        <fieldset>
+            <legend>{{ t('section_run') }}</legend>
+            <label>{{ t('field_run_name') }}
+                <input type="text" id="run-name-preview" value="{{ view.name }}" readonly>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('section_objective') }}</legend>
+            <label>{{ t('field_target') }}
+                <select name="target_symbols" id="target_symbols" multiple required size="8">
+                    {% for group, items in target_groups.items() %}
+                    <optgroup label="{{ group_labels.get(group, group) }}">
+                        {% for sym, sym_label in items %}
+                        <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <p class="hint">{{ t('target_multiselect_hint') }}</p>
+            </label>
+
+            <label>{{ t('field_horizons') }}
+                <input type="text" name="horizons" value="{{ view.horizons }}" required>
+            </label>
+            <label>{{ t('field_flat_thr') }}
+                <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
+            </label>
+            <label>{{ t('field_regimes') }}
+                <input type="text" name="regimes" value="{{ view.regimes }}" required>
+            </label>
+        </fieldset>
+
+        <details class="adv" data-adv="section_universe">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_universe') }}</span>
+                <span class="adv-state" data-adv-state="section_universe"></span>
+            </summary>
+            <div class="adv-body">
+            <p class="hint">{{ t('universe_hint') }}</p>
+            <label>{{ t('field_start_date') }}
+                <input type="date" name="start_date" value="{{ view.start_date }}">
+            </label>
+            <label>{{ t('field_yf_coverage') }}
+                <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
+            </label>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_data_quality">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_data_quality') }}</span>
+                <span class="adv-state" data-adv-state="section_data_quality"></span>
+            </summary>
+            <div class="adv-body">
+            <p class="hint">{{ t('data_quality_hint') }}</p>
+            <label class="checkbox">
+                <input type="checkbox" name="data_quality_enabled" {% if view.data_quality_enabled %}checked{% endif %}>
+                {{ t('field_data_quality_enabled') }}{{ info('data_quality_enabled') }}
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_max_frozen_run') }}
+                    <input type="number" name="max_frozen_run" value="{{ view.max_frozen_run }}">
+                </label>
+                <label>{{ t('field_max_gap_bdays') }}
+                    <input type="number" name="max_gap_bdays" value="{{ view.max_gap_bdays }}">
+                </label>
+                <label>{{ t('field_max_robust_z') }}
+                    <input type="number" step="any" name="max_robust_z" value="{{ view.max_robust_z }}">
+                </label>
+                <label>{{ t('field_max_universe_exclusion_frac') }}
+                    <input type="number" step="any" min="0" max="1" name="max_universe_exclusion_frac"
+                           value="{{ view.max_universe_exclusion_frac }}">
+                </label>
+            </div>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_features">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_features') }}</span>
+                <span class="adv-state" data-adv-state="section_features"></span>
+            </summary>
+            <div class="adv-body">
+            {% for f in all_families %}
+            <label class="checkbox">
+                <input type="checkbox" name="families" value="{{ f }}" {% if f in view.families %}checked{% endif %}>
+                {{ f }}{{ info(f) }}
+            </label>
+            {% endfor %}
+
+            <div class="subfieldset">
+                <p class="hint">{{ t('vol_models_hint') }}</p>
+                {% for m in all_vol_models %}
+                <label class="checkbox">
+                    <input type="checkbox" name="vol_models" value="{{ m }}" {% if m in view.vol_models %}checked{% endif %}>
+                    {{ vol_model_labels.get(m, m) }}{{ info(m, vol_model_labels.get(m, m)) }}
+                </label>
+                {% endfor %}
+            </div>
+
+            <div class="subgrid">
+                <label>{{ t('field_interact_base') }}
+                    <input type="number" name="interact_top_base" value="{{ view.interact_top_base }}">
+                </label>
+                <label>{{ t('field_interact_pairs') }}
+                    <input type="number" name="interact_top_pairs" value="{{ view.interact_top_pairs }}">
+                </label>
+                <label>{{ t('field_interact_final') }}
+                    <input type="number" name="interact_final_n" value="{{ view.interact_final_n }}">
+                </label>
+                <label>{{ t('field_pool_prefilter') }}
+                    <input type="number" name="pool_prefilter" value="{{ view.pool_prefilter }}">
+                </label>
+            </div>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_validation">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_validation') }}</span>
+                <span class="adv-state" data-adv-state="section_validation"></span>
+            </summary>
+            <div class="adv-body">
+            <label>{{ t('field_scheme') }}{{ info('scheme') }}
+                <select name="scheme">
+                    <option value="walkforward" {% if view.scheme == 'walkforward' %}selected{% endif %}>{{ t('field_scheme_walkforward') }}</option>
+                    <option value="cpcv" {% if view.scheme == 'cpcv' %}selected{% endif %}>{{ t('field_scheme_cpcv') }}</option>
+                </select>
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_n_groups') }}{{ info('n_groups') }}
+                    <input type="number" name="n_groups" value="{{ view.n_groups }}">
+                </label>
+                <label>{{ t('field_k_test_groups') }}{{ info('k_test_groups') }}
+                    <input type="number" name="k_test_groups" value="{{ view.k_test_groups }}">
+                </label>
+            </div>
+            <div class="subgrid">
+                <label>{{ t('field_n_wf_folds') }}
+                    <input type="number" name="n_wf_folds" value="{{ view.n_wf_folds }}">
+                </label>
+                <label>{{ t('field_min_train_frac') }}
+                    <input type="number" step="any" name="min_train_frac" value="{{ view.min_train_frac }}">
+                </label>
+                <label>{{ t('field_min_train_rows') }}
+                    <input type="number" name="min_train_rows" value="{{ view.min_train_rows }}">
+                </label>
+                <label>{{ t('field_min_test_rows') }}
+                    <input type="number" name="min_test_rows" value="{{ view.min_test_rows }}">
+                </label>
+            </div>
+            <label class="checkbox">
+                <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>
+                {{ t('field_purge') }}{{ info('purge') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="embargo_enabled" {% if view.embargo_enabled %}checked{% endif %}>
+                {{ t('field_embargo_enabled') }}{{ info('embargo_enabled') }}
+            </label>
+            <label>{{ t('field_embargo_bars') }}
+                <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
+            </label>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_selection">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_selection') }}</span>
+                <span class="adv-state" data-adv-state="section_selection"></span>
+            </summary>
+            <div class="adv-body">
+            <label>{{ t('field_method') }}
+                <select name="selection_method">
+                    {% for m in selection_methods %}
+                    <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
+                    {% endfor %}
+                </select>
+                {% for m in selection_methods %}{{ info(m, m|upper) }}{% endfor %}
+            </label>
+            <label>{{ t('field_n_features_grid') }}
+                <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
+            </label>
+            <label>{{ t('field_shap_sample') }}
+                <input type="number" name="shap_sample" value="{{ view.shap_sample }}">
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="track_stability" {% if view.track_stability %}checked{% endif %}>
+                {{ t('field_track_stability') }}{{ info('track_stability') }}
+            </label>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_sampler">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_sampler') }}</span>
+                <span class="adv-state" data-adv-state="section_sampler"></span>
+            </summary>
+            <div class="adv-body">
+            {% for s in all_samplers %}
+            <label class="checkbox">
+                <input type="checkbox" name="sampler_candidates" value="{{ s }}" {% if s in view.sampler_candidates %}checked{% endif %}>
+                {{ s }}{{ info(s) }}
+            </label>
+            {% endfor %}
+            <label class="checkbox">
+                <input type="checkbox" name="uniqueness_weights" {% if view.uniqueness_weights %}checked{% endif %}>
+                {{ t('field_uniqueness_weights') }}{{ info('uniqueness_weights') }}
+            </label>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_models">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_models') }}</span>
+                <span class="adv-state" data-adv-state="section_models"></span>
+            </summary>
+            <div class="adv-body">
+            {% for a in all_algos %}
+            <label class="checkbox">
+                <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
+                {{ a }}{{ info(a) }}
+            </label>
+            {% endfor %}
+            <label class="checkbox">
+                <input type="checkbox" name="calibration" {% if view.calibration %}checked{% endif %}>
+                {{ t('field_calibration') }}{{ info('calibration') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
+                {{ t('field_stacking') }}{{ info('stacking') }}
+            </label>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_tuning">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_tuning') }}</span>
+                <span class="adv-state" data-adv-state="section_tuning"></span>
+            </summary>
+            <div class="adv-body">
+            <label class="checkbox">
+                <input type="checkbox" name="tuning_enabled" {% if view.tuning_enabled %}checked{% endif %}>
+                {{ t('field_enabled') }}{{ info('tuning_enabled') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="optuna_select_top_k_per_horizon" {% if view.optuna_select_top_k_per_horizon %}checked{% endif %}>
+                {{ t('field_optuna_select_top_k_per_horizon') }}{{ info('optuna_select_top_k_per_horizon') }}
+            </label>
+            <div class="subgrid">
+                <label>{{ t('field_top_k') }}
+                    <input type="number" name="top_k" value="{{ view.top_k }}">
+                </label>
+                <label>{{ t('field_n_trials') }}
+                    <input type="number" name="n_trials" value="{{ view.n_trials }}">
+                </label>
+                <label>{{ t('field_cv_splits') }}
+                    <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
+                </label>
+            </div>
+            </div>
+        </details>
+
+        <details class="adv" data-adv="section_output">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_output') }}</span>
+                <span class="adv-state" data-adv-state="section_output"></span>
+            </summary>
+            <div class="adv-body">
+            <label>{{ t('field_output_dir') }}
+                <input type="text" name="output_dir" value="{{ view.output_dir }}">
+            </label>
+            <label>{{ t('field_seed') }}
+                <input type="number" name="seed" value="{{ view.seed }}">
+            </label>
+            </div>
+        </details>
+
+        {# Barre de lancement COLLANTE en bas de la colonne. Avant, le bouton
+           vivait au fond d'un panneau à défilement interne de 613px pour
+           3042px de contenu : il n'apparaissait dans aucun viewport, et
+           l'action principale du produit n'était jamais visible. Le
+           récapitulatif à côté rappelle les trois champs qui déterminent le
+           run, parce qu'ils sont 9 blocs plus haut au moment du clic. #}
+        <div class="launch-bar">
+            <p class="launch-recap" id="launch-recap" aria-live="polite"></p>
+            <button type="submit" class="primary" id="launch-btn">
+                {{ t('btn_launch_run') }}
+            </button>
+        </div>
+    </form>
+    </div>
+</section>
+
+<section class="dash-panel dash-progress" aria-labelledby="progress-title">
+    <h2 id="progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
+    <div class="dash-panel-body">
+
+    <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
+        <p class="hint" id="queue-summary"></p>
+    </div>
+
+    {# Ce message ne vaut que si la colonne est REELLEMENT vide. Avec la liste
+       des derniers runs juste en dessous, « aucun run pour l'instant » etait
+       une contre-verite imprimee sur le premier ecran du produit. #}
+    <p id="no-run-message" class="hint {% if initial_run_id or recent_runs %}hidden{% endif %}">{{ t('no_run_yet') }}</p>
+
+    {# Au repos, cette colonne n'avait rien à montrer sur toute la hauteur du
+       premier viewport. La base a de quoi la remplir : les derniers runs,
+       avec la seule contrepartie de fiabilité qui tienne sur une ligne — le
+       nombre d'essais dont le F1_dir affiché est le maximum. #}
+    {% if recent_runs %}
+    <div id="recent-runs" class="recent-runs {% if initial_run_id %}hidden{% endif %}">
+        <p class="recent-runs-title">Derniers runs</p>
+        <ol class="recent-runs-list">
+            {% for r in recent_runs %}
+            <li>
+                <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
+                <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}j · {{ r.status }}</span>
+                <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
+                <span class="recent-runs-rel">F1_dir, meilleur de {{ r.n_trials or 0 }} essai(s)</span>
+            </li>
+            {% endfor %}
+        </ol>
+        <p class="recent-runs-foot"><a href="/runs">Historique complet →</a></p>
+    </div>
+    {% endif %}
+
+    <div id="status-panel" class="{% if not initial_run_id %}hidden{% endif %}">
+        <p id="run-name-line" class="run-name-line"></p>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <p id="status-line">…</p>
+        <pre id="log-tail" class="log-tail"></pre>
+    </div>
+    <div id="results-panel" class="hidden"></div>
+    </div>
+</section>
+
+<section class="dash-panel dash-stock" aria-labelledby="stock-title">
+    <h2 id="stock-title" class="dash-panel-title">{{ t('section_stock') }}</h2>
+    <div class="dash-panel-body">
+    <div class="target-preview" id="target-preview">
+        <div class="preview-range-buttons" id="preview-ranges">
+            <button type="button" class="range-btn" data-period="1mo">1M</button>
+            <button type="button" class="range-btn" data-period="3mo">3M</button>
+            <button type="button" class="range-btn" data-period="6mo">6M</button>
+            <button type="button" class="range-btn active" data-period="1y">1Y</button>
+            <button type="button" class="range-btn" data-period="5y">5Y</button>
+            <button type="button" class="range-btn" data-period="max">Max</button>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="preview-canvas" width="700" height="180"></canvas>
+            <div id="preview-tooltip" class="chart-tooltip hidden"></div>
+        </div>
+        <p class="hint" id="preview-status"></p>
+    </div>
+
+    <div class="target-news" id="target-news">
+        <p class="hint">{{ t('news_recent') }}</p>
+        <ul id="news-list" class="news-list"></ul>
+    </div>
+    </div>
+</section>
+
+<section class="dash-panel dash-movers" aria-labelledby="movers-title">
+    <div class="movers-header">
+        <h2 id="movers-title" class="dash-panel-title">{{ t('movers_title') }}</h2>
+        <span class="hint" id="movers-updated">
+            {% if movers.updated_at %}{{ t('movers_updated_at', time=movers.updated_at) }}{% else %}{{ t('movers_computing') }}{% endif %}
+        </span>
+    </div>
+    <div class="dash-panel-body">
+    {% if movers.error %}
+    <p class="hint">{{ movers.error }}</p>
+    {% endif %}
+    {# Chaque ligne est un BOUTON qui AJOUTE le symbole à la sélection du
+       `<select multiple id="target_symbols">` (sans désélectionner les
+       autres) et recharge l'aperçu. Avant, ce panneau était le bloc le plus
+       visible de la page et le seul relié à aucune tâche : un widget de
+       portail boursier posé dans un outil de recherche. Relié, il devient ce
+       qu'il aurait dû être — l'aide à composer la sélection de cibles, une
+       ou plusieurs. Les symboles absents de la liste des cibles ne sont pas
+       cliquables et le disent. #}
+    <p class="hint movers-hint">{{ t('movers_pick_hint') }}</p>
+    <div class="movers-columns" id="movers-columns">
+        <div class="movers-col">
+            <h3 class="movers-col-title movers-up">{{ t('movers_gainers') }}</h3>
+            <ul id="movers-gainers" class="movers-list">
+                {% for row in movers.gainers %}
+                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-up">+{{ row.pct }}%</span></button></li>
+                {% endfor %}
+            </ul>
+            <p class="movers-empty hint {% if movers.gainers %}hidden{% endif %}" id="movers-gainers-empty">{{ t('movers_no_data') }}</p>
+        </div>
+        <div class="movers-col">
+            <h3 class="movers-col-title movers-down">{{ t('movers_losers') }}</h3>
+            <ul id="movers-losers" class="movers-list">
+                {% for row in movers.losers %}
+                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-down">{{ row.pct }}%</span></button></li>
+                {% endfor %}
+            </ul>
+            <p class="movers-empty hint {% if movers.losers %}hidden{% endif %}" id="movers-losers-empty">{{ t('movers_no_data') }}</p>
+        </div>
+    </div>
+    </div>
+</section>
+
+</div>
+
+<script>
+    window.INITIAL_RUN_ID = {{ initial_run_id | tojson }};
+</script>
+<script src="/static/app.js"></script>
+{% endblock %}

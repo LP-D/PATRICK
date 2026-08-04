@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% block title %}PATRICK — {{ target }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ target }}</h1>
+<p class="page-subtitle">Vue agrégée de tout l'historique de runs pour cette cible (tous horizons/schémas confondus) — lecture seule.</p>
+
+{% if detail is none %}
+{{ empty_state("Aucun run pour cette cible.", "Configure et lance un run depuis la page d'accueil pour commencer à bâtir un historique.") }}
+{% else %}
+
+<div class="metric-grid">
+{{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
+          "Nombre de configurations réellement testées sur cette cible, tous runs confondus — corrige la lecture de tout Sharpe/PBO isolé (section 4, METHODOLOGY.md).",
+          "neutral") }}
+{{ metric("Runs", detail.n_runs, detail.runs | length ~ " run(s) en base.", "neutral") }}
+{% if detail.target_fdr %}
+{{ metric("Meilleure p-value DM (ajustée BH)",
+          "%.4f" | format(detail.target_fdr.adjusted_p_value),
+          "rang " ~ detail.target_fdr.rank ~ "/" ~ detail.fdr_result.n_tested ~ " cibles testées — " ~
+          ("significatif" if detail.target_fdr.significant else "non significatif") ~
+          " au seuil FDR " ~ detail.fdr_result.alpha,
+          "ok" if detail.target_fdr.significant else "warning") }}
+{% else %}
+{{ metric("Correction FDR entre cibles", "—",
+          "Aucun résultat Diebold-Mariano pour cette cible (pas de run walk-forward avec config gagnante à ce jour).",
+          "disabled") }}
+{% endif %}
+</div>
+
+<section class="card">
+<h2>PBO par horizon</h2>
+<p class="hint">Probabilité de sur-sélection de backtest (CSCV) — walk-forward (blocs) et CPCV (chemins) séparément, jamais mélangés.</p>
+{% set pbo_rows = [] %}
+{% for horizon, by_scheme in detail.pbo_by_horizon.items() %}
+{% for scheme_name, pbo in [("walk-forward", by_scheme.walkforward), ("CPCV", by_scheme.cpcv)] %}
+{# Même règle que la page de détail (C5) : pas de point PBO tant que le
+   diagnostic de fiabilité refuse — sinon on affiche un chiffre à côté d'un
+   message disant qu'il n'a pas été calculé. #}
+{% if pbo.n_blocks > 0 %}
+{% set rel = pbo.reliability %}
+{% set rel_text = ("IC 90% [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (rel.message if (rel and rel.message) else "non calculable") %}
+{% set pbo_text = ("%.3f" | format(pbo.pbo)) if (rel and rel.ok) else "—" %}
+{% set _ = pbo_rows.append([horizon ~ "j", scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{{ data_table(["Horizon", "Schéma", "PBO", "N blocs/chemins", "Fiabilité (bootstrap)"], pbo_rows,
+              "Pas assez d'essais avec folds/chemins complets pour calculer un PBO sur cette cible.",
+              num_cols=[0, 2, 3],
+              footer="PBO affiché uniquement quand le diagnostic de fiabilité l'accepte (≥ 6 blocs) ; sinon « — » et le motif du refus en clair. Un PBO sous ce seuil n'est pas interprétable.") }}
+</section>
+
+<section class="card">
+<h2>Runs</h2>
+{% set rows = [] %}
+{% for r in detail.runs %}
+{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+{% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '<span class="na">—</span>' %}
+{% set relaunch_cell = '<form method="post" action="/runs/' ~ r.run_id ~ '/relaunch" class="inline-form"><button type="submit" class="primary">Relancer (tous horizons)</button></form>' %}
+{% set _ = rows.append([
+    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
+    r.horizon ~ 'j',
+    ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
+    status_badge(r.status, state),
+    r.started_at or '—',
+    r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
+    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
+    dm_cell,
+    relaunch_cell,
+]) %}
+{% endfor %}
+{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "DM p-value", "Relancer"],
+              rows, num_cols=[1, 5, 6, 7],
+              footer=(detail.runs | length) ~ " run(s) · F1_dir = meilleur essai sur n, non déflaté ; p-value DM brute — la version corrigée du test multiple (BH entre cibles) est le bloc de mesure en haut de cette page.") }}
+</section>
+
+{% endif %}
+{% endblock %}

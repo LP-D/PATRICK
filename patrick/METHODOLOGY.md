@@ -1,0 +1,698 @@
+# Méthodologie
+
+Ce document explique **pourquoi** `patrick` est construit comme il l'est —
+les garanties qu'il apporte contre le sur-ajustement et la fuite
+d'information, où elles s'arrêtent, et ses limites connues. Il complète le
+code (les modules cités contiennent des docstrings détaillées) sans le
+dupliquer. Pour *comment* l'utiliser, voir `README.md`.
+
+## 1. Walk-forward strict
+
+Aucune validation croisée aléatoire (`KFold`, `train_test_split` mélangé)
+nulle part dans le pipeline : l'historique est découpé en folds
+chronologiques successifs (`patrick/validation/walkforward.py`,
+`build_fold_cuts`) — le train d'un fold ne contient jamais de données
+postérieures au test qui le suit. Nombre de folds et fraction minimale de
+train paramétrables (`ValidationConfig`).
+
+### Purge et embargo (López de Prado)
+
+Deux fuites distinctes, deux mécanismes distincts :
+
+- **Purge** (`patrick/validation/purge.py`) : une ligne de train dont la
+  fenêtre de label (`horizon` jours ouvrés en avant) chevauche la coupure de
+  fold est retirée du train — sinon son label contient de l'information sur
+  la période de test. Impact mesuré sur ce projet : marginal (delta
+  F1_dir ≈ -0.002) mais le mécanisme reste actif par défaut plutôt que
+  supposé négligeable.
+- **Embargo** (`patrick/validation/embargo.py`) : au-delà de la purge, les
+  `embargo_bars` premières barres du **test** (par défaut dérivées de
+  l'horizon, `ValidationConfig.embargo_bars=None`) sont retirées — des
+  features à fenêtre glissante (moyennes mobiles, EWMA, volatilité
+  réalisée...) calculées juste après la coupure incluent encore des
+  observations du train, donc restent corrélées avec lui même une fois le
+  label "propre" (déjà géré par la purge).
+
+Vérifié par un test de corruption du futur bout-en-bout
+(`tests/test_leakage.py::test_corrupting_the_future_does_not_change_train_features_or_model`)
+qui modifie délibérément les données post-coupure et vérifie que les
+features/le modèle du train n'en sont pas affectés, et par un test de
+décalage de cible
+(`test_shifting_target_by_one_bar_collapses_performance_to_baseline`) qui
+vérifie qu'un label décalé d'une barre fait s'effondrer la performance au
+niveau des baselines — preuve empirique qu'il n'y a pas de fuite résiduelle
+qui compenserait artificiellement un mauvais alignement temporel.
+
+### Alignement temporel par classe d'actif (as-of join)
+
+Les données sont indexées par date calendaire (barres quotidiennes), sans
+horodatage de clôture intrajournalier. Une jointure "même date" traiterait
+implicitement une clôture Tokyo (~08:00 UTC) et une clôture New York
+(~20-21:00 UTC) du même jour comme simultanées — faux dans le sens où une
+feature dont la clôture arrive *après* celle de la cible contiendrait de
+l'information non encore disponible au moment de la décision.
+`patrick/data/session_calendar.py` décale d'une barre toute feature dont la
+classe d'actif clôture après celle de la cible (heure de clôture UTC
+approximative par classe : crypto 24/7, FX ~22:00, actions US ~21:00,
+actions Europe ~16:30, etc.) — cf. `data/ingest.py::_apply_session_lag`.
+Approximation documentée, pas un vrai as-of join intrajournalier (qui
+demanderait de migrer toute l'ingestion sur des données horaires, hors
+périmètre).
+
+## 2. Données macro : vintages point-in-time (ALFRED)
+
+Par défaut, l'API FRED renvoie chaque série *telle que révisée aujourd'hui*
+— pas telle qu'elle était connue à la date de décision historique (les
+révisions de PIB, chômage, etc. peuvent être significatives). Les jointures
+macro peuvent utiliser les vintages ALFRED
+(`patrick/data/sources/fred_source.py::download_series(realtime_date=...)`),
+qui renvoient la série telle que publiée à `realtime_date`, évitant que le
+modèle "apprenne" sur des révisions qui n'existaient pas encore à l'époque.
+
+## 3. Sélection, tuning, leaderboard : jamais sur le holdout
+
+Les `holdout_months` derniers mois d'historique (`ValidationConfig`,
+désactivable à 0) sont réservés avant même le découpage walk-forward
+(`pipeline/engine.py::_walk_forward_span`) — ni la sélection de features, ni
+le tuning Optuna, ni le tri du leaderboard ne les voient jamais.
+`_evaluate_holdout` réévalue **une seule fois** la config déjà choisie sur ce
+holdout, jamais pour choisir entre plusieurs configs (anti-pattern #1
+ci-dessous).
+
+## 4. Correction multi-tests (validité statistique)
+
+Chercher la meilleure config parmi *N* essais gonfle mécaniquement le
+meilleur score observé, même si aucune config n'a de vrai pouvoir prédictif
+(le problème classique du "multiple testing"). `patrick` persiste **tous**
+les essais (table `trial`, pas seulement le vainqueur) et en tient compte,
+via quatre garde-fous dans `patrick/validation/` :
+
+- **Compteur d'essais cumulé** (`tracking/stats.py::count_cumulative_trials`) :
+  tout l'historique de runs sur cette cible/horizon, pas seulement le run
+  courant — chercher la meilleure config sur 50 runs successifs revient à
+  en avoir essayé bien plus qu'un run isolé ne le suggère.
+- **Sharpe déflaté** (`dsr.py::deflated_sharpe_ratio`, Bailey & López de
+  Prado 2014) : corrige le Sharpe observé du nombre d'essais dont le
+  gagnant a été sélectionné. Affiché systématiquement à côté du Sharpe
+  brut, jamais seul (anti-pattern #6).
+- **PBO** (`pbo.py::compute_pbo`, CSCV par blocs) : probabilité que la
+  config gagnante en échantillon (IS) soit perdante hors échantillon (OOS),
+  estimée en partitionnant les blocs temporels en toutes les combinaisons
+  IS/OOS possibles.
+- **Diebold-Mariano** (`diebold_mariano.py`) : p-value du test de
+  différence de perte entre le meilleur modèle et la meilleure baseline
+  systématique — un modèle non significativement meilleur qu'une baseline
+  est signalé comme tel, pas caché.
+
+Ces éléments apparaissent ensemble dans le leaderboard et dans
+`patrick report` : métrique de test, métrique de holdout, p-value DM vs
+baseline, compteur d'essais cumulé. Le même principe s'applique au
+simulateur d'investissement (Phase 4, section 6) : chaque configuration de
+simulation testée sur une cible est journalisée (`simulation` table), et le
+compteur + Sharpe déflaté correspondant sont affichés en permanence dans
+`/simulate`.
+
+## 5. Baselines systématiques
+
+Trois baselines "sans intelligence" (`patrick/validation/baselines.py`)
+calculées pour chaque (horizon, fold, régime) et ajoutées au leaderboard à
+côté des modèles réels : classe majoritaire, persistance (la classe
+réalisée sur la fenêtre la plus récente), et HAR-RV (Corsi — direction par
+persistance de signe, amplitude reclassée via les mêmes seuils causaux que
+la cible réelle) pour les cibles de volatilité. Un modèle (ou un F1_dir de
+0.55) qui ne bat pas ces baselines n'apporte rien, même si ses métriques
+absolues semblent correctes.
+
+## 6. Le simulateur d'investissement ne ré-exécute jamais un modèle
+
+Le module de simulation (`patrick/simulate/`, Phase 4) lit exclusivement la
+table `prediction` (splits `test`/`holdout`/`live`, déjà écrite par un run
+antérieur) et le snapshot Parquet immuable associé, pour calculer le
+rendement réalisé de l'actif sous-jacent. Il ne charge, ne réentraîne, ni ne
+resélectionne jamais de modèle — la seule chose qu'il ajoute au run existant
+est une politique de position et un jeu de frictions.
+
+### Convention de timing (rapport de correction, C6)
+
+Le plan de phase 4 prescrivait une convention `open_next` (exécution à
+l'ouverture du jour suivant) — **non implémentable ici** : le simulateur ne
+modélise qu'une seule série de clôtures par actif (close-to-close), pas
+d'open/high/low. Le seul paramètre de timing est `execution_lag_bars`, et
+c'est exactement ce qu'il fait (aucune mention d'`open_next` ne subsiste dans
+le code, l'UI, les YAMLs ou le glossaire).
+
+Convention réelle (`simulate/engine.py::_build_exposure`) : le signal est
+connu à la clôture du jour `t` ; l'exposition démarre à la ligne
+`t + execution_lag_bars` de la grille quotidienne. Comme
+`underlying_ret[i] = close[i]/close[i-1] - 1` (le rendement qui SE TERMINE au
+jour `i`, pas celui qui en part), le premier rendement capté par cette entrée
+est celui de `t+lag-1` à `t+lag`. Avec le minimum imposé
+`execution_lag_bars=1` (anti-pattern #5, section 10), ce premier rendement
+capté est donc exactement celui de `t` à `t+1` — le mouvement qui suit
+immédiatement la clôture du signal, sans latence réelle ajoutée au-delà de
+cette clôture. `execution_lag_bars=0` capterait le rendement de `t-1` à `t`,
+déjà connu au moment où le signal est calculé — du look-ahead pur,
+structurellement interdit par `SimParams.__post_init__`.
+
+**Revisite du finding F.2 de l'audit** ("lag=0 donne un Sharpe plus bas que
+lag=1", non résolu) : un signal oracle (prédiction parfaite, par
+construction, du mouvement `t`→`t+1`) injecté dans `_build_exposure` réel
+(lag=0 testé en contournant la validation, diagnostic seul) confirme que ce
+n'est **pas un bug d'alignement** — sur série synthétique (20000 jours,
+signaux isolés espacés de 5 jours, horizon=1), lag=1 capte exactement ce que
+l'oracle prédit (Sharpe ≈ 6, quasi parfait), tandis que lag=0/2/3 captent un
+rendement sans rapport avec la prédiction (Sharpe proche de 0 : 0.07/0.20/0.10,
+jamais négatif ni anormal). `_build_exposure` fonctionne comme attendu ; le
+finding F.2 s'explique entièrement par cette convention une fois comprise.
+
+## 7. SMOTE vs `class_weight` + seuil calibré
+
+Défaut actuel : SMOTE (suréchantillonnage, `sampler.candidates: ["SMOTE"]`).
+`class_weight="balanced"`/`auto_class_weights="Balanced"` est déjà appliqué
+par défaut sur les classifieurs qui le supportent nativement (LightGBM,
+RandomForest, CatBoost — `models/registry.py`), en plus de SMOTE ; XGBoost
+et GradientBoosting n'ont pas d'équivalent sklearn natif. `models/
+calibration.py` (calibration isotonique + recherche de seuil causal,
+méthodologie `VIX_CALIBRATED_THRESHOLD`) existait déjà mais n'était branché
+nulle part dans le pipeline. Phase 5.3 :
+
+- Le pseudo-sampler `"none"` (`models/samplers.py::_NoResample`) permet de
+  tester `class_weight` SEUL (sans suréchantillonnage) via la grille
+  `sampler.candidates` existante — ex. `sampler.candidates: ["SMOTE",
+  "none"]` dans une config de run, comparable via les mêmes métriques et le
+  même test Diebold-Mariano, sans script d'A/B test séparé.
+- `config.models.calibration: bool` (déjà dans le schéma, ignoré jusqu'ici)
+  est maintenant branché dans `_fit_eval` (`pipeline/engine.py`) :
+  calibration isotonique + seuil recherché sur les 15% les plus récents du
+  train (jamais le test).
+
+**L'A/B test empirique sur 5 cibles (demandé par le plan) n'a pas pu être
+exécuté dans cette session** : le sandbox n'a pas d'accès réseau à
+yfinance/FRED (vérifié directement — toute requête sortante échoue avec une
+erreur de proxy). Marche à suivre en environnement avec accès réseau :
+
+```bash
+for target in "^VIX" "^GSPC" "SPY" "TLT" "GLD"; do
+  patrick run --config configs/ab_test_${target}.yaml  # sampler.candidates: ["SMOTE", "none"]
+done
+```
+
+puis comparer, par cible, les lignes `SMOTE` vs `none` du leaderboard (même
+horizon/régime/N/algo) sur F1_dir/balanced accuracy — changer le défaut vers
+`class_weight` seul (`sampler.candidates: ["none"]`) si `none` gagne sur la
+majorité des 5 cibles. Le résultat déjà documenté dans `models/
+calibration.py` (sur le seul projet VIX d'origine, pas 5 cibles) est mitigé
+— gain hors régime STRESS, perte en régime STRESS — pas de victoire nette
+qui justifierait de changer le défaut sans revalidation. **Le défaut reste
+`sampler.candidates: ["SMOTE"]`, `calibration: false`.**
+
+## 8. Limites connues
+
+- **Biais de survivance** : l'univers de tickers (`configs/examples/*.yaml`,
+  `webapp/forms.py::TARGET_GROUPS`) est une liste fixe reflétant la
+  composition *actuelle* des indices/secteurs — les actifs retirés d'un
+  indice, délistés ou en faillite depuis n'y figurent pas, ce qui gonfle
+  mécaniquement la performance historique apparente de tout ce qui touche à
+  des paniers larges. Limite structurelle de tout backtest basé sur des
+  données gratuites (yfinance) ; non corrigée ici (un univers point-in-time
+  demanderait une source de données dédiée).
+- **`Adj Close` rétro-ajusté** : l'ingestion utilise `auto_adjust=True`
+  (`data/sources/yfinance_source.py`), qui replie dividendes/splits dans le
+  prix de clôture *rétroactivement à la date d'ingestion*, pas tels qu'ils
+  étaient affichés au moment de la décision historique — une forme de fuite
+  d'information mineure mais réelle (l'ampleur d'un ajustement futur n'était
+  pas connue à l'époque). Les rendements (base de la cible et de la plupart
+  des features) sont peu affectés ; les indicateurs sensibles au *niveau* de
+  prix (supports/résistances, moyennes mobiles longues) le sont davantage.
+  Écart assumé, pas un risque au niveau purge/embargo (l'ajustement ne
+  dépend pas de la fenêtre walk-forward) — prix de l'accès gratuit aux
+  données.
+- **`patrick predict --live`** : `y_true` des prédictions live est stocké en
+  binaire (hausse/baisse réalisée) plutôt que reclassifié dans les 4 classes
+  du modèle — les seuils par quantile/régime de `features/target.py` sont
+  fittés par run et non persistés séparément pour l'inférence
+  (`patrick/predict.py`, hors scope Phase 4). Sert uniquement à l'affichage
+  de suivi, jamais à réentraîner ou sélectionner un modèle.
+- **Kelly fractionnaire** (simulateur) : approximé avec un ratio de gain
+  b=1 (pari à cote égale) plutôt qu'un modèle de gain/perte calibré par
+  trade — gaté sur un score de Brier (`simulate/engine.py::
+  check_kelly_available`) pour éviter de l'activer sans signal correctement
+  calibré, mais reste une simplification du Kelly complet.
+
+## 9. Logo
+
+Il n'y en a pas, et c'est un choix, pas un manque. Le monogramme "P" en anneau
+doré (`.brand-mark`) appartenait à la charte remplacée ; il a disparu avec elle
+lors du remplacement d'identité (§14). Le produit s'identifie par son nom en
+chasse fixe, en tête de bandeau de session (`.session-id`) — la forme qu'un
+listing de calcul donne à son en-tête. Aucun placeholder de logo n'a été
+réintroduit : en poser un supposerait qu'une marque manque, alors que le monde
+visuel courant n'en veut pas.
+
+## 10. Anti-patterns explicitement refusés
+
+Ces pratiques cassent une ou plusieurs des garanties ci-dessus — le code les
+évite structurellement plutôt que par convention :
+
+1. Trier/sélectionner quoi que ce soit sur le holdout.
+2. Exécuter un modèle depuis le simulateur au lieu de lire `prediction`.
+3. Appliquer un sampler (SMOTE) hors du fold d'entraînement.
+4. Joindre une série macro sur sa date de référence plutôt que sa date de
+   publication.
+5. Exécuter un signal sur la bougie qui l'a produit (le simulateur impose
+   `execution_lag_bars >= 1`).
+6. Afficher un Sharpe sans le nombre d'essais qui l'ont produit.
+7. Écraser un snapshot de données existant au lieu d'en créer un nouveau
+   (`data/store.py` — dédupliqué par hash de contenu, jamais réécrit).
+8. Exclure une série de l'univers sans motif explicite persisté (Phase 6.5 --
+   `data/quality.py` : chaque exclusion porte un `reason`, jamais un simple
+   `[WARN]` de log).
+
+## 11. Phase 6 — rigueur d'échantillonnage
+
+Contrainte transversale à toute la phase 6 : aucune des briques ci-dessous ne
+doit devenir un défaut silencieux. Chacune est explicitement activable/
+désactivable dans le YAML (`RunConfig`) et le formulaire web, et le rapport
+HTML de run indique lesquelles étaient actives (section "Corrections phase 6",
+`tracking/report.py`).
+
+### 11.1 P6.5 — Portes de qualité de données à l'ingestion
+
+`patrick/data/quality.py`, câblé dans `data/ingest.py` (toggle
+`data_quality.enabled`, défaut `true`). Chaque série candidate (yfinance ou
+FRED) passe six contrôles avant d'entrer dans l'univers de features :
+
+1. **Prix figés** : `n` clôtures consécutives identiques (défaut 4).
+2. **Trous de cotation** : plus de `n` jours ouvrés sans observation (défaut 10).
+3. **Rendements aberrants** : au-delà de `n` écarts-types **robustes** (MAD ×
+   1.4826, résistant aux queues épaisses — pas un écart-type classique, qui
+   serait lui-même gonflé par l'aberration qu'on cherche à détecter). Défaut 40.
+4. **Fin de série précoce** : dernière observation trop antérieure à la date de
+   fin demandée (probable délistage) — même seuil que 2.
+5. **Série FRED absente ou discontinuée** : aucune observation renvoyée.
+6. **Couverture insuffisante** : réutilise `universe.yf_coverage` (Phase 0,
+   0.85 par défaut), pas un nouveau seuil inventé.
+
+**Seuils mesurés, pas choisis par convention** (cf. docstring de module et
+`tests/test_data_quality.py::test_thresholds_measured_not_arbitrary_*`) :
+simulation de centaines de séries synthétiques à queues épaisses réalistes
+(Student-t, df=5) — le seuil de prix figés (4) et le seuil de rendement
+aberrant (40 écarts-types robustes) ne se déclenchent JAMAIS sur ces séries
+propres, mais se déclenchent nettement sur une corruption injectée réaliste
+(split boursier non ajusté, erreur de décimale). Le seuil de trou de cotation
+(10 jours ouvrés) est calé sur le plus long cluster de jours fériés de marché
+connu (~5 jours), doublé par marge de sécurité.
+
+Comportement : une série qui échoue un contrôle est EXCLUE avec un motif
+explicite (`reason` + `detail`), persisté en base (table `data_quality_issue`,
+liée au `snapshot_id`) — jamais un `[WARN]` perdu dans les logs (même classe de
+défaut que le repli FRED silencieux, déjà corrigé, cf. section "Accès aux
+données" du README). Si plus de `max_universe_exclusion_frac` (défaut 30%) de
+l'univers demandé est exclu, l'ingestion **échoue** plutôt que de continuer sur
+un univers décimé silencieusement.
+
+Limite assumée : `download_universe` (yfinance) ffille déjà en interne avant
+de renvoyer les colonnes retenues (couverture) — les trous de cotation y sont
+donc déjà comblés au moment où `data/quality.py` les voit. Une interruption
+prolongée y apparaît comme une clôture figée (valeur ffillée répétée), déjà
+couverte par le contrôle 1 — convergence assumée, documentée dans
+`data/ingest.py::_run_extra_quality_checks`, pas un trou dans la garantie. Les
+contrôles 2 et 4 (trous/fin précoce) s'appliquent tels quels aux séries FRED
+(non pré-remplies à ce stade).
+
+### 11.2 P6.3 — Stabilité de la sélection de features
+
+`patrick/selection/stability.py`, câblé dans `pipeline/engine.py` après le
+scan (toggle `selection.track_stability`, défaut `true`). Pour la
+configuration (régime, N) localement gagnante de CHAQUE horizon (moyenne
+F1_dir sur ses folds — indépendant du choix global `final_best`, qui ne
+retient qu'un seul horizon pour le modèle exporté), calcule :
+
+- l'indice de **Jaccard** des ensembles de features retenues entre chaque
+  paire de folds walk-forward (chemins CPCV demain, P6.1) — moyenné en
+  `mean_jaccard` ;
+- la **fréquence de sélection** de chaque feature sur l'ensemble des folds.
+
+Persisté dans `feature_stability(run_id, feature, selection_freq)` +
+`run_feature_stability(run_id, mean_jaccard, n_folds)` (migration 0006).
+Affiché dans le rapport HTML de run : Jaccard moyen, classement des features
+par fréquence de sélection, et un avertissement explicite si le Jaccard moyen
+tombe sous `MIN_MEAN_JACCARD_WARNING = 0.40`.
+
+**Seuil mesuré, pas choisi par convention** (cf.
+`tests/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`) :
+sur des données synthétiques SANS lien réel entre X et y (cible pur bruit),
+avec des features corrélées entre elles comme le sont les familles
+technical/interactions du pipeline réel, la sélection SHAP RÉELLE (pas une
+formule combinatoire naïve) produit déjà un Jaccard moyen jusqu'à ~0.40 entre
+folds par la seule structure de corrélation — une formule combinatoire naïve
+(deux sous-ensembles aléatoires indépendants) donnerait un seuil de hasard
+~100x plus bas (~0.01), largement sous-estimé car elle ignore que des
+features corrélées sont choisies ENSEMBLE par un sélecteur basé sur
+l'importance, pas indépendamment. En dessous de 0.40, la stabilité observée
+est indiscernable de cet artefact — pas la preuve d'un signal reproductible.
+
+### 11.3 P6.2 — Poids d'unicité et bootstrap séquentiel
+
+`patrick/models/uniqueness.py` + `patrick/models/sequential_forest.py`
+(López de Prado, "Advances in Financial Machine Learning", ch. 4). Avec un
+horizon `h > 1` et une prédiction par barre, les fenêtres de label se
+chevauchent : l'observation à la barre `t` prédit `[t, t+h]`, donc deux
+observations à moins de `h` barres l'une de l'autre partagent une partie du
+même mouvement de marché sous-jacent — les observations d'entraînement ne
+sont PAS indépendantes.
+
+- **Concurrence par barre** : nombre de spans d'observation qui la recouvrent.
+- **Unicité moyenne par observation** : moyenne de `1/concurrence` sur les
+  barres qu'elle couvre.
+- **Taille d'échantillon effective** (`n_eff`) : somme des unicités —
+  toujours calculée et rapportée à côté de `n_train` (`fold_metric`, métriques
+  `n_train`/`effective_n_train`), quel que soit le sampler.
+- **Poids d'unicité en `sample_weight`** + **bootstrap séquentiel pour
+  RandomForest** (`SequentialBootstrapRandomForestClassifier`, tirage
+  favorisant dynamiquement les observations les moins concurrentes avec le
+  tirage en cours) : ne s'appliquent concrètement QUE si `sampler_name=
+  "none"` — SMOTE et les autres suréchantillonneurs synthétisent des
+  observations sans date/span réels, auxquelles un poids d'unicité ne peut
+  pas être rattaché proprement. Limite assumée, documentée dans
+  `SamplingConfig`/`pipeline/engine.py::_fit_eval`.
+
+Toggle `sampling.uniqueness_weights` (défaut `true`, jamais un défaut
+silencieux).
+
+**Mesure sur cible synthétique** (déliverable P6.2, observations
+consécutives, une par barre — cf. `tests/test_uniqueness.py::
+test_effective_sample_size_matches_1_over_horizon_plus_1`) : `n_eff/n`
+converge vers `1/(horizon+1)` (résultat analytique, confirmé numériquement) :
+
+| horizon (jours) | n_eff / n | Exemple (n=1000) |
+|---|---|---|
+| 1  | 0.500 | 500 |
+| 3  | 0.251 | 251 |
+| 5  | 0.167 | 167 |
+| 10 | 0.092 | 92 |
+| 20 | 0.049 | 49 |
+
+Le chiffre est délibérément surprenant : à l'horizon par défaut du pipeline
+VIX (5 jours), un run avec `n_train=1000` a l'incertitude statistique d'un
+échantillon d'environ **170 lignes**, pas 1000 — cf. justification du seuil
+`min_test_rows`/`MIN_BLOCKS` (rapports de correction D3/C5), qui raisonnaient
+déjà en observations réellement indépendantes sans le formaliser aussi
+explicitement.
+
+**Coût de calcul assumé** : le bootstrap séquentiel coûte O(n_obs x n_bars)
+PAR ARBRE (contre O(n_obs) pour un bootstrap uniforme) — `n_estimators`
+réduit à 100 par défaut pour la variante séquentielle (200 pour la forêt
+standard, `models/registry.py`), compromis documenté dans
+`models/sequential_forest.py`. Mesuré sur `tests/test_uniqueness.py` (config
+minuscule, walk-forward à 2 folds) : ~70s pour un run complet avec
+`sampler="none"`+RandomForest+bootstrap séquentiel, contre quelques secondes
+en configuration standard (SMOTE, bootstrap uniforme) — l'écart grandit avec
+la taille du train, à anticiper sur un run réel (n_train de plusieurs
+centaines à quelques milliers de lignes par fold).
+
+### 11.4 P6.1 — CPCV (validation croisée purgée combinatoire)
+
+`patrick/validation/cpcv.py` (López de Prado, "Advances in Financial Machine
+Learning", ch. 12), câblé dans `pipeline/engine.py::_run_cpcv_scan`, en
+ALTERNATIVE au walk-forward existant — jamais un remplacement.
+`validation.scheme: walkforward | cpcv` (défaut `walkforward`, comportement
+inchangé pour tout run existant), exposé dans le YAML et le formulaire web.
+
+**Principe** : l'historique est découpé en `n_groups` (N) groupes contigus.
+Pour chaque combinaison de `k_test_groups` (k) groupes servant de test (le
+reste sert de train), purge/embargo sont appliqués à CHAQUE frontière de
+groupe de test — contrairement au walk-forward, qui n'a qu'une seule
+frontière train/test à chaque fold. Un groupe de test intérieur (ni premier
+ni dernier groupe de l'historique) a DEUX frontières train/test adjacentes :
+purge symétrique des deux côtés. Les `C(N, k)` combinaisons se recollent en
+`C(N-1, k-1)` chemins de backtest indépendants (identité combinatoire), par
+l'algorithme d'assignation de López de Prado (`path_assignment`) : chaque
+groupe apparaît une fois comme test dans chacun des chemins qui le
+contiennent, dans un ordre déterministe.
+
+**Défauts calculés, pas choisis par convention** (`n_groups=7`,
+`k_test_groups=2`) : le nombre de chemins obtenu est `C(6,1) = 6` — c'est le
+plus petit couple (N, k=2) qui atteigne exactement `MIN_BLOCKS=6`, le seuil
+minimal de fiabilité du PBO (garde C5, `validation/pbo_reliability.py`).
+N=6 donnerait 5 chemins (insuffisant) ; N=8 donnerait 7 chemins (pas
+nécessaire, coût combinatoire `C(8,2)=28` combinaisons contre `C(7,2)=21`).
+C'est la raison d'être principale de P6.1 : rendre le PBO satisfiable en
+dehors d'un historique de runs déjà long, en produisant directement
+plusieurs blocs OOS indépendants à partir d'UN SEUL run.
+
+**Performance rapportée comme une distribution, jamais un point** : chaque
+ligne de leaderboard CPCV porte `n_paths`, `F1_dir_median`, `F1_dir_q05`,
+`F1_dir_q95`, `F1_dir_std` (`validation/cpcv.py::path_performance_distribution`)
+— `F1_dir` (utilisé par le tri existant du leaderboard) vaut la médiane, pas
+une moyenne sur un unique run comme en walk-forward. PBO branché sur ces
+mêmes chemins (`tracking/stats.py::pbo_for_target_cpcv`, source
+`fold_metric[split='test_path']`, jamais mélangée avec les métriques
+par-combinaison `split='test'`) — `compute_pbo`/`pbo_reliability` (C5)
+réutilisés SANS MODIFICATION, seule la source de la matrice change.
+
+**Limites assumées, documentées** (`_run_cpcv_scan`, docstring) :
+
+- Features paramétriques (EGARCH/Kalman/HMM/.../filtre particulaire) fit UNE
+  SEULE FOIS sur tout l'historique (`fit_end_idx=None`, comme le modèle de
+  production), pas par combinaison — refitter par combinaison demanderait un
+  mécanisme de fit sur un train scindé en segments NON contigus, que les
+  modules paramétriques (pensés pour un simple préfixe `fit_end_idx`) ne
+  supportent pas aujourd'hui. Risque de fuite résiduel sur CES familles
+  seulement, en mode CPCV seulement.
+- Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna, pas de
+  Diebold-Mariano en mode CPCV : ces mécanismes reposent sur la topologie
+  "une seule frontière, train=préfixe" du walk-forward (`_FoldContext`/
+  `ctx.prepare`), pas transposable telle quelle à la topologie CPCV
+  (train=complément de groupes dispersés) dans le périmètre de cette phase.
+  `run_pipeline` renvoie explicitement `None` pour `holdout`/
+  `diebold_mariano`/`holdout_diagnostic` en mode CPCV — jamais une valeur
+  walk-forward réutilisée par erreur — et le rapport HTML l'indique en toutes
+  lettres plutôt que d'afficher un "—" ambigu.
+- Purge et embargo sont STRUCTURELS en CPCV (toujours appliqués à chaque
+  frontière de groupe de test), pas gouvernés par `validation.purge`/
+  `embargo_enabled` (optionnels en walk-forward, où l'effet mesuré était
+  négligeable sur une SEULE frontière) — CPCV expose structurellement
+  davantage de frontières, donc davantage de surface de fuite potentielle à
+  fermer par construction.
+- P6.3 (stabilité de sélection) n'est pas calculée en mode CPCV : les
+  features retenues par combinaison ne sont pas capturées dans
+  `board.rows` sous la forme attendue par `feature_selection_stability`.
+
+**Persistance** : `prediction.path_id` (migration 0007, `PRIMARY KEY
+(trial_id, ts, path_id)` — une même date de test est évaluée par PLUSIEURS
+combinaisons/chemins en CPCV, `(trial_id, ts)` seul ne suffit plus ;
+`path_id=-1` sentinelle "sans objet" pour toute prédiction walk-forward,
+comportement inchangé) ; `fold_metric.split='test_path'` (migration 0008,
+CHECK élargi) pour les métriques par chemin, distinctes de `split='test'`
+(par combinaison).
+
+**Tests** (`tests/test_cpcv.py`, 14 tests) : sur données synthétiques,
+vérifient qu'aucun chemin ne contient d'observation à la fois en train et en
+test, que le purge est appliqué aux deux frontières de chaque groupe de test
+intérieur (et à une seule pour un groupe en bord d'historique), que le
+nombre de chemins correspond exactement à la formule combinatoire, et que
+`path_performance_distribution` renvoie bien médiane/quantiles/écart-type
+(jamais un point) y compris sur des cas dégénérés (NaN, vide).
+`tests/test_pipeline_smoke.py::test_cpcv_scheme_runs_end_to_end_and_reports_a_path_distribution`
+exerce `run_pipeline` bout-en-bout en mode CPCV (y compris le chemin d'export
+du modèle final, qui référence des variables `None` en walk-forward pur —
+`pool_builder`/`ctx`/`last_fold` — et devait donc être branché explicitement) ;
+`test_walkforward_scheme_is_default_and_bit_identical_to_before_p61` est la
+contre-épreuve : ne pas fixer `validation.scheme` laisse le comportement
+walk-forward inchangé.
+
+**Chemins obtenus et coût de calcul mesuré** (config `tiny_config` des tests,
+1500 lignes synthétiques, 1 horizon, 2 valeurs de N features, 1 sampler,
+2 algos) : `n_groups=5`/`k_test_groups=2` (plus petit que le défaut, pour un
+test rapide) → `C(4,1) = 4` chemins reconstruits à partir de `C(5,2) = 10`
+combinaisons. À titre de comparaison, le test walk-forward équivalent
+(`n_wf_folds=2`, même grille) prend un ordre de grandeur de temps comparable
+par essai de configuration — le coût CPCV croît avec le nombre de
+combinaisons (`C(N,k)`, pas `C(N-1,k-1)` chemins) évaluées, chacune
+nécessitant un fit/predict complet : avec les défauts (N=7, k=2), 21
+combinaisons sont évaluées pour reconstruire 6 chemins, contre `n_wf_folds`
+(walk-forward, typiquement 3-5) fits — CPCV coûte structurellement plus cher
+par essai de configuration, en échange de blocs OOS indépendants garantis
+dès un seul run (cf. raison d'être ci-dessus).
+
+### 11.5 P6.4 — Correction FDR (Benjamini-Hochberg) entre cibles
+
+`patrick/validation/fdr.py` (fonction pure `benjamini_hochberg`, Benjamini &
+Hochberg 1995), câblée via `tracking/stats.py::fdr_across_targets`.
+
+**Raison d'être** : les garde-fous multi-tests de la section 4 (compteur
+d'essais cumulé, DSR, PBO, Diebold-Mariano) corrigent le nombre d'ESSAIS DE
+CONFIG au sein d'une même (cible, horizon). Ils ne corrigent PAS le fait
+d'essayer successivement plusieurs CIBLES différentes (VIX, puis GSPC, puis
+SPY...) et de ne retenir que celle dont le test Diebold-Mariano est
+significatif — un problème de tests multiples à une échelle différente. Sur
+20 cibles sans aucun vrai signal, environ 1 apparaîtrait "significative" à
+p<0.05 par pur hasard rien qu'en cherchant assez.
+
+**Mécanisme** : `pipeline/engine.py::run_pipeline` persiste désormais le
+résultat Diebold-Mariano (Phase 2.5) dans une table dédiée `dm_result`
+(migration 0009, une ligne par run walk-forward ayant produit un
+`final_best` — jamais en mode CPCV, cf. limite 11.4) plutôt que seulement
+dans `job.result_json` (limite antérieure : invisible pour un `patrick run`/
+`patrick resume` CLI, et impossible à agréger PAR CIBLE à travers plusieurs
+runs). `fdr_across_targets` prend, pour chaque cible ayant au moins un
+`dm_result`, la MEILLEURE (plus petite) p-value obtenue sur n'importe lequel
+de ses runs, puis applique `benjamini_hochberg` — jamais modifié lui-même
+(même discipline que C5/P6.1 : seule la requête source change), renvoyant
+pour chaque cible une p-value ajustée (q-value) et un statut significatif au
+seuil FDR choisi (`alpha`, défaut 0.10, paramétrable via
+`patrick report --fdr-alpha` ou l'argument `alpha` de `fdr_across_targets`).
+
+**Affichage** : nouvelle section "Correction FDR entre cibles" dans le
+rapport HTML de run (`tracking/report.py`) — nombre de cibles testées,
+nombre de significatives brutes (p ≤ alpha), nombre de significatives après
+correction BH, et le statut de LA cible de ce run (p brute, p ajustée, rang)
+resitué parmi toutes les autres — jamais un chiffre isolé, même principe que
+l'intervalle de confiance bootstrap du PBO (C5).
+
+**Tests** (`tests/test_fdr.py`, 7 tests) : exemple calculé à la main (m=5,
+q-values vérifiées terme à terme), monotonie des p-values ajustées par rang,
+équivalence `significant ⟺ q≤alpha`. Déliverable explicitement demandé :
+sur des p-values simulées Uniform(0,1) pour TOUTES les cibles (vrai null
+partout, 300 tirages de m=50 cibles), le nombre moyen de découvertes BH par
+tirage est proche de alpha (~0.10 — résultat classique : sous le null
+complet, P(≥1 découverte BH) = alpha exactement), très en dessous du nombre
+de "significatifs" bruts non corrigés qui converge vers m·alpha (~5) ; sur
+un mélange (moitié cibles à vrai null Uniform(0,1), moitié à vraie
+alternative Beta(0.5,8) concentrée près de 0, simulant un DM réellement
+significatif), BH retrouve une puissance substantielle (>40% de vrais
+positifs détectés) tout en bornant la proportion de fausses découvertes.
+`tests/test_fdr_integration.py` (2 tests lents) : `run_pipeline` sur deux
+cibles distinctes écrit bien deux lignes `dm_result`, agrégées correctement
+par `fdr_across_targets` ; contre-épreuve — un run CPCV n'écrit jamais de
+`dm_result` (jamais une p-value walk-forward réutilisée par erreur pour une
+cible qui n'a en réalité tourné qu'en CPCV).
+
+## 12. Phase 7 — interface (historique de runs, cibles, univers)
+
+Refonte de l'interface web autour d'un principe directeur : **aucun chiffre
+affiché sans sa contrepartie de fiabilité** (intervalle de confiance, taille
+d'échantillon, ou message explicite de non-calculabilité — jamais un nombre
+nu). Lecture seule : aucune de ces pages ne relance, ne modifie ni
+n'influence un run ; elles lisent uniquement `patrick.db` (mêmes briques de
+validité que `tracking/report.py`/`tracking/stats.py`, jamais réimplémentées
+différemment).
+
+### 12.0 Système de design (P7.0)
+
+- `webapp/static/tokens.css` : jetons (couleurs, typographie, espacement)
+  extraits de l'ancien `:root` de `style.css` — même charte sombre/or,
+  aucune couleur changée. Deux ajouts : une échelle typographique
+  (`--text-xs` à `--text-2xl`) et une échelle d'espacement (`--space-1` à
+  `--space-8`, base 4px).
+- **3 états sémantiques neufs**, en plus de `--ok`/`--warning`/`--error`
+  (déjà existants) : `--neutral` (informatif, ex. schéma de validation),
+  `--pending` (en cours/en file d'attente), `--disabled` (désactivé pour ce
+  run, ou non calculable — ni un succès ni un échec, ne doit pas se confondre
+  visuellement avec une erreur réelle). Portés par `.status-badge`/
+  `.metric-value` (`static/style.css`).
+- `webapp/templates/_components.html` : composants Jinja partagés —
+  `metric()` (force un troisième argument `reliability`, jamais implicite),
+  `status_badge()`, `data_table()`, `sparkline()` (SVG inline, sans JS),
+  `empty_state()` (pas de données) et `error_state()` (donnée manquante
+  inattendue) — deux sémantiques distinctes, jamais confondues.
+
+### 12.1-12.3 `/runs`, `/runs/{id}`, `/targets/{ticker}` (P7.1-P7.3)
+
+Nouveau module `tracking/history.py` : requêtes lecture seule, réutilisant
+`trackstats.pbo_for_target[_cpcv]`, `trackstats.fdr_across_targets`,
+`trackholdout.spearman_test_vs_holdout` sans les modifier (même discipline
+que P6.1/C5). Contrairement à `report.py` (dont holdout/DM/PBO ne
+s'affichent que pour un run lancé depuis l'interface web, limite du
+mécanisme `job.result_json`), ces requêtes recalculent PBO/essais cumulés à
+la volée pour N'IMPORTE QUEL run (CLI ou web) et lisent `dm_result`
+(migration 0009, P6.4) directement — disponible pour tout run walk-forward
+quelle que soit son origine.
+
+- `/runs` (P7.1) : explorateur de tout l'historique (`run`), filtrable par
+  cible/statut/schéma.
+- `/runs/{id}` (P7.2) : page de détail (essais, baselines, PBO, DM, holdout,
+  diagnostic de corrélation test/holdout, FDR, qualité de données, stabilité
+  des features). **Décision de routage** : `/runs/{run_id}` existait déjà
+  (suivi d'un run en cours/en file, pointant vers `index.html`) — plutôt que
+  de créer une collision d'URL, la route existante bascule sur cette
+  nouvelle page de détail lecture seule uniquement quand `run_manager` ne
+  connaît PAS ce run (pas de ligne `job` associée — cas d'un `patrick run`/
+  `patrick resume` CLI, qui n'a jamais de `job_id`) ; le comportement du
+  lancement/suivi en direct est inchangé à l'identique.
+- `/targets/{ticker}` (P7.3) : vue agrégée de tout l'historique d'une cible,
+  PBO par horizon (walk-forward et CPCV séparément), et statut FDR de la
+  cible parmi toutes les autres testées.
+
+### 12.4 Page d'accueil (P7.4)
+
+**Décision** : `/` reste le formulaire de lancement + tableau de bord de
+suivi existant (Phase 3), inchangé — une refonte du contenu de `/` n'a pas
+été tentée sans un brief exact de sa nouvelle maquette (risque de casser un
+flux déjà testé bout-en-bout, `test_webapp_smoke.py`). La découvrabilité des
+nouvelles pages est assurée par deux liens ajoutés à la barre de navigation
+commune (`base.html`) : « Historique » (`/runs`) et « Univers » (`/universe`).
+
+### 12.5 `/universe` (P7.5)
+
+Croise `config/defaults.py::DEFAULT_TARGET_GROUPS` (déjà l'univers de cibles
+du formulaire de lancement) avec l'historique réel de runs — aucune donnée
+nouvelle, juste la jointure des deux : pour chaque cible configurable, le
+nombre de runs et le dernier lancé, ou « jamais lancée » sinon.
+
+### 12.6 Tests
+
+`tests/test_history.py` (11 tests) : requêtes de `tracking/history.py` sur
+base SQLite directe (filtre, tri, agrégation par cible, structure
+walk-forward vs CPCV, cas vide). `tests/test_history_webapp_smoke.py` (8
+tests) : rendu FastAPI réel des 4 nouvelles pages (base pré-remplie
+directement, sans run pipeline complet — rapide, contrairement à
+`test_webapp_smoke.py`), y compris le cas 404 et les états vides.
+
+## 13. Correction N2 — une valeur infinie ne peut plus atteindre un modèle
+
+Un run réel sur `^VIX` échouait après 380s de construction de features avec
+`Input data contains "inf" or a value too large, while "missing" is not set
+to "inf"` (XGBoost). Diagnostic mesuré, pas supposé.
+
+**Cause racine** : `np.nan_to_num`, utilisé aux trois endroits où la matrice
+de features est construite (walk-forward, holdout, CPCV), donnait une fausse
+sécurité. Il mappe ±inf sur ±1.797e308 (le maximum float64) — valeur finie
+sur l'instant, mais le `RobustScaler` appliqué juste après divise par l'IQR
+de la colonne. Dès que cet IQR est < 1 — cas courant parmi 6632 colonnes
+(rendements, z-scores, indicateurs bornés) — la division **redonne ±inf**.
+Mesuré : une seule cellule infinie dans une colonne d'IQR 0.025 suffit à
+reproduire l'erreur. Le scaler étant ajusté sur le train seul, un inf présent
+uniquement dans le TEST emprunte aussi ce chemin.
+
+**Origine de l'inf** : la garde anti-inf existait dans
+`discover_interactions` (features/interactions.py) mais PAS dans
+`_apply_interaction_formulas` (pipeline/engine.py) — or les formules retenues
+sur le fold pilote sont ensuite *appliquées* aux autres folds, là où un
+dénominateur sain sur le pilote peut devenir ~0. `ratio`/`zrel` neutralisent
+un dénominateur exactement nul (`.replace(0, np.nan)`) mais pas un
+dénominateur simplement très petit, qui produit un ±inf réel. C'est le chemin
+reproduit en production.
+
+**Correctif, à deux étages plus la source** :
+
+- `_finite_features` remplace `np.nan_to_num` : un ±inf vient toujours d'un
+  calcul dégénéré (division par ~0, log d'une valeur <= 0) et ne porte aucune
+  information numérique — il suit donc le chemin des valeurs MANQUANTES
+  (comme NaN, déjà converti en 0.0), jamais celui d'un « nombre très grand ».
+  Compté et signalé, jamais silencieux (même discipline que la garde D3).
+- `_finite_scaled` garantit l'invariant en SORTIE de mise à l'échelle : une
+  valeur simplement très grande mais finie (donc invisible en amont) peut
+  encore déborder en étant divisée par un IQR minuscule. Les deux étages sont
+  nécessaires, l'un ne remplace pas l'autre.
+- `apply_interaction` devient le seul point d'application autorisé du registre
+  `INTERACTION_TYPES`, pour que la garde ne puisse plus être oubliée par un
+  appelant — la cause de l'asymétrie d'origine.
+
+**Tests** (`tests/test_inf_features.py`, 7 tests) : reproduction explicite de
+la cause racine (verrou anti-retrait du correctif : si `nan_to_num` seul
+cessait de réintroduire l'inf, le test le signale), équivalence inf/NaN,
+non-silence, débordement depuis une valeur finie, garde d'interaction sur
+dénominateur ~0 ET exactement nul, et surtout : XGBoost accepte réellement la
+matrice nettoyée là où il rejette la matrice naïve.
