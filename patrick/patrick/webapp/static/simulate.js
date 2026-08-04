@@ -89,6 +89,19 @@
 
     var lastTradeReturns = [];
 
+    var METRIC_ANNOTATIONS = {
+        "sim_metric_cagr": "Compound Annual Growth Rate (CAGR) — taux de croissance annuel composé du portefeuille.",
+        "sim_metric_vol": "Volatilité annualisée — écart-type des rendements annualisé. Plus bas = plus stable.",
+        "sim_metric_sharpe": "Ratio de Sharpe — rendement excédentaire par unité de risque (volatilité). Plus haut = mieux. Les valeurs entre parenthèses incluent la correction de Sharpe déflaté pour tenir compte du surapprentissage.",
+        "sim_metric_sortino": "Ratio de Sortino — comme Sharpe, mais ne compte que la volatilité à la baisse (rend de négatifs). Plus haut = mieux.",
+        "sim_metric_max_dd": "Drawdown maximal — pire baisse cumulative depuis un pic. La valeur entre parenthèses est la durée en jours. Un DD plus petit est préférable.",
+        "sim_metric_turnover": "Turnover annualisé — nombre de fois où le portefeuille est rebalancé par an. Indique l'activité de trading.",
+        "sim_metric_hit_rate": "Hit Rate ou Win Rate — pourcentage de trades rentables. Plus haut = meilleur edge, mais doit être combiné avec Profit Factor.",
+        "sim_metric_profit_factor": "Profit Factor — ratio des gains totaux sur les pertes totales. Un PF > 1 est rentable; > 1.5 est solide.",
+        "sim_metric_avg_exposure": "Exposition moyenne au marché — proportion moyenne du capital investi. 1 = toujours 100% investi, 0.5 = 50% en moyenne.",
+        "sim_metric_break_even": "Break Even Cost — coûts maximums tolérés (en basis points) pour que la stratégie reste rentable au seuil."
+    };
+
     form.addEventListener("submit", async function (ev) {
         ev.preventDefault();
         var trialId = trialSelect.value;
@@ -156,6 +169,38 @@
 
         renderMetricsTable(data.strategy || {}, data.buy_and_hold || {});
         renderTradesTable(lastTradeReturns);
+        describeCanvases(eqPoints, bhPoints, ddPoints, lastTradeReturns);
+    }
+
+    /* Équivalents textuels des trois toiles. Un graphique sans texte de
+       remplacement n'existe pas pour un lecteur d'écran, et ces trois-là
+       portent l'intégralité du résultat d'une simulation. Écrit à partir des
+       vraies séries, jamais d'un libellé générique. */
+    function describeCanvases(eq, bh, dd, trades) {
+        function setLabel(id, text) {
+            var el = document.getElementById(id);
+            if (el) el.setAttribute("aria-label", text);
+        }
+        if (eq.length) {
+            setLabel("sim-equity-canvas", fmtStr(tr("sim_aria_equity",
+                "Equity curve over {n} points: {first} to {last}, against buy-and-hold ending at {bh}."),
+                { n: eq.length, first: fmtNum(eq[0], 3), last: fmtNum(eq[eq.length - 1], 3),
+                  bh: bh.length ? fmtNum(bh[bh.length - 1], 3) : "—" }));
+        }
+        if (dd.length) {
+            setLabel("sim-drawdown-canvas", fmtStr(tr("sim_aria_drawdown",
+                "Drawdown over {n} points, deepest {max}."),
+                { n: dd.length, max: fmtNum(Math.min.apply(null, dd), 3) }));
+        }
+        if (trades.length) {
+            var pos = 0, neg = 0;
+            for (var i = 0; i < trades.length; i++) { if (trades[i] > 0) pos++; else if (trades[i] < 0) neg++; }
+            setLabel("sim-dist-canvas", fmtStr(tr("sim_aria_dist",
+                "Distribution of {n} trades: {pos} winning, {neg} losing, worst {min}, best {max}."),
+                { n: trades.length, pos: pos, neg: neg,
+                  min: fmtNum(Math.min.apply(null, trades), 4),
+                  max: fmtNum(Math.max.apply(null, trades), 4) }));
+        }
     }
 
     function renderMetricsTable(strat, bh) {
@@ -175,7 +220,10 @@
         ];
         var tbody = document.querySelector("#sim-metrics-table tbody");
         tbody.innerHTML = rows.map(function (r) {
-            return "<tr><td>" + tr(r[0], r[0]) + '</td><td class="num">' + r[1] + '</td><td class="num">' + r[2] + "</td></tr>";
+            var label = tr(r[0], r[0]);
+            var annotation = METRIC_ANNOTATIONS[r[0]] || "";
+            var help = annotation ? '<span class="metric-help" title="' + escapeHtml(annotation) + '">?</span>' : "";
+            return '<tr class="metric-row"><td class="metric-label">' + label + ' ' + help + '</td><td class="metric-value num">' + r[1] + '</td><td class="metric-value num">' + r[2] + "</td></tr>";
         }).join("");
     }
 
@@ -202,7 +250,7 @@
     function drawLine(canvas, series1, series2, isDrawdown) {
         if (!canvas) return;
         var ctx = canvas.getContext("2d");
-        var w = canvas.width, h = canvas.height, pad = 30;
+        var w = canvas.width, h = canvas.height, pad = 40;
         ctx.clearRect(0, 0, w, h);
         var all = series1.concat(series2 || []).filter(function (v) { return v !== null && v !== undefined && !Number.isNaN(v); });
         if (all.length < 2) return;
@@ -235,6 +283,22 @@
         ctx.fillText(fmtNum(max, 2), 2, pad);
         ctx.fillText(fmtNum(min, 2), 2, h - pad + 4);
 
+        ctx.textAlign = "center";
+        var timePoints = [0, Math.floor(series1.length / 2), series1.length - 1];
+        for (var i = 0; i < timePoints.length; i++) {
+            var idx = timePoints[i];
+            if (idx < series1.length) {
+                var xStep = (w - 2 * pad) / (series1.length - 1);
+                var x = pad + idx * xStep;
+                ctx.fillText(idx, x, h - 5);
+            }
+        }
+
+        ctx.textAlign = "right";
+        ctx.fillText(isDrawdown ? "Drawdown (%)" : "Equity", 15, 15);
+        ctx.textAlign = "center";
+        ctx.fillText("Time", w / 2, h - 2);
+
         if (series2 && series2.length) plot(series2, token("--ink-2"));
         plot(series1, isDrawdown ? token("--error-ink") : line);
     }
@@ -242,7 +306,7 @@
     function drawHistogram(canvas, values) {
         if (!canvas) return;
         var ctx = canvas.getContext("2d");
-        var w = canvas.width, h = canvas.height, pad = 24;
+        var w = canvas.width, h = canvas.height, pad = 35;
         ctx.clearRect(0, 0, w, h);
         if (!values.length) return;
         var nBins = Math.min(20, Math.max(5, Math.floor(Math.sqrt(values.length))));
@@ -257,11 +321,24 @@
         var maxCount = Math.max.apply(null, bins);
         var barW = (w - 2 * pad) / nBins;
         var gain = token("--ok-ink"), loss = token("--error-ink");
+        var axis = token("--ink-text-2");
         var zeroBin = (0 - min) / binW;
         for (var i = 0; i < nBins; i++) {
             var barH = (bins[i] / maxCount) * (h - 2 * pad);
             ctx.fillStyle = (i + 0.5) >= zeroBin ? gain : loss;
             ctx.fillRect(pad + i * barW, h - pad - barH, barW - 1, barH);
         }
+
+        ctx.fillStyle = axis;
+        ctx.font = "9px " + MONO;
+        ctx.textAlign = "center";
+        ctx.fillText(fmtNum(min, 2), pad, h - 5);
+        ctx.fillText(fmtNum(min + (max - min) / 2, 2), pad + (w - 2 * pad) / 2, h - 5);
+        ctx.fillText(fmtNum(max, 2), w - pad, h - 5);
+
+        ctx.textAlign = "right";
+        ctx.fillText("Frequency", 20, 15);
+        ctx.textAlign = "center";
+        ctx.fillText("Return per Trade", w / 2, h - 2);
     }
 })();

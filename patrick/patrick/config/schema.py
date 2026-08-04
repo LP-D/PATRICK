@@ -96,7 +96,12 @@ class ValidationConfig(BaseModel):
     # one-vs-rest ne soit pas dégénéré (effectif nul dans une classe) donne
     # 5 x 4 = 20, exactement la valeur déjà en place.
     min_test_rows: int = 20
-    holdout_months: int = D.DEFAULT_HOLDOUT_MONTHS
+    holdout_months: int = Field(
+        default=D.DEFAULT_HOLDOUT_MONTHS,
+        ge=12,
+        le=24,
+        description="Holdout terminal window (months). Valid range: 12-24, default 15."
+    )
 
 
 class SelectionConfig(BaseModel):

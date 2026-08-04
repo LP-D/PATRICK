@@ -23,6 +23,7 @@
     var newsList = document.getElementById("news-list");
 
     var currentPeriod = "1y";
+    var currentSymbol = null;
     var currentSeries = null; // {dates, closes}
 
     // Le panneau d'aperçu (un graphique, une liste d'actus) reste
@@ -52,6 +53,8 @@
             ctx.fillStyle = token("--ink-text-2");
             ctx.font = "13px " + MONO;
             ctx.fillText(tr("preview_no_data", "No data for this period."), pad, h / 2);
+            canvas.setAttribute("aria-label", tr("preview_aria_empty",
+                "Target price history — nothing plotted yet."));
             return;
         }
 
@@ -97,6 +100,13 @@
         ctx.stroke();
         canvas._baseImage = ctx.getImageData(0, 0, w, h);
 
+        // Équivalent textuel : sans lui, la toile ne dit rien du tout à un
+        // lecteur d'écran. Réécrit à chaque tracé, avec les vraies bornes.
+        canvas.setAttribute("aria-label", fmtStr(
+            tr("preview_aria", "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."),
+            { symbol: currentSymbol || "?", period: currentPeriod, n: closes.length,
+              min: fmtNum(min), max: fmtNum(max), last: fmtNum(closes[closes.length - 1]) }));
+
         canvas.onmousemove = function (ev) {
             var rect = canvas.getBoundingClientRect();
             var mx = (ev.clientX - rect.left) * (canvas.width / rect.width);
@@ -133,6 +143,7 @@
 
     function loadPreview(symbol, period) {
         if (!canvas) return;
+        currentSymbol = symbol;
         if (statusEl) statusEl.textContent = tr("preview_loading", "Loading…");
         fetch("/api/preview/" + encodeURIComponent(symbol) + "?period=" + encodeURIComponent(period))
             .then(function (r) { return r.json(); })
@@ -140,8 +151,13 @@
                 currentSeries = data;
                 drawChart(data);
                 if (statusEl) {
-                    statusEl.textContent = data.error ? fmtStr(tr("preview_unavailable", "Unavailable: {error}"), { error: data.error })
-                        : (data.closes && data.closes.length ? "" : tr("preview_no_data", "No data for this period."));
+                    // La plaque écrit déjà « Pas de données pour cette période »
+                    // quand la série est vide : le répéter juste en dessous
+                    // disait deux fois la même chose. Cette ligne ne porte donc
+                    // plus que ce que la plaque ne peut pas dire — la cause.
+                    statusEl.textContent = data.error
+                        ? fmtStr(tr("preview_unavailable", "Unavailable: {error}"), { error: data.error })
+                        : "";
                 }
             })
             .catch(function () {

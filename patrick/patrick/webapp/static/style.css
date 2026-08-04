@@ -18,7 +18,16 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--ground); }
+html {
+    background: var(--ground);
+    /* La barre de lancement est collante en bas : sans cette réserve, un champ
+       situé derrière elle est « dans le viewport » pour le navigateur, qui ne
+       défile donc pas quand on l'atteint au clavier — on tape dans un champ
+       invisible. Mesuré : barre à `top: 832`, `input[name=regimes]` à
+       `835 → 867`. La hauteur réelle varie de 68 à 165px selon l'état armé et
+       la largeur ; `app.js` la publie dans `--launch-bar-h`. */
+    scroll-padding-bottom: calc(var(--launch-bar-h, 0px) + var(--s5));
+}
 
 body {
     margin: 0;
@@ -94,14 +103,24 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     display: flex;
     align-items: center;
     gap: var(--s5);
-    padding: var(--s3) var(--s6);
+    padding: max(var(--s3), env(safe-area-inset-top)) max(var(--s6), env(safe-area-inset-right))
+             var(--s3) max(var(--s6), env(safe-area-inset-left));
     background: var(--ink);
     color: var(--ink-text);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    /* Le bandeau ne pousse jamais le document. Mesuré à 200 % de zoom texte en
+       390px : le lien « Simulateur » atteignait 548px et faisait déborder la
+       PAGE de 64px. `clip` plutôt que `hidden` — il borne sans créer de
+       conteneur de défilement, donc le `position: sticky` du bandeau tient. */
+    overflow-x: clip;
 }
-/* Le produit s'identifie par son nom en chasse fixe — aucun logo, aucun
-   monogramme : c'est un engagement de marque, pas un manque à combler. */
+/* L'identité du produit tient en deux pièces dans un seul lien : la marque
+   (SVG en ligne, cf. base.html) puis le nom en chasse fixe. La marque ajoute la
+   reconnaissance, le nom reste ce qui se lit — elle ne le remplace pas. */
 .station-id {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
     font-family: var(--mono);
     font-size: var(--t-lead);
     font-weight: 600;
@@ -109,9 +128,26 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--ink-text);
     padding-right: var(--s2);
 }
+.station-mark {
+    flex: none;
+    /* En `em`, pas en pixels : à 200 % de zoom texte le nom passait de 17 à
+       34px et la marque restait à 22 — elle devenait une vignette accrochée à
+       un mot. 1.3em = 22px à la taille nominale. */
+    width: 1.3em;
+    height: 1.3em;
+    /* Le mono du nom porte 0.22em de chasse : sans ce recul, la marque colle à
+       la lettre P alors que le nom, lui, respire. */
+    margin-right: 1px;
+}
+/* La tête de la dernière barre — le seul point coloré de la marque. Posée en
+   CSS et non en attribut : une couleur codée en dur dans le SVG survivrait à un
+   remplacement d'identité et repeindrait l'ancien monde. */
+.station-mark .mark-head { fill: var(--accent-ink); }
 .station-id:hover { color: var(--ink-text); text-decoration: none; }
-.station-id:hover::after { transform: scaleX(1); }
-.station-id::after {
+.station-id:hover .station-name::after { transform: scaleX(1); }
+/* Le trait de survol souligne le NOM, pas le lien entier : porté par
+   `.station-id`, il passait sous la marque et la barrait. */
+.station-name::after {
     content: "";
     display: block;
     height: 2px;
@@ -201,11 +237,15 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
 }
 /* Sans données, la bande ne feint pas un tracé : elle le dit. */
 .record-canvas[data-state="empty"] { cursor: default; }
+/* La légende s'étalait sur 5 lignes de chasse fixe sous une bande de 40px en
+   mobile : le texte pesait plus que la donnée qu'il légende. Bornée à deux
+   lignes, le texte complet restant dans le DOM pour les technologies
+   d'assistance. */
 .record-caption {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--s1) var(--s5);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     margin: var(--s2) 0 0;
     font-family: var(--mono);
     font-size: var(--t-micro);
@@ -213,6 +253,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--ink-text-2);
 }
 .record-caption b { font-weight: 600; color: var(--ink-text); }
+.record-canvas:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 .record-tooltip {
     position: absolute;
     z-index: 40;
@@ -229,6 +270,64 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
 }
 .record-tooltip b { color: var(--text); font-weight: 600; }
 .record-tooltip span { color: var(--text-3); }
+
+/* ---------------------------------------------------------------------------
+   LE VERDICT DE LA STATION — ce qui tient, ce que ça a coûté.
+
+   Registre du BOÎTIER, pas de la valeur : chasse fixe au corps de la ligne de
+   provenance, libellé en capitales espacées, contrepartie en ligne juste
+   après. Deux grands chiffres ici auraient fait une barre de KPI — le gabarit
+   « gros chiffre, petit libellé, stats de soutien » que ce monde a remplacé,
+   et que DESIGN.md refuse explicitement.
+
+   Aucune couleur de jugement sur le nombre de survivants : le produit soutient
+   qu'un « non » clairement établi est un résultat réussi, donc zéro survivant
+   n'est pas un mauvais état et ne se peint pas comme tel.
+   --------------------------------------------------------------------------- */
+.verdict {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1) var(--s6);
+    margin: var(--s2) 0 0;
+    font-family: var(--mono);
+    font-size: var(--t-micro);
+    line-height: 1.5;
+    color: var(--ink-text-2);
+}
+.verdict-item { display: inline-flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; min-width: 0; }
+.verdict b {
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: rgba(159, 174, 198, 0.72);
+}
+.verdict-value { color: var(--ink-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* La contrepartie n'est jamais optionnelle : c'est la règle du produit, elle
+   vaut ici comme dans `metric()`. */
+.verdict-rel { color: var(--ink-text-2); opacity: 0.85; }
+.verdict .na { color: var(--ink-text-2); }
+
+/* Ligne de portée locale, en tête d'une surface dense. Même grammaire que le
+   verdict du bandeau — libellé, valeur, contrepartie — mais posée sur le
+   PAPIER, donc dans les couleurs de la page. Elle ne répète jamais le verdict
+   global : elle répond à la question propre à sa surface. */
+.scope-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s2) var(--s3);
+    margin: 0 0 var(--s5);
+    font-family: var(--mono);
+    font-size: var(--t-small);
+    color: var(--text-3);
+}
+.scope-line b {
+    font-family: var(--display);
+    font-size: var(--t-micro);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-2);
+}
+.scope-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Contexte de reproductibilité : cible, snapshot, hash de config, git SHA,
    seed. Imprimé SUR le boîtier, avant le premier résultat — sans ces champs
@@ -265,8 +364,18 @@ h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; }
     letter-spacing: -0.02em;
     line-height: 1.15;
     text-wrap: balance;
+    /* À 200 % de zoom texte en 390px, « d'investissement » fait à lui seul
+       438px pour 358 disponibles : un mot plus large que sa colonne ne peut
+       pas se replier, et c'est LUI qui poussait la page de 64px. Coupable
+       identifié par `scrollWidth > clientWidth` sur le titre, pas par un
+       élément dont la boîte dépassait — elle ne dépassait pas. */
+    overflow-wrap: break-word;
     margin-bottom: var(--s2);
 }
+/* Un chemin de code dans le sous-titre (`config/defaults.py::DEFAULT_...`) est
+   un jeton insécable : à 200 % de zoom il poussait `/universe` 333px hors de
+   l'écran. */
+.page-subtitle code, .table-footer code, .hint code { overflow-wrap: anywhere; }
 .page-subtitle {
     color: var(--text-2);
     font-size: var(--t-body);
@@ -571,6 +680,13 @@ button.primary:disabled {
     color: var(--text);
     font-family: var(--mono);
     font-size: var(--t-body);
+    /* Sans `min-width: 0`, la largeur MIN-CONTENT d'un `select` (« run_b — ^VIX
+       h=5j (2026-07-28 13:16:14) ») dimensionne la piste de grille qui le
+       contient. Mesuré à 200 % de zoom texte en 390px : `main.container` avait
+       un `scrollWidth` de 454 pour un `clientWidth` de 390 — la page débordait
+       de 64px sans qu'aucun élément ne dépasse visiblement, parce que c'est la
+       piste elle-même qui était trop large. */
+    min-width: 0;
     transition: border-color 140ms ease-out, box-shadow 140ms ease-out, background 140ms ease-out;
 }
 .run-form input:hover, .run-form select:hover, .run-form textarea:hover { border-color: var(--text-3); }
@@ -891,6 +1007,24 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 /* Un bloc modifié par rapport à ses défauts se signale : c'est la seule chose
    qui distingue un réglage d'une leçon héritée. */
 .adv-state[data-modified] { color: var(--accent); font-weight: 600; }
+/* État d'une brique de rigueur. Toujours rendu, ON comme OFF — et OFF se voit,
+   parce qu'une garantie absente est l'information qui compte. */
+.adv-gate {
+    display: inline-block;
+    margin-left: var(--s2);
+    padding: 1px 6px;
+    border-radius: var(--r-small);
+    background: var(--raise);
+    color: var(--text-2);
+    font-size: var(--t-micro);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.adv-gate[data-off] { background: var(--warn-weak); color: var(--warn); }
+.adv-tail { margin-left: var(--s2); }
+/* Le résumé peut désormais porter plusieurs pastilles : il s'enroule plutôt
+   que de pousser le titre hors du panneau. */
+.adv-state { white-space: normal; text-overflow: clip; }
 .adv-body { padding: var(--s2) var(--s1) var(--s5); }
 .adv-body > .hint:first-child { margin-top: 0; }
 
@@ -907,7 +1041,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     gap: var(--s4);
     flex-wrap: wrap;
     margin: var(--s5) calc(-1 * var(--s5)) calc(-1 * var(--s5));
-    padding: var(--s4) var(--s5);
+    padding: var(--s4) var(--s5) max(var(--s4), env(safe-area-inset-bottom));
     background: var(--surface);
     border-top: 1px solid var(--rule);
     border-radius: 0 0 var(--r-panel) var(--r-panel);
@@ -925,6 +1059,42 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 }
 .launch-recap b { font-weight: 600; color: var(--text); }
 .launch-bar button.primary { flex: none; }
+
+/* État armé : la barre change de matière pour dire que le prochain clic
+   engage. Pas de fenêtre modale — l'action n'a pas besoin d'interrompre,
+   seulement d'être relue avant d'être confirmée.
+
+   Le teinté est COMPOSÉ SUR la surface, jamais posé à sa place. Mesuré sur la
+   version précédente : `background: var(--warn-weak)` remplaçait le fond
+   opaque par un `rgba(…, 0.12)`, et comme la barre est collante, le formulaire
+   défilait dessous et transparaissait au travers — en 390px le récapitulatif
+   s'imprimait sur le champ « Nom du run ». Illisible à l'instant précis où il
+   sert. Le repli couvre les navigateurs sans `color-mix`.
+
+   `--pending` et non `--warn` : armer un lancement n'est pas un
+   avertissement, c'est une attente de confirmation. */
+.launch-bar[data-confirm] {
+    background: var(--surface);
+    background: color-mix(in srgb, var(--pending) 10%, var(--surface));
+    border-top-color: var(--pending);
+}
+.launch-bar[data-confirm] .launch-recap { color: var(--text); }
+.launch-bar[data-confirm] button.primary { background: var(--pending); border-color: var(--pending); }
+.launch-cancel {
+    flex: none;
+    padding: 9px var(--s4);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r-control);
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--display);
+    font-size: var(--t-body);
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 140ms ease-out, color 140ms ease-out;
+}
+.launch-cancel:hover { border-color: var(--text-3); color: var(--text); }
+.launch-cancel[hidden] { display: none; }
 
 .group-block { margin-bottom: var(--s6); }
 .group-title {
@@ -1005,7 +1175,9 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
    thèmes, coins adoucis, jamais un rectangle blanc bordé.
    --------------------------------------------------------------------------- */
 .target-preview { margin: 0 0 var(--s5); }
-.preview-range-buttons { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
+/* `flex-wrap` : à 200 % de zoom texte en 390px, « 5Y » et « Max » sortaient de
+   l'écran de 100px — aucun ancêtre ne les clippait. Mesuré. */
+.preview-range-buttons { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s3); }
 .range-btn {
     padding: 3px var(--s3);
     border: 1px solid var(--rule-strong);
@@ -1107,6 +1279,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     font-size: var(--t-head);
     font-weight: 700;
     letter-spacing: -0.02em;
+    overflow-wrap: break-word;
     margin: 0 0 var(--s6);
 }
 .sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: var(--s5); align-items: start; }
@@ -1152,6 +1325,76 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
 
 .sim-guard { color: var(--warn); }
 #sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; }
+
+.sim-graph-container { margin-bottom: var(--s5); }
+.sim-graph-title {
+    font-family: var(--display);
+    font-size: var(--t-small);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--s2);
+}
+.sim-graph-hint {
+    font-size: var(--t-micro);
+    color: var(--text-2);
+    margin-bottom: var(--s3);
+    line-height: 1.5;
+}
+
+.metric-row { position: relative; }
+.metric-row:hover { background: var(--raise); cursor: help; }
+.metric-label { position: relative; }
+.metric-help {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+    background: var(--text-3);
+    color: var(--surface);
+    font-size: 9px;
+    font-weight: bold;
+    margin-left: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help { opacity: 1; color: var(--accent); background: var(--text-3); }
+.metric-help::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1F2937;
+    color: #FFF;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    width: 200px;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::after { opacity: 1; }
+.metric-help::before {
+    content: "";
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1F2937;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::before { opacity: 1; }
+
 #sim-trades-table { max-height: 320px; }
 
 .example-picker { margin-bottom: var(--s5); display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: center; font-size: var(--t-small); }
@@ -1194,15 +1437,102 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
         grid-row: auto;
     }
     .station { flex-wrap: wrap; gap: var(--s3) var(--s4); padding: var(--s3) var(--s4); }
-    .station-nav { order: 3; width: 100%; overflow-x: auto; }
+    .station-nav { order: 3; width: 100%; min-width: 0; overflow-x: auto; }
     .station-tools { margin-left: auto; }
     .record { padding: var(--s3) var(--s4) var(--s2); }
-    .record-canvas { height: 56px; }
+    /* Bande + légende consommaient ~350px des 844 du premier écran mobile —
+       41 % — et sur TOUTES les pages. Ramenées à ~90px. */
+    .record-canvas { height: 44px; }
+    .record-caption { -webkit-line-clamp: 2; }
+    /* En une colonne, chaque verdict prend sa ligne avec sa contrepartie —
+       côte à côte ils se réduiraient à deux fragments illisibles. */
+    .verdict { flex-direction: column; gap: var(--s2); }
     .session-context { padding: var(--s2) var(--s4) var(--s3); }
     .container { padding: var(--s5) var(--s4) var(--s7); }
     .card { padding: var(--s4); }
     .metric-grid { grid-template-columns: 1fr; gap: var(--s4); }
     .page-title { font-size: 1.5rem; }
+}
+
+/* ===========================================================================
+   POINTEUR GROSSIER — doigt, stylet.
+   Choisi sur `pointer: coarse` et non sur une largeur de viewport : une
+   tablette de 1024px se touche, un portable de 1366px à écran tactile aussi,
+   et une fenêtre de navigateur réduite à 390px se pilote toujours à la
+   souris. Adapter sur la largeur aurait épaissi les tables denses de
+   quelqu'un qui vise au pixel près, et laissé les vraies cibles tactiles à
+   15px.
+
+   Deux seuils, pas un : 44px pour tout ce qui est un CONTRÔLE (WCAG 2.5.5,
+   AAA), 24px pour un lien de texte DANS une table dense (WCAG 2.5.8, AA).
+   Imposer 44px à `/universe` reviendrait à étirer 550 lignes à 24 000px de
+   défilement pour un gain que la norme n'exige pas.
+   =========================================================================== */
+@media (pointer: coarse) {
+    /* Chrome de la station */
+    .station-nav a, .station-lang a, .theme-toggle {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* « fr » et « en » font deux caractères : la hauteur suffisait, la largeur
+       non — mesuré à 32px. */
+    .station-lang a { min-width: 44px; }
+    .station-id { min-height: 44px; display: inline-flex; align-items: center; }
+
+    /* Contrôles du formulaire. La case native reste petite : c'est le LABEL
+       qui est la cible réelle, et il l'était déjà — on lui donne juste la
+       hauteur qui le prouve. */
+    .run-form label.checkbox { min-height: 44px; align-items: center; }
+    .run-form input[type="checkbox"] { width: 20px; height: 20px; }
+    .run-form input[type="text"], .run-form input[type="number"],
+    .run-form input[type="date"], .run-form select, .run-form textarea,
+    .filter-bar select, .filter-bar input, .example-picker select {
+        min-height: 44px;
+    }
+    .adv-summary { min-height: 44px; align-items: center; }
+    .movers-pick { min-height: 44px; }
+    .range-btn { min-height: 44px; padding-left: var(--s4); padding-right: var(--s4); }
+    button.primary { min-height: 44px; }
+    .downloads a, .section-index a { min-height: 44px; display: inline-flex; align-items: center; }
+
+    /* Liens de texte dans les tables denses : 24px, la valeur que la norme
+       demande réellement à ce niveau. La cellule porte la hauteur, le lien la
+       remplit — sinon on agrandit la ligne sans agrandir la cible. */
+    table.data-table tbody td, table.leaderboard tbody td { padding-top: 10px; padding-bottom: 10px; }
+    table.data-table tbody td a, table.leaderboard tbody td a,
+    .recent-runs-list a, .news-list a {
+        display: inline-block;
+        min-height: 24px;
+        /* Un symbole de deux lettres mesurait 17px de large : la hauteur
+           n'est que la moitié de la cible. */
+        min-width: 24px;
+        padding: 2px 0;
+    }
+    /* Lien dans du texte courant. Le `padding-block` étend la zone de contact
+       SANS passer le lien en bloc : un `inline-block` au milieu d'un
+       paragraphe casserait le retour à la ligne. Le remplissage est
+       transparent, il ne déplace rien. */
+    .container p a, .container li a, .page-subtitle a, .table-footer a, .block-note a {
+        padding-block: 5px;
+    }
+    /* La bande d'enregistrement se pilote au doigt : voir observatory.js, le
+       survol n'existe pas ici. */
+    .record-canvas { cursor: pointer; }
+}
+
+/* L'appel de glossaire garde son gabarit de 15px — c'est un appel de note, il
+   ne doit pas peser autant qu'un bouton — mais sa zone de contact est étendue
+   au-delà de sa marque visible. C'est la règle générale du système : une
+   petite marque n'impose pas une petite cible. */
+.info-icon { position: relative; }
+.info-icon::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
 }
 
 /* Le mouvement porte de l'information (mesurable vs non mesurable) : on retire
@@ -1227,3 +1557,50 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
 .leaderboard tbody tr.flip-move { transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1); }
 #results-panel.results-arriving { animation: patrick-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes patrick-arrive { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Layout improvements — Phase 5 layout */
+.page-title { margin-top: 2rem; margin-bottom: 0.5rem; }
+.page-subtitle { margin-top: 0.5rem; margin-bottom: 2rem; line-height: 1.6; }
+
+/* Navigation breadcrumbs — Phase 5 hardening */
+nav.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color, #E5E7EB);
+    color: var(--ink-secondary, #6B7280);
+}
+nav.breadcrumb a { color: inherit; text-decoration: none; border-bottom: 1px solid transparent; }
+nav.breadcrumb a:hover { border-bottom-color: var(--ink-text, #1F2937); }
+nav.breadcrumb span[aria-current="page"] { font-weight: 500; color: var(--ink-text, #1F2937); }
+nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: 0.5rem; }
+
+/* Filter bar styling — Phase 5 layout */
+.filter-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--bg-secondary, #F9FAFB);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+.filter-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
+.filter-bar select { padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color, #D1D5DB); border-radius: 4px; }
+@media (max-width: 640px) { .filter-bar { flex-direction: column; } }
+
+/* Empty states — Phase 5 hardening */
+.empty-state-title { font-weight: 500; margin: 0 0 0.5rem 0; color: var(--ink-text, #1F2937); }
+.empty-state-hint { margin: 0; color: var(--ink-secondary, #6B7280); line-height: 1.5; }
+.empty-state-hint a { color: var(--accent-ink, #7EA6FF); text-decoration: none; border-bottom: 1px solid currentColor; }
+.empty-state-hint a:hover { text-decoration: underline; }
+
+/* Group separation — Phase 5 layout */
+.group-block { margin-bottom: 3rem; }
+.group-block:not(:last-child) { padding-bottom: 2rem; border-bottom: 1px solid var(--border-color, #E5E7EB); }
+.group-title { font-size: 1.125rem; font-weight: 600; margin: 0 0 1rem 0; }
+.group-title .hint { font-weight: 400; font-size: 0.875rem; color: var(--ink-secondary, #6B7280); }

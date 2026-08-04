@@ -273,6 +273,40 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     }
 
 
+def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
+    """Les deux seuls chiffres que le produit sait établir sur TOUT
+    l'historique : ce qui tient, et ce que ça a coûté.
+
+    « Ce qui tient » = cibles dont la meilleure p-value Diebold-Mariano survit
+    à la correction Benjamini-Hochberg ENTRE cibles. C'est le critère de sortie
+    du produit, et c'est aussi le seul chiffre honnête à cette échelle :
+    essayer 550 cibles et ne garder que la significative est exactement le
+    biais que `fdr_across_targets` mesure (section 4, METHODOLOGY.md).
+
+    `survivors = None` quand aucune cible n'a de résultat DM. C'est l'état
+    NOMINAL d'une base jeune, pas un cas limite : `0 / 0` se lirait comme un
+    échec alors que la mesure n'est simplement pas encore calculable, et le
+    produit refuse d'imprimer une mesure non interprétable. L'appelant doit
+    distinguer les deux.
+
+    Aucun calcul nouveau : `fdr_across_targets` est celui de `/targets/{t}`,
+    les comptes sont des agrégats directs. Lecture seule."""
+    fdr = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
+    n_tested = fdr["n_tested"]
+    trials = conn.execute("SELECT COUNT(*) FROM trial").fetchone()[0]
+    runs, targets = conn.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT target) FROM run"
+    ).fetchone()
+    return {
+        "survivors": fdr["n_bh_significant"] if n_tested else None,
+        "n_tested": n_tested,
+        "alpha": fdr["alpha"],
+        "cumulative_trials": trials,
+        "n_runs": runs,
+        "n_targets": targets,
+    }
+
+
 def universe_overview(conn: sqlite3.Connection) -> list[dict]:
     """P7.5 -- `/universe` : croise l'univers configurable de cibles
     (`config/defaults.py::DEFAULT_TARGET_GROUPS`, déjà utilisé par le

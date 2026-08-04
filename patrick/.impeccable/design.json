@@ -399,7 +399,7 @@
       "record-reveal": {
         "duration": "620ms",
         "easing": "cubic-bezier(0.16,1,0.3,1) (sortie cubique en JS)",
-        "note": "Le seul moment authoré : la bande se révèle de gauche à droite au chargement."
+        "note": "Le seul moment authore : la bande se revele de gauche a droite au chargement. Coordonnee = sequence, une colonne par run."
       },
       "progress-sweep": {
         "duration": "1900ms",
@@ -417,7 +417,8 @@
     },
     "breakpoints": {
       "wide": "1100px",
-      "narrow": "980px"
+      "narrow": "980px",
+      "pointer": "pointer: coarse (adaptation tactile, jamais la largeur)"
     },
     "themes": {
       "strategy": "Deux rendus écrits séparément, jamais une inversion. :root = clair (défaut), :root[data-theme=dark] = sombre.",
@@ -447,15 +448,17 @@
         "on-accent": "#05080F"
       }
     },
-    "northStar": "Un appareil de mesure en service : boîtier d'encre, feuilles de papier posées dessus. Un chiffre ne s'écrit jamais seul, et la station enregistre même quand personne ne regarde.",
+    "northStar": "Un appareil de mesure en service : boitier d'encre, feuilles de papier posees dessus. Un chiffre ne s'ecrit jamais seul, et la station montre ce qu'elle a enregistre avant qu'on le demande.",
     "rules": [
       "Deux matieres : toute toile est sur --ink, toujours la matiere la plus profonde de la scene. En sombre la separation est portee par --plate-edge, pas par la luminance.",
-      "Un panneau est un objet posé (rayon + ombre à décalage et flou), pas une zone délimitée par un trait.",
-      "L'accent ne dit que « interactif ou actif » — jamais une donnée, jamais un jugement.",
-      "La donnée est en Spline Sans Mono alignée à la décimale ; le chrome est en Archivo.",
-      "Le texte porte l'état, la couleur ne fait que le doubler.",
-      "Aucun chiffre sans sa contrepartie de fiabilité ; une mesure non interprétable n'est pas imprimée.",
-      "Un seul regime de focus : aucun element focusable ne repose outline:none."
+      "Un panneau est un objet pose (rayon + ombre a decalage et flou), jamais un panneau dans un panneau.",
+      "L'accent ne dit que « interactif ou actif » — jamais une donnee, jamais un jugement.",
+      "La donnee est en Spline Sans Mono alignee a la decimale ; le chrome est en Archivo.",
+      "Le texte porte l'etat, la couleur ne fait que le doubler.",
+      "Aucun chiffre sans sa contrepartie ; une mesure non interpretable n'est pas imprimee, jusque dans le bandeau.",
+      "L'etat d'une brique de rigueur est toujours rendu, ON comme OFF : une garantie desactivee ne doit jamais devenir silencieuse.",
+      "Un seul regime de focus : aucun element focusable ne repose outline:none.",
+      "Les cibles tactiles s'adaptent sur pointer:coarse, jamais sur une largeur de viewport. 44px pour un controle, 24px pour un lien en table dense."
     ],
     "components": {
       "status-badge": {
@@ -477,20 +480,41 @@
       "panel": {
         "html": "<section class=\"card\"><h2>Résumé</h2><p>…</p></section>",
         "css": ".card{background:#fff;border:1px solid #DEE3EC;border-radius:12px;box-shadow:0 1px 2px rgba(11,18,32,.05),0 10px 28px -14px rgba(11,18,32,.22);padding:20px 24px 24px}.card>h2{font-family:Archivo,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#47536A;margin:0 0 16px}"
+      },
+      "verdict": {
+        "html": "<p class=\"verdict\"><span class=\"verdict-item\"><b>CE QUI TIENT</b> <span class=\"na\">-</span> <span class=\"verdict-rel\">aucune cible n'a encore de resultat Diebold-Mariano</span></span></p>",
+        "css": ".verdict{display:flex;flex-wrap:wrap;gap:4px 24px;font-family:'Spline Sans Mono',monospace;font-size:.75rem;color:#9FAEC6}.verdict b{font-weight:500;letter-spacing:.1em;color:rgba(159,174,198,.72)}.verdict-value{color:#EDF1F7;font-weight:600;font-variant-numeric:tabular-nums}"
+      },
+      "adv-gate": {
+        "html": "<span class=\"adv-gate\">Embargo ON</span> <span class=\"adv-gate\" data-off>Purge OFF</span>",
+        "css": ".adv-gate{display:inline-block;margin-left:8px;padding:1px 6px;border-radius:6px;background:#F4F6FA;color:#47536A;font-size:.75rem;font-weight:600;white-space:nowrap}.adv-gate[data-off]{background:rgba(138,90,8,.12);color:#8A5A08}"
+      },
+      "scope-line": {
+        "html": "<p class=\"scope-line\"><b>CIBLES EXPLOREES</b> <span class=\"scope-value\">1 / 550</span> <span>dont 1 avec au moins un run termine</span></p>",
+        "css": ".scope-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;font-family:'Spline Sans Mono',monospace;font-size:.8125rem;color:#626D80}.scope-line b{font-family:Archivo,sans-serif;font-size:.75rem;font-weight:700;letter-spacing:.12em;color:#47536A}.scope-value{color:#0F1626;font-weight:600;font-variant-numeric:tabular-nums}"
+      },
+      "station-mark": {
+        "html": "<a class=\"station-id\" href=\"/\"><svg class=\"station-mark\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"12\" cy=\"12\" r=\"9.25\" fill=\"none\" stroke=\"currentColor\" stroke-opacity=\".6\" stroke-width=\"1.4\"/><g stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" fill=\"none\"><path d=\"M8.2 15.6V14\"/><path d=\"M12 15.6v-3.2\"/><path d=\"M15.8 15.6v-4.4\"/></g><circle class=\"mark-head\" cx=\"15.8\" cy=\"8.8\" r=\"1.9\"/></svg><span class=\"station-name\">PATRICK</span></a>",
+        "css": ".station-id{display:inline-flex;align-items:center;gap:8px;font-family:'Spline Sans Mono',monospace;font-size:1.0625rem;font-weight:600;letter-spacing:.22em;color:#EDF1F7;padding-right:8px}.station-mark{flex:none;width:1.3em;height:1.3em;margin-right:1px}.station-mark .mark-head{fill:#7EA6FF}.station-name::after{content:'';display:block;height:2px;margin-top:3px;background:#7EA6FF;transform:scaleX(0);transform-origin:left;transition:transform 220ms cubic-bezier(.16,1,.3,1)}.station-id:hover .station-name::after{transform:scaleX(1)}"
       }
     },
     "dos": [
-      "Écrire la contrepartie de fiabilité de chaque chiffre.",
-      "Poser toute toile sur --ink et lire ses couleurs dans les jetons « sur boîtier », sans repli.",
-      "Donner à toute surface au repos son état vide écrit."
+      "Ecrire la contrepartie de fiabilite de chaque chiffre.",
+      "Rendre l'etat d'une brique de rigueur en permanence, ON comme OFF.",
+      "Poser toute toile sur --ink et lire ses couleurs sans repli.",
+      "Donner a toute surface au repos son etat vide ecrit.",
+      "Verifier le contraste sur le fond composite reel, dans les deux themes."
     ],
     "donts": [
       "Afficher un chiffre nu.",
-      "Utiliser l'accent pour porter une donnée ou un jugement.",
+      "Resumer un bloc replie en ne listant que ce qui est active.",
+      "Utiliser l'accent pour porter une donnee ou un jugement.",
       "Imbriquer un panneau dans un panneau.",
-      "Dériver le thème sombre par inversion du clair.",
-      "Réintroduire un logo, un monogramme ou un placeholder de logo.",
-      "Poser du blanc code en dur sur un fond d'accent : c'est --on-accent."
+      "Deriver le theme sombre par inversion du clair.",
+      "Redefinir --accent-ink, --ok-ink, --warn-ink ou --error-ink dans le bloc sombre.",
+      "Poser du blanc code en dur sur un fond d'accent : c'est --on-accent.",
+      "Reposer outline:none sur un element focusable.",
+      "Remplacer le fond d'un element collant par une couleur translucide."
     ]
   }
 }

@@ -90,12 +90,19 @@
     <h2 id="sim-equity-title" class="dash-panel-title">{{ t('sim_section_equity') }}</h2>
     <div class="dash-panel-body">
         <p id="sim-overfitting-guard" class="hint sim-guard hidden"></p>
-        {# Au repos, la plaque est vide : elle le DIT, elle ne reste pas noire.
-           `simulate.js` pose `body[data-sim-loaded]` au premier rendu, le CSS
-           retire alors l'état vide et rend les toiles à leur taille. #}
         <p class="sim-empty">{{ t('sim_empty_curves') }}</p>
-        <canvas id="sim-equity-canvas" width="520" height="180"></canvas>
-        <canvas id="sim-drawdown-canvas" width="520" height="90"></canvas>
+        <div class="sim-graph-container">
+            <h3 class="sim-graph-title">Equity Curve (Croissance du capital)</h3>
+            <p class="sim-graph-hint">Stratégie (or) vs Buy & Hold (gris) — axe Y: valeur du portefeuille, axe X: temps</p>
+            <canvas id="sim-equity-canvas" width="520" height="180" role="img"
+                    aria-label="{{ t('sim_aria_equity_empty') }}"></canvas>
+        </div>
+        <div class="sim-graph-container">
+            <h3 class="sim-graph-title">Drawdown (Pertes cumulatives)</h3>
+            <p class="sim-graph-hint">Déclin depuis le pic le plus proche — plus positif = mieux. Axe Y: % de baisse, axe X: temps</p>
+            <canvas id="sim-drawdown-canvas" width="520" height="90" role="img"
+                    aria-label="{{ t('sim_aria_drawdown_empty') }}"></canvas>
+        </div>
     </div>
 </section>
 
@@ -114,7 +121,12 @@
     <h2 id="sim-dist-title" class="dash-panel-title">{{ t('sim_section_distribution') }}</h2>
     <div class="dash-panel-body">
         <p class="sim-empty">{{ t('sim_empty_distribution') }}</p>
-        <canvas id="sim-dist-canvas" width="520" height="160"></canvas>
+        <p class="sim-graph-hint">Distribution des rendements par trade — <span style="color: var(--ok-ink);">vert = gains</span>, <span style="color: var(--error-ink);">rouge = pertes</span>. La forme dit si tu as un edge.</p>
+        <div class="sim-graph-container">
+            <h3 class="sim-graph-title">Rendements par Trade (Return per Trade)</h3>
+            <canvas id="sim-dist-canvas" width="520" height="160" role="img"
+                    aria-label="{{ t('sim_aria_dist_empty') }}"></canvas>
+        </div>
     </div>
 </section>
 

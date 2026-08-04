@@ -3,8 +3,30 @@
 {% block title %}PATRICK — Univers de cibles{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Univers de cibles</h1>
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_universe') or 'Univers' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_universe') or 'Univers de cibles' }}</h1>
 <p class="page-subtitle">Toutes les cibles configurables (mêmes groupes que le formulaire de lancement, <code>config/defaults.py::DEFAULT_TARGET_GROUPS</code>), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.</p>
+
+{# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici
+   serait la redondance que la passe `distill` vient d'enlever. Cette ligne
+   répond à la question propre à cette page — sur tout cet univers, qu'est-ce
+   qui a déjà été exploré ? Les comptes viennent des groupes déjà rendus,
+   aucune requête de plus. #}
+{% set ns = namespace(total=0, touched=0, done=0) %}
+{% for g in groups %}{% for s in g.symbols %}
+{% set ns.total = ns.total + 1 %}
+{% if s.n_runs %}{% set ns.touched = ns.touched + 1 %}{% endif %}
+{% if s.n_done %}{% set ns.done = ns.done + 1 %}{% endif %}
+{% endfor %}{% endfor %}
+<p class="scope-line">
+    <b>{{ t('scope_universe') }}</b>
+    <span class="scope-value">{{ ns.touched }} / {{ ns.total }}</span>
+    <span class="scope-rel">{{ t('scope_universe_rel', done=ns.done, never=ns.total - ns.touched) }}</span>
+</p>
 
 {% for g in groups %}
 <div class="group-block">

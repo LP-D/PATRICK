@@ -1,7 +1,16 @@
 {% extends "base.html" %}
-{% block title %}PATRICK{% endblock %}
+{% block title %}PATRICK — {{ t('index_title') }}{% endblock %}
 
-{% macro info(term, label=None) %}<button type="button" class="info-icon" data-term="{{ term }}" {% if label %}data-term-label="{{ label }}"{% endif %} aria-label="{{ label or term }}">i</button>{% endmacro %}
+{# Appel de note du glossaire.
+
+   Le nom accessible dit ce que fait le bouton et sur QUOI il porte
+   (« Définition : Portes de qualité actives »), pas la clé de configuration
+   brute : un lecteur d'écran annonçait « data_quality_enabled, bouton », et
+   l'encart se titrait en MAJUSCULES_SNAKE_CASE. Ordre de résolution du nom :
+   l'étiquette explicite passée par l'appelant, sinon `glossary_labels`
+   (clé technique -> libellé traduit), sinon le terme lui-même — les termes
+   comme `technical` ou `XGBoost` SONT déjà leur propre libellé. #}
+{% macro info(term, label=None) %}{% set shown = label or (glossary_labels.get(term) if glossary_labels else none) or term %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ shown }}" aria-label="{{ t('glossary_open_aria', term=shown) if t else shown }}">i</button>{% endmacro %}
 
 {% block content %}
 
@@ -27,9 +36,13 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
-    <form method="get" action="/" class="example-picker">
+    {# `onchange="this.form.submit()"` rechargeait la page et écrasait les 65
+       champs saisis, sans un mot. Le seul accélérateur de la page était aussi
+       son seul destructeur de travail. La soumission passe désormais par
+       `app.js`, qui demande confirmation si le formulaire a été modifié. #}
+    <form method="get" action="/" class="example-picker" id="example-form">
         <label for="load">{{ t('load_example_label') }}</label>
-        <select name="load" id="load" onchange="this.form.submit()">
+        <select name="load" id="load">
             <option value="">{{ t('load_example_default') }}</option>
             {% for ex in examples %}
             <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
@@ -217,7 +230,12 @@
                     <option value="{{ m }}" {% if view.selection_method == m %}selected{% endif %}>{{ m|upper }}</option>
                     {% endfor %}
                 </select>
-                {% for m in selection_methods %}{{ info(m, m|upper) }}{% endfor %}
+                {# Un seul appel de note, sur la méthode sélectionnée, mis à
+                   jour par `app.js` au changement. Trois « ? » identiques en
+                   file à 18px d'écart portaient chacun une zone de contact de
+                   44px : elles se chevauchaient de 26px, et rien ne disait
+                   lequel était SHAP, RFE ou LASSO. #}
+                <span id="selection-method-info">{{ info(view.selection_method, view.selection_method|upper) }}</span>
             </label>
             <label>{{ t('field_n_features_grid') }}
                 <input type="text" name="n_features_grid" value="{{ view.n_features_grid }}" required>
@@ -333,8 +351,15 @@
     </div>
 </section>
 
+{# Le titre suit l'état du panneau. « Avancement » au-dessus d'une liste de
+   runs passés décrivait une chose et en montrait une autre : au repos, ce
+   panneau ne montre pas l'avancement de quoi que ce soit, il montre
+   l'historique récent. `app.js` bascule le titre en même temps que le
+   contenu. #}
 <section class="dash-panel dash-progress" aria-labelledby="progress-title">
-    <h2 id="progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
+    <h2 id="progress-title" class="dash-panel-title"
+        data-title-idle="{{ t('section_recent') }}"
+        data-title-active="{{ t('section_progress') }}">{{ t('section_progress') if initial_run_id else t('section_recent') }}</h2>
     <div class="dash-panel-body">
 
     <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
@@ -352,14 +377,16 @@
        nombre d'essais dont le F1_dir affiché est le maximum. #}
     {% if recent_runs %}
     <div id="recent-runs" class="recent-runs {% if initial_run_id %}hidden{% endif %}">
-        <p class="recent-runs-title">Derniers runs</p>
         <ol class="recent-runs-list">
             {% for r in recent_runs %}
             <li>
                 <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
                 <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}j · {{ r.status }}</span>
                 <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
-                <span class="recent-runs-rel">F1_dir, meilleur de {{ r.n_trials or 0 }} essai(s)</span>
+                {# « meilleur de 0 essai(s) » sur un run en cours était une
+                   contrepartie de fiabilité qui affirmait une fausseté : il n'y
+                   a pas de meilleur essai tant qu'aucun n'est fini. #}
+                <span class="recent-runs-rel">{% if r.n_trials %}{{ t('recent_rel_trials', n=r.n_trials) }}{% elif r.status in ('running', 'queued') %}{{ t('recent_rel_running') }}{% else %}{{ t('recent_rel_none') }}{% endif %}</span>
             </li>
             {% endfor %}
         </ol>
@@ -390,7 +417,11 @@
             <button type="button" class="range-btn" data-period="max">Max</button>
         </div>
         <div class="chart-wrap">
-            <canvas id="preview-canvas" width="700" height="180"></canvas>
+            {# Une toile est un trou noir pour un lecteur d'écran : elle porte un rôle et
+               un libellé, et `market.js` réécrit ce libellé avec les vraies bornes
+               de la série une fois tracée. #}
+            <canvas id="preview-canvas" width="700" height="180" role="img"
+                    aria-label="{{ t('preview_aria_empty') }}"></canvas>
             <div id="preview-tooltip" class="chart-tooltip hidden"></div>
         </div>
         <p class="hint" id="preview-status"></p>
@@ -411,8 +442,11 @@
         </span>
     </div>
     <div class="dash-panel-body">
+    {# Une panne rendue en `.hint` gris était typographiquement identique à un
+       texte d'aide : on ne distinguait pas « voici comment ça marche » de
+       « ça ne marche pas ». #}
     {% if movers.error %}
-    <p class="hint">{{ movers.error }}</p>
+    <p class="banner banner-warning">{{ movers.error }}</p>
     {% endif %}
     {# Chaque ligne est un BOUTON qui AJOUTE le symbole à la sélection du
        `<select multiple id="target_symbols">` (sans désélectionner les
@@ -422,7 +456,8 @@
        qu'il aurait dû être — l'aide à composer la sélection de cibles, une
        ou plusieurs. Les symboles absents de la liste des cibles ne sont pas
        cliquables et le disent. #}
-    <p class="hint movers-hint">{{ t('movers_pick_hint') }}</p>
+    <p class="hint movers-hint {% if not movers.gainers and not movers.losers %}hidden{% endif %}"
+       id="movers-hint">{{ t('movers_pick_hint') }}</p>
     <div class="movers-columns" id="movers-columns">
         <div class="movers-col">
             <h3 class="movers-col-title movers-up">{{ t('movers_gainers') }}</h3>

@@ -5,6 +5,28 @@ résolu à la langue courante dans `app.py` avant d'être envoyé au template.
 """
 from __future__ import annotations
 
+# Nom lisible d'un terme de glossaire, quand la clé technique n'en est pas un.
+# Sans cette table, l'appel de note s'annonçait « data_quality_enabled, bouton »
+# à un lecteur d'écran et titrait son encart en MAJUSCULES_SNAKE_CASE — le
+# glossaire existe précisément pour traduire ces clés, il ne pouvait pas être le
+# seul endroit qui les laisse brutes. Les termes absents d'ici portent déjà leur
+# propre nom (`technical`, `XGBoost`, `SMOTE`…) : leur clé EST le libellé visible,
+# et l'aligner suffit.
+TERM_LABEL_KEYS: dict[str, str] = {
+    "data_quality_enabled": "field_data_quality_enabled",
+    "scheme": "field_scheme",
+    "n_groups": "field_n_groups",
+    "k_test_groups": "field_k_test_groups",
+    "purge": "field_purge",
+    "embargo_enabled": "field_embargo_enabled",
+    "track_stability": "field_track_stability",
+    "uniqueness_weights": "field_uniqueness_weights",
+    "calibration": "field_calibration",
+    "stacking": "field_stacking",
+    "tuning_enabled": "field_enabled",
+    "optuna_select_top_k_per_horizon": "field_optuna_select_top_k_per_horizon",
+}
+
 GLOSSARY: dict[str, dict[str, str]] = {
     # Familles de features
     "technical": {

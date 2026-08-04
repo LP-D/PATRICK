@@ -22,8 +22,8 @@ STRINGS: dict[str, dict[str, str]] = {
     # progressive du formulaire.
     "index_title": {"fr": "Poste de lancement", "en": "Launch station"},
     "index_subtitle": {
-        "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés — leur résumé les affiche sans qu'il faille les ouvrir.",
-        "en": "Configure a run, launch it, follow it. Collapsed blocks carry defaults derived from measured results — their summary shows them without opening.",
+        "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés ; chaque brique de rigueur affiche son état, ON comme OFF, sans qu'il faille les ouvrir.",
+        "en": "Configure a run, launch it, follow it. Collapsed blocks carry defaults derived from measured results; every rigor gate shows its state, ON or OFF, without opening them.",
     },
     "adv_state_fields": {"fr": "{n} réglage(s)", "en": "{n} setting(s)"},
     "adv_state_more": {"fr": "+{n}", "en": "+{n}"},
@@ -31,11 +31,50 @@ STRINGS: dict[str, dict[str, str]] = {
                            "en": "Changed since the page was loaded"},
     "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
     "recap_targets_count": {"fr": "{n} cibles", "en": "{n} targets"},
+
+    # Garde-fous : confirmation de lancement, écrasement de configuration,
+    # validation dans la langue de la PAGE (le navigateur, lui, parle la sienne).
+    # Noms courts des briques de rigueur, pour les résumés de blocs et le
+    # récapitulatif de lancement. Leur état est TOUJOURS rendu, ON comme OFF :
+    # une garantie absente est précisément l'information qui compte.
+    "recent_rel_trials": {"fr": "F1_dir, meilleur de {n} essai(s)",
+                          "en": "F1_dir, best of {n} trial(s)"},
+    "recent_rel_running": {"fr": "essais en cours", "en": "trials in progress"},
+    "recent_rel_none": {"fr": "aucun essai enregistré", "en": "no trial recorded"},
+
+    "gate_data_quality_enabled": {"fr": "Qualité", "en": "Quality"},
+    "gate_purge": {"fr": "Purge", "en": "Purge"},
+    "gate_embargo_enabled": {"fr": "Embargo", "en": "Embargo"},
+    "gate_uniqueness_weights": {"fr": "Unicité", "en": "Uniqueness"},
+    "gate_calibration": {"fr": "Calibration", "en": "Calibration"},
+    "gate_stacking": {"fr": "Stacking", "en": "Stacking"},
+    "confirm_line_gates": {"fr": "Rigueur : {g}.", "en": "Rigor: {g}."},
+
+    "btn_confirm_launch": {"fr": "Confirmer le lancement", "en": "Confirm launch"},
+    "btn_cancel": {"fr": "Annuler", "en": "Cancel"},
+    "confirm_line_target": {"fr": "Cible {t}, horizons {h}, régimes {r}.",
+                            "en": "Target {t}, horizons {h}, regimes {r}."},
+    "confirm_line_scheme": {"fr": "Schéma {s}.", "en": "Scheme {s}."},
+    "confirm_line_combos": {"fr": "{n} combinaisons à évaluer.", "en": "{n} combinations to evaluate."},
+    "confirm_line_combos_unknown": {"fr": "Nombre de combinaisons non calculable depuis ce formulaire.",
+                                    "en": "Combination count not computable from this form."},
+    "confirm_line_queue": {"fr": "{n} run(s) déjà en file : celui-ci démarrera après.",
+                           "en": "{n} run(s) already queued: this one starts after them."},
+    "confirm_line_queue_free": {"fr": "Aucun run en file : celui-ci démarre immédiatement.",
+                                "en": "Nothing queued: this one starts immediately."},
+    "load_example_confirm": {"fr": "Charger « {name} » remplacera toute la configuration en cours. Continuer ?",
+                             "en": "Loading \u201c{name}\u201d will replace the whole current configuration. Continue?"},
+    "glossary_open_aria": {"fr": "Définition : {term}", "en": "Definition: {term}"},
+    "validation_required": {"fr": "Ce champ est obligatoire.", "en": "This field is required."},
+    "validation_range": {"fr": "Valeur hors des bornes autorisées.", "en": "Value outside the allowed range."},
+    "validation_type": {"fr": "Format attendu non respecté.", "en": "Expected format not matched."},
+
     "movers_pick_hint": {"fr": "Clique un symbole pour en faire la cible du run.",
                          "en": "Click a symbol to make it the run's target."},
     "movers_not_a_target": {"fr": "{s} n'est pas une cible disponible.",
                             "en": "{s} is not an available target."},
     "section_progress": {"fr": "Avancement", "en": "Progress"},
+    "section_recent": {"fr": "Derniers runs", "en": "Recent runs"},
     "section_stock": {"fr": "Aperçu marché — cible choisie", "en": "Market overview — chosen target"},
     "no_run_yet": {"fr": "Aucun run pour l'instant — configure et lance à gauche.",
                    "en": "No run yet — configure and launch on the left."},
@@ -234,7 +273,32 @@ STRINGS: dict[str, dict[str, str]] = {
     "record_empty": {"fr": "Aucun run enregistré — la bande se remplira au premier run lancé.",
                      "en": "No run recorded yet — the record fills from the first run launched."},
     "record_runs": {"fr": "runs", "en": "runs"},
-    "record_span": {"fr": "du {from} à maintenant", "en": "from {from} to now"},
+    "record_span_range": {"fr": "du {from} au {to}", "en": "from {from} to {to}"},
+    # Verdict de la station. « Ce qui tient » n'est pas coloré en --ok : le
+    # produit soutient qu'un « non » clairement établi est un résultat réussi,
+    # donc zéro survivant n'est pas un mauvais état.
+    "verdict_survivors": {"fr": "CE QUI TIENT", "en": "WHAT HOLDS"},
+    "verdict_survivors_rel": {"fr": "cibles dont le signal survit à la correction entre cibles (BH, α={alpha})",
+                              "en": "targets whose signal survives the across-target correction (BH, α={alpha})"},
+    "verdict_not_computable": {"fr": "aucune cible n'a encore de résultat Diebold-Mariano",
+                               "en": "no target has a Diebold-Mariano result yet"},
+    "verdict_cost": {"fr": "CE QUE ÇA A COÛTÉ", "en": "WHAT IT COST"},
+    "verdict_cost_rel": {"fr": "essais cumulés sur {runs} run(s), {targets} cible(s)",
+                         "en": "cumulative trials over {runs} run(s), {targets} target(s)"},
+
+    # Lignes de portée locale : chaque surface dense répond à SA question, sans
+    # répéter le verdict global que le bandeau porte déjà.
+    "scope_universe": {"fr": "CIBLES EXPLORÉES", "en": "TARGETS EXPLORED"},
+    "scope_universe_rel": {"fr": "dont {done} avec au moins un run terminé · {never} jamais lancées",
+                           "en": "of which {done} with at least one finished run · {never} never launched"},
+    "scope_runs": {"fr": "RUNS COMPARÉS AUX BASELINES", "en": "RUNS COMPARED TO BASELINES"},
+    "scope_runs_rel": {"fr": "runs affichés ayant produit un résultat Diebold-Mariano",
+                       "en": "listed runs that produced a Diebold-Mariano result"},
+
+    "record_span_day": {"fr": "le {d}", "en": "on {d}"},
+    "record_hidden": {"fr": "({n} hors champ)", "en": "({n} off-strip)"},
+    "record_kbd": {"fr": "Activité des runs — flèches pour parcourir, Entrée pour ouvrir",
+                   "en": "Run activity — arrows to browse, Enter to open"},
     "record_scale": {"fr": "hauteur = essais (log, max {max})",
                      "en": "height = trials (log, max {max})"},
     "record_counts": {"fr": "{done} terminés · {running} en cours · {failed} échoués",
@@ -243,6 +307,27 @@ STRINGS: dict[str, dict[str, str]] = {
                        "en": "{n} with no trial count (floor height)"},
     "record_trials": {"fr": "essais", "en": "trials"},
     "record_no_trials": {"fr": "essais inconnus", "en": "trial count unknown"},
+    "record_tap_again": {"fr": "touche à nouveau pour ouvrir", "en": "tap again to open"},
+
+    # Équivalents textuels des toiles. Un graphique sans texte de remplacement
+    # n'existe pas pour un lecteur d'écran ; ces libellés sont réécrits par
+    # `market.js` / `simulate.js` avec les vraies bornes une fois tracés.
+    "preview_aria_empty": {"fr": "Cours de la cible — aucune donnée tracée pour l'instant.",
+                           "en": "Target price history — nothing plotted yet."},
+    "preview_aria": {"fr": "Cours de {symbol} sur {period} : {n} points, du plus bas {min} au plus haut {max}, dernier point {last}.",
+                     "en": "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."},
+    "sim_aria_equity_empty": {"fr": "Courbe de capital — aucune simulation lancée.",
+                              "en": "Equity curve — no simulation run yet."},
+    "sim_aria_drawdown_empty": {"fr": "Drawdown — aucune simulation lancée.",
+                                "en": "Drawdown — no simulation run yet."},
+    "sim_aria_dist_empty": {"fr": "Distribution des rendements par trade — aucune simulation lancée.",
+                            "en": "Per-trade return distribution — no simulation run yet."},
+    "sim_aria_equity": {"fr": "Courbe de capital sur {n} points : de {first} à {last}, comparée au buy-and-hold qui finit à {bh}.",
+                        "en": "Equity curve over {n} points: {first} to {last}, against buy-and-hold ending at {bh}."},
+    "sim_aria_drawdown": {"fr": "Drawdown sur {n} points, creux maximal {max}.",
+                          "en": "Drawdown over {n} points, deepest {max}."},
+    "sim_aria_dist": {"fr": "Distribution de {n} trades : {pos} gagnants, {neg} perdants, du pire {min} au meilleur {max}.",
+                      "en": "Distribution of {n} trades: {pos} winning, {neg} losing, worst {min}, best {max}."},
 
     # Phase 4 — simulateur d'investissement
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
@@ -302,6 +387,94 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_col_buy_hold": {"fr": "Buy & hold", "en": "Buy & hold"},
     "sim_trades_download": {"fr": "Exporter en CSV", "en": "Export as CSV"},
     "sim_trades_none": {"fr": "Aucun trade.", "en": "No trades."},
+
+    # Phase 5 — surfaces exploratoires (explorateur, historique, détails)
+    # Colonnes partagées
+    "col_run": {"fr": "Run", "en": "Run"},
+    "col_target": {"fr": "Cible", "en": "Target"},
+    "col_horizon": {"fr": "Horizon", "en": "Horizon"},
+    "col_scheme": {"fr": "Schéma", "en": "Scheme"},
+    "col_status": {"fr": "Statut", "en": "Status"},
+    "col_started": {"fr": "Lancé", "en": "Started"},
+    "col_trials": {"fr": "Essais", "en": "Trials"},
+    "col_best_f1": {"fr": "F1_dir", "en": "F1_dir"},
+    "col_dm_p": {"fr": "p-value DM", "en": "DM p-value"},
+
+    # Helpers partagés
+    "h_horizon_unit": {"fr": "{h}j", "en": "{h}d"},
+    "h_significant": {"fr": "significatif (p < 0.05)", "en": "significant (p < 0.05)"},
+    "h_not_significant": {"fr": "non significatif (p ≥ 0.05)", "en": "not significant (p ≥ 0.05)"},
+    "h_not_computed": {"fr": "non calculé", "en": "not computed"},
+    "h_not_computable": {"fr": "non calculable", "en": "not computable"},
+    "h_ci90": {"fr": "IC 90%", "en": "90% CI"},
+    "h_table_empty": {"fr": "Aucune donnée.", "en": "No data."},
+
+    # Runs explorer (rl_*)
+    "rl_title": {"fr": "Historique des runs", "en": "Runs history"},
+    "rl_subtitle": {"fr": "Tous les runs exécutés depuis le démarrage du serveur (entièrement lu de la base SQLite), ordonnés par date décroissante. Chaque ligne montre la cible, l'horizon, le statut, la date de lancement et le nombre d'essais.", "en": "All runs executed since server startup (fully read from SQLite database), sorted by decreasing date. Each row shows the target, horizon, status, launch date, and number of trials."},
+    "rl_filter_all_f": {"fr": "toutes", "en": "all"},
+    "rl_filter_all_m": {"fr": "tous", "en": "all"},
+    "rl_filter_submit": {"fr": "Filtrer", "en": "Filter"},
+    "rl_footer_count": {"fr": "run(s)", "en": "run(s)"},
+    "rl_footer_target": {"fr": "cibles uniques", "en": "unique targets"},
+    "rl_footer_status": {"fr": "statuts", "en": "statuses"},
+    "rl_footer_scheme": {"fr": "schémas", "en": "schemes"},
+    "rl_footer_note": {"fr": "Phase 5 : explorateur des runs avec filtrage et métriques détaillées à venir.", "en": "Phase 5: runs explorer with filtering and detailed metrics coming soon."},
+    "rl_empty": {"fr": "Aucun run.", "en": "No runs."},
+    "rl_empty_hint": {"fr": "Lance un run depuis l'onglet Configuration pour en créer un.", "en": "Launch a run from the Configuration tab to create one."},
+
+    # Universe explorer (un_*)
+    "un_title": {"fr": "Univers de cibles", "en": "Targets universe"},
+    "un_subtitle": {"fr": "Toutes les cibles configurables (mêmes groupes que le formulaire de lancement), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.", "en": "All configurable targets (same groups as the launch form), crossed with actual run history — no new data, just the join of the two."},
+    "un_col_symbol": {"fr": "Symbole", "en": "Symbol"},
+    "un_col_label": {"fr": "Libellé", "en": "Label"},
+    "un_col_source": {"fr": "Source", "en": "Source"},
+    "un_col_history": {"fr": "Historique", "en": "History"},
+    "un_col_last_run": {"fr": "Dernier run", "en": "Last run"},
+    "un_state_done": {"fr": "{n} run(s) terminé(s)", "en": "{n} run(s) done"},
+    "un_state_running": {"fr": "{n} run(s) en cours", "en": "{n} run(s) running"},
+    "un_state_never": {"fr": "jamais lancée", "en": "never launched"},
+    "un_footer": {"fr": "{n} cible(s) · {d} avec au moins un run terminé · {v} jamais lancée(s)", "en": "{n} target(s) · {d} with at least one completed run · {v} never launched"},
+
+    # Targets explorer (tg_*)
+    "tg_subtitle": {"fr": "Agrégation sur cette cible : tous les runs, tous les horizons. Métriques cumulées et historique des runs.", "en": "Aggregation for this target: all runs, all horizons. Cumulative metrics and runs history."},
+    "tg_empty": {"fr": "Aucun run pour cette cible.", "en": "No runs for this target."},
+    "tg_empty_hint": {"fr": "Aucun run n'a été exécuté sur cette cible — lance-en un depuis Configuration.", "en": "No run has been executed on this target — launch one from Configuration."},
+    "tg_metric_cumulative": {"fr": "Essais cumulés", "en": "Cumulative trials"},
+    "tg_rel_cumulative": {"fr": "Toutes les configurations testées sur cette cible, tout run confondu.", "en": "All configurations tested on this target, across all runs."},
+    "tg_metric_runs": {"fr": "Nombre de runs", "en": "Number of runs"},
+    "tg_rel_runs": {"fr": "Runs complètement exécutés sur cette cible.", "en": "Completed runs on this target."},
+    "tg_section_runs": {"fr": "Historique des runs", "en": "Runs history"},
+    "tg_runs_footer": {"fr": "run(s) complètement exécutés sur cette cible", "en": "run(s) completed on this target"},
+    "tg_section_pbo": {"fr": "Analyse PBO", "en": "PBO analysis"},
+    "tg_pbo_hint": {"fr": "Nombre de blocs satisfont le diagnostic de fiabilité pour PBO sur cette cible.", "en": "Number of blocks satisfy the reliability diagnostic for PBO on this target."},
+    "tg_col_nblocks": {"fr": "Blocs", "en": "Blocks"},
+    "tg_col_reliability": {"fr": "Fiabilité", "en": "Reliability"},
+    "tg_pbo_empty": {"fr": "Pas d'analyse PBO disponible.", "en": "No PBO analysis available."},
+    "tg_pbo_footer": {"fr": "Chaque ligne représente un horizon différent.", "en": "Each row represents a different horizon."},
+
+    # Run detail (rd_*)
+    "rd_title": {"fr": "Détails du run", "en": "Run details"},
+    "rd_ctx_target": {"fr": "cible", "en": "target"},
+    "rd_ctx_snapshot": {"fr": "snapshot", "en": "snapshot"},
+    "rd_ctx_config": {"fr": "config", "en": "config"},
+    "rd_ctx_git": {"fr": "git", "en": "git"},
+    "rd_ctx_seed": {"fr": "seed", "en": "seed"},
+    "rd_horizon": {"fr": "horizon", "en": "horizon"},
+    "rd_started": {"fr": "lancé", "en": "started"},
+    "rd_finished": {"fr": "terminé", "en": "finished"},
+    "rd_sections": {"fr": "Sections", "en": "Sections"},
+    "rd_sections_aria": {"fr": "Sections de la page", "en": "Page sections"},
+    "rd_section_summary": {"fr": "Résumé", "en": "Summary"},
+    "rd_section_trials": {"fr": "Essais", "en": "Trials"},
+    "rd_section_config": {"fr": "Configuration", "en": "Configuration"},
+
+    # Scope lines (shared)
+    "scope_universe": {"fr": "Portée de l'univers", "en": "Universe scope"},
+    "scope_universe_rel": {"fr": "{done} avec un run complètement exécuté, {never} jamais lancée(s)", "en": "{done} with a completed run, {never} never launched"},
+    # Phase 5 : empty states améliorés pour hardening
+    "empty_runs_title": {"fr": "Aucun run pour l'instant.", "en": "No run yet."},
+    "empty_runs_hint": {"fr": "Configure et lance un run depuis le poste de lancement.", "en": "Configure and launch a run from the launch station."},
 }
 
 
@@ -343,7 +516,17 @@ def js_strings(lang: str) -> dict[str, str]:
         "sim_col_strategy", "sim_col_buy_hold",
         "record_unavailable", "record_empty", "record_runs", "record_span",
         "record_scale", "record_counts", "record_unknown", "record_trials",
-        "record_no_trials",
+        "record_no_trials", "record_tap_again", "record_span_range", "record_span_day", "record_hidden",
+        "preview_aria_empty", "preview_aria",
+        "sim_aria_equity_empty", "sim_aria_drawdown_empty", "sim_aria_dist_empty",
+        "sim_aria_equity", "sim_aria_drawdown", "sim_aria_dist",
+        "btn_confirm_launch", "btn_cancel", "confirm_line_target", "confirm_line_scheme",
+        "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_queue",
+        "confirm_line_gates",
+        "gate_data_quality_enabled", "gate_purge", "gate_embargo_enabled",
+        "gate_uniqueness_weights", "gate_calibration", "gate_stacking",
+        "confirm_line_queue_free", "load_example_confirm",
+        "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
         "recap_horizons", "recap_targets_count", "movers_not_a_target",
     ]

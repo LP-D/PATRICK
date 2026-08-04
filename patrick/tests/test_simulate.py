@@ -95,15 +95,15 @@ def test_execution_lag_cannot_be_zero():
 
 def test_kelly_disabled_without_good_calibration(tmp_path):
     db_path, store_root, trial_id, _ = _setup_run_with_predictions(tmp_path, good_signal=False, n=150)
-    params = sim.SimParams(position_mode="kelly")
+    params = sim.SimParams(position_mode="heuristic_leverage")
     result = sim.simulate(trial_id, params, db_path=db_path, store_root=store_root)
     assert result["ok"] is False
-    assert "Kelly" in result["message"]
+    assert "heuristique" in result["message"]
 
 
 def test_kelly_enabled_with_strong_signal(tmp_path):
     db_path, store_root, trial_id, _ = _setup_run_with_predictions(tmp_path, good_signal=True)
-    params = sim.SimParams(position_mode="kelly", kelly_fraction=0.5)
+    params = sim.SimParams(position_mode="heuristic_leverage", kelly_fraction=0.5)
     result = sim.simulate(trial_id, params, db_path=db_path, store_root=store_root)
     assert result["ok"] is True
 

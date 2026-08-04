@@ -231,6 +231,47 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
+def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
+    """Tous les runs, les plus récents d'abord — pour surfaces exploratoires (Phase 5).
+    Inclut `scheme`/`best_f1_dir`/`dm_p_value` (mêmes requêtes que
+    `tracking.history.list_runs`, dupliquées ici plutôt qu'importées : `db.py`
+    est la couche basse, `history.py` en dépend, pas l'inverse) -- `runs.html`
+    les affiche directement (`r.scheme`, `r.best_f1_dir`, `r.dm_p_value`)."""
+    rows = conn.execute(
+        "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials "
+        "FROM run ORDER BY started_at DESC",
+    ).fetchall()
+    out = []
+    for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
+        name, scheme = None, "walkforward"
+        try:
+            cfg = json.loads(config_json) if config_json else {}
+            name = cfg.get("name")
+            scheme = cfg.get("validation", {}).get("scheme", "walkforward")
+        except (TypeError, ValueError, AttributeError):
+            pass
+        best_row = conn.execute(
+            "SELECT trial_id FROM trial WHERE run_id = ? AND is_best = 1 LIMIT 1", (run_id,)
+        ).fetchone()
+        best_f1_dir = None
+        if best_row:
+            metric_row = conn.execute(
+                "SELECT AVG(value) FROM fold_metric WHERE trial_id = ? "
+                "AND split IN ('test', 'test_path') AND metric = 'F1_dir'",
+                (best_row[0],),
+            ).fetchone()
+            best_f1_dir = metric_row[0] if metric_row and metric_row[0] is not None else None
+        dm_row = conn.execute("SELECT p_value FROM dm_result WHERE run_id = ?", (run_id,)).fetchone()
+        out.append({
+            "run_id": run_id, "target": target, "horizon": horizon,
+            "status": status, "started_at": started_at, "finished_at": finished_at,
+            "n_trials": n_trials, "name": name, "config_json": config_json,
+            "scheme": scheme, "best_f1_dir": best_f1_dir,
+            "dm_p_value": dm_row[0] if dm_row else None,
+        })
+    return out
+
+
 def list_done_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
     """Runs terminés (`status='done'`), les plus récents d'abord -- alimente le
     sélecteur de run du simulateur (Phase 4.7)."""

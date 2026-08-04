@@ -5,7 +5,7 @@
 {% block session_context %}
 {% set r = detail.run %}
 <div class="session-context">
-    <span><b>cible</b> {{ r.target }}/{{ r.horizon }}j</span>
+    <span><b>cible</b> <a href="/targets/{{ r.target }}">{{ r.target }}</a>/{{ r.horizon }}j</span>
     <span><b>snapshot</b> {{ r.snapshot_id or '—' }}</span>
     <span><b>config</b> {{ r.config_hash or '—' }}</span>
     <span><b>git</b> {{ r.git_sha or '—' }}</span>
@@ -14,6 +14,13 @@
 {% endblock %}
 
 {% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
+    <a href="/targets/{{ detail.run.target }}">{{ detail.run.target }}</a>
+    <span aria-current="page">{{ detail.run.run_id | truncate(12, true) }}</span>
+</nav>
+
 {% set run = detail.run %}
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
@@ -40,9 +47,9 @@
 </nav>
 
 <section id="resume" class="card">
-<h2>Résumé</h2>
+<h2 style="margin-top: 0">Résumé</h2>
 
-<div class="metric-grid">
+<div class="metric-grid" style="margin-bottom: 2rem;">
 {{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
           "Toutes les configurations testées sur cette cible/horizon, tout run confondu.", "neutral") }}
 
