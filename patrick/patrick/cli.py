@@ -24,6 +24,18 @@ def ingest_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
     force: bool = typer.Option(False, "--force", help="Retélécharge même si en cache"),
 ) -> None:
+    """Télécharge et prépare les données brutes (Phase 0) : tickers Yahoo Finance
+    et séries FRED selon la config. Les données sont mises en cache localement
+    (`~/.patrick/data`) et réutilisées par défaut — `--force` réactive le
+    téléchargement, utile après un changement d'univers ou pour récupérer les
+    dernières cours/données macro.
+
+    Exemple :
+
+    \b
+        patrick ingest --config configs/examples/vix_direction.yaml
+        patrick ingest --config configs/examples/vix_direction.yaml --force
+    """
     cfg = RunConfig.from_yaml(config)
     store = DataStore()
     df = ingest(cfg.objective, cfg.universe, store, force=force, data_quality=cfg.data_quality)
@@ -37,6 +49,18 @@ def run_cmd(
                                        help="Retélécharge les données même si en cache"),
     name: str | None = typer.Option(None, "--name", help="Nom du run ; par défaut, déduit de la cible"),
 ) -> None:
+    """Pipeline complet bout-en-bout (Phase 1-4) : ingestion data → sélection de
+    features (SHAP) → walk-forward cross-validation → grille de modèles → tuning
+    Optuna → holdout terminal → export du meilleur modèle. Configuration lue depuis
+    un fichier YAML (voir `configs/examples/`). Le résultat (leaderboard, meilleur
+    modèle, contexte de reproductibilité) est stocké en base SQLite et en cache Parquet.
+
+    Exemple :
+
+    \b
+        patrick run --config configs/examples/vix_direction.yaml
+        patrick run --config configs/examples/vix_direction.yaml --force-ingest
+    """
     cfg = RunConfig.from_yaml(config)
     if name:
         cfg.name = name

@@ -41,6 +41,50 @@ exporte :
 - `runs/<name>_best_model.joblib` + `_best_model_meta.json` : le modèle gagnant,
   ré-entraîné sur 100% de l'historique (comme `VIX_PRODUCTION`)
 
+## Commandes disponibles
+
+### `patrick ingest`
+Télécharge et prépare les données brutes (Phase 0) selon la config : tickers Yahoo Finance 
+et séries FRED. Les données sont mises en cache localement et réutilisées par défaut.
+
+```bash
+# Ingestion standard (utilise le cache s'il existe)
+patrick ingest --config configs/examples/vix_direction.yaml
+
+# Force le téléchargement même si en cache
+patrick ingest --config configs/examples/vix_direction.yaml --force
+```
+
+### `patrick run`
+Pipeline complet bout-en-bout (Phases 1-4) : ingestion → sélection features (SHAP) → 
+walk-forward cross-validation → grille modèles → tuning Optuna → holdout terminal → 
+export du meilleur modèle.
+
+```bash
+# Lancement standard
+patrick run --config configs/examples/vix_direction.yaml
+
+# Force le téléchargement data même si en cache
+patrick run --config configs/examples/vix_direction.yaml --force-ingest
+
+# Override du nom du run
+patrick run --config configs/examples/vix_direction.yaml --name mon_run_custom
+```
+
+### `patrick serve`
+Lance l'interface web (formulaire de config, suivi de run, leaderboard, simulation).
+
+```bash
+# Lancement standard (http://127.0.0.1:8000)
+patrick serve
+
+# Sur une interface réseau différente
+patrick serve --host 0.0.0.0 --port 9000
+
+# Mode développement (rechargement à chaud)
+patrick serve --reload
+```
+
 ### `patrick audit degradation` (rapport de correction, C7)
 
 Mesure l'impact réel des corrections de fuite de la phase 0 (purge/embargo,
@@ -69,9 +113,9 @@ est bien peuplé sur ce chemin, cf. rapport de correction C7).
 Voir `configs/examples/vix_direction.yaml` (reproduit le pipeline VIX établi) et
 `configs/examples/aapl_direction.yaml` (second actif, preuve de généralité). Champs
 principaux : `objective` (cible, horizons, régimes), `universe` (tickers/FRED du
-pool de features), `features` (familles activées), `validation` (folds, purge),
-`selection` (méthode, grille N), `sampler`, `models` (algos, calibration,
-stacking), `tuning` (Optuna).
+pool de features), `features` (familles activées), `validation` (folds, purge,
+**holdout_months** [12-24, défaut 15]), `selection` (méthode, grille N), `sampler`,
+`models` (algos, calibration, stacking), `tuning` (Optuna).
 
 ## Accès aux données
 
