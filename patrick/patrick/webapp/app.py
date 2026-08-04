@@ -196,7 +196,7 @@ async def create_run(request: Request):
     FIFO existante les enchaîne, aucun nouvel orchestrateur. Si une seule
     config est invalide parmi les cibles soumises, rien n'est enqueue."""
     form = await request.form()
-    targets = form.getlist("target_symbols")
+    targets = list(dict.fromkeys(form.getlist("target_symbols")))
     if not targets:
         return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
 
@@ -259,7 +259,15 @@ def relaunch_run(run_id: str):
     new_name = run_manager.next_run_name(config.objective.target_symbol)
     cfg_dict = config.model_dump()
     cfg_dict["name"] = new_name
-    cfg_dict["output"]["dir"] = f"runs/{new_name}"
+    # Le dossier de sortie de la relance reprend le RACINE (parent) du
+    # dossier de la config d'origine -- un batch soumis avec un `output_dir`
+    # explicite, ou un run lancé en CLI avec sa propre racine, ne doit pas se
+    # faire écraser au profit d'un `runs/` codé en dur relatif au cwd du
+    # process web. Seul le dernier composant (le nom du run) change.
+    original_dir = Path(config.output.dir)
+    cfg_dict["output"]["dir"] = (
+        str(original_dir.parent / new_name) if original_dir.parent != Path(".") else f"runs/{new_name}"
+    )
     new_config = RunConfig.model_validate(cfg_dict)
 
     job_view = run_manager.start_run(new_config)

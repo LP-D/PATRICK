@@ -414,12 +414,14 @@
     {% if movers.error %}
     <p class="hint">{{ movers.error }}</p>
     {% endif %}
-    {# Chaque ligne est un BOUTON qui pose le symbole dans `target_symbol` et
-       recharge l'aperçu. Avant, ce panneau était le bloc le plus visible de
-       la page et le seul relié à aucune tâche : un widget de portail boursier
-       posé dans un outil de recherche. Relié, il devient ce qu'il aurait dû
-       être — l'aide au choix de la cible. Les symboles absents de la liste
-       des cibles ne sont pas cliquables et le disent. #}
+    {# Chaque ligne est un BOUTON qui AJOUTE le symbole à la sélection du
+       `<select multiple id="target_symbols">` (sans désélectionner les
+       autres) et recharge l'aperçu. Avant, ce panneau était le bloc le plus
+       visible de la page et le seul relié à aucune tâche : un widget de
+       portail boursier posé dans un outil de recherche. Relié, il devient ce
+       qu'il aurait dû être — l'aide à composer la sélection de cibles, une
+       ou plusieurs. Les symboles absents de la liste des cibles ne sont pas
+       cliquables et le disent. #}
     <p class="hint movers-hint">{{ t('movers_pick_hint') }}</p>
     <div class="movers-columns" id="movers-columns">
         <div class="movers-col">

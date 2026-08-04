@@ -60,3 +60,15 @@ def test_next_run_name_counts_per_target_independently():
     finally:
         conn.close()
     assert run_manager.next_run_name("^AORD") == "AORD_1"
+
+
+def test_next_run_name_skips_names_claimed_by_queued_jobs():
+    import json as _json
+    from patrick.tracking import jobs as jobs_db
+    conn = trackdb.connect()
+    try:
+        config_json = _json.dumps({"name": "VIX_1", "objective": {"target_symbol": "^VIX"}})
+        jobs_db.enqueue_job(conn, config_json)
+    finally:
+        conn.close()
+    assert run_manager.next_run_name("^VIX") == "VIX_2"
