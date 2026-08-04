@@ -70,9 +70,9 @@ ASSET_CLASS_FRICTION_BPS = {
 
 @dataclass
 class SimParams:
-    position_mode: str = "threshold"  # threshold | proportional | kelly
+    position_mode: str = "threshold"  # threshold | proportional | heuristic_leverage
     threshold: float = 0.55
-    kelly_fraction: float = 0.5
+    kelly_fraction: float = 0.5  # Leverage fraction (heuristic, not Kelly formula)
     max_leverage: float = 1.0
     max_position: float = 1.0
     short_allowed: bool = True
@@ -109,7 +109,9 @@ def _position_from_score(score: np.ndarray, params: SimParams) -> np.ndarray:
         pos[score <= 1 - params.threshold] = -1.0
     elif params.position_mode == "proportional":
         pos = np.clip((score - 0.5) * 2, -1.0, 1.0)
-    elif params.position_mode == "kelly":
+    elif params.position_mode == "heuristic_leverage":
+        # Heuristic leverage (not true Kelly formula, which is f*=edge/odds in discrete
+        # or f*=μ/σ² in continuous). This linear approximation ignores volatility.
         pos = params.kelly_fraction * (2 * score - 1)
     else:
         raise ValueError(f"position_mode inconnu : {params.position_mode}")
@@ -126,18 +128,22 @@ def _brier_score(y_true_binary: np.ndarray, score: np.ndarray) -> float:
     return float(np.mean((score - y_true_binary) ** 2))
 
 
-def check_kelly_available(conn: sqlite3.Connection, trial_id: int, min_obs: int = 30) -> tuple[bool, str]:
-    """Le Kelly fractionnaire n'est activable QUE si une courbe de calibration
+def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: int = 30) -> tuple[bool, str]:
+    """L'allocation heuristique n'est activable QUE si une courbe de calibration
     (proxy ici : un score de Brier meilleur qu'un tirage au sort sur le
     problème binarisé, 0.25) existe sur le fold de test -- sinon désactivé
-    avec un message explicatif (Phase 4.1), jamais silencieusement approximé."""
+    avec un message explicatif (Phase 4.1), jamais silencieusement approximé.
+
+    ⚠️  DISCLAIMER : Cette allocation est une heuristique (`leverage = kelly_frac * (2*score - 1)`),
+    non une véritable formule Kelly (qui est f*=edge/odds en discret ou f*=μ/σ² en continu).
+    Elle ignore la volatilité du signal et peut sur/sous-dimensionner face à la variance réelle."""
     rows = conn.execute(
         "SELECT y_pred, y_proba, y_true FROM prediction "
         "WHERE trial_id = ? AND split = 'test' AND y_proba IS NOT NULL AND y_true IS NOT NULL",
         (trial_id,),
     ).fetchall()
     if len(rows) < min_obs:
-        return False, f"Kelly désactivé : seulement {len(rows)} observations de test avec proba (min {min_obs})."
+        return False, f"Allocation heuristique désactivée : seulement {len(rows)} observations de test avec proba (min {min_obs})."
     y_pred = np.array([r[0] for r in rows])
     y_proba = np.array([r[1] for r in rows])
     y_true = np.array([r[2] for r in rows])
@@ -145,8 +151,8 @@ def check_kelly_available(conn: sqlite3.Connection, trial_id: int, min_obs: int 
     y_true_binary = np.isin(y_true, _UP_CLASSES).astype(float)
     brier = _brier_score(y_true_binary, score)
     if brier >= 0.25:
-        return False, f"Kelly désactivé : score de Brier {brier:.3f} >= 0.25 (pas mieux qu'un tirage au sort)."
-    return True, f"Kelly activé (score de Brier {brier:.3f} sur {len(rows)} obs. de test)."
+        return False, f"Allocation heuristique désactivée : score de Brier {brier:.3f} >= 0.25 (pas mieux qu'un tirage au sort)."
+    return True, f"Allocation heuristique activée (score de Brier {brier:.3f} sur {len(rows)} obs. de test)."
 
 
 def _load_predictions(conn: sqlite3.Connection, trial_id: int) -> pd.DataFrame:
@@ -265,8 +271,8 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
             raise ValueError(f"Run introuvable pour trial {trial_id}")
 
         kelly_ok, kelly_message = (True, None)
-        if params.position_mode == "kelly":
-            kelly_ok, kelly_message = check_kelly_available(conn, trial_id)
+        if params.position_mode == "heuristic_leverage":
+            kelly_ok, kelly_message = check_leverage_available(conn, trial_id)
             if not kelly_ok:
                 return {"ok": False, "message": kelly_message, "params": params.to_dict()}
 
