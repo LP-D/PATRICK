@@ -123,6 +123,35 @@ def test_thresholds_measured_not_arbitrary_frozen_and_aberrant():
     assert quality.check_aberrant_returns(corrupted) is not None
 
 
+def test_download_ohlc_is_cached_per_symbol_and_start(tmp_path, monkeypatch):
+    yfinance_source._download_one_cached.cache_clear()
+    yfinance_source._download_ohlc_cached.cache_clear()
+    monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "cache"))
+    calls = {"count": 0}
+
+    def fake_download(symbol, start=None, auto_adjust=True, progress=False):
+        calls["count"] += 1
+        idx = pd.bdate_range(start or "2020-01-01", periods=4)
+        return pd.DataFrame(
+            {
+                "Open": [100.0, 101.0, 102.0, 103.0],
+                "High": [101.0, 102.0, 103.0, 104.0],
+                "Low": [99.0, 100.0, 101.0, 102.0],
+                "Close": [100.5, 101.5, 102.5, 103.5],
+            },
+            index=idx,
+        )
+
+    monkeypatch.setattr(yfinance_source.yf, "download", fake_download)
+
+    first = yfinance_source.download_ohlc("^GSPC", "2020-01-01")
+    second = yfinance_source.download_ohlc("^GSPC", "2020-01-01")
+
+    assert calls["count"] == 1
+    assert list(first.columns) == ["Open", "High", "Low", "Close"]
+    assert second.equals(first)
+
+
 # ---------------------------------------------------------------------------
 # Intégration `ingest()` -- sources monkeypatchées, jamais `ingest()` lui-même
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from patrick.config.schema import RunConfig
+from patrick.phase9 import determine_signal_quality_status, regime_summary
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -540,6 +541,81 @@ def simulate_page(request: Request, run_id: str | None = None):
         request, "simulate.html",
         {"runs": runs, "initial_run_id": run_id, **_i18n_context(request)},
     )
+
+
+@app.get("/phase9")
+def phase9_overview(request: Request):
+    """Vue synthétique Phase 9 : signal quality + régime + journal + snapshots."""
+    conn = trackdb.connect()
+    try:
+        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
+        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
+    finally:
+        conn.close()
+
+    summary = {
+        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
+        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
+    }
+    return templates.TemplateResponse(
+        request,
+        "phase9_overview.html",
+        {"summary": summary, "entries": entries, "snapshots": snapshots, **_i18n_context(request)},
+    )
+
+
+@app.get("/api/phase9/summary")
+def api_phase9_summary():
+    conn = trackdb.connect()
+    try:
+        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
+        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
+    finally:
+        conn.close()
+    return {
+        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
+        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
+        "entries": entries,
+        "snapshots": snapshots,
+    }
+
+
+@app.get("/api/phase9/journal")
+def api_phase9_journal(limit: int = 20):
+    conn = trackdb.connect()
+    try:
+        return {"entries": trackdb.list_phase9_journal_entries(conn, limit=limit)}
+    finally:
+        conn.close()
+
+
+@app.post("/api/phase9/journal")
+async def api_phase9_record_journal(request: Request):
+    body = await request.json()
+    action = str(body.get("action") or "manual_review")
+    actor = str(body.get("actor") or "operator")
+    reason = str(body.get("reason") or "phase9 review")
+    before = body.get("before")
+    after = body.get("after")
+    conn = trackdb.connect()
+    try:
+        entry = trackdb.save_phase9_journal_entry(conn, action, actor, before, after, reason)
+    finally:
+        conn.close()
+    return {"entry": entry}
+
+
+@app.post("/api/phase9/snapshot")
+async def api_phase9_snapshot(request: Request):
+    body = await request.json()
+    name = str(body.get("name") or "snapshot")
+    state = body.get("state") or {}
+    conn = trackdb.connect()
+    try:
+        snapshot_id = trackdb.save_phase9_snapshot(conn, name, state)
+    finally:
+        conn.close()
+    return {"snapshot_id": snapshot_id, "snapshot_name": name}
 
 
 @app.get("/api/runs/{run_id}/trials")

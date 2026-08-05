@@ -6,10 +6,13 @@ batch, pour qu'un seul ticker cassé ne fasse pas perdre tout le lot.
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+from patrick.cache_manager import LocalCache
 
 
 def _clean_col(ticker: str) -> str:
@@ -35,16 +38,33 @@ def download_batch(tickers: list[str], start: str) -> pd.DataFrame:
     return raw
 
 
-def download_one(ticker: str, start: str) -> pd.Series | None:
+@lru_cache(maxsize=256)
+def _download_one_cached(ticker: str, start: str) -> pd.Series | None:
     try:
         s = yf.download(ticker, start=start, auto_adjust=True, progress=False)["Close"]
         if isinstance(s, pd.DataFrame):
             s = s.iloc[:, 0]
+        s = s.copy()
         s.name = _clean_col(ticker)
         return s
     except Exception as e:
         print(f"  [WARN] yfinance {ticker}: {str(e)[:100]}")
         return None
+
+
+def download_one(ticker: str, start: str) -> pd.Series | None:
+    key = f"series_{_clean_col(ticker)}_{start}"
+    cache = LocalCache()
+    cached = cache.load_dataframe(key, max_age_days=7)
+    if cached is not None:
+        if cached.shape[1] == 1:
+            return cached.iloc[:, 0].copy()
+        return cached.iloc[:, 0].copy()
+    s = _download_one_cached(ticker, start)
+    if s is not None:
+        cache.save_dataframe(key, s.to_frame(), max_age_days=7)
+        return s.copy()
+    return None
 
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
@@ -100,10 +120,8 @@ def download_target(symbol: str, start: str) -> pd.Series:
     return s.rename(_clean_col(symbol))
 
 
-def download_ohlc(symbol: str, start: str) -> pd.DataFrame | None:
-    """OHLC pour un seul symbole — utilisé par les estimateurs de vol réalisée
-    (Parkinson/GK/RS/Yang-Zhang), qui n'ont besoin que de la cible, pas de tout
-    l'univers (cf. portée de VIX_OHLC_VOL)."""
+@lru_cache(maxsize=128)
+def _download_ohlc_cached(symbol: str, start: str) -> pd.DataFrame | None:
     try:
         df = yf.download(symbol, start=start, auto_adjust=True, progress=False)
         if isinstance(df.columns, pd.MultiIndex):
@@ -111,7 +129,27 @@ def download_ohlc(symbol: str, start: str) -> pd.DataFrame | None:
         cols = [c for c in ("Open", "High", "Low", "Close") if c in df.columns]
         if len(cols) < 4:
             return None
-        return df[list(cols)].dropna(how="all")
+        return df[list(cols)].dropna(how="all").copy()
     except Exception as e:
         print(f"  [WARN] yfinance OHLC {symbol}: {str(e)[:100]}")
         return None
+
+
+def download_ohlc(symbol: str, start: str) -> pd.DataFrame | None:
+    """OHLC pour un seul symbole — utilisé par les estimateurs de vol réalisée
+    (Parkinson/GK/RS/Yang-Zhang), qui n'ont besoin que de la cible, pas de tout
+    l'univers (cf. portée de VIX_OHLC_VOL).
+
+    Le résultat est mis en cache local + mémoire par `(symbol, start)` pour éviter
+    les téléchargements répétés pendant un scan de grille ou un run multi-fold : le
+    même dataset OHLC est relu plusieurs fois sur le même historique, sans valeur
+    ajoutée à re-télécharger depuis Yahoo.
+    """
+    cache_key = f"ohlc_{_clean_col(symbol)}_{start}"
+    cached = LocalCache().load_dataframe(cache_key, max_age_days=7)
+    if cached is not None:
+        return cached.copy()
+    df = _download_ohlc_cached(symbol, start)
+    if df is not None:
+        LocalCache().save_dataframe(cache_key, df, max_age_days=7)
+    return None if df is None else df.copy()

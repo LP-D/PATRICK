@@ -140,6 +140,75 @@ def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list
     return [dict(zip(("series", "reason", "detail"), row)) for row in rows]
 
 
+def save_phase9_snapshot(conn: sqlite3.Connection, snapshot_name: str, state: dict) -> int:
+    """Persist one snapshot of the Phase 9 workspace for later review."""
+    payload = json.dumps(state, sort_keys=True, default=str)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO phase9_snapshot (snapshot_name, payload_json, created_at) VALUES (?, ?, datetime('now'))",
+            (snapshot_name, payload),
+        )
+    return int(cursor.lastrowid)
+
+
+def list_phase9_snapshots(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+    rows = conn.execute(
+        "SELECT snapshot_name, payload_json, created_at FROM phase9_snapshot ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "snapshot_name": snapshot_name,
+            "payload": json.loads(payload_json) if payload_json else {},
+            "created_at": created_at,
+        }
+        for snapshot_name, payload_json, created_at in rows
+    ]
+
+
+def save_phase9_journal_entry(conn: sqlite3.Connection, action: str, actor: str, before: object | None, after: object | None, reason: str) -> dict:
+    """Persist a decision or operator action for the Phase 9 tracking layer."""
+    payload_before = json.dumps(before, sort_keys=True, default=str)
+    payload_after = json.dumps(after, sort_keys=True, default=str)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO phase9_journal (action, actor, before_json, after_json, reason, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (action, actor, payload_before, payload_after, reason),
+        )
+    row = conn.execute(
+        "SELECT id, action, actor, before_json, after_json, reason, created_at FROM phase9_journal WHERE id = ?",
+        (int(cursor.lastrowid),),
+    ).fetchone()
+    return {
+        "id": row[0],
+        "action": row[1],
+        "actor": row[2],
+        "before": json.loads(row[3]) if row[3] else None,
+        "after": json.loads(row[4]) if row[4] else None,
+        "reason": row[5],
+        "created_at": row[6],
+    }
+
+
+def list_phase9_journal_entries(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, action, actor, before_json, after_json, reason, created_at FROM phase9_journal ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "action": row[1],
+            "actor": row[2],
+            "before": json.loads(row[3]) if row[3] else None,
+            "after": json.loads(row[4]) if row[4] else None,
+            "reason": row[5],
+            "created_at": row[6],
+        }
+        for row in rows
+    ]
+
+
 def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: float,
                             n_folds: int, selection_freq: dict[str, float]) -> None:
     """Phase 6.3 (P6.3). `mean_jaccard` peut être NaN (moins de 2 folds
