@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Phase 9 — PATRICK{% endblock %}
+
+{% block content %}
+<section class="stack section-card">
+    <div class="panel-header">
+        <div>
+            <p class="eyebrow">Phase 9</p>
+            <h1>Plateforme de trading et de traçabilité</h1>
+        </div>
+    </div>
+
+    <div class="two-up-grid">
+        <article class="panel">
+            <h2>Qualité des signaux</h2>
+            <dl class="stats-list">
+                <div>
+                    <dt>Statut</dt>
+                    <dd>{{ summary.signal_quality.status }}</dd>
+                </div>
+                <div>
+                    <dt>Signaux</dt>
+                    <dd>{{ summary.signal_quality.n_values }}</dd>
+                </div>
+                <div>
+                    <dt>Significatifs</dt>
+                    <dd>{{ summary.signal_quality.n_selected }}</dd>
+                </div>
+                <div>
+                    <dt>Part sélectionnée</dt>
+                    <dd>{{ '%.2f'|format(summary.signal_quality.share_selected) }}</dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="panel">
+            <h2>Classification de régime</h2>
+            <dl class="stats-list">
+                <div>
+                    <dt>Jours</dt>
+                    <dd>{{ summary.regime_summary.n_days }}</dd>
+                </div>
+                <div>
+                    <dt>CALM</dt>
+                    <dd>{{ summary.regime_summary.counts.CALM }}</dd>
+                </div>
+                <div>
+                    <dt>NORMAL</dt>
+                    <dd>{{ summary.regime_summary.counts.NORMAL }}</dd>
+                </div>
+                <div>
+                    <dt>STRESS</dt>
+                    <dd>{{ summary.regime_summary.counts.STRESS }}</dd>
+                </div>
+                <div>
+                    <dt>CRASH</dt>
+                    <dd>{{ summary.regime_summary.counts.CRASH }}</dd>
+                </div>
+            </dl>
+        </article>
+    </div>
+
+    <div class="two-up-grid">
+        <article class="panel">
+            <h2>Journal de décision</h2>
+            {% if entries %}
+            <ul class="timeline">
+                {% for entry in entries %}
+                <li>
+                    <strong>{{ entry.action }}</strong>
+                    <span>{{ entry.actor }} · {{ entry.created_at }}</span>
+                    <small>{{ entry.reason }}</small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>Aucune entrée enregistrée.</p>
+            {% endif %}
+        </article>
+
+        <article class="panel">
+            <h2>Instantanés</h2>
+            {% if snapshots %}
+            <ul class="timeline">
+                {% for snapshot in snapshots %}
+                <li>
+                    <strong>{{ snapshot.snapshot_name }}</strong>
+                    <span>{{ snapshot.created_at }}</span>
+                    <small>{{ snapshot.payload | tojson }}</small>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>Aucun snapshot enregistré.</p>
+            {% endif %}
+        </article>
+    </div>
+</section>
+{% endblock %}

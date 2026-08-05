@@ -115,6 +115,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
             <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
             <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
+            <a href="/phase9" {% if request.url.path.startswith('/phase9') %}aria-current="page"{% endif %}>Phase 9</a>
         </nav>
         <div class="station-tools">
             <nav class="station-lang" aria-label="Langue / Language">
