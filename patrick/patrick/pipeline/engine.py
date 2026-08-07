@@ -47,6 +47,7 @@ from sklearn.preprocessing import RobustScaler
 
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
+from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
 from patrick.features import macro as feat_macro
@@ -580,11 +581,57 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te)}
 
 
+# Phase X5 -- kind exposé en config (validation.baseline_by_asset_class) -> clé
+# interne de `fd.baseline_predictions`/`fd.baselines` (`validation/baselines.py`).
+_BASELINE_KIND_TO_KEY = {
+    "persistence": "BASELINE_persistence",
+    "majority": "BASELINE_majority",
+    "majority_by_regime": "BASELINE_majority_by_regime",
+    "har_rv": "BASELINE_har_rv",
+    "momentum_20": "BASELINE_momentum_20",
+    "momentum_5": "BASELINE_momentum_5",
+    "random_walk_no_drift": "BASELINE_random_walk_no_drift",
+    "random_walk_drift": "BASELINE_random_walk_drift",
+}
+# Référence commune fixe (X5) : permet de comparer les classes d'actif entre
+# elles sur un pied d'égalité, jamais configurable (contrairement à la
+# baseline spécifique, cf. `baseline_by_asset_class`).
+_COMMON_BASELINE_KEY = "BASELINE_persistence"
+
+
+def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str | None, np.ndarray | None]:
+    """Parmi `candidate_keys` (clés `BASELINE_*` réellement calculées pour ce
+    fold), retient celle de F1_dir le plus haut -- même logique de sélection
+    empirique que le comportement historique (une seule baseline "meilleure
+    sur ce fold"), mais restreinte à l'ensemble pertinent pour la classe
+    d'actif de la cible plutôt qu'à toutes les baselines confondues."""
+    best_name, best_pred, best_f1 = None, None, -1.0
+    for key in candidate_keys:
+        pred = (fd.baseline_predictions or {}).get(key)
+        if pred is None:
+            continue
+        f1 = (fd.baselines or {}).get(key, {}).get("F1_dir")
+        if f1 is not None and f1 == f1 and f1 > best_f1:
+            best_f1, best_name, best_pred = f1, key, pred
+    return best_name, best_pred
+
+
 def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: int, seed: int) -> dict | None:
-    """DM (Phase 2.5) entre la config gagnante et la meilleure des baselines
-    systématiques (Phase 0.6), sur le fold walk-forward le plus récent — la
-    période la plus proche du régime de marché actuel, plutôt qu'une moyenne
-    sur tout l'historique qui diluerait un éventuel changement de régime."""
+    """DM (Phase 2.5) entre la config gagnante et DEUX baselines (Phase X5),
+    sur le fold walk-forward le plus récent — la période la plus proche du
+    régime de marché actuel, plutôt qu'une moyenne sur tout l'historique qui
+    diluerait un éventuel changement de régime :
+
+    - `class_specific` : la meilleure (F1_dir le plus haut sur ce fold) parmi
+      les candidats configurés pour la classe d'actif de la cible
+      (`validation.baseline_by_asset_class`, cf. `classify_asset_class`) ;
+    - `common` : la persistance de classe, TOUJOURS calculée en plus, comme
+      référence fixe permettant de comparer les classes d'actif entre elles
+      sur un pied d'égalité (jamais configurable).
+
+    Retourne `None` seulement si aucune des deux comparaisons n'a pu être
+    calculée (baselines indisponibles sur ce fold, ex. HAR-RV avec train trop
+    court) -- sinon un dict avec l'une ou l'autre clé à `None` selon le cas."""
     horizon, regime = int(best_cfg["horizon"]), best_cfg["regime"]
     n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
     best_params = _parse_params(best_cfg.get("best_params"))
@@ -596,20 +643,30 @@ def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: in
     _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
                               sampler_name, algo, seed,
                               calibration=ctx.config.models.calibration, **best_params)
-
-    best_baseline_name, best_baseline_pred, best_f1 = None, None, -1.0
-    for name, pred in fd.baseline_predictions.items():
-        f1 = (fd.baselines or {}).get(name, {}).get("F1_dir")
-        if f1 is not None and f1 == f1 and f1 > best_f1:
-            best_f1, best_baseline_name, best_baseline_pred = f1, name, pred
-    if best_baseline_pred is None:
-        return None
-
     loss_model = (np.asarray(y_pred).ravel() != fd.y_te).astype(float)
-    loss_baseline = (np.asarray(best_baseline_pred).ravel() != fd.y_te).astype(float)
-    dm = diebold_mariano(loss_model, loss_baseline, h=horizon)
-    dm["baseline"] = best_baseline_name
-    return dm
+
+    asset_class = classify_asset_class(ctx.config.objective.target_symbol,
+                                        ctx.config.objective.target_source)
+    candidate_kinds = ctx.config.validation.baseline_by_asset_class.get(asset_class, ["persistence"])
+    candidate_keys = [_BASELINE_KIND_TO_KEY[k] for k in candidate_kinds if k in _BASELINE_KIND_TO_KEY]
+    class_name, class_pred = _best_baseline_among(fd, candidate_keys)
+    common_pred = (fd.baseline_predictions or {}).get(_COMMON_BASELINE_KEY)
+
+    result: dict = {"asset_class": asset_class, "class_specific": None, "common": None}
+    if class_pred is not None:
+        loss_class = (np.asarray(class_pred).ravel() != fd.y_te).astype(float)
+        dm_class = diebold_mariano(loss_model, loss_class, h=horizon)
+        dm_class["baseline"] = class_name
+        result["class_specific"] = dm_class
+    if common_pred is not None:
+        loss_common = (np.asarray(common_pred).ravel() != fd.y_te).astype(float)
+        dm_common = diebold_mariano(loss_model, loss_common, h=horizon)
+        dm_common["baseline"] = _COMMON_BASELINE_KEY
+        result["common"] = dm_common
+
+    if result["class_specific"] is None and result["common"] is None:
+        return None
+    return result
 
 
 def _config_hash(config: RunConfig) -> str:
@@ -1157,8 +1214,15 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 # Phase 6.4 (P6.4) : persisté dans une table dédiée (dm_result,
                 # migration 0009), pas seulement dans job.result_json -- queryable
                 # à travers tout l'historique de runs (y compris CLI, sans job web
-                # associé), nécessaire à `trackstats.fdr_across_targets`.
-                trackdb.save_dm_result(conn, run_ids[int(final_best["horizon"])], dm_result)
+                # associé), nécessaire à `trackstats.fdr_across_targets`. Phase X5 :
+                # deux lignes par run (kind), class-specific ET commune (persistance).
+                run_id_for_horizon = run_ids[int(final_best["horizon"])]
+                if dm_result.get("class_specific") is not None:
+                    trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["class_specific"],
+                                            kind="class_specific")
+                if dm_result.get("common") is not None:
+                    trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["common"],
+                                            kind="common")
 
         # Phase 2.2 — essais cumulés sur cette cible/horizon, tout l'historique de
         # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique

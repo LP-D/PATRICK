@@ -75,7 +75,8 @@ def test_run_pipeline_persists_dm_result_queryable_across_targets(tmp_path, monk
 
     conn = sqlite3.connect(db_path)
     n_dm_rows = conn.execute("SELECT COUNT(*) FROM dm_result").fetchone()[0]
-    assert n_dm_rows == 2, "un dm_result par run walk-forward avec config gagnante"
+    # Phase X5 : deux lignes par run (class_specific + common), pas une seule.
+    assert n_dm_rows == 4, "deux dm_result (class-specific + commun) par run walk-forward"
 
     fdr_result = trackstats.fdr_across_targets(conn)
     conn.close()

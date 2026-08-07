@@ -10,7 +10,9 @@ import pandas as pd
 
 from patrick.validation.metrics import metrics
 
-BASELINE_NAMES = ("BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv")
+BASELINE_NAMES = ("BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv",
+                   "BASELINE_majority_by_regime", "BASELINE_momentum_20", "BASELINE_momentum_5",
+                   "BASELINE_random_walk_no_drift", "BASELINE_random_walk_drift")
 
 
 def majority_class_predictions(y_tr: np.ndarray, n: int) -> np.ndarray:
@@ -18,6 +20,22 @@ def majority_class_predictions(y_tr: np.ndarray, n: int) -> np.ndarray:
     values, counts = np.unique(y_tr, return_counts=True)
     majority = values[np.argmax(counts)]
     return np.full(n, majority, dtype=int)
+
+
+def majority_by_regime_predictions(y_tr: np.ndarray, tr_regimes: np.ndarray,
+                                    te_regimes: np.ndarray) -> np.ndarray:
+    """Classe majoritaire du train, calculée SÉPARÉMENT par régime (Phase X5)
+    -- plus exigeante que la majorité globale quand le déséquilibre de classe
+    varie selon le régime de marché. Repli sur la majorité globale du train
+    si un régime de test n'a aucune observation de train correspondante."""
+    global_majority = majority_class_predictions(y_tr, 1)[0]
+    per_regime: dict[str, int] = {}
+    for reg in np.unique(tr_regimes):
+        mask = tr_regimes == reg
+        if mask.any():
+            values, counts = np.unique(y_tr[mask], return_counts=True)
+            per_regime[reg] = int(values[np.argmax(counts)])
+    return np.array([per_regime.get(reg, global_majority) for reg in te_regimes], dtype=int)
 
 
 def persistence_predictions(target_series: pd.Series, idx: pd.DatetimeIndex,
@@ -30,6 +48,52 @@ def persistence_predictions(target_series: pd.Series, idx: pd.DatetimeIndex,
     fallback = target_series.mode().iloc[0] if len(target_series) else 0
     persisted = np.where(pd.isna(persisted), fallback, persisted).astype(int)
     return persisted
+
+
+MOMENTUM_WINDOW_FUTURES = 20  # cf. Phase X5 -- momentum documenté sur cette classe
+MOMENTUM_WINDOW_CRYPTO = 5    # régimes de volatilité extrêmes, fenêtre plus courte
+
+
+def momentum_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
+                          te_mask: np.ndarray, window: int,
+                          thr: dict, reg_r: pd.Series) -> np.ndarray:
+    """Baseline momentum (Phase X5, futures/crypto) : classe le rendement
+    glissant sur `window` jours via les MÊMES seuils causaux (`thr`, par
+    régime) que `build_target` -- directement comparable aux classes réelles."""
+    mom = price_series.pct_change(window).reindex(idx).values
+    reg_al = reg_r.reindex(idx).fillna("GLOBAL").values
+    preds = np.zeros(len(idx), dtype=int)
+    for i in range(len(idx)):
+        q25, q75 = thr.get(reg_al[i], thr.get("GLOBAL", (0, 0)))
+        r = mom[i] if not np.isnan(mom[i]) else 0.0
+        preds[i] = _classify_like_target(r, q25, q75)
+    return preds[te_mask]
+
+
+def random_walk_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
+                             tr_mask: np.ndarray, te_mask: np.ndarray, drift: bool,
+                             thr: dict, reg_r: pd.Series) -> np.ndarray:
+    """Baseline marche aléatoire (Phase X5) : le meilleur prévisionniste pour
+    une marche aléatoire SANS dérive (FX, résultat de référence établi en
+    recherche FX à horizon court) est "pas de changement" (rendement prévu =
+    0), classé via les seuils causaux comme une observation quelconque. AVEC
+    dérive (séries macro, convention standard en macro-économétrie) : le
+    rendement moyen du train est utilisé comme prévision constante au lieu de
+    0. Prévision constante par construction (pas de dépendance à l'historique
+    récent, contrairement à la persistance)."""
+    if drift:
+        ret = price_series.pct_change().reindex(idx)
+        train_ret = ret.values[tr_mask]
+        train_ret = train_ret[~np.isnan(train_ret)]
+        r_hat = float(train_ret.mean()) if len(train_ret) else 0.0
+    else:
+        r_hat = 0.0
+    reg_al = reg_r.reindex(idx).fillna("GLOBAL").values
+    preds = np.zeros(len(idx), dtype=int)
+    for i in range(len(idx)):
+        q25, q75 = thr.get(reg_al[i], thr.get("GLOBAL", (0, 0)))
+        preds[i] = _classify_like_target(r_hat, q25, q75)
+    return preds[te_mask]
 
 
 def _classify_like_target(r: float, q25: float, q75: float) -> int:
@@ -114,9 +178,20 @@ def compute_baselines(price_series: pd.Series, target_series: pd.Series,
     `y_te`, nécessaires pour comparer la perte du modèle gagnant à celle d'une
     baseline observation par observation (une moyenne de métriques ne le permet
     pas). Un seul calcul sous-jacent dans les deux cas, pas de duplication."""
+    reg_al = reg_r.reindex(idx).values
     preds: dict[str, np.ndarray] = {
         "BASELINE_majority": majority_class_predictions(y_tr, len(y_te)),
         "BASELINE_persistence": persistence_predictions(target_series, idx, te_mask, horizon),
+        "BASELINE_majority_by_regime": majority_by_regime_predictions(
+            y_tr, reg_al[tr_mask], reg_al[te_mask]),
+        "BASELINE_momentum_20": momentum_predictions(
+            price_series, idx, te_mask, MOMENTUM_WINDOW_FUTURES, thr, reg_r),
+        "BASELINE_momentum_5": momentum_predictions(
+            price_series, idx, te_mask, MOMENTUM_WINDOW_CRYPTO, thr, reg_r),
+        "BASELINE_random_walk_no_drift": random_walk_predictions(
+            price_series, idx, tr_mask, te_mask, drift=False, thr=thr, reg_r=reg_r),
+        "BASELINE_random_walk_drift": random_walk_predictions(
+            price_series, idx, tr_mask, te_mask, drift=True, thr=thr, reg_r=reg_r),
     }
     har_pred = har_rv_predictions(price_series, idx, tr_mask, te_mask, thr, reg_r)
     if har_pred is not None:

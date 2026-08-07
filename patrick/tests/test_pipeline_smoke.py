@@ -197,10 +197,18 @@ def test_phase2_holdout_dm_cumulative_trials_and_pbo_are_populated(tiny_config, 
     assert result["holdout"] is not None, "le holdout ne doit pas se désactiver sur 1500 lignes"
     assert 0 <= result["holdout"]["F1_dir"] <= 1
 
-    assert result["diebold_mariano"] is not None
-    assert result["diebold_mariano"]["baseline"] in (
-        "BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv")
-    assert 0 <= result["diebold_mariano"]["p_value"] <= 1
+    # "^TEST" -> classify_asset_class retombe sur "other" (préfixe "^" non
+    # reconnu) -> seul candidat configuré par défaut : persistance (cf.
+    # config.defaults.DEFAULT_BASELINE_BY_ASSET_CLASS["other"]).
+    dm = result["diebold_mariano"]
+    assert dm is not None
+    assert dm["asset_class"] == "other"
+    assert dm["class_specific"] is not None
+    assert dm["class_specific"]["baseline"] == "BASELINE_persistence"
+    assert 0 <= dm["class_specific"]["p_value"] <= 1
+    assert dm["common"] is not None
+    assert dm["common"]["baseline"] == "BASELINE_persistence"
+    assert 0 <= dm["common"]["p_value"] <= 1
 
     assert result["cumulative_trials"] > 0
 

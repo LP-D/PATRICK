@@ -102,6 +102,20 @@ class ValidationConfig(BaseModel):
         le=24,
         description="Holdout terminal window (months). Valid range: 12-24, default 15."
     )
+    # Phase X5 -- sélection de baseline Diebold-Mariano par classe d'actif de
+    # la CIBLE (`data/session_calendar.py::classify_asset_class`), plutôt
+    # qu'une unique baseline "meilleure sur ce fold" toutes classes
+    # confondues. Chaque cible reçoit deux comparaisons DM : la meilleure
+    # (F1_dir le plus haut sur ce fold) parmi les candidats listés ici pour sa
+    # classe, ET la persistance de classe (référence commune fixe, jamais
+    # configurable ici -- cf. `pipeline/engine.py::_evaluate_diebold_mariano`)
+    # pour comparer les classes entre elles sur un pied d'égalité. Exposé en
+    # YAML (pas en dur) pour permettre un ajustement sans modification de
+    # code -- valeurs par défaut correspondant à la littérature par classe
+    # (cf. rapport bloc X, session de consolidation).
+    baseline_by_asset_class: dict[str, list[str]] = Field(
+        default_factory=lambda: dict(D.DEFAULT_BASELINE_BY_ASSET_CLASS)
+    )
 
 
 class SelectionConfig(BaseModel):

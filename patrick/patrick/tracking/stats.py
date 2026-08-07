@@ -106,7 +106,8 @@ def pbo_for_target_cpcv(conn: sqlite3.Connection, target: str, horizon: int, reg
     return result
 
 
-def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
+def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
+                        kind: str = "class_specific") -> dict:
     """Phase 6.4 (P6.4) -- correction FDR (Benjamini-Hochberg) à travers
     TOUTES les cibles ayant un résultat Diebold-Mariano dans l'historique de
     runs (`dm_result`, migration 0009) : pour chaque cible, la MEILLEURE
@@ -116,11 +117,20 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
     sur une seule cible (section 4, METHODOLOGY.md), à l'échelle des cibles
     cette fois. `compute_pbo`/`benjamini_hochberg` eux-mêmes ne sont jamais
     modifiés ici (même discipline que C5/P6.1) -- seule la requête source
-    change."""
+    change.
+
+    `kind` (Phase X5, migration 0010) : filtre sur `"class_specific"` (défaut
+    -- la comparaison propre à la classe d'actif de chaque cible, le résultat
+    PRINCIPAL) ou `"common"` (persistance de classe, comparaison secondaire
+    permettant de vérifier les classes entre elles sur un pied d'égalité) --
+    jamais les deux mélangées dans un même MIN, ce qui ferait concurrence
+    entre deux comparaisons de nature différente pour la même cible."""
     rows = conn.execute(
         "SELECT run.target, MIN(dm_result.p_value) FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
-        "GROUP BY run.target"
+        "WHERE dm_result.kind = ? "
+        "GROUP BY run.target",
+        (kind,),
     ).fetchall()
     p_values = {target: p for target, p in rows}
     return benjamini_hochberg(p_values, alpha=alpha)
