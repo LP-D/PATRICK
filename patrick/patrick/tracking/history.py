@@ -66,9 +66,14 @@ def _avg_metric(conn: sqlite3.Connection, trial_id: int, splits: tuple[str, ...]
     return row[0] if row and row[0] is not None else None
 
 
-def _dm_result_for_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
+def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class_specific") -> dict | None:
+    """Phase X5 (migration 0010) : un run walk-forward a désormais DEUX lignes
+    `dm_result` (class_specific + common) -- `kind` sélectionne laquelle,
+    `"class_specific"` par défaut (résultat PRINCIPAL affiché partout sauf
+    demande explicite du comparatif commun)."""
     row = conn.execute(
-        "SELECT baseline, dm_stat, p_value, computed_at FROM dm_result WHERE run_id = ?", (run_id,)
+        "SELECT baseline, dm_stat, p_value, computed_at FROM dm_result WHERE run_id = ? AND kind = ?",
+        (run_id, kind),
     ).fetchone()
     if row is None:
         return None
@@ -93,7 +98,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     rows = conn.execute(
         f"SELECT run.run_id, run.target, run.horizon, run.status, run.started_at, "
         f"run.finished_at, run.n_trials, run.config_json, dm.p_value "
-        f"FROM run LEFT JOIN dm_result dm ON dm.run_id = run.run_id "
+        f"FROM run LEFT JOIN dm_result dm ON dm.run_id = run.run_id AND dm.kind = 'class_specific' "
         f"{where} ORDER BY run.started_at DESC, run.rowid DESC LIMIT ?",
         (*params, limit),
     ).fetchall()

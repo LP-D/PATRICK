@@ -220,11 +220,17 @@ def signal_dm_summary(
     frame = pd.DataFrame(rows)
     if frame.empty:
         return frame
+    # Un signal dont le p_value DM est NaN (historique < 10 observations, cf.
+    # `validation.diebold_mariano`) n'est ni significatif ni non significatif --
+    # il n'a simplement pas pu être testé. `testable` porte cette distinction
+    # explicitement, pour ne jamais le confondre avec un signal réellement
+    # évalué et jugé non significatif (même `significant=False` sinon).
+    frame["testable"] = np.isfinite(frame["p_value"])
 
     p_map = {
         row["signal"]: float(row["p_value"])
         for _, row in frame.iterrows()
-        if np.isfinite(row["p_value"]) and row["signal"]
+        if row["testable"] and row["signal"]
     }
     if not p_map:
         frame["adjusted_p_value"] = np.nan
@@ -236,7 +242,13 @@ def signal_dm_summary(
     adjusted = pd.DataFrame.from_dict(bh["results"], orient="index").reset_index()
     adjusted = adjusted.rename(columns={"index": "signal"})
     frame = frame.merge(adjusted[["signal", "adjusted_p_value", "significant"]], on="signal", how="left")
-    frame["selected"] = frame["significant"].fillna(False)
+    # Un signal non testable (absent de `adjusted`, cf. filtre `testable` ci-dessus)
+    # revient du merge avec `significant=NaN` -- normalisé à False pour rester
+    # cohérent avec la branche `not p_map` ci-dessus (même convention dans les
+    # deux chemins), `testable=False` restant la seule source de vérité sur
+    # la distinction "non testé" vs "testé, non significatif".
+    frame["significant"] = frame["significant"].fillna(False)
+    frame["selected"] = frame["significant"]
     return frame.sort_values(["adjusted_p_value", "p_value"]).reset_index(drop=True)
 
 

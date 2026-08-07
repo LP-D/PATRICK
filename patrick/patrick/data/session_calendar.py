@@ -30,9 +30,11 @@ CLOSE_UTC_HOUR = {
     "fx": 22.0,                # convention clôture NY ~17h ET
     "futures": 21.0,           # règlement CME/ICE, fin d'après-midi US
     "equities_us": 20.0,       # NYSE/NASDAQ ~16h ET
+    "volatility_index": 20.0,  # VIX & apparentés, cote sur la même session que les indices US
     "equities_americas_other": 21.0,
     "equities_europe": 16.5,   # Paris/Francfort/Londres ~16h30-17h30 UTC
     "equities_asia_pacific": 8.0,   # Tokyo/HK/Shanghai/Sydney, la plus précoce
+    "macro": 24.0,              # série FRED utilisée comme cible directe (pas yfinance)
     "other": 24.0,              # inconnu -> traité comme le plus tardif (conservateur)
 }
 
@@ -45,11 +47,11 @@ _AMERICAS_OTHER_SUFFIXES = (".SA", ".MX", ".TO", ".BA")
 # Indices ("^"-préfixés) classés individuellement (le suffixe seul ne suffit
 # pas à distinguer leur région) — non exhaustif : tout indice absent retombe
 # sur "other" (traitement conservateur, cf. CLOSE_UTC_HOUR["other"]).
+_VOLATILITY_INDICES = ("^VIX", "^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^EVZ")
+
 _INDEX_REGION = {
     "^GSPC": "equities_us", "^DJI": "equities_us", "^IXIC": "equities_us",
     "^RUT": "equities_us", "^NYA": "equities_us", "^XAX": "equities_us",
-    "^VIX": "equities_us", "^VXN": "equities_us", "^OVX": "equities_us",
-    "^GVZ": "equities_us", "^EVZ": "equities_us",
     "^FCHI": "equities_europe", "^GDAXI": "equities_europe", "^FTSE": "equities_europe",
     "^STOXX50E": "equities_europe", "^IBEX": "equities_europe", "^N100": "equities_europe",
     "^BFX": "equities_europe",
@@ -68,9 +70,17 @@ _INDEX_REGION = {
 
 def classify_asset_class(symbol: str, source: str = "yfinance") -> str:
     """Classe d'actif d'un symbole yfinance, par motif de ticker — heuristique
-    volontairement simple (pas de dépendance à un référentiel externe)."""
+    volontairement simple (pas de dépendance à un référentiel externe).
+    `source == "fred"` : série macro utilisée comme cible directe (Phase X5,
+    sélection de baseline par classe d'actif) -- distincte de "other" pour
+    pouvoir lui assigner la baseline marche aléatoire avec dérive plutôt que
+    la plus conservatrice par défaut."""
+    if source == "fred":
+        return "macro"
     if source != "yfinance":
         return "other"
+    if symbol in _VOLATILITY_INDICES:
+        return "volatility_index"
     if symbol in _INDEX_REGION:
         return _INDEX_REGION[symbol]
     if symbol.endswith("-USD") or symbol.endswith("-USDT") or symbol.endswith("-USDC"):

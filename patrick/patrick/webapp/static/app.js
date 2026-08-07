@@ -237,16 +237,26 @@
                 { n: data.holdout.n_test ?? "?", f1: fmt(h.F1_dir) }));
         }
 
+        // Phase X5 : deux comparaisons DM (class_specific + common), plutôt
+        // qu'une seule baseline "meilleure sur ce fold" toutes classes
+        // confondues -- cf. `validation.baseline_by_asset_class`.
         const dm = data.diebold_mariano;
-        if (dm && dm.p_value !== null && dm.p_value !== undefined) {
-            const significant = dm.p_value < 0.05;
+        const renderDmEntry = (entry) => {
+            if (!entry || entry.p_value === null || entry.p_value === undefined) return null;
+            const significant = entry.p_value < 0.05;
             const key = significant ? "stat_dm_significant" : "stat_dm_not_significant";
             const fallback = significant
                 ? "Diebold-Mariano vs {baseline}: p={p} — significant"
                 : "Diebold-Mariano vs {baseline}: p={p} — not significant";
             const cls = significant ? "" : ' class="hint"';
-            lines.push(`<span${cls}>${fmtStr(tr(key, fallback),
-                { baseline: dm.baseline || "?", p: fmt(dm.p_value) })}</span>`);
+            return `<span${cls}>${fmtStr(tr(key, fallback),
+                { baseline: entry.baseline || "?", p: fmt(entry.p_value) })}</span>`;
+        };
+        if (dm) {
+            const classLine = renderDmEntry(dm.class_specific);
+            if (classLine) lines.push(classLine);
+            const commonLine = renderDmEntry(dm.common);
+            if (commonLine) lines.push(commonLine);
         }
 
         if (data.cumulative_trials) {

@@ -25,6 +25,26 @@ DEFAULT_SEED = 42
 # via validation.holdout_months dans le YAML (range: 12-24, défaut: 15).
 DEFAULT_HOLDOUT_MONTHS = 15
 
+# Phase X5 -- mapping classe d'actif (`data/session_calendar.classify_asset_class`)
+# -> candidats de baseline "spécifique" pour le test Diebold-Mariano (Phase 2.5).
+# Quand plusieurs candidats sont listés, le meilleur (F1_dir le plus haut sur le
+# fold évalué) est retenu -- cf. `pipeline/engine.py::_evaluate_diebold_mariano`.
+# La persistance de classe est TOUJOURS calculée en plus, comme référence commune
+# fixe entre classes (jamais dans ce mapping). Non exhaustif : toute classe absente
+# retombe sur ["persistence"] (comportement historique, conservateur).
+DEFAULT_BASELINE_BY_ASSET_CLASS: dict[str, list[str]] = {
+    "volatility_index": ["har_rv"],
+    "equities_us": ["persistence", "majority_by_regime"],
+    "equities_americas_other": ["persistence", "majority_by_regime"],
+    "equities_europe": ["persistence", "majority_by_regime"],
+    "equities_asia_pacific": ["persistence", "majority_by_regime"],
+    "fx": ["random_walk_no_drift"],
+    "futures": ["momentum_20"],
+    "crypto": ["persistence", "momentum_5"],
+    "macro": ["random_walk_drift"],
+    "other": ["persistence"],
+}
+
 # Optuna fait partie de la boucle par défaut (demande explicite) : sélectionner le
 # meilleur modèle sans l'affiner ne répond pas au besoin "ressort le meilleur modèle".
 DEFAULT_TUNING_ENABLED = True

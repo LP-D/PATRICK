@@ -23,9 +23,10 @@ def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
     la baseline. `p_value` : bilatéral, H0 = précisions égales."""
     d = np.asarray(loss_a, dtype=float) - np.asarray(loss_b, dtype=float)
     n = len(d)
-    d_mean = float(np.mean(d))
     if n < 10:
-        return {"dm_stat": 0.0, "p_value": 1.0, "n_obs": n, "mean_loss_diff": round(d_mean, 6)}
+        return {"dm_stat": np.nan, "p_value": np.nan, "n_obs": n, "mean_loss_diff": np.nan}
+
+    d_mean = float(np.mean(d))
 
     var_d = float(np.var(d, ddof=0))
     for lag in range(1, max(h - 1, 0) + 1):

@@ -228,11 +228,21 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
                             "(toutes les combinaisons participent au scan, cf. METHODOLOGY.md)</span>")
             pbo_label = "chemins CPCV" if pbo else "—"
         else:
-            dm_pvalue = f"{dm['p_value']:.4f}" if dm else "—"
-            dm_flag = (" <span class='flag'>non significatif (p ≥ 0.05)</span>"
-                       if dm and dm['p_value'] >= 0.05 else "")
-            dm_baseline = html.escape(dm['baseline']) if dm else "—"
-            dm_html = f"p-value = {dm_pvalue}{dm_flag} (vs {dm_baseline})"
+            def _dm_line(entry: dict | None) -> str:
+                if not entry:
+                    return "—"
+                pvalue = f"{entry['p_value']:.4f}"
+                flag = (" <span class='flag'>non significatif (p ≥ 0.05)</span>"
+                        if entry['p_value'] >= 0.05 else "")
+                baseline = html.escape(entry['baseline'])
+                return f"p-value = {pvalue}{flag} (vs {baseline})"
+            if dm:
+                asset_class_html = html.escape(dm.get('asset_class') or '—')
+                dm_html = (f"<span class='hint'>classe d'actif : {asset_class_html}</span><br>"
+                           f"spécifique à la classe : {_dm_line(dm.get('class_specific'))}<br>"
+                           f"commune (persistance) : {_dm_line(dm.get('common'))}")
+            else:
+                dm_html = "—"
             holdout_html = _fmt_metrics_table(job_stats.get('holdout') or {})
             pbo_label = "blocs walk-forward"
         stats_html = f"""
