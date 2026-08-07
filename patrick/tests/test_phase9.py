@@ -22,16 +22,42 @@ from patrick.phase9 import (
 )
 
 
-def test_signal_dm_summary_returns_valid_selection_frame():
-    actual = np.array([0, 1, 0, 1, 0, 1, 0, 1], dtype=int)
+def test_signal_dm_summary_marks_insufficient_history_as_not_testable():
+    """< 10 observations -> `diebold_mariano` renvoie NaN (cf.
+    `validation.diebold_mariano`, corrigé en session de réconciliation) --
+    un signal insuffisamment observé n'est ni significatif ni non
+    significatif, il n'a pas pu être testé du tout. `testable=False` porte
+    cette distinction explicitement, jamais silencieusement absorbée dans
+    `significant=False` (qui affirmerait à tort "testé, pas de différence")."""
+    actual = np.array([0, 1, 0, 1, 0, 1, 0, 1], dtype=int)  # n=8 < 10
     signal_a = actual.copy()
     signal_b = np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=int)
 
     frame = signal_dm_summary({"A": signal_a, "B": signal_b}, actual, baseline={"A": actual, "B": actual}, alpha=0.10)
 
-    assert {"signal", "p_value", "adjusted_p_value", "selected"}.issubset(frame.columns)
-    assert set(frame["signal"]) == {"A", "B"}
+    assert {"signal", "p_value", "testable", "adjusted_p_value", "significant", "selected"}.issubset(frame.columns)
+    assert set(frame["signal"]) == {"A", "B"}  # jamais silencieusement absents du DataFrame
+    assert frame["p_value"].isna().all()
+    assert not frame["testable"].any()
+    assert not frame["significant"].any()
+    assert not frame["selected"].any()
+
+
+def test_signal_dm_summary_marks_sufficient_history_as_testable():
+    """>= 10 observations -> `diebold_mariano` calcule une vraie p-value.
+    Contre-épreuve du test précédent : un signal testé et jugé non
+    significatif (`testable=True, significant=False`) doit être
+    distinguable d'un signal non testable (`testable=False,
+    significant=False` ci-dessus) -- même valeur `significant`, `testable`
+    différent."""
+    actual = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1], dtype=int)  # n=12 >= 10
+    signal_a = actual.copy()  # prédiction = baseline = actual -> aucune différence de perte, p_value=1.0
+
+    frame = signal_dm_summary({"A": signal_a}, actual, baseline={"A": actual}, alpha=0.10)
+
+    assert frame.loc[0, "testable"]
     assert frame["p_value"].notna().all()
+    assert not frame.loc[0, "significant"]  # testé, mais pas de différence -> non significatif, pas non testable
 
 
 def test_reduce_correlated_signals_keeps_single_representation_per_cluster():
