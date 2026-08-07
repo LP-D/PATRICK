@@ -7,13 +7,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from patrick.config.schema import RunConfig
+from patrick.phase9 import determine_signal_quality_status, regime_summary
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -196,33 +197,105 @@ def activity(limit: int = 120):
     }
 
 
+@app.get("/api/next-run-names")
+def next_run_names(target: list[str] = Query(default=[])):
+    """Aperçu (lecture seule) du nom qui sera attribué à chaque cible si le
+    formulaire est soumis maintenant — appelé par `app.js` quand la
+    sélection de cibles change. Ne réserve rien : le nombre réel peut
+    différer si d'autres runs pour la même cible s'intercalent avant la
+    soumission (cf. spec batch-run-launch, limite connue)."""
+    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
+
+
 @app.post("/runs")
 async def create_run(request: Request):
     """Répond en JSON (consommé par `app.js` en AJAX, sans rechargement de
     page) : un run est démarré immédiatement s'il n'y en a pas d'actif, sinon
     mis en file d'attente — jamais rejeté, `start_run` ne lève plus d'erreur
-    dans ce cas (cf. `run_manager.py`)."""
-    form = await request.form()
-    config_dict, errors = forms.build_config_dict(form)
+    dans ce cas (cf. `run_manager.py`).
 
-    if not errors:
+    Une soumission peut cibler plusieurs symboles à la fois (`<select
+    multiple name="target_symbols">`) : un job est enfilé par cible, avec un
+    nom/dossier de sortie distincts (`run_manager.next_run_name`) — la queue
+    FIFO existante les enchaîne, aucun nouvel orchestrateur. Si une seule
+    config est invalide parmi les cibles soumises, rien n'est enqueue."""
+    form = await request.form()
+    targets = list(dict.fromkeys(form.getlist("target_symbols")))
+    if not targets:
+        return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
+
+    raw_output_dir = (form.get("output_dir") or "").strip()
+    errors: list[str] = []
+    configs: list[RunConfig] = []
+    for sym in targets:
+        name = run_manager.next_run_name(sym)
+        config_dict, errs = forms.build_config_dict(form, target_symbol=sym, name=name)
+        if errs:
+            errors.extend(f"{sym} : {e}" for e in errs)
+            continue
+        # Un dossier de sortie saisi à la main s'applique tel quel à une
+        # cible unique ; pour un batch, il est partagé par le formulaire --
+        # sans ce garde-fou, N cibles avec le même `output_dir` explicite
+        # écraseraient les artefacts les unes des autres.
+        if len(targets) > 1 and raw_output_dir:
+            config_dict["output"]["dir"] = f"{raw_output_dir}/{name}"
         try:
-            config = RunConfig.model_validate(config_dict)
+            configs.append(RunConfig.model_validate(config_dict))
         except ValidationError as exc:
-            errors = [f"{'.'.join(str(p) for p in e['loc'])} : {e['msg']}" for e in exc.errors()]
-            config = None
-    else:
-        config = None
+            errors.extend(
+                f"{sym} : {'.'.join(str(p) for p in e['loc'])} : {e['msg']}" for e in exc.errors()
+            )
 
     if errors:
         return JSONResponse({"errors": errors}, status_code=400)
 
-    job_view = run_manager.start_run(config)
-    return JSONResponse({
-        "run_id": job_view["id"],
-        "status": job_view["status"],
-        "queue_position": job_view["queue_position"],
-    })
+    runs = []
+    for config in configs:
+        job_view = run_manager.start_run(config)
+        runs.append({
+            "run_id": job_view["id"],
+            "status": job_view["status"],
+            "queue_position": job_view["queue_position"],
+            "target": config.objective.target_symbol,
+        })
+    return JSONResponse({"runs": runs})
+
+
+@app.post("/runs/{run_id}/relaunch")
+def relaunch_run(run_id: str):
+    """Relance un run passé à l'identique, sauf nom/dossier de sortie
+    (nouveau numéro, cf. `run_manager.next_run_name`) -- une nouvelle
+    tentative doit être distinguable dans l'historique, pas confondue avec
+    l'originale. Fonctionne pour un run soumis via le web (config retrouvée
+    dans la table `job`) et pour un run lancé en CLI (repli sur
+    `run.config_json`, absent de `job`)."""
+    config = run_manager.get_run_config(run_id)
+    if config is None:
+        conn = trackdb.connect()
+        try:
+            row = trackdb.get_run(conn, run_id)
+        finally:
+            conn.close()
+        if row is None or not row["config_json"]:
+            raise HTTPException(status_code=404, detail="Run introuvable (config indisponible)")
+        config = RunConfig.model_validate_json(row["config_json"])
+
+    new_name = run_manager.next_run_name(config.objective.target_symbol)
+    cfg_dict = config.model_dump()
+    cfg_dict["name"] = new_name
+    # Le dossier de sortie de la relance reprend le RACINE (parent) du
+    # dossier de la config d'origine -- un batch soumis avec un `output_dir`
+    # explicite, ou un run lancé en CLI avec sa propre racine, ne doit pas se
+    # faire écraser au profit d'un `runs/` codé en dur relatif au cwd du
+    # process web. Seul le dernier composant (le nom du run) change.
+    original_dir = Path(config.output.dir)
+    cfg_dict["output"]["dir"] = (
+        str(original_dir.parent / new_name) if original_dir.parent != Path(".") else f"runs/{new_name}"
+    )
+    new_config = RunConfig.model_validate(cfg_dict)
+
+    job_view = run_manager.start_run(new_config)
+    return RedirectResponse(f"/runs/{job_view['id']}", status_code=303)
 
 
 @app.get("/api/run-state")
@@ -468,6 +541,81 @@ def simulate_page(request: Request, run_id: str | None = None):
         request, "simulate.html",
         {"runs": runs, "initial_run_id": run_id, **_i18n_context(request)},
     )
+
+
+@app.get("/phase9")
+def phase9_overview(request: Request):
+    """Vue synthétique Phase 9 : signal quality + régime + journal + snapshots."""
+    conn = trackdb.connect()
+    try:
+        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
+        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
+    finally:
+        conn.close()
+
+    summary = {
+        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
+        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
+    }
+    return templates.TemplateResponse(
+        request,
+        "phase9_overview.html",
+        {"summary": summary, "entries": entries, "snapshots": snapshots, **_i18n_context(request)},
+    )
+
+
+@app.get("/api/phase9/summary")
+def api_phase9_summary():
+    conn = trackdb.connect()
+    try:
+        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
+        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
+    finally:
+        conn.close()
+    return {
+        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
+        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
+        "entries": entries,
+        "snapshots": snapshots,
+    }
+
+
+@app.get("/api/phase9/journal")
+def api_phase9_journal(limit: int = 20):
+    conn = trackdb.connect()
+    try:
+        return {"entries": trackdb.list_phase9_journal_entries(conn, limit=limit)}
+    finally:
+        conn.close()
+
+
+@app.post("/api/phase9/journal")
+async def api_phase9_record_journal(request: Request):
+    body = await request.json()
+    action = str(body.get("action") or "manual_review")
+    actor = str(body.get("actor") or "operator")
+    reason = str(body.get("reason") or "phase9 review")
+    before = body.get("before")
+    after = body.get("after")
+    conn = trackdb.connect()
+    try:
+        entry = trackdb.save_phase9_journal_entry(conn, action, actor, before, after, reason)
+    finally:
+        conn.close()
+    return {"entry": entry}
+
+
+@app.post("/api/phase9/snapshot")
+async def api_phase9_snapshot(request: Request):
+    body = await request.json()
+    name = str(body.get("name") or "snapshot")
+    state = body.get("state") or {}
+    conn = trackdb.connect()
+    try:
+        snapshot_id = trackdb.save_phase9_snapshot(conn, name, state)
+    finally:
+        conn.close()
+    return {"snapshot_id": snapshot_id, "snapshot_name": name}
 
 
 @app.get("/api/runs/{run_id}/trials")

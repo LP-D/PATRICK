@@ -30,6 +30,9 @@
     {{ status_badge(run.status, state) }} ·
     lancé le {{ run.started_at or '—' }}{% if run.finished_at %}, terminé le {{ run.finished_at }}{% endif %}
 </p>
+<form method="post" action="/runs/{{ run.run_id }}/relaunch" class="inline-form">
+    <button type="submit" class="primary">Relancer (config complète, tous horizons)</button>
+</form>
 
 {# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
    page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement

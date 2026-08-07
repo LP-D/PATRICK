@@ -15,7 +15,7 @@
         return str.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; });
     }
 
-    var targetSelect = document.getElementById("target_symbol");
+    var targetSelect = document.getElementById("target_symbols");
     var canvas = document.getElementById("preview-canvas");
     var tooltip = document.getElementById("preview-tooltip");
     var statusEl = document.getElementById("preview-status");
@@ -25,6 +25,17 @@
     var currentPeriod = "1y";
     var currentSymbol = null;
     var currentSeries = null; // {dates, closes}
+
+    // Le panneau d'aperçu (un graphique, une liste d'actus) reste
+    // mono-cible même si `#target_symbols` accepte désormais plusieurs
+    // sélections (lancement en batch) : on affiche toujours la première
+    // cible sélectionnée, jamais N aperçus. `.value` sur un `<select
+    // multiple>` est peu fiable d'un navigateur à l'autre -- on lit
+    // `selectedOptions[0]` explicitement.
+    function firstSelectedValue(select) {
+        if (!select || !select.selectedOptions || !select.selectedOptions.length) return null;
+        return select.selectedOptions[0].value;
+    }
 
     function fmtNum(v) {
         return v.toLocaleString(document.documentElement.lang || "fr", { maximumFractionDigits: 2 });
@@ -193,7 +204,7 @@
 
     function refreshAll() {
         if (!targetSelect) return;
-        var symbol = targetSelect.value;
+        var symbol = firstSelectedValue(targetSelect);
         if (!symbol) return;
         loadPreview(symbol, currentPeriod);
         loadNews(symbol);
@@ -212,7 +223,8 @@
             Array.prototype.forEach.call(rangesEl.querySelectorAll(".range-btn"), function (b) {
                 b.classList.toggle("active", b === btn);
             });
-            if (targetSelect && targetSelect.value) loadPreview(targetSelect.value, currentPeriod);
+            var rangeSymbol = firstSelectedValue(targetSelect);
+            if (rangeSymbol) loadPreview(rangeSymbol, currentPeriod);
         });
     }
 

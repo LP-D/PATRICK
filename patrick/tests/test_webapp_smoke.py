@@ -20,8 +20,12 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from starlette.datastructures import FormData
 
+from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.tracking import db as trackdb
+from patrick.webapp import forms, run_manager
 from patrick.webapp.app import app
 
 # Rapport de correction, D1 : les deux tests lancent un run pipeline complet
@@ -55,8 +59,7 @@ def _isolated_env(tmp_path, monkeypatch):
 
 def _form_data(tmp_path) -> dict:
     return {
-        "name": "smoke_web_test",
-        "target_symbol": TARGET_SYMBOL,
+        "target_symbols": [TARGET_SYMBOL],
         "horizons": "3,5",
         "flat_thr": "0.003",
         "regimes": "GLOBAL",
@@ -87,6 +90,20 @@ def _form_data(tmp_path) -> dict:
     }
 
 
+def _to_formdata(d: dict) -> FormData:
+    """Convertit le dict de `_form_data` (valeurs `list` pour les champs
+    multi-sélection) en `starlette.datastructures.FormData` -- la même forme
+    que celle que `forms.build_config_dict` reçoit en production via `await
+    request.form()`, sans passer par un aller-retour HTTP réel."""
+    pairs = []
+    for k, v in d.items():
+        if isinstance(v, list):
+            pairs.extend((k, item) for item in v)
+        else:
+            pairs.append((k, v))
+    return FormData(pairs)
+
+
 def _wait_for_status(client, run_id, *, not_in: set[str], deadline_s: float) -> dict:
     deadline = time.time() + deadline_s
     status = None
@@ -104,10 +121,12 @@ def test_run_via_web_form_end_to_end(tmp_path):
     resp = client.post("/runs", data=_form_data(tmp_path))
     assert resp.status_code == 200, resp.text
     body = resp.json()
+    assert len(body["runs"]) == 1, body
+    run = body["runs"][0]
     # `start_run` enfile désormais toujours en base ('queued') : la transition
     # vers 'running' est décidée par le worker séparé, jamais immédiate.
-    assert body["status"] == "queued", body
-    run_id = body["run_id"]
+    assert run["status"] == "queued", run
+    run_id = run["run_id"]
 
     status = _wait_for_status(client, run_id, not_in={"queued", "running"}, deadline_s=240)
     assert status["status"] == "done", status
@@ -129,19 +148,17 @@ def test_second_run_queues_then_auto_starts(tmp_path):
     client = TestClient(app)
 
     form_a = _form_data(tmp_path)
-    form_a["name"] = "run_a"
     form_a["output_dir"] = str(tmp_path / "runs_a")
     resp_a = client.post("/runs", data=form_a)
     assert resp_a.status_code == 200, resp_a.text
-    run_a = resp_a.json()
+    run_a = resp_a.json()["runs"][0]
     assert run_a["status"] == "queued"
 
     form_b = _form_data(tmp_path)
-    form_b["name"] = "run_b"
     form_b["output_dir"] = str(tmp_path / "runs_b")
     resp_b = client.post("/runs", data=form_b)
     assert resp_b.status_code == 200, resp_b.text
-    run_b = resp_b.json()
+    run_b = resp_b.json()["runs"][0]
     assert run_b["status"] == "queued"
 
     # run_a doit être réclamé par le worker (unique) avant run_b : file FIFO.
@@ -154,3 +171,130 @@ def test_second_run_queues_then_auto_starts(tmp_path):
 
     b_status = _wait_for_status(client, run_b["run_id"], not_in={"queued"}, deadline_s=180)
     assert b_status["status"] in ("running", "done"), b_status
+
+
+def test_batch_submit_queues_one_job_per_target(tmp_path):
+    """Sélectionner plusieurs cibles dans le formulaire enfile un job par
+    cible, chacun avec un nom/dossier de sortie distinct -- pas de nouvel
+    orchestrateur, juste plusieurs jobs pour la même queue FIFO.
+
+    Soumet aussi un `output_dir` explicite : c'est la seule combinaison qui
+    exerce le garde-fou anti-collision de `create_run`
+    (`len(targets) > 1 and raw_output_dir`) -- sans elle, un dossier partagé
+    entre plusieurs cibles écraserait leurs artefacts les uns les autres, et
+    rien ne le détecterait."""
+    DataStore(root=str(tmp_path / "store")).save("raw_^AORD", _synthetic_raw(seed=1))
+    client = TestClient(app)
+
+    base_output_dir = str(tmp_path / "shared_runs")
+    form = _form_data(tmp_path)
+    form["target_symbols"] = [TARGET_SYMBOL, "^AORD"]
+    form["output_dir"] = base_output_dir
+    resp = client.post("/runs", data=form)
+    assert resp.status_code == 200, resp.text
+    runs = resp.json()["runs"]
+
+    assert len(runs) == 2
+    assert {r["target"] for r in runs} == {TARGET_SYMBOL, "^AORD"}
+    assert len({r["run_id"] for r in runs}) == 2
+
+    # Chaque job existe bien côté serveur, dans un état actif légitime, avec
+    # un nom distinct dérivé de SA cible -- pas seulement "la réponse HTTP
+    # avait 2 entrées" (assertion trop faible pour détecter un job perdu ou
+    # mal routé).
+    output_dirs = set()
+    for r in runs:
+        status = client.get(f"/runs/{r['run_id']}/status").json()
+        assert status["status"] in ("queued", "running"), status
+        assert status["name"].startswith(forms.slug_target(r["target"])), status
+
+        # Le dossier de sortie réellement persisté (config du job, pas
+        # simplement la réponse HTTP) doit être suffixé par le nom généré de
+        # CE job, sous le dossier partagé soumis dans le formulaire -- et
+        # donc distinct de celui de l'autre cible.
+        config = run_manager.get_run_config(r["run_id"])
+        expected_dir = f"{base_output_dir}/{status['name']}"
+        assert config.output.dir == expected_dir, config.output.dir
+        output_dirs.add(config.output.dir)
+
+    assert len(output_dirs) == 2
+
+
+def test_relaunch_reuses_config_with_fresh_name(tmp_path):
+    client = TestClient(app)
+    resp = client.post("/runs", data=_form_data(tmp_path))
+    run_id = resp.json()["runs"][0]["run_id"]
+    _wait_for_status(client, run_id, not_in={"queued", "running"}, deadline_s=240)
+
+    relaunch_resp = client.post(f"/runs/{run_id}/relaunch", follow_redirects=False)
+    assert relaunch_resp.status_code == 303, relaunch_resp.text
+    new_run_id = relaunch_resp.headers["location"].rsplit("/", 1)[-1]
+    assert new_run_id != run_id
+
+    old_config = run_manager.get_run_config(run_id)
+    new_config = run_manager.get_run_config(new_run_id)
+    assert new_config.objective.target_symbol == old_config.objective.target_symbol
+    assert new_config.objective.horizons == old_config.objective.horizons
+    assert new_config.name != old_config.name
+    assert new_config.name.startswith(forms.slug_target(old_config.objective.target_symbol))
+
+
+def test_relaunch_falls_back_to_run_table_for_cli_only_run(tmp_path):
+    """Un run lancé en CLI (`patrick run`) n'écrit jamais de ligne `job` --
+    seule une soumission via le formulaire web le fait (`run_manager.
+    start_run`). `run_manager.get_run_config` (qui ne lit que `job`) renvoie
+    donc `None` pour un tel run, et la relance doit basculer sur
+    `run.config_json` (table remplie par TOUT run, CLI ou web) plutôt que de
+    le traiter comme introuvable -- exactement le scénario que le repli de
+    `relaunch_run` existe pour couvrir.
+
+    On simule ce cas en insérant directement une ligne `run` (via
+    `trackdb.upsert_snapshot`/`create_run`, sans ligne `job` correspondante)
+    plutôt qu'en soumettant via `/runs` -- construire la config passe quand
+    même par `forms.build_config_dict` (le même code que `create_run` en
+    production), juste sans l'aller-retour HTTP. On n'attend pas que le
+    pipeline relancé atteigne `done` (inutile pour vérifier le repli et le
+    round-trip de config) : seule la réponse immédiate de `/relaunch` est
+    vérifiée, comme suggéré en revue -- réel (vraie DB, vraie route, vraie
+    queue), pas mocké."""
+    client = TestClient(app)
+
+    config_dict, errs = forms.build_config_dict(
+        _to_formdata(_form_data(tmp_path)), target_symbol=TARGET_SYMBOL, name="cli_manual_run",
+    )
+    assert not errs, errs
+    config_dict["output"]["dir"] = str(tmp_path / "cli_runs" / "cli_manual_run")
+    config = RunConfig.model_validate(config_dict)
+
+    run_id = "cli_only_run"
+    conn = trackdb.connect()
+    try:
+        trackdb.upsert_snapshot(conn, f"snap_{run_id}", "hash", None, None, None)
+        trackdb.create_run(
+            conn, run_id, TARGET_SYMBOL, config.objective.horizons[0], f"snap_{run_id}",
+            config.model_dump_json(), "cfghash", "sha", 42,
+        )
+        trackdb.finish_run(conn, run_id, status="done", n_trials=3)
+    finally:
+        conn.close()
+
+    # Confirme qu'on exerce bien le repli (pas de ligne `job` pour ce run_id) --
+    # sans quoi le test passerait même si `relaunch_run` ignorait le repli.
+    assert run_manager.get_run_config(run_id) is None
+
+    relaunch_resp = client.post(f"/runs/{run_id}/relaunch", follow_redirects=False)
+    assert relaunch_resp.status_code == 303, relaunch_resp.text
+    new_run_id = relaunch_resp.headers["location"].rsplit("/", 1)[-1]
+    assert new_run_id != run_id
+
+    new_config = run_manager.get_run_config(new_run_id)
+    assert new_config.objective.target_symbol == TARGET_SYMBOL
+    assert new_config.objective.horizons == config.objective.horizons
+    assert new_config.name != config.name
+    assert new_config.name.startswith(forms.slug_target(TARGET_SYMBOL))
+
+
+def test_relaunch_404_on_unknown_run():
+    client = TestClient(app)
+    resp = client.post("/runs/does-not-exist/relaunch")
+    assert resp.status_code == 404

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from patrick.config.schema import RunConfig
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
+from patrick.webapp import forms
 
 _IDLE_TIMEOUT_ENV = "PATRICK_WORKER_IDLE_TIMEOUT"
 _DEFAULT_IDLE_TIMEOUT_S = 600.0
@@ -27,6 +28,41 @@ _DEFAULT_IDLE_TIMEOUT_S = 600.0
 def _connect():
     return trackdb.connect(trackdb.default_db_path())
 
+
+
+def next_run_name(target_symbol: str) -> str:
+    """Nom de run généré = slug(cible) + numéro de séquence. Le compteur de
+    base vient de la table `run` (1 + nombre de runs déjà enregistrés pour
+    cette cible), mais un job simplement enfilé (`queued`) ou en cours
+    (`running`) n'a pas encore de ligne `run` -- invisible à ce compte tant
+    que le pipeline n'a pas réellement démarré. Sans le contrôle ci-dessous,
+    deux jobs pour la même cible soumis avant que le premier ne démarre
+    recevraient le même nom, donc le même `output.dir`/`study_name` Optuna :
+    écrasement silencieux d'artefacts et reprise involontaire d'une étude
+    Optuna (cf. pipeline/engine.py:1038, 1075 -- load_if_exists=True sur un
+    study_name dérivé du nom). On recule donc aussi devant tout nom déjà
+    tenu par un job encore en file ou en cours pour cette même cible."""
+    conn = _connect()
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM run WHERE target = ?", (target_symbol,)
+        ).fetchone()[0]
+        claimed_names = set()
+        for (config_json,) in conn.execute(
+            "SELECT config_json FROM job WHERE status IN ('queued', 'running')"
+        ).fetchall():
+            cfg = json.loads(config_json)
+            if cfg.get("objective", {}).get("target_symbol") == target_symbol:
+                claimed_names.add(cfg.get("name"))
+    finally:
+        conn.close()
+    slug = forms.slug_target(target_symbol)
+    n = count + 1
+    name = f"{slug}_{n}"
+    while name in claimed_names:
+        n += 1
+        name = f"{slug}_{n}"
+    return name
 
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:

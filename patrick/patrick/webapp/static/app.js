@@ -419,14 +419,11 @@
                     showErrors(data.errors || [tr("run_launch_error", "Error launching the run.")]);
                     return;
                 }
-                if (data.status === "running") {
-                    startTracking(data.run_id);
-                } else {
-                    // "queued" : le run affiché reste celui déjà actif ; on
-                    // rafraîchit juste la file d'attente tout de suite plutôt
-                    // que d'attendre le prochain tick de runStatePoll.
-                    runStatePoll();
-                }
+                // Chaque job posé (un par cible sélectionnée) est 'queued' à cet
+                // instant (cf. run_manager.start_run) : le passage à 'running' est
+                // décidé par le worker séparé, repéré par le polling périodique de
+                // l'état de la file (runStatePoll), jamais ici.
+                runStatePoll();
             } catch (e) {
                 showErrors([tr("run_launch_error", "Error launching the run.")]);
             } finally {
@@ -530,7 +527,14 @@
         if (!launchBar || !launchBtn) return;
         confirmArmed = true;
         launchBar.dataset.confirm = "";
-        var target = (form.querySelector("#target_symbol") || {}).value || "?";
+        // `#target_symbol` (singulier) a été remplacé par un `<select multiple
+        // id="target_symbols">` -- la confirmation doit lister TOUTES les
+        // cibles sélectionnées, pas une seule, sans quoi un lancement en batch
+        // se confirmerait sur un résumé qui n'en montre qu'une (ou aucune).
+        var targetSelect = form.querySelector("#target_symbols");
+        var target = targetSelect
+            ? Array.prototype.map.call(targetSelect.selectedOptions, function (o) { return o.value; }).join(", ") || "?"
+            : "?";
         var horizons = (form.querySelector("[name=horizons]") || {}).value || "?";
         var regimes = (form.querySelector("[name=regimes]") || {}).value || "?";
         var schemeSel = form.querySelector("[name=scheme]");
@@ -738,16 +742,43 @@
     const launchRecap = document.getElementById("launch-recap");
     function refreshRecap() {
         if (!launchRecap || !form) return;
-        const target = form.querySelector("#target_symbol");
+        const target = form.querySelector("#target_symbols");
         const horizons = form.querySelector("[name=horizons]");
         const scheme = form.querySelector("[name=scheme]");
         const bits = [];
-        if (target && target.value) bits.push("<b>" + target.value + "</b>");
+        if (target) {
+            const selected = Array.from(target.selectedOptions).map((o) => o.value);
+            if (selected.length === 1) bits.push("<b>" + selected[0] + "</b>");
+            else if (selected.length > 1) bits.push(fmtStr(tr("recap_targets_count", "{n} targets"), { n: selected.length }));
+        }
         if (horizons && horizons.value) {
             bits.push(fmtStr(tr("recap_horizons", "horizons {h}"), { h: horizons.value }));
         }
         if (scheme && scheme.selectedIndex >= 0) bits.push(scheme.options[scheme.selectedIndex].textContent.trim());
         launchRecap.innerHTML = bits.join(" · ");
+    }
+
+    // --- aperçu (lecture seule) du nom que le serveur attribuera à chaque
+    // cible sélectionnée -- appelle /api/next-run-names, ne réserve rien. ---
+    const runNamePreview = document.getElementById("run-name-preview");
+    async function refreshRunNamePreview() {
+        if (!runNamePreview || !form) return;
+        const select = form.querySelector("#target_symbols");
+        if (!select) return;
+        const selected = Array.from(select.selectedOptions).map((o) => o.value);
+        if (!selected.length) {
+            runNamePreview.value = "";
+            return;
+        }
+        const params = new URLSearchParams();
+        selected.forEach((s) => params.append("target", s));
+        try {
+            const res = await fetch(`/api/next-run-names?${params}`);
+            const names = await res.json();
+            runNamePreview.value = selected.map((s) => names[s]).filter(Boolean).join(", ");
+        } catch (e) {
+            // aperçu best-effort : une panne réseau ne doit pas bloquer le formulaire.
+        }
     }
 
     if (advBlocks.length || launchRecap) {
@@ -758,6 +789,12 @@
             form.addEventListener("change", function () { refreshAdvStates(); refreshRecap(); });
             form.addEventListener("input", refreshRecap);
         }
+    }
+
+    const targetSymbolsSelect = document.getElementById("target_symbols");
+    if (targetSymbolsSelect) {
+        targetSymbolsSelect.addEventListener("change", refreshRunNamePreview);
+        refreshRunNamePreview();
     }
 
     /* Les lignes de « plus fortes variations » posent leur symbole dans le
@@ -784,18 +821,21 @@
         moversColumns.addEventListener("click", function (ev) {
             const btn = ev.target.closest(".movers-pick");
             if (!btn) return;
-            const select = document.getElementById("target_symbol");
+            const select = document.getElementById("target_symbols");
             if (!select) return;
             const symbol = btn.dataset.symbol;
-            const match = Array.from(select.options).some((o) => o.value === symbol);
-            if (!match) {
+            const option = Array.from(select.options).find((o) => o.value === symbol);
+            if (!option) {
                 btn.title = fmtStr(tr("movers_not_a_target", "{s} n'est pas une cible disponible."), { s: symbol });
                 return;
             }
-            select.value = symbol;
+            // Additif, pas remplacement : un clic sur une variation ajoute
+            // cette cible à la sélection en cours au lieu de l'écraser --
+            // c'est ainsi qu'on compose un batch depuis ce panneau.
+            option.selected = true;
             // `change` déclenche le rechargement de l'aperçu marché (market.js)
-            // et le rafraîchissement du récapitulatif : poser `.value` seul ne
-            // notifie personne.
+            // et le rafraîchissement du récapitulatif/de l'aperçu de nom : poser
+            // `.selected` seul ne notifie personne.
             select.dispatchEvent(new Event("change", { bubbles: true }));
             select.focus({ preventScroll: false });
         });

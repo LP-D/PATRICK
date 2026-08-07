@@ -30,6 +30,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "adv_state_modified": {"fr": "Modifié depuis le chargement de la page",
                            "en": "Changed since the page was loaded"},
     "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
+    "recap_targets_count": {"fr": "{n} cibles", "en": "{n} targets"},
+
     # Garde-fous : confirmation de lancement, écrasement de configuration,
     # validation dans la langue de la PAGE (le navigateur, lui, parle la sienne).
     # Noms courts des briques de rigueur, pour les résumés de blocs et le
@@ -91,10 +93,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "load_example_default": {"fr": "— partir des défauts —", "en": "— start from defaults —"},
 
     "section_run": {"fr": "Run", "en": "Run"},
-    "field_run_name": {"fr": "Nom du run", "en": "Run name"},
+    "field_run_name": {"fr": "Nom du run (généré automatiquement)", "en": "Run name (auto-generated)"},
 
     "section_objective": {"fr": "Objectif — que prédire ?", "en": "Objective — what to predict?"},
-    "field_target": {"fr": "Cible", "en": "Target"},
+    "field_target": {"fr": "Cible(s)", "en": "Target(s)"},
+    "target_multiselect_hint": {
+        "fr": "Ctrl/Cmd + clic (ou glisser) pour sélectionner plusieurs cibles — un run est lancé par cible, à la suite.",
+        "en": "Ctrl/Cmd + click (or drag) to pick multiple targets — one run launches per target, in sequence.",
+    },
     "news_recent": {"fr": "Actualités récentes :", "en": "Recent news:"},
     "field_horizons": {"fr": "Horizons (jours, séparés par des virgules)", "en": "Horizons (days, comma-separated)"},
     "field_flat_thr": {"fr": 'Seuil "flat" (mouvement neutre, ex. 0.003 = 0.3%)',
@@ -522,7 +528,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "confirm_line_queue_free", "load_example_confirm",
         "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
-        "recap_horizons", "movers_not_a_target",
+        "recap_horizons", "recap_targets_count", "movers_not_a_target",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

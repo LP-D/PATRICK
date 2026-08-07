@@ -55,14 +55,14 @@
         <fieldset>
             <legend>{{ t('section_run') }}</legend>
             <label>{{ t('field_run_name') }}
-                <input type="text" name="name" value="{{ view.name }}" required>
+                <input type="text" id="run-name-preview" value="{{ view.name }}" readonly>
             </label>
         </fieldset>
 
         <fieldset>
             <legend>{{ t('section_objective') }}</legend>
             <label>{{ t('field_target') }}
-                <select name="target_symbol" id="target_symbol" required>
+                <select name="target_symbols" id="target_symbols" multiple required size="8">
                     {% for group, items in target_groups.items() %}
                     <optgroup label="{{ group_labels.get(group, group) }}">
                         {% for sym, sym_label in items %}
@@ -71,6 +71,7 @@
                     </optgroup>
                     {% endfor %}
                 </select>
+                <p class="hint">{{ t('target_multiselect_hint') }}</p>
             </label>
 
             <label>{{ t('field_horizons') }}
@@ -447,12 +448,14 @@
     {% if movers.error %}
     <p class="banner banner-warning">{{ movers.error }}</p>
     {% endif %}
-    {# Chaque ligne est un BOUTON qui pose le symbole dans `target_symbol` et
-       recharge l'aperçu. Avant, ce panneau était le bloc le plus visible de
-       la page et le seul relié à aucune tâche : un widget de portail boursier
-       posé dans un outil de recherche. Relié, il devient ce qu'il aurait dû
-       être — l'aide au choix de la cible. Les symboles absents de la liste
-       des cibles ne sont pas cliquables et le disent. #}
+    {# Chaque ligne est un BOUTON qui AJOUTE le symbole à la sélection du
+       `<select multiple id="target_symbols">` (sans désélectionner les
+       autres) et recharge l'aperçu. Avant, ce panneau était le bloc le plus
+       visible de la page et le seul relié à aucune tâche : un widget de
+       portail boursier posé dans un outil de recherche. Relié, il devient ce
+       qu'il aurait dû être — l'aide à composer la sélection de cibles, une
+       ou plusieurs. Les symboles absents de la liste des cibles ne sont pas
+       cliquables et le disent. #}
     <p class="hint movers-hint {% if not movers.gainers and not movers.losers %}hidden{% endif %}"
        id="movers-hint">{{ t('movers_pick_hint') }}</p>
     <div class="movers-columns" id="movers-columns">

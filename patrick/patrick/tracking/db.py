@@ -140,6 +140,75 @@ def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list
     return [dict(zip(("series", "reason", "detail"), row)) for row in rows]
 
 
+def save_phase9_snapshot(conn: sqlite3.Connection, snapshot_name: str, state: dict) -> int:
+    """Persist one snapshot of the Phase 9 workspace for later review."""
+    payload = json.dumps(state, sort_keys=True, default=str)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO phase9_snapshot (snapshot_name, payload_json, created_at) VALUES (?, ?, datetime('now'))",
+            (snapshot_name, payload),
+        )
+    return int(cursor.lastrowid)
+
+
+def list_phase9_snapshots(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+    rows = conn.execute(
+        "SELECT snapshot_name, payload_json, created_at FROM phase9_snapshot ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "snapshot_name": snapshot_name,
+            "payload": json.loads(payload_json) if payload_json else {},
+            "created_at": created_at,
+        }
+        for snapshot_name, payload_json, created_at in rows
+    ]
+
+
+def save_phase9_journal_entry(conn: sqlite3.Connection, action: str, actor: str, before: object | None, after: object | None, reason: str) -> dict:
+    """Persist a decision or operator action for the Phase 9 tracking layer."""
+    payload_before = json.dumps(before, sort_keys=True, default=str)
+    payload_after = json.dumps(after, sort_keys=True, default=str)
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO phase9_journal (action, actor, before_json, after_json, reason, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+            (action, actor, payload_before, payload_after, reason),
+        )
+    row = conn.execute(
+        "SELECT id, action, actor, before_json, after_json, reason, created_at FROM phase9_journal WHERE id = ?",
+        (int(cursor.lastrowid),),
+    ).fetchone()
+    return {
+        "id": row[0],
+        "action": row[1],
+        "actor": row[2],
+        "before": json.loads(row[3]) if row[3] else None,
+        "after": json.loads(row[4]) if row[4] else None,
+        "reason": row[5],
+        "created_at": row[6],
+    }
+
+
+def list_phase9_journal_entries(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, action, actor, before_json, after_json, reason, created_at FROM phase9_journal ORDER BY id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "id": row[0],
+            "action": row[1],
+            "actor": row[2],
+            "before": json.loads(row[3]) if row[3] else None,
+            "after": json.loads(row[4]) if row[4] else None,
+            "reason": row[5],
+            "created_at": row[6],
+        }
+        for row in rows
+    ]
+
+
 def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: float,
                             n_folds: int, selection_freq: dict[str, float]) -> None:
     """Phase 6.3 (P6.3). `mean_jaccard` peut être NaN (moins de 2 folds
@@ -238,22 +307,42 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
 
 
 def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
-    """Tous les runs, les plus récents d'abord — pour surfaces exploratoires (Phase 5)."""
+    """Tous les runs, les plus récents d'abord — pour surfaces exploratoires (Phase 5).
+    Inclut `scheme`/`best_f1_dir`/`dm_p_value` (mêmes requêtes que
+    `tracking.history.list_runs`, dupliquées ici plutôt qu'importées : `db.py`
+    est la couche basse, `history.py` en dépend, pas l'inverse) -- `runs.html`
+    les affiche directement (`r.scheme`, `r.best_f1_dir`, `r.dm_p_value`)."""
     rows = conn.execute(
         "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials "
         "FROM run ORDER BY started_at DESC",
     ).fetchall()
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
-        name = None
+        name, scheme = None, "walkforward"
         try:
-            name = json.loads(config_json).get("name") if config_json else None
+            cfg = json.loads(config_json) if config_json else {}
+            name = cfg.get("name")
+            scheme = cfg.get("validation", {}).get("scheme", "walkforward")
         except (TypeError, ValueError, AttributeError):
             pass
+        best_row = conn.execute(
+            "SELECT trial_id FROM trial WHERE run_id = ? AND is_best = 1 LIMIT 1", (run_id,)
+        ).fetchone()
+        best_f1_dir = None
+        if best_row:
+            metric_row = conn.execute(
+                "SELECT AVG(value) FROM fold_metric WHERE trial_id = ? "
+                "AND split IN ('test', 'test_path') AND metric = 'F1_dir'",
+                (best_row[0],),
+            ).fetchone()
+            best_f1_dir = metric_row[0] if metric_row and metric_row[0] is not None else None
+        dm_row = conn.execute("SELECT p_value FROM dm_result WHERE run_id = ?", (run_id,)).fetchone()
         out.append({
             "run_id": run_id, "target": target, "horizon": horizon,
             "status": status, "started_at": started_at, "finished_at": finished_at,
-            "n_trials": n_trials, "name": name,
+            "n_trials": n_trials, "name": name, "config_json": config_json,
+            "scheme": scheme, "best_f1_dir": best_f1_dir,
+            "dm_p_value": dm_row[0] if dm_row else None,
         })
     return out
 
