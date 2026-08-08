@@ -3,58 +3,47 @@
 Suivi des échecs pré-existants identifiés mais volontairement **non corrigés**
 dans les sessions de traduction (D1-D6) et d'infrastructure (CI, commit
 fréquent, nettoyage de branches) — hors mandat de ces sessions
-(« aucune modification de logique fonctionnelle »). À traiter dans une
-session de correction dédiée.
+(« aucune modification de logique fonctionnelle »). Traités dans une session
+de correction dédiée (voir « Résolus » ci-dessous).
 
 ---
 
-## 1. `test_data_quality.py::test_ingest_excludes_series_with_explicit_reason_and_persists`
+## Résolus
 
-**Symptôme** :
-```
-RuntimeError: [QUALITY] Insufficient history: data must go back at least 20
-years (earliest observation 2018-01-01 < 2006-08-08).
-```
+### 1. `test_data_quality.py::test_ingest_excludes_series_with_explicit_reason_and_persists` — résolu 2026-08-08
 
-**Cause identifiée** : la fixture utilise une date de début **absolue**
-codée en dur (`2018-01-01`). Le contrôle qualité (`data/ingest.py:182`)
-exige un historique remontant à au moins 20 ans avant la date système
-courante. `2018-01-01` était valide tant que "aujourd'hui" restait avant
-~2038, mais la logique de test elle-même compare à `pd.Timestamp.today()`
-— une date absolue dans une fixture censée représenter "assez ancien"
-est structurellement fragile face à l'écoulement du temps réel, pas
-seulement face à ce seuil de 20 ans précis.
+Cause confirmée : fixture à date absolue `2018-01-01`. Corrigé en remplaçant
+par `_OLD_ENOUGH_START`, une date calculée relativement à l'exécution
+(`pd.Timestamp.today() - 30 ans`, marge de 10 ans au-delà du seuil de 20 ans
+testé) — `patrick/tests/test_data_quality.py`. Voir l'historique git de ce
+fichier / le commit associé sur la PR #41 pour le diff exact.
 
-**Piste de correction déjà identifiée** : remplacer la date absolue par
-une date **relative** à l'exécution du test (ex.
-`pd.Timestamp.today() - pd.Timedelta(days=21*365)` ou équivalent), pour
-que la fixture reste valide indéfiniment plutôt que de se dégrader avec
-le temps qui passe.
+### 2. `test_data_quality.py::test_data_quality_disabled_restores_pre_p6_5_behavior` — résolu 2026-08-08
 
----
+Même cause, même correctif que le point 1 (fixture partageant la même
+constante `_OLD_ENOUGH_START`).
 
-## 2. `test_data_quality.py::test_data_quality_disabled_restores_pre_p6_5_behavior`
+### 3. `test_history_webapp_smoke.py::test_universe_page_renders` — résolu 2026-08-08
 
-Même cause, même piste de correction que le point 1 ci-dessus — fixture
-partageant la même date absolue `2018-01-01`.
+**Ce n'était pas un problème de date** : investigation menée avant toute
+correction (voir règle du projet : ne jamais deviner la cause). Cause réelle,
+confirmée par exécution directe : `patrick/webapp/app.py::universe_page`
+contenait une confusion de type — `DEFAULT_TARGET_GROUPS.values()` donne des
+listes de tuples `(symbole, label)`, mais la route les itérait comme si
+c'étaient des symboles bruts (`for s in targets`), puis testait
+`target in symbol_info` avec `target` = tuple entier contre un dict à clés
+string. Résultat : `target in symbol_info` était **toujours `False`**, donc
+la liste `groups` restait vide dans 100% des cas, indépendamment du contenu
+de la base — un bug de production, pas un artefact de test.
 
----
-
-## 3. `test_history_webapp_smoke.py::test_universe_page_renders`
-
-**Symptôme** :
-```
-assert 'VIX' in resp.text
-```
-échoue — la page `/universe` rendue ne contient pas la chaîne `"VIX"`
-attendue par le test.
-
-**Cause** : **non identifiée** dans les sessions courantes — nécessite une
-investigation dédiée (le test seed une base de données de test via
-`_seed_db(tmp_path, monkeypatch)` puis vérifie le rendu HTML de la page
-`/universe` ; la piste la plus probable est un décalage entre les données
-seedées par le test et ce que `tracking/history.py::universe_overview`
-attend réellement, mais ceci reste à vérifier, pas supposé ici).
+`tracking/history.py::universe_overview` faisait déjà cette jointure
+correctement (`for symbol, label in items:`) mais n'était pas appelée par la
+route — une deuxième implémentation parallèle, divergente, avait été écrite
+directement dans `app.py`. Corrigé en supprimant cette duplication : la route
+appelle désormais `universe_overview()` pour le regroupement, et ne conserve
+que la logique propre à la route (traduction i18n du nom de groupe, qui a
+besoin de `request` et n'a donc pas sa place dans la couche lecture seule
+`tracking/history.py`).
 
 ---
 
@@ -66,9 +55,7 @@ les mêmes trois, jamais de régression supplémentaire causée par les
 changements de ces sessions (vérifié systématiquement via exécution
 isolée et comparaison `git stash`/HEAD non modifié). Confirmés une
 dernière fois par la CI elle-même (`.github/workflows/tests.yml`,
-premier run réel sur PR #41) : `3 failed, 221 passed, 42 deselected`.
+premiers runs sur PR #41) : `3 failed, 221 passed, 42 deselected`.
 
-Tant qu'ils ne sont pas corrigés, **la CI de ce dépôt affichera rouge sur
-chaque push/PR** — attendu, documenté, pas un signal à ignorer pour
-autant : toute NOUVELLE régression doit apparaître comme un 4e échec (ou
-un changement dans les 3 existants), pas se cacher dans le bruit.
+Après correction : suite complète rapide vérifiée verte —
+`224 passed, 42 deselected, 0 failed`.

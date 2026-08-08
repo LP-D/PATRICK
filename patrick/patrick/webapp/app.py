@@ -443,38 +443,27 @@ def _extract_scheme(run: dict) -> str:
 
 @app.get("/universe")
 def universe_page(request: Request):
-    """Target universe cross-referenced with run history."""
-    from patrick.config import defaults
-    symbol_info = {s: (label, src) for s, label, src in defaults.DEFAULT_TARGET_CHOICES}
+    """Target universe cross-referenced with run history.
+
+    The DB/config join itself (`DEFAULT_TARGET_GROUPS` x run history) is
+    delegated to `tracking/history.py::universe_overview` -- previously
+    duplicated here with a bug (iterating `(symbol, label)` tuples as if
+    they were plain symbol strings, so `target in symbol_info` was always
+    False and every group came back empty). Only the i18n group-name
+    translation stays here, since it needs `request`, which the read-only
+    history layer doesn't have access to."""
     conn = trackdb.connect()
     try:
-        symbol_stats = {s: {"n_runs": 0, "n_done": 0, "last_started_at": None}
-                       for targets in defaults.DEFAULT_TARGET_GROUPS.values()
-                       for s in targets}
-        for run in trackdb.list_all_runs(conn):
-            if run["target"] in symbol_stats:
-                symbol_stats[run["target"]]["n_runs"] += 1
-                if run["status"] == "done":
-                    symbol_stats[run["target"]]["n_done"] += 1
-                if not symbol_stats[run["target"]]["last_started_at"] or run["started_at"] > symbol_stats[run["target"]]["last_started_at"]:
-                    symbol_stats[run["target"]]["last_started_at"] = run["started_at"]
+        raw_groups = trackhistory.universe_overview(conn)
     finally:
         conn.close()
 
     t = i18n.translator(i18n.get_lang(request))
-    groups = []
-    for group_name, group_targets in defaults.DEFAULT_TARGET_GROUPS.items():
-        symbols = []
-        for target in group_targets:
-            if target in symbol_info:
-                label, source = symbol_info[target]
-                stats = symbol_stats.get(target, {"n_runs": 0, "n_done": 0, "last_started_at": None})
-                symbols.append({"symbol": target, "label": label, "source": source,
-                               "n_runs": stats["n_runs"], "n_done": stats["n_done"],
-                               "last_started_at": stats["last_started_at"]})
-        if symbols:
-            translated_group = t(i18n.TARGET_GROUP_LABEL_KEYS.get(group_name, f"group_{group_name}"))
-            groups.append({"group": translated_group, "symbols": symbols})
+    groups = [
+        {"group": t(i18n.TARGET_GROUP_LABEL_KEYS.get(g["group"], f"group_{g['group']}")),
+         "symbols": g["symbols"]}
+        for g in raw_groups if g["symbols"]
+    ]
 
     return templates.TemplateResponse(
         request, "universe.html",
