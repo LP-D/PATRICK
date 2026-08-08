@@ -1,14 +1,14 @@
-"""Phase 6.2 (P6.2) -- forêt aléatoire à bootstrap séquentiel : remplace le
-bootstrap uniforme interne de `sklearn.ensemble.RandomForestClassifier`
-(chaque arbre tiré indépendamment, ignorant le chevauchement des labels) par
-un tirage séquentiel qui favorise les observations les moins concurrentes
-avec le tirage en cours (`models/uniqueness.py::sequential_bootstrap`).
+"""Phase 6.2 (P6.2) -- sequential-bootstrap random forest: replaces
+`sklearn.ensemble.RandomForestClassifier`'s internal uniform bootstrap
+(each tree drawn independently, ignoring label overlap) with a sequential
+draw that favors observations least concurrent with the draw in progress
+(`models/uniqueness.py::sequential_bootstrap`).
 
-`n_estimators` réduit par défaut (100, contre 200 pour la forêt standard,
-`models/registry.py`) : le tirage séquentiel coûte O(n_obs x n_bars) PAR
-ARBRE (contre O(n_obs) pour un bootstrap uniforme) -- un nombre d'arbres plus
-élevé resterait correct mais deviendrait rapidement impraticable sur de
-grands folds. Compromis assumé, documenté (cf. rapport P6.2)."""
+`n_estimators` reduced by default (100, versus 200 for the standard forest,
+`models/registry.py`): the sequential draw costs O(n_obs x n_bars) PER TREE
+(versus O(n_obs) for a uniform bootstrap) -- a higher tree count would
+remain correct but would quickly become impractical on large folds.
+Accepted, documented trade-off (see the P6.2 report)."""
 from __future__ import annotations
 
 import numpy as np
@@ -20,9 +20,9 @@ DEFAULT_N_ESTIMATORS = 100
 
 
 class SequentialBootstrapRandomForestClassifier:
-    """Interface minimale compatible `fit`/`predict`/`predict_proba` (pas un
-    sous-classement sklearn complet -- pas besoin de `get_params`/`clone`
-    ici, cf. usage direct dans `pipeline/engine.py::_fit_eval`)."""
+    """Minimal `fit`/`predict`/`predict_proba` interface (not a full sklearn
+    subclass -- no need for `get_params`/`clone` here, see the direct usage
+    in `pipeline/engine.py::_fit_eval`)."""
 
     def __init__(self, n_estimators: int = DEFAULT_N_ESTIMATORS, max_depth: int = 6,
                  min_samples_leaf: int = 5, max_features: str | int | float = "sqrt",
@@ -55,7 +55,7 @@ class SequentialBootstrapRandomForestClassifier:
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         if not self.trees_:
-            raise RuntimeError("modèle non entraîné (appeler .fit() d'abord).")
+            raise RuntimeError("model not trained (call .fit() first).")
         n_classes = len(self.classes_)
         probs = np.zeros((X.shape[0], n_classes))
         for tree in self.trees_:

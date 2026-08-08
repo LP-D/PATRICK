@@ -1,11 +1,12 @@
-"""Export HTML d'un run (Phase 3.3) — lit uniquement la base SQLite (jamais le
-modèle/les données), donc disponible même longtemps après un run, sur une
-machine qui n'a plus les artefacts CSV/joblib d'origine.
+"""HTML export of a run (Phase 3.3) — reads only the SQLite database (never
+the model/data), so available even long after a run, on a machine that no
+longer has the original CSV/joblib artifacts.
 
-Autonome (CSS inline, pas de dépendance réseau), même charte visuelle sombre/or
-que l'interface web (`webapp/static/style.css`) pour rester cohérent, mais
-généré une fois en fichier statique — pas de gabarit Jinja2 vivant, ce rapport
-n'est jamais re-servi par le process web.
+Self-contained (inline CSS, no network dependency), same dark/gold visual
+style as the web interface (`webapp/static/style.css`) to stay consistent,
+but generated once as a static file — no live Jinja2 template, this report
+is never re-served by the web process. Report content (HTML labels/text) is
+in French, matching the rest of the web interface.
 """
 from __future__ import annotations
 
@@ -53,10 +54,10 @@ def _trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
 
 
 def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict | None:
-    """Phase 6.1 (P6.1) -- distribution de performance par CHEMIN CPCV
-    (`fold_metric[split='test_path']`, écrit par `pipeline/engine.py::
-    _run_cpcv_scan`) pour un trial donné -- jamais un point unique en mode
-    CPCV, cf. `validation/cpcv.py::path_performance_distribution`."""
+    """Phase 6.1 (P6.1) -- performance distribution per CPCV PATH
+    (`fold_metric[split='test_path']`, written by `pipeline/engine.py::
+    _run_cpcv_scan`) for a given trial -- never a single point in CPCV mode,
+    see `validation/cpcv.py::path_performance_distribution`."""
     rows = conn.execute(
         "SELECT value FROM fold_metric WHERE trial_id = ? AND split = 'test_path' AND metric = 'F1_dir'",
         (trial_id,),
@@ -78,13 +79,13 @@ def _baselines_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
 
 
 def _job_stats_for_run(conn: sqlite3.Connection, job_id: str | None) -> dict | None:
-    """Holdout/DM/PBO/compteur d'essais cumulé (Phase 2) ne sont persistés que
-    dans `job.result_json` (calculés une fois pour la config gagnante de tout
-    l'appel `run_pipeline`, pas par run/horizon individuellement) — seuls les
-    runs lancés depuis l'interface web ont un `job_id` ; un `patrick run`/
-    `patrick resume` en CLI n'en a pas et ne peut donc pas les afficher ici
-    (limite connue, cf. rapport de phase — pas de nouvelle table dédiée pour
-    ça, hors scope Phase 3)."""
+    """Holdout/DM/PBO/cumulative-trial-count (Phase 2) are only persisted in
+    `job.result_json` (computed once for the winning config of the whole
+    `run_pipeline` call, not per run/horizon individually) — only runs
+    launched from the web interface have a `job_id`; a CLI `patrick run`/
+    `patrick resume` has none and therefore cannot display them here (known
+    limitation, see phase report — no new dedicated table for this, out of
+    scope for Phase 3)."""
     if not job_id:
         return None
     job = jobs_db.get_job(conn, job_id)
@@ -114,11 +115,11 @@ def _section(title: str, body: str) -> str:
 
 
 def _fmt_pbo_reliability(reliability: dict | None) -> str:
-    """Rapport de correction, C5 -- un PBO ponctuel isolé n'est pas
-    interprétable seul (audit : écart-type ~0.16 sur un tirage unique à
-    n_blocks=16, pire à n_blocks=4). Affiche l'intervalle de confiance par
-    bootstrap à côté du point, ou le message de refus explicite si trop peu
-    de blocs -- jamais un chiffre nu sans ce contexte."""
+    """Correction report, C5 -- a single isolated PBO point is not
+    interpretable on its own (audit: std ~0.16 on a single draw at
+    n_blocks=16, worse at n_blocks=4). Displays the bootstrap confidence
+    interval next to the point, or the explicit refusal message if too few
+    blocks -- never a bare number without this context."""
     if not reliability:
         return ""
     if not reliability.get("ok"):
@@ -137,27 +138,27 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
     try:
         run = trackdb.get_run(conn, run_id)
         if run is None:
-            raise ValueError(f"Run introuvable : {run_id}")
+            raise ValueError(f"Run not found: {run_id}")
         trials = _trials_for_run(conn, run_id)
-        # Phase 6.1 (P6.1) -- distribution par chemin CPCV, lue pendant que la
-        # connexion est encore ouverte (utilisée plus bas seulement si le
-        # schéma de CE run est "cpcv", cf. `config` extrait après fermeture).
+        # Phase 6.1 (P6.1) -- per-CPCV-path distribution, read while the
+        # connection is still open (used below only if THIS run's scheme is
+        # "cpcv", see `config` extracted after closing).
         path_distributions = {t["trial_id"]: _path_distribution_for_trial(conn, t["trial_id"])
                                for t in trials}
         baselines = _baselines_for_run(conn, run_id)
         job_stats = _job_stats_for_run(conn, run.get("job_id"))
-        # Rapport d'audit, C4 -- diagnostic LECTURE SEULE (jamais utilisé pour
-        # choisir une config, cf. patrick/tracking/holdout_diagnostic.py) :
-        # lu directement en base (contrairement à holdout/DM/PBO ci-dessus,
-        # persisté par run, disponible aussi pour un `patrick run`/`resume` CLI
-        # sans job web associé).
+        # Audit report, C4 -- READ-ONLY diagnostic (never used to choose a
+        # config, see patrick/tracking/holdout_diagnostic.py): read directly
+        # from the database (unlike holdout/DM/PBO above, persisted per run,
+        # also available for a CLI `patrick run`/`resume` with no associated
+        # web job).
         holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
         quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
         feature_stability = trackdb.get_feature_stability(conn, run_id)
-        # Phase 6.4 (P6.4) : correction FDR entre TOUTES les cibles ayant un
-        # résultat Diebold-Mariano dans l'historique (pas seulement celle de
-        # ce run) -- calculée pendant que la connexion est encore ouverte.
-        # `fdr_alpha` paramétrable (défaut 0.10), cf. `patrick report --fdr-alpha`.
+        # Phase 6.4 (P6.4): FDR correction across ALL targets that have a
+        # Diebold-Mariano result in the history (not just this run's) --
+        # computed while the connection is still open. `fdr_alpha` is
+        # configurable (default 0.10), see `patrick report --fdr-alpha`.
         fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
     finally:
         conn.close()
@@ -165,10 +166,10 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
     config = json.loads(run["config_json"])
     lib_versions = json.loads(run.get("lib_versions") or "{}") if run.get("lib_versions") else {}
 
-    # Phase 6.1 (P6.1) -- schéma de validation actif pour CE run, jamais
-    # implicite : affiché en tête de rapport, et change la lecture de toute
-    # la section "Validité statistique" ci-dessous (holdout/DM structurellement
-    # non calculés en CPCV, cf. `pipeline/engine.py::_run_cpcv_scan`).
+    # Phase 6.1 (P6.1) -- validation scheme active for THIS run, never
+    # implicit: displayed at the top of the report, and changes how the
+    # whole "Validité statistique" section below reads (holdout/DM
+    # structurally not computed in CPCV, see `pipeline/engine.py::_run_cpcv_scan`).
     val_cfg = config.get("validation", {})
     scheme = val_cfg.get("scheme", "walkforward")
     is_cpcv = scheme == "cpcv"
@@ -274,12 +275,12 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
         "(cf. rapport d'audit, C4).</span></p>"
     )
 
-    # Phase 6.4 (P6.4) -- correction FDR entre cibles : la MEILLEURE p-value
-    # DM historique de CETTE cible, resituée parmi toutes les cibles ayant un
-    # résultat DM (jamais un chiffre isolé -- même principe que C5 pour le
-    # PBO). `run["target"]` peut être absent de `fdr_result["results"]` si
-    # aucun de ses runs walk-forward n'a encore de `dm_result` (run CPCV
-    # seul, ou aucun `final_best` obtenu jusqu'ici).
+    # Phase 6.4 (P6.4) -- FDR correction across targets: THIS target's BEST
+    # historical DM p-value, placed among all targets that have a DM result
+    # (never an isolated number -- same principle as C5 for PBO).
+    # `run["target"]` may be absent from `fdr_result["results"]` if none of
+    # its walk-forward runs has a `dm_result` yet (CPCV-only run, or no
+    # `final_best` obtained so far).
     this_target_fdr = fdr_result["results"].get(run["target"])
     if fdr_result["n_tested"] == 0:
         fdr_html = ("<p class='hint'>Aucun résultat Diebold-Mariano disponible dans l'historique "

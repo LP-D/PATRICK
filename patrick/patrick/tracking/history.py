@@ -1,16 +1,15 @@
-"""Phase 7 (interface) -- requêtes LECTURE SEULE pour parcourir l'historique
-des runs déjà persistés en base : aucun nouveau calcul de modèle, aucune
-influence sur un run en cours. Sert `webapp/app.py` (`/runs`, `/runs/{id}`,
-`/targets/{ticker}`, `/universe`) -- les mêmes briques de validité (PBO,
-Diebold-Mariano, FDR, stabilité des features, diagnostic holdout) que
-`tracking/report.py`/`tracking/stats.py`, jamais réimplémentées : recalculées
-à la volée sur demande (pas de cache), donc toujours à jour avec le dernier
-run de la cible concernée -- contrairement à `report.py`, qui ne peut afficher
-holdout/DM/PBO que pour un run lancé depuis l'interface web (limite du
-mécanisme `job.result_json`), ces requêtes marchent aussi pour un `patrick
-run`/`patrick resume` en CLI : `dm_result` (migration 0009) et
-`fold_metric[split='holdout']` sont écrits par `pipeline/engine.py`
-indépendamment de tout `job_id`.
+"""Phase 7 (interface) -- READ-ONLY queries for browsing the history of runs
+already persisted in the database: no new model computation, no influence on
+a run in progress. Serves `webapp/app.py` (`/runs`, `/runs/{id}`,
+`/targets/{ticker}`, `/universe`) -- the same validity components (PBO,
+Diebold-Mariano, FDR, feature stability, holdout diagnostic) as
+`tracking/report.py`/`tracking/stats.py`, never reimplemented: recomputed
+on the fly on request (no cache), so always up to date with the target's
+latest run -- unlike `report.py`, which can only display holdout/DM/PBO for
+a run launched from the web interface (a limitation of the `job.result_json`
+mechanism), these queries also work for a CLI `patrick run`/`patrick
+resume`: `dm_result` (migration 0009) and `fold_metric[split='holdout']`
+are written by `pipeline/engine.py` independently of any `job_id`.
 """
 from __future__ import annotations
 
@@ -67,10 +66,10 @@ def _avg_metric(conn: sqlite3.Connection, trial_id: int, splits: tuple[str, ...]
 
 
 def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class_specific") -> dict | None:
-    """Phase X5 (migration 0010) : un run walk-forward a désormais DEUX lignes
-    `dm_result` (class_specific + common) -- `kind` sélectionne laquelle,
-    `"class_specific"` par défaut (résultat PRINCIPAL affiché partout sauf
-    demande explicite du comparatif commun)."""
+    """Phase X5 (migration 0010): a walk-forward run now has TWO `dm_result`
+    rows (class_specific + common) -- `kind` selects which one,
+    `"class_specific"` by default (the MAIN result shown everywhere except
+    on explicit request for the common comparison)."""
     row = conn.execute(
         "SELECT baseline, dm_stat, p_value, computed_at FROM dm_result WHERE run_id = ? AND kind = ?",
         (run_id, kind),
@@ -83,10 +82,10 @@ def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class
 def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
               status: str | None = None, scheme: str | None = None,
               limit: int = 200) -> list[dict]:
-    """P7.1 -- explorateur `/runs` : une ligne par run, les plus récents
-    d'abord. `scheme` filtre après lecture (pas une colonne `run`, seulement
-    présent dans `config_json`) -- acceptable, l'historique d'un usage local
-    mono-utilisateur reste de taille modeste."""
+    """P7.1 -- `/runs` browser: one row per run, most recent first. `scheme`
+    filters after reading (not a `run` column, only present in
+    `config_json`) -- acceptable, a single local user's history stays
+    modestly sized."""
     clauses, params = [], []
     if target:
         clauses.append("run.target = ?")
@@ -120,9 +119,9 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
 
 
 def list_distinct_targets(conn: sqlite3.Connection) -> list[dict]:
-    """Cibles ayant au moins un run en base, avec compteurs -- alimente le
-    filtre de `/runs` et la table `/universe` (croisée avec
-    `DEFAULT_TARGET_GROUPS`, cf. `universe_overview`)."""
+    """Targets with at least one run in the database, with counts -- feeds
+    the `/runs` filter and the `/universe` table (joined with
+    `DEFAULT_TARGET_GROUPS`, see `universe_overview`)."""
     rows = conn.execute(
         "SELECT target, COUNT(*), SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), "
         "MAX(started_at) FROM run GROUP BY target ORDER BY MAX(started_at) DESC"
@@ -169,9 +168,9 @@ def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dic
 
 
 def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -> dict | None:
-    """P7.2 -- page détail `/runs/{id}` : mêmes briques que `report.py`
-    (jamais recalculées différemment), mais renvoyées en structure Python pour
-    un gabarit Jinja plutôt qu'en HTML déjà formaté."""
+    """P7.2 -- `/runs/{id}` detail page: same components as `report.py`
+    (never recomputed differently), but returned as a Python structure for
+    a Jinja template rather than pre-formatted HTML."""
     run = trackdb.get_run(conn, run_id)
     if run is None:
         return None
@@ -234,8 +233,8 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
 
 
 def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10) -> dict | None:
-    """P7.3 -- page `/targets/{ticker}` : vue agrégée de tout l'historique de
-    runs pour UNE cible (tous horizons/schémas confondus)."""
+    """P7.3 -- `/targets/{ticker}` page: aggregated view of the entire run
+    history for ONE target (across all horizons/schemes)."""
     runs = conn.execute(
         "SELECT run_id, horizon, status, started_at, finished_at, config_json, n_trials "
         "FROM run WHERE target = ? ORDER BY started_at DESC, rowid DESC", (target,),
@@ -279,23 +278,23 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
 
 
 def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
-    """Les deux seuls chiffres que le produit sait établir sur TOUT
-    l'historique : ce qui tient, et ce que ça a coûté.
+    """The only two numbers the product can establish over the ENTIRE
+    history: what holds up, and what it cost.
 
-    « Ce qui tient » = cibles dont la meilleure p-value Diebold-Mariano survit
-    à la correction Benjamini-Hochberg ENTRE cibles. C'est le critère de sortie
-    du produit, et c'est aussi le seul chiffre honnête à cette échelle :
-    essayer 550 cibles et ne garder que la significative est exactement le
-    biais que `fdr_across_targets` mesure (section 4, METHODOLOGY.md).
+    "What holds up" = targets whose best Diebold-Mariano p-value survives
+    the Benjamini-Hochberg correction ACROSS targets. That is the product's
+    exit criterion, and also the only honest number at this scale: trying
+    550 targets and keeping only the significant one is exactly the bias
+    `fdr_across_targets` measures (section 4, METHODOLOGY.md).
 
-    `survivors = None` quand aucune cible n'a de résultat DM. C'est l'état
-    NOMINAL d'une base jeune, pas un cas limite : `0 / 0` se lirait comme un
-    échec alors que la mesure n'est simplement pas encore calculable, et le
-    produit refuse d'imprimer une mesure non interprétable. L'appelant doit
-    distinguer les deux.
+    `survivors = None` when no target has a DM result. That is the NOMINAL
+    state of a young database, not an edge case: `0 / 0` would read as a
+    failure when the measure simply isn't computable yet, and the product
+    refuses to print an uninterpretable measure. The caller must
+    distinguish the two.
 
-    Aucun calcul nouveau : `fdr_across_targets` est celui de `/targets/{t}`,
-    les comptes sont des agrégats directs. Lecture seule."""
+    No new computation: `fdr_across_targets` is the same one `/targets/{t}`
+    uses, the counts are direct aggregates. Read-only."""
     fdr = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
     n_tested = fdr["n_tested"]
     trials = conn.execute("SELECT COUNT(*) FROM trial").fetchone()[0]
@@ -313,10 +312,10 @@ def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
 
 
 def universe_overview(conn: sqlite3.Connection) -> list[dict]:
-    """P7.5 -- `/universe` : croise l'univers configurable de cibles
-    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, déjà utilisé par le
-    formulaire de lancement) avec l'historique réel de runs -- aucune donnée
-    nouvelle, juste la jointure des deux."""
+    """P7.5 -- `/universe`: joins the configurable target universe
+    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, already used by the launch
+    form) with the actual run history -- no new data, just the join of the
+    two."""
     history = {h["target"]: h for h in list_distinct_targets(conn)}
     groups = []
     for group_name, items in D.DEFAULT_TARGET_GROUPS.items():

@@ -1,6 +1,7 @@
-"""Cible directionnelle/amplitude 4 classes (DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT)
-avec seuils causaux conditionnels au régime — logique établie dans tout le projet
-VIX (`build_target`), généralisée : la série n'est plus câblée en dur sur le VIX.
+"""4-class direction/amplitude target (DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT)
+with causal, regime-conditional thresholds -- logic established throughout
+the VIX project (`build_target`), generalized: the series is no longer
+hardcoded to the VIX.
 """
 from __future__ import annotations
 
@@ -12,22 +13,23 @@ TARGET_COL = "target_class"
 
 def build_target(series: pd.Series, horizon: int, split_idx: int,
                   flat_thr: float = 0.003) -> tuple[pd.Series, pd.Series, dict]:
-    """Retourne (target, regime_par_date, seuils_par_regime). Les seuils de régime
-    (CALM/NORMAL/STRESS, quantiles 33%/67% du niveau) et de classification (quantiles
-    25%/75% du rendement, par régime) sont fittés uniquement sur `series[:split_idx]`
-    (train du fold) — aucune fuite du futur.
+    """Returns (target, regime_by_date, thresholds_by_regime). Regime
+    thresholds (CALM/NORMAL/STRESS, 33%/67% quantiles of the level) and
+    classification thresholds (25%/75% quantiles of the return, per regime)
+    are fitted solely on `series[:split_idx]` (the fold's train set) -- no
+    future leak.
 
-    Phase 0 (correctness) : les seuils de classification étaient fittés sur
-    `ret.loc[ret.index < cut_date]`, mais `ret[d] = s[d+horizon]/s[d] - 1` — pour
-    les dates `d` situées dans les `horizon` derniers points avant `cut_date`, cette
-    fenêtre déborde sur le test, donc `ret[d]` (et par extension les quantiles
-    fittés dessus) est partiellement informé par des valeurs post-coupure, même en
-    excluant `d` lui-même. C'est une fuite distincte de celle que corrige
-    `validation/purge.py` (qui n'agit qu'en aval, sur les LIGNES de train déjà
-    construites, pas sur le calcul des seuils eux-mêmes) — détectée par le test de
-    corruption du futur (`tests/test_leakage.py`). `ret_tr` exclut donc aussi ces
-    `horizon` derniers points : seules des fenêtres de label entièrement
-    antérieures à `cut_date` contribuent au fit des seuils."""
+    Phase 0 (correctness): classification thresholds used to be fitted on
+    `ret.loc[ret.index < cut_date]`, but `ret[d] = s[d+horizon]/s[d] - 1` --
+    for dates `d` within the `horizon` last points before `cut_date`, this
+    window overruns into the test set, so `ret[d]` (and by extension the
+    quantiles fitted on it) is partly informed by post-cut values, even when
+    excluding `d` itself. This is a leak distinct from the one
+    `validation/purge.py` fixes (which only acts downstream, on already-
+    built train ROWS, not on the threshold computation itself) -- detected
+    by the future-corruption test (`tests/test_leakage.py`). `ret_tr`
+    therefore also excludes these last `horizon` points: only label windows
+    entirely before `cut_date` contribute to the threshold fit."""
     s = series.ffill().bfill()
     s_tr = s.iloc[:split_idx]
     calm_thr = s_tr.quantile(0.33)

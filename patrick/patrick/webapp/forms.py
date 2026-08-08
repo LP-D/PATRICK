@@ -1,9 +1,12 @@
-"""Traduction formulaire HTML <-> config `RunConfig` — remplace l'édition
-manuelle du YAML. Pas de contrainte imposée par `RunConfig` lui-même (schéma
-pydantic sans bornes ni validateurs, cf. exploration), donc les vérifications
-de base (listes non vides...) sont faites ici, avant `model_validate`, pour
-éviter un run qui parte avec une grille vide.
-"""
+"""HTML form <-> `RunConfig` translation -- replaces manual YAML editing. No
+constraint enforced by `RunConfig` itself (a pydantic schema with no bounds
+or validators, per exploration), so basic checks (non-empty lists...) are
+done here, before `model_validate`, to avoid a run starting with an empty
+grid.
+
+`VOL_MODEL_LABELS` and the `errors` validation strings below stay in French,
+matching the rest of the French-language product surface (form labels,
+error messages shown directly in the web UI)."""
 from __future__ import annotations
 
 import glob
@@ -40,15 +43,15 @@ _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 
 def slug_target(symbol: str) -> str:
     """`^VIX` -> `VIX`, `EURUSD=X` -> `EURUSD_X`, `000001.SS` -> `000001_SS`
-    -- dérive un nom de run/dossier de sortie sûr (pas de caractère spécial)
-    à partir d'un symbole de cible."""
+    -- derives a safe run name/output directory (no special characters)
+    from a target symbol."""
     return _SLUG_RE.sub("_", symbol).strip("_")
 
 
 def universe_excluding(target_symbol: str) -> tuple[list[str], dict[str, str]]:
-    """L'univers de features est toujours "tout ce qu'on a" (plus de sélection
-    manuelle de tickers/source) — sauf la cible elle-même, pour ne pas la donner
-    en feature d'entrée (fuite triviale)."""
+    """The feature universe is always "everything we have" (no more manual
+    ticker/source selection) -- except the target itself, so it isn't fed
+    back in as an input feature (trivial leak)."""
     yf_tickers = [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != target_symbol]
     fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if k != target_symbol}
     return yf_tickers, fred_series
@@ -177,15 +180,14 @@ def _checked(form, name: str) -> bool:
 
 
 def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, list[str]]:
-    """`form` est une `starlette.datastructures.FormData`. `target_symbol`/
-    `name` sont passés explicitement par l'appelant (`app.py`, une fois par
-    cible d'une soumission) plutôt que lus dans `form` : un lancement peut
-    soumettre plusieurs cibles à la fois (`<select multiple>`), et le nom
-    est toujours dérivé de la cible + un numéro de séquence
-    (`run_manager.next_run_name`), jamais saisi à la main. Renvoie
-    (config_dict, erreurs) — `config_dict` reste utilisable même avec des
-    erreurs (pour repeupler le formulaire), mais ne doit pas être passé à
-    `RunConfig.model_validate` si `erreurs` est non vide."""
+    """`form` is a `starlette.datastructures.FormData`. `target_symbol`/
+    `name` are passed explicitly by the caller (`app.py`, once per target
+    of a submission) rather than read from `form`: a launch can submit
+    several targets at once (`<select multiple>`), and the name is always
+    derived from the target + a sequence number (`run_manager.next_run_name`),
+    never typed by hand. Returns (config_dict, errors) -- `config_dict`
+    stays usable even with errors (to repopulate the form), but must not be
+    passed to `RunConfig.model_validate` if `errors` is non-empty."""
     errors: list[str] = []
 
     def _require_non_empty(lst: list, label: str) -> list:
@@ -325,8 +327,8 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
 
 
 def to_view(cfg: dict) -> dict:
-    """Convertit un dict de config (types réels, listes/dicts) en valeurs
-    plates pour préremplir les champs du formulaire `index.html`."""
+    """Converts a config dict (real types, lists/dicts) into flat values to
+    pre-fill the `index.html` form fields."""
     obj, uni = cfg.get("objective", {}), cfg.get("universe", {})
     dq = cfg.get("data_quality", {})
     feat, val = cfg.get("features", {}), cfg.get("validation", {})

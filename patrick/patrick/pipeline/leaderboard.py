@@ -1,6 +1,6 @@
-"""Collecte des résultats d'un run et export CSV/xlsx — remplace le hack "push
-chaque checkpoint sur une branche Git" de Colab par une simple écriture disque,
-la machine étant persistante."""
+"""Collects a run's results and exports CSV/xlsx -- replaces the Colab hack of
+"push every checkpoint to a Git branch" with a plain disk write, now that the
+machine is persistent."""
 from __future__ import annotations
 
 import os

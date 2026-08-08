@@ -98,7 +98,7 @@ def test_kelly_disabled_without_good_calibration(tmp_path):
     params = sim.SimParams(position_mode="heuristic_leverage")
     result = sim.simulate(trial_id, params, db_path=db_path, store_root=store_root)
     assert result["ok"] is False
-    assert "heuristique" in result["message"]
+    assert "Heuristic" in result["message"]
 
 
 def test_kelly_enabled_with_strong_signal(tmp_path):

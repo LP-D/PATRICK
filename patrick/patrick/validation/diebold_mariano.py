@@ -1,9 +1,9 @@
-"""Test de Diebold-Mariano (1995) : la précision prédictive de deux modèles
-diffère-t-elle significativement, ou l'écart observé est-il compatible avec
-du bruit d'échantillonnage ? Formulation originale sur une perte quadratique
-(régression) — généralisée ici à une perte 0/1 (mal classé = 1, bien classé
-= 0), adaptée à la cible de classification 4-classes du projet. H0 : les deux
-modèles ont la même précision prédictive.
+"""Diebold-Mariano test (1995): does the predictive accuracy of two models
+differ significantly, or is the observed gap consistent with sampling
+noise? Original formulation uses squared loss (regression) — generalized
+here to 0/1 loss (misclassified = 1, correct = 0), adapted to this
+project's 4-class classification target. H0: both models have the same
+predictive accuracy.
 """
 from __future__ import annotations
 
@@ -12,15 +12,14 @@ from scipy import stats
 
 
 def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
-    """`loss_a` : perte du modèle candidat, `loss_b` : perte de la baseline de
-    comparaison, alignées observation par observation (même ordre, même
-    longueur). `h` : horizon de prévision — la série de différences de perte
-    peut être autocorrélée jusqu'au lag h-1 (chevauchement des fenêtres de
-    label), la variance du test l'intègre plutôt que de supposer
-    l'indépendance.
+    """`loss_a`: candidate model's loss, `loss_b`: comparison baseline's loss,
+    aligned observation by observation (same order, same length). `h`:
+    forecast horizon — the loss-difference series can be autocorrelated up
+    to lag h-1 (overlapping label windows), the test variance accounts for
+    this rather than assuming independence.
 
-    `dm_stat` < 0 : le candidat a une perte moyenne plus faible (meilleur) que
-    la baseline. `p_value` : bilatéral, H0 = précisions égales."""
+    `dm_stat` < 0: the candidate has a lower (better) mean loss than the
+    baseline. `p_value`: two-sided, H0 = equal accuracy."""
     d = np.asarray(loss_a, dtype=float) - np.asarray(loss_b, dtype=float)
     n = len(d)
     if n < 10:
@@ -46,3 +45,4 @@ def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
         "n_obs": n,
         "mean_loss_diff": round(d_mean, 6),
     }
+

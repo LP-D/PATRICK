@@ -1,5 +1,5 @@
-"""Sélection LASSO (embedded) — testée dans VIX_FEATURE_SELECTION, la plus faible
-des trois sur la config de référence (F1_dir 0.572)."""
+"""LASSO (embedded) selection -- tested in VIX_FEATURE_SELECTION, the weakest
+of the three on the reference config (F1_dir 0.572)."""
 from __future__ import annotations
 
 import numpy as np

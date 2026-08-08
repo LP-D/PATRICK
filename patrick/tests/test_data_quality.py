@@ -17,6 +17,12 @@ from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 
+# Relative, not absolute: `data/ingest.py` requires >= 20 years of history
+# (`min_history = today - 20*365.25 days`). An absolute date drifts under
+# that threshold as real time passes -- 30 years back keeps a decade of
+# margin regardless of when the suite runs.
+_OLD_ENOUGH_START = (pd.Timestamp.today() - pd.Timedelta(days=30 * 365.25)).strftime("%Y-%m-%d")
+
 
 def _clean_series(n=1000, seed=0, price=100.0) -> pd.Series:
     rng = np.random.default_rng(seed)
@@ -157,7 +163,7 @@ def test_download_ohlc_is_cached_per_symbol_and_start(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def _make_yf_fake(good_tickers, bad_ticker, n=800):
-    idx = pd.bdate_range("2018-01-01", periods=n)
+    idx = pd.bdate_range(_OLD_ENOUGH_START, periods=n)
 
     def fake_download(tickers, start=None, auto_adjust=True, progress=False):
         is_batch = isinstance(tickers, list)
@@ -192,7 +198,7 @@ def test_ingest_excludes_series_with_explicit_reason_and_persists(tmp_path, monk
     monkeypatch.delenv(fred_source.FRED_API_KEY_ENV, raising=False)
 
     objective = ObjectiveConfig(target_symbol="^TEST", target_source="yfinance", disable_session_lag=True)
-    universe = UniverseConfig(yf_tickers=[*goods, bad], start_date="2018-01-01")
+    universe = UniverseConfig(yf_tickers=[*goods, bad], start_date=_OLD_ENOUGH_START)
     store = DataStore(root=str(tmp_path / "store"))
 
     df = ingest_module.ingest(objective, universe, store=store, force=True)
@@ -241,7 +247,7 @@ def test_data_quality_disabled_restores_pre_p6_5_behavior(tmp_path, monkeypatch)
     monkeypatch.delenv(fred_source.FRED_API_KEY_ENV, raising=False)
 
     objective = ObjectiveConfig(target_symbol="^TEST", target_source="yfinance", disable_session_lag=True)
-    universe = UniverseConfig(yf_tickers=[good, bad], start_date="2018-01-01")
+    universe = UniverseConfig(yf_tickers=[good, bad], start_date=_OLD_ENOUGH_START)
     store = DataStore(root=str(tmp_path / "store"))
 
     df = ingest_module.ingest(objective, universe, store=store, force=True,

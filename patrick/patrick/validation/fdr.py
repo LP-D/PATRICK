@@ -1,31 +1,31 @@
-"""Phase 6.4 (P6.4) -- correction FDR (Benjamini-Hochberg, 1995) à travers
-TOUTES les cibles testées historiquement -- distincte des garde-fous
-multi-tests déjà en place (section 4 de METHODOLOGY.md), qui corrigent le
-nombre d'ESSAIS DE CONFIG au sein d'une même (cible, horizon) : essayer
-successivement N cibles différentes (VIX, puis GSPC, puis SPY...) et retenir
-celle dont le test Diebold-Mariano est significatif soulève le MÊME problème
-de tests multiples, à une échelle différente -- sur 20 cibles sans aucun
-vrai signal, environ 1 apparaîtrait "significative" à p<0.05 par pur hasard.
+"""Phase 6.4 (P6.4) -- FDR correction (Benjamini-Hochberg, 1995) across ALL
+historically tested targets -- distinct from the multi-testing guards
+already in place (section 4 of METHODOLOGY.md), which correct for the
+number of CONFIG TRIALS within a single (target, horizon): successively
+trying N different targets (VIX, then GSPC, then SPY...) and keeping the one
+whose Diebold-Mariano test is significant raises the SAME multiple-testing
+problem, at a different scale -- across 20 targets with no real signal at
+all, about 1 would appear "significant" at p<0.05 by pure chance.
 
-Fonction pure (aucune dépendance SQLite) : `benjamini_hochberg` prend un dict
-{cible: meilleure p-value DM historique} et renvoie, pour chaque cible, sa
-p-value ajustée (q-value) et son statut significatif au seuil FDR choisi --
-le pont vers la base (`tracking/stats.py::fdr_across_targets`) construit ce
-dict à partir de `dm_result`/`run`.
+Pure function (no SQLite dependency): `benjamini_hochberg` takes a dict
+{target: best historical DM p-value} and returns, for each target, its
+adjusted p-value (q-value) and its significance status at the chosen FDR
+threshold -- the bridge to the database (`tracking/stats.py::fdr_across_targets`)
+builds this dict from `dm_result`/`run`.
 """
 from __future__ import annotations
 
 
 def benjamini_hochberg(p_values: dict[str, float], alpha: float = 0.10) -> dict:
-    """Procédure de Benjamini-Hochberg (step-up) : p-values ajustées
-    (q-values) telles que `significant = (q <= alpha)` est équivalent au
-    critère original (plus grand k tel que p_(k) <= (k/m)*alpha, rejette
-    1..k) -- équivalence standard, cf. Benjamini & Hochberg (1995).
+    """Benjamini-Hochberg (step-up) procedure: adjusted p-values (q-values)
+    such that `significant = (q <= alpha)` is equivalent to the original
+    criterion (largest k such that p_(k) <= (k/m)*alpha, rejects 1..k) --
+    standard equivalence, see Benjamini & Hochberg (1995).
 
-    `p_values` : {cible: p_value}, NaN silencieusement exclues (cible sans
-    essai DM valide, ex. tous ses runs en mode CPCV -- cf. limite P6.1,
-    Diebold-Mariano non calculé dans ce schéma)."""
-    items = [(k, v) for k, v in p_values.items() if v == v]  # exclut NaN
+    `p_values`: {target: p_value}, NaN silently excluded (target with no
+    valid DM trial, e.g. all its runs in CPCV mode -- see P6.1 limitation,
+    Diebold-Mariano not computed in that scheme)."""
+    items = [(k, v) for k, v in p_values.items() if v == v]  # excludes NaN
     m = len(items)
     if m == 0:
         return {"alpha": alpha, "n_tested": 0, "n_raw_significant": 0,
@@ -34,8 +34,8 @@ def benjamini_hochberg(p_values: dict[str, float], alpha: float = 0.10) -> dict:
     items_sorted = sorted(items, key=lambda kv: kv[1])
     raw_p = [v for _, v in items_sorted]
 
-    # q_(i) = min_{j>=i} (m/j * p_(j)) -- calculé de la fin vers le début
-    # pour garantir la monotonie (q_(1) <= q_(2) <= ... <= q_(m)).
+    # q_(i) = min_{j>=i} (m/j * p_(j)) -- computed from the end backward to
+    # guarantee monotonicity (q_(1) <= q_(2) <= ... <= q_(m)).
     adjusted = [0.0] * m
     adjusted[-1] = min(1.0, raw_p[-1])
     for i in range(m - 2, -1, -1):

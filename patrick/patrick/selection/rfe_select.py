@@ -1,5 +1,5 @@
-"""Sélection RFE (wrapper) — testée dans VIX_FEATURE_SELECTION, légèrement
-derrière SHAP (F1_dir 0.579 vs 0.597 sur la config de référence)."""
+"""RFE (wrapper) selection -- tested in VIX_FEATURE_SELECTION, slightly
+behind SHAP (F1_dir 0.579 vs 0.597 on the reference config)."""
 from __future__ import annotations
 
 import numpy as np

@@ -35,6 +35,7 @@ DEFAULT_REGIME_THRESHOLDS = RegimeThresholds()
 
 
 def _as_array_1d(values: Sequence[float] | np.ndarray, name: str) -> np.ndarray:
+    """Coerce `values` to a 1D float array, raising if it isn't already 1D."""
     arr = np.asarray(values, dtype=float)
     if arr.ndim != 1:
         raise ValueError(f"{name} must be a 1D array")
@@ -48,10 +49,10 @@ def classify_regime_daily(
     realized_vol: Sequence[float] | np.ndarray,
     thresholds: RegimeThresholds = DEFAULT_REGIME_THRESHOLDS,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Classifie chaque jour selon le régime observé, sans prédiction du régime.
+    """Classifies each day by observed regime — no regime prediction.
 
-    Retourne (regime_labels, confidence_scores). La confiance est une valeur de
-    [0, 1] basée sur la distance relative aux seuils les plus proches.
+    Returns (regime_labels, confidence_scores). Confidence is a value in
+    [0, 1] based on relative distance to the nearest thresholds.
     """
     vix_arr = _as_array_1d(vix, "vix")
     vix_pct = _as_array_1d(vix_percentile, "vix_percentile")
@@ -125,7 +126,7 @@ def classify_regime_daily(
 
 
 def regime_summary(regime_labels: Sequence[str]) -> dict:
-    """Compte les transitions par an et synthétise la distribution des durées."""
+    """Counts transitions per year and summarizes the duration distribution."""
     labels = list(regime_labels)
     if not labels:
         return {"n_days": 0, "counts": {k: 0 for k in REGIME_LABELS}, "annual_transitions": {"total_transitions": 0, "transitions_per_day": 0.0}, "duration_distribution": {}}
@@ -163,7 +164,7 @@ def regime_summary(regime_labels: Sequence[str]) -> dict:
 
 
 def p_value_histogram(p_values: Mapping[str, float], bins: int = 10) -> dict:
-    """Résume la forme de la distribution de p-values pour un diagnostic visuel."""
+    """Summarizes the shape of a p-value distribution for a visual diagnostic."""
     values = [float(v) for v in p_values.values() if v == v]
     if not values:
         return {"n_values": 0, "histogram": {}, "near_zero": 0, "uniform_like": True}
@@ -179,10 +180,12 @@ def p_value_histogram(p_values: Mapping[str, float], bins: int = 10) -> dict:
 
 
 def signal_strength(scores: Mapping[str, float]) -> pd.DataFrame:
+    """Wraps a {signal: score} mapping into a two-column DataFrame."""
     return pd.DataFrame({"signal": list(scores), "score": [float(v) for v in scores.values()]})
 
 
 def _loss_array(predictions: Sequence[float] | np.ndarray, actual: Sequence[float] | np.ndarray) -> np.ndarray:
+    """0/1 loss array (misclassified = 1, correct = 0), same shape required."""
     pred = np.asarray(predictions, dtype=float)
     act = np.asarray(actual, dtype=float)
     if pred.shape != act.shape:
@@ -196,7 +199,7 @@ def signal_dm_summary(
     baseline: Mapping[str, Sequence[float] | np.ndarray] | None = None,
     alpha: float = 0.10,
 ) -> pd.DataFrame:
-    """Calcule la statistique Diebold-Mariano pour chaque signal et les p-values BH."""
+    """Computes the Diebold-Mariano statistic for each signal and the BH p-values."""
     baseline_map = baseline or {}
     rows: list[dict] = []
     for signal_name, predictions in signals.items():
@@ -220,11 +223,12 @@ def signal_dm_summary(
     frame = pd.DataFrame(rows)
     if frame.empty:
         return frame
-    # Un signal dont le p_value DM est NaN (historique < 10 observations, cf.
-    # `validation.diebold_mariano`) n'est ni significatif ni non significatif --
-    # il n'a simplement pas pu être testé. `testable` porte cette distinction
-    # explicitement, pour ne jamais le confondre avec un signal réellement
-    # évalué et jugé non significatif (même `significant=False` sinon).
+    # A signal whose DM p-value is NaN (history < 10 observations, cf.
+    # `validation.diebold_mariano`) is neither significant nor not
+    # significant -- it simply could not be tested. `testable` carries this
+    # distinction explicitly, so it is never conflated with a signal that
+    # was actually evaluated and found not significant (both would
+    # otherwise show `significant=False`).
     frame["testable"] = np.isfinite(frame["p_value"])
 
     p_map = {
@@ -242,11 +246,12 @@ def signal_dm_summary(
     adjusted = pd.DataFrame.from_dict(bh["results"], orient="index").reset_index()
     adjusted = adjusted.rename(columns={"index": "signal"})
     frame = frame.merge(adjusted[["signal", "adjusted_p_value", "significant"]], on="signal", how="left")
-    # Un signal non testable (absent de `adjusted`, cf. filtre `testable` ci-dessus)
-    # revient du merge avec `significant=NaN` -- normalisé à False pour rester
-    # cohérent avec la branche `not p_map` ci-dessus (même convention dans les
-    # deux chemins), `testable=False` restant la seule source de vérité sur
-    # la distinction "non testé" vs "testé, non significatif".
+    # A non-testable signal (absent from `adjusted`, cf. the `testable`
+    # filter above) comes back from the merge with `significant=NaN` --
+    # normalized to False to stay consistent with the `not p_map` branch
+    # above (same convention on both paths); `testable=False` remains the
+    # sole source of truth for the "not tested" vs "tested, not
+    # significant" distinction.
     frame["significant"] = frame["significant"].fillna(False)
     frame["selected"] = frame["significant"]
     return frame.sort_values(["adjusted_p_value", "p_value"]).reset_index(drop=True)
@@ -257,11 +262,11 @@ def reduce_correlated_signals(
     signal_matrix: pd.DataFrame,
     corr_threshold: float = 0.70,
 ) -> pd.DataFrame:
-    """Conserve un signal par bloc corrélé.
+    """Keeps a single signal per correlated cluster.
 
-    Le critère de sélection est la significativité statistique (p-value BH la plus
-    faible), pas le Sharpe. C'est un garde-fou structurel pour éviter de conserver
-    plusieurs signaux quasi redondants.
+    The selection criterion is statistical significance (lowest BH
+    p-value), not raw Sharpe. This is a structural guard against keeping
+    several near-redundant signals.
     """
     if signal_frame.empty or signal_matrix.empty:
         return signal_frame.copy()
@@ -288,7 +293,7 @@ def reduce_correlated_signals(
 
 
 def compare_test_holdout(signal_frame: pd.DataFrame, test_sharpe: Mapping[str, float], holdout_sharpe: Mapping[str, float]) -> pd.DataFrame:
-    """Calcule l'écart relatif de Sharpe entre test et holdout, affiché pour diagnostic."""
+    """Computes the relative Sharpe gap between test and holdout, for diagnostic display."""
     rows: list[dict] = []
     for _, row in signal_frame.iterrows():
         name = row["signal"]
@@ -310,7 +315,7 @@ def aggregate_signals(
     prediction_column: str = "prediction",
     significance_column: str = "selected",
 ) -> dict:
-    """Agrège les signaux par classe d'actif et renvoie un verdict global."""
+    """Aggregates signals by asset class and returns an overall verdict."""
     if signal_frame.empty:
         return {
             "class_counts": {},
@@ -391,7 +396,7 @@ def aggregate_signals(
 
 
 def regime_alignment_score(verdict: Mapping[str, float | str], regime_label: str | None, *, baseline_mapping: Mapping[str, float] | None = None) -> dict:
-    """Compare le verdict agrégé au régime observé et signale une divergence forte."""
+    """Compares the aggregate verdict to the observed regime and flags a strong divergence."""
     score = float(verdict.get("score", 0.0))
     expected = baseline_mapping or {
         "CALM": 0.35,
@@ -422,7 +427,7 @@ def validate_aggregate_signal_quality(
     *,
     target_column: str = "score",
 ) -> dict:
-    """Vérifie qu'un verdict agrégé est bien corrélé négativement au VIX réalisé."""
+    """Checks that an aggregate verdict is indeed negatively correlated with realized VIX."""
     if signal_frame.empty or len(realized_vix) == 0:
         return {"n_obs": 0, "correlation": np.nan, "status": "insufficient_data"}
 
@@ -439,7 +444,7 @@ def validate_aggregate_signal_quality(
 
 
 def build_event_calendar(events: Iterable[Mapping[str, object]]) -> pd.DataFrame:
-    """Construit un calendrier d'événements à partir d'entrées manuelles ou importées."""
+    """Builds an event calendar from manual or imported entries."""
     rows: list[dict[str, object]] = []
     for entry in events:
         if isinstance(entry, pd.Series):
@@ -447,7 +452,7 @@ def build_event_calendar(events: Iterable[Mapping[str, object]]) -> pd.DataFrame
         else:
             row = dict(entry)
         if "date" not in row:
-            raise ValueError("Chaque entrée d'événement doit avoir une colonne 'date'.")
+            raise ValueError("Each event entry must have a 'date' column.")
         rows.append(
             {
                 "date": pd.to_datetime(row["date"]),
@@ -462,10 +467,10 @@ def build_event_calendar(events: Iterable[Mapping[str, object]]) -> pd.DataFrame
 
 
 def credit_risk_regime(high_yield_spread: float, investment_grade_spread: float, *, threshold: float = 0.15) -> dict:
-    """Indique un régime de crédit à partir des spreads FRED agrégés, sans prétendre couvrir le risque émetteur individuel."""
+    """Flags a credit regime from aggregated FRED spreads — does not claim to cover individual issuer risk."""
     diff = float(high_yield_spread) - float(investment_grade_spread)
     if np.isnan(diff):
-        return {"state": "UNKNOWN", "spread_difference": np.nan, "source_note": "données absentes", "coverage": "individual issuer risk not covered"}
+        return {"state": "UNKNOWN", "spread_difference": np.nan, "source_note": "missing data", "coverage": "individual issuer risk not covered"}
     if diff > threshold:
         state = "STRESS"
     elif diff > 0.0:
@@ -481,7 +486,7 @@ def credit_risk_regime(high_yield_spread: float, investment_grade_spread: float,
 
 
 def trend_follow_signal(prices: Sequence[float] | pd.Series, short_window: int = 5, long_window: int = 20) -> pd.DataFrame:
-    """Produit un signal de suivi de tendance sans apprentissage : momentum + croisements SMA explicites."""
+    """Produces a trend-following signal with no learning: momentum + explicit SMA crossovers."""
     series = pd.Series(prices, dtype=float)
     sma_short = series.rolling(short_window, min_periods=1).mean()
     sma_long = series.rolling(long_window, min_periods=1).mean()
@@ -497,7 +502,7 @@ def trend_follow_signal(prices: Sequence[float] | pd.Series, short_window: int =
 
 
 def risk_parity_weights(returns: pd.DataFrame, *, floor: float = 1e-6) -> pd.Series:
-    """Calcule un portefeuille à parité de risque à partir d'un historique de rendements."""
+    """Computes a risk-parity portfolio from a returns history."""
     returns = returns.copy()
     if returns.empty:
         return pd.Series(dtype=float)
@@ -523,13 +528,14 @@ class StrategyRule:
     notes: str = ""
 
     def validate(self) -> None:
+        """Raises if the rule has no assets, weights don't sum to 1 (unlevered), or leverage isn't positive."""
         if not self.active_assets:
-            raise ValueError("Une règle de stratégie nécessite au moins un actif.")
+            raise ValueError("A strategy rule requires at least one asset.")
         weight_sum = sum(float(v) for v in self.weights.values())
         if abs(weight_sum - 1.0) > 1e-3 and self.leverage <= 1.0:
-            raise ValueError(f"Les pondérations d'une règle doivent totaliser 1.0, got {weight_sum}.")
+            raise ValueError(f"A rule's weights must sum to 1.0, got {weight_sum}.")
         if self.leverage <= 0:
-            raise ValueError("Le levier doit être strictement positif.")
+            raise ValueError("Leverage must be strictly positive.")
 
 
 @dataclass(frozen=True)
@@ -552,7 +558,7 @@ class StrategyVersion:
 
 @dataclass
 class StrategyEngine:
-    """Moteur unique de décision pour la couche d'agrégation, stratégie et exécution."""
+    """Single decision engine for the aggregation, strategy, and execution layer."""
 
     journal: DecisionJournal = field(default_factory=lambda: DecisionJournal(author="operator"))
     versions: list[StrategyVersion] = field(default_factory=list)
@@ -560,6 +566,7 @@ class StrategyEngine:
     thresholds: RegimeThresholds = field(default_factory=lambda: DEFAULT_REGIME_THRESHOLDS)
 
     def classify_regime(self, vix, vix_pct, market_return, realized_vol):
+        """Classifies the regime and journals the classification (cf. `classify_regime_daily`)."""
         labels, confidence = classify_regime_daily(vix, vix_pct, market_return, realized_vol, self.thresholds)
         self.journal.record(
             "regime_classification",
@@ -616,26 +623,26 @@ def enforce_risk_constraints(
     max_total_sector: float | None = None,
     min_cash: float = 0.10,
 ) -> dict:
-    """Valide qu'une allocation n'enfreint pas les contraintes de risque. Refuse explicite si besoin."""
+    """Validates that an allocation doesn't violate risk constraints. Fails explicitly when it does."""
     total = float(sum(weights.values())) if weights else 0.0
     if total <= 0:
-        raise ValueError("L'allocation doit contenir au moins une position positive.")
+        raise ValueError("The allocation must contain at least one positive position.")
     if max_leverage > 0 and total > max_leverage:
-        raise ValueError(f"Violation de levier: total {total} > max {max_leverage}.")
+        raise ValueError(f"Leverage violation: total {total} > max {max_leverage}.")
     for asset, weight in weights.items():
         w = float(weight)
         if w > max_per_asset:
-            raise ValueError(f"Violation de contrainte par actif: {asset} = {w} > {max_per_asset}.")
+            raise ValueError(f"Per-asset constraint violation: {asset} = {w} > {max_per_asset}.")
     if max_total_sector is not None and total > max_total_sector:
-        raise ValueError(f"Violation d'exposition sectorielle: {total} > {max_total_sector}.")
+        raise ValueError(f"Sector exposure violation: {total} > {max_total_sector}.")
     cash = max(0.0, 1.0 - total)
     if cash < min_cash:
-        raise ValueError(f"Violation de trésorerie minimale: cash {cash} < {min_cash}.")
+        raise ValueError(f"Minimum cash violation: cash {cash} < {min_cash}.")
     return {"status": "ok", "total_exposure": total, "cash": cash}
 
 
 def parameter_grid_summary(results: Sequence[Mapping[str, object]]) -> pd.DataFrame:
-    """Résume une recherche de paramètres avec le nombre de combinaisons testées et le Sharpe déflaté."""
+    """Summarizes a parameter search with the number of combinations tested and the deflated Sharpe."""
     if not results:
         return pd.DataFrame(columns=["n_combinations", "debiased_sharpe", "best_result"])
     rows = []
@@ -674,7 +681,7 @@ class ExecutionOrder:
 
 
 def simulate_execution(orders: Iterable[ExecutionOrder], prices: Mapping[str, float], *, default_friction: float = 0.001) -> pd.DataFrame:
-    """Simule l'exécution d'une file d'ordres avec frictions et refus explicites."""
+    """Simulates execution of an order queue with friction and explicit rejections."""
     rows: list[dict] = []
     for order in orders:
         order = ExecutionOrder(**order.to_dict()) if isinstance(order, dict) else order
@@ -715,7 +722,7 @@ class DecisionJournalEntry:
 
 
 class DecisionJournal:
-    """Journal de décision unique, filtrable et exportable."""
+    """Single decision journal, filterable and exportable."""
 
     def __init__(self, author: str = "system") -> None:
         self.author = author
@@ -755,17 +762,17 @@ class DecisionJournal:
 
 
 def take_snapshot(state: Mapping[str, object], name: str) -> dict:
-    """Crée un snapshot de l'état courant, utile pour la reproductibilité et les comparaisons."""
+    """Creates a snapshot of the current state, useful for reproducibility and comparisons."""
     return {"snapshot_name": name, "timestamp": pd.Timestamp.now(tz="UTC").isoformat(), "state": dict(state)}
 
 
 def reconstruct_state(snapshot: Mapping[str, object]) -> dict:
-    """Restaure un état à partir d'un snapshot avant/pendant la revue humaine."""
+    """Restores a state from a snapshot, before/during human review."""
     return dict(snapshot.get("state", {}))
 
 
 def determine_signal_quality_status(p_values: Mapping[str, float], *, alpha: float = 0.10) -> dict:
-    """Retourne un diagnostic d'exploitation final sur la qualité des signaux."""
+    """Returns a final operational diagnostic on signal quality."""
     values = [float(v) for v in p_values.values() if np.isfinite(v)]
     if not values:
         return {"status": "no_signal", "n_values": 0, "alpha": alpha}

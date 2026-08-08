@@ -1,5 +1,6 @@
-"""Registre des 5 algos ML établis (VIX_FINAL_ML_SCAN) — hyperparamètres par
-défaut identiques à ceux validés dans le projet, ré-affinables via Optuna."""
+"""Registry of the 5 established ML algos (VIX_FINAL_ML_SCAN) -- default
+hyperparameters identical to those validated in the project, refinable via
+Optuna."""
 from __future__ import annotations
 
 from catboost import CatBoostClassifier
@@ -39,4 +40,4 @@ def get_classifier(algo: str, seed: int = 42, **overrides):
                       allow_writing_files=False)
         params.update(overrides)
         return CatBoostClassifier(**params)
-    raise ValueError(f"Algo ML inconnu: '{algo}' (attendu: {ML_ALGOS})")
+    raise ValueError(f"Unknown ML algo: '{algo}' (expected: {ML_ALGOS})")

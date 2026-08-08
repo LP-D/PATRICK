@@ -1,20 +1,21 @@
-"""`patrick predict --live` (Phase 4.6) : score le modèle déjà exporté d'un run
-sur les données les plus récentes, écrit la prédiction dans `prediction` avec
-`split='live'` AVANT que le résultat soit connu (paper trading), et complète
-`y_true` des prédictions live passées dont l'horizon est désormais écoulé.
+"""`patrick predict --live` (Phase 4.6): scores a run's already-exported model
+on the most recent data, writes the prediction to `prediction` with
+`split='live'` BEFORE the outcome is known (paper trading), and backfills
+`y_true` for past live predictions whose horizon has since elapsed.
 
-Ne ré-entraîne et ne ré-sélectionne jamais rien : charge le modèle+scaler déjà
-exportés (`tracking.export.export_best_model`) et reconstruit uniquement le
-vecteur de features du jour, selon la même recette qu'à l'export
-(`feature_pool` + formules d'interaction persistées avec le modèle).
+Never retrains and never re-selects anything: loads the already-exported
+model+scaler (`tracking.export.export_best_model`) and only rebuilds today's
+feature vector, following the same recipe as at export time (`feature_pool`
++ interaction formulas persisted alongside the model).
 
-`y_true` pour `split='live'` est simplifié en binaire (1.0 si le rendement
-réalisé sur l'horizon est positif, 0.0 sinon) plutôt que reclassifié dans les
-4 classes DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT du modèle : reproduire les
-seuils par quantile/régime de `features/target.py` à l'inférence demanderait
-de les persister séparément (non fait ici, hors scope Phase 4 -- cf. rapport
-de phase). Ce simplifié ne sert qu'à l'affichage "la prédiction avait-elle
-raison sur la direction ?", jamais à ré-entraîner ou sélectionner un modèle.
+`y_true` for `split='live'` is simplified to binary (1.0 if the realized
+return over the horizon is positive, 0.0 otherwise) rather than reclassified
+into the model's 4 classes DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT:
+reproducing `features/target.py`'s per-quantile/regime thresholds at
+inference time would require persisting them separately (not done here, out
+of scope for Phase 4 -- see phase report). This simplified value is only used
+for the "was the prediction right about direction?" display, never to
+retrain or select a model.
 """
 from __future__ import annotations
 
@@ -56,10 +57,10 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
         ts = pd.Timestamp(row["ts"])
         pos = series.index.searchsorted(ts)
         if pos >= len(series.index) or series.index[pos] != ts:
-            continue  # date du signal pas (encore) retrouvée telle quelle dans l'historique frais
+            continue  # signal date not (yet) found as-is in the fresh history
         future_idx = pos + horizon
         if future_idx >= len(series.index):
-            continue  # horizon pas encore écoulé
+            continue  # horizon not yet elapsed
         ret = series.iloc[future_idx] / series.iloc[pos] - 1
         y_true_binary = 1.0 if ret > 0 else 0.0
         trackdb.update_prediction_outcome(conn, trial_id, row["ts"], y_true_binary)
@@ -72,10 +73,10 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
     try:
         run = trackdb.get_run(conn, run_id)
         if run is None:
-            raise ValueError(f"Run introuvable : {run_id}")
+            raise ValueError(f"Run not found: {run_id}")
         best = _find_best_trial(conn, run_id)
         if best is None:
-            raise ValueError(f"Pas de modèle exporté (essai gagnant) pour le run {run_id}.")
+            raise ValueError(f"No exported model (winning trial) for run {run_id}.")
 
         bundle = joblib.load(best["artifact_path"])
         model, scaler = bundle["model"], bundle["scaler"]
@@ -97,8 +98,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         missing = [c for c in feature_pool if c not in full_pool.columns]
         if missing:
             raise ValueError(
-                f"Colonnes du pool d'entraînement absentes des données fraîches : {missing[:5]}"
-                f"{'...' if len(missing) > 5 else ''} -- la config a peut-être changé depuis l'export.")
+                f"Training pool columns missing from the fresh data: {missing[:5]}"
+                f"{'...' if len(missing) > 5 else ''} -- the config may have changed since export.")
 
         last_row = full_pool[feature_pool].iloc[[-1]]
         last_ts = full_pool.index[-1]

@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  fast-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e "./patrick[dev,web]"
+
+      # Only the fast suite runs in CI. `pyproject.toml`'s own
+      # `[tool.pytest.ini_options]` already documents why: the full suite
+      # (~26 files, ~130 tests) takes ~55-60 min because it includes real
+      # model training, full pipeline runs, and worker subprocess tests
+      # (marked `@pytest.mark.slow`) -- individually measured at anywhere
+      # from ~10s to ~70s each. Running that on every push/PR would make CI
+      # a bottleneck rather than a fast feedback loop, and several of the
+      # slow tests spawn real subprocesses (`patrick.cli worker`) that are
+      # a poor fit for a shared CI runner (extra flakiness, no benefit over
+      # local verification). `addopts = "-m 'not slow'"` already makes bare
+      # `pytest` fast-only locally; `-m "not slow"` here is the explicit,
+      # self-documenting equivalent for CI. Run `pytest -m slow` locally
+      # before a release-sensitive merge to cover the excluded tests.
+      - name: Run fast test suite
+        run: pytest patrick/tests/ -q -m "not slow"

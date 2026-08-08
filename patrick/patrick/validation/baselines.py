@@ -1,7 +1,7 @@
-"""Baselines systématiques (Phase 0.6) : classe majoritaire, persistance, HAR-RV —
-calculées pour chaque (horizon, fold, régime) walk-forward et ajoutées au
-leaderboard à côté des modèles réels. Sans ça, un F1_dir de 0.55 a l'air bon dans
-l'absolu ; à côté d'une persistance à 0.53, il ne vaut presque rien.
+"""Systematic baselines (Phase 0.6): majority class, persistence, HAR-RV —
+computed for every walk-forward (horizon, fold, regime) and added to the
+leaderboard alongside real models. Without this, an F1_dir of 0.55 looks good
+in isolation; next to a persistence of 0.53, it's worth almost nothing.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ BASELINE_NAMES = ("BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv"
 
 
 def majority_class_predictions(y_tr: np.ndarray, n: int) -> np.ndarray:
-    """Prédit partout la classe la plus fréquente du train."""
+    """Predicts the train's most frequent class everywhere."""
     values, counts = np.unique(y_tr, return_counts=True)
     majority = values[np.argmax(counts)]
     return np.full(n, majority, dtype=int)
@@ -24,10 +24,10 @@ def majority_class_predictions(y_tr: np.ndarray, n: int) -> np.ndarray:
 
 def majority_by_regime_predictions(y_tr: np.ndarray, tr_regimes: np.ndarray,
                                     te_regimes: np.ndarray) -> np.ndarray:
-    """Classe majoritaire du train, calculée SÉPARÉMENT par régime (Phase X5)
-    -- plus exigeante que la majorité globale quand le déséquilibre de classe
-    varie selon le régime de marché. Repli sur la majorité globale du train
-    si un régime de test n'a aucune observation de train correspondante."""
+    """Train's majority class, computed SEPARATELY per regime (Phase X5) --
+    more demanding than the global majority when class imbalance varies with
+    the market regime. Falls back to the train's global majority if a test
+    regime has no corresponding train observation."""
     global_majority = majority_class_predictions(y_tr, 1)[0]
     per_regime: dict[str, int] = {}
     for reg in np.unique(tr_regimes):
@@ -40,9 +40,10 @@ def majority_by_regime_predictions(y_tr: np.ndarray, tr_regimes: np.ndarray,
 
 def persistence_predictions(target_series: pd.Series, idx: pd.DatetimeIndex,
                              te_mask: np.ndarray, horizon: int) -> np.ndarray:
-    """Prédit, pour chaque date de test, la classe réalisée sur la fenêtre de
-    `horizon` observations précédente dans `target_series` (déjà connue à la date
-    de décision) — le baseline "rien ne change" classique en séries temporelles."""
+    """Predicts, for every test date, the realized class over the previous
+    `horizon`-observation window in `target_series` (already known at
+    decision time) — the classic "nothing changes" baseline in time
+    series."""
     shifted = target_series.shift(horizon)
     persisted = shifted.reindex(idx).values[te_mask]
     fallback = target_series.mode().iloc[0] if len(target_series) else 0
@@ -50,16 +51,16 @@ def persistence_predictions(target_series: pd.Series, idx: pd.DatetimeIndex,
     return persisted
 
 
-MOMENTUM_WINDOW_FUTURES = 20  # cf. Phase X5 -- momentum documenté sur cette classe
-MOMENTUM_WINDOW_CRYPTO = 5    # régimes de volatilité extrêmes, fenêtre plus courte
+MOMENTUM_WINDOW_FUTURES = 20  # see Phase X5 -- momentum documented on this class
+MOMENTUM_WINDOW_CRYPTO = 5    # extreme volatility regimes, shorter window
 
 
 def momentum_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
                           te_mask: np.ndarray, window: int,
                           thr: dict, reg_r: pd.Series) -> np.ndarray:
-    """Baseline momentum (Phase X5, futures/crypto) : classe le rendement
-    glissant sur `window` jours via les MÊMES seuils causaux (`thr`, par
-    régime) que `build_target` -- directement comparable aux classes réelles."""
+    """Momentum baseline (Phase X5, futures/crypto): classifies the rolling
+    `window`-day return via the SAME causal thresholds (`thr`, per regime)
+    as `build_target` -- directly comparable to the real classes."""
     mom = price_series.pct_change(window).reindex(idx).values
     reg_al = reg_r.reindex(idx).fillna("GLOBAL").values
     preds = np.zeros(len(idx), dtype=int)
@@ -73,14 +74,13 @@ def momentum_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
 def random_walk_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
                              tr_mask: np.ndarray, te_mask: np.ndarray, drift: bool,
                              thr: dict, reg_r: pd.Series) -> np.ndarray:
-    """Baseline marche aléatoire (Phase X5) : le meilleur prévisionniste pour
-    une marche aléatoire SANS dérive (FX, résultat de référence établi en
-    recherche FX à horizon court) est "pas de changement" (rendement prévu =
-    0), classé via les seuils causaux comme une observation quelconque. AVEC
-    dérive (séries macro, convention standard en macro-économétrie) : le
-    rendement moyen du train est utilisé comme prévision constante au lieu de
-    0. Prévision constante par construction (pas de dépendance à l'historique
-    récent, contrairement à la persistance)."""
+    """Random-walk baseline (Phase X5): the best forecaster for a random
+    walk WITHOUT drift (FX, an established reference result in short-horizon
+    FX research) is "no change" (forecast return = 0), classified via the
+    causal thresholds like any observation. WITH drift (macro series,
+    standard convention in macro-econometrics): the train's average return
+    is used as the constant forecast instead of 0. A constant forecast by
+    construction (no dependency on recent history, unlike persistence)."""
     if drift:
         ret = price_series.pct_change().reindex(idx)
         train_ret = ret.values[tr_mask]
@@ -109,20 +109,20 @@ def _classify_like_target(r: float, q25: float, q75: float) -> int:
 def har_rv_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
                         tr_mask: np.ndarray, te_mask: np.ndarray,
                         thr: dict, reg_r: pd.Series) -> np.ndarray | None:
-    """Baseline HAR-RV (Corsi) : régression linéaire (moindres carrés, ajustée sur
-    le train uniquement) de la vol réalisée du lendemain sur ses moyennes
-    glissantes 1j/5j/22j.
+    """HAR-RV baseline (Corsi): linear regression (least squares, fit on
+    train only) of next-day realized vol on its 1d/5d/22d rolling averages.
 
-    Approximation documentée : HAR-RV prédit nativement une MAGNITUDE de
-    volatilité, pas une direction — la cible de ce projet est direction+amplitude
-    (4 classes). On combine donc : direction = signe du dernier rendement connu
-    (persistance de signe, l'a-priori directionnel le plus neutre possible) ;
-    amplitude = le niveau de RV prédit par HAR-RV, reclassé FORT/FAIBLE via les
-    MÊMES seuils causaux (`thr`, par régime) que `build_target` — donc directement
-    comparable aux classes réelles plutôt qu'une échelle inventée pour l'occasion.
+    Documented approximation: HAR-RV natively predicts a volatility
+    MAGNITUDE, not a direction — this project's target is direction+
+    amplitude (4 classes). So the two are combined: direction = sign of the
+    last known return (sign persistence, the most directionally neutral
+    prior possible); amplitude = the RV level predicted by HAR-RV,
+    reclassified STRONG/WEAK via the SAME causal thresholds (`thr`, per
+    regime) as `build_target` — hence directly comparable to the real
+    classes rather than a scale invented for the occasion.
 
-    Retourne None si le train est trop court pour ajuster HAR-RV (baseline omise
-    du leaderboard plutôt que polluée de NaN).
+    Returns None if the train is too short to fit HAR-RV (baseline omitted
+    from the leaderboard rather than polluted with NaN).
     """
     ret = price_series.pct_change()
     rv = ret.pow(2)
@@ -131,7 +131,7 @@ def har_rv_predictions(price_series: pd.Series, idx: pd.DatetimeIndex,
         "rv_5d": rv.rolling(5).mean(),
         "rv_22d": rv.rolling(22).mean(),
     })
-    target_rv = rv.shift(-1)  # RV du jour suivant, à prédire à partir d'aujourd'hui
+    target_rv = rv.shift(-1)  # next day's RV, to be predicted from today
     data = pd.concat([feat, target_rv.rename("y")], axis=1).dropna()
     tr_dates = set(idx[tr_mask])
     fit_data = data.loc[data.index.isin(tr_dates)]
@@ -168,16 +168,16 @@ def compute_baselines(price_series: pd.Series, target_series: pd.Series,
                        y_tr: np.ndarray, y_te: np.ndarray, horizon: int,
                        thr: dict, reg_r: pd.Series,
                        return_predictions: bool = False) -> dict[str, dict] | dict[str, np.ndarray]:
-    """Retourne {nom_baseline: metrics(...)} pour toutes les baselines calculables
-    sur ce fold (comportement historique, `return_predictions=False`). HAR-RV est
-    absent du dict (pas de clé) si l'historique de train est trop court, plutôt
-    que de polluer le leaderboard avec des NaN.
+    """Returns {baseline_name: metrics(...)} for all baselines computable on
+    this fold (historical behavior, `return_predictions=False`). HAR-RV is
+    absent from the dict (no key) if the train history is too short, rather
+    than polluting the leaderboard with NaNs.
 
-    `return_predictions=True` (Phase 2.5, Diebold-Mariano) : renvoie
-    {nom_baseline: y_pred} à la place — les prédictions brutes, alignées sur
-    `y_te`, nécessaires pour comparer la perte du modèle gagnant à celle d'une
-    baseline observation par observation (une moyenne de métriques ne le permet
-    pas). Un seul calcul sous-jacent dans les deux cas, pas de duplication."""
+    `return_predictions=True` (Phase 2.5, Diebold-Mariano): returns
+    {baseline_name: y_pred} instead — the raw predictions, aligned with
+    `y_te`, needed to compare the winning model's loss to a baseline's
+    observation by observation (a metric average cannot do this). A single
+    underlying computation in both cases, no duplication."""
     reg_al = reg_r.reindex(idx).values
     preds: dict[str, np.ndarray] = {
         "BASELINE_majority": majority_class_predictions(y_tr, len(y_te)),

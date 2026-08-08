@@ -1,8 +1,8 @@
-"""File d'attente de jobs (Phase 3.1) — persistée dans la table `job` (cf.
-migration `0002_jobs.sql`), consommée par un worker en process séparé
-(`patrick/worker.py`) qui interroge cette table en boucle, plutôt qu'un thread
-interne au process web (BackgroundTasks-like, ancien `run_manager.py`) : tuer
-le process web pendant un run ne perd plus le run.
+"""Job queue (Phase 3.1) — persisted in the `job` table (see migration
+`0002_jobs.sql`), consumed by a worker in a separate process
+(`patrick/worker.py`) that polls this table in a loop, rather than a thread
+internal to the web process (BackgroundTasks-like, the old `run_manager.py`):
+killing the web process during a run no longer loses the run.
 """
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ import json
 import sqlite3
 import uuid
 
-# Un heartbeat plus vieux que ça -> worker considéré mort (`ensure_worker_running`
-# en relance un). Le worker rafraîchit son heartbeat à chaque itération de la
-# boucle ET pendant l'exécution d'un run (throttlé à ~1/s, cf. worker.py), mais
-# l'import de ses dépendances ML (xgboost/shap/arch/...) avant même d'entrer
-# dans sa boucle prend déjà ~5s à froid -> marge large pour ne pas confondre
-# "worker en train de démarrer" et "worker mort" (ce qui ferait spawner un
-# second worker en double, cf. `ensure_worker_running`).
+# A heartbeat older than this -> worker considered dead (`ensure_worker_running`
+# relaunches one). The worker refreshes its heartbeat on every loop iteration
+# AND during a run's execution (throttled to ~1/s, see worker.py), but
+# importing its ML dependencies (xgboost/shap/arch/...) even before entering
+# its loop already takes ~5s cold -> generous margin to avoid confusing
+# "worker starting up" with "worker dead" (which would spawn a duplicate
+# second worker, see `ensure_worker_running`).
 HEARTBEAT_STALE_S = 30.0
 
 _JOB_COLUMNS = [
@@ -36,11 +36,10 @@ def enqueue_job(conn: sqlite3.Connection, config_json: str) -> str:
 
 
 def claim_next_job(conn: sqlite3.Connection, worker_pid: int) -> dict | None:
-    """Réclame le plus ancien job en attente de façon atomique : `BEGIN
-    IMMEDIATE` prend le verrou d'écriture avant même de lire, donc deux
-    workers qui appellent ceci en même temps ne peuvent jamais réclamer le
-    même job (le second bloque jusqu'à ce que le premier commit/rollback, puis
-    ne trouve plus de job 'queued' à cette place)."""
+    """Claims the oldest queued job atomically: `BEGIN IMMEDIATE` takes the
+    write lock even before reading, so two workers calling this at the same
+    time can never claim the same job (the second one blocks until the first
+    commits/rolls back, then finds no more 'queued' job in that spot)."""
     conn.execute("BEGIN IMMEDIATE")
     try:
         row = conn.execute(
@@ -125,16 +124,15 @@ def active_job(conn: sqlite3.Connection) -> dict | None:
 
 
 def reap_stale_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
-    """Jobs restés 'running' au-delà de `max_age_s` -> leur worker est mort sans
-    avoir pu marquer l'échec (kill -9, crash, coupure de courant) : on les
-    repasse en erreur plutôt que de les laisser bloquer la file indéfiniment.
-    Appelé au démarrage de `run_worker_loop`, jamais pendant une exécution en
-    cours (un run légitimement long ne doit pas être fauché par son propre
-    worker)."""
+    """Jobs left 'running' beyond `max_age_s` -> their worker died without
+    being able to mark the failure (kill -9, crash, power loss): they are
+    switched to error rather than left blocking the queue indefinitely.
+    Called at `run_worker_loop` startup, never during an ongoing execution (a
+    legitimately long run must not be cut down by its own worker)."""
     with conn:
         cur = conn.execute(
             "UPDATE job SET status = 'error', finished_at = datetime('now'), "
-            "error = 'worker interrompu (process mort)' "
+            "error = 'worker interrupted (process died)' "
             "WHERE status = 'running' AND "
             "(julianday('now') - julianday(started_at)) * 86400 > ?",
             (max_age_s,),

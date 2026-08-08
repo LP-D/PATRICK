@@ -1,5 +1,6 @@
-"""Registre unifié des méthodes de sélection de features — défaut SHAP (leçon du
-projet : bat RFE et LASSO en test direct sur la config de référence)."""
+"""Unified registry of feature selection methods -- SHAP is the default
+(lesson from the project: it beats RFE and LASSO in a direct test on the
+reference config)."""
 from __future__ import annotations
 
 import numpy as np
@@ -19,4 +20,4 @@ def select_features(method: str, X_tr: np.ndarray, y_tr: np.ndarray, top_n: int,
         return list(rfe_rank(X_tr, y_tr, top_n, prefilter, seed=seed))
     if method == "lasso":
         return list(lasso_rank(X_tr, y_tr, top_n, prefilter, seed=seed))
-    raise ValueError(f"Méthode de sélection inconnue: '{method}' (attendu: {SELECTION_METHODS})")
+    raise ValueError(f"Unknown selection method: '{method}' (expected: {SELECTION_METHODS})")

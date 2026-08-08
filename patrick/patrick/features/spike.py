@@ -1,7 +1,8 @@
-"""Features de "spike" (VIX_SPIKE_SCAN) : exposant de Hurst glissant, semivariance
-(risque baissier), skew glissant, et un filtre particulaire bootstrap sur un modèle
-de volatilité stochastique simple (AR(1) en log-volatilité). Effet marginal mesuré
-dans le projet VIX — conservé car peu coûteux et parfois utile hors régime GLOBAL.
+""""Spike" features (VIX_SPIKE_SCAN): rolling Hurst exponent, semivariance
+(downside risk), rolling skew, and a bootstrap particle filter over a simple
+stochastic volatility model (AR(1) in log-volatility). Marginal effect
+measured in the VIX project -- kept since it's cheap and sometimes useful
+outside the GLOBAL regime.
 """
 from __future__ import annotations
 
@@ -31,16 +32,16 @@ def _hurst_of_window(x: np.ndarray) -> float:
 
 
 def rolling_hurst(series: pd.Series, window: int = 100) -> pd.Series:
-    """Estimateur approché de l'exposant de Hurst (méthode des différences à lags
-    multiples) sur une fenêtre glissante — H≈0.5 marche aléatoire, H>0.5 persistant,
-    H<0.5 anti-persistant."""
+    """Approximate estimator of the Hurst exponent (multi-lag differences
+    method) over a rolling window -- H≈0.5 random walk, H>0.5 persistent,
+    H<0.5 anti-persistent."""
     log_s = np.log(series.clip(lower=1e-8))
     return log_s.rolling(window).apply(_hurst_of_window, raw=True)
 
 
 def rolling_semivariance(series: pd.Series, window: int = 20) -> pd.Series:
-    """Volatilité réalisée ne comptant que les rendements négatifs (risque baissier),
-    annualisée."""
+    """Realized volatility counting only negative returns (downside risk),
+    annualized."""
     ret = safe_pct_change(series)
     neg = ret.where(ret < 0, 0.0)
     return np.sqrt((neg ** 2).rolling(window).mean()) * np.sqrt(252)
@@ -52,17 +53,18 @@ def rolling_skew(series: pd.Series, window: int = 20) -> pd.Series:
 
 def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 42,
                          fit_end_idx: int | None = None) -> pd.Series:
-    """Filtre particulaire bootstrap sur un modèle de volatilité stochastique
-    log-AR(1) : h_t = mu + phi*(h_{t-1}-mu) + eta_t, r_t | h_t ~ N(0, exp(h_t)).
-    (mu, phi, sigma_eta) calibrés grossièrement par corrélation d'ordre 1 sur
-    log(r_t^2) — ce n'est pas une MLE complète, mais suffisant pour une feature de
-    volatilité filtrée causale (chaque h_t n'utilise que r_1..r_t).
+    """Bootstrap particle filter over a log-AR(1) stochastic volatility model:
+    h_t = mu + phi*(h_{t-1}-mu) + eta_t, r_t | h_t ~ N(0, exp(h_t)).
+    (mu, phi, sigma_eta) roughly calibrated via first-order correlation on
+    log(r_t^2) -- not a full MLE, but sufficient for a causal filtered
+    volatility feature (each h_t uses only r_1..r_t).
 
-    `fit_end_idx`, quand fourni, restreint la calibration de (mu, phi, sigma_eta) à
-    `series.iloc[:fit_end_idx]` (train du fold) — sinon (comme avant ce fix) ces
-    trois statistiques étaient calculées sur toute la série, donc informées par le
-    test de folds ultérieurs même si la récursion particulaire elle-même est
-    causale (cf. vol_models.py, même classe de fuite, même fix)."""
+    `fit_end_idx`, when provided, restricts the calibration of
+    (mu, phi, sigma_eta) to `series.iloc[:fit_end_idx]` (the fold's train
+    set) -- otherwise (as before this fix) these three statistics were
+    computed over the whole series, so informed by later folds' test set
+    even though the particle recursion itself is causal (see vol_models.py,
+    same leak class, same fix)."""
     ret = safe_pct_change(series).fillna(0.0).values
     n = len(ret)
     log_r2 = np.log(ret ** 2 + 1e-8)
@@ -112,8 +114,8 @@ def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 4
 
 
 def build_spike_features_base(series: pd.Series, prefix: str = "px") -> pd.DataFrame:
-    """hurst/semivar/skew — fenêtres glissantes pures, causal par construction,
-    calculé une seule fois pour tout un run (partagé par tous les folds)."""
+    """hurst/semivar/skew -- pure rolling windows, causal by construction,
+    computed once for a whole run (shared across all folds)."""
     return pd.DataFrame({
         f"{prefix}_hurst_100d": rolling_hurst(series, 100),
         f"{prefix}_semivar_20d": rolling_semivariance(series, 20),
@@ -123,8 +125,9 @@ def build_spike_features_base(series: pd.Series, prefix: str = "px") -> pd.DataF
 
 def build_spike_features_parametric(series: pd.Series, prefix: str = "px",
                                      fit_end_idx: int | None = None) -> pd.DataFrame:
-    """particle_filter_vol seul — paramètres (mu/phi/sigma_eta) à recalculer par
-    fold via `fit_end_idx` (cf. docstring de `particle_filter_vol`)."""
+    """particle_filter_vol alone -- parameters (mu/phi/sigma_eta) to be
+    recomputed per fold via `fit_end_idx` (see `particle_filter_vol`
+    docstring)."""
     return pd.DataFrame({
         f"{prefix}_particle_vol": particle_filter_vol(series, fit_end_idx=fit_end_idx),
     }, index=series.index)
@@ -132,9 +135,10 @@ def build_spike_features_parametric(series: pd.Series, prefix: str = "px",
 
 def build_spike_features(series: pd.Series, prefix: str = "px",
                           fit_end_idx: int | None = None) -> pd.DataFrame:
-    """Combine `build_spike_features_base` + `_parametric` — utilisé tel quel pour
-    un calcul ponctuel (tests) ; le moteur walk-forward appelle les deux variantes
-    séparément pour ne recalculer par fold que la partie paramétrique."""
+    """Combines `build_spike_features_base` + `_parametric` -- used as-is for
+    a one-off computation (tests); the walk-forward engine calls both
+    variants separately so only the parametric part is recomputed per
+    fold."""
     return pd.concat([
         build_spike_features_base(series, prefix),
         build_spike_features_parametric(series, prefix, fit_end_idx),

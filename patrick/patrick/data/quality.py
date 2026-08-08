@@ -1,40 +1,40 @@
-"""Phase 6.5 -- portes de qualité de données à l'ingestion : chaque série
-candidate (yfinance ou FRED) passe une batterie de contrôles AVANT d'entrer
-dans l'univers de features. Toute exclusion est motivée explicitement et
-persistée (jamais un `[WARN]` perdu dans les logs, comme l'était le repli
-FRED avant sa correction -- même classe de défaut, cf. rapport de session).
+"""Phase 6.5 -- data quality gates at ingestion: every candidate series
+(yfinance or FRED) goes through a battery of checks BEFORE entering the
+feature universe. Every exclusion is explicitly justified and persisted
+(never a `[WARN]` lost in the logs, as the FRED fallback used to be before
+its fix -- same class of defect, see session report).
 
-Seuils par défaut -- MESURÉS, pas choisis par convention (cf. rapport de
-correction P6.5 pour le détail des simulations) :
+Default thresholds -- MEASURED, not chosen by convention (see the P6.5
+correction report for simulation details):
 
-- `DEFAULT_MAX_FROZEN_RUN = 4` (clôtures identiques consécutives) : simulation
-  de 500 séries x 4000 jours (prix ~100, vol quotidienne 1.5%, arrondi 2
-  décimales -- cotation typique) -- AUCUNE série propre n'atteint un run de 4
-  clôtures identiques (maximum observé : 3). Un run de 4+ n'arrive quasiment
-  jamais par hasard sur une série activement cotée.
-- `DEFAULT_MAX_GAP_BDAYS = 10` (trou de cotation) : les plus longs clusters de
-  jours fériés de marché connus (Noël/Nouvel An avec jours fériés se
-  chevauchant selon les juridictions) atteignent ~5 jours ouvrés consécutifs
-  -- 10 jours ouvrés (2 semaines) donne une marge de sécurité x2 par rapport à
-  ce maximum plausible, tout en détectant une vraie suspension de cotation.
-  Réutilisé tel quel pour `check_stale_tail` (fin de série précoce = un trou
-  de cotation qui n'a jamais été comblé).
-- `DEFAULT_MAX_ROBUST_Z = 40.0` (rendement aberrant) : simulation de 500
-  séries x 4000 jours de rendements Student-t (df=5, queues épaisses
-  réalistes pour un actif liquide) -- z-score robuste (MAD globale x 1.4826,
-  résistant aux valeurs aberrantes qui biaiseraient un écart-type classique)
-  maximal observé sur l'ensemble des séries PROPRES : 35.5 (0/500 dépassent
-  40). Un split non ajusté (2:1, cas le plus doux testé) produit un z ≈ 40 ;
-  des cas plus francs (10:1, erreur de décimale) donnent 60-700+ -- séparation
-  nette entre bruit de marché propre et corruption de données.
-- `DEFAULT_MIN_COVERAGE = 0.85` : réutilise `UniverseConfig.yf_coverage`
-  (déjà en place, Phase 0), pas un nouveau seuil inventé.
-- `DEFAULT_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30` : au-delà, la perte porte sur
-  des séries ENTIÈRES (pas une couverture partielle déjà tolérée par
-  `yf_coverage`) -- un tiers de l'univers demandé disparu signale un problème
-  systémique (mauvais tickers/start_date/panne fournisseur), pas quelques
-  séries isolément défaillantes ; en dessous, la sélection de features
-  (`pool_prefilter`, déjà agressive) reste opérable sur ce qui reste.
+- `DEFAULT_MAX_FROZEN_RUN = 4` (consecutive identical closes): simulation of
+  500 series x 4000 days (price ~100, 1.5% daily vol, rounded to 2 decimals
+  -- typical quoting) -- NO clean series reaches a run of 4 identical
+  closes (max observed: 3). A run of 4+ almost never happens by chance on an
+  actively quoted series.
+- `DEFAULT_MAX_GAP_BDAYS = 10` (quoting gap): the longest known clusters of
+  market-holiday days (Christmas/New Year with overlapping holidays
+  depending on jurisdiction) reach ~5 consecutive business days -- 10
+  business days (2 weeks) gives a 2x safety margin over this plausible
+  maximum, while still catching a real trading suspension. Reused as-is for
+  `check_stale_tail` (early series end = a quoting gap that was never
+  filled).
+- `DEFAULT_MAX_ROBUST_Z = 40.0` (aberrant return): simulation of 500 series
+  x 4000 days of Student-t returns (df=5, fat tails realistic for a liquid
+  asset) -- max robust z-score (global MAD x 1.4826, resistant to outliers
+  that would bias a classical standard deviation) observed across all CLEAN
+  series: 35.5 (0/500 exceed 40). An unadjusted split (2:1, mildest case
+  tested) produces z ≈ 40; more blatant cases (10:1, decimal-point error)
+  give 60-700+ -- a clean separation between clean market noise and data
+  corruption.
+- `DEFAULT_MIN_COVERAGE = 0.85`: reuses `UniverseConfig.yf_coverage`
+  (already in place, Phase 0), not a newly invented threshold.
+- `DEFAULT_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30`: beyond this, the loss is on
+  ENTIRE series (not the partial coverage already tolerated by
+  `yf_coverage`) -- a third of the requested universe gone signals a
+  systemic problem (bad tickers/start_date/provider outage), not a few
+  individually failing series; below it, feature selection (`pool_prefilter`,
+  already aggressive) remains workable on what's left.
 """
 from __future__ import annotations
 
@@ -61,10 +61,10 @@ class QualityIssue:
 
 
 def robust_z_scores(returns: pd.Series) -> pd.Series:
-    """MAD (médiane des écarts absolus à la médiane) redimensionnée par 1.4826
-    pour être un estimateur cohérent de l'écart-type sous normalité --
-    résistant aux queues épaisses (une valeur aberrante ne gonfle pas le
-    dénominateur, contrairement à un écart-type classique)."""
+    """MAD (median absolute deviation from the median) rescaled by 1.4826 to be
+    a consistent estimator of the standard deviation under normality --
+    resistant to fat tails (a single outlier doesn't inflate the denominator,
+    unlike a classical standard deviation)."""
     med = returns.median()
     mad = (returns - med).abs().median()
     robust_sigma = mad * 1.4826
@@ -74,8 +74,8 @@ def robust_z_scores(returns: pd.Series) -> pd.Series:
 
 
 def check_frozen_prices(s: pd.Series, max_run: int = DEFAULT_MAX_FROZEN_RUN) -> QualityIssue | None:
-    """`max_run` : nombre de clôtures consécutives identiques à partir duquel
-    la série est considérée figée (cf. justification module)."""
+    """`max_run`: number of consecutive identical closes above which the
+    series is considered frozen (see module justification)."""
     vals = s.dropna().values
     if len(vals) < max_run:
         return None
@@ -86,29 +86,29 @@ def check_frozen_prices(s: pd.Series, max_run: int = DEFAULT_MAX_FROZEN_RUN) -> 
         run = run + 1 if is_same else 1
         best = max(best, run)
     if best >= max_run:
-        return QualityIssue(s.name, "prix_figes", f"{best} clôtures consécutives identiques (seuil {max_run})")
+        return QualityIssue(s.name, "prix_figes", f"{best} consecutive identical closes (threshold {max_run})")
     return None
 
 
 def check_quote_gaps(s: pd.Series, max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS) -> QualityIssue | None:
-    """Plus long trou (en jours ouvrés) entre deux observations non-NaN
-    consécutives de `s`, sur l'index business-day complet fourni par l'appelant
-    (`s.index` doit déjà être le calendrier jours ouvrés attendu)."""
+    """Longest gap (in business days) between two consecutive non-NaN
+    observations of `s`, on the full business-day index provided by the
+    caller (`s.index` must already be the expected business-day calendar)."""
     valid_dates = s.dropna().index
     if len(valid_dates) < 2:
         return None
     gaps = valid_dates.to_series().diff().dt.days.dropna()
-    # Grille jours ouvrés (pas de samedi/dimanche) : un trou "normal" d'un jour
-    # ouvré vaut ~1-3 jours calendaires selon position dans la semaine -- on
-    # convertit en jours ouvrés approximatifs via le ratio 7/5 (5 jours ouvrés
-    # par semaine calendaire de 7 jours), cohérent avec `pd.bdate_range`.
+    # Business-day grid (no Saturday/Sunday): a "normal" one-business-day gap
+    # is worth ~1-3 calendar days depending on position in the week -- we
+    # convert to approximate business days via the 7/5 ratio (5 business days
+    # per 7-day calendar week), consistent with `pd.bdate_range`.
     gaps_bdays = gaps * 5 / 7
     max_gap = gaps_bdays.max() if len(gaps_bdays) else 0.0
     if max_gap > max_gap_bdays:
         worst_idx = gaps_bdays.idxmax()
         return QualityIssue(s.name, "trou_de_cotation",
-                             f"trou de {max_gap:.0f} jours ouvrés estimés se terminant {worst_idx.date()} "
-                             f"(seuil {max_gap_bdays})")
+                             f"gap of ~{max_gap:.0f} business days ending {worst_idx.date()} "
+                             f"(threshold {max_gap_bdays})")
     return None
 
 
@@ -122,8 +122,8 @@ def check_aberrant_returns(s: pd.Series, max_robust_z: float = DEFAULT_MAX_ROBUS
     if max_abs_z > max_robust_z:
         worst_idx = z.abs().idxmax()
         return QualityIssue(s.name, "rendement_aberrant",
-                             f"rendement de {ret.loc[worst_idx]:.1%} le {worst_idx.date()} "
-                             f"(z robuste={max_abs_z:.1f}, seuil {max_robust_z})")
+                             f"return of {ret.loc[worst_idx]:.1%} on {worst_idx.date()} "
+                             f"(robust z={max_abs_z:.1f}, threshold {max_robust_z})")
     return None
 
 
@@ -137,17 +137,17 @@ def check_stale_tail(s: pd.Series, requested_end: pd.Timestamp,
     gap_bdays = gap_days * 5 / 7
     if gap_bdays > max_gap_bdays:
         return QualityIssue(s.name, "fin_de_serie_precoce",
-                             f"dernière observation {last_date.date()}, "
-                             f"~{gap_bdays:.0f} jours ouvrés avant la fin demandée "
-                             f"({requested_end.date()}, seuil {max_gap_bdays}) -- probablement délistée")
+                             f"last observation {last_date.date()}, "
+                             f"~{gap_bdays:.0f} business days before the requested end "
+                             f"({requested_end.date()}, threshold {max_gap_bdays}) -- likely delisted")
     return None
 
 
 def check_fred_missing(name: str, s: pd.Series | None) -> QualityIssue | None:
     if s is None or s.dropna().empty:
         return QualityIssue(name, "fred_absent_ou_discontinue",
-                             "aucune observation renvoyée (série discontinuée, identifiant invalide, "
-                             "ou échec de récupération)")
+                             "no observation returned (discontinued series, invalid identifier, "
+                             "or fetch failure)")
     return None
 
 
@@ -158,7 +158,7 @@ def check_coverage(s: pd.Series, full_index: pd.DatetimeIndex,
     coverage = s.reindex(full_index).notna().mean()
     if coverage < min_coverage:
         return QualityIssue(s.name, "couverture_insuffisante",
-                             f"{coverage:.1%} de jours ouvrés renseignés (seuil {min_coverage:.0%})")
+                             f"{coverage:.1%} of business days populated (threshold {min_coverage:.0%})")
     return None
 
 
@@ -167,10 +167,10 @@ def evaluate_yfinance_series(name: str, s: pd.Series, full_index: pd.DatetimeInd
                               max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
                               max_robust_z: float = DEFAULT_MAX_ROBUST_Z,
                               min_coverage: float = DEFAULT_MIN_COVERAGE) -> QualityIssue | None:
-    """Renvoie le PREMIER problème détecté (une série exclue l'est pour un
-    motif, pas cumulativement) -- ordre : couverture, trou de cotation, fin
-    précoce, prix figés, rendement aberrant (du plus "structurel" au plus
-    fin)."""
+    """Returns the FIRST detected issue (an excluded series is excluded for
+    one reason, not cumulatively) -- order: coverage, quoting gap, early end,
+    frozen prices, aberrant return (from most "structural" to most fine-
+    grained)."""
     s = s.rename(name) if s.name != name else s
     for check, kwargs in (
         (check_coverage, {"full_index": full_index, "min_coverage": min_coverage}),

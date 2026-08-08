@@ -1,5 +1,5 @@
-"""Orchestration de l'ingestion : cible + univers de features (yfinance + FRED),
-alignés sur un même index, mis en cache dans le data lake local.
+"""Ingestion orchestration: target + feature universe (yfinance + FRED),
+aligned on a common index, cached in the local data lake.
 """
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ from patrick.data.store import DataStore
 
 
 def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: ObjectiveConfig) -> pd.DataFrame:
-    """Décale d'une barre les colonnes dont la classe d'actif clôture après celle
-    de la cible (Phase 0.4 — cf. `data/session_calendar.py`) : une jointure "même
-    date calendaire" traite implicitement comme simultanées des clôtures de
-    marché qui ne le sont pas (ex. clôture US utilisée "du jour" pour une cible
-    qui a déjà clôturé plus tôt dans la même journée UTC).
+    """Shifts by one bar the columns whose asset class closes after the
+    target's (Phase 0.4 — see `data/session_calendar.py`): a "same calendar
+    date" join implicitly treats as simultaneous market closes that aren't
+    (e.g. a US close used "for the day" for a target that already closed
+    earlier the same UTC day).
 
-    `objective.disable_session_lag` (rapport de correction, C7) : bascule
-    ajoutée uniquement pour `patrick audit degradation`, jamais utilisée en
-    production (défaut False -- correction toujours appliquée)."""
+    `objective.disable_session_lag` (correction report, C7): toggle added
+    only for `patrick audit degradation`, never used in production (default
+    False -- fix always applied)."""
     if objective.disable_session_lag:
         return yf_df
     reverse = {yfinance_source.clean_symbol(t): t for t in tickers}
@@ -39,23 +39,23 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
             out[col] = out[col].shift(1)
             lagged.append(original_symbol)
     if lagged:
-        print(f"  [ALIGNEMENT] {len(lagged)} tickers décalés d'une barre "
-              f"(clôture postérieure à celle de la cible) : {', '.join(lagged[:8])}"
+        print(f"  [ALIGNMENT] {len(lagged)} tickers shifted by one bar "
+              f"(close later than the target's): {', '.join(lagged[:8])}"
               f"{'...' if len(lagged) > 8 else ''}")
     return out
 
 
 def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
                               quality_issues: list | None = None) -> None:
-    """Métadonnées de contexte (Phase 1.6) transportées via `DataFrame.attrs` —
-    lues par `pipeline/engine.py` pour peupler la table `snapshot` sans changer
-    la signature de `ingest()` (qui reste "retourne un DataFrame", ce que
-    monkeypatchent déjà tous les tests existants).
+    """Context metadata (Phase 1.6) carried via `DataFrame.attrs` — read by
+    `pipeline/engine.py` to populate the `snapshot` table without changing
+    `ingest()`'s signature (which stays "returns a DataFrame", which every
+    existing test already monkeypatches).
 
-    `quality_issues` (Phase 6.5, P6.5) : `None` sur le chemin cache-hit (les
-    exclusions ont eu lieu lors de la récupération d'origine, non rejouées ici
-    -- même limite assumée que `n_tickers`/`fred_source`, recalculés à chaque
-    appel plutôt que persistés avec les données elles-mêmes)."""
+    `quality_issues` (Phase 6.5, P6.5): `None` on the cache-hit path (the
+    exclusions happened during the original fetch, not replayed here --
+    same accepted limitation as `n_tickers`/`fred_source`, recomputed on
+    every call rather than persisted with the data itself)."""
     df.attrs["n_tickers"] = len(universe.yf_tickers)
     df.attrs["n_fred_series"] = len(universe.fred_series)
     df.attrs["fred_source"] = "api" if os.environ.get(FRED_API_KEY_ENV) else "scrape"
@@ -64,18 +64,18 @@ def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
 
 def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp,
                                dq: DataQualityConfig, issues: list, *, prefilled: bool) -> list[str]:
-    """Contrôles P6.5 AU-DELÀ de la couverture (déjà gérée par `download_universe`/
-    `download_fred_universe` elles-mêmes, cf. leur paramètre `issues`).
+    """P6.5 checks BEYOND coverage (already handled by `download_universe`/
+    `download_fred_universe` themselves, see their `issues` parameter).
 
-    `prefilled` : `download_universe` fait déjà un `.ffill()` interne avant de
-    renvoyer les colonnes retenues (couverture) -- les vrais trous de cotation
-    y sont donc déjà comblés (NaN disparus) au moment où ce module les voit ;
-    `check_quote_gaps`/`check_stale_tail` y seraient des no-op (plus de NaN à
-    détecter), MAIS une vraie interruption prolongée y apparaît comme une
-    clôture figée (valeur ffillée répétée), déjà couverte par
-    `check_frozen_prices` -- convergence assumée, pas un trou dans la garantie.
-    Les séries FRED (`prefilled=False`) ne sont pas pré-remplies ici : les
-    quatre contrôles s'appliquent tels quels."""
+    `prefilled`: `download_universe` already does an internal `.ffill()`
+    before returning the retained columns (coverage) -- real quoting gaps
+    are therefore already filled (NaNs gone) by the time this module sees
+    them; `check_quote_gaps`/`check_stale_tail` would be no-ops there (no
+    more NaN to detect), BUT a real prolonged interruption shows up there as
+    a frozen close (repeated ffilled value), already covered by
+    `check_frozen_prices` -- an accepted convergence, not a gap in the
+    guarantee. FRED series (`prefilled=False`) are not pre-filled here: all
+    four checks apply as-is."""
     to_drop = []
     for col in df_cols.columns:
         s = df_cols[col]
@@ -102,14 +102,14 @@ def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp
 def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
            store: DataStore | None = None, force: bool = False,
            data_quality: DataQualityConfig | None = None) -> pd.DataFrame:
-    """`cache_key` ne dépend que de `target_symbol`, pas de `universe.
-    vintage_realtime_date`/`objective.disable_session_lag` (rapport de
-    correction, C7) : un cache existant peut donc masquer un changement de ces
-    deux bascules. Appelants qui les font varier pour un même `target_symbol`
-    (ex. `patrick audit degradation`) DOIVENT passer `force=True`.
+    """`cache_key` only depends on `target_symbol`, not on `universe.
+    vintage_realtime_date`/`objective.disable_session_lag` (correction
+    report, C7): an existing cache can therefore mask a change to these two
+    toggles. Callers that vary them for the same `target_symbol` (e.g.
+    `patrick audit degradation`) MUST pass `force=True`.
 
-    `data_quality` (Phase 6.5, P6.5) : `None` -> `DataQualityConfig()` (portes
-    actives par défaut, jamais un défaut silencieusement désactivé)."""
+    `data_quality` (Phase 6.5, P6.5): `None` -> `DataQualityConfig()` (gates
+    active by default, never a silently disabled default)."""
     dq = data_quality if data_quality is not None else DataQualityConfig()
     store = store or DataStore()
     cache_key = f"raw_{objective.target_symbol}"
@@ -118,12 +118,12 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if not force and store.exists(cache_key):
         df = store.load(cache_key)
         _attach_snapshot_context(df, universe)
-        print(f"[CACHE] {cache_key}: {df.shape} déjà en cache (force=True pour rafraîchir).")
+        print(f"[CACHE] {cache_key}: {df.shape} already cached (force=True to refresh).")
         return df
     if not force and cached_local is not None:
         df = cached_local.copy()
         _attach_snapshot_context(df, universe)
-        print(f"[CACHE_LOCAL] {cache_key}: {df.shape} réutilisé depuis le cache local (manquants seulement).")
+        print(f"[CACHE_LOCAL] {cache_key}: {df.shape} reused from local cache (missing rows only).")
         return df
 
     t0 = time.time()
@@ -133,7 +133,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         target = fred_source.download_series(objective.target_symbol, objective.target_symbol,
                                                universe.start_date)
         if target is None:
-            raise RuntimeError(f"Impossible de récupérer la cible FRED '{objective.target_symbol}'.")
+            raise RuntimeError(f"Could not fetch FRED target '{objective.target_symbol}'.")
 
     df = target.to_frame()
     issues: list = []
@@ -146,8 +146,8 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
             issues=issues if dq.enabled else None)
         yf_df = _apply_session_lag(yf_df, universe.yf_tickers, objective)
         if dq.enabled and len(yf_df.columns):
-            # `download_universe` a déjà ffillé en interne -- `check_quote_gaps`/
-            # `check_stale_tail` y seraient des no-op, cf. docstring `prefilled`.
+            # `download_universe` already ffilled internally -- `check_quote_gaps`/
+            # `check_stale_tail` would be no-ops there, see `prefilled` docstring.
             to_drop = _run_extra_quality_checks(yf_df, requested_end, dq, issues, prefilled=True)
             yf_df = yf_df.drop(columns=to_drop)
         df = df.join(yf_df, how="outer")
@@ -157,7 +157,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
             universe.fred_series, universe.start_date, realtime_date=universe.vintage_realtime_date,
             issues=issues if dq.enabled else None)
         if dq.enabled and len(fred_df.columns):
-            # Séries FRED non pré-remplies à ce stade : les 4 contrôles s'appliquent.
+            # FRED series not pre-filled at this stage: all 4 checks apply.
             to_drop = _run_extra_quality_checks(fred_df, requested_end, dq, issues, prefilled=False)
             fred_df = fred_df.drop(columns=to_drop)
         if len(fred_df):
@@ -167,21 +167,21 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if dq.enabled and n_requested > 0:
         exclusion_frac = len(issues) / n_requested
         if issues:
-            print(f"  [QUALITÉ] {len(issues)}/{n_requested} séries exclues de l'univers "
-                  f"({exclusion_frac:.0%}) :")
+            print(f"  [QUALITY] {len(issues)}/{n_requested} series excluded from the universe "
+                  f"({exclusion_frac:.0%}):")
             for i in issues:
-                print(f"    - {i.series} : {i.reason} -- {i.detail}")
+                print(f"    - {i.series}: {i.reason} -- {i.detail}")
 
-    # Règle métier locale de Patrick : on n'exige plus un seuil de refus sur le
-    # pourcentage d'univers exclu. La seule condition vraie pour démarrer est d'avoir
-    # des données historiques assez anciennes (>= 20 ans), sans bloquer un run sur une
-    # liste de tickers légèrement dégradée mais utilisable.
+    # Patrick's local business rule: no longer requiring a rejection threshold on
+    # the percentage of excluded universe. The only real condition to start is
+    # having sufficiently old historical data (>= 20 years), without blocking a
+    # run over a slightly degraded but still usable ticker list.
     earliest = df.index.min() if len(df) else pd.Timestamp.today()
     min_history = pd.Timestamp.today() - pd.Timedelta(days=20 * 365.25)
     if earliest > min_history:
         raise RuntimeError(
-            "[QUALITÉ] Historique insuffisant : les données doivent remonter sur au moins 20 ans "
-            f"(première observation {earliest.date()} < {min_history.date()})."
+            "[QUALITY] Insufficient history: data must go back at least 20 years "
+            f"(earliest observation {earliest.date()} < {min_history.date()})."
         )
 
     df = df.sort_index().ffill().dropna(subset=[target.name])

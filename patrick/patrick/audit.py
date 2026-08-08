@@ -1,24 +1,24 @@
-"""Rapport de correction, C7 -- `patrick audit degradation` : mesure l'impact
-réel des corrections de fuite de la phase 0 (purge/embargo, alignement as-of
-par classe d'actif, vintages FRED/ALFRED) en comparant 4 configurations
-empilées sur le même univers de cibles et le même seed. Exécute le pipeline
-RÉEL (`ingest()`/`run_pipeline()`, pas de monkeypatch) -- nécessite donc un
-accès réseau réel (yfinance/FRED), jamais disponible dans ce sandbox. Validé
-ici via `tests/test_audit_degradation.py` (sources monkeypatchées au niveau
-`yfinance.download`/`requests.get`, pas `ingest()` lui-même, pour que le vrai
-code de `ingest()`/`_attach_snapshot_context` tourne quand même).
+"""Correction report, C7 -- `patrick audit degradation`: measures the real
+impact of the phase-0 leakage fixes (purge/embargo, per-asset-class as-of
+alignment, FRED/ALFRED vintages) by comparing 4 stacked configurations on
+the same target universe and the same seed. Runs the REAL pipeline
+(`ingest()`/`run_pipeline()`, no monkeypatching) -- therefore requires real
+network access (yfinance/FRED), never available in this sandbox. Validated
+here via `tests/test_audit_degradation.py` (sources monkeypatched at the
+`yfinance.download`/`requests.get` level, not `ingest()` itself, so the real
+`ingest()`/`_attach_snapshot_context` code still runs).
 
-Les 4 configurations sont CUMULATIVES (chacune ajoute une correction à la
-précédente), pas indépendantes -- pour isoler la contribution marginale de
-chaque correction plutôt que mesurer 4 combinaisons non ordonnées :
-  - baseline_avant : aucune correction phase 0 (purge/embargo désactivés,
-    alignement as-of désactivé, pas de vintage).
+The 4 configurations are CUMULATIVE (each adds one fix on top of the
+previous one), not independent -- this isolates the marginal contribution of
+each fix rather than measuring 4 unordered combinations:
+  - baseline_avant : no phase-0 fix (purge/embargo disabled,
+    as-of alignment disabled, no vintage).
   - +purge         : + purge/embargo (Phase 0.1).
-  - +vintages      : + vintages FRED/ALFRED (Phase 0.5) -- nécessite
-    FRED_API_KEY (repli scrape = toujours la révision actuelle, un vintage y
-    est impossible, cf. `data/sources/fred_source.py`).
-  - complet        : + alignement as-of par classe d'actif (Phase 0.4) --
-    configuration de production actuelle.
+  - +vintages      : + FRED/ALFRED vintages (Phase 0.5) -- requires
+    FRED_API_KEY (scrape fallback = always the current revision, a vintage
+    is impossible there, see `data/sources/fred_source.py`).
+  - complet        : + per-asset-class as-of alignment (Phase 0.4) --
+    current production configuration.
 """
 from __future__ import annotations
 
@@ -46,9 +46,9 @@ CONFIGURATIONS: tuple[str, ...] = ("baseline_avant", "+purge", "+vintages", "com
 
 METRIC_COLUMNS: tuple[str, ...] = ("BalAcc_4cls", "MCC_4cls", "F1_dir")
 
-# Un actif par classe (Phase 0 concerne toute la surface yfinance/FRED, pas un
-# seul marché) -- tickers/séries FRED réalistes, cohérents avec
-# `configs/examples/*.yaml` et `webapp/forms.py::TARGET_GROUPS`.
+# One asset per class (Phase 0 concerns the whole yfinance/FRED surface, not a
+# single market) -- realistic tickers/FRED series, consistent with
+# `configs/examples/*.yaml` and `webapp/forms.py::TARGET_GROUPS`.
 DEFAULT_TARGETS: list[dict] = [
     {"label": "indice_us", "target_symbol": "^GSPC", "target_source": "yfinance",
      "yf_tickers": ["^VIX", "TLT"], "fred_series": {"NFCI": "NFCI", "T10Y2Y": "T10Y2Y"},
@@ -69,17 +69,17 @@ DEFAULT_TARGETS: list[dict] = [
 
 
 def _vintage_date_for_audit() -> str:
-    """Délibérément distincte d'aujourd'hui : omettre `realtime_date` (ou lui
-    donner la date du jour) fait renvoyer par l'API FRED `realtime_start=
-    realtime_end=aujourd'hui` PAR DÉFAUT -- indiscernable du cas sans vintage.
-    Un an en arrière rend la différence visible (URL loggée, valeurs
-    récupérées) et vérifiable par l'utilisateur en conditions réelles."""
+    """Deliberately distinct from today: omitting `realtime_date` (or setting
+    it to today's date) makes the FRED API return `realtime_start=
+    realtime_end=today` BY DEFAULT -- indistinguishable from the no-vintage
+    case. One year back makes the difference visible (logged URL, retrieved
+    values) and verifiable by the user under real conditions."""
     return (date.today() - timedelta(days=365)).isoformat()
 
 
 def _config_for(target: dict, configuration: str, seed: int, output_dir: str) -> RunConfig:
     if configuration not in CONFIGURATIONS:
-        raise ValueError(f"configuration inconnue : {configuration!r} (attendu : {CONFIGURATIONS})")
+        raise ValueError(f"unknown configuration: {configuration!r} (expected: {CONFIGURATIONS})")
     purge_on = configuration in ("+purge", "+vintages", "complet")
     vintages_on = configuration in ("+vintages", "complet")
     session_lag_on = configuration == "complet"
@@ -105,9 +105,9 @@ def _config_for(target: dict, configuration: str, seed: int, output_dir: str) ->
         selection=SelectionConfig(method="shap", n_features_grid=[8]),
         sampler=SamplerConfig(candidates=["SMOTE"]),
         models=ModelsConfig(algos=["RandomForest"]),
-        # Tuning désactivé : l'audit compare l'effet des corrections de fuite,
-        # pas la qualité d'un budget Optuna -- 4 configs x 5 cibles avec
-        # tuning activé serait inutilement long pour la question posée ici.
+        # Tuning disabled: the audit compares the effect of the leakage fixes,
+        # not the quality of an Optuna budget -- 4 configs x 5 targets with
+        # tuning enabled would be needlessly long for the question asked here.
         tuning=TuningConfig(enabled=False),
         output=OutputConfig(dir=output_dir, seed=seed),
     )
@@ -122,10 +122,10 @@ def _masked_fred_url(series_id: str, start: str, api_key: str, realtime_date: st
 
 
 def _last_snapshot_fred_source(db_path: str | None) -> str | None:
-    """Le `fred_source` de la ligne `snapshot` la plus récente -- fiable ici
-    car chaque appel `run_pipeline(force_ingest=True)` insère une ligne
-    fraîche (snapshot_id dérivé du contenu, cf. `data/store.py::save`), jamais
-    de collision entre deux configurations qui diffèrent réellement."""
+    """The `fred_source` of the most recent `snapshot` row -- reliable here
+    because every `run_pipeline(force_ingest=True)` call inserts a fresh row
+    (snapshot_id derived from content, see `data/store.py::save`), never a
+    collision between two configurations that genuinely differ."""
     conn = trackdb.connect(db_path)
     try:
         row = conn.execute(
@@ -139,10 +139,10 @@ def _extract_row(target_label: str, configuration: str, result: dict, db_path: s
     final_best = result.get("final_best") or {}
     fred_src = _last_snapshot_fred_source(db_path)
     if fred_src is None:
-        print(f"  [WARN AUDIT] snapshot.fred_source est NULL pour {target_label}/{configuration} -- "
-              "inattendu sur un run réel (rapport de correction, C7 : ce champ n'est None que si "
-              "`ingest()` a été monkeypatché sans reproduire `_attach_snapshot_context`, jamais sur "
-              "ce chemin). Vérifier qu'aucun monkeypatch de `ingest()` ne subsiste.")
+        print(f"  [WARN AUDIT] snapshot.fred_source is NULL for {target_label}/{configuration} -- "
+              "unexpected on a real run (correction report, C7: this field is only None if "
+              "`ingest()` was monkeypatched without reproducing `_attach_snapshot_context`, never on "
+              "this path). Check that no monkeypatch of `ingest()` remains.")
     row = {"target": target_label, "configuration": configuration, "fred_source": fred_src,
            "n_evaluations": len(result.get("leaderboard")) if result.get("leaderboard") is not None else 0}
     for col in METRIC_COLUMNS:
@@ -176,11 +176,11 @@ def run_degradation_audit(targets: list[dict] | None = None, seed: int = 42,
     api_key = os.environ.get(FRED_API_KEY_ENV)
     if not api_key:
         raise RuntimeError(
-            "FRED_API_KEY non défini : la configuration \"+vintages\" est dénuée de sens sans lui "
-            "-- le repli scrape (CSV public fredgraph.csv) ne peut renvoyer que la révision "
-            "ACTUELLE de chaque série, jamais un vintage ALFRED point-in-time (cf. "
-            "patrick/data/sources/fred_source.py). Définir la variable d'environnement avant de "
-            "relancer `patrick audit degradation` (clé gratuite : "
+            "FRED_API_KEY not set: the \"+vintages\" configuration is meaningless without it "
+            "-- the scrape fallback (public fredgraph.csv) can only return the CURRENT revision "
+            "of each series, never a point-in-time ALFRED vintage (see "
+            "patrick/data/sources/fred_source.py). Set the environment variable before "
+            "re-running `patrick audit degradation` (free key: "
             "https://fred.stlouisfed.org/docs/api/api_key.html)."
         )
 
@@ -194,14 +194,14 @@ def run_degradation_audit(targets: list[dict] | None = None, seed: int = 42,
             cfg = _config_for(target, configuration, seed, output_dir)
             if not url_logged and cfg.universe.fred_series:
                 series_id = next(iter(cfg.universe.fred_series.values()))
-                print(f"[AUDIT] URL FRED (1re série de la 1re cible, clé masquée) : "
+                print(f"[AUDIT] FRED URL (1st series of the 1st target, key masked): "
                       f"{_masked_fred_url(series_id, cfg.universe.start_date, api_key, cfg.universe.vintage_realtime_date)}")
                 url_logged = True
             print(f"[AUDIT] {target['label']} / {configuration} ...")
-            # force_ingest=True : la clé de cache de `ingest()` ne dépend pas de
-            # `vintage_realtime_date`/`disable_session_lag` (cf. docstring
-            # `data/ingest.py::ingest`) -- sans ça, la 2e-4e configuration d'une
-            # même cible réutiliserait silencieusement les données de la 1re.
+            # force_ingest=True: `ingest()`'s cache key does not depend on
+            # `vintage_realtime_date`/`disable_session_lag` (see docstring of
+            # `data/ingest.py::ingest`) -- without this, the 2nd-4th configuration
+            # of the same target would silently reuse the 1st one's data.
             result = run_pipeline(cfg, store=store, force_ingest=True, db_path=db_path)
             rows.append(_extract_row(target["label"], configuration, result, db_path))
 

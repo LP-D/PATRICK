@@ -1,25 +1,26 @@
-"""Features de volatilité avancées : EGARCH, Kalman filtré, HMM filtré (algorithme
-forward causal, pas Viterbi/forward-backward qui utiliseraient le futur), proxy
-Heston (spread/theta) et proxy VRP tronqué.
+"""Advanced volatility features: EGARCH, filtered Kalman, filtered HMM (causal
+forward algorithm, not Viterbi/forward-backward which would use the future),
+Heston proxy (spread/theta) and truncated VRP proxy.
 
-Ces familles étaient calibrées sur des données d'options dans certaines variantes
-antérieures du projet ; ce module se limite à yfinance/FRED (décision actée pour ce
-cadre), donc Heston et VRP sont ici des **proxys construits sur la volatilité
-réalisée**, pas des calibrations sur volatilité implicite d'options — documenté
-explicitement plutôt que présenté comme équivalent à une calibration d'options.
+These families used to be calibrated on options data in some earlier variants
+of the project; this module is limited to yfinance/FRED (a decision made for
+this framework), so Heston and VRP are here **proxies built on realized
+volatility**, not calibrations on options implied volatility — explicitly
+documented rather than presented as equivalent to an options calibration.
 
-`fit_end_idx` (fuite corrigée, cf. test 0.2 "corruption du futur") : EGARCH/Kalman/
-HMM/AR/MA/ARMA/ARIMA ne sont pas de simples fenêtres glissantes — ils estiment des
-PARAMÈTRES globaux (omega/alpha/beta EGARCH, matrices de transition HMM, coefficients
-ARIMA...) avant de produire une sortie récursive causale point par point. Estimer ces
-paramètres sur `series` en entier (comme avant ce fix) fait que même les valeurs de
-TRAIN d'un fold sont informées par du TEST d'un fold ultérieur, puisque le pool de
-features était construit une seule fois pour tout l'historique. `fit_end_idx`, quand
-fourni, restreint l'estimation des paramètres à `series.iloc[:fit_end_idx]` (train du
-fold) ; les paramètres sont ensuite figés et appliqués à la récursion causale sur
-`series` en entier (train + test), sans ré-estimation — walk-forward correct. Sans
-`fit_end_idx` (None), comportement inchangé (fit sur toute la série) : utilisé pour le
-modèle de production final (`tracking/export.py`), qui n'a plus de test à protéger.
+`fit_end_idx` (leak fixed, see test 0.2 "future corruption"): EGARCH/Kalman/
+HMM/AR/MA/ARMA/ARIMA are not simple rolling windows — they estimate global
+PARAMETERS (EGARCH omega/alpha/beta, HMM transition matrices, ARIMA
+coefficients...) before producing a causal, point-by-point recursive output.
+Estimating these parameters on the whole `series` (as before this fix) means
+that even a fold's TRAIN values are informed by a later fold's TEST, since
+the feature pool used to be built once for the entire history. `fit_end_idx`,
+when provided, restricts parameter estimation to `series.iloc[:fit_end_idx]`
+(the fold's train); the parameters are then frozen and applied to the causal
+recursion over the whole `series` (train + test), with no re-estimation —
+correct walk-forward. Without `fit_end_idx` (None), unchanged behavior (fit
+on the whole series): used for the final production model
+(`tracking/export.py`), which no longer has a test set to protect.
 """
 from __future__ import annotations
 
@@ -38,32 +39,33 @@ def _fit_cutoff_date(series: pd.Series, fit_end_idx: int | None):
 def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1,
                             fit_end_idx: int | None = None,
                             test_end_idx: int | None = None) -> pd.Series:
-    """Volatilité conditionnelle EGARCH — récursive sur les résidus passés
-    uniquement, mais dont les paramètres (omega/alpha/beta) sont estimés sur
-    `series.iloc[:fit_end_idx]` seulement (walk-forward), puis figés et appliqués
-    à la série complète via `.fix()` (pas de ré-estimation avec le test).
+    """EGARCH conditional volatility — recursive over past residuals only, but
+    whose parameters (omega/alpha/beta) are estimated on
+    `series.iloc[:fit_end_idx]` only (walk-forward), then frozen and applied
+    to the full series via `.fix()` (no re-estimation using the test set).
 
-    `.fix()` seul ne suffit pas : même à paramètres figés, `arch` recalcule en
-    interne, à partir de la série passée à `arch_model()`, le backcast (valeur
-    d'initialisation de la récursion) ET les bornes numériques de variance
-    (`variance_bounds`, basées sur `np.var`/`np.max` de toute la série) — deux
-    canaux de fuite indépendants de l'estimation des paramètres, détectés par le
-    test de corruption du futur en les rendant volontairement énormes. Plutôt que
-    de re-patcher chaque détail interne d'`arch` (fragile, dépend de versions non
-    documentées), la portion TRAIN est prise directement du fit train-only (`res`,
-    qui n'a par construction jamais vu le test) ; seule la portion TEST utilise la
-    série complète via `.fix()`, où ces artefacts numériques résiduels n'ont pas
-    d'impact sur la correction du train.
+    `.fix()` alone is not enough: even with frozen parameters, `arch`
+    internally recomputes, from the series passed to `arch_model()`, the
+    backcast (recursion initialization value) AND the numeric variance bounds
+    (`variance_bounds`, based on `np.var`/`np.max` of the whole series) — two
+    leak channels independent of parameter estimation, detected by the future-
+    corruption test by making them deliberately huge. Rather than re-patching
+    every internal detail of `arch` (fragile, depends on undocumented
+    versions), the TRAIN portion is taken directly from the train-only fit
+    (`res`, which by construction has never seen the test set); only the TEST
+    portion uses the full series via `.fix()`, where these residual numeric
+    artifacts have no impact on the train's correction.
 
-    `test_end_idx` (rapport de correction, D2 -> N1) : le backcast est confirmé
-    non rétrospectif (calculé sur les seules premières observations), mais
-    `variance_bounds` reste un canal de fuite réel bien que mesuré inerte sur
-    données réalistes (D2 : écart 0.0 vs référence causale, 0 observation
-    clippée, 3 graines) -- actif seulement sous corruption ~100000x hors
-    échelle. Le fermer par construction ne coûte rien (mesuré gratuit, D2) :
-    quand fourni, la série passée à `.fix()` (`ret`) est tronquée à la fin du
-    fold de TEST courant plutôt que de s'étendre à tout l'historique restant
-    (`self.raw` en amont couvre tout le dataset, pas seulement ce fold)."""
+    `test_end_idx` (correction report, D2 -> N1): the backcast is confirmed
+    non-retrospective (computed on the first observations only), but
+    `variance_bounds` remains a real leak channel even though measured inert
+    on realistic data (D2: 0.0 gap vs. the causal reference, 0 observations
+    clipped, 3 seeds) -- only active under ~100000x out-of-scale corruption.
+    Closing it by construction costs nothing (measured free, D2): when
+    provided, the series passed to `.fix()` (`ret`) is truncated at the end
+    of the current TEST fold rather than extending over the whole remaining
+    history (`self.raw` upstream covers the whole dataset, not just this
+    fold)."""
     from arch import arch_model
 
     ret = (safe_pct_change(series).dropna() * 100)
@@ -92,11 +94,11 @@ def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1
 
 
 def kalman_filtered_level(series: pd.Series, fit_end_idx: int | None = None) -> pd.Series:
-    """Niveau filtré (pas lissé) par un filtre de Kalman local-level : `.filter()`
-    de pykalman est la passe forward causale (contrairement à `.smooth()`). Les deux
-    hyperparamètres de covariance (observation/transition) sont estimés à partir de
-    la variance des observations/différences sur `values[:fit_end_idx]` uniquement
-    (train du fold), pas sur toute la série."""
+    """Level filtered (not smoothed) by a local-level Kalman filter: pykalman's
+    `.filter()` is the causal forward pass (unlike `.smooth()`). Both
+    covariance hyperparameters (observation/transition) are estimated from
+    the variance of the observations/differences on `values[:fit_end_idx]`
+    only (the fold's train), not the whole series."""
     from pykalman import KalmanFilter
 
     values = series.ffill().bfill().values.astype(float)
@@ -118,12 +120,13 @@ def kalman_filtered_level(series: pd.Series, fit_end_idx: int | None = None) -> 
 
 def hmm_filtered_stress_prob(series: pd.Series, n_states: int = 2, seed: int = 42,
                               fit_end_idx: int | None = None) -> pd.Series:
-    """Probabilité filtrée (causale) d'être dans l'état de plus haute variance d'un
-    HMM gaussien à n_states régimes. Calcule l'algorithme forward à la main (en
-    log-espace) plutôt que d'utiliser `predict_proba`/`decode` de hmmlearn, qui
-    lissent avec le futur (forward-backward / Viterbi) — non causal ici. Le modèle
-    (moyennes/variances/transitions) est estimé sur `x[:fit_end_idx]` seulement
-    (train du fold), puis appliqué en avant sur toute la série sans ré-estimation."""
+    """Filtered (causal) probability of being in the highest-variance state of
+    an n_states-regime Gaussian HMM. Computes the forward algorithm by hand
+    (in log-space) rather than using hmmlearn's `predict_proba`/`decode`,
+    which smooth using the future (forward-backward / Viterbi) — non-causal
+    here. The model (means/variances/transitions) is estimated on
+    `x[:fit_end_idx]` only (the fold's train), then applied forward over the
+    whole series with no re-estimation."""
     from hmmlearn.hmm import GaussianHMM
     from scipy.special import logsumexp
     from scipy.stats import norm
@@ -145,9 +148,9 @@ def hmm_filtered_stress_prob(series: pd.Series, n_states: int = 2, seed: int = 4
     try:
         model.fit(x_fit)
     except Exception as e:
-        # [FIX] filet de sécurité en plus du safe_pct_change : une série encore
-        # dégénérée (quasi constante, etc.) peut faire échouer l'ajustement HMM
-        # pour d'autres raisons que des inf — ne doit pas planter tout le run.
+        # [FIX] safety net on top of safe_pct_change: a still-degenerate series
+        # (near-constant, etc.) can make the HMM fit fail for reasons other than
+        # inf values — must not crash the whole run.
         print(f"  [WARN] HMM: {str(e)[:100]}")
         return pd.Series(np.nan, index=series.index, name="hmm_filtered_stress_prob")
 
@@ -173,12 +176,12 @@ def hmm_filtered_stress_prob(series: pd.Series, n_states: int = 2, seed: int = 4
 
 def heston_proxy_features(series: pd.Series, short_window: int = 20,
                            long_window: int = 252) -> pd.DataFrame:
-    """Proxy inspiré de Heston (mean-reversion de la variance) construit sur la
-    variance réalisée, faute de volatilité implicite d'options dans ce cadre :
-    `heston_theta` = niveau long terme, `heston_spread` = écart de la variance
-    réalisée courante à ce niveau (l'équivalent du gap de retour à la moyenne).
-    Fenêtres glissantes uniquement (pas de paramètre global estimé) — causal par
-    construction, pas de `fit_end_idx` nécessaire."""
+    """Heston-inspired proxy (variance mean-reversion) built on realized
+    variance, in the absence of options implied volatility in this framework:
+    `heston_theta` = long-term level, `heston_spread` = gap between current
+    realized variance and this level (the mean-reversion gap equivalent).
+    Rolling windows only (no global parameter estimated) — causal by
+    construction, no `fit_end_idx` needed."""
     ret = safe_pct_change(series)
     rv = (ret ** 2).rolling(short_window).mean() * 252
     theta = rv.rolling(long_window, min_periods=60).mean()
@@ -188,9 +191,9 @@ def heston_proxy_features(series: pd.Series, short_window: int = 20,
 
 def vrp_proxy(series: pd.Series, short_window: int = 10, long_window: int = 60,
               clip: tuple[float, float] = (-0.5, 0.5)) -> pd.Series:
-    """Proxy de prime de risque de variance (VRP), tronqué : écart relatif entre
-    vol réalisée courte et longue, faute de vol implicite d'options. Fenêtres
-    glissantes uniquement — causal par construction, pas de `fit_end_idx`."""
+    """Truncated variance risk premium (VRP) proxy: relative gap between short
+    and long realized vol, in the absence of options implied vol. Rolling
+    windows only — causal by construction, no `fit_end_idx`."""
     ret = safe_pct_change(series)
     vol_short = ret.rolling(short_window).std() * np.sqrt(252)
     vol_long = ret.rolling(long_window).std() * np.sqrt(252)
@@ -200,11 +203,11 @@ def vrp_proxy(series: pd.Series, short_window: int = 10, long_window: int = 60,
 
 def _arima_family_resid(series: pd.Series, order: tuple[int, int, int], name: str,
                          fit_end_idx: int | None = None) -> pd.Series:
-    """Résidu (surprise) d'un modèle AR/MA/ARMA/ARIMA(p,d,q) — `.resid` de
-    statsmodels est one-step-ahead in-sample, donc causal pas à pas. Les
-    coefficients sont estimés sur `ret[:fit_end_idx]` (train du fold) uniquement,
-    puis appliqués (`.apply`, sans ré-estimation) à la série complète des
-    rendements pour produire les résidus sur train ET test."""
+    """Residual (surprise) of an AR/MA/ARMA/ARIMA(p,d,q) model — statsmodels'
+    `.resid` is one-step-ahead in-sample, hence causal step by step. The
+    coefficients are estimated on `ret[:fit_end_idx]` (the fold's train) only,
+    then applied (`.apply`, with no re-estimation) to the full return series
+    to produce residuals over train AND test."""
     from statsmodels.tsa.arima.model import ARIMA
 
     ret = safe_pct_change(series).dropna()
@@ -245,12 +248,12 @@ def arima_resid(series: pd.Series, p: int = 1, d: int = 1, q: int = 1,
     return _arima_family_resid(series, (p, d, q), "arima_resid", fit_end_idx)
 
 
-# Modèles dont les paramètres sont estimés globalement et doivent donc être
-# réajustés par fold (`fit_end_idx`) pour rester walk-forward-safe. `test_end_idx`
-# n'est consommé que par EGARCH (cf. N1, docstring d'`egarch_conditional_vol`) --
-# les autres l'ignorent : leur récursion causale (Kalman `.filter()`, HMM forward,
-# résidus AR/MA/ARMA/ARIMA appliqués pas à pas) n'est pas affectée par la portion
-# de `series` postérieure au fold, contrairement à `arch_model(...).fix()`.
+# Models whose parameters are estimated globally and therefore must be
+# re-fit per fold (`fit_end_idx`) to stay walk-forward-safe. `test_end_idx`
+# is only consumed by EGARCH (see N1, `egarch_conditional_vol` docstring) --
+# the others ignore it: their causal recursion (Kalman `.filter()`, HMM
+# forward, AR/MA/ARMA/ARIMA residuals applied step by step) is unaffected by
+# the portion of `series` after the fold, unlike `arch_model(...).fix()`.
 _PARAMETRIC_MODELS = {
     "egarch": lambda s, fit_end_idx, test_end_idx: egarch_conditional_vol(
         s, fit_end_idx=fit_end_idx, test_end_idx=test_end_idx).to_frame(),
@@ -261,15 +264,15 @@ _PARAMETRIC_MODELS = {
     "arma": lambda s, fit_end_idx, test_end_idx: arma_resid(s, fit_end_idx=fit_end_idx).to_frame(),
     "arima": lambda s, fit_end_idx, test_end_idx: arima_resid(s, fit_end_idx=fit_end_idx).to_frame(),
 }
-# Fenêtres glissantes pures — aucun paramètre global, `fit_end_idx`/`test_end_idx` ignorés.
+# Pure rolling windows — no global parameter, `fit_end_idx`/`test_end_idx` ignored.
 _NONPARAMETRIC_MODELS = {
     "heston_proxy": lambda s, fit_end_idx, test_end_idx: heston_proxy_features(s),
     "vrp_proxy": lambda s, fit_end_idx, test_end_idx: vrp_proxy(s).to_frame(),
 }
 _VOL_MODEL_BUILDERS = {**_PARAMETRIC_MODELS, **_NONPARAMETRIC_MODELS}
 
-# Comportement d'origine (avant sélection par modèle) — inchangé pour tout appelant
-# qui ne précise pas `models`.
+# Original behavior (before per-model selection) — unchanged for any caller
+# that doesn't specify `models`.
 _DEFAULT_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
 
 PARAMETRIC_VOL_MODELS = frozenset(_PARAMETRIC_MODELS)
@@ -277,9 +280,9 @@ PARAMETRIC_VOL_MODELS = frozenset(_PARAMETRIC_MODELS)
 
 def build_vol_model_features_base(series: pd.Series, prefix: str = "px",
                                    models: list[str] | None = None) -> pd.DataFrame:
-    """Sous-ensemble non-paramétrique de `models` (heston_proxy/vrp_proxy par
-    défaut) — fenêtres glissantes pures, causal par construction, calculé une
-    seule fois pour tout un run (partagé par tous les folds)."""
+    """Non-parametric subset of `models` (heston_proxy/vrp_proxy by default)
+    — pure rolling windows, causal by construction, computed once for a whole
+    run (shared across all folds)."""
     models = models if models is not None else _DEFAULT_MODELS
     selected = [m for m in models if m in _NONPARAMETRIC_MODELS]
     if not selected:
@@ -293,11 +296,11 @@ def build_vol_model_features_parametric(series: pd.Series, prefix: str = "px",
                                          models: list[str] | None = None,
                                          fit_end_idx: int | None = None,
                                          test_end_idx: int | None = None) -> pd.DataFrame:
-    """Sous-ensemble paramétrique de `models` (egarch/kalman/hmm/ar/ma/arma/arima
-    par défaut) — à recalculer par fold via `fit_end_idx` (cf. docstring de
-    module) : paramètres réestimés uniquement sur le train de chaque fold.
-    `test_end_idx` (D2 -> N1) : fin du fold de TEST courant, pour EGARCH
-    uniquement (cf. docstring d'`egarch_conditional_vol`)."""
+    """Parametric subset of `models` (egarch/kalman/hmm/ar/ma/arma/arima by
+    default) — to be recomputed per fold via `fit_end_idx` (see module
+    docstring): parameters re-estimated only on each fold's train.
+    `test_end_idx` (D2 -> N1): end of the current TEST fold, for EGARCH
+    only (see `egarch_conditional_vol` docstring)."""
     models = models if models is not None else _DEFAULT_MODELS
     selected = [m for m in models if m in _PARAMETRIC_MODELS]
     if not selected:
@@ -311,12 +314,12 @@ def build_vol_model_features(series: pd.Series, prefix: str = "px",
                               models: list[str] | None = None,
                               fit_end_idx: int | None = None,
                               test_end_idx: int | None = None) -> pd.DataFrame:
-    """`models` : sous-ensemble de `_VOL_MODEL_BUILDERS` à calculer (défaut :
-    les 5 modèles historiques du pipeline VIX). Un nom inconnu est ignoré plutôt
-    que de faire planter tout le run. `fit_end_idx` : borne d'estimation des
-    modèles paramétriques (egarch/kalman/hmm/ar/ma/arma/arima) — cf. docstring
-    de module. `test_end_idx` : fin du fold de test, pour EGARCH uniquement
-    (D2 -> N1). Les proxys Heston/VRP (fenêtres glissantes pures) ignorent les deux."""
+    """`models`: subset of `_VOL_MODEL_BUILDERS` to compute (default: the 5
+    historical models of the VIX pipeline). An unknown name is ignored rather
+    than crashing the whole run. `fit_end_idx`: estimation cutoff for the
+    parametric models (egarch/kalman/hmm/ar/ma/arma/arima) — see module
+    docstring. `test_end_idx`: end of the test fold, for EGARCH only
+    (D2 -> N1). The Heston/VRP proxies (pure rolling windows) ignore both."""
     models = models if models is not None else _DEFAULT_MODELS
     parts = [_VOL_MODEL_BUILDERS[m](series, fit_end_idx, test_end_idx)
              for m in models if m in _VOL_MODEL_BUILDERS]

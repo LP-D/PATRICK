@@ -2,19 +2,19 @@
 "The Probability of Backtest Overfitting", 2017) via CSCV (Combinatorially
 Symmetric Cross-Validation).
 
-Écart assumé par rapport au papier original : celui-ci découpe la série de
-rendements en S blocs temporels arbitraires (paramètre libre). Ici, les blocs
-sont directement les folds walk-forward déjà calculés par le moteur
-(`fold_metric`, un par (trial, fold)) — respecte la structure temporelle par
-construction (chaque fold est déjà une tranche chronologique contiguë), pas
-de découpage supplémentaire à inventer ni à justifier séparément.
+Accepted deviation from the original paper: it splits the return series into
+S arbitrary time blocks (a free parameter). Here, the blocks are directly the
+walk-forward folds already computed by the engine (`fold_metric`, one per
+(trial, fold)) — respects the temporal structure by construction (each fold
+is already a contiguous chronological slice), no additional split to invent
+or justify separately.
 
-Limite documentée : CSCV veut un nombre PAIR de blocs, idéalement S>=16 pour
-un nombre de combinaisons raisonnable. `n_wf_folds` vaut 5 par défaut dans ce
-projet (impair, pensé pour le walk-forward, pas pour CSCV) — le fold le plus
-ancien est donc retiré pour retomber sur un nombre pair (4 par défaut, 6
-combinaisons IS/OOS). Un `n_wf_folds` plus élevé donne un PBO plus robuste ;
-documenté plutôt que masqué, cf. rapport de phase.
+Documented limitation: CSCV wants an EVEN number of blocks, ideally S>=16 for
+a reasonable number of combinations. `n_wf_folds` defaults to 5 in this
+project (odd, designed for walk-forward, not CSCV) — so the oldest fold is
+dropped to fall back to an even number (4 by default, 6 IS/OOS
+combinations). A higher `n_wf_folds` gives a more robust PBO; documented
+rather than hidden, see phase report.
 """
 from __future__ import annotations
 
@@ -24,13 +24,13 @@ import numpy as np
 
 
 def compute_pbo(perf_matrix: np.ndarray) -> dict:
-    """`perf_matrix` : (n_trials, n_blocks) — une métrique de performance (ex.
-    F1_dir) par (trial, bloc temporel). Pour chaque partition des blocs en deux
-    moitiés égales (in-sample / out-of-sample, toutes les combinaisons), on
-    repère le trial le meilleur en IS puis on regarde son rang en OOS : s'il
-    n'est pas meilleur que la médiane des autres trials en OOS (logit <= 0),
-    la sélection "in-sample" ne généralise pas — c'est du surapprentissage de
-    backtest. PBO = proportion de combinaisons dans ce cas."""
+    """`perf_matrix`: (n_trials, n_blocks) — a performance metric (e.g.
+    F1_dir) per (trial, time block). For every partition of the blocks into
+    two equal halves (in-sample / out-of-sample, all combinations), the best
+    trial in IS is identified and its rank in OOS is checked: if it is not
+    better than the median of the other trials in OOS (logit <= 0), the
+    "in-sample" selection does not generalize — this is backtest
+    overfitting. PBO = proportion of combinations in this case."""
     perf_matrix = np.asarray(perf_matrix, dtype=float)
     n_trials, n_blocks = perf_matrix.shape
     if n_blocks % 2 != 0:
@@ -49,8 +49,8 @@ def compute_pbo(perf_matrix: np.ndarray) -> dict:
         oos_perf = perf_matrix[:, oos_blocks].mean(axis=1)
         best_is_trial = int(np.argmax(is_perf))
 
-        # Rang relatif (0,1) du trial "meilleur en IS" une fois évalué en OOS —
-        # proportion des AUTRES trials qu'il bat en OOS.
+        # Relative rank (0,1) of the "best in IS" trial once evaluated in
+        # OOS — proportion of the OTHER trials it beats in OOS.
         if n_trials > 1:
             rank = float((oos_perf < oos_perf[best_is_trial]).sum()) / (n_trials - 1)
         else:

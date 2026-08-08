@@ -1,10 +1,11 @@
-"""Export du modèle gagnant : ré-entraîné sur 100% de l'historique disponible
-(comme VIX_PRODUCTION — pas de test à protéger une fois la config validée par le
-scan walk-forward), sérialisé avec son scaler et ses features sélectionnées.
+"""Export of the winning model: retrained on 100% of the available history
+(like VIX_PRODUCTION — no test set to protect once the config has been
+validated by the walk-forward scan), serialized with its scaler and selected
+features.
 
-L'inférence sur la dernière ligne non labellisée (la "vraie" prédiction du jour)
-n'est pas incluse ici — c'est une commande `patrick predict` séparée, à construire
-quand le besoin de mise en production se précisera.
+Inference on the last unlabeled row (the "real" prediction for today) is not
+included here — that's a separate `patrick predict` command, to be built
+once the production-deployment need becomes concrete.
 """
 from __future__ import annotations
 
@@ -61,12 +62,12 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     os.makedirs(out_dir, exist_ok=True)
     model_path = os.path.join(out_dir, f"{config.name}_best_model.joblib")
     # `feature_pool`/`interaction_formulas` (Phase 4.6, `patrick predict
-    # --live`) : le pool COMPLET (avant sélection) et la recette pour le
-    # reconstruire à l'identique sur des données fraîches -- `scaler.transform`
-    # exige le même nombre de colonnes, dans le même ordre, que celles vues
-    # par `.fit`. Les formules d'interaction sont découvertes une fois par run
-    # (fold pilote, cf. `_FoldPoolBuilder`) et sans elles, `predict --live` ne
-    # peut pas reproduire les colonnes d'interaction du pool d'entraînement.
+    # --live`): the FULL pool (before selection) and the recipe to rebuild it
+    # identically on fresh data -- `scaler.transform` requires the same
+    # number of columns, in the same order, as those seen by `.fit`.
+    # Interaction formulas are discovered once per run (pilot fold, see
+    # `_FoldPoolBuilder`) and without them, `predict --live` cannot reproduce
+    # the training pool's interaction columns.
     joblib.dump({"model": clf, "scaler": sc, "feature_names": feat_names,
                  "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
                  "target_col": target_col}, model_path)
@@ -79,5 +80,5 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=1)
 
-    print(f"[EXPORT] modèle gagnant ({algo}, h={horizon}j, {regime}, N={n_feat}) -> {model_path}")
+    print(f"[EXPORT] winning model ({algo}, h={horizon}d, {regime}, N={n_feat}) -> {model_path}")
     return model_path

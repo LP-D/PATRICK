@@ -1,6 +1,6 @@
-"""Construction des coupures de walk-forward en fenêtre expansive — identique dans
-tous les notebooks du projet VIX : `min_train_frac` du fold 1, puis `n_wf_folds`
-segments égaux de test jusqu'à la fin de l'historique."""
+"""Builds expanding-window walk-forward cuts -- identical across all VIX
+project notebooks: `min_train_frac` for fold 1, then `n_wf_folds` equal test
+segments through the end of the history."""
 from __future__ import annotations
 
 import pandas as pd

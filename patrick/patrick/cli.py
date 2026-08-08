@@ -1,6 +1,10 @@
-"""CLI `patrick` — `ingest` (peuple/rafraîchit le data lake local) et `run`
-(pipeline complet bout-en-bout : features -> walk-forward -> sélection -> grille
--> Optuna -> meilleur modèle exporté)."""
+"""`patrick` CLI -- `ingest` (populates/refreshes the local data lake) and
+`run` (full end-to-end pipeline: features -> walk-forward -> selection ->
+grid -> Optuna -> exported best model).
+
+Command `help=` strings and `typer.echo()` output stay in French, matching
+the rest of the French-language product surface (see the D4 translation
+scope note in `README.md`)."""
 from __future__ import annotations
 
 import typer
@@ -24,13 +28,12 @@ def ingest_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
     force: bool = typer.Option(False, "--force", help="Retélécharge même si en cache"),
 ) -> None:
-    """Télécharge et prépare les données brutes (Phase 0) : tickers Yahoo Finance
-    et séries FRED selon la config. Les données sont mises en cache localement
-    (`~/.patrick/data`) et réutilisées par défaut — `--force` réactive le
-    téléchargement, utile après un changement d'univers ou pour récupérer les
-    dernières cours/données macro.
+    """Downloads and prepares the raw data (Phase 0): Yahoo Finance tickers
+    and FRED series per the config. Data is cached locally (`~/.patrick/data`)
+    and reused by default -- `--force` re-triggers the download, useful after
+    a universe change or to fetch the latest prices/macro data.
 
-    Exemple :
+    Example:
 
     \b
         patrick ingest --config configs/examples/vix_direction.yaml
@@ -49,13 +52,14 @@ def run_cmd(
                                        help="Retélécharge les données même si en cache"),
     name: str | None = typer.Option(None, "--name", help="Nom du run ; par défaut, déduit de la cible"),
 ) -> None:
-    """Pipeline complet bout-en-bout (Phase 1-4) : ingestion data → sélection de
-    features (SHAP) → walk-forward cross-validation → grille de modèles → tuning
-    Optuna → holdout terminal → export du meilleur modèle. Configuration lue depuis
-    un fichier YAML (voir `configs/examples/`). Le résultat (leaderboard, meilleur
-    modèle, contexte de reproductibilité) est stocké en base SQLite et en cache Parquet.
+    """Full end-to-end pipeline (Phase 1-4): data ingestion -> feature
+    selection (SHAP) -> walk-forward cross-validation -> model grid -> Optuna
+    tuning -> terminal holdout -> export of the best model. Configuration
+    read from a YAML file (see `configs/examples/`). The result (leaderboard,
+    best model, reproducibility context) is stored in the SQLite database and
+    the Parquet cache.
 
-    Exemple :
+    Example:
 
     \b
         patrick run --config configs/examples/vix_direction.yaml
@@ -77,13 +81,13 @@ def run_cmd(
 def resume_cmd(
     run_id: str = typer.Option(..., "--run-id", help="Identifiant du run à reprendre (table `run`)"),
 ) -> None:
-    """Relance un run à partir de sa config persistée en base (Phase 3.2) :
-    utile après une interruption (worker tué, machine redémarrée en plein
-    tuning). Le scan de grille (avant Optuna) est toujours rejoué en entier —
-    pas de checkpointing à ce niveau, hors scope Phase 3 — mais les essais
-    Optuna déjà terminés pour chaque config sont repris via l'étude
-    persistante sqlite (`<output_dir>/optuna.db`, `load_if_exists=True`)
-    plutôt que refaits depuis zéro."""
+    """Relaunches a run from its config persisted in the database (Phase 3.2):
+    useful after an interruption (worker killed, machine restarted mid-tuning).
+    The grid scan (before Optuna) is always replayed in full -- no
+    checkpointing at that level, out of Phase 3 scope -- but Optuna trials
+    already completed for each config are resumed via the persistent sqlite
+    study (`<output_dir>/optuna.db`, `load_if_exists=True`) rather than redone
+    from scratch."""
     conn = trackdb.connect()
     row = trackdb.get_run(conn, run_id)
     conn.close()
@@ -110,10 +114,10 @@ def report_cmd(
         0.10, "--fdr-alpha",
         help="Seuil FDR (Phase 6.4) pour la correction Benjamini-Hochberg entre cibles"),
 ) -> None:
-    """Export HTML d'un run (Phase 3.3) : config, essais, métriques, baselines,
-    validité statistique (holdout/DM/PBO si le run vient de l'interface web),
-    contexte de reproductibilité — lu uniquement depuis `patrick.db`, sans
-    dépendre des artefacts CSV/joblib du run."""
+    """HTML export of a run (Phase 3.3): config, trials, metrics, baselines,
+    statistical validity (holdout/DM/PBO if the run came from the web
+    interface), reproducibility context -- read solely from `patrick.db`,
+    with no dependency on the run's CSV/joblib artifacts."""
     try:
         path = report_module.save_report(run_id, output_path=output, fdr_alpha=fdr_alpha)
     except ValueError as exc:
@@ -127,13 +131,13 @@ def predict_cmd(
     run_id: str = typer.Option(..., "--run-id", help="Identifiant du run (table `run`)"),
     live: bool = typer.Option(False, "--live", help="Score le modèle sur les données du jour (paper trading)"),
 ) -> None:
-    """Prédiction en production (Phase 4.6), sans réentraîner ni resélectionner
-    quoi que ce soit -- charge le modèle déjà exporté du run. `--live` : écrit
-    la prédiction du jour dans `prediction` (split='live') AVANT de connaître
-    le résultat, et complète au passage les prédictions live passées dont
-    l'horizon est désormais écoulé.
+    """Production prediction (Phase 4.6), without retraining or reselecting
+    anything -- loads the run's already-exported model. `--live`: writes
+    today's prediction to `prediction` (split='live') BEFORE knowing the
+    outcome, and along the way backfills past live predictions whose horizon
+    has now elapsed.
 
-    Exemple de cron (tous les jours ouvrés à 22h, après clôture US) :
+    Example cron (every weekday at 22:00, after US market close):
 
     \b
         0 22 * * 1-5 cd /chemin/vers/patrick && patrick predict --run-id <id> --live
@@ -153,11 +157,11 @@ def worker_cmd(
     poll_interval: float = typer.Option(
         1.0, "--poll-interval", help="Intervalle de sondage de la file (secondes)"),
 ) -> None:
-    """Worker de la file de jobs (Phase 3.1) : process séparé qui exécute les
-    runs soumis depuis l'interface web. Normalement lancé automatiquement par
-    le serveur web (`ensure_worker_running`, cf. `webapp/run_manager.py`) —
-    cette commande sert au lancement manuel/debug, ou en tant que service
-    dédié si on préfère ne pas dépendre de l'auto-spawn."""
+    """Job queue worker (Phase 3.1): separate process that executes runs
+    submitted from the web interface. Normally launched automatically by the
+    web server (`ensure_worker_running`, see `webapp/run_manager.py`) -- this
+    command is for manual launch/debugging, or as a dedicated service if you
+    prefer not to rely on auto-spawn."""
     worker_module.run_worker_loop(poll_interval=poll_interval, idle_timeout=idle_timeout)
 
 
@@ -167,8 +171,8 @@ def serve_cmd(
     port: int = typer.Option(8000, "--port", help="Port d'écoute"),
     reload: bool = typer.Option(False, "--reload", help="Recharge à chaud (dev)"),
 ) -> None:
-    """Lance l'interface web (formulaire de config + suivi de run + leaderboard),
-    en remplacement de l'édition manuelle du YAML. Nécessite l'extra `web`
+    """Launches the web interface (config form + run tracking + leaderboard),
+    replacing manual YAML editing. Requires the `web` extra
     (`pip install -e ".[web]"`)."""
     try:
         import uvicorn
@@ -189,13 +193,12 @@ def audit_degradation_cmd(
     output_dir: str = typer.Option(
         "runs/audit_degradation", "--output-dir", help="Dossier de sortie des runs + du CSV/markdown"),
 ) -> None:
-    """Rapport de correction, C7 -- mesure l'impact réel des corrections de
-    fuite de la phase 0 (purge/embargo, alignement as-of, vintages FRED) en
-    comparant 4 configurations empilées (baseline_avant -> +purge ->
-    +vintages -> complet) sur le même univers de cibles/seed. Exécute le
-    pipeline réel (accès réseau yfinance/FRED requis) ; échoue explicitement
-    si FRED_API_KEY n'est pas défini (la configuration +vintages n'a pas de
-    sens sans lui)."""
+    """Correction report, C7 -- measures the real impact of the Phase 0 leak
+    fixes (purge/embargo, as-of alignment, FRED vintages) by comparing 4
+    stacked configurations (baseline_before -> +purge -> +vintages -> full)
+    on the same target/seed universe. Runs the real pipeline (yfinance/FRED
+    network access required); fails explicitly if FRED_API_KEY is not set
+    (the +vintages configuration is meaningless without it)."""
     from patrick import audit as audit_module
 
     target_list = None

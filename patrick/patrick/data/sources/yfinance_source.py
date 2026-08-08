@@ -1,7 +1,7 @@
-"""Téléchargement Yahoo Finance robuste — reprend le pattern établi dans
-VIX_FINAL_FEATURES/VIX_PURGED_CV : un lot principal en un seul appel batch (rapide),
-puis un repli ticker-par-ticker pour les tickers à faible historique ou instables en
-batch, pour qu'un seul ticker cassé ne fasse pas perdre tout le lot.
+"""Robust Yahoo Finance download -- reuses the pattern established in
+VIX_FINAL_FEATURES/VIX_PURGED_CV: a single batch call for the main lot
+(fast), then a ticker-by-ticker fallback for tickers with short history or
+unstable in batch, so one broken ticker doesn't lose the whole lot.
 """
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def _clean_col(ticker: str) -> str:
 
 
 def clean_symbol(ticker: str) -> str:
-    """Version publique de `_clean_col`, pour que le pipeline puisse retrouver le
-    nom de colonne d'un symbole sans dépendre d'un détail interne du module."""
+    """Public version of `_clean_col`, so the pipeline can recover a
+    symbol's column name without depending on an internal module detail."""
     return _clean_col(ticker)
 
 
@@ -69,15 +69,16 @@ def download_one(ticker: str, start: str) -> pd.Series | None:
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
                        t0: float | None = None, issues: list | None = None) -> pd.DataFrame:
-    """Télécharge un univers de tickers avec repli individuel sur les échecs/faible
-    couverture. Retourne un DataFrame indexé par date, une colonne par ticker retenu.
+    """Downloads a universe of tickers with an individual fallback for
+    failures/low coverage. Returns a DataFrame indexed by date, one column
+    per retained ticker.
 
-    `issues` (Phase 6.5, P6.5) : si fourni, chaque ticker exclu par CE filtre de
-    couverture (le seul déjà en place ici) y ajoute un `QualityIssue` -- motif
-    réel constaté au point de décision, pas reconstruit après coup. Les autres
-    contrôles de qualité (prix figés, trous, rendements aberrants, fin de
-    série précoce) tournent séparément dans `data/ingest.py` sur les séries
-    survivantes, via `data/quality.py`.
+    `issues` (Phase 6.5, P6.5): if provided, every ticker excluded by THIS
+    coverage filter (the only one already in place here) adds a
+    `QualityIssue` to it -- the real reason observed at the decision point,
+    not reconstructed after the fact. The other quality checks (frozen
+    prices, gaps, outlier returns, early series end) run separately in
+    `data/ingest.py` on the surviving series, via `data/quality.py`.
     """
     from patrick.data.quality import QualityIssue
 
@@ -89,7 +90,7 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
         if issues is not None:
             for col, cov in low_coverage.items():
                 issues.append(QualityIssue(col, "couverture_insuffisante",
-                                            f"{cov:.1%} de jours ouvrés renseignés (seuil {coverage_min:.0%})"))
+                                            f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
         raw = raw.loc[:, raw.notna().mean() >= coverage_min].ffill().dropna(how="all")
     kept = set(raw.columns) if len(raw) else set()
     missing = [t for t in tickers if _clean_col(t) not in kept]
@@ -98,7 +99,7 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
         if s is None:
             if issues is not None:
                 issues.append(QualityIssue(_clean_col(t), "echec_telechargement",
-                                            "aucune donnée renvoyée par yfinance (repli individuel)"))
+                                            "no data returned by yfinance (individual fallback)"))
             continue
         if len(raw):
             s = s.reindex(raw.index).ffill()
@@ -107,16 +108,16 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
             raw[s.name] = s
         elif issues is not None:
             issues.append(QualityIssue(s.name, "couverture_insuffisante",
-                                        f"{cov:.1%} de jours ouvrés renseignés (seuil {coverage_min:.0%})"))
-    print(f"  [yfinance] {raw.shape[1] if len(raw) else 0}/{len(tickers)} tickers retenus "
-          f"(couverture>={coverage_min:.0%}) en {time.time()-t0:.1f}s")
+                                        f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
+    print(f"  [yfinance] {raw.shape[1] if len(raw) else 0}/{len(tickers)} tickers kept "
+          f"(coverage>={coverage_min:.0%}) in {time.time()-t0:.1f}s")
     return raw
 
 
 def download_target(symbol: str, start: str) -> pd.Series:
     s = download_one(symbol, start)
     if s is None or s.dropna().empty:
-        raise RuntimeError(f"Impossible de récupérer la cible '{symbol}' via yfinance.")
+        raise RuntimeError(f"Could not fetch target '{symbol}' via yfinance.")
     return s.rename(_clean_col(symbol))
 
 
@@ -136,14 +137,14 @@ def _download_ohlc_cached(symbol: str, start: str) -> pd.DataFrame | None:
 
 
 def download_ohlc(symbol: str, start: str) -> pd.DataFrame | None:
-    """OHLC pour un seul symbole — utilisé par les estimateurs de vol réalisée
-    (Parkinson/GK/RS/Yang-Zhang), qui n'ont besoin que de la cible, pas de tout
-    l'univers (cf. portée de VIX_OHLC_VOL).
+    """OHLC for a single symbol -- used by realized-vol estimators
+    (Parkinson/GK/RS/Yang-Zhang), which only need the target, not the whole
+    universe (see VIX_OHLC_VOL scope).
 
-    Le résultat est mis en cache local + mémoire par `(symbol, start)` pour éviter
-    les téléchargements répétés pendant un scan de grille ou un run multi-fold : le
-    même dataset OHLC est relu plusieurs fois sur le même historique, sans valeur
-    ajoutée à re-télécharger depuis Yahoo.
+    The result is cached locally + in memory by `(symbol, start)` to avoid
+    repeated downloads during a grid scan or a multi-fold run: the same
+    OHLC dataset is read multiple times over the same history, with no
+    added value in re-downloading it from Yahoo.
     """
     cache_key = f"ohlc_{_clean_col(symbol)}_{start}"
     cached = LocalCache().load_dataframe(cache_key, max_age_days=7)

@@ -1,5 +1,5 @@
-"""Jointures macro FRED + features de lag (piste Granger identifiée dans
-VIX_VAR_MACRO : EFFR et NFCI causent le VIX au sens de Granger, T10Y2Y/T10YIE non)."""
+"""FRED macro joins + lag features (Granger lead identified in
+VIX_VAR_MACRO: EFFR and NFCI Granger-cause VIX, T10Y2Y/T10YIE do not)."""
 from __future__ import annotations
 
 import pandas as pd

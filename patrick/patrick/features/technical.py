@@ -1,6 +1,6 @@
-"""Features techniques de base : retours, z-scores, moyennes mobiles, et les
-estimateurs de volatilité réalisée OHLC (Parkinson/Garman-Klass/Rogers-Satchell/
-Yang-Zhang) validés (sans signal net, mais reproductibles) dans VIX_OHLC_VOL.
+"""Basic technical features: returns, z-scores, moving averages, and the OHLC
+realized-volatility estimators (Parkinson/Garman-Klass/Rogers-Satchell/
+Yang-Zhang) validated (no clean signal, but reproducible) in VIX_OHLC_VOL.
 """
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def rolling_vol(series: pd.Series, windows: list[int] = (10, 20)) -> pd.DataFram
 
 
 # ---------------------------------------------------------------------------
-# Estimateurs de volatilité réalisée à partir de l'OHLC (VIX_OHLC_VOL) — tous
-# annualisés (facteur sqrt(252)) et calculés sur une fenêtre glissante.
+# Realized-volatility estimators from OHLC (VIX_OHLC_VOL) — all annualized
+# (sqrt(252) factor) and computed over a rolling window.
 # ---------------------------------------------------------------------------
 _ANNUALIZE = np.sqrt(252)
 
@@ -86,7 +86,7 @@ def yang_zhang_vol(open_: pd.Series, high: pd.Series, low: pd.Series,
 
 
 def ohlc_vol_features(ohlc: pd.DataFrame, prefix: str, windows: list[int] = (10, 20)) -> pd.DataFrame:
-    """ohlc: DataFrame avec colonnes Open/High/Low/Close (yfinance-style)."""
+    """ohlc: DataFrame with Open/High/Low/Close columns (yfinance-style)."""
     o, h, l, c = ohlc["Open"], ohlc["High"], ohlc["Low"], ohlc["Close"]
     out = {}
     for w in windows:

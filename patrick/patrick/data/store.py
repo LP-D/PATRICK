@@ -1,18 +1,18 @@
-"""Data lake local en Parquet, partitionné par snapshot immuable — remplace le
-cache "dernier connu" (un fichier réécrit à chaque ingestion) : yfinance/FRED
-réécrivent leur propre historique (dividendes, splits, révisions), donc sans
-identité de contenu, deux runs à des dates d'exécution différentes ne sont pas
-comparables même si "rien n'a changé". Chaque `save()` calcule un hash du
-contenu et écrit dans une nouvelle partition `snapshot=<date d'ingestion>/`,
-sans jamais réécrire une partition existante (anti-pattern Phase 0 : "écraser
-un snapshot existant au lieu d'en créer un nouveau") — deux ingestions le même
-jour avec un contenu différent produisent deux fichiers distincts (hash
-différent), deux ingestions avec un contenu identique retrouvent le même
-snapshot_id (déduplication par hash, pas de doublon inutile sur disque).
+"""Local Parquet data lake, partitioned by immutable snapshot -- replaces the
+"latest known" cache (a file rewritten on every ingestion): yfinance/FRED
+rewrite their own history (dividends, splits, revisions), so without a
+content identity, two runs on different execution dates aren't comparable
+even if "nothing changed". Every `save()` computes a content hash and writes
+to a new `snapshot=<ingestion date>/` partition, never rewriting an existing
+partition (Phase 0 anti-pattern: "overwrite an existing snapshot instead of
+creating a new one") -- two ingestions on the same day with different
+content produce two distinct files (different hash), two ingestions with
+identical content resolve to the same snapshot_id (hash-based deduplication,
+no useless duplicate on disk).
 
-DuckDB (`query()`) lit directement les Parquet sans étape d'import — utile pour
-explorer/agréger plusieurs snapshots par SQL sans les recharger un par un en
-mémoire pandas.
+DuckDB (`query()`) reads the Parquet files directly with no import step --
+useful for exploring/aggregating multiple snapshots via SQL without loading
+them one by one into pandas memory.
 """
 from __future__ import annotations
 
@@ -25,20 +25,20 @@ from glob import glob
 import pandas as pd
 
 def _default_store_dir() -> str:
-    """Cf. `tracking.db.default_db_path` : lu depuis l'environnement à CHAQUE
-    appel (pas figé à l'import) pour que le worker (process séparé) partage le
-    même data lake que le process web qui l'a lancé, et pour l'isolation des
-    tests (`PATRICK_STORE_ROOT` positionné avant d'instancier `DataStore()`)."""
+    """See `tracking.db.default_db_path`: read from the environment on EVERY
+    call (not frozen at import time) so the worker (separate process) shares
+    the same data lake as the web process that launched it, and for test
+    isolation (`PATRICK_STORE_ROOT` set before instantiating `DataStore()`)."""
     return os.environ.get("PATRICK_STORE_ROOT") or os.path.expanduser("~/.patrick/store")
 
 
-DEFAULT_STORE_DIR = _default_store_dir()  # valeur au chargement du module, pour affichage/CLI seulement
+DEFAULT_STORE_DIR = _default_store_dir()  # value at module load time, for display/CLI only
 
 
 def _content_hash(df: pd.DataFrame) -> str:
-    """Hash déterministe du CONTENU (valeurs + index), pas de la date d'écriture
-    — deux DataFrames avec les mêmes données produisent le même hash quel que
-    soit le moment où `save()` est appelé."""
+    """Deterministic hash of the CONTENT (values + index), not the write
+    date -- two DataFrames with the same data produce the same hash
+    regardless of when `save()` is called."""
     row_hashes = pd.util.hash_pandas_object(df, index=True).values
     return hashlib.sha256(row_hashes.tobytes()).hexdigest()[:12]
 
@@ -80,6 +80,10 @@ class DataStore:
 
     def load(self, key: str, snapshot_id: str | None = None) -> pd.DataFrame:
         entries = self._read_index().get(key, {}).get("snapshots", [])
+        # Kept in French: these messages are interpolated verbatim into
+        # webapp/app.py's French HTTPException detail (f"Données de la
+        # cible introuvables : {exc}") -- an English message here would
+        # produce a mixed-language error string in the French web UI.
         if not entries:
             raise FileNotFoundError(f"Aucun snapshot pour la clé '{key}'.")
         entry = entries[-1] if snapshot_id is None else next(
@@ -92,9 +96,9 @@ class DataStore:
         return df
 
     def save(self, key: str, df: pd.DataFrame) -> str:
-        """Écrit `df` dans une nouvelle partition immuable (déduplique par hash de
-        contenu : si un snapshot identique existe déjà pour cette clé, le
-        réutilise plutôt que d'en créer un nouveau). Retourne le snapshot_id."""
+        """Writes `df` to a new immutable partition (deduplicates by content
+        hash: if an identical snapshot already exists for this key, reuses
+        it rather than creating a new one). Returns the snapshot_id."""
         content_hash = _content_hash(df)
         idx = self._read_index()
         entries = idx.setdefault(key, {}).setdefault("snapshots", [])
@@ -128,8 +132,8 @@ class DataStore:
         return self._read_index()
 
     def query(self, sql: str) -> pd.DataFrame:
-        """Exécute `sql` via DuckDB (lit les Parquet directement, sans les
-        recharger en pandas au préalable) — ex. `store.query("SELECT * FROM "
+        """Executes `sql` via DuckDB (reads the Parquet files directly,
+        without first reloading them into pandas) -- e.g. `store.query("SELECT * FROM "
         "read_parquet('~/.patrick/store/snapshot=*/*.parquet', "
         "hive_partitioning=true) LIMIT 10")`."""
         import duckdb
@@ -137,8 +141,8 @@ class DataStore:
         return duckdb.sql(sql).df()
 
     def glob_pattern(self, key: str | None = None) -> str:
-        """Motif glob DuckDB (`hive_partitioning=true`) couvrant tous les
-        snapshots d'une clé (ou de toutes les clés si `key` omis)."""
+        """DuckDB glob pattern (`hive_partitioning=true`) covering all
+        snapshots for a key (or all keys if `key` is omitted)."""
         pattern = f"{self._safe_key(key)}__*" if key else "*"
         return os.path.join(self.root, "snapshot=*", f"{pattern}.parquet")
 

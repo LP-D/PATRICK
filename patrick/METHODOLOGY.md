@@ -696,3 +696,90 @@ cessait de réintroduire l'inf, le test le signale), équivalence inf/NaN,
 non-silence, débordement depuis une valeur finie, garde d'interaction sur
 dénominateur ~0 ET exactement nul, et surtout : XGBoost accepte réellement la
 matrice nettoyée là où il rejette la matrice naïve.
+
+## 14. Fuites trouvées en écrivant le test de corruption du futur (Phase 0)
+
+Le test de corruption du futur (`tests/test_leakage.py`, cf. section 1) n'a
+pas seulement validé purge/embargo : il a révélé trois fuites plus fines,
+antérieures à ces mécanismes, dans des modules qui semblaient causaux en
+sortie mais ne l'étaient pas dans leur AJUSTEMENT.
+
+- **Estimation de paramètres sur tout l'historique** (`features/vol_models.py` :
+  EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA ; `features/spike.py` : filtre
+  particulaire) : avant correction, ces modèles ajustaient leurs PARAMÈTRES
+  une seule fois sur tout l'historique disponible, puis produisaient une
+  sortie point-par-point causale. La sortie ne violait donc pas
+  visiblement la causalité barre par barre, mais les paramètres eux-mêmes
+  avaient été informés par des données futures au moment de l'entraînement
+  d'un fold précoce. Corrigé en réajustant par fold (paramètre
+  `fit_end_idx`, train uniquement) — le coût est un réajustement complet à
+  chaque fold plutôt qu'un ajustement unique amorti.
+- **`features/target.py::build_target`** : les seuils de classification
+  (quartiles définissant DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT) étaient
+  fittés sur des fenêtres de label qui chevauchaient la coupure
+  train/test — une variante du même problème que la purge (section 1),
+  mais au niveau de la définition de la cible elle-même, pas des features.
+- **Repli `.fix()` d'EGARCH** (`arch`) : le backcast et les bornes de
+  variance internes à la librairie sont calculés sur la série entière même
+  quand les paramètres du modèle sont figés (branche de repli utilisée
+  quand l'optimiseur principal ne converge pas) — cf. docstring de
+  `vol_models.py` pour le contournement.
+
+**Bug de robustesse trouvé séparément, en écrivant les tests de la Phase 2**
+(pas une fuite temporelle, mais un risque de plantage silencieux) :
+`features/_utils.py::safe_pct_change` neutralisait un dénominateur
+EXACTEMENT nul (`+/-inf` -> NaN) mais pas un dénominateur simplement
+PROCHE de zéro, qui produit un rendement énorme mais fini. Sur une série
+qui traverse zéro (T10Y2Y, EFFR typiquement), ce rendement déborde ensuite
+en overflow après mise à l'échelle (`RobustScaler`) et fait planter XGBoost
+(`Input data contains inf`) — même famille de bug que la correction N2
+(section 13), trouvée plus tôt et par un autre chemin (fenêtre de données
+synthétique sans l'artefact de plancher habituel, cf.
+`tests/test_pipeline_smoke.py::_synthetic_raw_no_floor`). Corrigé par un
+clip à +/-1000% par période — au-delà, jamais un signal exploitable, quel
+que soit l'actif.
+
+## 15. Persistance (SQLite + Parquet)
+
+Projet mono-utilisateur local : SQLite (pas de service séparé), migrations
+SQL numérotées (`patrick/tracking/migrations/`, pas d'Alembic — ce projet ne
+passe pas par SQLAlchemy). `tracking/db.py::connect` ouvre
+`~/.patrick/patrick.db` en mode WAL (`foreign_keys=ON`, `busy_timeout=5000`)
+et applique automatiquement toute migration non encore enregistrée dans
+`schema_version` à chaque connexion — jamais d'étape manuelle séparée.
+
+Chaque `run_pipeline()` écrit :
+
+- **`snapshot`** : un par contenu de données ingéré (hash déterministe des
+  données brutes) — deux ingestions identiques retombent sur le même
+  snapshot, pas de duplication.
+- **`run`** : un par (cible, horizon) de la config — une config à plusieurs
+  horizons écrit plusieurs `run`, partageant `snapshot_id`, `config_hash`,
+  `git_sha` (reproductibilité).
+- **`trial`** : un par combinaison (régime, N features, sampler, algo,
+  hyperparamètres) réellement testée, pas seulement la gagnante — prérequis
+  direct de la section 4 (PBO/DSR ont besoin de savoir combien de
+  configurations ont été essayées).
+- **`fold_metric`** : toutes les métriques (F1_dir, BalAcc, MCC, AUC...) par
+  (trial, fold).
+- **`baseline_metric`** : les baselines systématiques (section 5), agrégées
+  par run.
+- **`prediction`** : une ligne par observation de test/holdout/live
+  (`y_true`, `y_pred`, confiance de la classe prédite) — prérequis direct
+  du simulateur (section 6), qui ne doit jamais relancer un modèle et lit
+  donc uniquement cette table.
+
+Le data lake Parquet (`data/store.py`) est partitionné par snapshot immuable
+(`~/.patrick/store/snapshot=<date>/<clé>__<hash>.parquet`) plutôt que
+réécrit à chaque ingestion — deux ingestions identiques retombent sur le
+même snapshot (déduplication par hash), deux ingestions différentes le même
+jour coexistent sans s'écraser. `DataStore.query()` lit directement les
+Parquet par SQL via DuckDB, sans recharger un par un en pandas.
+
+**Limite connue** : le Sharpe déflaté (`validation/dsr.py`, section 4) est
+implémenté et testé mais **pas encore appelé depuis `run_pipeline`** — il a
+besoin d'une courbe de P&L à déflater, produite par le simulateur (section
+6), pas encore branchée en amont. Module autonome, prêt à être appelé une
+fois ce branchement fait — corrige une imprécision de la section 4
+ci-dessus, qui le décrit comme "affiché systématiquement" (vrai pour PBO et
+DM, pas encore pour DSR).
