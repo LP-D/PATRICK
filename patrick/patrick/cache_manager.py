@@ -13,7 +13,7 @@ def _cache_root() -> Path:
 
 
 class LocalCache:
-    """Cache local simple pour données, features et sélections, avec rafraîchissement hebdo."""
+    """Simple local cache for data, features and selections, with weekly refresh."""
 
     def __init__(self, root: str | None = None):
         self.root = Path(root) if root else _cache_root()

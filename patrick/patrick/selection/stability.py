@@ -1,24 +1,23 @@
-"""Phase 6.3 (P6.3) -- stabilité de la sélection de features à travers les
-folds (walk-forward aujourd'hui, chemins CPCV demain -- P6.1) : une sélection
-qui change presque entièrement d'un fold à l'autre ne signale pas un modèle
-qui s'adapte au régime, mais une procédure de sélection instable -- le signal
-identifié n'est reproductible qu'à la mesure où les features retenues le sont.
+"""Phase 6.3 (P6.3) -- feature selection stability across folds
+(walk-forward today, CPCV paths tomorrow -- P6.1): a selection that changes
+almost entirely from one fold to the next does not signal a model adapting
+to the regime, but an unstable selection procedure -- the identified signal
+is only as reproducible as the retained features are.
 
-`MIN_MEAN_JACCARD_WARNING = 0.40` -- MESURÉ, pas choisi par convention (cf.
+`MIN_MEAN_JACCARD_WARNING = 0.40` -- MEASURED, not chosen by convention (see
 `tests/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`
-pour la mesure reproductible) : sur des données synthétiques SANS lien réel
-entre X et y (cible pur bruit, features corrélées entre elles comme le sont
-les familles technical/interactions du pipeline réel), la sélection SHAP
-RÉELLE (`patrick/selection/shap_select.py`, pas une formule combinatoire
-naïve) produit déjà un Jaccard moyen JUSQU'À ~0.40 entre folds par la seule
-structure de corrélation des features -- pas par un vrai signal récurrent.
-En dessous de ce seuil, une stabilité observée est indiscernable de cet
-artefact ; ce n'est PAS la preuve que le signal identifié est reproductible.
-Une formule combinatoire naïve (deux sous-ensembles aléatoires indépendants
-d'un pool de taille P) donnerait un Jaccard de hasard ~100x plus bas (~0.01
-pour N=8/P=450) -- largement sous-estimé car elle ignore que des features
-corrélées sont choisies ENSEMBLE, pas indépendamment, par un sélecteur basé
-sur l'importance."""
+for the reproducible measurement): on synthetic data with NO real link
+between X and y (pure-noise target, features correlated with each other the
+way the real pipeline's technical/interactions families are), the REAL SHAP
+selection (`patrick/selection/shap_select.py`, not a naive combinatorial
+formula) already produces a mean Jaccard of UP TO ~0.40 between folds from
+feature correlation structure alone -- not from a genuine recurring signal.
+Below this threshold, observed stability is indistinguishable from that
+artifact; it is NOT proof that the identified signal is reproducible. A
+naive combinatorial formula (two independent random subsets of a pool of
+size P) would give a chance Jaccard ~100x lower (~0.01 for N=8/P=450) --
+grossly underestimated because it ignores that correlated features are
+chosen TOGETHER, not independently, by an importance-based selector."""
 from __future__ import annotations
 
 from itertools import combinations
@@ -34,14 +33,14 @@ def jaccard(a: set, b: set) -> float:
 
 
 def feature_selection_stability(fold_feature_sets: dict[int, list[str]]) -> dict:
-    """`fold_feature_sets` : {fold_index: [noms de features retenues]}, un
-    fold peut être un fold walk-forward ou (P6.1, à venir) un chemin CPCV.
+    """`fold_feature_sets`: {fold_index: [names of retained features]}, a
+    fold can be a walk-forward fold or (P6.1, upcoming) a CPCV path.
 
-    Renvoie : `mean_jaccard` (moyenne des Jaccard par paire de folds -- NaN si
-    moins de 2 folds, la stabilité n'est pas définissable sur un seul fold),
-    `pairwise_jaccard` (liste, pour audit), `selection_freq` ({feature:
-    fraction des folds où elle est retenue}), `n_folds`, `warning` (message
-    explicite si `mean_jaccard < MIN_MEAN_JACCARD_WARNING`, sinon `None`)."""
+    Returns: `mean_jaccard` (average of pairwise fold Jaccards -- NaN if
+    fewer than 2 folds, stability isn't definable on a single fold),
+    `pairwise_jaccard` (list, for audit), `selection_freq` ({feature:
+    fraction of folds where it is retained}), `n_folds`, `warning` (explicit
+    message if `mean_jaccard < MIN_MEAN_JACCARD_WARNING`, else `None`)."""
     n_folds = len(fold_feature_sets)
     sets = {k: set(v) for k, v in fold_feature_sets.items()}
 
@@ -61,10 +60,10 @@ def feature_selection_stability(fold_feature_sets: dict[int, list[str]]) -> dict
     warning = None
     if mean_jaccard < MIN_MEAN_JACCARD_WARNING:
         warning = (
-            f"Jaccard moyen ({mean_jaccard:.3f}) sous le seuil ({MIN_MEAN_JACCARD_WARNING}) -- "
-            "la sélection de features change substantiellement d'un fold à l'autre, indiscernable "
-            "de l'artefact de corrélation mesuré sur données sans signal réel (cf. rapport de "
-            "correction P6.3). Le signal identifié par ce run n'est pas démontré reproductible."
+            f"Mean Jaccard ({mean_jaccard:.3f}) below the threshold ({MIN_MEAN_JACCARD_WARNING}) -- "
+            "feature selection changes substantially from one fold to the next, indistinguishable "
+            "from the correlation artifact measured on data with no real signal (see the P6.3 "
+            "correction report). The signal identified by this run is not shown to be reproducible."
         )
 
     return {"mean_jaccard": mean_jaccard, "pairwise_jaccard": pairwise,

@@ -1,8 +1,8 @@
-"""Découverte d'interactions inter-features (VIX_FINAL_FEATURES) : top-N features
-par importance -> paires parmi un sous-ensemble plus restreint -> plusieurs types
-d'interaction par paire -> re-sélection des meilleures. Les noms générés
-(`A__minus__B`, `A__prod__B`, `A__zrel__B`, ...) suivent la convention déjà en
-place dans les features sélectionnées du projet.
+"""Cross-feature interaction discovery (VIX_FINAL_FEATURES): top-N features
+by importance -> pairs among a narrower subset -> several interaction types
+per pair -> re-selection of the best ones. The generated names
+(`A__minus__B`, `A__prod__B`, `A__zrel__B`, ...) follow the convention
+already in place in the project's selected features.
 """
 from __future__ import annotations
 
@@ -21,20 +21,21 @@ INTERACTION_TYPES = {
 
 
 def apply_interaction(fn, a: pd.Series, b: pd.Series) -> pd.Series:
-    """Rapport de correction, N2 -- SEUL point d'application autorisé des
-    fonctions d'`INTERACTION_TYPES`, pour que la garde anti-inf ne puisse plus
-    être oubliée par un appelant.
+    """Correction report, N2 -- the ONLY authorized application point for
+    `INTERACTION_TYPES` functions, so the anti-inf guard can no longer be
+    forgotten by a caller.
 
-    `ratio`/`zrel` neutralisent déjà un dénominateur EXACTEMENT nul
-    (`.replace(0, np.nan)`), mais pas un dénominateur simplement très petit :
-    ce cas produit un ±inf réel (pas un NaN), que XGBoost rejette sans
-    condition ("Input data contains `inf`"). La garde vivait jusqu'ici dans
-    `discover_interactions` seulement, alors que les formules retenues sur le
-    fold pilote sont ensuite APPLIQUÉES aux autres folds (`_apply_interaction_
-    formulas`, pipeline/engine.py) -- là où le dénominateur peut justement
-    devenir ~0 alors qu'il était sain sur le pilote. C'était le chemin
-    reproduit en production. Un ±inf n'a ici aucun sens numérique : traité
-    comme valeur manquante, au même titre que le dénominateur nul."""
+    `ratio`/`zrel` already neutralize a denominator that is EXACTLY zero
+    (`.replace(0, np.nan)`), but not a denominator that is merely very
+    small: that case produces a real ±inf (not a NaN), which XGBoost
+    rejects unconditionally ("Input data contains `inf`"). The guard used
+    to live only in `discover_interactions`, whereas the formulas retained
+    on the pilot fold are then APPLIED to the other folds
+    (`_apply_interaction_formulas`, pipeline/engine.py) -- exactly where
+    the denominator can become ~0 when it was well-behaved on the pilot.
+    That was the path reproduced in production. A ±inf has no numerical
+    meaning here: treated as a missing value, the same as a zero
+    denominator."""
     return fn(a, b).replace([np.inf, -np.inf], np.nan)
 
 
@@ -52,7 +53,7 @@ def _prefilter_top(X: np.ndarray, y: np.ndarray, names: list[str], top_n: int,
 def discover_interactions(X_df: pd.DataFrame, y: np.ndarray, top_base: int = 40,
                            top_pairs: int = 20, final_n: int = 30,
                            seed: int = 42) -> pd.DataFrame:
-    """X_df et y doivent déjà être alignés (même ordre de lignes, sans NaN dans y)."""
+    """X_df and y must already be aligned (same row order, no NaN in y)."""
     Xf = X_df.fillna(0.0)
     base_names = _prefilter_top(Xf.values, y, list(X_df.columns), top_base, seed)
     pair_names = _prefilter_top(Xf[base_names].values, y, base_names, top_pairs, seed)

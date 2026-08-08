@@ -1,6 +1,7 @@
-"""Calibration isotonique + recherche de seuil causal (VIX_CALIBRATED_THRESHOLD) —
-gain mesuré hors régime STRESS (+0.026 F1_UP_FORT, +0.062 F1_DOWN_FORT), mais nuit
-en STRESS (-0.188 F1_UP_FORT) : désactivé par défaut, à activer sciemment."""
+"""Isotonic calibration + causal threshold search (VIX_CALIBRATED_THRESHOLD) --
+measured gain outside the STRESS regime (+0.026 F1_UP_FORT, +0.062 F1_DOWN_FORT),
+but hurts during STRESS (-0.188 F1_UP_FORT): disabled by default, enable
+knowingly."""
 from __future__ import annotations
 
 import numpy as np
@@ -19,9 +20,10 @@ def calibrate_classifier(base_clf, X_tr: np.ndarray, y_tr: np.ndarray, cv: int =
 
 def search_threshold(cal_clf, X_val: np.ndarray, y_val: np.ndarray,
                       thresholds: np.ndarray = DEFAULT_THRESHOLDS) -> tuple[float, float]:
-    """Cherche, sur une tranche de validation chronologique (fin du train, jamais le
-    test), le seuil qui force la classe FORT (0 ou 3) dès que sa probabilité le
-    dépasse, maximisant la moyenne (F1_UP_FORT, F1_DOWN_FORT)."""
+    """Searches, on a chronological validation slice (end of train, never the
+    test set), for the threshold that forces the STRONG class (0 or 3) as
+    soon as its probability exceeds it, maximizing the average of
+    (F1_UP_FORT, F1_DOWN_FORT)."""
     proba = cal_clf.predict_proba(X_val)
     classes = cal_clf.classes_
     best_thr, best_score = float(thresholds[0]), -1.0

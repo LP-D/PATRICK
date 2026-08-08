@@ -1,7 +1,7 @@
-"""Pré-filtre partagé par les 3 méthodes de sélection : réduit un pool potentiellement
-énorme de features à `prefilter` colonnes par importance XGBoost, avant d'appliquer
-la méthode finale (SHAP/RFE/LASSO) — identique pour les 3, pour isoler l'effet de la
-méthode finale (VIX_FEATURE_SELECTION)."""
+"""Pre-filter shared by the 3 selection methods: reduces a potentially huge
+feature pool to `prefilter` columns by XGBoost importance, before applying
+the final method (SHAP/RFE/LASSO) -- identical across the 3, to isolate the
+effect of the final method (VIX_FEATURE_SELECTION)."""
 from __future__ import annotations
 
 import numpy as np

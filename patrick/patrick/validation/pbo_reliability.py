@@ -1,48 +1,49 @@
-"""Rapport de correction, C5 -- fiabilité du PBO (`patrick/validation/pbo.py`,
-`compute_pbo`). L'audit a mesuré une espérance correcte (~0.50 sur 30 tirages
-i.i.d. indépendants) mais un écart-type ~0.16 sur un SEUL tirage (n_blocks=16),
-et pire encore au n_blocks réellement atteint par défaut dans ce projet
-(n_wf_folds=5 -> 4 blocs après retrait du bloc le plus ancien pour parité) --
-un PBO isolé, sans indication de dispersion, n'est pas interprétable seul.
+"""Correction report, C5 -- PBO reliability (`patrick/validation/pbo.py`,
+`compute_pbo`). The audit measured a correct expectation (~0.50 over 30
+independent i.i.d. draws) but a std dev of ~0.16 on a SINGLE draw
+(n_blocks=16), and worse still at the n_blocks actually reached by default
+in this project (n_wf_folds=5 -> 4 blocks after dropping the oldest block
+for parity) -- an isolated PBO, with no dispersion indication, is not
+interpretable on its own.
 
-Ce module N'EST PAS une modification de `compute_pbo` -- ce fichier n'importe
-ni ne touche `pbo.py` : il fournit un diagnostic complémentaire, calculé
-séparément. `_combination_outcomes` reproduit délibérément la logique
-par-combinaison de `compute_pbo` (`tests/test_pbo_reliability.py` vérifie que
-le PBO recalculé ici correspond EXACTEMENT à celui de `compute_pbo` --
-garde-fou anti-dérive si l'un des deux change sans l'autre).
+This module is NOT a modification of `compute_pbo` -- this file neither
+imports nor touches `pbo.py`: it provides a complementary diagnostic,
+computed separately. `_combination_outcomes` deliberately reproduces
+`compute_pbo`'s per-combination logic (`tests/test_pbo_reliability.py`
+verifies that the PBO recomputed here matches `compute_pbo`'s EXACTLY --
+an anti-drift guard in case one changes without the other).
 
-Dispersion -- bootstrap sur les TRIALS, pas sur les combinaisons : un premier
-essai (rééchantillonner l'ensemble déjà-calculé des C(n,n/2) sorties
-binaires) donnait un intervalle ridiculement étroit (largeur ~0.01 contre un
-écart-type mesuré ~0.16 par l'audit) -- attendu a posteriori : les
-combinaisons CSCV, calculées sur les MÊMES données sous-jacentes fixes, ne
-capturent aucune variabilité de nouvelles données, seulement le
-réarrangement d'un petit ensemble déjà fortement corrélé. Le bootstrap
-rééchantillonne donc les TRIALS (lignes de `perf_matrix`, avec remise) --
-plus proche de "et si on avait eu un jeu de trials légèrement différent ?",
-la même question que pose une nouvelle exécution. Pour rester praticable
-(C(16,8)=12870 combinaisons x 300 répétitions bootstrap serait de l'ordre de
-la minute), chaque répétition bootstrap sous-échantillonne au plus
-`MAX_COMBINATIONS_PER_BOOTSTRAP` combinaisons tirées au hasard plutôt que de
-toutes les énumérer -- vérifié empiriquement donner un écart-type quasi
-identique à l'énumération complète (0.113 vs 0.112 sur un cas testé), pour
-~40x moins de temps de calcul. Seul CE sous-échantillonnage est approximatif
-; le POINT ponctuel `pbo` retourné reste la valeur EXACTE de `compute_pbo`.
+Dispersion -- bootstrap over TRIALS, not over combinations: a first attempt
+(resampling the already-computed set of C(n,n/2) binary outcomes) gave a
+ridiculously narrow interval (width ~0.01 against a std dev of ~0.16 measured
+by the audit) -- expected in hindsight: CSCV combinations, computed on the
+SAME fixed underlying data, capture no variability from new data, only the
+rearrangement of a small, already strongly-correlated set. The bootstrap
+therefore resamples TRIALS (rows of `perf_matrix`, with replacement) --
+closer to "what if we'd had a slightly different set of trials?", the same
+question a new run poses. To stay practical (C(16,8)=12870 combinations x
+300 bootstrap repetitions would take on the order of a minute), each
+bootstrap repetition subsamples at most `MAX_COMBINATIONS_PER_BOOTSTRAP`
+randomly-drawn combinations rather than enumerating them all -- empirically
+verified to give a std dev nearly identical to full enumeration (0.113 vs
+0.112 on a tested case), for ~40x less compute time. Only THIS subsampling
+is approximate; the point estimate `pbo` returned remains the EXACT value
+from `compute_pbo`.
 
-Seuil minimal (MIN_BLOCKS = 6), justifié par calcul, pas par convention :
-pour qu'une proportion (le PBO est la fraction de combinaisons où le meilleur
-IS ne bat pas la médiane OOS) suive raisonnablement l'approximation normale,
-la règle usuelle est n*p >= 5 ET n*(1-p) >= 5 -- au pire cas p=0.5, ça donne
-n >= 10 combinaisons. C'est un PLANCHER NÉCESSAIRE, pas suffisant : les
-combinaisons CSCV ne sont PAS indépendantes (elles partagent des blocs entre
-elles), donc le nombre d'informations réellement indépendantes est
-strictement inférieur à C(n_blocks, n_blocks/2) -- le vrai seuil nécessaire
-est donc PLUS ÉLEVÉ que ce plancher de 10, pas plus bas. C(4,2)=6 < 10
-(insuffisant même dans l'hypothèse la plus optimiste d'indépendance totale) ;
-C(6,3)=20 >= 10 (satisfait le plancher avec marge, tout en restant sous le
-S>=16 documenté comme "idéal" dans `pbo.py` -- un compromis délibérément
-conservateur, pas le seuil idéal). D'où MIN_BLOCKS=6.
+Minimum threshold (MIN_BLOCKS = 6), justified by calculation, not
+convention: for a proportion (PBO is the fraction of combinations where the
+best IS trial does not beat the OOS median) to reasonably follow the normal
+approximation, the usual rule is n*p >= 5 AND n*(1-p) >= 5 -- worst case
+p=0.5, that gives n >= 10 combinations. This is a NECESSARY floor, not a
+sufficient one: CSCV combinations are NOT independent (they share blocks
+with each other), so the number of genuinely independent pieces of
+information is strictly lower than C(n_blocks, n_blocks/2) -- the true
+required threshold is therefore HIGHER than this floor of 10, not lower.
+C(4,2)=6 < 10 (insufficient even under the most optimistic assumption of
+total independence); C(6,3)=20 >= 10 (satisfies the floor with margin,
+while staying below the S>=16 documented as "ideal" in `pbo.py` -- a
+deliberately conservative compromise, not the ideal threshold). Hence
+MIN_BLOCKS=6.
 """
 from __future__ import annotations
 
@@ -52,7 +53,7 @@ from math import comb
 import numpy as np
 
 MIN_BLOCKS = 6
-MIN_COMBINATIONS_FLOOR = 10  # n*p>=5 et n*(1-p)>=5 au pire cas p=0.5 (proportion binomiale)
+MIN_COMBINATIONS_FLOOR = 10  # n*p>=5 and n*(1-p)>=5 worst case p=0.5 (binomial proportion)
 DEFAULT_N_BOOTSTRAP = 300
 MAX_COMBINATIONS_PER_BOOTSTRAP = 150
 
@@ -70,10 +71,10 @@ def required_blocks_reason() -> str:
 
 def _iter_combinations(n_blocks: int, half: int, max_combinations: int | None,
                         rng: np.random.Generator | None):
-    """Toutes les combinaisons (C(n_blocks, half) <= max_combinations, ou
-    max_combinations=None) sinon un tirage aléatoire de `max_combinations`
-    sous-ensembles de taille `half` (approximation Monte Carlo de la moyenne
-    sur toutes les combinaisons -- collisions négligeables tant que
+    """All combinations (C(n_blocks, half) <= max_combinations, or
+    max_combinations=None), otherwise a random draw of `max_combinations`
+    subsets of size `half` (Monte Carlo approximation of the average over
+    all combinations -- collisions negligible as long as
     C(n_blocks, half) >> max_combinations)."""
     block_ids = list(range(n_blocks))
     total = comb(n_blocks, half)
@@ -86,14 +87,14 @@ def _iter_combinations(n_blocks: int, half: int, max_combinations: int | None,
 
 def _combination_outcomes(perf_matrix: np.ndarray, max_combinations: int | None = None,
                            rng: np.random.Generator | None = None) -> np.ndarray:
-    """Reproduit la logique par-combinaison de `compute_pbo`
-    (`patrick/validation/pbo.py`, non importé/modifié ici) : pour chaque
-    partition des blocs en deux moitiés égales, 1.0 si le trial le meilleur en
-    IS ne bat pas la médiane des autres en OOS (logit<=0, "overfitting" au
-    sens CSCV), sinon 0.0. Avec `max_combinations=None` (défaut), énumère
-    TOUTES les combinaisons -- `np.mean(outcomes)` == `compute_pbo(...)["pbo"]`
-    exactement (vérifié par test). Avec `max_combinations` fixé, sous-échantillonne
-    (cf. docstring de module) -- résultat approximatif, réservé au bootstrap."""
+    """Reproduces `compute_pbo`'s per-combination logic
+    (`patrick/validation/pbo.py`, not imported/modified here): for each
+    partition of blocks into two equal halves, 1.0 if the best trial in IS
+    does not beat the median of the others in OOS (logit<=0, "overfitting"
+    in the CSCV sense), else 0.0. With `max_combinations=None` (default),
+    enumerates ALL combinations -- `np.mean(outcomes)` == `compute_pbo(...)["pbo"]`
+    exactly (verified by test). With `max_combinations` set, subsamples (see
+    module docstring) -- approximate result, reserved for the bootstrap."""
     perf_matrix = np.asarray(perf_matrix, dtype=float)
     n_trials, n_blocks = perf_matrix.shape
     if n_blocks % 2 != 0:
@@ -120,13 +121,13 @@ def _combination_outcomes(perf_matrix: np.ndarray, max_combinations: int | None 
 def pbo_reliability(perf_matrix: np.ndarray, n_bootstrap: int = DEFAULT_N_BOOTSTRAP, seed: int = 42,
                      ci: tuple[float, float] = (5.0, 95.0),
                      max_combinations_per_bootstrap: int = MAX_COMBINATIONS_PER_BOOTSTRAP) -> dict:
-    """Diagnostic de fiabilité pour un PBO donné (mêmes entrées que
-    `compute_pbo`) : refus explicite sous `MIN_BLOCKS`, sinon intervalle de
-    confiance (90% par défaut, percentiles 5/95) par bootstrap SUR LES TRIALS
-    (lignes de `perf_matrix`, avec remise -- cf. docstring de module pour
-    pourquoi pas sur les combinaisons). Le point `pbo` retourné est la valeur
-    EXACTE de `compute_pbo` (aucune approximation) ; seul l'intervalle utilise
-    le sous-échantillonnage de combinaisons par répétition bootstrap."""
+    """Reliability diagnostic for a given PBO (same inputs as `compute_pbo`):
+    explicit refusal below `MIN_BLOCKS`, otherwise a confidence interval (90%
+    by default, 5/95 percentiles) via bootstrap OVER TRIALS (rows of
+    `perf_matrix`, with replacement -- see module docstring for why not over
+    combinations). The `pbo` point returned is the EXACT value from
+    `compute_pbo` (no approximation); only the interval uses combination
+    subsampling per bootstrap repetition."""
     perf_matrix = np.asarray(perf_matrix, dtype=float)
     n_trials, n_blocks_raw = perf_matrix.shape
     n_blocks = n_blocks_raw - (n_blocks_raw % 2)

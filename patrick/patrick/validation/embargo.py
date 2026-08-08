@@ -1,12 +1,12 @@
-"""Embargo (López de Prado) : au-delà de la purge (retire du train les lignes dont
-la fenêtre de LABEL chevauche la coupure), l'embargo retire du TEST les `e`
-premières barres qui suivent immédiatement la coupure. Motivation distincte de la
-purge : des features à fenêtre glissante (rolling mean/std/EWMA...) calculées juste
-après la coupure incluent encore des observations du train dans leur fenêtre, donc
-peuvent rester corrélées avec lui même une fois le label "propre" (déjà géré par la
-purge). Défaut `e = horizon` (cf. `ValidationConfig.embargo_bars=None` -> dérivé de
-l'horizon courant plutôt que codé en dur), cohérent avec l'ordre de grandeur des
-fenêtres de feature les plus longues utilisées dans ce projet.
+"""Embargo (López de Prado): beyond purge (removes from train the rows whose
+LABEL window overlaps the cut), embargo removes from TEST the `e` bars
+immediately following the cut. Distinct motivation from purge: rolling-
+window features (rolling mean/std/EWMA...) computed just after the cut
+still include train observations in their window, so can stay correlated
+with it even once the label is "clean" (already handled by purge). Default
+`e = horizon` (see `ValidationConfig.embargo_bars=None` -> derived from the
+current horizon rather than hardcoded), consistent with the order of
+magnitude of the longest feature windows used in this project.
 """
 from __future__ import annotations
 
@@ -16,10 +16,11 @@ import pandas as pd
 
 def embargo_mask(full_index: pd.DatetimeIndex, mask: np.ndarray, cut_date,
                   embargo_bars: int) -> np.ndarray:
-    """Retire de `mask` (typiquement le masque de test, aligné sur `full_index`)
-    les `embargo_bars` premières lignes à `cut_date` ou après. Ne modifie que les
-    positions déjà à True ; ne touche pas les positions avant `cut_date` (l'embargo
-    s'applique au début du test, pas à la fin du train — cf. purge pour ce côté)."""
+    """Removes from `mask` (typically the test mask, aligned on `full_index`)
+    the first `embargo_bars` rows at or after `cut_date`. Only modifies
+    positions already True; does not touch positions before `cut_date`
+    (embargo applies to the start of test, not the end of train -- see
+    purge for that side)."""
     if embargo_bars <= 0:
         return mask
     out = mask.copy()

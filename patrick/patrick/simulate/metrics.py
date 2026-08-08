@@ -1,6 +1,6 @@
-"""Métriques de performance (Phase 4.4), fonctions pures sur des séries de
-rendements quotidiens -- aucune dépendance à SQLite ni à `prediction`
-(cf. `simulate/engine.py` pour l'assemblage depuis la base).
+"""Performance metrics (Phase 4.4), pure functions on daily-return series --
+no dependency on SQLite or on `prediction` (see `simulate/engine.py` for the
+assembly from the database).
 """
 from __future__ import annotations
 
@@ -41,9 +41,9 @@ def sortino_ratio(returns: pd.Series, risk_free: float = 0.0) -> float:
 
 
 def max_drawdown(equity: pd.Series) -> tuple[float, int]:
-    """(profondeur max en fraction négative, durée en jours du plus long creux
-    -- du pic précédent jusqu'au retour au-dessus de ce pic, pas seulement
-    jusqu'au point le plus bas)."""
+    """(max depth as a negative fraction, duration in days of the longest
+    trough -- from the previous peak until the return above that peak, not
+    just to the lowest point)."""
     if len(equity) < 2:
         return float("nan"), 0
     running_max = equity.cummax()
@@ -81,9 +81,9 @@ def profit_factor(trade_returns: pd.Series) -> float:
 
 
 def performance_summary(equity: pd.Series, returns: pd.Series, exposure: pd.Series) -> dict:
-    """Regroupe toutes les métriques Phase 4.4 pour une jambe (stratégie ou
-    buy-and-hold) donnée -- `exposure` sert seulement à l'exposition moyenne
-    (1.0 constant pour le buy-and-hold)."""
+    """Groups all Phase 4.4 metrics for a given leg (strategy or
+    buy-and-hold) -- `exposure` is only used for the average exposure
+    (constant 1.0 for buy-and-hold)."""
     max_dd, max_dd_days = max_drawdown(equity)
     return {
         "cagr": cagr(equity),

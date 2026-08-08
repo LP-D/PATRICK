@@ -1,7 +1,7 @@
-"""Données de marché légères pour l'interface web : mini-graphique d'historique
-et actualités au changement de cible (fenêtre "que prédire ?"), séparées du
-moteur `patrick.data.ingest` qui, lui, télécharge/aligne/cache tout l'univers
-pour un run complet — ici on veut une réponse rapide pour un seul symbole.
+"""Lightweight market data for the web interface: mini history chart and
+news on target change (the "what to predict?" panel), separate from the
+`patrick.data.ingest` engine, which downloads/aligns/caches the whole
+universe for a full run -- here we want a fast response for a single symbol.
 """
 from __future__ import annotations
 
