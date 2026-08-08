@@ -41,6 +41,56 @@ def test_migrate_is_idempotent(tmp_path):
     conn2.close()
 
 
+def test_migrate_tolerates_tables_created_under_a_prior_migration_numbering(tmp_path):
+    """Real incident, not hypothetical: `0011_phase9_tracking.sql` was
+    numbered `0010_phase9_tracking.sql` before an earlier renumbering
+    (collision with this project's own `0010_dm_result_kind.sql`). A
+    database that applied it under the old number has `phase9_snapshot`/
+    `phase9_journal` on disk but no `schema_version` row recording version
+    11 -- reproduced here by creating those tables directly and connecting
+    to a schema_version stuck below 11, without ever running the actual
+    migration script under either number."""
+    path = str(tmp_path / "patrick.db")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, "
+        "applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    # Genuinely apply 0001..0009 (real scripts, not faked schema_version rows)
+    # so dependent tables (e.g. `run`, `dm_result` from 0009) actually exist
+    # -- migration 0010 rebuilds `dm_result` and would fail on a hollow fake.
+    for script in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        version = int(script.name.split("_", 1)[0])
+        if version >= 10:
+            continue
+        conn.executescript(script.read_text())
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.commit()
+    conn.execute(
+        "CREATE TABLE phase9_snapshot (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "snapshot_name TEXT NOT NULL, payload_json TEXT NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    conn.execute(
+        "CREATE TABLE phase9_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
+        "before_json TEXT, after_json TEXT, reason TEXT NOT NULL DEFAULT '', "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    conn.commit()
+    conn.close()
+
+    conn = db.connect(path)  # must not raise sqlite3.OperationalError: table phase9_snapshot already exists
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+    n_migrations = len(list(db.MIGRATIONS_DIR.glob("*.sql")))
+    assert applied == set(range(1, n_migrations + 1))  # every version now recorded, none skipped forever
+    # dm_result went through its real 0010 rebuild (kind column present) --
+    # not silently skipped just because phase9's table-existence check fired.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(dm_result)")}
+    assert "kind" in cols
+    conn.close()
+
+
 def test_full_write_path_snapshot_run_trial_fold_metric_prediction(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
 

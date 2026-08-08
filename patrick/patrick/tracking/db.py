@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -18,6 +19,8 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+
+_CREATE_TABLE_RE = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
 
 
 def default_db_path() -> str:
@@ -51,6 +54,29 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _tables_already_present(conn: sqlite3.Connection, sql: str) -> bool:
+    """True if EVERY `CREATE TABLE` target in `sql` already exists in the
+    database. Real incident, not hypothetical: `0011_phase9_tracking.sql`
+    was numbered `0010_phase9_tracking.sql` before an earlier renumbering
+    (collision with this project's own `0010_dm_result_kind.sql`) --
+    a database that had already applied it under the old number has
+    `phase9_snapshot`/`phase9_journal` on disk but no `schema_version` row
+    for version 11, so `executescript()` below would crash on
+    `CREATE TABLE phase9_snapshot` for a table that's already there. Checked
+    per-migration (not hardcoded to phase9) so any future renumbering hits
+    the same safety net. Only covers "all its tables already exist" -- a
+    migration that also does INSERT/DROP/RENAME (like 0010) is never a pure
+    CREATE-TABLE-only script and is unaffected by this check."""
+    names = _CREATE_TABLE_RE.findall(sql)
+    if not names:
+        return False
+    placeholders = ",".join("?" for _ in names)
+    existing = {row[0] for row in conn.execute(
+        f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})", names
+    )}
+    return set(names) <= existing
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version ("
@@ -64,6 +90,9 @@ def migrate(conn: sqlite3.Connection) -> None:
         if version <= current:
             continue
         sql = script.read_text()
+        if _tables_already_present(conn, sql):
+            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+            continue
         with conn:
             conn.executescript(sql)
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
