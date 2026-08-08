@@ -1,7 +1,8 @@
-"""Défauts encodant les leçons du projet VIX (README) — activables autrement,
-jamais retirés du code : SHAP bat RFE/LASSO en test direct, le stacking perd sur
-93% des (horizon, fold) testés en walk-forward, le DL n'a jamais battu le ML
-classique, la purge a un effet négligeable, la calibration n'aide que hors STRESS.
+"""Defaults encoding the lessons learned from the VIX project (README) — can be
+switched on differently, never removed from the code: SHAP beats RFE/LASSO in
+direct testing, stacking loses on 93% of the (horizon, fold) pairs tested in
+walk-forward, DL never beat classical ML, purge has a negligible effect,
+calibration only helps outside STRESS regimes.
 """
 
 DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
@@ -19,19 +20,20 @@ DEFAULT_MIN_TRAIN_FRAC = 0.40
 DEFAULT_FLAT_THR = 0.003
 DEFAULT_SEED = 42
 
-# Phase 2.1 (validité statistique) : derniers mois réservés en holdout terminal,
-# jamais vus par la sélection de features/le tuning/le tri du leaderboard. Le plan
-# fourni laisse un intervalle (12-24 mois) ; 15 = milieu raisonnable. Configurable
-# via validation.holdout_months dans le YAML (range: 12-24, défaut: 15).
+# Phase 2.1 (statistical validity): last months reserved as terminal holdout,
+# never seen by feature selection/tuning/leaderboard ranking. The original plan
+# leaves a range (12-24 months); 15 = reasonable midpoint. Configurable via
+# validation.holdout_months in the YAML (range: 12-24, default: 15).
 DEFAULT_HOLDOUT_MONTHS = 15
 
-# Phase X5 -- mapping classe d'actif (`data/session_calendar.classify_asset_class`)
-# -> candidats de baseline "spécifique" pour le test Diebold-Mariano (Phase 2.5).
-# Quand plusieurs candidats sont listés, le meilleur (F1_dir le plus haut sur le
-# fold évalué) est retenu -- cf. `pipeline/engine.py::_evaluate_diebold_mariano`.
-# La persistance de classe est TOUJOURS calculée en plus, comme référence commune
-# fixe entre classes (jamais dans ce mapping). Non exhaustif : toute classe absente
-# retombe sur ["persistence"] (comportement historique, conservateur).
+# Phase X5 -- mapping from asset class (`data/session_calendar.classify_asset_class`)
+# -> "class-specific" baseline candidates for the Diebold-Mariano test (Phase 2.5).
+# When several candidates are listed, the best one (highest F1_dir on the
+# evaluated fold) is kept -- see `pipeline/engine.py::_evaluate_diebold_mariano`.
+# Class-agnostic persistence is ALWAYS computed in addition, as a fixed common
+# reference across classes (never part of this mapping). Not exhaustive: any
+# class absent here falls back to ["persistence"] (historical, conservative
+# behavior).
 DEFAULT_BASELINE_BY_ASSET_CLASS: dict[str, list[str]] = {
     "volatility_index": ["har_rv"],
     "equities_us": ["persistence", "majority_by_regime"],
@@ -45,65 +47,65 @@ DEFAULT_BASELINE_BY_ASSET_CLASS: dict[str, list[str]] = {
     "other": ["persistence"],
 }
 
-# Optuna fait partie de la boucle par défaut (demande explicite) : sélectionner le
-# meilleur modèle sans l'affiner ne répond pas au besoin "ressort le meilleur modèle".
+# Optuna is part of the loop by default (explicit requirement): selecting the
+# best model without tuning it does not fulfill "return the best model".
 DEFAULT_TUNING_ENABLED = True
 DEFAULT_TUNING_TOP_K = 5
 DEFAULT_TUNING_N_TRIALS = 100
 DEFAULT_TUNING_CV_SPLITS = 3
-# Rapport d'audit, C3 : `top_k` était sélectionné GLOBALEMENT tous horizons
-# confondus -- un run à plusieurs horizons pouvait voir 100% du budget Optuna
-# concentré sur un seul horizon (celui dont le meilleur essai SCAN dominait),
-# les autres n'en recevant aucun. True = chaque horizon reçoit son propre
-# top_k/n_trials, indépendamment des autres (comportement corrigé, par défaut).
+# Audit report, C3: `top_k` used to be selected GLOBALLY across all horizons --
+# a multi-horizon run could see 100% of the Optuna budget concentrated on a
+# single horizon (whichever had the dominant best SCAN trial), the others
+# getting none. True = each horizon receives its own top_k/n_trials,
+# independently of the others (fixed behavior, default).
 DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 
-# Phase 6.5 (P6.5) -- portes de qualité de données à l'ingestion : seuils
-# MESURÉS par simulation, pas choisis par convention -- cf. justification
-# détaillée dans `data/quality.py` (docstring de module).
+# Phase 6.5 (P6.5) -- data quality gates at ingestion: thresholds MEASURED by
+# simulation, not chosen by convention -- see detailed justification in
+# `data/quality.py` (module docstring).
 DEFAULT_QUALITY_MAX_FROZEN_RUN = 4
 DEFAULT_QUALITY_MAX_GAP_BDAYS = 10
 DEFAULT_QUALITY_MAX_ROBUST_Z = 40.0
 DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
 
-# Phase 6.1 (P6.1) -- CPCV : couple minimal (N, k=2) qui rend le PBO
-# satisfiable (garde C5, MIN_BLOCKS=6) sans calcul combinatoire superflu --
-# cf. justification détaillée dans `validation/cpcv.py`.
+# Phase 6.1 (P6.1) -- CPCV: minimal (N, k=2) pair that makes PBO satisfiable
+# (guard C5, MIN_BLOCKS=6) without superfluous combinatorial computation --
+# see detailed justification in `validation/cpcv.py`.
 DEFAULT_CPCV_N_GROUPS = 7
 DEFAULT_CPCV_K_TEST_GROUPS = 2
 
-# Options désactivées par défaut mais câblées dans le pipeline (pas en annexe) :
-# purge (VIX_PURGED_CV : delta F1_dir négligeable), calibration (VIX_CALIBRATED_THRESHOLD :
-# gain conditionnel au régime, nuit en STRESS), stacking (VIX_STACKING_WF : perd 28/30).
+# Options disabled by default but wired into the pipeline (not an appendix):
+# purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
+# regime-conditional gain, hurts in STRESS), stacking (VIX_STACKING_WF: loses 28/30).
 DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
 DEFAULT_STACKING_ENABLED = False
 
-# Embargo (Phase 0 correctness, distinct de la purge ci-dessus) : retire du TEST
-# les `embargo_bars` premières barres qui suivent la coupure train/test, contre les
-# fenêtres glissantes (rolling mean/std...) calculées juste après la coupure et
-# encore corrélées au train. Contrairement à la purge (effet mesuré négligeable
-# dans le projet VIX d'origine), il n'existe pas encore de mesure empirique pour
-# l'embargo sur ce cadre généralisé — activé par défaut par prudence (coût faible :
-# quelques barres de test en moins par fold), à la différence de la purge.
+# Embargo (Phase 0 correctness, distinct from the purge above): removes from the
+# TEST set the first `embargo_bars` bars following the train/test cut, against
+# rolling windows (rolling mean/std...) computed right after the cut that are
+# still correlated with train. Unlike purge (measured negligible effect in the
+# original VIX project), there is not yet an empirical measurement for embargo
+# on this generalized framework -- enabled by default out of caution (low cost:
+# a few fewer test bars per fold), unlike purge.
 DEFAULT_EMBARGO_ENABLED = True
-DEFAULT_EMBARGO_BARS = None  # None -> dérivé de l'horizon courant (e = horizon)
+DEFAULT_EMBARGO_BARS = None  # None -> derived from the current horizon (e = horizon)
 
-# Modèles de la famille "vol_models" (patrick/features/vol_models.py), sélectionnables
-# individuellement depuis l'interface web. Les 5 premiers sont ceux du pipeline VIX
-# d'origine (toujours calculés ensemble jusqu'ici) — restent activés par défaut pour ne
-# pas changer la référence F1_dir≈0.610 déjà validée. AR/MA/ARMA/ARIMA sont nouveaux,
-# jamais testés en walk-forward : désactivés par défaut.
+# Models in the "vol_models" family (patrick/features/vol_models.py), individually
+# selectable from the web interface. The first 5 are the ones from the original VIX
+# pipeline (always computed together until now) — kept enabled by default so as not
+# to change the already-validated F1_dir≈0.610 reference. AR/MA/ARMA/ARIMA are new,
+# never tested in walk-forward: disabled by default.
 ALL_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
 DEFAULT_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
 
-# Liste ouverte des cibles proposées par le formulaire web ("que prédire ?"),
-# groupées par catégorie pour un menu déroulant navigable malgré leur nombre — plus
-# de champ libre. Chaque entrée fixe aussi sa source (yfinance sauf le groupe
-# "Macro (FRED)"), donc il n'y a plus de choix de source à faire séparément.
-# Liste blanche gérée manuellement : tickers déjà connus pour être delistés, mal
-# formés pour yfinance, ou renommés depuis — à exclure si jamais réinjectés dans
-# YF_TICKERS_RAW/MANUAL_YF_NAMES ci-dessus lors d'une future extension.
+# Open list of targets proposed by the web form ("what to predict?"), grouped
+# by category for a browsable dropdown despite their number — no more free-text
+# field. Each entry also fixes its source (yfinance except for the
+# "Macro (FRED)" group), so there is no separate source choice to make anymore.
+# Manually maintained blocklist: tickers already known to be delisted, malformed
+# for yfinance, or renamed since — to exclude if ever reinjected into
+# YF_TICKERS_RAW/MANUAL_YF_NAMES above during a future extension.
 BAD_TICKERS = {
     "XXIV", "TVIX", "ZIV", "^MIB", "CELG", "AET", "HES", "GPS", "JWN", "DFS",
     "SPX", "EON", "EDF", "RWE", "SZR", "ICN", "CEIX", "MXEA", "SQ", "SHELL", "K",
@@ -132,9 +134,9 @@ DEFAULT_TARGET_GROUPS = {
         ("^STOXX50E", "STOXX50E_EU"),
         ("^VIX", "VIX_Price"),
         ("^VXN", "VXN_NASDAQ_Vol"),
-        # Ajouts (liste yfinance fournie par l'utilisateur, 2026-07-27) : indices
-        # mondiaux absents ci-dessus, filtrés/validés à la main contre le fichier
-        # source (pas de doublon avec les symboles déjà présents).
+        # Additions (yfinance list provided by the user, 2026-07-27): world
+        # indices absent above, manually filtered/validated against the source
+        # file (no duplicate with symbols already present).
         ("000001.SS", "SSE_Shanghai"),
         ("^BFX", "BEL20_Belgium"),
         ("^BSESN", "Sensex_India"),
@@ -207,15 +209,15 @@ DEFAULT_TARGET_GROUPS = {
         ("SB=F", "Sugar_Futures"),
     ],
     "Actions France & Europe": [
-        # Sous-ensemble haute confiance de la liste brute (18922 tickers) : la
-        # quasi-totalité des ~7966 codes "Actions" étaient des warrants/turbos
-        # Euronext (suffixe .NX, ~7074) ou des séries de certificats sur une
-        # même sous-jacente (ex. ACAxx/ETAxx/MLxxx, repérées par préfixe commun
-        # répété) plutôt que des actions distinctes — filtrées. Ne garde que des
-        # sociétés cotées identifiées avec confiance (CAC 40 + mid-caps
-        # reconnaissables), chacune vérifiée présente dans le fichier source.
-        # TTE (TotalEnergies) déjà présent dans "Actions individuelles" (ligne
-        # US) — pas de doublon TTE.PA ici.
+        # High-confidence subset of the raw list (18922 tickers): the vast
+        # majority of the ~7966 "Actions" codes were Euronext warrants/turbos
+        # (.NX suffix, ~7074) or certificate series on the same underlying
+        # (e.g. ACAxx/ETAxx/MLxxx, identified by a repeated common prefix)
+        # rather than distinct stocks — filtered out. Keeps only listed
+        # companies identified with confidence (CAC 40 + recognizable
+        # mid-caps), each verified present in the source file. TTE
+        # (TotalEnergies) already present under "Actions individuelles" (US
+        # row) — no TTE.PA duplicate here.
         ("AI.PA", "AirLiquide"),
         ("AIR.PA", "Airbus"),
         ("MC.PA", "LVMH"),
@@ -425,9 +427,9 @@ DEFAULT_TARGET_GROUPS = {
         ("MARA", "MARA_Marathon"),
         ("MSTR", "MSTR_Bitcoin3"),
         ("RIOT", "RIOT_Riot"),
-        # Spot (absent ci-dessus, qui ne couvrait que les proxies actions/ETF) —
-        # seulement les cryptos majeures, non-stablecoin, non-wrapped (exclut
-        # USDT/USDC/STETH/WBTC/WETH... redondants avec leur sous-jacent).
+        # Spot (absent above, which only covered stock/ETF proxies) — only major
+        # cryptos, non-stablecoin, non-wrapped (excludes
+        # USDT/USDC/STETH/WBTC/WETH... redundant with their underlying).
         ("BTC-USD", "Bitcoin_Spot"),
         ("ETH-USD", "Ethereum_Spot"),
         ("BNB-USD", "BNB_Spot"),
@@ -714,13 +716,13 @@ def _flatten_target_choices():
     return out
 
 
-# (symbole, libellé, source) — vue "à plat" de DEFAULT_TARGET_GROUPS, pour tout code
-# qui n'a pas besoin du groupement (résolution de la source d'un symbole, etc.)
+# (symbol, label, source) — "flattened" view of DEFAULT_TARGET_GROUPS, for any
+# code that doesn't need the grouping (resolving a symbol's source, etc.)
 DEFAULT_TARGET_CHOICES = _flatten_target_choices()
 
-# Univers "large" utilisé automatiquement pour construire les features (plus de
-# sélection manuelle de tickers) : union de tout ce qui est disponible ci-dessus,
-# côté yfinance et côté FRED. La cible choisie en est retirée au moment de construire
-# la config (voir webapp/forms.py) pour éviter qu'un ticker ne se prédise lui-même.
+# "Large" universe automatically used to build features (no more manual ticker
+# selection): union of everything available above, both yfinance and FRED side.
+# The chosen target is removed from it when building the config (see
+# webapp/forms.py) to avoid a ticker predicting itself.
 DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src == "yfinance"]
 DEFAULT_UNIVERSE_FRED_SERIES = {label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"}

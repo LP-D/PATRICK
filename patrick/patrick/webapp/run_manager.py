@@ -1,12 +1,12 @@
-"""Client léger de la file de jobs (Phase 3.1) côté process web.
+"""Lightweight job-queue client (Phase 3.1) on the web process side.
 
-L'exécution réelle du pipeline a lieu dans un process worker séparé
-(`patrick worker`, cf. `patrick/worker.py`) ; ce module ne fait plus que lire
-et écrire la table `job` (cf. `tracking/jobs.py`) et s'assurer qu'un worker
-tourne. Remplace l'ancien `RunState`/thread interne au process web
-(BackgroundTasks-like) : tuer le process web pendant un run ne perd plus le
-run, un redémarrage retrouve l'état en relisant `job` plutôt qu'un état perdu
-en mémoire.
+The pipeline's actual execution happens in a separate worker process
+(`patrick worker`, see `patrick/worker.py`); this module now only reads and
+writes the `job` table (see `tracking/jobs.py`) and ensures a worker is
+running. Replaces the old web-process-internal `RunState`/thread
+(BackgroundTasks-like): killing the web process during a run no longer
+loses the run, a restart recovers the state by re-reading `job` rather than
+a state lost in memory.
 """
 from __future__ import annotations
 
@@ -31,17 +31,17 @@ def _connect():
 
 
 def next_run_name(target_symbol: str) -> str:
-    """Nom de run généré = slug(cible) + numéro de séquence. Le compteur de
-    base vient de la table `run` (1 + nombre de runs déjà enregistrés pour
-    cette cible), mais un job simplement enfilé (`queued`) ou en cours
-    (`running`) n'a pas encore de ligne `run` -- invisible à ce compte tant
-    que le pipeline n'a pas réellement démarré. Sans le contrôle ci-dessous,
-    deux jobs pour la même cible soumis avant que le premier ne démarre
-    recevraient le même nom, donc le même `output.dir`/`study_name` Optuna :
-    écrasement silencieux d'artefacts et reprise involontaire d'une étude
-    Optuna (cf. pipeline/engine.py:1038, 1075 -- load_if_exists=True sur un
-    study_name dérivé du nom). On recule donc aussi devant tout nom déjà
-    tenu par un job encore en file ou en cours pour cette même cible."""
+    """Generated run name = slug(target) + sequence number. The base counter
+    comes from the `run` table (1 + number of runs already recorded for this
+    target), but a job that is merely queued (`queued`) or running
+    (`running`) has no `run` row yet -- invisible to this count until the
+    pipeline has actually started. Without the check below, two jobs for the
+    same target submitted before the first one starts would receive the
+    same name, hence the same `output.dir`/Optuna `study_name`: silent
+    artifact overwrite and involuntary resumption of an Optuna study (see
+    pipeline/engine.py:1038, 1075 -- load_if_exists=True on a study_name
+    derived from the name). So this also steps back from any name already
+    held by a job still queued or running for this same target."""
     conn = _connect()
     try:
         count = conn.execute(
@@ -98,12 +98,12 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
 
 
 def start_run(config: RunConfig) -> dict:
-    """Enfile la config comme nouveau job et s'assure qu'un worker existe pour
-    la consommer. Ne lance plus rien "tout de suite" en mémoire : la
-    transition queued -> running est décidée par le worker (process séparé),
-    donc immédiatement après cet appel le job est toujours 'queued' même s'il
-    n'y a aucun autre run actif (le worker le réclame en général en moins
-    d'une seconde, cf. `poll_interval`)."""
+    """Enqueues the config as a new job and ensures a worker exists to
+    consume it. No longer launches anything "right away" in memory: the
+    queued -> running transition is decided by the worker (separate
+    process), so immediately after this call the job is still 'queued' even
+    if there is no other active run (the worker generally claims it in
+    under a second, see `poll_interval`)."""
     conn = _connect()
     try:
         job_id = jobs_db.enqueue_job(conn, config.model_dump_json())
@@ -175,22 +175,22 @@ def queued_runs() -> list[dict]:
 
 
 def ensure_worker_running() -> None:
-    """Relance `patrick worker` en process séparé et détaché si aucun worker
-    vivant n'est détecté (heartbeat absent ou périmé). Un léger recouvrement
-    entre deux appels concurrents est possible (pas de verrou distribué) mais
-    sans conséquence : `claim_next_job` est atomique, deux workers ne peuvent
-    jamais exécuter le même job — au pire l'un des deux s'arrête vite, faute
-    de jobs à réclamer."""
+    """Relaunches `patrick worker` as a separate, detached process if no
+    live worker is detected (heartbeat missing or stale). A slight overlap
+    between two concurrent calls is possible (no distributed lock) but
+    harmless: `claim_next_job` is atomic, two workers can never execute the
+    same job — at worst one of the two stops quickly, finding no jobs left
+    to claim."""
     conn = _connect()
     try:
         if jobs_db.worker_is_alive(conn):
             return
-        # Réserve immédiatement le rôle de worker actif (heartbeat placeholder,
-        # pid=0) avant même de spawner le process séparé : celui-ci met
-        # plusieurs secondes à importer ses dépendances ML avant d'écrire son
-        # propre heartbeat (cf. commentaire sur HEARTBEAT_STALE_S) — sans ce
-        # jalon, une deuxième soumission arrivant dans cette fenêtre verrait
-        # encore "aucun worker vivant" et en relancerait un second en double.
+        # Immediately reserves the active-worker role (heartbeat placeholder,
+        # pid=0) even before spawning the separate process: the latter takes
+        # several seconds to import its ML dependencies before writing its
+        # own heartbeat (see comment on HEARTBEAT_STALE_S) — without this
+        # marker, a second submission arriving in this window would still
+        # see "no live worker" and would relaunch a duplicate second one.
         jobs_db.write_heartbeat(conn, pid=0)
     finally:
         conn.close()
@@ -202,7 +202,7 @@ def _spawn_worker(idle_timeout: float) -> None:
     cmd = [sys.executable, "-m", "patrick.cli", "worker", "--idle-timeout", str(idle_timeout)]
     kwargs: dict = {}
     if os.name == "posix":
-        kwargs["start_new_session"] = True  # survit à la mort du process web (nouveau groupe de process)
+        kwargs["start_new_session"] = True  # survives the web process's death (new process group)
     else:
         kwargs["creationflags"] = (
             subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]

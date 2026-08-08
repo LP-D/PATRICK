@@ -1,43 +1,41 @@
-"""Simulateur d'investissement (Phase 4) -- v1 mono-actif.
+"""Investment simulator (Phase 4) -- v1 single-asset.
 
-Contraintes non négociables du plan, appliquées ici :
-- ne RÉ-EXÉCUTE JAMAIS un modèle : lit uniquement `prediction` (split test/
-  holdout/live) + la donnée brute immuable du snapshot associé au run (pour
-  calculer le rendement réalisé de l'actif sous-jacent -- un chargement de
-  données, pas une inférence).
-- timing d'exécution explicite (rapport de correction, C6 -- remplace la
-  convention `open_next` du plan de phase 4, jamais implémentable ici : le
-  simulateur ne modélise qu'une série de clôtures close-to-close, pas
-  d'open/high/low par actif) : seul `execution_lag_bars` pilote le timing, et
-  c'est tout ce qu'il fait. Convention réelle (`_build_exposure`) : le signal
-  est connu à la clôture du jour `t` ; l'exposition démarre à la ligne
-  `t + execution_lag_bars` de la grille quotidienne ; comme
-  `underlying_ret[i] = close[i]/close[i-1] - 1` (le rendement qui SE TERMINE
-  au jour i), le PREMIER rendement capté est celui de `t+lag-1` à `t+lag`.
-  Avec le minimum imposé `execution_lag_bars=1`, ce premier rendement capté
-  est donc exactement celui de `t` à `t+1` -- le mouvement qui suit
-  immédiatement la clôture du signal, sans latence réelle supplémentaire.
-  `execution_lag_bars=0` est structurellement interdit (`SimParams.
-  __post_init__`, anti-pattern #5 du plan) : il ferait capter le rendement de
-  `t-1` à `t`, déjà connu au moment où le signal est calculé, donc du
-  look-ahead pur. Revisite F.2 (rapport d'audit, "lag=0 donne un Sharpe plus
-  bas que lag=1", non résolu) : un signal oracle (prédiction parfaite du
-  mouvement `t`->`t+1`) confirme que ce n'est PAS un bug d'alignement --
-  lag=1 capte exactement ce que l'oracle prédit (Sharpe ~6, quasi parfait sur
-  série synthétique), lag=0/2/3 captent un rendement sans rapport avec la
-  prédiction (Sharpe proche de 0, jamais négatif ni anormal). `_build_exposure`
-  fonctionne comme attendu ; script de diagnostic non conservé dans le dépôt
-  (mesure ponctuelle, comme D2).
-- horizons chevauchants explicitement résolus : `overlap_mode` "tranches"
-  (moyenne des signaux actifs, par défaut) ou "renewed" (position unique
-  renouvelée), jamais un choix implicite.
+Non-negotiable constraints from the plan, applied here:
+- NEVER re-runs a model: reads only `prediction` (test/holdout/live split) +
+  the immutable raw data of the snapshot associated with the run (to compute
+  the underlying asset's realized return -- a data load, not an inference).
+- explicit execution timing (correction report, C6 -- replaces the
+  `open_next` convention from the phase-4 plan, never implementable here: the
+  simulator only models a close-to-close series, no per-asset open/high/low):
+  only `execution_lag_bars` drives timing, and that is all it does. Actual
+  convention (`_build_exposure`): the signal is known at the close of day
+  `t`; the exposure starts at row `t + execution_lag_bars` of the daily
+  grid; since `underlying_ret[i] = close[i]/close[i-1] - 1` (the return that
+  ENDS on day i), the FIRST return captured is that of `t+lag-1` to `t+lag`.
+  With the enforced minimum `execution_lag_bars=1`, this first captured
+  return is therefore exactly the one from `t` to `t+1` -- the move that
+  immediately follows the signal's close, with no additional real latency.
+  `execution_lag_bars=0` is structurally forbidden (`SimParams.
+  __post_init__`, anti-pattern #5 of the plan): it would capture the return
+  from `t-1` to `t`, already known at the moment the signal is computed,
+  i.e. pure look-ahead. Revisits F.2 (audit report, "lag=0 gives a lower
+  Sharpe than lag=1", unresolved): an oracle signal (perfect prediction of
+  the `t`->`t+1` move) confirms this is NOT an alignment bug -- lag=1
+  captures exactly what the oracle predicts (Sharpe ~6, near-perfect on
+  synthetic series), lag=0/2/3 capture a return unrelated to the prediction
+  (Sharpe close to 0, never negative or abnormal). `_build_exposure` works
+  as expected; the diagnostic script was not kept in the repo (one-off
+  measurement, like D2).
+- overlapping horizons explicitly resolved: `overlap_mode` "tranches"
+  (average of active signals, default) or "renewed" (single position
+  renewed), never an implicit choice.
 
-`y_proba` en base est la confiance du modèle dans SA classe prédite (top-1,
-4 classes DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT -- cf. features/target.py),
-pas directement P(hausse). Choix documenté (détail mineur laissé à mon
-appréciation, cf. rapport de phase) : `_directional_score` la convertit en un
-score dans [0,1] façon "P(hausse)" en retournant la confiance quand la classe
-prédite est haussière, et son complément sinon.
+`y_proba` in the database is the model's confidence in ITS predicted class
+(top-1, 4 classes DOWN_FORT/DOWN_FAIBLE/UP_FAIBLE/UP_FORT -- see
+features/target.py), not directly P(up). Documented choice (minor detail
+left to my judgment, see phase report): `_directional_score` converts it to
+a [0,1] "P(up)"-style score by returning the confidence when the predicted
+class is bullish, and its complement otherwise.
 """
 from __future__ import annotations
 
@@ -81,12 +79,12 @@ class SimParams:
     spread_bps: float = 0.0
     commission_bps: float = 0.0
     carry_bps_per_year: float = 0.0
-    asset_class: str | None = None  # si fourni, préremplit spread+commission (cf. ASSET_CLASS_FRICTION_BPS)
+    asset_class: str | None = None  # if provided, prefills spread+commission (see ASSET_CLASS_FRICTION_BPS)
 
     def __post_init__(self) -> None:
         if self.execution_lag_bars < 1:
-            raise ValueError("execution_lag_bars doit être >= 1 : exécuter sur la bougie du "
-                              "signal (anti-pattern #5 du plan) est structurellement interdit.")
+            raise ValueError("execution_lag_bars must be >= 1: executing on the signal's own "
+                              "bar (anti-pattern #5 of the plan) is structurally forbidden.")
         if self.asset_class and self.asset_class in ASSET_CLASS_FRICTION_BPS:
             total = ASSET_CLASS_FRICTION_BPS[self.asset_class]
             if self.spread_bps == 0.0 and self.commission_bps == 0.0:
@@ -114,7 +112,7 @@ def _position_from_score(score: np.ndarray, params: SimParams) -> np.ndarray:
         # or f*=μ/σ² in continuous). This linear approximation ignores volatility.
         pos = params.kelly_fraction * (2 * score - 1)
     else:
-        raise ValueError(f"position_mode inconnu : {params.position_mode}")
+        raise ValueError(f"unknown position_mode: {params.position_mode}")
 
     pos = pos * params.max_leverage
     if not params.short_allowed:
@@ -129,21 +127,21 @@ def _brier_score(y_true_binary: np.ndarray, score: np.ndarray) -> float:
 
 
 def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: int = 30) -> tuple[bool, str]:
-    """L'allocation heuristique n'est activable QUE si une courbe de calibration
-    (proxy ici : un score de Brier meilleur qu'un tirage au sort sur le
-    problème binarisé, 0.25) existe sur le fold de test -- sinon désactivé
-    avec un message explicatif (Phase 4.1), jamais silencieusement approximé.
+    """Heuristic allocation is only enabled if a calibration curve (proxy here:
+    a Brier score better than a coin flip on the binarized problem, 0.25)
+    holds on the test fold -- otherwise disabled with an explanatory message
+    (Phase 4.1), never silently approximated.
 
-    ⚠️  DISCLAIMER : Cette allocation est une heuristique (`leverage = kelly_frac * (2*score - 1)`),
-    non une véritable formule Kelly (qui est f*=edge/odds en discret ou f*=μ/σ² en continu).
-    Elle ignore la volatilité du signal et peut sur/sous-dimensionner face à la variance réelle."""
+    DISCLAIMER: this allocation is a heuristic (`leverage = kelly_frac * (2*score - 1)`),
+    not a true Kelly formula (which is f*=edge/odds in discrete or f*=μ/σ² in continuous).
+    It ignores the signal's volatility and can over/under-size relative to the real variance."""
     rows = conn.execute(
         "SELECT y_pred, y_proba, y_true FROM prediction "
         "WHERE trial_id = ? AND split = 'test' AND y_proba IS NOT NULL AND y_true IS NOT NULL",
         (trial_id,),
     ).fetchall()
     if len(rows) < min_obs:
-        return False, f"Allocation heuristique désactivée : seulement {len(rows)} observations de test avec proba (min {min_obs})."
+        return False, f"Heuristic allocation disabled: only {len(rows)} test observations with proba (min {min_obs})."
     y_pred = np.array([r[0] for r in rows])
     y_proba = np.array([r[1] for r in rows])
     y_true = np.array([r[2] for r in rows])
@@ -151,8 +149,8 @@ def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: i
     y_true_binary = np.isin(y_true, _UP_CLASSES).astype(float)
     brier = _brier_score(y_true_binary, score)
     if brier >= 0.25:
-        return False, f"Allocation heuristique désactivée : score de Brier {brier:.3f} >= 0.25 (pas mieux qu'un tirage au sort)."
-    return True, f"Allocation heuristique activée (score de Brier {brier:.3f} sur {len(rows)} obs. de test)."
+        return False, f"Heuristic allocation disabled: Brier score {brier:.3f} >= 0.25 (no better than a coin flip)."
+    return True, f"Heuristic allocation enabled (Brier score {brier:.3f} on {len(rows)} test obs.)."
 
 
 def _load_predictions(conn: sqlite3.Connection, trial_id: int) -> pd.DataFrame:
@@ -169,14 +167,14 @@ def _load_predictions(conn: sqlite3.Connection, trial_id: int) -> pd.DataFrame:
 
 def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
                      daily_index: pd.DatetimeIndex, horizon: int, params: SimParams) -> pd.Series:
-    """Place chaque signal sur la grille quotidienne à `entry_idx = position du
-    signal + execution_lag_bars` (jamais avant, cf. `SimParams.__post_init__`) ;
-    le premier rendement capté à cette entrée est `underlying_ret[entry_idx]`,
-    c.-à-d. le rendement close-to-close de `entry_idx-1` à `entry_idx` (cf.
-    convention détaillée, docstring de module, rapport de correction C6) --
-    puis résout les horizons chevauchants (Phase 4, contrainte non
-    négociable) : "tranches" moyenne les signaux actifs sur [entry, entry+H),
-    "renewed" fait tenir le dernier signal jusqu'au suivant."""
+    """Places each signal on the daily grid at `entry_idx = signal position +
+    execution_lag_bars` (never earlier, see `SimParams.__post_init__`); the
+    first return captured at this entry is `underlying_ret[entry_idx]`, i.e.
+    the close-to-close return from `entry_idx-1` to `entry_idx` (see detailed
+    convention, module docstring, correction report C6) -- then resolves
+    overlapping horizons (Phase 4, non-negotiable constraint): "tranches"
+    averages the active signals over [entry, entry+H), "renewed" holds the
+    last signal until the next one."""
     n = len(daily_index)
     date_to_idx = {d: i for i, d in enumerate(daily_index)}
     entry_idxs = []
@@ -202,25 +200,25 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
                 sparse.iloc[entry_idx] = pos
         exposure = sparse.ffill().fillna(0.0).values
     else:
-        raise ValueError(f"overlap_mode inconnu : {params.overlap_mode}")
+        raise ValueError(f"unknown overlap_mode: {params.overlap_mode}")
 
     return pd.Series(exposure, index=daily_index)
 
 
 def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
                                hard_ceiling_bps: float = 1000.0) -> float:
-    """Coût (spread+commission) par unité de turnover, en bps, qui ramène le
-    rendement total COMPOSÉ à zéro. `gross_returns` : rendement par période
-    net du carry mais avant coût de transaction (`exposure * underlying_ret -
-    carry_cost`). `turnover` : |Δexposition| par période, alignée sur
+    """Cost (spread+commission) per unit of turnover, in bps, that brings the
+    total COMPOUNDED return to zero. `gross_returns`: return per period net
+    of carry but before transaction cost (`exposure * underlying_ret -
+    carry_cost`). `turnover`: |Δexposure| per period, aligned with
     `gross_returns`.
 
-    Résolution numérique (`brentq`), pas une division linéaire : les coûts de
-    transaction s'appliquent période par période sur une équité qui COMPOSE
-    (`cumprod`), donc `retour_brut_total / turnover_total` sous-estime
-    fortement le coût réel dès que la position est maintenue sur plusieurs
-    périodes (cf. rapport d'audit, section F.3 -- réconciliation exacte
-    vérifiée par `tests/test_simulate.py::test_break_even_cost_reconciles_...`).
+    Numerical solve (`brentq`), not a linear division: transaction costs
+    apply period by period on an equity that COMPOUNDS (`cumprod`), so
+    `total_gross_return / total_turnover` strongly underestimates the real
+    cost as soon as the position is held over multiple periods (see audit
+    report, section F.3 -- exact reconciliation verified by
+    `tests/test_simulate.py::test_break_even_cost_reconciles_...`).
     """
     total_turnover = float(turnover.sum())
     if total_turnover <= 1e-9:
@@ -230,10 +228,10 @@ def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
     turn_arr = turnover.values
 
     def net_total_return(c: float) -> float:
-        # Clip à 1e-9 (pas 0/négatif) : une fois l'équité "en faillite" sur une
-        # période, un coût plus élevé ne peut pas creuser davantage un facteur
-        # déjà nul -- sans ce clip, `cumprod` pourrait changer de signe et
-        # casser la monotonie décroissante que `brentq` suppose.
+        # Clip to 1e-9 (not 0/negative): once equity has "gone bust" on a
+        # period, a higher cost cannot dig an already-zero factor any deeper --
+        # without this clip, `cumprod` could flip sign and break the decreasing
+        # monotonicity that `brentq` assumes.
         factors = np.clip(1.0 + gross_arr - turn_arr * c, 1e-9, None)
         return float(np.prod(factors) - 1.0)
 
@@ -242,16 +240,16 @@ def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
         return 0.0
 
     hard_ceiling = hard_ceiling_bps / 10000.0
-    c_hi = 1e-4  # 1 bp en décimal
+    c_hi = 1e-4  # 1 bp in decimal
     while net_total_return(c_hi) > 0.0 and c_hi < hard_ceiling:
         c_hi *= 2
     c_hi = min(c_hi, hard_ceiling)
 
     if net_total_return(c_hi) > 0.0:
         warnings.warn(
-            f"break_even_cost_bps : rendement encore positif au plafond dur de "
-            f"{hard_ceiling_bps:.0f} bps -- pas de changement de signe trouvé, "
-            "coût de rentabilité indéterminé.", stacklevel=2)
+            f"break_even_cost_bps: return still positive at the hard ceiling of "
+            f"{hard_ceiling_bps:.0f} bps -- no sign change found, "
+            "break-even cost is undetermined.", stacklevel=2)
         return float("nan")
 
     c_star = brentq(net_total_return, 0.0, c_hi, xtol=1e-14, rtol=1e-12)
@@ -265,10 +263,10 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         trial_row = conn.execute(
             "SELECT run_id FROM trial WHERE trial_id = ?", (trial_id,)).fetchone()
         if trial_row is None:
-            raise ValueError(f"Trial introuvable : {trial_id}")
+            raise ValueError(f"Trial not found: {trial_id}")
         run = trackdb.get_run(conn, trial_row[0])
         if run is None:
-            raise ValueError(f"Run introuvable pour trial {trial_id}")
+            raise ValueError(f"Run not found for trial {trial_id}")
 
         kelly_ok, kelly_message = (True, None)
         if params.position_mode == "heuristic_leverage":
@@ -278,8 +276,8 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
 
         pred_df = _load_predictions(conn, trial_id)
         if len(pred_df) < 10:
-            return {"ok": False, "message": "Pas assez de prédictions (test/holdout/live) pour simuler "
-                                             f"(trouvé {len(pred_df)}, minimum 10).", "params": params.to_dict()}
+            return {"ok": False, "message": "Not enough predictions (test/holdout/live) to simulate "
+                                             f"(found {len(pred_df)}, minimum 10).", "params": params.to_dict()}
 
         store = DataStore(root=store_root) if store_root else DataStore()
         raw = store.load(f"raw_{run['target']}", snapshot_id=run["snapshot_id"])
@@ -311,8 +309,8 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
 
         annual_turnover = float(turnover.sum() / max(len(daily_index) / simmetrics.TRADING_DAYS_PER_YEAR, 1e-9))
 
-        # Rendements "par trade" : un trade = un segment d'exposition non nulle
-        # continue (entrée -> sortie), rendement composé sur ce segment.
+        # Per-trade returns: a trade = a contiguous non-zero exposure segment
+        # (entry -> exit), compounded return over that segment.
         trade_returns = _trade_returns(exposure, strategy_returns)
         strat_summary["turnover_annualized"] = annual_turnover
         strat_summary["hit_rate"] = simmetrics.hit_rate(trade_returns)
@@ -334,7 +332,7 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
             "n_signals": len(pred_df),
             "strategy": strat_summary,
             "buy_and_hold": bh_summary,
-            "n_simulation_configs_on_target": n_configs + 1,  # +1 : celle-ci compte aussi
+            "n_simulation_configs_on_target": n_configs + 1,  # +1: this one counts too
             "equity_curve": _series_to_points(equity),
             "buy_and_hold_curve": _series_to_points(bh_equity),
             "drawdown_curve": _series_to_points(equity / equity.cummax() - 1),
@@ -346,10 +344,10 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
 
 
 def _to_json_safe(obj):
-    """NaN/Inf -> None : `json.dumps` les accepte par défaut (`allow_nan=True`,
-    extension non standard) mais `JSON.parse` côté navigateur les rejette --
-    des métriques indéfinies (ex. Sharpe sur trop peu d'observations) ne
-    doivent jamais faire planter le rendu de la page, juste s'afficher "—"."""
+    """NaN/Inf -> None: `json.dumps` accepts them by default (`allow_nan=True`,
+    a non-standard extension) but the browser's `JSON.parse` rejects them --
+    undefined metrics (e.g. Sharpe on too few observations) must never crash
+    the page render, they should just display as "-"."""
     if isinstance(obj, dict):
         return {k: _to_json_safe(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -391,8 +389,8 @@ def save_simulation(conn: sqlite3.Connection, trial_id: int, params: SimParams, 
 
 
 def count_simulations_for_target(conn: sqlite3.Connection, target: str) -> int:
-    """Nombre de simulations déjà enregistrées sur cette cible, tout run/trial
-    confondu (Phase 4.5, garde-fou anti-surapprentissage) -- symétrique à
+    """Number of simulations already recorded for this target, across all
+    runs/trials (Phase 4.5, anti-overfitting guard) -- symmetric to
     `tracking.stats.count_cumulative_trials`."""
     row = conn.execute(
         "SELECT COUNT(*) FROM simulation "

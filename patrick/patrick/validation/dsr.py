@@ -1,16 +1,15 @@
-"""Sharpe déflaté — Deflated Sharpe Ratio (Bailey & López de Prado, "The
-Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting
-and Non-Normality", 2014). Corrige le Sharpe observé du biais de sélection
-(le meilleur essai parmi N surestime sa vraie qualité) et de la non-normalité
-des rendements (skew/kurtosis, qui élargissent la variance effective du
-Sharpe estimé).
+"""Deflated Sharpe Ratio (Bailey & López de Prado, "The Deflated Sharpe
+Ratio: Correcting for Selection Bias, Backtest Overfitting and
+Non-Normality", 2014). Corrects the observed Sharpe for selection bias (the
+best trial among N overestimates its true quality) and return non-normality
+(skew/kurtosis, which widen the estimated Sharpe's effective variance).
 
-Phase 2.3 : le plan le lie explicitement à la Phase 4 ("utilisé dès qu'une
-courbe de P&L existe") — il n'y a pas encore de série de rendements réelle
-dans ce pipeline (les métriques sont des scores de classification, pas un
-P&L). Ce module est donc autonome et testé, mais pas encore appelé depuis
-`pipeline/engine.py` : rien à quoi l'appliquer avant le simulateur
-d'investissement.
+Phase 2.3: the original plan explicitly ties it to Phase 4 ("used as soon as
+a P&L curve exists") — there is not yet a real return series in this
+pipeline (the metrics are classification scores, not a P&L). This module is
+therefore standalone and tested, but not yet called from
+`pipeline/engine.py`: nothing to apply it to before the investment
+simulator.
 """
 from __future__ import annotations
 
@@ -21,18 +20,18 @@ _EULER_MASCHERONI = 0.5772156649015329
 
 
 def _sharpe_std_error(n: int, skew: float, kurtosis: float, sr: float) -> float:
-    """Écart-type asymptotique du Sharpe estimé (Mertens 2002 / Bailey & López
-    de Prado 2012, eq. 5) — se réduit à 1/sqrt(n) sous normalité (skew=0,
-    kurtosis=3)."""
+    """Asymptotic standard error of the estimated Sharpe (Mertens 2002 /
+    Bailey & López de Prado 2012, eq. 5) — reduces to 1/sqrt(n) under
+    normality (skew=0, kurtosis=3)."""
     return float(np.sqrt(max((1 - skew * sr + (kurtosis - 1) / 4 * sr ** 2) / max(n - 1, 1), 0.0)))
 
 
 def expected_max_sharpe(n_trials: int, sr_std: float) -> float:
-    """E[max(SR_1..SR_N)] sous H0 (N essais indépendants, SR ~ N(0, sr_std^2)) —
-    approximation par les statistiques d'ordre extrêmes d'un échantillon gaussien
-    (Bailey & López de Prado 2014, eq. 6). C'est le "benchmark" que le Sharpe
-    observé doit dépasser pour ne pas être expliqué par le simple fait d'avoir
-    essayé N configurations."""
+    """E[max(SR_1..SR_N)] under H0 (N independent trials, SR ~ N(0, sr_std^2))
+    -- approximated via the extreme order statistics of a Gaussian sample
+    (Bailey & López de Prado 2014, eq. 6). This is the "benchmark" the
+    observed Sharpe must beat to not be explained by the mere fact of having
+    tried N configurations."""
     if n_trials <= 1 or sr_std <= 0:
         return 0.0
     return float(sr_std * (
@@ -43,15 +42,15 @@ def expected_max_sharpe(n_trials: int, sr_std: float) -> float:
 
 def deflated_sharpe_ratio(returns: np.ndarray, n_trials: int, periods_per_year: int = 252,
                            benchmark_sr: float | None = None) -> dict:
-    """`returns` : rendements PÉRIODIQUES (pas annualisés) de la stratégie évaluée.
-    `n_trials` : nombre d'essais parmi lesquels cette stratégie a été choisie
-    comme la meilleure (cf. `tracking.stats.count_cumulative_trials`).
-    `benchmark_sr` : Sharpe de référence à dépasser ; par défaut,
-    `expected_max_sharpe(n_trials, ...)` (le benchmark standard du papier).
+    """`returns`: PERIODIC (not annualized) returns of the evaluated strategy.
+    `n_trials`: number of trials among which this strategy was chosen as the
+    best one (see `tracking.stats.count_cumulative_trials`).
+    `benchmark_sr`: reference Sharpe to beat; defaults to
+    `expected_max_sharpe(n_trials, ...)` (the paper's standard benchmark).
 
-    Retourne un dict avec `dsr` (probabilité que le Sharpe vrai soit positif,
-    déflaté) et `p_value` (1 - dsr) ; `sr`/`sr_annualized` le Sharpe brut non
-    déflaté, pour comparaison."""
+    Returns a dict with `dsr` (probability that the true Sharpe is positive,
+    deflated) and `p_value` (1 - dsr); `sr`/`sr_annualized` the raw,
+    non-deflated Sharpe, for comparison."""
     r = np.asarray(returns, dtype=float)
     r = r[~np.isnan(r)]
     n = len(r)
@@ -63,7 +62,7 @@ def deflated_sharpe_ratio(returns: np.ndarray, n_trials: int, periods_per_year: 
     std = np.std(r, ddof=1)
     sr = float(np.mean(r) / std) if std > 0 else 0.0
     skew = float(stats.skew(r))
-    kurt = float(stats.kurtosis(r, fisher=False))  # convention "kurtosis normale" = 3, pas l'excès
+    kurt = float(stats.kurtosis(r, fisher=False))  # "normal kurtosis" convention = 3, not excess kurtosis
 
     sr0 = benchmark_sr if benchmark_sr is not None else expected_max_sharpe(max(n_trials, 1), _sharpe_std_error(n, skew, kurt, sr))
     sr_std = _sharpe_std_error(n, skew, kurt, sr)

@@ -1,14 +1,14 @@
-"""Métriques du schéma 4 classes (direction + amplitude) — reprend `metrics()` de
-VIX_FINAL_ML_SCAN, avec le fix `ravel()` (bug CatBoost `unhashable numpy.ndarray`,
-cf. PR #31 sur LP-D/claude) câblé dès l'origine plutôt qu'ajouté après coup.
+"""Metrics for the 4-class scheme (direction + amplitude) — reuses
+`metrics()` from VIX_FINAL_ML_SCAN, with the `ravel()` fix (CatBoost
+`unhashable numpy.ndarray` bug, see PR #31 on LP-D/claude) wired in from the
+start rather than bolted on afterward.
 
-Phase 0.7 : balanced accuracy, MCC et AUC (ovr) ajoutées comme métriques
-primaires — l'accuracy brute (`Acc_dir`, conservée pour compatibilité) est
-trompeuse sur des classes déséquilibrées (majoritaire à 60% -> "80% accuracy" sans
-rien apprendre). F1_dir reste la métrique de tri/tuning du pipeline (continuité
-avec la référence F1_dir≈0.610 du projet VIX d'origine) ; balanced accuracy/MCC/AUC
-sont calculées systématiquement et affichées à côté, pas silencieusement
-substituées à F1_dir.
+Phase 0.7: balanced accuracy, MCC and AUC (ovr) added as primary metrics —
+raw accuracy (`Acc_dir`, kept for compatibility) is misleading on imbalanced
+classes (60% majority -> "80% accuracy" while learning nothing). F1_dir
+remains the pipeline's ranking/tuning metric (continuity with the original
+VIX project's F1_dir≈0.610 reference); balanced accuracy/MCC/AUC are always
+computed and displayed alongside, never silently substituted for F1_dir.
 """
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ _ALL_CLASSES = [0, 1, 2, 3]
 
 
 def metrics(y_true, y_pred, y_proba: np.ndarray | None = None) -> dict:
-    # [FIX] CatBoostClassifier.predict() renvoie un tableau 2D (n,1) pour le
-    # multiclasse -> itérer dessus donne des sous-tableaux non hashables comme clé
-    # de dict. Ravel systématique, quel que soit l'algo.
+    # [FIX] CatBoostClassifier.predict() returns a 2D array (n,1) for
+    # multiclass -> iterating over it gives unhashable sub-arrays as dict
+    # keys. Systematic ravel, regardless of the algo.
     y_true = np.asarray(y_true).ravel()
     y_pred = np.asarray(y_pred).ravel()
 
@@ -37,9 +37,9 @@ def metrics(y_true, y_pred, y_proba: np.ndarray | None = None) -> dict:
         "MCC_4cls": round(matthews_corrcoef(y_true, y_pred), 4),
     }
 
-    # AUC (one-vs-rest, macro) : nécessite des probabilités et au moins 2 classes
-    # réellement présentes dans y_true — sinon (fold trop petit, régime rare) NaN
-    # plutôt qu'une exception qui interromprait tout le scan.
+    # AUC (one-vs-rest, macro): requires probabilities and at least 2 classes
+    # actually present in y_true — otherwise (fold too small, rare regime)
+    # NaN rather than an exception that would abort the whole scan.
     if y_proba is not None and len(np.unique(y_true)) >= 2:
         try:
             m["AUC_ovr_4cls"] = round(

@@ -1,35 +1,36 @@
-"""Orchestrateur du pipeline complet : ingestion -> construction des features ->
-walk-forward (régime/horizon/fold) -> grille sélection×sampler×N×algo -> meilleur
-modèle -> tuning Optuna sur le top-K -> leaderboard + modèle exporté.
+"""Orchestrator for the complete pipeline: ingestion -> feature construction ->
+walk-forward (regime/horizon/fold) -> selection×sampler×N×algo grid -> best
+model -> Optuna tuning on the top-K -> leaderboard + exported model.
 
-Généralise, en une seule commande, la séquence manuelle
+Generalizes, into a single command, the manual sequence
 VIX_FINAL_FEATURES -> VIX_FINAL_ML_SCAN -> VIX_FINAL_OPTUNA.
 
-Phase 0 (correctness) : les features "paramétriques" (EGARCH/Kalman/HMM/AR/MA/
-ARMA/ARIMA de vol_models.py, filtre particulaire de spike.py) estiment des
-paramètres globaux avant de produire une sortie récursive causale — les estimer
-une seule fois sur tout l'historique (comme avant ce fix) fait fuir de
-l'information du test d'un fold vers le train d'un autre, même si la sortie
-point-par-point est elle-même causale (cf. `tests/test_leakage.py`, test de
-corruption du futur). Le pool de features est donc scindé en deux :
-- `build_base_feature_pool` : technical/spike(hors filtre particulaire)/macro —
-  fenêtres glissantes pures, aucun paramètre global, calculé une seule fois.
-- `build_parametric_pool` : vol_models paramétriques + filtre particulaire,
-  réajustés par fold via `fit_end_idx` (train du fold uniquement), mis en cache
-  par coupure de fold (indépendante de l'horizon, donc `n_wf_folds` variantes,
-  pas `n_wf_folds × n_horizons`).
-Les interactions sont découvertes une fois sur le fold pilote (comme avant) mais
-leurs FORMULES (déterministes, algébriques) sont réappliquées à chaque pool de
-fold — pas de fuite : une formule appliquée à des valeurs déjà correctement
-recalculées par fold ne réintroduit rien.
+Phase 0 (correctness): the "parametric" features (EGARCH/Kalman/HMM/AR/MA/
+ARMA/ARIMA from vol_models.py, particle filter from spike.py) estimate global
+parameters before producing a causal recursive output — estimating them once
+over the whole history (as before this fix) leaks information from one
+fold's test into another fold's train, even though the point-by-point output
+is itself causal (see `tests/test_leakage.py`, future-corruption test). The
+feature pool is therefore split in two:
+- `build_base_feature_pool`: technical/spike(excluding the particle
+  filter)/macro — pure rolling windows, no global parameter, computed once.
+- `build_parametric_pool`: parametric vol_models + particle filter, re-fit
+  per fold via `fit_end_idx` (the fold's train only), cached per fold cut
+  (independent of horizon, hence `n_wf_folds` variants, not
+  `n_wf_folds × n_horizons`).
+Interactions are discovered once on the pilot fold (as before) but their
+FORMULAS (deterministic, algebraic) are reapplied to each fold's pool — no
+leak: a formula applied to values already correctly recomputed per fold
+reintroduces nothing.
 
-Phase 1 (persistance SQLite) : chaque évaluation (pas seulement la gagnante) est
-écrite dans `~/.patrick/patrick.db` — une ligne `run` par (target, horizon) de la
-config (ils partagent le même `snapshot_id`), une ligne `trial` par combinaison
-(régime, N, sampler, algo) réellement testée, une ligne `fold_metric` par
-(trial, fold, métrique), une ligne `prediction` par observation de test. Le CSV/
-leaderboard existant n'est pas remplacé, seulement complété : la base sert la
-Phase 2 (validité statistique), pas un remplacement de l'export actuel.
+Phase 1 (SQLite persistence): every evaluation (not just the winning one) is
+written to `~/.patrick/patrick.db` — one `run` row per (target, horizon) of
+the config (they share the same `snapshot_id`), one `trial` row per
+(regime, N, sampler, algo) combination actually tested, one `fold_metric`
+row per (trial, fold, metric), one `prediction` row per test observation.
+The existing CSV/leaderboard is not replaced, only complemented: the
+database serves Phase 2 (statistical validity), not a replacement of the
+current export.
 """
 from __future__ import annotations
 
@@ -77,57 +78,55 @@ from patrick.validation.walkforward import build_fold_cuts, describe_folds
 
 
 def _finite_features(values: np.ndarray, where: str) -> np.ndarray:
-    """Rapport de correction, N2 -- remplace `np.nan_to_num(...)` aux trois
-    endroits où la matrice de features est construite (walk-forward, holdout,
-    CPCV).
+    """Correction report, N2 -- replaces `np.nan_to_num(...)` at the three
+    places where the feature matrix is built (walk-forward, holdout, CPCV).
 
-    `np.nan_to_num` seul ne suffit PAS, et donnait une fausse sécurité : il
-    mappe ±inf sur ±1.797e308 (le maximum float64), valeur finie sur l'instant
-    mais astronomique, que le `RobustScaler` appliqué juste après divise par
-    l'IQR de la colonne. Dès que cet IQR est < 1 -- cas courant parmi des
-    milliers de colonnes (rendements, z-scores, indicateurs bornés) -- la
-    division REDONNE ±inf, et XGBoost refuse la matrice ("Input data contains
-    `inf` or a value too large, while `missing` is not set to `inf`"). Mesuré :
-    une seule cellule infinie dans une colonne d'IQR 0.025 suffit à reproduire
-    l'erreur ; le scaler étant ajusté sur le train seul, un inf présent
-    uniquement dans le TEST passe aussi par ce chemin.
+    `np.nan_to_num` alone is NOT enough, and gave a false sense of safety: it
+    maps ±inf to ±1.797e308 (the float64 maximum), a value that's finite at
+    that instant but astronomical, which the `RobustScaler` applied right
+    after divides by the column's IQR. As soon as this IQR is < 1 -- a
+    common case among thousands of columns (returns, z-scores, bounded
+    indicators) -- the division PRODUCES ±inf again, and XGBoost rejects the
+    matrix ("Input data contains `inf` or a value too large, while `missing`
+    is not set to `inf`"). Measured: a single infinite cell in a column with
+    IQR 0.025 is enough to reproduce the error; since the scaler is fit on
+    train only, an inf present only in TEST also goes through this path.
 
-    Un ±inf en amont vient toujours d'un calcul dégénéré (division par un
-    dénominateur ~0 dans un ratio/une interaction, log d'une valeur <= 0) : il
-    ne porte aucune information numérique exploitable, il est donc traité comme
-    une valeur MANQUANTE -- exactement le même chemin que NaN, déjà converti en
-    0.0 ici -- et jamais comme "un nombre très grand". Compté et signalé, jamais
-    silencieux (même discipline que la garde D3 sur les folds exclus)."""
+    An upstream ±inf always comes from a degenerate computation (division by
+    a ~0 denominator in a ratio/interaction, log of a value <= 0): it carries
+    no exploitable numeric information, so it is treated as a MISSING value
+    -- exactly the same path as NaN, already converted to 0.0 here -- and
+    never as "a very large number". Counted and reported, never silent (same
+    discipline as the D3 guard on excluded folds)."""
     n_inf = int(np.isinf(values).sum())
     if n_inf:
-        print(f"  [WARN] {where} : {n_inf} valeur(s) infinie(s) dans le pool de features "
-              f"(calcul dégénéré : dénominateur ~0, log d'une valeur <= 0) — "
-              f"traitées comme manquantes.")
+        print(f"  [WARN] {where}: {n_inf} infinite value(s) in the feature pool "
+              f"(degenerate computation: denominator ~0, log of a value <= 0) — "
+              f"treated as missing.")
     return np.nan_to_num(np.where(np.isfinite(values), values, np.nan))
 
 
 def _finite_scaled(scaled: np.ndarray, where: str) -> np.ndarray:
-    """Rapport de correction, N2 -- garantit après mise à l'échelle l'invariant
-    dont XGBoost a besoin (matrice entièrement finie), que `_finite_features`
-    ne suffit pas à assurer à lui seul : une valeur d'entrée simplement TRÈS
-    GRANDE mais finie (jamais un inf, donc invisible en amont) peut encore
-    déborder en divisant par un IQR minuscule. Filet de sécurité en sortie,
-    pas un remplacement du nettoyage en entrée -- les deux sont nécessaires."""
+    """Correction report, N2 -- guarantees after scaling the invariant
+    XGBoost needs (a fully finite matrix), which `_finite_features` alone
+    cannot guarantee: an input value that is simply VERY LARGE but finite
+    (never an inf, hence invisible upstream) can still overflow when divided
+    by a tiny IQR. A safety net on the way out, not a replacement for the
+    upstream cleanup -- both are necessary."""
     if not np.isfinite(scaled).all():
         n_bad = int((~np.isfinite(scaled)).sum())
-        print(f"  [WARN] {where} : {n_bad} valeur(s) non finie(s) APRÈS mise à l'échelle "
-              f"(débordement d'une valeur extrême divisée par un IQR minuscule) — "
-              f"ramenées à la médiane (0 après RobustScaler).")
+        print(f"  [WARN] {where}: {n_bad} non-finite value(s) AFTER scaling "
+              f"(overflow from an extreme value divided by a tiny IQR) — "
+              f"reset to the median (0 after RobustScaler).")
         scaled = np.nan_to_num(np.where(np.isfinite(scaled), scaled, np.nan))
     return scaled
 
 
 def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
-    """Features causales par construction (fenêtres glissantes/lags, aucun
-    paramètre estimé globalement) : technical, spike (hors filtre particulaire),
-    macro, + estimateurs de vol OHLC de la cible. Calculé une seule fois, partagé
-    par tous les folds/horizons d'un run — sans risque de fuite (cf. docstring de
-    module)."""
+    """Features causal by construction (rolling windows/lags, no globally
+    estimated parameter): technical, spike (excluding the particle filter),
+    macro, + the target's OHLC vol estimators. Computed once, shared across
+    all folds/horizons of a run — no leak risk (see module docstring)."""
     families = config.features.families
     parts: list[pd.DataFrame] = [raw]
 
@@ -159,19 +158,19 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
 def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
                            fit_end_idx: int | None,
                            test_end_idx: int | None = None) -> pd.DataFrame:
-    """vol_models paramétriques (EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA) + filtre
-    particulaire (spike) — réestimés sur `raw.iloc[:fit_end_idx]` uniquement
-    (train du fold), appliqués causalement sur tout l'historique sans
-    ré-estimation. `fit_end_idx=None` : fit sur toute la série (utilisé pour le
-    modèle de production final, qui n'a plus de test à protéger).
+    """Parametric vol_models (EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA) + particle
+    filter (spike) — re-estimated on `raw.iloc[:fit_end_idx]` only (the
+    fold's train), applied causally over the whole history with no
+    re-estimation. `fit_end_idx=None`: fit on the whole series (used for the
+    final production model, which no longer has a test set to protect).
 
-    `test_end_idx` (rapport de correction, D2 -> N1) : fin du fold de TEST
-    courant. `raw` couvre tout le dataset (pas seulement ce fold), donc sans
-    cette borne EGARCH appliquerait `.fix()` sur une série s'étendant bien
-    au-delà du fold -- canal de fuite `variance_bounds` mesuré réel mais inerte
-    sur données réalistes (D2), fermé ici par construction à coût nul (mesuré
-    gratuit). Ignoré par les autres modèles paramétriques (récursions causales
-    non affectées, cf. docstring de `vol_models._PARAMETRIC_MODELS`)."""
+    `test_end_idx` (correction report, D2 -> N1): end of the current TEST
+    fold. `raw` covers the whole dataset (not just this fold), so without
+    this bound EGARCH would apply `.fix()` on a series extending well beyond
+    the fold -- a `variance_bounds` leak channel measured as real but inert
+    on realistic data (D2), closed here by construction at zero cost
+    (measured free). Ignored by the other parametric models (causal
+    recursions unaffected, see `vol_models._PARAMETRIC_MODELS` docstring)."""
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
@@ -193,11 +192,11 @@ def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
 
 def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
                                      target_col: str, pilot_split_idx: int) -> list[str]:
-    """Découvre les formules d'interaction (VIX_FINAL_FEATURES) sur le fold
-    pilote (train du premier fold) — retourne les noms de colonnes retenues, qui
-    encodent la paire de features + le type d'interaction (cf.
-    `INTERACTION_TYPES`), réutilisables tels quels par `_apply_interaction_formulas`
-    sur le pool (base + paramétrique) de n'importe quel fold."""
+    """Discovers the interaction formulas (VIX_FINAL_FEATURES) on the pilot
+    fold (first fold's train) — returns the retained column names, which
+    encode the feature pair + interaction type (see `INTERACTION_TYPES`),
+    reusable as-is by `_apply_interaction_formulas` on the pool (base +
+    parametric) of any fold."""
     pilot_horizon = config.objective.horizons[len(config.objective.horizons) // 2]
     pilot_target, _, _ = build_target(pool[target_col], pilot_horizon, pilot_split_idx,
                                        config.objective.flat_thr)
@@ -206,7 +205,7 @@ def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
     pilot_train_mask = np.asarray(pilot_idx < pilot_cut_date)
     y_pilot_tr = pilot_target.values[pilot_train_mask].astype(int)
     if len(y_pilot_tr) < 100:
-        print("  [INTERACTIONS] pas assez de données sur le fold pilote — étape sautée.")
+        print("  [INTERACTIONS] not enough data on the pilot fold — step skipped.")
         return []
 
     feature_cols = [c for c in pool.columns if c != target_col]
@@ -223,10 +222,10 @@ def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
 
 
 def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) -> pd.DataFrame:
-    """Applique des formules d'interaction déjà découvertes (noms de colonnes
-    encodant paire + type) aux valeurs de `pool` — opération algébrique/fenêtre
-    glissante déterministe, sans risque de fuite tant que `pool` lui-même est
-    correct pour le fold considéré."""
+    """Applies already-discovered interaction formulas (column names encoding
+    pair + type) to `pool`'s values — a deterministic algebraic/rolling-
+    window operation, with no leak risk as long as `pool` itself is correct
+    for the fold in question."""
     if not formula_names:
         return pd.DataFrame(index=pool.index)
     full_inter = pd.DataFrame(index=pool.index)
@@ -237,10 +236,10 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
                 a_name, b_name = col_name.split(marker, 1)
                 if a_name in pool.columns and b_name in pool.columns:
                     try:
-                        # N2 : `apply_interaction` (jamais `fn` directement) --
-                        # porte la garde anti-inf, indispensable ICI : une
-                        # formule saine sur le fold pilote peut voir son
-                        # dénominateur passer à ~0 sur un autre fold.
+                        # N2: `apply_interaction` (never `fn` directly) --
+                        # carries the anti-inf guard, indispensable HERE: a
+                        # formula sound on the pilot fold can see its
+                        # denominator go to ~0 on another fold.
                         full_inter[col_name] = apply_interaction(fn, pool[a_name], pool[b_name])
                     except Exception:
                         pass
@@ -249,8 +248,8 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
 
 
 class _FoldPoolBuilder:
-    """Construit et met en cache (par coupure de fold, indépendante de l'horizon)
-    le pool complet base+paramétrique+interactions d'un fold."""
+    """Builds and caches (per fold cut, independent of horizon) the full
+    base+parametric+interactions pool of a fold."""
 
     def __init__(self, raw: pd.DataFrame, config: RunConfig, target_col: str,
                  base_pool: pd.DataFrame, fold_cuts: list[int]):
@@ -265,10 +264,10 @@ class _FoldPoolBuilder:
             self._init_interactions()
 
     def _merge_base_and_parametric(self, cut_idx: int) -> pd.DataFrame:
-        # D2 -> N1 : `cut_idx` est à la fois la fin du train et le début du test
-        # de son fold (`fold_cuts[k]`) -- la fin de CE fold de test est donc la
-        # coupure suivante dans la même liste (`fold_cuts[k+1]`), ou None au-delà
-        # du dernier fold connu (pas de troncature, comportement d'origine).
+        # D2 -> N1: `cut_idx` is both the end of train and the start of test
+        # for its fold (`fold_cuts[k]`) -- the end of THIS test fold is
+        # therefore the next cut in the same list (`fold_cuts[k+1]`), or None
+        # beyond the last known fold (no truncation, original behavior).
         pos = self.fold_cuts.index(cut_idx)
         test_end_idx = self.fold_cuts[pos + 1] if pos + 1 < len(self.fold_cuts) else None
         param_pool = build_parametric_pool(self.raw, self.config, fit_end_idx=cut_idx,
@@ -281,7 +280,7 @@ class _FoldPoolBuilder:
         pilot_pool = self._merge_base_and_parametric(pilot_cut)
         self.interaction_formulas = _discover_interaction_formulas(
             pilot_pool, self.config, self.target_col, pilot_cut)
-        print(f"  [INTERACTIONS] {len(self.interaction_formulas)} formules découvertes (fold pilote).")
+        print(f"  [INTERACTIONS] {len(self.interaction_formulas)} formulas discovered (pilot fold).")
         inter = _apply_interaction_formulas(pilot_pool, self.interaction_formulas)
         self._cache[pilot_cut] = pd.concat([pilot_pool, inter], axis=1)
 
@@ -297,11 +296,11 @@ class _FoldPoolBuilder:
 
 @dataclass
 class FoldData:
-    """Sortie de `_FoldContext.prepare()` — un objet nommé plutôt qu'un tuple
-    positionnel : la Phase 1 (persistance) a besoin de `test_dates` (une date par
-    ligne de test, pour la table `prediction`) en plus de ce qu'utilisait déjà la
-    Phase 0, et un 8e élément positionnel commençait à être illisible/fragile à
-    l'appel."""
+    """Output of `_FoldContext.prepare()` — a named object rather than a
+    positional tuple: Phase 1 (persistence) needs `test_dates` (one date per
+    test row, for the `prediction` table) in addition to what Phase 0 already
+    used, and an 8th positional element was becoming unreadable/fragile to
+    call."""
     X_tr: np.ndarray
     y_tr: np.ndarray
     X_te: np.ndarray
@@ -311,20 +310,20 @@ class FoldData:
     test_dates: list[str]
     baselines: dict | None = None
     baseline_predictions: dict | None = None
-    # Phase 6.2 (P6.2) -- poids d'unicité (une valeur par ligne de X_tr, même
-    # ordre) + matrice indicatrice observation x barre (pour le bootstrap
-    # séquentiel) + taille d'échantillon effective (somme des unicités,
-    # TOUJOURS calculée -- propriété des labels, indépendante du sampler).
+    # Phase 6.2 (P6.2) -- uniqueness weights (one value per X_tr row, same
+    # order) + observation x bar indicator matrix (for the sequential
+    # bootstrap) + effective sample size (sum of uniquenesses, ALWAYS
+    # computed -- a property of the labels, independent of the sampler).
     sample_weight: np.ndarray | None = None
     ind_matrix: np.ndarray | None = None
     effective_n: float | None = None
 
 
 class _FoldContext:
-    """Prépare X_tr/y_tr/X_te/y_te pour un (horizon, fold, régime) donné — utilisé
-    à la fois par le scan principal et par la ré-évaluation post-Optuna, pour
-    garantir que les deux passes appliquent exactement la même logique (masques,
-    purge, embargo, mise à l'échelle)."""
+    """Prepares X_tr/y_tr/X_te/y_te for a given (horizon, fold, regime) —
+    used by both the main scan and the post-Optuna re-evaluation, to
+    guarantee that both passes apply exactly the same logic (masks, purge,
+    embargo, scaling)."""
 
     def __init__(self, pool_builder: _FoldPoolBuilder, target_col: str, feature_pool: list[str],
                  config: RunConfig, all_dates: pd.DatetimeIndex, fold_cuts: list[int]):
@@ -362,19 +361,19 @@ class _FoldContext:
         y_te = target_series.values[te_mask].astype(int)
         if (len(y_tr) < cfg.validation.min_train_rows
                 or len(y_te) < cfg.validation.min_test_rows):
-            # Rapport de correction, D3 : la garde existait déjà (min_train_rows/
-            # min_test_rows) mais excluait le fold SILENCIEUSEMENT -- l'incident
-            # de débogage C3 (dernier fold walk-forward effondré à 10-13 lignes de
-            # test, `None` renvoyé sans un mot) a montré que ça oblige à
-            # instrumenter le code à la main pour comprendre un budget Optuna/SCAN
-            # incomplet. Avertissement explicite désormais systématique.
-            print(f"  [WARN] fold {fold_idx + 1} exclu (h={horizon}j régime={regime}) : "
+            # Correction report, D3: the guard already existed (min_train_rows/
+            # min_test_rows) but excluded the fold SILENTLY -- the C3 debugging
+            # incident (last walk-forward fold collapsed to 10-13 test rows,
+            # `None` returned without a word) showed this forces manually
+            # instrumenting the code to understand an incomplete Optuna/SCAN
+            # budget. Explicit warning now systematic.
+            print(f"  [WARN] fold {fold_idx + 1} excluded (h={horizon}d regime={regime}): "
                   f"train={len(y_tr)} (min {cfg.validation.min_train_rows}), "
                   f"test={len(y_te)} (min {cfg.validation.min_test_rows}).")
             return None
 
         X_pool_df = pool[self.feature_pool].reindex(idx)
-        where = f"fold {fold_idx + 1} (h={horizon}j régime={regime})"
+        where = f"fold {fold_idx + 1} (h={horizon}d regime={regime})"
         sc = RobustScaler()
         X_tr = _finite_scaled(
             sc.fit_transform(_finite_features(X_pool_df.values[tr_mask], f"{where} train")), where)
@@ -382,13 +381,13 @@ class _FoldContext:
             sc.transform(_finite_features(X_pool_df.values[te_mask], f"{where} test")), where)
         test_dates = [str(d.date()) for d in idx[te_mask]]
 
-        # Phase 6.2 (P6.2) : spans de label [position, position+horizon] des
-        # observations de TRAIN sur la grille de barres du fold (`self.
-        # all_dates`, pas `idx` -- `idx` a des trous, cf. `build_target`, lignes
-        # "flat" et fin de série retirées, alors que le chevauchement de labels
-        # se raisonne sur le calendrier réel des barres). Fenêtre locale (pas
-        # tout l'historique) : borne la taille de la matrice indicatrice à la
-        # taille réelle du bloc train, pas à des milliers de jours d'historique.
+        # Phase 6.2 (P6.2): label spans [position, position+horizon] of the
+        # TRAIN observations on the fold's bar grid (`self.all_dates`, not
+        # `idx` -- `idx` has gaps, see `build_target`, "flat" rows and series
+        # tail removed, whereas label overlap must be reasoned about on the
+        # actual bar calendar). Local window (not the whole history): bounds
+        # the indicator matrix size to the train block's actual size, not
+        # thousands of days of history.
         train_dates = idx[tr_mask]
         start_positions_global = self.all_dates.get_indexer(train_dates)
         valid = start_positions_global >= 0
@@ -406,9 +405,9 @@ class _FoldContext:
         baselines = None
         baseline_predictions = None
         if want_baselines:
-            # Un seul calcul (return_predictions=True) : les métriques agrégées
-            # (leaderboard) ET les prédictions brutes (Diebold-Mariano, Phase 2.5)
-            # viennent de la même passe, pas de deux appels redondants.
+            # A single computation (return_predictions=True): the aggregated
+            # metrics (leaderboard) AND the raw predictions (Diebold-Mariano,
+            # Phase 2.5) come from the same pass, no redundant second call.
             baseline_predictions = compute_baselines(
                 pool[self.target_col], target_series, idx, tr_mask, te_mask,
                 y_tr, y_te, horizon, thr, reg_r, return_predictions=True)
@@ -429,34 +428,35 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
               sampler_name: str, algo: str, seed: int, calibration: bool = False,
               sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
               uniqueness_weights_enabled: bool = True, **algo_overrides):
-    """Retourne (metrics_dict, y_pred, confiance_prédite) — `confiance_prédite`
-    (probabilité de la classe prédite, une valeur par ligne de test) alimente
-    `prediction.y_proba`, qui n'a qu'une colonne (pas un vecteur par classe).
+    """Returns (metrics_dict, y_pred, predicted_confidence) —
+    `predicted_confidence` (probability of the predicted class, one value per
+    test row) feeds `prediction.y_proba`, which has only one column (not a
+    per-class vector).
 
-    `sampler_name="none"` (Phase 5.3, `models/samplers.py::_NoResample`) : pas
-    de rééchantillonnage, s'appuie sur `class_weight`/`auto_class_weights`
-    déjà câblé en dur pour RandomForest/LightGBM/CatBoost
-    (`models/registry.py`) -- XGBoost/GradientBoosting n'ont pas d'équivalent
-    natif en multiclasse et restent donc non pondérés dans ce cas.
+    `sampler_name="none"` (Phase 5.3, `models/samplers.py::_NoResample`): no
+    resampling, relies on `class_weight`/`auto_class_weights` already
+    hardcoded for RandomForest/LightGBM/CatBoost (`models/registry.py`) --
+    XGBoost/GradientBoosting have no native multiclass equivalent and
+    therefore stay unweighted in this case.
 
-    `calibration=True` (Phase 5.3, `config.models.calibration`) : calibration
-    isotonique + recherche de seuil causal (`models/calibration.py`,
-    jusqu'ici non branché) plutôt qu'un simple `argmax`. La tranche de
-    validation du seuil est les 15% les PLUS RÉCENTS du train rééchantillonné
-    (les lignes sont déjà en ordre chronologique à ce stade) -- jamais le
-    test, cohérent avec le reste du pipeline.
+    `calibration=True` (Phase 5.3, `config.models.calibration`): isotonic
+    calibration + causal threshold search (`models/calibration.py`, not
+    wired in until now) rather than a plain `argmax`. The threshold
+    validation slice is the MOST RECENT 15% of the resampled train set (rows
+    are already in chronological order at this stage) -- never the test set,
+    consistent with the rest of the pipeline.
 
-    `sample_weight`/`ind_matrix` (Phase 6.2, P6.2) : poids d'unicité et
-    matrice indicatrice observation x barre, calculés sur `X_tr`/`y_tr` AVANT
-    rééchantillonnage. Appliqués seulement si `sampler_name=="none"` (`Xr`
-    reste alors X_tr inchangé, même ordre/nombre de lignes -- SMOTE et les
-    autres suréchantillonneurs synthétisent des observations sans span réel,
-    limite assumée documentée dans `SamplingConfig`). Pour RandomForest :
-    bootstrap séquentiel (`SequentialBootstrapRandomForestClassifier`) plutôt
-    que le bootstrap uniforme de sklearn. Pour les autres algos qui le
-    supportent : `sample_weight` passé directement à `.fit()`. Combinaison
-    avec `calibration=True` non gérée (hors périmètre P6.2, limite documentée) :
-    le chemin calibré reste non pondéré même si les poids sont disponibles."""
+    `sample_weight`/`ind_matrix` (Phase 6.2, P6.2): uniqueness weights and
+    observation x bar indicator matrix, computed on `X_tr`/`y_tr` BEFORE
+    resampling. Applied only if `sampler_name=="none"` (`Xr` then stays
+    unchanged X_tr, same row order/count -- SMOTE and the other oversamplers
+    synthesize observations with no real span, an accepted limitation
+    documented in `SamplingConfig`). For RandomForest: sequential bootstrap
+    (`SequentialBootstrapRandomForestClassifier`) rather than sklearn's
+    uniform bootstrap. For other algos that support it: `sample_weight`
+    passed directly to `.fit()`. Combination with `calibration=True` not
+    handled (out of scope for P6.2, documented limitation): the calibrated
+    path stays unweighted even when weights are available."""
     apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
                          and sample_weight is not None)
     try:
@@ -510,23 +510,22 @@ def _parse_params(raw_params) -> dict:
 
 
 def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_train_frac: float) -> int:
-    """Position (exclue) où s'arrête le domaine walk-forward : les
-    `holdout_months` derniers mois d'historique sont réservés (Phase 2.1),
-    jamais vus par la sélection de features, le tuning ou le tri du
-    leaderboard — seulement par une unique réévaluation finale de la config
-    déjà choisie (`_evaluate_holdout`). Renvoie `len(all_dates)` (holdout
-    désactivé) si `holdout_months<=0` ou si l'historique est trop court pour à
-    la fois entraîner (`min_train_frac`) et garder un holdout de la durée
-    demandée — le run continue sans holdout plutôt que de planter, avec un
-    avertissement explicite."""
+    """(Excluded) position where the walk-forward domain stops: the last
+    `holdout_months` months of history are reserved (Phase 2.1), never seen
+    by feature selection, tuning, or leaderboard ranking — only by a single
+    final re-evaluation of the already-chosen config (`_evaluate_holdout`).
+    Returns `len(all_dates)` (holdout disabled) if `holdout_months<=0` or if
+    the history is too short to both train (`min_train_frac`) and keep a
+    holdout of the requested length — the run continues without a holdout
+    rather than crashing, with an explicit warning."""
     n = len(all_dates)
     if holdout_months <= 0 or n == 0:
         return n
     holdout_start_date = all_dates[-1] - pd.DateOffset(months=holdout_months)
     n_wf = int((all_dates < holdout_start_date).sum())
     if n_wf < max(int(n * min_train_frac) + 1, 100):
-        print(f"  [WARN] historique trop court pour un holdout de {holdout_months} mois "
-              f"en plus de l'entraînement walk-forward — holdout désactivé pour ce run.")
+        print(f"  [WARN] history too short for a {holdout_months}-month holdout "
+              f"on top of walk-forward training — holdout disabled for this run.")
         return n
     return n_wf
 
@@ -534,13 +533,13 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
 def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature_pool: list[str],
                        config: RunConfig, all_dates_full: pd.DatetimeIndex, n_wf: int,
                        best_cfg: dict, seed: int) -> dict | None:
-    """Réévalue la config gagnante (Phase 2.1) sur le holdout terminal : le
-    modèle est réentraîné UNIQUEMENT sur les données antérieures au holdout
-    (`pool_builder.get(n_wf)` -> paramétrique fit sur `raw.iloc[:n_wf]`, même
-    mécanisme causal que les folds walk-forward), puis testé sur les lignes
-    jamais vues. Une seule config évaluée ici — celle déjà choisie par le scan
-    walk-forward — jamais utilisée pour choisir entre plusieurs (anti-pattern
-    #1 du plan fourni : ne rien trier/sélectionner sur le holdout)."""
+    """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
+    the model is retrained ONLY on data prior to the holdout
+    (`pool_builder.get(n_wf)` -> parametric fit on `raw.iloc[:n_wf]`, same
+    causal mechanism as the walk-forward folds), then tested on the never-
+    seen rows. A single config evaluated here — the one already chosen by
+    the walk-forward scan — never used to choose among several (anti-pattern
+    #1 of the original plan: never rank/select on the holdout)."""
     horizon = int(best_cfg["horizon"])
     regime = best_cfg["regime"]
     n_feat = int(best_cfg["N"])
@@ -560,13 +559,13 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
     y_tr = target_series.values[tr_mask].astype(int)
     y_te = target_series.values[te_mask].astype(int)
     if len(y_tr) < config.validation.min_train_rows or len(y_te) < config.validation.min_test_rows:
-        print(f"  [WARN] holdout exclu (h={horizon}j régime={regime}) : "
+        print(f"  [WARN] holdout excluded (h={horizon}d regime={regime}): "
               f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
               f"test={len(y_te)} (min {config.validation.min_test_rows}).")
         return None
 
     X_pool_df = pool[feature_pool].reindex(idx)
-    where = f"holdout (h={horizon}j régime={regime})"
+    where = f"holdout (h={horizon}d regime={regime})"
     sc = RobustScaler()
     X_tr = _finite_scaled(
         sc.fit_transform(_finite_features(X_pool_df.values[tr_mask], f"{where} train")), where)
@@ -581,8 +580,8 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te)}
 
 
-# Phase X5 -- kind exposé en config (validation.baseline_by_asset_class) -> clé
-# interne de `fd.baseline_predictions`/`fd.baselines` (`validation/baselines.py`).
+# Phase X5 -- kind exposed in config (validation.baseline_by_asset_class) ->
+# internal key of `fd.baseline_predictions`/`fd.baselines` (`validation/baselines.py`).
 _BASELINE_KIND_TO_KEY = {
     "persistence": "BASELINE_persistence",
     "majority": "BASELINE_majority",
@@ -593,18 +592,18 @@ _BASELINE_KIND_TO_KEY = {
     "random_walk_no_drift": "BASELINE_random_walk_no_drift",
     "random_walk_drift": "BASELINE_random_walk_drift",
 }
-# Référence commune fixe (X5) : permet de comparer les classes d'actif entre
-# elles sur un pied d'égalité, jamais configurable (contrairement à la
-# baseline spécifique, cf. `baseline_by_asset_class`).
+# Fixed common reference (X5): allows comparing asset classes to each other
+# on an equal footing, never configurable (unlike the class-specific
+# baseline, see `baseline_by_asset_class`).
 _COMMON_BASELINE_KEY = "BASELINE_persistence"
 
 
 def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str | None, np.ndarray | None]:
-    """Parmi `candidate_keys` (clés `BASELINE_*` réellement calculées pour ce
-    fold), retient celle de F1_dir le plus haut -- même logique de sélection
-    empirique que le comportement historique (une seule baseline "meilleure
-    sur ce fold"), mais restreinte à l'ensemble pertinent pour la classe
-    d'actif de la cible plutôt qu'à toutes les baselines confondues."""
+    """Among `candidate_keys` (`BASELINE_*` keys actually computed for this
+    fold), keeps the one with the highest F1_dir -- same empirical selection
+    logic as the historical behavior (a single "best on this fold"
+    baseline), but restricted to the set relevant to the target's asset
+    class rather than all baselines combined."""
     best_name, best_pred, best_f1 = None, None, -1.0
     for key in candidate_keys:
         pred = (fd.baseline_predictions or {}).get(key)
@@ -617,21 +616,21 @@ def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str
 
 
 def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: int, seed: int) -> dict | None:
-    """DM (Phase 2.5) entre la config gagnante et DEUX baselines (Phase X5),
-    sur le fold walk-forward le plus récent — la période la plus proche du
-    régime de marché actuel, plutôt qu'une moyenne sur tout l'historique qui
-    diluerait un éventuel changement de régime :
+    """DM (Phase 2.5) between the winning config and TWO baselines (Phase
+    X5), on the most recent walk-forward fold — the period closest to the
+    current market regime, rather than an average over the whole history
+    that would dilute a possible regime change:
 
-    - `class_specific` : la meilleure (F1_dir le plus haut sur ce fold) parmi
-      les candidats configurés pour la classe d'actif de la cible
-      (`validation.baseline_by_asset_class`, cf. `classify_asset_class`) ;
-    - `common` : la persistance de classe, TOUJOURS calculée en plus, comme
-      référence fixe permettant de comparer les classes d'actif entre elles
-      sur un pied d'égalité (jamais configurable).
+    - `class_specific`: the best one (highest F1_dir on this fold) among the
+      candidates configured for the target's asset class
+      (`validation.baseline_by_asset_class`, see `classify_asset_class`);
+    - `common`: class-agnostic persistence, ALWAYS computed in addition, as
+      a fixed reference allowing asset classes to be compared to each other
+      on an equal footing (never configurable).
 
-    Retourne `None` seulement si aucune des deux comparaisons n'a pu être
-    calculée (baselines indisponibles sur ce fold, ex. HAR-RV avec train trop
-    court) -- sinon un dict avec l'une ou l'autre clé à `None` selon le cas."""
+    Returns `None` only if neither comparison could be computed (baselines
+    unavailable on this fold, e.g. HAR-RV with too short a train) -- otherwise
+    a dict with either key set to `None` depending on the case."""
     horizon, regime = int(best_cfg["horizon"]), best_cfg["regime"]
     n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
     best_params = _parse_params(best_cfg.get("best_params"))
@@ -674,13 +673,14 @@ def _config_hash(config: RunConfig) -> str:
 
 
 def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None, list]:
-    """Lit le contexte de snapshot déposé par `ingest()` sur `raw.attrs` (Phase
-    1.6). En repli — `raw` vient d'un `ingest` monkeypatché par un test, sans
-    `.attrs` — calcule un identifiant ad-hoc à partir du contenu, pour que la
-    persistance reste fonctionnelle/testable même sans le vrai `ingest()`.
+    """Reads the snapshot context left by `ingest()` on `raw.attrs` (Phase
+    1.6). As a fallback — `raw` comes from an `ingest` monkeypatched by a
+    test, with no `.attrs` — computes an ad-hoc identifier from the content,
+    so persistence stays functional/testable even without the real
+    `ingest()`.
 
-    `quality_issues` (Phase 6.5, P6.5) : liste de dicts (`[]` par défaut sur un
-    `ingest` monkeypatché, cf. `data/ingest.py::_attach_snapshot_context`)."""
+    `quality_issues` (Phase 6.5, P6.5): list of dicts (`[]` by default on a
+    monkeypatched `ingest`, see `data/ingest.py::_attach_snapshot_context`)."""
     snapshot_id = raw.attrs.get("snapshot_id")
     data_hash = raw.attrs.get("data_hash")
     if not snapshot_id:
@@ -694,39 +694,38 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
 def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame, target_col: str,
                     conn, run_ids: dict[int, str], seed: int
                     ) -> tuple[Leaderboard, dict, dict, pd.DataFrame, list[str], list[str]]:
-    """Phase 6.1 (P6.1) -- scan CPCV, EN ALTERNATIVE au scan walk-forward
-    (`config.validation.scheme == "cpcv"`), jamais un remplacement.
+    """Phase 6.1 (P6.1) -- CPCV scan, AS AN ALTERNATIVE to the walk-forward
+    scan (`config.validation.scheme == "cpcv"`), never a replacement.
 
-    Limites assumées, documentées (hors périmètre P6.1, dont l'objet est de
-    rendre le PBO satisfiable via plus de blocs -- pas de refermer d'autres
-    canaux) :
-    - Features paramétriques (EGARCH/Kalman/.../filtre particulaire) fit UNE
-      SEULE FOIS sur tout l'historique (`fit_end_idx=None`, comme le modèle
-      de production), pas par combinaison -- refitter par combinaison
-      demanderait un mécanisme de fit sur train SCINDÉ EN SEGMENTS NON
-      CONTIGUS que `vol_models.py`/`spike.py` (pensés pour un simple préfixe
-      `fit_end_idx`) ne supportent pas aujourd'hui. Risque de fuite résiduel
-      sur CES familles seulement, en mode CPCV seulement.
-    - Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna par
-      combinaison, pas de Diebold-Mariano : ces mécanismes reposent sur la
-      topologie "une seule frontière, train=préfixe" du walk-forward
-      (`_FoldContext`/`ctx.prepare`), pas transposable telle quelle à la
-      topologie CPCV (train=complément de groupes dispersés) dans le
-      périmètre de cette session.
-    - Purge et embargo sont STRUCTURELS ici (toujours appliqués aux deux
-      frontières de chaque groupe de test, `validation/cpcv.py`), pas
-      gouvernés par `validation.purge`/`embargo_enabled` (optionnels en
-      walk-forward, où l'effet mesuré était négligeable sur une SEULE
-      frontière) -- CPCV expose structurellement plus de frontières, donc
-      plus de surface de fuite potentielle à fermer par construction.
+    Accepted, documented limitations (out of scope for P6.1, whose purpose
+    is to make PBO satisfiable via more blocks -- not to close other
+    channels):
+    - Parametric features (EGARCH/Kalman/.../particle filter) are fit ONCE
+      over the whole history (`fit_end_idx=None`, like the production
+      model), not per combination -- re-fitting per combination would
+      require a fit mechanism on a train SPLIT INTO NON-CONTIGUOUS SEGMENTS
+      that `vol_models.py`/`spike.py` (designed for a simple `fit_end_idx`
+      prefix) do not support today. Residual leak risk on THESE families
+      only, in CPCV mode only.
+    - No terminal holdout (Phase 2.1), no per-combination Optuna tuning, no
+      Diebold-Mariano: these mechanisms rely on walk-forward's "single
+      boundary, train=prefix" topology (`_FoldContext`/`ctx.prepare`), not
+      directly transposable to the CPCV topology (train=complement of
+      scattered groups) within this session's scope.
+    - Purge and embargo are STRUCTURAL here (always applied at both
+      boundaries of every test group, `validation/cpcv.py`), not governed by
+      `validation.purge`/`embargo_enabled` (optional in walk-forward, where
+      the measured effect was negligible on a SINGLE boundary) -- CPCV
+      structurally exposes more boundaries, hence more potential leak
+      surface to close by construction.
 
-    Renvoie (board, trial_ids, n_trials_per_run, full_pool, feature_pool,
-    interaction_formulas) -- les trois premiers éléments suivent le même
-    contrat que le scan walk-forward (branchable sur le reste de
-    `run_pipeline` : export CSV, `final_best`, etc.) ; les trois derniers
-    exposent le pool complet déjà construit sur tout l'historique (fit
-    unique, cf. limite ci-dessus) pour que le bloc export-modèle final le
-    RÉUTILISE tel quel plutôt que de le reconstruire une deuxième fois."""
+    Returns (board, trial_ids, n_trials_per_run, full_pool, feature_pool,
+    interaction_formulas) -- the first three elements follow the same
+    contract as the walk-forward scan (pluggable into the rest of
+    `run_pipeline`: CSV export, `final_best`, etc.); the last three expose
+    the full pool already built over the whole history (single fit, see
+    limitation above) so that the final model-export block REUSES it as-is
+    rather than rebuilding it a second time."""
     n_groups, k_test = config.validation.n_groups, config.validation.k_test_groups
     all_dates = raw.index
     n_bars = len(all_dates)
@@ -739,8 +738,8 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         group_of_date[start:end + 1] = gi
     group_of_date = pd.Series(group_of_date, index=all_dates)
 
-    print(f"[CPCV] N={n_groups} groupes, k={k_test} -> {len(combos)} combinaisons, "
-          f"{len(paths)} chemins de backtest reconstruits.")
+    print(f"[CPCV] N={n_groups} groups, k={k_test} -> {len(combos)} combinations, "
+          f"{len(paths)} reconstructed backtest paths.")
 
     param_pool = build_parametric_pool(raw, config, fit_end_idx=None)
     full_pool = pd.concat([base_pool, param_pool], axis=1)
@@ -750,7 +749,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     if "interactions" in config.features.families:
         pilot_split_idx = groups[0][1] + 1
         interaction_formulas = _discover_interaction_formulas(full_pool, config, target_col, pilot_split_idx)
-        print(f"  [INTERACTIONS] {len(interaction_formulas)} formules découvertes (groupe pilote).")
+        print(f"  [INTERACTIONS] {len(interaction_formulas)} formulas discovered (pilot group).")
         inter = _apply_interaction_formulas(full_pool, interaction_formulas)
         full_pool = pd.concat([full_pool, inter], axis=1)
 
@@ -768,7 +767,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         date_group = group_of_date.reindex(idx)
         reg_al = reg_r.reindex(idx).fillna("NORMAL").values
         X_pool_df = full_pool[feature_pool].reindex(idx)
-        X_all = _finite_features(X_pool_df.values, f"CPCV (h={horizon}j)")
+        X_all = _finite_features(X_pool_df.values, f"CPCV (h={horizon}d)")
         y_all = target_series.values.astype(int)
 
         for regime in config.objective.regimes:
@@ -791,12 +790,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                             y_tr, y_te = y_all[tr_mask], y_all[te_mask]
                             if (len(y_tr) < config.validation.min_train_rows
                                     or len(y_te) < config.validation.min_test_rows):
-                                print(f"  [WARN] CPCV combo {combo} exclu (h={horizon}j régime={regime}) : "
+                                print(f"  [WARN] CPCV combo {combo} excluded (h={horizon}d regime={regime}): "
                                       f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
                                       f"test={len(y_te)} (min {config.validation.min_test_rows}).")
                                 continue
 
-                            where = f"CPCV combo {combo} (h={horizon}j régime={regime})"
+                            where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
                             sc = RobustScaler()
                             X_tr_full = _finite_scaled(sc.fit_transform(X_all[tr_mask]), where)
                             X_te_full = _finite_scaled(sc.transform(X_all[te_mask]), where)
@@ -806,7 +805,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                             met, y_pred, confidence = _fit_eval(
                                 X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed,
                                 calibration=config.models.calibration,
-                                uniqueness_weights_enabled=False)  # P6.2 : spans non définis sur train dispersé
+                                uniqueness_weights_enabled=False)  # P6.2: spans undefined on scattered train
 
                             test_idx_dates = idx[te_mask]
                             test_groups_of_rows = date_group.reindex(test_idx_dates).values
@@ -834,8 +833,8 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                             trial_id = trial_ids[trial_key]
                             trackdb.add_fold_metrics(conn, trial_id, fold_index=ci, split="test", metrics=met)
 
-                        # Recollage des chemins (P6.1) : une ligne prediction par chemin,
-                        # métrique de performance PAR CHEMIN -- jamais un point unique.
+                        # Path reassembly (P6.1): one prediction row per path,
+                        # performance metric PER PATH -- never a single point.
                         path_metric_values: dict[int, float] = {}
                         trial_id = trial_ids.get((horizon, regime, n_feat, sampler_name, algo))
                         for p, buf in path_buf.items():
@@ -849,11 +848,11 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                             )
                             path_met = metrics(np.array(buf["y_true"]), np.array(buf["y_pred"]))
                             path_metric_values[p] = path_met.get("F1_dir", float("nan"))
-                            # `split="test_path"` (jamais "test", déjà utilisé par-combinaison
-                            # ci-dessus) : permet à `stats.pbo_for_target_cpcv` de reconstruire
-                            # une matrice (trial x chemin) sans se mélanger avec les métriques
-                            # par combinaison -- même mécanisme que `pbo_for_target` (walk-forward),
-                            # juste un autre `split`/`fold_index` (chemin, pas fold).
+                            # `split="test_path"` (never "test", already used per-combination
+                            # above): allows `stats.pbo_for_target_cpcv` to rebuild a
+                            # (trial x path) matrix without mixing with the per-combination
+                            # metrics -- same mechanism as `pbo_for_target` (walk-forward),
+                            # just a different `split`/`fold_index` (path, not fold).
                             trackdb.add_fold_metrics(conn, trial_id, fold_index=p,
                                                       split="test_path", metrics=path_met)
 
@@ -862,8 +861,8 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                   scheme="cpcv", n_paths=dist["n_paths"],
                                   F1_dir_median=dist["median"], F1_dir_q05=dist["q05"],
                                   F1_dir_q95=dist["q95"], F1_dir_std=dist["std"],
-                                  # `F1_dir` (médiane) alimente le tri existant du leaderboard
-                                  # (`board.best(metric="F1_dir")`) sans dupliquer cette logique.
+                                  # `F1_dir` (median) feeds the leaderboard's existing sort
+                                  # (`board.best(metric="F1_dir")`) without duplicating this logic.
                                   F1_dir=dist["median"])
 
     return board, trial_ids, n_trials_per_run, full_pool, feature_pool, interaction_formulas
@@ -897,19 +896,19 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         run_ids[horizon] = run_id
 
     all_dates_full = raw.index
-    print("[FEATURES] construction du pool de base (causal, partagé par tous les folds)...")
+    print("[FEATURES] building the base pool (causal, shared by all folds)...")
     base_pool = build_base_feature_pool(raw, config, target_col)
-    print(f"[FEATURES] pool de base: {base_pool.shape[1]} colonnes ({time.time()-t0:.1f}s)")
-    assert (base_pool.index == all_dates_full).all(), "la construction des features ne doit pas changer l'index de dates"
+    print(f"[FEATURES] base pool: {base_pool.shape[1]} columns ({time.time()-t0:.1f}s)")
+    assert (base_pool.index == all_dates_full).all(), "feature construction must not change the date index"
 
     baseline_rows: list[dict] = []
     baseline_accum: dict[tuple[str, str], list[dict]] = {}
     tuned_rows: list[dict] = []
     tuned_trial_ids: dict[tuple, int] = {}
 
-    # Phase 6.1 (P6.1) -- CPCV en ALTERNATIVE au walk-forward
-    # (`validation.scheme`), jamais un remplacement : la branche walk-forward
-    # ci-dessous est BIT-IDENTIQUE au comportement d'avant P6.1.
+    # Phase 6.1 (P6.1) -- CPCV as an ALTERNATIVE to walk-forward
+    # (`validation.scheme`), never a replacement: the walk-forward branch
+    # below is BIT-IDENTICAL to the pre-P6.1 behavior.
     cpcv_full_pool = None
     cpcv_interaction_formulas = None
     if config.validation.scheme == "cpcv":
@@ -918,7 +917,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         pool_builder = None
         ctx = None
         all_dates = all_dates_full
-        n_wf = len(all_dates_full)  # CPCV : pas de holdout terminal (limite assumée, cf. _run_cpcv_scan)
+        n_wf = len(all_dates_full)  # CPCV: no terminal holdout (accepted limitation, see _run_cpcv_scan)
         last_fold = None
     else:
         n_wf = _walk_forward_span(all_dates_full, config.validation.holdout_months,
@@ -928,13 +927,13 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                      config.validation.min_train_frac)
         describe_folds(all_dates, fold_cuts)
         if n_wf < len(all_dates_full):
-            print(f"[HOLDOUT] {len(all_dates_full) - n_wf} lignes réservées "
+            print(f"[HOLDOUT] {len(all_dates_full) - n_wf} rows reserved "
                   f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
-                  "jamais vues par la sélection/le tuning.")
+                  "never seen by selection/tuning.")
 
         pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
         feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
-        print(f"[FEATURES] pool complet (fold 1, base+paramétrique+interactions): {len(feature_pool)} colonnes")
+        print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(feature_pool)} columns")
         ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
 
         board = Leaderboard()
@@ -973,8 +972,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                           sampler=sampler_name, algo=algo,
                                           features="|".join(feat_names),
                                           n_train=len(fd.y_tr), n_test=len(fd.y_te),
-                                          # Phase 6.2 (P6.2) : taille d'échantillon effective (somme
-                                          # des unicités) à côté de n_train -- toujours calculée.
+                                          # Phase 6.2 (P6.2): effective sample size (sum of
+                                          # uniquenesses) alongside n_train -- always computed.
                                           effective_n_train=fd.effective_n,
                                           test_start=fd.test_start, test_end=fd.test_end, **met)
 
@@ -985,9 +984,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                         selector=config.selection.method)
                                     n_trials_per_run[run_id] += 1
                                 trial_id = trial_ids[trial_key]
-                                # Phase 6.2 (P6.2) : n_eff stocké comme un "metric" de plus
-                                # (schéma générique trial/fold_index/split/metric/value, pas de
-                                # colonne dédiée) -- lu par le rapport HTML à côté de F1_dir/etc.
+                                # Phase 6.2 (P6.2): n_eff stored as one more "metric" (generic
+                                # trial/fold_index/split/metric/value schema, no dedicated
+                                # column) -- read by the HTML report alongside F1_dir/etc.
                                 met_with_n = dict(met)
                                 met_with_n["n_train"] = float(len(fd.y_tr))
                                 if fd.effective_n is not None:
@@ -998,26 +997,26 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                                          ts=fd.test_dates, y_true=fd.y_te,
                                                          y_pred=y_pred, y_proba=confidence)
 
-                print(f"  h={horizon:2d}j fold{k+1}: {len(board.rows)} lignes cumulées "
+                print(f"  h={horizon:2d}d fold{k+1}: {len(board.rows)} cumulative rows "
                       f"[{time.time()-t0:.0f}s]")
 
-    print(f"\n[SCAN] {len(board.rows)} évaluations en {(time.time()-t0)/60:.1f}min")
+    print(f"\n[SCAN] {len(board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
     best = board.best(metric="F1_dir")
     if best:
-        print(f"[BEST avant Optuna] h={best['horizon']}j {best['regime']} N={best['N']} "
+        print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
               f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
 
-    # Phase 6.3 (P6.3) -- stabilité de la sélection de features, PAR HORIZON
-    # (chaque run_id est scopé à un horizon, cf. schéma Phase 1.2) : pour la
-    # config (regime, N) localement gagnante de CET horizon (moyenne F1_dir
-    # sur ses folds, indépendant du choix global `final_best` ci-dessous, qui
-    # ne retient qu'UN SEUL horizon), stabilité mesurée sur les features
-    # réellement retenues par fold (déjà capturées dans `board.rows[...]
-    # ["features"]`, pas de re-sélection). sampler/algo n'influencent pas la
-    # sélection (faite avant leur boucle) : les dédupliquer avant Jaccard.
-    # Non calculée en mode CPCV (les features sélectionnées par combinaison
-    # ne sont pas capturées dans `board.rows` sous la même forme -- limite
-    # assumée, hors périmètre P6.1).
+    # Phase 6.3 (P6.3) -- feature selection stability, PER HORIZON (each
+    # run_id is scoped to one horizon, see Phase 1.2 schema): for the
+    # locally winning (regime, N) config of THIS horizon (F1_dir averaged
+    # over its folds, independent of the global `final_best` choice below,
+    # which keeps only ONE horizon), stability measured on the features
+    # actually retained per fold (already captured in `board.rows[...]
+    # ["features"]`, no re-selection). sampler/algo do not influence
+    # selection (done before their loop): deduplicate them before Jaccard.
+    # Not computed in CPCV mode (features selected per combination are not
+    # captured in `board.rows` in the same shape -- accepted limitation,
+    # out of scope for P6.1).
     if config.selection.track_stability and config.validation.scheme == "walkforward":
         for horizon in config.objective.horizons:
             board_h = Leaderboard()
@@ -1034,17 +1033,17 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             trackdb.save_feature_stability(conn, run_ids[horizon], stability["mean_jaccard"],
                                             stability["n_folds"], stability["selection_freq"])
             if stability["warning"]:
-                print(f"  [STABILITÉ] h={horizon}j : {stability['warning']}")
+                print(f"  [STABILITY] h={horizon}d: {stability['warning']}")
 
-    # Rapport d'audit, C4 -- diagnostic holdout de TOUTE la grille SCAN (pas
-    # seulement le gagnant final), écrit dans `holdout_diagnostic` (table
-    # séparée de `fold_metric`, jamais lue par la sélection/le tuning) : permet
-    # une corrélation de rang test/holdout après coup, sans jamais influencer
-    # le choix de la config gagnante. Non applicable en mode CPCV (pas de
-    # holdout terminal, cf. _run_cpcv_scan).
+    # Audit report, C4 -- holdout diagnostic of the WHOLE SCAN grid (not just
+    # the final winner), written to `holdout_diagnostic` (a table separate
+    # from `fold_metric`, never read by selection/tuning): allows an
+    # after-the-fact test/holdout rank correlation, without ever influencing
+    # the winning config's choice. Not applicable in CPCV mode (no terminal
+    # holdout, see _run_cpcv_scan).
     if config.validation.scheme == "walkforward" and n_wf < len(all_dates_full) and trial_ids:
-        print(f"[HOLDOUT DIAGNOSTIC] évaluation de {len(trial_ids)} trials sur le holdout "
-              "(lecture seule, ne choisit rien)...")
+        print(f"[HOLDOUT DIAGNOSTIC] evaluating {len(trial_ids)} trials on the holdout "
+              "(read-only, chooses nothing)...")
         for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
             diag_cfg = {"horizon": h, "regime": regime, "N": n_feat,
                         "sampler": sampler_name, "algo": algo, "best_params": {}}
@@ -1053,14 +1052,14 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if diag_eval is not None:
                 trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
 
-    # Affinage Optuna : walk-forward uniquement (repose sur `ctx.prepare`,
-    # topologie "train=préfixe" -- pas transposable telle quelle à CPCV dans
-    # ce périmètre, cf. _run_cpcv_scan).
+    # Optuna tuning: walk-forward only (relies on `ctx.prepare`,
+    # "train=prefix" topology -- not directly transposable to CPCV within
+    # this scope, see _run_cpcv_scan).
     if config.validation.scheme == "walkforward" and config.tuning.enabled and len(board.rows):
         if config.tuning.optuna_select_top_k_per_horizon:
-            # Rapport d'audit, C3 : sélection top_k PAR horizon (pas globale) --
-            # sinon un horizon dont le meilleur essai SCAN domine peut capter
-            # 100% du budget Optuna, laissant les autres horizons à zéro essai.
+            # Audit report, C3: top_k selection PER horizon (not global) --
+            # otherwise a horizon whose best SCAN trial dominates can capture
+            # 100% of the Optuna budget, leaving other horizons zero trials.
             top_configs = []
             for horizon in config.objective.horizons:
                 board_h = Leaderboard()
@@ -1068,15 +1067,15 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 top_configs.extend(board_h.top_k(config.tuning.top_k, metric="F1_dir"))
         else:
             top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
-        print(f"\n[OPTUNA] affinage des {len(top_configs)} meilleures configs "
-              f"({config.tuning.n_trials} essais, CV={config.tuning.cv_splits}, "
-              f"par_horizon={config.tuning.optuna_select_top_k_per_horizon})...")
-        # Phase 3.2 (`patrick resume`) : étude Optuna persistée dans un fichier
-        # SQLite dédié (jamais `patrick.db`), un `study_name` déterministe par
-        # config testée -> un `patrick run`/`patrick resume` relancé sur la
-        # même config (même config_hash, donc même nom d'étude) après une
-        # interruption reprend les essais déjà faits au lieu de repartir à
-        # zéro (cf. `tune_config`, `optuna_runner.py`).
+        print(f"\n[OPTUNA] tuning the {len(top_configs)} best configs "
+              f"({config.tuning.n_trials} trials, CV={config.tuning.cv_splits}, "
+              f"per_horizon={config.tuning.optuna_select_top_k_per_horizon})...")
+        # Phase 3.2 (`patrick resume`): Optuna study persisted in a dedicated
+        # SQLite file (never `patrick.db`), a deterministic `study_name` per
+        # tested config -> a `patrick run`/`patrick resume` relaunched on the
+        # same config (same config_hash, hence same study name) after an
+        # interruption resumes the trials already done instead of starting
+        # from zero (see `tune_config`, `optuna_runner.py`).
         os.makedirs(config.output.dir, exist_ok=True)
         optuna_storage_path = os.path.join(config.output.dir, "optuna.db")
         for cfg in top_configs:
@@ -1097,7 +1096,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                                 n_trials=config.tuning.n_trials,
                                                 cv_splits=config.tuning.cv_splits, seed=seed,
                                                 storage_path=optuna_storage_path, study_name=study_name)
-            print(f"  h={horizon}j {regime} N={n_feat} {sampler_name} {algo}: "
+            print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
                   f"cv_F1_dir={best_cv:.4f} params={best_params}")
 
             tuned_key = (horizon, regime, n_feat, sampler_name, algo, json.dumps(best_params, sort_keys=True))
@@ -1137,8 +1136,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         print(f"[EXPORT] {tuned_path}")
     print(f"[EXPORT] {csv_path}")
 
-    # baseline_metric n'a pas de colonne fold_index (schéma Phase 1.2) : agrégée
-    # (moyenne) par run plutôt qu'écrite par fold — cf. rapport de phase.
+    # baseline_metric has no fold_index column (Phase 1.2 schema): aggregated
+    # (averaged) per run rather than written per fold — see phase report.
     for (run_id, baseline_name), fold_dicts in baseline_accum.items():
         agg = {}
         for m in {k for d in fold_dicts for k in d}:
@@ -1162,9 +1161,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     cumulative_trials = 0
     holdout_diagnostic_result = None
     if final_best is not None:
-        # CPCV (P6.1) : `_run_cpcv_scan` a déjà construit ce pool complet (fit
-        # unique sur tout l'historique, mêmes formules d'interaction) --
-        # réutilisé tel quel plutôt que reconstruit une deuxième fois.
+        # CPCV (P6.1): `_run_cpcv_scan` already built this full pool (single
+        # fit over the whole history, same interaction formulas) -- reused
+        # as-is rather than rebuilt a second time.
         if config.validation.scheme == "cpcv":
             full_pool = cpcv_full_pool
             interaction_formulas = cpcv_interaction_formulas
@@ -1190,9 +1189,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         if best_trial_id is not None:
             trackdb.mark_best_trial(conn, best_trial_id, artifact_path=model_path)
 
-        # Phase 2.1 — holdout terminal : une seule réévaluation de la config déjà
-        # choisie, jamais utilisée pour choisir entre plusieurs (cf. docstring
-        # de _evaluate_holdout).
+        # Phase 2.1 — terminal holdout: a single re-evaluation of the already-
+        # chosen config, never used to choose among several (see
+        # _evaluate_holdout docstring).
         if n_wf < len(all_dates_full):
             holdout_eval = _evaluate_holdout(pool_builder, target_col, feature_pool, config,
                                               all_dates_full, n_wf, final_best, seed)
@@ -1205,17 +1204,18 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                              ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
                                              y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
 
-        # Phase 2.5 — Diebold-Mariano vs meilleure baseline (dernier fold walk-forward).
-        # Repose sur `ctx.prepare` (topologie train=préfixe) : sans objet en
-        # CPCV (`ctx is None`), cf. limites documentées dans `_run_cpcv_scan`.
+        # Phase 2.5 — Diebold-Mariano vs. best baseline (last walk-forward fold).
+        # Relies on `ctx.prepare` (train=prefix topology): not applicable in
+        # CPCV (`ctx is None`), see limitations documented in `_run_cpcv_scan`.
         if config.validation.scheme == "walkforward":
             dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
             if dm_result is not None:
-                # Phase 6.4 (P6.4) : persisté dans une table dédiée (dm_result,
-                # migration 0009), pas seulement dans job.result_json -- queryable
-                # à travers tout l'historique de runs (y compris CLI, sans job web
-                # associé), nécessaire à `trackstats.fdr_across_targets`. Phase X5 :
-                # deux lignes par run (kind), class-specific ET commune (persistance).
+                # Phase 6.4 (P6.4): persisted in a dedicated table (dm_result,
+                # migration 0009), not just in job.result_json -- queryable
+                # across the whole run history (including CLI, with no
+                # associated web job), needed by `trackstats.fdr_across_targets`.
+                # Phase X5: two rows per run (kind), class-specific AND common
+                # (persistence).
                 run_id_for_horizon = run_ids[int(final_best["horizon"])]
                 if dm_result.get("class_specific") is not None:
                     trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["class_specific"],
@@ -1224,10 +1224,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["common"],
                                             kind="common")
 
-        # Phase 2.2 — essais cumulés sur cette cible/horizon, tout l'historique de
-        # runs confondu (pas seulement ce run). Phase 2.4 — PBO sur ce même historique
-        # (P6.1 : branché sur les chemins CPCV plutôt que les blocs walk-forward
-        # quand ce schéma est actif, cf. `stats.pbo_for_target_cpcv`).
+        # Phase 2.2 — cumulative trials on this target/horizon, across the whole
+        # run history (not just this run). Phase 2.4 — PBO on this same history
+        # (P6.1: wired to CPCV paths rather than walk-forward blocks when this
+        # scheme is active, see `stats.pbo_for_target_cpcv`).
         cumulative_trials = trackstats.count_cumulative_trials(
             conn, config.objective.target_symbol, int(final_best["horizon"]))
         if config.validation.scheme == "cpcv":
@@ -1237,10 +1237,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             pbo_result = trackstats.pbo_for_target(
                 conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
 
-        # Rapport d'audit, C4 -- diagnostic (LECTURE SEULE, cf. holdout_diagnostic.py) :
-        # la procédure de sélection généralise-t-elle du test vers le holdout ?
-        # N'influence jamais final_best, calculé après coup uniquement. Sans
-        # objet en CPCV (pas de holdout terminal, cf. `_run_cpcv_scan`).
+        # Audit report, C4 -- diagnostic (READ ONLY, see holdout_diagnostic.py):
+        # does the selection procedure generalize from test to holdout? Never
+        # influences final_best, computed after the fact only. Not applicable
+        # in CPCV (no terminal holdout, see `_run_cpcv_scan`).
         if config.validation.scheme == "walkforward":
             holdout_diagnostic_result = trackholdout.spearman_test_vs_holdout(
                 conn, run_ids[int(final_best["horizon"])], metric="F1_dir")

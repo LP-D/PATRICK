@@ -51,7 +51,7 @@ def test_finite_features_reports_and_never_stays_silent(capsys):
     cellules infinies est annoncé, jamais absorbé sans un mot."""
     _finite_features(np.array([[np.inf], [1.0], [-np.inf]]), "fold 2 (h=5j)")
     out = capsys.readouterr().out
-    assert "2 valeur(s) infinie(s)" in out
+    assert "2 infinite value(s)" in out
     assert "fold 2 (h=5j)" in out
 
     _finite_features(np.array([[1.0], [2.0]]), "fold 3")
@@ -72,7 +72,7 @@ def test_finite_scaled_catches_overflow_from_large_but_finite_values(capsys):
 
     repaired = _finite_scaled(scaled, "holdout (h=5j)")
     assert np.isfinite(repaired).all()
-    assert "APRÈS mise à l'échelle" in capsys.readouterr().out
+    assert "AFTER scaling" in capsys.readouterr().out
 
 
 def test_xgboost_accepts_the_sanitized_matrix():

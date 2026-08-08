@@ -1,7 +1,9 @@
-"""Internationalisation minimale (FR/EN) de l'interface web — un dict de
-chaînes + un cookie pour retenir le choix, pas de framework i18n : le site est
-un outil local mono-utilisateur, deux langues suffisent et une dépendance de
-plus (Babel, etc.) n'apporterait rien ici.
+"""Minimal internationalization (FR/EN) of the web interface — a string
+dict + a cookie to remember the choice, no i18n framework: the site is a
+local single-user tool, two languages are enough and one more dependency
+(Babel, etc.) would add nothing here. STRINGS dict values ("fr"/"en" pairs)
+are UI content, not code documentation, and are intentionally left as-is in
+both languages.
 """
 from __future__ import annotations
 
@@ -18,8 +20,8 @@ STRINGS: dict[str, dict[str, str]] = {
 
     "section_settings": {"fr": "Configuration du run", "en": "Run configuration"},
 
-    # Accueil : titre de page (la surface en manquait un) et divulgation
-    # progressive du formulaire.
+    # Home page: page title (the surface was missing one) and progressive
+    # form disclosure.
     "index_title": {"fr": "Poste de lancement", "en": "Launch station"},
     "index_subtitle": {
         "fr": "Configure un run, lance-le, suis-le. Les blocs repliés portent des valeurs par défaut issues de résultats mesurés ; chaque brique de rigueur affiche son état, ON comme OFF, sans qu'il faille les ouvrir.",
@@ -32,11 +34,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "recap_horizons": {"fr": "horizons {h}", "en": "horizons {h}"},
     "recap_targets_count": {"fr": "{n} cibles", "en": "{n} targets"},
 
-    # Garde-fous : confirmation de lancement, écrasement de configuration,
-    # validation dans la langue de la PAGE (le navigateur, lui, parle la sienne).
-    # Noms courts des briques de rigueur, pour les résumés de blocs et le
-    # récapitulatif de lancement. Leur état est TOUJOURS rendu, ON comme OFF :
-    # une garantie absente est précisément l'information qui compte.
+    # Guards: launch confirmation, config overwrite, validation in the
+    # PAGE's language (the browser itself speaks its own). Short names for
+    # the rigor gates, for block summaries and the launch recap. Their state
+    # is ALWAYS rendered, ON as much as OFF: a missing guarantee is
+    # precisely the information that matters.
     "recent_rel_trials": {"fr": "F1_dir, meilleur de {n} essai(s)",
                           "en": "F1_dir, best of {n} trial(s)"},
     "recent_rel_running": {"fr": "essais en cours", "en": "trials in progress"},
@@ -191,7 +193,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
     "btn_launch_run": {"fr": "Lancer le run", "en": "Launch run"},
 
-    # app.js (injectées via window.I18N)
+    # app.js (injected via window.I18N)
     "phase_ingestion": {"fr": "Ingestion des données…", "en": "Ingesting data…"},
     "phase_features": {"fr": "Construction des features…", "en": "Building features…"},
     "phase_scan": {"fr": "Grille sélection × sampler × algo…", "en": "Selection × sampler × algo grid…"},
@@ -215,7 +217,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "artifact_best_model": {"fr": "Meilleur modèle (joblib)", "en": "Best model (joblib)"},
     "artifact_best_model_meta": {"fr": "Métadonnées (JSON)", "en": "Metadata (JSON)"},
 
-    # Phase 2 — validité statistique
+    # Phase 2 — statistical validity
     "stat_holdout": {"fr": "Holdout terminal ({n} obs. jamais vues) : F1_dir={f1}",
                       "en": "Terminal holdout ({n} unseen obs.): F1_dir={f1}"},
     "stat_dm_significant": {"fr": "Diebold-Mariano vs {baseline} : p={p} — significatif",
@@ -255,14 +257,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_stocks": {"fr": "Actions individuelles", "en": "Individual stocks"},
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
 
-    # Phase 7 — historique/univers
+    # Phase 7 — history/universe
     "nav_home": {"fr": "Poste", "en": "Station"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
 
-    # Monde « Station d'observation » — boîtier : bascule de thème et bande
-    # d'enregistrement. Le bouton de thème nomme l'ÉTAT courant, pas l'action
-    # (c'est un indicateur avec pastille) : « Jour » = on est en clair.
+    # "Observation station" world — chrome: theme toggle and activity
+    # record strip. The theme button names the current STATE, not the
+    # action (it's an indicator with a dot): "Day" = currently in light mode.
     "theme_light": {"fr": "Jour", "en": "Day"},
     "theme_dark": {"fr": "Nuit", "en": "Night"},
     "record_aria": {"fr": "Activité des runs dans le temps",
@@ -274,9 +276,9 @@ STRINGS: dict[str, dict[str, str]] = {
                      "en": "No run recorded yet — the record fills from the first run launched."},
     "record_runs": {"fr": "runs", "en": "runs"},
     "record_span_range": {"fr": "du {from} au {to}", "en": "from {from} to {to}"},
-    # Verdict de la station. « Ce qui tient » n'est pas coloré en --ok : le
-    # produit soutient qu'un « non » clairement établi est un résultat réussi,
-    # donc zéro survivant n'est pas un mauvais état.
+    # The station's verdict. "What holds" is not colored --ok: the product's
+    # stance is that a clearly established "no" is a successful result, so
+    # zero survivors is not a bad state.
     "verdict_survivors": {"fr": "CE QUI TIENT", "en": "WHAT HOLDS"},
     "verdict_survivors_rel": {"fr": "cibles dont le signal survit à la correction entre cibles (BH, α={alpha})",
                               "en": "targets whose signal survives the across-target correction (BH, α={alpha})"},
@@ -286,8 +288,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "verdict_cost_rel": {"fr": "essais cumulés sur {runs} run(s), {targets} cible(s)",
                          "en": "cumulative trials over {runs} run(s), {targets} target(s)"},
 
-    # Lignes de portée locale : chaque surface dense répond à SA question, sans
-    # répéter le verdict global que le bandeau porte déjà.
+    # Local-scope lines: each dense surface answers ITS OWN question,
+    # without repeating the global verdict the banner already carries.
     "scope_universe": {"fr": "CIBLES EXPLORÉES", "en": "TARGETS EXPLORED"},
     "scope_universe_rel": {"fr": "dont {done} avec au moins un run terminé · {never} jamais lancées",
                            "en": "of which {done} with at least one finished run · {never} never launched"},
@@ -309,9 +311,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "record_no_trials": {"fr": "essais inconnus", "en": "trial count unknown"},
     "record_tap_again": {"fr": "touche à nouveau pour ouvrir", "en": "tap again to open"},
 
-    # Équivalents textuels des toiles. Un graphique sans texte de remplacement
-    # n'existe pas pour un lecteur d'écran ; ces libellés sont réécrits par
-    # `market.js` / `simulate.js` avec les vraies bornes une fois tracés.
+    # Text equivalents for the canvases. A chart with no replacement text
+    # does not exist for a screen reader; these labels are rewritten by
+    # `market.js` / `simulate.js` with the real bounds once plotted.
     "preview_aria_empty": {"fr": "Cours de la cible — aucune donnée tracée pour l'instant.",
                            "en": "Target price history — nothing plotted yet."},
     "preview_aria": {"fr": "Cours de {symbol} sur {period} : {n} points, du plus bas {min} au plus haut {max}, dernier point {last}.",
@@ -329,7 +331,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_aria_dist": {"fr": "Distribution de {n} trades : {pos} gagnants, {neg} perdants, du pire {min} au meilleur {max}.",
                       "en": "Distribution of {n} trades: {pos} winning, {neg} losing, worst {min}, best {max}."},
 
-    # Phase 4 — simulateur d'investissement
+    # Phase 4 — investment simulator
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
     "sim_title": {"fr": "Simulateur d'investissement (mono-actif)", "en": "Investment simulator (single-asset)"},
     "sim_section_config": {"fr": "Configuration de la stratégie", "en": "Strategy configuration"},
@@ -372,9 +374,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_metric_profit_factor": {"fr": "Profit factor", "en": "Profit factor"},
     "sim_metric_avg_exposure": {"fr": "Exposition moyenne", "en": "Average exposure"},
     "sim_metric_break_even": {"fr": "Coût de rentabilité (break-even)", "en": "Break-even cost"},
-    # États vides du simulateur au repos. Sans eux, `/simulate` ouvre sur trois
-    # plaques de tracé noires et deux tables à en-têtes seuls : la surface la
-    # moins dense du produit se lisait comme cassée plutôt que comme en attente.
+    # Simulator empty states at rest. Without them, `/simulate` opens on
+    # three blank plotting panels and two header-only tables: the product's
+    # least dense surface read as broken rather than waiting.
     "sim_empty_curves": {"fr": "Aucune simulation lancée — choisis un run et un modèle, puis lance la simulation pour tracer la courbe de capital et le drawdown.",
                          "en": "No simulation run yet — pick a run and a model, then launch to plot the equity curve and drawdown."},
     "sim_empty_metrics": {"fr": "Les métriques apparaîtront ici, comparées au buy-and-hold, une fois la simulation lancée.",
@@ -388,8 +390,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_trades_download": {"fr": "Exporter en CSV", "en": "Export as CSV"},
     "sim_trades_none": {"fr": "Aucun trade.", "en": "No trades."},
 
-    # Phase 5 — surfaces exploratoires (explorateur, historique, détails)
-    # Colonnes partagées
+    # Phase 5 — exploratory surfaces (explorer, history, details)
+    # Shared columns
     "col_run": {"fr": "Run", "en": "Run"},
     "col_target": {"fr": "Cible", "en": "Target"},
     "col_horizon": {"fr": "Horizon", "en": "Horizon"},
@@ -400,7 +402,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "col_best_f1": {"fr": "F1_dir", "en": "F1_dir"},
     "col_dm_p": {"fr": "p-value DM", "en": "DM p-value"},
 
-    # Helpers partagés
+    # Shared helpers
     "h_horizon_unit": {"fr": "{h}j", "en": "{h}d"},
     "h_significant": {"fr": "significatif (p < 0.05)", "en": "significant (p < 0.05)"},
     "h_not_significant": {"fr": "non significatif (p ≥ 0.05)", "en": "not significant (p ≥ 0.05)"},
@@ -472,7 +474,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # Scope lines (shared)
     "scope_universe": {"fr": "Portée de l'univers", "en": "Universe scope"},
     "scope_universe_rel": {"fr": "{done} avec un run complètement exécuté, {never} jamais lancée(s)", "en": "{done} with a completed run, {never} never launched"},
-    # Phase 5 : empty states améliorés pour hardening
+    # Phase 5: improved empty states for hardening
     "empty_runs_title": {"fr": "Aucun run pour l'instant.", "en": "No run yet."},
     "empty_runs_hint": {"fr": "Configure et lance un run depuis le poste de lancement.", "en": "Configure and launch a run from the launch station."},
 }
@@ -534,9 +536,9 @@ def js_strings(lang: str) -> dict[str, str]:
     return {k: t(k) for k in keys}
 
 
-# Libellés traduits des groupes de cibles (les clés internes de
-# DEFAULT_TARGET_GROUPS restent en français — sentinelles de logique dans
-# config/defaults.py — seul l'affichage change).
+# Translated labels for target groups (DEFAULT_TARGET_GROUPS' internal keys
+# stay in French — logic sentinels in config/defaults.py — only the display
+# changes).
 TARGET_GROUP_LABEL_KEYS = {
     "Indices": "group_indices",
     "ETFs larges & style": "group_broad_etfs",

@@ -1,6 +1,8 @@
-"""Interface web de `patrick` : construit une `RunConfig` par formulaire
-(remplace l'édition manuelle du YAML), lance `run_pipeline` en arrière-plan
-et affiche progression + leaderboard dans le navigateur.
+"""`patrick`'s web interface: builds a `RunConfig` from a form (replaces
+manual YAML editing), launches `run_pipeline` in the background, and
+displays progress + leaderboard in the browser. User-facing strings (HTTP
+error details, template labels) stay in French, matching the rest of the
+web interface.
 """
 from __future__ import annotations
 
@@ -44,11 +46,11 @@ def _on_startup() -> None:
 
 
 def _station_verdict() -> dict | None:
-    """Le verdict de la station, rendu côté SERVEUR dans le bandeau de chaque
-    page. Pas d'appel AJAX comme la bande d'enregistrement : c'est une donnée
-    de chrome, elle doit être là au premier rendu plutôt que d'apparaître après
-    coup. Une seule requête agrégée, lecture seule, échec silencieux — le
-    bandeau doit s'afficher même sans base (première installation)."""
+    """The station's verdict, rendered SERVER-side in every page's banner.
+    No AJAX call like the activity strip: this is chrome data, it must be
+    there on first render rather than appear afterward. A single aggregated
+    query, read-only, fails silently — the banner must render even with no
+    database (first install)."""
     try:
         conn = trackdb.connect()
     except Exception:
@@ -69,9 +71,9 @@ def _i18n_context(request: Request) -> dict:
         "t": t,
         "glossary": {k: t_entry.get(lang) or t_entry.get(i18n.DEFAULT_LANG) for k, t_entry in GLOSSARY.items()},
         "group_labels": {k: t(v) for k, v in i18n.TARGET_GROUP_LABEL_KEYS.items()},
-        # Nom lisible par terme de glossaire ; les termes qui portent déjà leur
-        # nom (`technical`, `XGBoost`…) n'y figurent pas et le gabarit retombe
-        # sur le terme lui-même.
+        # Human-readable name per glossary term; terms that already carry
+        # their own name (`technical`, `XGBoost`…) are absent from it and
+        # the template falls back to the term itself.
         "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
         "i18n_js": i18n.js_strings(lang),
         "verdict": _station_verdict(),
@@ -87,11 +89,12 @@ def set_lang(lang: str, next: str = "/"):
 
 
 def _recent_runs(limit: int = 8) -> list[dict]:
-    """Derniers runs persistés, pour la colonne « avancement » de l'accueil
-    AU REPOS. Sans eux, cette colonne est vide sur toute la hauteur du premier
-    viewport tant qu'aucun run ne tourne -- alors que la base a précisément de
-    quoi la remplir. Lecture seule, échec silencieux : l'accueil doit
-    s'afficher même si la base n'existe pas encore (première installation)."""
+    """Most recent persisted runs, for the "progress" column of the home
+    page AT REST. Without them, this column stays empty across the whole
+    first-viewport height as long as no run is running -- even though the
+    database has exactly what's needed to fill it. Read-only, fails
+    silently: the home page must render even if the database does not exist
+    yet (first install)."""
     try:
         conn = trackdb.connect()
     except Exception:
@@ -161,16 +164,17 @@ def movers():
 
 @app.get("/api/activity")
 def activity(limit: int = 120):
-    """Alimente la bande d'enregistrement du bandeau (`observatory.js`) — une
-    marque par run, posée à son heure de départ, hauteur portée par le nombre
-    d'essais et couleur par l'état.
+    """Feeds the banner's activity strip (`observatory.js`) — one mark per
+    run, placed at its start time, height driven by the number of trials and
+    color by status.
 
-    Lecture seule et échec silencieux, comme `_recent_runs` : la bande est un
-    élément de gabarit partagé par TOUTES les pages, une base absente
-    (première installation) ne doit pas rendre l'interface inutilisable. Le
-    front distingue « pas encore de run » (`runs: []`) de « base illisible »
-    (`available: false`) et l'écrit dans la légende — la bande ne doit jamais
-    laisser croire à une station muette quand c'est la lecture qui a échoué."""
+    Read-only and fails silently, like `_recent_runs`: the strip is a
+    template element shared by ALL pages, a missing database (first
+    install) must not make the interface unusable. The frontend
+    distinguishes "no run yet" (`runs: []`) from "database unreadable"
+    (`available: false`) and writes it in the legend — the strip must never
+    give the impression of a silent station when it's the read that
+    failed."""
     try:
         conn = trackdb.connect()
     except Exception:
@@ -199,26 +203,26 @@ def activity(limit: int = 120):
 
 @app.get("/api/next-run-names")
 def next_run_names(target: list[str] = Query(default=[])):
-    """Aperçu (lecture seule) du nom qui sera attribué à chaque cible si le
-    formulaire est soumis maintenant — appelé par `app.js` quand la
-    sélection de cibles change. Ne réserve rien : le nombre réel peut
-    différer si d'autres runs pour la même cible s'intercalent avant la
-    soumission (cf. spec batch-run-launch, limite connue)."""
+    """(Read-only) preview of the name that will be assigned to each target
+    if the form is submitted now — called by `app.js` when the target
+    selection changes. Reserves nothing: the actual number may differ if
+    other runs for the same target slot in before submission (see the
+    batch-run-launch spec, known limitation)."""
     return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
 
 
 @app.post("/runs")
 async def create_run(request: Request):
-    """Répond en JSON (consommé par `app.js` en AJAX, sans rechargement de
-    page) : un run est démarré immédiatement s'il n'y en a pas d'actif, sinon
-    mis en file d'attente — jamais rejeté, `start_run` ne lève plus d'erreur
-    dans ce cas (cf. `run_manager.py`).
+    """Responds in JSON (consumed by `app.js` via AJAX, no page reload): a
+    run starts immediately if none is active, otherwise queued — never
+    rejected, `start_run` no longer raises an error in that case (see
+    `run_manager.py`).
 
-    Une soumission peut cibler plusieurs symboles à la fois (`<select
-    multiple name="target_symbols">`) : un job est enfilé par cible, avec un
-    nom/dossier de sortie distincts (`run_manager.next_run_name`) — la queue
-    FIFO existante les enchaîne, aucun nouvel orchestrateur. Si une seule
-    config est invalide parmi les cibles soumises, rien n'est enqueue."""
+    A single submission can target several symbols at once (`<select
+    multiple name="target_symbols">`): one job is enqueued per target, with
+    distinct name/output directory (`run_manager.next_run_name`) — the
+    existing FIFO queue chains them, no new orchestrator. If a single config
+    is invalid among the submitted targets, nothing is enqueued."""
     form = await request.form()
     targets = list(dict.fromkeys(form.getlist("target_symbols")))
     if not targets:
@@ -233,10 +237,10 @@ async def create_run(request: Request):
         if errs:
             errors.extend(f"{sym} : {e}" for e in errs)
             continue
-        # Un dossier de sortie saisi à la main s'applique tel quel à une
-        # cible unique ; pour un batch, il est partagé par le formulaire --
-        # sans ce garde-fou, N cibles avec le même `output_dir` explicite
-        # écraseraient les artefacts les unes des autres.
+        # A manually entered output directory applies as-is to a single
+        # target; for a batch, it is shared across the form -- without this
+        # guard, N targets with the same explicit `output_dir` would
+        # overwrite each other's artifacts.
         if len(targets) > 1 and raw_output_dir:
             config_dict["output"]["dir"] = f"{raw_output_dir}/{name}"
         try:
@@ -263,12 +267,12 @@ async def create_run(request: Request):
 
 @app.post("/runs/{run_id}/relaunch")
 def relaunch_run(run_id: str):
-    """Relance un run passé à l'identique, sauf nom/dossier de sortie
-    (nouveau numéro, cf. `run_manager.next_run_name`) -- une nouvelle
-    tentative doit être distinguable dans l'historique, pas confondue avec
-    l'originale. Fonctionne pour un run soumis via le web (config retrouvée
-    dans la table `job`) et pour un run lancé en CLI (repli sur
-    `run.config_json`, absent de `job`)."""
+    """Relaunches a past run identically, except for name/output directory
+    (new number, see `run_manager.next_run_name`) -- a new attempt must be
+    distinguishable in the history, not confused with the original. Works
+    for a run submitted via the web (config found in the `job` table) and
+    for a run launched via CLI (falls back to `run.config_json`, absent from
+    `job`)."""
     config = run_manager.get_run_config(run_id)
     if config is None:
         conn = trackdb.connect()
@@ -283,11 +287,11 @@ def relaunch_run(run_id: str):
     new_name = run_manager.next_run_name(config.objective.target_symbol)
     cfg_dict = config.model_dump()
     cfg_dict["name"] = new_name
-    # Le dossier de sortie de la relance reprend le RACINE (parent) du
-    # dossier de la config d'origine -- un batch soumis avec un `output_dir`
-    # explicite, ou un run lancé en CLI avec sa propre racine, ne doit pas se
-    # faire écraser au profit d'un `runs/` codé en dur relatif au cwd du
-    # process web. Seul le dernier composant (le nom du run) change.
+    # The relaunch's output directory reuses the ROOT (parent) of the
+    # original config's directory -- a batch submitted with an explicit
+    # `output_dir`, or a CLI-launched run with its own root, must not get
+    # overwritten in favor of a hardcoded `runs/` relative to the web
+    # process's cwd. Only the last component (the run's name) changes.
     original_dir = Path(config.output.dir)
     cfg_dict["output"]["dir"] = (
         str(original_dir.parent / new_name) if original_dir.parent != Path(".") else f"runs/{new_name}"
@@ -300,9 +304,9 @@ def relaunch_run(run_id: str):
 
 @app.get("/api/run-state")
 def run_state():
-    """État agrégé léger (run actif + file d'attente) — poll périodique côté
-    JS pour suivre l'avancement de la file, distinct du polling détaillé
-    `/runs/{run_id}/status` (progression/logs d'un run précis)."""
+    """Lightweight aggregated state (active run + queue) — periodic JS-side
+    polling to track queue progress, distinct from the detailed polling of
+    `/runs/{run_id}/status` (progress/logs of a specific run)."""
     active = run_manager.active_run()
     return {
         "active_run": {"id": active["id"], "name": active["name"]} if active else None,
@@ -319,20 +323,20 @@ def _get_run_or_404(run_id: str) -> dict:
 
 @app.get("/runs/{run_id}")
 def run_page(request: Request, run_id: str):
-    """Même tableau de bord qu'`index()` (un seul gabarit, `index.html`) —
-    seul `initial_run_id` change, forcé sur ce run précis plutôt que sur le
-    run actif courant. Permet de rouvrir/partager le lien d'un run passé ou en
-    cours sans dupliquer le template. Le formulaire settings est prérempli
-    avec la config réelle de ce run (pas les défauts).
+    """Same dashboard as `index()` (a single template, `index.html`) — only
+    `initial_run_id` changes, forced to this specific run rather than the
+    current active one. Allows reopening/sharing the link of a past or
+    ongoing run without duplicating the template. The settings form is
+    prefilled with this run's real config (not the defaults).
 
-    Phase 7.2 (P7.2) -- `run_manager.get_run` ne connaît que les runs lancés
-    depuis l'interface web (table `job`) : un `patrick run`/`patrick resume`
-    CLI n'a jamais de ligne `job` associée, et ne s'y trouve donc jamais. Si
-    ce run_id n'a pas de job mais existe dans `run` (table remplie par tout
-    run, CLI ou web), on bascule sur la page de détail lecture seule
-    (`run_detail.html`) plutôt que de renvoyer une 404 -- l'historique ne
-    doit jamais devenir inaccessible par ce lien (cf. PRODUCT.md, "rien
-    n'est silencieusement perdu")."""
+    Phase 7.2 (P7.2) -- `run_manager.get_run` only knows about runs launched
+    from the web interface (`job` table): a CLI `patrick run`/`patrick
+    resume` never has an associated `job` row, and is therefore never found
+    there. If this run_id has no job but exists in `run` (a table populated
+    by every run, CLI or web), we fall back to the read-only detail page
+    (`run_detail.html`) rather than returning a 404 -- the history must
+    never become inaccessible through this link (see PRODUCT.md, "nothing
+    is silently lost")."""
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
@@ -392,24 +396,24 @@ def download_artifact(run_id: str, artifact: str):
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
                    scheme: str | None = None):
-    """Phase 7.1 — explorateur de l'historique complet de runs."""
+    """Phase 7.1 — full run-history explorer."""
     conn = trackdb.connect()
     try:
         all_runs = trackdb.list_all_runs(conn)
     finally:
         conn.close()
 
-    # Filtrage côté serveur (scheme) et client (target/status) — cf. critique P2
+    # Server-side filtering (scheme) and client-side (target/status) — see P2 critique
     runs = all_runs
     if target:
         runs = [r for r in runs if r.get("target") == target]
     if status:
         runs = [r for r in runs if r.get("status") == status]
     if scheme:
-        # Schéma stocké dans config_json — extraction côté Python
+        # Scheme stored in config_json — extracted on the Python side
         runs = [r for r in runs if _extract_scheme(r) == scheme]
 
-    # Compter les runs par cible pour le filtre dropdown
+    # Count runs per target for the dropdown filter
     target_counts = {}
     for r in all_runs:
         tgt = r.get("target")
@@ -426,7 +430,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
 
 
 def _extract_scheme(run: dict) -> str:
-    """Extraire le schéma de validation depuis le run (stocké en config_json)."""
+    """Extract the validation scheme from the run (stored in config_json)."""
     import json
     try:
         if run.get("config_json"):
@@ -439,7 +443,7 @@ def _extract_scheme(run: dict) -> str:
 
 @app.get("/universe")
 def universe_page(request: Request):
-    """Univers de cibles croisé avec historique de runs."""
+    """Target universe cross-referenced with run history."""
     from patrick.config import defaults
     symbol_info = {s: (label, src) for s, label, src in defaults.DEFAULT_TARGET_CHOICES}
     conn = trackdb.connect()
@@ -480,7 +484,7 @@ def universe_page(request: Request):
 
 @app.get("/targets/{ticker}")
 def target_page(request: Request, ticker: str):
-    """Phase 7.3 — vue agrégée de tous les runs d'une cible."""
+    """Phase 7.3 — aggregated view of all runs for a target."""
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
 
@@ -500,9 +504,9 @@ def target_page(request: Request, ticker: str):
         "cumulative_trials": sum(r.get("n_trials") or 0 for r in target_runs),
         "n_runs": len(target_runs),
         "runs": target_runs,
-        "target_fdr": None,  # Phase 5+ : PBO/FDR requiert stats.py
+        "target_fdr": None,  # Phase 5+: PBO/FDR requires stats.py
         "fdr_result": {"n_tested": 0, "alpha": 0.10},
-        "pbo_by_horizon": {},  # Phase 5+ : à remplir depuis stats
+        "pbo_by_horizon": {},  # Phase 5+: to be filled in from stats
     }
 
     return templates.TemplateResponse(
@@ -513,7 +517,7 @@ def target_page(request: Request, ticker: str):
 
 @app.get("/runs/{run_id}/detail")
 def run_detail_page(request: Request, run_id: str):
-    """Phase 7.2 — page détail lecture seule d'un run (CLI ou web)."""
+    """Phase 7.2 — read-only detail page for a run (CLI or web)."""
     conn = trackdb.connect()
     try:
         detail = trackhistory.run_detail(conn, run_id)
@@ -529,9 +533,9 @@ def run_detail_page(request: Request, run_id: str):
 
 @app.get("/simulate")
 def simulate_page(request: Request, run_id: str | None = None):
-    """Phase 4 -- vue dédiée (pas la grille 2x2 du dashboard : contenu de
-    hauteur variable). Le simulateur ne ré-exécute jamais de modèle : il lit
-    seulement les runs déjà `done` et leurs `prediction` persistées."""
+    """Phase 4 -- dedicated view (not the dashboard's 2x2 grid: variable-
+    height content). The simulator never re-runs a model: it only reads
+    already-`done` runs and their persisted `prediction` rows."""
     conn = trackdb.connect()
     try:
         runs = trackdb.list_done_runs(conn)
@@ -545,7 +549,7 @@ def simulate_page(request: Request, run_id: str | None = None):
 
 @app.get("/phase9")
 def phase9_overview(request: Request):
-    """Vue synthétique Phase 9 : signal quality + régime + journal + snapshots."""
+    """Phase 9 summary view: signal quality + regime + journal + snapshots."""
     conn = trackdb.connect()
     try:
         entries = trackdb.list_phase9_journal_entries(conn, limit=20)
@@ -632,9 +636,9 @@ _SIM_PARAM_FIELDS = set(sim_engine.SimParams.__dataclass_fields__)
 
 @app.post("/api/simulate")
 async def api_simulate(request: Request):
-    """Lance une simulation (Phase 4) et la journalise TOUJOURS en base (Phase
-    4.5, garde-fou anti-surapprentissage), succès ou échec -- le nombre de
-    configurations essayées ne doit jamais être caché."""
+    """Runs a simulation (Phase 4) and ALWAYS logs it to the database (Phase
+    4.5, anti-overfitting guard), success or failure -- the number of
+    configurations tried must never be hidden."""
     body = await request.json()
     try:
         trial_id = int(body["trial_id"])

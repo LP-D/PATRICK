@@ -1,29 +1,29 @@
-"""Téléchargement FRED robuste série-par-série (reprend le pattern établi dans
-VIX_FINAL_FEATURES/VIX_VAR_MACRO) : une série qui échoue ne fait pas perdre les
-autres.
+"""Robust series-by-series FRED download (follows the pattern established in
+VIX_FINAL_FEATURES/VIX_VAR_MACRO): one series failing does not lose the
+others.
 
-Deux chemins de récupération :
-- API officielle FRED (https://fred.stlouisfed.org/docs/api/fred/), utilisée
-  si la variable d'environnement FRED_API_KEY est définie (clé gratuite sur
-  https://fred.stlouisfed.org/docs/api/api_key.html). Stable, authentifiée,
-  ne dépend pas du HTML/CSV public.
-- `pandas_datareader` (scrape du CSV public fredgraph.csv), utilisé en repli
-  si aucune clé n'est fournie. C'est le chemin historique de ce module, mais
-  il est sujet aux blocages/changements de format côté fred.stlouisfed.org
-  (constaté : échecs systématiques sur toutes les séries FRED alors que
-  yfinance fonctionnait toujours) — d'où l'ajout du chemin API.
+Two retrieval paths:
+- Official FRED API (https://fred.stlouisfed.org/docs/api/fred/), used if the
+  FRED_API_KEY environment variable is set (free key at
+  https://fred.stlouisfed.org/docs/api/api_key.html). Stable, authenticated,
+  doesn't depend on the public HTML/CSV.
+- `pandas_datareader` (scrape of the public fredgraph.csv), used as a fallback
+  if no key is provided. This is this module's historical path, but it is
+  subject to blocking/format changes on fred.stlouisfed.org's side (observed:
+  systematic failures on every FRED series while yfinance kept working) —
+  hence the addition of the API path.
 
-Phase 0.5 (vintages ALFRED) : par défaut, l'API FRED renvoie chaque série TELLE
-QUE RÉVISÉE AUJOURD'HUI (`realtime_start`/`realtime_end` par défaut = date du
-jour) — le CPI de janvier 2020, par exemple, a été révisé plusieurs fois depuis
-sa première publication ; l'utiliser tel quel dans un backtest walk-forward sur
-2020 est un look-ahead bias (le modèle "voit" une révision qui n'existait pas
-encore à l'époque). `download_series(..., realtime_date=...)` bascule sur les
-vintages ALFRED (mêmes endpoints FRED, `realtime_start=realtime_end=<date>`) :
-renvoie la série telle qu'elle était connue à `realtime_date`, pas aujourd'hui.
-Seul le chemin API le permet ; le repli scrape ne peut historiquement renvoyer
-que la version actuelle (courante) de chaque série, jamais un vintage passé —
-`download_fred_universe` émet un warning explicite dans ce cas.
+Phase 0.5 (ALFRED vintages): by default, the FRED API returns each series AS
+REVISED TODAY (`realtime_start`/`realtime_end` default to today's date) —
+January 2020's CPI, for instance, has been revised several times since its
+first publication; using it as-is in a walk-forward backtest over 2020 is a
+look-ahead bias (the model "sees" a revision that didn't exist yet at the
+time). `download_series(..., realtime_date=...)` switches to ALFRED vintages
+(same FRED endpoints, `realtime_start=realtime_end=<date>`): returns the
+series as it was known at `realtime_date`, not today. Only the API path
+allows this; the scrape fallback can historically only return the current
+(latest) version of each series, never a past vintage —
+`download_fred_universe` emits an explicit warning in that case.
 """
 from __future__ import annotations
 
@@ -46,8 +46,8 @@ def _download_via_api(series_id: str, start: str, api_key: str,
         "observation_start": start,
     }
     if realtime_date:
-        # Vintage ALFRED : renvoie, pour chaque date d'observation, la valeur
-        # telle qu'elle était connue à `realtime_date` (pas la révision actuelle).
+        # ALFRED vintage: returns, for each observation date, the value as it
+        # was known at `realtime_date` (not the current revision).
         params["realtime_start"] = realtime_date
         params["realtime_end"] = realtime_date
     resp = requests.get(FRED_API_URL, params=params, timeout=30)
@@ -61,10 +61,10 @@ def _download_via_api(series_id: str, start: str, api_key: str,
 
 def download_series(name: str, series_id: str, start: str,
                      realtime_date: str | None = None) -> pd.Series | None:
-    """`realtime_date` (YYYY-MM-DD) : récupère le vintage ALFRED connu à cette
-    date plutôt que la série telle que révisée aujourd'hui — nécessite le chemin
-    API (FRED_API_KEY défini) ; ignoré silencieusement en repli scrape (impossible
-    à faire sans l'API, cf. docstring de module)."""
+    """`realtime_date` (YYYY-MM-DD): fetches the ALFRED vintage known as of
+    that date rather than the series as revised today — requires the API
+    path (FRED_API_KEY set); silently ignored on the scrape fallback
+    (impossible without the API, see module docstring)."""
     api_key = os.environ.get(FRED_API_KEY_ENV)
     try:
         s = _download_via_api(series_id, start, api_key, realtime_date) if api_key \
@@ -78,21 +78,21 @@ def download_series(name: str, series_id: str, start: str,
 
 def download_fred_universe(series_map: dict[str, str], start: str,
                             realtime_date: str | None = None, issues: list | None = None) -> pd.DataFrame:
-    """series_map: {nom_colonne: identifiant_FRED}. `realtime_date` : cf.
-    `download_series` — propagé à chaque série de l'univers.
+    """series_map: {column_name: FRED_identifier}. `realtime_date`: see
+    `download_series` — propagated to every series in the universe.
 
-    `issues` (Phase 6.5, P6.5) : si fourni, chaque série sans donnée (échec de
-    récupération ou série discontinuée) y ajoute un `QualityIssue`."""
+    `issues` (Phase 6.5, P6.5): if provided, every series with no data
+    (fetch failure or discontinued series) adds a `QualityIssue` to it."""
     from patrick.data.quality import check_fred_missing
 
     api_key = os.environ.get(FRED_API_KEY_ENV)
     if not api_key:
-        print("  [WARN] FRED_API_KEY non défini : repli sur le scrape CSV public, qui ne "
-              "peut renvoyer que la version RÉVISÉE AUJOURD'HUI de chaque série (pas de "
-              "vintage point-in-time possible). Les features macro dérivées de ces séries "
-              "sont donc potentiellement en avance sur l'information réellement disponible "
-              "aux dates historiques du backtest (look-ahead bias sur les révisions). "
-              "Définir FRED_API_KEY pour activer les vintages ALFRED (Phase 0.5).")
+        print("  [WARN] FRED_API_KEY not set: falling back to the public CSV scrape, which "
+              "can only return the version REVISED TODAY of each series (no point-in-time "
+              "vintage possible). Macro features derived from these series may therefore be "
+              "ahead of the information actually available at the backtest's historical "
+              "dates (look-ahead bias on revisions). "
+              "Set FRED_API_KEY to enable ALFRED vintages (Phase 0.5).")
     cols = []
     for name, sid in series_map.items():
         s = download_series(name, sid, start, realtime_date=realtime_date)

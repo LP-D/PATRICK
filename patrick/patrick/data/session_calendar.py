@@ -1,41 +1,38 @@
-"""Alignement temporel par classe d'actif (Phase 0.4) : les DataFrames de ce
-projet sont indexés par DATE CALENDAIRE (barres quotidiennes yfinance), sans
-horodatage de clôture — une jointure "même date" traite implicitement une
-clôture Tokyo (~08:00 UTC) et une clôture New York (~20:00-21:00 UTC) du même
-jour calendaire comme simultanées. C'est correct dans un sens (Tokyo clôture
-avant New York le même jour, l'utiliser en feature "du jour" pour une cible US
-est légitime) mais faux dans l'autre : une feature dont la clôture "du jour"
-arrive APRÈS la clôture de la cible contient de l'information non encore
-disponible au moment de la décision.
+"""Per-asset-class time alignment (Phase 0.4): this project's DataFrames are
+indexed by CALENDAR DATE (daily yfinance bars), with no close timestamp — a
+"same date" join implicitly treats a Tokyo close (~08:00 UTC) and a New York
+close (~20:00-21:00 UTC) of the same calendar day as simultaneous. This is
+correct in one direction (Tokyo closes before New York the same day, using it
+as a "same-day" feature for a US target is legitimate) but wrong in the
+other: a feature whose "same-day" close happens AFTER the target's close
+contains information not yet available at decision time.
 
-Sans horodatages intrajournaliers réels (hors de portée avec des barres
-quotidiennes yfinance — les obtenir demanderait de migrer toute l'ingestion sur
-des données horaires, hors périmètre ici), la correction appliquée est un
-décalage d'un jour ouvré : toute feature dont la classe d'actif clôture
-(heure UTC approximative) APRÈS celle de la cible est retardée d'une barre
-avant d'être jointe — c'est-à-dire qu'à la date D, la feature utilisée est sa
-valeur connue à D-1 (déjà entièrement écoulée avant la clôture de la cible),
-pas sa valeur "du jour" (pas encore connue). Approximation documentée,
-meilleure que l'absence totale d'alignement, pas équivalente à un vrai as-of
-join intrajournalier.
+Without real intraday timestamps (out of reach with daily yfinance bars —
+getting them would require migrating the entire ingestion to hourly data,
+out of scope here), the fix applied is a one-business-day shift: any feature
+whose asset class closes (approximate UTC hour) AFTER the target's is
+delayed by one bar before being joined — i.e. on date D, the feature used is
+its value known as of D-1 (already fully elapsed before the target's close),
+not its "same-day" value (not yet known). A documented approximation, better
+than no alignment at all, but not equivalent to a true intraday as-of join.
 """
 from __future__ import annotations
 
-# Heure de clôture UTC approximative par classe d'actif (échelle 0-24, valeur la
-# plus tardive de la classe — conservateur : en cas de doute, on suppose une
-# clôture tardive, ce qui décale PLUS de features plutôt que moins, quitte à
-# perdre un peu de fraîcheur, jamais à laisser fuiter de l'information).
+# Approximate UTC close hour per asset class (0-24 scale, latest value of the
+# class — conservative: when in doubt, assume a late close, which delays MORE
+# features rather than fewer, at the cost of some freshness, never at the
+# cost of leaking information).
 CLOSE_UTC_HOUR = {
-    "crypto": 24.0,           # 24/7, la barre "du jour" n'est complète qu'en fin de journée UTC
-    "fx": 22.0,                # convention clôture NY ~17h ET
-    "futures": 21.0,           # règlement CME/ICE, fin d'après-midi US
-    "equities_us": 20.0,       # NYSE/NASDAQ ~16h ET
-    "volatility_index": 20.0,  # VIX & apparentés, cote sur la même session que les indices US
+    "crypto": 24.0,           # 24/7, the "same-day" bar is only complete at the end of the UTC day
+    "fx": 22.0,                # NY close convention ~5pm ET
+    "futures": 21.0,           # CME/ICE settlement, late US afternoon
+    "equities_us": 20.0,       # NYSE/NASDAQ ~4pm ET
+    "volatility_index": 20.0,  # VIX & related, quoted on the same session as US indices
     "equities_americas_other": 21.0,
-    "equities_europe": 16.5,   # Paris/Francfort/Londres ~16h30-17h30 UTC
-    "equities_asia_pacific": 8.0,   # Tokyo/HK/Shanghai/Sydney, la plus précoce
-    "macro": 24.0,              # série FRED utilisée comme cible directe (pas yfinance)
-    "other": 24.0,              # inconnu -> traité comme le plus tardif (conservateur)
+    "equities_europe": 16.5,   # Paris/Frankfurt/London ~16:30-17:30 UTC
+    "equities_asia_pacific": 8.0,   # Tokyo/HK/Shanghai/Sydney, the earliest
+    "macro": 24.0,              # FRED series used as a direct target (not yfinance)
+    "other": 24.0,              # unknown -> treated as the latest (conservative)
 }
 
 _EU_SUFFIXES = (".PA", ".DE", ".AS", ".BR", ".MI", ".MC", ".LS", ".VI", ".L",
@@ -44,9 +41,9 @@ _ASIA_SUFFIXES = (".HK", ".T", ".SS", ".SZ", ".KS", ".TW", ".SI", ".JK", ".KL",
                    ".BO", ".NS", ".AX", ".NZ")
 _AMERICAS_OTHER_SUFFIXES = (".SA", ".MX", ".TO", ".BA")
 
-# Indices ("^"-préfixés) classés individuellement (le suffixe seul ne suffit
-# pas à distinguer leur région) — non exhaustif : tout indice absent retombe
-# sur "other" (traitement conservateur, cf. CLOSE_UTC_HOUR["other"]).
+# Indices ("^"-prefixed) classified individually (the suffix alone isn't
+# enough to distinguish their region) — not exhaustive: any absent index
+# falls back to "other" (conservative handling, see CLOSE_UTC_HOUR["other"]).
 _VOLATILITY_INDICES = ("^VIX", "^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^EVZ")
 
 _INDEX_REGION = {
@@ -69,12 +66,12 @@ _INDEX_REGION = {
 
 
 def classify_asset_class(symbol: str, source: str = "yfinance") -> str:
-    """Classe d'actif d'un symbole yfinance, par motif de ticker — heuristique
-    volontairement simple (pas de dépendance à un référentiel externe).
-    `source == "fred"` : série macro utilisée comme cible directe (Phase X5,
-    sélection de baseline par classe d'actif) -- distincte de "other" pour
-    pouvoir lui assigner la baseline marche aléatoire avec dérive plutôt que
-    la plus conservatrice par défaut."""
+    """Asset class of a yfinance symbol, by ticker pattern — deliberately
+    simple heuristic (no dependency on an external reference database).
+    `source == "fred"`: macro series used as a direct target (Phase X5,
+    baseline selection by asset class) -- distinct from "other" so it can be
+    assigned the random-walk-with-drift baseline rather than the default,
+    more conservative one."""
     if source == "fred":
         return "macro"
     if source != "yfinance":
@@ -104,11 +101,11 @@ def classify_asset_class(symbol: str, source: str = "yfinance") -> str:
 
 def session_lag_days(feature_symbol: str, feature_source: str,
                       target_symbol: str, target_source: str) -> int:
-    """1 si la feature doit être retardée d'une barre avant d'être jointe à la
-    cible (sa clôture "du jour" arrive après celle de la cible -> pas encore
-    connue au moment de la décision), 0 sinon. Toujours 0 si la cible elle-même
-    n'est pas yfinance (FRED : sa propre correction temporelle est le sujet de
-    la Phase 0.5, pas de celle-ci — cf. docstring de module)."""
+    """1 if the feature must be delayed by one bar before being joined to the
+    target (its "same-day" close happens after the target's -> not yet known
+    at decision time), 0 otherwise. Always 0 if the target itself is not
+    yfinance (FRED: its own temporal correction is the subject of Phase 0.5,
+    not this one — see module docstring)."""
     if target_source != "yfinance":
         return 0
     feature_class = classify_asset_class(feature_symbol, feature_source)

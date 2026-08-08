@@ -314,7 +314,7 @@ def test_undersized_fold_is_excluded_with_explicit_warning(tiny_config, monkeypa
         db_path=str(tmp_path / "patrick_test_d3.db"))
 
     captured = capsys.readouterr()
-    assert "[WARN] fold" in captured.out and "exclu" in captured.out, (
+    assert "[WARN] fold" in captured.out and "excluded" in captured.out, (
         "aucun avertissement explicite alors qu'un fold aurait dû être exclu pour taille insuffisante."
     )
     assert "min 10000" in captured.out or "(min 10000)" in captured.out

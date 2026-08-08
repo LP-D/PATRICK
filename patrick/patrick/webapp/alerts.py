@@ -1,8 +1,9 @@
-"""Liste d'alertes (plus fortes variations récentes) sur l'univers de tickers —
-calculée en arrière-plan toutes les 30 minutes et mise en cache : la télécharger
-à chaque chargement de la page serait trop lent sur ~300 tickers (cf. décision
-utilisateur). Indépendant de `patrick.data.ingest` (qui, lui, cache un run
-complet) : ici on veut juste un instantané rapide, régulièrement rafraîchi.
+"""Alert list (largest recent moves) over the ticker universe — computed in
+the background every 30 minutes and cached: downloading it on every page
+load would be too slow on ~300 tickers (per user decision). Independent from
+`patrick.data.ingest` (which caches a full run): here we just want a quick,
+regularly refreshed snapshot. Error/status strings in `_cache` are
+user-facing and stay in French, matching the rest of the web interface.
 """
 from __future__ import annotations
 
@@ -51,9 +52,9 @@ def _compute_once() -> None:
             _cache["error"] = "Pas assez de données téléchargées."
         return
 
-    # yfinance peut renvoyer une dernière ligne entièrement vide (jour en cours,
-    # pas encore clôturé) — on la retire après avoir comblé les trous ponctuels
-    # (jours fériés locaux différents selon la place) par un forward-fill.
+    # yfinance can return a fully empty last row (day still in progress, not
+    # yet closed) — it is dropped after filling one-off gaps (local holidays
+    # differing by exchange) via a forward-fill.
     df = df.ffill().dropna(axis=0, how="all").dropna(axis=1, how="all")
     if len(df) < 2:
         with _lock:

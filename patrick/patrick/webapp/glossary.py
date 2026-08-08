@@ -1,17 +1,20 @@
-"""Explications courtes (jargon financier/ML expliqué au moins une fois) affichées
-dans l'interface web via un petit encart cliquable — pas de logique métier ici,
-juste du texte, gardé à part de `forms.py` pour rester lisible. Bilingue (FR/EN),
-résolu à la langue courante dans `app.py` avant d'être envoyé au template.
+"""Short explanations (finance/ML jargon explained at least once) displayed
+in the web interface via a small clickable popover — no business logic here,
+just text, kept apart from `forms.py` to stay readable. Bilingual (FR/EN),
+resolved to the current language in `app.py` before being sent to the
+template. Glossary entry text itself (the "fr"/"en" dict values below) is
+UI content, not code documentation, and is intentionally left as-is in both
+languages.
 """
 from __future__ import annotations
 
-# Nom lisible d'un terme de glossaire, quand la clé technique n'en est pas un.
-# Sans cette table, l'appel de note s'annonçait « data_quality_enabled, bouton »
-# à un lecteur d'écran et titrait son encart en MAJUSCULES_SNAKE_CASE — le
-# glossaire existe précisément pour traduire ces clés, il ne pouvait pas être le
-# seul endroit qui les laisse brutes. Les termes absents d'ici portent déjà leur
-# propre nom (`technical`, `XGBoost`, `SMOTE`…) : leur clé EST le libellé visible,
-# et l'aligner suffit.
+# Human-readable name for a glossary term, when the technical key isn't one.
+# Without this table, the footnote marker would announce itself as
+# "data_quality_enabled, button" to a screen reader and title its popover in
+# UPPER_SNAKE_CASE — the glossary exists precisely to translate these keys,
+# it could not be the one place that leaves them raw. Terms absent from here
+# already carry their own name (`technical`, `XGBoost`, `SMOTE`…): their key
+# IS the visible label, and aligning them is enough.
 TERM_LABEL_KEYS: dict[str, str] = {
     "data_quality_enabled": "field_data_quality_enabled",
     "scheme": "field_scheme",
@@ -28,7 +31,7 @@ TERM_LABEL_KEYS: dict[str, str] = {
 }
 
 GLOSSARY: dict[str, dict[str, str]] = {
-    # Familles de features
+    # Feature families
     "technical": {
         "fr": ("Indicateurs techniques classiques (moyennes mobiles, RSI, MACD, "
                "bandes de Bollinger...) calculés sur chaque série de l'univers, "
@@ -67,7 +70,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "conditions) aligned on the market calendar."),
     },
 
-    # Modèles de la famille vol_models
+    # Models in the vol_models family
     "egarch": {
         "fr": ("EGARCH (Exponential GARCH) : modèle de volatilité conditionnelle qui "
                "capture le fait que les chocs négatifs augmentent souvent plus la "
@@ -145,7 +148,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "non-stationary series. Feature = the model's residual."),
     },
 
-    # Méthodes de sélection de features
+    # Feature selection methods
     "shap": {
         "fr": ("SHAP (SHapley Additive exPlanations) : mesure la contribution de "
                "chaque feature aux prédictions d'un modèle déjà entraîné (théorie des "
@@ -173,7 +176,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "selection inside training rather than a separate step."),
     },
 
-    # Samplers (rééquilibrage des classes)
+    # Samplers (class rebalancing)
     "SMOTE": {
         "fr": ("SMOTE (Synthetic Minority Over-sampling) : génère des exemples "
                "synthétiques de la classe minoritaire (interpolés entre voisins "
@@ -214,7 +217,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "synthetic generation."),
     },
 
-    # Algorithmes de classification
+    # Classification algorithms
     "XGBoost": {
         "fr": ("Gradient boosting sur arbres de décision, implémentation "
                "optimisée pour la vitesse et la régularisation — un des algos de "
@@ -253,7 +256,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "variables well and limit overfitting via \"ordered\" boosting."),
     },
 
-    # Autres options du pipeline
+    # Other pipeline options
     "purge": {
         "fr": ("Purge (walk-forward) : retire les lignes d'entraînement trop proches "
                "de la frontière train/test, pour éviter qu'une fuite d'information "

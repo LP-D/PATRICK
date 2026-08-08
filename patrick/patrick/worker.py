@@ -1,14 +1,14 @@
-"""Worker `patrick` (Phase 3.1) : process séparé qui consomme la file de jobs
-SQLite (`job`, cf. `tracking/jobs.py`) en boucle et exécute `run_pipeline`.
+"""`patrick` worker (Phase 3.1): a separate process that consumes the SQLite
+job queue (`job`, see `tracking/jobs.py`) in a loop and runs `run_pipeline`.
 
-Remplace l'exécution en thread interne au process web (BackgroundTasks-like,
-ancien `webapp/run_manager.py`) : tuer le process web pendant un run ne perd
-plus le run, ce worker (process séparé, ne partage rien avec le process web
-sinon la base SQLite) le termine. Relancé automatiquement par
-`run_manager.ensure_worker_running` à la prochaine soumission s'il est
-absent/mort ; s'arrête tout seul après `idle_timeout` secondes sans job à
-traiter (outil local mono-utilisateur : pas de process fantôme qui tourne
-indéfiniment pour rien).
+Replaces execution in a thread internal to the web process (BackgroundTasks-
+like, the old `webapp/run_manager.py`): killing the web process during a run
+no longer loses the run, this worker (a separate process, sharing nothing
+with the web process besides the SQLite database) finishes it. Automatically
+relaunched by `run_manager.ensure_worker_running` on the next submission if
+it's absent/dead; stops on its own after `idle_timeout` seconds with no job
+to process (local single-user tool: no ghost process running forever for
+nothing).
 """
 from __future__ import annotations
 
@@ -26,20 +26,20 @@ from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 
-_FOLD_LINE_RE = re.compile(r"lignes cumulées")
-_FOLD_LINE_NUM_RE = re.compile(r":\s*(\d+)\s*lignes")
+_FOLD_LINE_RE = re.compile(r"cumulative rows")
+_FOLD_LINE_NUM_RE = re.compile(r":\s*(\d+)\s*cumulative")
 
 _PHASE_MARKERS = [
     ("[FEATURES]", "features"),
     ("[SCAN]", "scan"),
-    ("[BEST avant Optuna]", "scan"),
+    ("[BEST before Optuna]", "scan"),
     ("[OPTUNA]", "tuning"),
     ("[EXPORT]", "export"),
 ]
 
-# Ecritures DB throttlées : `run_pipeline` imprime bien plus d'une ligne par
-# seconde (une par fold/trial), largement plus fréquent que ce qui est utile
-# côté UI, et chaque écriture est une transaction SQLite.
+# Throttled DB writes: `run_pipeline` prints far more than one line per
+# second (one per fold/trial), well beyond what's useful on the UI side, and
+# every write is a SQLite transaction.
 _FLUSH_THROTTLE_S = 1.0
 
 
@@ -56,11 +56,12 @@ def _estimate_total(config: RunConfig) -> int:
 
 
 class _ProgressCapture:
-    """Redirige stdout vers la vraie console + persiste progression/logs en
-    base. Sert aussi de battement de coeur pendant l'exécution d'un run : sans
-    ça, un run long (plusieurs minutes entre deux itérations de la boucle
-    `run_worker_loop`) laisserait le heartbeat devenir périmé et
-    `ensure_worker_running` croirait ce worker mort alors qu'il travaille."""
+    """Redirects stdout to the real console + persists progress/logs to the
+    database. Also serves as a heartbeat during a run's execution: without
+    this, a long run (several minutes between two `run_worker_loop`
+    iterations) would let the heartbeat go stale and
+    `ensure_worker_running` would believe this worker dead while it's
+    working."""
 
     def __init__(self, conn, job_id: str, pid: int):
         self._conn = conn
@@ -111,8 +112,8 @@ class _ProgressCapture:
 
 
 def _to_native(obj):
-    """Convertit récursivement numpy.int64/float64/bool_/NaN (issus des
-    DataFrames pandas) en types Python natifs, JSON-sérialisables."""
+    """Recursively converts numpy.int64/float64/bool_/NaN (from pandas
+    DataFrames) into native, JSON-serializable Python types."""
     if isinstance(obj, dict):
         return {k: _to_native(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -126,9 +127,9 @@ def _to_native(obj):
 
 
 def _summarize_result(config: RunConfig, result: dict) -> dict:
-    """Construit un résumé JSON-sérialisable + la liste des artefacts exportés
-    (retrouvés par convention de nommage, `run_pipeline` ne renvoie pas ces
-    chemins directement, sauf `model_path`)."""
+    """Builds a JSON-serializable summary + the list of exported artifacts
+    (found by naming convention, `run_pipeline` does not return these paths
+    directly, except `model_path`)."""
     out_dir = config.output.dir
     name = config.name
 
@@ -185,7 +186,7 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
     sys.stdout = capture
     try:
         result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
-    except Exception as exc:  # noqa: BLE001 - surfacé via job.error, jamais avalé
+    except Exception as exc:  # noqa: BLE001 - surfaced via job.error, never swallowed
         sys.stdout = old_stdout
         capture.final_flush()
         jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")
@@ -197,25 +198,25 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
 
 
 def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> None:
-    """Boucle principale : réclame le prochain job en attente et l'exécute, en
-    boucle, jusqu'à `idle_timeout` secondes sans job disponible (le worker
-    s'arrête alors tout seul ; `run_manager.ensure_worker_running` en relance
-    un à la prochaine soumission)."""
+    """Main loop: claims the next queued job and runs it, in a loop, until
+    `idle_timeout` seconds pass with no job available (the worker then
+    stops on its own; `run_manager.ensure_worker_running` relaunches one on
+    the next submission)."""
     pid = os.getpid()
     db_path = trackdb.default_db_path()
     conn = trackdb.connect(db_path)
     n_reaped = jobs_db.reap_stale_running_jobs(conn)
     if n_reaped:
-        print(f"[WORKER] {n_reaped} job(s) 'running' abandonné(s) par un worker précédent -> erreur.")
+        print(f"[WORKER] {n_reaped} 'running' job(s) abandoned by a previous worker -> error.")
     jobs_db.write_heartbeat(conn, pid)
     idle_since = time.monotonic()
-    print(f"[WORKER] démarré (pid={pid}, db={db_path})")
+    print(f"[WORKER] started (pid={pid}, db={db_path})")
     while True:
         job = jobs_db.claim_next_job(conn, pid)
         if job is None:
             jobs_db.write_heartbeat(conn, pid)
             if time.monotonic() - idle_since > idle_timeout:
-                print(f"[WORKER] inactif depuis {idle_timeout:.0f}s, arrêt (pid={pid}).")
+                print(f"[WORKER] idle for {idle_timeout:.0f}s, stopping (pid={pid}).")
                 return
             time.sleep(poll_interval)
             continue

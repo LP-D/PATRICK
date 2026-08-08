@@ -1,11 +1,11 @@
-"""Persistance SQLite des runs (Phase 1) — une ligne par essai (`trial`), pas
-seulement le vainqueur, pour permettre plus tard le calcul de validité
-statistique (Sharpe déflaté, PBO — Phase 2) qui a besoin de savoir combien de
-configurations ont réellement été testées.
+"""SQLite persistence for runs (Phase 1) — one row per trial (`trial`), not
+just the winner, to later allow computing statistical validity (Deflated
+Sharpe, PBO — Phase 2) which needs to know how many configurations were
+actually tested.
 
-Projet mono-utilisateur local : pas de Redis/Postgres/service — SQLite (WAL,
-un fichier) + migrations SQL numérotées (pas d'Alembic, ce projet ne passe pas
-par SQLAlchemy).
+Local single-user project: no Redis/Postgres/service — SQLite (WAL, one
+file) + numbered SQL migrations (no Alembic, this project does not go
+through SQLAlchemy).
 """
 from __future__ import annotations
 
@@ -21,19 +21,18 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
 def default_db_path() -> str:
-    """Lu depuis l'environnement à CHAQUE appel (pas une constante figée à
-    l'import) : `patrick worker`, lancé en process séparé par
-    `run_manager.ensure_worker_running`, doit partager la même base que le
-    process web qui l'a fait naître (héritage d'environnement via
-    `subprocess.Popen`) sans qu'il faille se passer le chemin en argument CLI
-    — et les tests doivent pouvoir isoler chaque run sur un `tmp_path` en
-    positionnant `PATRICK_DB_PATH` avant d'appeler `connect()`, ce qu'une
-    valeur par défaut de paramètre (évaluée une seule fois à l'import du
-    module) ne permettrait pas."""
+    """Read from the environment on EVERY call (not a constant frozen at
+    import time): `patrick worker`, launched as a separate process by
+    `run_manager.ensure_worker_running`, must share the same database as the
+    web process that spawned it (environment inheritance via
+    `subprocess.Popen`) without needing to pass the path as a CLI argument
+    — and tests must be able to isolate each run on a `tmp_path` by setting
+    `PATRICK_DB_PATH` before calling `connect()`, which a parameter default
+    (evaluated once at module import) would not allow."""
     return os.environ.get("PATRICK_DB_PATH") or os.path.expanduser("~/.patrick/patrick.db")
 
 
-DEFAULT_DB_PATH = default_db_path()  # valeur au chargement du module, pour affichage/CLI seulement
+DEFAULT_DB_PATH = default_db_path()  # value at module load time, for display/CLI only
 
 _TRACKED_LIBS = (
     "numpy", "pandas", "scikit-learn", "xgboost", "lightgbm", "catboost",
@@ -71,9 +70,9 @@ def migrate(conn: sqlite3.Connection) -> None:
 
 
 def library_versions() -> str:
-    """JSON {lib: version} des dépendances principales — cf. Phase 1.6
-    (reproductibilité). `importlib.metadata` (stdlib) : pas de dépendance
-    ajoutée juste pour ça."""
+    """JSON {lib: version} of the main dependencies — see Phase 1.6
+    (reproducibility). `importlib.metadata` (stdlib): no dependency added
+    just for this."""
     versions = {"python": sys.version.split()[0]}
     for lib in _TRACKED_LIBS:
         try:
@@ -84,9 +83,9 @@ def library_versions() -> str:
 
 
 def current_git_sha(cwd: str | None = None) -> str:
-    """SHA git du HEAD courant — "unknown" (pas d'exception) si le run tourne
-    hors d'un dépôt git ou sans binaire git disponible : la reproductibilité en
-    pâtit mais ça ne doit jamais faire planter un run."""
+    """Git SHA of the current HEAD — "unknown" (no exception) if the run runs
+    outside a git repo or with no git binary available: reproducibility
+    suffers but this must never crash a run."""
     try:
         out = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True,
@@ -98,8 +97,8 @@ def current_git_sha(cwd: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CRUD — une fonction par table d'écriture, toutes idempotentes/explicites sur
-# leurs paramètres plutôt que de prendre des dicts non typés.
+# CRUD — one function per write table, all idempotent/explicit about their
+# parameters rather than taking untyped dicts.
 # ---------------------------------------------------------------------------
 
 def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
@@ -115,11 +114,11 @@ def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
 
 
 def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
-    """Phase 6.5 (P6.5). Idempotent par snapshot : si ce `snapshot_id` a déjà
-    des lignes (même contenu déjà ingéré via un `force=True` répété), on ne
-    duplique pas -- le snapshot lui-même est déjà dédupliqué par hash de
-    contenu (`data/store.py`), les motifs d'exclusion qui l'ont produit le
-    sont donc aussi par construction."""
+    """Phase 6.5 (P6.5). Idempotent per snapshot: if this `snapshot_id`
+    already has rows (same content already ingested via a repeated
+    `force=True`), nothing is duplicated -- the snapshot itself is already
+    deduplicated by content hash (`data/store.py`), so the exclusion reasons
+    that produced it are too, by construction."""
     if not issues:
         return
     with conn:
@@ -211,11 +210,11 @@ def list_phase9_journal_entries(conn: sqlite3.Connection, limit: int = 50) -> li
 
 def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: float,
                             n_folds: int, selection_freq: dict[str, float]) -> None:
-    """Phase 6.3 (P6.3). `mean_jaccard` peut être NaN (moins de 2 folds
-    utilisables) -- converti en NULL SQL avant stockage (colonne nullable,
-    cf. migration 0006 ; sqlite3/le driver Python ne garantit pas qu'un NaN
-    Python survive le binding en `REAL`), le rapport l'affiche comme "non
-    calculable", jamais comme un chiffre trompeur."""
+    """Phase 6.3 (P6.3). `mean_jaccard` can be NaN (fewer than 2 usable
+    folds) -- converted to SQL NULL before storage (nullable column, see
+    migration 0006; sqlite3/the Python driver does not guarantee a Python
+    NaN survives `REAL` binding), the report displays it as "not
+    computable", never as a misleading number."""
     mean_jaccard_sql = mean_jaccard if mean_jaccard == mean_jaccard else None  # NaN != NaN
     with conn:
         conn.execute(
@@ -233,10 +232,10 @@ def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: 
 
 
 def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
-    """`mean_jaccard` revient en NaN (pas `None`) quand non calculable --
-    NULL SQL uniquement à la persistance (cf. `save_feature_stability`),
-    NaN côté Python pour que les comparaisons numériques existantes
-    (`mj == mj`) restent valables sans traiter `None` séparément partout."""
+    """`mean_jaccard` comes back as NaN (not `None`) when not computable --
+    SQL NULL only at persistence time (see `save_feature_stability`), NaN on
+    the Python side so existing numeric comparisons (`mj == mj`) remain
+    valid without handling `None` separately everywhere."""
     row = conn.execute(
         "SELECT mean_jaccard, n_folds FROM run_feature_stability WHERE run_id = ?", (run_id,)).fetchone()
     if row is None:
@@ -251,16 +250,16 @@ def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
 
 def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
                     kind: str = "class_specific") -> None:
-    """Phase 6.4 (P6.4). Persiste le résultat Diebold-Mariano (Phase 2.5) de
-    CE run pour qu'il soit queryable à travers tout l'historique (cf.
-    migration 0009) -- `dm_result` vient de `validation.diebold_mariano.
-    diebold_mariano()` avec un champ `baseline` en plus (ajouté par
+    """Phase 6.4 (P6.4). Persists THIS run's Diebold-Mariano result (Phase
+    2.5) so it is queryable across the whole history (see migration 0009)
+    -- `dm_result` comes from `validation.diebold_mariano.diebold_mariano()`
+    with an extra `baseline` field (added by
     `pipeline/engine.py::_evaluate_diebold_mariano`).
 
-    `kind` (Phase X5, migration 0010) : `"class_specific"` (baseline propre à
-    la classe d'actif de la cible, cf. `validation.baseline_by_asset_class`)
-    ou `"common"` (persistance de classe, référence fixe entre classes) --
-    deux lignes distinctes par run, PRIMARY KEY (run_id, kind)."""
+    `kind` (Phase X5, migration 0010): `"class_specific"` (baseline specific
+    to the target's asset class, see `validation.baseline_by_asset_class`)
+    or `"common"` (class-agnostic persistence, fixed reference across
+    classes) -- two distinct rows per run, PRIMARY KEY (run_id, kind)."""
     with conn:
         conn.execute(
             "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value) VALUES (?, ?, ?, ?, ?) "
@@ -307,11 +306,12 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
 
 
 def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
-    """Tous les runs, les plus récents d'abord — pour surfaces exploratoires (Phase 5).
-    Inclut `scheme`/`best_f1_dir`/`dm_p_value` (mêmes requêtes que
-    `tracking.history.list_runs`, dupliquées ici plutôt qu'importées : `db.py`
-    est la couche basse, `history.py` en dépend, pas l'inverse) -- `runs.html`
-    les affiche directement (`r.scheme`, `r.best_f1_dir`, `r.dm_p_value`)."""
+    """All runs, most recent first — for exploratory surfaces (Phase 5).
+    Includes `scheme`/`best_f1_dir`/`dm_p_value` (same queries as
+    `tracking.history.list_runs`, duplicated here rather than imported:
+    `db.py` is the low-level layer, `history.py` depends on it, not the
+    other way around) -- `runs.html` displays them directly (`r.scheme`,
+    `r.best_f1_dir`, `r.dm_p_value`)."""
     rows = conn.execute(
         "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials "
         "FROM run ORDER BY started_at DESC",
@@ -348,8 +348,8 @@ def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
 
 
 def list_done_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
-    """Runs terminés (`status='done'`), les plus récents d'abord -- alimente le
-    sélecteur de run du simulateur (Phase 4.7)."""
+    """Finished runs (`status='done'`), most recent first -- feeds the
+    simulator's run selector (Phase 4.7)."""
     rows = conn.execute(
         "SELECT run_id, target, horizon, started_at, finished_at, config_json "
         "FROM run WHERE status = 'done' ORDER BY started_at DESC LIMIT ?", (limit,),
@@ -396,7 +396,7 @@ def mark_best_trial(conn: sqlite3.Connection, trial_id: int, artifact_path: str 
 def add_fold_metrics(conn: sqlite3.Connection, trial_id: int, fold_index: int,
                       split: str, metrics: dict) -> None:
     rows = [(trial_id, fold_index, split, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]  # exclut NaN
+            for name, value in metrics.items() if value is not None and value == value]  # excludes NaN
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO fold_metric (trial_id, fold_index, split, metric, value) "
@@ -419,16 +419,16 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
                      ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1) -> None:
-    """`y_true` peut contenir `None` (Phase 4.6, `split='live'` : la prédiction
-    est écrite AVANT que le résultat soit connu) -- stocké en NULL plutôt que
-    de planter sur `float(None)`, complété plus tard par
+    """`y_true` can contain `None` (Phase 4.6, `split='live'`: the prediction
+    is written BEFORE the outcome is known) -- stored as NULL rather than
+    crashing on `float(None)`, backfilled later by
     `update_prediction_outcome`.
 
-    `path_id` (Phase 6.1, P6.1) : `-1` (défaut) = sans objet (walk-forward,
-    comportement inchangé) ; sous CPCV, un chemin de backtest distinct
-    (`validation/cpcv.py::path_assignment`) -- une même date peut alors
-    apparaître dans plusieurs lignes `prediction` (une par chemin qui la
-    couvre), (trial_id, ts, path_id) les distingue."""
+    `path_id` (Phase 6.1, P6.1): `-1` (default) = not applicable
+    (walk-forward, unchanged behavior); under CPCV, a distinct backtest path
+    (`validation/cpcv.py::path_assignment`) -- the same date can then appear
+    in several `prediction` rows (one per path that covers it),
+    (trial_id, ts, path_id) distinguishes them."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
               float(yp_proba) if yp_proba is not None else None, path_id)
@@ -442,9 +442,9 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
 
 
 def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int) -> list[dict]:
-    """Prédictions `split='live'` dont le résultat n'est pas encore connu
-    (Phase 4.6) -- candidates pour `update_prediction_outcome` une fois leur
-    horizon écoulé."""
+    """`split='live'` predictions whose outcome is not yet known (Phase 4.6)
+    -- candidates for `update_prediction_outcome` once their horizon has
+    elapsed."""
     rows = conn.execute(
         "SELECT ts FROM prediction WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
         (trial_id,),
