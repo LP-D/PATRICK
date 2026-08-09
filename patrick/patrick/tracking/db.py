@@ -20,7 +20,9 @@ from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
-_CREATE_TABLE_RE = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_CREATE_TABLE_RE = re.compile(r"^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_CREATE_INDEX_RE = re.compile(
+    r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
 
 
 def default_db_path() -> str:
@@ -54,27 +56,55 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _tables_already_present(conn: sqlite3.Connection, sql: str) -> bool:
-    """True if EVERY `CREATE TABLE` target in `sql` already exists in the
-    database. Real incident, not hypothetical: `0011_phase9_tracking.sql`
-    was numbered `0010_phase9_tracking.sql` before an earlier renumbering
-    (collision with this project's own `0010_dm_result_kind.sql`) --
-    a database that had already applied it under the old number has
-    `phase9_snapshot`/`phase9_journal` on disk but no `schema_version` row
-    for version 11, so `executescript()` below would crash on
-    `CREATE TABLE phase9_snapshot` for a table that's already there. Checked
-    per-migration (not hardcoded to phase9) so any future renumbering hits
-    the same safety net. Only covers "all its tables already exist" -- a
-    migration that also does INSERT/DROP/RENAME (like 0010) is never a pure
-    CREATE-TABLE-only script and is unaffected by this check."""
-    names = _CREATE_TABLE_RE.findall(sql)
-    if not names:
-        return False
-    placeholders = ",".join("?" for _ in names)
-    existing = {row[0] for row in conn.execute(
-        f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})", names
-    )}
-    return set(names) <= existing
+def _split_statements(sql: str) -> list[str]:
+    """Split a migration script into individual statements. Migrations here
+    are plain DDL/DML with no semicolons inside string literals (verified
+    across all current scripts), so a split on ';' is enough once `--` line
+    comments are stripped first -- otherwise a semicolon inside a French
+    comment (this project's migration headers are prose, not just code)
+    could be mistaken for a statement terminator."""
+    stripped_lines = []
+    for line in sql.splitlines():
+        comment_at = line.find("--")
+        stripped_lines.append(line[:comment_at] if comment_at != -1 else line)
+    return [s.strip() for s in "\n".join(stripped_lines).split(";") if s.strip()]
+
+
+def _ddl_target_already_exists(conn: sqlite3.Connection, statement: str) -> bool:
+    """True if `statement` is a bare `CREATE TABLE`/`CREATE INDEX` (no
+    `IF NOT EXISTS`) whose target already exists in the database -- the
+    only two DDL forms in these migrations that raise `OperationalError` on
+    a repeat run. Checked per statement at execution time rather than
+    classifying a whole script upfront as "safe to skip entirely": a real
+    incident (`0011_phase9_tracking.sql`, renumbered from 0010 after a
+    collision with this project's own `0010_dm_result_kind.sql`) showed
+    that decision is only as reliable as whatever inspects the script's
+    content, and a per-statement check needs no such inspection to be
+    correct -- it just asks SQLite whether the object is already there.
+    Anything else (INSERT/DROP/RENAME/ALTER, or a statement that already
+    spells out IF NOT EXISTS) runs unconditionally; a migration that isn't
+    naturally safe to partially re-run this way (like 0010/0012's table
+    rebuild) is excluded upstream via `_CUSTOM_IDEMPOTENCY_CHECKS` instead."""
+    for pattern, obj_type in ((_CREATE_TABLE_RE, "table"), (_CREATE_INDEX_RE, "index")):
+        m = pattern.match(statement)
+        if m and "IF NOT EXISTS" not in statement[:m.end()].upper():
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?",
+                (obj_type, m.group(1)),
+            ).fetchone()
+            return row is not None
+    return False
+
+
+def _run_migration_script(conn: sqlite3.Connection, sql: str) -> None:
+    """Runs a migration script statement by statement (instead of a single
+    `executescript()` call) so a `CREATE TABLE`/`CREATE INDEX` whose target
+    already exists is skipped individually, without needing to decide
+    upfront whether the whole script is "safe" to skip."""
+    for statement in _split_statements(sql):
+        if _ddl_target_already_exists(conn, statement):
+            continue
+        conn.execute(statement)
 
 
 def _dm_result_already_has_kind(conn: sqlite3.Connection) -> bool:
@@ -82,16 +112,18 @@ def _dm_result_already_has_kind(conn: sqlite3.Connection) -> bool:
     0012 (`0012_dm_result_kind_repair.sql`, a byte-for-byte replay of
     `0010_dm_result_kind.sql`'s table rebuild) against re-running on a
     database where 0010 already applied normally -- unlike
-    `_tables_already_present`, checking "does dm_result_new exist" would not
-    work here, since that table is transient (renamed away within the same
-    script) and never lingers on disk either way."""
+    `_ddl_target_already_exists`'s per-statement check, "does dm_result_new
+    exist" would not work here, since that table is transient (renamed away
+    within the same script) and never lingers on disk either way."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(dm_result)")}
     return "kind" in cols
 
 
 # Per-version idempotency overrides for migrations whose real effect isn't
-# expressible as "do all its CREATE TABLE targets already exist"
-# (`_tables_already_present`) -- e.g. an ALTER-equivalent table rebuild.
+# expressible as "each individual CREATE TABLE/INDEX target already exists"
+# (`_ddl_target_already_exists`, checked per statement in
+# `_run_migration_script`) -- e.g. an ALTER-equivalent table rebuild, where
+# skipping only some of its statements would leave the table half-migrated.
 # Keyed by version so it stays opt-in per migration rather than a guess
 # applied to every script.
 _CUSTOM_IDEMPOTENCY_CHECKS = {12: _dm_result_already_has_kind}
@@ -113,12 +145,8 @@ def migrate(conn: sqlite3.Connection) -> None:
         if custom_check is not None and custom_check(conn):
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
             continue
-        sql = script.read_text()
-        if _tables_already_present(conn, sql):
-            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-            continue
         with conn:
-            conn.executescript(sql)
+            _run_migration_script(conn, script.read_text())
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
 
 

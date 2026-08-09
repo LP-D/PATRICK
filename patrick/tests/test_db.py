@@ -91,6 +91,59 @@ def test_migrate_tolerates_tables_created_under_a_prior_migration_numbering(tmp_
     conn.close()
 
 
+def test_migrate_skips_phase9_tables_individually_when_schema_version_stops_just_below_0011(tmp_path):
+    """Isolated reproduction of the specific claim under investigation:
+    `phase9_snapshot`/`phase9_journal` genuinely present on disk,
+    `schema_version` capped at exactly 10 (the real-world value: this is
+    the OLD phase9-as-0010 numbering, not the real 0010_dm_result_kind.sql,
+    which never ran) -- deliberately narrower than
+    `test_migrate_repairs_dm_result_kind_when_watermark_absorbed_it_under_old_phase9_numbering`
+    below (which also asserts on dm_result/kind): this one only asserts on
+    phase9 itself, so a regression there can't hide behind an unrelated
+    dm_result assertion passing."""
+    path = str(tmp_path / "patrick.db")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, "
+        "applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    for script in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        version = int(script.name.split("_", 1)[0])
+        if version >= 10:
+            continue
+        conn.executescript(script.read_text())
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.execute(
+        "CREATE TABLE phase9_snapshot (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "snapshot_name TEXT NOT NULL, payload_json TEXT NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    conn.execute(
+        "CREATE TABLE phase9_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
+        "before_json TEXT, after_json TEXT, reason TEXT NOT NULL DEFAULT '', "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    # A pre-existing row -- if the guard fails and 0011 re-runs its
+    # CREATE TABLE, this row is either wiped (table recreated) or the
+    # connect() call below raises before we even get to check.
+    conn.execute(
+        "INSERT INTO phase9_snapshot (snapshot_name, payload_json) VALUES ('pre-existing', '{}')"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (10)")
+    conn.commit()
+    conn.close()
+
+    conn = db.connect(path)  # must not raise sqlite3.OperationalError: table phase9_snapshot already exists
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+    assert 11 in applied  # phase9 recorded as applied, not skipped forever like dm_result_kind used to be
+    names = conn.execute(
+        "SELECT snapshot_name FROM phase9_snapshot ORDER BY id"
+    ).fetchall()
+    assert names == [("pre-existing",)]  # table left untouched, not recreated/wiped
+    conn.close()
+
+
 def test_migrate_repairs_dm_result_kind_when_watermark_absorbed_it_under_old_phase9_numbering(tmp_path):
     """Distinct instance of the same renumbering fallout covered by the test
     above, but worse: here `schema_version` genuinely records version 10 --
