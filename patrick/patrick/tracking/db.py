@@ -374,6 +374,33 @@ def finish_run(conn: sqlite3.Connection, run_id: str, status: str,
         )
 
 
+def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
+    """Runs left 'running' beyond `max_age_s` -> their worker died before
+    calling `finish_run` (kill -9, crash, a container-level swap -- see
+    AUDIT_ENVIRONNEMENT.md for a real example), or -- a distinct, more
+    common gap this also closes -- `worker.py::_run_one_job` catches a
+    normal pipeline exception and marks `job.status='error'`, but never
+    touches the `run` row itself, so a plain caught exception mid-run also
+    left it stuck on 'running' forever until now.
+
+    Age-gated exactly like `jobs.reap_stale_running_jobs`, not "any running
+    row at worker startup is orphaned": `run_manager.ensure_worker_running`
+    documents that two workers can briefly, legitimately overlap (no
+    distributed lock), so a run genuinely in progress under a live worker
+    -- itself possibly just started -- must not be reaped out from under it.
+    Called once at `run_worker_loop` startup, never during an ongoing
+    execution."""
+    with conn:
+        cur = conn.execute(
+            "UPDATE run SET status = 'failed', finished_at = datetime('now'), "
+            "error = 'orphaned: no matching process at worker startup' "
+            "WHERE status = 'running' AND "
+            "(julianday('now') - julianday(started_at)) * 86400 > ?",
+            (max_age_s,),
+        )
+    return cur.rowcount
+
+
 _RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",
                 "git_sha", "seed", "lib_versions", "status", "started_at", "finished_at",
                 "n_trials", "error", "job_id"]
