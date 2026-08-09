@@ -77,6 +77,26 @@ def _tables_already_present(conn: sqlite3.Connection, sql: str) -> bool:
     return set(names) <= existing
 
 
+def _dm_result_already_has_kind(conn: sqlite3.Connection) -> bool:
+    """True if `dm_result` already has its `kind` column. Guards migration
+    0012 (`0012_dm_result_kind_repair.sql`, a byte-for-byte replay of
+    `0010_dm_result_kind.sql`'s table rebuild) against re-running on a
+    database where 0010 already applied normally -- unlike
+    `_tables_already_present`, checking "does dm_result_new exist" would not
+    work here, since that table is transient (renamed away within the same
+    script) and never lingers on disk either way."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(dm_result)")}
+    return "kind" in cols
+
+
+# Per-version idempotency overrides for migrations whose real effect isn't
+# expressible as "do all its CREATE TABLE targets already exist"
+# (`_tables_already_present`) -- e.g. an ALTER-equivalent table rebuild.
+# Keyed by version so it stays opt-in per migration rather than a guess
+# applied to every script.
+_CUSTOM_IDEMPOTENCY_CHECKS = {12: _dm_result_already_has_kind}
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version ("
@@ -88,6 +108,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     for script in scripts:
         version = int(script.name.split("_", 1)[0])
         if version <= current:
+            continue
+        custom_check = _CUSTOM_IDEMPOTENCY_CHECKS.get(version)
+        if custom_check is not None and custom_check(conn):
+            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
             continue
         sql = script.read_text()
         if _tables_already_present(conn, sql):
