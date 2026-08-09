@@ -23,8 +23,16 @@ from patrick.pipeline.engine import (
     _select,
     build_base_feature_pool,
 )
+from patrick.tracking import db as trackdb
 from patrick.validation.metrics import metrics
 from patrick.validation.walkforward import build_fold_cuts
+
+# S4: _select() now persists/looks up the selection cache -- these tests call
+# it directly (not through run_pipeline), so they need a real connection.
+# Values are dummies (no test here cares about cache hits/misses, only the
+# selection result itself), but distinct per test invocation isn't required:
+# each test uses its own tmp_path-backed DB, so no cross-test collision.
+_DUMMY_TARGET, _DUMMY_HORIZON, _DUMMY_SNAPSHOT_ID = "^TEST", 1, "snap_test"
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
@@ -142,7 +150,8 @@ def _prepare_fold(raw: pd.DataFrame, config: RunConfig, fold_idx: int = 0):
 # coupure du fold.
 # ---------------------------------------------------------------------------
 @pytest.mark.slow  # ~23s mesuré (rapport de correction, D1) : features+sélection+entraînement complets
-def test_corrupting_the_future_does_not_change_train_features_or_model():
+def test_corrupting_the_future_does_not_change_train_features_or_model(tmp_path):
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
     config = _make_config()
     raw = _synthetic_raw()
     all_dates = raw.index
@@ -170,8 +179,10 @@ def test_corrupting_the_future_does_not_change_train_features_or_model():
 
     # étend la vérification à la sélection de features et à l'entraînement du
     # modèle (pas seulement les features brutes) : toute la chaîne, comme demandé.
-    cols_o = list(_select(config, X_tr_o, y_tr_o, 5, seed=42))
-    cols_c = list(_select(config, X_tr_c, y_tr_c, 5, seed=42))
+    cols_o = list(_select(conn, _DUMMY_TARGET, _DUMMY_HORIZON, _DUMMY_SNAPSHOT_ID,
+                           config, X_tr_o, y_tr_o, 5, seed=42))
+    cols_c = list(_select(conn, _DUMMY_TARGET, _DUMMY_HORIZON, "snap_test_c",
+                           config, X_tr_c, y_tr_c, 5, seed=42))
     assert cols_o == cols_c, "la sélection de features a changé -> fuite en amont d'elle."
 
     clf_o = get_classifier("RandomForest", seed=42)
@@ -302,7 +313,7 @@ def test_future_leak_detection_by_magnitude_and_purge(shift_magnitude, purge_ena
 
 
 @pytest.mark.slow  # ~17s mesuré (rapport de correction, D1)
-def test_corrupting_beyond_test_fold_does_not_change_test_features_or_predictions():
+def test_corrupting_beyond_test_fold_does_not_change_test_features_or_predictions(tmp_path):
     """Rapport d'audit, C2.a — contrôle distinct de
     `test_corrupting_the_future_does_not_change_train_features_or_model` : ce
     dernier protège le TRAIN contre une fuite venant du futur, mais corrompt
@@ -331,6 +342,7 @@ def test_corrupting_beyond_test_fold_does_not_change_test_features_or_prediction
     paramètre `test_end_idx`) a été appliqué : mesuré gratuit en coût (D2), ferme
     le canal par construction. Ce test vérifie maintenant positivement la
     fermeture du canal plutôt que de documenter la fuite."""
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
     config = _make_config()
     raw = _synthetic_raw()
     all_dates = raw.index
@@ -377,7 +389,8 @@ def test_corrupting_beyond_test_fold_does_not_change_test_features_or_prediction
     # deux cas, cf. test 0.2 principal) doit produire des prédictions identiques
     # sur ce X_te identique -- pas seulement des features numériquement égales.
     X_tr_o, y_tr_o = prepared_orig.X_tr, prepared_orig.y_tr
-    cols_o = list(_select(config, X_tr_o, y_tr_o, 5, seed=42))
+    cols_o = list(_select(conn, _DUMMY_TARGET, _DUMMY_HORIZON, _DUMMY_SNAPSHOT_ID,
+                           config, X_tr_o, y_tr_o, 5, seed=42))
     clf_o = get_classifier("RandomForest", seed=42)
     clf_o.fit(X_tr_o[:, cols_o], y_tr_o)
     np.testing.assert_array_equal(
@@ -393,7 +406,8 @@ def test_corrupting_beyond_test_fold_does_not_change_test_features_or_prediction
 # vers la baseline.
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("k,seed", [(30.0, 0), (30.0, 7), (30.0, 13)])
-def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed):
+def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed, tmp_path):
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
     # horizon=1 : fenêtres de label de longueur 1 barre, décalées de 1 barre ->
     # entièrement disjointes (pas de chevauchement mécanique). Avec un horizon
     # plus long (ex. 5), décaler de 1 barre laisse 4/5 de chevauchement entre les
@@ -415,7 +429,8 @@ def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed):
     assert prepared is not None
     X_tr, y_tr, X_te, y_te = prepared.X_tr, prepared.y_tr, prepared.X_te, prepared.y_te
 
-    cols_true = _select(config, X_tr, y_tr, 3, seed=42)
+    cols_true = _select(conn, _DUMMY_TARGET, _DUMMY_HORIZON, _DUMMY_SNAPSHOT_ID,
+                         config, X_tr, y_tr, 3, seed=42)
     clf_true = get_classifier("RandomForest", seed=42)
     clf_true.fit(X_tr[:, cols_true], y_tr)
     met_true = metrics(y_te, clf_true.predict(X_te[:, cols_true]))
@@ -430,7 +445,8 @@ def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed):
     X_te_shift = X_te[:-1]
     assert len(y_tr_shift) >= 50 and len(y_te_shift) >= 10, "pas assez de données pour un test significatif."
 
-    cols_shift = _select(config, X_tr_shift, y_tr_shift, 3, seed=42)
+    cols_shift = _select(conn, _DUMMY_TARGET, _DUMMY_HORIZON, "snap_test_shift",
+                          config, X_tr_shift, y_tr_shift, 3, seed=42)
     clf_shift = get_classifier("RandomForest", seed=42)
     clf_shift.fit(X_tr_shift[:, cols_shift], y_tr_shift)
     met_shift = metrics(y_te_shift, clf_shift.predict(X_te_shift[:, cols_shift]))

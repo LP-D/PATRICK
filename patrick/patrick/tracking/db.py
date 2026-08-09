@@ -20,7 +20,9 @@ from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
-_CREATE_TABLE_RE = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_CREATE_TABLE_RE = re.compile(r"^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_CREATE_INDEX_RE = re.compile(
+    r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
 
 
 def default_db_path() -> str:
@@ -54,27 +56,55 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _tables_already_present(conn: sqlite3.Connection, sql: str) -> bool:
-    """True if EVERY `CREATE TABLE` target in `sql` already exists in the
-    database. Real incident, not hypothetical: `0011_phase9_tracking.sql`
-    was numbered `0010_phase9_tracking.sql` before an earlier renumbering
-    (collision with this project's own `0010_dm_result_kind.sql`) --
-    a database that had already applied it under the old number has
-    `phase9_snapshot`/`phase9_journal` on disk but no `schema_version` row
-    for version 11, so `executescript()` below would crash on
-    `CREATE TABLE phase9_snapshot` for a table that's already there. Checked
-    per-migration (not hardcoded to phase9) so any future renumbering hits
-    the same safety net. Only covers "all its tables already exist" -- a
-    migration that also does INSERT/DROP/RENAME (like 0010) is never a pure
-    CREATE-TABLE-only script and is unaffected by this check."""
-    names = _CREATE_TABLE_RE.findall(sql)
-    if not names:
-        return False
-    placeholders = ",".join("?" for _ in names)
-    existing = {row[0] for row in conn.execute(
-        f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})", names
-    )}
-    return set(names) <= existing
+def _split_statements(sql: str) -> list[str]:
+    """Split a migration script into individual statements. Migrations here
+    are plain DDL/DML with no semicolons inside string literals (verified
+    across all current scripts), so a split on ';' is enough once `--` line
+    comments are stripped first -- otherwise a semicolon inside a French
+    comment (this project's migration headers are prose, not just code)
+    could be mistaken for a statement terminator."""
+    stripped_lines = []
+    for line in sql.splitlines():
+        comment_at = line.find("--")
+        stripped_lines.append(line[:comment_at] if comment_at != -1 else line)
+    return [s.strip() for s in "\n".join(stripped_lines).split(";") if s.strip()]
+
+
+def _ddl_target_already_exists(conn: sqlite3.Connection, statement: str) -> bool:
+    """True if `statement` is a bare `CREATE TABLE`/`CREATE INDEX` (no
+    `IF NOT EXISTS`) whose target already exists in the database -- the
+    only two DDL forms in these migrations that raise `OperationalError` on
+    a repeat run. Checked per statement at execution time rather than
+    classifying a whole script upfront as "safe to skip entirely": a real
+    incident (`0011_phase9_tracking.sql`, renumbered from 0010 after a
+    collision with this project's own `0010_dm_result_kind.sql`) showed
+    that decision is only as reliable as whatever inspects the script's
+    content, and a per-statement check needs no such inspection to be
+    correct -- it just asks SQLite whether the object is already there.
+    Anything else (INSERT/DROP/RENAME/ALTER, or a statement that already
+    spells out IF NOT EXISTS) runs unconditionally; a migration that isn't
+    naturally safe to partially re-run this way (like 0010/0012's table
+    rebuild) is excluded upstream via `_CUSTOM_IDEMPOTENCY_CHECKS` instead."""
+    for pattern, obj_type in ((_CREATE_TABLE_RE, "table"), (_CREATE_INDEX_RE, "index")):
+        m = pattern.match(statement)
+        if m and "IF NOT EXISTS" not in statement[:m.end()].upper():
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?",
+                (obj_type, m.group(1)),
+            ).fetchone()
+            return row is not None
+    return False
+
+
+def _run_migration_script(conn: sqlite3.Connection, sql: str) -> None:
+    """Runs a migration script statement by statement (instead of a single
+    `executescript()` call) so a `CREATE TABLE`/`CREATE INDEX` whose target
+    already exists is skipped individually, without needing to decide
+    upfront whether the whole script is "safe" to skip."""
+    for statement in _split_statements(sql):
+        if _ddl_target_already_exists(conn, statement):
+            continue
+        conn.execute(statement)
 
 
 def _dm_result_already_has_kind(conn: sqlite3.Connection) -> bool:
@@ -82,16 +112,18 @@ def _dm_result_already_has_kind(conn: sqlite3.Connection) -> bool:
     0012 (`0012_dm_result_kind_repair.sql`, a byte-for-byte replay of
     `0010_dm_result_kind.sql`'s table rebuild) against re-running on a
     database where 0010 already applied normally -- unlike
-    `_tables_already_present`, checking "does dm_result_new exist" would not
-    work here, since that table is transient (renamed away within the same
-    script) and never lingers on disk either way."""
+    `_ddl_target_already_exists`'s per-statement check, "does dm_result_new
+    exist" would not work here, since that table is transient (renamed away
+    within the same script) and never lingers on disk either way."""
     cols = {row[1] for row in conn.execute("PRAGMA table_info(dm_result)")}
     return "kind" in cols
 
 
 # Per-version idempotency overrides for migrations whose real effect isn't
-# expressible as "do all its CREATE TABLE targets already exist"
-# (`_tables_already_present`) -- e.g. an ALTER-equivalent table rebuild.
+# expressible as "each individual CREATE TABLE/INDEX target already exists"
+# (`_ddl_target_already_exists`, checked per statement in
+# `_run_migration_script`) -- e.g. an ALTER-equivalent table rebuild, where
+# skipping only some of its statements would leave the table half-migrated.
 # Keyed by version so it stays opt-in per migration rather than a guess
 # applied to every script.
 _CUSTOM_IDEMPOTENCY_CHECKS = {12: _dm_result_already_has_kind}
@@ -113,12 +145,8 @@ def migrate(conn: sqlite3.Connection) -> None:
         if custom_check is not None and custom_check(conn):
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
             continue
-        sql = script.read_text()
-        if _tables_already_present(conn, sql):
-            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-            continue
         with conn:
-            conn.executescript(sql)
+            _run_migration_script(conn, script.read_text())
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
 
 
@@ -164,6 +192,52 @@ def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
             "ON CONFLICT(snapshot_id) DO NOTHING",
             (snapshot_id, data_hash, n_tickers, n_fred_series, fred_source),
         )
+
+
+def exclude_symbol(conn: sqlite3.Connection, symbol: str, reason: str) -> None:
+    """M1: persist a symbol as confirmed unavailable at the data source
+    (see migration 0013). `ON CONFLICT DO NOTHING`, not DO UPDATE: the
+    first-confirmed reason/date is the historical record of when this was
+    established, not something a later call should silently overwrite."""
+    with conn:
+        conn.execute(
+            "INSERT INTO excluded_symbol (symbol, reason) VALUES (?, ?) "
+            "ON CONFLICT(symbol) DO NOTHING",
+            (symbol, reason),
+        )
+
+
+def get_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, snapshot_id: str,
+                          data_hash: str, selector_config_hash: str) -> list[int] | None:
+    """S4: returns the cached feature-selection column indices for this
+    exact key, or None on a miss. No TTL/expiration check (see migration
+    0014's docstring): a snapshot is immutable once created, so a hit here
+    is never stale -- the only invalidation is a change in one of the five
+    key fields."""
+    row = conn.execute(
+        "SELECT selected_columns FROM shap_selection_cache WHERE "
+        "target = ? AND horizon = ? AND snapshot_id = ? AND data_hash = ? AND selector_config_hash = ?",
+        (target, horizon, snapshot_id, data_hash, selector_config_hash),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def save_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, snapshot_id: str,
+                           data_hash: str, selector_config_hash: str, columns: list[int]) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO shap_selection_cache "
+            "(target, horizon, snapshot_id, data_hash, selector_config_hash, selected_columns) "
+            "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+            (target, horizon, snapshot_id, data_hash, selector_config_hash, json.dumps(columns)),
+        )
+
+
+def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"
+    ).fetchall()
+    return [dict(zip(("symbol", "reason", "excluded_at"), row)) for row in rows]
 
 
 def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
@@ -344,6 +418,33 @@ def finish_run(conn: sqlite3.Connection, run_id: str, status: str,
             "error = ? WHERE run_id = ?",
             (status, n_trials, error, run_id),
         )
+
+
+def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
+    """Runs left 'running' beyond `max_age_s` -> their worker died before
+    calling `finish_run` (kill -9, crash, a container-level swap -- see
+    AUDIT_ENVIRONNEMENT.md for a real example), or -- a distinct, more
+    common gap this also closes -- `worker.py::_run_one_job` catches a
+    normal pipeline exception and marks `job.status='error'`, but never
+    touches the `run` row itself, so a plain caught exception mid-run also
+    left it stuck on 'running' forever until now.
+
+    Age-gated exactly like `jobs.reap_stale_running_jobs`, not "any running
+    row at worker startup is orphaned": `run_manager.ensure_worker_running`
+    documents that two workers can briefly, legitimately overlap (no
+    distributed lock), so a run genuinely in progress under a live worker
+    -- itself possibly just started -- must not be reaped out from under it.
+    Called once at `run_worker_loop` startup, never during an ongoing
+    execution."""
+    with conn:
+        cur = conn.execute(
+            "UPDATE run SET status = 'failed', finished_at = datetime('now'), "
+            "error = 'orphaned: no matching process at worker startup' "
+            "WHERE status = 'running' AND "
+            "(julianday('now') - julianday(started_at)) * 86400 > ?",
+            (max_age_s,),
+        )
+    return cur.rowcount
 
 
 _RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",

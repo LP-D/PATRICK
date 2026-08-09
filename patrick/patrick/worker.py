@@ -208,6 +208,9 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
     n_reaped = jobs_db.reap_stale_running_jobs(conn)
     if n_reaped:
         print(f"[WORKER] {n_reaped} 'running' job(s) abandoned by a previous worker -> error.")
+    n_reaped_runs = trackdb.reap_orphaned_runs(conn)
+    if n_reaped_runs:
+        print(f"[WORKER] {n_reaped_runs} 'running' run(s) orphaned by a previous worker -> failed.")
     jobs_db.write_heartbeat(conn, pid)
     idle_since = time.monotonic()
     print(f"[WORKER] started (pid={pid}, db={db_path})")

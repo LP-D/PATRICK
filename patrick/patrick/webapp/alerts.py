@@ -13,6 +13,7 @@ import time
 
 from patrick.config import defaults as D
 from patrick.data.sources.yfinance_source import clean_symbol, download_batch
+from patrick.tracking import db as trackdb
 
 REFRESH_SECONDS = 30 * 60
 LOOKBACK_DAYS = 5
@@ -35,8 +36,21 @@ def _label_for(symbol: str) -> str:
     return symbol
 
 
+def _active_tickers() -> list[str]:
+    """`D.DEFAULT_UNIVERSE_YF_TICKERS` minus symbols persisted as confirmed
+    unavailable (M1, migration 0013) -- a symbol that fails identically at
+    every startup (delisted/invalid) must be excluded once, not retried on
+    every refresh forever."""
+    conn = trackdb.connect()
+    try:
+        excluded = {row["symbol"] for row in trackdb.list_excluded_symbols(conn)}
+    finally:
+        conn.close()
+    return [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t not in excluded]
+
+
 def _compute_once() -> None:
-    tickers = list(D.DEFAULT_UNIVERSE_YF_TICKERS)
+    tickers = _active_tickers()
     reverse = {clean_symbol(t): t for t in tickers}
     start = (dt.date.today() - dt.timedelta(days=LOOKBACK_DAYS * 3 + 5)).isoformat()
 
