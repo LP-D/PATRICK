@@ -91,6 +91,72 @@ def test_migrate_tolerates_tables_created_under_a_prior_migration_numbering(tmp_
     conn.close()
 
 
+def test_migrate_repairs_dm_result_kind_when_watermark_absorbed_it_under_old_phase9_numbering(tmp_path):
+    """Distinct instance of the same renumbering fallout covered by the test
+    above, but worse: here `schema_version` genuinely records version 10 --
+    not for the real `0010_dm_result_kind.sql`, but for the OLD
+    `phase9_tracking` content that used to be numbered 0010 before the
+    renumbering to 0011. The watermark (`version <= current`) then skips the
+    real 0010 forever, since 10 already "looks done" -- `dm_result` is left
+    on its pre-migration shape (no `kind` column) with no path back, unless
+    migration 0012 (`0012_dm_result_kind_repair.sql`) catches it."""
+    path = str(tmp_path / "patrick.db")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, "
+        "applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    for script in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        version = int(script.name.split("_", 1)[0])
+        if version >= 10:
+            continue
+        conn.executescript(script.read_text())
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.execute(
+        "CREATE TABLE phase9_snapshot (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "snapshot_name TEXT NOT NULL, payload_json TEXT NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    conn.execute(
+        "CREATE TABLE phase9_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "action TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system', "
+        "before_json TEXT, after_json TEXT, reason TEXT NOT NULL DEFAULT '', "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    # The row that makes this the exact real-world case: version 10 recorded
+    # for the OLD phase9 content, not for dm_result_kind, which never ran.
+    conn.execute("INSERT INTO schema_version (version) VALUES (10)")
+    conn.commit()
+    conn.close()
+
+    conn = db.connect(path)  # must not raise, must not skip dm_result_kind's fix forever
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(dm_result)")}
+    assert "kind" in cols
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+    n_migrations = len(list(db.MIGRATIONS_DIR.glob("*.sql")))
+    assert applied == set(range(1, n_migrations + 1))
+    conn.close()
+
+
+def test_migrate_repair_is_a_noop_when_dm_result_already_has_kind_column(tmp_path):
+    """The common, healthy case: 0010_dm_result_kind.sql already ran
+    normally. Migration 0012 must not rebuild dm_result a second time --
+    verified by writing a row through the real save_dm_result() (which
+    depends on the (run_id, kind) PRIMARY KEY for its ON CONFLICT clause)
+    and confirming it survives a reconnect/remigrate untouched."""
+    path = str(tmp_path / "patrick.db")
+    conn = db.connect(path)
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+    db.save_dm_result(conn, "run1", {"baseline": "BASELINE_majority", "dm_stat": 1.2, "p_value": 0.05})
+    conn.close()
+
+    conn = db.connect(path)  # reconnect/remigrate -- must not raise, must not touch dm_result
+    row = conn.execute("SELECT baseline, kind FROM dm_result WHERE run_id = 'run1'").fetchone()
+    assert row == ("BASELINE_majority", "class_specific")
+    conn.close()
+
+
 def test_full_write_path_snapshot_run_trial_fold_metric_prediction(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
 
