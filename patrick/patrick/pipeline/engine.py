@@ -418,10 +418,48 @@ class _FoldContext:
                          sample_weight, ind_matrix, effective_n)
 
 
-def _select(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
-    return select_features(config.selection.method, X_tr, y_tr, n_feat,
-                            config.features.pool_prefilter, seed=seed,
-                            shap_sample=config.selection.shap_sample)
+def _selector_config_hash(config: RunConfig, n_feat: int, seed: int) -> str:
+    """S2: only the selector parameters that actually reach `select_features`/
+    `shap_rank` -- method, the requested N, `shap_sample`, `pool_prefilter`,
+    seed. Deliberately excludes `sampler`/`algo`/model hyperparameters and
+    `selection.track_stability`: none of them are ever passed into
+    `_select()`, confirmed by direct reading of every call site -- including
+    one would make two selector configs that produce the SAME result look
+    different (needless cache misses); omitting one that mattered would make
+    two DIFFERENT results collide under the same key (silent corruption)."""
+    payload = json.dumps({
+        "method": config.selection.method, "n_feat": n_feat,
+        "shap_sample": config.selection.shap_sample,
+        "pool_prefilter": config.features.pool_prefilter, "seed": seed,
+    }, sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _xy_data_hash(X_tr: np.ndarray, y_tr: np.ndarray) -> str:
+    """The correctness guarantee of the selection cache key (see migration
+    0014): `target`/`horizon`/`snapshot_id` alone under-specify the actual
+    training data -- the same snapshot produces different (X_tr, y_tr) per
+    regime and per fold/CPCV-combo. Measured cost on a generously-sized
+    array (4000x1000, 32MB): ~40ms full SHA-256 vs ~10s for a real SHAP
+    computation of the same size (0.4%) -- negligible, no cheaper summary
+    hash needed."""
+    h = hashlib.sha256(np.ascontiguousarray(X_tr).tobytes())
+    h.update(np.ascontiguousarray(y_tr).tobytes())
+    return h.hexdigest()
+
+
+def _select(conn, target: str, horizon: int, snapshot_id: str,
+            config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
+    data_hash = _xy_data_hash(X_tr, y_tr)
+    selector_hash = _selector_config_hash(config, n_feat, seed)
+    cached = trackdb.get_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash)
+    if cached is not None:
+        return cached
+    cols = [int(c) for c in select_features(config.selection.method, X_tr, y_tr, n_feat,
+                                             config.features.pool_prefilter, seed=seed,
+                                             shap_sample=config.selection.shap_sample)]
+    trackdb.save_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash, cols)
+    return cols
 
 
 def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
@@ -530,9 +568,9 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
     return n_wf
 
 
-def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature_pool: list[str],
-                       config: RunConfig, all_dates_full: pd.DatetimeIndex, n_wf: int,
-                       best_cfg: dict, seed: int) -> dict | None:
+def _evaluate_holdout(conn, snapshot_id: str, pool_builder: "_FoldPoolBuilder", target_col: str,
+                       feature_pool: list[str], config: RunConfig, all_dates_full: pd.DatetimeIndex,
+                       n_wf: int, best_cfg: dict, seed: int) -> dict | None:
     """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
     the model is retrained ONLY on data prior to the holdout
     (`pool_builder.get(n_wf)` -> parametric fit on `raw.iloc[:n_wf]`, same
@@ -571,7 +609,7 @@ def _evaluate_holdout(pool_builder: "_FoldPoolBuilder", target_col: str, feature
         sc.fit_transform(_finite_features(X_pool_df.values[tr_mask], f"{where} train")), where)
     X_te = _finite_scaled(
         sc.transform(_finite_features(X_pool_df.values[te_mask], f"{where} test")), where)
-    cols = _select(config, X_tr, y_tr, n_feat, seed)
+    cols = _select(conn, target_col, horizon, snapshot_id, config, X_tr, y_tr, n_feat, seed)
     met, y_pred, confidence = _fit_eval(X_tr[:, cols], y_tr, X_te[:, cols], y_te,
                                          sampler_name, algo, seed,
                                          calibration=config.models.calibration, **best_params)
@@ -615,7 +653,8 @@ def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str
     return best_name, best_pred
 
 
-def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: int, seed: int) -> dict | None:
+def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: "_FoldContext", best_cfg: dict,
+                               last_fold: int, seed: int) -> dict | None:
     """DM (Phase 2.5) between the winning config and TWO baselines (Phase
     X5), on the most recent walk-forward fold — the period closest to the
     current market regime, rather than an average over the whole history
@@ -638,7 +677,7 @@ def _evaluate_diebold_mariano(ctx: "_FoldContext", best_cfg: dict, last_fold: in
     fd = ctx.prepare(horizon, last_fold, regime, want_baselines=True)
     if fd is None or not fd.baseline_predictions:
         return None
-    cols = _select(ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
+    cols = _select(conn, ctx.target_col, horizon, snapshot_id, ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
     _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
                               sampler_name, algo, seed,
                               calibration=ctx.config.models.calibration, **best_params)
@@ -692,7 +731,7 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
 
 
 def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame, target_col: str,
-                    conn, run_ids: dict[int, str], seed: int
+                    conn, run_ids: dict[int, str], seed: int, snapshot_id: str
                     ) -> tuple[Leaderboard, dict, dict, pd.DataFrame, list[str], list[str]]:
     """Phase 6.1 (P6.1) -- CPCV scan, AS AN ALTERNATIVE to the walk-forward
     scan (`config.validation.scheme == "cpcv"`), never a replacement.
@@ -799,7 +838,8 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                             sc = RobustScaler()
                             X_tr_full = _finite_scaled(sc.fit_transform(X_all[tr_mask]), where)
                             X_te_full = _finite_scaled(sc.transform(X_all[te_mask]), where)
-                            cols = _select(config, X_tr_full, y_tr, n_feat, seed)
+                            cols = _select(conn, target_col, horizon, snapshot_id,
+                                           config, X_tr_full, y_tr, n_feat, seed)
                             X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
 
                             met, y_pred, confidence = _fit_eval(
@@ -913,7 +953,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     cpcv_interaction_formulas = None
     if config.validation.scheme == "cpcv":
         board, trial_ids, n_trials_per_run, cpcv_full_pool, feature_pool, cpcv_interaction_formulas = (
-            _run_cpcv_scan(raw, config, base_pool, target_col, conn, run_ids, seed))
+            _run_cpcv_scan(raw, config, base_pool, target_col, conn, run_ids, seed, snapshot_id))
         pool_builder = None
         ctx = None
         all_dates = all_dates_full
@@ -957,7 +997,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                         baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
 
                     for n_feat in config.selection.n_features_grid:
-                        cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+                        cols = _select(conn, target_col, horizon, snapshot_id,
+                                       config, fd.X_tr, fd.y_tr, n_feat, seed)
                         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
                         feat_names = [feature_pool[c] for c in cols]
 
@@ -1047,8 +1088,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
             diag_cfg = {"horizon": h, "regime": regime, "N": n_feat,
                         "sampler": sampler_name, "algo": algo, "best_params": {}}
-            diag_eval = _evaluate_holdout(pool_builder, target_col, feature_pool, config,
-                                           all_dates_full, n_wf, diag_cfg, seed)
+            diag_eval = _evaluate_holdout(conn, snapshot_id, pool_builder, target_col, feature_pool,
+                                           config, all_dates_full, n_wf, diag_cfg, seed)
             if diag_eval is not None:
                 trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
 
@@ -1088,7 +1129,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 continue
             if len(fd.y_tr) < config.validation.min_train_rows * 2:
                 continue
-            cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+            cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, seed)
             X_tr_n = fd.X_tr[:, cols]
 
             study_name = f"{config.name}_{config_hash}_h{horizon}_{regime}_N{n_feat}_{sampler_name}_{algo}"
@@ -1110,7 +1151,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 fd = ctx.prepare(horizon, k, regime)
                 if fd is None:
                     continue
-                cols = _select(config, fd.X_tr, fd.y_tr, n_feat, seed)
+                cols = _select(conn, target_col, horizon, snapshot_id,
+                               config, fd.X_tr, fd.y_tr, n_feat, seed)
                 X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
                 met, y_pred, confidence = _fit_eval(
                     X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
@@ -1193,8 +1235,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # chosen config, never used to choose among several (see
         # _evaluate_holdout docstring).
         if n_wf < len(all_dates_full):
-            holdout_eval = _evaluate_holdout(pool_builder, target_col, feature_pool, config,
-                                              all_dates_full, n_wf, final_best, seed)
+            holdout_eval = _evaluate_holdout(conn, snapshot_id, pool_builder, target_col, feature_pool,
+                                              config, all_dates_full, n_wf, final_best, seed)
             if holdout_eval is not None:
                 holdout_result = holdout_eval["metrics"]
                 if best_trial_id is not None:
@@ -1208,7 +1250,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # Relies on `ctx.prepare` (train=prefix topology): not applicable in
         # CPCV (`ctx is None`), see limitations documented in `_run_cpcv_scan`.
         if config.validation.scheme == "walkforward":
-            dm_result = _evaluate_diebold_mariano(ctx, final_best, last_fold, seed)
+            dm_result = _evaluate_diebold_mariano(conn, snapshot_id, ctx, final_best, last_fold, seed)
             if dm_result is not None:
                 # Phase 6.4 (P6.4): persisted in a dedicated table (dm_result,
                 # migration 0009), not just in job.result_json -- queryable

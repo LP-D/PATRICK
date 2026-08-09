@@ -207,6 +207,32 @@ def exclude_symbol(conn: sqlite3.Connection, symbol: str, reason: str) -> None:
         )
 
 
+def get_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, snapshot_id: str,
+                          data_hash: str, selector_config_hash: str) -> list[int] | None:
+    """S4: returns the cached feature-selection column indices for this
+    exact key, or None on a miss. No TTL/expiration check (see migration
+    0014's docstring): a snapshot is immutable once created, so a hit here
+    is never stale -- the only invalidation is a change in one of the five
+    key fields."""
+    row = conn.execute(
+        "SELECT selected_columns FROM shap_selection_cache WHERE "
+        "target = ? AND horizon = ? AND snapshot_id = ? AND data_hash = ? AND selector_config_hash = ?",
+        (target, horizon, snapshot_id, data_hash, selector_config_hash),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def save_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, snapshot_id: str,
+                           data_hash: str, selector_config_hash: str, columns: list[int]) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO shap_selection_cache "
+            "(target, horizon, snapshot_id, data_hash, selector_config_hash, selected_columns) "
+            "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+            (target, horizon, snapshot_id, data_hash, selector_config_hash, json.dumps(columns)),
+        )
+
+
 def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"
