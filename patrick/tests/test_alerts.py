@@ -60,3 +60,47 @@ def test_compute_once_never_passes_an_excluded_symbol_to_download_batch_across_r
         assert "LBS=F" not in tickers
         assert "^EVZ" not in tickers
         assert "HYLD" not in tickers
+
+
+class _StopLoop(Exception):
+    """Sentinel to unwind out of `_loop()`'s `while True` deterministically
+    -- no real thread, no wall-clock race, nothing left running once the
+    test function returns (a real background thread driving `_loop()`
+    would keep calling the REAL `download_batch` against Yahoo Finance
+    forever after `monkeypatch` undoes its patches at test teardown, since
+    `_loop()` never stops on its own -- confirmed the hard way: an earlier
+    version of this test did exactly that and hung the whole suite
+    hammering the real API)."""
+
+
+def test_loop_reapplies_the_exclusion_filter_on_every_periodic_cycle(monkeypatch):
+    """Not just `_compute_once()` called twice by hand: drives the actual
+    `_loop()` body (`while True: _compute_once(); sleep(REFRESH_SECONDS)`,
+    the real background-thread target since `start_background_refresh()`)
+    through several genuine periodic cycles, in-process and synchronously --
+    `time.sleep` is replaced with a counter that raises `_StopLoop` once
+    enough cycles have been observed, rather than actually sleeping and
+    racing wall-clock time. Confirms the exclusion filter (read fresh from
+    the DB inside `_active_tickers()` on every call, no in-memory
+    memoization across cycles) holds on cycle 5 exactly as on cycle 1, not
+    just "the first call after startup"."""
+    seen_ticker_lists = []
+
+    def _fake_download_batch(tickers, start):
+        seen_ticker_lists.append(list(tickers))
+        return pd.DataFrame()
+
+    def _fake_sleep(seconds):
+        if len(seen_ticker_lists) >= 5:
+            raise _StopLoop
+
+    monkeypatch.setattr(alerts, "download_batch", _fake_download_batch)
+    monkeypatch.setattr(alerts.time, "sleep", _fake_sleep)
+
+    with pytest.raises(_StopLoop):
+        alerts._loop()
+
+    assert len(seen_ticker_lists) == 5
+    for cycle_num, tickers in enumerate(seen_ticker_lists, start=1):
+        assert "LBS=F" not in tickers, f"cycle {cycle_num} leaked an excluded symbol"
+        assert "^EVZ" not in tickers, f"cycle {cycle_num} leaked an excluded symbol"
