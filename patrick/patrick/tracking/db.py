@@ -194,6 +194,26 @@ def upsert_snapshot(conn: sqlite3.Connection, snapshot_id: str, data_hash: str,
         )
 
 
+def exclude_symbol(conn: sqlite3.Connection, symbol: str, reason: str) -> None:
+    """M1: persist a symbol as confirmed unavailable at the data source
+    (see migration 0013). `ON CONFLICT DO NOTHING`, not DO UPDATE: the
+    first-confirmed reason/date is the historical record of when this was
+    established, not something a later call should silently overwrite."""
+    with conn:
+        conn.execute(
+            "INSERT INTO excluded_symbol (symbol, reason) VALUES (?, ?) "
+            "ON CONFLICT(symbol) DO NOTHING",
+            (symbol, reason),
+        )
+
+
+def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"
+    ).fetchall()
+    return [dict(zip(("symbol", "reason", "excluded_at"), row)) for row in rows]
+
+
 def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
     """Phase 6.5 (P6.5). Idempotent per snapshot: if this `snapshot_id`
     already has rows (same content already ingested via a repeated
