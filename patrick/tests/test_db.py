@@ -144,6 +144,46 @@ def test_migrate_skips_phase9_tables_individually_when_schema_version_stops_just
     conn.close()
 
 
+def test_migrate_reproduces_0011_crash_using_the_real_migration_sql_verbatim(tmp_path):
+    """Same real-world scenario as the test above, but the phase9 tables are
+    created by executing 0011_phase9_tracking.sql's actual file content
+    (read straight from MIGRATIONS_DIR) rather than a hand-typed
+    approximation -- eliminating any risk that a manually retyped CREATE
+    TABLE subtly differs from the real migration text and hides a
+    reproduction gap. Confirmed by direct comparison against the exact SQL
+    reported from the real Windows database: byte-identical (ignoring
+    comments) to this repository's 0011_phase9_tracking.sql.
+
+    Result recorded here for the record: run against commit b043c5b (before
+    the per-statement fix in PR #45) this test FAILS with exactly
+    `sqlite3.OperationalError: table phase9_snapshot already exists` --
+    confirming the crash reproduces with the real file content, not just a
+    synthetic approximation. Run against this commit (after the fix), it
+    PASSES."""
+    path = str(tmp_path / "patrick.db")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, "
+        "applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    )
+    for script in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        version = int(script.name.split("_", 1)[0])
+        if version >= 10:
+            continue
+        conn.executescript(script.read_text())
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    # The real 0011 file, executed verbatim -- not retyped.
+    conn.executescript((db.MIGRATIONS_DIR / "0011_phase9_tracking.sql").read_text())
+    conn.execute("INSERT INTO schema_version (version) VALUES (10)")
+    conn.commit()
+    conn.close()
+
+    conn = db.connect(path)  # real migrate(), real 0011 file content already applied on disk
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+    assert 11 in applied
+    conn.close()
+
+
 def test_migrate_repairs_dm_result_kind_when_watermark_absorbed_it_under_old_phase9_numbering(tmp_path):
     """Distinct instance of the same renumbering fallout covered by the test
     above, but worse: here `schema_version` genuinely records version 10 --
