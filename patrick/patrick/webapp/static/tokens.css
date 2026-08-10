@@ -1,184 +1,152 @@
-/* PATRICK — jetons du monde visuel « Station d'observation ».
-   Remplace intégralement le monde « Sortie de solveur » (noir plat, filets
-   horizontaux seuls, chasse fixe partout, rayons nuls). Aucune valeur n'a été
-   reprise : c'est un remplacement d'identité demandé, pas un ajustement.
-   Contrat de direction complet : en tête de `templates/base.html`.
+/* PATRICK — jetons du monde visuel « Nocturne ».
+   Remplace intégralement le monde « Station d'observation » (Archivo +
+   Spline Sans Mono, palette encre/papier bleu-froid, échelle d'élévation à
+   4 niveaux). Extrait d'une maquette de référence (deux directions, 1a dense
+   façon terminal / 1b aérée façon analytics) puis réassigné sur la structure
+   sémantique déjà en place (`--ground`, `--surface`, `--accent`, `--ink`...)
+   plutôt que renommé littéralement -- les composants Jinja
+   (`_components.html` : metric(), data_table(), status_badge(),
+   empty_state(), error_state()) n'ont pas été réécrits, seule cette feuille
+   de jetons change.
 
-   Ce que le monde emprunte à une station d'observation (sismique, météo) :
-   - Le BOÎTIER de l'instrument est en encre profonde, l'ENREGISTREMENT est sur
-     papier clair. D'où deux matières, pas un dégradé de gris : `--ink` pour le
-     bandeau et les plaques de tracé, `--ground`/`--surface` pour la lecture.
-   - Une station publie une magnitude AVEC son incertitude, et refuse de
-     localiser un événement quand il lui manque des stations. C'est déjà la
-     doctrine du produit ; le monde visuel lui donne enfin sa forme.
-   - Les panneaux sont des objets posés (rayon, ombre portée réelle avec
-     décalage ET flou), pas des zones délimitées par un trait.
+   MODE SOMBRE SEUL pour cette passe. `:root` porte directement les valeurs
+   Nocturne (actives par défaut, pas une bascule) ; `[data-theme="light"]`
+   est un bloc vide préparé pour un futur chantier -- voir KNOWN_ISSUES.md.
+   Le bouton de bascule jour/nuit est masqué (`base.html`) tant que ce bloc
+   est vide : avec l'ancienne polarité (`:root`=clair, override sombre), la
+   bascule avait un sens ; avec Nocturne comme actif par défaut, un
+   `[data-theme="light"]` vide ne changerait RIEN visuellement -- l'exposer
+   ferait croire à un mode clair qui n'existe pas encore.
 
-   Deux rendus travaillés séparément, pas une inversion :
-   `:root` = clair (défaut), `[data-theme="dark"]` = sombre. La scène le
-   justifie — Patrick sert autant en journée qu'en soirée, donc aucun des deux
-   n'est le repli de l'autre. Le choix est explicite (bouton) et mémorisé ;
-   sans choix exprimé, `prefers-color-scheme` tranche.
-
-   Contraste : tout texte tient 4,5:1 sur SON fond réel (fond composité des
-   pastilles teintées inclus), tout texte large 3:1. Vérifié avant
-   construction, pas après. */
+   Contraste : tout texte tient 4,5:1 sur SON fond réel, tout texte large ou
+   composant d'UI 3:1 -- recalculé indépendamment (luminance relative WCAG,
+   pas la lisibilité supposée de la maquette source) avant construction, pas
+   après. Valeurs mesurées en commentaire ligne par ligne. */
 
 /* --- Familles ------------------------------------------------------------
-   Deux faces téléchargées, aucune requête réseau : les .woff2 sont servis
-   depuis `/static/fonts/` — un outil local ne doit pas dépendre d'un CDN pour
-   s'afficher correctement hors ligne.
-
-   Archivo (chrome, titres, libellés) : grotesque de large chasse dessinée pour
-   la signalétique et l'étiquette d'appareil — elle tient en capitales serrées
-   comme en titre de 28px, ce qu'une UI-face neutre ne fait pas.
-   Spline Sans Mono (toute donnée) : chasse fixe contemporaine, chiffres
-   tabulaires, formes ouvertes — elle aligne les décimales sans le costume de
-   terminal des monos de code. --- */
+   Inter seule, une face variable, poids 400-700 -- remplace Archivo (chrome)
+   + Spline Sans Mono (donnée) : la maquette Nocturne n'a qu'une police, la
+   hiérarchie titre/corps se fait par graisse (500 sur les titres) et par
+   taille, pas par changement de famille. La classe `pk-mono` (donnée
+   numérique -- prix, ticker, métrique) reste une famille distincte
+   (`--mono`, monospace système) : Inter n'a pas de chiffres tabulaires
+   fiables au même degré qu'une vraie mono, et l'alignement décimal des
+   tableaux denses (`/runs`, `/universe`) en dépend. --- */
 @font-face {
-    font-family: "Archivo";
+    font-family: "Inter";
     font-style: normal;
     font-weight: 400 700;
     font-display: swap;
-    src: url("/static/fonts/archivo-latin.woff2") format("woff2");
+    src: url("/static/fonts/inter-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
         U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-    font-family: "Archivo";
+    font-family: "Inter";
     font-style: normal;
     font-weight: 400 700;
     font-display: swap;
-    src: url("/static/fonts/archivo-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
-        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-    font-family: "Spline Sans Mono";
-    font-style: normal;
-    font-weight: 400 600;
-    font-display: swap;
-    src: url("/static/fonts/splinesansmono-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
-        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Spline Sans Mono";
-    font-style: normal;
-    font-weight: 400 600;
-    font-display: swap;
-    src: url("/static/fonts/splinesansmono-latin-ext.woff2") format("woff2");
+    src: url("/static/fonts/inter-latin-ext.woff2") format("woff2");
     unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 :root {
-    color-scheme: light;
+    color-scheme: dark;
 
-    /* --- Matières.
-       `--ink` n'est PAS le fond de page en clair : c'est le boîtier. Il porte
-       le bandeau, la bande d'enregistrement et les plaques de graphique. Le
-       même jeton existe dans les deux thèmes, ce qui fait que les toiles
-       (market.js, simulate.js) n'ont jamais à savoir dans quel thème elles
-       tracent. --- */
-    --ink: #0B1220;
-    --ink-2: #16213A;      /* second niveau DANS le boîtier (grille de tracé) */
-    --ink-text: #EDF1F7;   /* texte posé sur --ink — 15,1:1 */
-    --ink-text-2: #9FAEC6; /* libellé sur --ink — 6,9:1 */
+    /* --- Matières. Nocturne n'a que deux paliers (fond/surface) ; PATRICK
+       en a trois (boîtier/plan de travail/feuille) pour porter la
+       distinction boîtier-papier du monde précédent, conservée en
+       structure (R2). `--ink` n'existe pas dans la source -- dérivé plus
+       sombre que `--ground`, même famille de teinte (indigo profond), pour
+       rester la matière la plus profonde de la scène comme l'exige la
+       règle déjà en place. Mesuré : luminance --ink 0,0046 < --ground
+       0,0096 -- toujours plus sombre. --- */
+    --ink: #0D0E17;
+    --ink-2: #171A28;      /* second niveau DANS le boîtier (grille de tracé) -- interpolé entre --ink et --ground */
+    --ink-text: #E9E9ED;   /* = --text : 15,9:1 sur --ink, aucune raison de diverger tant qu'un seul thème existe */
+    --ink-text-2: #B2B6CA; /* = neutral-400 : 9,6:1 sur --ink */
 
-    --ground: #ECEFF4;     /* la page : le plan de travail, pas une feuille */
-    --surface: #FFFFFF;    /* le panneau : la feuille posée dessus */
-    --raise: #F4F6FA;      /* champ de saisie, ligne survolée */
-    --rule: #DEE3EC;       /* filet interne (entre deux lignes d'une table) */
-    --rule-strong: #C3CBD8; /* contour d'un objet manipulable (champ, bouton) */
+    --ground: #161826;     /* --color-bg de la source : le plan de travail */
+    --surface: #232532;    /* --color-surface de la source : le panneau */
+    --raise: #282B3B;      /* creux de champ / ligne survolée -- pas de jeton dédié dans la source,
+                               dérivé du même geste que son survol de ligne de table (mix ~4-6% de --text sur --surface) */
+    --rule: #34384A;       /* filet interne -- mix ~10% de --text sur --surface, plus faible que rule-strong */
+    --rule-strong: #3D4258; /* = --color-divider exact de la source (mix 16% de --text) */
 
-    /* --- Texte. Hiérarchie par taille ET par contraste : un monde clair peut
-       se permettre trois vrais niveaux, un monde sombre non. --- */
-    --text: #0F1626;       /* valeur, donnée, titre — 16,4:1 sur --surface */
-    --text-2: #47536A;     /* libellé, en-tête de colonne — 8,4:1 */
-    --text-3: #626D80;     /* incertitude, note, NA — 5,4:1 sur --surface et
-                              4,8:1 sur --ground : les deux fonds tiennent */
+    /* --- Texte. --- */
+    --text: #E9E9ED;       /* --color-text de la source -- 14,54:1 sur --ground, 12,55:1 sur --surface */
+    --text-2: #A2A2AC;     /* mix 70% de --text (ton "libellé de champ" de la source) -- 7,62:1 / 6,89:1 */
+    --text-3: #8C8C99;     /* mix 60% de --text -- CORRIGÉ depuis la source : elle utilise 50%
+                               (.card-meta) et 55% (.text-muted) par endroits, dont l'un échoue AA
+                               sur --surface (4,26:1, mesuré) ; 60% tient 5,92:1 / 5,49:1 sur les deux fonds */
 
-    /* --- Accent unique, fonctionnel : « ceci est interactif ou actif ».
-       Il ne porte jamais une donnée ni un jugement — c'est ce qui permet de
-       lire la page sans se demander si le bleu veut dire « bon ». --- */
-    --accent: #1B4FD8;     /* 7,3:1 sur --surface ; blanc dessus : 7,3:1 */
-    --accent-hover: #143CAB;
-    --accent-weak: rgba(27, 79, 216, 0.10);  /* fond d'état actif discret */
-    /* Texte posé SUR l'accent plein. Mesuré : blanc sur l'accent clair
-       #1B4FD8 donne 6,65:1, mais blanc sur l'accent sombre #74A0FF ne donne
-       que 2,56:1 — l'action principale du produit était le seul texte
-       illisible de l'interface, et seulement la nuit. */
-    --on-accent: #FFFFFF;
+    /* --- Accent unique, fonctionnel : « ceci est interactif ou actif ». --- */
+    --accent: #9184D9;     /* --color-accent de la source -- 5,45:1 sur --ground, 4,71:1 sur --surface (marge la plus fine du système, à surveiller) */
+    --accent-hover: #A7A1DB; /* --color-accent-2 de la source, déjà utilisée comme second accent */
+    --accent-weak: rgba(145, 132, 217, 0.14);
+    /* Texte posé SUR l'accent plein. Mesuré : blanc échoue (3,23:1, sous AA) --
+       l'accent Nocturne est trop clair pour porter du texte clair, contrairement
+       à l'ancien accent bleu sombre. --ink (5,96:1) tient et reste dans la
+       famille du boîtier plutôt qu'un noir pur arbitraire. */
+    --on-accent: var(--ink);
 
-    /* --- Jeux « sur boîtier ». Toute toile (graphique, bande
-       d'enregistrement, journal) est tracée sur `--ink`, qui est TOUJOURS la
-       matière la plus profonde de la scène — plus sombre que `--ground`.
+    /* --- Jeux « sur boîtier », invariants tant qu'un seul thème existe.
+       accent-ink fusionné avec --accent (pas de variante ink séparée dans la
+       source ; structure conservée pour permettre une divergence future si
+       le mode clair en a besoin). ok/warn/error-ink conservés de l'ancien
+       système -- non couverts par la source Nocturne, revérifiés (pas
+       supposés) contre les 3 nouveaux fonds : 6,25:1 à 9,11:1 partout. --- */
+    --accent-ink: #9184D9;
+    --ok-ink: #35C08A;     /* 8,29:1 sur --ink, 7,59:1 sur --ground, 6,55:1 sur --surface */
+    --warn-ink: #E0A94E;   /* 9,11:1 / 8,35:1 / 7,20:1 */
+    --error-ink: #FF8172;  /* 7,91:1 / 7,24:1 / 6,25:1 */
 
-       Ce sont CES QUATRE JETONS qui sont invariants, pas `--ink` lui-même :
-       ils tiennent sur les deux valeurs d'encre, donc `market.js` et
-       `simulate.js` n'ont jamais à savoir dans quel thème ils tracent.
-       Mesuré : accent-ink 7,83:1 (clair) / 8,38:1 (sombre) ; ok-ink 8,08 /
-       8,64 ; warn-ink 8,88 / 9,50 ; error-ink 7,70 / 8,24.
+    /* --- États sémantiques. ok/warn/error conservés de l'ancien système
+       (non couverts par la source), revérifiés contre les nouveaux fonds --
+       toujours au-dessus de 6,25:1, aucun changement nécessaire.
+       --pending SORTI de la famille accent (violet) vers la rampe neutre :
+       l'ancien --pending (#BE95F7) et le nouvel --accent (#9184D9) sont
+       désormais dans la même famille de teinte -- gardait la confusion
+       interactif/actif vs en-attente que la doctrine du projet interdit
+       explicitement (« l'accent ne porte jamais un jugement »).
+       neutral-500 (#9397ab) choisi plutôt que neutral-600 (#75798c) : ce
+       dernier échoue AA partout (3,52:1 à 4,46:1, mesuré), neutral-500 tient
+       5,25:1 à 6,64:1 -- et c'est déjà l'anneau de --shadow-lg, cohérence
+       gratuite. --- */
+    --ok: #3BC493;         --ok-weak: rgba(59, 196, 147, 0.14);
+    --warn: #E0A94E;       --warn-weak: rgba(224, 169, 78, 0.14);
+    --error: #FF8172;      --error-weak: rgba(255, 129, 114, 0.14);
+    --pending: #9397AB;    --pending-weak: rgba(147, 151, 171, 0.14);
 
-       `--ink` lui-même, en revanche, DOIT descendre en thème sombre, sinon il
-       devient plus clair que la page qu'il est censé trouer. Conséquence
-       mesurée et assumée : en sombre la plaque ne se détache plus par la
-       luminance (1,15:1 contre `--surface`, contre 18,72:1 en clair), donc
-       elle se détache par un BORD explicite — `--plate-edge`. Aucun écart de
-       luminance atteignable entre deux fonds sombres ne remplacerait ce bord :
-       poussé jusqu'à la limite du contraste de texte, l'écart plafonne à
-       1,30:1. --- */
-    --accent-ink: #7EA6FF; /* 6,4:1 */
-    --ok-ink: #35C08A;     /* 8,4:1 */
-    --warn-ink: #E0A94E;   /* 9,5:1 */
-    --error-ink: #FF8172;  /* 7,4:1 */
-
-    /* --- États sémantiques. Chacun répond à une question que l'outil pose
-       déjà ; aucun n'est décoratif. Les `-weak` sont les fonds de pastille :
-       leur composité sur --surface laisse le texte de la même famille
-       au-dessus de 4,5:1. --- */
-    --ok: #0B6E4F;         --ok-weak: rgba(11, 110, 79, 0.11);
-    --warn: #8A5A08;       --warn-weak: rgba(138, 90, 8, 0.12);
-    --error: #B32D22;      --error-weak: rgba(179, 45, 34, 0.10);
-    --pending: #5B34B0;    --pending-weak: rgba(91, 52, 176, 0.10);
-
-    /* --- Profondeur. Un panneau est un objet posé : décalage vertical + flou.
-       Jamais un halo coloré à décalage nul. --- */
-    --shadow-panel: 0 1px 2px rgba(11, 18, 32, 0.05),
-                    0 10px 28px -14px rgba(11, 18, 32, 0.22);
-    --shadow-raised: 0 2px 4px rgba(11, 18, 32, 0.07),
-                     0 18px 44px -18px rgba(11, 18, 32, 0.30);
-    /* Même poids que `--shadow-raised` (l'alpha diffuse 0.30 était déjà celui
-       choisi pour la barre de lancement avant sa migration), miroir vertical
-       pour un objet collé au BAS du viewport : l'ombre porte vers le haut, sur
-       le contenu qu'il surplombe, pas vers un bas hors écran. Le reflet du
-       bord supérieur (inset) n'est pas inversé : c'est la même arête, qu'elle
-       reçoive une ombre vers le haut ou vers le bas. */
-    --shadow-raised-up: 0 -2px 4px rgba(11, 18, 32, 0.07),
-                        0 -18px 44px -18px rgba(11, 18, 32, 0.30);
-    /* Niveau au-dessus de `--shadow-raised` : réservé à ce qui flotte
-       AU-DESSUS de toute la page (popover du glossaire), jamais à une carte
-       simplement relevée -- sans ça les deux registres se confondent. */
-    --shadow-overlay: 0 4px 8px rgba(11, 18, 32, 0.10),
-                      0 28px 64px -20px rgba(11, 18, 32, 0.38);
-    --shadow-control: 0 1px 2px rgba(11, 18, 32, 0.08);
-    /* Bord de plaque : le seul indice de matière qui survive au thème sombre,
-       où l'écart de luminance entre l'encre et le papier tombe à 1,15:1. */
-    --plate-edge: inset 0 0 0 1px rgba(159, 174, 198, 0.14);
+    /* --- Profondeur. Philosophie différente du système à 4 niveaux
+       précédent (panel/raised/overlay/control dérivés d'un même halo) :
+       anneau fin d'abord (1px, opaque, pas de flou), ombre diffuse ensuite,
+       croissante. `--plate-edge` de l'ancien système est absorbé par
+       `--shadow-sm` (même rôle : bord qui affirme la matière sans dépendre
+       d'un écart de luminance). Valeurs Nocturne exactes, non modifiées. --- */
+    --shadow-sm: 0 0 0 1px #3F424D;
+    --shadow-md: 0 0 0 1px #595D6C, 0 6px 18px rgba(0, 0, 0, 0.55);
+    --shadow-lg: 0 0 0 1px #9397AB, 0 16px 40px rgba(0, 0, 0, 0.65);
+    /* Miroir vertical de --shadow-md pour un objet collé au BAS du viewport
+       (barre de lancement) : l'anneau reste identique (une bordure n'a pas de
+       direction), seule la composante diffuse s'inverse pour porter vers le
+       haut, sur le contenu surplombé. Non fourni par la source (qui n'a pas
+       d'équivalent de barre collante) -- dérivé par le même raisonnement
+       qu'utilisé pour --shadow-raised-up dans le système précédent. */
+    --shadow-md-up: 0 0 0 1px #595D6C, 0 -6px 18px rgba(0, 0, 0, 0.55);
 
     /* --- Familles. --- */
-    --display: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-               Roboto, "Helvetica Neue", Arial, sans-serif;
+    --display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
     --ui: var(--display);
-    --mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
-            Consolas, "Liberation Mono", monospace;
+    --heading-weight: 500;
+    --mono: ui-monospace, Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
 
-    /* --- Échelle typographique. Le monde précédent plafonnait le corps à 13px
-       et le titre de page à 22px : dense, mais illisible comme produit. Six
-       pas, écarts nets. --- */
+    /* --- Échelle typographique -- INCHANGÉE : la source Nocturne ne
+       redéfinit pas de tailles numériques, seulement famille + graisse des
+       titres. --- */
     --t-micro: 0.75rem;    /* 12px — en-tête de colonne, note, unité */
     --t-small: 0.8125rem;  /* 13px — libellé, métadonnée */
     --t-body: 0.875rem;    /* 14px — donnée courante, cellule de table */
@@ -186,64 +154,25 @@
     --t-value: 1.5rem;     /* 24px — valeur d'un bloc de mesure */
     --t-head: 1.75rem;     /* 28px — titre de page */
 
-    /* --- Espacement, base 4px. --- */
-    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
-    --s5: 20px; --s6: 24px; --s7: 32px; --s8: 48px;
+    /* --- Espacement. Base 2.8px (source Nocturne : --space-N = N × 2.8px,
+       vérifié sur les 6 valeurs fournies) -- --s5/--s7 manquants dans la
+       source, complétés par la même règle. --- */
+    --s1: 2.8px;  --s2: 5.6px;  --s3: 8.4px;  --s4: 11.2px;
+    --s5: 14px;   --s6: 16.8px; --s7: 19.6px; --s8: 22.4px;
 
-    /* --- Rayons. Le monde précédent les mettait à zéro par doctrine ; c'est
-       le premier signe extérieur qui faisait lire l'outil comme inachevé. Un
-       instrument moderne a des angles adoucis, pas vifs. --- */
-    --r-small: 6px;        /* plaque de tracé, micro-contrôle du bandeau */
-    --r-control: 8px;
-    --r-panel: 12px;
-    --r-chip: 999px;       /* pastille d'état : la seule forme pleinement ronde */
+    /* --- Rayons. --- */
+    --r-small: 4px;         /* = --radius-sm */
+    --r-control: 8px;       /* = --radius-md */
+    --r-panel: 14px;        /* = --radius-lg */
+    --r-chip: 999px;        /* pastille pleinement ronde -- non couvert par la source, forme non concernée par son échelle */
 }
 
-/* --- Rendu sombre. Écrit séparément, pas dérivé par inversion : les fonds
-   sont bleutés-froids (le boîtier vu de nuit), les accents sont remontés en
-   clarté pour tenir 4,5:1 sur fond sombre, et l'ombre devient profondeur +
-   liseré haut (lumière rasante) — une ombre noire seule est invisible sur un
-   fond noir. --- */
-:root[data-theme="dark"] {
-    color-scheme: dark;
-
-    --ink: #05080F;
-    --ink-2: #101827;
-    --ink-text: #E9EEF6;
-    --ink-text-2: #97A6BE;
-
-    --ground: #0A0F18;
-    --surface: #121A26;
-    --raise: #1A2432;
-    --rule: #222D3D;
-    --rule-strong: #354356;
-
-    --text: #E9EDF4;       /* 14,2:1 sur --surface */
-    --text-2: #A6B2C4;     /* 7,3:1 */
-    --text-3: #8996AA;     /* 5,4:1 */
-
-    --accent: #74A0FF;     /* 6,6:1 sur --surface */
-    --accent-hover: #9DBBFF;
-    --accent-weak: rgba(116, 160, 255, 0.14);
-    --on-accent: #05080F;  /* 7,84:1 sur #74A0FF */
-    /* Les quatre jeux « sur boîtier » (--accent-ink, --ok-ink, --warn-ink,
-       --error-ink) ne sont PAS redéfinis ici : ce sont eux les invariants.
-       `--ink` et ses fonds, eux, descendent — cf. la note du bloc clair. */
-
-    --ok: #3BC493;         --ok-weak: rgba(59, 196, 147, 0.14);
-    --warn: #E0A94E;       --warn-weak: rgba(224, 169, 78, 0.14);
-    --error: #FF8172;      --error-weak: rgba(255, 129, 114, 0.14);
-    --pending: #BE95F7;    --pending-weak: rgba(190, 149, 247, 0.14);
-
-    --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
-                    0 12px 30px -16px rgba(0, 0, 0, 0.85);
-    --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.07) inset,
-                     0 20px 48px -20px rgba(0, 0, 0, 0.92);
-    --shadow-raised-up: 0 1px 0 rgba(255, 255, 255, 0.07) inset,
-                        0 -20px 48px -20px rgba(0, 0, 0, 0.92);
-    --shadow-overlay: 0 1px 0 rgba(255, 255, 255, 0.08) inset,
-                      0 32px 72px -24px rgba(0, 0, 0, 0.96);
-    --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.45);
-    /* Plus marqué en sombre : c'est là qu'il porte seul la séparation. */
-    --plate-edge: inset 0 0 0 1px rgba(159, 174, 198, 0.22);
+/* Mode clair -- non implémenté dans cette passe (dark uniquement). Bloc
+   présent et vide plutôt qu'absent : l'architecture (:root sombre actif +
+   override clair) est prête à recevoir des valeurs sans réarchitecturer la
+   feuille de jetons ni les composants qui la consomment. Voir
+   KNOWN_ISSUES.md. Le bouton de bascule jour/nuit est masqué tant que ce
+   bloc est vide (base.html). */
+[data-theme="light"] {
+    /* not yet implemented — see KNOWN_ISSUES.md */
 }

@@ -1,81 +1,81 @@
 ---
 name: PATRICK
-description: Station d'observation — un chiffre ne s'écrit jamais seul, et la station enregistre même quand personne ne regarde.
+description: Nocturne — un instrument de mesure professionnel, dense et sombre, pas un tableau de bord SaaS générique.
 colors:
-  ink: "#0B1220"
-  ink-2: "#16213A"
-  ink-text: "#EDF1F7"
-  ink-text-2: "#9FAEC6"
-  ground: "#ECEFF4"
-  surface: "#FFFFFF"
-  raise: "#F4F6FA"
-  rule: "#DEE3EC"
-  rule-strong: "#C3CBD8"
-  text: "#0F1626"
-  text-2: "#47536A"
-  text-3: "#626D80"
-  accent: "#1B4FD8"
-  accent-hover: "#143CAB"
-  on-accent: "#FFFFFF"
-  accent-ink: "#7EA6FF"
-  ok: "#0B6E4F"
-  warn: "#8A5A08"
-  error: "#B32D22"
-  pending: "#5B34B0"
+  ink: "#0D0E17"
+  ink-2: "#171A28"
+  ink-text: "#E9E9ED"
+  ink-text-2: "#B2B6CA"
+  ground: "#161826"
+  surface: "#232532"
+  raise: "#282B3B"
+  rule: "#34384A"
+  rule-strong: "#3D4258"
+  text: "#E9E9ED"
+  text-2: "#A2A2AC"
+  text-3: "#8C8C99"
+  accent: "#9184D9"
+  accent-hover: "#A7A1DB"
+  on-accent: "#0D0E17"
+  accent-ink: "#9184D9"
+  ok: "#3BC493"
+  warn: "#E0A94E"
+  error: "#FF8172"
+  pending: "#9397AB"
   ok-ink: "#35C08A"
   warn-ink: "#E0A94E"
   error-ink: "#FF8172"
 typography:
   head:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     fontSize: "1.75rem"
-    fontWeight: 700
+    fontWeight: 500
     lineHeight: 1.15
     letterSpacing: "-0.02em"
   value:
-    fontFamily: "Spline Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontFamily: "ui-monospace, Menlo, SF Mono, Consolas, Liberation Mono, monospace"
     fontSize: "1.5rem"
     fontWeight: 500
     lineHeight: 1.15
     letterSpacing: "-0.02em"
   lead:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     fontSize: "1.0625rem"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.3
     letterSpacing: "normal"
   body:
-    fontFamily: "Spline Sans Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    fontFamily: "ui-monospace, Menlo, SF Mono, Consolas, Liberation Mono, monospace"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
   small:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 500
     lineHeight: 1.55
     letterSpacing: "normal"
   micro:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     fontSize: "0.75rem"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.5
     letterSpacing: "0.12em"
 rounded:
-  small: "6px"
+  small: "4px"
   control: "8px"
-  panel: "12px"
+  panel: "14px"
   chip: "999px"
 spacing:
-  s1: "4px"
-  s2: "8px"
-  s3: "12px"
-  s4: "16px"
-  s5: "20px"
-  s6: "24px"
-  s7: "32px"
-  s8: "48px"
+  s1: "2.8px"
+  s2: "5.6px"
+  s3: "8.4px"
+  s4: "11.2px"
+  s5: "14px"
+  s6: "16.8px"
+  s7: "19.6px"
+  s8: "22.4px"
 components:
   panel:
     backgroundColor: "{colors.surface}"
@@ -171,35 +171,35 @@ ce fichier explique **comment les appliquer**, il ne les remplace pas.
 
 ## Overview
 
-Le monde s'appelle **« Station d'observation »**. Il rend l'outil comme un
-appareil de mesure en service : un boîtier d'encre profonde qui porte
-l'identité, l'enregistrement et le verdict ; des feuilles de papier posées
-dessus qui portent la lecture.
+Le monde s'appelle **« Nocturne »**. Extrait d'une maquette de référence
+(deux directions : 1a dense façon terminal, 1b aérée façon analytics) et
+réassigné sur la structure sémantique déjà en place — les composants Jinja
+n'ont pas été réécrits, seule la feuille de jetons change.
 
-Il remplace **intégralement** le monde précédent, « Sortie de solveur » (noir
-plat, filets horizontaux seuls, chasse fixe partout, rayons à zéro, états
-écrits `[DONE]`). Si vous trouvez `--r-none`, `JetBrains Mono`, un
-`border-radius: 0` posé par doctrine ou un badge à crochets, c'est un résidu à
-supprimer, pas une variante à respecter.
+Il remplace **intégralement** le monde précédent, « Station d'observation »
+(boîtier encre profonde / papier clair, Archivo + Spline Sans Mono, échelle
+d'élévation à décalage + flou dès le premier niveau). Si vous trouvez
+`--shadow-panel`, `--shadow-raised`, `--shadow-overlay`, `Archivo` ou
+`Spline Sans Mono`, c'est un résidu à migrer, pas une variante à respecter.
 
-**La thèse tient en deux propositions.**
+**La thèse produit ne change pas** — elle appartient au produit, pas à son
+habillage : *un chiffre ne s'écrit jamais seul*. La signature de `metric()`
+force toujours un troisième argument `reliability` ; le verdict de la station
+imprime toujours un tiret et son motif tant qu'aucune cible n'a de résultat
+Diebold-Mariano, jamais « 0 / 0 » qui se lirait comme un échec. *La station
+montre ce qu'elle a enregistré avant qu'on le demande* — le bandeau porte
+toujours, sur les cinq surfaces, la bande des runs récents et les deux
+chiffres du verdict.
 
-La première appartient au produit, pas à son habillage : *un chiffre ne
-s'écrit jamais seul*. La signature de `metric()` force un troisième argument
-`reliability` — le gabarit ne devine jamais l'incertitude. Quand une mesure
-n'est pas interprétable, le produit **refuse de l'imprimer** : il affiche `—`,
-le motif en clair, et renvoie la justification longue en note sous le bloc.
-Cette règle vaut jusque dans le bandeau : le verdict de la station imprime un
-tiret et son motif tant qu'aucune cible n'a de résultat Diebold-Mariano,
-jamais « 0 / 0 » qui se lirait comme un échec.
+Mode : **Operate**. La scannabilité et la densité priment sur l'expression ;
+Nocturne les sert par un fond sombre dense et un accent unique, pas par
+l'ornement.
 
-La seconde est propre à ce monde : *la station montre ce qu'elle a enregistré
-avant qu'on le demande*. Le bandeau porte, sur les cinq surfaces, la bande des
-runs récents et les deux chiffres du verdict — ce qui tient, et ce que ça a
-coûté.
-
-Mode : **Operate**. La scannabilité et la densité priment sur l'expression ; la
-marque vit dans la précision des détails.
+**Mode sombre seul pour cette passe.** `:root` porte directement les valeurs
+Nocturne (actives par défaut, pas une bascule) ; `[data-theme="light"]` est un
+bloc vide, préparé mais pas écrit — voir « Écarts connus » et
+`KNOWN_ISSUES.md`. Le bouton de bascule jour/nuit est masqué tant que ce bloc
+est vide.
 
 ### Identité
 
@@ -209,14 +209,9 @@ visuelle. Il s'écrit en chasse fixe (`.station-name`), à gauche du bandeau.
 **La marque** (`.station-mark`) le précède : un anneau qui enferme trois barres
 montantes, la dernière coiffée d'un point d'accent. C'est un relevé, pas un
 emblème — la même lecture que la bande d'enregistrement posée juste dessous :
-des événements ponctuels, de hauteur inégale, le plus récent à droite.
-
-Elle est **redessinée** d'après le logo fourni par l'utilisateur (marque
-circulaire, anneau et glyphe), pas importée. Ce qui a été gardé : la forme
-circulaire et le glyphe enfermé. Ce qui a été laissé : l'or, le sérif et le
-lettrage en petites capitales, qui appartiennent au monde précédent. Une
-version antérieure de ce document interdisait tout logo ; cette consigne a été
-levée.
+des événements ponctuels, de hauteur inégale, le plus récent à droite. Le
+dessin lui-même n'a pas changé avec Nocturne, seules ses couleurs (`currentColor`
+→ `--ink-text`, tête → `--accent-ink`) suivent la nouvelle palette.
 
 Trois règles la tiennent :
 
@@ -226,7 +221,8 @@ Trois règles la tiennent :
 - **Aucune couleur codée en dur.** L'anneau et les barres prennent
   `currentColor`, donc `--ink-text` ; la tête reçoit `--accent-ink` par CSS.
   Une couleur écrite dans le SVG survivrait à un remplacement d'identité et
-  repeindrait l'ancien monde.
+  repeindrait l'ancien monde — c'est exactement ce que ce remplacement de
+  jetons vient de vérifier en pratique.
 - **Taille en `em`.** À 200 % de zoom texte, une marque en pixels devient une
   vignette accrochée à un mot.
 
@@ -237,7 +233,8 @@ différents pour un même produit se contrediraient.
 
 ### Deux matières, pas un dégradé de gris
 
-Règle structurante du monde, à comprendre avant de toucher une couleur.
+Règle structurante du monde, conservée de « Station d'observation » — à
+comprendre avant de toucher une couleur.
 
 - **Le boîtier** (`--ink`, `--ink-2`) porte le bandeau, la bande
   d'enregistrement, le verdict, le contexte de reproductibilité, le journal de
@@ -245,26 +242,24 @@ Règle structurante du monde, à comprendre avant de toucher une couleur.
 - **Le papier** (`--ground` plan de travail, `--surface` feuille posée dessus,
   `--raise` creux d'un champ) porte la lecture.
 
-**Quatre jetons « sur boîtier » sont identiques dans les deux thèmes** :
-`--accent-ink`, `--ok-ink`, `--warn-ink`, `--error-ink`. Ce sont eux les
-invariants, parce qu'ils tiennent sur les deux valeurs d'encre — mesuré :
-7,83:1 et 8,38:1 pour l'accent, 7,70:1 et 8,24:1 pour l'erreur. C'est ce qui
-permet à `market.js` et `simulate.js` de tracer sans savoir dans quel thème.
+Nocturne, source de cette passe, n'a que deux paliers (`--color-bg`/
+`--color-surface`) — `--ink` n'y est pas fourni. Dérivé plus sombre que
+`--ground`, même famille de teinte (indigo profond), pour rester la matière la
+plus profonde de la scène : mesuré, luminance `--ink` 0,0046 < `--ground`
+0,0096.
 
-**`--ink` lui-même descend en thème sombre** (`#0B1220` → `#05080F`), et ce
-n'est pas une entorse : sans ça, la plaque deviendrait plus claire que la page
-qu'elle troue. La plaque est toujours la matière la plus profonde de la scène
-— c'est la règle, pas sa valeur.
+**Les jetons « sur boîtier »** (`--accent-ink`, `--ok-ink`, `--warn-ink`,
+`--error-ink`) restent la structure d'invariants du monde précédent, prête
+pour un futur mode clair — `--accent-ink` est aujourd'hui un simple alias de
+`--accent` (Nocturne n'a qu'une valeur d'accent, la distinction n'a de sens
+que quand deux thèmes existent). `ok-ink`/`warn-ink`/`error-ink` ne sont pas
+couverts par la source Nocturne : conservés de l'ancien système, revérifiés
+(pas supposés) contre les trois fonds — 6,25:1 à 9,11:1 partout.
 
-Conséquence mesurée et assumée : en clair la plaque se détache par la
-luminance (18,72:1 contre `--surface`), en sombre elle ne le peut plus
-(1,15:1). Elle se détache donc par un **bord explicite**, `--plate-edge`.
-Aucun écart de luminance atteignable ne le remplacerait : poussé jusqu'à la
-limite du contraste de texte, l'écart entre deux fonds sombres plafonne à
-1,30:1.
-
-**`--on-accent`** porte le texte posé sur l'accent plein. Le blanc tient sur
-l'accent clair (6,65:1) mais pas sur l'accent sombre éclairci (2,56:1).
+**`--on-accent`** porte le texte posé sur l'accent plein. Mesuré : le blanc
+échoue sur l'accent Nocturne (#9184D9, 3,23:1, sous AA) — contrairement à
+l'ancien accent bleu sombre qui le tenait. `--on-accent` vaut `--ink`
+(5,96:1), dans la famille du boîtier plutôt qu'un noir arbitraire.
 
 ### Stratégie : Restrained
 
@@ -276,127 +271,145 @@ Les jugements ont leurs propres jetons (`--ok`, `--warn`, `--error`,
 Il n'existe **pas** de jeton « info ». Un état sans jugement s'écrit dans la
 couleur du texte.
 
-`--pending` porte aussi l'attente de confirmation (barre de lancement armée) :
-armer n'est pas avertir.
+**`--pending` est délibérément hors de la famille de l'accent.** L'accent
+Nocturne (#9184D9) est violet ; l'ancien `--pending` (#BE95F7) l'était aussi —
+les deux se seraient lus comme une seule et même couleur, confondant
+« interactif/actif » et « en attente de confirmation ». `--pending` prend
+`#9397AB`, un ton de la rampe neutre (déjà l'anneau de `--shadow-lg`,
+cohérence gratuite) plutôt qu'une nuance d'accent — vérifié (`#75798C`, l'autre
+candidat neutre, échoue AA partout : 3,52:1 à 4,46:1, contre 5,25:1 à 6,64:1
+pour `#9397AB`). `--pending` porte toujours l'attente de confirmation (barre
+de lancement armée) : armer n'est pas avertir.
 
-### Deux rendus, écrits séparément
+### Un rendu écrit, un chemin préparé pour le second
 
-`:root` est clair, `:root[data-theme="dark"]` est sombre. Le second n'est
-**pas** une inversion : fonds bleutés-froids, accents remontés en clarté,
-ombres devenues profondeur + liseré haut. Le choix est explicite, mémorisé, et
-posé **avant le premier rendu** par un script bloquant dans le `<head>`.
+`:root` porte Nocturne directement — ce n'est **pas** une bascule pour cette
+passe, contrairement à l'ancien système où `:root` était le thème clair par
+défaut et `[data-theme="dark"]` un override. `[data-theme="light"]` existe en
+bloc vide : l'architecture (jetons sémantiques, structure `:root` +
+`[data-theme]`) est prête à recevoir un mode clair sans réarchitecturer la
+feuille de jetons ni les composants qui la consomment, mais aucune valeur n'y
+est écrite. Voir « Écarts connus ».
 
 ### Contraste
 
 Tout texte tient 4,5:1 sur **son fond réel**, fond composité des pastilles
-teintées inclus ; tout texte large tient 3:1. Les valeurs mesurées sont en
+teintées inclus ; tout texte large ou composant d'UI tient 3:1. Recalculé
+indépendamment (luminance relative WCAG) pour chaque jeton Nocturne avant
+application — pas supposé conforme parce que la maquette source semblait
+lisible : un des tons atténués qu'elle utilise (`.card-meta`, 50 % de mélange)
+échoue AA sur `--surface` (4,26:1, mesuré), ce qui a fait fixer `--text-3` à
+60 % plutôt qu'une valeur de la source. Les valeurs mesurées sont en
 commentaire dans `tokens.css`, ligne par ligne — ne pas modifier une couleur
-sans refaire le calcul sur les deux thèmes.
+sans refaire le calcul.
 
 ## Typography
 
-Deux familles, servies depuis `/static/fonts/` — **aucune requête CDN**.
+Une seule famille, Inter, servie depuis `/static/fonts/` — **aucune requête
+CDN**. Remplace Archivo (chrome) + Spline Sans Mono (donnée) : la maquette
+Nocturne n'a qu'une police, la hiérarchie titre/corps se fait par graisse
+(**500 sur les titres**, contre 600-700 dans l'ancien système) et par taille,
+pas par changement de famille.
 
-- **Archivo** (`--display`, aliasée `--ui`) : chrome, titres, libellés,
-  boutons, en-têtes de colonne, pastilles d'état.
-- **Spline Sans Mono** (`--mono`) : **toute donnée**, plus le nom du produit.
+- **Inter** (`--display`, aliasée `--ui`) : chrome, titres, libellés, boutons,
+  en-têtes de colonne, pastilles d'état.
+- **`--mono`** (police monospace système, `ui-monospace, Menlo, SF Mono...`) :
+  **toute donnée**, plus le nom du produit. La classe utilitaire `pk-mono`
+  (nom repris de la maquette Nocturne) documente explicitement l'intention
+  dans le balisage de `metric()`/`data_table()`, en plus de la règle
+  mécanique ci-dessous.
 
-**Le contraste des deux familles porte la hiérarchie**, pas la taille seule.
+**Le contraste des deux familles porte toujours la hiérarchie**, pas la
+taille seule — même principe qu'avant, une seule famille chrome au lieu de
+deux.
 
-Règle mécanique : `table, .num, .mono, code, pre, .metric-value, input,
-select, textarea` reçoivent `--mono` + `tabular-nums` + `"tnum" 1, "zero" 1`.
-Non négociable — c'est ce qui permet l'alignement décimal.
+Règle mécanique inchangée : `table, .num, .mono, .pk-mono, code, pre,
+.metric-value, input, select, textarea` reçoivent `--mono` + `tabular-nums` +
+`"tnum" 1, "zero" 1`. Non négociable — c'est ce qui permet l'alignement
+décimal.
 
-Six pas (`--t-micro` 12px → `--t-head` 28px). Tout titre porte
-`overflow-wrap: break-word` : mesuré à 200 % de zoom texte en 390px, le mot
-« d'investissement » fait 438px pour 358 disponibles et poussait la page.
+Six pas, **valeurs inchangées** (`--t-micro` 12px → `--t-head` 28px) — la
+source Nocturne ne redéfinit pas d'échelle numérique, seulement famille et
+graisse des titres. Tout titre porte toujours `overflow-wrap: break-word`
+(mesuré à 200 % de zoom texte en 390px, cf. historique).
 
 ## Layout
+
+Section **inchangée par ce chantier** — Nocturne ne touche ni à la grille, ni
+à la divulgation progressive, ni à la barre collante, ni à l'adaptation
+tactile : uniquement jetons de couleur, typographie, espacement, rayon,
+élévation.
 
 ### La grille du poste
 
 Asymétrique et délibérée : `1.3fr / 1fr`. La colonne gauche porte la tâche
-principale, la droite ce qui la sert. Une grille de panneaux égaux donnait le
-même poids à un formulaire de 65 contrôles et à un widget de variations.
+principale, la droite ce qui la sert.
 
-**Aucun panneau ne défile en interne.** Mesuré sur la version qui le faisait :
-613px visibles pour 3042px de contenu, deux barres de défilement concurrentes,
-`Ctrl+F` inopérant hors flux, bouton de lancement absent de tout viewport. Le
-seul défilement d'une page est celui de la page.
+**Aucun panneau ne défile en interne.** Le seul défilement d'une page est
+celui de la page.
 
 ### Divulgation progressive
 
-Deux blocs de formulaire restent ouverts — le nom du run et l'objectif, les
-seuls réglés à chaque lancement. Les neuf autres se replient en `<details>`
-portant leur état en résumé. Gain mesuré : le chemin clavier vers l'action
-principale est passé d'environ 105 arrêts à 24, les blocs repliés retirant
-leur contenu de l'ordre de tabulation.
+Deux blocs de formulaire restent ouverts — le nom du run et l'objectif. Les
+neuf autres se replient en `<details>` portant leur état en résumé.
 
 ### Barre de lancement collante
 
 En bas de la colonne de configuration, avec le rappel cible / horizons /
-schéma. `html` réserve `scroll-padding-bottom` égal à `--launch-bar-h`,
-publiée par un `ResizeObserver` : sans cette réserve, un champ derrière la
-barre est « dans le viewport » pour le navigateur, qui ne défile donc pas
-quand on l'atteint au clavier. Mesurer la boîte de **bordure**, pas
-`contentRect` — celui-ci exclut le remplissage et rendait 35px pour une barre
-de 68.
+schéma. `html` réserve `scroll-padding-bottom` égal à `--launch-bar-h`.
 
 ### Adaptation : le pointeur, pas la largeur
 
 Les cibles tactiles s'adaptent sur `pointer: coarse`, jamais sur une largeur
-de viewport. Une tablette de 1024px se touche ; une fenêtre réduite à 390px se
-pilote à la souris. Vérifié : `/universe` fait la même hauteur à la souris
-avant et après.
+de viewport. Deux seuils : 44px pour un contrôle (WCAG 2.5.5), 24px pour un
+lien de texte dans une table dense (WCAG 2.5.8).
 
-**Deux seuils, pas un.** 44px pour un **contrôle** (WCAG 2.5.5). 24px pour un
-lien de texte **dans une table dense** (WCAG 2.5.8) : imposer 44px à 550
-lignes ajouterait plus de 24 000px de défilement pour un gain que la norme
-n'exige pas.
-
-Une petite marque n'impose pas une petite cible : l'appel de glossaire garde
-son gabarit de 15px et porte une zone de contact de 44px par pseudo-élément.
-
-Zones sûres : `viewport-fit=cover` et `env(safe-area-inset-*)` sur le bandeau
-et la barre de lancement.
-
-Ruptures : 1100px (le simulateur passe en colonne), 980px (la grille du poste
-passe en colonne, le bandeau s'enroule). Zéro débordement horizontal sur les
-20 contextes mesurés, et zéro à 200 % de zoom texte.
+Ruptures inchangées : 1100px (simulateur en colonne), 980px (grille du poste
+en colonne, bandeau enroulé).
 
 ## Elevation & Depth
 
-**Un panneau est un objet posé**, pas une zone délimitée par un trait :
-`--surface`, `1px solid var(--rule)`, `--r-panel`, et `--shadow-panel` — une
-ombre avec **décalage vertical ET flou**. Un halo coloré à décalage nul est de
-la décoration, pas de la profondeur.
+**Philosophie remplacée, pas fusionnée** avec l'ancien système à 4 niveaux
+(`--shadow-panel`/`--shadow-raised`/`--shadow-overlay`/`--shadow-control`,
+tous à décalage + flou dès le premier niveau). Nocturne : **anneau fin
+d'abord** (1px, net, sans flou), **ombre diffuse croissante ensuite**.
+
+- `--shadow-sm` — anneau seul (`0 0 0 1px #3F424D`). Rôle : carte au repos,
+  bord de plaque (`--plate-edge` de l'ancien système est absorbé ici), champ
+  et bouton au repos.
+- `--shadow-md` — anneau plus clair + ombre diffuse moyenne. Rôle : tooltip,
+  élément relevé/actif. `--shadow-md-up` en miroir vertical pour la barre de
+  lancement collante (objet collé au bas du viewport, l'ombre porte vers le
+  haut sur le contenu surplombé).
+- `--shadow-lg` — anneau le plus clair + ombre diffuse large. Rôle : ce qui
+  flotte au-dessus de **toute** la page — seul le popover du glossaire
+  (`role="dialog"`) l'utilise aujourd'hui.
 
 Le filet ne structure plus la page : il sépare deux lignes **dans** un panneau
 (`--rule`) ou cerne un objet manipulable (`--rule-strong`).
 
-`--plate-edge` est le seul indice de matière qui survive au thème sombre : un
-liseré interne posé sur la bande d'enregistrement, l'aperçu marché, les trois
-toiles du simulateur et le journal de run.
-
 **Jamais de panneau dans un panneau** : il ne dit rien de plus que le filet
 qu'il remplace et brouille la hiérarchie.
+
+**Détail signature Nocturne** : les filets de table (`data_table()`,
+leaderboard) sont peints en dégradé fondu sur 48px à chaque bout plutôt qu'un
+arrêt net — porté par la ligne (`background`, peint en bas de la ligne),
+jamais par une bordure de cellule.
 
 ### Mouvement
 
 **Un seul moment authoré** : la bande se révèle de gauche à droite en 620ms
-(sortie cubique) au chargement — le mouvement natif d'un enregistreur. Le
-reste est fonctionnel : la jauge balaie **uniquement** pendant les phases non
-mesurables, le leaderboard glisse au tri (FLIP), le panneau de résultats
-apparaît. `prefers-reduced-motion` retire le mouvement, **jamais**
-l'information : la jauge non mesurable devient un motif rayé statique.
+(sortie cubique) au chargement. Le reste est fonctionnel : la jauge balaie
+**uniquement** pendant les phases non mesurables, le leaderboard glisse au tri
+(FLIP), le panneau de résultats apparaît. `prefers-reduced-motion` retire le
+mouvement, **jamais** l'information.
 
 ## Shapes
 
-`--r-small` 6px (plaque de tracé, micro-contrôle du bandeau, pastille d'état
-de brique), `--r-control` 8px (champ, bouton, état vide), `--r-panel` 12px
-(panneau), `--r-chip` 999px (pastille d'état, bouton de plage). Le monde
-précédent les mettait à zéro par doctrine ; c'est le premier signe extérieur
-qui faisait lire l'outil comme inachevé.
+`--r-small` 4px (plaque de tracé, micro-contrôle du bandeau, pastille d'état
+de brique), `--r-control` 8px (champ, bouton, état vide — inchangé), `--r-panel`
+14px (panneau), `--r-chip` 999px (pastille d'état, bouton de plage) — rayons
+Nocturne exacts (`--radius-sm`/`md`/`lg` de la source), remplacent 6/8/12px.
 
 ### Focus — un seul régime, sans exception
 
@@ -408,86 +421,53 @@ qui faisait lire l'outil comme inachevé.
 }
 ```
 
-Le formulaire a porté pendant une passe sa propre règle — `outline: none`
-compensé par un anneau à 10 % d'opacité, mesuré à 1,15:1 contre le blanc,
-c'est-à-dire rien. L'incohérence est pire que l'absence. **Toute règle qui
-repose `outline: none` sur un élément focusable est un défaut.**
+Règle inchangée par ce chantier. **Toute règle qui repose `outline: none` sur
+un élément focusable est un défaut.**
 
 ## Components
 
 Composants Jinja partagés dans `templates/_components.html`, CSS dans
-`static/style.css`, jetons dans `static/tokens.css`.
+`static/style.css`, jetons dans `static/tokens.css`. **Aucun composant n'a été
+réécrit par ce chantier** — seule la feuille de jetons change, R2 de la
+consigne Nocturne. `metric()` et `data_table()` portent en plus la classe
+`pk-mono` sur leurs valeurs/colonnes numériques (documentation explicite dans
+le balisage, redondante avec la règle mécanique mais utile hors table/metric).
 
 **`metric(label, value, reliability, state)`** — le composant signature. Le
 troisième argument est **obligatoire**. Valeur en `--t-value` (24px) en chasse
-fixe ; ligne de fiabilité décrochée par un filet vertical de 1px. **C'est la
-seule verticale du système**, et elle dit « ceci appartient au chiffre
-au-dessus ».
+fixe (`pk-mono`) ; ligne de fiabilité décrochée par un filet vertical de 1px.
 
 **`data_table(headers, rows, empty_message, row_classes, num_cols, footer)`** —
 `num_cols` porte les indices des colonnes de **mesure** ; elles seules
-reçoivent la classe `num`. L'appelant déclare, le gabarit ne devine pas.
-En-tête collant sur fond `--raise`.
+reçoivent les classes `num pk-mono`. Filet de ligne en dégradé fondu 48px
+(voir Elevation & Depth), en-tête collant sur fond `--raise`.
 
 **`status_badge(label, state)`** — pastille avec point de 6px en
-`currentColor`. Six états. **Le texte porte l'état, la couleur ne fait que le
-doubler.** Un run échoué prend `error`, jamais `neutral`.
+`currentColor`. Six états, `--pending` désormais un ton neutre (voir Colors),
+plus jamais confondable avec l'accent.
 
-**`empty_state` / `error_state`** — encadré pointillé sur `--raise`, message
-préfixé de `NA`.
+**`empty_state` / `error_state`** — encadré sur `--raise`, message préfixé de
+`NA`. Inchangé.
 
-**Le verdict de la station** (`.verdict`, rendu côté serveur dans le bandeau)
-— deux chiffres sur les cinq surfaces : *ce qui tient* (cibles survivant à la
-correction Benjamini-Hochberg entre cibles) et *ce que ça a coûté* (essais
-cumulés). Registre du **boîtier**, pas de la valeur : chasse fixe au corps de
-la ligne de provenance, contrepartie en ligne. Deux grands chiffres ici
-feraient une barre de KPI. `survivors = None` tant qu'aucune cible n'a de
-résultat DM : on imprime `—` et le motif.
+**Le verdict de la station** (`.verdict`) — inchangé structurellement, jetons
+Nocturne (chasse fixe boîtier).
 
-**Les lignes de portée locale** (`.scope-line`, en tête de `/universe` et
-`/runs`) — même grammaire, posée sur le papier. Elles ne répètent **jamais**
-le verdict global : chacune répond à la question de sa surface.
+**Les lignes de portée locale** (`.scope-line`) — inchangées.
 
-**La bande d'enregistrement** (`.record`, `observatory.js`) — une colonne par
-run, la plus récente à droite. **La coordonnée est la séquence, pas le temps
-écoulé** : un axe de temps absolu dépensait toute la largeur en durée plutôt
-qu'en runs (mesuré : 18 runs sur 90 secondes étalés sur 6 jours, deux amas
-dans 3 % de la surface). Hauteur = essais (log), couleur = état, plafond de 40
-colonnes. C'est un **contrôle** : `tabindex=0`, flèches, Home/End, Entrée pour
-ouvrir, Échap pour lâcher.
+**La bande d'enregistrement** (`.record`, `observatory.js`) — inchangée.
 
-Trois refus inscrits dans le code, qui ne sont pas des oublis : pas de courbe
-entre les marques (les runs sont des événements ponctuels) ; pas de hauteur
-inventée sans compte d'essais ; la légende porte **toujours** le plafond de
-l'échelle et l'étendue temporelle, qui a quitté le tracé pour elle.
+**Les briques de rigueur** (`.adv-gate`) — inchangées.
 
-**Les briques de rigueur dans les blocs repliés** (`.adv-gate`) — six
-garanties (`data_quality_enabled`, `purge`, `embargo_enabled`,
-`uniqueness_weights`, `calibration`, `stacking`) dont l'état est **toujours
-rendu, ON comme OFF**, et OFF se colore. Une case ordinaire ne se résume que
-si elle est cochée — c'est un réglage ; une brique se résume toujours — c'est
-une garantie, et son absence est l'information qui compte. La même ligne est
-reprise par le récapitulatif de lancement.
+**La barre de lancement à deux temps** — `--shadow-md-up` remplace l'ombre
+codée en dur de l'ancien système (une seule couche, jamais redéfinie en
+sombre). Le teinté d'armement reste **composé sur** la surface.
 
-**La barre de lancement à deux temps** — le premier clic arme et déplie ce qui
-va tourner (cible, horizons, régimes, schéma, combinaisons **calculées**, rang
-en file, état des briques) ; le second lance. Pas de fenêtre modale : l'action
-n'a pas besoin d'interrompre, seulement d'être relue. Échap ou toute
-modification désarme. Le teinté d'armement est **composé sur** la surface,
-jamais posé à sa place — une barre collante translucide laisse voir le
-formulaire au travers.
+**Le glossaire** — `--shadow-lg` remplace `--shadow-overlay` : même rôle
+(flotte au-dessus de toute la page), nouvelle mécanique (anneau + diffus large
+plutôt que décalage + flou).
 
-**Le glossaire** — `role="dialog"`, prend le focus à l'ouverture, Échap le
-rend au déclencheur, tabuler hors de lui le referme. Le focus est posé à la
-frame suivante : le popover sort de `display: none` par une transition
-`allow-discrete` et un `focus()` synchrone est ignoré. Nom accessible =
-« Définition : <libellé humain> », via `TERM_LABEL_KEYS` — le glossaire ne peut
-pas être le seul endroit qui laisse ses clés brutes.
-
-**Toiles (canvas)** — une toile ne peut pas hériter d'une couleur CSS : elle
-doit la **lire**, sans repli codé en dur (un repli survit à un remplacement
-d'identité et repeint l'ancien monde). Toutes portent `role="img"` et un
-`aria-label` **réécrit à partir des vraies séries** après tracé.
+**Toiles (canvas)** — inchangées : lisent les jetons au tracé, aucun repli
+codé en dur.
 
 ## Do's and Don'ts
 
@@ -501,36 +481,37 @@ d'identité et repeint l'ancien monde). Toutes portent `role="img"` et un
 - Poser toute toile sur le boîtier et lire ses couleurs sans repli.
 - Donner à toute surface au repos son état vide écrit.
 - Adapter les cibles tactiles sur `pointer: coarse`, jamais sur la largeur.
-- Vérifier le contraste sur le fond **composité réel**, dans les deux thèmes.
+- Vérifier le contraste sur le fond **composité réel**.
+- Poser `--shadow-sm` avant `--shadow-md`/`--shadow-lg` — l'anneau fin est le
+  niveau de repos, pas une étape à sauter.
 
 **À ne pas faire**
 
 - Afficher un chiffre nu, sans dénominateur ni réserve.
 - Afficher une valeur ponctuelle à côté d'un message disant qu'elle n'a pas
   été calculée.
-- Résumer un bloc replié en ne listant que ce qui est activé : une garantie
-  désactivée devient alors un défaut silencieux.
+- Résumer un bloc replié en ne listant que ce qui est activé.
 - Utiliser l'accent pour porter une donnée ou un jugement.
-- Introduire un sixième neutre bleuté « informatif ».
+- Poser `--pending` (ou tout jugement) dans la famille de teinte de l'accent.
 - Imbriquer un panneau dans un panneau.
-- Dériver le thème sombre par inversion du clair.
-- Redéfinir `--accent-ink`, `--ok-ink`, `--warn-ink` ou `--error-ink` dans le
-  bloc sombre : ces quatre-là sont les invariants.
-- Poser du blanc codé en dur sur un fond d'accent — c'est `--on-accent`.
+- Poser du texte clair codé en dur sur un fond d'accent — c'est `--on-accent`.
 - Reposer `outline: none` sur un élément focusable.
-- Remplacer le fond d'un élément collant par une couleur translucide.
 - Afficher « 0 % » pendant une phase qui ne produit aucune mesure.
 - Poser un `cursor: pointer` sur un élément que rien n'active.
+- Écrire une ombre à décalage + flou dès le premier niveau — c'est l'ancienne
+  mécanique, pas celle de Nocturne.
 
 ## Écarts connus entre le contrat et le code
 
 Documentés parce qu'ils sont réels, pas corrigés ici :
 
+- **Mode clair non implémenté.** `[data-theme="light"]` est un bloc vide dans
+  `tokens.css` — l'architecture est prête, aucune valeur n'est écrite. Le
+  bouton de bascule jour/nuit est masqué en conséquence. Chantier futur
+  distinct, voir `KNOWN_ISSUES.md`.
 - **`metric()` n'apparaît nulle part sur `/`**, et la page n'affiche aucun
-  chiffre en typographie de valeur : mesuré, un seul objet au-dessus de 17px
-  (le `h1`). Décision explicite de l'utilisateur — le verdict vit dans le
-  bandeau, qui est le boîtier et non le papier. La critique le remonte, et
-  c'est assumé.
+  chiffre en typographie de valeur — décision explicite de l'utilisateur,
+  inchangée par ce chantier.
 - **La bande ne porte pas la durée d'un run**, seulement son rang et son
   effort. `finished_at` existe en base et n'est pas exploité.
 - **`sparkline()`** est déclarée dans `_components.html` et jamais appelée.
@@ -538,7 +519,5 @@ Documentés parce qu'ils sont réels, pas corrigés ici :
   yfinance est coupé dans l'environnement de construction.
 - **Aucun lien d'évitement** : la première tabulation atterrit sur la marque et
   le nom du produit, pas sur un « aller au contenu ».
-- **La marque est une interprétation du logo fourni**, redessinée de mémoire et
-  non tracée sur le fichier d'origine (aucun fichier n'a été transmis, seulement
-  une image). Les proportions de l'anneau et le nombre de barres sont des choix,
-  pas une reprise — à valider ou corriger par l'utilisateur.
+- **La marque est une interprétation du logo fourni**, redessinée de mémoire —
+  inchangée par ce chantier, seules ses couleurs suivent Nocturne.

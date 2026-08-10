@@ -76,3 +76,26 @@ Identifié pendant le chantier du cache EGARCH/Kalman/HMM (recherche du
 point d'insertion unique) — non supprimée ici, hors du mandat de ce
 chantier. À traiter dans une passe de nettoyage séparée.
 
+---
+
+## Chantier futur distinct
+
+### 2. Mode clair non implémenté (monde visuel « Nocturne ») — identifié 2026-08-10
+
+`patrick/patrick/webapp/static/tokens.css` porte `:root` (Nocturne, sombre,
+actif) et `[data-theme="light"]` (bloc vide, `/* not yet implemented — see
+KNOWN_ISSUES.md */`) — l'architecture (jetons sémantiques, structure
+`:root` + `[data-theme]`) est prête à recevoir un mode clair sans
+réarchitecturer la feuille de jetons ni les composants qui la consomment
+(`metric()`, `data_table()`, `status_badge()`, `empty_state()`,
+`error_state()`), mais aucune valeur n'y est écrite. En conséquence, le
+bouton de bascule jour/nuit (`#theme-toggle`, `templates/base.html`) est
+masqué et le script de détection de thème (`localStorage`/
+`prefers-color-scheme`, posé avant le premier rendu) a été retiré du
+`<head>` — l'un et l'autre redeviendront nécessaires quand ce bloc sera
+écrit. `observatory.js` garde son code de bascule intact (guardé par
+`if (toggle)`, inerte sans bouton) : aucune modification JS ne sera
+nécessaire pour réactiver la bascule, seul `tokens.css` et le bouton dans
+`base.html` doivent être complétés. Chantier futur distinct, non traité
+dans le remplacement de charte visuelle qui a introduit cette structure.
+
