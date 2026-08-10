@@ -1051,7 +1051,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border-top: 1px solid var(--rule);
     border-radius: 0 0 var(--r-panel) var(--r-panel);
-    box-shadow: 0 -8px 20px -16px rgba(11, 18, 32, 0.30);
+    box-shadow: var(--shadow-raised-up);
 }
 .launch-recap {
     margin: 0;
@@ -1142,7 +1142,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-raised);
+    box-shadow: var(--shadow-overlay);
     padding: var(--s4) var(--s7) var(--s4) var(--s4);
     font-size: var(--t-small);
     color: var(--text);
@@ -1372,15 +1372,15 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     bottom: 125%;
     left: 50%;
     transform: translateX(-50%);
-    background: #1F2937;
-    color: #FFF;
+    background: var(--ink);
+    color: var(--ink-text);
     padding: 8px;
-    border-radius: 4px;
+    border-radius: var(--r-small);
     font-size: 11px;
     width: 200px;
     text-align: left;
     white-space: normal;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-raised);
     z-index: 1000;
     pointer-events: none;
     opacity: 0;
@@ -1394,7 +1394,7 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     left: 50%;
     transform: translateX(-50%);
     border: 4px solid transparent;
-    border-top-color: #1F2937;
+    border-top-color: var(--ink);
     z-index: 1000;
     opacity: 0;
     transition: opacity 0.2s;
@@ -1585,18 +1585,16 @@ nav.breadcrumb a:hover { border-bottom-color: var(--ink-text, #1F2937); }
 nav.breadcrumb span[aria-current="page"] { font-weight: 500; color: var(--ink-text, #1F2937); }
 nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: 0.5rem; }
 
-/* Filter bar styling — Phase 5 layout */
-.filter-bar {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    padding: 1rem;
-    background: var(--bg-secondary, #F9FAFB);
-    border-radius: 8px;
-    flex-wrap: wrap;
-}
+/* Filter bar layout. Le panneau lui-même (fond, bordure, rayon, ombre) est
+   déjà posé plus haut (`.filter-bar { ... box-shadow: var(--shadow-panel);
+   ... }`, section "P7.0 -- composants") ; les deux règles qui vivaient ici
+   redéfinissaient les mêmes propriétés en dur (fond #F9FAFB, rayon 8px,
+   variables jamais définies --bg-secondary/--border-color) et gagnaient la
+   cascade en étant déclarées plus tard dans le fichier -- c'est ce qui
+   rendait le panneau plat malgré la bonne règle existante. Il ne reste ici
+   que ce qui n'est PAS déjà couvert : le layout du `<label>` et la colonne
+   mobile. */
 .filter-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
-.filter-bar select { padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color, #D1D5DB); border-radius: 4px; }
 @media (max-width: 640px) { .filter-bar { flex-direction: column; } }
 
 /* Empty states — Phase 5 hardening */
