@@ -328,6 +328,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--text-2);
 }
 .scope-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.scope-rel { opacity: 0.85; }
 
 /* Contexte de reproductibilité : cible, snapshot, hash de config, git SHA,
    seed. Imprimé SUR le boîtier, avant le premier résultat — sans ces champs
@@ -931,6 +932,11 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-2);
+}
+.dash-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
 }
 
 /* ---------------------------------------------------------------------------
