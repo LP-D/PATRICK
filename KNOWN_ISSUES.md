@@ -59,3 +59,20 @@ premiers runs sur PR #41) : `3 failed, 221 passed, 42 deselected`.
 
 Après correction : suite complète rapide vérifiée verte —
 `224 passed, 42 deselected, 0 failed`.
+
+---
+
+## Code mort identifié (non traité dans ce chantier)
+
+### 1. `patrick/patrick/features/vol_models.py::build_vol_model_features` — identifié 2026-08-09
+
+Fonction combinée (paramétrique + non-paramétrique, ligne ~313) **jamais
+appelée en production** — confirmé par recherche exhaustive des appelants
+(`grep` sur tout `patrick/patrick/`) : seule
+`build_vol_model_features_parametric` (et séparément
+`build_vol_model_features_base`) est utilisée, depuis
+`pipeline/engine.py::build_parametric_pool`/`build_base_feature_pool`.
+Identifié pendant le chantier du cache EGARCH/Kalman/HMM (recherche du
+point d'insertion unique) — non supprimée ici, hors du mandat de ce
+chantier. À traiter dans une passe de nettoyage séparée.
+

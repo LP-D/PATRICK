@@ -24,10 +24,13 @@ on the whole series): used for the final production model
 """
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 
 from patrick.features._utils import safe_pct_change
+from patrick.tracking import db as trackdb
 
 
 def _fit_cutoff_date(series: pd.Series, fit_end_idx: int | None):
@@ -277,6 +280,50 @@ _DEFAULT_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
 
 PARAMETRIC_VOL_MODELS = frozenset(_PARAMETRIC_MODELS)
 
+# The single fixed output column name each parametric model always produces
+# (matches the `name=`/`.rename(...)` used inside each function) -- lets the
+# cache reconstruct a DataFrame identical in shape to a fresh computation
+# without re-deriving the name from the (possibly cached, not recomputed)
+# result itself.
+_MODEL_OUTPUT_COLUMN = {
+    "egarch": "egarch_vol",
+    "kalman": "kalman_filtered",
+    "hmm": "hmm_filtered_stress_prob",
+    "ar": "ar_resid",
+    "ma": "ma_resid",
+    "arma": "arma_resid",
+    "arima": "arima_resid",
+}
+
+
+def _cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, series: pd.Series,
+                              fit_end_idx: int | None, test_end_idx: int | None) -> pd.DataFrame:
+    """Cache for the vol-model computation (migration 0015), inserted at the
+    single dict-invocation funnel (`_PARAMETRIC_MODELS[model](...)`) rather
+    than inside each individual model function -- the only production call
+    site (`build_vol_model_features_parametric`, from
+    `pipeline/engine.py::build_parametric_pool`) goes through here, so one
+    change covers every model uniformly.
+
+    -1 is used as the "not provided" sentinel for `fit_end_idx`/
+    `test_end_idx` (never NULL -- see migration 0015's docstring: SQLite
+    does not dedupe NULLs against each other in a composite PRIMARY KEY).
+    `data_hash` (sha256 of the actual `series` content) is the correctness
+    guarantee -- same role as the SHAP cache's `data_hash`."""
+    fit_key = fit_end_idx if fit_end_idx is not None else -1
+    test_key = test_end_idx if test_end_idx is not None else -1
+    data_hash = hashlib.sha256(np.ascontiguousarray(series.to_numpy(dtype=float)).tobytes()).hexdigest()
+    col_name = _MODEL_OUTPUT_COLUMN[model]
+
+    cached = trackdb.get_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash)
+    if cached is not None:
+        return pd.DataFrame({col_name: cached}, index=series.index)
+
+    result = _PARAMETRIC_MODELS[model](series, fit_end_idx, test_end_idx)
+    values = [None if pd.isna(v) else float(v) for v in result[col_name].to_numpy()]
+    trackdb.save_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash, values)
+    return result
+
 
 def build_vol_model_features_base(series: pd.Series, prefix: str = "px",
                                    models: list[str] | None = None) -> pd.DataFrame:
@@ -295,17 +342,31 @@ def build_vol_model_features_base(series: pd.Series, prefix: str = "px",
 def build_vol_model_features_parametric(series: pd.Series, prefix: str = "px",
                                          models: list[str] | None = None,
                                          fit_end_idx: int | None = None,
-                                         test_end_idx: int | None = None) -> pd.DataFrame:
+                                         test_end_idx: int | None = None,
+                                         conn=None, snapshot_id: str | None = None) -> pd.DataFrame:
     """Parametric subset of `models` (egarch/kalman/hmm/ar/ma/arma/arima by
     default) — to be recomputed per fold via `fit_end_idx` (see module
     docstring): parameters re-estimated only on each fold's train.
     `test_end_idx` (D2 -> N1): end of the current TEST fold, for EGARCH
-    only (see `egarch_conditional_vol` docstring)."""
+    only (see `egarch_conditional_vol` docstring).
+
+    `conn`/`snapshot_id`: when both are given, each model's computation goes
+    through the vol-model cache (`_cached_parametric_model`, migration 0015)
+    instead of always recomputing -- `prefix` doubles as the cache's
+    `ticker` key component (it already is the column-name prefix this
+    series is downloaded/identified under). Optional (default None) so
+    existing callers/tests that never pass a DB connection keep computing
+    directly, unaffected."""
     models = models if models is not None else _DEFAULT_MODELS
     selected = [m for m in models if m in _PARAMETRIC_MODELS]
     if not selected:
         return pd.DataFrame(index=series.index)
-    df = pd.concat([_PARAMETRIC_MODELS[m](series, fit_end_idx, test_end_idx) for m in selected], axis=1)
+    if conn is not None and snapshot_id is not None:
+        parts = [_cached_parametric_model(conn, snapshot_id, prefix, m, series, fit_end_idx, test_end_idx)
+                  for m in selected]
+    else:
+        parts = [_PARAMETRIC_MODELS[m](series, fit_end_idx, test_end_idx) for m in selected]
+    df = pd.concat(parts, axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     return df
 
