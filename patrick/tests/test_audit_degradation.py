@@ -13,7 +13,7 @@ import pytest
 from patrick import audit as audit_module
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
-from tests.conftest import OLD_ENOUGH_START
+from conftest import OLD_ENOUGH_START
 
 N_DAYS = 700
 START = OLD_ENOUGH_START  # relative, not absolute -- see tests/conftest.py

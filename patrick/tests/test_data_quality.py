@@ -16,7 +16,7 @@ from patrick.data import quality
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
-from tests.conftest import OLD_ENOUGH_START as _OLD_ENOUGH_START
+from conftest import OLD_ENOUGH_START as _OLD_ENOUGH_START
 
 
 def _clean_series(n=1000, seed=0, price=100.0) -> pd.Series:
