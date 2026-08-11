@@ -13,7 +13,19 @@ import pytest
 from patrick.features._utils import safe_pct_change
 from patrick.features.spike import build_spike_features
 from patrick.features.technical import build_technical_features
-from patrick.features.vol_models import build_vol_model_features
+from patrick.features.vol_models import build_vol_model_features_base, build_vol_model_features_parametric
+
+
+def _build_vol_model_features(series, prefix="px", models=None):
+    """Test helper standing in for the old combined `build_vol_model_features`
+    (removed, dead code -- audit D4): concatenates the base (non-parametric)
+    and parametric pools exactly as the two real production callers
+    (`pipeline/engine.py::build_base_feature_pool`/`build_parametric_pool`)
+    do, so the zero-crossing/infinity regression below still runs against
+    every default model."""
+    base = build_vol_model_features_base(series, prefix=prefix, models=models)
+    parametric = build_vol_model_features_parametric(series, prefix=prefix, models=models)
+    return pd.concat([base, parametric], axis=1)
 
 
 def _series_crossing_zero(n=400, seed=0) -> pd.Series:
@@ -32,7 +44,7 @@ def test_safe_pct_change_has_no_inf_when_series_touches_zero():
 
 def test_vol_model_features_do_not_crash_on_zero_crossing_series():
     s = _series_crossing_zero()
-    df = build_vol_model_features(s, prefix="test")
+    df = _build_vol_model_features(s, prefix="test")
     assert len(df) == len(s)
     numeric = df.select_dtypes(include=[np.number])
     assert not np.isinf(numeric.to_numpy(dtype=float)).any()
@@ -40,14 +52,14 @@ def test_vol_model_features_do_not_crash_on_zero_crossing_series():
 
 def test_vol_model_features_respects_models_selection():
     s = _series_crossing_zero()
-    df = build_vol_model_features(s, prefix="test", models=["kalman"])
+    df = _build_vol_model_features(s, prefix="test", models=["kalman"])
     assert list(df.columns) == ["test_kalman_filtered"]
 
 
 @pytest.mark.slow  # ~11.4s mesuré (rapport de correction, D1) : 4 modèles ARIMA/ARMA/AR/MA
 def test_vol_model_features_ar_ma_arma_arima_do_not_crash():
     s = _series_crossing_zero()
-    df = build_vol_model_features(s, prefix="test", models=["ar", "ma", "arma", "arima"])
+    df = _build_vol_model_features(s, prefix="test", models=["ar", "ma", "arma", "arima"])
     assert len(df) == len(s)
     assert set(df.columns) == {"test_ar_resid", "test_ma_resid", "test_arma_resid", "test_arima_resid"}
     numeric = df.select_dtypes(include=[np.number])

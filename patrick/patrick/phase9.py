@@ -179,11 +179,6 @@ def p_value_histogram(p_values: Mapping[str, float], bins: int = 10) -> dict:
     }
 
 
-def signal_strength(scores: Mapping[str, float]) -> pd.DataFrame:
-    """Wraps a {signal: score} mapping into a two-column DataFrame."""
-    return pd.DataFrame({"signal": list(scores), "score": [float(v) for v in scores.values()]})
-
-
 def _loss_array(predictions: Sequence[float] | np.ndarray, actual: Sequence[float] | np.ndarray) -> np.ndarray:
     """0/1 loss array (misclassified = 1, correct = 0), same shape required."""
     pred = np.asarray(predictions, dtype=float)
@@ -517,6 +512,26 @@ def risk_parity_weights(returns: pd.DataFrame, *, floor: float = 1e-6) -> pd.Ser
     return weights
 
 
+# Blocs 5-7 du plan PATRICK original en 9 blocs (stratégie, backtest,
+# exécution) -- jamais commencés en pratique, l'univers restant limité à
+# ^VIX (mono-cible). `StrategyRule`/`StrategyVersion`/`StrategyEngine`/
+# `enforce_risk_constraints`/`ExecutionOrder`/`simulate_execution`/
+# `parameter_grid_summary` ne sont appelées nulle part hors de leurs propres
+# tests -- pas un oubli, la plomberie préparée pour cette phase future,
+# en attente d'un univers multi-cibles avant intégration (audit dette
+# technique, D1). Conservées volontairement plutôt que supprimées et
+# réécrites plus tard.
+#
+# `DecisionJournal`/`DecisionJournalEntry`/`take_snapshot` (plus bas dans ce
+# fichier) sont conservées pour la même raison bien qu'elles fassent partie
+# du lot identifié comme redondant avec `tracking/db.py` (D3, même audit) :
+# `StrategyEngine.journal` et `StrategyEngine.snapshot_state` en dépendent
+# structurellement (tout appel de méthode journalise via `self.journal`).
+# Elles ne sont PAS la persistance production (ça, c'est `tracking/db.py`
+# ::save_phase9_journal_entry`/`save_phase9_snapshot`, réellement branchée
+# sur `/api/phase9/journal` et servant `/phase9`) -- seulement l'audit trail
+# interne, en mémoire, du futur moteur de stratégie. `reconstruct_state`,
+# elle, n'avait aucun appelant (ni ici ni ailleurs) et a été supprimée.
 @dataclass(frozen=True)
 class StrategyRule:
     regime: str
@@ -764,11 +779,6 @@ class DecisionJournal:
 def take_snapshot(state: Mapping[str, object], name: str) -> dict:
     """Creates a snapshot of the current state, useful for reproducibility and comparisons."""
     return {"snapshot_name": name, "timestamp": pd.Timestamp.now(tz="UTC").isoformat(), "state": dict(state)}
-
-
-def reconstruct_state(snapshot: Mapping[str, object]) -> dict:
-    """Restores a state from a snapshot, before/during human review."""
-    return dict(snapshot.get("state", {}))
 
 
 def determine_signal_quality_status(p_values: Mapping[str, float], *, alpha: float = 0.10) -> dict:

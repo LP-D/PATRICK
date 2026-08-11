@@ -62,19 +62,72 @@ Après correction : suite complète rapide vérifiée verte —
 
 ---
 
-## Code mort identifié (non traité dans ce chantier)
+## Code mort — traité (audit phase9.py, D1-D4)
 
-### 1. `patrick/patrick/features/vol_models.py::build_vol_model_features` — identifié 2026-08-09
+### 1. `patrick/patrick/features/vol_models.py::build_vol_model_features` — identifié 2026-08-09, supprimé 2026-08-11
 
-Fonction combinée (paramétrique + non-paramétrique, ligne ~313) **jamais
-appelée en production** — confirmé par recherche exhaustive des appelants
-(`grep` sur tout `patrick/patrick/`) : seule
+Fonction combinée (paramétrique + non-paramétrique) **jamais appelée en
+production** — confirmé par recherche exhaustive des appelants : seule
 `build_vol_model_features_parametric` (et séparément
 `build_vol_model_features_base`) est utilisée, depuis
 `pipeline/engine.py::build_parametric_pool`/`build_base_feature_pool`.
-Identifié pendant le chantier du cache EGARCH/Kalman/HMM (recherche du
-point d'insertion unique) — non supprimée ici, hors du mandat de ce
-chantier. À traiter dans une passe de nettoyage séparée.
+Lue en détail (D4) : duplication exacte des deux fonctions séparées
+concaténées, en plus ancien -- sans le cache (`conn`/`snapshot_id`,
+migration 0015) ni l'instrumentation de profilage (P1) ajoutés depuis aux
+deux fonctions séparées. Supprimée, ainsi que `_VOL_MODEL_BUILDERS` (dict
+de fusion qui n'existait que pour l'alimenter). Les 3 tests de
+`tests/test_features_robustness.py` qui l'utilisaient (régression zero-
+crossing/infini, cf. en-tête du fichier) ont été portés sur un helper de
+test local qui appelle les deux fonctions séparées et concatène -- la
+couverture réelle (le bug historique testé) est préservée, seul le point
+d'entrée mort a disparu.
+
+### 2. `patrick/patrick/phase9.py::signal_strength` — identifié et supprimé 2026-08-11
+
+Orpheline totale (même pas exportée dans `__init__.py`, contrairement au
+reste de `phase9.py`). Enveloppe triviale `{signal: score} -> DataFrame`
+à 2 colonnes ; son rôle (poser une colonne `signal` en entrée
+d'`aggregate_signals`) est déjà rempli en production par la sortie
+(bien plus riche : `dm_stat`/`p_value`/`testable`/`significant`...) de
+`signal_dm_summary`, qui alimente réellement `aggregate_signals`.
+Supprimée sans réécriture de test (aucun test n'y faisait référence).
+
+### 3. `patrick/patrick/phase9.py::reconstruct_state` — identifié et supprimé 2026-08-11
+
+Fonction libre, strictement orpheline : aucun appelant, y compris depuis
+`StrategyEngine` (qui n'a jamais utilisé `take_snapshot`/`reconstruct_state`
+comme une paire symétrique malgré les noms). Supprimée.
+
+### 4. `patrick/patrick/phase9.py::DecisionJournal`/`DecisionJournalEntry`/`take_snapshot` — **conservées**, décision révisée 2026-08-11
+
+Identifiées dans l'audit comme redondantes avec la vraie persistance
+(`tracking/db.py::save_phase9_journal_entry`/`save_phase9_snapshot`,
+branchée sur `/api/phase9/journal` et `/phase9`) -- la décision initiale de
+l'audit était de les supprimer avec le reste du "journal en double" (D3).
+Lecture du code avant suppression (règle du projet : jamais deviner) a
+révélé une dépendance structurelle non anticipée : `StrategyEngine`
+(conservée, cf. bloc 5-7 ci-dessous) journalise en interne via
+`self.journal` (une `DecisionJournal`) sur CHAQUE méthode, et
+`StrategyEngine.snapshot_state` appelle directement `take_snapshot`.
+Supprimer ces trois symboles aurait cassé `StrategyEngine`, ce que D1
+(même audit) demande explicitement de ne pas toucher. Rôle clarifié en
+commentaire de module (`phase9.py`, juste avant `StrategyRule`) : ce ne
+sont pas des concurrentes de `tracking/db.py` mais l'audit trail interne,
+en mémoire, du futur moteur de stratégie -- gardées pour cette seule
+raison, pas pour un usage autonome.
+
+---
+
+## Plomberie future volontaire (non retirée)
+
+### `StrategyRule`/`StrategyVersion`/`StrategyEngine`/`enforce_risk_constraints`/`ExecutionOrder`/`simulate_execution`/`parameter_grid_summary` — audit D1, 2026-08-11
+
+Jamais appelées hors de leurs propres tests -- blocs 5-7 du plan PATRICK
+original en 9 blocs (stratégie, backtest, exécution), jamais commencés en
+pratique puisque l'univers reste limité à `^VIX`. Pas du code mort par
+accident : plomberie préparée pour cette phase future, documentée en
+commentaire de module dans `phase9.py` plutôt que supprimée et à
+réécrire plus tard.
 
 ---
 

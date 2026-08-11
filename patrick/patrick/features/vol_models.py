@@ -325,8 +325,6 @@ _NONPARAMETRIC_MODELS = {
     "heston_proxy": lambda s, fit_end_idx, test_end_idx: heston_proxy_features(s),
     "vrp_proxy": lambda s, fit_end_idx, test_end_idx: vrp_proxy(s).to_frame(),
 }
-_VOL_MODEL_BUILDERS = {**_PARAMETRIC_MODELS, **_NONPARAMETRIC_MODELS}
-
 # Original behavior (before per-model selection) — unchanged for any caller
 # that doesn't specify `models`.
 _DEFAULT_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
@@ -425,21 +423,3 @@ def build_vol_model_features_parametric(series: pd.Series, prefix: str = "px",
     return df
 
 
-def build_vol_model_features(series: pd.Series, prefix: str = "px",
-                              models: list[str] | None = None,
-                              fit_end_idx: int | None = None,
-                              test_end_idx: int | None = None) -> pd.DataFrame:
-    """`models`: subset of `_VOL_MODEL_BUILDERS` to compute (default: the 5
-    historical models of the VIX pipeline). An unknown name is ignored rather
-    than crashing the whole run. `fit_end_idx`: estimation cutoff for the
-    parametric models (egarch/kalman/hmm/ar/ma/arma/arima) — see module
-    docstring. `test_end_idx`: end of the test fold, for EGARCH only
-    (D2 -> N1). The Heston/VRP proxies (pure rolling windows) ignore both."""
-    models = models if models is not None else _DEFAULT_MODELS
-    parts = [_VOL_MODEL_BUILDERS[m](series, fit_end_idx, test_end_idx)
-             for m in models if m in _VOL_MODEL_BUILDERS]
-    if not parts:
-        return pd.DataFrame(index=series.index)
-    df = pd.concat(parts, axis=1)
-    df.columns = [f"{prefix}_{c}" for c in df.columns]
-    return df
