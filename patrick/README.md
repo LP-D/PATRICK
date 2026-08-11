@@ -77,14 +77,30 @@ web interface. Auto-spawned by `patrick serve`; run manually for debugging
 or as a standalone service.
 
 ### `patrick serve`
-Launches the web interface (config form, run tracking, leaderboard,
-simulation).
+Launches the web interface.
 
 ```bash
 patrick serve                              # http://127.0.0.1:8000
 patrick serve --host 0.0.0.0 --port 9000
 patrick serve --reload                     # dev, hot reload
 ```
+
+Pages (nav: Synthèse · Lancer · Historique · Univers · Simulateur · Phase 9):
+
+- `/` — synthesis dashboard: coverage, per-target DM/BH quality, latest
+  prediction, winning-model metrics by direction, recent-run history. No page
+  cache, recomputed on every load from the database.
+- `/launch` — the config form (target/horizons/features/validation/models),
+  run tracking, launch queue. Was on `/` before the synthesis dashboard
+  replaced it there.
+- `/runs`, `/runs/{id}` — run history browser and detail page.
+- `/universe` — configured target universe crossed with run history.
+- `/targets/{ticker}` — aggregated run history for one target.
+- `/simulate` — position-sizing/backtest simulator on a trained model.
+- `/phase9` — decision journal + named snapshots only (manual review audit
+  trail persisted in SQLite). Signal quality and regime classification, shown
+  here in an earlier iteration, moved to `/` (regime classification is not
+  wired to any production path — see `KNOWN_ISSUES.md`).
 
 ### `patrick audit degradation`
 Diagnostic tool — measures the real impact of the Phase 0 leakage fixes
