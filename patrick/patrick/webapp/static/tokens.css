@@ -1,53 +1,83 @@
-/* PATRICK — jetons du monde visuel « Nocturne ».
-   Remplace intégralement le monde « Station d'observation » (Archivo +
-   Spline Sans Mono, palette encre/papier bleu-froid, échelle d'élévation à
-   4 niveaux). Extrait d'une maquette de référence (deux directions, 1a dense
-   façon terminal / 1b aérée façon analytics) puis réassigné sur la structure
-   sémantique déjà en place (`--ground`, `--surface`, `--accent`, `--ink`...)
-   plutôt que renommé littéralement -- les composants Jinja
-   (`_components.html` : metric(), data_table(), status_badge(),
-   empty_state(), error_state()) n'ont pas été réécrits, seule cette feuille
-   de jetons change.
+/* PATRICK — jetons du monde visuel « Desk Amber ».
+   Remplace intégralement « Nocturne » (Space Grotesk + JetBrains Mono,
+   palette ambre sur charbon chaud OKLCH, ombres triple couche). Extrait
+   d'une maquette de référence (section `id="1c"` de
+   PATRICK__Directions_visuelles_export.html, direction « développée »)
+   puis réassigné sur la structure sémantique déjà en place (`--ground`,
+   `--surface`, `--accent`, `--ink`...) plutôt que renommé littéralement --
+   les composants Jinja (`_components.html` : metric(), data_table(),
+   status_badge(), empty_state(), error_state()) n'ont pas été réécrits,
+   seule cette feuille de jetons change (à l'exception des 6 règles
+   `.status-badge.status-*` dans style.css, cf. note plus bas).
 
-   MODE SOMBRE SEUL pour cette passe. `:root` porte directement les valeurs
-   Nocturne (actives par défaut, pas une bascule) ; `[data-theme="light"]`
-   est un bloc vide préparé pour un futur chantier -- voir KNOWN_ISSUES.md.
-   Le bouton de bascule jour/nuit est masqué (`base.html`) tant que ce bloc
-   est vide : avec l'ancienne polarité (`:root`=clair, override sombre), la
-   bascule avait un sens ; avec Nocturne comme actif par défaut, un
-   `[data-theme="light"]` vide ne changerait RIEN visuellement -- l'exposer
-   ferait croire à un mode clair qui n'existe pas encore.
+   MODE SOMBRE SEUL pour cette passe -- même posture que Nocturne.
+   `:root` porte directement les valeurs Desk Amber (actives par défaut) ;
+   `[data-theme="light"]` reste le bloc vide préparé pour un futur
+   chantier (KNOWN_ISSUES.md), inchangé par ce remplacement.
 
    Contraste : tout texte tient 4,5:1 sur SON fond réel, tout texte large ou
-   composant d'UI 3:1 -- recalculé indépendamment (luminance relative WCAG,
-   pas la lisibilité supposée de la maquette source) avant construction, pas
-   après. Valeurs mesurées en commentaire ligne par ligne. */
+   composant d'UI 3:1 -- recalculé indépendamment (luminance relative WCAG
+   via OKLab, pas la lisibilité supposée de la maquette source) avant
+   construction. Rapport complet : DESK_AMBER_R1-R5.md (racine du repo).
+   Valeurs mesurées en commentaire ligne par ligne ci-dessous.
+
+   Statuts (--ok/--warn/--error/--pending) : la maquette source utilise un
+   motif fond-teinté-16%+texte-coloré pour ses badges de statut -- vérifié
+   INATTEIGNABLE en AA pour au moins le rouge (chroma 0.19 hors gamut sRGB
+   dès L≈0.72, contraste plafonne à 3,45:1 quel que soit L au-delà,
+   balayage empirique). Remplacé par le motif déjà présent et déjà
+   conforme dans la même maquette pour les badges ON/OFF : fond plein +
+   texte `--on-accent`. Implique une modification des 6 règles
+   `.status-badge.status-*` dans style.css (background: var(--X) au lieu
+   de var(--X-weak) ; color: var(--on-accent) au lieu de var(--X)) --
+   seule dérogation à "seule cette feuille de jetons change", validée
+   explicitement (rapport DESK_AMBER_R1-R5.md, R3/R4). Les jetons `-weak`
+   restent définis : encore utilisés ailleurs (bannières, garde-fous) en
+   simple aplat de fond sous du texte clair standard, un motif différent
+   du badge et non concerné par le problème de gamut ci-dessus. */
 
 /* --- Familles ------------------------------------------------------------
-   Inter seule, une face variable, poids 400-700 -- remplace Archivo (chrome)
-   + Spline Sans Mono (donnée) : la maquette Nocturne n'a qu'une police, la
-   hiérarchie titre/corps se fait par graisse (500 sur les titres) et par
-   taille, pas par changement de famille. La classe `pk-mono` (donnée
-   numérique -- prix, ticker, métrique) reste une famille distincte
-   (`--mono`, monospace système) : Inter n'a pas de chiffres tabulaires
-   fiables au même degré qu'une vraie mono, et l'alignement décimal des
-   tableaux denses (`/runs`, `/universe`) en dépend. --- */
+   Space Grotesk (interface/titres/nav/boutons) + JetBrains Mono (donnée --
+   IDs, tickers, dates, toute colonne numérique), remplace Inter seule.
+   Deux familles au lieu d'une : la maquette Desk Amber distingue chrome et
+   donnée par la police, pas seulement par la graisse -- `--display`/`--ui`
+   pour l'interface, `--mono`/`.pk-mono` pour la donnée (structure déjà en
+   place, seules les familles chargées changent). --- */
 @font-face {
-    font-family: "Inter";
+    font-family: "Space Grotesk";
     font-style: normal;
     font-weight: 400 700;
     font-display: swap;
-    src: url("/static/fonts/inter-latin.woff2") format("woff2");
+    src: url("/static/fonts/spacegrotesk-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
         U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-    font-family: "Inter";
+    font-family: "Space Grotesk";
     font-style: normal;
     font-weight: 400 700;
     font-display: swap;
-    src: url("/static/fonts/inter-latin-ext.woff2") format("woff2");
+    src: url("/static/fonts/spacegrotesk-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/static/fonts/jetbrainsmono-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url("/static/fonts/jetbrainsmono-latin-ext.woff2") format("woff2");
     unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -55,98 +85,110 @@
 :root {
     color-scheme: dark;
 
-    /* --- Matières. Nocturne n'a que deux paliers (fond/surface) ; PATRICK
-       en a trois (boîtier/plan de travail/feuille) pour porter la
-       distinction boîtier-papier du monde précédent, conservée en
-       structure (R2). `--ink` n'existe pas dans la source -- dérivé plus
-       sombre que `--ground`, même famille de teinte (indigo profond), pour
-       rester la matière la plus profonde de la scène comme l'exige la
-       règle déjà en place. Mesuré : luminance --ink 0,0046 < --ground
-       0,0096 -- toujours plus sombre. --- */
-    --ink: #0D0E17;
-    --ink-2: #171A28;      /* second niveau DANS le boîtier (grille de tracé) -- interpolé entre --ink et --ground */
-    --ink-text: #E9E9ED;   /* = --text : 15,9:1 sur --ink, aucune raison de diverger tant qu'un seul thème existe */
-    --ink-text-2: #B2B6CA; /* = neutral-400 : 9,6:1 sur --ink */
+    /* --- Matières. Trois paliers (boîtier/plan de travail/feuille), teinte
+       de base OKLCH constante (hue 60, chroma 0.009-0.02) sur les quatre.
+       --ground/--surface/--raise = valeurs extraites telles quelles
+       (dégradé du panneau boîtier et de ses cartes, réduites à leur stop le
+       plus clair -- le plus défavorable pour le contraste texte dessus).
+       --ink dérivé (absent de la maquette, qui ne montre pas le fond de
+       page derrière le panneau) : plus sombre que --ground, même famille.
+       --ink-2 = le stop sombre du même dégradé que --ground (0,14 vs
+       0,165) -- gratuit, pas une invention séparée. */
+    --ink: #060403;        /* oklch(0.11 0.009 60), dérivé */
+    --ink-2: #0D0805;      /* oklch(0.14 0.011 60), stop sombre du dégradé boîtier de la source */
+    --ink-text: #F0EAE5;   /* = --text : 15,03:1 sur --ink (plus sombre que --ground, donc >= le ratio sur --ground) */
+    --ink-text-2: #A69C95; /* = --text-2 : 7,20:1 sur --ground, encore mieux sur --ink */
 
-    --ground: #161826;     /* --color-bg de la source : le plan de travail */
-    --surface: #232532;    /* --color-surface de la source : le panneau */
-    --raise: #282B3B;      /* creux de champ / ligne survolée -- pas de jeton dédié dans la source,
-                               dérivé du même geste que son survol de ligne de table (mix ~4-6% de --text sur --surface) */
-    --rule: #34384A;       /* filet interne -- mix ~10% de --text sur --surface, plus faible que rule-strong */
-    --rule-strong: #3D4258; /* = --color-divider exact de la source (mix 16% de --text) */
+    --ground: #130D09;     /* oklch(0.165 0.013 60), stop clair du dégradé boîtier -- source */
+    --surface: #1D1610;    /* oklch(0.205 0.016 60), dégradé carte/en-tête -- source */
+    --raise: #1C140F;      /* oklch(0.2 0.016 60), fond de ligne survolée -- source */
+    --rule: rgba(140, 111, 77, 0.4);        /* oklch(0.34 0.024 60 / 0.4), bordure carte OFF -- source */
+    --rule-strong: rgba(148, 118, 82, 0.55); /* oklch(0.36 0.026 60 / 0.55), bordure carte -- source */
 
     /* --- Texte. --- */
-    --text: #E9E9ED;       /* --color-text de la source -- 14,54:1 sur --ground, 12,55:1 sur --surface */
-    --text-2: #A2A2AC;     /* mix 70% de --text (ton "libellé de champ" de la source) -- 7,62:1 / 6,89:1 */
-    --text-3: #8C8C99;     /* mix 60% de --text -- CORRIGÉ depuis la source : elle utilise 50%
-                               (.card-meta) et 55% (.text-muted) par endroits, dont l'un échoue AA
-                               sur --surface (4,26:1, mesuré) ; 60% tient 5,92:1 / 5,49:1 sur les deux fonds */
+    --text: #F0EAE5;       /* oklch(0.94 0.01 60) -- 15,03:1 sur --ground, 15,63:1 sur --surface -- source */
+    --text-2: #A69C95;     /* oklch(0.7 0.015 60) -- 7,20:1 / 6,70:1 -- source */
+    --text-3: #8D847D;     /* oklch(0.62 0.015 60) -- CORRIGÉ depuis la source : elle utilise 0,5 (luminance
+                               trop proche des fonds clairs de cartes -- badge OFF 2,81:1, échoue AA), 0,62
+                               tient 4,64:1 (badge OFF, le pire cas mesuré) à 5,28:1 (--ground) */
 
     /* --- Accent unique, fonctionnel : « ceci est interactif ou actif ». --- */
-    --accent: #9184D9;     /* --color-accent de la source -- 5,45:1 sur --ground, 4,71:1 sur --surface (marge la plus fine du système, à surveiller) */
-    --accent-hover: #A7A1DB; /* --color-accent-2 de la source, déjà utilisée comme second accent */
-    --accent-weak: rgba(145, 132, 217, 0.14);
-    /* Texte posé SUR l'accent plein. Mesuré : blanc échoue (3,23:1, sous AA) --
-       l'accent Nocturne est trop clair pour porter du texte clair, contrairement
-       à l'ancien accent bleu sombre. --ink (5,96:1) tient et reste dans la
-       famille du boîtier plutôt qu'un noir pur arbitraire. */
+    --accent: #D6B529;     /* oklch(0.78 0.15 95) -- 9,65:1 sur --ground, 8,98:1 sur --surface -- source */
+    --accent-hover: #E6C540; /* oklch(0.83 0.15 95), variante survol CTA de la source */
+    --accent-weak: oklch(0.78 0.15 95 / 0.14);
+    /* Texte posé SUR l'accent plein. Mesuré : --ink (9,97:1) tient largement --
+       la source utilise déjà ce même --ink sur les badges ON et le bouton CTA. */
     --on-accent: var(--ink);
 
     /* --- Jeux « sur boîtier », invariants tant qu'un seul thème existe.
-       accent-ink fusionné avec --accent (pas de variante ink séparée dans la
-       source ; structure conservée pour permettre une divergence future si
-       le mode clair en a besoin). ok/warn/error-ink conservés de l'ancien
-       système -- non couverts par la source Nocturne, revérifiés (pas
-       supposés) contre les 3 nouveaux fonds : 6,25:1 à 9,11:1 partout. --- */
-    --accent-ink: #9184D9;
-    --ok-ink: #35C08A;     /* 8,29:1 sur --ink, 7,59:1 sur --ground, 6,55:1 sur --surface */
-    --warn-ink: #E0A94E;   /* 9,11:1 / 8,35:1 / 7,20:1 */
-    --error-ink: #FF8172;  /* 7,91:1 / 7,24:1 / 6,25:1 */
+       accent-ink fusionné avec --accent, ok/warn/error-ink fusionnés avec
+       leurs jetons non-ink respectifs (comme --accent-ink) : aucune
+       variante « ink » distincte n'apparaît dans la source, structure
+       conservée pour permettre une divergence future si le mode clair en
+       a besoin. --- */
+    --accent-ink: #D6B529;
+    --ok-ink: #69BC61;
+    --warn-ink: #F0971A;
+    --error-ink: #FF645F;
 
-    /* --- États sémantiques. ok/warn/error conservés de l'ancien système
-       (non couverts par la source), revérifiés contre les nouveaux fonds --
-       toujours au-dessus de 6,25:1, aucun changement nécessaire.
-       --pending SORTI de la famille accent (violet) vers la rampe neutre :
-       l'ancien --pending (#BE95F7) et le nouvel --accent (#9184D9) sont
-       désormais dans la même famille de teinte -- gardait la confusion
-       interactif/actif vs en-attente que la doctrine du projet interdit
-       explicitement (« l'accent ne porte jamais un jugement »).
-       neutral-500 (#9397ab) choisi plutôt que neutral-600 (#75798c) : ce
-       dernier échoue AA partout (3,52:1 à 4,46:1, mesuré), neutral-500 tient
-       5,25:1 à 6,64:1 -- et c'est déjà l'anneau de --shadow-lg, cohérence
-       gratuite. --- */
-    --ok: #3BC493;         --ok-weak: rgba(59, 196, 147, 0.14);
-    --warn: #E0A94E;       --warn-weak: rgba(224, 169, 78, 0.14);
-    --error: #FF8172;      --error-weak: rgba(255, 129, 114, 0.14);
-    --pending: #9397AB;    --pending-weak: rgba(147, 151, 171, 0.14);
+    /* --- États sémantiques. Aucune valeur trouvée dans la source pour
+       succès/attention/erreur/en-attente (son mock de données utilise
+       done/running/failed en fond-teinté+texte-coloré, motif écarté --
+       voir en-tête de fichier). --ok/--error dérivés directement des
+       hues source (142 vert / 25 rouge, mêmes L/C que la source, qui les
+       utilise ailleurs pour du texte plein sur fond opaque : 7,64:1 /
+       6,17:1 sur --surface). --warn/--pending n'ont aucun équivalent dans
+       la source : dérivés en OKLCH avec la même méthode de construction
+       (L/C cohérents avec le reste du système) plutôt qu'une hue=60
+       littérale (rendrait les statuts indiscernables entre eux et du
+       neutre) pour pending (hue 280, faible chroma, hors famille accent,
+       doctrine déjà en place : « l'accent ne porte jamais un jugement »)
+       comme pour warn -- REVU après implémentation : hue 80 (entre l'accent
+       95 et l'erreur 25) initialement proposée, décalée à hue 67, écart de
+       séparation avec l'accent insuffisant sur les daltonismes protan/
+       deutéranopes (courants sur les teintes ambre/orange) -- 15° de hue
+       entre 80 et l'accent 95, contre 28° entre 67 et 95. Recalculé après
+       coup (pas supposé réglé par le déplacement seul) : ink-on-warn tient
+       8,89:1 (motif badge, contre 8,80:1 avant -- amélioré, pas dégradé),
+       warn sur --surface/--ground 7,80:1 / 8,38:1, aucun clipping de gamut
+       à ce L/C/H. Les quatre statuts vérifiés en texte plein sur
+       --on-accent (motif badge corrigé, R3/R4) : 8,48:1 / 8,89:1 / 6,85:1
+       / 7,42:1. --- */
+    --ok: #69BC61;          --ok-weak: oklch(0.72 0.15 142 / 0.14);
+    --warn: #F0971A;        --warn-weak: oklch(0.75 0.16 67 / 0.14);
+    --error: #FF645F;       --error-weak: oklch(0.70 0.19 25 / 0.14);
+    --pending: #9A9DB1;     --pending-weak: oklch(0.70 0.03 280 / 0.14);
 
-    /* --- Profondeur. Philosophie différente du système à 4 niveaux
-       précédent (panel/raised/overlay/control dérivés d'un même halo) :
-       anneau fin d'abord (1px, opaque, pas de flou), ombre diffuse ensuite,
-       croissante. `--plate-edge` de l'ancien système est absorbé par
-       `--shadow-sm` (même rôle : bord qui affirme la matière sans dépendre
-       d'un écart de luminance). Valeurs Nocturne exactes, non modifiées. --- */
-    --shadow-sm: 0 0 0 1px #3F424D;
-    --shadow-md: 0 0 0 1px #595D6C, 0 6px 18px rgba(0, 0, 0, 0.55);
-    --shadow-lg: 0 0 0 1px #9397AB, 0 16px 40px rgba(0, 0, 0, 0.65);
+    /* --- Profondeur. Philosophie différente du système à anneau fin de
+       Nocturne : triple couche (highlight interne + ombre courte + ombre
+       diffuse), la bordure (--rule/--rule-strong) porte la matière
+       séparément plutôt que dans le box-shadow. Valeurs Desk Amber
+       exactes -- --shadow-sm = l'ombre de carte par défaut de la source
+       (mesurée sur les cartes de réglage ON), --shadow-md = sa variante
+       survol, --shadow-lg = l'ombre à 4 couches du panneau boîtier
+       (niveau le plus élevé de la source). --- */
+    --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 5px rgba(0, 0, 0, 0.4), 0 8px 16px -6px rgba(0, 0, 0, 0.45);
+    --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 3px 7px rgba(0, 0, 0, 0.5), 0 12px 22px -6px rgba(0, 0, 0, 0.55);
+    --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.5), 0 24px 48px -12px rgba(0, 0, 0, 0.7);
     /* Miroir vertical de --shadow-md pour un objet collé au BAS du viewport
-       (barre de lancement) : l'anneau reste identique (une bordure n'a pas de
-       direction), seule la composante diffuse s'inverse pour porter vers le
-       haut, sur le contenu surplombé. Non fourni par la source (qui n'a pas
-       d'équivalent de barre collante) -- dérivé par le même raisonnement
-       qu'utilisé pour --shadow-raised-up dans le système précédent. */
-    --shadow-md-up: 0 0 0 1px #595D6C, 0 -6px 18px rgba(0, 0, 0, 0.55);
+       (barre de lancement) -- même dérivation que sous Nocturne : le
+       highlight interne et l'ombre courte restent identiques, seule la
+       composante diffuse s'inverse pour porter vers le haut. */
+    --shadow-md-up: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 -3px 7px rgba(0, 0, 0, 0.5), 0 -12px 22px -6px rgba(0, 0, 0, 0.55);
 
     /* --- Familles. --- */
-    --display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    --display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto,
                "Helvetica Neue", Arial, sans-serif;
     --ui: var(--display);
-    --heading-weight: 500;
-    --mono: ui-monospace, Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
+    --heading-weight: 600;  /* CORRIGÉ depuis Nocturne (500) : la source utilise 600 sur les titres de
+                                carte/section/nav actif, 700 sur le logo et le CTA (non couvert par ce
+                                jeton unique -- géré au cas par cas dans style.css comme sous Nocturne) */
+    --mono: "JetBrains Mono", ui-monospace, Menlo, "SF Mono", Consolas, "Liberation Mono", monospace;
 
-    /* --- Échelle typographique -- INCHANGÉE : la source Nocturne ne
-       redéfinit pas de tailles numériques, seulement famille + graisse des
-       titres. --- */
+    /* --- Échelle typographique -- INCHANGÉE : la source Desk Amber ne
+       redéfinit pas de tailles numériques génériques (celles observées --
+       10,5 à 15px -- sont propres à sa maquette dense, pas une échelle à
+       importer telle quelle par-dessus l'échelle déjà calibrée du projet). --- */
     --t-micro: 0.75rem;    /* 12px — en-tête de colonne, note, unité */
     --t-small: 0.8125rem;  /* 13px — libellé, métadonnée */
     --t-body: 0.875rem;    /* 14px — donnée courante, cellule de table */
@@ -154,25 +196,27 @@
     --t-value: 1.5rem;     /* 24px — valeur d'un bloc de mesure */
     --t-head: 1.75rem;     /* 28px — titre de page */
 
-    /* --- Espacement. Base 2.8px (source Nocturne : --space-N = N × 2.8px,
-       vérifié sur les 6 valeurs fournies) -- --s5/--s7 manquants dans la
-       source, complétés par la même règle. --- */
+    /* --- Espacement. INCHANGÉ -- non couvert par la source. --- */
     --s1: 2.8px;  --s2: 5.6px;  --s3: 8.4px;  --s4: 11.2px;
     --s5: 14px;   --s6: 16.8px; --s7: 19.6px; --s8: 22.4px;
 
-    /* --- Rayons. --- */
-    --r-small: 4px;         /* = --radius-sm */
-    --r-control: 8px;       /* = --radius-md */
-    --r-panel: 14px;        /* = --radius-lg */
-    --r-chip: 999px;        /* pastille pleinement ronde -- non couvert par la source, forme non concernée par son échelle */
+    /* --- Rayons. Échelle resserrée à 2-4px (mesurée sur la source) au lieu
+       des 4/8/14/999px de Nocturne. --r-panel partage la valeur 3px de
+       --r-control : la source n'a qu'UN panneau à 4px (le résumé de
+       config/CTA élevé), tout le reste (cartes, header, boutons, inputs)
+       est à 3px -- pas de jeton dédié pour cette unique exception plutôt
+       que complexifier l'échelle pour un seul élément. --r-chip PASSE DE
+       999px (pilule) À 2px (carré) -- mesuré sur les badges ON/OFF de la
+       source, confirmé (pas de pilule dans cette direction), voir
+       DESK_AMBER_R1-R5.md. --- */
+    --r-small: 2px;         /* = --radius-sm, mesuré (badges/petits éléments) */
+    --r-control: 3px;       /* = --radius-md, mesuré (cartes/boutons/inputs) */
+    --r-panel: 3px;         /* = --radius-lg, mesuré (même palier que --r-control dans la source) */
+    --r-chip: 2px;          /* mesuré -- carré, pas une pilule (correction vs Nocturne) */
 }
 
-/* Mode clair -- non implémenté dans cette passe (dark uniquement). Bloc
-   présent et vide plutôt qu'absent : l'architecture (:root sombre actif +
-   override clair) est prête à recevoir des valeurs sans réarchitecturer la
-   feuille de jetons ni les composants qui la consomment. Voir
-   KNOWN_ISSUES.md. Le bouton de bascule jour/nuit est masqué tant que ce
-   bloc est vide (base.html). */
+/* Mode clair -- non implémenté (inchangé par ce remplacement de charte).
+   Voir KNOWN_ISSUES.md. */
 [data-theme="light"] {
     /* not yet implemented — see KNOWN_ISSUES.md */
 }

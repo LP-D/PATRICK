@@ -82,7 +82,7 @@ Aucun renommage littéral — seules les valeurs changent, comme pour Nocturne. 
 | success | `oklch(0.72 0.15 142)` | extrait, inchangé |
 | info | `oklch(0.75 0.14 230)` | extrait, inchangé |
 | error | `oklch(0.70 0.19 25)` | extrait, inchangé |
-| **attention** (absent de l'extrait) | `oklch(0.75 0.16 80)` | **dérivé** — hue entre accent (95) et erreur (25), pour rester distincte des deux |
+| **attention** (absent de l'extrait) | ~~`oklch(0.75 0.16 80)`~~ → `oklch(0.75 0.16 67)` | **dérivé, révisé après implémentation (R6)** — hue 80 initiale trop proche de l'accent (95, écart 15°) pour rester nette sur les daltonismes protan/deutéranopes ; décalée à hue 67 (écart 28°). Contraste recalculé sur la nouvelle valeur, motif fond-plein + `--on-accent` : 8,89:1 (amélioré vs 8,80:1 avant) |
 | **pending/attente** (absent de l'extrait) | `oklch(0.70 0.03 280)` | **dérivé** — faible chroma, hors famille accent, même doctrine que `--pending` sous Nocturne (sorti de la teinte active pour ne jamais se confondre avec l'interactif) |
 
 > ⚠️ « Même teinte de base 60 » (consigne initiale) n'a **pas** été lue au sens littéral (hue=60 pour tous les statuts) — ça rendrait succès/attention/erreur indiscernables entre eux et du neutre. Lu comme « même méthode de construction (L/C cohérents avec le reste) », comme le fait l'extrait lui-même (hues distincts 142/230/25). **À confirmer** si ce n'est pas la lecture voulue.

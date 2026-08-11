@@ -1,4 +1,4 @@
-/* PATRICK — monde visuel « Nocturne ». Contrat de direction : en tête de
+/* PATRICK — monde visuel « Desk Amber ». Contrat de direction : en tête de
    `templates/base.html`. Jetons : `tokens.css`.
 
    Quatre règles gouvernent tout ce fichier :
@@ -7,20 +7,23 @@
       en encre (`--ink`) : bandeau, bande d'enregistrement, plaques de tracé.
       L'enregistrement se lit sur papier (`--surface` posé sur `--ground`).
       Une toile est TOUJOURS sur le boîtier.
-   2. UN PANNEAU EST UN OBJET POSÉ, mais autrement qu'avant : anneau fin
-      d'abord (`--shadow-sm`, un simple trait de 1px, pas de flou), ombre
-      diffuse croissante ensuite (`--shadow-md`/`--shadow-lg`) — pas la même
-      mécanique que l'ancien monde (décalage + flou dès le premier niveau).
-   3. LA DONNÉE EST EN CHASSE FIXE (`--mono`, `.pk-mono`), alignée à la
-      décimale ; le chrome (titre, libellé, bouton, navigation) est en Inter
-      (`--display`), poids 500 sur les titres. Une seule famille de base,
-      contrairement à l'ancien monde (Archivo + Spline Sans Mono) — le
-      contraste chrome/donnée vient désormais de la famille mono elle-même,
-      pas d'une seconde face.
+   2. UN PANNEAU EST UN OBJET POSÉ, mais autrement qu'avant : triple couche
+      (`--shadow-sm`/`--shadow-md`/`--shadow-lg` : highlight interne + ombre
+      courte + ombre diffuse), le bord porté séparément par `--rule`/
+      `--rule-strong` — pas l'anneau fin fondu dans l'ombre du monde
+      précédent (Nocturne), ni le décalage + flou dès le premier niveau de
+      celui d'avant.
+   3. LA DONNÉE EST EN CHASSE FIXE (`--mono`, `.pk-mono`, JetBrains Mono),
+      alignée à la décimale ; le chrome (titre, libellé, bouton, navigation)
+      est en Space Grotesk (`--display`), poids 600 sur les titres. Deux
+      familles, contrairement à Nocturne (Inter seule) — le contraste
+      chrome/donnée vient à la fois du changement de famille et de la
+      graisse.
    4. L'ACCENT NE DIT QUE « interactif ou actif ». Il ne porte jamais une
       donnée ni un jugement : les jugements ont leurs propres jetons —
       `--pending` est délibérément hors de la famille de l'accent (rampe
-      neutre, pas une nuance de violet) pour ne jamais se lire comme lui. */
+      neutre à faible chroma, pas une nuance d'ambre) pour ne jamais se lire
+      comme lui. */
 
 * { box-sizing: border-box; }
 
@@ -48,7 +51,9 @@ body {
 
 /* Toute donnée numérique : chasse fixe + chiffres tabulaires. Non négociable,
    c'est ce qui permet l'alignement décimal d'une colonne à l'autre. `pk-mono`
-   (nom de la maquette Nocturne) est l'alias explicite posé dans le balisage
+   (nom hérité de la maquette Nocturne, conservé tel quel par Desk Amber --
+   changer un nom de classe pour suivre chaque monde visuel casserait plus
+   qu'il n'expliquerait) est l'alias explicite posé dans le balisage
    (`metric()`, `data_table()`) pour documenter l'intention au niveau du
    composant -- redondant avec la règle mécanique ci-dessous pour `table`/
    `.metric-value`, mais nécessaire là où une donnée numérique apparaît hors
@@ -512,11 +517,18 @@ h1, h2, h3, h4 { font-family: var(--display); font-weight: var(--heading-weight)
     background: currentColor;
     flex: none;
 }
-.status-badge.status-ok { color: var(--ok); background: var(--ok-weak); }
-.status-badge.status-warning { color: var(--warn); background: var(--warn-weak); }
-.status-badge.status-error { color: var(--error); background: var(--error-weak); }
+/* Desk Amber (R6) : fond plein + `--on-accent`, pas fond teinté + texte
+   coloré -- le motif teinté est structurellement inatteignable en AA pour
+   au moins le rouge (chroma hors gamut sRGB dès L≈0.72, cf. tokens.css et
+   DESK_AMBER_R1-R5.md R3/R4). Motif repris de celui, déjà conforme, des
+   badges ON/OFF de la même maquette source. .status-neutral/.status-disabled
+   inchangés : jamais concernés (texte clair sur --raise, jamais un aplat
+   de la même famille que son propre texte). */
+.status-badge.status-ok { color: var(--on-accent); background: var(--ok); }
+.status-badge.status-warning { color: var(--on-accent); background: var(--warn); }
+.status-badge.status-error { color: var(--on-accent); background: var(--error); }
 .status-badge.status-neutral { color: var(--text-2); background: var(--raise); }
-.status-badge.status-pending { color: var(--pending); background: var(--pending-weak); }
+.status-badge.status-pending { color: var(--on-accent); background: var(--pending); }
 .status-badge.status-disabled { color: var(--text-3); background: var(--raise); }
 
 /* ---------------------------------------------------------------------------
