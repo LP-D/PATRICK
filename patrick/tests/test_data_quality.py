@@ -16,12 +16,7 @@ from patrick.data import quality
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
-
-# Relative, not absolute: `data/ingest.py` requires >= 20 years of history
-# (`min_history = today - 20*365.25 days`). An absolute date drifts under
-# that threshold as real time passes -- 30 years back keeps a decade of
-# margin regardless of when the suite runs.
-_OLD_ENOUGH_START = (pd.Timestamp.today() - pd.Timedelta(days=30 * 365.25)).strftime("%Y-%m-%d")
+from conftest import OLD_ENOUGH_START as _OLD_ENOUGH_START
 
 
 def _clean_series(n=1000, seed=0, price=100.0) -> pd.Series:

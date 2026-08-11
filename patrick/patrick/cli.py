@@ -171,9 +171,9 @@ def serve_cmd(
     port: int = typer.Option(8000, "--port", help="Port d'écoute"),
     reload: bool = typer.Option(False, "--reload", help="Recharge à chaud (dev)"),
 ) -> None:
-    """Launches the web interface (config form + run tracking + leaderboard),
-    replacing manual YAML editing. Requires the `web` extra
-    (`pip install -e ".[web]"`)."""
+    """Launches the web interface (synthesis dashboard on `/`, config form +
+    run tracking + leaderboard on `/launch`), replacing manual YAML editing.
+    Requires the `web` extra (`pip install -e ".[web]"`)."""
     try:
         import uvicorn
     except ImportError:

@@ -23,6 +23,19 @@ fichier / le commit associé sur la PR #41 pour le diff exact.
 Même cause, même correctif que le point 1 (fixture partageant la même
 constante `_OLD_ENOUGH_START`).
 
+### 4. `test_audit_degradation.py::test_audit_degradation_runs_all_four_configurations_and_exports` — résolu 2026-08-11
+
+Même cause, même famille que les points 1-2 (fixture à date absolue,
+`START = "2015-01-01"`) : passée sous le seuil des 20 ans d'historique
+minimum requis par `data/ingest.py`. Pas détectée avant cette session car
+le test est marqué `slow` (exclu de la suite rapide par défaut,
+`pyproject.toml::addopts`) et n'était donc pas visible tant que
+`pytest -m slow` n'avait pas été relancé après que la fixture ait
+franchi le seuil. `_OLD_ENOUGH_START` (point 1) déplacée de
+`test_data_quality.py` vers `tests/conftest.py::OLD_ENOUGH_START`
+(helper partagé plutôt que dupliqué une deuxième fois, cf. règle du
+projet) ; les deux fichiers l'importent désormais.
+
 ### 3. `test_history_webapp_smoke.py::test_universe_page_renders` — résolu 2026-08-08
 
 **Ce n'était pas un problème de date** : investigation menée avant toute
@@ -59,6 +72,47 @@ premiers runs sur PR #41) : `3 failed, 221 passed, 42 deselected`.
 
 Après correction : suite complète rapide vérifiée verte —
 `224 passed, 42 deselected, 0 failed`.
+
+---
+
+## Instable, cause identifiée -- pas corrigé (charge machine, pas un bug)
+
+### `test_webapp_smoke.py` (tests slow lançant un vrai pipeline) — `deadline_s=240` insuffisant sous charge externe, identifié 2026-08-11
+
+`pytest -m slow` complet (session C1-C4) : 2 échecs sur 16 tests slow,
+`test_audit_degradation...` (point 4 ci-dessus, résolu) et
+`test_relaunch_reuses_config_with_fresh_name`
+(`test_webapp_smoke.py`) — timeout dans `_wait_for_status(...,
+deadline_s=240)`.
+
+**Investigation avant correctif** (règle du projet) : `test_relaunch_reuses_
+config_with_fresh_name` passe seul en isolation (29,5s, marge large sur
+240s). Reproduit de façon fiable en relançant les 6 tests slow de
+`test_webapp_smoke.py` ensemble (~5 min) -- mais avec `-x` (arrêt au premier
+échec), c'est le PREMIER test du fichier
+(`test_run_via_web_form_end_to_end`), pas le test du rapport initial, qui
+échoue le premier : `elapsed_s=235.6`, `phase='features'`,
+`progress={'done': 0, 'total': 16}` -- le pipeline réel n'avait même pas
+commencé les essais de modèles après 235s, alors qu'il termine
+normalement en quelques secondes à quelques dizaines de secondes. Au
+moment de cette relance, `uptime` mesurait une charge machine de
+**19,3 sur 4 cœurs** (`nproc`) sans aucun processus pytest concurrent de
+cette session -- charge externe au conteneur, pas une contention entre
+tests de cette suite.
+
+**Conclusion** : pas la même famille que les points 1-2-4 (aucune fixture
+en cause) et pas un bug de code -- le budget de 240s de
+`_wait_for_status` n'a simplement aucune marge quand la machine hôte est
+fortement chargée par autre chose que cette session, et LEQUEL des 6
+tests du fichier échoue en premier dépend du moment exact où la charge
+frappe, pas d'un test spécifique ni d'un ordre d'exécution particulier.
+**Non corrigé délibérément** : augmenter `deadline_s` à une valeur
+arbitraire (600? 900?) serait deviner un correctif sans savoir si la
+marge serait suffisante à la prochaine charge externe -- exactement ce
+que la règle du projet interdit. Nécessite une décision produit (budget
+de timeout acceptable pour la CI/le sandbox, ou marquer ces tests comme
+non fiables sous charge partagée) plutôt qu'un ajustement de constante
+à la volée.
 
 ---
 
