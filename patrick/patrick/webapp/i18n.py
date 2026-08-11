@@ -258,7 +258,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
 
     # Phase 7 — history/universe
-    "nav_home": {"fr": "Poste", "en": "Station"},
+    # P8: "/" became the synthesis dashboard, the launcher moved to
+    # "/launch" -- nav_home now names the SYNTHESIS page (still the site's
+    # "/" landing point, hence reused by every breadcrumb's first link),
+    # nav_launch is the new, separate entry for the launcher.
+    "nav_home": {"fr": "Synthèse", "en": "Overview"},
+    "nav_launch": {"fr": "Lancer", "en": "Launch"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
 

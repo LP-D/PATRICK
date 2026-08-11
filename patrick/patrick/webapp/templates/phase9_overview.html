@@ -1,34 +1,16 @@
 {% extends "base.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% from "_components.html" import data_table %}
 {% block title %}Phase 9 — PATRICK{% endblock %}
+
+{# P8/B6 -- trimmed to what has no other surface in the product: the manual
+   decision journal and named snapshots (real persistence, tracking/db.py).
+   Signal quality / regime classification (hardcoded literals, never real)
+   removed rather than kept duplicated -- the real signal quality now lives
+   on "/" (tracking.history.synthesis_overview). See DASHBOARD_B1-B2.md. #}
 
 {% block content %}
 <h1 class="page-title">Phase 9</h1>
-<p class="page-subtitle">Plateforme de trading et de traçabilité</p>
-
-<section class="card">
-<h2>Qualité des signaux</h2>
-<div class="metric-grid">
-{{ metric("Statut", summary.signal_quality.status, "usable si au moins un signal significatif au seuil alpha=" ~ summary.signal_quality.alpha ~ ", flat sinon.", "neutral") }}
-{{ metric("Signaux", summary.signal_quality.n_values, "Nombre de signaux évalués.", "neutral") }}
-{{ metric("Significatifs", summary.signal_quality.n_selected, "Signaux sous le seuil alpha.", "neutral") }}
-{{ metric("Part sélectionnée", "%.2f" | format(summary.signal_quality.share_selected), "Part des signaux évalués jugés significatifs.", "neutral") }}
-</div>
-</section>
-
-<section class="card">
-<h2>Classification de régime</h2>
-<div class="metric-grid">
-{{ metric("Jours", summary.regime_summary.n_days, "Nombre de jours classés.", "neutral") }}
-</div>
-{% set regime_rows = [
-    ["CALM", summary.regime_summary.counts.CALM],
-    ["NORMAL", summary.regime_summary.counts.NORMAL],
-    ["STRESS", summary.regime_summary.counts.STRESS],
-    ["CRASH", summary.regime_summary.counts.CRASH],
-] %}
-{{ data_table(["Régime", "Jours"], regime_rows, num_cols=[1]) }}
-</section>
+<p class="page-subtitle">Journal de décision et instantanés — le reste de l'ancienne page (qualité des signaux, régime) vit désormais sur <a href="/">{{ t('nav_home') }}</a>, branché aux vraies données.</p>
 
 <section class="card">
 <h2>Journal de décision</h2>

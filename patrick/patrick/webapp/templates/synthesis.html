@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% block title %}PATRICK — {{ t('nav_home') }}{% endblock %}
+
+{# P8 -- synthesis dashboard replacing the old "/". Every number here is
+   read live from the database on each request (no page cache, B4) via
+   `tracking.history.synthesis_overview` -- no hardcoded literal anywhere
+   on this page, unlike the /phase9 card this section 2 replaces. Full
+   precision (exact p-value, cumulative trial count, BH detail) is not
+   duplicated inline: click through to /targets/{ticker} or /runs/{id}
+   (B4). See DASHBOARD_B1-B2.md for the data-sourcing decisions. #}
+
+{% block content %}
+<h1 class="page-title">{{ t('nav_home') }}</h1>
+<p class="page-subtitle">Vue d'ensemble de tout l'historique de runs, recalculée à chaque chargement — aucune valeur mise en cache. <a href="/launch">{{ t('index_title') }} →</a></p>
+
+<section class="card">
+<h2>Couverture</h2>
+<div class="metric-grid">
+{{ metric("Cibles entraînées", overview.coverage.touched ~ " / " ~ overview.coverage.total, (overview.coverage.done ~ " avec un run complètement exécuté") | string, "neutral") }}
+{{ metric("Dernière inférence", overview.coverage.last_inference_at or "—", "Horodatage de la prédiction la plus récente, toutes cibles confondues (table prediction).", "neutral" if overview.coverage.last_inference_at else "pending") }}
+</div>
+</section>
+
+<section class="card">
+<h2>Qualité par cible</h2>
+{% if overview.fdr_n_tested == 0 %}
+{{ empty_state("Aucun résultat Diebold-Mariano en base.", "Nécessite au moins un run complet (walk-forward, hors CPCV) pour produire une p-value testable.") }}
+{% else %}
+{% if overview.fdr_n_tested == 1 %}
+<p class="hint">Correction Benjamini-Hochberg non significative avec un seul signal testé — nécessite plusieurs cibles entraînées pour être interprétable (un seul test n'a rien à corriger).</p>
+{% endif %}
+{% set quality_rows_fmt = [] %}
+{% for r in overview.quality_rows %}
+{% if r.testable %}
+{% set _ = quality_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
+    "%.4f" | format(r.p_value),
+    "%.4f" | format(r.adjusted_p_value),
+    status_badge("Significatif", "ok") if r.significant else status_badge("Non significatif", "neutral"),
+]) %}
+{% else %}
+{% set _ = quality_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
+    '<span class="na">—</span>', '<span class="na">—</span>',
+    status_badge("Non testable", "disabled"),
+]) %}
+{% endif %}
+{% endfor %}
+{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ ". Détail du calcul sur la fiche de chaque cible.") }}
+{% endif %}
+</section>
+
+<section class="card">
+<h2>Dernière prédiction par cible</h2>
+{% set pred_rows = [] %}
+{% for r in overview.prediction_rows if r.prediction %}
+{% set p = r.prediction %}
+{% set _ = pred_rows.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
+    p.horizon ~ "j",
+    p.direction ~ " (" ~ p.amplitude ~ ")",
+    ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
+    '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>',
+    p.split,
+]) %}
+{% endfor %}
+{{ data_table(["Cible", "Horizon", "Direction", "Confiance", "Quand", "Source"], pred_rows, "Aucune prédiction enregistrée pour l'instant — nécessite au moins un run avec un split test/holdout/live.", num_cols=[3]) }}
+</section>
+
+<section class="card">
+<h2>Métriques du modèle gagnant, par direction</h2>
+{% set metric_rows_present = overview.metric_rows | selectattr("metrics") | list %}
+{% if not metric_rows_present %}
+{{ empty_state("Aucune métrique par direction disponible.", "Nécessite au moins un run complet avec des prédictions test/holdout enregistrées.") }}
+{% else %}
+{% set metric_rows_fmt = [] %}
+{% for r in metric_rows_present %}
+{% set m = r.metrics %}
+{% set down = m.by_direction.DOWN %}
+{% set up = m.by_direction.UP %}
+{% set _ = metric_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
+    ("%.4f" | format(m.auc_overall)) if m.auc_overall is not none else '<span class="na">—</span>',
+    (down.n ~ " · P " ~ ("%.2f"|format(down.precision)) ~ " · R " ~ ("%.2f"|format(down.recall)) ~ " · F1 " ~ ("%.2f"|format(down.f1))) if down else ('<span class="na">—</span> (' ~ m.n_down ~ ' obs., min 10)'),
+    (up.n ~ " · P " ~ ("%.2f"|format(up.precision)) ~ " · R " ~ ("%.2f"|format(up.recall)) ~ " · F1 " ~ ("%.2f"|format(up.f1))) if up else ('<span class="na">—</span> (' ~ m.n_up ~ ' obs., min 10)'),
+    '<a href="/runs/' ~ r.metrics.run_id ~ '">' ~ r.metrics.split_used ~ ', n=' ~ r.metrics.n ~ '</a>',
+]) %}
+{% endfor %}
+{{ data_table(["Cible", "AUC (global, non ventilé)", "Baisse — n · précision · rappel · F1", "Hausse — n · précision · rappel · F1", "Source"], metric_rows_fmt) }}
+<p class="hint">AUC non calculable par direction : la probabilité stockée est celle de la classe prédite, pas P(hausse) — pas une valeur de classement valide pour un AUC par direction (seul l'AUC global, calculé correctement à l'entraînement, est affiché).</p>
+{% endif %}
+</section>
+
+<section class="card">
+<h2>Classification de régime</h2>
+{{ empty_state("Classification de régime jamais exécutée en production.", "patrick.phase9.classify_regime_daily existe et est testée, mais n'est appelée par aucun chemin de production — aucune table ne stocke de régime. Voir DASHBOARD_B1-B2.md.") }}
+</section>
+
+<section class="card">
+<h2>{{ t('section_recent') }}</h2>
+{% set recent_rows = [] %}
+{% for r in overview.recent_runs %}
+{% set _ = recent_rows.append([
+    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
+    r.target, r.horizon ~ "j", status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
+    ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>',
+    r.started_at,
+]) %}
+{% endfor %}
+{{ data_table(["Run", "Cible", "Horizon", "Statut", "F1_dir (meilleur essai)", "Lancé"], recent_rows, "Aucun run pour l'instant.", num_cols=[4], footer='<a href="/runs">Historique complet →</a>') }}
+</section>
+{% endblock %}
