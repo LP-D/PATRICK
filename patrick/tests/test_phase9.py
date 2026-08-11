@@ -161,7 +161,7 @@ def test_phase9_tracking_persistence_and_overview_route(tmp_path, monkeypatch):
     client = TestClient(app)
     response = client.get("/phase9")
     assert response.status_code == 200
-    assert "Plateforme de trading" in response.text
+    assert "Journal de décision" in response.text
 
     journal = client.get("/api/phase9/journal").json()
     assert journal["entries"]

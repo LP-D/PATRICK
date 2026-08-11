@@ -16,7 +16,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from patrick.config.schema import RunConfig
-from patrick.phase9 import determine_signal_quality_status, regime_summary
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -129,8 +128,12 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
     )
 
 
-@app.get("/")
-def index(request: Request, load: str | None = None):
+@app.get("/launch")
+def launch_page(request: Request, load: str | None = None):
+    """P8 (synthesis dashboard chantier): moved from `/` to free that route
+    for the new synthesis page. Same handler, same template
+    (`index.html`), only the route changed -- nav/breadcrumb links updated
+    accordingly (see `base.html`, `i18n.py::nav_launch`)."""
     if load:
         try:
             cfg = forms.load_example_config(load)
@@ -140,6 +143,27 @@ def index(request: Request, load: str | None = None):
     else:
         cfg = forms.default_config_dict()
     return _render_index(request, forms.to_view(cfg), [])
+
+
+@app.get("/")
+def synthesis_page(request: Request):
+    """P8 -- synthesis dashboard, replaces the old `/` (now `/launch`).
+    Structure: coverage banner, per-target DM/BH quality, latest prediction
+    per target, winning-model metrics per target (split by direction),
+    condensed recent-run history -- all read live from the database on
+    every request (no page cache), same components/tokens as `/phase9`.
+    Reliability detail (full p-value, cumulative trials, BH detail) is not
+    duplicated inline: it lives on `/targets/{ticker}`/`/runs/{id}`, one
+    click away."""
+    conn = trackdb.connect()
+    try:
+        overview = trackhistory.synthesis_overview(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "synthesis.html",
+        {"overview": overview, **_i18n_context(request)},
+    )
 
 
 @app.get("/api/preview/{symbol}")
@@ -538,27 +562,33 @@ def simulate_page(request: Request, run_id: str | None = None):
 
 @app.get("/phase9")
 def phase9_overview(request: Request):
-    """Phase 9 summary view: signal quality + regime + journal + snapshots."""
+    """P8/B6: trimmed to what is genuinely unique here after the synthesis
+    dashboard (`/`) absorbed signal quality -- the manual decision journal
+    and named snapshots (`tracking/db.py`, real persistence) have no other
+    surface in the product. `signal_quality`/`regime_summary` (hardcoded
+    literals, `phase9.determine_signal_quality_status`/`regime_summary`)
+    removed rather than kept duplicated -- same real data now lives on `/`,
+    the fake numbers here served no one. See DASHBOARD_B1-B2.md."""
     conn = trackdb.connect()
     try:
         entries = trackdb.list_phase9_journal_entries(conn, limit=20)
         snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
     finally:
         conn.close()
-
-    summary = {
-        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
-        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
-    }
     return templates.TemplateResponse(
         request,
         "phase9_overview.html",
-        {"summary": summary, "entries": entries, "snapshots": snapshots, **_i18n_context(request)},
+        {"entries": entries, "snapshots": snapshots, **_i18n_context(request)},
     )
 
 
 @app.get("/api/phase9/summary")
 def api_phase9_summary():
+    """No caller anywhere in the frontend (checked: absent from every
+    `static/*.js`) -- kept only as a thin journal/snapshots mirror of the
+    page above, `signal_quality`/`regime_summary` (same fabricated literals
+    as the page used to carry) dropped rather than kept for a route nothing
+    reads."""
     conn = trackdb.connect()
     try:
         entries = trackdb.list_phase9_journal_entries(conn, limit=20)
@@ -566,8 +596,6 @@ def api_phase9_summary():
     finally:
         conn.close()
     return {
-        "signal_quality": determine_signal_quality_status({"s1": 0.02, "s2": 0.04, "s3": 0.18, "s4": 0.65}, alpha=0.10),
-        "regime_summary": regime_summary(["CALM", "NORMAL", "STRESS", "CRASH", "CALM"]),
         "entries": entries,
         "snapshots": snapshots,
     }

@@ -117,7 +117,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             <span class="station-name">PATRICK</span>
         </a>
         <nav class="station-nav">
-            <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Poste' }}</a>
+            <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Synthèse' }}</a>
+            <a href="/launch" {% if request.url.path == '/launch' %}aria-current="page"{% endif %}>{{ t('nav_launch') if t else 'Lancer' }}</a>
             <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
             <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
             <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
