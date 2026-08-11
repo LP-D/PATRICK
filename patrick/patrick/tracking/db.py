@@ -233,6 +233,34 @@ def save_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, s
         )
 
 
+def get_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: str, model: str,
+                          fit_end_idx: int, test_end_idx: int, data_hash: str) -> list[float | None] | None:
+    """Cache for parametric volatility-model computations (EGARCH/Kalman/HMM/
+    AR/MA/ARMA/ARIMA -- see migration 0015). `fit_end_idx`/`test_end_idx` use
+    -1 as the "not provided" sentinel (see migration 0015's docstring), never
+    NULL -- SQLite does not dedupe NULLs against each other in a composite
+    PRIMARY KEY. No TTL: same reasoning as `get_cached_selection`, a snapshot
+    never changes once created."""
+    row = conn.execute(
+        "SELECT result_json FROM vol_model_cache WHERE snapshot_id = ? AND ticker = ? AND model = ? "
+        "AND fit_end_idx = ? AND test_end_idx = ? AND data_hash = ?",
+        (snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def save_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: str, model: str,
+                           fit_end_idx: int, test_end_idx: int, data_hash: str,
+                           values: list[float | None]) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO vol_model_cache "
+            "(snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash, result_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+            (snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash, json.dumps(values)),
+        )
+
+
 def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"

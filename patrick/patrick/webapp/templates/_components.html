@@ -14,7 +14,7 @@
 {% macro metric(label, value, reliability, state='neutral') %}
 <div class="metric">
   <div class="metric-label">{{ label }}</div>
-  <div class="metric-value status-{{ state }}">{{ value }}</div>
+  <div class="metric-value pk-mono status-{{ state }}">{{ value }}</div>
   <div class="metric-reliability hint">{{ reliability }}</div>
 </div>
 {% endmacro %}
@@ -39,10 +39,10 @@
 {% set nc = num_cols or [] %}
 <div class="table-scroll">
 <table class="data-table">
-<thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
+<thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% for row in rows %}
-<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td{% if loop.index0 in nc %} class="num"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table>

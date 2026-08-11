@@ -1,20 +1,26 @@
-/* PATRICK — monde visuel « Station d'observation ». Contrat de direction : en
-   tête de `templates/base.html`. Jetons : `tokens.css`.
+/* PATRICK — monde visuel « Nocturne ». Contrat de direction : en tête de
+   `templates/base.html`. Jetons : `tokens.css`.
 
    Quatre règles gouvernent tout ce fichier :
 
    1. DEUX MATIÈRES, jamais un dégradé de gris. Le boîtier de l'instrument est
       en encre (`--ink`) : bandeau, bande d'enregistrement, plaques de tracé.
       L'enregistrement se lit sur papier (`--surface` posé sur `--ground`).
-      Une toile est TOUJOURS sur le boîtier, dans les deux thèmes.
-   2. UN PANNEAU EST UN OBJET POSÉ : rayon, ombre à décalage ET flou. Le monde
-      précédent séparait par des filets nus et se lisait comme inachevé ; ici
-      le filet ne sert plus qu'à séparer deux lignes DANS un panneau.
-   3. LA DONNÉE EST EN CHASSE FIXE, alignée à la décimale ; le chrome (titre,
-      libellé, bouton, navigation) est en Archivo. Le contraste des deux
-      familles porte la hiérarchie — ce n'est plus la taille seule.
+      Une toile est TOUJOURS sur le boîtier.
+   2. UN PANNEAU EST UN OBJET POSÉ, mais autrement qu'avant : anneau fin
+      d'abord (`--shadow-sm`, un simple trait de 1px, pas de flou), ombre
+      diffuse croissante ensuite (`--shadow-md`/`--shadow-lg`) — pas la même
+      mécanique que l'ancien monde (décalage + flou dès le premier niveau).
+   3. LA DONNÉE EST EN CHASSE FIXE (`--mono`, `.pk-mono`), alignée à la
+      décimale ; le chrome (titre, libellé, bouton, navigation) est en Inter
+      (`--display`), poids 500 sur les titres. Une seule famille de base,
+      contrairement à l'ancien monde (Archivo + Spline Sans Mono) — le
+      contraste chrome/donnée vient désormais de la famille mono elle-même,
+      pas d'une seconde face.
    4. L'ACCENT NE DIT QUE « interactif ou actif ». Il ne porte jamais une
-      donnée ni un jugement : les jugements ont leurs propres jetons. */
+      donnée ni un jugement : les jugements ont leurs propres jetons —
+      `--pending` est délibérément hors de la famille de l'accent (rampe
+      neutre, pas une nuance de violet) pour ne jamais se lire comme lui. */
 
 * { box-sizing: border-box; }
 
@@ -41,8 +47,13 @@ body {
 }
 
 /* Toute donnée numérique : chasse fixe + chiffres tabulaires. Non négociable,
-   c'est ce qui permet l'alignement décimal d'une colonne à l'autre. */
-table, .num, .mono, code, pre, .metric-value, input, select, textarea {
+   c'est ce qui permet l'alignement décimal d'une colonne à l'autre. `pk-mono`
+   (nom de la maquette Nocturne) est l'alias explicite posé dans le balisage
+   (`metric()`, `data_table()`) pour documenter l'intention au niveau du
+   composant -- redondant avec la règle mécanique ci-dessous pour `table`/
+   `.metric-value`, mais nécessaire là où une donnée numérique apparaît hors
+   de ces deux contextes déjà couverts. */
+table, .num, .mono, .pk-mono, code, pre, .metric-value, input, select, textarea {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1, "zero" 1;
@@ -232,7 +243,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     height: 72px;
     border-radius: var(--r-small);
     background: var(--ink-2);
-    box-shadow: var(--plate-edge);
+    box-shadow: var(--shadow-sm);
     cursor: crosshair;
 }
 /* Sans données, la bande ne feint pas un tracé : elle le dit. */
@@ -262,7 +273,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     border-radius: var(--r-control);
     background: var(--surface);
     color: var(--text);
-    box-shadow: var(--shadow-raised);
+    box-shadow: var(--shadow-md);
     font-family: var(--mono);
     font-size: var(--t-micro);
     line-height: 1.5;
@@ -328,6 +339,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
     color: var(--text-2);
 }
 .scope-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.scope-rel { opacity: 0.85; }
 
 /* Contexte de reproductibilité : cible, snapshot, hash de config, git SHA,
    seed. Imprimé SUR le boîtier, avant le premier résultat — sans ces champs
@@ -356,11 +368,11 @@ a:hover { color: var(--accent-hover); text-decoration: underline; text-underline
 /* ===========================================================================
    Titres. Archivo, resserré. Plus d'air AU-DESSUS d'un titre qu'en dessous.
    =========================================================================== */
-h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; }
+h1, h2, h3, h4 { font-family: var(--display); font-weight: var(--heading-weight); margin: 0; }
 
 .page-title {
     font-size: var(--t-head);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     letter-spacing: -0.02em;
     line-height: 1.15;
     text-wrap: balance;
@@ -390,14 +402,14 @@ h1, h2, h3, h4 { font-family: var(--display); font-weight: 600; margin: 0; }
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--shadow-sm);
     padding: var(--s5) var(--s6) var(--s6);
     margin: 0 0 var(--s5);
 }
 .card > h2, .card-title {
     font-family: var(--display);
     font-size: var(--t-micro);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-2);
@@ -540,17 +552,38 @@ table.data-table thead th, table.leaderboard thead th {
     text-align: left;
     padding: var(--s3) var(--s4);
     background: var(--raise);
-    border-bottom: 1px solid var(--rule-strong);
+    border-bottom: 1px solid transparent; /* réserve la hauteur ; le filet réel est peint par la ligne, voir thead tr ci-dessous */
     white-space: nowrap;
 }
 table.data-table tbody td, table.leaderboard tbody td {
     padding: var(--s3) var(--s4);
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid transparent; /* idem */
     vertical-align: baseline;
 }
-table.data-table tbody tr:last-child td,
-table.leaderboard tbody tr:last-child td { border-bottom: 0; }
-table.data-table tbody tr:hover, table.leaderboard tbody tr:hover { background: var(--raise); }
+/* Détail signature Nocturne : le filet de ligne est peint en dégradé fondu
+   sur 48px à chaque bout plutôt qu'un arrêt net -- porté par la LIGNE
+   (`background`, peint en bas / 1px), pas par chaque cellule, pour que le
+   fondu s'étende sur toute la largeur du tableau et pas sur chaque `<td>`
+   séparément. */
+table.data-table thead tr, table.leaderboard thead tr {
+    background: linear-gradient(to right,
+        transparent, var(--rule-strong) 48px,
+        var(--rule-strong) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+}
+table.data-table tbody tr, table.leaderboard tbody tr {
+    background: linear-gradient(to right,
+        transparent, var(--rule) 48px,
+        var(--rule) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+}
+table.data-table tbody tr:last-child, table.leaderboard tbody tr:last-child { background: none; }
+table.data-table tbody tr:hover, table.leaderboard tbody tr:hover {
+    /* La teinte de survol se superpose au filet de ligne, qui continue à peindre. */
+    background:
+        linear-gradient(var(--raise), var(--raise)) no-repeat 0 0 / 100% 100%,
+        linear-gradient(to right,
+            transparent, var(--rule) 48px,
+            var(--rule) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+}
 /* La ligne retenue se marque en graisse et par le mot « meilleur » dans sa
    dernière colonne — pas par un aplat coloré derrière des chiffres. */
 table.data-table tbody tr.best td,
@@ -636,11 +669,11 @@ button.primary {
     font-weight: 600;
     letter-spacing: 0.02em;
     cursor: pointer;
-    box-shadow: var(--shadow-control);
+    box-shadow: var(--shadow-sm);
     transition: background 140ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
                 box-shadow 140ms ease-out;
 }
-button.primary:hover { background: var(--accent-hover); color: var(--on-accent); transform: translateY(-1px); box-shadow: var(--shadow-panel); }
+button.primary:hover { background: var(--accent-hover); color: var(--on-accent); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 button.primary:active { transform: translateY(0); }
 button.primary:disabled {
     background: var(--raise);
@@ -728,7 +761,7 @@ legend {
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--shadow-sm);
     font-size: var(--t-small);
     color: var(--text-2);
 }
@@ -751,7 +784,7 @@ legend {
     border-color: var(--accent);
     color: var(--accent);
     text-decoration: none;
-    box-shadow: var(--shadow-control);
+    box-shadow: var(--shadow-sm);
 }
 
 /* Index de sections — PAS des onglets : les cibles sont des sections de la
@@ -765,7 +798,7 @@ legend {
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--shadow-sm);
     margin-bottom: var(--s5);
     font-size: var(--t-micro);
     text-transform: uppercase;
@@ -819,7 +852,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .log-tail {
     background: var(--ink);
     border-radius: var(--r-control);
-    box-shadow: var(--plate-edge);
+    box-shadow: var(--shadow-sm);
     padding: var(--s3) var(--s4);
     max-height: 320px;
     overflow-y: auto;
@@ -920,17 +953,22 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--shadow-sm);
     padding: var(--s5);
 }
 .dash-panel-title {
     margin: 0 0 var(--s4);
     font-family: var(--display);
     font-size: var(--t-micro);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-2);
+}
+.dash-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1045,7 +1083,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border-top: 1px solid var(--rule);
     border-radius: 0 0 var(--r-panel) var(--r-panel);
-    box-shadow: 0 -8px 20px -16px rgba(11, 18, 32, 0.30);
+    box-shadow: var(--shadow-md-up);
 }
 .launch-recap {
     margin: 0;
@@ -1100,7 +1138,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .group-title {
     font-family: var(--display);
     font-size: var(--t-small);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-2);
@@ -1136,7 +1174,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-panel);
-    box-shadow: var(--shadow-raised);
+    box-shadow: var(--shadow-lg);
     padding: var(--s4) var(--s7) var(--s4) var(--s4);
     font-size: var(--t-small);
     color: var(--text);
@@ -1198,7 +1236,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     height: 180px;
     border-radius: var(--r-control);
     background: var(--ink);
-    box-shadow: var(--plate-edge);
+    box-shadow: var(--shadow-sm);
 }
 .chart-tooltip {
     position: absolute;
@@ -1206,7 +1244,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--r-control);
-    box-shadow: var(--shadow-raised);
+    box-shadow: var(--shadow-md);
     padding: 4px var(--s3);
     font-family: var(--mono);
     font-size: var(--t-micro);
@@ -1224,7 +1262,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .movers-header h2 {
     font-family: var(--display);
     font-size: var(--t-micro);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-2);
@@ -1277,7 +1315,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
 .sim-title {
     font-family: var(--display);
     font-size: var(--t-head);
-    font-weight: 700;
+    font-weight: var(--heading-weight);
     letter-spacing: -0.02em;
     overflow-wrap: break-word;
     margin: 0 0 var(--s6);
@@ -1290,7 +1328,7 @@ html[data-page-hidden] .progress-fill { animation-play-state: paused; }
     width: 100%;
     border-radius: var(--r-control);
     background: var(--ink);
-    box-shadow: var(--plate-edge);
+    box-shadow: var(--shadow-sm);
     margin-bottom: var(--s3);
 }
 /* Simulateur au repos. Une plaque de tracé vide de 400px de haut est un trou
@@ -1366,15 +1404,15 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     bottom: 125%;
     left: 50%;
     transform: translateX(-50%);
-    background: #1F2937;
-    color: #FFF;
+    background: var(--ink);
+    color: var(--ink-text);
     padding: 8px;
-    border-radius: 4px;
+    border-radius: var(--r-small);
     font-size: 11px;
     width: 200px;
     text-align: left;
     white-space: normal;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
     z-index: 1000;
     pointer-events: none;
     opacity: 0;
@@ -1388,7 +1426,7 @@ body:not([data-sim-loaded]) #sim-trades-table { display: none; }
     left: 50%;
     transform: translateX(-50%);
     border: 4px solid transparent;
-    border-top-color: #1F2937;
+    border-top-color: var(--ink);
     z-index: 1000;
     opacity: 0;
     transition: opacity 0.2s;
@@ -1579,18 +1617,16 @@ nav.breadcrumb a:hover { border-bottom-color: var(--ink-text, #1F2937); }
 nav.breadcrumb span[aria-current="page"] { font-weight: 500; color: var(--ink-text, #1F2937); }
 nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: 0.5rem; }
 
-/* Filter bar styling — Phase 5 layout */
-.filter-bar {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    padding: 1rem;
-    background: var(--bg-secondary, #F9FAFB);
-    border-radius: 8px;
-    flex-wrap: wrap;
-}
+/* Filter bar layout. Le panneau lui-même (fond, bordure, rayon, ombre) est
+   déjà posé plus haut (`.filter-bar { ... box-shadow: var(--shadow-sm);
+   ... }`, section "P7.0 -- composants") ; les deux règles qui vivaient ici
+   redéfinissaient les mêmes propriétés en dur (fond #F9FAFB, rayon 8px,
+   variables jamais définies --bg-secondary/--border-color) et gagnaient la
+   cascade en étant déclarées plus tard dans le fichier -- c'est ce qui
+   rendait le panneau plat malgré la bonne règle existante. Il ne reste ici
+   que ce qui n'est PAS déjà couvert : le layout du `<label>` et la colonne
+   mobile. */
 .filter-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
-.filter-bar select { padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color, #D1D5DB); border-radius: 4px; }
 @media (max-width: 640px) { .filter-bar { flex-direction: column; } }
 
 /* Empty states — Phase 5 hardening */

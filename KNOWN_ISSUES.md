@@ -59,3 +59,43 @@ premiers runs sur PR #41) : `3 failed, 221 passed, 42 deselected`.
 
 Après correction : suite complète rapide vérifiée verte —
 `224 passed, 42 deselected, 0 failed`.
+
+---
+
+## Code mort identifié (non traité dans ce chantier)
+
+### 1. `patrick/patrick/features/vol_models.py::build_vol_model_features` — identifié 2026-08-09
+
+Fonction combinée (paramétrique + non-paramétrique, ligne ~313) **jamais
+appelée en production** — confirmé par recherche exhaustive des appelants
+(`grep` sur tout `patrick/patrick/`) : seule
+`build_vol_model_features_parametric` (et séparément
+`build_vol_model_features_base`) est utilisée, depuis
+`pipeline/engine.py::build_parametric_pool`/`build_base_feature_pool`.
+Identifié pendant le chantier du cache EGARCH/Kalman/HMM (recherche du
+point d'insertion unique) — non supprimée ici, hors du mandat de ce
+chantier. À traiter dans une passe de nettoyage séparée.
+
+---
+
+## Chantier futur distinct
+
+### 2. Mode clair non implémenté (monde visuel « Nocturne ») — identifié 2026-08-10
+
+`patrick/patrick/webapp/static/tokens.css` porte `:root` (Nocturne, sombre,
+actif) et `[data-theme="light"]` (bloc vide, `/* not yet implemented — see
+KNOWN_ISSUES.md */`) — l'architecture (jetons sémantiques, structure
+`:root` + `[data-theme]`) est prête à recevoir un mode clair sans
+réarchitecturer la feuille de jetons ni les composants qui la consomment
+(`metric()`, `data_table()`, `status_badge()`, `empty_state()`,
+`error_state()`), mais aucune valeur n'y est écrite. En conséquence, le
+bouton de bascule jour/nuit (`#theme-toggle`, `templates/base.html`) est
+masqué et le script de détection de thème (`localStorage`/
+`prefers-color-scheme`, posé avant le premier rendu) a été retiré du
+`<head>` — l'un et l'autre redeviendront nécessaires quand ce bloc sera
+écrit. `observatory.js` garde son code de bascule intact (guardé par
+`if (toggle)`, inerte sans bouton) : aucune modification JS ne sera
+nécessaire pour réactiver la bascule, seul `tokens.css` et le bouton dans
+`base.html` doivent être complétés. Chantier futur distinct, non traité
+dans le remplacement de charte visuelle qui a introduit cette structure.
+

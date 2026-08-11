@@ -157,7 +157,8 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
 
 def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
                            fit_end_idx: int | None,
-                           test_end_idx: int | None = None) -> pd.DataFrame:
+                           test_end_idx: int | None = None,
+                           conn=None, snapshot_id: str | None = None) -> pd.DataFrame:
     """Parametric vol_models (EGARCH/Kalman/HMM/AR/MA/ARMA/ARIMA) + particle
     filter (spike) — re-estimated on `raw.iloc[:fit_end_idx]` only (the
     fold's train), applied causally over the whole history with no
@@ -170,7 +171,15 @@ def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
     the fold -- a `variance_bounds` leak channel measured as real but inert
     on realistic data (D2), closed here by construction at zero cost
     (measured free). Ignored by the other parametric models (causal
-    recursions unaffected, see `vol_models._PARAMETRIC_MODELS` docstring)."""
+    recursions unaffected, see `vol_models._PARAMETRIC_MODELS` docstring).
+
+    `conn`/`snapshot_id`: forwarded to `vol_models.build_vol_model_features_parametric`'s
+    cache (migration 0015) when both are given -- this is the single
+    production funnel that repeats identically per fold (walk-forward) or
+    across separate runs of the same snapshot (CPCV, single fit). Does not
+    cover `spike.build_spike_features_parametric` (particle filter) -- out
+    of scope for this workstream (EGARCH/Kalman/HMM only, per the O1-O5
+    scope decision)."""
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
@@ -179,7 +188,8 @@ def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
         if "vol_models" in families:
             parts.append(vol_models.build_vol_model_features_parametric(
                 s, prefix=col, models=config.features.vol_models,
-                fit_end_idx=fit_end_idx, test_end_idx=test_end_idx))
+                fit_end_idx=fit_end_idx, test_end_idx=test_end_idx,
+                conn=conn, snapshot_id=snapshot_id))
         if "spike" in families:
             parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
 
@@ -252,12 +262,15 @@ class _FoldPoolBuilder:
     base+parametric+interactions pool of a fold."""
 
     def __init__(self, raw: pd.DataFrame, config: RunConfig, target_col: str,
-                 base_pool: pd.DataFrame, fold_cuts: list[int]):
+                 base_pool: pd.DataFrame, fold_cuts: list[int],
+                 conn=None, snapshot_id: str | None = None):
         self.raw = raw
         self.config = config
         self.target_col = target_col
         self.base_pool = base_pool
         self.fold_cuts = fold_cuts
+        self.conn = conn
+        self.snapshot_id = snapshot_id
         self._cache: dict[int, pd.DataFrame] = {}
         self.interaction_formulas: list[str] = []
         if "interactions" in config.features.families:
@@ -271,7 +284,8 @@ class _FoldPoolBuilder:
         pos = self.fold_cuts.index(cut_idx)
         test_end_idx = self.fold_cuts[pos + 1] if pos + 1 < len(self.fold_cuts) else None
         param_pool = build_parametric_pool(self.raw, self.config, fit_end_idx=cut_idx,
-                                            test_end_idx=test_end_idx)
+                                            test_end_idx=test_end_idx,
+                                            conn=self.conn, snapshot_id=self.snapshot_id)
         merged = pd.concat([self.base_pool, param_pool], axis=1)
         return merged.loc[:, ~merged.columns.duplicated()]
 
@@ -780,7 +794,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     print(f"[CPCV] N={n_groups} groups, k={k_test} -> {len(combos)} combinations, "
           f"{len(paths)} reconstructed backtest paths.")
 
-    param_pool = build_parametric_pool(raw, config, fit_end_idx=None)
+    param_pool = build_parametric_pool(raw, config, fit_end_idx=None, conn=conn, snapshot_id=snapshot_id)
     full_pool = pd.concat([base_pool, param_pool], axis=1)
     full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
 
@@ -971,7 +985,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                   f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
                   "never seen by selection/tuning.")
 
-        pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts)
+        pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts,
+                                         conn=conn, snapshot_id=snapshot_id)
         feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
         print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(feature_pool)} columns")
         ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
@@ -1211,7 +1226,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             interaction_formulas = cpcv_interaction_formulas
         else:
             full_pool = pd.concat(
-                [base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
+                [base_pool, build_parametric_pool(raw, config, fit_end_idx=None,
+                                                   conn=conn, snapshot_id=snapshot_id)], axis=1)
             full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
             interaction_formulas = pool_builder.interaction_formulas
             if interaction_formulas:
