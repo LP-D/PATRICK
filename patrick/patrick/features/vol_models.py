@@ -25,12 +25,65 @@ on the whole series): used for the final production model
 from __future__ import annotations
 
 import hashlib
+import time
 
 import numpy as np
 import pandas as pd
 
 from patrick.features._utils import safe_pct_change
 from patrick.tracking import db as trackdb
+
+# Opt-in per-model timing (P1, profilage run réel) -- off by default so it
+# changes nothing for production runs (no allocation, no timing overhead on
+# the hot path). Enabled via `enable_profiling()`; accumulates cumulative
+# wall time and call count per model name across whatever calls happen while
+# enabled, regardless of caller (works through the cache funnel too, since
+# it wraps the actual computation, never a cache hit).
+PROFILE_ENABLED = False
+_PROFILE: dict[str, dict[str, float]] = {}
+
+
+def enable_profiling(enabled: bool = True) -> None:
+    global PROFILE_ENABLED
+    PROFILE_ENABLED = enabled
+
+
+def reset_profile() -> None:
+    _PROFILE.clear()
+
+
+def profile_report() -> pd.DataFrame:
+    """One row per model: cumulative_seconds, calls, avg_seconds_per_call,
+    pct_of_total -- empty DataFrame if profiling was never enabled/no calls
+    recorded."""
+    if not _PROFILE:
+        return pd.DataFrame(columns=["model", "cumulative_seconds", "calls",
+                                      "avg_seconds_per_call", "pct_of_total"])
+    total = sum(v["seconds"] for v in _PROFILE.values())
+    rows = []
+    for model, v in _PROFILE.items():
+        rows.append({
+            "model": model,
+            "cumulative_seconds": v["seconds"],
+            "calls": v["calls"],
+            "avg_seconds_per_call": v["seconds"] / v["calls"] if v["calls"] else float("nan"),
+            "pct_of_total": (v["seconds"] / total * 100) if total else float("nan"),
+        })
+    df = pd.DataFrame(rows).sort_values("cumulative_seconds", ascending=False).reset_index(drop=True)
+    return df
+
+
+def _timed_model_call(model: str, fn, *args, **kwargs):
+    if not PROFILE_ENABLED:
+        return fn(*args, **kwargs)
+    t0 = time.perf_counter()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        elapsed = time.perf_counter() - t0
+        slot = _PROFILE.setdefault(model, {"seconds": 0.0, "calls": 0})
+        slot["seconds"] += elapsed
+        slot["calls"] += 1
 
 
 def _fit_cutoff_date(series: pd.Series, fit_end_idx: int | None):
@@ -319,7 +372,7 @@ def _cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, se
     if cached is not None:
         return pd.DataFrame({col_name: cached}, index=series.index)
 
-    result = _PARAMETRIC_MODELS[model](series, fit_end_idx, test_end_idx)
+    result = _timed_model_call(model, _PARAMETRIC_MODELS[model], series, fit_end_idx, test_end_idx)
     values = [None if pd.isna(v) else float(v) for v in result[col_name].to_numpy()]
     trackdb.save_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash, values)
     return result
@@ -365,7 +418,8 @@ def build_vol_model_features_parametric(series: pd.Series, prefix: str = "px",
         parts = [_cached_parametric_model(conn, snapshot_id, prefix, m, series, fit_end_idx, test_end_idx)
                   for m in selected]
     else:
-        parts = [_PARAMETRIC_MODELS[m](series, fit_end_idx, test_end_idx) for m in selected]
+        parts = [_timed_model_call(m, _PARAMETRIC_MODELS[m], series, fit_end_idx, test_end_idx)
+                  for m in selected]
     df = pd.concat(parts, axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     return df
