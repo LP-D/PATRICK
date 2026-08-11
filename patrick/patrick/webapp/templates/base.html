@@ -3,20 +3,23 @@
 <!--
 THESIS: Un chiffre ne s'écrit jamais seul, et la station enregistre même quand
 personne ne regarde. Ce monde refuse à la fois le tableau de bord SaaS
-(cartes identiques, dégradés, sidebar) et le monde « Station d'observation »
-qui le précédait ici : Nocturne rend l'outil comme un instrument de mesure
-professionnel, dense et sombre plutôt que boîtier encre/papier clair.
-OWN-WORLD: Nocturne -- extrait d'une maquette de référence, réassigné sur la
-structure sémantique déjà en place (pas de renommage littéral). Deux matières
-héritées du monde précédent : un boîtier (bandeau, bande d'enregistrement,
-plaques de tracé) plus sombre que le plan de travail, qui reste plus sombre
-que le panneau posé dessus. Inter seule (chrome ET titres, poids 500 sur les
-titres) ; toute donnée numérique en chasse fixe système (`--mono`, `pk-mono`).
-Élévation à anneau fin d'abord, ombre diffuse croissante ensuite (pas décalage
-+ flou dès le premier niveau). Un seul accent (violet) qui ne dit que
-« interactif » -- `--pending` délibérément hors de sa famille de teinte
-(rampe neutre) pour ne jamais se lire comme lui. MODE SOMBRE SEUL pour cette
-passe : `:root` porte Nocturne directement, `[data-theme="light"]` est un
+(cartes identiques, dégradés, sidebar) et les mondes qui l'ont précédé ici :
+Desk Amber rend l'outil comme un instrument de mesure professionnel, dense et
+sombre, avec un caractère plus assertif (ombres marquées, accent chaud) que
+la sobriété violette de Nocturne qui l'a immédiatement précédé.
+OWN-WORLD: Desk Amber -- extrait d'une maquette de référence (section `1c`),
+réassigné sur la structure sémantique déjà en place (pas de renommage
+littéral). Deux matières héritées des mondes précédents : un boîtier
+(bandeau, bande d'enregistrement, plaques de tracé) plus sombre que le plan
+de travail, qui reste plus sombre que le panneau posé dessus. Space Grotesk
+pour le chrome et les titres (poids 600), JetBrains Mono pour toute donnée
+numérique (`--mono`, `pk-mono`) -- deux familles au lieu d'une, contrairement
+à Nocturne. Élévation à triple couche (highlight interne + ombre courte +
+ombre diffuse), le bord porté séparément par `--rule`/`--rule-strong` plutôt
+que fondu dans l'ombre. Un seul accent (ambre) qui ne dit que « interactif »
+-- `--pending` délibérément hors de sa famille de teinte (rampe neutre à
+faible chroma) pour ne jamais se lire comme lui. MODE SOMBRE SEUL pour cette
+passe : `:root` porte Desk Amber directement, `[data-theme="light"]` est un
 bloc vide préparé, pas encore écrit -- voir KNOWN_ISSUES.md.
 STORY: Le visiteur voit d'abord une station qui tourne — la bande dit combien
 de runs, quand, avec quel effort d'essais. Puis il lit chaque mesure avec sa
@@ -24,9 +27,9 @@ contrepartie de fiabilité, et ce qui n'a pas pu être calculé.
 FIRST VIEWPORT: Bandeau d'encre pleine largeur (nom en chasse fixe, navigation,
 langue), puis la bande d'enregistrement des runs avec sa légende chiffrée,
 puis la ligne de provenance, puis les panneaux de travail.
-FORM: Nocturne, remplace intégralement Station d'observation (candidat 6 de
-la liste ordonnée, clé c81bdabf) -- pas une variante, un remplacement
-d'identité demandé.
+FORM: Desk Amber, remplace intégralement Nocturne (section `1c` de
+PATRICK__Directions_visuelles_export.html) -- pas une variante, un
+remplacement d'identité demandé.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 -->
 <head>
@@ -36,22 +39,22 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
        sinon se glisser sous la barre d'état, et la barre de lancement
        collante sous l'indicateur d'accueil. #}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0D0E17">
+    <meta name="theme-color" content="#060403">
     <title>{% block title %}PATRICK{% endblock %}</title>
     {# Icône d'onglet : la MÊME marque que le bandeau (anneau, trois barres
        montantes, point d'accent en tête de la dernière), posée sur le boîtier.
        Deux dessins différents pour un même produit se contrediraient : l'onglet
        et l'en-tête portent la même géométrie, seule l'échelle change. En SVG en
        ligne, donc aucune requête supplémentaire et aucun 404 d'onglet.
-       Couleurs Nocturne : boîtier --ink #0D0E17, texte --ink-text #E9E9ED,
-       point d'accent --accent-ink #9184D9. #}
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230D0E17'/%3E%3Ccircle cx='16' cy='16' r='12.3' fill='none' stroke='%23E9E9ED' stroke-opacity='.6' stroke-width='1.9'/%3E%3Cg stroke='%23E9E9ED' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10.9 20.8v-2.1'/%3E%3Cpath d='M16 20.8v-4.3'/%3E%3Cpath d='M21.1 20.8v-5.9'/%3E%3C/g%3E%3Ccircle cx='21.1' cy='11.7' r='2.5' fill='%239184D9'/%3E%3C/svg%3E">
-    <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+       Couleurs Desk Amber : boîtier --ink #060403, texte --ink-text #F0EAE5,
+       point d'accent --accent-ink #D6B529. #}
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23060403'/%3E%3Ccircle cx='16' cy='16' r='12.3' fill='none' stroke='%23F0EAE5' stroke-opacity='.6' stroke-width='1.9'/%3E%3Cg stroke='%23F0EAE5' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10.9 20.8v-2.1'/%3E%3Cpath d='M16 20.8v-4.3'/%3E%3Cpath d='M21.1 20.8v-5.9'/%3E%3C/g%3E%3Ccircle cx='21.1' cy='11.7' r='2.5' fill='%23D6B529'/%3E%3C/svg%3E">
+    <link rel="preload" href="/static/fonts/spacegrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/static/tokens.css">
     <link rel="stylesheet" href="/static/style.css">
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
     <script>
-        // Pas de détection de thème ici : Nocturne est la seule valeur de
+        // Pas de détection de thème ici : Desk Amber est la seule valeur de
         // `:root` pour cette passe (mode sombre seul), `[data-theme="light"]`
         // est un bloc vide (voir tokens.css, KNOWN_ISSUES.md). Un script de
         // détection AVANT le premier rendu redeviendra nécessaire quand le
@@ -127,7 +130,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             </nav>
             {# Bouton de bascule jour/nuit masqué pour cette passe : avec
                l'ancienne polarité (`:root`=clair, `[data-theme="dark"]`
-               =override), la bascule avait un effet visible. Avec Nocturne
+               =override), la bascule avait un effet visible. Avec Desk Amber
                comme `:root` actif et `[data-theme="light"]` vide (voir
                tokens.css), cliquer ne changerait plus rien -- l'exposer
                ferait croire à un mode clair qui n'existe pas encore.
