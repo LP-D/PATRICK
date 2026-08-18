@@ -5,7 +5,8 @@ walk-forward, DL never beat classical ML, purge has a negligible effect,
 calibration only helps outside STRESS regimes.
 """
 
-DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
+DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "CatBoost"]
+ALL_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
 DEFAULT_SAMPLERS_ALL = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN"]
 DEFAULT_SAMPLER = ["SMOTE"]
 DEFAULT_SELECTION_METHOD = "shap"
