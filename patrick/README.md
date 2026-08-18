@@ -147,7 +147,7 @@ everything to SQLite (`~/.patrick/patrick.db`) and exports Parquet snapshots;
 Measured on a 4-core sandbox machine, synthetic-data ingestion (real
 yfinance/FRED network access unavailable in that environment), single
 horizon, **at the exact grid density of `configs/examples/vix_direction.yaml`**
-(11 `N_features` values × 5 algos including CatBoost × 5 walk-forward folds,
+(11 `N_features` values × 4 algos × 5 walk-forward folds,
 Optuna `top_k=5`/`n_trials=100`/`cv_splits=3` with `MedianPruner` — pruner is
 hardcoded in `tuning/optuna_runner.py`, not a config toggle, and has been
 present since the project's first commit): **~16 minutes per horizon**, i.e.

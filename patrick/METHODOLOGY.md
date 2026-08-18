@@ -171,7 +171,8 @@ Défaut actuel : SMOTE (suréchantillonnage, `sampler.candidates: ["SMOTE"]`).
 `class_weight="balanced"`/`auto_class_weights="Balanced"` est déjà appliqué
 par défaut sur les classifieurs qui le supportent nativement (LightGBM,
 RandomForest, CatBoost — `models/registry.py`), en plus de SMOTE ; XGBoost
-et GradientBoosting n'ont pas d'équivalent sklearn natif. `models/
+et GradientBoosting (disponible en option, retiré du défaut — voir §7.2)
+n'ont pas d'équivalent sklearn natif. `models/
 calibration.py` (calibration isotonique + recherche de seuil causal,
 méthodologie `VIX_CALIBRATED_THRESHOLD`) existait déjà mais n'était branché
 nulle part dans le pipeline. Phase 5.3 :
@@ -205,6 +206,46 @@ calibration.py` (sur le seul projet VIX d'origine, pas 5 cibles) est mitigé
 — gain hors régime STRESS, perte en régime STRESS — pas de victoire nette
 qui justifierait de changer le défaut sans revalidation. **Le défaut reste
 `sampler.candidates: ["SMOTE"]`, `calibration: false`.**
+
+### 7.2 A/B test GradientBoosting (août 2026)
+
+**Contexte.** Le profilage P3 (`scripts/profile_scan_optuna_p3_p4.py`)
+montre que `GradientBoosting` (sklearn) consomme 61% du temps de scan
+(5,298 s/fit vs 0,233 s pour LightGBM, 0,569 s pour XGBoost, 0,371 s
+pour RandomForest, 1,019 s pour CatBoost).
+
+**Protocole AB1.** Interrogation de la base existante
+(`patrick.db.backup-cleanup-20260809`, cible `^VIX`, 1 435 trials, tous
+horizons, 5 folds walk-forward) — pas de run supplémentaire.
+
+**Résultats.**
+
+| Algo               | Trials | Avg F1_dir | Best F1_dir | Win rate |
+|:-------------------|-------:|-----------:|------------:|---------:|
+| LightGBM           |    330 |     0.5765 |      0.7143 |    32.9% |
+| XGBoost            |    330 |     0.5683 |      0.7143 |    27.3% |
+| RandomForest       |    330 |     0.5637 |      0.7143 |    20.6% |
+| GradientBoosting   |    330 |     0.5599 |      0.6667 |     5.2% |
+| CatBoost           |    115 |     0.5534 |      0.6667 |    14.0% |
+
+**Décision : retirer GradientBoosting de la grille par défaut.**
+
+- Win rate 5,2% (4ème sur 5 en F1_dir moyen, jamais au-dessus de 0.6667
+  alors que les 3 premiers atteignent 0.7143).
+- 61% du temps de scan pour 5,2% de victoires.
+- Reste disponible via `models.algos` en YAML ou dans le formulaire web
+  (non supprimé du code, uniquement retiré du défaut).
+
+**Estimation de gain.** Avec les temps P3 mesurés (1 fold × 1 horizon) :
+- GradientBoosting : 58,3 s sur 95,3 s de scan → 61,2%
+- Scan sans GB : 95,3 − 58,3 = 37,0 s (soit 38,8% du temps original)
+- Extrapolation au run complet `^VIX` (6 horizons × 5 folds) :
+  - Temps scan avec 5 algos : ~58 725 s (16h19, mesuré)
+  - Part scan dans le total : ~80% (le reste = ingestion + features +
+    Optuna, dont Optuna ne porte que sur les top_k qui excluent déjà
+    souvent GB)
+  - Gain attendu sur le scan : ~36% → nouveau temps total estimé
+    ~37 600 s (10h27), soit ~6h de gain par run complet
 
 ## 8. Limites connues
 

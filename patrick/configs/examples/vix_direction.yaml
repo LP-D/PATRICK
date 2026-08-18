@@ -72,7 +72,7 @@ sampling:
   uniqueness_weights: true
 
 models:
-  algos: ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
+  algos: ["XGBoost", "LightGBM", "RandomForest", "CatBoost"]
   calibration: false
   stacking: false
 
