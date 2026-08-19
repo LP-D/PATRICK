@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Garde-fou contre la dÃ©synchronisation silencieuse du worktree local --
 # incident du 2026-08-07 (session de consolidation) : le conteneur d'exÃ©cution
 # a redÃ©marrÃ© depuis un instantanÃ© figÃ© antÃ©rieur Ã  plusieurs sessions de
