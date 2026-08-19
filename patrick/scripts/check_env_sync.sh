@@ -69,6 +69,7 @@ fi
 # aucun sous-dossier "patrick" pour reproduire ce piÃƒÂ¨ge.
 PYBIN=$(command -v python || command -v python3)
 IMPORT_PATH="$(cd /tmp && "$PYBIN" -c "import patrick; print(patrick.__file__ or '')" 2>/dev/null)"
+command -v cygpath >/dev/null 2>&1 && IMPORT_PATH="$(cygpath -u "$IMPORT_PATH" 2>/dev/null || echo "$IMPORT_PATH")"
 if [ -z "$IMPORT_PATH" ]; then
     IMPORT_STATUS="FAIL (import patrick ÃƒÂ©choue, ou __file__ vide/None)"
     FAIL=1
