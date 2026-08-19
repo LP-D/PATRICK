@@ -68,7 +68,13 @@ fi
 # ÃƒÆ’Ã‚Â©ditable rÃƒÆ’Ã‚Â©elle -- __file__ vaut alors None SANS lever d'erreur (source du
 # faux-nÃƒÆ’Ã‚Â©gatif rencontrÃƒÆ’Ã‚Â© en session, cf. rapport). /tmp n'a par construction
 # aucun sous-dossier "patrick" pour reproduire ce piÃƒÆ’Ã‚Â¨ge.
-PYBIN=$(command -v python || command -v python3)
+VENV_PY="$REPO_ROOT/patrick/.venv/Scripts/python.exe"
+[ -x "$VENV_PY" ] || VENV_PY="$REPO_ROOT/patrick/.venv/bin/python"
+if [ -x "$VENV_PY" ]; then
+    PYBIN="$VENV_PY"
+else
+    PYBIN=$(command -v python || command -v python3)
+fi
 IMPORT_PATH="$(cd /tmp && "$PYBIN" -c "import patrick; print(patrick.__file__ or '')" 2>/dev/null)"
 command -v cygpath >/dev/null 2>&1 && IMPORT_PATH="$(cygpath -u "$IMPORT_PATH" 2>/dev/null || echo "$IMPORT_PATH")"
 if [ -z "$IMPORT_PATH" ]; then
