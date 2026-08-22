@@ -1,0 +1,380 @@
+/* PATRICK — Design System v2 ("Internal Cockpit")
+   Source of truth: design-system/patrick/MASTER.md
+   Loaded only by base_v2.html — old Desk Amber pages (tokens.css/style.css)
+   are untouched and keep working until migrated page by page. */
+
+:root {
+  /* --- Color palette (MASTER.md, locked pass 3) --- */
+  --color-background: #0F172A;
+  --color-card: #1B2336;
+  --color-primary: #1E293B;
+  --color-secondary: #334155;
+  --color-accent: #22C55E;
+  --color-on-accent: #0F172A;
+  --color-destructive: #EF4444;
+  --color-on-destructive: #000000;
+  --color-foreground: #F8FAFC;
+  --color-muted: #272F42;
+  --color-muted-foreground: #94A3B8;
+  --color-border: #64748B; /* corrected from #475569 — 3.75:1 on background, was 2.36:1 */
+  --color-ring: #FFFFFF;
+
+  /* --- Spacing (MASTER.md) --- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* --- Shadows: dark-theme recalibration (MASTER.md) --- */
+  --shadow-sm: 0 0 0 1px rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 0 0 1px rgba(255,255,255,0.06), 0 6px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 0 0 1px rgba(255,255,255,0.08), 0 14px 32px rgba(0,0,0,0.55);
+  --shadow-xl: 0 0 0 1px rgba(255,255,255,0.10), 0 24px 56px rgba(0,0,0,0.6);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --sidebar-width: 240px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: "Fira Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+a { color: var(--color-foreground); }
+a:hover { color: var(--color-accent); }
+
+code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular", monospace; }
+
+/* ============ App shell: sidebar + content ============ */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--color-primary);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg) var(--space-md);
+  gap: var(--space-xl);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-foreground);
+  text-decoration: none;
+  font-family: "Fira Code", monospace;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+.brand-mark circle.mark-head { fill: var(--color-accent); }
+.brand:hover { color: var(--color-foreground); }
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-nav a {
+  display: block;
+  padding: 9px var(--space-sm);
+  border-radius: 8px;
+  color: var(--color-muted-foreground);
+  text-decoration: none;
+  font-size: 13.5px;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.sidebar-nav a:hover { background: var(--color-muted); color: var(--color-foreground); }
+.sidebar-nav a[aria-current="page"] {
+  background: var(--color-muted);
+  color: var(--color-foreground);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  gap: var(--space-sm);
+  font-size: 12px;
+}
+.sidebar-lang a {
+  color: var(--color-muted-foreground);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.sidebar-lang a.active { color: var(--color-foreground); background: var(--color-muted); }
+.sidebar-lang a:hover { color: var(--color-foreground); }
+
+.main-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-xl) var(--space-2xl);
+  max-width: 1280px;
+}
+
+/* ============ Page header ============ */
+
+.page-title {
+  font-family: "Fira Code", monospace;
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin: 0 0 var(--space-xs);
+  color: var(--color-foreground);
+}
+.page-subtitle {
+  color: var(--color-muted-foreground);
+  margin: 0 0 var(--space-xl);
+  line-height: 1.6;
+}
+.page-subtitle a { color: var(--color-accent); text-decoration: none; }
+.page-subtitle a:hover { text-decoration: underline; }
+
+/* ============ KPI grid (top row — Pattern: Internal Cockpit) ============ */
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+/* Stagger via nth-child rather than a macro param: _components.html is
+   shared with pages not yet migrated to v2, kept untouched on purpose. */
+.metric-grid > .metric:nth-child(1) { --enter-delay: 0ms; }
+.metric-grid > .metric:nth-child(2) { --enter-delay: 40ms; }
+.metric-grid > .metric:nth-child(3) { --enter-delay: 80ms; }
+.metric-grid > .metric:nth-child(4) { --enter-delay: 120ms; }
+
+.metric {
+  --enter-delay: 0ms;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: var(--space-md);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 180ms var(--ease-out), border-color 180ms var(--ease-out), transform 180ms var(--ease-out);
+
+  opacity: 0;
+  animation: kpi-enter 420ms var(--ease-out) var(--enter-delay) both;
+}
+.metric:hover { box-shadow: var(--shadow-lg); border-color: var(--color-muted-foreground); transform: translateY(-2px); }
+
+.metric-label {
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  margin-bottom: var(--space-sm);
+}
+.metric-value {
+  font-family: "Fira Code", monospace;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.metric-value.status-pending, .metric-value.status-disabled { color: var(--color-muted-foreground); }
+.metric-value.status-ok { color: var(--color-accent); }
+.metric-value.status-error { color: var(--color-destructive); }
+.metric-reliability {
+  margin-top: var(--space-sm);
+  font-size: 12px;
+}
+
+@keyframes kpi-enter {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0px); }
+}
+
+/* ============ Content section cards (dense zones) ============ */
+
+.card {
+  --enter-delay: 0ms;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-md);
+
+  opacity: 0;
+  animation: card-enter 380ms var(--ease-out) var(--enter-delay) both;
+}
+/* No hover-lift here on purpose: these are static content panels, not
+   clickable tiles — a hover transform would be decorative motion with no
+   purpose (creation-gotchas.md, "don't animate just because you can"). */
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(6px); filter: blur(3px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0px); }
+}
+
+.card h2 {
+  font-family: "Fira Code", monospace;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  margin: 0 0 var(--space-md);
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--color-muted-foreground);
+  font-size: 13px;
+  margin: var(--space-sm) 0 0;
+}
+
+.na { color: var(--color-muted-foreground); }
+
+/* ============ Tables ============ */
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.data-table th {
+  text-align: left;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted-foreground);
+  background: var(--color-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-muted);
+  transition: background-color 120ms var(--ease-out);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--color-muted); }
+.data-table td.num, .data-table th.num { text-align: right; }
+.data-table a { color: var(--color-foreground); text-decoration: none; border-bottom: 1px dotted var(--color-muted-foreground); }
+.data-table a:hover { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+
+.table-footer {
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  margin: var(--space-sm) 0 0;
+}
+.table-footer a { color: var(--color-accent); text-decoration: none; }
+.table-footer a:hover { text-decoration: underline; }
+
+/* ============ Status badges ============ */
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: "Fira Code", monospace;
+}
+.status-badge.status-ok { background: color-mix(in srgb, var(--color-accent) 18%, transparent); color: var(--color-accent); }
+.status-badge.status-error { background: color-mix(in srgb, var(--color-destructive) 18%, transparent); color: var(--color-destructive); }
+.status-badge.status-pending { background: var(--color-muted); color: var(--color-muted-foreground); }
+.status-badge.status-disabled { background: var(--color-muted); color: var(--color-muted-foreground); opacity: 0.7; }
+.status-badge.status-neutral { background: var(--color-secondary); color: var(--color-foreground); }
+
+/* ============ Empty / error states ============ */
+
+.empty-state, .error-state {
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-lg);
+  text-align: left;
+}
+.empty-state-message { margin: 0; color: var(--color-muted-foreground); font-weight: 500; }
+.error-state-message { margin: 0; color: var(--color-destructive); font-weight: 500; }
+.empty-state .hint, .error-state .hint { margin-top: var(--space-xs); }
+
+/* ============ Loading skeleton (utility — see report: not triggered by any
+   async content on this page, kept ready for /launch and /simulate which
+   have client-fetched data) ============ */
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background-image: linear-gradient(90deg, var(--color-muted) 0%, var(--color-secondary) 50%, var(--color-muted) 100%);
+  background-size: 200% 100%;
+  animation: skel-sweep 1.8s linear infinite;
+}
+@keyframes skel-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============ Accessibility: prefers-reduced-motion ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  .metric, .card {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+  .metric, .data-table td, .sidebar-nav a, a {
+    transition-duration: 0.01ms !important;
+  }
+  .skeleton-line {
+    animation: none !important;
+    background-image: none !important;
+  }
+}
+
+/* ============ Responsive ============ */
+
+@media (max-width: 1023px) {
+  .app-shell { flex-direction: column; }
+  .sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .sidebar-nav { flex-direction: row; }
+  .sidebar-footer { margin-top: 0; margin-left: auto; }
+  .main-content { padding: var(--space-lg) var(--space-md); }
+}
+
+@media (max-width: 480px) {
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .page-title { font-size: 1.25rem; }
+}
