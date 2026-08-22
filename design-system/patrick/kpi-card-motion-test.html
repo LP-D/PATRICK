@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>PATRICK — KPI card motion test</title>
+<style>
+  :root {
+    --color-background: #0F172A;
+    --color-card: #1B2336;
+    --color-primary: #1E293B;
+    --color-secondary: #334155;
+    --color-accent: #22C55E;
+    --color-on-accent: #0F172A;
+    --color-destructive: #EF4444;
+    --color-foreground: #F8FAFC;
+    --color-muted: #272F42;
+    --color-muted-foreground: #94A3B8;
+    --color-border: #64748B;
+    --color-ring: #FFFFFF;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Dark-theme shadows: light ring (edge definition) + soft black blur (ambient depth) */
+    --shadow-sm: 0 0 0 1px rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md: 0 0 0 1px rgba(255,255,255,0.06), 0 6px 16px rgba(0,0,0,0.5);
+    --shadow-lg: 0 0 0 1px rgba(255,255,255,0.08), 0 14px 32px rgba(0,0,0,0.55);
+    --shadow-xl: 0 0 0 1px rgba(255,255,255,0.10), 0 24px 56px rgba(0,0,0,0.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: "Fira Sans", ui-sans-serif, system-ui, sans-serif;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    align-items: flex-start;
+  }
+
+  h1 {
+    font-family: "Fira Code", ui-monospace, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--color-muted-foreground);
+    text-transform: uppercase;
+    margin: 0;
+  }
+
+  .row { display: flex; gap: 20px; flex-wrap: wrap; }
+
+  /* ---------- KPI Card ---------- */
+  .kpi-card {
+    --enter-delay: 0ms;
+    width: 220px;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: box-shadow 180ms var(--ease-out), border-color 180ms var(--ease-out), transform 180ms var(--ease-out);
+    box-shadow: var(--shadow-sm);
+
+    /* Enter animation: opacity + translateY + blur (Jakub recipe, cookbook §1) */
+    opacity: 0;
+    animation: kpi-enter 420ms var(--ease-out) var(--enter-delay) both;
+  }
+
+  .kpi-card:hover {
+    border-color: var(--color-muted-foreground);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
+
+  .kpi-card:active {
+    transform: scale(0.98) translateY(-2px);
+  }
+
+  @keyframes kpi-enter {
+    from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+    to   { opacity: 1; transform: translateY(0);    filter: blur(0px); }
+  }
+
+  .kpi-label {
+    font-family: "Fira Code", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--color-muted-foreground);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 8px;
+  }
+
+  .kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .kpi-value {
+    font-family: "Fira Code", ui-monospace, monospace;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: 0 -4px;
+    /* Value-update flash: background only, no re-entrance, no loop */
+    transition: background-color 200ms var(--ease-out);
+  }
+
+  .kpi-value.flash-up   { background-color: color-mix(in srgb, var(--color-accent) 25%, transparent); }
+  .kpi-value.flash-down { background-color: color-mix(in srgb, var(--color-destructive) 25%, transparent); }
+
+  .kpi-delta {
+    font-family: "Fira Code", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .kpi-delta.up   { color: var(--color-accent); }
+  .kpi-delta.down { color: var(--color-destructive); }
+
+  .kpi-sub {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--color-muted-foreground);
+  }
+
+  /* ---------- Skeleton / loading state (Jhey, selective — empty state only) ---------- */
+  .kpi-card.is-loading .kpi-skel {
+    display: block;
+  }
+  .kpi-card.is-loading .kpi-loaded {
+    display: none;
+  }
+  .kpi-card:not(.is-loading) .kpi-skel {
+    display: none;
+  }
+
+  .kpi-skel-line {
+    height: 10px;
+    border-radius: 4px;
+    background: var(--color-muted);
+    background-image: linear-gradient(
+      90deg,
+      var(--color-muted) 0%,
+      var(--color-secondary) 50%,
+      var(--color-muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: skel-sweep 1.8s linear infinite;
+  }
+  .kpi-skel-line.label { width: 60%; margin-bottom: 12px; }
+  .kpi-skel-line.value { width: 45%; height: 24px; margin-bottom: 10px; }
+  .kpi-skel-line.sub   { width: 35%; }
+
+  @keyframes skel-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  button.control {
+    font-family: "Fira Sans", sans-serif;
+    font-size: 13px;
+    background: var(--color-secondary);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background-color 150ms var(--ease-out), transform 150ms var(--ease-out);
+  }
+  button.control:hover { background: var(--color-muted); }
+  button.control:active { transform: scale(0.97); }
+
+  /* ---------- Accessibility: prefers-reduced-motion ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-card {
+      animation: none !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+    .kpi-card, .kpi-value, button.control {
+      transition-duration: 0.01ms !important;
+    }
+    .kpi-skel-line {
+      animation: none !important;
+      background-image: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <div>
+    <h1>1. Loaded state — entrance animation on mount</h1>
+    <div class="row">
+      <div class="kpi-card" style="--enter-delay:0ms">
+        <div class="kpi-loaded">
+          <p class="kpi-label">Sharpe Ratio (OOS)</p>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="v1">1.84</span>
+            <span class="kpi-delta up">▲ 0.06</span>
+          </div>
+          <p class="kpi-sub">vs. 1.78 fenêtre précédente</p>
+        </div>
+      </div>
+      <div class="kpi-card" style="--enter-delay:60ms">
+        <div class="kpi-loaded">
+          <p class="kpi-label">Max Drawdown</p>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="v2">-12.4%</span>
+            <span class="kpi-delta down">▼ 0.9pt</span>
+          </div>
+          <p class="kpi-sub">vs. -11.5% fenêtre précédente</p>
+        </div>
+      </div>
+      <div class="kpi-card" style="--enter-delay:120ms">
+        <div class="kpi-loaded">
+          <p class="kpi-label">CPCV p-value</p>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="v3">0.031</span>
+          </div>
+          <p class="kpi-sub">significatif à 5%</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h1>2. Loading state (skeleton — no re-entrance on data refresh)</h1>
+    <div class="row">
+      <div class="kpi-card is-loading">
+        <div class="kpi-skel">
+          <div class="kpi-skel-line label"></div>
+          <div class="kpi-skel-line value"></div>
+          <div class="kpi-skel-line sub"></div>
+        </div>
+        <div class="kpi-loaded">
+          <p class="kpi-label">Sharpe Ratio (OOS)</p>
+          <div class="kpi-value-row"><span class="kpi-value">1.84</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h1>3. Live update test — value changes flash, card does not re-enter</h1>
+    <button class="control" id="simulate">Simuler un rafraîchissement de données</button>
+  </div>
+
+<script>
+  // Frequency-gate demonstration: periodic/manual data updates must NOT
+  // replay the mount entrance animation. Only a brief, non-looping
+  // background flash on the changed value — under 200ms, transform/opacity/
+  // background-color only, no layout properties.
+  document.getElementById('simulate').addEventListener('click', () => {
+    const el = document.getElementById('v1');
+    const current = parseFloat(el.textContent);
+    const next = (current + (Math.random() > 0.5 ? 0.03 : -0.03)).toFixed(2);
+    const up = parseFloat(next) >= current;
+    el.textContent = next;
+    el.classList.remove('flash-up', 'flash-down');
+    void el.offsetWidth; // restart transition
+    el.classList.add(up ? 'flash-up' : 'flash-down');
+    setTimeout(() => el.classList.remove('flash-up', 'flash-down'), 600);
+  });
+</script>
+
+</body>
+</html>
