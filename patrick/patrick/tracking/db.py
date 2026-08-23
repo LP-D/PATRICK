@@ -15,6 +15,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
@@ -445,6 +446,28 @@ def finish_run(conn: sqlite3.Connection, run_id: str, status: str,
             "UPDATE run SET status = ?, finished_at = datetime('now'), n_trials = ?, "
             "error = ? WHERE run_id = ?",
             (status, n_trials, error, run_id),
+        )
+
+
+def record_phase_timing(conn: sqlite3.Connection, run_id: str, phase: str,
+                         started_at: float, finished_at: float) -> None:
+    """Phase-timing instrumentation (migration 0016). `started_at`/
+    `finished_at` are `time.time()` epoch floats -- the same clock
+    `pipeline/engine.py` already uses for its own `t0`/duration prints --
+    converted here to the UTC 'YYYY-MM-DD HH:MM:SS' string format
+    `datetime('now')` produces elsewhere in this schema, so this table's
+    timestamps stay directly comparable to `run.started_at`/`finished_at`.
+
+    One row per phase OCCURRENCE, not one row per (run_id, phase): see the
+    migration's header for why (ingestion/pool_construction happen once
+    per pipeline invocation and get recorded once per horizon's run_id;
+    tuning can occur more than once per run_id, once per top-config)."""
+    started_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(started_at))
+    finished_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(finished_at))
+    with conn:
+        conn.execute(
+            "INSERT INTO run_phase_timing (run_id, phase, started_at, finished_at) VALUES (?, ?, ?, ?)",
+            (run_id, phase, started_str, finished_str),
         )
 
 

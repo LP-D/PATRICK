@@ -229,6 +229,55 @@ def test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1(tmp_path):
     conn.close()
 
 
+def test_phase_breakdown_for_run_empty_when_no_timing_recorded(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    breakdown = trackhistory.phase_breakdown_for_run(conn, "run1")
+    assert breakdown["phases"] == []
+    conn.close()
+
+
+def test_phase_breakdown_for_run_sums_duration_and_counts_occurrences_per_phase(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+
+    db.record_phase_timing(conn, "run1", "ingestion", started_at=0.0, finished_at=10.0)
+    db.record_phase_timing(conn, "run1", "pool_construction", started_at=10.0, finished_at=25.0)
+    db.record_phase_timing(conn, "run1", "scan", started_at=25.0, finished_at=85.0)
+    # tuning happens twice (two top-configs) -- must be summed, not overwritten
+    db.record_phase_timing(conn, "run1", "tuning", started_at=85.0, finished_at=115.0)
+    db.record_phase_timing(conn, "run1", "tuning", started_at=115.0, finished_at=135.0)
+
+    breakdown = trackhistory.phase_breakdown_for_run(conn, "run1")
+    by_phase = {p["phase"]: p for p in breakdown["phases"]}
+
+    assert by_phase["ingestion"]["duration_s"] == 10
+    assert by_phase["pool_construction"]["duration_s"] == 15
+    assert by_phase["scan"]["duration_s"] == 60
+    assert by_phase["tuning"]["duration_s"] == 50  # 30 + 20, summed across 2 occurrences
+    assert by_phase["tuning"]["occurrences"] == 2
+    assert by_phase["ingestion"]["occurrences"] == 1
+
+    # Ordered by duration descending -- the point of a breakdown is to see
+    # the dominant phase first without re-sorting client-side.
+    assert [p["phase"] for p in breakdown["phases"]] == ["scan", "tuning", "pool_construction", "ingestion"]
+    conn.close()
+
+
+def test_phase_breakdown_for_run_reports_unaccounted_time_against_run_total(tmp_path):
+    """The 4 instrumented phases don't necessarily cover 100% of a run's
+    wall time (model export, holdout diagnostic, etc. aren't instrumented)
+    -- phase_breakdown_for_run must say so rather than imply full coverage."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    db.record_phase_timing(conn, "run1", "scan", started_at=0.0, finished_at=60.0)
+
+    breakdown = trackhistory.phase_breakdown_for_run(conn, "run1")
+    assert breakdown["run_total_s"] is not None
+    assert breakdown["unaccounted_s"] == breakdown["run_total_s"] - 60
+    conn.close()
+
+
 def test_universe_overview_marks_known_symbol_with_history(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     _make_run(conn, "run1", "^VIX", 5, status="done")
