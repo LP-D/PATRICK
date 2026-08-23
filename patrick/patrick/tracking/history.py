@@ -398,6 +398,70 @@ def latest_prediction_for_target(conn: sqlite3.Connection, target: str) -> dict 
     }
 
 
+def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -> dict[str, dict]:
+    """P8.1 perf fix -- grouped equivalent of calling
+    `latest_prediction_for_target()` once per target: same rule (prefer
+    `split='live'`, else most recent `test`/`holdout` row), same per-target
+    dict shape, but ONE query for the whole target list instead of one
+    round trip each. `synthesis_overview()` was doing the latter -- fine on
+    a small dev DB, but O(n_targets) round trips against the real ~2.2 GB /
+    12M-row-`prediction` database made `/` hang (regression test:
+    `test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1` in
+    `tests/test_history.py`).
+
+    A first version used `ROW_NUMBER() OVER (PARTITION BY run.target ORDER
+    BY ...)` -- correct, and cheap on the test-scale DB, but MEASURABLY
+    WORSE on the real one: ranking must sort every matching prediction row
+    across every requested target before it can discard everything but
+    rn=1, so it forces a full sort over a large slice of a 12M-row table
+    instead of the cheap `ORDER BY ... LIMIT 1` per-target short-circuit
+    the old per-target version got from `idx_run_target`. Below instead
+    uses a correlated subquery per target (still ONE round trip: SQLite
+    evaluates it as part of a single prepared statement) so each target
+    keeps its own indexed `ORDER BY ... LIMIT 1` plan -- measured 3.3s for
+    all targets with real predictions on the production DB, vs 50s+
+    (timeout) for the old per-target loop. The outer join-back to
+    `prediction`/`trial`/`run` via `rowid` reconstitutes the full row
+    without repeating the ranking logic.
+
+    Returns a dict keyed by target; a target with no prediction row at all
+    is simply absent (same as the old function returning `None` for it)."""
+    if not targets:
+        return {}
+    placeholders = ",".join("?" for _ in targets)
+    rows = conn.execute(
+        "WITH target_list AS (SELECT DISTINCT target FROM run "
+        f"                    WHERE target IN ({placeholders})), "
+        "winner AS ("
+        "  SELECT tl.target, ("
+        "    SELECT p.rowid FROM prediction p "
+        "    JOIN trial t2 ON t2.trial_id = p.trial_id "
+        "    JOIN run r2 ON r2.run_id = t2.run_id "
+        "    WHERE r2.target = tl.target "
+        "    ORDER BY (p.split = 'live') DESC, p.ts DESC LIMIT 1"
+        "  ) AS pred_rowid "
+        "  FROM target_list tl"
+        ") "
+        "SELECT winner.target, prediction.ts, prediction.split, prediction.y_pred, prediction.y_proba, "
+        "       trial.trial_id, run.run_id, run.horizon "
+        "FROM winner "
+        "JOIN prediction ON prediction.rowid = winner.pred_rowid "
+        "JOIN trial ON trial.trial_id = prediction.trial_id "
+        "JOIN run ON run.run_id = trial.run_id",
+        tuple(targets),
+    ).fetchall()
+    out: dict[str, dict] = {}
+    for target, ts, split, y_pred, y_proba, trial_id, run_id, horizon in rows:
+        cls = int(round(y_pred))
+        out[target] = {
+            "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
+            "direction": _CLASS_DIRECTION.get(cls, "?"),
+            "amplitude": _CLASS_AMPLITUDE.get(cls, "?"),
+            "confidence": y_proba,
+        }
+    return out
+
+
 def direction_metrics_for_target(conn: sqlite3.Connection, target: str) -> dict | None:
     """P8.1 -- precision/recall/F1 split by direction (DOWN vs UP, not
     collapsed to a macro average) for the most recent completed run's best
@@ -518,10 +582,18 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
 
     prediction_rows = []
     metric_rows = []
+    # Grouped lookup (one query for every target) instead of the former
+    # latest_prediction_for_target() call inside this loop -- see
+    # latest_predictions_by_target()'s docstring and
+    # test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1.
+    # direction_metrics_for_target() below is UNCHANGED, still one query
+    # per target -- same shape of issue, not fixed in this pass, flagged
+    # separately.
+    latest_preds = latest_predictions_by_target(conn, [t["target"] for t in targets])
     for t in targets:
         target = t["target"]
         label = symbol_labels.get(target, target)
-        pred = latest_prediction_for_target(conn, target)
+        pred = latest_preds.get(target)
         prediction_rows.append({"target": target, "label": label, "prediction": pred})
         dm = direction_metrics_for_target(conn, target)
         metric_rows.append({"target": target, "label": label, "metrics": dm})

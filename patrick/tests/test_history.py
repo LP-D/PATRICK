@@ -141,6 +141,50 @@ def test_target_detail_aggregates_across_runs(tmp_path):
     conn.close()
 
 
+def test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1(tmp_path):
+    """P8 bug report: `/` hung for 50s+ against the real local DB (~2.2 GB,
+    550 targets). Root cause traced (faulthandler stack dump, bypassing the
+    web layer entirely) to `latest_prediction_for_target()` being called
+    once per target inside `synthesis_overview()`'s loop -- a database round
+    trip per target instead of one grouped query. `/phase9` and `/universe`
+    responded in <0.1s against the same DB, so the DB/connection itself
+    isn't the bottleneck -- the per-target query count is.
+
+    Regression guard: count the queries actually sent to sqlite (`sqlite3.
+    Connection.set_trace_callback`) during a single `synthesis_overview()`
+    call. `set_trace_callback` reports the EXPANDED SQL (parameter values
+    inlined, e.g. `run.target = 'SYM3'`, not `run.target = ?`) -- matched
+    below by the `WHERE run.target =` prefix rather than a literal `?`.
+    That WHERE clause is unique to the old per-target lookup --
+    `direction_metrics_for_target()` (a separate, NOT-yet-fixed N+1 in the
+    same loop, see history.py) queries `prediction` too but with a
+    different WHERE clause (`trial_id = ...`), so this filter isolates just
+    the query under test."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    n_targets = 40
+    for i in range(n_targets):
+        target = f"SYM{i}"
+        _make_run(conn, f"run{i}", target, 5, status="done")
+        trial_id = db.create_trial(conn, f"run{i}", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+        db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                            ts=["2024-01-01T00:00:00"], y_true=[None], y_pred=[3], y_proba=[0.8])
+
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql))
+    trackhistory.synthesis_overview(conn)
+    conn.set_trace_callback(None)
+
+    per_target_lookup_queries = [
+        q for q in queries
+        if "JOIN trial ON trial.trial_id = prediction.trial_id" in q and "WHERE run.target =" in q
+    ]
+    assert len(per_target_lookup_queries) <= 1, (
+        f"{len(per_target_lookup_queries)} per-target prediction lookups for {n_targets} targets "
+        "-- expected a single grouped query, not one round trip per target"
+    )
+    conn.close()
+
+
 def test_universe_overview_marks_known_symbol_with_history(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     _make_run(conn, "run1", "^VIX", 5, status="done")
