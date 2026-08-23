@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="{{ lang | default('fr') }}">
+<!--
+DESIGN SYSTEM v2 — "Internal Cockpit" (design-system/patrick/MASTER.md)
+Full reset, replaces Desk Amber. Fixed left sidebar nav, dense KPI/table
+content zones, no hero, no marketing chrome. Dark-only (locked palette has
+no light-mode counterpart, same as Desk Amber before it).
+
+This is a NEW layout used only by pages migrated to v2 (starting with `/`,
+synthesis.html). Unmigrated pages keep extending base.html + tokens.css/
+style.css untouched until their own turn in the priority order.
+-->
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0F172A">
+    <title>{% block title %}PATRICK{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230F172A'/%3E%3Ccircle cx='16' cy='16' r='12.3' fill='none' stroke='%23F8FAFC' stroke-opacity='.6' stroke-width='1.9'/%3E%3Cg stroke='%23F8FAFC' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10.9 20.8v-2.1'/%3E%3Cpath d='M16 20.8v-4.3'/%3E%3Cpath d='M21.1 20.8v-5.9'/%3E%3C/g%3E%3Ccircle cx='21.1' cy='11.7' r='2.5' fill='%2322C55E'/%3E%3C/svg%3E">
+    {# Fira Code/Fira Sans now vendored under static/fonts/ (@font-face rules
+       in patrick-v2.css) -- the Google Fonts CDN link tried first hung
+       specifically in Chrome during verification (direct HTTPS fetches via
+       urllib/pip/npm all worked fine in the same environment, so it wasn't
+       a real network-access problem); vendoring removes the dependency
+       either way and matches how Desk Amber already self-hosts its own
+       fonts. Preloaded here: both are used above the fold (page title,
+       every KPI/table value) so a font swap flash would be visible. #}
+    <link rel="preload" href="/static/fonts/firasans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/fonts/firacode-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/static/patrick-v2.css">
+    <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
+    <script>
+        window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
+    </script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="/">
+                <svg class="brand-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" stroke-opacity=".6" stroke-width="1.4"/>
+                    <g stroke="currentColor" stroke-width="2.25" stroke-linecap="round" fill="none">
+                        <path d="M8.2 15.6V14"/>
+                        <path d="M12 15.6v-3.2"/>
+                        <path d="M15.8 15.6v-4.4"/>
+                    </g>
+                    <circle class="mark-head" cx="15.8" cy="8.8" r="1.9"/>
+                </svg>
+                <span>PATRICK</span>
+            </a>
+            <nav class="sidebar-nav" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
+                <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Synthèse' }}</a>
+                <a href="/launch" {% if request.url.path == '/launch' %}aria-current="page"{% endif %}>{{ t('nav_launch') if t else 'Lancer' }}</a>
+                <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
+                <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
+                <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
+                <a href="/phase9" {% if request.url.path.startswith('/phase9') %}aria-current="page"{% endif %}>Phase 9</a>
+            </nav>
+            <div class="sidebar-footer">
+                <nav class="sidebar-lang" aria-label="Langue / Language">
+                    <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>
+                    <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {# Glossary popover (glossary.js) and observatory.js (theme toggle +
+       heliocorder canvas) deliberately not loaded here: synthesis.html
+       doesn't use either, and glossary's popover CSS hasn't been ported to
+       patrick-v2.css yet. Port both back into base_v2.html + patrick-v2.css
+       the first time a v2 page actually needs them. #}
+</body>
+</html>
