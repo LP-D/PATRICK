@@ -462,6 +462,132 @@ def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -
     return out
 
 
+def direction_metrics_by_target(conn: sqlite3.Connection, targets: list[str]) -> dict[str, dict | None]:
+    """P8.1 perf fix -- grouped equivalent of calling
+    `direction_metrics_for_target()` once per target. Same result shape
+    and same rules, but O(1) round trips instead of O(n_targets) --
+    confirmed as the query still blocking `/` end-to-end once
+    `latest_prediction_for_target()`'s own N+1 was fixed separately
+    (faulthandler dump landed here; regression test:
+    `test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1`).
+
+    WORSE shape than the other N+1: `direction_metrics_for_target()` did
+    THREE sequential queries per target (latest done run, its best trial,
+    then test predictions -- with a conditional 4th for the holdout
+    fallback), not one. Grouping strategy:
+
+    1. One correlated-subquery-per-target lookup (same winning pattern as
+       `latest_predictions_by_target()`, for the same reason: window
+       functions would force a full sort, this keeps each target's own
+       indexed `ORDER BY started_at DESC LIMIT 1` plan) resolves
+       target -> (run_id, trial_id) in a single round trip.
+    2. ALL test+holdout prediction rows for every resolved trial_id in one
+       IN-list query (no correlation needed here: trial_id is already
+       known, it's a flat filter) -- the per-trial test-vs-holdout choice
+       moves to a `groupby` in Python, same fallback rule as before (use
+       test rows if any exist, else holdout), just no longer one query
+       per decision.
+    3. ALL AUC_ovr_4cls averages for those trial_ids in one GROUP BY query
+       instead of one `_avg_metric()` call per target.
+
+    The sklearn `precision_recall_fscore_support` call itself stays
+    per-target in Python (CPU-bound, not a DB round trip -- it was never
+    part of the bottleneck; the faulthandler dumps that found this
+    function stuck were always inside a `conn.execute(...)` call, not
+    inside sklearn)."""
+    if not targets:
+        return {}
+    placeholders = ",".join("?" for _ in targets)
+    resolved = conn.execute(
+        "WITH target_list AS (SELECT DISTINCT target FROM run "
+        f"                    WHERE target IN ({placeholders})) "
+        "SELECT tl.target, run.run_id, trial.trial_id "
+        "FROM target_list tl "
+        "JOIN run ON run.run_id = ("
+        "  SELECT run_id FROM run WHERE run.target = tl.target AND run.status = 'done' "
+        "  ORDER BY started_at DESC, rowid DESC LIMIT 1"
+        ") "
+        "JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1",
+        tuple(targets),
+    ).fetchall()
+    if not resolved:
+        return {}
+
+    trial_by_target = {target: (run_id, trial_id) for target, run_id, trial_id in resolved}
+    trial_ids = [trial_id for _, _, trial_id in resolved]
+    trial_placeholders = ",".join("?" for _ in trial_ids)
+
+    # INDEXED BY: without it, the query planner picks idx_pred_split
+    # (`split IN (...)`) over the trial_id-leading primary key -- driving
+    # from `split` scans most of the table (test/holdout together are the
+    # bulk of 12M rows) and filters trial_id as a residual check, instead
+    # of the other way around. Measured on the real DB: unindexed forced a
+    # 15s+ hang (same query, no LIMIT to bail out early unlike the
+    # single-row lookups in latest_predictions_by_target); forcing the PK
+    # index -- the same fix a human DBA would reach for first, short of the
+    # ANALYZE this database has never had (`sqlite_stat1` absent, out of
+    # scope for this pass, see "/" build report) -- brought it to 0.01s.
+    # `sqlite_autoindex_prediction_1` is SQLite's own name for `prediction`'s
+    # first (only) auto-generated index, backing the `(trial_id, ts)`
+    # PRIMARY KEY declared in migrations/0001_initial.sql -- stable as long
+    # as that PK's column order doesn't change.
+    pred_rows = conn.execute(
+        f"SELECT trial_id, split, y_true, y_pred FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split IN ('test', 'holdout') "
+        "AND y_true IS NOT NULL",
+        tuple(trial_ids),
+    ).fetchall()
+    by_trial_split: dict[int, dict[str, list[tuple[float, float]]]] = {}
+    for trial_id, split, y_true, y_pred in pred_rows:
+        by_trial_split.setdefault(trial_id, {}).setdefault(split, []).append((y_true, y_pred))
+
+    auc_rows = conn.execute(
+        f"SELECT trial_id, AVG(value) FROM fold_metric "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split IN ('test', 'test_path') "
+        "AND metric = 'AUC_ovr_4cls' GROUP BY trial_id",
+        tuple(trial_ids),
+    ).fetchall()
+    auc_by_trial = dict(auc_rows)
+
+    out: dict[str, dict | None] = {}
+    for target, (run_id, trial_id) in trial_by_target.items():
+        splits = by_trial_split.get(trial_id, {})
+        rows = splits.get("test") or []
+        split_used = "test"
+        if not rows:
+            rows = splits.get("holdout") or []
+            split_used = "holdout"
+        if not rows:
+            out[target] = None
+            continue
+
+        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
+        precision, recall, f1, support = precision_recall_fscore_support(
+            y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
+        )
+        by_direction: dict[str, dict | None] = {}
+        for i, direction in enumerate(["DOWN", "UP"]):
+            if counts[direction] < _MIN_DIRECTION_SAMPLES:
+                by_direction[direction] = None
+                continue
+            by_direction[direction] = {
+                "n": int(support[i]), "precision": round(float(precision[i]), 4),
+                "recall": round(float(recall[i]), 4), "f1": round(float(f1[i]), 4),
+            }
+        out[target] = {
+            "run_id": run_id, "trial_id": trial_id, "split_used": split_used, "n": len(rows),
+            "n_up": counts["UP"], "n_down": counts["DOWN"],
+            "by_direction": by_direction,
+            "auc_overall": auc_by_trial.get(trial_id),
+            "auc_note": ("non calculable par direction : la probabilité stockée est celle de la classe "
+                         "prédite, pas P(hausse) -- pas une valeur de classement valide pour un AUC "
+                         "par direction."),
+        }
+    return out
+
+
 def direction_metrics_for_target(conn: sqlite3.Connection, target: str) -> dict | None:
     """P8.1 -- precision/recall/F1 split by direction (DOWN vs UP, not
     collapsed to a macro average) for the most recent completed run's best
@@ -582,20 +708,20 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
 
     prediction_rows = []
     metric_rows = []
-    # Grouped lookup (one query for every target) instead of the former
-    # latest_prediction_for_target() call inside this loop -- see
-    # latest_predictions_by_target()'s docstring and
-    # test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1.
-    # direction_metrics_for_target() below is UNCHANGED, still one query
-    # per target -- same shape of issue, not fixed in this pass, flagged
-    # separately.
-    latest_preds = latest_predictions_by_target(conn, [t["target"] for t in targets])
+    # Grouped lookups (one query each, not one per target) -- see
+    # latest_predictions_by_target()/direction_metrics_by_target()'s
+    # docstrings and the two test_synthesis_overview_*_is_not_n_plus_1
+    # regression tests. Both used to be called once per target inside this
+    # loop.
+    target_names = [t["target"] for t in targets]
+    latest_preds = latest_predictions_by_target(conn, target_names)
+    direction_metrics = direction_metrics_by_target(conn, target_names)
     for t in targets:
         target = t["target"]
         label = symbol_labels.get(target, target)
         pred = latest_preds.get(target)
         prediction_rows.append({"target": target, "label": label, "prediction": pred})
-        dm = direction_metrics_for_target(conn, target)
+        dm = direction_metrics.get(target)
         metric_rows.append({"target": target, "label": label, "metrics": dm})
 
     return {

@@ -185,6 +185,50 @@ def test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1(tmp_path):
     conn.close()
 
 
+def test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1(tmp_path):
+    """Same shape of bug as `latest_prediction_for_target`, flagged
+    separately in that fix's commit and now confirmed to be the function
+    still blocking `/` end-to-end against the real DB once the first N+1
+    was fixed (faulthandler stack dump landed on
+    `direction_metrics_for_target()`, line ~500, not the already-fixed
+    lookup).
+
+    Worse pattern than the first case: THREE sequential queries per target,
+    not one -- (1) latest 'done' run for the target, (2) that run's
+    is_best trial (`_best_trial_id`, shared helper), (3) test predictions
+    for that trial, with a conditional 4th query falling back to 'holdout'
+    predictions if (3) returns nothing. Isolated below via the run lookup's
+    literal SQL (`SELECT run_id FROM run WHERE target =`), unique to this
+    function -- `list_distinct_targets` uses a different `status = 'done'`
+    shape (a CASE WHEN, not a WHERE), and `list_runs`'s own `_best_trial_id`/
+    `_avg_metric` calls (for `recent_runs`, same `synthesis_overview()`
+    call) never touch `run_id FROM run WHERE target =` at all, so they
+    don't leak into this count."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    n_targets = 40
+    for i in range(n_targets):
+        target = f"SYM{i}"
+        run_id = f"run{i}"
+        _make_run(conn, run_id, target, 5, status="done")
+        trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+        db.mark_best_trial(conn, trial_id)
+        db.add_predictions(conn, trial_id, fold_index=1, split="test",
+                            ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0],
+                            y_proba=[0.7, 0.7])
+
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql))
+    trackhistory.synthesis_overview(conn)
+    conn.set_trace_callback(None)
+
+    per_target_run_lookups = [q for q in queries if "SELECT run_id FROM run WHERE target =" in q]
+    assert len(per_target_run_lookups) <= 1, (
+        f"{len(per_target_run_lookups)} per-target run lookups for {n_targets} targets "
+        "-- expected a single grouped query, not one round trip per target"
+    )
+    conn.close()
+
+
 def test_universe_overview_marks_known_symbol_with_history(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     _make_run(conn, "run1", "^VIX", 5, status="done")
