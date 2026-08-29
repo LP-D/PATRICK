@@ -64,6 +64,15 @@ style.css untouched until their own turn in the priority order.
         </aside>
 
         <main class="main-content">
+            {# base.html porte ce bloc HORS de .container, dans le bandeau
+               station -- v2 n'a pas de bandeau global, donc il vit en tete du
+               contenu de la page a la place. Absent de ce fichier avant la
+               migration de /runs/{id}/detail (feature/cockpit-v2-migrate-
+               remaining-pages) : un enfant qui definit un bloc que le parent
+               n'a pas voit son contenu silencieusement disparaitre (pas
+               d'erreur Jinja) -- c'est ce qui serait arrive au quadruplet de
+               reproductibilite (snapshot/config hash/git SHA/seed). #}
+            {% block session_context %}{% endblock %}
             {% block content %}{% endblock %}
         </main>
     </div>

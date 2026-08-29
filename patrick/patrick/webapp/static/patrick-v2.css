@@ -1143,6 +1143,87 @@ nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: var(--sp
 .empty-state-hint a { color: var(--color-accent); text-decoration: none; }
 .empty-state-hint a:hover { text-decoration: underline; }
 
+/* ============ /runs/{id}/detail ============ */
+
+/* Contexte de reproductibilite (cible/snapshot/hash config/git SHA/seed) --
+   imprime avant le premier resultat, cf. base_v2.html::block session_context. */
+.session-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  padding: var(--space-sm) 0 var(--space-md);
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  overflow-wrap: anywhere;
+}
+.session-context b {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  margin-right: var(--space-xs);
+  opacity: 0.75;
+}
+
+/* Index de sections en tete de page -- PAS des onglets (aucune section
+   active a marquer, toutes les sections sont deja rendues). */
+.section-index {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-lg);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.section-index-label { color: var(--color-muted-foreground); }
+.section-index a { color: var(--color-muted-foreground); text-decoration: none; }
+.section-index a:hover, .section-index a:focus-visible { color: var(--color-accent); }
+
+/* Note de bloc -- justification methodologique trop longue pour une colonne
+   de .metric-reliability, deplacee sous le bloc entier. */
+.block-note {
+  margin: var(--space-lg) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 8px;
+  background: var(--color-muted);
+  max-width: 100ch;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+.block-note-marker { color: var(--color-foreground); font-weight: 600; margin-right: var(--space-xs); }
+
+/* Vidage de config JSON -- entier, jamais tronque, mais borne en hauteur et
+   defile dans son propre conteneur (comme .table-scroll). */
+.config-dump {
+  max-height: 480px;
+  overflow: auto;
+  background: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+pre { overflow-x: auto; max-width: 100%; }
+
+/* Ligne retenue (meilleur essai) : graisse + filet d'accent, pas d'aplat
+   colore derriere des chiffres. */
+.data-table tbody tr.best td { font-weight: 600; color: var(--color-foreground); }
+.data-table tbody tr.best td:first-child { box-shadow: inset 2px 0 0 var(--color-accent); }
+
 /* ============ Utility ============
    Toujours en dernier dans ce fichier : classe d'etat, elle doit gagner la
    cascade sur toute regle posant `display` par ailleurs (ex. .banner). Meme
