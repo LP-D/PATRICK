@@ -1224,6 +1224,18 @@ pre { overflow-x: auto; max-width: 100%; }
 .data-table tbody tr.best td { font-weight: 600; color: var(--color-foreground); }
 .data-table tbody tr.best td:first-child { box-shadow: inset 2px 0 0 var(--color-accent); }
 
+/* ============ /universe : groupes de cibles ============
+   Desk Amber portait deux definitions concurrentes de .group-block/.group-title
+   (style.css : bloc "ACCUEIL" original, puis un bloc "Phase 5 layout" plus bas
+   qui gagne la cascade -- source-order -- avec des reperis --border-color/
+   --ink-secondary jamais definis dans tokens.css, donc silencieusement retombes
+   sur leurs valeurs de secours CLAIRES (#E5E7EB/#6B7280) sur un theme sombre.
+   Non reproduit ici : jetons MASTER.md corrects des le depart. */
+.group-block { margin-bottom: var(--space-2xl); }
+.group-block:not(:last-child) { padding-bottom: var(--space-xl); border-bottom: 1px solid var(--color-border); }
+.group-title { font-size: 18px; font-weight: 600; margin: 0 0 var(--space-md); color: var(--color-foreground); }
+.group-title .hint { display: inline; font-weight: 400; margin: 0; }
+
 /* ============ Utility ============
    Toujours en dernier dans ce fichier : classe d'etat, elle doit gagner la
    cascade sur toute regle posant `display` par ailleurs (ex. .banner). Meme
