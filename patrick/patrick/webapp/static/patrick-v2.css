@@ -1236,6 +1236,137 @@ pre { overflow-x: auto; max-width: 100%; }
 .group-title { font-size: 18px; font-weight: 600; margin: 0 0 var(--space-md); color: var(--color-foreground); }
 .group-title .hint { display: inline; font-weight: 400; margin: 0; }
 
+/* ============ /simulate ============ */
+
+.sim-title {
+  font-family: "Fira Code", monospace;
+  font-weight: 600;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-xl);
+  color: var(--color-foreground);
+}
+.sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: var(--space-md); align-items: start; }
+.sim-panel-config { grid-row: 1 / span 3; }
+.sim-panel-equity, .sim-panel-metrics, .sim-panel-distribution { grid-column: 2; }
+.sim-panel-trades { grid-column: 1 / span 2; max-height: 460px; }
+
+#sim-equity-canvas, #sim-drawdown-canvas, #sim-dist-canvas {
+  width: 100%;
+  border-radius: 8px;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-sm);
+}
+/* Au repos (avant toute simulation), les toiles disparaissent plutot que de
+   laisser un rectangle vide : le drapeau est pose par simulate.js au
+   premier rendu. */
+.sim-empty {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-md);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+body[data-sim-loaded] .sim-empty { display: none; }
+body:not([data-sim-loaded]) #sim-equity-canvas,
+body:not([data-sim-loaded]) #sim-drawdown-canvas,
+body:not([data-sim-loaded]) #sim-dist-canvas,
+body:not([data-sim-loaded]) #sim-metrics-table,
+body:not([data-sim-loaded]) #sim-trades-table { display: none; }
+
+.sim-grid .dash-panel { max-height: none; }
+.sim-guard { color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground)); }
+
+.sim-graph-container { margin-bottom: var(--space-lg); }
+.sim-graph-title {
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin-bottom: var(--space-sm);
+}
+.sim-graph-hint { font-size: 11px; color: var(--color-muted-foreground); margin-bottom: var(--space-sm); line-height: 1.5; }
+
+/* table.leaderboard : meme grammaire que .data-table, jetons partages --
+   pas le meme selecteur car #sim-metrics-table/#sim-trades-table utilisent
+   la classe "leaderboard", pas "data-table" (simulate.js). */
+table.leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+table.leaderboard th {
+  text-align: left;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted-foreground);
+  background: var(--color-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+table.leaderboard td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-muted);
+  vertical-align: baseline;
+}
+table.leaderboard tbody tr:last-child td { border-bottom: none; }
+#sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; }
+#sim-trades-table { max-height: 320px; overflow-y: auto; display: block; }
+
+.metric-row { position: relative; }
+.metric-row:hover { background: var(--color-muted); cursor: help; }
+.metric-help {
+  display: inline-block;
+  width: 14px; height: 14px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--color-muted-foreground);
+  color: var(--color-card);
+  font-size: 9px;
+  font-weight: bold;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+.metric-row:hover .metric-help { opacity: 1; }
+.metric-help::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  width: 200px;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::after { opacity: 1; }
+
+#sim-trades-download { display: inline-block; margin-bottom: var(--space-sm); color: var(--color-accent); }
+
+@media (max-width: 1100px) {
+  .sim-grid { grid-template-columns: 1fr; }
+  .sim-panel-config, .sim-panel-equity, .sim-panel-metrics,
+  .sim-panel-distribution, .sim-panel-trades { grid-column: 1; grid-row: auto; }
+}
+
 /* ============ Utility ============
    Toujours en dernier dans ce fichier : classe d'etat, elle doit gagner la
    cascade sur toute regle posant `display` par ailleurs (ex. .banner). Meme
