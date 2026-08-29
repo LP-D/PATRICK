@@ -27,6 +27,7 @@ Locked from generator pass 2 ("SaaS dashboard internal admin" query — the only
 | Secondary | `#334155` | `--color-secondary` |
 | Accent (positive / vert) | `#22C55E` | `--color-accent` |
 | Destructive (alerte / rouge) | `#EF4444` | `--color-destructive` |
+| Warning (à vérifier / ambre) | `#F59E0B` | `--color-warning` |
 | Foreground (texte) | `#F8FAFC` | `--color-foreground` |
 | Muted | `#272F42` | `--color-muted` |
 | Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
@@ -36,6 +37,8 @@ Locked from generator pass 2 ("SaaS dashboard internal admin" query — the only
 | On Destructive | `#000000` | `--color-on-destructive` |
 
 **Color Notes:** Dark tech + status green/red. Red confirmed `#EF4444` (was unspecified in the prior chat summary — full hex table always had it). Border corrected from `#475569` (2.36:1 on `#0F172A`, fails WCAG 1.4.11 non-text 3:1) to `#64748B` (3.75:1) — same slate family, next step up (slate-500 vs slate-600).
+
+**Warning token (added post-lock, migration Cockpit v2 session 3):** the original 3 generator passes never produced a third status color (only green/red) — real pages (`run_detail.html`/`target.html`/`index.html`) needed a distinct "flag, not broken" state (p-value DM non significative, stabilité Jaccard sous seuil, échec du fetch movers) that a stopgap (`color-mix` depuis `--color-destructive`) covered provisionally. `#F59E0B` chosen (Tailwind `amber-500`) for the same reason `--color-accent`/`--color-destructive` are `green-500`/`red-500` — same weight, same family as the rest of the locked palette, not an arbitrary pick. Contrast measured (WCAG relative-luminance formula, same method as the Border correction above): `#F59E0B` vs `#0F172A` (background) = **8.31:1**, vs `#1B2336` (card) = **7.30:1** — both clear WCAG 1.4.11 non-text (≥3:1) and even AA normal-text (≥4.5:1) with margin, used as plain colored text (`.metric-value.status-warning`) as well as a tinted badge/banner (`.status-badge.status-warning`, `.banner-warning`), same tinted-background convention already used for `status-ok`/`status-error` (no separate `--color-on-warning` needed).
 
 ### Typography
 
