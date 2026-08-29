@@ -327,14 +327,7 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
 .metric-value.status-pending, .metric-value.status-disabled { color: var(--color-muted-foreground); }
 .metric-value.status-ok { color: var(--color-accent); }
 .metric-value.status-error { color: var(--color-destructive); }
-/* STOPGAP, a documenter dans le rapport de migration : MASTER.md (palette
-   verrouillee) ne definit aucune teinte "avertissement" (seuls accent-vert
-   et destructive-rouge existent dans la table verrouillee) alors que
-   run_detail.html/target.html utilisent bien l'etat "warning" (p-value DM
-   non significative, stabilite Jaccard sous seuil -- des reserves, pas des
-   erreurs). Compose depuis --color-destructive deja approuve plutot que
-   d'inventer une teinte ambre : a trancher explicitement par Leon-Paul. */
-.metric-value.status-warning { color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground)); }
+.metric-value.status-warning { color: var(--color-warning); }
 .metric-reliability {
   margin-top: var(--space-sm);
   font-size: 12px;
@@ -445,10 +438,9 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
 .status-badge.status-pending { background: var(--color-muted); color: var(--color-muted-foreground); }
 .status-badge.status-disabled { background: var(--color-muted); color: var(--color-muted-foreground); opacity: 0.7; }
 .status-badge.status-neutral { background: var(--color-secondary); color: var(--color-foreground); }
-/* STOPGAP -- meme reserve que .metric-value.status-warning ci-dessus. */
 .status-badge.status-warning {
-  background: color-mix(in srgb, var(--color-destructive) 16%, transparent);
-  color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground));
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
 }
 
 /* ============ Empty / error states ============ */
@@ -537,10 +529,8 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
   color: var(--color-foreground);
 }
 .banner-warning {
-  /* meme reserve que .status-badge.status-warning : pas de teinte
-     "avertissement" dans la palette verrouillee MASTER.md. */
-  background: color-mix(in srgb, var(--color-destructive) 6%, transparent);
-  border-color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground));
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: var(--color-warning);
   color: var(--color-foreground);
 }
 .banner ul { margin: var(--space-xs) 0 0; padding-left: var(--space-lg); }
@@ -806,8 +796,8 @@ legend {
   white-space: nowrap;
 }
 .adv-gate[data-off] {
-  background: color-mix(in srgb, var(--color-destructive) 16%, transparent);
-  color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground));
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
 }
 .adv-tail { margin-left: var(--space-sm); }
 .adv-body { padding: var(--space-sm) var(--space-xs) var(--space-md); }
@@ -1281,7 +1271,7 @@ body:not([data-sim-loaded]) #sim-metrics-table,
 body:not([data-sim-loaded]) #sim-trades-table { display: none; }
 
 .sim-grid .dash-panel { max-height: none; }
-.sim-guard { color: color-mix(in srgb, var(--color-destructive) 55%, var(--color-muted-foreground)); }
+.sim-guard { color: var(--color-warning); }
 
 .sim-graph-container { margin-bottom: var(--space-lg); }
 .sim-graph-title {
