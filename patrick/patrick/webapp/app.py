@@ -186,45 +186,6 @@ def movers():
     return alerts.get_cached()
 
 
-@app.get("/api/activity")
-def activity(limit: int = 120):
-    """Feeds the banner's activity strip (`observatory.js`) — one mark per
-    run, placed at its start time, height driven by the number of trials and
-    color by status.
-
-    Read-only and fails silently, like `_recent_runs`: the strip is a
-    template element shared by ALL pages, a missing database (first
-    install) must not make the interface unusable. The frontend
-    distinguishes "no run yet" (`runs: []`) from "database unreadable"
-    (`available: false`) and writes it in the legend — the strip must never
-    give the impression of a silent station when it's the read that
-    failed."""
-    try:
-        conn = trackdb.connect()
-    except Exception:
-        return {"available": False, "runs": []}
-    try:
-        rows = trackhistory.list_runs(conn, limit=limit)
-    except Exception:
-        return {"available": False, "runs": []}
-    finally:
-        conn.close()
-    return {
-        "available": True,
-        "runs": [
-            {
-                "run_id": r["run_id"],
-                "name": r["name"] or r["run_id"],
-                "target": r["target"],
-                "status": r["status"],
-                "started_at": r["started_at"],
-                "n_trials": r["n_trials"],
-            }
-            for r in rows
-        ],
-    }
-
-
 @app.get("/api/next-run-names")
 def next_run_names(target: list[str] = Query(default=[])):
     """(Read-only) preview of the name that will be assigned to each target

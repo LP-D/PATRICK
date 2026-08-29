@@ -129,20 +129,28 @@
   --color-border: #64748B; /* corrected from #475569 — 3.75:1 on background, was 2.36:1 */
   --color-ring: #FFFFFF;
 
-  /* --- Legacy aliases for the shared canvas-chart scripts (market.js,
-     simulate.js) -- both read colors via getComputedStyle(...).getPropertyValue,
-     using the variable names defined in tokens.css (Desk Amber). Those scripts
-     are not renamed/forked for v2: they're still loaded by every page not yet
-     migrated (base.html), so a rename there would touch Desk Amber pages this
-     migration must not affect. Semantic mapping to MASTER.md roles, not new
-     values: --accent-ink/--ok-ink (both "positive/brand" in tokens.css) ->
-     --color-accent (MASTER.md doesn't distinguish the two); --error-ink ->
-     --color-destructive; --ink-text-2 (secondary text) -> --color-muted-foreground;
-     --ink-2 (secondary/structural, not text) -> --color-secondary; --mono ->
-     same Fira Code stack already used by the `code, .pk-mono, .num` rule below. */
+  /* --- Legacy variable names, kept as aliases now that Desk Amber (tokens.css/
+     style.css/base.html/observatory.js) is gone. Posed during the migration to
+     avoid touching Desk Amber pages while both worlds coexisted -- that reason
+     no longer applies (nothing extends base.html anymore), but market.js/
+     simulate.js/_components.html still read these exact names via
+     getComputedStyle(...).getPropertyValue / plain `var(...)`, so renaming them
+     now would mean editing those JS/Jinja files for zero behavior change.
+     Semantic mapping to MASTER.md roles, not new values: --accent-ink/--ok-ink
+     (both "positive/brand" in the old tokens.css) -> --color-accent (MASTER.md
+     doesn't distinguish the two); --error-ink -> --color-destructive;
+     --ink-text-2 (secondary text) -> --color-muted-foreground; --ink-2
+     (secondary/structural, not text) -> --color-secondary; --mono -> same Fira
+     Code stack already used by the `code, .pk-mono, .num` rule below.
+     --accent added here (not part of the original 6): `_components.html`'s
+     sparkline() macro defaults to `color='var(--accent)'` -- unused by any
+     page today, but the same silent-failure risk (getPropertyValue returns ""
+     on an undefined custom property) the other 6 aliases were added to avoid,
+     now caught before Desk Amber's own --accent stopped existing. */
   --mono: "Fira Code", ui-monospace, "SFMono-Regular", monospace;
   --ink-text-2: var(--color-muted-foreground);
   --accent-ink: var(--color-accent);
+  --accent: var(--color-accent);
   --ink-2: var(--color-secondary);
   --error-ink: var(--color-destructive);
   --ok-ink: var(--color-accent);
