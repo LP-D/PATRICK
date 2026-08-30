@@ -64,14 +64,35 @@ style.css untouched until their own turn in the priority order.
         </aside>
 
         <main class="main-content">
+            {# base.html porte ce bloc HORS de .container, dans le bandeau
+               station -- v2 n'a pas de bandeau global, donc il vit en tete du
+               contenu de la page a la place. Absent de ce fichier avant la
+               migration de /runs/{id}/detail (feature/cockpit-v2-migrate-
+               remaining-pages) : un enfant qui definit un bloc que le parent
+               n'a pas voit son contenu silencieusement disparaitre (pas
+               d'erreur Jinja) -- c'est ce qui serait arrive au quadruplet de
+               reproductibilite (snapshot/config hash/git SHA/seed). #}
+            {% block session_context %}{% endblock %}
             {% block content %}{% endblock %}
         </main>
     </div>
 
-    {# Glossary popover (glossary.js) and observatory.js (theme toggle +
-       heliocorder canvas) deliberately not loaded here: synthesis.html
-       doesn't use either, and glossary's popover CSS hasn't been ported to
-       patrick-v2.css yet. Port both back into base_v2.html + patrick-v2.css
-       the first time a v2 page actually needs them. #}
+    {# Migration /launch (feature/cockpit-v2-migrate-remaining-pages) : glossary.js
+       et market.js portes ici (chrome global, comme dans base.html) -- premiere
+       page v2 qui en a besoin. glossary-popover rendu pour toute page v2 (CSS
+       .hidden le neutralise si aucun [data-term] n'est present) plutot que par
+       template, pour ne pas dupliquer ce bloc a chaque migration future.
+
+       observatory.js (heliocorder) reste absent : abandon explicite et documente
+       au commit de migration de / (09f681e) -- "signature visuelle propre a
+       Desk Amber, sans equivalent dans le pattern cockpit", pas un report. #}
+    <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="false">
+        <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
+        <div id="glossary-popover-title" class="glossary-popover-title"></div>
+        <div id="glossary-popover-body" class="glossary-popover-body"></div>
+    </div>
+    <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
+    <script src="/static/glossary.js"></script>
+    <script src="/static/market.js"></script>
 </body>
 </html>

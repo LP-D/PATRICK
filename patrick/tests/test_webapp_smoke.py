@@ -182,20 +182,25 @@ def test_batch_submit_queues_one_job_per_target(tmp_path):
     exerce le garde-fou anti-collision de `create_run`
     (`len(targets) > 1 and raw_output_dir`) -- sans elle, un dossier partagé
     entre plusieurs cibles écraserait leurs artefacts les uns les autres, et
-    rien ne le détecterait."""
-    DataStore(root=str(tmp_path / "store")).save("raw_^AORD", _synthetic_raw(seed=1))
+    rien ne le détecterait.
+
+    ^GSPC (pas ^AORD) : univers réduit (feature/universe-reduction) --
+    ^AORD a été retiré (groupe "Indices" réduit à ^GSPC/^VIX), le
+    soumettre renverrait désormais 400 ("choix invalide") au lieu de 200.
+    ^GSPC reste dans l'univers réduit et distinct de TARGET_SYMBOL (^VIX)."""
+    DataStore(root=str(tmp_path / "store")).save("raw_^GSPC", _synthetic_raw(seed=1))
     client = TestClient(app)
 
     base_output_dir = str(tmp_path / "shared_runs")
     form = _form_data(tmp_path)
-    form["target_symbols"] = [TARGET_SYMBOL, "^AORD"]
+    form["target_symbols"] = [TARGET_SYMBOL, "^GSPC"]
     form["output_dir"] = base_output_dir
     resp = client.post("/runs", data=form)
     assert resp.status_code == 200, resp.text
     runs = resp.json()["runs"]
 
     assert len(runs) == 2
-    assert {r["target"] for r in runs} == {TARGET_SYMBOL, "^AORD"}
+    assert {r["target"] for r in runs} == {TARGET_SYMBOL, "^GSPC"}
     assert len({r["run_id"] for r in runs}) == 2
 
     # Chaque job existe bien côté serveur, dans un état actif légitime, avec

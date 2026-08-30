@@ -90,6 +90,55 @@ def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class
     return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3]}
 
 
+def phase_breakdown_for_run(conn: sqlite3.Connection, run_id: str) -> dict:
+    """P8.2 perf instrumentation -- wall-time breakdown for one run_id from
+    `run_phase_timing` (migration 0016), sourced by
+    `pipeline/engine.py::run_pipeline`'s `db.record_phase_timing()` calls.
+    Answers "where does the wall time go" directly from the database
+    instead of a manual DB read-out after the fact (see the 2026-08-23
+    performance investigation).
+
+    `duration_s`/`occurrences` are summed per phase (a phase can occur more
+    than once per run_id -- `tuning` runs once per top-config, see the
+    migration's docstring), ordered by duration descending so the dominant
+    phase reads first without client-side sorting.
+
+    `unaccounted_s` = `run_total_s` (`run.finished_at` - `run.started_at`)
+    minus the sum of all recorded phase durations: the 4 instrumented
+    phases do NOT necessarily cover the whole run (model export, holdout
+    diagnostic, and the walk-forward folds' lazy per-fold pool builds
+    beyond the first are not separately instrumented, see the migration's
+    "known limitation" note) -- reported explicitly rather than implying
+    full coverage. `None` for a run still `running` (no `finished_at` yet)
+    or unknown."""
+    run_row = conn.execute(
+        "SELECT started_at, finished_at FROM run WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    run_total_s = None
+    if run_row and run_row[0] and run_row[1]:
+        row = conn.execute(
+            "SELECT strftime('%s', ?) - strftime('%s', ?)", (run_row[1], run_row[0])
+        ).fetchone()
+        run_total_s = row[0]
+
+    rows = conn.execute(
+        "SELECT phase, "
+        "SUM(strftime('%s', finished_at) - strftime('%s', started_at)) AS duration_s, "
+        "COUNT(*) AS occurrences "
+        "FROM run_phase_timing WHERE run_id = ? "
+        "GROUP BY phase ORDER BY duration_s DESC",
+        (run_id,),
+    ).fetchall()
+    phases = [{"phase": phase, "duration_s": duration_s, "occurrences": occurrences}
+              for phase, duration_s, occurrences in rows]
+
+    unaccounted_s = None
+    if run_total_s is not None:
+        unaccounted_s = run_total_s - sum(p["duration_s"] for p in phases)
+
+    return {"run_total_s": run_total_s, "unaccounted_s": unaccounted_s, "phases": phases}
+
+
 def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
               status: str | None = None, scheme: str | None = None,
               limit: int = 200) -> list[dict]:

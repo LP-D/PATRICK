@@ -929,8 +929,15 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     seed = config.output.seed
     t0 = time.time()
 
+    # Phase timing (migration 0016): ingestion runs before any run_id
+    # exists (trackdb.create_run() below is the first point one does),
+    # so its start/end are captured here and written once run_ids are
+    # known -- same duplication run.started_at itself already has across
+    # a batch's horizons, see record_phase_timing()'s docstring.
+    t_ingest_start = time.time()
     raw = ingest(config.objective, config.universe, store, force=force_ingest,
                  data_quality=config.data_quality)
+    t_ingest_end = time.time()
     target_col = clean_symbol(config.objective.target_symbol)
 
     conn = trackdb.connect(db_path)
@@ -949,7 +956,19 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                             config_hash=config_hash, git_sha=git_sha, seed=seed, job_id=job_id)
         run_ids[horizon] = run_id
 
+    for _run_id in run_ids.values():
+        trackdb.record_phase_timing(conn, _run_id, "ingestion", t_ingest_start, t_ingest_end)
+
     all_dates_full = raw.index
+    # Phase timing: base pool is shared by all folds/horizons, built once --
+    # in walk-forward, only the FIRST fold's full pool (base+parametric+
+    # interactions, built just below via pool_builder.get(fold_cuts[0]))
+    # is cleanly attributable here; later folds' pools are built lazily
+    # from inside the scan loop and land in the "scan" phase instead (see
+    # migration 0016's "known limitation"). CPCV builds its pool entirely
+    # inside _run_cpcv_scan(), entangled with its own scan loop -- not
+    # separately timed here, see that branch below.
+    t_pool_start = time.time()
     print("[FEATURES] building the base pool (causal, shared by all folds)...")
     base_pool = build_base_feature_pool(raw, config, target_col)
     print(f"[FEATURES] base pool: {base_pool.shape[1]} columns ({time.time()-t0:.1f}s)")
@@ -966,8 +985,17 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     cpcv_full_pool = None
     cpcv_interaction_formulas = None
     if config.validation.scheme == "cpcv":
+        # Phase timing: _run_cpcv_scan() builds its pool AND runs its scan
+        # loop internally, entangled (unlike walk-forward, where the first
+        # fold's pool build is cleanly separable) -- not split further here
+        # to avoid restructuring that function; recorded as "scan" only,
+        # no "pool_construction" row for CPCV runs (see migration 0016).
+        t_scan_start = time.time()
         board, trial_ids, n_trials_per_run, cpcv_full_pool, feature_pool, cpcv_interaction_formulas = (
             _run_cpcv_scan(raw, config, base_pool, target_col, conn, run_ids, seed, snapshot_id))
+        t_scan_end = time.time()
+        for _run_id in run_ids.values():
+            trackdb.record_phase_timing(conn, _run_id, "scan", t_scan_start, t_scan_end)
         pool_builder = None
         ctx = None
         all_dates = all_dates_full
@@ -988,6 +1016,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts,
                                          conn=conn, snapshot_id=snapshot_id)
         feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
+        t_pool_end = time.time()
+        for _run_id in run_ids.values():
+            trackdb.record_phase_timing(conn, _run_id, "pool_construction", t_pool_start, t_pool_end)
         print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(feature_pool)} columns")
         ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
 
@@ -998,6 +1029,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
 
         for horizon in config.objective.horizons:
             run_id = run_ids[horizon]
+            t_scan_start = time.time()
             for k in range(config.validation.n_wf_folds):
                 for regime in config.objective.regimes:
                     fd = ctx.prepare(horizon, k, regime, want_baselines=True)
@@ -1055,6 +1087,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
 
                 print(f"  h={horizon:2d}d fold{k+1}: {len(board.rows)} cumulative rows "
                       f"[{time.time()-t0:.0f}s]")
+            t_scan_end = time.time()
+            trackdb.record_phase_timing(conn, run_id, "scan", t_scan_start, t_scan_end)
 
     print(f"\n[SCAN] {len(board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
     best = board.best(metric="F1_dir")
@@ -1144,6 +1178,12 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 continue
             if len(fd.y_tr) < config.validation.min_train_rows * 2:
                 continue
+            # Phase timing: one row per top-config (tune_config() itself,
+            # here scoped to include the immediately-following per-fold
+            # refit+write below -- both are unavoidable cost of tuning this
+            # one config, not a separate concern). A run_id can legitimately
+            # get more than one "tuning" row (see migration 0016).
+            t_tune_start = time.time()
             cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, seed)
             X_tr_n = fd.X_tr[:, cols]
 
@@ -1181,6 +1221,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 trackdb.add_fold_metrics(conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
                 trackdb.add_predictions(conn, tuned_trial_id, fold_index=k + 1, split="test",
                                          ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
+            t_tune_end = time.time()
+            trackdb.record_phase_timing(conn, run_id, "tuning", t_tune_start, t_tune_end)
 
     tuned_df = pd.DataFrame(tuned_rows)
     if baseline_rows:

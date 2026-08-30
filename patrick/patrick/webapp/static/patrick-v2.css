@@ -122,11 +122,38 @@
   --color-on-accent: #0F172A;
   --color-destructive: #EF4444;
   --color-on-destructive: #000000;
+  --color-warning: #F59E0B; /* amber-500, ajoute post-lock (MASTER.md) -- 8.31:1 sur #0F172A, 7.30:1 sur #1B2336 */
   --color-foreground: #F8FAFC;
   --color-muted: #272F42;
   --color-muted-foreground: #94A3B8;
   --color-border: #64748B; /* corrected from #475569 — 3.75:1 on background, was 2.36:1 */
   --color-ring: #FFFFFF;
+
+  /* --- Legacy variable names, kept as aliases now that Desk Amber (tokens.css/
+     style.css/base.html/observatory.js) is gone. Posed during the migration to
+     avoid touching Desk Amber pages while both worlds coexisted -- that reason
+     no longer applies (nothing extends base.html anymore), but market.js/
+     simulate.js/_components.html still read these exact names via
+     getComputedStyle(...).getPropertyValue / plain `var(...)`, so renaming them
+     now would mean editing those JS/Jinja files for zero behavior change.
+     Semantic mapping to MASTER.md roles, not new values: --accent-ink/--ok-ink
+     (both "positive/brand" in the old tokens.css) -> --color-accent (MASTER.md
+     doesn't distinguish the two); --error-ink -> --color-destructive;
+     --ink-text-2 (secondary text) -> --color-muted-foreground; --ink-2
+     (secondary/structural, not text) -> --color-secondary; --mono -> same Fira
+     Code stack already used by the `code, .pk-mono, .num` rule below.
+     --accent added here (not part of the original 6): `_components.html`'s
+     sparkline() macro defaults to `color='var(--accent)'` -- unused by any
+     page today, but the same silent-failure risk (getPropertyValue returns ""
+     on an undefined custom property) the other 6 aliases were added to avoid,
+     now caught before Desk Amber's own --accent stopped existing. */
+  --mono: "Fira Code", ui-monospace, "SFMono-Regular", monospace;
+  --ink-text-2: var(--color-muted-foreground);
+  --accent-ink: var(--color-accent);
+  --accent: var(--color-accent);
+  --ink-2: var(--color-secondary);
+  --error-ink: var(--color-destructive);
+  --ok-ink: var(--color-accent);
 
   /* --- Spacing (MASTER.md) --- */
   --space-xs: 4px;
@@ -308,6 +335,7 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
 .metric-value.status-pending, .metric-value.status-disabled { color: var(--color-muted-foreground); }
 .metric-value.status-ok { color: var(--color-accent); }
 .metric-value.status-error { color: var(--color-destructive); }
+.metric-value.status-warning { color: var(--color-warning); }
 .metric-reliability {
   margin-top: var(--space-sm);
   font-size: 12px;
@@ -418,6 +446,10 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
 .status-badge.status-pending { background: var(--color-muted); color: var(--color-muted-foreground); }
 .status-badge.status-disabled { background: var(--color-muted); color: var(--color-muted-foreground); opacity: 0.7; }
 .status-badge.status-neutral { background: var(--color-secondary); color: var(--color-foreground); }
+.status-badge.status-warning {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
 
 /* ============ Empty / error states ============ */
 
@@ -487,3 +519,855 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .page-title { font-size: 1.25rem; }
 }
+
+/* ============ Banners (alerts printed in-flow) ============ */
+
+.banner {
+  display: block;
+  padding: var(--space-sm) var(--space-md);
+  margin: 0 0 var(--space-md);
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.banner-error {
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+  border-color: var(--color-destructive);
+  color: var(--color-foreground);
+}
+.banner-warning {
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: var(--color-warning);
+  color: var(--color-foreground);
+}
+.banner ul { margin: var(--space-xs) 0 0; padding-left: var(--space-lg); }
+
+/* ============ Glossary popover (glossary.js) ============
+   Porte ici la premiere fois qu'une page v2 en a besoin (/launch) --
+   voir la note laissee dans base_v2.html lors de la migration de /. */
+
+.info-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px; height: 15px;
+  margin-left: 3px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-family: "Fira Code", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: 1px;
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+.info-icon::before { content: "?"; }
+.info-icon:hover, .info-icon:focus {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+/* Zone de contact 44px (WCAG 2.5.5) sans agrandir la marque visible. */
+.info-icon::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 44px; height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.glossary-popover {
+  position: absolute;
+  z-index: 50;
+  max-width: 380px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-md) calc(var(--space-md) + 20px) var(--space-md) var(--space-md);
+  font-size: 13.5px;
+  color: var(--color-foreground);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 140ms linear, transform 160ms var(--ease-out), display 160ms allow-discrete;
+}
+.glossary-popover.hidden {
+  display: none; opacity: 0; transform: translateY(-4px);
+  transition: opacity 100ms linear, transform 100ms linear, display 100ms allow-discrete;
+}
+@starting-style { .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-4px); } }
+.glossary-popover-title {
+  font-family: "Fira Code", monospace;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  margin-bottom: var(--space-sm);
+}
+.glossary-popover-body { line-height: 1.6; }
+.glossary-popover-close {
+  position: absolute;
+  top: var(--space-sm); right: var(--space-sm);
+  width: 24px; height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-muted-foreground);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.glossary-popover-close:hover { color: var(--color-foreground); background: var(--color-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .glossary-popover, .glossary-popover.hidden { transition: none; }
+}
+
+/* ============ /launch — formulaire de lancement ============
+   Grille asymetrique (config a gauche, etat de la station a droite) :
+   meme decision de gabarit que Desk Amber (style.css, section ACCUEIL),
+   reportee ici avec les jetons MASTER.md. Aucun panneau ne defile en
+   interne -- un seul defilement, celui de la page. */
+
+.station-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: start;
+}
+.dash-settings { grid-column: 1; grid-row: 1 / span 3; }
+.dash-progress, .dash-stock, .dash-movers { grid-column: 2; }
+
+.dash-panel {
+  min-width: 0;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-md);
+}
+.dash-panel-title {
+  margin: 0 0 var(--space-md);
+  font-family: "Fira Code", monospace;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+}
+.dash-panel-body { display: flex; flex-direction: column; gap: var(--space-md); }
+
+/* ---- Formulaire ---- */
+
+.example-picker {
+  margin-bottom: var(--space-md);
+  display: flex; flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+  font-size: 13.5px;
+}
+.example-picker label { color: var(--color-muted-foreground); white-space: nowrap; }
+.example-picker select {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+}
+
+.run-form label {
+  display: block;
+  margin-bottom: var(--space-md);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+}
+.run-form label.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-right: var(--space-md);
+  margin-bottom: var(--space-sm);
+  color: var(--color-foreground);
+}
+.run-form input[type="checkbox"] { accent-color: var(--color-accent); width: 15px; height: 15px; }
+.run-form input[type="text"], .run-form input[type="number"], .run-form input[type="date"],
+.run-form select, .run-form textarea, .filter-bar select, .filter-bar input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px var(--space-sm);
+  margin-top: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+.run-form input:hover, .run-form select:hover, .run-form textarea:hover { border-color: var(--color-muted-foreground); }
+.run-form input:focus, .run-form select:focus, .run-form textarea:focus,
+.filter-bar select:focus, .filter-bar input:focus {
+  background: var(--color-card);
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+fieldset {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-md) 0 var(--space-xs);
+  margin: 0 0 var(--space-xs);
+}
+legend {
+  padding: 0 var(--space-sm) 0 0;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+}
+.subgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 var(--space-md); }
+.subfieldset { border-top: 1px solid var(--color-border); margin: var(--space-sm) 0 var(--space-md); padding-top: var(--space-md); }
+
+/* Divulgation progressive (<details>) : deux blocs restent ouverts (nom du
+   run, objectif) ; les neuf autres portent des defauts deja mesures dans
+   le VIX (README) et se replient. */
+.adv { border-top: 1px solid var(--color-border); padding: 0; margin: 0; }
+.adv:last-of-type { border-bottom: 1px solid var(--color-border); }
+.adv-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-xs);
+  cursor: pointer;
+  list-style: none;
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.adv-summary::-webkit-details-marker { display: none; }
+.adv-summary::before {
+  content: "";
+  flex: none;
+  width: 7px; height: 7px;
+  border-right: 1.5px solid var(--color-muted-foreground);
+  border-bottom: 1.5px solid var(--color-muted-foreground);
+  transform: rotate(-45deg) translate(-1px, -1px);
+  transition: transform 160ms var(--ease-out);
+}
+.adv[open] > .adv-summary::before { transform: rotate(45deg) translate(-2px, -2px); }
+.adv-summary:hover { background: var(--color-muted); }
+.adv-summary:hover::before { border-color: var(--color-accent); }
+.adv-title {
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adv-state {
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  flex: 1 0 auto;
+  margin-left: auto;
+  text-align: right;
+  white-space: normal;
+}
+.adv-state[data-modified] { color: var(--color-accent); font-weight: 600; }
+.adv-gate {
+  display: inline-block;
+  margin-left: var(--space-sm);
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.adv-gate[data-off] {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+.adv-tail { margin-left: var(--space-sm); }
+.adv-body { padding: var(--space-sm) var(--space-xs) var(--space-md); }
+.adv-body > .hint:first-child { margin-top: 0; }
+
+/* Barre de lancement, collante en bas de la colonne de config. */
+.launch-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin: var(--space-md) calc(-1 * var(--space-md)) calc(-1 * var(--space-md));
+  padding: var(--space-md) max(var(--space-md), env(safe-area-inset-bottom));
+  background: var(--color-card);
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.35);
+}
+.launch-recap {
+  margin: 0;
+  flex: 1 1 240px;
+  min-width: 0;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+  overflow-wrap: anywhere;
+}
+.launch-recap b { font-weight: 600; color: var(--color-foreground); }
+.launch-bar button.primary { flex: none; }
+/* Etat arme : composee SUR la surface (color-mix), jamais posee a sa place
+   (la barre est collante, un rgba() transparent laisserait le formulaire
+   qui defile en dessous transparaitre). */
+.launch-bar[data-confirm] {
+  background: color-mix(in srgb, var(--color-muted-foreground) 12%, var(--color-card));
+  border-top-color: var(--color-muted-foreground);
+}
+.launch-bar[data-confirm] .launch-recap { color: var(--color-foreground); }
+.launch-bar[data-confirm] button.primary {
+  background: var(--color-muted-foreground);
+  border-color: var(--color-muted-foreground);
+  color: var(--color-background);
+}
+.launch-cancel {
+  flex: none;
+  padding: 9px var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  font-family: "Fira Sans", sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out);
+}
+.launch-cancel:hover { border-color: var(--color-muted-foreground); color: var(--color-foreground); }
+.launch-cancel[hidden] { display: none; }
+
+button.primary {
+  padding: 9px var(--space-md);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-family: "Fira Sans", sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+button.primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+button.primary:active { transform: translateY(0); }
+button.primary:disabled {
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  border-color: var(--color-border);
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+.inline-form { display: inline; }
+
+/* ---- Avancement / derniers runs ---- */
+
+.queue-panel {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 8px;
+  background: var(--color-muted);
+  font-size: 13.5px;
+}
+.queue-panel .hint { margin: 0; }
+
+.progress-bar { height: 6px; background: var(--color-muted); border-radius: 999px; overflow: hidden; }
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: var(--color-accent);
+  border-radius: 999px;
+  transition: transform 0.55s var(--ease-out);
+}
+/* Phase non mesurable (ingestion/features, avant les folds) : la jauge
+   balaie plutot que de mentir sur une valeur. */
+.progress-bar[data-progress-mode="measuring"] .progress-fill {
+  transform: none;
+  transition: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%, #000 62%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, #000 38%, #000 62%, transparent 100%);
+  -webkit-mask-size: 46% 100%; mask-size: 46% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: patrick-measuring 1900ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes patrick-measuring {
+  from { -webkit-mask-position: -50% 0; mask-position: -50% 0; }
+  to   { -webkit-mask-position: 110% 0; mask-position: 110% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill { transition: none; }
+  .progress-bar[data-progress-mode="measuring"] .progress-fill { animation: none; opacity: 0.6; }
+}
+
+#status-line { color: var(--color-muted-foreground); font-family: "Fira Code", monospace; font-size: 13.5px; margin: var(--space-sm) 0; }
+.run-name-line { font-family: "Fira Code", monospace; font-size: 15px; font-weight: 600; margin: 0 0 var(--space-sm); }
+.log-tail {
+  background: var(--color-primary);
+  border-radius: 8px;
+  padding: var(--space-sm) var(--space-md);
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+  white-space: pre-wrap;
+}
+
+.recent-runs { margin: var(--space-sm) 0 0; font-family: "Fira Code", monospace; }
+.recent-runs-list { list-style: none; margin: 0; padding: 0; }
+.recent-runs-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-muted);
+  font-size: 13.5px;
+}
+.recent-runs-list a { grid-column: 1; color: var(--color-foreground); font-weight: 500; text-decoration: none; }
+.recent-runs-list a:hover { color: var(--color-accent); }
+.recent-runs-value { grid-column: 2; grid-row: 1; text-align: right; }
+.recent-runs-meta { grid-column: 1; font-size: 11px; color: var(--color-muted-foreground); }
+.recent-runs-rel { grid-column: 2; text-align: right; font-size: 11px; color: var(--color-muted-foreground); }
+.recent-runs-foot { margin: var(--space-sm) 0 0; font-size: 11px; }
+.recent-runs-foot a { color: var(--color-accent); text-decoration: none; }
+
+/* ---- Apercu marche (market.js) ---- */
+
+.target-preview { margin: 0 0 var(--space-md); }
+.preview-range-buttons { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+.range-btn {
+  padding: 3px var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  font-family: "Fira Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+.range-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.range-btn.active { border-color: transparent; background: var(--color-accent); color: var(--color-on-accent); }
+.chart-wrap { position: relative; }
+#preview-canvas {
+  width: 100%;
+  height: 180px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  padding: 4px var(--space-sm);
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  color: var(--color-foreground);
+  white-space: nowrap;
+}
+.target-news { margin-bottom: var(--space-md); }
+.news-list { list-style: none; padding: 0; margin: 0; }
+.news-list li { margin-bottom: var(--space-sm); font-size: 13.5px; line-height: 1.5; }
+.news-list a { color: var(--color-foreground); text-decoration: none; }
+.news-list a:hover { color: var(--color-accent); }
+.news-publisher { font-size: 11px; color: var(--color-muted-foreground); }
+
+/* ---- Movers ---- */
+
+.movers-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--space-sm); }
+.movers-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--space-md); margin-top: var(--space-md); }
+.movers-col-title {
+  margin: 0 0 var(--space-sm);
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.movers-hint { margin: 0 0 var(--space-sm); }
+.movers-list { list-style: none; margin: 0; padding: 0; font-family: "Fira Code", monospace; }
+.movers-list li { border-bottom: 1px solid var(--color-muted); }
+.movers-pick {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-sm);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out);
+}
+.movers-pick:hover { background: var(--color-muted); }
+.movers-pick:hover .movers-symbol { color: var(--color-accent); }
+.movers-empty { margin: var(--space-sm) 0 0; }
+.movers-symbol { font-weight: 600; min-width: 64px; }
+.movers-label { color: var(--color-muted-foreground); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.movers-pct { font-variant-numeric: tabular-nums; }
+.movers-up { color: var(--color-accent); }
+.movers-down { color: var(--color-destructive); }
+
+@media (max-width: 980px) {
+  .station-grid { grid-template-columns: 1fr; }
+  .dash-settings, .dash-progress, .dash-stock, .dash-movers { grid-column: 1; grid-row: auto; }
+  .adv-state { flex: 1 0 100%; text-align: left; margin-left: 0; }
+}
+
+/* Cible tactile 44px (WCAG 2.5.5) sur pointeur grossier, cf. Desk Amber
+   style.css -- meme decision, portee ici. */
+@media (pointer: coarse) {
+  .run-form label.checkbox { min-height: 44px; align-items: center; }
+  .run-form input[type="checkbox"] { width: 20px; height: 20px; }
+  .run-form input[type="text"], .run-form input[type="number"], .run-form input[type="date"],
+  .run-form select, .run-form textarea, .filter-bar select, .filter-bar input, .example-picker select {
+    min-height: 44px;
+  }
+  .adv-summary { min-height: 44px; align-items: center; }
+  .movers-pick { min-height: 44px; }
+  .range-btn { min-height: 44px; padding-left: var(--space-md); padding-right: var(--space-md); }
+  button.primary { min-height: 44px; }
+}
+
+/* ============ Breadcrumb, portee locale, filtres (/runs, /universe,
+   /targets/{ticker}, /runs/{id}/detail) ============ */
+
+nav.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13.5px;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-muted-foreground);
+}
+nav.breadcrumb a { color: inherit; text-decoration: none; border-bottom: 1px solid transparent; }
+nav.breadcrumb a:hover { border-bottom-color: var(--color-foreground); color: var(--color-foreground); }
+nav.breadcrumb span[aria-current="page"] { font-weight: 600; color: var(--color-foreground); }
+nav.breadcrumb a:not(:last-child)::after { content: "→"; margin-left: var(--space-sm); color: var(--color-muted-foreground); }
+
+/* Ligne de portee LOCALE (repond a la question de CETTE page, jamais le
+   verdict global) -- meme grammaire que .metric mais posee dans le flux. */
+.scope-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0 0 var(--space-lg);
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+  color: var(--color-muted-foreground);
+}
+.scope-line b {
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+}
+.scope-value { color: var(--color-foreground); font-weight: 600; }
+.scope-rel { opacity: 0.85; }
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  align-items: flex-end;
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  font-size: 13.5px;
+  color: var(--color-muted-foreground);
+}
+.filter-bar label { display: flex; align-items: center; gap: var(--space-sm); }
+.filter-bar select, .filter-bar input { width: auto; }
+@media (max-width: 640px) { .filter-bar { flex-direction: column; align-items: stretch; } }
+
+/* Etat vide en <div class="card"> directement (pas le macro empty_state) --
+   deux pages du produit l'utilisent ainsi. */
+.empty-state-title { font-weight: 600; margin: 0 0 var(--space-sm); color: var(--color-foreground); }
+.empty-state-hint { margin: 0; color: var(--color-muted-foreground); line-height: 1.5; }
+.empty-state-hint a { color: var(--color-accent); text-decoration: none; }
+.empty-state-hint a:hover { text-decoration: underline; }
+
+/* ============ /runs/{id}/detail ============ */
+
+/* Contexte de reproductibilite (cible/snapshot/hash config/git SHA/seed) --
+   imprime avant le premier resultat, cf. base_v2.html::block session_context. */
+.session-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  padding: var(--space-sm) 0 var(--space-md);
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  overflow-wrap: anywhere;
+}
+.session-context b {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  margin-right: var(--space-xs);
+  opacity: 0.75;
+}
+
+/* Index de sections en tete de page -- PAS des onglets (aucune section
+   active a marquer, toutes les sections sont deja rendues). */
+.section-index {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-lg);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.section-index-label { color: var(--color-muted-foreground); }
+.section-index a { color: var(--color-muted-foreground); text-decoration: none; }
+.section-index a:hover, .section-index a:focus-visible { color: var(--color-accent); }
+
+/* Note de bloc -- justification methodologique trop longue pour une colonne
+   de .metric-reliability, deplacee sous le bloc entier. */
+.block-note {
+  margin: var(--space-lg) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 8px;
+  background: var(--color-muted);
+  max-width: 100ch;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+.block-note-marker { color: var(--color-foreground); font-weight: 600; margin-right: var(--space-xs); }
+
+/* Vidage de config JSON -- entier, jamais tronque, mais borne en hauteur et
+   defile dans son propre conteneur (comme .table-scroll). */
+.config-dump {
+  max-height: 480px;
+  overflow: auto;
+  background: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+pre { overflow-x: auto; max-width: 100%; }
+
+/* Ligne retenue (meilleur essai) : graisse + filet d'accent, pas d'aplat
+   colore derriere des chiffres. */
+.data-table tbody tr.best td { font-weight: 600; color: var(--color-foreground); }
+.data-table tbody tr.best td:first-child { box-shadow: inset 2px 0 0 var(--color-accent); }
+
+/* ============ /universe : groupes de cibles ============
+   Desk Amber portait deux definitions concurrentes de .group-block/.group-title
+   (style.css : bloc "ACCUEIL" original, puis un bloc "Phase 5 layout" plus bas
+   qui gagne la cascade -- source-order -- avec des reperis --border-color/
+   --ink-secondary jamais definis dans tokens.css, donc silencieusement retombes
+   sur leurs valeurs de secours CLAIRES (#E5E7EB/#6B7280) sur un theme sombre.
+   Non reproduit ici : jetons MASTER.md corrects des le depart. */
+.group-block { margin-bottom: var(--space-2xl); }
+.group-block:not(:last-child) { padding-bottom: var(--space-xl); border-bottom: 1px solid var(--color-border); }
+.group-title { font-size: 18px; font-weight: 600; margin: 0 0 var(--space-md); color: var(--color-foreground); }
+.group-title .hint { display: inline; font-weight: 400; margin: 0; }
+
+/* ============ /simulate ============ */
+
+.sim-title {
+  font-family: "Fira Code", monospace;
+  font-weight: 600;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-xl);
+  color: var(--color-foreground);
+}
+.sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: var(--space-md); align-items: start; }
+.sim-panel-config { grid-row: 1 / span 3; }
+.sim-panel-equity, .sim-panel-metrics, .sim-panel-distribution { grid-column: 2; }
+.sim-panel-trades { grid-column: 1 / span 2; max-height: 460px; }
+
+#sim-equity-canvas, #sim-drawdown-canvas, #sim-dist-canvas {
+  width: 100%;
+  border-radius: 8px;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-sm);
+}
+/* Au repos (avant toute simulation), les toiles disparaissent plutot que de
+   laisser un rectangle vide : le drapeau est pose par simulate.js au
+   premier rendu. */
+.sim-empty {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-md);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+body[data-sim-loaded] .sim-empty { display: none; }
+body:not([data-sim-loaded]) #sim-equity-canvas,
+body:not([data-sim-loaded]) #sim-drawdown-canvas,
+body:not([data-sim-loaded]) #sim-dist-canvas,
+body:not([data-sim-loaded]) #sim-metrics-table,
+body:not([data-sim-loaded]) #sim-trades-table { display: none; }
+
+.sim-grid .dash-panel { max-height: none; }
+.sim-guard { color: var(--color-warning); }
+
+.sim-graph-container { margin-bottom: var(--space-lg); }
+.sim-graph-title {
+  font-family: "Fira Code", monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin-bottom: var(--space-sm);
+}
+.sim-graph-hint { font-size: 11px; color: var(--color-muted-foreground); margin-bottom: var(--space-sm); line-height: 1.5; }
+
+/* table.leaderboard : meme grammaire que .data-table, jetons partages --
+   pas le meme selecteur car #sim-metrics-table/#sim-trades-table utilisent
+   la classe "leaderboard", pas "data-table" (simulate.js). */
+table.leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+table.leaderboard th {
+  text-align: left;
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted-foreground);
+  background: var(--color-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+table.leaderboard td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-muted);
+  vertical-align: baseline;
+}
+table.leaderboard tbody tr:last-child td { border-bottom: none; }
+#sim-metrics-table td:nth-child(2), #sim-metrics-table td:nth-child(3) { text-align: right; }
+#sim-trades-table { max-height: 320px; overflow-y: auto; display: block; }
+
+.metric-row { position: relative; }
+.metric-row:hover { background: var(--color-muted); cursor: help; }
+.metric-help {
+  display: inline-block;
+  width: 14px; height: 14px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--color-muted-foreground);
+  color: var(--color-card);
+  font-size: 9px;
+  font-weight: bold;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+.metric-row:hover .metric-help { opacity: 1; }
+.metric-help::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  width: 200px;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.metric-row:hover .metric-help::after { opacity: 1; }
+
+#sim-trades-download { display: inline-block; margin-bottom: var(--space-sm); color: var(--color-accent); }
+
+@media (max-width: 1100px) {
+  .sim-grid { grid-template-columns: 1fr; }
+  .sim-panel-config, .sim-panel-equity, .sim-panel-metrics,
+  .sim-panel-distribution, .sim-panel-trades { grid-column: 1; grid-row: auto; }
+}
+
+/* ============ Utility ============
+   Toujours en dernier dans ce fichier : classe d'etat, elle doit gagner la
+   cascade sur toute regle posant `display` par ailleurs (ex. .banner). Meme
+   contrainte dans Desk Amber (style.css : .hidden apres .banner). */
+.hidden { display: none; }

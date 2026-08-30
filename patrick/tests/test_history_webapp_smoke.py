@@ -98,9 +98,14 @@ def test_target_page_renders_with_history(tmp_path, monkeypatch):
 
 
 def test_target_page_renders_empty_state_without_history(tmp_path, monkeypatch):
+    """^GSPC (pas AAPL) : univers réduit (feature/universe-reduction) --
+    AAPL a été retiré avec tout le groupe "Actions individuelles", /targets/
+    AAPL renvoie donc désormais 404 ("Cible inconnue") plutôt que la page
+    vide que ce test vérifie. ^GSPC reste dans l'univers réduit et n'a pas
+    de run seedé par _seed_db (seul ^VIX en a) -- même rôle que jouait AAPL."""
     _seed_db(tmp_path, monkeypatch)
     client = TestClient(app)
-    resp = client.get("/targets/AAPL")
+    resp = client.get("/targets/%5EGSPC")
     assert resp.status_code == 200
     assert "Aucun run pour cette cible" in resp.text
 

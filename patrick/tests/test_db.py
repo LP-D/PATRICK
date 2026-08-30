@@ -321,3 +321,73 @@ def test_library_versions_returns_valid_json():
 def test_current_git_sha_does_not_raise_outside_git_repo(tmp_path):
     sha = db.current_git_sha(cwd=str(tmp_path))
     assert isinstance(sha, str) and len(sha) > 0
+
+
+def test_migration_0016_creates_run_phase_timing_table(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "run_phase_timing" in tables
+    conn.close()
+
+
+def test_record_phase_timing_stores_one_row_per_call(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+
+    db.record_phase_timing(conn, "run1", "ingestion", started_at=1000.0, finished_at=1012.5)
+
+    rows = conn.execute(
+        "SELECT run_id, phase, started_at, finished_at FROM run_phase_timing"
+    ).fetchall()
+    assert len(rows) == 1
+    run_id, phase, started_at, finished_at = rows[0]
+    assert run_id == "run1"
+    assert phase == "ingestion"
+    # Stored as the same UTC 'YYYY-MM-DD HH:MM:SS' string format datetime('now')
+    # produces elsewhere in this schema (run.started_at etc.) -- epoch 1000.0 /
+    # 1012.5 land on 1970-01-01, seconds truncated (no fractional precision,
+    # matching every other timestamp column already in this database).
+    assert started_at == "1970-01-01 00:16:40"
+    assert finished_at == "1970-01-01 00:16:52"
+    conn.close()
+
+
+def test_record_phase_timing_allows_multiple_rows_for_same_run_and_phase(tmp_path):
+    """tuning is called once per top-config -- a run_id can legitimately
+    have more than one 'tuning' occurrence, unlike a PRIMARY KEY on
+    (run_id, phase) would allow."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+
+    db.record_phase_timing(conn, "run1", "tuning", started_at=2000.0, finished_at=2100.0)
+    db.record_phase_timing(conn, "run1", "tuning", started_at=2200.0, finished_at=2260.0)
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM run_phase_timing WHERE run_id = 'run1' AND phase = 'tuning'"
+    ).fetchone()[0]
+    assert count == 2
+    conn.close()
+
+
+def test_record_phase_timing_rejects_unknown_phase(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+    with pytest.raises(sqlite3.IntegrityError):
+        db.record_phase_timing(conn, "run1", "not_a_real_phase", started_at=0.0, finished_at=1.0)
+    conn.close()
+
+
+def test_record_phase_timing_cascades_on_run_delete(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+    db.record_phase_timing(conn, "run1", "scan", started_at=0.0, finished_at=1.0)
+
+    with conn:
+        conn.execute("DELETE FROM run WHERE run_id = 'run1'")
+
+    assert conn.execute("SELECT count(*) FROM run_phase_timing").fetchone()[0] == 0
+    conn.close()
