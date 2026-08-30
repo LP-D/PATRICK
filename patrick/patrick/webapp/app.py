@@ -464,24 +464,9 @@ def target_page(request: Request, ticker: str):
 
     conn = trackdb.connect()
     try:
-        target_runs = [r for r in trackdb.list_all_runs(conn) if r["target"] == ticker]
+        detail = trackhistory.target_detail(conn, ticker)
     finally:
         conn.close()
-
-    if not target_runs:
-        return templates.TemplateResponse(
-            request, "target.html",
-            {"target": ticker, "detail": None, **_i18n_context(request)},
-        )
-
-    detail = {
-        "cumulative_trials": sum(r.get("n_trials") or 0 for r in target_runs),
-        "n_runs": len(target_runs),
-        "runs": target_runs,
-        "target_fdr": None,  # Phase 5+: PBO/FDR requires stats.py
-        "fdr_result": {"n_tested": 0, "alpha": 0.10},
-        "pbo_by_horizon": {},  # Phase 5+: to be filled in from stats
-    }
 
     return templates.TemplateResponse(
         request, "target.html",
