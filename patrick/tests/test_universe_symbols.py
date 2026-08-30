@@ -81,8 +81,76 @@ def test_no_duplicate_symbol_across_groups():
     assert not dupes, f"symbole(s) en double : {dupes}"
 
 
-def test_the_two_fixed_symbols_are_correct():
-    """Non-régression explicite sur les deux corrections."""
+def test_the_two_historical_typos_never_reappear():
+    """Non-régression sur deux corrections passées (L3HARRIS -> LHX,
+    CBOT_W -> WEAT). Réduction d'univers (feature/universe-reduction) :
+    "Actions individuelles" (portait LHX) et "Matières premières & devises
+    (ETFs)" (portait WEAT) sont retirés en intégralité -- plus aucun des
+    deux tickers, correct ou fautif, n'est dans l'univers aujourd'hui. La
+    partie encore vérifiable et utile de ce garde-fou : si l'un de ces
+    groupes est un jour réintroduit, la forme fautive ne doit pas y
+    revenir. La présence de la forme correcte n'est plus un invariant --
+    ce n'est plus l'un des groupes actuellement chargés."""
     symbols = {s for _, s, _ in _yfinance_symbols()}
-    assert "L3HARRIS" not in symbols and "LHX" in symbols
-    assert "CBOT_W" not in symbols and "WEAT" in symbols
+    assert "L3HARRIS" not in symbols
+    assert "CBOT_W" not in symbols
+
+
+# Univers cible de la réduction (feature/universe-reduction) : commodités
+# (futures) + macro (FRED) + 4 actifs conservés explicitement (VIX, EUR/USD,
+# S&P500, BTC). Répété ici en dur (pas dérivé de D.DEFAULT_TARGET_GROUPS) —
+# le point du test est justement de détecter un écart entre ce qui est
+# CHARGÉ au runtime et ce qui était VOULU, une assertion qui se contente de
+# relire la même source qu'elle vérifie ne détecterait rien.
+_EXPECTED_INDICES = {"^GSPC", "^VIX"}
+_EXPECTED_DEVISES = {"EURUSD=X"}
+_EXPECTED_CRYPTO = {"BTC-USD"}
+_EXPECTED_COMMODITIES_FUTURES = {
+    "GC=F", "SI=F", "HG=F", "CL=F", "BZ=F", "NG=F", "ZC=F", "ZO=F", "KE=F",
+    "ZR=F", "ZS=F", "GF=F", "HE=F", "LE=F", "CC=F", "KC=F", "CT=F", "LBS=F",
+    "OJ=F", "SB=F",
+}
+_EXPECTED_MACRO_FRED = {
+    "BAMLC0A0CM", "BAMLC0A4CBBB", "BAMLH0A0HYM2", "CPIAUCSL", "CPILFESL",
+    "DCOILBRENTEU", "DCOILWTICO", "DFF", "DGS1", "DGS10", "DGS2", "DGS20",
+    "DGS3", "DGS30", "DGS5", "DGS7", "DTB1", "DTB3", "DTB6", "EFFR",
+    "FEDFUNDS", "GDP", "INDPRO", "NFCI", "OILPRICE", "PAYEMS", "PCE",
+    "PCEPILFE", "RSAFS", "SOFR", "SP500", "STLFSI4", "T10Y2Y", "T10Y3M",
+    "T10YIE", "T5YIE", "T5YIFR", "TEDRATE", "UMCSENT", "UNRATE", "VIXCLS",
+    "VIXDVOL", "WILL5000IND",
+}
+
+
+def test_universe_matches_exactly_the_reduced_target_set():
+    """Non-régression explicite (Phase 4, feature/universe-reduction) : la
+    liste d'univers chargée au runtime doit correspondre EXACTEMENT à la
+    liste attendue -- 67 cibles (20 commodités futures + 43 macro FRED + 2
+    indices + 1 devise + 1 crypto), pas "à peu près" (un ticker en trop ou
+    en moins passerait inaperçu avec une simple assertion de longueur)."""
+    groups = D.DEFAULT_TARGET_GROUPS
+    assert set(groups.keys()) == {"Indices", "Devises", "Matières premières (futures)", "Crypto", "Macro (FRED)"}
+
+    actual_indices = {s for s, _ in groups["Indices"]}
+    actual_devises = {s for s, _ in groups["Devises"]}
+    actual_crypto = {s for s, _ in groups["Crypto"]}
+    actual_commodities = {s for s, _ in groups["Matières premières (futures)"]}
+    actual_macro = {s for s, _ in groups["Macro (FRED)"]}
+
+    assert actual_indices == _EXPECTED_INDICES
+    assert actual_devises == _EXPECTED_DEVISES
+    assert actual_crypto == _EXPECTED_CRYPTO
+    assert actual_commodities == _EXPECTED_COMMODITIES_FUTURES
+    assert actual_macro == _EXPECTED_MACRO_FRED
+
+    all_expected = (_EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO
+                    | _EXPECTED_COMMODITIES_FUTURES | _EXPECTED_MACRO_FRED)
+    assert len(all_expected) == 67
+    all_actual = {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
+    assert all_actual == all_expected
+
+    # Cohérence avec l'univers de features (dérivé de la même source,
+    # config/schema.py::DEFAULT_UNIVERSE_YF_TICKERS/DEFAULT_UNIVERSE_FRED_SERIES).
+    assert set(D.DEFAULT_UNIVERSE_YF_TICKERS) == (
+        _EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO | _EXPECTED_COMMODITIES_FUTURES
+    )
+    assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED
