@@ -75,7 +75,12 @@
             </label>
 
             <label>{{ t('field_horizons') }}
-                <input type="text" name="horizons" value="{{ view.horizons }}" required>
+                <select name="horizons" id="horizons" multiple required size="6">
+                    {% for h in all_horizons %}
+                    <option value="{{ h }}" {% if h in view.horizons %}selected{% endif %}>{{ h }}</option>
+                    {% endfor %}
+                </select>
+                <p class="hint">{{ t('horizons_multiselect_hint') }}</p>
             </label>
             <label>{{ t('field_flat_thr') }}
                 <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">

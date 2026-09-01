@@ -13,7 +13,7 @@ from patrick.webapp.app import app
 
 def _minimal_form(**overrides) -> FormData:
     base = {
-        "horizons": "1,2",
+        "horizons": ["1", "2"],
         "regimes": "GLOBAL",
         "families": ["technical"],
         "n_features_grid": "5,8",
@@ -68,3 +68,17 @@ def test_build_config_dict_respects_explicit_output_dir():
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_2")
     assert errors == []
     assert config_dict["output"]["dir"] == "/tmp/custom_runs"
+
+
+def test_build_config_dict_reads_horizons_as_repeated_multi_select_values():
+    """`horizons` used to be a free-text input, submitted as a single
+    comma-joined string (`"1,2"`) and read with `form.get`. It is now a
+    native `<select multiple name="horizons">` (see index.html), which HTML
+    forms submit as several values repeated under the SAME key -- exactly
+    like `families`/`algos`/`sampler_candidates` already are. `form.get`
+    would silently keep only the first of those values; this asserts all
+    of them make it into the parsed config, in the order submitted."""
+    form = _minimal_form(horizons=["1", "5", "10"])
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_3")
+    assert errors == []
+    assert config_dict["objective"]["horizons"] == [1, 5, 10]

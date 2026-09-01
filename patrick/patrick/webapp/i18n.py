@@ -104,7 +104,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Ctrl/Cmd + click (or drag) to pick multiple targets — one run launches per target, in sequence.",
     },
     "news_recent": {"fr": "Actualités récentes :", "en": "Recent news:"},
-    "field_horizons": {"fr": "Horizons (jours, séparés par des virgules)", "en": "Horizons (days, comma-separated)"},
+    "field_horizons": {"fr": "Horizons (jours)", "en": "Horizons (days)"},
+    "horizons_multiselect_hint": {
+        "fr": "Ctrl/Cmd + clic pour sélectionner plusieurs horizons — le pipeline ne traite que ces valeurs.",
+        "en": "Ctrl/Cmd + click to pick multiple horizons — the pipeline only processes these values.",
+    },
     "field_flat_thr": {"fr": 'Seuil "flat" (mouvement neutre, ex. 0.003 = 0.3%)',
                         "en": 'Flat threshold (neutral move, e.g. 0.003 = 0.3%)'},
     "field_regimes": {"fr": "Régimes (séparés par des virgules, ex. GLOBAL)",
