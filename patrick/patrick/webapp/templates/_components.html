@@ -80,3 +80,26 @@
   {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
 </div>
 {% endmacro %}
+
+{# feature/ticker-stats-panel (`/commodities`, `/macro`) -- one card per
+   asset, rendered as a SKELETON only (three `.skeleton-line` bars, the
+   loading-state utility already defined in patrick-v2.css but unused until
+   now). `static/asset_stats.js` finds this container by `data-symbol`,
+   fetches `/api/asset-stats/{symbol}` and replaces `.asset-panel-body`'s
+   content with the real chart + stats table, or the empty state if the
+   series turns out too short / the fetch failed -- exactly the same
+   client-fetch-then-render split as the market preview (`market.js`,
+   `#preview-canvas`), so the page itself never blocks on 20-43
+   yfinance/FRED calls. `slug` (from `forms.slug_target`) makes the id
+   valid even for symbols like `GC=F`/`^VIX` that aren't valid HTML ids
+   as-is. #}
+{% macro asset_panel(symbol, label, slug) %}
+<div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}">
+  <h2>{{ label }} <span class="hint pk-mono asset-panel-symbol">{{ symbol }}</span></h2>
+  <div class="asset-panel-body" data-state="loading">
+    <div class="skeleton-line" style="width: 100%; margin-bottom: 8px"></div>
+    <div class="skeleton-line" style="width: 70%; margin-bottom: 8px"></div>
+    <div class="skeleton-line" style="width: 85%"></div>
+  </div>
+</div>
+{% endmacro %}

@@ -1,0 +1,20 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import asset_panel %}
+{% block title %}PATRICK — Matières premières{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_commodities') or 'Matières premières' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_commodities') or 'Matières premières (futures)' }}</h1>
+<p class="page-subtitle">{{ t('assetpanel_subtitle') or "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif." }}</p>
+<p class="hint">{{ t('assetpanel_bars_hint') or "Fenêtres exprimées en barres de la série (jours de bourse pour ces futures), pas en durée calendaire." }}</p>
+
+<div class="group-block asset-panel-grid">
+{% for a in assets %}
+{{ asset_panel(a.symbol, a.label, a.slug) }}
+{% endfor %}
+</div>
+{% endblock %}

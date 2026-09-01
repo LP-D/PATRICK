@@ -15,12 +15,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
-from patrick.webapp import alerts, forms, i18n, market_data, run_manager
+from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
+
+# feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
+# `/commodities` and `/macro` -- named once here rather than re-typed at
+# each call site (route + tests both need the exact same key).
+COMMODITIES_TARGET_GROUP = "Matières premières (futures)"
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -455,6 +461,60 @@ def universe_page(request: Request):
         request, "universe.html",
         {"groups": groups, **_i18n_context(request)},
     )
+
+
+def _asset_group_view(group_key: str) -> list[dict]:
+    """Per-asset panel skeleton for `/commodities`/`/macro`: symbol/label
+    from `DEFAULT_TARGET_GROUPS` (same source `/universe` reads) plus a
+    DOM-safe `slug` for the panel's `id` -- reuses `forms.slug_target`
+    rather than a second slugifier, since it already turns e.g. `GC=F` or
+    `^VIX`-shaped symbols into a valid id for exactly this kind of use
+    (run output dirs today, a DOM id here)."""
+    return [
+        {"symbol": sym, "label": label, "slug": forms.slug_target(sym)}
+        for sym, label in D.DEFAULT_TARGET_GROUPS[group_key]
+    ]
+
+
+@app.get("/commodities")
+def commodities_page(request: Request):
+    """feature/ticker-stats-panel: one display-stats panel per commodity
+    future in the reduced universe (returns/z-score/MA/vol -- never the ML
+    pipeline). The page itself renders only panel skeletons (no
+    yfinance/FRED fetch here, see `asset_stats.py` module docstring) --
+    `static/asset_stats.js` fills each one via `/api/asset-stats/{symbol}`
+    once loaded, same client-fetch split as the market preview
+    (`market.js` / `/api/preview/{symbol}`)."""
+    return templates.TemplateResponse(
+        request, "commodities.html",
+        {"assets": _asset_group_view(COMMODITIES_TARGET_GROUP), **_i18n_context(request)},
+    )
+
+
+@app.get("/macro")
+def macro_page(request: Request):
+    """feature/ticker-stats-panel: same panel, for the Macro (FRED) group."""
+    return templates.TemplateResponse(
+        request, "macro.html",
+        {"assets": _asset_group_view(D.FRED_TARGET_GROUP), **_i18n_context(request)},
+    )
+
+
+@app.get("/api/asset-stats/{symbol}")
+def asset_stats_api(symbol: str, period: str = "5y"):
+    """feature/ticker-stats-panel: fetched client-side, once per panel, by
+    `asset_stats.js`. Same data-access path as `/api/preview/{symbol}`
+    (`forms.TARGET_SOURCE_BY_SYMBOL` -> `market_data.price_history`) --
+    `asset_stats.compute_stats` only adds the display-stats layer on top,
+    it does not fetch anything itself. `period="5y"`: comfortably covers
+    every window this module computes (longest is the 252-bar view /
+    200-bar MA) without requesting `"max"` for every asset on every page
+    load."""
+    source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Symbole inconnu")
+    series = market_data.price_history(symbol, source, period)
+    return asset_stats.compute_stats(series)
 
 
 @app.get("/targets/{ticker}")
