@@ -380,6 +380,21 @@ def test_record_phase_timing_rejects_unknown_phase(tmp_path):
     conn.close()
 
 
+def test_record_phase_timing_accepts_stability_holdout_diagnostic_and_export(tmp_path):
+    """Migration 0017 : le bucket "non instrumenté" (824s/34% mesurés sur le
+    run GSPC du 25/08) regroupait stabilité, diagnostic holdout et export --
+    ces trois phases doivent être acceptées par la même contrainte CHECK que
+    ingestion/pool_construction/scan/tuning, pas une table séparée."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
+    for phase in ("stability", "holdout_diagnostic", "export"):
+        db.record_phase_timing(conn, "run1", phase, started_at=0.0, finished_at=1.0)
+    rows = conn.execute("SELECT phase FROM run_phase_timing ORDER BY phase").fetchall()
+    assert [r[0] for r in rows] == ["export", "holdout_diagnostic", "stability"]
+    conn.close()
+
+
 def test_record_phase_timing_cascades_on_run_delete(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)

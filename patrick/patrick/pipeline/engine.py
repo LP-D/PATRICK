@@ -1115,6 +1115,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if not top_h:
                 continue
             winner = top_h[0]
+            # Phase timing (migration 0017): timed AFTER the cheap top_h
+            # lookup/continue above, same convention as "tuning"'s
+            # t_tune_start (set after its own pre-checks) -- one row per
+            # horizon that actually has a winner to measure stability on.
+            t_stability_start = time.time()
             fold_feature_sets: dict[int, list[str]] = {}
             for r in board_h.rows:
                 if r["regime"] == winner["regime"] and r["N"] == winner["N"]:
@@ -1124,6 +1129,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                             stability["n_folds"], stability["selection_freq"])
             if stability["warning"]:
                 print(f"  [STABILITY] h={horizon}d: {stability['warning']}")
+            t_stability_end = time.time()
+            trackdb.record_phase_timing(conn, run_ids[horizon], "stability", t_stability_start, t_stability_end)
 
     # Audit report, C4 -- holdout diagnostic of the WHOLE SCAN grid (not just
     # the final winner), written to `holdout_diagnostic` (a table separate
@@ -1134,6 +1141,13 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     if config.validation.scheme == "walkforward" and n_wf < len(all_dates_full) and trial_ids:
         print(f"[HOLDOUT DIAGNOSTIC] evaluating {len(trial_ids)} trials on the holdout "
               "(read-only, chooses nothing)...")
+        # Phase timing (migration 0017): the loop below mixes every horizon's
+        # trials together (trial_ids spans all of them, not restructured
+        # here -- same discipline as pool_construction's CPCV branch above,
+        # which avoids splitting _run_cpcv_scan). One identical start/end
+        # written to every horizon's run_id, like "ingestion" already does,
+        # rather than a false per-horizon split of a genuinely mixed loop.
+        t_holdout_diag_start = time.time()
         for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
             diag_cfg = {"horizon": h, "regime": regime, "N": n_feat,
                         "sampler": sampler_name, "algo": algo, "best_params": {}}
@@ -1141,6 +1155,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                            config, all_dates_full, n_wf, diag_cfg, seed)
             if diag_eval is not None:
                 trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
+        t_holdout_diag_end = time.time()
+        for _run_id in run_ids.values():
+            trackdb.record_phase_timing(conn, _run_id, "holdout_diagnostic", t_holdout_diag_start, t_holdout_diag_end)
 
     # Optuna tuning: walk-forward only (relies on `ctx.prepare`,
     # "train=prefix" topology -- not directly transposable to CPCV within
@@ -1224,6 +1241,12 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             t_tune_end = time.time()
             trackdb.record_phase_timing(conn, run_id, "tuning", t_tune_start, t_tune_end)
 
+    # Phase timing (migration 0017): board.export() + the tuned CSV write
+    # below produce ONE combined artifact set across every horizon (board
+    # mixes all of them together, exactly like holdout_diagnostic's loop
+    # above) -- same "identical start/end per run_id" convention as
+    # ingestion/holdout_diagnostic, not a per-horizon split.
+    t_export_start = time.time()
     tuned_df = pd.DataFrame(tuned_rows)
     if baseline_rows:
         board.rows.extend(baseline_rows)
@@ -1234,6 +1257,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         tuned_df.to_csv(tuned_path, index=False)
         print(f"[EXPORT] {tuned_path}")
     print(f"[EXPORT] {csv_path}")
+    t_export_end = time.time()
+    for _run_id in run_ids.values():
+        trackdb.record_phase_timing(conn, _run_id, "export", t_export_start, t_export_end)
 
     # baseline_metric has no fold_index column (Phase 1.2 schema): aggregated
     # (averaged) per run rather than written per fold — see phase report.
@@ -1305,9 +1331,20 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # a 2-horizon fixture: only ever one `is_best` row across BOTH runs).
         trial_id_by_horizon: dict[int, int] = {}
         for horizon, best_h in final_best_by_horizon.items():
+            # Phase timing (migration 0017): second "export" occurrence for
+            # THIS horizon's own run_id -- model serialization (full-pool
+            # refit + joblib dump). One row per horizon now that
+            # export_best_model() runs once per horizon (fix/best-model-
+            # per-horizon), not once for the single global winner as before.
+            # Multiple rows per (run_id, phase) already supported (see
+            # migration 0016, "tuning").
+            t_export_model_start = time.time()
             h_model_path = export_best_model(full_pool, target_col, feature_pool, config,
                                               best_h, config.output.dir, seed=seed,
                                               interaction_formulas=interaction_formulas)
+            t_export_model_end = time.time()
+            trackdb.record_phase_timing(conn, run_ids[horizon], "export",
+                                         t_export_model_start, t_export_model_end)
             model_paths[horizon] = h_model_path
 
             h_best_key = (int(best_h["horizon"]), best_h["regime"], int(best_h["N"]),
