@@ -498,6 +498,48 @@ def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> i
     return cur.rowcount
 
 
+def cleanup_legacy_ticker_runs(conn: sqlite3.Connection) -> int:
+    """Runs left 'running'/'pending' whose `target` is no longer part of the
+    current reduced universe (`config.defaults.DEFAULT_TARGET_CHOICES`, since
+    commit 3cc303f which cut ~550 tickers down to 67 -- commodity futures +
+    FRED macro series + 4 kept assets) can never complete: no feature/config
+    wiring exists any more for a ticker outside that set, so a worker will
+    never pick them back up nor drive them to 'done'/'failed' on its own --
+    they are orphaned the moment the universe changed under them, not after
+    some timeout.
+
+    Distinct from `reap_orphaned_runs` above: that one is age-gated and
+    target-agnostic (any run stuck 'running' too long, regardless of
+    ticker); this one is target-gated and age-agnostic (a 'running'/'pending'
+    row on a legacy ticker is invalid immediately, no need to wait one out).
+    The two catch different orphans and neither should touch the other's:
+    this function leaves alone
+    - 'running'/'pending' rows on a still-valid target (a different,
+      unrelated orphan -- `reap_orphaned_runs`'s concern, not this one's);
+    - already-finished ('done'/'failed') rows on a legacy target -- those
+      are legitimate historical results from when that ticker was still in
+      scope, not orphans, and must never be rewritten.
+
+    Same manual remediation this codifies as a repeatable, tested function:
+    the ad hoc `GSPC_1_detail_h*` cleanup done directly against the DB
+    before this existed."""
+    from patrick.config.defaults import DEFAULT_TARGET_CHOICES
+
+    valid_targets = {symbol for symbol, _label, _source in DEFAULT_TARGET_CHOICES}
+
+    rows = conn.execute(
+        "SELECT run_id, target FROM run WHERE status IN ('running', 'pending')"
+    ).fetchall()
+
+    count = 0
+    for run_id, target in rows:
+        if target not in valid_targets:
+            finish_run(conn, run_id, status="failed",
+                       error="ticker hors univers reduit, run abandonne")
+            count += 1
+    return count
+
+
 _RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",
                 "git_sha", "seed", "lib_versions", "status", "started_at", "finished_at",
                 "n_trials", "error", "job_id"]
