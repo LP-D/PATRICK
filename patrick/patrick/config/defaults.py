@@ -133,6 +133,11 @@ DEFAULT_TARGET_GROUPS = {
     ],
     "Devises": [
         ("EURUSD=X", "EUR_USD"),
+        # DX-Y.NYB (US Dollar Index) : ticker yfinance de l'ancien univers
+        # (pre-reduction), reintroduit a la demande -- classe avec les devises
+        # plutot qu'un nouveau groupe a une seule entree ; ne doit PAS aller
+        # dans "Macro (FRED)" (source y serait a tort "fred").
+        ("DX-Y.NYB", "USD_Index"),
     ],
     "Matières premières (futures)": [
         ("GC=F", "Gold_Futures"),

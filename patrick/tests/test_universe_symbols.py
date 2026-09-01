@@ -103,7 +103,7 @@ def test_the_two_historical_typos_never_reappear():
 # CHARGÉ au runtime et ce qui était VOULU, une assertion qui se contente de
 # relire la même source qu'elle vérifie ne détecterait rien.
 _EXPECTED_INDICES = {"^GSPC", "^VIX"}
-_EXPECTED_DEVISES = {"EURUSD=X"}
+_EXPECTED_DEVISES = {"EURUSD=X", "DX-Y.NYB"}
 _EXPECTED_CRYPTO = {"BTC-USD"}
 _EXPECTED_COMMODITIES_FUTURES = {
     "GC=F", "SI=F", "HG=F", "CL=F", "BZ=F", "NG=F", "ZC=F", "ZO=F", "KE=F",
@@ -124,9 +124,11 @@ _EXPECTED_MACRO_FRED = {
 def test_universe_matches_exactly_the_reduced_target_set():
     """Non-régression explicite (Phase 4, feature/universe-reduction) : la
     liste d'univers chargée au runtime doit correspondre EXACTEMENT à la
-    liste attendue -- 67 cibles (20 commodités futures + 43 macro FRED + 2
-    indices + 1 devise + 1 crypto), pas "à peu près" (un ticker en trop ou
-    en moins passerait inaperçu avec une simple assertion de longueur)."""
+    liste attendue -- 68 cibles (20 commodités futures + 43 macro FRED + 2
+    indices + 2 devises + 1 crypto), pas "à peu près" (un ticker en trop ou
+    en moins passerait inaperçu avec une simple assertion de longueur).
+    DX-Y.NYB (US Dollar Index) ajouté aux devises -- ticker yfinance, ne doit
+    pas être confondu avec une source FRED."""
     groups = D.DEFAULT_TARGET_GROUPS
     assert set(groups.keys()) == {"Indices", "Devises", "Matières premières (futures)", "Crypto", "Macro (FRED)"}
 
@@ -144,7 +146,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
 
     all_expected = (_EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO
                     | _EXPECTED_COMMODITIES_FUTURES | _EXPECTED_MACRO_FRED)
-    assert len(all_expected) == 67
+    assert len(all_expected) == 68
     all_actual = {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
     assert all_actual == all_expected
 
@@ -154,3 +156,20 @@ def test_universe_matches_exactly_the_reduced_target_set():
         _EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO | _EXPECTED_COMMODITIES_FUTURES
     )
     assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED
+
+
+def test_dxy_is_a_yfinance_ticker_not_fred():
+    """DX-Y.NYB (US Dollar Index) : symbole yfinance de l'ancien univers,
+    reintroduit dans le groupe "Devises". Test structurel (pas d'appel
+    reseau yfinance dans la suite rapide) confirmant qu'il apparait bien
+    cote yfinance de la config chargee, jamais cote FRED -- une erreur de
+    groupe (ex: place par megarde dans "Macro (FRED)") lui donnerait a tort
+    source="fred" dans DEFAULT_TARGET_CHOICES."""
+    assert "DX-Y.NYB" in D.DEFAULT_UNIVERSE_YF_TICKERS
+    assert "DX-Y.NYB" not in D.DEFAULT_UNIVERSE_FRED_SERIES.values()
+
+    matches = [(sym, label, src) for sym, label, src in D.DEFAULT_TARGET_CHOICES if sym == "DX-Y.NYB"]
+    assert len(matches) == 1
+    _, label, source = matches[0]
+    assert source == "yfinance"
+    assert label == "USD_Index"
