@@ -1246,14 +1246,36 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         trackdb.add_baseline_metrics(conn, run_id, baseline_name, split="test", metrics=agg)
 
     final_best = dict(best) if best else None
+    group_cols = ["horizon", "regime", "N", "sampler", "algo"]
+    tuned_agg = None
     if len(tuned_df):
-        group_cols = ["horizon", "regime", "N", "sampler", "algo"]
         tuned_agg = (tuned_df.groupby(group_cols + ["best_params"])["F1_dir"]
                      .mean().reset_index().sort_values("F1_dir", ascending=False))
         if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
             final_best = tuned_agg.iloc[0].to_dict()
 
+    # Audit fix [per-horizon export]: `final_best` above is the single winner
+    # across ALL horizons combined (`board.best()`/`tuned_agg` are never
+    # grouped by horizon) -- exporting only THAT config's model silently
+    # discards every other horizon's own scan/tuning result, even though
+    # `trial`/`run` are already scoped per horizon (Phase 1.2 schema) and
+    # `predict.py::_find_best_trial` already queries `is_best` PER run_id.
+    # Same before/after-tuning comparison as `final_best`, just scoped to one
+    # horizon's own rows at a time.
+    final_best_by_horizon: dict[int, dict] = {}
+    for horizon in config.objective.horizons:
+        board_h = Leaderboard()
+        board_h.rows = [r for r in board.rows if r.get("horizon") == horizon and r.get("N") is not None]
+        best_h = board_h.best(metric="F1_dir")
+        if tuned_agg is not None:
+            tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
+            if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
+                best_h = tuned_h.iloc[0].to_dict()
+        if best_h is not None:
+            final_best_by_horizon[horizon] = best_h
+
     model_path = None
+    model_paths: dict[int, str] = {}
     holdout_result = None
     dm_result = None
     pbo_result = None
@@ -1275,19 +1297,32 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if interaction_formulas:
                 full_inter = _apply_interaction_formulas(full_pool, interaction_formulas)
                 full_pool = pd.concat([full_pool, full_inter], axis=1)
-        model_path = export_best_model(full_pool, target_col, feature_pool, config,
-                                        final_best, config.output.dir, seed=seed,
-                                        interaction_formulas=interaction_formulas)
+        # Fix [per-horizon export]: one model per horizon with a valid
+        # winning config, not just `final_best`'s own horizon -- otherwise
+        # `patrick predict --run-id <run_id_of_other_horizon> --live` finds
+        # no trial with is_best=1 for that run_id and always raises "No
+        # exported model for this run" (reproduced pre-fix on `tiny_config`,
+        # a 2-horizon fixture: only ever one `is_best` row across BOTH runs).
+        trial_id_by_horizon: dict[int, int] = {}
+        for horizon, best_h in final_best_by_horizon.items():
+            h_model_path = export_best_model(full_pool, target_col, feature_pool, config,
+                                              best_h, config.output.dir, seed=seed,
+                                              interaction_formulas=interaction_formulas)
+            model_paths[horizon] = h_model_path
 
-        best_key = (int(final_best["horizon"]), final_best["regime"], int(final_best["N"]),
-                    final_best["sampler"], final_best["algo"])
-        best_trial_id = trial_ids.get(best_key)
-        if best_trial_id is None and "best_params" in final_best:
-            parsed_params = _parse_params(final_best["best_params"])
-            tuned_key = best_key + (json.dumps(parsed_params, sort_keys=True),)
-            best_trial_id = tuned_trial_ids.get(tuned_key)
-        if best_trial_id is not None:
-            trackdb.mark_best_trial(conn, best_trial_id, artifact_path=model_path)
+            h_best_key = (int(best_h["horizon"]), best_h["regime"], int(best_h["N"]),
+                          best_h["sampler"], best_h["algo"])
+            h_trial_id = trial_ids.get(h_best_key)
+            if h_trial_id is None and "best_params" in best_h:
+                h_parsed_params = _parse_params(best_h["best_params"])
+                h_tuned_key = h_best_key + (json.dumps(h_parsed_params, sort_keys=True),)
+                h_trial_id = tuned_trial_ids.get(h_tuned_key)
+            if h_trial_id is not None:
+                trackdb.mark_best_trial(conn, h_trial_id, artifact_path=h_model_path)
+                trial_id_by_horizon[horizon] = h_trial_id
+
+        model_path = model_paths.get(int(final_best["horizon"]))
+        best_trial_id = trial_id_by_horizon.get(int(final_best["horizon"]))
 
         # Phase 2.1 — terminal holdout: a single re-evaluation of the already-
         # chosen config, never used to choose among several (see
@@ -1355,6 +1390,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         "best_before_tuning": best,
         "final_best": final_best,
         "model_path": model_path,
+        "model_paths": model_paths,
         "elapsed_s": time.time() - t0,
         "holdout": holdout_result,
         "diebold_mariano": dm_result,

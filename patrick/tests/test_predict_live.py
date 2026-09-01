@@ -6,6 +6,7 @@ sans jamais ré-entraîner ni resélectionner quoi que ce soit.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import numpy as np
@@ -123,3 +124,105 @@ def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
 def test_predict_live_unknown_run_raises(tmp_path):
     with pytest.raises(ValueError):
         predict_module.predict_live("no-such-run", db_path=str(tmp_path / "patrick.db"))
+
+
+def _multi_horizon_config(tmp_path) -> RunConfig:
+    raw_yaml = {
+        "name": "predict_live_multi_horizon_test",
+        "objective": {"target_symbol": TARGET_SYMBOL, "horizons": [3, HORIZON], "regimes": ["GLOBAL"]},
+        "universe": {
+            "yf_tickers": ["SPX_LIKE"],
+            "fred_series": {"NFCI": "NFCI", "T10Y2Y": "T10Y2Y"},
+            "start_date": "2015-01-01",
+        },
+        "features": {
+            "families": ["technical", "interactions", "spike", "vol_models", "macro"],
+            "interact_top_base": 15, "interact_top_pairs": 8, "interact_final_n": 6,
+            "pool_prefilter": 60,
+        },
+        "validation": {"n_wf_folds": 2, "min_train_frac": 0.5},
+        "selection": {"method": "shap", "n_features_grid": [5, 8], "shap_sample": 200},
+        "sampler": {"candidates": ["SMOTE"]},
+        "models": {"algos": ["RandomForest", "XGBoost"]},
+        "tuning": {"enabled": False, "top_k": 2, "n_trials": 3, "cv_splits": 2},
+        "output": {"dir": str(tmp_path / "runs_multi"), "seed": 42},
+    }
+    return RunConfig.model_validate(raw_yaml)
+
+
+@pytest.mark.slow
+def test_predict_live_works_for_every_horizon_in_a_multi_horizon_run(tmp_path, monkeypatch):
+    """Rapport d'audit -- confirmé : avant correction, un `patrick run`
+    multi-horizons ne marquait `is_best=1` QUE sur le trial du gagnant
+    global -- `predict_live(run_id)` sur le run_id d'un AUTRE horizon (table
+    `run`, un run_id distinct par horizon, cf. Phase 1.2) levait
+    systématiquement `ValueError("No exported model (winning trial) for run
+    {run_id}.")`. `patrick predict --run-id <id> --live` était donc cassé
+    pour tout horizon sauf celui du gagnant global, sur tout run
+    multi-horizons -- reproduit et corrigé ici avec 2 horizons (3j, 5j)."""
+    raw_v1 = _synthetic_raw()
+    monkeypatch.setattr(
+        engine_module, "ingest",
+        lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+
+    db_path = str(tmp_path / "patrick_multi.db")
+    store = DataStore(root=str(tmp_path / "store_multi"))
+    result = engine_module.run_pipeline(_multi_horizon_config(tmp_path), store=store, db_path=db_path)
+    assert set(result["model_paths"].keys()) == {3, HORIZON}
+
+    conn = sqlite3.connect(db_path)
+    run_ids = dict(conn.execute("SELECT horizon, run_id FROM run").fetchall())
+    conn.close()
+    assert set(run_ids.keys()) == {3, HORIZON}
+
+    monkeypatch.setattr(
+        predict_module, "ingest",
+        lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+
+    for horizon, run_id in run_ids.items():
+        live = predict_module.predict_live(run_id, db_path=db_path, store=store)
+        assert live["y_pred"] in (0, 1, 2, 3)
+        assert 0.0 <= live["y_proba"] <= 1.0
+
+
+@pytest.mark.slow
+def test_predict_live_still_works_for_legacy_pre_fix_artifact_path(tmp_path, monkeypatch):
+    """Compatibilité ascendante (rapport de correction, étape 3) : un run
+    exporté par l'ANCIEN code (un seul fichier `<name>_best_model.joblib`,
+    sans suffixe `_h<horizon>`) doit continuer à fonctionner avec
+    `predict_live` après ce correctif -- rien côté lecture (`predict.py`)
+    ne redérive un chemin de fichier depuis une convention de nommage, tout
+    passe par `trial.artifact_path` tel qu'enregistré à l'export. Simulé ici
+    en renommant le fichier fraîchement exporté vers l'ANCIENNE convention
+    et en mettant à jour `artifact_path` en conséquence, pour reproduire
+    l'état d'un run historique déjà en base avant ce correctif (ces runs-là
+    ne seront jamais réexportés sous la nouvelle convention)."""
+    raw_v1 = _synthetic_raw()
+    monkeypatch.setattr(
+        engine_module, "ingest",
+        lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+
+    db_path = str(tmp_path / "patrick_legacy.db")
+    store = DataStore(root=str(tmp_path / "store_legacy"))
+    config = _tiny_config(tmp_path)
+    result = engine_module.run_pipeline(config, store=store, db_path=db_path)
+    new_path = result["model_path"]
+    assert new_path is not None and os.path.exists(new_path)
+
+    legacy_path = os.path.join(config.output.dir, f"{config.name}_best_model.joblib")
+    os.replace(new_path, legacy_path)
+
+    conn = sqlite3.connect(db_path)
+    run_id = conn.execute("SELECT run_id FROM run WHERE horizon = ?", (HORIZON,)).fetchone()[0]
+    conn.execute("UPDATE trial SET artifact_path = ? WHERE run_id = ? AND is_best = 1",
+                 (legacy_path, run_id))
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(
+        predict_module, "ingest",
+        lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+
+    live = predict_module.predict_live(run_id, db_path=db_path, store=store)
+    assert live["y_pred"] in (0, 1, 2, 3)
+    assert 0.0 <= live["y_proba"] <= 1.0

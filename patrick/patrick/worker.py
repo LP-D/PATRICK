@@ -149,6 +149,19 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
     if model_path:
         _add("best_model", model_path)
         _add("best_model_meta", model_path[: -len(".joblib")] + "_meta.json")
+    # Fix report [per-horizon export]: `run_pipeline` now exports one model
+    # per horizon with a valid result (`result["model_paths"]`), not just
+    # `model_path` (kept above, unchanged, for backward compatibility --
+    # still the global winner's own file). Exposed here under per-horizon
+    # keys so a multi-horizon run's OTHER horizons are downloadable too,
+    # through the same generic `/runs/{run_id}/download/{artifact}` route
+    # (no new route needed, `download_artifact` already looks artifacts up
+    # by key).
+    for horizon, h_model_path in (result.get("model_paths") or {}).items():
+        if h_model_path == model_path:
+            continue  # already exposed as "best_model" above, avoid a duplicate download link
+        _add(f"best_model_h{horizon}", h_model_path)
+        _add(f"best_model_meta_h{horizon}", h_model_path[: -len(".joblib")] + "_meta.json")
 
     top_rows = []
     if len(leaderboard_df):

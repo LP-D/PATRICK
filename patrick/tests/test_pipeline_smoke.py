@@ -126,6 +126,61 @@ def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, t
     )
 
 
+def test_export_writes_one_model_file_per_horizon_with_valid_tuned_result(tiny_config, monkeypatch, tmp_path):
+    """Rapport d'audit -- confirmé : `export_best_model` n'était appelé
+    qu'UNE fois par `run_pipeline`, scopé au seul horizon de `final_best`
+    (le gagnant GLOBAL, calculé tous horizons confondus par
+    `board.best()`/`tuned_agg.groupby(...)` -- aucun `groupby("horizon")`
+    dans ce calcul). Les horizons 3j et 5j de `tiny_config` sont pourtant
+    TOUS DEUX scannés et affinés par Optuna (même fixture
+    `_synthetic_raw_no_floor` que `test_optuna_budget_is_allocated_to_every_horizon`
+    ci-dessus, qui le vérifie déjà côté `tuned_df`) -- avant correction, un
+    seul des deux repartait avec un fichier .joblib, l'autre voyait son
+    meilleur config affiné calculé puis silencieusement jeté à l'export.
+
+    Après correction : un fichier modèle par horizon ayant un résultat
+    valide (`result["model_paths"]`), et le trial gagnant de CHAQUE horizon
+    (pas seulement celui du gagnant global) marqué is_best avec son propre
+    artifact_path -- faute de quoi `patrick predict --run-id
+    <run_id_de_l'autre_horizon> --live` ne trouve aucun trial gagnant pour
+    ce run_id (cf. test_predict_live.py,
+    test_predict_live_works_for_every_horizon_in_a_multi_horizon_run)."""
+    import os
+
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_perhorizon.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_perhorizon_store"),
+        db_path=db_path)
+
+    assert result["final_best"] is not None
+    model_paths = result["model_paths"]
+    expected_horizons = set(tiny_config.objective.horizons)
+    assert set(model_paths.keys()) == expected_horizons, (
+        f"pas un fichier modele par horizon avec resultat valide : attendu {expected_horizons}, "
+        f"obtenu {set(model_paths.keys())}."
+    )
+    # Fichiers distincts (pas le même chemin écrasé horizon après horizon).
+    assert len(set(model_paths.values())) == len(model_paths)
+    for horizon, path in model_paths.items():
+        assert os.path.exists(path)
+        assert f"_h{horizon}.joblib" in path
+
+    conn = sqlite3.connect(db_path)
+    for horizon in expected_horizons:
+        run_id = conn.execute("SELECT run_id FROM run WHERE horizon = ?", (horizon,)).fetchone()[0]
+        best_row = conn.execute(
+            "SELECT artifact_path FROM trial WHERE run_id = ? AND is_best = 1", (run_id,)
+        ).fetchone()
+        assert best_row is not None, f"aucun trial gagnant marque pour l'horizon {horizon}j"
+        assert best_row[0] == model_paths[horizon]
+    conn.close()
+
+
 def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, tmp_path):
     """Contre-épreuve : `optuna_select_top_k_per_horizon=False` restaure l'ancien
     comportement (sélection top_k globale, tous horizons confondus) --

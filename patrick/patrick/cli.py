@@ -45,6 +45,20 @@ def ingest_cmd(
     typer.echo(f"Ingestion terminée : {df.shape[0]} lignes x {df.shape[1]} colonnes.")
 
 
+def _echo_exported_models(result: dict) -> None:
+    """Fix report [per-horizon export]: `run_pipeline` now exports one model
+    per horizon with a valid result (`result["model_paths"]`), not just
+    `result["model_path"]` (the single global winner, kept for backward
+    compatibility -- e.g. a run with only one horizon still gets exactly one
+    line here, unchanged from before this fix)."""
+    model_paths = result.get("model_paths") or {}
+    if len(model_paths) > 1:
+        for horizon in sorted(model_paths):
+            typer.echo(f"Modèle exporté (h={horizon}j) : {model_paths[horizon]}")
+    elif result.get("model_path"):
+        typer.echo(f"Modèle exporté : {result['model_path']}")
+
+
 @app.command(name="run")
 def run_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
@@ -73,8 +87,7 @@ def run_cmd(
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
         typer.echo(f"Meilleur modèle final : {result['final_best']}")
-    if result["model_path"]:
-        typer.echo(f"Modèle exporté : {result['model_path']}")
+    _echo_exported_models(result)
 
 
 @app.command(name="resume")
@@ -101,8 +114,7 @@ def resume_cmd(
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
         typer.echo(f"Meilleur modèle final : {result['final_best']}")
-    if result["model_path"]:
-        typer.echo(f"Modèle exporté : {result['model_path']}")
+    _echo_exported_models(result)
 
 
 @app.command(name="report")
