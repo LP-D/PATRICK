@@ -266,6 +266,36 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_launch": {"fr": "Lancer", "en": "Launch"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
+    # feature/ticker-stats-panel
+    "nav_commodities": {"fr": "Matières premières", "en": "Commodities"},
+    "nav_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
+    "assetpanel_subtitle": {
+        "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
+        "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",
+    },
+    "assetpanel_bars_hint": {
+        "fr": "Fenêtres exprimées en barres de la série (jours de bourse pour ces futures), pas en durée calendaire.",
+        "en": "Windows are counted in bars of the series (trading days for these futures), not calendar time.",
+    },
+    "assetpanel_bars_hint_macro": {
+        "fr": "Fenêtres exprimées en barres de la série, pas en durée calendaire — plusieurs séries FRED de ce groupe sont mensuelles ou trimestrielles (CPI, GDP, PAYEMS, RSAFS, UMCSENT, UNRATE), une barre y couvre donc bien plus qu'un jour.",
+        "en": "Windows are counted in bars of the series, not calendar time — several FRED series in this group are monthly or quarterly (CPI, GDP, PAYEMS, RSAFS, UMCSENT, UNRATE), so one bar there spans much more than a day.",
+    },
+    "assetpanel_loading": {"fr": "Chargement…", "en": "Loading…"},
+    "assetpanel_error": {"fr": "Indisponible : {error}", "en": "Unavailable: {error}"},
+    "assetpanel_insufficient": {
+        "fr": "Historique insuffisant pour calculer ces statistiques pour l'instant.",
+        "en": "Not enough history to compute these stats yet.",
+    },
+    "assetpanel_load_error": {"fr": "Erreur de chargement.", "en": "Loading error."},
+    "assetpanel_returns": {"fr": "Rendements (horizons du pipeline)", "en": "Returns (pipeline horizons)"},
+    "assetpanel_long_window": {"fr": "Vue longue période", "en": "Longer-window view"},
+    "assetpanel_zscore": {"fr": "Z-score (60 barres)", "en": "Z-score (60 bars)"},
+    "assetpanel_ma": {"fr": "Cours vs moyenne mobile", "en": "Price vs moving average"},
+    "assetpanel_vol": {"fr": "Volatilité (proxy Heston, réalisée annualisée)", "en": "Volatility (Heston proxy, annualized realized)"},
+    "assetpanel_vol_current": {"fr": "courante (20 barres)", "en": "current (20 bars)"},
+    "assetpanel_vol_long_run": {"fr": "long terme (~252 barres)", "en": "long-run (~252 bars)"},
+    "assetpanel_bars": {"fr": "{n} barres", "en": "{n} bars"},
 
     # "Observation station" world — chrome: theme toggle and activity
     # record strip. The theme button names the current STATE, not the
@@ -536,6 +566,11 @@ def js_strings(lang: str) -> dict[str, str]:
         "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
         "recap_horizons", "recap_targets_count", "movers_not_a_target",
+        # feature/ticker-stats-panel (asset_stats.js)
+        "assetpanel_loading", "assetpanel_error", "assetpanel_insufficient",
+        "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",
+        "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol",
+        "assetpanel_vol_current", "assetpanel_vol_long_run", "assetpanel_bars",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}
