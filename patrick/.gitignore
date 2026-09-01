@@ -6,6 +6,7 @@ build/
 dist/
 runs/
 .patrick/
+logs/
 
 # impeccable-live-ignore-start
 .impeccable/hook.cache.json

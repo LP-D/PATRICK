@@ -181,6 +181,63 @@ def test_export_writes_one_model_file_per_horizon_with_valid_tuned_result(tiny_c
     conn.close()
 
 
+def test_phase_timing_covers_stability_holdout_diagnostic_and_export(tiny_config, monkeypatch, tmp_path):
+    """Réinstrumentation (migration 0017, après le refactor per-horizon de
+    l'export -- fix/best-model-per-horizon) : les trois sous-phases qui
+    composaient le bucket "non instrumenté" (824s/34% sur la mesure GSPC du
+    25/08) doivent chacune produire au moins une ligne run_phase_timing sur
+    un run réel. "stability" et "holdout_diagnostic" restent dans du code
+    inchangé par le refactor per-horizon (une ligne par horizon pour
+    stability, une ligne partagée identique à chaque run_id pour
+    holdout_diagnostic -- mêmes conventions que la première version de cette
+    instrumentation, cf. 3b57f43). "export" doit maintenant produire AU
+    MOINS DEUX lignes par horizon : l'export CSV/tuned partagé (identique à
+    chaque run_id, comme avant) PLUS l'export modèle propre à cet horizon --
+    export_best_model() est appelé une fois par horizon dans la boucle
+    final_best_by_horizon (fix/best-model-per-horizon), plus une seule fois
+    pour le seul gagnant global comme avant ce fix."""
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_phasetiming.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_phasetiming_store"),
+        db_path=db_path)
+
+    assert result["holdout"] is not None, "le holdout doit être actif pour exercer holdout_diagnostic"
+    expected_horizons = set(tiny_config.objective.horizons)
+    assert set(result["model_paths"].keys()) == expected_horizons
+
+    conn = sqlite3.connect(db_path)
+    run_id_by_horizon = dict(conn.execute("SELECT horizon, run_id FROM run").fetchall())
+
+    for horizon in expected_horizons:
+        run_id = run_id_by_horizon[horizon]
+
+        stability_rows = conn.execute(
+            "SELECT COUNT(*) FROM run_phase_timing WHERE run_id = ? AND phase = 'stability'", (run_id,)
+        ).fetchone()[0]
+        assert stability_rows > 0, f"aucune ligne 'stability' pour l'horizon {horizon}j"
+
+        holdout_rows = conn.execute(
+            "SELECT COUNT(*) FROM run_phase_timing WHERE run_id = ? AND phase = 'holdout_diagnostic'", (run_id,)
+        ).fetchone()[0]
+        assert holdout_rows > 0, f"aucune ligne 'holdout_diagnostic' pour l'horizon {horizon}j"
+
+        export_rows = conn.execute(
+            "SELECT COUNT(*) FROM run_phase_timing WHERE run_id = ? AND phase = 'export'", (run_id,)
+        ).fetchone()[0]
+        assert export_rows >= 2, (
+            f"attendu au moins 2 lignes 'export' pour l'horizon {horizon}j "
+            f"(CSV partagé + modèle per-horizon), obtenu {export_rows} -- "
+            "le refactor per-horizon de l'export doit produire une ligne 'export' "
+            "par horizon, pas une seule pour le gagnant global."
+        )
+    conn.close()
+
+
 def test_optuna_budget_can_revert_to_global_selection(tiny_config, monkeypatch, tmp_path):
     """Contre-épreuve : `optuna_select_top_k_per_horizon=False` restaure l'ancien
     comportement (sélection top_k globale, tous horizons confondus) --
