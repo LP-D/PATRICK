@@ -60,7 +60,7 @@ def _isolated_env(tmp_path, monkeypatch):
 def _form_data(tmp_path) -> dict:
     return {
         "target_symbols": [TARGET_SYMBOL],
-        "horizons": "3,5",
+        "horizons": ["3", "5"],
         "flat_thr": "0.003",
         "regimes": "GLOBAL",
         "start_date": "2015-01-01",

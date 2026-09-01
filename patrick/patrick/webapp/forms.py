@@ -130,6 +130,11 @@ ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "mac
 ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
+# Horizons have no separate "all possible values" concept the way algos/vol
+# models do -- `DEFAULT_HORIZONS` already *is* the fixed, exhaustive set the
+# pipeline can process (see `patrick/config/defaults.py`); the multi-select
+# in index.html has no option outside of it.
+ALL_HORIZONS = list(D.DEFAULT_HORIZONS)
 TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)
 TARGET_GROUPS = D.DEFAULT_TARGET_GROUPS
 VOL_MODEL_LABELS = {
@@ -195,7 +200,13 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             errors.append(f"« {label} » ne peut pas être vide.")
         return lst
 
-    horizons = _require_non_empty(_int_list(form.get("horizons", "")), "Horizons")
+    # Native `<select multiple name="horizons">` (index.html): HTML forms
+    # submit multi-selects as several values repeated under the same key,
+    # exactly like `families`/`algos`/`sampler_candidates` below --
+    # `form.getlist`, not `form.get` (which would silently keep only the
+    # first selected horizon).
+    horizons = _require_non_empty(
+        [int(h) for h in form.getlist("horizons") if str(h).strip()], "Horizons")
     regimes = _require_non_empty(_split_list(form.get("regimes", "GLOBAL")), "Régimes")
     families = _require_non_empty(form.getlist("families"), "Familles de features")
     vol_models = form.getlist("vol_models")
@@ -338,7 +349,9 @@ def to_view(cfg: dict) -> dict:
     return {
         "name": cfg.get("name", ""),
         "target_symbol": obj.get("target_symbol", ""),
-        "horizons": ",".join(str(h) for h in obj.get("horizons", [])),
+        # A list of ints, not the old joined string: the form field is now a
+        # `<select multiple>` (index.html), pre-selected via `h in view.horizons`.
+        "horizons": [int(h) for h in obj.get("horizons", [])],
         "flat_thr": obj.get("flat_thr", D.DEFAULT_FLAT_THR),
         "regimes": ",".join(obj.get("regimes", [])),
         "start_date": uni.get("start_date", "2000-01-01"),

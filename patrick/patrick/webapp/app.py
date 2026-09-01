@@ -33,6 +33,7 @@ FORM_OPTIONS = {
     "all_samplers": forms.ALL_SAMPLERS,
     "all_algos": forms.ALL_ALGOS,
     "all_vol_models": forms.ALL_VOL_MODELS,
+    "all_horizons": forms.ALL_HORIZONS,
     "vol_model_labels": forms.VOL_MODEL_LABELS,
     "selection_methods": ["shap", "rfe", "lasso"],
     "target_groups": forms.TARGET_GROUPS,

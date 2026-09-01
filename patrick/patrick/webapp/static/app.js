@@ -508,6 +508,20 @@
         return value.split(",").map(function (x) { return x.trim(); }).filter(Boolean).length;
     }
 
+    /* `horizons` est passé de <input type=text> à <select multiple> : sur un
+       <select multiple>, `.value` ne renvoie QUE la valeur de la première
+       option sélectionnée (comportement DOM standard), jamais la liste
+       entière -- exactement le même piège qu'un `<select multiple
+       id="target_symbols">` non traité aurait posé. Les trois lectures
+       ci-dessous (comptage pour la projection de combinaisons, résumé de
+       confirmation, récap de la barre de lancement) passent par
+       `selectedOptions` au lieu de `.value`. */
+    function selectedValues(el) {
+        if (!el) return [];
+        if (el.multiple) return Array.prototype.map.call(el.selectedOptions, function (o) { return o.value; });
+        return el.value ? [el.value] : [];
+    }
+
     /* Nombre de combinaisons que le scan va évaluer. Calculé, pas estimé :
        c'est le produit des cardinalités que le formulaire porte déjà. Une
        durée en minutes serait une invention — la machine et la cible la
@@ -515,7 +529,7 @@
     function projectedCombinations() {
         if (!form) return null;
         var grid = countList((form.querySelector("[name=n_features_grid]") || {}).value);
-        var horizons = countList((form.querySelector("[name=horizons]") || {}).value);
+        var horizons = selectedValues(form.querySelector("[name=horizons]")).length;
         var regimes = countList((form.querySelector("[name=regimes]") || {}).value);
         var algos = form.querySelectorAll("[name=algos]:checked").length;
         var samplers = form.querySelectorAll("[name=sampler_candidates]:checked").length;
@@ -535,7 +549,7 @@
         var target = targetSelect
             ? Array.prototype.map.call(targetSelect.selectedOptions, function (o) { return o.value; }).join(", ") || "?"
             : "?";
-        var horizons = (form.querySelector("[name=horizons]") || {}).value || "?";
+        var horizons = selectedValues(form.querySelector("[name=horizons]")).join(", ") || "?";
         var regimes = (form.querySelector("[name=regimes]") || {}).value || "?";
         var schemeSel = form.querySelector("[name=scheme]");
         var scheme = schemeSel && schemeSel.selectedIndex >= 0
@@ -751,8 +765,9 @@
             if (selected.length === 1) bits.push("<b>" + selected[0] + "</b>");
             else if (selected.length > 1) bits.push(fmtStr(tr("recap_targets_count", "{n} targets"), { n: selected.length }));
         }
-        if (horizons && horizons.value) {
-            bits.push(fmtStr(tr("recap_horizons", "horizons {h}"), { h: horizons.value }));
+        const horizonsVals = selectedValues(horizons);
+        if (horizonsVals.length) {
+            bits.push(fmtStr(tr("recap_horizons", "horizons {h}"), { h: horizonsVals.join(", ") }));
         }
         if (scheme && scheme.selectedIndex >= 0) bits.push(scheme.options[scheme.selectedIndex].textContent.trim());
         launchRecap.innerHTML = bits.join(" · ");
