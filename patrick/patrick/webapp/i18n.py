@@ -216,6 +216,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "artifact_tuned_csv": {"fr": "Configs affinées (CSV)", "en": "Refined configs (CSV)"},
     "artifact_best_model": {"fr": "Meilleur modèle (joblib)", "en": "Best model (joblib)"},
     "artifact_best_model_meta": {"fr": "Métadonnées (JSON)", "en": "Metadata (JSON)"},
+    # Fix report [per-horizon export] : un run multi-horizons exporte
+    # désormais un modèle par horizon (`best_model_h<horizon>`, cf.
+    # worker.py::_summarize_result) -- {h} substitué dynamiquement, une seule
+    # entrée couvre tous les horizons.
+    "artifact_best_model_h": {"fr": "Modèle h={h}j (joblib)", "en": "Model h={h}d (joblib)"},
+    "artifact_best_model_meta_h": {"fr": "Métadonnées h={h}j (JSON)", "en": "Metadata h={h}d (JSON)"},
 
     # Phase 2 — statistical validity
     "stat_holdout": {"fr": "Holdout terminal ({n} obs. jamais vues) : F1_dir={f1}",
@@ -509,6 +515,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "results_title", "results_summary", "results_summary_tuned", "results_best_config",
         "results_leaderboard", "artifact_leaderboard_csv", "artifact_leaderboard_xlsx",
         "artifact_tuned_csv", "artifact_best_model", "artifact_best_model_meta",
+        "artifact_best_model_h", "artifact_best_model_meta_h",
         "preview_loading", "preview_no_data", "preview_unavailable", "preview_load_error",
         "news_loading", "news_none", "news_load_error", "movers_no_data",
         "movers_updated_at", "movers_computing",

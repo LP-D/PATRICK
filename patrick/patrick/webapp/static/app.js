@@ -354,7 +354,15 @@
             best_model: tr("artifact_best_model", "Best model (joblib)"),
             best_model_meta: tr("artifact_best_model_meta", "Metadata (JSON)"),
         };
-        return labels[key] || key;
+        if (labels[key]) return labels[key];
+        // Per-horizon export keys (`best_model_h5`, `best_model_meta_h5`,
+        // see worker.py::_summarize_result) -- not in the fixed map above
+        // since the horizon varies per run.
+        const meta = key.match(/^best_model_meta_h(\d+)$/);
+        if (meta) return fmtStr(tr("artifact_best_model_meta_h", "Metadata h={h}d (JSON)"), { h: meta[1] });
+        const model = key.match(/^best_model_h(\d+)$/);
+        if (model) return fmtStr(tr("artifact_best_model_h", "Model h={h}d (joblib)"), { h: model[1] });
+        return key;
     }
 
     function escapeHtml(s) {
