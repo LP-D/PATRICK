@@ -368,7 +368,14 @@ def _cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, se
 
     cached = trackdb.get_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash)
     if cached is not None:
-        return pd.DataFrame({col_name: cached}, index=series.index)
+        # Bug found 2026-08-23: `cached` can hold Python `None` (a failed
+        # fit's NaN values round-tripped through JSON, see the write below)
+        # -- an explicit float dtype is required here, or a list containing
+        # `None` makes pandas infer `object`, not `float64`. An object-dtype
+        # column downstream makes np.isinf() raise in
+        # pipeline/engine.py::_finite_features() (regression test:
+        # test_cached_result_preserves_float_dtype_when_the_underlying_fit_failed).
+        return pd.DataFrame({col_name: pd.Series(cached, index=series.index, dtype=float)})
 
     result = _timed_model_call(model, _PARAMETRIC_MODELS[model], series, fit_end_idx, test_end_idx)
     values = [None if pd.isna(v) else float(v) for v in result[col_name].to_numpy()]
