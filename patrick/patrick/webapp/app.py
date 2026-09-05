@@ -122,7 +122,6 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
         {
             "view": view,
             "errors": errors,
-            "examples": forms.list_example_configs(),
             "active_run": active,
             "queued_runs": run_manager.queued_runs(),
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
@@ -136,19 +135,12 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
 
 
 @app.get("/launch")
-def launch_page(request: Request, load: str | None = None):
+def launch_page(request: Request):
     """P8 (synthesis dashboard chantier): moved from `/` to free that route
     for the new synthesis page. Same handler, same template
     (`index.html`), only the route changed -- nav/breadcrumb links updated
     accordingly (see `base.html`, `i18n.py::nav_launch`)."""
-    if load:
-        try:
-            cfg = forms.load_example_config(load)
-        except FileNotFoundError:
-            return _render_index(request, forms.to_view(forms.default_config_dict()),
-                                  [f"Config d'exemple introuvable : {load}"], status_code=404)
-    else:
-        cfg = forms.default_config_dict()
+    cfg = forms.default_config_dict()
     return _render_index(request, forms.to_view(cfg), [])
 
 

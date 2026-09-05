@@ -12,29 +12,8 @@ from __future__ import annotations
 import glob
 import os
 import re
-from pathlib import Path
-
-import yaml
 
 from patrick.config import defaults as D
-
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-EXAMPLES_DIR = REPO_ROOT / "configs" / "examples"
-
-
-def list_example_configs() -> list[str]:
-    if not EXAMPLES_DIR.is_dir():
-        return []
-    return sorted(p.name for p in EXAMPLES_DIR.glob("*.yaml"))
-
-
-def load_example_config(filename: str) -> dict:
-    path = EXAMPLES_DIR / filename
-    if not path.is_file() or path.parent != EXAMPLES_DIR:
-        raise FileNotFoundError(filename)
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
 
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
 

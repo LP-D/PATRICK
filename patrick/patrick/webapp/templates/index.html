@@ -36,20 +36,6 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
-    {# `onchange="this.form.submit()"` rechargeait la page et écrasait les 65
-       champs saisis, sans un mot. Le seul accélérateur de la page était aussi
-       son seul destructeur de travail. La soumission passe désormais par
-       `app.js`, qui demande confirmation si le formulaire a été modifié. #}
-    <form method="get" action="/launch" class="example-picker" id="example-form">
-        <label for="load">{{ t('load_example_label') }}</label>
-        <select name="load" id="load">
-            <option value="">{{ t('load_example_default') }}</option>
-            {% for ex in examples %}
-            <option value="{{ ex }}" {% if request.query_params.get('load') == ex %}selected{% endif %}>{{ ex }}</option>
-            {% endfor %}
-        </select>
-    </form>
-
     <form method="post" action="/runs" class="run-form" id="run-form">
 
         <fieldset>
