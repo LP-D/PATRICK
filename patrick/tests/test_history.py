@@ -289,3 +289,88 @@ def test_universe_overview_marks_known_symbol_with_history(tmp_path):
     other = next(s for s in flat.values() if s["symbol"] != "^VIX")
     assert other["n_runs"] == 0
     conn.close()
+
+
+def _set_started_at(conn, run_id: str, started_at: str) -> None:
+    """Test-only helper: `create_run()` always stamps `datetime('now')`
+    (db.py), giving every run in a fast test the SAME second-resolution
+    timestamp -- useless for asserting chronological ordering. Backdates a
+    run's `started_at` directly so successive runs can be seeded with
+    distinct, controlled timestamps."""
+    conn.execute("UPDATE run SET started_at = ? WHERE run_id = ?", (started_at, run_id))
+    conn.commit()
+
+
+def test_phase_timing_drift_for_target_empty_when_no_runs(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    assert trackhistory.phase_timing_drift_for_target(conn, "^VIX") == []
+    conn.close()
+
+
+def test_phase_timing_drift_for_target_empty_when_runs_have_no_phase_timing(tmp_path):
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    assert trackhistory.phase_timing_drift_for_target(conn, "^VIX") == []
+    conn.close()
+
+
+def test_phase_timing_drift_for_target_orders_points_chronologically_across_runs(tmp_path):
+    """P9 -- seed 3 successive runs for the same ticker, inserted OUT of
+    chronological order on purpose (run3 first) with distinct `started_at`
+    and distinct per-phase durations. The function must return one point
+    per (run, phase), ordered by `started_at` ascending (oldest run first)
+    regardless of insertion/run_id order -- ready to plot as a time series
+    without client-side re-sorting."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run3", "^VIX", 5, status="done")
+    _set_started_at(conn, "run3", "2026-01-03 00:00:00")
+    db.record_phase_timing(conn, "run3", "scan", started_at=0.0, finished_at=90.0)
+    db.record_phase_timing(conn, "run3", "tuning", started_at=90.0, finished_at=110.0)
+
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    _set_started_at(conn, "run1", "2026-01-01 00:00:00")
+    db.record_phase_timing(conn, "run1", "scan", started_at=0.0, finished_at=60.0)
+    db.record_phase_timing(conn, "run1", "tuning", started_at=60.0, finished_at=90.0)
+
+    _make_run(conn, "run2", "^VIX", 5, status="done")
+    _set_started_at(conn, "run2", "2026-01-02 00:00:00")
+    db.record_phase_timing(conn, "run2", "scan", started_at=0.0, finished_at=75.0)
+    db.record_phase_timing(conn, "run2", "tuning", started_at=75.0, finished_at=100.0)
+
+    # A different ticker's run must never leak into this ticker's drift.
+    _make_run(conn, "other", "AAPL", 5, status="done")
+    db.record_phase_timing(conn, "other", "scan", started_at=0.0, finished_at=999.0)
+
+    points = trackhistory.phase_timing_drift_for_target(conn, "^VIX")
+
+    assert [p["run_id"] for p in points] == ["run1", "run1", "run2", "run2", "run3", "run3"]
+    assert [p["started_at"] for p in points] == [
+        "2026-01-01 00:00:00", "2026-01-01 00:00:00",
+        "2026-01-02 00:00:00", "2026-01-02 00:00:00",
+        "2026-01-03 00:00:00", "2026-01-03 00:00:00",
+    ]
+    by_run_phase = {(p["run_id"], p["phase"]): p["duration_s"] for p in points}
+    assert by_run_phase[("run1", "scan")] == 60
+    assert by_run_phase[("run1", "tuning")] == 30
+    assert by_run_phase[("run2", "scan")] == 75
+    assert by_run_phase[("run2", "tuning")] == 25
+    assert by_run_phase[("run3", "scan")] == 90
+    assert by_run_phase[("run3", "tuning")] == 20
+    conn.close()
+
+
+def test_phase_timing_drift_for_target_sums_multiple_occurrences_of_same_phase(tmp_path):
+    """`tuning` (and in principle any phase) can occur more than once per
+    run_id -- same rule as `phase_breakdown_for_run` -- must be summed into
+    ONE point per (run, phase), not returned as separate rows."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    _set_started_at(conn, "run1", "2026-01-01 00:00:00")
+    db.record_phase_timing(conn, "run1", "tuning", started_at=0.0, finished_at=20.0)
+    db.record_phase_timing(conn, "run1", "tuning", started_at=20.0, finished_at=45.0)
+
+    points = trackhistory.phase_timing_drift_for_target(conn, "^VIX")
+    assert len(points) == 1
+    assert points[0]["phase"] == "tuning"
+    assert points[0]["duration_s"] == 45
+    conn.close()
