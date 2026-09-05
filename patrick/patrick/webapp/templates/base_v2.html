@@ -52,6 +52,7 @@ style.css untouched until their own turn in the priority order.
                 <a href="/launch" {% if request.url.path == '/launch' %}aria-current="page"{% endif %}>{{ t('nav_launch') if t else 'Lancer' }}</a>
                 <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
                 <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
+                <a href="/data-freshness" {% if request.url.path.startswith('/data-freshness') %}aria-current="page"{% endif %}>{{ t('nav_data_freshness') if t else 'Fraîcheur' }}</a>
                 <a href="/commodities" {% if request.url.path.startswith('/commodities') %}aria-current="page"{% endif %}>{{ t('nav_commodities') if t else 'Matières premières' }}</a>
                 <a href="/macro" {% if request.url.path.startswith('/macro') %}aria-current="page"{% endif %}>{{ t('nav_macro') if t else 'Macro (FRED)' }}</a>
                 <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
