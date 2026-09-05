@@ -476,6 +476,63 @@ def _asset_group_view(group_key: str) -> list[dict]:
     ]
 
 
+def _predictions_overview() -> list[dict]:
+    """feature/predictions-overview: universe-wide (target x horizon) table
+    -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
+    grouping `/universe` already uses). Server-rendered live from the DB on
+    every request (no page cache, same philosophy as `/phase9`/`/universe`)
+    via two small grouped queries (`trackhistory.
+    latest_predictions_by_target_and_horizon`/
+    `direction_metrics_by_target_and_horizon`) -- NOT a page-load client
+    fetch like `asset_stats.js`: this data lives in our own indexed sqlite
+    DB, not an external API, so there is no latency reason to defer it.
+
+    Raw data only (direction, confidence, dm p-value) -- the ok/warning
+    state and badge label are computed in the template, same convention as
+    `universe.html`'s own inline `{% set state = ... %}`, not precomputed
+    here as HTML strings."""
+    all_symbols = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
+    horizons = list(D.DEFAULT_HORIZONS)
+    conn = trackdb.connect()
+    try:
+        preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
+        metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
+    finally:
+        conn.close()
+
+    groups = []
+    for group_name, items in D.DEFAULT_TARGET_GROUPS.items():
+        rows = []
+        for sym, label in items:
+            for h in horizons:
+                pred = preds.get((sym, h))
+                dm = (metrics.get((sym, h)) or {}).get("dm_result") if metrics.get((sym, h)) else None
+                rows.append({
+                    "symbol": sym, "label": label, "horizon": h,
+                    "direction": pred["direction"] if pred else None,
+                    "confidence": pred["confidence"] if pred else None,
+                    "ts": pred["ts"] if pred else None,
+                    "run_id": pred["run_id"] if pred else None,
+                    "dm_p_value": dm["p_value"] if dm else None,
+                })
+        groups.append({"group": group_name, "rows": rows})
+    return groups
+
+
+@app.get("/predictions")
+def predictions_page(request: Request):
+    """feature/predictions-overview: dense universe-wide table (every
+    target x every horizon), direction + Diebold-Mariano significance
+    badge (same "ok" if p<0.05 semantics as `run_detail.html`) -- V1, no
+    interactive filter (acceptable per the phase's own scope, a static
+    dense table over ~400 rows renders and scrolls fine within
+    `data_table`'s own scroll container)."""
+    return templates.TemplateResponse(
+        request, "predictions.html",
+        {"groups": _predictions_overview(), **_i18n_context(request)},
+    )
+
+
 @app.get("/commodities")
 def commodities_page(request: Request):
     """feature/ticker-stats-panel: one display-stats panel per commodity
