@@ -43,6 +43,10 @@ FORM_OPTIONS = {
     "vol_model_labels": forms.VOL_MODEL_LABELS,
     "selection_methods": ["shap", "rfe", "lasso"],
     "target_groups": forms.TARGET_GROUPS,
+    # Phase 1 (feature/hyperparams-ui): drives the "Bornes Optuna" section --
+    # one [low, high] input pair per (algo, hyperparameter), pre-filled from
+    # `view.optuna_bounds` (see `forms.to_view`).
+    "optuna_param_specs": D.OPTUNA_PARAM_SPECS,
 }
 
 

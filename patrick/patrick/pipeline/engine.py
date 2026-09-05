@@ -1208,7 +1208,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
                                                 n_trials=config.tuning.n_trials,
                                                 cv_splits=config.tuning.cv_splits, seed=seed,
-                                                storage_path=optuna_storage_path, study_name=study_name)
+                                                storage_path=optuna_storage_path, study_name=study_name,
+                                                bounds=config.tuning.optuna_bounds)
             print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
                   f"cv_F1_dir={best_cv:.4f} params={best_params}")
 

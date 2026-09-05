@@ -75,6 +75,79 @@ DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
 DEFAULT_CPCV_N_GROUPS = 7
 DEFAULT_CPCV_K_TEST_GROUPS = 2
 
+# Phase 1 (feature/hyperparams-ui) -- the Optuna search space itself (per-algo,
+# per-hyperparameter [low, high] bounds, `tuning/optuna_runner.py::
+# suggest_params`) used to be fixed in code with NO configuration surface at
+# all -- not even a RunConfig field, unlike n_trials/top_k/cv_splits/algos
+# which were already exposed on `/launch`. `OPTUNA_PARAM_SPECS` is the
+# STRUCTURE of the search (int vs float, log-scale, and the outer sanity
+# envelope enforced by `webapp/forms.py::_parse_optuna_bounds`) -- fixed, not
+# itself user-configurable: only the [low, high] pair inside that envelope is
+# (`RunConfig.tuning.optuna_bounds`, defaulting to `DEFAULT_OPTUNA_BOUNDS`
+# below).
+OPTUNA_PARAM_SPECS: dict[str, dict[str, dict]] = {
+    "XGBoost": {
+        "n_estimators": {"type": "int", "min_allowed": 10, "max_allowed": 2000},
+        "max_depth": {"type": "int", "min_allowed": 1, "max_allowed": 20},
+        "learning_rate": {"type": "float", "log": True, "min_allowed": 0.0001, "max_allowed": 1.0},
+        "subsample": {"type": "float", "min_allowed": 0.01, "max_allowed": 1.0},
+        "colsample_bytree": {"type": "float", "min_allowed": 0.01, "max_allowed": 1.0},
+        "min_child_weight": {"type": "int", "min_allowed": 1, "max_allowed": 50},
+    },
+    "LightGBM": {
+        "n_estimators": {"type": "int", "min_allowed": 10, "max_allowed": 2000},
+        "max_depth": {"type": "int", "min_allowed": 1, "max_allowed": 20},
+        "learning_rate": {"type": "float", "log": True, "min_allowed": 0.0001, "max_allowed": 1.0},
+        "num_leaves": {"type": "int", "min_allowed": 2, "max_allowed": 512},
+        "min_child_samples": {"type": "int", "min_allowed": 1, "max_allowed": 500},
+        "subsample": {"type": "float", "min_allowed": 0.01, "max_allowed": 1.0},
+    },
+    "RandomForest": {
+        "n_estimators": {"type": "int", "min_allowed": 10, "max_allowed": 2000},
+        "max_depth": {"type": "int", "min_allowed": 1, "max_allowed": 50},
+        "min_samples_leaf": {"type": "int", "min_allowed": 1, "max_allowed": 200},
+    },
+    "GradientBoosting": {
+        "n_estimators": {"type": "int", "min_allowed": 10, "max_allowed": 2000},
+        "learning_rate": {"type": "float", "log": True, "min_allowed": 0.0001, "max_allowed": 1.0},
+        "max_depth": {"type": "int", "min_allowed": 1, "max_allowed": 20},
+        "min_samples_leaf": {"type": "int", "min_allowed": 1, "max_allowed": 200},
+        "subsample": {"type": "float", "min_allowed": 0.01, "max_allowed": 1.0},
+    },
+    "CatBoost": {
+        "iterations": {"type": "int", "min_allowed": 10, "max_allowed": 2000},
+        "depth": {"type": "int", "min_allowed": 1, "max_allowed": 16},
+        "learning_rate": {"type": "float", "log": True, "min_allowed": 0.0001, "max_allowed": 1.0},
+    },
+}
+
+# Default [low, high] bounds -- IDENTICAL to the values historically hardcoded
+# in `tuning/optuna_runner.py::suggest_params` (VIX_FINAL_OPTUNA methodology):
+# a run that does not customize `tuning.optuna_bounds` must search EXACTLY
+# the same space as before this config surface existed (see
+# `tests/test_optuna_bounds.py::
+# test_default_bounds_match_the_ranges_historically_hardcoded_in_suggest_params`).
+DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
+    "XGBoost": {
+        "n_estimators": [100, 400], "max_depth": [3, 8], "learning_rate": [0.01, 0.2],
+        "subsample": [0.6, 1.0], "colsample_bytree": [0.6, 1.0], "min_child_weight": [1, 10],
+    },
+    "LightGBM": {
+        "n_estimators": [100, 400], "max_depth": [3, 8], "learning_rate": [0.01, 0.2],
+        "num_leaves": [15, 63], "min_child_samples": [5, 50], "subsample": [0.6, 1.0],
+    },
+    "RandomForest": {
+        "n_estimators": [100, 500], "max_depth": [3, 10], "min_samples_leaf": [1, 20],
+    },
+    "GradientBoosting": {
+        "n_estimators": [100, 400], "learning_rate": [0.01, 0.2], "max_depth": [3, 8],
+        "min_samples_leaf": [1, 20], "subsample": [0.6, 1.0],
+    },
+    "CatBoost": {
+        "iterations": [100, 400], "depth": [3, 8], "learning_rate": [0.01, 0.2],
+    },
+}
+
 # Options disabled by default but wired into the pipeline (not an appendix):
 # purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
 # regime-conditional gain, hurts in STRESS), stacking (VIX_STACKING_WF: loses 28/30).

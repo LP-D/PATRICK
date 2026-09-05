@@ -161,6 +161,22 @@ class TuningConfig(BaseModel):
     # horizon. False = old behavior (global top_k across all horizons),
     # kept for explicit backward compatibility.
     optuna_select_top_k_per_horizon: bool = D.DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON
+    # Phase 1 (feature/hyperparams-ui): per-algo Optuna search-space bounds
+    # (`{algo: {param: [low, high]}}`), forwarded to
+    # `tuning/optuna_runner.py::suggest_params`. Used to have NO config
+    # surface at all -- fixed in code. Defaults to `D.DEFAULT_OPTUNA_BOUNDS`,
+    # identical to those former hardcoded values, so an unmodified run keeps
+    # searching exactly the same space. Like the rest of `RunConfig` (no
+    # bounds/validators enforced by pydantic here, per the module docstring),
+    # range/shape validation happens in `webapp/forms.py::
+    # _parse_optuna_bounds` before this ever reaches `model_validate` from
+    # the web form; `suggest_params` itself falls back to the default for any
+    # algo/param missing or malformed here, so a hand-edited YAML with a
+    # partial override degrades gracefully rather than raising deep inside a
+    # run.
+    optuna_bounds: dict[str, dict[str, list[float]]] = Field(
+        default_factory=lambda: {a: dict(p) for a, p in D.DEFAULT_OPTUNA_BOUNDS.items()}
+    )
 
 
 class OutputConfig(BaseModel):

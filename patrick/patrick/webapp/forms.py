@@ -184,6 +184,50 @@ def _checked(form, name: str) -> bool:
     return form.get(name) in ("on", "true", "1")
 
 
+def _parse_optuna_bounds(form, errors: list[str]) -> dict:
+    """Phase 1 (feature/hyperparams-ui): reads the "Bornes Optuna" section
+    (`index.html`, fields named `ob__{algo}__{param}__low`/`__high`) into
+    `{algo: {param: [low, high]}}` (see `RunConfig.tuning.optuna_bounds`,
+    `tuning/optuna_runner.py::suggest_params`). A field absent from `form`
+    (old form submission, or a test's minimal `FormData`) falls back to
+    `D.DEFAULT_OPTUNA_BOUNDS[algo][param]` -- unmodified behavior. Any
+    invalid value (non-numeric, low >= high, or outside the sanity envelope
+    declared in `D.OPTUNA_PARAM_SPECS[algo][param]`) appends a precise error
+    and falls back to the default for that single (algo, param) pair rather
+    than failing the whole form."""
+    out: dict[str, dict[str, list[float]]] = {}
+    for algo, params in D.OPTUNA_PARAM_SPECS.items():
+        out[algo] = {}
+        for param, spec in params.items():
+            default_lo, default_hi = D.DEFAULT_OPTUNA_BOUNDS[algo][param]
+            raw_lo = form.get(f"ob__{algo}__{param}__low")
+            raw_hi = form.get(f"ob__{algo}__{param}__high")
+            if (raw_lo is None or str(raw_lo).strip() == "") and \
+               (raw_hi is None or str(raw_hi).strip() == ""):
+                out[algo][param] = [default_lo, default_hi]
+                continue
+            label = f"Bornes Optuna {algo}.{param}"
+            try:
+                lo = float(raw_lo) if raw_lo not in (None, "") else default_lo
+                hi = float(raw_hi) if raw_hi not in (None, "") else default_hi
+            except ValueError:
+                errors.append(f"« {label} » : valeur numérique invalide.")
+                out[algo][param] = [default_lo, default_hi]
+                continue
+            if lo >= hi:
+                errors.append(f"« {label} » : le minimum doit être strictement inférieur au maximum.")
+                out[algo][param] = [default_lo, default_hi]
+                continue
+            allowed_lo, allowed_hi = spec["min_allowed"], spec["max_allowed"]
+            if not (allowed_lo <= lo <= allowed_hi) or not (allowed_lo <= hi <= allowed_hi):
+                errors.append(
+                    f"« {label} » : hors de la plage autorisée [{allowed_lo}, {allowed_hi}].")
+                out[algo][param] = [default_lo, default_hi]
+                continue
+            out[algo][param] = [int(lo), int(hi)] if spec["type"] == "int" else [lo, hi]
+    return out
+
+
 def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, list[str]]:
     """`form` is a `starlette.datastructures.FormData`. `target_symbol`/
     `name` are passed explicitly by the caller (`app.py`, once per target
@@ -270,6 +314,22 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         max_frozen_run = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
         max_gap_bdays = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
 
+    # Phase 1 (feature/hyperparams-ui): n_trials/top_k/cv_splits were already
+    # exposed on the form (section_tuning) but never checked beyond "is this
+    # parseable as an int" -- a non-positive n_trials/top_k or a cv_splits<2
+    # reached `RunConfig` (unvalidated, pydantic with no bounds here, see
+    # module docstring) and then Optuna/`TimeSeriesSplit` unchanged, failing
+    # far from the form with an unrelated error. `TimeSeriesSplit` itself
+    # requires n_splits >= 2.
+    if n_trials <= 0:
+        errors.append("« Essais Optuna » doit être un entier strictement positif.")
+    if top_k <= 0:
+        errors.append("« Top-K configs affinées » doit être un entier strictement positif.")
+    if cv_splits < 2:
+        errors.append("« Folds CV » doit être un entier >= 2.")
+
+    optuna_bounds = _parse_optuna_bounds(form, errors)
+
     config_dict = {
         "name": name,
         "objective": {
@@ -331,6 +391,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "n_trials": n_trials,
             "cv_splits": cv_splits,
             "optuna_select_top_k_per_horizon": _checked(form, "optuna_select_top_k_per_horizon"),
+            "optuna_bounds": optuna_bounds,
         },
         "output": {"dir": out_dir, "seed": seed},
     }
@@ -393,6 +454,7 @@ def to_view(cfg: dict) -> dict:
         "cv_splits": tun.get("cv_splits", D.DEFAULT_TUNING_CV_SPLITS),
         "optuna_select_top_k_per_horizon": bool(
             tun.get("optuna_select_top_k_per_horizon", D.DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON)),
+        "optuna_bounds": tun.get("optuna_bounds") or D.DEFAULT_OPTUNA_BOUNDS,
         "output_dir": out.get("dir", "runs"),
         "seed": out.get("seed", D.DEFAULT_SEED),
     }

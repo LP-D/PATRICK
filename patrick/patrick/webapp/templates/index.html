@@ -313,15 +313,51 @@
             </label>
             <div class="subgrid">
                 <label>{{ t('field_top_k') }}
-                    <input type="number" name="top_k" value="{{ view.top_k }}">
+                    <input type="number" min="1" name="top_k" value="{{ view.top_k }}">
                 </label>
                 <label>{{ t('field_n_trials') }}
-                    <input type="number" name="n_trials" value="{{ view.n_trials }}">
+                    <input type="number" min="1" name="n_trials" value="{{ view.n_trials }}">
                 </label>
                 <label>{{ t('field_cv_splits') }}
-                    <input type="number" name="cv_splits" value="{{ view.cv_splits }}">
+                    <input type="number" min="2" name="cv_splits" value="{{ view.cv_splits }}">
                 </label>
             </div>
+            </div>
+        </details>
+
+        {# Phase 1 (feature/hyperparams-ui) : jusqu'ici, la plage [min, max]
+           explorée par Optuna pour chaque hyperparamètre de chaque algo
+           n'avait AUCUNE surface de configuration -- fixée en dur dans
+           `tuning/optuna_runner.py::suggest_params`, contrairement à
+           n_trials/top_k/cv_splits/algos ci-dessus, déjà exposés. Un bloc
+           `<details>` par algo (même patron que `section_features` pour les
+           modèles de volatilité) pour ne pas noyer les ~20 paires de champs
+           dans une seule grille plate. #}
+        <details class="adv" data-adv="section_optuna_bounds">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_optuna_bounds') }}</span>
+                <span class="adv-state" data-adv-state="section_optuna_bounds"></span>
+            </summary>
+            <div class="adv-body">
+            <p class="hint">{{ t('optuna_bounds_hint') }}</p>
+            {% for algo, params in optuna_param_specs.items() %}
+            <div class="subfieldset">
+                <p class="hint"><strong>{{ algo }}</strong></p>
+                <div class="subgrid">
+                {% for param, spec in params.items() %}
+                {% set bound = view.optuna_bounds.get(algo, {}).get(param, [spec.min_allowed, spec.max_allowed]) %}
+                    <label>{{ param }} ({{ t('optuna_bound_low') }})
+                        <input type="number" step="any" min="{{ spec.min_allowed }}" max="{{ spec.max_allowed }}"
+                               name="ob__{{ algo }}__{{ param }}__low" value="{{ bound[0] }}">
+                    </label>
+                    <label>{{ param }} ({{ t('optuna_bound_high') }})
+                        <input type="number" step="any" min="{{ spec.min_allowed }}" max="{{ spec.max_allowed }}"
+                               name="ob__{{ algo }}__{{ param }}__high" value="{{ bound[1] }}">
+                    </label>
+                {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
             </div>
         </details>
 
