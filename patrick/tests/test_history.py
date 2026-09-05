@@ -354,6 +354,154 @@ def test_direction_metrics_by_target_and_horizon_is_not_n_plus_1(tmp_path):
     conn.close()
 
 
+# --- Phase 3 (suivi prediction -> realise) : live_hit_rate_by_target_and_horizon ---
+# TDD : ces tests sont ecrits AVANT l'implementation de la fonction (elle
+# n'existe pas encore dans tracking/history.py au moment ou ce bloc est
+# ajoute) -- ils doivent d'abord echouer avec AttributeError, puis passer une
+# fois la fonction ecrite, sur des proportions hit/miss connues a l'avance.
+
+def _add_live_prediction(conn, trial_id: int, ts: str, *, y_pred: int, y_true: float | None,
+                          y_proba: float | None = 0.6) -> None:
+    db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                        ts=[ts], y_true=[y_true], y_pred=[y_pred], y_proba=[y_proba])
+
+
+def test_live_hit_rate_by_target_and_horizon_computes_known_proportion(tmp_path):
+    """3 hits / 2 miss connus a l'avance (voir predict.py : y_true du split
+    'live' est BINAIRE -- 1.0=UP/0.0=DOWN -- alors que y_pred reste la
+    classe 4-classes 0..3 ; un hit = (y_pred >= 2) == bool(y_true))."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    _add_live_prediction(conn, trial_id, "2024-01-01", y_pred=3, y_true=1.0)  # hit (UP/UP)
+    _add_live_prediction(conn, trial_id, "2024-01-02", y_pred=0, y_true=0.0)  # hit (DOWN/DOWN)
+    _add_live_prediction(conn, trial_id, "2024-01-03", y_pred=2, y_true=1.0)  # hit (UP/UP)
+    _add_live_prediction(conn, trial_id, "2024-01-04", y_pred=3, y_true=0.0)  # miss (UP/DOWN)
+    _add_live_prediction(conn, trial_id, "2024-01-05", y_pred=0, y_true=1.0)  # miss (DOWN/UP)
+
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, ["^VIX"], [5])
+    result = out[("^VIX", 5)]
+    assert result["n"] == 5
+    assert result["n_hits"] == 3
+    assert result["hit_rate"] == 0.6
+    conn.close()
+
+
+def test_live_hit_rate_by_target_and_horizon_excludes_unbackfilled(tmp_path):
+    """Une prediction 'live' pas encore backfillee (y_true IS NULL, cf.
+    predict.py::predict_live avant que l'horizon ne soit ecoule) ne doit ni
+    compter dans n, ni dans le calcul -- seul le resultat REALISE compte."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    _add_live_prediction(conn, trial_id, "2024-01-01", y_pred=3, y_true=1.0)  # hit
+    _add_live_prediction(conn, trial_id, "2024-01-02", y_pred=3, y_true=None)  # pas encore connu
+
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, ["^VIX"], [5])
+    result = out[("^VIX", 5)]
+    assert result["n"] == 1
+    assert result["hit_rate"] == 1.0
+    conn.close()
+
+
+def test_live_hit_rate_by_target_and_horizon_respects_window(tmp_path):
+    """Fenetre glissante : seules les `window` predictions live les plus
+    RECENTES (par ts) avec resultat connu entrent dans le calcul -- pas tout
+    l'historique."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    # 3 plus anciennes : toutes miss. 2 plus recentes : toutes hit.
+    _add_live_prediction(conn, trial_id, "2024-01-01", y_pred=3, y_true=0.0)  # miss (ancien)
+    _add_live_prediction(conn, trial_id, "2024-01-02", y_pred=3, y_true=0.0)  # miss (ancien)
+    _add_live_prediction(conn, trial_id, "2024-01-03", y_pred=3, y_true=0.0)  # miss (ancien)
+    _add_live_prediction(conn, trial_id, "2024-01-04", y_pred=3, y_true=1.0)  # hit (recent)
+    _add_live_prediction(conn, trial_id, "2024-01-05", y_pred=3, y_true=1.0)  # hit (recent)
+
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, ["^VIX"], [5], window=2)
+    result = out[("^VIX", 5)]
+    assert result["n"] == 2
+    assert result["n_hits"] == 2
+    assert result["hit_rate"] == 1.0
+    assert result["window"] == 2
+    conn.close()
+
+
+def test_live_hit_rate_by_target_and_horizon_partitions_by_horizon(tmp_path):
+    """Meme cible, deux horizons distincts : chaque (cible, horizon) doit
+    resoudre ses PROPRES predictions live, pas celles de l'autre horizon."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run_h5", "^VIX", 5, status="done")
+    trial_h5 = db.create_trial(conn, "run_h5", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_h5)
+    _add_live_prediction(conn, trial_h5, "2024-01-01", y_pred=3, y_true=1.0)  # hit
+
+    _make_run(conn, "run_h10", "^VIX", 10, status="done")
+    trial_h10 = db.create_trial(conn, "run_h10", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_h10)
+    _add_live_prediction(conn, trial_h10, "2024-01-01", y_pred=3, y_true=0.0)  # miss
+
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, ["^VIX"], [5, 10])
+    assert out[("^VIX", 5)]["hit_rate"] == 1.0
+    assert out[("^VIX", 10)]["hit_rate"] == 0.0
+    conn.close()
+
+
+def test_live_hit_rate_by_target_and_horizon_none_when_no_live_predictions(tmp_path):
+    """Un couple (cible, horizon) avec un run/trial mais aucune prediction
+    live backfillee retourne None (present, distinct d'une cle absente pour
+    un couple sans run du tout) -- meme convention que
+    `direction_metrics_by_target_and_horizon`."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run1", "^VIX", 5, status="done")
+    db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    # Pas de mark_best_trial : aucune prediction live n'a jamais ete ecrite.
+
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, ["^VIX"], [5])
+    assert ("^VIX", 5) not in out or out[("^VIX", 5)] is None
+    # Couple totalement inconnu (aucun run) : absent.
+    assert ("AAPL", 5) not in trackhistory.live_hit_rate_by_target_and_horizon(conn, ["AAPL"], [5])
+    conn.close()
+
+
+def test_live_hit_rate_by_target_and_horizon_is_not_n_plus_1(tmp_path):
+    """Meme discipline de performance NON NEGOCIABLE que les fonctions
+    voisines (`direction_metrics_by_target_and_horizon`,
+    `latest_predictions_by_target_and_horizon`) : une requete de resolution
+    (target,horizon)->trial_id, puis UNE requete groupee `trial_id IN (...)`
+    pour recuperer toutes les lignes live -- jamais une requete par paire,
+    jamais de ROW_NUMBER() OVER (PARTITION BY ...)."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    targets = [f"SYM{i}" for i in range(10)]
+    horizons = [1, 5, 10]
+    for i, target in enumerate(targets):
+        for h in horizons:
+            run_id = f"run_{i}_{h}"
+            _make_run(conn, run_id, target, h, status="done")
+            trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+            db.mark_best_trial(conn, trial_id)
+            _add_live_prediction(conn, trial_id, "2024-01-01", y_pred=3, y_true=1.0)
+
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql))
+    out = trackhistory.live_hit_rate_by_target_and_horizon(conn, targets, horizons)
+    conn.set_trace_callback(None)
+
+    assert len(out) == len(targets) * len(horizons)
+    assert all(v is not None for v in out.values())
+    prediction_queries = [q for q in queries if "FROM prediction" in q]
+    assert len(prediction_queries) <= 1, (
+        f"{len(prediction_queries)} queries touching `prediction` for "
+        f"{len(targets)}x{len(horizons)} pairs -- expected a single grouped fetch"
+    )
+    window_function_queries = [q for q in queries if "OVER" in q.upper() and "PARTITION" in q.upper()]
+    assert not window_function_queries, "ROW_NUMBER()/PARTITION BY forbidden per CLAUDE.md perf discipline"
+    conn.close()
+
+
 def test_phase_breakdown_for_run_empty_when_no_timing_recorded(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     _make_run(conn, "run1", "^VIX", 5, status="done")

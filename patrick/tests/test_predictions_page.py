@@ -76,3 +76,43 @@ def test_predictions_reachable_from_nav():
     client = TestClient(app)
     resp = client.get("/")
     assert 'href="/predictions"' in resp.text
+
+
+def test_predictions_page_shows_live_hit_rate(tmp_path, monkeypatch):
+    """Phase 3 (suivi prediction -> realise) -- la colonne 'Fiabilite live'
+    doit afficher le hit rate calcule sur les predictions `split='live'`
+    deja backfillees, distinct de la significativite Diebold-Mariano
+    (backtest) affichee a cote."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfghash", "sha", 42)
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    # 10 predictions live resolues, 7 hits / 3 miss (>= _MIN_DIRECTION_SAMPLES
+    # donc le badge n'est pas dans l'etat "peu de recul").
+    for i in range(7):
+        db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                            ts=[f"2024-06-{i+1:02d}T00:00:00"], y_true=[1.0], y_pred=[3], y_proba=[0.6])
+    for i in range(3):
+        db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                            ts=[f"2024-06-{i+8:02d}T00:00:00"], y_true=[0.0], y_pred=[3], y_proba=[0.6])
+    db.finish_run(conn, "run1", status="done", n_trials=1)
+    conn.close()
+
+    client = TestClient(app)
+    resp = client.get("/predictions")
+    assert resp.status_code == 200
+    # 7/10 = 70%, n=10.
+    assert "70% (n=10)" in resp.text
+
+
+def test_predictions_page_shows_no_live_track_record_state(tmp_path, monkeypatch):
+    """Une paire (cible, horizon) sans aucune prediction 'live' backfillee
+    affiche un etat vide explicite pour la colonne live, jamais une case
+    silencieusement absente."""
+    _seed_db(tmp_path, monkeypatch)  # seed_db du test existant : 1 live non backfillee (y_true=None)
+    client = TestClient(app)
+    resp = client.get("/predictions")
+    assert resp.status_code == 200
+    assert "pas de recul live" in resp.text

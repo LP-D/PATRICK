@@ -10,6 +10,7 @@
 
 <h1 class="page-title">{{ t('nav_predictions') or 'Prédictions' }}</h1>
 <p class="page-subtitle">Vue d'ensemble de l'univers réduit — dernier signal disponible par cible et par horizon, avec sa significativité Diebold-Mariano (même seuil "ok" si p&lt;0,05 que sur la page d'un run). Lecture seule, recalculée à chaque chargement, aucun nouveau calcul de modèle.</p>
+<p class="page-subtitle">Colonne <b>Fiabilité live</b> (Phase 3, suivi prédiction → réalisé) : taux de réussite directionnel (hit rate) sur les {{ live_hit_rate_window }} dernières prédictions <code>live</code> dont l'issue réelle est déjà connue (backfill automatique une fois l'horizon écoulé) — distinct du backtest ci-dessus, c'est la trace réellement observée en conditions réelles. Badge d'alerte si le taux passe sous {{ '%.0f' | format(live_hit_rate_warning_threshold * 100) }}% (pire qu'un tirage aléatoire pour un appel directionnel binaire), affiché seulement à partir de 10 observations résolues (sinon "pas assez de recul") — même seuil de fiabilité que les autres colonnes par direction de cette page.</p>
 
 {% set ns = namespace(total=0, with_pred=0) %}
 {% for g in groups %}{% for r in g.rows %}
@@ -44,6 +45,13 @@
             {% set sig_cell = status_badge('aucune prédiction', 'disabled') %}
             {% set conf_label = '<span class="na">—</span>' %}
         {% endif %}
+        {% if r.live_hit_rate is none %}
+            {% set hit_cell = status_badge('pas de recul live', 'disabled') %}
+        {% elif r.live_hit_rate_n < 10 %}
+            {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ', peu de recul)', 'neutral') %}
+        {% else %}
+            {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ')', 'ok' if r.live_hit_rate >= live_hit_rate_warning_threshold else 'warning') %}
+        {% endif %}
         {% set _ = rows.append([
             '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
             r.label,
@@ -51,11 +59,12 @@
             dir_cell,
             conf_label,
             sig_cell,
+            hit_cell,
             r.ts or '—',
         ]) %}
     {% endfor %}
     {% set n_pred = g.rows | selectattr('direction') | list | length %}
-    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Dernier signal"], rows,
+    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dernier signal"], rows,
                   num_cols=[4],
                   footer=(g.rows | length) ~ " paire(s) · " ~ n_pred ~ " avec une prédiction disponible") }}
 </div>
