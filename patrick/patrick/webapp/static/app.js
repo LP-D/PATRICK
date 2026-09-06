@@ -441,30 +441,6 @@
     }
 
     /* -----------------------------------------------------------------------
-       Chargement d'un exemple : confirmer avant d'écraser la saisie.
-       ----------------------------------------------------------------------- */
-    const exampleForm = document.getElementById("example-form");
-    const exampleSelect = document.getElementById("load");
-    if (exampleForm && exampleSelect && form) {
-        // Empreinte du formulaire au chargement : c'est la seule référence
-        // honnête dont dispose le navigateur pour dire « tu as saisi quelque
-        // chose ». Charger un exemple recharge la page, donc elle se réaligne.
-        const formBaseline = new URLSearchParams(new FormData(form)).toString();
-        exampleSelect.addEventListener("change", function () {
-            if (!exampleSelect.value) return;
-            const dirty = new URLSearchParams(new FormData(form)).toString() !== formBaseline;
-            if (dirty && !window.confirm(fmtStr(
-                tr("load_example_confirm",
-                   "Charger « {name} » remplacera toute la configuration en cours. Continuer ?"),
-                { name: exampleSelect.value }))) {
-                exampleSelect.value = "";
-                return;
-            }
-            exampleForm.submit();
-        });
-    }
-
-    /* -----------------------------------------------------------------------
        Validation en langue de l'interface.
        Le navigateur affiche ses bulles natives dans la langue du NAVIGATEUR,
        pas dans celle de la page : « Please fill out this field. » apparaissait

@@ -64,8 +64,6 @@ STRINGS: dict[str, dict[str, str]] = {
                            "en": "{n} run(s) already queued: this one starts after them."},
     "confirm_line_queue_free": {"fr": "Aucun run en file : celui-ci démarre immédiatement.",
                                 "en": "Nothing queued: this one starts immediately."},
-    "load_example_confirm": {"fr": "Charger « {name} » remplacera toute la configuration en cours. Continuer ?",
-                             "en": "Loading \u201c{name}\u201d will replace the whole current configuration. Continue?"},
     "glossary_open_aria": {"fr": "Définition : {term}", "en": "Definition: {term}"},
     "validation_required": {"fr": "Ce champ est obligatoire.", "en": "This field is required."},
     "validation_range": {"fr": "Valeur hors des bornes autorisées.", "en": "Value outside the allowed range."},
@@ -90,9 +88,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "movers_computing": {"fr": "Calcul en cours (toutes les 30 min)…", "en": "Computing (every 30 min)…"},
     "movers_gainers": {"fr": "▲ Hausses", "en": "▲ Gainers"},
     "movers_losers": {"fr": "▼ Baisses", "en": "▼ Losers"},
-
-    "load_example_label": {"fr": "Charger un exemple :", "en": "Load an example:"},
-    "load_example_default": {"fr": "— partir des défauts —", "en": "— start from defaults —"},
 
     "section_run": {"fr": "Run", "en": "Run"},
     "field_run_name": {"fr": "Nom du run (généré automatiquement)", "en": "Run name (auto-generated)"},
@@ -573,7 +568,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "confirm_line_gates",
         "gate_data_quality_enabled", "gate_purge", "gate_embargo_enabled",
         "gate_uniqueness_weights", "gate_calibration", "gate_stacking",
-        "confirm_line_queue_free", "load_example_confirm",
+        "confirm_line_queue_free",
         "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
         "recap_horizons", "recap_targets_count", "movers_not_a_target",

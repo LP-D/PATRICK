@@ -99,6 +99,33 @@ def test_launch_page_serves_the_run_launcher(tmp_path, monkeypatch):
     assert 'id="run-form"' in resp.text
 
 
+def test_launch_page_has_no_example_loader(tmp_path, monkeypatch):
+    """fix/remove-launch-example-loader : le dropdown "Charger un exemple"
+    (id="load" / id="example-form") rechargeait la page et ecrasait
+    silencieusement les 65 champs saisis au premier changement (cf.
+    .impeccable/critique/...index-html.md) -- retire sans remplacement, du
+    template et de la route /launch."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/launch")
+    assert resp.status_code == 200
+    assert 'id="example-form"' not in resp.text
+    assert 'id="load"' not in resp.text
+
+
+def test_launch_page_ignores_stale_load_query_param(tmp_path, monkeypatch):
+    """Un ancien lien/marque-page vers /launch?load=... (point d'entree
+    retire) ne doit plus produire d'erreur ni de comportement special --
+    parametre simplement ignore, page normale rendue."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/launch", params={"load": "some_example.yaml"})
+    assert resp.status_code == 200
+    assert 'id="run-form"' in resp.text
+
+
 def test_phase9_page_no_longer_carries_fabricated_signal_quality(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
