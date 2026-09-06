@@ -35,6 +35,18 @@ _CLASS_DIRECTION = {0: "DOWN", 1: "DOWN", 2: "UP", 3: "UP"}
 _CLASS_AMPLITUDE = {0: "FORT", 1: "FAIBLE", 2: "FAIBLE", 3: "FORT"}
 _MIN_DIRECTION_SAMPLES = 10  # same threshold as metrics.py's own FORT/FAIBLE breakdown
 
+# Phase 3 (suivi prediction -> realise). Window = number of most-recent
+# `split='live'` predictions WITH A KNOWN OUTCOME (`y_true IS NOT NULL`)
+# used per (target, horizon) -- not a calendar window, see
+# `live_hit_rate_by_target_and_horizon`'s docstring for why. Warning
+# threshold = worse than random chance on a binary directional call (a
+# hit rate below 0.5 is exactly the point at which the model's live
+# direction calls stop beating a coin flip); gated behind
+# `_MIN_DIRECTION_SAMPLES` (reused from the direction-metrics functions
+# above) so a handful of unlucky calls does not trip the badge.
+LIVE_HIT_RATE_WINDOW = 30
+LIVE_HIT_RATE_WARNING_THRESHOLD = 0.5
+
 
 def _config_field(config_json: str | None, *path, default=None):
     if not config_json:
@@ -669,6 +681,148 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
             "by_direction": by_direction,
             "auc_overall": auc_by_trial.get(trial_id),
             "dm_result": dm_by_run.get(run_id),
+        }
+    return out
+
+
+def live_hit_rate_by_target_and_horizon(conn: sqlite3.Connection, targets: list[str],
+                                         horizons: list[int],
+                                         window: int = LIVE_HIT_RATE_WINDOW) -> dict[tuple[str, int], dict | None]:
+    """Phase 3 (suivi prediction -> realise) -- rolling hit rate of
+    `split='live'` predictions (Phase 4.6, `patrick predict --live`,
+    `predict.py`) against their backfilled outcome. The backfill mechanism
+    already exists and is NOT reimplemented here: `predict.py::predict_live`
+    writes each live call with `y_true=None` (outcome unknown yet), then
+    `predict.py::_update_live_outcomes` -> `tracking.db.update_prediction_outcome`
+    fills it in once the horizon has elapsed (`tests/test_predict_live.py::
+    test_predict_live_writes_then_backfills_outcome` covers that mechanism
+    end to end) -- this function only ever READS rows where that backfill
+    already happened (`y_true IS NOT NULL`).
+
+    Window = the last `window` (default `LIVE_HIT_RATE_WINDOW` = 30) live
+    predictions WITH A KNOWN OUTCOME per (target, horizon), most recent
+    first by `ts` -- not a calendar window: `predict_live` is called on
+    demand / by a scheduler with no guaranteed cadence, so "last N
+    resolved observations" is the only definition that stays meaningful
+    regardless of call frequency. A pair with fewer than `window` resolved
+    live predictions uses all of it (reported via `n < window`).
+
+    "Hit" definition -- THE UNIT MISMATCH THAT MAKES THIS DIFFERENT FROM
+    `direction_metrics_by_target[_and_horizon]` ABOVE: those two read
+    `split IN ('test', 'holdout')` rows, where `y_true` is the 4-class
+    index (0..3, same units as `y_pred`), so `_CLASS_DIRECTION[int(round(t))]`
+    applies to both sides symmetrically. `split='live'` rows are NOT
+    symmetric: `predict.py`'s module docstring is explicit that `y_true`
+    there is simplified to BINARY realized direction (1.0 UP / 0.0 DOWN),
+    while `y_pred` stays the 4-class index written by the model
+    (`predict.py::predict_live`: `y_pred=[pred_class]`). Reusing
+    `_CLASS_DIRECTION[int(round(y_true))]` on a live row would crash or
+    silently misclassify (`round(1.0)` collides with class index 1 =
+    DOWN_FAIBLE) -- a hit here is instead `(y_pred >= 2) == bool(y_true)`,
+    i.e. comparing y_pred's OWN direction (classes 2/3 = UP, 0/1 = DOWN,
+    same split as `_CLASS_DIRECTION`) against y_true's already-binary UP/DOWN.
+
+    Also reports `confidence_calibration_mse`: mean squared error between
+    `prediction.y_proba` (confidence of the PREDICTED class) and the hit
+    indicator (1.0/0.0). `direction_metrics_for_target`'s docstring warns
+    that this same `y_proba` is NOT P(UP) and is therefore not a valid
+    per-direction AUC ranking score -- that caveat does not apply here:
+    this only ever compares the stored confidence against "was the
+    prediction actually right", which is exactly the quantity
+    `y_proba` estimates. This makes it a real (single-scalar) Brier score,
+    just not one collapsed across 4 classes the way a textbook multiclass
+    Brier score would be -- `None` when every windowed row has `y_proba
+    IS NULL` (should not happen for rows written by `predict_live`, which
+    always supplies a confidence, but is handled rather than assumed).
+
+    Performance discipline (`prediction` ~12M rows in production, CLAUDE.md
+    NON-NEGOCIABLE): two round trips, no `ROW_NUMBER() OVER (PARTITION BY
+    ...)` anywhere.
+      1. Resolve every (target, horizon) -> its best-trial id(s) via a flat
+         join on `run`/`trial` -- `prediction` is not touched at all here,
+         `run`/`trial` are tiny relative to `prediction`, and
+         `trial.is_best = 1` narrows to exactly the trials `predict_live`
+         ever writes to (non-best trials never get a `split='live'` row).
+      2. ONE flat `trial_id IN (...) AND split = 'live' AND y_true IS NOT
+         NULL` fetch for the WHOLE resolved trial_id set -- same
+         `INDEXED BY sqlite_autoindex_prediction_1` hint and same
+         reasoning as `direction_metrics_by_target[_and_horizon]`'s own
+         second query (the planner otherwise drives the scan from
+         `idx_pred_split` on `split` and re-checks `trial_id` as a residual
+         filter): that shape is the one measured fast for exactly this
+         "many known trial_ids, small `split='live'` slice of a 12M-row
+         table" access pattern, so it is reused as-is rather than
+         reinvented as a per-key correlated subquery, which does not
+         generalize to "last N rows" the way it does to "the single latest
+         row" (`latest_predictions_by_target_and_horizon`'s own case).
+      The "last N per (target, horizon)" cut and the hit-rate/calibration
+      arithmetic both happen in Python afterwards, over an already-small,
+      already-live-filtered, already-fetched-once row set -- never a SQL
+      window function ranking the full table (the anti-pattern
+      `latest_predictions_by_target_and_horizon`'s docstring measured at
+      50s+ vs 3.3s on the real production database).
+
+    Returns a dict keyed by `(target, horizon)`. A pair with at least one
+    resolved (target, horizon, best trial) but zero live+backfilled
+    prediction rows maps to `None` (present, not absent -- distinguishes
+    "checked, nothing yet" from the next case); a pair with no run at all
+    for that (target, horizon) is simply absent from the dict, same
+    convention as `direction_metrics_by_target_and_horizon`."""
+    if not targets or not horizons:
+        return {}
+    target_placeholders = ",".join("?" for _ in targets)
+    horizon_placeholders = ",".join("?" for _ in horizons)
+    resolved = conn.execute(
+        "SELECT DISTINCT run.target, run.horizon, trial.trial_id "
+        "FROM run JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1 "
+        f"WHERE run.target IN ({target_placeholders}) AND run.horizon IN ({horizon_placeholders})",
+        tuple(targets) + tuple(horizons),
+    ).fetchall()
+    if not resolved:
+        return {}
+
+    trial_ids_by_key: dict[tuple[str, int], list[int]] = {}
+    all_trial_ids: set[int] = set()
+    for target, horizon, trial_id in resolved:
+        trial_ids_by_key.setdefault((target, horizon), []).append(trial_id)
+        all_trial_ids.add(trial_id)
+
+    trial_placeholders = ",".join("?" for _ in all_trial_ids)
+    pred_rows = conn.execute(
+        f"SELECT trial_id, ts, y_true, y_pred, y_proba FROM prediction "
+        f"INDEXED BY sqlite_autoindex_prediction_1 "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split = 'live' AND y_true IS NOT NULL",
+        tuple(all_trial_ids),
+    ).fetchall()
+    rows_by_trial: dict[int, list[tuple]] = {}
+    for trial_id, ts, y_true, y_pred, y_proba in pred_rows:
+        rows_by_trial.setdefault(trial_id, []).append((ts, y_true, y_pred, y_proba))
+
+    out: dict[tuple[str, int], dict | None] = {}
+    for key, trial_ids in trial_ids_by_key.items():
+        rows = [row for tid in trial_ids for row in rows_by_trial.get(tid, [])]
+        if not rows:
+            out[key] = None
+            continue
+        rows.sort(key=lambda r: r[0], reverse=True)
+        windowed = rows[:window]
+        n = len(windowed)
+        n_hits = 0
+        sq_errors = []
+        for _ts, y_true, y_pred, y_proba in windowed:
+            predicted_up = int(round(y_pred)) >= 2
+            hit = predicted_up == bool(y_true)
+            n_hits += int(hit)
+            if y_proba is not None:
+                sq_errors.append((y_proba - (1.0 if hit else 0.0)) ** 2)
+        out[key] = {
+            "n": n,
+            "window": window,
+            "n_hits": n_hits,
+            "hit_rate": round(n_hits / n, 4),
+            "oldest_ts": windowed[-1][0],
+            "latest_ts": windowed[0][0],
+            "confidence_calibration_mse": round(sum(sq_errors) / len(sq_errors), 4) if sq_errors else None,
         }
     return out
 
