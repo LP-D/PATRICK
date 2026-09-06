@@ -42,15 +42,24 @@
     var spreadInput = document.getElementById("sim-spread-bps");
     var commissionInput = document.getElementById("sim-commission-bps");
 
+    // Phase 10 -- doit rester synchronisé avec simulate.engine.ASSET_CLASS_FRICTION_BPS
+    // (justification des ordres de grandeur documentée là-bas, en commentaire).
     var ASSET_CLASS_BPS = { futures_liquid: 1.0, us_large_cap: 3.0, eu_mid_cap: 15.0, crypto_non_major: 30.0 };
 
-    assetClassSelect.addEventListener("change", function () {
+    function applyAssetClassPreset() {
         var v = ASSET_CLASS_BPS[assetClassSelect.value];
         if (v !== undefined) {
             spreadInput.value = (v / 2).toFixed(2);
             commissionInput.value = (v / 2).toFixed(2);
         }
-    });
+    }
+
+    assetClassSelect.addEventListener("change", applyAssetClassPreset);
+    // Défaut pré-rempli dès le chargement (pas seulement au changement) : le
+    // <select> porte déjà un `selected` documenté dans le template (futures_liquid,
+    // 1bp) -- cet appel garde le JS comme source de vérité unique du calcul
+    // spread/commission, y compris pour la valeur initiale.
+    applyAssetClassPreset();
 
     async function loadTrials(runId) {
         trialSelect.innerHTML = '<option value="">—</option>';

@@ -69,6 +69,27 @@ def test_simulate_page_lists_done_run(seeded_run):
     assert run_id in resp.text
 
 
+def test_simulate_page_prefills_default_transaction_cost():
+    """Phase 10 : le champ de coûts de transaction doit afficher, dès le
+    chargement de la page (sans action utilisateur), une valeur par défaut
+    DOCUMENTÉE et non nulle -- pas "0" -- tout en restant éditable. Défaut
+    choisi : préréglage `futures_liquid` (1 bp round-turn au total, cf.
+    `simulate.engine.ASSET_CLASS_FRICTION_BPS` et sa justification en
+    commentaire), réparti 0.5 bp spread + 0.5 bp commission, cohérent avec le
+    cas de référence de la tâche (futures/indices/FX liquides)."""
+    client = TestClient(app)
+    resp = client.get("/simulate")
+    assert resp.status_code == 200
+    html = resp.text
+    assert '<option value="futures_liquid" selected>' in html, (
+        "le préréglage de classe d'actif par défaut (futures_liquid) doit être "
+        "présélectionné dans le <select> sur /simulate")
+    assert 'id="sim-spread-bps" step="0.5" min="0" value="0.5"' in html, (
+        "le champ spread_bps doit être pré-rempli avec le défaut documenté (0.5 bp)")
+    assert 'id="sim-commission-bps" step="0.5" min="0" value="0.5"' in html, (
+        "le champ commission_bps doit être pré-rempli avec le défaut documenté (0.5 bp)")
+
+
 def test_api_list_trials_returns_best_trial(seeded_run):
     run_id, trial_id = seeded_run
     client = TestClient(app)
