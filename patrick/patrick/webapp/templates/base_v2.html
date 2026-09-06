@@ -104,5 +104,10 @@ style.css untouched until their own turn in the priority order.
        finding nothing elsewhere) -- global include, same as market.js above,
        rather than a per-template <script> block for two routes. #}
     <script src="/static/asset_stats.js"></script>
+    {# feature/shap-waterfall (Phase 7): no-op on every page except
+       `/targets/{ticker}` (guarded by `#shap-waterfall-widget[data-target]`
+       finding nothing elsewhere) -- same global-include convention as
+       asset_stats.js above. #}
+    <script src="/static/shap_waterfall.js"></script>
 </body>
 </html>

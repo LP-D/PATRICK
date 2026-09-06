@@ -545,6 +545,43 @@ STRINGS: dict[str, dict[str, str]] = {
     # Phase 5: improved empty states for hardening
     "empty_runs_title": {"fr": "Aucun run pour l'instant.", "en": "No run yet."},
     "empty_runs_hint": {"fr": "Configure et lance un run depuis le poste de lancement.", "en": "Configure and launch a run from the launch station."},
+
+    # Phase 7 -- SHAP waterfall (feature/shap-waterfall), /targets/{ticker}
+    "shap_section_title": {"fr": "Explication de la dernière prédiction (SHAP)",
+                           "en": "Explaining the most recent prediction (SHAP)"},
+    "shap_section_hint": {
+        "fr": ("Décompose la prédiction la plus récemment enregistrée pour un horizon donné, feature par "
+               "feature, via SHAP (contribution de chaque feature à la prédiction d'un modèle déjà entraîné — "
+               "voir glossaire). Calculé à la demande sur le modèle réellement exporté, jamais sur celui, "
+               "jetable, utilisé pendant la sélection de features."),
+        "en": ("Breaks down the most recently recorded prediction for a given horizon, feature by feature, "
+               "via SHAP (each feature's contribution to an already-trained model's prediction — see "
+               "glossary). Computed on demand on the actually exported model, never on the throwaway one "
+               "used during feature selection."),
+    },
+    "shap_select_horizon": {"fr": "Horizon :", "en": "Horizon:"},
+    "shap_btn_generate": {"fr": "Générer l'explication", "en": "Generate explanation"},
+    "shap_no_model": {"fr": "Aucun run terminé pour cette cible — pas de modèle exporté à expliquer.",
+                      "en": "No completed run for this target — no exported model to explain."},
+    "shap_loading": {"fr": "Calcul en cours…", "en": "Computing…"},
+    "shap_load_error": {"fr": "Erreur de chargement.", "en": "Loading error."},
+    "shap_unavailable": {"fr": "Aucune explication disponible pour cet horizon.",
+                         "en": "No explanation available for this horizon."},
+    "shap_caption": {
+        "fr": "{date} · prédiction : {label} (confiance {proba}) · {n} features · échantillon {split}",
+        "en": "{date} · predicted: {label} (confidence {proba}) · {n} features · {split} sample",
+    },
+    "shap_units_hint": {
+        "fr": ("Les barres représentent le score brut du modèle par classe (pas une probabilité) : la "
+               "garantie d'additivité de SHAP tient dans cet espace pour un ensemble d'arbres multiclasse, "
+               "pas après la fonction softmax."),
+        "en": ("Bars are the model's raw per-class score (not a probability): SHAP's additive guarantee "
+               "holds in that space for a multiclass tree ensemble, not after the softmax."),
+    },
+    "shap_class_0": {"fr": "Forte baisse", "en": "Strong down"},
+    "shap_class_1": {"fr": "Légère baisse", "en": "Slight down"},
+    "shap_class_2": {"fr": "Légère hausse", "en": "Slight up"},
+    "shap_class_3": {"fr": "Forte hausse", "en": "Strong up"},
 }
 
 
@@ -605,6 +642,9 @@ def js_strings(lang: str) -> dict[str, str]:
         "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",
         "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol",
         "assetpanel_vol_current", "assetpanel_vol_long_run", "assetpanel_bars",
+        # feature/shap-waterfall (shap_waterfall.js)
+        "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
+        "shap_units_hint", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

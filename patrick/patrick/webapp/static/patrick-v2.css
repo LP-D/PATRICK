@@ -1257,6 +1257,23 @@ pre { overflow-x: auto; max-width: 100%; }
 .asset-metric-grid .metric { padding: var(--space-sm); animation: none; opacity: 1; }
 .asset-metric-grid .metric-value { font-size: 16px; }
 
+/* ============ /targets/{ticker} : waterfall SHAP (feature/shap-waterfall)
+   ============ -- on-demand, per (ticker, horizon), see shap_waterfall.js. */
+.shap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.shap-controls label { display: flex; align-items: center; gap: var(--space-sm); }
+.shap-controls select { width: auto; }
+.shap-waterfall-output { min-height: 24px; }
+.shap-waterfall-svg { overflow-x: auto; }
+.shap-waterfall-svg svg { display: block; max-width: 100%; height: auto; }
+.shap-caption { font-weight: 500; color: var(--color-foreground); }
+.shap-units-hint { margin-top: var(--space-sm); }
+
 /* ============ /simulate ============ */
 
 .sim-title {

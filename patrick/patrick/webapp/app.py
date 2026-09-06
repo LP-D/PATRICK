@@ -15,13 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
+from patrick import explain
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import portfolio as trackportfolio
-from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager
+from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager, shap_chart
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
@@ -671,11 +672,43 @@ def target_page(request: Request, ticker: str):
     finally:
         conn.close()
 
+    # feature/shap-waterfall (Phase 7): horizons offered in the on-demand
+    # SHAP selector -- any horizon with at least one DONE run MAY have an
+    # exported model (`explain.explain_last_prediction` checks for real,
+    # returns `ok: False` otherwise; this list is only there to avoid
+    # offering an horizon that obviously never finished a run).
+    done_horizons = sorted({r["horizon"] for r in (detail["runs"] if detail else []) if r["status"] == "done"})
+
     return templates.TemplateResponse(
         request, "target.html",
         {"target": ticker, "detail": detail, "phase_drift": phase_drift,
-         "phase_labels": PHASE_LABELS, **_i18n_context(request)},
+         "phase_labels": PHASE_LABELS, "shap_horizons": done_horizons, **_i18n_context(request)},
     )
+
+
+@app.get("/api/targets/{ticker}/shap-waterfall")
+def target_shap_waterfall(ticker: str, horizon: int):
+    """feature/shap-waterfall (Phase 7): on-demand SHAP explanation of the
+    most recent RECORDED prediction for (ticker, horizon) -- see
+    `patrick.explain.explain_last_prediction` for the feasibility rationale
+    (cost measured on a real exported model, why the selection-time SHAP
+    cache is not reused) and `docs/PHASE7_SHAP_FEASIBILITY.md` for the
+    numbers. Computed synchronously on request (button-triggered from
+    `shap_waterfall.js`), never on page load."""
+    if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    try:
+        result = explain.explain_last_prediction(ticker, horizon)
+    except Exception as exc:  # never let an explanation failure break the page
+        return JSONResponse({"ok": False, "message": f"Erreur de calcul SHAP : {exc}"})
+    if result is None:
+        return JSONResponse({"ok": False, "message": "Aucune prédiction exploitable pour cet horizon."})
+    svg = shap_chart.render_waterfall_svg(result["base_value"], result["contributions"], result["final_value"])
+    return JSONResponse({
+        "ok": True, "svg": svg, "ts": result["ts"], "split": result["split"],
+        "y_pred": result["y_pred"], "y_pred_label": result["y_pred_label"],
+        "y_proba": result["y_proba"], "n_features_total": result["n_features_total"],
+    })
 
 
 @app.get("/runs/{run_id}/detail")
