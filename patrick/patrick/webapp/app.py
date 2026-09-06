@@ -29,6 +29,22 @@ from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 # each call site (route + tests both need the exact same key).
 COMMODITIES_TARGET_GROUP = "Matières premières (futures)"
 
+# P9 -- French display labels for `run_phase_timing` phases (migration
+# 0016/0017), used by the `/targets/{ticker}` drift chart legend. Kept here
+# (not `i18n.STRINGS`, English-translated) rather than there: these are
+# internal pipeline-phase names, not user-facing copy that needs an English
+# rendering -- same "hardcode the French label" convention `target.html`
+# already uses for its own section titles/hints.
+PHASE_LABELS = {
+    "ingestion": "Ingestion",
+    "pool_construction": "Construction du pool",
+    "scan": "Scan (walk-forward / CPCV)",
+    "tuning": "Tuning (Optuna)",
+    "stability": "Stabilité de sélection",
+    "holdout_diagnostic": "Diagnostic holdout",
+    "export": "Export",
+}
+
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="PATRICK")
@@ -647,12 +663,18 @@ def target_page(request: Request, ticker: str):
     conn = trackdb.connect()
     try:
         detail = trackhistory.target_detail(conn, ticker)
+        # P9 -- phase-timing drift, independent of `detail`'s None-ness on
+        # purpose: cheap either way (empty list when there is no
+        # `run_phase_timing` row for this target), and computing it inside
+        # the same connection avoids a second `trackdb.connect()`.
+        phase_drift = trackhistory.phase_timing_drift_for_target(conn, ticker)
     finally:
         conn.close()
 
     return templates.TemplateResponse(
         request, "target.html",
-        {"target": ticker, "detail": detail, **_i18n_context(request)},
+        {"target": ticker, "detail": detail, "phase_drift": phase_drift,
+         "phase_labels": PHASE_LABELS, **_i18n_context(request)},
     )
 
 

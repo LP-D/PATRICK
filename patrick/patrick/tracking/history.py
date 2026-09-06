@@ -151,6 +151,44 @@ def phase_breakdown_for_run(conn: sqlite3.Connection, run_id: str) -> dict:
     return {"run_total_s": run_total_s, "unaccounted_s": unaccounted_s, "phases": phases}
 
 
+def phase_timing_drift_for_target(conn: sqlite3.Connection, target: str) -> list[dict]:
+    """P9 -- drift of `run_phase_timing` (migration 0016/0017) sub-phase
+    durations ACROSS a target's successive runs, in chronological order.
+    `phase_breakdown_for_run` above answers "where does the wall time go"
+    for ONE run; this answers "is a given sub-phase getting slower or
+    faster over time" for one target across ALL its runs (any horizon or
+    scheme -- same whole-history scope as `target_detail`), feeding the
+    `/targets/{ticker}` drift trend chart.
+
+    One point per (run, phase) OCCURRENCE-GROUP -- a phase summed across
+    its occurrences within that run, same rule `phase_breakdown_for_run`
+    already applies (`tuning` can run more than once per run_id, once per
+    top-config): `{run_id, started_at, phase, duration_s}`.
+
+    Ordered by `run.started_at` ascending (oldest run first -- a trend
+    chart reads left-to-right as "over time"; `list_runs`/`target_detail`
+    order DESC instead, because a history TABLE reads newest-first, a
+    different concern), `run.rowid` as a tie-break for two runs sharing a
+    same-second timestamp (same tie-break shape used elsewhere in this
+    module, e.g. `list_runs`), then by phase name for a stable order within
+    a run. Ready to plot without client-side re-sorting or re-grouping.
+
+    Empty list for a target with no runs at all, or whose runs have no
+    `run_phase_timing` row yet (a young run still `running`, or one
+    launched before migration 0016)."""
+    rows = conn.execute(
+        "SELECT run.run_id, run.started_at, rpt.phase, "
+        "SUM(strftime('%s', rpt.finished_at) - strftime('%s', rpt.started_at)) AS duration_s "
+        "FROM run JOIN run_phase_timing rpt ON rpt.run_id = run.run_id "
+        "WHERE run.target = ? "
+        "GROUP BY run.run_id, rpt.phase "
+        "ORDER BY run.started_at ASC, run.rowid ASC, rpt.phase",
+        (target,),
+    ).fetchall()
+    return [{"run_id": run_id, "started_at": started_at, "phase": phase, "duration_s": duration_s}
+            for run_id, started_at, phase, duration_s in rows]
+
+
 def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
               status: str | None = None, scheme: str | None = None,
               limit: int = 200) -> list[dict]:

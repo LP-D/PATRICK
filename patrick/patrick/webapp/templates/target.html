@@ -83,4 +83,25 @@
 </section>
 
 {% endif %}
+
+<section class="card">
+<h2>Dérive des sous-phases (temps d'exécution)</h2>
+<p class="hint">Durée de chaque sous-phase de la pipeline (instrumentation <code>run_phase_timing</code>, migrations 0016/0017 : ingestion, construction du pool, scan, tuning, stabilité de sélection, diagnostic holdout, export) au fil des runs successifs de cette cible, tous horizons/schémas confondus — une phase qui s'allonge dans le temps peut signaler une dérive de volumétrie de données ou de configuration.</p>
+{% if phase_drift %}
+<div id="drift-legend" class="drift-legend" aria-hidden="true"></div>
+<div class="chart-wrap">
+<canvas id="drift-canvas" width="900" height="260" role="img"
+        aria-label="Dérive des durées de sous-phase — chargement…"></canvas>
+<div id="drift-tooltip" class="chart-tooltip hidden"></div>
+</div>
+{% else %}
+<p class="hint">Aucune donnée de chronométrage de sous-phase pour cette cible (runs antérieurs à la migration 0016, ou encore en cours).</p>
+{% endif %}
+</section>
+
+<script>
+window.DRIFT_POINTS = {{ phase_drift | default([]) | tojson }};
+window.DRIFT_PHASE_LABELS = {{ phase_labels | default({}) | tojson }};
+</script>
+<script src="/static/drift.js"></script>
 {% endblock %}
