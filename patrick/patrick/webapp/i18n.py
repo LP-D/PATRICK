@@ -186,6 +186,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_cv_splits": {"fr": "Folds CV", "en": "CV folds"},
     "field_optuna_select_top_k_per_horizon": {"fr": "Budget Optuna par horizon", "en": "Optuna budget per horizon"},
 
+    # Phase 1 (feature/hyperparams-ui): search-space bounds per algo/hyperparameter,
+    # previously fixed in code with no configuration surface at all.
+    "section_optuna_bounds": {"fr": "Bornes de recherche Optuna", "en": "Optuna search bounds"},
+    "optuna_bounds_hint": {
+        "fr": "Pour chaque algorithme, la plage explorée par Optuna pour chacun de ses hyperparamètres (min doit être < max). Valeurs par défaut = plage historique du projet VIX ; ne modifier que si nécessaire.",
+        "en": "For each algorithm, the range Optuna searches for each of its hyperparameters (min must be < max). Defaults = the VIX project's historical range; change only if needed.",
+    },
+    "optuna_bound_low": {"fr": "min", "en": "min"},
+    "optuna_bound_high": {"fr": "max", "en": "max"},
+
     "section_output": {"fr": "Sortie", "en": "Output"},
     "field_output_dir": {"fr": "Dossier de sortie", "en": "Output directory"},
     "field_seed": {"fr": "Seed", "en": "Seed"},

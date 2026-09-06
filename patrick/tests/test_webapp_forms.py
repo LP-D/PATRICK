@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
+from patrick.config import defaults as D
 from patrick.webapp import forms
 from patrick.webapp.app import app
 
@@ -82,3 +83,90 @@ def test_build_config_dict_reads_horizons_as_repeated_multi_select_values():
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_3")
     assert errors == []
     assert config_dict["objective"]["horizons"] == [1, 5, 10]
+
+
+# Phase 1 (feature/hyperparams-ui) -- audit : `n_trials`/`top_k`/`cv_splits`
+# etaient deja exposes dans le formulaire (index.html, section_tuning) mais
+# JAMAIS valides cote serveur au-dela d'une erreur de type ("un champ
+# numerique entier est invalide") -- un n_trials negatif ou un cv_splits=1
+# passait tel quel jusqu'a `RunConfig` (pydantic, sans bornes, cf. docstring
+# du module) puis jusqu'a Optuna/sklearn, avec une erreur illisible loin du
+# formulaire. Ces tests fixent des bornes raisonnables cote `build_config_dict`.
+def test_build_config_dict_rejects_non_positive_n_trials():
+    form = _minimal_form(n_trials="0")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_4")
+    assert any("essais optuna" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_non_positive_top_k():
+    form = _minimal_form(top_k="-1")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_5")
+    assert any("top-k" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_cv_splits_below_two():
+    form = _minimal_form(cv_splits="1")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_6")
+    assert any("cv" in e.lower() for e in errors)
+
+
+def test_build_config_dict_accepts_valid_tuning_bounds():
+    form = _minimal_form(n_trials="50", top_k="3", cv_splits="4")
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_7")
+    assert errors == []
+    assert config_dict["tuning"]["n_trials"] == 50
+    assert config_dict["tuning"]["top_k"] == 3
+    assert config_dict["tuning"]["cv_splits"] == 4
+
+
+# Phase 1 (feature/hyperparams-ui) -- la grille Optuna (bornes [low, high] par
+# hyperparametre et par algo, `tuning/optuna_runner.py::suggest_params`)
+# n'avait ABSOLUMENT aucune surface de configuration avant ce changement : ni
+# champ de formulaire, ni cle dans `RunConfig`. `ob__{algo}__{param}__low`/
+# `__high` est le nom de champ choisi cote `index.html` pour cette nouvelle
+# section.
+def test_build_config_dict_defaults_optuna_bounds_when_form_omits_them():
+    """Un formulaire qui ne soumet pas les champs de bornes (ancien
+    formulaire, ou test existant type `_minimal_form()`) doit produire
+    exactement les bornes par defaut -- comportement inchange."""
+    form = _minimal_form()
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_8")
+    assert errors == []
+    assert config_dict["tuning"]["optuna_bounds"] == D.DEFAULT_OPTUNA_BOUNDS
+
+
+def test_build_config_dict_reads_custom_optuna_bounds_from_form():
+    form = _minimal_form(**{
+        "ob__XGBoost__n_estimators__low": "120",
+        "ob__XGBoost__n_estimators__high": "180",
+    })
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_9")
+    assert errors == []
+    assert config_dict["tuning"]["optuna_bounds"]["XGBoost"]["n_estimators"] == [120, 180]
+    # Les autres hyperparametres de XGBoost, non touches, restent par defaut.
+    assert config_dict["tuning"]["optuna_bounds"]["XGBoost"]["max_depth"] == \
+        D.DEFAULT_OPTUNA_BOUNDS["XGBoost"]["max_depth"]
+
+
+def test_build_config_dict_rejects_optuna_bound_low_greater_than_high():
+    form = _minimal_form(**{
+        "ob__RandomForest__n_estimators__low": "500",
+        "ob__RandomForest__n_estimators__high": "100",
+    })
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_10")
+    assert any("randomforest.n_estimators" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_optuna_bound_outside_allowed_range():
+    form = _minimal_form(**{
+        "ob__CatBoost__depth__low": "1",
+        "ob__CatBoost__depth__high": "9999",
+    })
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_11")
+    assert any("catboost.depth" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_non_numeric_optuna_bound():
+    form = _minimal_form(**{"ob__XGBoost__max_depth__low": "abc"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_12")
+    assert any("xgboost.max_depth" in e.lower() for e in errors)
