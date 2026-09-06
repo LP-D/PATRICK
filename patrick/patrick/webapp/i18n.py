@@ -262,6 +262,8 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # target group category names (optgroups)
     "group_indices": {"fr": "Indices", "en": "Indices"},
+    "group_currencies": {"fr": "Devises", "en": "Currencies"},
+    "group_commodities_futures": {"fr": "Matières premières (futures)", "en": "Commodities (futures)"},
     "group_broad_etfs": {"fr": "ETFs larges & style", "en": "Broad & style ETFs"},
     "group_sector_etfs": {"fr": "ETFs sectoriels & thématiques", "en": "Sector & thematic ETFs"},
     "group_bonds_etfs": {"fr": "Obligataire & taux (ETFs)", "en": "Bonds & rates (ETFs)"},
@@ -655,6 +657,8 @@ def js_strings(lang: str) -> dict[str, str]:
 # changes).
 TARGET_GROUP_LABEL_KEYS = {
     "Indices": "group_indices",
+    "Devises": "group_currencies",
+    "Matières premières (futures)": "group_commodities_futures",
     "ETFs larges & style": "group_broad_etfs",
     "ETFs sectoriels & thématiques": "group_sector_etfs",
     "Obligataire & taux (ETFs)": "group_bonds_etfs",

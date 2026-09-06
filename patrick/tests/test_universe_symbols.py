@@ -117,18 +117,23 @@ _EXPECTED_MACRO_FRED = {
     "FEDFUNDS", "GDP", "INDPRO", "NFCI", "OILPRICE", "PAYEMS", "PCE",
     "PCEPILFE", "RSAFS", "SOFR", "SP500", "STLFSI4", "T10Y2Y", "T10Y3M",
     "T10YIE", "T5YIE", "T5YIFR", "TEDRATE", "UMCSENT", "UNRATE", "VIXCLS",
-    "VIXDVOL", "WILL5000IND",
 }
 
 
 def test_universe_matches_exactly_the_reduced_target_set():
     """Non-régression explicite (Phase 4, feature/universe-reduction) : la
     liste d'univers chargée au runtime doit correspondre EXACTEMENT à la
-    liste attendue -- 68 cibles (20 commodités futures + 43 macro FRED + 2
+    liste attendue -- 66 cibles (20 commodités futures + 41 macro FRED + 2
     indices + 2 devises + 1 crypto), pas "à peu près" (un ticker en trop ou
     en moins passerait inaperçu avec une simple assertion de longueur).
     DX-Y.NYB (US Dollar Index) ajouté aux devises -- ticker yfinance, ne doit
-    pas être confondu avec une source FRED."""
+    pas être confondu avec une source FRED. VIXDVOL/WILL5000IND retirés
+    (fix/cleanup-dead-references) : les deux identifiants renvoient une
+    erreur 400 sur l'API FRED officielle -- VIXDVOL ne correspond à aucune
+    série FRED trouvée (recherche infructueuse), WILL5000IND correspond à
+    une série Wilshire réellement retirée de FRED (licence Wilshire
+    Associates), pas un simple renommage (recherche "Wilshire" sur l'API
+    FRED : 0 résultat)."""
     groups = D.DEFAULT_TARGET_GROUPS
     assert set(groups.keys()) == {"Indices", "Devises", "Matières premières (futures)", "Crypto", "Macro (FRED)"}
 
@@ -146,7 +151,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
 
     all_expected = (_EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO
                     | _EXPECTED_COMMODITIES_FUTURES | _EXPECTED_MACRO_FRED)
-    assert len(all_expected) == 68
+    assert len(all_expected) == 66
     all_actual = {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
     assert all_actual == all_expected
 
