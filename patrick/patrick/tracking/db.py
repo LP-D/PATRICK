@@ -705,3 +705,22 @@ def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, 
             "UPDATE prediction SET y_true = ? WHERE trial_id = ? AND ts = ?",
             (float(y_true), trial_id, ts),
         )
+
+
+def latest_prediction_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict | None:
+    """Phase 7 (SHAP waterfall) -- the most recent `prediction` row recorded
+    for a trial, whatever its `split` (holdout/test/test_path/live). Used to
+    pick a real, already-persisted prediction to explain rather than
+    triggering a fresh live inference (`predict.py`'s job, not this one) --
+    `ts` strings are lexicographically sortable ISO-like dates, so `ORDER BY
+    ts DESC` is correct here."""
+    row = conn.execute(
+        "SELECT ts, split, fold_index, y_true, y_pred, y_proba FROM prediction "
+        "WHERE trial_id = ? ORDER BY ts DESC LIMIT 1",
+        (trial_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    ts, split, fold_index, y_true, y_pred, y_proba = row
+    return {"ts": ts, "split": split, "fold_index": fold_index, "y_true": y_true,
+            "y_pred": int(y_pred), "y_proba": y_proba}

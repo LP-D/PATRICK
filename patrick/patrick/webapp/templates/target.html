@@ -82,5 +82,23 @@
               footer=(detail.runs | length) ~ " run(s) · F1_dir = meilleur essai sur n, non déflaté ; p-value DM brute — la version corrigée du test multiple (BH entre cibles) est le bloc de mesure en haut de cette page.") }}
 </section>
 
+<section class="card" id="shap-waterfall-widget" data-target="{{ target }}">
+<h2>{{ t('shap_section_title') }} <button type="button" class="info-icon" data-term="shap" data-term-label="SHAP" aria-label="{{ t('glossary_open_aria', term='SHAP') }}">i</button></h2>
+<p class="hint">{{ t('shap_section_hint') }}</p>
+{% if shap_horizons %}
+<div class="shap-controls">
+  <label for="shap-horizon-select">{{ t('shap_select_horizon') }}
+    <select id="shap-horizon-select" class="shap-horizon-select">
+      {% for h in shap_horizons %}<option value="{{ h }}">{{ h }}j</option>{% endfor %}
+    </select>
+  </label>
+  <button type="button" class="primary shap-generate-btn">{{ t('shap_btn_generate') }}</button>
+</div>
+<div class="shap-waterfall-output"></div>
+{% else %}
+<p class="hint">{{ t('shap_no_model') }}</p>
+{% endif %}
+</section>
+
 {% endif %}
 {% endblock %}
