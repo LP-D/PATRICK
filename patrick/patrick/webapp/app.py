@@ -460,6 +460,26 @@ def universe_page(request: Request):
     )
 
 
+@app.get("/data-freshness")
+def data_freshness_page(request: Request):
+    """Phase 5 -- fraîcheur des données ingérées, par ticker/série, lue
+    uniquement depuis le data lake local (`data/freshness.py`, jamais
+    d'appel réseau yfinance/FRED depuis cette page)."""
+    from patrick.data import freshness as data_freshness
+
+    t = i18n.translator(i18n.get_lang(request))
+    raw_groups = data_freshness.freshness_overview()
+    groups = [
+        {"group": t(i18n.TARGET_GROUP_LABEL_KEYS.get(g["group"], f"group_{g['group']}")),
+         "results": g["results"]}
+        for g in raw_groups
+    ]
+    return templates.TemplateResponse(
+        request, "data_freshness.html",
+        {"groups": groups, **_i18n_context(request)},
+    )
+
+
 def _asset_group_view(group_key: str) -> list[dict]:
     """Per-asset panel skeleton for `/commodities`/`/macro`: symbol/label
     from `DEFAULT_TARGET_GROUPS` (same source `/universe` reads) plus a

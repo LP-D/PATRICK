@@ -1,0 +1,50 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, data_table %}
+{% block title %}PATRICK — Fraîcheur des données{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_data_freshness') or 'Fraîcheur' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_data_freshness') or 'Fraîcheur des données' }}</h1>
+<p class="page-subtitle">Dernière donnée connue par ticker/série, lue uniquement depuis le data lake local (aucun appel réseau yfinance/FRED depuis cette page). Un ticker qui n'a jamais servi de cible d'un run n'a, à ce jour, aucune fraîcheur observable dans le cache — état "jamais mis en cache", pas une erreur.</p>
+
+{% set ns = namespace(total=0, cached=0) %}
+{% for g in groups %}{% for r in g.results %}
+{% set ns.total = ns.total + 1 %}
+{% if r.cached %}{% set ns.cached = ns.cached + 1 %}{% endif %}
+{% endfor %}{% endfor %}
+<p class="scope-line">
+    <b>Couverture du cache</b>
+    <span class="scope-value">{{ ns.cached }} / {{ ns.total }}</span>
+    <span class="scope-rel">ticker(s)/série(s) déjà mis en cache localement (ont servi de cible d'au moins un run)</span>
+</p>
+
+{% for g in groups %}
+<div class="group-block">
+    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.results | length }})</span></h2>
+    {% set rows = [] %}
+    {% for r in g.results %}
+        {% if r.cached %}
+            {% set fresh_cell = status_badge((r.business_days_late ~ "j de retard"), 'ok' if r.state == 'ok' else 'warning') %}
+            {% set date_cell = r.date_max %}
+        {% else %}
+            {% set fresh_cell = status_badge('jamais mis en cache', 'disabled') %}
+            {% set date_cell = '<span class="na">—</span>' %}
+        {% endif %}
+        {% set _ = rows.append([
+            '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
+            r.label,
+            r.periodicity,
+            date_cell,
+            fresh_cell,
+        ]) %}
+    {% endfor %}
+    {% set n_cached = g.results | selectattr('cached') | list | length %}
+    {{ data_table(["Symbole", "Libellé", "Périodicité", "Dernière donnée", "Fraîcheur"], rows,
+                  footer=(g.results | length) ~ " série(s) · " ~ n_cached ~ " en cache") }}
+</div>
+{% endfor %}
+{% endblock %}

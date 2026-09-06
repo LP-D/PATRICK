@@ -281,6 +281,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_launch": {"fr": "Lancer", "en": "Launch"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
+    "nav_data_freshness": {"fr": "Fraîcheur", "en": "Freshness"},
     # feature/ticker-stats-panel
     "nav_commodities": {"fr": "Matières premières", "en": "Commodities"},
     "nav_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
