@@ -275,6 +275,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_commodities": {"fr": "Matières premières", "en": "Commodities"},
     "nav_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
+    # Phase 8 (feature/portfolio-view)
+    "nav_portfolio": {"fr": "Portefeuille", "en": "Portfolio"},
+    "portfolio_subtitle": {
+        "fr": "Synthèse cross-actifs de l'univers réduit : signaux haussiers/baissiers agrégés par catégorie (config/defaults.py::DEFAULT_TARGET_GROUPS), à partir du même dernier signal par (cible, horizon) que /predictions — aucune nouvelle requête, une agrégation en Python de la même donnée.",
+        "en": "Cross-asset synthesis of the reduced universe: bullish/bearish signal counts aggregated per category (config/defaults.py::DEFAULT_TARGET_GROUPS), from the same latest (target, horizon) signal as /predictions — no new query, a Python aggregation of the same data.",
+    },
+    "portfolio_signals_title": {"fr": "Signaux par catégorie", "en": "Signals by category"},
+    "portfolio_contradictions_title": {"fr": "Signaux contradictoires", "en": "Contradictory signals"},
+    "portfolio_contradictions_subtitle": {
+        "fr": "Paires d'actifs historiquement corrélés (voir tracking/portfolio.py::CORRELATED_PAIRS) dont les derniers signaux, au même horizon, contredisent le sens de corrélation attendu.",
+        "en": "Pairs of historically correlated assets (see tracking/portfolio.py::CORRELATED_PAIRS) whose latest signals, at the same horizon, contradict the expected correlation direction.",
+    },
+    "portfolio_no_contradiction": {
+        "fr": "Aucune contradiction détectée pour l'instant sur les paires suivies.",
+        "en": "No contradiction detected so far on the tracked pairs.",
+    },
     "assetpanel_subtitle": {
         "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
         "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",

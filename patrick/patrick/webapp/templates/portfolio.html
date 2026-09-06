@@ -1,0 +1,76 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, data_table, empty_state %}
+{% block title %}PATRICK — Portefeuille{% endblock %}
+
+{# Phase 8 (feature/portfolio-view) -- cross-asset aggregated synthesis.
+   `overview` = tracking.portfolio.portfolio_overview()'s return value:
+   `groups` (bullish/bearish counts per DEFAULT_TARGET_GROUPS category) and
+   `contradictions` (correlated-pair disagreements) -- both already
+   computed in Python from the SAME latest_predictions_by_target_and_horizon
+   result `/predictions` uses, no new query. Group names come straight from
+   DEFAULT_TARGET_GROUPS' own keys (already French), same convention as
+   predictions.html/universe.html -- not re-translated here. #}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Synthèse' }}</a>
+    <span aria-current="page">{{ t('nav_portfolio') or 'Portefeuille' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_portfolio') or 'Portefeuille' }}</h1>
+<p class="page-subtitle">{{ t('portfolio_subtitle') }}</p>
+
+{% set ns = namespace(total=0, signals=0) %}
+{% for g in overview.groups %}
+{% set ns.total = ns.total + g.n_pairs %}
+{% set ns.signals = ns.signals + g.n_signals %}
+{% endfor %}
+<p class="scope-line">
+    <b>Couverture</b>
+    <span class="scope-value">{{ ns.signals }} / {{ ns.total }}</span>
+    <span class="scope-rel">paire(s) cible × horizon avec un signal résolu (haussier ou baissier)</span>
+</p>
+
+<section class="card" style="--enter-delay:60ms">
+<h2>{{ t('portfolio_signals_title') }}</h2>
+{% if not overview.groups %}
+{{ empty_state("Aucune catégorie configurée.", "Vérifie config/defaults.py::DEFAULT_TARGET_GROUPS.") }}
+{% else %}
+{% set group_rows = [] %}
+{% for g in overview.groups %}
+{% set _ = group_rows.append([
+    g.group,
+    status_badge(g.n_bullish, 'ok') if g.n_bullish else g.n_bullish,
+    status_badge(g.n_bearish, 'warning') if g.n_bearish else g.n_bearish,
+    g.n_no_signal,
+    g.n_pairs,
+]) %}
+{% endfor %}
+{{ data_table(["Catégorie", "Haussiers", "Baissiers", "Sans signal", "Total paires"], group_rows,
+              num_cols=[1, 2, 3, 4],
+              footer=(ns.signals) ~ " signal(s) résolu(s) sur " ~ (ns.total) ~ " paire(s) cible × horizon, toutes catégories confondues.") }}
+{% endif %}
+</section>
+
+<section class="card" style="--enter-delay:100ms">
+<h2>{{ t('portfolio_contradictions_title') }}</h2>
+<p class="hint">{{ t('portfolio_contradictions_subtitle') }}</p>
+{% if not overview.contradictions %}
+{{ empty_state(t('portfolio_no_contradiction')) }}
+{% else %}
+{% set contradiction_rows = [] %}
+{% for c in overview.contradictions %}
+{% set _ = contradiction_rows.append([
+    '<a href="/targets/' ~ c.symbol_a ~ '">' ~ c.symbol_a ~ '</a> / <a href="/targets/' ~ c.symbol_b ~ '">' ~ c.symbol_b ~ '</a>',
+    (c.horizon ~ 'j'),
+    status_badge(c.symbol_a ~ ' : ' ~ c.direction_a, 'ok' if c.direction_a == 'UP' else 'warning'),
+    status_badge(c.symbol_b ~ ' : ' ~ c.direction_b, 'ok' if c.direction_b == 'UP' else 'warning'),
+    ('négative attendue' if c.correlation == 'negative' else 'positive attendue'),
+    c.rationale,
+]) %}
+{% endfor %}
+{{ data_table(["Paire", "Horizon", "Signal A", "Signal B", "Corrélation", "Pourquoi"], contradiction_rows,
+              footer=(overview.contradictions | length) ~ " contradiction(s) détectée(s) sur " ~ (overview.groups | length) ~ " catégorie(s) suivie(s).") }}
+{% endif %}
+</section>
+{% endblock %}

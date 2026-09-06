@@ -20,6 +20,7 @@ from patrick.config.schema import RunConfig
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.tracking import portfolio as trackportfolio
 from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
@@ -546,6 +547,29 @@ def predictions_page(request: Request):
             "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
             **_i18n_context(request),
         },
+    )
+
+
+@app.get("/portfolio")
+def portfolio_page(request: Request):
+    """Phase 8 (feature/portfolio-view): cross-asset aggregated synthesis --
+    bullish/bearish signal counts per `DEFAULT_TARGET_GROUPS` category, plus
+    contradiction detection between historically correlated pairs (DXY/EUR-
+    USD, WTI/Brent, S&P500/VIX -- see
+    `tracking.portfolio.CORRELATED_PAIRS`). All aggregation happens in
+    `tracking.portfolio.portfolio_overview()`, which sources its data from
+    the SAME grouped query `/predictions` already uses
+    (`history.latest_predictions_by_target_and_horizon`) -- no new DB query
+    written for this page, same read-only-on-every-request philosophy as
+    every other page in this module."""
+    conn = trackdb.connect()
+    try:
+        overview = trackportfolio.portfolio_overview(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "portfolio.html",
+        {"overview": overview, **_i18n_context(request)},
     )
 
 
