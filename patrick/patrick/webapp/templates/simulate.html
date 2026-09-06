@@ -61,18 +61,24 @@
                 <label>{{ t('sim_field_asset_class') }}
                     <select id="sim-asset-class">
                         <option value="">—</option>
-                        <option value="futures_liquid">Futures liquides (1bp)</option>
+                        <option value="futures_liquid" selected>Futures liquides (1bp)</option>
                         <option value="us_large_cap">US large cap (3bp)</option>
                         <option value="eu_mid_cap">EU mid cap (15bp)</option>
                         <option value="crypto_non_major">Crypto hors majors (30bp)</option>
                     </select>
                 </label>
+                <!-- Phase 10 : défaut pré-rempli et DOCUMENTÉ (pas 0) -- préréglage
+                     "futures_liquid" présélectionné ci-dessus (1bp round-turn, cf.
+                     simulate.engine.ASSET_CLASS_FRICTION_BPS et sa justification en
+                     commentaire) réparti 0.5bp spread + 0.5bp commission ; ces deux
+                     champs restent éditables et sont resynchronisés par
+                     simulate.js si l'utilisateur change de classe d'actif. -->
                 <div class="subgrid">
                     <label>{{ t('sim_field_spread_bps') }}
-                        <input type="number" id="sim-spread-bps" step="0.5" min="0" value="0">
+                        <input type="number" id="sim-spread-bps" step="0.5" min="0" value="0.5">
                     </label>
                     <label>{{ t('sim_field_commission_bps') }}
-                        <input type="number" id="sim-commission-bps" step="0.5" min="0" value="0">
+                        <input type="number" id="sim-commission-bps" step="0.5" min="0" value="0.5">
                     </label>
                     <label>{{ t('sim_field_carry_bps') }}
                         <input type="number" id="sim-carry-bps" step="1" min="0" value="0">

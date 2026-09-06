@@ -58,6 +58,34 @@ from patrick.validation.dsr import deflated_sharpe_ratio
 _UP_CLASSES = (2, 3)
 _DOWN_CLASSES = (0, 1)
 
+# Coûts de friction par défaut (spread + commission combinés, en bps,
+# "round-turn" = aller-retour complet) par classe d'actif, prélevés
+# proportionnellement au turnover (`|Δexposure|`, voir `simulate()`) à chaque
+# fois que la position change -- y compris, mais pas seulement, un
+# retournement complet de sens (long<->short), qui déplace 2 unités
+# d'exposition et donc coûte 2x ce taux.
+#
+# JUSTIFICATION (Phase 10) -- ordre de grandeur indicatif, PAS une mesure
+# empirique précise mesurée sur un broker réel : ces chiffres dépendent en
+# pratique du broker, de l'heure/liquidité du moment et de la taille de
+# l'ordre, qu'on ne modélise pas ici. Ils servent de point de départ
+# raisonnable et editable (`SimParams.spread_bps`/`commission_bps`, champ
+# libre sur /simulate), pas une vérité mesurée :
+# - futures_liquid (ex. futures indiciels E-mini S&P 500/ES, Euro Stoxx
+#   50/FESX, spot FX majeurs EUR/USD) : instruments les plus liquides du
+#   marché, spread bid-ask usuellement bien sous 1 bp sur les contrats les
+#   plus traités + une commission de courtage de l'ordre de 0.5 bp ->
+#   1 bp round-turn retenu au total (0.5 bp spread + 0.5 bp commission ici).
+# - us_large_cap (actions US grande capitalisation, ex. composantes du
+#   S&P 500) : marché profond mais moins liquide qu'un future indiciel,
+#   spread NBBO + commission courtage discount -> 3 bp retenus.
+# - eu_mid_cap (actions européennes moyenne capitalisation) : carnet d'ordres
+#   plus mince, spreads sensiblement plus larges -> 15 bp retenus, ordre de
+#   grandeur prudent plutôt qu'optimiste.
+# - crypto_non_major (cryptoactifs hors BTC/ETH, sur les plus grandes places
+#   d'échange) : frais d'exchange + spread nettement plus élevés et très
+#   variables selon la plateforme -> 30 bp retenus comme borne indicative
+#   basse-à-moyenne, pas un plafond.
 ASSET_CLASS_FRICTION_BPS = {
     "futures_liquid": 1.0,
     "us_large_cap": 3.0,

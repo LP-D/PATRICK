@@ -212,6 +212,61 @@ def test_simulate_never_touches_model_or_trains_anything(tmp_path):
     assert result["ok"] is True
 
 
+def test_transaction_cost_exact_diff_equals_turnover_times_bps():
+    """TDD (Phase 10, coûts de transaction) -- cas connu, calculé à la main
+    AVANT toute modification du code : 10 signaux consécutifs
+    (horizon=1, execution_lag_bars=1 -> pas de chevauchement, chaque signal
+    occupe exactement 1 jour de la grille et `exposure` reproduit `target_pos`
+    telle quelle) avec exactement 3 retournements de sens dans la séquence
+    UP,UP,UP,DOWN,DOWN,UP,UP,UP,UP,DOWN (transitions aux index 2->3, 4->5,
+    8->9). Turnover total = 1 (entrée 0->+1) + 3 x 2 (chaque retournement
+    plein +1<->-1 déplace 2 unités d'exposition) + 1 (sortie -1->0) = 8.
+
+    Au niveau `strategy_returns = exposure * underlying_ret - trading_cost -
+    carry_cost` (engine.simulate, avant compounding), le coût de transaction
+    est un terme ADDITIF indépendant du rendement du sous-jacent : l'écart de
+    P&L (somme des rendements période par période) entre "sans coûts" et
+    "avec coûts" doit donc être EXACTEMENT `turnover_total * cout_bps /
+    10000`, à la précision flottante près -- quel que soit `underlying_ret`.
+    """
+    idx = pd.bdate_range("2021-06-01", periods=20)
+    signal_dates = idx[5:15]  # 10 signaux consécutifs
+    y_pred = np.array([3, 3, 3, 0, 0, 3, 3, 3, 3, 0])  # 3=UP_FORT, 0=DOWN_FORT
+    y_proba = np.full(10, 0.9)
+
+    params = sim.SimParams(threshold=0.55, execution_lag_bars=1, overlap_mode="tranches")
+    score = sim._directional_score(y_pred, y_proba)
+    target_pos = sim._position_from_score(score, params)
+    signs = np.sign(target_pos)
+    assert np.array_equal(signs, [1, 1, 1, -1, -1, 1, 1, 1, 1, -1])
+    n_reversals = int(np.sum(np.diff(signs) != 0))
+    assert n_reversals == 3
+
+    exposure = sim._build_exposure(signal_dates, target_pos, idx, horizon=1, params=params)
+    turnover = exposure.diff().abs().fillna(exposure.abs())
+    total_turnover = float(turnover.sum())
+    assert total_turnover == pytest.approx(1.0 + n_reversals * 2.0 + 1.0)  # = 8.0
+
+    # Rendement du sous-jacent quelconque et non trivial (le résultat ne doit
+    # pas en dépendre) -- pas de prix "rond" qui masquerait une erreur d'échelle.
+    rng = np.random.default_rng(7)
+    underlying_ret = pd.Series(rng.normal(0, 0.01, len(idx)), index=idx)
+
+    def additive_pnl(spread_bps: float, commission_bps: float) -> float:
+        trading_cost = turnover * (spread_bps + commission_bps) / 10000.0
+        strategy_returns = exposure * underlying_ret - trading_cost
+        return float(strategy_returns.sum())
+
+    pnl_no_cost = additive_pnl(0.0, 0.0)
+    spread_bps, commission_bps = 2.0, 2.0  # 4 bps total (cf. préréglage us_large_cap)
+    pnl_with_cost = additive_pnl(spread_bps, commission_bps)
+
+    expected_diff = total_turnover * (spread_bps + commission_bps) / 10000.0  # = 8 * 4bps = 0.0032
+    actual_diff = pnl_no_cost - pnl_with_cost
+    assert expected_diff == pytest.approx(0.0032)
+    assert actual_diff == pytest.approx(expected_diff, abs=1e-15)
+
+
 def test_execution_lag_one_captures_return_from_signal_close_to_next_close():
     """Rapport de correction, C6 -- fige la convention de timing réelle
     (`_build_exposure`, remplace `open_next` du plan de phase 4, non
