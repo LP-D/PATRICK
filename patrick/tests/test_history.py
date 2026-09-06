@@ -229,6 +229,131 @@ def test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1(tmp_path):
     conn.close()
 
 
+def test_latest_predictions_by_target_and_horizon_partitions_by_horizon(tmp_path):
+    """`/predictions` (vue d'ensemble) needs one row per (target, horizon),
+    not one per target collapsed across horizons like
+    `latest_predictions_by_target()` -- ^VIX h=5 and ^VIX h=10 must resolve
+    to their OWN latest prediction, not both silently reporting whichever
+    of the two happens to win the target-wide "most recent" comparison."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run_h5", "^VIX", 5, status="done")
+    trial_h5 = db.create_trial(conn, "run_h5", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.add_predictions(conn, trial_h5, fold_index=None, split="live",
+                        ts=["2024-01-01T00:00:00"], y_true=[None], y_pred=[3], y_proba=[0.7])
+
+    _make_run(conn, "run_h10", "^VIX", 10, status="done")
+    trial_h10 = db.create_trial(conn, "run_h10", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.add_predictions(conn, trial_h10, fold_index=None, split="live",
+                        ts=["2024-02-01T00:00:00"], y_true=[None], y_pred=[0], y_proba=[0.6])
+
+    out = trackhistory.latest_predictions_by_target_and_horizon(conn, ["^VIX"], [5, 10])
+    assert set(out.keys()) == {("^VIX", 5), ("^VIX", 10)}
+    assert out[("^VIX", 5)]["direction"] == "UP"
+    assert out[("^VIX", 5)]["run_id"] == "run_h5"
+    assert out[("^VIX", 10)]["direction"] == "DOWN"
+    assert out[("^VIX", 10)]["run_id"] == "run_h10"
+    # Un horizon sans aucune prediction est simplement absent (pas de cle a moitie remplie).
+    assert ("^VIX", 3) not in out
+    conn.close()
+
+
+def test_latest_predictions_by_target_and_horizon_is_not_n_plus_1(tmp_path):
+    """Meme discipline de performance que `latest_predictions_by_target()`
+    (voir `test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1`) :
+    une seule requete groupee pour tout le produit (target x horizon), pas
+    une par paire -- sous-requete correlee, pas ROW_NUMBER() OVER PARTITION
+    (mesure plus lente sur la vraie base ~12M lignes, voir docstring de
+    `latest_predictions_by_target`)."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    targets = [f"SYM{i}" for i in range(10)]
+    horizons = [1, 5, 10]
+    for i, target in enumerate(targets):
+        for h in horizons:
+            run_id = f"run_{i}_{h}"
+            _make_run(conn, run_id, target, h, status="done")
+            trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+            db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                                ts=["2024-01-01T00:00:00"], y_true=[None], y_pred=[3], y_proba=[0.7])
+
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql))
+    out = trackhistory.latest_predictions_by_target_and_horizon(conn, targets, horizons)
+    conn.set_trace_callback(None)
+
+    assert len(out) == len(targets) * len(horizons)
+    per_pair_lookup_queries = [
+        q for q in queries
+        if "JOIN trial ON trial.trial_id = prediction.trial_id" in q and "WHERE r2.target =" in q
+    ]
+    assert len(per_pair_lookup_queries) <= 1, (
+        f"{len(per_pair_lookup_queries)} per-(target,horizon) prediction lookups for "
+        f"{len(targets)}x{len(horizons)} pairs -- expected a single grouped query"
+    )
+    conn.close()
+
+
+def test_direction_metrics_by_target_and_horizon_partitions_by_horizon(tmp_path):
+    """Meme correction que `latest_predictions_by_target_and_horizon` mais
+    pour la fiabilite (F1 par direction) : chaque horizon doit resoudre son
+    PROPRE dernier run 'done', pas le plus recent du ticker tous horizons
+    confondus. Inclut aussi le resultat Diebold-Mariano (p_value/baseline)
+    du run resolu -- c'est ce qui alimente le badge ok/warning de
+    /predictions, meme semantique que run_detail.html ("ok" si p < 0.05)."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _make_run(conn, "run_h5", "^VIX", 5, status="done")
+    trial_h5 = db.create_trial(conn, "run_h5", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_h5)
+    db.add_predictions(conn, trial_h5, fold_index=1, split="test",
+                        ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0], y_proba=[0.7, 0.7])
+    db.save_dm_result(conn, "run_h5", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+
+    _make_run(conn, "run_h10", "^VIX", 10, status="done")
+    trial_h10 = db.create_trial(conn, "run_h10", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_h10)
+    db.add_predictions(conn, trial_h10, fold_index=1, split="test",
+                        ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[0, 0], y_proba=[0.6, 0.6])
+    db.save_dm_result(conn, "run_h10", {"baseline": "majority", "dm_stat": 0.5, "p_value": 0.42})
+
+    out = trackhistory.direction_metrics_by_target_and_horizon(conn, ["^VIX"], [5, 10])
+    assert set(out.keys()) == {("^VIX", 5), ("^VIX", 10)}
+    assert out[("^VIX", 5)]["run_id"] == "run_h5"
+    assert out[("^VIX", 5)]["dm_result"]["p_value"] == 0.03
+    assert out[("^VIX", 10)]["run_id"] == "run_h10"
+    assert out[("^VIX", 10)]["dm_result"]["p_value"] == 0.42
+    conn.close()
+
+
+def test_direction_metrics_by_target_and_horizon_is_not_n_plus_1(tmp_path):
+    """Meme discipline de performance que
+    `test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1`,
+    etendue a (target, horizon)."""
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    targets = [f"SYM{i}" for i in range(10)]
+    horizons = [1, 5, 10]
+    for i, target in enumerate(targets):
+        for h in horizons:
+            run_id = f"run_{i}_{h}"
+            _make_run(conn, run_id, target, h, status="done")
+            trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+            db.mark_best_trial(conn, trial_id)
+            db.add_predictions(conn, trial_id, fold_index=1, split="test",
+                                ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0],
+                                y_proba=[0.7, 0.7])
+
+    queries: list[str] = []
+    conn.set_trace_callback(lambda sql: queries.append(sql))
+    out = trackhistory.direction_metrics_by_target_and_horizon(conn, targets, horizons)
+    conn.set_trace_callback(None)
+
+    assert len(out) == len(targets) * len(horizons)
+    per_pair_run_lookups = [q for q in queries if "run.target = thl.target AND run.horizon = thl.horizon" in q]
+    assert len(per_pair_run_lookups) <= 1, (
+        f"{len(per_pair_run_lookups)} per-(target,horizon) run lookups for "
+        f"{len(targets)}x{len(horizons)} pairs -- expected a single grouped query"
+    )
+    conn.close()
+
+
 def test_phase_breakdown_for_run_empty_when_no_timing_recorded(tmp_path):
     conn = db.connect(str(tmp_path / "patrick.db"))
     _make_run(conn, "run1", "^VIX", 5, status="done")

@@ -511,6 +511,168 @@ def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -
     return out
 
 
+def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: list[str],
+                                              horizons: list[int]) -> dict[tuple[str, int], dict]:
+    """`/predictions` (universe-wide overview): same rule and same grouped-
+    query discipline as `latest_predictions_by_target()` above (prefer
+    `split='live'`, else most recent `test`/`holdout` row; ONE correlated
+    subquery per partition key, not `ROW_NUMBER() OVER PARTITION` -- see
+    that function's docstring for why the latter is measurably worse on
+    the real ~12M-row `prediction` table), just partitioned by
+    `(target, horizon)` instead of `target` alone: `run` is already scoped
+    one row per horizon (Phase 1.2 schema), so a target's OWN h=5 and h=10
+    runs must resolve independently, not have one silently shadow the
+    other under a target-wide "most recent" comparison.
+
+    Returns a dict keyed by `(target, horizon)` tuple; a pair with no
+    prediction row at all is simply absent."""
+    if not targets or not horizons:
+        return {}
+    target_placeholders = ",".join("?" for _ in targets)
+    horizon_placeholders = ",".join("?" for _ in horizons)
+    rows = conn.execute(
+        "WITH target_horizon_list AS ("
+        "  SELECT DISTINCT run.target, run.horizon FROM run "
+        f"   WHERE run.target IN ({target_placeholders}) AND run.horizon IN ({horizon_placeholders})"
+        "), "
+        "winner AS ("
+        "  SELECT thl.target, thl.horizon, ("
+        "    SELECT p.rowid FROM prediction p "
+        "    JOIN trial t2 ON t2.trial_id = p.trial_id "
+        "    JOIN run r2 ON r2.run_id = t2.run_id "
+        "    WHERE r2.target = thl.target AND r2.horizon = thl.horizon "
+        "    ORDER BY (p.split = 'live') DESC, p.ts DESC LIMIT 1"
+        "  ) AS pred_rowid "
+        "  FROM target_horizon_list thl"
+        ") "
+        "SELECT winner.target, winner.horizon, prediction.ts, prediction.split, prediction.y_pred, "
+        "       prediction.y_proba, trial.trial_id, run.run_id "
+        "FROM winner "
+        "JOIN prediction ON prediction.rowid = winner.pred_rowid "
+        "JOIN trial ON trial.trial_id = prediction.trial_id "
+        "JOIN run ON run.run_id = trial.run_id",
+        tuple(targets) + tuple(horizons),
+    ).fetchall()
+    out: dict[tuple[str, int], dict] = {}
+    for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id in rows:
+        cls = int(round(y_pred))
+        out[(target, horizon)] = {
+            "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
+            "direction": _CLASS_DIRECTION.get(cls, "?"),
+            "amplitude": _CLASS_AMPLITUDE.get(cls, "?"),
+            "confidence": y_proba,
+        }
+    return out
+
+
+def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: list[str],
+                                             horizons: list[int]) -> dict[tuple[str, int], dict | None]:
+    """`/predictions` (universe-wide overview): same grouping strategy and
+    correlated-subquery discipline as `direction_metrics_by_target()`
+    above, partitioned by `(target, horizon)` instead of `target` alone --
+    see that function's docstring for the full performance rationale (one
+    round trip resolving target->(run_id, trial_id), one flat IN-list for
+    predictions, one flat GROUP BY for AUC).
+
+    Also resolves each pair's Diebold-Mariano result (`dm_result`,
+    `kind='class_specific'` -- same default `_dm_result_for_run()` uses,
+    same value `run_detail.html`/`target_detail()` actually display)
+    inline: `run_id` is already known per pair from step 1, so this is one
+    more flat IN-list query, not a second N+1.
+    This is what feeds `/predictions`' ok/warning badge -- same "ok" if
+    `p_value < 0.05` semantics already used on `run_detail.html`, not a
+    new threshold invented for this page. `dm_result` is `None` when the
+    resolved run has none yet (CPCV runs skip DM entirely, see
+    `run_detail.html`)."""
+    if not targets or not horizons:
+        return {}
+    target_placeholders = ",".join("?" for _ in targets)
+    horizon_placeholders = ",".join("?" for _ in horizons)
+    resolved = conn.execute(
+        "WITH target_horizon_list AS ("
+        "  SELECT DISTINCT run.target, run.horizon FROM run "
+        f"   WHERE run.target IN ({target_placeholders}) AND run.horizon IN ({horizon_placeholders})"
+        ") "
+        "SELECT thl.target, thl.horizon, run.run_id, trial.trial_id "
+        "FROM target_horizon_list thl "
+        "JOIN run ON run.run_id = ("
+        "  SELECT run_id FROM run WHERE run.target = thl.target AND run.horizon = thl.horizon "
+        "  AND run.status = 'done' ORDER BY started_at DESC, rowid DESC LIMIT 1"
+        ") "
+        "JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1",
+        tuple(targets) + tuple(horizons),
+    ).fetchall()
+    if not resolved:
+        return {}
+
+    pair_by_key = {(target, horizon): (run_id, trial_id) for target, horizon, run_id, trial_id in resolved}
+    trial_ids = [trial_id for _, _, _, trial_id in resolved]
+    run_ids = [run_id for _, _, run_id, _ in resolved]
+    trial_placeholders = ",".join("?" for _ in trial_ids)
+    run_placeholders = ",".join("?" for _ in run_ids)
+
+    pred_rows = conn.execute(
+        f"SELECT trial_id, split, y_true, y_pred FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split IN ('test', 'holdout') "
+        "AND y_true IS NOT NULL",
+        tuple(trial_ids),
+    ).fetchall()
+    by_trial_split: dict[int, dict[str, list[tuple[float, float]]]] = {}
+    for trial_id, split, y_true, y_pred in pred_rows:
+        by_trial_split.setdefault(trial_id, {}).setdefault(split, []).append((y_true, y_pred))
+
+    auc_rows = conn.execute(
+        f"SELECT trial_id, AVG(value) FROM fold_metric "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split IN ('test', 'test_path') "
+        "AND metric = 'AUC_ovr_4cls' GROUP BY trial_id",
+        tuple(trial_ids),
+    ).fetchall()
+    auc_by_trial = dict(auc_rows)
+
+    dm_rows = conn.execute(
+        f"SELECT run_id, baseline, p_value FROM dm_result "
+        f"WHERE run_id IN ({run_placeholders}) AND kind = 'class_specific'",
+        tuple(run_ids),
+    ).fetchall()
+    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value} for run_id, baseline, p_value in dm_rows}
+
+    out: dict[tuple[str, int], dict | None] = {}
+    for key, (run_id, trial_id) in pair_by_key.items():
+        splits = by_trial_split.get(trial_id, {})
+        rows = splits.get("test") or []
+        split_used = "test"
+        if not rows:
+            rows = splits.get("holdout") or []
+            split_used = "holdout"
+        if not rows:
+            out[key] = None
+            continue
+
+        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
+        precision, recall, f1, support = precision_recall_fscore_support(
+            y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
+        )
+        by_direction: dict[str, dict | None] = {}
+        for i, direction in enumerate(["DOWN", "UP"]):
+            if counts[direction] < _MIN_DIRECTION_SAMPLES:
+                by_direction[direction] = None
+                continue
+            by_direction[direction] = {
+                "n": int(support[i]), "precision": round(float(precision[i]), 4),
+                "recall": round(float(recall[i]), 4), "f1": round(float(f1[i]), 4),
+            }
+        out[key] = {
+            "run_id": run_id, "trial_id": trial_id, "split_used": split_used, "n": len(rows),
+            "n_up": counts["UP"], "n_down": counts["DOWN"],
+            "by_direction": by_direction,
+            "auc_overall": auc_by_trial.get(trial_id),
+            "dm_result": dm_by_run.get(run_id),
+        }
+    return out
+
+
 def direction_metrics_by_target(conn: sqlite3.Connection, targets: list[str]) -> dict[str, dict | None]:
     """P8.1 perf fix -- grouped equivalent of calling
     `direction_metrics_for_target()` once per target. Same result shape

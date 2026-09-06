@@ -274,6 +274,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # feature/ticker-stats-panel
     "nav_commodities": {"fr": "Matières premières", "en": "Commodities"},
     "nav_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
+    "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
     "assetpanel_subtitle": {
         "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
         "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",

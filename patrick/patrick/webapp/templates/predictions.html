@@ -1,0 +1,63 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, data_table, empty_state %}
+{% block title %}PATRICK — Prédictions{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_predictions') or 'Prédictions' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_predictions') or 'Prédictions' }}</h1>
+<p class="page-subtitle">Vue d'ensemble de l'univers réduit — dernier signal disponible par cible et par horizon, avec sa significativité Diebold-Mariano (même seuil "ok" si p&lt;0,05 que sur la page d'un run). Lecture seule, recalculée à chaque chargement, aucun nouveau calcul de modèle.</p>
+
+{% set ns = namespace(total=0, with_pred=0) %}
+{% for g in groups %}{% for r in g.rows %}
+{% set ns.total = ns.total + 1 %}
+{% if r.direction %}{% set ns.with_pred = ns.with_pred + 1 %}{% endif %}
+{% endfor %}{% endfor %}
+<p class="scope-line">
+    <b>Couverture</b>
+    <span class="scope-value">{{ ns.with_pred }} / {{ ns.total }}</span>
+    <span class="scope-rel">paire(s) cible × horizon avec au moins une prédiction</span>
+</p>
+
+{% if ns.total == 0 %}
+{{ empty_state("Aucune cible configurée.", "Vérifie config/defaults.py::DEFAULT_TARGET_GROUPS.") }}
+{% endif %}
+
+{% for g in groups %}
+<div class="group-block">
+    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.rows | length }} paire(s))</span></h2>
+    {% set rows = [] %}
+    {% for r in g.rows %}
+        {% if r.direction %}
+            {% set dir_cell = status_badge(r.direction, 'ok' if r.direction == 'UP' else 'warning') %}
+            {% if r.dm_p_value is not none %}
+                {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < 0.05 else 'warning') %}
+            {% else %}
+                {% set sig_cell = status_badge('en attente', 'neutral') %}
+            {% endif %}
+            {% set conf_label = ('%.2f' | format(r.confidence)) if r.confidence is not none else '<span class="na">—</span>' %}
+        {% else %}
+            {% set dir_cell = '<span class="na">—</span>' %}
+            {% set sig_cell = status_badge('aucune prédiction', 'disabled') %}
+            {% set conf_label = '<span class="na">—</span>' %}
+        {% endif %}
+        {% set _ = rows.append([
+            '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
+            r.label,
+            (r.horizon ~ 'j'),
+            dir_cell,
+            conf_label,
+            sig_cell,
+            r.ts or '—',
+        ]) %}
+    {% endfor %}
+    {% set n_pred = g.rows | selectattr('direction') | list | length %}
+    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Dernier signal"], rows,
+                  num_cols=[4],
+                  footer=(g.rows | length) ~ " paire(s) · " ~ n_pred ~ " avec une prédiction disponible") }}
+</div>
+{% endfor %}
+{% endblock %}
