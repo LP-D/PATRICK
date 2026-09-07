@@ -46,11 +46,13 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
+from patrick.features import guida
 from patrick.features import macro as feat_macro
 from patrick.features import spike, technical, vol_models
 from patrick.features.interactions import INTERACTION_TYPES, apply_interaction, discover_interactions
@@ -128,21 +130,26 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
     macro, + the target's OHLC vol estimators. Computed once, shared across
     all folds/horizons of a run — no leak risk (see module docstring)."""
     families = config.features.families
+    guida_on = config.features.enable_guida_features
+    guida_windows = list(D.GUIDA_LOOKBACKS) if guida_on else None
     parts: list[pd.DataFrame] = [raw]
 
     for col in raw.columns:
         s = raw[col]
         if "technical" in families:
-            parts.append(technical.build_technical_features(s, prefix=col))
+            parts.append(technical.build_technical_features(s, prefix=col, guida_windows=guida_windows))
         if "spike" in families:
-            parts.append(spike.build_spike_features_base(s, prefix=col))
+            parts.append(spike.build_spike_features_base(s, prefix=col, guida_windows=guida_windows))
         if "vol_models" in families:
             parts.append(vol_models.build_vol_model_features_base(
-                s, prefix=col, models=config.features.vol_models))
+                s, prefix=col, models=config.features.vol_models, guida_windows=guida_windows))
 
     if "macro" in families and config.universe.fred_series:
         macro_cols = list(config.universe.fred_series.keys())
-        parts.append(feat_macro.build_macro_features(raw, macro_cols))
+        parts.append(feat_macro.build_macro_features(raw, macro_cols, guida_windows=guida_windows))
+
+    if guida_on:
+        parts.append(guida.build_guida_estimated_features(raw))
 
     if "technical" in families:
         ohlc = download_ohlc(config.objective.target_symbol, config.universe.start_date)
