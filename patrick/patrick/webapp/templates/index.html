@@ -161,6 +161,32 @@
             </div>
         </details>
 
+        {# Phase 3 (feature/hyperparams-lookbacks) : jusqu'ici, les fenetres
+           roulantes (returns/zscore/ma_ratio/rolling_vol/ohlc_vol) de
+           `features/technical.py` n'avaient AUCUNE surface de configuration
+           -- fixees en dur en defaut de fonction, jamais threadees dans
+           `RunConfig` ni `pipeline/engine.py` (laisse de cote par
+           `feature/hyperparams-ui`). Un champ texte par fonction (liste
+           d'entiers separee par des virgules, meme convention que
+           `n_features_grid`), meme patron que `section_optuna_bounds`
+           ci-dessous. #}
+        <details class="adv" data-adv="section_technical_lookbacks">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('section_technical_lookbacks') }}</span>
+                <span class="adv-state" data-adv-state="section_technical_lookbacks"></span>
+            </summary>
+            <div class="adv-body">
+            <p class="hint">{{ t('technical_lookbacks_hint') }}</p>
+            <div class="subgrid">
+            {% for field, label in technical_lookback_fields %}
+                <label>{{ label }}
+                    <input type="text" name="tl__{{ field }}" value="{{ view.technical_lookbacks.get(field, '') }}">
+                </label>
+            {% endfor %}
+            </div>
+            </div>
+        </details>
+
         <details class="adv" data-adv="section_validation">
             <summary class="adv-summary">
                 <span class="adv-title">{{ t('section_validation') }}</span>

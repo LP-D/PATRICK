@@ -65,6 +65,12 @@ FORM_OPTIONS = {
     # one [low, high] input pair per (algo, hyperparameter), pre-filled from
     # `view.optuna_bounds` (see `forms.to_view`).
     "optuna_param_specs": D.OPTUNA_PARAM_SPECS,
+    # Phase 3 (feature/hyperparams-lookbacks): drives the "Lookbacks
+    # technical" section -- one comma-separated `<input>` per
+    # `features/technical.py` function, pre-filled from
+    # `view.technical_lookbacks` (see `forms.to_view`).
+    "technical_lookback_fields": forms.TECHNICAL_LOOKBACK_FIELDS,
+    "technical_lookback_bounds": D.TECHNICAL_LOOKBACK_BOUNDS,
 }
 
 

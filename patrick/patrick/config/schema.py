@@ -58,6 +58,35 @@ class DataQualityConfig(BaseModel):
     max_universe_exclusion_frac: float = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
 
 
+class TechnicalLookbacksConfig(BaseModel):
+    """Phase 3 (feature/hyperparams-lookbacks): rolling-window lookbacks for
+    `features/technical.py`, previously fixed function-default parameters
+    never threaded through `RunConfig` (`feature/hyperparams-ui` exposed
+    n_trials/top_k/cv_splits/algos/optuna_bounds but explicitly left this
+    out). Defaults are IDENTICAL to the historical hardcoded values -- an
+    unmodified run keeps computing exactly the same technical features as
+    before this field existed.
+
+    Like the rest of `RunConfig` (no bounds/validators enforced by pydantic
+    here, per the module docstring), range validation happens in
+    `webapp/forms.py::_parse_technical_lookbacks` before this ever reaches
+    `model_validate` from the web form, AND defensively again in
+    `pipeline/engine.py::_sanitize_lookback_windows` right before
+    `features/technical.py` is called -- the second guard also protects a
+    hand-edited YAML/CLI run, which never goes through the web form. Both
+    exist because a window<=0 is not merely "wasteful" here: `returns()`
+    silently computes a look-ahead (future-leaking) value for a NEGATIVE
+    window (pandas `Series.pct_change(periods=negative)` never raises), and
+    `ohlc_vol_windows` values below 2 raise `ZeroDivisionError` inside
+    `yang_zhang_vol` (`(window - 1)` in its denominator) -- see
+    `tests/test_technical_lookbacks.py` for both measured behaviors."""
+    returns_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_RETURNS_WINDOWS))
+    zscore_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_ZSCORE_WINDOWS))
+    ma_ratio_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_MA_RATIO_WINDOWS))
+    rolling_vol_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_ROLLING_VOL_WINDOWS))
+    ohlc_vol_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_OHLC_VOL_WINDOWS))
+
+
 class FeaturesConfig(BaseModel):
     """Which feature families to build (all reused from the VIX project)."""
     families: list[str] = Field(default_factory=lambda: list(D.DEFAULT_FEATURE_FAMILIES))
@@ -66,6 +95,7 @@ class FeaturesConfig(BaseModel):
     interact_top_pairs: int = 20
     interact_final_n: int = 30
     pool_prefilter: int = D.DEFAULT_POOL_PREFILTER
+    technical_lookbacks: TechnicalLookbacksConfig = Field(default_factory=TechnicalLookbacksConfig)
 
 
 class ValidationConfig(BaseModel):

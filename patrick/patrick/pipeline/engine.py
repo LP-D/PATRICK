@@ -122,6 +122,31 @@ def _finite_scaled(scaled: np.ndarray, where: str) -> np.ndarray:
     return scaled
 
 
+def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str) -> list[int]:
+    """Phase 3 (feature/hyperparams-lookbacks) -- defensive floor applied
+    right before `features/technical.py` is called, protecting the YAML/CLI
+    path (`RunConfig` has no pydantic-level bounds, see
+    `config/schema.py::TechnicalLookbacksConfig` docstring) the same way
+    `webapp/forms.py::_parse_technical_lookbacks` already protects the
+    web-form path. `min_allowed=1` (returns/zscore/ma_ratio/rolling_vol): a
+    window<=0 either crashes (`rolling(w<0)`, pandas ValueError) or, worse,
+    passes SILENTLY for `returns()` specifically -- `safe_pct_change(series,
+    w<0)` never raises; pandas' `Series.pct_change(periods=negative)` shifts
+    the OTHER direction and silently returns a forward-looking (look-ahead
+    leak) value instead (measured, see tests/test_technical_lookbacks.py).
+    `min_allowed=2` (ohlc_vol_windows): `yang_zhang_vol` divides by
+    `(window - 1)`, so window=1 raises ZeroDivisionError deep in the
+    pipeline. Same discipline as `_finite_features` above: invalid entries
+    are dropped and reported, never silently kept, and never allowed to
+    crash the whole run over one bad configured value."""
+    kept = [w for w in windows if isinstance(w, int) and not isinstance(w, bool) and w >= min_allowed]
+    dropped = [w for w in windows if w not in kept]
+    if dropped:
+        print(f"  [WARN] {label}: invalid lookback window(s) {dropped} ignored "
+              f"(must be an integer >= {min_allowed}) — computed with {kept or 'no window'}.")
+    return kept
+
+
 def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
     """Features causal by construction (rolling windows/lags, no globally
     estimated parameter): technical, spike (excluding the particle filter),
@@ -130,10 +155,24 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
     families = config.features.families
     parts: list[pd.DataFrame] = [raw]
 
+    # Phase 3 (feature/hyperparams-lookbacks): sanitized once, outside the
+    # per-column loop below (`_sanitize_lookback_windows` is pure/cheap, but
+    # there is no reason to repeat the same filtering + [WARN] print once
+    # per raw column).
+    lb = config.features.technical_lookbacks
+    returns_windows = _sanitize_lookback_windows(lb.returns_windows, 1, "returns_windows")
+    zscore_windows = _sanitize_lookback_windows(lb.zscore_windows, 1, "zscore_windows")
+    ma_ratio_windows = _sanitize_lookback_windows(lb.ma_ratio_windows, 1, "ma_ratio_windows")
+    rolling_vol_windows = _sanitize_lookback_windows(lb.rolling_vol_windows, 1, "rolling_vol_windows")
+    ohlc_vol_windows = _sanitize_lookback_windows(lb.ohlc_vol_windows, 2, "ohlc_vol_windows")
+
     for col in raw.columns:
         s = raw[col]
         if "technical" in families:
-            parts.append(technical.build_technical_features(s, prefix=col))
+            parts.append(technical.build_technical_features(
+                s, prefix=col,
+                returns_windows=returns_windows, zscore_windows=zscore_windows,
+                ma_ratio_windows=ma_ratio_windows, rolling_vol_windows=rolling_vol_windows))
         if "spike" in families:
             parts.append(spike.build_spike_features_base(s, prefix=col))
         if "vol_models" in families:
@@ -148,7 +187,7 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
         ohlc = download_ohlc(config.objective.target_symbol, config.universe.start_date)
         if ohlc is not None:
             ohlc_aligned = ohlc.reindex(raw.index).ffill()
-            parts.append(technical.ohlc_vol_features(ohlc_aligned, prefix=target_col))
+            parts.append(technical.ohlc_vol_features(ohlc_aligned, prefix=target_col, windows=ohlc_vol_windows))
 
     pool = pd.concat(parts, axis=1)
     pool = pool.loc[:, ~pool.columns.duplicated()]

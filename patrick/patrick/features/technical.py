@@ -98,10 +98,30 @@ def ohlc_vol_features(ohlc: pd.DataFrame, prefix: str, windows: list[int] = (10,
 
 
 def build_technical_features(series: pd.Series, prefix: str = "px",
-                              ohlc: pd.DataFrame | None = None) -> pd.DataFrame:
-    parts = [returns(series), zscore(series), ma_ratio(series), rolling_vol(series)]
+                              ohlc: pd.DataFrame | None = None,
+                              returns_windows: list[int] = (1, 5, 10, 20),
+                              zscore_windows: list[int] = (10, 20, 60),
+                              ma_ratio_windows: list[int] = (10, 20, 50),
+                              rolling_vol_windows: list[int] = (10, 20),
+                              ohlc_vol_windows: list[int] = (10, 20)) -> pd.DataFrame:
+    """Phase 3 (feature/hyperparams-lookbacks): every `*_windows` argument
+    defaults to the same tuple that used to be hardcoded on the individual
+    `returns`/`zscore`/`ma_ratio`/`rolling_vol`/`ohlc_vol_features` functions
+    -- a caller that does not pass them (e.g. the existing regression test
+    below) keeps computing exactly the same columns as before this
+    parameter existed. `pipeline/engine.py::build_base_feature_pool` is the
+    only production caller that now threads `RunConfig.features.
+    technical_lookbacks` through here, after sanitizing it
+    (`_sanitize_lookback_windows` -- see that function's docstring for why a
+    window can't just be passed through unchecked)."""
+    parts = [
+        returns(series, returns_windows),
+        zscore(series, zscore_windows),
+        ma_ratio(series, ma_ratio_windows),
+        rolling_vol(series, rolling_vol_windows),
+    ]
     df = pd.concat(parts, axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     if ohlc is not None and {"Open", "High", "Low", "Close"}.issubset(ohlc.columns):
-        df = pd.concat([df, ohlc_vol_features(ohlc, prefix)], axis=1)
+        df = pd.concat([df, ohlc_vol_features(ohlc, prefix, ohlc_vol_windows)], axis=1)
     return df
