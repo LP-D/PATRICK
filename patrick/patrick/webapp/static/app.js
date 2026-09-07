@@ -780,6 +780,50 @@
         }
     }
 
+    // --- feature/expanded-horizons : désactive les <option> d'horizon
+    // infaisables (historique insuffisant, cf. validation/feasibility.py)
+    // pour la/les cible(s) actuellement sélectionnée(s) -- même mécanisme
+    // que refreshRunNamePreview ci-dessus (petit endpoint dédié, appelé au
+    // chargement et à chaque changement de cible). `disabled`, jamais
+    // seulement masqué : une combinaison infaisable reste visible mais non
+    // sélectionnable, avec le motif exact en tooltip (`title`). La
+    // validation faisant foi reste côté serveur (`forms.build_config_dict`)
+    // -- ceci n'est qu'un confort, contournable (JS désactivé, appel direct
+    // à l'API) sans jamais laisser passer un run infaisable pour autant. ---
+    const horizonsSelect = document.getElementById("horizons");
+    async function refreshHorizonFeasibility() {
+        if (!horizonsSelect || !form) return;
+        const targetSelect = form.querySelector("#target_symbols");
+        if (!targetSelect) return;
+        const selected = Array.from(targetSelect.selectedOptions).map((o) => o.value);
+        if (!selected.length) return;
+        const params = new URLSearchParams();
+        selected.forEach((s) => params.append("target", s));
+        let data;
+        try {
+            const res = await fetch(`/api/horizon-feasibility?${params}`);
+            data = await res.json();
+        } catch (e) {
+            return; // best-effort : une panne réseau laisse les options telles quelles.
+        }
+        let deselected = false;
+        Array.from(horizonsSelect.options).forEach((opt) => {
+            const info = data[opt.value];
+            if (info && info.feasible === false) {
+                opt.disabled = true;
+                opt.title = info.reason || "";
+                if (opt.selected) {
+                    opt.selected = false;
+                    deselected = true;
+                }
+            } else {
+                opt.disabled = false;
+                opt.removeAttribute("title");
+            }
+        });
+        if (deselected) refreshRecap();
+    }
+
     if (advBlocks.length || launchRecap) {
         advBlocks.forEach((block) => advBaseline.set(block, advSignature(block)));
         refreshAdvStates();
@@ -793,7 +837,9 @@
     const targetSymbolsSelect = document.getElementById("target_symbols");
     if (targetSymbolsSelect) {
         targetSymbolsSelect.addEventListener("change", refreshRunNamePreview);
+        targetSymbolsSelect.addEventListener("change", refreshHorizonFeasibility);
         refreshRunNamePreview();
+        refreshHorizonFeasibility();
     }
 
     /* Les lignes de « plus fortes variations » posent leur symbole dans le
