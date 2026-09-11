@@ -129,3 +129,77 @@ def test_volatility_present_and_positive_above_min_history():
     assert out["volatility"] is not None
     assert out["volatility"]["annualized_long_run"] > 0
     assert out["volatility"]["annualized_current"] > 0
+
+
+# flexibility-gaps Gap 1: ZSCORE_WINDOW/MA_WINDOWS/LONG_WINDOWS_BARS are
+# now overridable keyword args on compute_stats, defaults unchanged.
+
+def test_compute_stats_defaults_match_module_constants_when_unspecified():
+    series = _series(300, start=100.0, daily_growth=0.001, noise=0.01, seed=4)
+    out = asset_stats.compute_stats(series)
+    assert set(out["moving_averages"].keys()) == {str(w) for w in asset_stats.MA_WINDOWS}
+    assert set(out["long_window_returns"].keys()) == {str(w) for w in asset_stats.LONG_WINDOWS_BARS}
+
+
+def test_compute_stats_custom_zscore_window_changes_the_value():
+    series = _series(150, start=100.0, daily_growth=0.0, noise=0.01, seed=1)
+    default_out = asset_stats.compute_stats(series)
+    custom_out = asset_stats.compute_stats(series, zscore_window=90)
+    assert default_out["zscore_60d"] is not None
+    assert custom_out["zscore_60d"] is not None
+    assert custom_out["zscore_60d"] != default_out["zscore_60d"]
+
+
+def test_compute_stats_custom_ma_windows_change_the_keys():
+    series = _series(250, start=100.0, daily_growth=0.002)
+    out = asset_stats.compute_stats(series, ma_windows=[10, 100])
+    assert set(out["moving_averages"].keys()) == {"10", "100"}
+
+
+def test_compute_stats_custom_long_windows_bars_change_the_keys():
+    series = _series(300, start=100.0, daily_growth=0.001)
+    out = asset_stats.compute_stats(series, long_windows_bars=[5, 15])
+    assert set(out["long_window_returns"].keys()) == {"5", "15"}
+
+
+def test_validate_window_rejects_non_positive():
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.validate_window(0)
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.validate_window(-5)
+
+
+def test_validate_window_rejects_above_cap():
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.validate_window(asset_stats.MAX_WINDOW_BARS + 1)
+
+
+def test_validate_window_accepts_reasonable_value():
+    assert asset_stats.validate_window(90) == 90
+    assert asset_stats.validate_window(asset_stats.MAX_WINDOW_BARS) == asset_stats.MAX_WINDOW_BARS
+
+
+def test_parse_window_list_keeps_default_when_unset():
+    assert asset_stats.parse_window_list(None, [20, 50, 200]) == [20, 50, 200]
+    assert asset_stats.parse_window_list("", [20, 50, 200]) == [20, 50, 200]
+    assert asset_stats.parse_window_list("   ", [20, 50, 200]) == [20, 50, 200]
+
+
+def test_parse_window_list_parses_custom_csv():
+    assert asset_stats.parse_window_list("20,50,100", [1, 2, 3]) == [20, 50, 100]
+    assert asset_stats.parse_window_list(" 20 , 50 ", [1]) == [20, 50]
+
+
+def test_parse_window_list_rejects_non_integer_entry():
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.parse_window_list("20,abc", [1])
+
+
+def test_parse_window_list_rejects_non_positive_entry():
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.parse_window_list("0,50", [1])
+
+
+def test_parse_window_list_rejects_entry_above_cap():
+    with pytest.raises(asset_stats.InvalidWindowError):
+        asset_stats.parse_window_list(str(asset_stats.MAX_WINDOW_BARS + 1), [1])

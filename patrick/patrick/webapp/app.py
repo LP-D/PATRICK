@@ -639,7 +639,13 @@ def macro_page(request: Request):
 
 
 @app.get("/api/asset-stats/{symbol}")
-def asset_stats_api(symbol: str, period: str = "5y"):
+def asset_stats_api(
+    symbol: str,
+    period: str = "5y",
+    zscore_window: int = asset_stats.ZSCORE_WINDOW,
+    ma_windows: str | None = None,
+    long_windows_bars: str | None = None,
+):
     """feature/ticker-stats-panel: fetched client-side, once per panel, by
     `asset_stats.js`. Same data-access path as `/api/preview/{symbol}`
     (`forms.TARGET_SOURCE_BY_SYMBOL` -> `market_data.price_history`) --
@@ -647,12 +653,42 @@ def asset_stats_api(symbol: str, period: str = "5y"):
     it does not fetch anything itself. `period="5y"`: comfortably covers
     every window this module computes (longest is the 252-bar view /
     200-bar MA) without requesting `"max"` for every asset on every page
-    load."""
+    load.
+
+    flexibility-gaps Gap 1: `zscore_window`/`ma_windows`/`long_windows_bars`
+    (e.g. `?zscore_window=90&ma_windows=20,50,100`) override
+    `asset_stats.py`'s fixed `ZSCORE_WINDOW`/`MA_WINDOWS`/`LONG_WINDOWS_BARS`
+    defaults -- unset means unchanged default, matching every other
+    optional query param in this module. Only this API route takes the
+    parameter: `/commodities`/`/macro` (`commodities_page`/`macro_page`
+    above) render static panel skeletons with no computation of their own
+    (see their docstrings and `asset_stats.py` module docstring) --
+    `asset_stats.js` fetches this route per panel without forwarding any
+    query string today, so a page-level query param here would reach no
+    code at all. Validated via `asset_stats.validate_window`/
+    `parse_window_list`; a `ValueError` from either becomes this route's
+    only 400 (every other error path here is a 404 on an unknown
+    symbol)."""
     source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
     if source is None:
         raise HTTPException(status_code=404, detail="Symbole inconnu")
+    try:
+        zscore_window = asset_stats.validate_window(zscore_window, name="zscore_window")
+        ma_windows_list = asset_stats.parse_window_list(
+            ma_windows, asset_stats.MA_WINDOWS, name="ma_windows"
+        )
+        long_windows_list = asset_stats.parse_window_list(
+            long_windows_bars, asset_stats.LONG_WINDOWS_BARS, name="long_windows_bars"
+        )
+    except asset_stats.InvalidWindowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     series = market_data.price_history(symbol, source, period)
-    return asset_stats.compute_stats(series)
+    return asset_stats.compute_stats(
+        series,
+        zscore_window=zscore_window,
+        ma_windows=ma_windows_list,
+        long_windows_bars=long_windows_list,
+    )
 
 
 @app.get("/targets/{ticker}")
