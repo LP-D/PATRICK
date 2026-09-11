@@ -85,3 +85,52 @@ def test_portfolio_page_shows_no_contradiction_when_none_detected(tmp_path, monk
     # Explicit empty state for the contradictions section on a DB with no
     # predictions at all -- never a silently-empty section.
     assert "aucune contradiction" in resp.text.lower()
+
+
+# flexibility-gaps Gap 6: ?pairs= overrides tracking.portfolio.CORRELATED_PAIRS.
+
+def test_portfolio_page_default_pairs_prefill_the_textarea(tmp_path, monkeypatch):
+    _seed_db_empty(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp = client.get("/portfolio")
+    assert resp.status_code == 200
+    assert "DX-Y.NYB:EURUSD=X:negative" in resp.text
+    assert "CL=F:BZ=F:positive" in resp.text
+    assert "^GSPC:^VIX:negative" in resp.text
+
+
+def test_portfolio_page_custom_pairs_flag_a_non_default_contradiction(tmp_path, monkeypatch):
+    """GC=F/SI=F (gold/silver) is deliberately absent from CORRELATED_PAIRS
+    (see its own comment) -- with the default pairs it must never be
+    flagged, but a user-supplied ?pairs= override must be able to add it
+    and see the contradiction it implies."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    _seed_run_with_prediction(conn, "run_gc", "GC=F", 5, 3)   # UP
+    _seed_run_with_prediction(conn, "run_si", "SI=F", 5, 0)   # DOWN
+    conn.close()
+
+    client = TestClient(app)
+    resp_default = client.get("/portfolio")
+    assert resp_default.status_code == 200
+    assert "Aucune contradiction" in resp_default.text or "aucune contradiction" in resp_default.text.lower()
+
+    resp_custom = client.get("/portfolio", params={"pairs": "GC=F:SI=F:positive"})
+    assert resp_custom.status_code == 200
+    assert "GC=F" in resp_custom.text
+    assert "SI=F" in resp_custom.text
+    # And the textarea now reflects the custom set, not the 3 defaults.
+    assert "GC=F:SI=F:positive" in resp_custom.text
+
+
+def test_portfolio_page_rejects_malformed_pairs():
+    client = TestClient(app)
+    resp = client.get("/portfolio", params={"pairs": "GC=F:SI=F"})
+    assert resp.status_code == 400
+
+
+def test_portfolio_page_rejects_unknown_correlation_sense():
+    client = TestClient(app)
+    resp = client.get("/portfolio", params={"pairs": "GC=F:SI=F:sideways"})
+    assert resp.status_code == 400

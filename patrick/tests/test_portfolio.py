@@ -12,6 +12,8 @@ covered separately by `test_portfolio_page.py`.
 """
 from __future__ import annotations
 
+import pytest
+
 from patrick.tracking import portfolio as trackportfolio
 
 
@@ -197,3 +199,101 @@ def test_detect_contradictions_ignores_predictions_missing_direction():
 
 def test_detect_contradictions_empty_predictions_returns_empty_list():
     assert trackportfolio.detect_contradictions({}) == []
+
+
+# ---------------------------------------------------------------------------
+# flexibility-gaps Gap 6: parse_correlated_pairs / format_correlated_pairs
+# (the /portfolio ?pairs= override), and detect_contradictions with a
+# custom, non-default pair.
+# ---------------------------------------------------------------------------
+
+def test_parse_correlated_pairs_none_or_blank_returns_none():
+    assert trackportfolio.parse_correlated_pairs(None) is None
+    assert trackportfolio.parse_correlated_pairs("") is None
+    assert trackportfolio.parse_correlated_pairs("   \n  \n") is None
+
+
+def test_parse_correlated_pairs_parses_one_pair_per_line():
+    raw = "GC=F:SI=F:positive\n^GSPC:^VIX:negative\n"
+    pairs = trackportfolio.parse_correlated_pairs(raw)
+    assert pairs == [
+        {"symbol_a": "GC=F", "label_a": "GC=F", "symbol_b": "SI=F", "label_b": "SI=F",
+         "correlation": "positive",
+         "rationale": trackportfolio.parse_correlated_pairs("GC=F:SI=F:positive")[0]["rationale"]},
+        {"symbol_a": "^GSPC", "label_a": "^GSPC", "symbol_b": "^VIX", "label_b": "^VIX",
+         "correlation": "negative",
+         "rationale": trackportfolio.parse_correlated_pairs("^GSPC:^VIX:negative")[0]["rationale"]},
+    ]
+
+
+def test_parse_correlated_pairs_ignores_blank_lines_and_whitespace():
+    raw = "\n  GC=F : SI=F : POSITIVE  \n\n"
+    pairs = trackportfolio.parse_correlated_pairs(raw)
+    assert len(pairs) == 1
+    assert pairs[0]["symbol_a"] == "GC=F"
+    assert pairs[0]["symbol_b"] == "SI=F"
+    assert pairs[0]["correlation"] == "positive"  # case-insensitive
+
+
+def test_parse_correlated_pairs_rejects_wrong_field_count():
+    with pytest.raises(ValueError):
+        trackportfolio.parse_correlated_pairs("GC=F:SI=F")
+    with pytest.raises(ValueError):
+        trackportfolio.parse_correlated_pairs("GC=F:SI=F:positive:extra")
+
+
+def test_parse_correlated_pairs_rejects_empty_symbol():
+    with pytest.raises(ValueError):
+        trackportfolio.parse_correlated_pairs(":SI=F:positive")
+
+
+def test_parse_correlated_pairs_rejects_unknown_sens():
+    with pytest.raises(ValueError):
+        trackportfolio.parse_correlated_pairs("GC=F:SI=F:sideways")
+
+
+def test_format_correlated_pairs_round_trips_with_parse():
+    text = trackportfolio.format_correlated_pairs(trackportfolio.CORRELATED_PAIRS)
+    reparsed = trackportfolio.parse_correlated_pairs(text)
+    assert [(p["symbol_a"], p["symbol_b"], p["correlation"]) for p in reparsed] == [
+        (p["symbol_a"], p["symbol_b"], p["correlation"]) for p in trackportfolio.CORRELATED_PAIRS
+    ]
+
+
+def test_detect_contradictions_works_with_a_custom_non_standard_pair():
+    """Built case from the session brief: a non-standard pair, contradiction
+    correctly detected -- GC=F/SI=F (gold/silver, considered but left out of
+    CORRELATED_PAIRS per its own comment) as a user-supplied positive pair."""
+    custom_pairs = trackportfolio.parse_correlated_pairs("GC=F:SI=F:positive")
+    predictions = {
+        ("GC=F", 5): {"direction": "UP"},
+        ("SI=F", 5): {"direction": "DOWN"},  # diverges -> contradiction for a positive pair
+    }
+    hits = trackportfolio.detect_contradictions(predictions, pairs=custom_pairs)
+    assert len(hits) == 1
+    assert hits[0]["symbol_a"] == "GC=F"
+    assert hits[0]["symbol_b"] == "SI=F"
+    assert hits[0]["correlation"] == "positive"
+    assert hits[0]["rationale"]  # never missing, even for a custom pair
+
+    # And the default CORRELATED_PAIRS (no GC=F/SI=F) must NOT flag this pair.
+    assert trackportfolio.detect_contradictions(predictions) == []
+
+
+def test_portfolio_overview_falls_back_to_default_pairs_when_none_given(tmp_path):
+    from patrick.tracking import db as trackdb_module
+
+    conn = trackdb_module.connect(str(tmp_path / "patrick.db"))
+    overview = trackportfolio.portfolio_overview(conn)
+    conn.close()
+    assert overview["pairs_used"] == trackportfolio.CORRELATED_PAIRS
+
+
+def test_portfolio_overview_uses_custom_pairs_when_given(tmp_path):
+    from patrick.tracking import db as trackdb_module
+
+    conn = trackdb_module.connect(str(tmp_path / "patrick.db"))
+    custom_pairs = trackportfolio.parse_correlated_pairs("GC=F:SI=F:positive")
+    overview = trackportfolio.portfolio_overview(conn, pairs=custom_pairs)
+    conn.close()
+    assert overview["pairs_used"] == custom_pairs

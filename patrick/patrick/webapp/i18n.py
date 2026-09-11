@@ -302,6 +302,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "fr": "Aucune contradiction détectée pour l'instant sur les paires suivies.",
         "en": "No contradiction detected so far on the tracked pairs.",
     },
+    # flexibility-gaps Gap 6: /portfolio's ?pairs= override form.
+    "portfolio_pairs_label": {
+        "fr": "Paires corrélées (une par ligne, symbol_a:symbol_b:sens)",
+        "en": "Correlated pairs (one per line, symbol_a:symbol_b:sens)",
+    },
+    "portfolio_pairs_apply": {"fr": "Appliquer", "en": "Apply"},
+    "portfolio_pairs_hint": {
+        "fr": "sens : positive ou negative. Champ vide = les 3 paires par défaut (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
+        "en": "sens: positive or negative. Empty field = the 3 default pairs (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
+    },
     "assetpanel_subtitle": {
         "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
         "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",

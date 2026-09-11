@@ -96,6 +96,84 @@ CORRELATED_PAIRS: list[dict] = [
 ]
 
 
+# flexibility-gaps Gap 6: CORRELATED_PAIRS above was hardcoded with no
+# config surface -- `/portfolio` (`webapp/app.py::portfolio_page`) now
+# accepts `?pairs=` (one `symbol_a:symbol_b:sens` per line, same
+# `correlation` vocabulary as the module-level list above), parsed here and
+# forwarded to `detect_contradictions`'s pre-existing `pairs` override
+# below. Missing/blank input falls back to `CORRELATED_PAIRS` unchanged --
+# PATRICK is an exploratory platform (session brief), so a config gap is
+# resolved by exposing a parameter, not by leaving the list frozen.
+_VALID_CORRELATIONS = {"positive", "negative"}
+
+
+def parse_correlated_pairs(raw: str | None) -> list[dict] | None:
+    """Parses the `/portfolio` `?pairs=` override into the same list-of-dict
+    shape as `CORRELATED_PAIRS` (`detect_contradictions`'s `pairs` param).
+    One pair per line: `symbol_a:symbol_b:sens`, `sens` one of
+    `positive`/`negative` (case-insensitive). Blank lines/surrounding
+    whitespace are ignored.
+
+    Returns `None` (not `[]`) for `None`/blank/all-blank input, so the
+    caller (`portfolio_overview`) can tell "nothing submitted" from "an
+    empty list was explicitly submitted" and fall back to
+    `CORRELATED_PAIRS` in the former case -- the 3 documented defaults
+    always survive an empty field.
+
+    A hand-picked default pair carries a hand-written `rationale` and
+    friendly `label_a`/`label_b` (see `CORRELATED_PAIRS` above); a
+    user-entered pair has neither, so both default to the raw symbol
+    (`label_a`/`label_b`) and a generic auto-generated sentence
+    (`rationale`) -- `portfolio.html` renders `c.rationale` directly for
+    every contradiction hit, default or custom, so it must never be
+    missing.
+
+    Raises `ValueError` (message safe to surface as an HTTP 400 `detail`)
+    on a malformed line: wrong field count, an empty symbol, or a `sens`
+    outside `positive`/`negative`."""
+    if raw is None or not raw.strip():
+        return None
+    pairs: list[dict] = []
+    for lineno, line in enumerate(raw.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(":")
+        if len(parts) != 3:
+            raise ValueError(
+                f"Ligne {lineno} invalide ({line!r}) : format attendu "
+                "symbol_a:symbol_b:sens (ex. DX-Y.NYB:EURUSD=X:negative)."
+            )
+        symbol_a, symbol_b, sens = (p.strip() for p in parts)
+        if not symbol_a or not symbol_b:
+            raise ValueError(f"Ligne {lineno} invalide ({line!r}) : symboles vides.")
+        sens = sens.lower()
+        if sens not in _VALID_CORRELATIONS:
+            raise ValueError(
+                f"Ligne {lineno} invalide ({line!r}) : sens {sens!r} inconnu "
+                f"(attendu : {'/'.join(sorted(_VALID_CORRELATIONS))})."
+            )
+        pairs.append({
+            "symbol_a": symbol_a, "label_a": symbol_a,
+            "symbol_b": symbol_b, "label_b": symbol_b,
+            "correlation": sens,
+            "rationale": (
+                f"Paire personnalisée ({symbol_a} / {symbol_b}) : corrélation "
+                f"{sens} attendue (saisie manuelle, sans étude de corrélation "
+                "documentée)."
+            ),
+        })
+    return pairs or None
+
+
+def format_correlated_pairs(pairs: list[dict]) -> str:
+    """Inverse of `parse_correlated_pairs` -- one `symbol_a:symbol_b:sens`
+    line per pair, used to pre-fill the `/portfolio` textarea with whichever
+    set (default or custom) is currently active, so a reload/bookmark shows
+    exactly what produced the page's own contradictions."""
+    return "\n".join(f"{p['symbol_a']}:{p['symbol_b']}:{p['correlation']}" for p in pairs)
+
+
 def aggregate_signals_by_group(
     predictions: dict[tuple[str, int], dict],
     target_groups: dict[str, list[tuple[str, str]]],
@@ -200,6 +278,7 @@ def portfolio_overview(
     conn: sqlite3.Connection,
     target_groups: dict[str, list[tuple[str, str]]] | None = None,
     horizons: list[int] | None = None,
+    pairs: list[dict] | None = None,
 ) -> dict:
     """`/portfolio` -- assembles the cross-asset synthesis from the SAME
     grouped query `/predictions` already uses
@@ -207,15 +286,25 @@ def portfolio_overview(
     written for this phase), then aggregates it in Python via the two pure
     functions above. Read-only, recomputed on every request -- same
     philosophy as every other page in this module family (`synthesis_overview`,
-    `_predictions_overview`)."""
+    `_predictions_overview`).
+
+    flexibility-gaps Gap 6: `pairs` (already `detect_contradictions`'s own
+    parameter, just not threaded through here before) overrides
+    `CORRELATED_PAIRS` -- `None` (nothing submitted on `/portfolio`) keeps
+    the 3 documented defaults. `pairs_used` in the return value is always
+    the actual effective list (default or custom), so the caller can
+    round-trip it back into the page's own textarea via
+    `format_correlated_pairs` without re-deriving which one was active."""
     target_groups = D.DEFAULT_TARGET_GROUPS if target_groups is None else target_groups
     horizons = list(D.DEFAULT_HORIZONS) if horizons is None else horizons
     all_symbols = [sym for items in target_groups.values() for sym, _ in items]
 
     predictions = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
+    effective_pairs = CORRELATED_PAIRS if pairs is None else pairs
 
     return {
         "groups": aggregate_signals_by_group(predictions, target_groups, horizons),
-        "contradictions": detect_contradictions(predictions),
+        "contradictions": detect_contradictions(predictions, pairs=effective_pairs),
         "horizons": horizons,
+        "pairs_used": effective_pairs,
     }

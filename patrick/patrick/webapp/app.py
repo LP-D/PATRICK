@@ -658,7 +658,7 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
 
 
 @app.get("/portfolio")
-def portfolio_page(request: Request):
+def portfolio_page(request: Request, pairs: str | None = None):
     """Phase 8 (feature/portfolio-view): cross-asset aggregated synthesis --
     bullish/bearish signal counts per `DEFAULT_TARGET_GROUPS` category, plus
     contradiction detection between historically correlated pairs (DXY/EUR-
@@ -668,15 +668,36 @@ def portfolio_page(request: Request):
     the SAME grouped query `/predictions` already uses
     (`history.latest_predictions_by_target_and_horizon`) -- no new DB query
     written for this page, same read-only-on-every-request philosophy as
-    every other page in this module."""
+    every other page in this module.
+
+    flexibility-gaps Gap 6: `pairs` (`?pairs=`, GET form on `portfolio.html`
+    itself -- one `symbol_a:symbol_b:sens` per line) overrides the
+    hardcoded `CORRELATED_PAIRS`. Not routed through `/launch`: that form
+    builds a `RunConfig` for the ML pipeline, which this read-only,
+    run-independent aggregation page has no relationship to (it reads
+    `latest_predictions_by_target_and_horizon` directly, not any specific
+    run's config) -- a GET query param on this page's own route, same
+    pattern as every other display-time override in this session
+    (`?zscore_window=` on `/api/asset-stats`, `?dm_alpha=`/`?fdr_alpha=`
+    above), fits the data flow here. Malformed input (see
+    `tracking.portfolio.parse_correlated_pairs`) is this route's only 400;
+    missing/blank keeps the 3 defaults."""
+    try:
+        parsed_pairs = trackportfolio.parse_correlated_pairs(pairs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     conn = trackdb.connect()
     try:
-        overview = trackportfolio.portfolio_overview(conn)
+        overview = trackportfolio.portfolio_overview(conn, pairs=parsed_pairs)
     finally:
         conn.close()
     return templates.TemplateResponse(
         request, "portfolio.html",
-        {"overview": overview, **_i18n_context(request)},
+        {
+            "overview": overview,
+            "pairs_text": trackportfolio.format_correlated_pairs(overview["pairs_used"]),
+            **_i18n_context(request),
+        },
     )
 
 
