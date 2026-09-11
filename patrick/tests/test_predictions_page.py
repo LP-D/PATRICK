@@ -107,6 +107,41 @@ def test_predictions_page_shows_live_hit_rate(tmp_path, monkeypatch):
     assert "70% (n=10)" in resp.text
 
 
+# flexibility-gaps Gap 2: ?dm_alpha= overrides the DM significance
+# threshold, sourced from tracking.history.DM_SIGNIFICANCE_ALPHA -- no
+# longer a literal 0.05 hardcoded in the template.
+
+def test_predictions_page_dm_alpha_query_param_changes_significance_badge(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp_default = client.get("/predictions")
+    assert resp_default.status_code == 200
+    # p=0.03 < default alpha (0.05) -> "ok" badge.
+    assert 'status-ok">p=0.0300' in resp_default.text
+
+    resp_strict = client.get("/predictions", params={"dm_alpha": "0.01"})
+    assert resp_strict.status_code == 200
+    # Same p-value, stricter alpha (0.01) -> no longer significant -> "warning".
+    assert 'status-warning">p=0.0300' in resp_strict.text
+    assert "0,01" in resp_strict.text  # subtitle reflects the actual threshold used
+
+
+def test_predictions_page_rejects_non_positive_dm_alpha(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/predictions", params={"dm_alpha": "0"})
+    assert resp.status_code == 400
+
+
+def test_predictions_page_rejects_dm_alpha_above_one(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/predictions", params={"dm_alpha": "1.5"})
+    assert resp.status_code == 400
+
+
 def test_predictions_page_shows_no_live_track_record_state(tmp_path, monkeypatch):
     """Une paire (cible, horizon) sans aucune prediction 'live' backfillee
     affiche un etat vide explicite pour la colonne live, jamais une case

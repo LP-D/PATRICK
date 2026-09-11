@@ -46,6 +46,21 @@ PHASE_LABELS = {
     "export": "Export",
 }
 
+def _validate_alpha(value: float, name: str) -> float:
+    """flexibility-gaps Gap 2/Gap 4: bounds guard shared by every
+    significance-level query param on this module (`?dm_alpha=` on
+    `/predictions`/`/runs/{run_id}/detail`, `?fdr_alpha=` on
+    `/runs/{run_id}/detail`/`/targets/{ticker}`/`/`) -- a p-value/FDR
+    threshold only means something as a probability strictly between 0 and
+    1."""
+    if not (0.0 < value < 1.0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{name} doit être strictement compris entre 0 et 1 (reçu {value}).",
+        )
+    return value
+
+
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="PATRICK")
@@ -328,7 +343,7 @@ def _get_run_or_404(run_id: str) -> dict:
 
 
 @app.get("/runs/{run_id}")
-def run_page(request: Request, run_id: str):
+def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """Same dashboard as `index()` (a single template, `index.html`) — only
     `initial_run_id` changes, forced to this specific run rather than the
     current active one. Allows reopening/sharing the link of a past or
@@ -342,12 +357,18 @@ def run_page(request: Request, run_id: str):
     by every run, CLI or web), we fall back to the read-only detail page
     (`run_detail.html`) rather than returning a 404 -- the history must
     never become inaccessible through this link (see PRODUCT.md, "nothing
-    is silently lost")."""
+    is silently lost").
+
+    flexibility-gaps Gap 2: this fallback renders the same
+    `run_detail.html` template as `run_detail_page` below, so it needs the
+    same `dm_significance_alpha` context value (`?dm_alpha=`) -- otherwise
+    the template's comparison against an undefined value would raise."""
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
         return _render_index(request, view, [], initial_run_id=run_id)
 
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     conn = trackdb.connect()
     try:
         detail = trackhistory.run_detail(conn, run_id)
@@ -356,7 +377,8 @@ def run_page(request: Request, run_id: str):
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable (ni en mémoire, ni en base)")
     return templates.TemplateResponse(
-        request, "run_detail.html", {"detail": detail, **_i18n_context(request)},
+        request, "run_detail.html",
+        {"detail": detail, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
 
@@ -568,10 +590,10 @@ def _predictions_overview() -> list[dict]:
 
 
 @app.get("/predictions")
-def predictions_page(request: Request):
+def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """feature/predictions-overview: dense universe-wide table (every
     target x every horizon), direction + Diebold-Mariano significance
-    badge (same "ok" if p<0.05 semantics as `run_detail.html`) -- V1, no
+    badge (same "ok" if p<dm_alpha semantics as `run_detail.html`) -- V1, no
     interactive filter (acceptable per the phase's own scope, a static
     dense table over ~400 rows renders and scrolls fine within
     `data_table`'s own scroll container).
@@ -579,13 +601,21 @@ def predictions_page(request: Request):
     `live_hit_rate_window`/`live_hit_rate_warning_threshold` (Phase 3):
     passed through so the template can name the window/threshold it applies
     rather than hardcoding a number that could silently drift from
-    `tracking/history.py`'s actual constants."""
+    `tracking/history.py`'s actual constants.
+
+    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`, default
+    `tracking.history.DM_SIGNIFICANCE_ALPHA` = 0.05) -- was a literal
+    `0.05` hardcoded independently in both this template and
+    `run_detail.html`; both now read the same request-scoped value from a
+    single named constant, same pattern as the live-hit-rate pair above."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     return templates.TemplateResponse(
         request, "predictions.html",
         {
             "groups": _predictions_overview(),
             "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
             "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
+            "dm_significance_alpha": dm_alpha,
             **_i18n_context(request),
         },
     )
@@ -748,8 +778,13 @@ def target_shap_waterfall(ticker: str, horizon: int):
 
 
 @app.get("/runs/{run_id}/detail")
-def run_detail_page(request: Request, run_id: str):
-    """Phase 7.2 — read-only detail page for a run (CLI or web)."""
+def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+    """Phase 7.2 — read-only detail page for a run (CLI or web).
+
+    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`), same
+    constant/param/validation as `predictions_page` above -- single source
+    for the Diebold-Mariano ok/warning threshold this template shows."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     conn = trackdb.connect()
     try:
         detail = trackhistory.run_detail(conn, run_id)
@@ -759,7 +794,7 @@ def run_detail_page(request: Request, run_id: str):
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, **_i18n_context(request)},
+        {"detail": detail, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
 

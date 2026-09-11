@@ -90,6 +90,42 @@ def test_run_detail_page_404_for_unknown_run(tmp_path, monkeypatch):
     assert resp.status_code == 404
 
 
+# flexibility-gaps Gap 2: ?dm_alpha= overrides the DM significance
+# threshold on both /runs/{run_id} (fallback) and /runs/{run_id}/detail --
+# same tracking.history.DM_SIGNIFICANCE_ALPHA-sourced value as /predictions.
+
+def test_run_detail_page_dm_alpha_query_param_changes_significance(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp_default = client.get("/runs/run1/detail")
+    assert resp_default.status_code == 200
+    # Jinja autoescape turns "<" into "&lt;" in the rendered HTML.
+    assert "significatif (p &lt; 0,05)" in resp_default.text
+
+    resp_strict = client.get("/runs/run1/detail", params={"dm_alpha": "0.01"})
+    assert resp_strict.status_code == 200
+    assert "non significatif (p ≥ 0,01)" in resp_strict.text
+
+
+def test_run_detail_page_rejects_invalid_dm_alpha(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp = client.get("/runs/run1/detail", params={"dm_alpha": "1.0"})
+    assert resp.status_code == 400
+
+
+def test_run_page_fallback_accepts_dm_alpha_query_param(tmp_path, monkeypatch):
+    """/runs/{run_id} (no job in run_manager -> fallback path) renders the
+    same run_detail.html template -- must accept the same override,
+    otherwise the template's comparison against an undefined value would
+    raise."""
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp = client.get("/runs/run1", params={"dm_alpha": "0.01"})
+    assert resp.status_code == 200
+    assert "non significatif (p ≥ 0,01)" in resp.text
+
+
 def test_target_page_renders_with_history(tmp_path, monkeypatch):
     _seed_db(tmp_path, monkeypatch)
     client = TestClient(app)
