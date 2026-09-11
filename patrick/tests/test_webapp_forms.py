@@ -259,3 +259,36 @@ def test_build_config_dict_does_not_block_horizons_for_a_never_cached_target():
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_15")
     assert errors == []
     assert config_dict["objective"]["horizons"] == [756]
+
+
+def test_build_config_dict_rejects_horizon_infeasible_under_the_actually_submitted_n_wf_folds():
+    """Suivi d'audit : `build_config_dict` appelait
+    `feasibility.check_feasibility(target_symbol, h)` SANS jamais transmettre
+    les `n_wf_folds`/`min_train_frac` reellement soumis dans `form` (les deux
+    sont personnalisables sur /launch depuis feature/hyperparams-ui) --
+    verifiant donc toujours la faisabilite sous
+    DEFAULT_N_WF_FOLDS/DEFAULT_MIN_TRAIN_FRAC, quelle que soit la
+    configuration reellement demandee pour CE run.
+
+    Cas concret construit a la main (verifie directement via
+    `feasibility.min_test_fold_size`) : n_obs=1000, horizon=100.
+      - Sous les defauts (n_wf_folds=5, min_train_frac=0.40) :
+        fold=120 > 100 -> feasible=True.
+      - Sous n_wf_folds=10 (min_train_frac inchange) reellement soumis dans
+        `form` : fold=60 <= 100 -> feasible=False -- ce run produirait un
+        fold de test integralement vide apres embargo (embargo_bars=horizon
+        par defaut, cf. validation/embargo.py), pas juste un indicateur UI
+        perime : `pipeline/engine.py::build_fold_cuts` utilisera bien
+        n_wf_folds=10 pour CE run.
+
+    Avant correction : aucune erreur (le backend valide sous les DEFAUTS,
+    pas sous ce qui est reellement soumis) -- la combinaison passe a tort."""
+    _seed_history("^VIX", 1000)
+    form = _minimal_form(horizons=["100"], n_wf_folds="10")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_16")
+    assert any("horizons" in e.lower() and "insuffisant" in e.lower() for e in errors), (
+        "la combinaison (^VIX, horizon=100, n_wf_folds=10 reellement soumis) est "
+        "infaisable (fold=60<=100) mais aucune erreur n'a ete levee -- le backend "
+        "valide sous DEFAULT_N_WF_FOLDS=5 (fold=120>100), pas sous ce qui est "
+        "reellement demande pour ce run"
+    )
