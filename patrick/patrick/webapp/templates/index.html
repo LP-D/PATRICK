@@ -194,6 +194,15 @@
                 <label>{{ t('field_min_test_rows') }}
                     <input type="number" name="min_test_rows" value="{{ view.min_test_rows }}">
                 </label>
+                {# flexibility-gaps Gap 7: DEFAULT_HOLDOUT_MONTHS was already
+                   configurable via YAML (validation.holdout_months,
+                   config/schema.py::ValidationConfig, bounds 12-24) but had
+                   no surface on this form -- same subgrid/pattern as
+                   n_wf_folds/min_train_frac above, min/max mirror the
+                   schema's own Field(ge=12, le=24). #}
+                <label>{{ t('field_holdout_months') }}
+                    <input type="number" min="12" max="24" name="holdout_months" value="{{ view.holdout_months }}">
+                </label>
             </div>
             <label class="checkbox">
                 <input type="checkbox" name="purge" {% if view.purge %}checked{% endif %}>

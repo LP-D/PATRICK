@@ -156,6 +156,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_min_train_frac": {"fr": "Fraction min. d'entraînement", "en": "Min. training fraction"},
     "field_min_train_rows": {"fr": "Lignes min. train", "en": "Min. train rows"},
     "field_min_test_rows": {"fr": "Lignes min. test", "en": "Min. test rows"},
+    # flexibility-gaps Gap 7: validation.holdout_months, YAML-only until now.
+    "field_holdout_months": {"fr": "Holdout terminal (mois, 12-24)", "en": "Terminal holdout (months, 12-24)"},
     "field_purge": {"fr": "Purge (retire les lignes proches de la frontière train/test)",
                      "en": "Purge (removes rows near the train/test boundary)"},
     "field_embargo_enabled": {"fr": "Embargo (retire les premières lignes de test après la coupure)",
