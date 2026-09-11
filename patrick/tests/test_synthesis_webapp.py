@@ -89,6 +89,46 @@ def test_synthesis_page_no_page_cache_reflects_new_run(tmp_path, monkeypatch):
     assert "0.0300" in second.text
 
 
+# flexibility-gaps Gap 4: ?fdr_alpha= on "/" was previously fixed at 0.10
+# (tracking.history.station_verdict's own default) with no way to change
+# it from the web -- CLI already had `patrick report --fdr-alpha`.
+
+def test_synthesis_page_fdr_alpha_query_param_changes_verdict_and_quality_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    _seed_run_with_predictions(conn)
+    conn.close()
+
+    client = TestClient(app)
+    resp_default = client.get("/")
+    assert resp_default.status_code == 200
+    # Single target, p=0.03 < default alpha (0.10) -> significant -> survivor.
+    assert "α=0.1)" in resp_default.text
+    assert "alpha=0.1." in resp_default.text  # quality-table footer (overview.fdr_alpha)
+
+    resp_strict = client.get("/", params={"fdr_alpha": "0.01"})
+    assert resp_strict.status_code == 200
+    # Same p-value, stricter alpha -> no more survivors.
+    assert "α=0.01)" in resp_strict.text
+    assert "alpha=0.01." in resp_strict.text
+
+
+def test_synthesis_page_rejects_non_positive_fdr_alpha(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/", params={"fdr_alpha": "0"})
+    assert resp.status_code == 400
+
+
+def test_synthesis_page_rejects_fdr_alpha_above_one(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    client = TestClient(app)
+    resp = client.get("/", params={"fdr_alpha": "1.5"})
+    assert resp.status_code == 400
+
+
 def test_launch_page_serves_the_run_launcher(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()

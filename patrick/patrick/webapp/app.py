@@ -88,25 +88,34 @@ def _on_startup() -> None:
     alerts.start_background_refresh()
 
 
-def _station_verdict() -> dict | None:
-    """The station's verdict, rendered SERVER-side in every page's banner.
-    No AJAX call like the activity strip: this is chrome data, it must be
-    there on first render rather than appear afterward. A single aggregated
-    query, read-only, fails silently — the banner must render even with no
-    database (first install)."""
+def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
+    """The station's verdict -- `verdict.alpha`/`verdict.survivors`/etc.,
+    read by `synthesis.html` (the only template that still renders it;
+    `runs.html`/`universe.html` carry a stale "le bandeau porte le verdict
+    global" comment from the pre-`base_v2.html` banner architecture, but
+    neither actually reads `verdict.*` today). A single aggregated query,
+    read-only, fails silently — must render even with no database (first
+    install).
+
+    flexibility-gaps Gap 4: `fdr_alpha` (default 0.10, matching
+    `trackhistory.station_verdict`'s own default) -- forwarded by
+    `synthesis_page` (`/`, the only caller that has a validated
+    request-level value to give it); every other route keeps calling
+    `_i18n_context(request)` with no override, so this default is
+    unchanged for them."""
     try:
         conn = trackdb.connect()
     except Exception:
         return None
     try:
-        return trackhistory.station_verdict(conn)
+        return trackhistory.station_verdict(conn, fdr_alpha=fdr_alpha)
     except Exception:
         return None
     finally:
         conn.close()
 
 
-def _i18n_context(request: Request) -> dict:
+def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
     lang = i18n.get_lang(request)
     t = i18n.translator(lang)
     return {
@@ -119,7 +128,7 @@ def _i18n_context(request: Request) -> dict:
         # the template falls back to the term itself.
         "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
         "i18n_js": i18n.js_strings(lang),
-        "verdict": _station_verdict(),
+        "verdict": _station_verdict(fdr_alpha),
     }
 
 
@@ -182,7 +191,7 @@ def launch_page(request: Request):
 
 
 @app.get("/")
-def synthesis_page(request: Request):
+def synthesis_page(request: Request, fdr_alpha: float = 0.10):
     """P8 -- synthesis dashboard, replaces the old `/` (now `/launch`).
     Structure: coverage banner, per-target DM/BH quality, latest prediction
     per target, winning-model metrics per target (split by direction),
@@ -190,15 +199,33 @@ def synthesis_page(request: Request):
     every request (no page cache), same components/tokens as `/phase9`.
     Reliability detail (full p-value, cumulative trials, BH detail) is not
     duplicated inline: it lives on `/targets/{ticker}`/`/runs/{id}`, one
-    click away."""
+    click away.
+
+    flexibility-gaps Gap 4: `fdr_alpha` (`?fdr_alpha=`, default 0.10, same
+    literal `trackhistory.synthesis_overview`'s own `alpha` default) --
+    `synthesis_overview` internally calls `station_verdict(conn,
+    fdr_alpha=alpha)` (one of the three functions named in this gap) plus
+    its own per-target FDR table, both fixed at 0.10 with no way to change
+    it from the web before this. Plumbing only.
+
+    NOT covered here: the small "verdict" banner shown in EVERY page's
+    header chrome (`_station_verdict()`/`_i18n_context()` above) also
+    calls `station_verdict()`, unconditionally at the 0.10 default -- it is
+    shared header chrome rendered by every single route in this module,
+    not this page's own content, so threading `fdr_alpha` through it would
+    mean adding the parameter to every route in `app.py` rather than just
+    the ones whose PAGE is about FDR/quality detail. The adjustable detail
+    is one click away on this same page, `/targets/{ticker}`, and
+    `/runs/{run_id}/detail` -- all three now support `?fdr_alpha=`."""
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
     try:
-        overview = trackhistory.synthesis_overview(conn)
+        overview = trackhistory.synthesis_overview(conn, alpha=fdr_alpha)
     finally:
         conn.close()
     return templates.TemplateResponse(
         request, "synthesis.html",
-        {"overview": overview, **_i18n_context(request)},
+        {"overview": overview, **_i18n_context(request, fdr_alpha=fdr_alpha)},
     )
 
 
@@ -343,7 +370,8 @@ def _get_run_or_404(run_id: str) -> dict:
 
 
 @app.get("/runs/{run_id}")
-def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
+             fdr_alpha: float = 0.10):
     """Same dashboard as `index()` (a single template, `index.html`) — only
     `initial_run_id` changes, forced to this specific run rather than the
     current active one. Allows reopening/sharing the link of a past or
@@ -362,16 +390,24 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     flexibility-gaps Gap 2: this fallback renders the same
     `run_detail.html` template as `run_detail_page` below, so it needs the
     same `dm_significance_alpha` context value (`?dm_alpha=`) -- otherwise
-    the template's comparison against an undefined value would raise."""
+    the template's comparison against an undefined value would raise.
+
+    flexibility-gaps Gap 4: `fdr_alpha` (`?fdr_alpha=`, default 0.10 --
+    same literal `tracking.history.run_detail`'s own default already uses)
+    was already a parameter on `trackhistory.run_detail` (used by `patrick
+    report --fdr-alpha`) but never reached this route -- every web visitor
+    saw the FDR correction fixed at 0.10 no matter what. No new FDR
+    calculation here, only the missing plumbing to the existing param."""
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
         return _render_index(request, view, [], initial_run_id=run_id)
 
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
     try:
-        detail = trackhistory.run_detail(conn, run_id)
+        detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
     finally:
         conn.close()
     if detail is None:
@@ -722,14 +758,20 @@ def asset_stats_api(
 
 
 @app.get("/targets/{ticker}")
-def target_page(request: Request, ticker: str):
-    """Phase 7.3 — aggregated view of all runs for a target."""
+def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
+    """Phase 7.3 — aggregated view of all runs for a target.
+
+    flexibility-gaps Gap 4: `fdr_alpha` (`?fdr_alpha=`, default 0.10, same
+    literal as `trackhistory.target_detail`'s own default) -- plumbing
+    only, same rationale as `run_detail_page`/`run_page` above.
+    `target.html` already reads `detail.fdr_result.alpha` dynamically."""
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
 
     conn = trackdb.connect()
     try:
-        detail = trackhistory.target_detail(conn, ticker)
+        detail = trackhistory.target_detail(conn, ticker, fdr_alpha=fdr_alpha)
         # P9 -- phase-timing drift, independent of `detail`'s None-ness on
         # purpose: cheap either way (empty list when there is no
         # `run_phase_timing` row for this target), and computing it inside
@@ -778,16 +820,25 @@ def target_shap_waterfall(ticker: str, horizon: int):
 
 
 @app.get("/runs/{run_id}/detail")
-def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
+                     fdr_alpha: float = 0.10):
     """Phase 7.2 — read-only detail page for a run (CLI or web).
 
     flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`), same
     constant/param/validation as `predictions_page` above -- single source
-    for the Diebold-Mariano ok/warning threshold this template shows."""
+    for the Diebold-Mariano ok/warning threshold this template shows.
+
+    flexibility-gaps Gap 4: `fdr_alpha` (`?fdr_alpha=`, default 0.10, same
+    literal as `trackhistory.run_detail`'s own default) -- plumbing only,
+    `trackhistory.run_detail` already accepted this parameter (used by
+    `patrick report --fdr-alpha`), no web route forwarded it. `template
+    (`run_detail.html`) already reads the resulting `detail.fdr_result.alpha`
+    dynamically, so no template change is needed here."""
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
     try:
-        detail = trackhistory.run_detail(conn, run_id)
+        detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
     finally:
         conn.close()
     if detail is None:
