@@ -128,3 +128,39 @@ def test_cached_result_is_byte_identical_to_a_fresh_computation(conn, monkeypatc
     independent = vol_models._cached_parametric_model(conn, "snap_independent", "TICK", "egarch", s, 500, None)
     assert calls["n"] == 2
     pd.testing.assert_frame_equal(independent, cold)
+
+
+def test_cached_result_preserves_float_dtype_when_the_underlying_fit_failed(conn, monkeypatch):
+    """Bug found 2026-08-23 (real GSPC re-run, `HY_OAS_egarch_vol` and
+    `SP500_Level_egarch_vol` both all-NaN and `object` dtype): a failed fit
+    (`egarch_conditional_vol`'s own `except` path) returns
+    `pd.Series(np.nan, ...)` -- correctly `float64`, no crash on a cold
+    call. But the cache WRITE path (`_cached_parametric_model` below)
+    converts every NaN to a Python `None` before JSON-serializing into
+    `vol_model_cache` (`None if pd.isna(v) else float(v)`), and the READ
+    path reconstructed the cached list directly
+    (`pd.DataFrame({col_name: cached}, index=...)`) with no explicit
+    dtype -- a list of Python `None` makes pandas infer `object`, not
+    `float64`. Downstream, `pipeline/engine.py::_finite_features()` calls
+    `np.isinf()` on the assembled feature matrix, which raises `TypeError`
+    on an `object`-dtype column -- silent on the FIRST (cold) call, crashes
+    on the SECOND (any future cache hit against this same key), forever,
+    once the poisoned entry is written. Reproduced here by forcing the
+    underlying fit to always fail, rather than relying on real EGARCH
+    non-convergence (flaky/slow, and not the point under test -- the bug is
+    in the cache round-trip, not in why the fit failed)."""
+    def _always_fails(series, *args, **kwargs):
+        return pd.Series(np.nan, index=series.index, name="egarch_vol")
+    monkeypatch.setattr(vol_models, "egarch_conditional_vol", _always_fails)
+    s = _synthetic_series()
+
+    cold = vol_models._cached_parametric_model(conn, "snap1", "TICK", "egarch", s, 500, None)
+    warm = vol_models._cached_parametric_model(conn, "snap1", "TICK", "egarch", s, 500, None)
+
+    assert cold["egarch_vol"].dtype.kind == "f", f"cold call: unexpected dtype {cold['egarch_vol'].dtype}"
+    assert warm["egarch_vol"].dtype.kind == "f", (
+        f"cache-hit call returned dtype {warm['egarch_vol'].dtype!r} instead of a float dtype -- "
+        "np.isinf() on this raises TypeError downstream in "
+        "pipeline/engine.py::_finite_features()"
+    )
+    pd.testing.assert_frame_equal(warm, cold)
