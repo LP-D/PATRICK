@@ -67,6 +67,17 @@ def test_data_freshness_page_groups_match_default_target_groups(tmp_path, monkey
         assert group_name in resp.text
 
 
+def test_data_freshness_page_translates_every_group_label(tmp_path, monkeypatch):
+    """fix/cleanup-dead-references : meme defaut que /universe -- le fallback
+    f"group_{nom}" pour "Devises"/"Matieres premieres (futures)" (absents de
+    i18n.py::TARGET_GROUP_LABEL_KEYS) s'affichait litteralement."""
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    client = TestClient(app)
+    resp = client.get("/data-freshness")
+    assert resp.status_code == 200
+    assert "group_" not in resp.text
+
+
 def test_data_freshness_reachable_from_nav():
     client = TestClient(app)
     resp = client.get("/")

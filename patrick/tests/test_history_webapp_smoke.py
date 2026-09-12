@@ -153,6 +153,19 @@ def test_universe_page_renders(tmp_path, monkeypatch):
     assert "VIX" in resp.text
 
 
+def test_universe_page_translates_every_group_label(tmp_path, monkeypatch):
+    """fix/cleanup-dead-references : `TARGET_GROUP_LABEL_KEYS` (i18n.py) ne
+    couvrait pas "Devises"/"Matières premières (futures)" (groupes de
+    l'univers réduit) -- le fallback f"group_{nom}" (app.py::universe_page)
+    ne correspond à aucune clé i18n, donc `t()` renvoyait la clé brute,
+    affichée littéralement sur la page."""
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    resp = client.get("/universe")
+    assert resp.status_code == 200
+    assert "group_" not in resp.text
+
+
 def test_target_page_renders_empty_drift_state_without_phase_timing(tmp_path, monkeypatch):
     """_seed_db() never calls db.record_phase_timing() -- the drift section
     must degrade to its explicit empty state, not error, when a target has

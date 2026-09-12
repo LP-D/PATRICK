@@ -765,25 +765,6 @@ def phase9_overview(request: Request):
     )
 
 
-@app.get("/api/phase9/summary")
-def api_phase9_summary():
-    """No caller anywhere in the frontend (checked: absent from every
-    `static/*.js`) -- kept only as a thin journal/snapshots mirror of the
-    page above, `signal_quality`/`regime_summary` (same fabricated literals
-    as the page used to carry) dropped rather than kept for a route nothing
-    reads."""
-    conn = trackdb.connect()
-    try:
-        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
-        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
-    finally:
-        conn.close()
-    return {
-        "entries": entries,
-        "snapshots": snapshots,
-    }
-
-
 @app.get("/api/phase9/journal")
 def api_phase9_journal(limit: int = 20):
     conn = trackdb.connect()

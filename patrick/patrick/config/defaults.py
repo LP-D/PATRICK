@@ -279,8 +279,6 @@ DEFAULT_TARGET_GROUPS = {
         ("UMCSENT", "Michigan_Sentiment"),
         ("UNRATE", "Unemployment"),
         ("VIXCLS", "VIX"),
-        ("VIXDVOL", "VIX_DrawVol"),
-        ("WILL5000IND", "Wilshire5000"),
     ],
 }
 
