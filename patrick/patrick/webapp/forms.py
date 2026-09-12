@@ -14,6 +14,7 @@ import os
 import re
 
 from patrick.config import defaults as D
+from patrick.validation import feasibility
 
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
 
@@ -109,11 +110,15 @@ ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "mac
 ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
-# Horizons have no separate "all possible values" concept the way algos/vol
-# models do -- `DEFAULT_HORIZONS` already *is* the fixed, exhaustive set the
-# pipeline can process (see `patrick/config/defaults.py`); the multi-select
-# in index.html has no option outside of it.
-ALL_HORIZONS = list(D.DEFAULT_HORIZONS)
+# Phase 1 (feature/expanded-horizons): the multi-select in index.html now
+# offers every candidate horizon (`D.SELECTABLE_HORIZONS` = the original
+# short DEFAULT_HORIZONS + moderate 15/20/30j + long 252/504/756j), not only
+# `DEFAULT_HORIZONS` (which stays the actual pipeline default preselection,
+# unchanged). A horizon infeasible for the currently selected target(s) is
+# disabled client-side (`/api/horizon-feasibility`, `app.js`) and rejected
+# server-side regardless (`build_config_dict` below) -- never a fixed
+# "exhaustive set the pipeline can process" the way it used to be.
+ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
 TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)
 TARGET_GROUPS = D.DEFAULT_TARGET_GROUPS
 VOL_MODEL_LABELS = {
@@ -292,6 +297,36 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         seed = D.DEFAULT_SEED
         max_frozen_run = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
         max_gap_bdays = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
+
+    # Phase 1 (feature/expanded-horizons): a walk-forward run over an
+    # infeasible (target, horizon) combination either crashes or produces
+    # statistically empty folds (embargo empties every test fold -- see the
+    # `validation/feasibility.py` module docstring for the derivation). This
+    # is the ONE hard technical gate of this phase (unlike most of this
+    # form's other options, exposed with a warning rather than blocked) --
+    # checked here so a submission that bypasses the client-side disabled
+    # `<option>` (JS disabled, or a direct POST /runs) is rejected before
+    # `RunConfig`/the pipeline ever sees it, never left to fail mid-run.
+    #
+    # Bug fixed post-audit: this check used to run BEFORE `n_wf_folds`/
+    # `min_train_frac` were parsed from `form`, and called
+    # `check_feasibility(target_symbol, h)` with neither -- always validating
+    # against `DEFAULT_N_WF_FOLDS`/`DEFAULT_MIN_TRAIN_FRAC` regardless of what
+    # this specific run actually requested (both are independently
+    # customizable on /launch, feature/hyperparams-ui). A run submitted with
+    # a higher `n_wf_folds` (smaller folds) or higher `min_train_frac` (less
+    # test data) than the defaults could be genuinely infeasible while this
+    # gate still reported it as feasible. Moved here (after both parsing
+    # blocks above) and threaded through explicitly so the check always
+    # reflects the ACTUAL walk-forward split this run will use --
+    # see tests/test_webapp_forms.py::
+    # test_build_config_dict_rejects_horizon_infeasible_under_the_actually_submitted_n_wf_folds.
+    if target_symbol in TARGET_SOURCE_BY_SYMBOL:
+        for h in dict.fromkeys(horizons):
+            result = feasibility.check_feasibility(
+                target_symbol, h, n_wf_folds=n_wf_folds, min_train_frac=min_train_frac)
+            if not result.feasible:
+                errors.append(f"« Horizons » : {result.reason}")
 
     # Phase 1 (feature/hyperparams-ui): n_trials/top_k/cv_splits were already
     # exposed on the form (section_tuning) but never checked beyond "is this

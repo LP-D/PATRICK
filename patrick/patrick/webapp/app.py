@@ -22,6 +22,7 @@ from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import portfolio as trackportfolio
+from patrick.validation import feasibility
 from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager, shap_chart
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
@@ -215,6 +216,43 @@ def next_run_names(target: list[str] = Query(default=[])):
     other runs for the same target slot in before submission (see the
     batch-run-launch spec, known limitation)."""
     return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
+
+
+@app.get("/api/horizon-feasibility")
+def horizon_feasibility(target: list[str] = Query(default=[])):
+    """Phase 1 (feature/expanded-horizons) -- data for `app.js` to disable
+    infeasible `<option>`s in the shared `<select multiple name="horizons">`
+    (index.html) as the target selection changes, mirroring
+    `/api/next-run-names`'s pattern. A batch submission applies the SAME
+    horizons list to every selected target (`create_run` calls
+    `build_config_dict` once per target with the same form), so a horizon is
+    reported infeasible here as soon as it is infeasible for ANY currently
+    selected target -- the first blocking target/reason is surfaced.
+
+    Based on the REAL cached history depth (`validation/feasibility.py`,
+    `data/store.py`) -- never a static table, and never blocked when nothing
+    is cached yet for a target (exposed with a warning instead, per this
+    phase's guiding principle)."""
+    symbols = list(dict.fromkeys(target))
+    out: dict[str, dict] = {}
+    for h in D.SELECTABLE_HORIZONS:
+        blocking = None
+        for sym in symbols:
+            result = feasibility.check_feasibility(sym, h)
+            if not result.feasible:
+                blocking = result
+                break
+        if blocking is None:
+            out[str(h)] = {"feasible": True}
+        else:
+            out[str(h)] = {
+                "feasible": False,
+                "symbol": blocking.symbol,
+                "reason": blocking.reason,
+                "n_obs": blocking.n_obs,
+                "n_obs_required": blocking.n_obs_required,
+            }
+    return out
 
 
 @app.post("/runs")

@@ -61,7 +61,14 @@
             </label>
 
             <label>{{ t('field_horizons') }}
-                <select name="horizons" id="horizons" multiple required size="6">
+                {# Phase 1 (feature/expanded-horizons) : la liste propose
+                   toujours TOUTES les valeurs (courtes + moderees 15/20/30j +
+                   longues 252/504/756j) -- celles infaisables pour la
+                   cible actuellement selectionnee sont desactivees en JS
+                   (`disabled`, jamais juste masquees) des que
+                   `/api/horizon-feasibility` repond, avec le motif en
+                   `title` (voir app.js::refreshHorizonFeasibility). #}
+                <select name="horizons" id="horizons" multiple required size="8">
                     {% for h in all_horizons %}
                     <option value="{{ h }}" {% if h in view.horizons %}selected{% endif %}>{{ h }}</option>
                     {% endfor %}

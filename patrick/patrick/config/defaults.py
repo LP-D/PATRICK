@@ -13,6 +13,20 @@ DEFAULT_SELECTION_METHOD = "shap"
 DEFAULT_N_FEATURES_GRID = list(range(5, 16))
 DEFAULT_REGIMES = ["GLOBAL"]
 DEFAULT_HORIZONS = [1, 2, 3, 5, 7, 10]
+
+# Phase 1 (feature/expanded-horizons) -- additional horizon candidates
+# offered in the `/launch` selector (`webapp/forms.py::SELECTABLE_HORIZONS`),
+# never auto-selected: DEFAULT_HORIZONS above stays the actual default
+# preselection (the only horizons validated so far against the VIX
+# project's reference results). Long horizons in particular need far more
+# history than DEFAULT_HORIZONS ever did to remain a statistically valid
+# walk-forward (see `validation/feasibility.py`) -- exposed per-ticker with
+# an eligibility check on `/launch` (`/api/horizon-feasibility`), rather than
+# silently limited to whatever happens to already be ingested for the
+# currently selected target.
+MODERATE_HORIZONS = [15, 20, 30]
+LONG_HORIZONS = [252, 504, 756]
+SELECTABLE_HORIZONS = sorted(set(DEFAULT_HORIZONS) | set(MODERATE_HORIZONS) | set(LONG_HORIZONS))
 DEFAULT_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
 DEFAULT_POOL_PREFILTER = 450
 DEFAULT_SHAP_SAMPLE = 500

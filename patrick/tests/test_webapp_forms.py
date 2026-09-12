@@ -7,7 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
+import numpy as np
+import pandas as pd
+
 from patrick.config import defaults as D
+from patrick.data.store import DataStore
 from patrick.webapp import forms
 from patrick.webapp.app import app
 
@@ -34,6 +38,19 @@ def _minimal_form(**overrides) -> FormData:
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    # feature/expanded-horizons : `build_config_dict` consulte maintenant
+    # `validation/feasibility.py` (donc `data/store.py`) pour valider les
+    # horizons soumis -- isole du VRAI `~/.patrick/store` de la machine de
+    # dev, sinon ces tests dependraient de son contenu au moment ou ils
+    # tournent (non deterministe).
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+
+
+def _seed_history(symbol: str, n_obs: int) -> None:
+    store = DataStore()  # lit PATRICK_STORE_ROOT (isole par _isolated_db ci-dessus)
+    idx = pd.bdate_range("2000-01-01", periods=n_obs)
+    df = pd.DataFrame({symbol: np.arange(n_obs, dtype=float)}, index=idx)
+    store.save(f"raw_{symbol}", df)
 
 
 def test_next_run_names_endpoint_returns_one_name_per_target():
@@ -41,6 +58,48 @@ def test_next_run_names_endpoint_returns_one_name_per_target():
     resp = client.get("/api/next-run-names", params=[("target", "^VIX"), ("target", "^AORD")])
     assert resp.status_code == 200
     assert resp.json() == {"^VIX": "VIX_1", "^AORD": "AORD_1"}
+
+
+def test_horizon_feasibility_endpoint_flags_infeasible_horizon_for_short_history():
+    _seed_history("BTC-USD", 4371)
+    client = TestClient(app)
+    resp = client.get("/api/horizon-feasibility", params=[("target", "BTC-USD")])
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["756"]["feasible"] is False
+    assert body["756"]["symbol"] == "BTC-USD"
+    assert "4371" in body["756"]["reason"]
+    assert body["504"]["feasible"] is True
+    assert body["1"]["feasible"] is True
+
+
+def test_horizon_feasibility_endpoint_all_feasible_for_long_history():
+    _seed_history("^GSPC", 6885)
+    client = TestClient(app)
+    resp = client.get("/api/horizon-feasibility", params=[("target", "^GSPC")])
+    body = resp.json()
+    assert all(v["feasible"] for v in body.values())
+
+
+def test_horizon_feasibility_endpoint_aggregates_across_several_targets():
+    """Un seul <select multiple name="horizons"> s'applique a TOUTES les
+    cibles soumises en meme temps (cf. create_run) -- un horizon infaisable
+    pour UNE SEULE des cibles selectionnees doit etre remonte infaisable."""
+    _seed_history("BTC-USD", 4371)
+    _seed_history("^GSPC", 6885)
+    client = TestClient(app)
+    resp = client.get("/api/horizon-feasibility",
+                       params=[("target", "^GSPC"), ("target", "BTC-USD")])
+    body = resp.json()
+    assert body["756"]["feasible"] is False
+    assert body["756"]["symbol"] == "BTC-USD"
+
+
+def test_horizon_feasibility_endpoint_feasible_when_nothing_cached():
+    client = TestClient(app)
+    resp = client.get("/api/horizon-feasibility", params=[("target", "^VIX")])
+    body = resp.json()
+    assert all(v["feasible"] for v in body.values())
 
 
 def test_next_run_names_endpoint_dedupes_repeated_targets():
@@ -170,3 +229,66 @@ def test_build_config_dict_rejects_non_numeric_optuna_bound():
     form = _minimal_form(**{"ob__XGBoost__max_depth__low": "abc"})
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_12")
     assert any("xgboost.max_depth" in e.lower() for e in errors)
+
+
+# feature/expanded-horizons -- une combinaison (cible, horizon) infaisable
+# (fold de walk-forward integralement vide apres embargo, cf.
+# `validation/feasibility.py`) doit etre rejetee ICI, avant `RunConfig`/le
+# pipeline, meme si le <option disabled> cote client a ete contourne (JS
+# desactive, appel direct a POST /runs...).
+def test_build_config_dict_rejects_horizon_infeasible_for_the_selected_target():
+    _seed_history("^VIX", 4371)  # ~ meme profondeur que BTC-USD lors de l'audit
+    form = _minimal_form(horizons=["756"])
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_13")
+    assert any("horizons" in e.lower() and "insuffisant" in e.lower() for e in errors)
+
+
+def test_build_config_dict_accepts_horizon_feasible_for_the_selected_target():
+    _seed_history("^VIX", 6885)  # ~ meme profondeur que ^GSPC lors de l'audit
+    form = _minimal_form(horizons=["756"])
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_14")
+    assert errors == []
+    assert config_dict["objective"]["horizons"] == [756]
+
+
+def test_build_config_dict_does_not_block_horizons_for_a_never_cached_target():
+    """Rien en cache pour cette cible : principe directeur de cette session
+    (exposer avec avertissement plutot que bloquer par prudence) -- pas
+    d'erreur tant que l'infaisabilite n'est pas CONNUE."""
+    form = _minimal_form(horizons=["756"])
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_15")
+    assert errors == []
+    assert config_dict["objective"]["horizons"] == [756]
+
+
+def test_build_config_dict_rejects_horizon_infeasible_under_the_actually_submitted_n_wf_folds():
+    """Suivi d'audit : `build_config_dict` appelait
+    `feasibility.check_feasibility(target_symbol, h)` SANS jamais transmettre
+    les `n_wf_folds`/`min_train_frac` reellement soumis dans `form` (les deux
+    sont personnalisables sur /launch depuis feature/hyperparams-ui) --
+    verifiant donc toujours la faisabilite sous
+    DEFAULT_N_WF_FOLDS/DEFAULT_MIN_TRAIN_FRAC, quelle que soit la
+    configuration reellement demandee pour CE run.
+
+    Cas concret construit a la main (verifie directement via
+    `feasibility.min_test_fold_size`) : n_obs=1000, horizon=100.
+      - Sous les defauts (n_wf_folds=5, min_train_frac=0.40) :
+        fold=120 > 100 -> feasible=True.
+      - Sous n_wf_folds=10 (min_train_frac inchange) reellement soumis dans
+        `form` : fold=60 <= 100 -> feasible=False -- ce run produirait un
+        fold de test integralement vide apres embargo (embargo_bars=horizon
+        par defaut, cf. validation/embargo.py), pas juste un indicateur UI
+        perime : `pipeline/engine.py::build_fold_cuts` utilisera bien
+        n_wf_folds=10 pour CE run.
+
+    Avant correction : aucune erreur (le backend valide sous les DEFAUTS,
+    pas sous ce qui est reellement soumis) -- la combinaison passe a tort."""
+    _seed_history("^VIX", 1000)
+    form = _minimal_form(horizons=["100"], n_wf_folds="10")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_16")
+    assert any("horizons" in e.lower() and "insuffisant" in e.lower() for e in errors), (
+        "la combinaison (^VIX, horizon=100, n_wf_folds=10 reellement soumis) est "
+        "infaisable (fold=60<=100) mais aucune erreur n'a ete levee -- le backend "
+        "valide sous DEFAULT_N_WF_FOLDS=5 (fold=120>100), pas sous ce qui est "
+        "reellement demande pour ce run"
+    )
