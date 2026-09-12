@@ -64,7 +64,9 @@ from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
+from patrick.tracking import history as trackhistory
 from patrick.tracking import holdout_diagnostic as trackholdout
+from patrick.tracking import phase_timing_log
 from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
 from patrick.tuning.optuna_runner import tune_config
@@ -1420,6 +1422,24 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
 
     for run_id in run_ids.values():
         trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])
+
+    # Phase 4 (log de timing lisible) : complement texte brut a
+    # `run_phase_timing` (deja interrogeable en SQL), pour inspecter le
+    # timing d'un run sans requete DB -- ecrit ICI (fin de run_pipeline,
+    # apres finish_run() ci-dessus) plutot qu'au fil de l'execution : chaque
+    # ligne vient de `phase_breakdown_for_run()`, qui a besoin de
+    # `run.finished_at` (pose par finish_run) pour calculer `run_total_s`/
+    # les pourcentages -- l'ecrire plus tot forcerait soit un total inconnu,
+    # soit une deuxieme requete apres coup pour le completer. Un fichier par
+    # run_id (un par horizon), dans le meme `config.output.dir` que les
+    # autres artefacts de ce run (leaderboard CSV/xlsx, joblib exporte) --
+    # voir `tracking/phase_timing_log.py` pour le detail du format et de la
+    # convention de nommage.
+    for run_id in run_ids.values():
+        breakdown = trackhistory.phase_breakdown_for_run(conn, run_id)
+        timing_log_path = phase_timing_log.write_phase_timing_log(config.output.dir, run_id, breakdown)
+        print(f"[EXPORT] phase timing log -> {timing_log_path}")
+
     conn.close()
 
     return {
