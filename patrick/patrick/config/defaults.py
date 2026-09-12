@@ -193,6 +193,54 @@ DEFAULT_STACKING_ENABLED = False
 DEFAULT_EMBARGO_ENABLED = True
 DEFAULT_EMBARGO_BARS = None  # None -> derived from the current horizon (e = horizon)
 
+# Phase 3 (feature/hyperparams-lookbacks) -- rolling-window lookbacks for
+# `features/technical.py` (returns/zscore/ma_ratio/rolling_vol/ohlc_vol) used
+# to be fixed FUNCTION-DEFAULT parameters, never threaded through RunConfig
+# nor `pipeline/engine.py` (left out of `feature/hyperparams-ui`, documented
+# there only as "deeper plumbing, left to a separate phase"). Defaults below
+# are IDENTICAL to those hardcoded function defaults -- an unmodified run
+# computes exactly the same technical features as before this field existed
+# (see tests/test_technical_lookbacks.py::
+# test_default_lookback_windows_match_technical_py_hardcoded_defaults).
+DEFAULT_RETURNS_WINDOWS = [1, 5, 10, 20]
+DEFAULT_ZSCORE_WINDOWS = [10, 20, 60]
+DEFAULT_MA_RATIO_WINDOWS = [10, 20, 50]
+DEFAULT_ROLLING_VOL_WINDOWS = [10, 20]
+DEFAULT_OHLC_VOL_WINDOWS = [10, 20]
+
+# Validation envelope for each lookback list, applied in
+# `webapp/forms.py::_parse_technical_lookbacks` (web path) AND defensively
+# again in `pipeline/engine.py::_sanitize_lookback_windows` (YAML/CLI path --
+# `RunConfig` itself has no pydantic-level bounds here, same convention as
+# `TuningConfig.optuna_bounds` above). `min_allowed=1` for
+# returns/zscore/ma_ratio/rolling_vol_windows: `features/technical.py::
+# returns` calls `safe_pct_change(series, w)`, and pandas'
+# `Series.pct_change(periods=w)` accepts a NEGATIVE w with NO error at all --
+# it silently shifts the OTHER direction and returns a forward-looking
+# (look-ahead leak) value instead of raising (measured, see
+# tests/test_technical_lookbacks.py::
+# test_returns_silently_looks_ahead_on_negative_window_undocumented_bug).
+# The other three functions use `.rolling(w)`, which pandas already rejects
+# for w<0 (ValueError) but lets w=0 through silently as an all-NaN
+# (zscore/rolling_vol) or degenerate constant-0 (ma_ratio) column -- wasteful,
+# not a leak, but still rejected here for one uniform floor across all four.
+# `min_allowed=2` for ohlc_vol_windows specifically: `yang_zhang_vol` divides
+# by `(window - 1)`, so window=1 raises ZeroDivisionError deep in the
+# pipeline instead of a clean validation error at config time (measured, see
+# tests/test_technical_lookbacks.py::test_yang_zhang_vol_crashes_on_window_of_one).
+# `max_allowed` is a generous typo guard only (same role as
+# `OPTUNA_PARAM_SPECS`'s envelope) -- an overly large window is already
+# harmless on its own (rolling window just produces NaN for insufficient
+# history, no crash), consistent with this session's guiding principle of
+# not blocking exploration without a hard technical reason.
+TECHNICAL_LOOKBACK_BOUNDS: dict[str, dict[str, int]] = {
+    "returns_windows": {"min_allowed": 1, "max_allowed": 5000},
+    "zscore_windows": {"min_allowed": 1, "max_allowed": 5000},
+    "ma_ratio_windows": {"min_allowed": 1, "max_allowed": 5000},
+    "rolling_vol_windows": {"min_allowed": 1, "max_allowed": 5000},
+    "ohlc_vol_windows": {"min_allowed": 2, "max_allowed": 5000},
+}
+
 # Models in the "vol_models" family (patrick/features/vol_models.py), individually
 # selectable from the web interface. The first 5 are the ones from the original VIX
 # pipeline (always computed together until now) — kept enabled by default so as not

@@ -345,3 +345,76 @@ def test_build_config_dict_rejects_horizon_infeasible_under_the_actually_submitt
         "valide sous DEFAULT_N_WF_FOLDS=5 (fold=120>100), pas sous ce qui est "
         "reellement demande pour ce run"
     )
+
+
+# Phase 3 (feature/hyperparams-lookbacks) -- les lookbacks de features
+# (fenetres de returns/zscore/ma_ratio/rolling_vol/ohlc_vol,
+# `features/technical.py`) n'avaient aucune surface de configuration avant
+# ce changement (audit : fonctions deja parametrees via un argument
+# `windows=`, jamais appelees avec un argument explicite depuis
+# `pipeline/engine.py`). `tl__{champ}` est le nom de champ choisi cote
+# `index.html` (une liste d'entiers separee par des virgules, meme
+# convention que `n_features_grid`).
+def test_build_config_dict_defaults_technical_lookbacks_when_form_omits_them():
+    """Un formulaire qui ne soumet pas les champs de lookbacks (ancien
+    formulaire, ou test existant type `_minimal_form()`) doit produire
+    exactement les lookbacks par defaut -- comportement inchange."""
+    form = _minimal_form()
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_17")
+    assert errors == []
+    tl = config_dict["features"]["technical_lookbacks"]
+    assert tl["returns_windows"] == D.DEFAULT_RETURNS_WINDOWS
+    assert tl["zscore_windows"] == D.DEFAULT_ZSCORE_WINDOWS
+    assert tl["ma_ratio_windows"] == D.DEFAULT_MA_RATIO_WINDOWS
+    assert tl["rolling_vol_windows"] == D.DEFAULT_ROLLING_VOL_WINDOWS
+    assert tl["ohlc_vol_windows"] == D.DEFAULT_OHLC_VOL_WINDOWS
+
+
+def test_build_config_dict_reads_custom_technical_lookbacks_from_form():
+    form = _minimal_form(**{"tl__returns_windows": "3,7,14"})
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_18")
+    assert errors == []
+    assert config_dict["features"]["technical_lookbacks"]["returns_windows"] == [3, 7, 14]
+    # Les autres champs, non touches, restent par defaut.
+    assert config_dict["features"]["technical_lookbacks"]["zscore_windows"] == D.DEFAULT_ZSCORE_WINDOWS
+
+
+def test_build_config_dict_accepts_range_syntax_for_technical_lookbacks():
+    """Meme syntaxe `lo-hi` que `n_features_grid` (`_int_list`)."""
+    form = _minimal_form(**{"tl__rolling_vol_windows": "5-7"})
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_19")
+    assert errors == []
+    assert config_dict["features"]["technical_lookbacks"]["rolling_vol_windows"] == [5, 6, 7]
+
+
+def test_build_config_dict_rejects_non_positive_returns_window():
+    form = _minimal_form(**{"tl__returns_windows": "-3,5"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_20")
+    assert any("rendements" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_zero_zscore_window():
+    form = _minimal_form(**{"tl__zscore_windows": "0,10"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_21")
+    assert any("z-score" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_ohlc_vol_window_below_two():
+    """`yang_zhang_vol` divise par (window - 1) -- window=1 ferait planter
+    le pipeline avec un ZeroDivisionError (mesure, voir
+    tests/test_technical_lookbacks.py) plutot que d'etre rejete ici."""
+    form = _minimal_form(**{"tl__ohlc_vol_windows": "1,10"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_22")
+    assert any("ohlc" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_non_numeric_technical_lookback():
+    form = _minimal_form(**{"tl__ma_ratio_windows": "abc"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_23")
+    assert any("moyenne mobile" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_technical_lookback_above_max_allowed():
+    form = _minimal_form(**{"tl__returns_windows": "999999"})
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_24")
+    assert any("rendements" in e.lower() for e in errors)

@@ -69,6 +69,13 @@ def default_config_dict() -> dict:
             "interact_top_pairs": 20,
             "interact_final_n": 30,
             "pool_prefilter": D.DEFAULT_POOL_PREFILTER,
+            "technical_lookbacks": {
+                "returns_windows": list(D.DEFAULT_RETURNS_WINDOWS),
+                "zscore_windows": list(D.DEFAULT_ZSCORE_WINDOWS),
+                "ma_ratio_windows": list(D.DEFAULT_MA_RATIO_WINDOWS),
+                "rolling_vol_windows": list(D.DEFAULT_ROLLING_VOL_WINDOWS),
+                "ohlc_vol_windows": list(D.DEFAULT_OHLC_VOL_WINDOWS),
+            },
         },
         "validation": {
             "scheme": "walkforward",
@@ -122,6 +129,19 @@ ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
 ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
 TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)
 TARGET_GROUPS = D.DEFAULT_TARGET_GROUPS
+# Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
+# driving the "Lookbacks technical" section of `index.html` -- one
+# comma-separated `<input>` per `features/technical.py` function, same
+# convention as `n_features_grid` (`_int_list` below, supports `lo-hi`
+# ranges too). Order matters for the template's rendering only.
+TECHNICAL_LOOKBACK_FIELDS = [
+    ("returns_windows", "Lookbacks rendements"),
+    ("zscore_windows", "Lookbacks z-score"),
+    ("ma_ratio_windows", "Lookbacks moyenne mobile"),
+    ("rolling_vol_windows", "Lookbacks volatilité (rolling)"),
+    ("ohlc_vol_windows", "Lookbacks volatilité OHLC"),
+]
+
 VOL_MODEL_LABELS = {
     "egarch": "EGARCH (vol. conditionnelle)",
     "kalman": "Filtre de Kalman (niveau filtré)",
@@ -210,6 +230,56 @@ def _parse_optuna_bounds(form, errors: list[str]) -> dict:
                 out[algo][param] = [default_lo, default_hi]
                 continue
             out[algo][param] = [int(lo), int(hi)] if spec["type"] == "int" else [lo, hi]
+    return out
+
+
+def _parse_technical_lookbacks(form, errors: list[str]) -> dict:
+    """Phase 3 (feature/hyperparams-lookbacks): reads the "Lookbacks
+    technical" section (`index.html`, fields named
+    `tl__{returns_windows|zscore_windows|ma_ratio_windows|
+    rolling_vol_windows|ohlc_vol_windows}`) into
+    `{field: [int, ...]}` (see `RunConfig.features.technical_lookbacks`,
+    `features/technical.py::build_technical_features`). A field absent from
+    `form` (old form submission, or a test's minimal `FormData`) falls back
+    to `D.DEFAULT_*_WINDOWS` -- unmodified behavior, exactly like
+    `_parse_optuna_bounds` above. Any invalid value (non-numeric, empty
+    list, or a window outside `D.TECHNICAL_LOOKBACK_BOUNDS[field]`) appends
+    a precise error and falls back to the default for that single field
+    rather than failing the whole form -- `pipeline/engine.py::
+    _sanitize_lookback_windows` is a second, defensive line for the
+    YAML/CLI path this form never sees."""
+    defaults = {
+        "returns_windows": D.DEFAULT_RETURNS_WINDOWS,
+        "zscore_windows": D.DEFAULT_ZSCORE_WINDOWS,
+        "ma_ratio_windows": D.DEFAULT_MA_RATIO_WINDOWS,
+        "rolling_vol_windows": D.DEFAULT_ROLLING_VOL_WINDOWS,
+        "ohlc_vol_windows": D.DEFAULT_OHLC_VOL_WINDOWS,
+    }
+    out: dict[str, list[int]] = {}
+    for field, label in TECHNICAL_LOOKBACK_FIELDS:
+        raw = form.get(f"tl__{field}")
+        if raw is None or str(raw).strip() == "":
+            out[field] = list(defaults[field])
+            continue
+        try:
+            windows = _int_list(raw)
+        except ValueError:
+            errors.append(f"« {label} » : liste d'entiers invalide.")
+            out[field] = list(defaults[field])
+            continue
+        if not windows:
+            errors.append(f"« {label} » ne peut pas être vide.")
+            out[field] = list(defaults[field])
+            continue
+        bounds = D.TECHNICAL_LOOKBACK_BOUNDS[field]
+        invalid = [w for w in windows if not (bounds["min_allowed"] <= w <= bounds["max_allowed"])]
+        if invalid:
+            errors.append(
+                f"« {label} » : valeur(s) {invalid} hors de la plage autorisée "
+                f"[{bounds['min_allowed']}, {bounds['max_allowed']}].")
+            out[field] = list(defaults[field])
+            continue
+        out[field] = windows
     return out
 
 
@@ -355,6 +425,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         errors.append("« Holdout terminal (mois) » doit être compris entre 12 et 24.")
 
     optuna_bounds = _parse_optuna_bounds(form, errors)
+    technical_lookbacks = _parse_technical_lookbacks(form, errors)
 
     config_dict = {
         "name": name,
@@ -385,6 +456,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "interact_top_pairs": interact_top_pairs,
             "interact_final_n": interact_final_n,
             "pool_prefilter": pool_prefilter,
+            "technical_lookbacks": technical_lookbacks,
         },
         "validation": {
             "scheme": form.get("scheme", "walkforward"),
@@ -456,6 +528,21 @@ def to_view(cfg: dict) -> dict:
         "interact_top_pairs": feat.get("interact_top_pairs", 20),
         "interact_final_n": feat.get("interact_final_n", 30),
         "pool_prefilter": feat.get("pool_prefilter", D.DEFAULT_POOL_PREFILTER),
+        # Phase 3 (feature/hyperparams-lookbacks): flattened to comma-joined
+        # strings for the form's text inputs, same convention as
+        # `n_features_grid` above -- `tl.get(field)` falls back to the
+        # historical hardcoded defaults when absent (older saved config, or
+        # a config predating this field).
+        "technical_lookbacks": {
+            field: ",".join(str(w) for w in (feat.get("technical_lookbacks", {}).get(field) or default))
+            for field, default in (
+                ("returns_windows", D.DEFAULT_RETURNS_WINDOWS),
+                ("zscore_windows", D.DEFAULT_ZSCORE_WINDOWS),
+                ("ma_ratio_windows", D.DEFAULT_MA_RATIO_WINDOWS),
+                ("rolling_vol_windows", D.DEFAULT_ROLLING_VOL_WINDOWS),
+                ("ohlc_vol_windows", D.DEFAULT_OHLC_VOL_WINDOWS),
+            )
+        },
         "scheme": val.get("scheme", "walkforward"),
         "n_groups": val.get("n_groups", D.DEFAULT_CPCV_N_GROUPS),
         "k_test_groups": val.get("k_test_groups", D.DEFAULT_CPCV_K_TEST_GROUPS),

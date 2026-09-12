@@ -177,21 +177,48 @@ def _merged_windows(name: str, guida_windows: list[int] | None) -> list[int]:
 
 def build_technical_features(series: pd.Series, prefix: str = "px",
                               ohlc: pd.DataFrame | None = None,
-                              guida_windows: list[int] | None = None) -> pd.DataFrame:
+                              guida_windows: list[int] | None = None,
+                              returns_windows: list[int] = (1, 5, 10, 20),
+                              zscore_windows: list[int] = (10, 20, 60),
+                              ma_ratio_windows: list[int] = (10, 20, 50),
+                              rolling_vol_windows: list[int] = (10, 20),
+                              ohlc_vol_windows: list[int] = (10, 20)) -> pd.DataFrame:
     """`guida_windows` (Phase 2, feature/guida-features-full): optional list
     of extra lookbacks (typically `config.defaults.GUIDA_LOOKBACKS`) merged
-    into every already-`windows=`-parameterized function below (returns/
-    zscore/ma_ratio/rolling_vol/rsi). `None` (default): behavior strictly
-    unchanged from before this parameter existed."""
+    into returns/zscore/ma_ratio/rolling_vol/rsi below (deduplicated,
+    sorted) when provided -- NOT merged into `ohlc_vol_windows` (Guida's own
+    taxonomy never touched the OHLC estimators, see `features/guida.py`).
+    `None` (default): each family uses exactly its own `*_windows` below,
+    unmerged.
+
+    `*_windows` (Phase 3, feature/hyperparams-lookbacks): every argument
+    defaults to the same tuple that used to be hardcoded on the individual
+    `returns`/`zscore`/`ma_ratio`/`rolling_vol`/`ohlc_vol_features`
+    functions -- a caller that passes neither `guida_windows` nor these
+    keeps computing exactly the same columns as before either parameter
+    existed. `pipeline/engine.py::build_base_feature_pool` threads
+    `RunConfig.features.technical_lookbacks` (sanitized via
+    `_sanitize_lookback_windows`) into the `*_windows` args and
+    `RunConfig.features.enable_guida_features` into `guida_windows` -- the
+    two compose: a Guida-enabled run with custom lookbacks gets, per
+    family, the union of its own configured windows and the Guida grid.
+    `rsi` has no dedicated `*_windows` argument (out of hyperparams-
+    lookbacks' scope) and always starts from `_DEFAULT_WINDOWS["rsi"]`,
+    still guida-mergeable like before Phase 3 existed."""
+    def _merged(base: list[int]) -> list[int]:
+        if not guida_windows:
+            return list(base)
+        return sorted(set(base) | set(guida_windows))
+
     parts = [
-        returns(series, _merged_windows("returns", guida_windows)),
-        zscore(series, _merged_windows("zscore", guida_windows)),
-        ma_ratio(series, _merged_windows("ma_ratio", guida_windows)),
-        rolling_vol(series, _merged_windows("rolling_vol", guida_windows)),
-        rsi(series, _merged_windows("rsi", guida_windows)),
+        returns(series, _merged(returns_windows)),
+        zscore(series, _merged(zscore_windows)),
+        ma_ratio(series, _merged(ma_ratio_windows)),
+        rolling_vol(series, _merged(rolling_vol_windows)),
+        rsi(series, _merged(_DEFAULT_WINDOWS["rsi"])),
     ]
     df = pd.concat(parts, axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
     if ohlc is not None and {"Open", "High", "Low", "Close"}.issubset(ohlc.columns):
-        df = pd.concat([df, ohlc_vol_features(ohlc, prefix)], axis=1)
+        df = pd.concat([df, ohlc_vol_features(ohlc, prefix, ohlc_vol_windows)], axis=1)
     return df

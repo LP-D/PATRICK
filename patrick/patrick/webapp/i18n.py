@@ -145,6 +145,20 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_interact_final": {"fr": "Interactions — final N", "en": "Interactions — final N"},
     "field_pool_prefilter": {"fr": "Pool prefilter", "en": "Pool prefilter"},
 
+    # Phase 3 (feature/hyperparams-lookbacks): rolling-window lookbacks for
+    # `features/technical.py`, previously fixed function defaults with no
+    # configuration surface at all.
+    "section_technical_lookbacks": {"fr": "Lookbacks technical (fenêtres roulantes)",
+                                     "en": "Technical lookbacks (rolling windows)"},
+    "technical_lookbacks_hint": {
+        "fr": "Fenêtres roulantes (en barres) utilisées par les features technical (famille « technical »). "
+              "Liste d'entiers séparés par des virgules (ex. 10,20,60 ou 5-15). Valeurs par défaut = anciennes "
+              "valeurs codées en dur ; comportement inchangé si non modifié.",
+        "en": "Rolling windows (in bars) used by the technical features (\"technical\" family). "
+              "Comma-separated integer list (e.g. 10,20,60 or 5-15). Defaults = the former hardcoded values; "
+              "unmodified behavior if left as-is.",
+    },
+
     "section_validation": {"fr": "Validation (walk-forward ou CPCV)", "en": "Validation (walk-forward or CPCV)"},
     "field_scheme": {"fr": "Schéma", "en": "Scheme"},
     "field_scheme_walkforward": {"fr": "Walk-forward", "en": "Walk-forward"},
