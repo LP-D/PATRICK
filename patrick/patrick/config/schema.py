@@ -66,6 +66,14 @@ class FeaturesConfig(BaseModel):
     interact_top_pairs: int = 20
     interact_final_n: int = 30
     pool_prefilter: int = D.DEFAULT_POOL_PREFILTER
+    # Phase 2 (feature/guida-features-full) -- master switch for the Guida
+    # factor taxonomy: the 14-lookback grid (`config.defaults.GUIDA_LOOKBACKS`)
+    # applied to technical/spike/macro, plus the three "estimated" families
+    # (carry, cross-sectional momentum, idiosyncratic volatility -- see
+    # `features/guida.py`). False (default): exactly the pre-existing feature
+    # pool, unchanged -- this is a research toggle (scan-cost impact measured,
+    # not yet judged for a default-on switch), never flipped on here.
+    enable_guida_features: bool = D.DEFAULT_ENABLE_GUIDA_FEATURES
 
 
 class ValidationConfig(BaseModel):

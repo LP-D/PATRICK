@@ -28,6 +28,20 @@ MODERATE_HORIZONS = [15, 20, 30]
 LONG_HORIZONS = [252, 504, 756]
 SELECTABLE_HORIZONS = sorted(set(DEFAULT_HORIZONS) | set(MODERATE_HORIZONS) | set(LONG_HORIZONS))
 DEFAULT_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
+
+# Phase 2 (feature/guida-features-full) -- the 14 lookback windows (trading
+# days) used throughout Tony Guida's "Big Data and Machine Learning in
+# Quantitative Investment" (CFA Institute Research Foundation) factor
+# taxonomy. Reused verbatim (not re-derived) so every Guida-tagged feature in
+# this codebase shares the exact same horizon grid, from ~2 weeks (10d) to
+# 3 years (756d).
+GUIDA_LOOKBACKS: tuple[int, ...] = (10, 22, 44, 66, 88, 130, 200, 252, 300, 382, 400, 504, 600, 756)
+
+# Global opt-in switch (`FeaturesConfig.enable_guida_features`, config/schema.py):
+# False by default -- the scan-cost impact of the 14-lookback grid (measured in
+# `tests/test_guida_scan_cost.py`) has not been judged against a default-on
+# activation; this is a research-platform toggle, not a production default.
+DEFAULT_ENABLE_GUIDA_FEATURES = False
 DEFAULT_POOL_PREFILTER = 450
 DEFAULT_SHAP_SAMPLE = 500
 DEFAULT_N_WF_FOLDS = 5

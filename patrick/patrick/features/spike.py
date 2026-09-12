@@ -113,14 +113,44 @@ def particle_filter_vol(series: pd.Series, n_particles: int = 200, seed: int = 4
     return pd.Series(np.exp(filtered / 2), index=series.index, name="particle_filtered_vol")
 
 
-def build_spike_features_base(series: pd.Series, prefix: str = "px") -> pd.DataFrame:
+# Phase 2 (feature/guida-features-full) -- `rolling_hurst`'s `.rolling(w).
+# apply(_hurst_of_window, raw=True)` re-runs the O(window) multi-lag-
+# difference estimator at EVERY bar, i.e. O(n*window) total; unlike
+# semivariance/skew (vectorized pandas rolling ops, cheap at any window),
+# computing it at all 14 Guida lookbacks (up to 756d) would multiply the
+# per-column cost roughly 15x for a family whose module docstring already
+# notes "no clean signal, kept because cheap". A reduced subset (quarter/
+# year/two-year) is added instead of the full grid -- deliberately, not a
+# technical blocker -- so the family still benefits from a longer-horizon
+# Hurst without dominating scan time; measured in
+# `tests/test_guida_scan_cost.py`.
+HURST_GUIDA_SUBSET: tuple[int, ...] = (66, 252, 504)
+
+
+def build_spike_features_base(series: pd.Series, prefix: str = "px",
+                               guida_windows: list[int] | None = None) -> pd.DataFrame:
     """hurst/semivar/skew -- pure rolling windows, causal by construction,
-    computed once for a whole run (shared across all folds)."""
-    return pd.DataFrame({
+    computed once for a whole run (shared across all folds).
+
+    `guida_windows` (Phase 2): when provided (typically `config.defaults.
+    GUIDA_LOOKBACKS`), semivariance and skew (cheap, vectorized) are computed
+    at EVERY extra lookback; Hurst (expensive rolling `.apply`) only at
+    `HURST_GUIDA_SUBSET` -- see its docstring. `None` (default): behavior
+    strictly unchanged from before this parameter existed."""
+    out = {
         f"{prefix}_hurst_100d": rolling_hurst(series, 100),
         f"{prefix}_semivar_20d": rolling_semivariance(series, 20),
         f"{prefix}_skew_20d": rolling_skew(series, 20),
-    }, index=series.index)
+    }
+    if guida_windows:
+        for w in guida_windows:
+            if w != 20:
+                out[f"{prefix}_semivar_{w}d"] = rolling_semivariance(series, w)
+                out[f"{prefix}_skew_{w}d"] = rolling_skew(series, w)
+        for w in HURST_GUIDA_SUBSET:
+            if w != 100 and w in guida_windows:
+                out[f"{prefix}_hurst_{w}d"] = rolling_hurst(series, w)
+    return pd.DataFrame(out, index=series.index)
 
 
 def build_spike_features_parametric(series: pd.Series, prefix: str = "px",

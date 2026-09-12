@@ -383,17 +383,58 @@ def _cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, se
     return result
 
 
+# Phase 2 (feature/guida-features-full) -- heston_proxy/vrp_proxy are the
+# only two "vol_models" already expressed as a short/long ROLLING WINDOW pair
+# (no globally estimated parameter), so they're the only ones a Guida
+# "lookback" concept meaningfully applies to. A curated, small set of
+# (short, long) pairs is used rather than the full 14x14 combinatorial grid
+# (91 short<long pairs) -- most would be economically redundant with an
+# adjacent pair and would multiply scan cost for little marginal signal;
+# these two pairs cover a quarter-vs-annual and an annual-vs-2-year
+# mean-reversion horizon, in addition to each function's own hardcoded
+# default (20/252 for heston, 10/60 for vrp) which is always computed too.
+GUIDA_VOL_PROXY_PAIRS: tuple[tuple[int, int], ...] = ((22, 252), (66, 504))
+
+
 def build_vol_model_features_base(series: pd.Series, prefix: str = "px",
-                                   models: list[str] | None = None) -> pd.DataFrame:
+                                   models: list[str] | None = None,
+                                   guida_windows: list[int] | None = None) -> pd.DataFrame:
     """Non-parametric subset of `models` (heston_proxy/vrp_proxy by default)
     — pure rolling windows, causal by construction, computed once for a whole
-    run (shared across all folds)."""
+    run (shared across all folds).
+
+    `guida_windows` (Phase 2): when provided, ALSO computes heston_proxy/
+    vrp_proxy at `GUIDA_VOL_PROXY_PAIRS` (only pairs whose both bounds are
+    present in `guida_windows`) — parametric models (egarch/kalman/hmm/ar/ma/
+    arma/arima) ignore this parameter entirely, see module docstring. `None`
+    (default): behavior strictly unchanged from before this parameter
+    existed."""
     models = models if models is not None else _DEFAULT_MODELS
     selected = [m for m in models if m in _NONPARAMETRIC_MODELS]
     if not selected:
         return pd.DataFrame(index=series.index)
     df = pd.concat([_NONPARAMETRIC_MODELS[m](series, None, None) for m in selected], axis=1)
     df.columns = [f"{prefix}_{c}" for c in df.columns]
+
+    if guida_windows:
+        window_set = set(guida_windows)
+        extra_parts = []
+        for short, long_ in GUIDA_VOL_PROXY_PAIRS:
+            if short not in window_set or long_ not in window_set:
+                continue
+            if "heston_proxy" in selected:
+                extra = heston_proxy_features(series, short_window=short, long_window=long_)
+                extra = extra.rename(columns={
+                    "heston_theta": f"{prefix}_heston_theta_{short}_{long_}d",
+                    "heston_spread": f"{prefix}_heston_spread_{short}_{long_}d",
+                })
+                extra_parts.append(extra)
+            if "vrp_proxy" in selected:
+                extra = vrp_proxy(series, short_window=short, long_window=long_)
+                extra = extra.rename(f"{prefix}_vrp_proxy_{short}_{long_}d").to_frame()
+                extra_parts.append(extra)
+        if extra_parts:
+            df = pd.concat([df] + extra_parts, axis=1)
     return df
 
 
