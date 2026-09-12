@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 
 import pytest
 
@@ -228,6 +229,67 @@ def test_migrate_repairs_dm_result_kind_when_watermark_absorbed_it_under_old_pha
     applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
     n_migrations = len(list(db.MIGRATIONS_DIR.glob("*.sql")))
     assert applied == set(range(1, n_migrations + 1))
+    conn.close()
+
+
+def test_migrate_concurrent_calls_on_fresh_db_do_not_raise(tmp_path):
+    """Real incident (Sep 12, 2026, on a freshly provisioned preview DB):
+    `run_manager.ensure_worker_running` spawns `patrick worker` as a
+    subprocess sharing the SAME `PATRICK_DB_PATH` as the web process (see
+    `default_db_path`'s docstring) -- both independently call
+    `connect()` -> `migrate()` around the same time. On a BRAND NEW db file,
+    `migrate()`'s `current` (the schema_version high-water mark) is read
+    ONCE via a plain, non-locking SELECT before any writer has committed,
+    AND `_run_migration_script`'s per-statement `_ddl_target_already_exists`
+    check has the same check-then-act gap -- so a second connection racing
+    the first can decide a table/version isn't there yet, block on the
+    write lock, and by the time it wakes up the first connection has
+    already created/inserted it: `sqlite3.OperationalError: table X already
+    exists` or `sqlite3.IntegrityError` on the `schema_version` insert
+    (several migrations -- 0002, 0007, 0008, 0010, 0012, 0013, 0017 --
+    also contain non-idempotent ALTER/DROP/RENAME/INSERT statements, so a
+    replayed migration is not merely redundant there either).
+
+    Reproduced here with real threads (not sequential calls, which
+    wouldn't race at all) racing `db.connect()` on the same fresh path via
+    a `Barrier` to maximize the chance they all read stale state before any
+    of them has committed. The file is pre-created and switched to WAL
+    mode single-threaded, BEFORE the race starts: `connect()`'s own
+    `PRAGMA journal_mode = WAL` on a brand new file is a separate,
+    known SQLite hazard (needs an exclusive lock to change modes, raises
+    its own `database is locked` under this same concurrency) that is
+    unrelated to `migrate()` and out of scope for this fix -- isolating it
+    out keeps this test targeted at the `migrate()` race under
+    investigation instead of conflating it with a second, independent one."""
+    path = str(tmp_path / "patrick.db")
+    warm = sqlite3.connect(path)
+    warm.execute("PRAGMA journal_mode = WAL")
+    warm.close()
+
+    n_threads = 8
+    barrier = threading.Barrier(n_threads)
+    errors: list[BaseException] = []
+
+    def worker():
+        try:
+            barrier.wait()
+            conn = db.connect(path)
+            conn.close()
+        except BaseException as exc:  # noqa: BLE001 -- reported from the main thread, not raised here
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"migrate() raised under concurrency: {errors!r}"
+
+    conn = db.connect(path)
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+    n_migrations = len(list(db.MIGRATIONS_DIR.glob("*.sql")))
+    assert applied == set(range(1, n_migrations + 1))  # every version applied exactly once
     conn.close()
 
 

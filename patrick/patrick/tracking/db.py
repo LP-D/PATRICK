@@ -131,24 +131,44 @@ _CUSTOM_IDEMPOTENCY_CHECKS = {12: _dm_result_already_has_kind}
 
 
 def migrate(conn: sqlite3.Connection) -> None:
+    """Two connections (e.g. the web process and the `patrick worker`
+    subprocess it spawns, sharing one `PATRICK_DB_PATH` -- see
+    `default_db_path`'s docstring) can call this around the same time on a
+    brand new db. A plain `SELECT MAX(version)` before applying anything
+    would let both read `current = 0` before either has committed, so both
+    replay the same migrations -- several of which (0002, 0007, 0008, 0010,
+    0012, 0013, 0017) contain non-idempotent ALTER/DROP/RENAME/INSERT
+    statements, not just re-runnable `CREATE TABLE IF NOT EXISTS`. `BEGIN
+    IMMEDIATE` acquires the write lock up front (instead of only once a
+    write statement is reached), so a racing connection blocks here --
+    `busy_timeout` (set by `connect()` before calling this) makes it wait
+    rather than error -- and re-reads `current` already caught up once
+    unblocked, rather than redoing what the first connection just applied.
+    """
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version ("
         "version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
     )
-    current = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_version").fetchone()[0]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        current = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_version").fetchone()[0]
 
-    scripts = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    for script in scripts:
-        version = int(script.name.split("_", 1)[0])
-        if version <= current:
-            continue
-        custom_check = _CUSTOM_IDEMPOTENCY_CHECKS.get(version)
-        if custom_check is not None and custom_check(conn):
-            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-            continue
-        with conn:
+        scripts = sorted(MIGRATIONS_DIR.glob("*.sql"))
+        for script in scripts:
+            version = int(script.name.split("_", 1)[0])
+            if version <= current:
+                continue
+            custom_check = _CUSTOM_IDEMPOTENCY_CHECKS.get(version)
+            if custom_check is not None and custom_check(conn):
+                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+                continue
             _run_migration_script(conn, script.read_text())
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    except BaseException:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
 
 
 def library_versions() -> str:
