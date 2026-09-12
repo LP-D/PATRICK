@@ -178,6 +178,59 @@ def test_build_config_dict_accepts_valid_tuning_bounds():
     assert config_dict["tuning"]["cv_splits"] == 4
 
 
+# flexibility-gaps Gap 7 -- validation.holdout_months (config/schema.py,
+# already YAML-configurable, bounds 12-24) was never exposed on /launch.
+# Same "server-side bound before RunConfig ever sees it" pattern as the
+# n_trials/top_k/cv_splits tests above.
+
+def test_build_config_dict_defaults_holdout_months_when_form_omits_it():
+    form = _minimal_form()
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_HM_1")
+    assert errors == []
+    assert config_dict["validation"]["holdout_months"] == D.DEFAULT_HOLDOUT_MONTHS
+
+
+def test_build_config_dict_reads_custom_holdout_months_from_form():
+    form = _minimal_form(holdout_months="18")
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_HM_2")
+    assert errors == []
+    assert config_dict["validation"]["holdout_months"] == 18
+
+
+def test_build_config_dict_rejects_holdout_months_below_twelve():
+    form = _minimal_form(holdout_months="11")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_HM_3")
+    assert any("holdout" in e.lower() for e in errors)
+
+
+def test_build_config_dict_rejects_holdout_months_above_twenty_four():
+    form = _minimal_form(holdout_months="25")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_HM_4")
+    assert any("holdout" in e.lower() for e in errors)
+
+
+def test_build_config_dict_holdout_months_boundaries_are_accepted():
+    for value in ("12", "24"):
+        form = _minimal_form(holdout_months=value)
+        config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name=f"VIX_HM_{value}")
+        assert errors == []
+        assert config_dict["validation"]["holdout_months"] == int(value)
+
+
+def test_to_view_reflects_holdout_months_from_config():
+    cfg = forms.default_config_dict()
+    cfg["validation"]["holdout_months"] = 20
+    view = forms.to_view(cfg)
+    assert view["holdout_months"] == 20
+
+
+def test_to_view_defaults_holdout_months_when_absent_from_config():
+    cfg = forms.default_config_dict()
+    del cfg["validation"]["holdout_months"]
+    view = forms.to_view(cfg)
+    assert view["holdout_months"] == D.DEFAULT_HOLDOUT_MONTHS
+
+
 # Phase 1 (feature/hyperparams-ui) -- la grille Optuna (bornes [low, high] par
 # hyperparametre et par algo, `tuning/optuna_runner.py::suggest_params`)
 # n'avait ABSOLUMENT aucune surface de configuration avant ce changement : ni

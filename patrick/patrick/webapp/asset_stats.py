@@ -67,8 +67,72 @@ MIN_HISTORY_FOR_STATS = 30
 # margin, not a re-derivation of the estimator's own internals.
 _VOL_MIN_HISTORY = 90
 
+# flexibility-gaps Gap 1: `ZSCORE_WINDOW`/`MA_WINDOWS`/`LONG_WINDOWS_BARS`
+# above are display defaults, not hard limits -- PATRICK is an exploratory
+# research platform (see session brief), so `/api/asset-stats/{symbol}`
+# accepts `?zscore_window=`/`?ma_windows=`/`?long_windows_bars=` overrides
+# (`webapp/app.py::asset_stats_api`) rather than forcing every viewer to the
+# same three windows. This cap is the only hard limit: a sanity bound
+# against a window so large it would be silently meaningless (more bars
+# than any series this app ever loads -- `period="5y"` on daily data is
+# ~1260 bars) or expensive to compute, not a re-derivation of any
+# statistical constraint.
+MAX_WINDOW_BARS = 5000
 
-def compute_stats(series: dict) -> dict:
+
+class InvalidWindowError(ValueError):
+    """Raised by `validate_window`/`parse_window_list` for a user-supplied
+    window that fails validation -- message is safe to surface verbatim as
+    an HTTP 400 `detail` (`webapp/app.py::asset_stats_api`)."""
+
+
+def validate_window(value: int, *, name: str = "window") -> int:
+    """Positive-integer, sane-upper-bound guard for a single user-supplied
+    bar-count window. `name` is only used to make the error message point
+    at the right query parameter."""
+    if value <= 0:
+        raise InvalidWindowError(
+            f"{name} doit être un entier positif (reçu {value})."
+        )
+    if value > MAX_WINDOW_BARS:
+        raise InvalidWindowError(
+            f"{name} ne peut pas dépasser {MAX_WINDOW_BARS} barres (reçu {value})."
+        )
+    return value
+
+
+def parse_window_list(raw: str | None, default: list[int], *, name: str = "windows") -> list[int]:
+    """Parses a comma-separated list of bar-count windows, e.g.
+    `?ma_windows=20,50,100`. `None` or blank keeps `default` (the module's
+    own `MA_WINDOWS`/`LONG_WINDOWS_BARS`) unchanged -- the "default
+    unchanged if unspecified" rule from the session brief. Each entry is
+    validated with `validate_window`."""
+    if raw is None or not raw.strip():
+        return list(default)
+    out: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError as exc:
+            raise InvalidWindowError(
+                f"{name} doit être une liste d'entiers séparés par des virgules (valeur invalide : {part!r})."
+            ) from exc
+        out.append(validate_window(value, name=name))
+    if not out:
+        raise InvalidWindowError(f"{name} ne peut pas être une liste vide.")
+    return out
+
+
+def compute_stats(
+    series: dict,
+    *,
+    zscore_window: int = ZSCORE_WINDOW,
+    ma_windows: list[int] | None = None,
+    long_windows_bars: list[int] | None = None,
+) -> dict:
     """`series` is exactly the dict `market_data.price_history()` returns
     (the same data-access path already used by `/api/preview/{symbol}` --
     no second fetch mechanism here): `{"dates": [...], "closes": [...]}`,
@@ -79,7 +143,17 @@ def compute_stats(series: dict) -> dict:
     silently-omitted key) when history is insufficient for THAT stat
     specifically -- the frontend renders the explicit empty state per
     field, matching the rest of the product's "no number without its
-    reliability" rule (`_components.html::metric`)."""
+    reliability" rule (`_components.html::metric`).
+
+    `zscore_window`/`ma_windows`/`long_windows_bars` default to this
+    module's `ZSCORE_WINDOW`/`MA_WINDOWS`/`LONG_WINDOWS_BARS` -- callers
+    (`webapp/app.py::asset_stats_api`) pass overrides validated via
+    `validate_window`/`parse_window_list`. The response's `zscore_60d` key
+    name is kept stable (matches `asset_stats.js`) even when a non-default
+    `zscore_window` is used -- its VALUE reflects whichever window was
+    requested, only the JSON key stays fixed."""
+    ma_windows = list(MA_WINDOWS) if ma_windows is None else list(ma_windows)
+    long_windows_bars = list(LONG_WINDOWS_BARS) if long_windows_bars is None else list(long_windows_bars)
     dates = series.get("dates") or []
     closes = series.get("closes") or []
     out: dict = {
@@ -103,15 +177,15 @@ def compute_stats(series: dict) -> dict:
     for h in DEFAULT_HORIZONS:
         out["returns"][str(h)] = _last_or_none(ret_h[f"ret_{h}d"])
 
-    ret_long = tech_returns(s, windows=LONG_WINDOWS_BARS)
-    for w in LONG_WINDOWS_BARS:
+    ret_long = tech_returns(s, windows=long_windows_bars)
+    for w in long_windows_bars:
         out["long_window_returns"][str(w)] = _last_or_none(ret_long[f"ret_{w}d"])
 
-    z = tech_zscore(s, windows=[ZSCORE_WINDOW])
-    out["zscore_60d"] = _last_or_none(z[f"zscore_{ZSCORE_WINDOW}d"])
+    z = tech_zscore(s, windows=[zscore_window])
+    out["zscore_60d"] = _last_or_none(z[f"zscore_{zscore_window}d"])
 
-    ma = tech_ma_ratio(s, windows=MA_WINDOWS)
-    for w in MA_WINDOWS:
+    ma = tech_ma_ratio(s, windows=ma_windows)
+    for w in ma_windows:
         out["moving_averages"][str(w)] = _last_or_none(ma[f"vs_ma{w}"])
 
     if len(s) >= _VOL_MIN_HISTORY:

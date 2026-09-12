@@ -47,6 +47,19 @@ _MIN_DIRECTION_SAMPLES = 10  # same threshold as metrics.py's own FORT/FAIBLE br
 LIVE_HIT_RATE_WINDOW = 30
 LIVE_HIT_RATE_WARNING_THRESHOLD = 0.5
 
+# flexibility-gaps Gap 2: single source for the Diebold-Mariano ok/warning
+# significance threshold shown on `/predictions` and
+# `/runs/{run_id}/detail` (`predictions.html`/`run_detail.html`) -- both
+# templates used to hardcode the literal `0.05` independently; both now
+# receive `dm_significance_alpha` from their route (`webapp/app.py`,
+# overridable via `?dm_alpha=`) sourced from this one constant. Conventional
+# 5% significance level for a single hypothesis test -- distinct from
+# `fdr_alpha` (default 0.10) on `run_detail`/`target_detail`/
+# `station_verdict` below: that one corrects the OVERALL false-discovery
+# rate across many targets tested at once, this one is the per-(target,
+# horizon) DM test's own uncorrected significance cutoff.
+DM_SIGNIFICANCE_ALPHA = 0.05
+
 
 def _config_field(config_json: str | None, *path, default=None):
     if not config_json:

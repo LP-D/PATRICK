@@ -156,6 +156,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_min_train_frac": {"fr": "Fraction min. d'entraînement", "en": "Min. training fraction"},
     "field_min_train_rows": {"fr": "Lignes min. train", "en": "Min. train rows"},
     "field_min_test_rows": {"fr": "Lignes min. test", "en": "Min. test rows"},
+    # flexibility-gaps Gap 7: validation.holdout_months, YAML-only until now.
+    "field_holdout_months": {"fr": "Holdout terminal (mois, 12-24)", "en": "Terminal holdout (months, 12-24)"},
     "field_purge": {"fr": "Purge (retire les lignes proches de la frontière train/test)",
                      "en": "Purge (removes rows near the train/test boundary)"},
     "field_embargo_enabled": {"fr": "Embargo (retire les premières lignes de test après la coupure)",
@@ -303,6 +305,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "portfolio_no_contradiction": {
         "fr": "Aucune contradiction détectée pour l'instant sur les paires suivies.",
         "en": "No contradiction detected so far on the tracked pairs.",
+    },
+    # flexibility-gaps Gap 6: /portfolio's ?pairs= override form.
+    "portfolio_pairs_label": {
+        "fr": "Paires corrélées (une par ligne, symbol_a:symbol_b:sens)",
+        "en": "Correlated pairs (one per line, symbol_a:symbol_b:sens)",
+    },
+    "portfolio_pairs_apply": {"fr": "Appliquer", "en": "Apply"},
+    "portfolio_pairs_hint": {
+        "fr": "sens : positive ou negative. Champ vide = les 3 paires par défaut (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
+        "en": "sens: positive or negative. Empty field = the 3 default pairs (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
     },
     "assetpanel_subtitle": {
         "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",

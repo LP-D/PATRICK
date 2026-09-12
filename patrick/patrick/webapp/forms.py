@@ -81,6 +81,7 @@ def default_config_dict() -> dict:
             "embargo_bars": D.DEFAULT_EMBARGO_BARS,
             "min_train_rows": 100,
             "min_test_rows": 20,
+            "holdout_months": D.DEFAULT_HOLDOUT_MONTHS,
         },
         "selection": {
             "method": D.DEFAULT_SELECTION_METHOD,
@@ -269,6 +270,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         n_groups = int(form.get("n_groups", D.DEFAULT_CPCV_N_GROUPS))
         k_test_groups = int(form.get("k_test_groups", D.DEFAULT_CPCV_K_TEST_GROUPS))
         n_wf_folds = int(form.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS))
+        holdout_months = int(form.get("holdout_months", D.DEFAULT_HOLDOUT_MONTHS))
         min_train_rows = int(form.get("min_train_rows", 100))
         min_test_rows = int(form.get("min_test_rows", 20))
         interact_top_base = int(form.get("interact_top_base", 40))
@@ -289,6 +291,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         n_groups = D.DEFAULT_CPCV_N_GROUPS
         k_test_groups = D.DEFAULT_CPCV_K_TEST_GROUPS
         n_wf_folds = D.DEFAULT_N_WF_FOLDS
+        holdout_months = D.DEFAULT_HOLDOUT_MONTHS
         min_train_rows, min_test_rows = 100, 20
         interact_top_base, interact_top_pairs, interact_final_n = 40, 20, 30
         pool_prefilter, shap_sample = D.DEFAULT_POOL_PREFILTER, D.DEFAULT_SHAP_SAMPLE
@@ -342,6 +345,15 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     if cv_splits < 2:
         errors.append("« Folds CV » doit être un entier >= 2.")
 
+    # flexibility-gaps Gap 7: config/schema.py::ValidationConfig.holdout_months
+    # already enforces `ge=12, le=24` (pydantic) -- checked here too, same
+    # early/friendly-message convention as n_trials/top_k/cv_splits above,
+    # so a bad value reported on THIS form rather than surfacing later as a
+    # raw pydantic ValidationError once build_config_dict()'s result reaches
+    # RunConfig.model_validate().
+    if not (12 <= holdout_months <= 24):
+        errors.append("« Holdout terminal (mois) » doit être compris entre 12 et 24.")
+
     optuna_bounds = _parse_optuna_bounds(form, errors)
 
     config_dict = {
@@ -385,6 +397,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "embargo_bars": embargo_bars,
             "min_train_rows": min_train_rows,
             "min_test_rows": min_test_rows,
+            "holdout_months": holdout_months,
         },
         "selection": {
             "method": form.get("selection_method", D.DEFAULT_SELECTION_METHOD),
@@ -453,6 +466,7 @@ def to_view(cfg: dict) -> dict:
         "embargo_bars": val.get("embargo_bars", D.DEFAULT_EMBARGO_BARS),
         "min_train_rows": val.get("min_train_rows", 100),
         "min_test_rows": val.get("min_test_rows", 20),
+        "holdout_months": val.get("holdout_months", D.DEFAULT_HOLDOUT_MONTHS),
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),
         "n_features_grid": ",".join(str(n) for n in sel.get("n_features_grid", [])),
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),

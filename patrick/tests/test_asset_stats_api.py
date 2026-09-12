@@ -59,3 +59,53 @@ def test_asset_stats_api_passes_through_upstream_error(monkeypatch):
     data = resp.json()
     assert data["error"] == "network down"
     assert data["insufficient_history"] is True
+
+
+# flexibility-gaps Gap 1: ?zscore_window=/?ma_windows=/?long_windows_bars=
+# on this route, plumbed to asset_stats.compute_stats.
+
+def test_asset_stats_api_accepts_custom_zscore_window(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp_default = client.get("/api/asset-stats/GC=F")
+    resp_custom = client.get("/api/asset-stats/GC=F?zscore_window=90")
+    assert resp_default.status_code == 200
+    assert resp_custom.status_code == 200
+    assert resp_custom.json()["zscore_60d"] != resp_default.json()["zscore_60d"]
+
+
+def test_asset_stats_api_accepts_custom_ma_windows(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp = client.get("/api/asset-stats/GC=F?ma_windows=10,100")
+    assert resp.status_code == 200
+    assert set(resp.json()["moving_averages"].keys()) == {"10", "100"}
+
+
+def test_asset_stats_api_accepts_custom_long_windows_bars(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp = client.get("/api/asset-stats/GC=F?long_windows_bars=5,15")
+    assert resp.status_code == 200
+    assert set(resp.json()["long_window_returns"].keys()) == {"5", "15"}
+
+
+def test_asset_stats_api_rejects_non_positive_zscore_window(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp = client.get("/api/asset-stats/GC=F?zscore_window=0")
+    assert resp.status_code == 400
+
+
+def test_asset_stats_api_rejects_excessive_zscore_window(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp = client.get("/api/asset-stats/GC=F?zscore_window=999999")
+    assert resp.status_code == 400
+
+
+def test_asset_stats_api_rejects_malformed_ma_windows(monkeypatch):
+    monkeypatch.setattr(market_data, "price_history", _fake_price_history)
+    client = TestClient(app)
+    resp = client.get("/api/asset-stats/GC=F?ma_windows=20,abc")
+    assert resp.status_code == 400

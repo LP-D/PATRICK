@@ -55,6 +55,23 @@
 <section class="card" style="--enter-delay:100ms">
 <h2>{{ t('portfolio_contradictions_title') }}</h2>
 <p class="hint">{{ t('portfolio_contradictions_subtitle') }}</p>
+
+{# flexibility-gaps Gap 6: GET form directly on this page (not /launch --
+   this page has no relationship to a RunConfig, see portfolio_page's own
+   docstring) -- same "read-only, GET, bookmarkable" pattern as /runs'
+   scheme filter. One symbol_a:symbol_b:sens pair per line; pre-filled with
+   whichever set (default or custom) actually produced the table below via
+   tracking.portfolio.format_correlated_pairs, so a reload always reflects
+   what is currently active, never the 3 hardcoded defaults regardless of
+   what was submitted. #}
+<form method="get" action="/portfolio" class="filter-bar">
+    <label>{{ t('portfolio_pairs_label') or 'Paires corrélées (une par ligne, symbol_a:symbol_b:sens)' }}
+        <textarea name="pairs" rows="4" cols="48" class="pk-mono">{{ pairs_text }}</textarea>
+    </label>
+    <button type="submit">{{ t('portfolio_pairs_apply') or 'Appliquer' }}</button>
+</form>
+<p class="hint">{{ t('portfolio_pairs_hint') or 'sens : positive ou negative. Champ vide ou non modifié = les 3 paires par défaut (DXY/EUR-USD, WTI/Brent, S&P500/VIX).' }}</p>
+
 {% if not overview.contradictions %}
 {{ empty_state(t('portfolio_no_contradiction')) }}
 {% else %}

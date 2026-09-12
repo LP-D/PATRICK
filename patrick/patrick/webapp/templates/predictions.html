@@ -9,7 +9,7 @@
 </nav>
 
 <h1 class="page-title">{{ t('nav_predictions') or 'Prédictions' }}</h1>
-<p class="page-subtitle">Vue d'ensemble de l'univers réduit — dernier signal disponible par cible et par horizon, avec sa significativité Diebold-Mariano (même seuil "ok" si p&lt;0,05 que sur la page d'un run). Lecture seule, recalculée à chaque chargement, aucun nouveau calcul de modèle.</p>
+<p class="page-subtitle">Vue d'ensemble de l'univers réduit — dernier signal disponible par cible et par horizon, avec sa significativité Diebold-Mariano (même seuil "ok" si p&lt;{{ ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') }} que sur la page d'un run). Lecture seule, recalculée à chaque chargement, aucun nouveau calcul de modèle.</p>
 <p class="page-subtitle">Colonne <b>Fiabilité live</b> (Phase 3, suivi prédiction → réalisé) : taux de réussite directionnel (hit rate) sur les {{ live_hit_rate_window }} dernières prédictions <code>live</code> dont l'issue réelle est déjà connue (backfill automatique une fois l'horizon écoulé) — distinct du backtest ci-dessus, c'est la trace réellement observée en conditions réelles. Badge d'alerte si le taux passe sous {{ '%.0f' | format(live_hit_rate_warning_threshold * 100) }}% (pire qu'un tirage aléatoire pour un appel directionnel binaire), affiché seulement à partir de 10 observations résolues (sinon "pas assez de recul") — même seuil de fiabilité que les autres colonnes par direction de cette page.</p>
 
 {% set ns = namespace(total=0, with_pred=0) %}
@@ -35,7 +35,7 @@
         {% if r.direction %}
             {% set dir_cell = status_badge(r.direction, 'ok' if r.direction == 'UP' else 'warning') %}
             {% if r.dm_p_value is not none %}
-                {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < 0.05 else 'warning') %}
+                {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < dm_significance_alpha else 'warning') %}
             {% else %}
                 {% set sig_cell = status_badge('en attente', 'neutral') %}
             {% endif %}
