@@ -560,6 +560,31 @@ def cleanup_legacy_ticker_runs(conn: sqlite3.Connection) -> int:
     return count
 
 
+def list_legacy_ticker_runs(conn: sqlite3.Connection) -> list[dict]:
+    """Read-only preview of every `run` row -- ANY status, unlike
+    `cleanup_legacy_ticker_runs` above -- whose `target` is outside the
+    current reduced universe (`config.defaults.DEFAULT_TARGET_CHOICES`).
+    Deliberately makes no distinction between 'running'/'pending' (orphans)
+    and 'done'/'failed' (legitimate historical results, per this module's
+    own documented policy above): deciding whether/how to act on the
+    'done'/'failed' rows is a separate, harder call than this cleanup's --
+    this only surfaces what exists so that call can be made deliberately,
+    on real counts, rather than blind."""
+    from patrick.config.defaults import DEFAULT_TARGET_CHOICES
+
+    valid_targets = {symbol for symbol, _label, _source in DEFAULT_TARGET_CHOICES}
+
+    rows = conn.execute(
+        "SELECT run_id, target, status, started_at, finished_at FROM run"
+    ).fetchall()
+    return [
+        {"run_id": run_id, "target": target, "status": status,
+         "started_at": started_at, "finished_at": finished_at}
+        for run_id, target, status, started_at, finished_at in rows
+        if target not in valid_targets
+    ]
+
+
 _RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",
                 "git_sha", "seed", "lib_versions", "status", "started_at", "finished_at",
                 "n_trials", "error", "job_id"]

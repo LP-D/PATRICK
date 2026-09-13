@@ -137,3 +137,31 @@ def test_cleanup_mixed_scenario_only_touches_running_legacy_rows(tmp_path, monke
     remaining = conn.execute("SELECT target FROM run WHERE status IN ('running', 'pending')").fetchall()
     assert all(t[0] in _VALID_TARGETS for t in remaining)
     conn.close()
+
+
+def test_list_legacy_ticker_runs_is_read_only_and_covers_every_status(tmp_path, monkeypatch):
+    """Read-only preview (no mutation) of every `run` row referencing a
+    ticker outside `DEFAULT_TARGET_CHOICES`, regardless of status --
+    deliberately broader than `cleanup_legacy_ticker_runs` (running/pending
+    only): this is the inspection step a hard-delete decision must be based
+    on, so it must surface `done`/`failed` rows too, even though those are
+    documented above (`test_cleanup_leaves_finished_legacy_target_runs_untouched`)
+    as legitimate historical results that `cleanup_legacy_ticker_runs` itself
+    must never touch."""
+    db_path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
+    conn = trackdb.connect(db_path)
+
+    _insert_run(conn, "legacy_running", _LEGACY_TARGET, "running")
+    _insert_run(conn, "legacy_done", _LEGACY_TARGET, "done")
+    _insert_run(conn, "legacy_failed", _LEGACY_TARGET, "failed", error="old failure")
+    _insert_run(conn, "valid_done", _VALID_TARGET, "done")
+
+    preview = trackdb.list_legacy_ticker_runs(conn)
+
+    assert {row["run_id"] for row in preview} == {"legacy_running", "legacy_done", "legacy_failed"}
+    # Read-only: statuses/targets unchanged, nothing deleted or mutated.
+    assert _status_and_error(conn, "legacy_running")[0] == "running"
+    assert _status_and_error(conn, "legacy_done")[0] == "done"
+    assert conn.execute("SELECT count(*) FROM run").fetchone()[0] == 4
+    conn.close()
