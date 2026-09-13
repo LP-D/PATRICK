@@ -105,6 +105,63 @@ def test_cross_sectional_momentum_skips_groups_with_too_few_members():
     assert out.empty  # only 2 of the ~20 commodity tickers present
 
 
+def test_cross_sectional_momentum_default_windows_now_include_long_horizons():
+    """Chantier (feature/cross-sectional-momentum-long-horizon): the default
+    lookback set must be EXTENDED to include 252/504/756d (long horizons),
+    not replaced -- the existing 22/66d (short/medium) stay, since nothing
+    asked for those to be dropped."""
+    assert set(guida.CROSS_SECTIONAL_MOMENTUM_WINDOWS) >= {22, 66, 252, 504, 756}
+
+
+def test_cross_sectional_momentum_756d_ranks_three_synthetic_commodities():
+    """Same hand-computed ranking logic as the 5d test above
+    (test_cross_sectional_momentum_ranks_three_synthetic_commodities), at
+    the new 756d (long/~3y) lookback -- confirms the extended default
+    windows actually produce a correct ranking, not just a longer tuple.
+    Uses the DEFAULT windows (no explicit `windows=` override) so this
+    fails if 756 is missing from `CROSS_SECTIONAL_MOMENTUM_WINDOWS`."""
+    idx = pd.bdate_range("2020-01-01", periods=757)
+    flat = [100.0] * 756
+    raw = pd.DataFrame({
+        "GC=F": flat + [110.0],   # +10% over 756d
+        "SI=F": flat + [105.0],   # +5%
+        "HG=F": flat + [95.0],    # -5%
+    }, index=idx)
+
+    out = guida.cross_sectional_momentum_features(raw)
+    last = out.iloc[-1]
+    assert last["GC=F_xsect_mom_756d_estimated"] == pytest.approx(1.0)
+    assert last["SI=F_xsect_mom_756d_estimated"] == pytest.approx(2 / 3)
+    assert last["HG=F_xsect_mom_756d_estimated"] == pytest.approx(1 / 3)
+
+
+def test_cross_sectional_momentum_never_includes_macro_fx_or_crypto_columns():
+    """Regression guard for the group restriction (commodities only,
+    `guida.py`'s own module docstring on why Devises/Crypto/Macro are
+    excluded): mixes 3 real commodity tickers with one FX ("EURUSD=X") and
+    one crypto ("BTC-USD") column -- would fail if either group leaked
+    into the ranking via a future edit to `_commodity_columns` or the
+    windows extension above."""
+    idx = pd.bdate_range("2020-01-01", periods=6)
+    raw = pd.DataFrame({
+        "GC=F": [100, 100, 100, 100, 100, 110.0],
+        "SI=F": [100, 100, 100, 100, 100, 105.0],
+        "HG=F": [100, 100, 100, 100, 100, 95.0],
+        "EURUSD=X": [1.10, 1.10, 1.10, 1.10, 1.10, 1.30],
+        "BTC-USD": [30000.0, 30000, 30000, 30000, 30000, 45000],
+    }, index=idx)
+
+    out = guida.cross_sectional_momentum_features(raw, windows=[5])
+
+    assert not any(col.startswith("EURUSD=X") for col in out.columns)
+    assert not any(col.startswith("BTC-USD") for col in out.columns)
+    assert set(out.columns) == {
+        "GC=F_xsect_mom_5d_estimated",
+        "SI=F_xsect_mom_5d_estimated",
+        "HG=F_xsect_mom_5d_estimated",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Carry (EUR/USD only, estimated)
 # ---------------------------------------------------------------------------
