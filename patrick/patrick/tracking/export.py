@@ -26,7 +26,18 @@ from patrick.selection.registry import select_features
 
 def export_best_model(pool, target_col: str, feature_pool: list[str], config: RunConfig,
                        best_cfg: dict, out_dir: str, seed: int = 42,
-                       interaction_formulas: list[str] | None = None) -> str:
+                       interaction_formulas: list[str] | None = None,
+                       conn=None, symbol: str | None = None) -> str:
+    """`conn`/`symbol` (feature/drift-psi-infrastructure): when both are
+    given, persists a PSI reference (`validation.drift.decile_reference`)
+    for every SELECTED feature, keyed by (symbol, horizon, feature) --
+    REPLACED at each call, never accumulated (`tracking.db.save_drift_reference`
+    is an upsert), since a feature's reference is only meaningful as of the
+    LATEST training window. Uses the RAW (pre-`RobustScaler`) training-window
+    values already computed below for the real fit -- no second feature
+    pass, no parallel data path. Optional and backward compatible: omitted
+    (the default), this function's behavior is unchanged from before this
+    parameter existed."""
     horizon = int(best_cfg["horizon"])
     regime = best_cfg["regime"]
     n_feat = int(best_cfg["N"])
@@ -58,6 +69,15 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
         Xr, yr = X_n, y
     clf = get_classifier(algo, seed=seed, **best_params)
     clf.fit(Xr, yr)
+
+    if conn is not None and symbol is not None:
+        from patrick.tracking import db as trackdb
+        from patrick.validation.drift import decile_reference
+
+        raw_feature_values = X_pool_df[feat_names].values[sel]  # pre-scaling, matches on-demand reconstruction
+        for i, feature in enumerate(feat_names):
+            reference = decile_reference(raw_feature_values[:, i])
+            trackdb.save_drift_reference(conn, symbol, horizon, feature, reference)
 
     os.makedirs(out_dir, exist_ok=True)
     # Fix report [per-horizon export]: horizon is always part of the filename

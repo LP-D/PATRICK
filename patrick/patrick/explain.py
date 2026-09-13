@@ -62,11 +62,16 @@ from patrick.pipeline.engine import (
     build_parametric_pool,
 )
 from patrick.tracking import db as trackdb
+from patrick.validation import drift
 
 # `features/target.py::build_target`'s class order (0..3), spelled out here
 # once for display purposes -- that module fixes the mapping, this one only
 # names it.
 CLASS_NAMES = ["DOWN_FORT", "DOWN_FAIBLE", "UP_FAIBLE", "UP_FORT"]
+
+# Same order-of-magnitude minimum sample as `tracking.history.LIVE_HIT_RATE_WINDOW`:
+# below this many recent reconstructed rows, a PSI read is noise, not signal.
+DRIFT_RECENT_WINDOW = 30
 
 
 def _find_best_trial_for_horizon(conn: sqlite3.Connection, target: str, horizon: int) -> dict | None:
@@ -195,5 +200,77 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             "base_value": base_value, "final_value": final_value,
             "contributions": contributions, "n_features_total": len(feature_names),
         }
+    finally:
+        conn.close()
+
+
+def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | None = None,
+                                      store: DataStore | None = None,
+                                      recent_window: int = DRIFT_RECENT_WINDOW) -> dict | None:
+    """On-demand data-drift (PSI) check for one (target, horizon) -- ONLY
+    ever called for a single pair on an explicit user action (a
+    `/predictions` card click, a `/targets/{ticker}` page load), never
+    looped over the full ticker list: this rebuilds the ENTIRE feature
+    pool from cached raw data, the same non-trivial cost
+    `explain_last_prediction`'s own docstring measures at ~33s for a real
+    universe -- an unconditional per-page-load loop over every ticker
+    would multiply that by the universe size for no reason a single view
+    ever needs.
+
+    Reuses `_find_best_trial_for_horizon` and the EXACT SAME feature-
+    reconstruction path as `explain_last_prediction` (`ingest(force=False)`
+    + `build_base_feature_pool`/`build_parametric_pool`) -- no parallel
+    data path. Compares the last `recent_window` reconstructed rows
+    against the reference persisted at training time
+    (`tracking.export.export_best_model`, via `tracking.db.save_drift_reference`
+    -- migration 0018) for each of the model's SELECTED features, appends
+    one `drift_psi_history` row per feature (`tracking.db.record_drift_psi`),
+    and returns `{feature: {"psi": ..., "status": ...}}`.
+
+    Returns `None` when there is no exported model, no persisted reference
+    for ANY feature yet (never trained through the drift-aware export
+    path), or fewer than `recent_window` usable reconstructed rows."""
+    conn = trackdb.connect(db_path)
+    try:
+        best = _find_best_trial_for_horizon(conn, target, horizon)
+        if best is None:
+            return None
+
+        bundle = joblib.load(best["artifact_path"])
+        feature_names = bundle["feature_names"]
+        interaction_formulas = bundle.get("interaction_formulas", [])
+        target_col = bundle["target_col"]
+
+        run = trackdb.get_run(conn, best["run_id"])
+        config = RunConfig.model_validate_json(run["config_json"])
+        store = store or DataStore()
+        raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
+
+        base_pool = build_base_feature_pool(raw, config, target_col)
+        full_pool = pd.concat([base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
+        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
+        if interaction_formulas:
+            inter = _apply_interaction_formulas(full_pool, interaction_formulas)
+            full_pool = pd.concat([full_pool, inter], axis=1)
+
+        missing = [c for c in feature_names if c not in full_pool.columns]
+        if missing:
+            return None
+
+        recent = full_pool[feature_names].dropna()
+        if len(recent) < recent_window:
+            return None
+        recent = recent.tail(recent_window)
+
+        results = {}
+        for feature in feature_names:
+            reference = trackdb.get_drift_reference(conn, target, horizon, feature)
+            if reference is None:
+                continue
+            psi = drift.psi_from_reference(reference, recent[feature].to_numpy())
+            status = drift.data_drift_status(psi)
+            trackdb.record_drift_psi(conn, target, horizon, feature, psi)
+            results[feature] = {"psi": psi, "status": status}
+        return results or None
     finally:
         conn.close()

@@ -63,26 +63,54 @@ PAGE_HINKLEY_LAMBDA = 5.0
 def population_stability_index(expected: Sequence[float], actual: Sequence[float],
                                 bins: int = 10) -> float:
     """PSI of `actual` against a `bins`-quantile binning derived from
-    `expected` (the reference distribution) -- the standard formula,
-    `sum((actual_pct - expected_pct) * ln(actual_pct / expected_pct))` over
-    bins. Bin edges come from `expected`'s own quantiles (not a fixed
-    range) so each reference bin holds an equal share of the reference
-    sample by construction; the outermost edges are widened to +/-inf so a
-    genuinely shifted `actual` sample (outside the reference's observed
-    range) still lands in the extreme bin instead of being silently
-    dropped by `np.histogram`."""
+    `expected` (the reference distribution). One-shot convenience wrapper
+    around `decile_reference` + `psi_from_reference` for callers that have
+    both raw samples in hand and no reason to persist the reference (e.g.
+    a single ad hoc comparison, or this module's own tests) -- production
+    on-demand monitoring persists the reference once (`decile_reference`,
+    written at fit time by `tracking.export.export_best_model`) and reuses
+    it via `psi_from_reference` without ever re-touching the raw training
+    sample again."""
+    reference = decile_reference(expected, bins=bins)
+    return psi_from_reference(reference, actual)
+
+
+def decile_reference(expected: Sequence[float], bins: int = 10) -> dict:
+    """The PERSISTABLE form of a PSI reference: `bins`-quantile bin edges
+    derived from `expected`, plus `expected`'s own proportion in each bin
+    -- small and fixed-size regardless of the training sample's length, so
+    it can be stored (`tracking.db.save_drift_reference`, migration 0018)
+    without ever needing to keep the raw training sample around. Edges are
+    widened to +/-inf at the extremes so a genuinely shifted future sample
+    (outside the reference's observed range) still lands in the extreme
+    bin instead of being silently dropped by `np.histogram`."""
     expected = np.asarray(expected, dtype=float)
-    actual = np.asarray(actual, dtype=float)
     quantiles = np.linspace(0, 100, bins + 1)
     breakpoints = np.unique(np.percentile(expected, quantiles))
     if len(breakpoints) < 3:
-        return 0.0  # degenerate (near-constant) reference distribution -- no meaningful PSI
-    breakpoints[0] = -np.inf
-    breakpoints[-1] = np.inf
-
+        # Degenerate (near-constant) reference distribution -- a single
+        # catch-all bin makes psi_from_reference return 0.0 rather than
+        # dividing by a zero-count bin.
+        breakpoints = np.array([-np.inf, np.inf])
+    else:
+        breakpoints = breakpoints.copy()
+        breakpoints[0] = -np.inf
+        breakpoints[-1] = np.inf
     expected_counts, _ = np.histogram(expected, bins=breakpoints)
-    actual_counts, _ = np.histogram(actual, bins=breakpoints)
     expected_pct = expected_counts / expected_counts.sum()
+    return {"edges": breakpoints.tolist(), "expected_pct": expected_pct.tolist()}
+
+
+def psi_from_reference(reference: dict, actual: Sequence[float]) -> float:
+    """PSI of `actual` against a persisted `decile_reference(...)` result --
+    the standard formula, `sum((actual_pct - expected_pct) * ln(actual_pct
+    / expected_pct))` over the reference's own bins. Never touches the
+    original training sample: everything needed lives in `reference`."""
+    actual = np.asarray(actual, dtype=float)
+    edges = np.asarray(reference["edges"], dtype=float)
+    expected_pct = np.asarray(reference["expected_pct"], dtype=float)
+
+    actual_counts, _ = np.histogram(actual, bins=edges)
     actual_pct = actual_counts / actual_counts.sum()
 
     eps = 1e-4  # avoids log(0)/division-by-zero on an empty bin, standard PSI convention
