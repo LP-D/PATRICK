@@ -585,6 +585,35 @@ def list_legacy_ticker_runs(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def archive_legacy_ticker_runs(conn: sqlite3.Connection) -> int:
+    """Archives (`is_archived = 1`, migration 0018) -- NEVER deletes --
+    every `run` row (any status) referencing a ticker outside the current
+    reduced universe. Chosen over a hard DELETE: on the real production
+    DB, every single one of these rows is `done`/`failed`, which this
+    module's own documented policy (`cleanup_legacy_ticker_runs`'s
+    docstring, `test_cleanup_leaves_finished_legacy_target_runs_untouched`)
+    already treats as legitimate historical results that must never be
+    rewritten. Archiving hides them from the default-view listings
+    (`list_all_runs`/`list_done_runs`) without touching status/error/any
+    other column, and leaves the FK-cascade chain (trial/fold_metric/
+    prediction/...) completely untouched -- reversible, unlike a DELETE.
+    Idempotent: only rows not already archived are counted/touched."""
+    from patrick.config.defaults import DEFAULT_TARGET_CHOICES
+
+    valid_targets = {symbol for symbol, _label, _source in DEFAULT_TARGET_CHOICES}
+
+    rows = conn.execute("SELECT run_id, target FROM run WHERE is_archived = 0").fetchall()
+    to_archive = [run_id for run_id, target in rows if target not in valid_targets]
+    if not to_archive:
+        return 0
+    with conn:
+        conn.executemany(
+            "UPDATE run SET is_archived = 1 WHERE run_id = ?",
+            [(run_id,) for run_id in to_archive],
+        )
+    return len(to_archive)
+
+
 _RUN_COLUMNS = ["run_id", "target", "horizon", "snapshot_id", "config_json", "config_hash",
                 "git_sha", "seed", "lib_versions", "status", "started_at", "finished_at",
                 "n_trials", "error", "job_id"]
@@ -597,17 +626,27 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
-def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
+def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
     """All runs, most recent first — for exploratory surfaces (Phase 5).
     Includes `scheme`/`best_f1_dir`/`dm_p_value` (same queries as
     `tracking.history.list_runs`, duplicated here rather than imported:
     `db.py` is the low-level layer, `history.py` depends on it, not the
     other way around) -- `runs.html` displays them directly (`r.scheme`,
-    `r.best_f1_dir`, `r.dm_p_value`)."""
-    rows = conn.execute(
-        "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials "
-        "FROM run ORDER BY started_at DESC",
-    ).fetchall()
+    `r.best_f1_dir`, `r.dm_p_value`).
+
+    `include_archived` (chore/db-cleanup-legacy-tickers, migration 0018):
+    this is the one genuinely unconditional "every run" listing in the
+    codebase, so it is the one that needs to hide `is_archived` rows by
+    default -- `archive_legacy_ticker_runs`'s report covers why archiving
+    (not deleting) was chosen. `/predictions`/`/portfolio` need no
+    equivalent change: both build their queries from the CURRENT universe
+    (`config.defaults.DEFAULT_TARGET_GROUPS`), never from `run` directly,
+    so a legacy-ticker run was already invisible there."""
+    query = "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials FROM run"
+    if not include_archived:
+        query += " WHERE is_archived = 0"
+    query += " ORDER BY started_at DESC"
+    rows = conn.execute(query).fetchall()
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
         name, scheme = None, "walkforward"
@@ -639,13 +678,15 @@ def list_all_runs(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
-def list_done_runs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+def list_done_runs(conn: sqlite3.Connection, limit: int = 50, include_archived: bool = False) -> list[dict]:
     """Finished runs (`status='done'`), most recent first -- feeds the
-    simulator's run selector (Phase 4.7)."""
-    rows = conn.execute(
-        "SELECT run_id, target, horizon, started_at, finished_at, config_json "
-        "FROM run WHERE status = 'done' ORDER BY started_at DESC LIMIT ?", (limit,),
-    ).fetchall()
+    simulator's run selector (Phase 4.7). `include_archived`: see
+    `list_all_runs`'s docstring."""
+    query = "SELECT run_id, target, horizon, started_at, finished_at, config_json FROM run WHERE status = 'done'"
+    if not include_archived:
+        query += " AND is_archived = 0"
+    query += " ORDER BY started_at DESC LIMIT ?"
+    rows = conn.execute(query, (limit,)).fetchall()
     out = []
     for run_id, target, horizon, started_at, finished_at, config_json in rows:
         name = None

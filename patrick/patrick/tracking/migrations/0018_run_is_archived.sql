@@ -1,0 +1,12 @@
+-- Chantier chore/db-cleanup-legacy-tickers -- archive-in-place instead of
+-- hard-delete for `run` rows referencing a ticker outside the current
+-- reduced universe (`config.defaults.DEFAULT_TARGET_CHOICES`). See
+-- `db.py::archive_legacy_ticker_runs`/`list_legacy_ticker_runs`: on the
+-- real production DB, every one of these rows is 'done'/'failed' -- this
+-- project's own documented policy (`db.py::cleanup_legacy_ticker_runs`'s
+-- docstring) treats those as legitimate historical results that must
+-- never be rewritten/destroyed. `is_archived` hides them from default
+-- (active) listings without deleting anything -- reversible, unlike a
+-- DELETE, and the FK-cascade chain (trial/fold_metric/prediction/...)
+-- stays completely untouched either way.
+ALTER TABLE run ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
