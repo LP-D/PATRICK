@@ -1390,7 +1390,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             t_export_model_start = time.time()
             h_model_path = export_best_model(full_pool, target_col, feature_pool, config,
                                               best_h, config.output.dir, seed=seed,
-                                              interaction_formulas=interaction_formulas)
+                                              interaction_formulas=interaction_formulas,
+                                              conn=conn, symbol=config.objective.target_symbol)
             t_export_model_end = time.time()
             trackdb.record_phase_timing(conn, run_ids[horizon], "export",
                                          t_export_model_start, t_export_model_end)

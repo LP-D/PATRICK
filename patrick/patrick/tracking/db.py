@@ -282,6 +282,67 @@ def save_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: st
         )
 
 
+def save_drift_reference(conn: sqlite3.Connection, symbol: str, horizon: int, feature: str,
+                          reference: dict) -> None:
+    """Persists (migration 0018) a `validation.drift.decile_reference(...)`
+    result for (symbol, horizon, feature) -- REPLACED, not accumulated, at
+    each re-fit (`tracking.export.export_best_model`): a feature's
+    reference distribution is only meaningful as of the LATEST training
+    window, an older one would silently keep comparing against stale
+    data."""
+    with conn:
+        conn.execute(
+            "INSERT INTO drift_feature_reference (symbol, horizon, feature, reference_json, computed_at) "
+            "VALUES (?, ?, ?, ?, datetime('now')) "
+            "ON CONFLICT(symbol, horizon, feature) DO UPDATE SET "
+            "reference_json = excluded.reference_json, computed_at = excluded.computed_at",
+            (symbol, horizon, feature, json.dumps(reference)),
+        )
+
+
+def get_drift_reference(conn: sqlite3.Connection, symbol: str, horizon: int,
+                         feature: str) -> dict | None:
+    row = conn.execute(
+        "SELECT reference_json FROM drift_feature_reference "
+        "WHERE symbol = ? AND horizon = ? AND feature = ?",
+        (symbol, horizon, feature),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def record_drift_psi(conn: sqlite3.Connection, symbol: str, horizon: int, feature: str,
+                      psi: float) -> None:
+    """Appends one row to the PSI history -- the one legitimate
+    accumulating time series in this module's drift-monitoring tables
+    (`drift_feature_reference` above is a point-in-time reference,
+    replaced not accumulated). Written only on an on-demand computation
+    (`explain.compute_drift_for_ticker_horizon`), never a periodic job."""
+    with conn:
+        conn.execute(
+            "INSERT INTO drift_psi_history (symbol, horizon, feature, computed_at, psi) "
+            "VALUES (?, ?, ?, datetime('now'), ?)",
+            (symbol, horizon, feature, psi),
+        )
+
+
+def list_drift_psi_history(conn: sqlite3.Connection, symbol: str, horizon: int,
+                            feature: str | None = None, limit: int = 100) -> list[dict]:
+    if feature is not None:
+        rows = conn.execute(
+            "SELECT feature, computed_at, psi FROM drift_psi_history "
+            "WHERE symbol = ? AND horizon = ? AND feature = ? "
+            "ORDER BY computed_at DESC LIMIT ?",
+            (symbol, horizon, feature, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT feature, computed_at, psi FROM drift_psi_history "
+            "WHERE symbol = ? AND horizon = ? ORDER BY computed_at DESC LIMIT ?",
+            (symbol, horizon, limit),
+        ).fetchall()
+    return [{"feature": f, "computed_at": ts, "psi": psi} for f, ts, psi in rows]
+
+
 def list_excluded_symbols(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT symbol, reason, excluded_at FROM excluded_symbol ORDER BY excluded_at"
