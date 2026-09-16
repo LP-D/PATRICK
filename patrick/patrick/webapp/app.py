@@ -21,6 +21,7 @@ from patrick.config.schema import RunConfig
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.tracking import hrp as trackhrp
 from patrick.tracking import portfolio as trackportfolio
 from patrick.validation import feasibility
 from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager, shap_chart
@@ -735,11 +736,21 @@ def portfolio_page(request: Request, pairs: str | None = None):
         overview = trackportfolio.portfolio_overview(conn, pairs=parsed_pairs)
     finally:
         conn.close()
+    # CHANTIER D (feature/hrp-portfolio): s'ajoute a la synthese ci-dessus,
+    # ne la remplace pas -- calcul independant (prix caches localement, pas
+    # `latest_predictions_by_target_and_horizon`), echoue silencieusement
+    # vers une liste de poids vide plutot que de faire echouer toute la page
+    # (meme esprit read-only-avec-avertissement que le reste de cette route).
+    try:
+        hrp = trackhrp.hrp_overview()
+    except Exception:
+        hrp = {"weights": None, "skipped": [], "as_of": None, "n_assets": 0}
     return templates.TemplateResponse(
         request, "portfolio.html",
         {
             "overview": overview,
             "pairs_text": trackportfolio.format_correlated_pairs(overview["pairs_used"]),
+            "hrp": hrp,
             **_i18n_context(request),
         },
     )
