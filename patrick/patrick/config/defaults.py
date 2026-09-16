@@ -1,8 +1,20 @@
 """Defaults encoding the lessons learned from the VIX project (README) — can be
 switched on differently, never removed from the code: SHAP beats RFE/LASSO in
-direct testing, stacking loses on 93% of the (horizon, fold) pairs tested in
-walk-forward, DL never beat classical ML, purge has a negligible effect,
+direct testing, DL never beat classical ML, purge has a negligible effect,
 calibration only helps outside STRESS regimes.
+
+Stacking: the VIX-project finding that stacking lost on 93% of (horizon,
+fold) pairs applied to the single always-on `DEFAULT_STACKING_ENABLED`
+toggle below (a meta-model blended into the SAME leaderboard as every other
+candidate, never actually wired into `pipeline/engine.py`). CHANTIER B
+(feature/model-categories-comparison) lifts that blanket commitment: stacking
+is now one of three EXPLICIT, separately-compared model categories (global /
+per-regime / stacking, see `tracking/model_categories.py`), evaluated on its
+own merits per (ticker, horizon) via DM/FDR/PBO against the other two rather
+than assumed to lose a priori. `DEFAULT_STACKING_ENABLED` below still governs
+the legacy single-toggle path (unchanged, still off by default -- the old
+finding still applies to THAT path, which nothing here removes), independent
+of the new category comparison.
 """
 
 DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "CatBoost"]
@@ -178,7 +190,12 @@ DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
 
 # Options disabled by default but wired into the pipeline (not an appendix):
 # purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
-# regime-conditional gain, hurts in STRESS), stacking (VIX_STACKING_WF: loses 28/30).
+# regime-conditional gain, hurts in STRESS). Stacking (VIX_STACKING_WF: lost
+# 28/30 as a single blended toggle) is no longer a blanket "off" verdict --
+# see the module docstring above (CHANTIER B, tracking/model_categories.py):
+# it is now one of three separately-compared categories, not assumed inferior
+# a priori. DEFAULT_STACKING_ENABLED below is unchanged (still gates only the
+# legacy single-toggle path, still off by default).
 DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
 DEFAULT_STACKING_ENABLED = False
