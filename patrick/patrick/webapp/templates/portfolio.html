@@ -90,4 +90,28 @@
               footer=(overview.contradictions | length) ~ " contradiction(s) détectée(s) sur " ~ (overview.groups | length) ~ " catégorie(s) suivie(s).") }}
 {% endif %}
 </section>
+
+{# CHANTIER D (feature/hrp-portfolio) -- s'ajoute a la detection de
+   contradiction ci-dessus, ne la remplace pas. Poids HRP (Hierarchical Risk
+   Parity, Lopez de Prado) calcules a partir des prix DEJA en cache
+   localement (jamais de telechargement depuis cette page en lecture
+   seule) -- tracking.hrp.hrp_overview(). #}
+<section class="card" style="--enter-delay:140ms">
+<h2>{{ t('portfolio_hrp_title') or 'Répartition HRP (Hierarchical Risk Parity)' }}</h2>
+<p class="hint">{{ t('portfolio_hrp_hint') or 'Pondération par parité de risque hiérarchique : regroupe les actifs par similarité de corrélation (clustering) puis répartit le risque entre clusters plutôt qu\'entre actifs individuels — pas de rendement espéré requis, et contrairement à une optimisation Markowitz classique, jamais de concentration extrême sur une matrice de corrélation quasi-singulière (actifs très corrélés entre eux).' }}</p>
+
+{% if not hrp.weights is defined or hrp.weights is none or hrp.n_assets == 0 %}
+{{ empty_state("Historique de prix insuffisant en cache local pour calculer une répartition HRP.", "Lance au moins un run sur plusieurs tickers de l'univers pour peupler le cache.") }}
+{% else %}
+{% set hrp_rows = [] %}
+{% for symbol, weight in hrp.weights.items() %}
+{% set _ = hrp_rows.append([
+    '<a href="/targets/' ~ symbol ~ '">' ~ symbol ~ '</a>',
+    "%.1f%%" | format(weight * 100),
+]) %}
+{% endfor %}
+{{ data_table(["Actif", "Poids HRP"], hrp_rows, num_cols=[1],
+              footer=(hrp.n_assets) ~ " actif(s) pris en compte" ~ (" ; " ~ (hrp.skipped | length) ~ " écarté(s) (historique insuffisant ou absent du cache)." if hrp.skipped else ".")) }}
+{% endif %}
+</section>
 {% endblock %}
