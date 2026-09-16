@@ -248,6 +248,22 @@
             <label>{{ t('field_embargo_bars') }}
                 <input type="number" name="embargo_bars" value="{{ view.embargo_bars or '' }}">
             </label>
+            <label class="checkbox">
+                <input type="checkbox" name="regime_detection_enabled" {% if view.regime_detection_enabled %}checked{% endif %}>
+                {{ t('field_regime_detection_enabled') }}{{ info('regime_detection_enabled') }}
+            </label>
+            <label>{{ t('field_regime_threshold_mode') }}{{ info('regime_threshold_mode') }}
+                <select name="regime_threshold_mode">
+                    <option value="quantile" {% if view.regime_threshold_mode == 'quantile' %}selected{% endif %}>{{ t('regime_threshold_mode_quantile') }}</option>
+                    <option value="fixed" {% if view.regime_threshold_mode == 'fixed' %}selected{% endif %}>{{ t('regime_threshold_mode_fixed') }}</option>
+                </select>
+            </label>
+            <label>{{ t('field_regime_threshold_lo') }}
+                <input type="number" step="0.01" min="0" max="1" name="regime_threshold_lo" value="{{ view.regime_threshold_values[0] }}">
+            </label>
+            <label>{{ t('field_regime_threshold_hi') }}
+                <input type="number" step="0.01" min="0" max="1" name="regime_threshold_hi" value="{{ view.regime_threshold_values[1] }}">
+            </label>
             </div>
         </details>
 

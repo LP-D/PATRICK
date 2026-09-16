@@ -26,6 +26,8 @@ TERM_LABEL_KEYS: dict[str, str] = {
     "uniqueness_weights": "field_uniqueness_weights",
     "calibration": "field_calibration",
     "stacking": "field_stacking",
+    "regime_detection_enabled": "field_regime_detection_enabled",
+    "regime_threshold_mode": "field_regime_threshold_mode",
     "tuning_enabled": "field_enabled",
     "optuna_select_top_k_per_horizon": "field_optuna_select_top_k_per_horizon",
 }
@@ -393,6 +395,26 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "modèle individuel."),
         "en": ("Stacking: combines several models' predictions via a meta-model "
                "trained on top, instead of keeping the best individual model."),
+    },
+    "regime_detection_enabled": {
+        "fr": ("Détecte le régime de volatilité courant (calme/normal/stress) via un "
+               "HMM causal (filtre en avant seulement, jamais lissé avec le futur). "
+               "Le nombre d'états internes est choisi automatiquement par BIC/AIC."),
+        "en": ("Detects the current volatility regime (calm/normal/stress) via a "
+               "causal HMM (forward-only filter, never smoothed with the future). "
+               "The internal number of states is auto-selected via BIC/AIC."),
+    },
+    "regime_threshold_mode": {
+        "fr": ("Comment la probabilité filtrée de régime est convertie en 3 "
+               "catégories : « quantile » utilise des coupures relatives à "
+               "l'historique d'entraînement (ex. 33e/67e percentile) ; « valeur "
+               "fixe » utilise directement les 2 valeurs saisies ci-dessous, "
+               "quelle que soit la distribution observée."),
+        "en": ("How the filtered regime probability is converted into 3 "
+               "categories: \"quantile\" uses cutoffs relative to the training "
+               "history (e.g. 33rd/67th percentile); \"fixed value\" uses the 2 "
+               "values entered below directly, regardless of the observed "
+               "distribution."),
     },
     "tuning_enabled": {
         "fr": ("Tuning Optuna : affine automatiquement les hyperparamètres "
