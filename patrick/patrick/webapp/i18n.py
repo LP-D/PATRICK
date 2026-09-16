@@ -178,6 +178,13 @@ STRINGS: dict[str, dict[str, str]] = {
                                "en": "Embargo (removes the first test rows after the cut)"},
     "field_embargo_bars": {"fr": "Barres d'embargo (vide = horizon)",
                             "en": "Embargo bars (blank = horizon)"},
+    # CHANTIER A (feature/regime-detection-hmm)
+    "field_regime_detection_enabled": {"fr": "Détection de régime (HMM)", "en": "Regime detection (HMM)"},
+    "field_regime_threshold_mode": {"fr": "Mode de seuillage du régime", "en": "Regime threshold mode"},
+    "regime_threshold_mode_quantile": {"fr": "Quantile (relatif à l'historique)", "en": "Quantile (relative to history)"},
+    "regime_threshold_mode_fixed": {"fr": "Valeur fixe (absolue)", "en": "Fixed value (absolute)"},
+    "field_regime_threshold_lo": {"fr": "Seuil bas (calme / normal)", "en": "Low threshold (calm / normal)"},
+    "field_regime_threshold_hi": {"fr": "Seuil haut (normal / stress)", "en": "High threshold (normal / stress)"},
 
     "section_selection": {"fr": "Sélection de features", "en": "Feature selection"},
     "field_method": {"fr": "Méthode", "en": "Method"},

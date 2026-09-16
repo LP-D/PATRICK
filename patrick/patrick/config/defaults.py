@@ -193,6 +193,18 @@ DEFAULT_STACKING_ENABLED = False
 DEFAULT_EMBARGO_ENABLED = True
 DEFAULT_EMBARGO_BARS = None  # None -> derived from the current horizon (e = horizon)
 
+# CHANTIER A (feature/regime-detection-hmm) -- HMM-based volatility regime
+# detection (features/regime_detection.py). Off by default like
+# purge/calibration/stacking above: a new research toggle, not yet judged
+# for a default-on switch, never flipped on here. threshold_mode/values
+# follow the dm_alpha/fdr_alpha pattern (exposed, validated query-param-style
+# defaults) rather than being hardcoded inside the detection module itself.
+DEFAULT_REGIME_DETECTION_ENABLED = False
+DEFAULT_REGIME_STATE_CANDIDATES = (2, 3, 4)
+DEFAULT_REGIME_CRITERION = "bic"
+DEFAULT_REGIME_THRESHOLD_MODE = "quantile"  # "quantile" | "fixed"
+DEFAULT_REGIME_THRESHOLD_VALUES = (1 / 3, 2 / 3)
+
 # Phase 3 (feature/hyperparams-lookbacks) -- rolling-window lookbacks for
 # `features/technical.py` (returns/zscore/ma_ratio/rolling_vol/ohlc_vol) used
 # to be fixed FUNCTION-DEFAULT parameters, never threaded through RunConfig

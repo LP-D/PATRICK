@@ -151,6 +151,17 @@ class ValidationConfig(BaseModel):
     baseline_by_asset_class: dict[str, list[str]] = Field(
         default_factory=lambda: dict(D.DEFAULT_BASELINE_BY_ASSET_CLASS)
     )
+    # CHANTIER A (feature/regime-detection-hmm) -- HMM volatility regime
+    # detection (features/regime_detection.py::detect_regime). Off by
+    # default, same stance as purge/calibration/stacking. threshold_mode
+    # ("quantile" derives cutoffs from the train-only distribution of
+    # P(highest-variance state); "fixed" uses threshold_values verbatim as
+    # absolute probability cutoffs) and threshold_values are exposed here
+    # rather than hardcoded, same pattern as dm_alpha/fdr_alpha on the web
+    # routes.
+    regime_detection_enabled: bool = D.DEFAULT_REGIME_DETECTION_ENABLED
+    regime_threshold_mode: Literal["quantile", "fixed"] = D.DEFAULT_REGIME_THRESHOLD_MODE
+    regime_threshold_values: tuple[float, float] = D.DEFAULT_REGIME_THRESHOLD_VALUES
 
 
 class SelectionConfig(BaseModel):

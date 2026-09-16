@@ -89,6 +89,9 @@ def default_config_dict() -> dict:
             "min_train_rows": 100,
             "min_test_rows": 20,
             "holdout_months": D.DEFAULT_HOLDOUT_MONTHS,
+            "regime_detection_enabled": D.DEFAULT_REGIME_DETECTION_ENABLED,
+            "regime_threshold_mode": D.DEFAULT_REGIME_THRESHOLD_MODE,
+            "regime_threshold_values": list(D.DEFAULT_REGIME_THRESHOLD_VALUES),
         },
         "selection": {
             "method": D.DEFAULT_SELECTION_METHOD,
@@ -330,11 +333,19 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         max_robust_z = float(form.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z))
         max_universe_exclusion_frac = float(
             form.get("max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC))
+        default_lo, default_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
+        regime_threshold_lo = float(form.get("regime_threshold_lo", default_lo))
+        regime_threshold_hi = float(form.get("regime_threshold_hi", default_hi))
     except ValueError:
         errors.append("Un champ numérique décimal est invalide.")
         flat_thr, yf_coverage, min_train_frac = D.DEFAULT_FLAT_THR, 0.85, D.DEFAULT_MIN_TRAIN_FRAC
         max_robust_z = D.DEFAULT_QUALITY_MAX_ROBUST_Z
         max_universe_exclusion_frac = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
+        regime_threshold_lo, regime_threshold_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
+
+    if not (0.0 <= regime_threshold_lo < regime_threshold_hi <= 1.0):
+        errors.append("Régime : les seuils doivent vérifier 0 <= bas < haut <= 1.")
+        regime_threshold_lo, regime_threshold_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
 
     try:
         n_groups = int(form.get("n_groups", D.DEFAULT_CPCV_N_GROUPS))
@@ -470,6 +481,9 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "min_train_rows": min_train_rows,
             "min_test_rows": min_test_rows,
             "holdout_months": holdout_months,
+            "regime_detection_enabled": _checked(form, "regime_detection_enabled"),
+            "regime_threshold_mode": form.get("regime_threshold_mode", D.DEFAULT_REGIME_THRESHOLD_MODE),
+            "regime_threshold_values": [regime_threshold_lo, regime_threshold_hi],
         },
         "selection": {
             "method": form.get("selection_method", D.DEFAULT_SELECTION_METHOD),
@@ -554,6 +568,10 @@ def to_view(cfg: dict) -> dict:
         "min_train_rows": val.get("min_train_rows", 100),
         "min_test_rows": val.get("min_test_rows", 20),
         "holdout_months": val.get("holdout_months", D.DEFAULT_HOLDOUT_MONTHS),
+        "regime_detection_enabled": bool(val.get("regime_detection_enabled", False)),
+        "regime_threshold_mode": val.get("regime_threshold_mode", D.DEFAULT_REGIME_THRESHOLD_MODE),
+        "regime_threshold_values": tuple(
+            val.get("regime_threshold_values", D.DEFAULT_REGIME_THRESHOLD_VALUES)),
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),
         "n_features_grid": ",".join(str(n) for n in sel.get("n_features_grid", [])),
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),
