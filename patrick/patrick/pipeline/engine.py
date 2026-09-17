@@ -397,7 +397,19 @@ class _FoldContext:
         self.fold_cuts = fold_cuts
 
     def prepare(self, horizon: int, fold_idx: int, regime: str,
-                want_baselines: bool = False) -> FoldData | None:
+                want_baselines: bool = False,
+                external_regime_series: pd.Series | None = None) -> FoldData | None:
+        """`external_regime_series` (CHANTIER B, feature/model-categories-
+        comparison): when provided, `regime` is matched against THIS series
+        instead of the CALM/NORMAL/STRESS price-level classifier
+        `build_target` computes internally (`reg_r` below) -- a DIFFERENT,
+        pre-existing regime concept (quantiles of the price LEVEL, not the
+        causal HMM volatility regime of `features/regime_detection.py`).
+        `None` (every existing call site, unchanged) preserves the exact
+        original behavior -- this parameter is purely additive. Rows where
+        `external_regime_series` is NaN (e.g. not enough history yet for the
+        HMM to have produced a label) are excluded from both train and test,
+        never silently included in either."""
         cfg = self.config
         cut, nxt = self.fold_cuts[fold_idx], self.fold_cuts[fold_idx + 1]
         cut_date, nxt_date = self.all_dates[cut], self.all_dates[nxt - 1]
@@ -408,8 +420,14 @@ class _FoldContext:
         idx = target_series.index
         tr_mask = np.asarray(idx < cut_date)
         te_mask = np.asarray((idx >= cut_date) & (idx <= nxt_date))
-        reg_al = reg_r.reindex(idx).fillna("NORMAL").values
-        sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
+        if external_regime_series is not None:
+            reg_al = external_regime_series.reindex(idx).values
+            # pd.notna guard first: comparing pd.NA/NaN == regime returns
+            # pd.NA (not False), which would corrupt the boolean mask below.
+            sel = np.asarray([bool(pd.notna(r)) and r == regime for r in reg_al])
+        else:
+            reg_al = reg_r.reindex(idx).fillna("NORMAL").values
+            sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
         tr_mask = tr_mask & sel
         te_mask = te_mask & sel
 

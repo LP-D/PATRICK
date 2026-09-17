@@ -70,15 +70,32 @@ def compare_categories(results: dict[str, CategoryResult], dm_h: int = 1,
     {"global", "per_regime", "stacking"} mais fonctionne pour N>=2. Pour
     chaque PAIRE de categories (C(N,2) comparaisons, pas seulement une
     categorie contre une baseline fixe) : test Diebold-Mariano sur
-    `fold_loss` (alignement observation par observation suppose deja fait
-    par l'appelant), puis correction Benjamini-Hochberg (FDR) sur
-    l'ensemble de ces p-values pairwise. PBO (`compute_pbo`) traite chaque
-    categorie comme UN trial (n_trials = len(results)), `fold_metric`
-    empiles comme les blocs -- verifie si la categorie qui semble la
-    meilleure "in-sample" (par bloc) le reste "out-of-sample", exactement
-    la question que ce chantier pose. DSR : `None` par categorie tant
-    qu'aucune serie de rendement reelle n'a ete fournie (voir docstring
-    module) -- jamais un proxy invente."""
+    `fold_loss`, puis correction Benjamini-Hochberg (FDR) sur l'ensemble de
+    ces p-values pairwise. PBO (`compute_pbo`) traite chaque categorie
+    comme UN trial (n_trials = len(results)), `fold_metric` empiles comme
+    les blocs -- verifie si la categorie qui semble la meilleure
+    "in-sample" (par bloc) le reste "out-of-sample", exactement la question
+    que ce chantier pose. DSR : `None` par categorie tant qu'aucune serie
+    de rendement reelle n'a ete fournie (voir docstring module) -- jamais
+    un proxy invente.
+
+    Limite documentee (trouvee en cablant CHANTIER B pour de vrai,
+    `pipeline/model_categories_training.py`) : "alignement observation par
+    observation" n'est vrai EXACTEMENT que si toutes les categories
+    evaluent sur les memes observations de test. Ce n'est pas garanti pour
+    per_regime : un regime trop rare DANS UN FOLD DONNE (distinct du
+    garde-fou de fragmentation global de CHANTIER A, qui verifie
+    l'historique total, pas la repartition par fold) peut etre exclu par le
+    propre garde-fou min_test_rows de `_FoldContext.prepare`, retirant ces
+    quelques observations de per_regime sans les retirer de global/stacking
+    -- `fold_loss`/`fold_metric` peuvent donc avoir des longueurs
+    differentes entre categories. Tronque au plus petit commun DENOMINATEUR
+    (par paire pour DM, sur l'ensemble pour PBO) plutot que de planter --
+    approximation signalee, pas cachee : sur un nombre d'observations
+    suffisant (la situation normale), l'impact d'omettre une poignee
+    d'observations en fin de serie est negligeable ; sur un tres petit jeu
+    de donnees (comme les tests), il peut etre visible -- c'est le compromis
+    documente ici plutot que fige silencieusement dans le code."""
     categories = list(results.keys())
     if len(categories) < 2:
         raise ValueError("compare_categories necessite au moins 2 categories a comparer.")
@@ -86,14 +103,16 @@ def compare_categories(results: dict[str, CategoryResult], dm_h: int = 1,
     pairwise_dm: dict[str, dict] = {}
     p_values: dict[str, float] = {}
     for a, b in itertools.combinations(categories, 2):
-        dm = diebold_mariano(results[a].fold_loss, results[b].fold_loss, h=dm_h)
+        n = min(len(results[a].fold_loss), len(results[b].fold_loss))
+        dm = diebold_mariano(results[a].fold_loss[:n], results[b].fold_loss[:n], h=dm_h)
         key = f"{a}_vs_{b}"
         pairwise_dm[key] = dm
         p_values[key] = dm["p_value"]
 
     fdr = benjamini_hochberg(p_values, alpha=fdr_alpha)
 
-    perf_matrix = np.vstack([results[c].fold_metric for c in categories])
+    n_folds_common = min(len(results[c].fold_metric) for c in categories)
+    perf_matrix = np.vstack([results[c].fold_metric[:n_folds_common] for c in categories])
     pbo = compute_pbo(perf_matrix)
 
     dsr = {c: results[c].dsr() for c in categories}
