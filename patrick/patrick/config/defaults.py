@@ -108,21 +108,6 @@ DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 # simple opt-in de recherche.
 DEFAULT_ENABLE_FUNDAMENTALS_FEATURES = False
 
-# Seuil ABSOLU de jours de cotation disponibles pour envisager un
-# entrainement sur une action individuelle (`validation/equity_sufficiency.
-# py`) -- INDEPENDANT du garde-fou horizon existant (`validation/
-# feasibility.py`, qui exige un historique proportionnel a l'horizon choisi
-# ET ne s'applique qu'a une cible deja mise en cache localement). Ce
-# deuxieme seuil, plus basique, s'applique meme a un titre jamais ingere
-# (ex. IPO recente comme D.A.T.E) : 60 jours (~3 mois de bourse) est une
-# proposition de depart, ajustable -- ni derive statistiquement (contraire-
-# ment a `feasibility.py`), ni cense garantir a lui seul un walk-forward
-# statistiquement valide (c'est le role de `feasibility.py`, qui reste
-# applique EN PLUS une fois l'action selectionnee comme cible). L'affichage
-# prix/fondamentaux reste disponible sous ce seuil -- seul le lancement d'un
-# entrainement est concerne.
-DEFAULT_MIN_TRADING_DAYS_FOR_EQUITY = 60
-
 # CHANTIER (feature/equity-asset-class, suite) -- seuil GLOBAL, parametrable,
 # d'anciennete minimale d'historique (en annees) exige a l'ingestion pour
 # TOUTE cible (`data/ingest.py`) -- remplace le 20 fige en dur. Ramene a 10
@@ -132,7 +117,10 @@ DEFAULT_MIN_TRADING_DAYS_FOR_EQUITY = 60
 # (`webapp/forms.py` : champ formulaire ; `cli.py` : --min-history-years ;
 # `config.schema.DataQualityConfig.min_history_years` : cle YAML) --
 # validation sur la valeur SOUMISE uniquement (jamais sur ce defaut),
-# bornes `MIN_HISTORY_YEARS_BOUNDS` ci-dessous.
+# bornes `MIN_HISTORY_YEARS_BOUNDS` ci-dessous. Meme parametre lu par le
+# badge d'insuffisance de donnees actions (`validation/equity_sufficiency.
+# py`, converti en jours de bourse) -- il n'y a plus qu'UN seul seuil
+# d'anciennete minimale dans tout le projet, pas deux qui pourraient diverger.
 DEFAULT_MIN_HISTORY_YEARS = 10
 MIN_HISTORY_YEARS_BOUNDS: dict[str, int] = {"min_allowed": 3, "max_allowed": 40}
 

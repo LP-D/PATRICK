@@ -101,31 +101,67 @@ def test_equity_prices_are_dividend_adjusted_totalenergies_2026_06_30(monkeypatc
 
 
 # ---------------------------------------------------------------------------
-# 3. Badge d'insuffisance de donnees -- seuil ABSOLU de jours de cotation,
-#    independant du garde-fou horizon existant (validation/feasibility.py).
+# 3. Badge d'insuffisance de donnees -- CHANTIER (suite) : lit desormais le
+#    meme parametre que la regle d'ingestion (min_history_years, converti en
+#    jours de bourse via TRADING_DAYS_PER_YEAR), plus un seuil independant a
+#    60 jours fixes. Frontieres testees a T-1/T/T+1 JOURS exactement.
 # ---------------------------------------------------------------------------
 
-def test_data_sufficiency_insufficient_below_threshold(monkeypatch):
+def _threshold_days(min_history_years: int = None) -> int:
+    years = min_history_years if min_history_years is not None else D.DEFAULT_MIN_HISTORY_YEARS
+    return years * equity_sufficiency.TRADING_DAYS_PER_YEAR
+
+
+def test_data_sufficiency_insufficient_at_threshold_minus_one_day(monkeypatch):
+    threshold = _threshold_days()
     monkeypatch.setattr(
         equity_sufficiency.yfinance_source, "download_one",
-        lambda symbol, start: pd.Series(np.arange(10, dtype=float)),
+        lambda symbol, start: pd.Series(np.arange(threshold - 1, dtype=float)),
     )
-    result = equity_sufficiency.check_data_sufficiency("ALDAT.PA", min_trading_days=60)
+    result = equity_sufficiency.check_data_sufficiency("ALDAT.PA")
     assert result.sufficient is False
-    assert result.n_trading_days == 10
-    assert result.min_required == 60
+    assert result.n_trading_days == threshold - 1
+    assert result.min_required == threshold
     assert "insuffisant" in result.reason.lower()
 
 
-def test_data_sufficiency_sufficient_at_threshold_boundary(monkeypatch):
+def test_data_sufficiency_sufficient_exactly_at_threshold(monkeypatch):
     """>= le seuil, pas seulement au-dessus : la limite est INCLUSE."""
+    threshold = _threshold_days()
     monkeypatch.setattr(
         equity_sufficiency.yfinance_source, "download_one",
-        lambda symbol, start: pd.Series(np.arange(60, dtype=float)),
+        lambda symbol, start: pd.Series(np.arange(threshold, dtype=float)),
     )
-    result = equity_sufficiency.check_data_sufficiency("TTE.PA", min_trading_days=60)
+    result = equity_sufficiency.check_data_sufficiency("TTE.PA")
     assert result.sufficient is True
-    assert result.n_trading_days == 60
+    assert result.n_trading_days == threshold
+
+
+def test_data_sufficiency_sufficient_at_threshold_plus_one_day(monkeypatch):
+    threshold = _threshold_days()
+    monkeypatch.setattr(
+        equity_sufficiency.yfinance_source, "download_one",
+        lambda symbol, start: pd.Series(np.arange(threshold + 1, dtype=float)),
+    )
+    result = equity_sufficiency.check_data_sufficiency("TTE.PA")
+    assert result.sufficient is True
+    assert result.n_trading_days == threshold + 1
+
+
+def test_data_sufficiency_uses_configured_min_history_years_not_the_default(monkeypatch):
+    """Le badge doit reagir a un min_history_years EXPLICITE different du
+    defaut (7 ans, pas 10) -- meme jeu de donnees, verdict different."""
+    threshold_7y = _threshold_days(7)
+    n_days = threshold_7y + 5  # suffisant pour 7 ans, insuffisant pour 10 ans (defaut)
+    monkeypatch.setattr(
+        equity_sufficiency.yfinance_source, "download_one",
+        lambda symbol, start: pd.Series(np.arange(n_days, dtype=float)),
+    )
+    result_7y = equity_sufficiency.check_data_sufficiency("TTE.PA", min_history_years=7)
+    result_default = equity_sufficiency.check_data_sufficiency("TTE.PA")
+    assert result_7y.sufficient is True
+    assert result_default.sufficient is False
+    assert result_7y.min_required != result_default.min_required
 
 
 def test_data_sufficiency_never_fetched_ticker_is_zero_days_not_an_exception(monkeypatch):
