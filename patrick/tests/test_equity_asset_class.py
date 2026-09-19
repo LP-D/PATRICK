@@ -16,8 +16,10 @@ from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
 from patrick.config import equity_universe
-from patrick.config.schema import FeaturesConfig, ObjectiveConfig, RunConfig
-from patrick.data.sources import fundamentals_source, yfinance_source
+from patrick.config.schema import DataQualityConfig, FeaturesConfig, ObjectiveConfig, RunConfig, UniverseConfig
+from patrick.data import ingest as ingest_module
+from patrick.data.sources import fred_source, fundamentals_source, yfinance_source
+from patrick.data.store import DataStore
 from patrick.features import equity_fundamentals, guida
 from patrick.pipeline import engine as engine_module
 from patrick.validation import equity_sufficiency
@@ -141,6 +143,75 @@ def test_data_sufficiency_never_fetched_ticker_is_zero_days_not_an_exception(mon
 
 def test_default_min_history_years_is_10():
     assert D.DEFAULT_MIN_HISTORY_YEARS == 10
+
+
+def _start_days_back(days: int) -> str:
+    return (pd.Timestamp.today().normalize() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def _ingest_with_history(monkeypatch, tmp_path, target_symbol: str, days_back: int,
+                          min_history_years: int) -> pd.DataFrame:
+    """Ingestion synthetique, sans reseau : historique de `days_back` jours
+    de bourse pour `target_symbol`, seuil configure a `min_history_years`."""
+    monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "cache"))
+    monkeypatch.delenv(fred_source.FRED_API_KEY_ENV, raising=False)
+    start = _start_days_back(days_back)
+    idx = pd.bdate_range(start, periods=max(days_back // 7 * 5, 5))
+
+    def fake_download(tickers, start=None, auto_adjust=True, progress=False):
+        return pd.DataFrame({"Close": np.linspace(100.0, 110.0, len(idx))}, index=idx)
+
+    monkeypatch.setattr(yfinance_source.yf, "download", fake_download)
+    objective = ObjectiveConfig(target_symbol=target_symbol)
+    universe = UniverseConfig(yf_tickers=[], fred_series={}, start_date=start)
+    dq = DataQualityConfig(min_history_years=min_history_years)
+    store = DataStore(root=str(tmp_path / f"store_{target_symbol}"))
+    return ingest_module.ingest(objective, universe, store, data_quality=dq)
+
+
+def test_ingest_history_rule_uses_configured_min_history_years_not_hardcoded_20(monkeypatch, tmp_path):
+    """data/ingest.py:180-184 exigeait 20 ans fixes, sans aucun test --
+    verifie desormais que le seuil EFFECTIVEMENT applique est
+    `dq.min_history_years`, aux deux frontieres, pour deux valeurs
+    differentes (10 puis 7 ans)."""
+    for min_history_years in (10, 7):
+        threshold_days = round(min_history_years * 365.25)
+
+        with pytest.raises(RuntimeError, match=str(min_history_years)):
+            _ingest_with_history(monkeypatch, tmp_path, f"TOOSHORT_{min_history_years}",
+                                  threshold_days - 15, min_history_years)
+
+        df_ok = _ingest_with_history(monkeypatch, tmp_path, f"OLDENOUGH_{min_history_years}",
+                                      threshold_days + 15, min_history_years)
+        assert len(df_ok) > 0
+
+
+def test_cli_min_history_years_option_rejects_out_of_bounds_and_overrides_yaml(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from patrick.cli import app as cli_app
+
+    yaml_path = tmp_path / "cfg.yaml"
+    yaml_path.write_text(
+        "objective:\n  target_symbol: '^GSPC'\n"
+        "data_quality:\n  min_history_years: 10\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli_app, ["ingest", "--config", str(yaml_path), "--min-history-years", "999"])
+    assert result.exit_code != 0
+
+    captured = {}
+
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        captured["min_history_years"] = data_quality.min_history_years
+        return pd.DataFrame({"x": [1.0]})
+
+    monkeypatch.setattr("patrick.cli.ingest", fake_ingest)
+    result2 = runner.invoke(cli_app, ["ingest", "--config", str(yaml_path), "--min-history-years", "15"])
+    assert result2.exit_code == 0, result2.output
+    assert captured["min_history_years"] == 15
 
 
 # ---------------------------------------------------------------------------

@@ -56,6 +56,12 @@ class DataQualityConfig(BaseModel):
     max_gap_bdays: int = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
     max_robust_z: float = D.DEFAULT_QUALITY_MAX_ROBUST_Z
     max_universe_exclusion_frac: float = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
+    # CHANTIER (feature/equity-asset-class, suite) -- anciennete minimale
+    # d'historique (annees) exigee a l'ingestion (`data/ingest.py`), remplace
+    # le 20 fige en dur. Validee sur la valeur SOUMISE uniquement
+    # (`webapp/forms.py::_parse... ` / `cli.py --min-history-years`), jamais
+    # ici (pas de bounds pydantic, meme convention que le reste de RunConfig).
+    min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS
 
 
 class TechnicalLookbacksConfig(BaseModel):
