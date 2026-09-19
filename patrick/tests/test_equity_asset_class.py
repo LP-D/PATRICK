@@ -9,6 +9,8 @@ des donnees synthetiques, ou de valeurs REELLEMENT observees via yfinance
 le 2026-09-19 pour le cas du detachement de dividende TotalEnergies)."""
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -473,15 +475,28 @@ def test_equities_page_returns_200_and_lists_every_ticker(monkeypatch):
     assert "Cross-sectional momentum" in resp.text or "cross_sectional_momentum" in resp.text
 
 
-def test_launch_page_shows_insufficient_badge_for_a_low_history_equity(monkeypatch):
+def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(monkeypatch):
+    """Etape e : l'ancienne assertion `"insuffisant" in resp.text` etait
+    inoperante -- `webapp/i18n.py:356` ("Historique insuffisant pour
+    calculer ces statistiques...") est injectee en JSON sur TOUTE page via
+    `base_v2.html` (`i18n_js`), donc la chaine est presente meme quand le
+    badge actions est correct. Cette version cible l'element <option> exact
+    de chaque ticker."""
     def fake_download_one(symbol, start):
         if symbol == "ALDAT.PA":
-            return None  # pas encore cote
-        return pd.Series(np.arange(6863, dtype=float))
+            return None  # pas encore cote -> insuffisant
+        return pd.Series(np.arange(equity_sufficiency.TRADING_DAYS_PER_YEAR * 20, dtype=float))  # ~20 ans, largement suffisant
 
     monkeypatch.setattr(equity_sufficiency.yfinance_source, "download_one", fake_download_one)
     client = TestClient(app)
     resp = client.get("/launch")
     assert resp.status_code == 200
-    assert "ALDAT.PA" in resp.text
-    assert "insuffisant" in resp.text
+
+    def _option_label(symbol: str) -> str:
+        m = re.search(rf'<option value="{re.escape(symbol)}"[^>]*>([^<]*)</option>', resp.text)
+        assert m is not None, f"option {symbol} introuvable sur /launch"
+        return m.group(1)
+
+    assert "données insuffisantes" in _option_label("ALDAT.PA")
+    for sym in ("TTE.PA", "HO.PA", "AMZN"):
+        assert "données insuffisantes" not in _option_label(sym), sym
