@@ -1,17 +1,22 @@
 """CHANTIER B, cablage reel (feature/model-categories-comparison) : les 3
 categories entrainees pour de vrai sur un mini pipeline synthetique
 (reutilise les VRAIS internes de `pipeline/engine.py` -- `_FoldPoolBuilder`,
-`_FoldContext`, `_fit_eval`, `_select` -- pas une reimplementation isolee),
-plus les 2 tests anti-fuite explicitement demandes : frontiere de regime
-intra-fold, et out-of-fold du stacking.
+`_FoldContext`, `_fit_eval`, `_select` -- pas une reimplementation isolee).
 
-Portee : pas de passage par `run_pipeline()` complet (qui n'expose pas
-`ctx`/`pool_builder`/`board`, necessaires pour appeler les nouvelles
-fonctions directement) -- le setup ci-dessous reproduit exactement les
-memes appels que `run_pipeline` fait en interne pour construire ces objets
-(`build_base_feature_pool`, `build_fold_cuts`, `_FoldPoolBuilder`,
-`_FoldContext`), verifie par lecture directe du code avant d'ecrire ce
-test."""
+Revision (retrait de `_reduced_n_trials` + du `base_cfg` impose depuis
+global) : per_regime/stacking effectuent maintenant leur PROPRE scan complet
+(n_features x sampler x algo) et leur PROPRE tuning Optuna a budget plein,
+independamment l'un de l'autre et de global -- voir docstring de
+`pipeline/model_categories_training.py`. Tests couverts ici :
+- les 2 tests anti-fuite deja livres (frontiere de regime intra-fold,
+  out-of-fold du stacking) ;
+- budget Optuna plein (compte reellement les n_trials passes a
+  `tune_config`, compare a celui de global) ;
+- capacite reelle a choisir un n_features different de celui d'un autre
+  choix sur un cas synthetique construit pour etre non-ambigu (test unitaire
+  cible sur `_grid_scan_best_config`, plus fiable qu'un bout-en-bout bruite
+  sur un si petit jeu de donnees) ;
+- troncature DM par paire independante (`compare_categories`)."""
 from __future__ import annotations
 
 import numpy as np
@@ -20,8 +25,6 @@ import pytest
 
 from patrick.config.schema import RunConfig
 from patrick.data.sources.yfinance_source import clean_symbol
-from patrick.features.target import build_target
-from patrick.pipeline import engine as engine_module
 from patrick.pipeline.engine import (
     _fit_eval,
     _select,
@@ -31,13 +34,14 @@ from patrick.pipeline.engine import (
 )
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.pipeline.model_categories_training import (
+    _grid_scan_best_config,
     extract_global_category_result,
     train_per_regime_category,
     train_stacking_category,
 )
 from patrick.tracking import db as trackdb
-from patrick.tracking.model_categories import compare_categories
-from patrick.validation.metrics import metrics
+from patrick.tracking.model_categories import CategoryResult, compare_categories
+from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.walkforward import build_fold_cuts
 
 pytestmark = pytest.mark.slow
@@ -73,7 +77,11 @@ def tiny_config(tmp_path) -> RunConfig:
         "selection": {"method": "shap", "n_features_grid": [6], "shap_sample": 100},
         "sampler": {"candidates": ["none"]},
         "models": {"algos": ["RandomForest", "XGBoost"]},
-        "tuning": {"enabled": False},
+        # n_trials volontairement petit pour la vitesse du test -- le budget
+        # PLEIN de per_regime/stacking est le meme champ que global
+        # (`config.tuning.n_trials`), c'est cette egalite qui est testee,
+        # pas une valeur absolue particuliere.
+        "tuning": {"enabled": True, "n_trials": 3, "cv_splits": 2},
         "output": {"dir": str(tmp_path / "runs"), "seed": 42},
     }
     return RunConfig.model_validate(raw_yaml)
@@ -127,14 +135,12 @@ def wired_context(tiny_config, tmp_path):
 
 def test_three_categories_are_trained_and_tagged_distinctly(wired_context):
     ctx, board, horizon = wired_context["ctx"], wired_context["board"], wired_context["horizon"]
+    config, seed = wired_context["config"], wired_context["seed"]
     global_result = extract_global_category_result(ctx, board, horizon, wired_context["n_wf_folds"],
-                                                     wired_context["base_cfg"], wired_context["seed"])
+                                                     wired_context["base_cfg"], seed)
     per_regime_result, sub_models = train_per_regime_category(
-        ctx, wired_context["raw_price_series"], horizon, wired_context["n_wf_folds"],
-        wired_context["base_cfg"], wired_context["seed"])
-    stacking_result = train_stacking_category(
-        ctx, horizon, wired_context["n_wf_folds"], wired_context["config"].models.algos,
-        wired_context["base_cfg"]["n_feat"], "none", wired_context["seed"])
+        ctx, wired_context["raw_price_series"], horizon, wired_context["n_wf_folds"], config, seed)
+    stacking_result = train_stacking_category(ctx, horizon, wired_context["n_wf_folds"], config, seed)
 
     results = {"global": global_result, "per_regime": per_regime_result, "stacking": stacking_result}
     assert {r.category for r in results.values()} == {"global", "per_regime", "stacking"}
@@ -143,20 +149,120 @@ def test_three_categories_are_trained_and_tagged_distinctly(wired_context):
     # (garde-fou/split OOF trop serre sur un si petit jeu synthetique) --
     # l'important est qu'ils produisent un resultat distinct, pas vide.
     assert len(per_regime_result.fold_loss) >= 0
-    assert sub_models  # au moins 1 fold a produit un routage par regime
+    assert sub_models  # au moins 1 regime a produit un routage
 
     comparison = compare_categories(results)
     assert comparison["categories"] == ["global", "per_regime", "stacking"]
 
 
+def test_per_regime_and_stacking_use_the_full_optuna_budget_like_global(wired_context, monkeypatch):
+    """Compte les VRAIS n_trials passes a `tune_config` pendant
+    l'entrainement per_regime/stacking -- doit etre exactement
+    `config.tuning.n_trials`, identique a ce que global utiliserait (pas de
+    `_reduced_n_trials`, retire)."""
+    import patrick.pipeline.model_categories_training as mct
+
+    captured_n_trials = []
+    real_tune_config = mct.tune_config
+
+    def spy_tune_config(*args, **kwargs):
+        captured_n_trials.append(kwargs.get("n_trials"))
+        return real_tune_config(*args, **kwargs)
+
+    monkeypatch.setattr(mct, "tune_config", spy_tune_config)
+
+    ctx = wired_context["ctx"]
+    config, seed, horizon = wired_context["config"], wired_context["seed"], wired_context["horizon"]
+
+    train_per_regime_category(ctx, wired_context["raw_price_series"], horizon,
+                               wired_context["n_wf_folds"], config, seed)
+    n_calls_per_regime = len(captured_n_trials)
+    assert n_calls_per_regime > 0, "aucun appel tune_config capture pour per_regime"
+    assert all(n == config.tuning.n_trials for n in captured_n_trials), (
+        f"per_regime doit utiliser le budget PLEIN ({config.tuning.n_trials}), "
+        f"pas une fraction -- recu {captured_n_trials}")
+
+    captured_n_trials.clear()
+    train_stacking_category(ctx, horizon, wired_context["n_wf_folds"], config, seed)
+    assert len(captured_n_trials) > 0, "aucun appel tune_config capture pour stacking"
+    assert all(n == config.tuning.n_trials for n in captured_n_trials), (
+        f"stacking doit utiliser le budget PLEIN ({config.tuning.n_trials}), "
+        f"pas une fraction -- recu {captured_n_trials}")
+
+    # Ni _reduced_n_trials ni aucune fraction du budget ne doit plus exister
+    # dans le module (retire explicitement sur demande).
+    assert not hasattr(mct, "_reduced_n_trials"), "_reduced_n_trials aurait du etre retire du module"
+
+
+def test_grid_scan_picks_a_genuinely_different_n_features_when_it_is_clearly_optimal():
+    """Test unitaire cible sur `_grid_scan_best_config` (plus fiable qu'un
+    bout-en-bout bruite sur un si petit jeu de donnees) : 2 scenarios
+    synthetiques construits pour que N=2 soit sans ambiguite meilleur dans
+    l'un, et N=8 dans l'autre -- verifie que le scan suit reellement les
+    donnees plutot que de retomber toujours sur le meme choix (ce que le
+    `base_cfg` impose depuis global faisait avant ce correctif)."""
+    from patrick.config.schema import RunConfig
+    from patrick.tracking import db as trackdb
+    import tempfile
+    import os
+
+    rng = np.random.default_rng(7)
+    n = 400
+
+    class _FD:
+        def __init__(self, X_tr, y_tr, X_te, y_te):
+            self.X_tr, self.y_tr, self.X_te, self.y_te = X_tr, y_tr, X_te, y_te
+
+    def _build_fold_data(n_true_informative: int, n_noise: int = 8):
+        """y depend UNIQUEMENT des `n_true_informative` premieres colonnes
+        (regle simple, sans ambiguite) ; le reste est du bruit pur -- le
+        meilleur N doit refleter n_true_informative, pas une valeur fixe."""
+        X = rng.normal(0, 1, (n, n_true_informative + n_noise))
+        # 3 classes {0, 1, 2} contigues depuis 0 -- `shap_select.py::shap_rank`
+        # utilise `objective="multi:softprob"` sans condition (coherent avec
+        # la cible reelle du projet, toujours a 4 classes) ; un y BINAIRE
+        # {0, 1} declenchait une erreur XGBoost interne (num_class mal
+        # infere) specifique a ce cas limite -- pas un bug produit, corrige
+        # ici en restant fidele a l'hypothese multiclasse du produit.
+        s = X[:, :n_true_informative].sum(axis=1)
+        y = np.digitize(s, [np.quantile(s, 1 / 3), np.quantile(s, 2 / 3)])
+        split = n // 2
+        return [(0, _FD(X[:split], y[:split], X[split:], y[split:]))]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        raw_yaml = {
+            "name": "grid_scan_test", "objective": {"target_symbol": "^TEST", "horizons": [5]},
+            "universe": {"yf_tickers": [], "fred_series": {}},
+            "validation": {"n_wf_folds": 1},
+            "selection": {"method": "shap"},
+            "output": {"dir": tmp, "seed": 42},
+        }
+        config = RunConfig.model_validate(raw_yaml)
+        conn = trackdb.connect(os.path.join(tmp, "t.db"))
+
+        fold_data_small = _build_fold_data(n_true_informative=2)
+        winner_small = _grid_scan_best_config(fold_data_small, config, [2, 8], ["none"],
+                                               ["RandomForest"], 42, conn, "TEST", 5, "snap-small")
+
+        fold_data_large = _build_fold_data(n_true_informative=8)
+        winner_large = _grid_scan_best_config(fold_data_large, config, [2, 8], ["none"],
+                                               ["RandomForest"], 42, conn, "TEST", 5, "snap-large")
+        conn.close()  # libere le verrou Windows sur t.db avant le nettoyage du TemporaryDirectory
+
+        assert winner_small["n_feat"] != winner_large["n_feat"], (
+            "le scan doit reagir aux donnees -- ici il retombe sur le meme N "
+            "dans 2 scenarios construits pour etre discriminants.")
+
+
 def test_stacking_meta_model_never_trains_on_in_sample_base_predictions(wired_context, monkeypatch):
     """Verification CONCRETE (pas juste lecture de code) : instrumente
-    `_fit_eval` pour capturer les (X, y) passes a CHAQUE appel pendant
-    l'entrainement stacking, puis verifie que les lignes utilisees pour
-    entrainer le meta-modele (l'appel OOF) ne recoupent JAMAIS les lignes
-    sur lesquelles le modele de base correspondant a ete fit juste avant --
-    par construction du split temporel (X_base/X_oof disjoints), mais
-    verifie ici sur les VRAIES matrices passees, pas suppose."""
+    `_fit_eval` pour capturer les (X_train, X_eval) de CHAQUE appel pendant
+    l'entrainement stacking (scan OOF + tuning + refit final inclus), puis
+    verifie qu'AUCUN appel n'evalue sur une ligne presente dans son propre
+    train -- invariant qui doit tenir pour tous les appels de cette
+    fonction (scan et refit sont tous les deux shapes train->eval
+    disjoints par construction du split temporel), pas seulement un
+    sous-groupe fixe."""
     import patrick.pipeline.model_categories_training as mct
 
     calls = []
@@ -170,25 +276,15 @@ def test_stacking_meta_model_never_trains_on_in_sample_base_predictions(wired_co
 
     ctx = wired_context["ctx"]
     train_stacking_category(ctx, wired_context["horizon"], wired_context["n_wf_folds"],
-                             wired_context["config"].models.algos, wired_context["base_cfg"]["n_feat"],
-                             "none", wired_context["seed"])
+                             wired_context["config"], wired_context["seed"])
 
     assert len(calls) > 0, "aucun appel _fit_eval capture -- le test ne verifie rien, corriger le mock"
-    n_algos = len(wired_context["config"].models.algos)
-    # Par fold evalue : n_algos appels OOF (base sur X_base, predit sur X_oof)
-    # puis n_algos appels test (base sur X_tr complet, predit sur X_te) --
-    # les paires OOF sont les n_algos premiers appels de chaque groupe de
-    # 2*n_algos.
-    for group_start in range(0, len(calls), 2 * n_algos):
-        oof_calls = calls[group_start:group_start + n_algos]
-        for X_train_used, X_eval_used in oof_calls:
-            # Aucune ligne de X_eval_used (l'OOF) ne doit apparaitre dans
-            # X_train_used (le base-train) -- comparaison exacte des lignes.
-            train_rows = {tuple(row) for row in X_train_used}
-            eval_rows = {tuple(row) for row in X_eval_used}
-            assert train_rows.isdisjoint(eval_rows), (
-                "une ligne evaluee out-of-fold apparait aussi dans le train du "
-                "modele de base -- fuite du meta-modele sur une prediction in-sample.")
+    for X_train_used, X_eval_used in calls:
+        train_rows = {tuple(row) for row in X_train_used}
+        eval_rows = {tuple(row) for row in X_eval_used}
+        assert train_rows.isdisjoint(eval_rows), (
+            "une ligne evaluee apparait aussi dans le train du meme appel -- "
+            "fuite potentielle (OOF ou test) sur une prediction in-sample.")
 
 
 def test_regime_boundary_inside_a_fold_does_not_leak_future_labels(wired_context, monkeypatch):
@@ -212,7 +308,7 @@ def test_regime_boundary_inside_a_fold_does_not_leak_future_labels(wired_context
 
     ctx = wired_context["ctx"]
     train_per_regime_category(ctx, wired_context["raw_price_series"], wired_context["horizon"],
-                               wired_context["n_wf_folds"], wired_context["base_cfg"], wired_context["seed"])
+                               wired_context["n_wf_folds"], wired_context["config"], wired_context["seed"])
 
     assert len(captured_regimes) == wired_context["n_wf_folds"], (
         "un appel a detect_regime attendu par fold (fit_end_idx = coupe de CE fold), "
@@ -235,3 +331,40 @@ def test_regime_boundary_inside_a_fold_does_not_leak_future_labels(wired_context
                                seed=wired_context["seed"], fit_end_idx=first_fit_end_idx)
     common_idx = retruncated.regime.index
     pd.testing.assert_series_equal(first_regime.reindex(common_idx), retruncated.regime, check_names=False)
+
+
+def test_dm_truncation_for_a_pair_ignores_what_a_third_category_covers():
+    """`compare_categories` doit tronquer PAR PAIRE (intersection de CETTE
+    paire uniquement), jamais sur l'intersection a trois -- construit
+    global/stacking avec la MEME longueur complete et per_regime
+    deliberement plus court, verifie que le n_obs de la comparaison
+    global_vs_stacking reste la longueur COMPLETE, pas ecourtee par
+    per_regime."""
+    rng = np.random.default_rng(3)
+    n_full = 500
+    n_short = 50  # per_regime deliberement tronque
+
+    global_res = CategoryResult(category="global", label="g",
+                                 fold_metric=np.array([0.5, 0.55]),
+                                 fold_loss=(rng.uniform(0, 1, n_full) < 0.4).astype(float))
+    stacking_res = CategoryResult(category="stacking", label="s",
+                                   fold_metric=np.array([0.52, 0.58]),
+                                   fold_loss=(rng.uniform(0, 1, n_full) < 0.45).astype(float))
+    per_regime_res = CategoryResult(category="per_regime", label="r",
+                                     fold_metric=np.array([0.51]),
+                                     fold_loss=(rng.uniform(0, 1, n_short) < 0.42).astype(float))
+
+    results = {"global": global_res, "per_regime": per_regime_res, "stacking": stacking_res}
+    comparison = compare_categories(results)
+
+    expected_n_obs = min(len(global_res.fold_loss), len(stacking_res.fold_loss))
+    assert expected_n_obs == n_full  # les deux couvrent tout -- rien a tronquer pour CETTE paire
+    assert comparison["pairwise_dm"]["global_vs_stacking"]["n_obs"] == n_full, (
+        "global_vs_stacking a ete tronque par per_regime -- la troncature doit etre "
+        "independante par paire, pas une intersection a trois.")
+
+    # Verification directe (hors compare_categories) que diebold_mariano lui-meme,
+    # appele sur les series completes, rapporte bien n_full -- confirme que le
+    # chiffre ci-dessus n'est pas un hasard de calcul.
+    direct = diebold_mariano(global_res.fold_loss, stacking_res.fold_loss)
+    assert direct["n_obs"] == n_full
