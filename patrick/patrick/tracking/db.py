@@ -771,12 +771,18 @@ def list_trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
 
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
                   sampler: str, n_features: int, selector: str,
-                  params_json: str = "{}") -> int:
+                  params_json: str = "{}", category: str = "global") -> int:
+    """`category` (CHANTIER B, migration 0020, default 'global'): which of
+    the three compared model categories this trial belongs to
+    (global/per_regime/stacking, see
+    `pipeline/model_categories_training.py`) -- every pre-existing call site
+    (the main grid scan/Optuna loop) never passes it, so every trial it
+    produces stays correctly tagged 'global', unchanged."""
     with conn:
         cur = conn.execute(
             "INSERT INTO trial (run_id, regime, algo, sampler, n_features, selector, "
-            "params_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (run_id, regime, algo, sampler, n_features, selector, params_json),
+            "params_json, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (run_id, regime, algo, sampler, n_features, selector, params_json, category),
         )
         return cur.lastrowid
 

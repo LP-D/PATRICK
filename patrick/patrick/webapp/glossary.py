@@ -404,6 +404,31 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "causal HMM (forward-only filter, never smoothed with the future). "
                "The internal number of states is auto-selected via BIC/AIC."),
     },
+    # CHANTIER B (feature/model-categories-comparison) -- contenu pret pour
+    # la table de comparaison a 3 categories, dont l'affichage web depend de
+    # l'integration reelle dans pipeline/engine.py (hors scope de ce
+    # chantier, voir tracking/model_categories.py). Definitions gardees ici
+    # pour eviter de les re-ecrire quand cette integration sera faite.
+    "model_category_global": {
+        "fr": "Global : le pipeline actuel, un seul modele entraine sur tout l'historique du ticker, sans distinction de regime.",
+        "en": "Global: the current pipeline, a single model trained on the ticker's whole history, regime-agnostic.",
+    },
+    "model_category_per_regime": {
+        "fr": ("Par-regime : un modele distinct entraine par regime de volatilite "
+               "(calme/normal/stress, detection HMM causale) plutot qu'un seul modele "
+               "global -- soumis au meme garde-fou de fragmentation que la detection de regime."),
+        "en": ("Per-regime: a separate model trained per volatility regime "
+               "(calm/normal/stress, causal HMM detection) instead of one global model -- "
+               "subject to the same fragmentation guardrail as regime detection."),
+    },
+    "model_category_stacking": {
+        "fr": ("Stacking : combine les predictions de PLUSIEURS modeles (global + par-regime, "
+               "voire plusieurs algorithmes) via un meta-modele entraine par-dessus -- different "
+               "du modele « global », qui reste un modele individuel unique."),
+        "en": ("Stacking: combines predictions from SEVERAL models (global + per-regime, or "
+               "several algorithms) via a meta-model trained on top -- different from the "
+               "\"global\" category, which stays a single individual model."),
+    },
     "regime_threshold_mode": {
         "fr": ("Comment la probabilité filtrée de régime est convertie en 3 "
                "catégories : « quantile » utilise des coupures relatives à "
