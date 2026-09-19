@@ -15,7 +15,7 @@ import re
 
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
-from patrick.validation import feasibility
+from patrick.validation import feasibility, history_length
 
 # CHANTIER (feature/equity-asset-class): equities are selectable as a run's
 # TARGET (merged into TARGET_SOURCE_BY_SYMBOL/TARGET_CHOICES/TARGET_GROUPS
@@ -71,6 +71,7 @@ def default_config_dict() -> dict:
             "max_gap_bdays": D.DEFAULT_QUALITY_MAX_GAP_BDAYS,
             "max_robust_z": D.DEFAULT_QUALITY_MAX_ROBUST_Z,
             "max_universe_exclusion_frac": D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC,
+            "min_history_years": D.DEFAULT_MIN_HISTORY_YEARS,
         },
         "features": {
             "families": list(D.DEFAULT_FEATURE_FAMILIES),
@@ -385,6 +386,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         embargo_bars = int(embargo_bars_raw) if embargo_bars_raw else None
         max_frozen_run = int(form.get("max_frozen_run", D.DEFAULT_QUALITY_MAX_FROZEN_RUN))
         max_gap_bdays = int(form.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS))
+        min_history_years = int(form.get("min_history_years", D.DEFAULT_MIN_HISTORY_YEARS))
     except ValueError:
         errors.append("Un champ numérique entier est invalide.")
         n_groups = D.DEFAULT_CPCV_N_GROUPS
@@ -399,6 +401,25 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         seed = D.DEFAULT_SEED
         max_frozen_run = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
         max_gap_bdays = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
+        min_history_years = D.DEFAULT_MIN_HISTORY_YEARS
+
+    # CHANTIER (feature/equity-asset-class, suite): bounds on the SUBMITTED
+    # value only (never on the default), same reset-to-default-on-error
+    # convention as regime_threshold/optuna_bounds/technical_lookbacks above.
+    if not (D.MIN_HISTORY_YEARS_BOUNDS["min_allowed"] <= min_history_years
+            <= D.MIN_HISTORY_YEARS_BOUNDS["max_allowed"]):
+        errors.append(
+            "« Historique minimum (années) » doit être compris entre "
+            f"{D.MIN_HISTORY_YEARS_BOUNDS['min_allowed']} et {D.MIN_HISTORY_YEARS_BOUNDS['max_allowed']}.")
+        min_history_years = D.DEFAULT_MIN_HISTORY_YEARS
+    elif target_symbol in TARGET_SOURCE_BY_SYMBOL:
+        # Checked at SUBMISSION time (before ingestion), only when the
+        # target's history is already known locally (`data/store.py`) --
+        # same "unknown = not blocked" principle as the horizon-feasibility
+        # check below (`validation/history_length.py`).
+        hist_result = history_length.check_min_history(target_symbol, min_history_years)
+        if not hist_result.feasible:
+            errors.append(f"« Historique minimum » : {hist_result.reason}")
 
     # Phase 1 (feature/expanded-horizons): a walk-forward run over an
     # infeasible (target, horizon) combination either crashes or produces
@@ -477,6 +498,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "max_gap_bdays": max_gap_bdays,
             "max_robust_z": max_robust_z,
             "max_universe_exclusion_frac": max_universe_exclusion_frac,
+            "min_history_years": min_history_years,
         },
         "features": {
             "families": families,
@@ -554,6 +576,7 @@ def to_view(cfg: dict) -> dict:
         "max_robust_z": dq.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z),
         "max_universe_exclusion_frac": dq.get(
             "max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC),
+        "min_history_years": dq.get("min_history_years", D.DEFAULT_MIN_HISTORY_YEARS),
         "families": feat.get("families", []),
         "vol_models": feat.get("vol_models") or list(D.DEFAULT_VOL_MODELS),
         "interact_top_base": feat.get("interact_top_base", 40),

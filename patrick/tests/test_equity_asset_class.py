@@ -215,6 +215,75 @@ def test_cli_min_history_years_option_rejects_out_of_bounds_and_overrides_yaml(t
 
 
 # ---------------------------------------------------------------------------
+# Etape c -- build_config_dict : bornes sur la valeur SOUMISE, propagation,
+# et controle a la soumission contre l'historique deja connu localement.
+# ---------------------------------------------------------------------------
+
+def _minimal_form(**overrides):
+    from starlette.datastructures import FormData
+    base = {
+        "horizons": ["1", "2"],
+        "regimes": "GLOBAL",
+        "families": ["technical"],
+        "n_features_grid": "5,8",
+        "sampler_candidates": ["SMOTE"],
+        "algos": ["RandomForest"],
+    }
+    base.update(overrides)
+    items = []
+    for k, v in base.items():
+        if isinstance(v, list):
+            items.extend((k, x) for x in v)
+        else:
+            items.append((k, v))
+    return FormData(items)
+
+
+def _seed_equity_history_years_back(symbol: str, years_back: float) -> None:
+    """A la difference de `test_webapp_forms.py::_seed_history` (ancre fixe
+    2000-01-01, adaptee au test de TAILLE de fold), ici c'est la date de
+    DEPART (earliest) qui compte -- doit refleter une anciennete reelle de
+    `years_back` annees avant aujourd'hui."""
+    store = DataStore()
+    start = (pd.Timestamp.today().normalize() - pd.Timedelta(days=round(years_back * 365.25))).strftime("%Y-%m-%d")
+    idx = pd.bdate_range(start, periods=max(round(years_back * 252), 5))
+    df = pd.DataFrame({symbol: np.arange(len(idx), dtype=float)}, index=idx)
+    store.save(f"raw_{symbol}", df)
+
+
+def test_build_config_dict_rejects_min_history_years_out_of_bounds(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    form = _minimal_form(min_history_years="999")
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_MH_1")
+    assert any("historique" in e.lower() for e in errors)
+    assert config_dict["data_quality"]["min_history_years"] == D.DEFAULT_MIN_HISTORY_YEARS
+
+
+def test_build_config_dict_propagates_a_valid_min_history_years_different_from_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    assert 15 != D.DEFAULT_MIN_HISTORY_YEARS
+    form = _minimal_form(min_history_years="15")
+    config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_MH_2")
+    assert errors == []
+    assert config_dict["data_quality"]["min_history_years"] == 15
+
+
+def test_build_config_dict_rejects_submission_when_cached_history_is_too_short(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    _seed_equity_history_years_back("^VIX", 5)  # ~5 ans d'anciennete en cache
+    form = _minimal_form(min_history_years="10")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_MH_3")
+    assert any("historique" in e.lower() for e in errors)
+
+
+def test_build_config_dict_does_not_block_min_history_years_for_a_never_cached_target(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    form = _minimal_form(min_history_years="10")
+    _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_MH_4")
+    assert errors == []
+
+
+# ---------------------------------------------------------------------------
 # 4. Fondamentaux -- collecte, format long, mise en cache locale, et flag
 #    enable_fundamentals_features=False n'injecte AUCUNE colonne dans le
 #    pipeline d'entrainement (comportement par defaut inchange).
