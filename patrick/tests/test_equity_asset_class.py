@@ -346,17 +346,33 @@ def test_fetch_fundamentals_returns_long_format(monkeypatch, tmp_path):
 
 
 def test_fetch_fundamentals_empty_when_yfinance_has_nothing(monkeypatch, tmp_path):
-    """Titre trop recent (ex. D.A.T.E avant son premier exercice publie) --
-    DataFrame vide, jamais une exception."""
+    """Etape f : fixture reproduisant la forme REELLE renvoyee par yfinance
+    (verifie empiriquement le 2026-09-19, `yf.Ticker("HO.PA").
+    quarterly_income_stmt`) -- Thales n'a AUCUNE donnee trimestrielle cote
+    yfinance : `shape=(0, 0)`, exactement `pd.DataFrame()`, pas une
+    DataFrame avec des colonnes vides ni une exception. C'est le cas reel
+    qui motive ce test (pas seulement D.A.T.E avant son premier exercice
+    publie -- HO.PA a bien des exercices publies, simplement pas via
+    `quarterly_income_stmt`, voir `income_stmt` annuel a la place, hors
+    scope de ce module qui n'appelle QUE le trimestriel).
+
+    `stmt.empty` est du CODE MORT ici, au sens observable : confirme par
+    mutation-check (tour precedent) -- retirer le `or stmt.empty` du garde
+    (`if stmt is None or stmt.empty:`) ne change PAS le resultat de ce
+    test, une DataFrame (0,0) traversant `.T.reset_index().rename(...).
+    melt(...)` sans lui produit deja un resultat vide equivalent a
+    `_empty()`. Non retire malgre tout (garde explicite plus lisible/
+    defensive qu'un comportement implicite de pandas) -- aucune
+    modification de code de production ici, uniquement la fixture."""
     monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path))
 
     class _FakeTicker:
         def __init__(self, symbol):
-            self.quarterly_income_stmt = pd.DataFrame()
+            self.quarterly_income_stmt = pd.DataFrame()  # shape (0, 0), reel pour HO.PA
 
     monkeypatch.setattr(fundamentals_source.yf, "Ticker", _FakeTicker)
 
-    out = fundamentals_source.fetch_fundamentals("ALDAT.PA")
+    out = fundamentals_source.fetch_fundamentals("HO.PA")
     assert out.empty
     assert list(out.columns) == ["fiscalDateEnding", "metric", "value"]
 
