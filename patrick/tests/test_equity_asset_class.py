@@ -139,8 +139,8 @@ def test_data_sufficiency_never_fetched_ticker_is_zero_days_not_an_exception(mon
     assert result.n_trading_days == 0
 
 
-def test_default_min_trading_days_threshold_is_60():
-    assert D.DEFAULT_MIN_TRADING_DAYS_FOR_EQUITY == 60
+def test_default_min_history_years_is_10():
+    assert D.DEFAULT_MIN_HISTORY_YEARS == 10
 
 
 # ---------------------------------------------------------------------------

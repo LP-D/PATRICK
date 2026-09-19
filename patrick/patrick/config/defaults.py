@@ -123,6 +123,19 @@ DEFAULT_ENABLE_FUNDAMENTALS_FEATURES = False
 # entrainement est concerne.
 DEFAULT_MIN_TRADING_DAYS_FOR_EQUITY = 60
 
+# CHANTIER (feature/equity-asset-class, suite) -- seuil GLOBAL, parametrable,
+# d'anciennete minimale d'historique (en annees) exige a l'ingestion pour
+# TOUTE cible (`data/ingest.py`) -- remplace le 20 fige en dur. Ramene a 10
+# ans par defaut (moins conservateur que l'ancien 20, mais toujours >
+# `validation/feasibility.py`'s exigence horizon-proportionnelle pour les
+# horizons courts/moyens deja en production). Modifiable au lancement
+# (`webapp/forms.py` : champ formulaire ; `cli.py` : --min-history-years ;
+# `config.schema.DataQualityConfig.min_history_years` : cle YAML) --
+# validation sur la valeur SOUMISE uniquement (jamais sur ce defaut),
+# bornes `MIN_HISTORY_YEARS_BOUNDS` ci-dessous.
+DEFAULT_MIN_HISTORY_YEARS = 10
+MIN_HISTORY_YEARS_BOUNDS: dict[str, int] = {"min_allowed": 3, "max_allowed": 40}
+
 # Phase 6.5 (P6.5) -- data quality gates at ingestion: thresholds MEASURED by
 # simulation, not chosen by convention -- see detailed justification in
 # `data/quality.py` (module docstring).
