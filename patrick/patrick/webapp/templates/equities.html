@@ -1,0 +1,65 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import asset_panel, status_badge %}
+{% block title %}PATRICK — Actions individuelles{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <span aria-current="page">{{ t('nav_equities') or 'Actions individuelles' }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('nav_equities') or 'Actions individuelles' }}</h1>
+<p class="page-subtitle">Univers actions (config/equity_universe.py::EQUITY_UNIVERSE), séparé de l'univers commodités/macro : chaque titre reste sélectionnable comme cible sur /launch, jamais injecté comme feature dans un autre run.</p>
+
+<div class="group-block">
+<h2>Badge d'insuffisance de données</h2>
+<p class="hint">Seuil absolu de jours de cotation disponibles avant d'envisager un entraînement — indépendant du garde-fou horizon (/api/horizon-feasibility). L'affichage prix/fondamentaux reste disponible même sous le seuil.</p>
+{% for a in assets %}
+<p>
+  <strong>{{ a.label }}</strong> <span class="hint pk-mono">{{ a.symbol }}</span>
+  ({{ a.currency }}, {{ a.exchange }}, première cotation disponible : {{ a.first_listed }})
+  {{ status_badge('suffisant' if a.sufficient else 'insuffisant', 'ok' if a.sufficient else 'warning') }}
+  <br><span class="hint">{{ a.reason }}</span>
+</p>
+{% endfor %}
+</div>
+
+<div class="group-block">
+<h2>Familles Guida non applicables à cette classe</h2>
+<p class="hint">Message explicite plutôt qu'un silence — voir features/guida.py::EQUITY_FEATURE_EXCLUSIONS.</p>
+<ul>
+{% for family, reason in exclusions.items() %}
+<li><strong>{{ family }}</strong> — {{ reason }}</li>
+{% endfor %}
+</ul>
+</div>
+
+<div class="group-block asset-panel-grid">
+{% for a in assets %}
+{{ asset_panel(a.symbol, a.label, a.slug) }}
+{% endfor %}
+</div>
+
+<div class="group-block">
+<h2>Fondamentaux</h2>
+<p class="hint">Collecte hors pipeline ML par défaut (enable_fundamentals_features=False) — fiscalDateEnding + valeur, aucune garantie de non-révision, délai de publication réel non vérifié (data/sources/fundamentals_source.py).</p>
+{% for a in assets %}
+<h3>{{ a.label }} <span class="hint pk-mono">{{ a.symbol }}</span></h3>
+{% set rows = fundamentals.get(a.symbol, []) %}
+{% if rows %}
+<div class="table-scroll">
+<table class="data-table">
+<thead><tr><th>fiscalDateEnding</th><th>metric</th><th class="num pk-mono">value</th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr><td>{{ row.fiscalDateEnding }}</td><td>{{ row.metric }}</td><td class="num pk-mono">{{ row.value }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<p class="hint">Aucun fondamental disponible pour {{ a.symbol }} (titre trop récent ou non couvert par yfinance).</p>
+{% endif %}
+{% endfor %}
+</div>
+{% endblock %}

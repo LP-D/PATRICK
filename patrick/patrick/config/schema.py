@@ -103,6 +103,15 @@ class FeaturesConfig(BaseModel):
     # pool, unchanged -- this is a research toggle (scan-cost impact measured,
     # not yet judged for a default-on switch), never flipped on here.
     enable_guida_features: bool = D.DEFAULT_ENABLE_GUIDA_FEATURES
+    # CHANTIER (feature/equity-asset-class) -- master switch for equity
+    # fundamentals features (`features/equity_fundamentals.py`,
+    # `data/sources/fundamentals_source.py`): fiscalDateEnding + value,
+    # reindexed onto the daily pool. False (default): exactly the
+    # pre-existing feature pool, unchanged -- same "off by default research
+    # toggle" convention as `enable_guida_features` above. Only has an
+    # effect when the run's target is an equity symbol
+    # (`config.equity_universe.EQUITY_UNIVERSE`); a no-op otherwise.
+    enable_fundamentals_features: bool = D.DEFAULT_ENABLE_FUNDAMENTALS_FEATURES
     technical_lookbacks: TechnicalLookbacksConfig = Field(default_factory=TechnicalLookbacksConfig)
 
 

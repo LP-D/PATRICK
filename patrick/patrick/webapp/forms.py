@@ -14,9 +14,19 @@ import os
 import re
 
 from patrick.config import defaults as D
+from patrick.config import equity_universe as EQ
 from patrick.validation import feasibility
 
+# CHANTIER (feature/equity-asset-class): equities are selectable as a run's
+# TARGET (merged into TARGET_SOURCE_BY_SYMBOL/TARGET_CHOICES/TARGET_GROUPS
+# below), but deliberately NOT merged into D.DEFAULT_UNIVERSE_YF_TICKERS --
+# `universe_excluding` below stays untouched, so no run's default FEATURE
+# pool (commodities/macro, any target) ever gains an equity column just
+# because this new group exists. See `config/equity_universe.py`'s module
+# docstring for the full rationale ("separate from the existing commo/macro
+# universe", per this chantier's spec).
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
+TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in EQ.equity_target_choices()})
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 
@@ -130,8 +140,16 @@ ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
 # server-side regardless (`build_config_dict` below) -- never a fixed
 # "exhaustive set the pipeline can process" the way it used to be.
 ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
-TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)
-TARGET_GROUPS = D.DEFAULT_TARGET_GROUPS
+# CHANTIER (feature/equity-asset-class): equity choices/group appended
+# (never merged into D.DEFAULT_TARGET_GROUPS itself, see
+# TARGET_SOURCE_BY_SYMBOL's comment above) -- keeps
+# `test_universe_matches_exactly_the_reduced_target_set` (asserting on
+# `D.DEFAULT_TARGET_GROUPS` directly) unaffected by this new group.
+TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + EQ.equity_target_choices()
+TARGET_GROUPS = {
+    **D.DEFAULT_TARGET_GROUPS,
+    EQ.EQUITY_TARGET_GROUP: [(sym, meta["label"]) for sym, meta in EQ.EQUITY_UNIVERSE.items()],
+}
 # Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
 # driving the "Lookbacks technical" section of `index.html` -- one
 # comma-separated `<input>` per `features/technical.py` function, same

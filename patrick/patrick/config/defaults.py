@@ -101,6 +101,28 @@ DEFAULT_TUNING_CV_SPLITS = 3
 # independently of the others (fixed behavior, default).
 DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 
+# CHANTIER (feature/equity-asset-class) -- fondamentaux actions (fiscalDate
+# Ending + valeur, `data/sources/fundamentals_source.py`) : collecte HORS
+# pipeline ML par defaut, meme pattern que `DEFAULT_ENABLE_GUIDA_FEATURES`
+# ci-dessus -- False = comportement inchange pour tout run existant, un
+# simple opt-in de recherche.
+DEFAULT_ENABLE_FUNDAMENTALS_FEATURES = False
+
+# Seuil ABSOLU de jours de cotation disponibles pour envisager un
+# entrainement sur une action individuelle (`validation/equity_sufficiency.
+# py`) -- INDEPENDANT du garde-fou horizon existant (`validation/
+# feasibility.py`, qui exige un historique proportionnel a l'horizon choisi
+# ET ne s'applique qu'a une cible deja mise en cache localement). Ce
+# deuxieme seuil, plus basique, s'applique meme a un titre jamais ingere
+# (ex. IPO recente comme D.A.T.E) : 60 jours (~3 mois de bourse) est une
+# proposition de depart, ajustable -- ni derive statistiquement (contraire-
+# ment a `feasibility.py`), ni cense garantir a lui seul un walk-forward
+# statistiquement valide (c'est le role de `feasibility.py`, qui reste
+# applique EN PLUS une fois l'action selectionnee comme cible). L'affichage
+# prix/fondamentaux reste disponible sous ce seuil -- seul le lancement d'un
+# entrainement est concerne.
+DEFAULT_MIN_TRADING_DAYS_FOR_EQUITY = 60
+
 # Phase 6.5 (P6.5) -- data quality gates at ingestion: thresholds MEASURED by
 # simulation, not chosen by convention -- see detailed justification in
 # `data/quality.py` (module docstring).

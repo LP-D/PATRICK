@@ -52,7 +52,7 @@ from patrick.data.ingest import ingest
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
-from patrick.features import guida
+from patrick.features import equity_fundamentals, guida
 from patrick.features import macro as feat_macro
 from patrick.features import spike, technical, vol_models
 from patrick.features.interactions import INTERACTION_TYPES, apply_interaction, discover_interactions
@@ -191,6 +191,16 @@ def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: st
 
     if guida_on:
         parts.append(guida.build_guida_estimated_features(raw))
+
+    # CHANTIER (feature/equity-asset-class): off by default
+    # (`enable_fundamentals_features`), same short-circuit pattern as
+    # `guida_on` above -- `build_equity_fundamentals_features` itself is a
+    # no-op (empty DataFrame) for a non-equity target, but the flag check
+    # here also skips the fundamentals fetch call entirely when off,
+    # matching `enable_guida_features`'s "unchanged default pool" guarantee.
+    if config.features.enable_fundamentals_features:
+        parts.append(equity_fundamentals.build_equity_fundamentals_features(
+            config.objective.target_symbol, raw.index))
 
     if "technical" in families:
         ohlc = download_ohlc(config.objective.target_symbol, config.universe.start_date)
