@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx"]
+dev = ["pytest", "httpx", "ruff"]
 web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 
 [project.scripts]
