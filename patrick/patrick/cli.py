@@ -45,6 +45,26 @@ def _apply_min_history_years_override(cfg: RunConfig, min_history_years: int | N
     cfg.data_quality.min_history_years = min_history_years
 
 
+def _reject_unsupported_fundamentals_features(cfg: RunConfig) -> None:
+    """CHANTIER (feature/equity-asset-class, suite) -- validation a la
+    SOUMISSION (avant ingestion) : yfinance n'offre aucune source
+    point-in-time pour les fondamentaux (voir `features/
+    equity_fundamentals.py`) -- `enable_fundamentals_features: true` n'a
+    aucun champ formulaire ni option CLI positive (seule voie de soumission
+    reelle : YAML/`--config`), rejete ici plutot que de laisser le run
+    echouer en profondeur, en plein milieu du pipeline, une fois deja
+    lance (garde complementaire, pas redondant : celui du wrapper reste le
+    filet de securite pour toute construction directe de `RunConfig`)."""
+    if cfg.features.enable_fundamentals_features:
+        typer.echo(
+            "features.enable_fundamentals_features=true refuse : yfinance ne fournit aucune "
+            "source point-in-time pour les fondamentaux (etat actuel seulement, potentiellement "
+            "retraite) -- les injecter comme feature introduirait un biais look-ahead deja "
+            "demontre empiriquement. Voir features/equity_fundamentals.py."
+        )
+        raise typer.Exit(code=1)
+
+
 @app.command(name="ingest")
 def ingest_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
@@ -63,6 +83,7 @@ def ingest_cmd(
         patrick ingest --config configs/examples/vix_direction.yaml --force
     """
     cfg = RunConfig.from_yaml(config)
+    _reject_unsupported_fundamentals_features(cfg)
     _apply_min_history_years_override(cfg, min_history_years)
     store = DataStore()
     df = ingest(cfg.objective, cfg.universe, store, force=force, data_quality=cfg.data_quality)
@@ -108,6 +129,7 @@ def run_cmd(
     if name:
         cfg.name = name
     _apply_min_history_years_override(cfg, min_history_years)
+    _reject_unsupported_fundamentals_features(cfg)
     result = run_pipeline(cfg, force_ingest=force_ingest)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")

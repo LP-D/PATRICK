@@ -377,14 +377,34 @@ def test_fetch_fundamentals_empty_when_yfinance_has_nothing(monkeypatch, tmp_pat
     assert list(out.columns) == ["fiscalDateEnding", "metric", "value"]
 
 
-def test_build_equity_fundamentals_features_reindexes_and_ffills(monkeypatch):
+def test_build_equity_fundamentals_features_raises_no_point_in_time_source(monkeypatch):
+    """CHANTIER (suite) : yfinance ne fournit aucune source POINT-IN-TIME
+    pour les fondamentaux (etat ACTUEL seulement, potentiellement retraite --
+    4 exercices annuels / 6 trimestres, verifie empiriquement le
+    2026-09-19) -- les injecter comme feature datee introduit un biais
+    look-ahead deja demontre empiriquement (investigation dediee, tour
+    precedent : une valeur close le 31/12 etait visible des le 02/01). Le
+    point d'entree PUBLIC doit lever une exception DEDIEE, jamais un
+    DataFrame vide silencieux."""
+    idx = pd.bdate_range("2026-01-01", periods=5)
+    with pytest.raises(equity_fundamentals.FundamentalsFeaturesNotSupportedError, match="point-in-time"):
+        equity_fundamentals.build_equity_fundamentals_features("TTE.PA", idx)
+
+
+def test_reindex_fundamentals_reindexes_and_ffills(monkeypatch):
+    """Meme couverture que l'ancien test de `build_equity_fundamentals_
+    features` (rouge->vert du chantier precedent), retargetee sur
+    `_reindex_fundamentals` : la logique de reindexation elle-meme reste
+    correcte et testee, elle est seulement retiree du point d'entree
+    PUBLIC (desormais bloque, voir test ci-dessus) -- conservee pour une
+    eventuelle source point-in-time future."""
     monkeypatch.setattr(fundamentals_source, "fetch_fundamentals", lambda symbol: pd.DataFrame({
         "fiscalDateEnding": ["2025-12-31", "2026-03-31"],
         "metric": ["Total Revenue", "Total Revenue"],
         "value": [1000.0, 1100.0],
     }))
     idx = pd.bdate_range("2026-01-01", periods=100)
-    out = equity_fundamentals.build_equity_fundamentals_features("TTE.PA", idx)
+    out = equity_fundamentals._reindex_fundamentals("TTE.PA", idx)
 
     col = "TTE_PA_Total_Revenue_fundamental"
     assert col in out.columns
@@ -394,12 +414,12 @@ def test_build_equity_fundamentals_features_reindexes_and_ffills(monkeypatch):
     assert (out.loc[after, col] == 1100.0).all()
 
 
-def test_build_equity_fundamentals_features_is_a_noop_for_a_non_equity_symbol(monkeypatch):
+def test_reindex_fundamentals_is_a_noop_for_a_non_equity_symbol(monkeypatch):
     calls = []
     monkeypatch.setattr(fundamentals_source, "fetch_fundamentals",
                          lambda symbol: (calls.append(symbol), pd.DataFrame())[1])
     idx = pd.bdate_range("2024-01-01", periods=5)
-    out = equity_fundamentals.build_equity_fundamentals_features("^VIX", idx)
+    out = equity_fundamentals._reindex_fundamentals("^VIX", idx)
     assert out.empty
     assert not calls  # jamais interroge pour un symbole non-action
 
@@ -431,6 +451,42 @@ def test_enable_fundamentals_features_false_injects_no_fundamental_columns(monke
 
     assert not calls
     assert not any("fundamental" in c.lower() for c in pool.columns)
+
+
+def test_enable_fundamentals_features_true_makes_build_base_feature_pool_raise(monkeypatch):
+    """Garde de bout en bout : activer le flag (jamais expose sur /launch
+    ni en CLI aujourd'hui -- seule voie possible : YAML/construction directe
+    de RunConfig) doit faire echouer le pipeline avec l'exception dediee,
+    jamais silencieusement produire un pool sans les colonnes."""
+    monkeypatch.setattr(engine_module, "download_ohlc", lambda *a, **k: None)
+    raw = pd.DataFrame({"TTE_PA": [100.0, 101.0, 102.0]},
+                        index=pd.bdate_range("2024-01-01", periods=3))
+    config = RunConfig(
+        objective=ObjectiveConfig(target_symbol="TTE.PA"),
+        features=FeaturesConfig(families=["technical"], enable_fundamentals_features=True),
+    )
+    with pytest.raises(equity_fundamentals.FundamentalsFeaturesNotSupportedError):
+        engine_module.build_base_feature_pool(raw, config, target_col="TTE_PA")
+
+
+def test_cli_rejects_enable_fundamentals_features_true_at_submission(tmp_path):
+    """Validation a la SOUMISSION, cote CLI (seule voie de soumission reelle
+    du flag aujourd'hui, YAML/--config) -- rejet AVANT ingestion, jamais un
+    RuntimeError profond une fois le run deja lance."""
+    from typer.testing import CliRunner
+
+    from patrick.cli import app as cli_app
+
+    yaml_path = tmp_path / "cfg.yaml"
+    yaml_path.write_text(
+        "objective:\n  target_symbol: 'TTE.PA'\n"
+        "features:\n  enable_fundamentals_features: true\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli_app, ["ingest", "--config", str(yaml_path)])
+    assert result.exit_code != 0
+    assert "point-in-time" in result.output.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -489,6 +545,29 @@ def test_equities_page_returns_200_and_lists_every_ticker(monkeypatch):
         assert meta["label"] in resp.text
     # exclusions carry/cross-sectional momentum affichees explicitement
     assert "Cross-sectional momentum" in resp.text or "cross_sectional_momentum" in resp.text
+
+
+def test_equities_page_fundamentals_display_unaffected_by_the_training_guard(monkeypatch):
+    """CHANTIER (suite) : le blocage de `equity_fundamentals.
+    build_equity_fundamentals_features` (feature d'entrainement) ne doit
+    RIEN casser sur /equities -- `webapp/app.py::equities_page` appelle
+    `fundamentals_source.fetch_fundamentals` DIRECTEMENT, jamais le wrapper
+    desormais bloque. Donnees de forme REELLE (verifiee empiriquement pour
+    TTE.PA/AMZN, ÉTAPE 0)."""
+    monkeypatch.setattr(
+        equity_sufficiency.yfinance_source, "download_one",
+        lambda symbol, start: pd.Series(np.arange(100, dtype=float)),
+    )
+    monkeypatch.setattr(fundamentals_source, "fetch_fundamentals", lambda symbol: pd.DataFrame({
+        "fiscalDateEnding": ["2025-12-31", "2026-03-31"],
+        "metric": ["Total Revenue", "Total Revenue"],
+        "value": [43844000000.0, 44676000000.0],
+    }))
+    client = TestClient(app)
+    resp = client.get("/equities")
+    assert resp.status_code == 200
+    assert "Total Revenue" in resp.text
+    assert "43844000000.0" in resp.text
 
 
 def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(monkeypatch):
