@@ -14,7 +14,6 @@ import pytest
 
 from patrick.config.schema import ObjectiveConfig, RunConfig
 from patrick.pipeline import engine as engine_module
-from patrick.tracking import db as trackdb
 
 
 def _tiny_config(**overrides) -> RunConfig:
@@ -27,11 +26,6 @@ def _synthetic_xy(n_rows=300, n_cols=30, seed=0):
     X = rng.normal(size=(n_rows, n_cols))
     y = rng.integers(0, 4, size=n_rows)
     return X, y
-
-
-@pytest.fixture
-def conn(tmp_path):
-    return trackdb.connect(str(tmp_path / "patrick.db"))
 
 
 @pytest.fixture
