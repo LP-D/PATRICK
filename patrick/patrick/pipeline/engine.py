@@ -53,15 +53,26 @@ from patrick.data.ingest import ingest
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
-from patrick.features import equity_fundamentals, guida
+from patrick.features import equity_fundamentals, guida, spike, technical, vol_models
 from patrick.features import macro as feat_macro
-from patrick.features import spike, technical, vol_models
-from patrick.features.interactions import INTERACTION_TYPES, apply_interaction, discover_interactions
+from patrick.features.interactions import (
+    INTERACTION_TYPES,
+    apply_interaction,
+    discover_interactions,
+)
 from patrick.features.target import build_target
-from patrick.models.calibration import calibrate_classifier, predict_with_threshold, search_threshold
+from patrick.models.calibration import (
+    calibrate_classifier,
+    predict_with_threshold,
+    search_threshold,
+)
 from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
-from patrick.models.uniqueness import average_uniqueness, build_indicator_matrix, effective_sample_size
+from patrick.models.uniqueness import (
+    average_uniqueness,
+    build_indicator_matrix,
+    effective_sample_size,
+)
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability

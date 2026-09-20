@@ -9,7 +9,6 @@ import pandas as pd
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.fdr import benjamini_hochberg
 
-
 REGIME_LABELS = ("CALM", "NORMAL", "STRESS", "CRASH")
 
 

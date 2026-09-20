@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
+from conftest import OLD_ENOUGH_START as _OLD_ENOUGH_START
 
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
 from patrick.data import ingest as ingest_module
@@ -16,7 +16,6 @@ from patrick.data import quality
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
-from conftest import OLD_ENOUGH_START as _OLD_ENOUGH_START
 
 
 def _clean_series(n=1000, seed=0, price=100.0) -> pd.Series:

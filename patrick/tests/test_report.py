@@ -4,20 +4,19 @@ reproductibilité — et validité statistique Phase 2 quand le run vient d'un
 job web, cf. `run.job_id`)."""
 from __future__ import annotations
 
-import json
 import sqlite3
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import report as report_module
-from patrick import worker as worker_module
 
 # Rapport de correction, D1 : les deux tests de ce fichier lancent un run
 # pipeline complet (73s/70s mesurés) -- exclus par défaut, cf. pyproject.toml.

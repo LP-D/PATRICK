@@ -50,7 +50,7 @@ def test_render_waterfall_svg_positive_and_negative_use_distinct_colors():
     base_value = 0.0
     final_value = base_value + sum(c["shap"] for c in contributions)
     svg = render_waterfall_svg(base_value, contributions, final_value)
-    from patrick.webapp.shap_chart import POSITIVE_COLOR, NEGATIVE_COLOR
+    from patrick.webapp.shap_chart import NEGATIVE_COLOR, POSITIVE_COLOR
     assert POSITIVE_COLOR in svg
     assert NEGATIVE_COLOR in svg
 

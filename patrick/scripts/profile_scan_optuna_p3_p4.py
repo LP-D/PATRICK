@@ -294,7 +294,7 @@ def main() -> None:
           f"{full_optuna_seconds:.1f}s ({full_optuna_seconds/3600:.2f}h)")
 
     grand_total = p3_full_estimate + full_optuna_seconds
-    print(f"\n=== GRAND TOTAL (scan + Optuna estimate) ===")
+    print("\n=== GRAND TOTAL (scan + Optuna estimate) ===")
     print(f"  {grand_total:.1f}s ({grand_total/3600:.2f}h)")
     print(f"  Reference (real vix_direction.yaml run, 5 folds): "
           f"{REFERENCE_FULL_RUN_SECONDS:.1f}s ({REFERENCE_FULL_RUN_SECONDS/3600:.2f}h)")

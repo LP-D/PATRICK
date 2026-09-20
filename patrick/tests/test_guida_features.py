@@ -12,7 +12,6 @@ import pytest
 
 from patrick.features import guida
 
-
 # ---------------------------------------------------------------------------
 # Idiosyncratic volatility -- rolling OLS closed form
 # ---------------------------------------------------------------------------

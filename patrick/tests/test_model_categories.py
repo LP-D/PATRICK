@@ -30,12 +30,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from patrick.features.regime_detection import RegimeFragmentationError
 from patrick.tracking.model_categories import (
     CategoryResult,
     compare_categories,
     validate_per_regime_fragmentation,
 )
-from patrick.features.regime_detection import RegimeFragmentationError
 
 
 def _category(seed: int, n_folds: int = 6, n_obs: int = 500, loss_shift: float = 0.0) -> CategoryResult:

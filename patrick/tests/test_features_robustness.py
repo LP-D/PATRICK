@@ -13,7 +13,10 @@ import pytest
 from patrick.features._utils import safe_pct_change
 from patrick.features.spike import build_spike_features
 from patrick.features.technical import build_technical_features
-from patrick.features.vol_models import build_vol_model_features_base, build_vol_model_features_parametric
+from patrick.features.vol_models import (
+    build_vol_model_features_base,
+    build_vol_model_features_parametric,
+)
 
 
 def _build_vol_model_features(series, prefix="px", models=None):

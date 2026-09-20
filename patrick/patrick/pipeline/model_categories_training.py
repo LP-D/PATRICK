@@ -57,7 +57,7 @@ from patrick.features.regime_detection import (
     check_regime_fragmentation,
     detect_regime,
 )
-from patrick.pipeline.engine import _config_hash, _fit_eval, _select, _FoldContext
+from patrick.pipeline.engine import _config_hash, _fit_eval, _FoldContext, _select
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.tracking.model_categories import CategoryResult
 from patrick.tuning.optuna_runner import tune_config

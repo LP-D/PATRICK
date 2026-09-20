@@ -20,8 +20,8 @@ correct if the universe list changes again.
 """
 from __future__ import annotations
 
-from patrick.tracking import db as trackdb
 from patrick.config.defaults import DEFAULT_TARGET_CHOICES
+from patrick.tracking import db as trackdb
 
 _VALID_TARGETS = {symbol for symbol, _label, _source in DEFAULT_TARGET_CHOICES}
 _VALID_TARGET = next(iter(_VALID_TARGETS))  # any real, still-in-scope ticker

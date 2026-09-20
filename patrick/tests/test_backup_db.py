@@ -10,12 +10,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-import time
 
 import pytest
 
-from patrick.tracking import backup
-from patrick.tracking import db
+from patrick.tracking import backup, db
 
 
 def _make_populated_db(path: str) -> sqlite3.Connection:

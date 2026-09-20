@@ -9,11 +9,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from conftest import OLD_ENOUGH_START
 
 from patrick import audit as audit_module
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
-from conftest import OLD_ENOUGH_START
 
 N_DAYS = 700
 START = OLD_ENOUGH_START  # relative, not absolute -- see tests/conftest.py

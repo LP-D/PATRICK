@@ -37,6 +37,7 @@ def test_pipeline_accepts_none_in_sampler_grid(tmp_path, monkeypatch):
     lignes de leaderboard pour les deux -- la mécanique de comparaison est
     utilisable telle quelle dès qu'un accès réseau réel est disponible."""
     import pandas as pd
+
     from patrick.config.schema import RunConfig
     from patrick.data.store import DataStore
     from patrick.pipeline import engine as engine_module

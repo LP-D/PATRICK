@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from patrick.data.ingest import _apply_session_lag
 from patrick.config.schema import ObjectiveConfig
+from patrick.data.ingest import _apply_session_lag
 from patrick.data.session_calendar import classify_asset_class, session_lag_days
 
 

@@ -11,7 +11,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from patrick.features.vol_models import GUIDA_VOL_PROXY_PAIRS, build_vol_model_features_base
+from patrick.features.vol_models import (
+    GUIDA_VOL_PROXY_PAIRS,
+    build_vol_model_features_base,
+)
 
 
 def _series(n=1200, seed=4) -> pd.Series:

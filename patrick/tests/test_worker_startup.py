@@ -8,8 +8,8 @@ pipeline réel exécuté), contrairement à `test_worker.py` qui est marqué
 """
 from __future__ import annotations
 
-from patrick.tracking import db as trackdb
 from patrick import worker as worker_module
+from patrick.tracking import db as trackdb
 
 
 def _insert_running_run(conn, run_id: str, hours_ago: float) -> None:

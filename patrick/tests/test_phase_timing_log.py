@@ -18,9 +18,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick.tracking import db
+from patrick.tracking import db, phase_timing_log
 from patrick.tracking import history as trackhistory
-from patrick.tracking import phase_timing_log
 
 
 def _make_run(conn, run_id: str, target: str = "^VIX", horizon: int = 5) -> None:

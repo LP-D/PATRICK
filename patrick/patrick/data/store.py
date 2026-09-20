@@ -21,9 +21,9 @@ import json
 import os
 import tempfile
 from datetime import date, datetime, timezone
-from glob import glob
 
 import pandas as pd
+
 
 def _default_store_dir() -> str:
     """See `tracking.db.default_db_path`: read from the environment on EVERY

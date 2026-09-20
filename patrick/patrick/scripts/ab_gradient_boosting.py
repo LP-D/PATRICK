@@ -40,7 +40,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 # ── AB1: query existing database ────────────────────────────────────────────
 
 def ab1_query_db(db_path: str) -> bool:
@@ -118,24 +117,19 @@ def ab1_query_db(db_path: str) -> bool:
 # ── AB2: live A/B experiment ────────────────────────────────────────────────
 
 def ab2_run_experiment(horizon: int = 5):
-    from sklearn.preprocessing import RobustScaler
 
     from patrick.config.schema import RunConfig
     from patrick.data.ingest import ingest
     from patrick.data.sources.yfinance_source import clean_symbol
     from patrick.data.store import DataStore
-    from patrick.features.target import build_target
     from patrick.pipeline.engine import (
+        _fit_eval,
         _FoldContext,
         _FoldPoolBuilder,
-        _finite_features,
-        _finite_scaled,
         _select,
-        _fit_eval,
         _walk_forward_span,
         build_base_feature_pool,
     )
-    from patrick.validation.metrics import metrics as compute_metrics
     from patrick.validation.walkforward import build_fold_cuts
 
     config_path = Path(__file__).resolve().parents[2] / "configs" / "examples" / "vix_direction.yaml"

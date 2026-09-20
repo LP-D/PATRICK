@@ -15,8 +15,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
-from patrick.webapp.app import app
 from patrick.webapp import forms
+from patrick.webapp.app import app
 
 
 def test_commodities_page_returns_200():
@@ -41,7 +41,7 @@ def test_commodities_page_has_one_stats_panel_per_asset():
     # Each panel must carry its own symbol so `asset_stats.js` knows which
     # `/api/asset-stats/{symbol}` to call.
     slug = forms.slug_target("GC=F")
-    assert f'data-symbol="GC=F"' in resp.text
+    assert 'data-symbol="GC=F"' in resp.text
     assert f'id="asset-{slug}"' in resp.text
 
 

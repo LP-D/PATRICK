@@ -22,7 +22,6 @@ import pytest
 from patrick.data import freshness
 from patrick.data.store import DataStore
 
-
 # ---------------------------------------------------------------------------
 # Table de correspondance périodicité FRED (préfixe/pattern -> fréquence)
 # ---------------------------------------------------------------------------
@@ -216,8 +215,8 @@ def test_compute_freshness_never_makes_a_network_call(tmp_path, monkeypatch):
     """Garde-fou explicite : si `yfinance_source`/`fred_source` sont
     importés/appelés par erreur depuis `compute_freshness`, ce test doit
     l'attraper en cassant l'appel réseau."""
-    import patrick.data.sources.yfinance_source as yf_source
     import patrick.data.sources.fred_source as fred_src
+    import patrick.data.sources.yfinance_source as yf_source
 
     def _boom(*a, **k):
         raise AssertionError("compute_freshness ne doit jamais appeler le réseau")

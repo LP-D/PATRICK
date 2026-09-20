@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from math import comb
 
-import numpy as np
 import pytest
 
 from patrick.validation.cpcv import (

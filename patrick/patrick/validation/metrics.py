@@ -13,8 +13,13 @@ computed and displayed alongside, never silently substituted for F1_dir.
 from __future__ import annotations
 
 import numpy as np
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score, f1_score,
-                              matthews_corrcoef, roc_auc_score)
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    matthews_corrcoef,
+    roc_auc_score,
+)
 
 _DIR_MAP = {0: "DOWN", 1: "DOWN", 2: "UP", 3: "UP"}
 _ALL_CLASSES = [0, 1, 2, 3]

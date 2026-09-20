@@ -32,7 +32,11 @@ import pandas as pd
 
 from patrick.config.defaults import DEFAULT_MIN_TRAIN_FRAC, DEFAULT_N_WF_FOLDS
 from patrick.features._utils import safe_pct_change
-from patrick.validation.feasibility import FeasibilityResult, is_feasible, min_obs_required
+from patrick.validation.feasibility import (
+    FeasibilityResult,
+    is_feasible,
+    min_obs_required,
+)
 
 ThresholdMode = Literal["quantile", "fixed"]
 REGIME_LABELS = ("calme", "normal", "stress")

@@ -2,9 +2,9 @@ __version__ = "0.1.0"
 
 from patrick.phase9 import (
     DEFAULT_REGIME_THRESHOLDS,
-    RegimeThresholds,
     DecisionJournal,
     ExecutionOrder,
+    RegimeThresholds,
     StrategyEngine,
     StrategyRule,
     StrategyVersion,

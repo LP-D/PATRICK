@@ -13,17 +13,16 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import time
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
-from patrick import worker as worker_module
 
 # Rapport de correction, D1 : les deux tests lancent un vrai sous-processus
 # `patrick worker` (76s/69s mesurés) -- exclus par défaut, cf. pyproject.toml.

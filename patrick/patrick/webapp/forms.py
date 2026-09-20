@@ -9,8 +9,6 @@ matching the rest of the French-language product surface (form labels,
 error messages shown directly in the web UI)."""
 from __future__ import annotations
 
-import glob
-import os
 import re
 from pathlib import Path
 

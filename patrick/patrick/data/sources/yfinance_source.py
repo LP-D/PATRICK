@@ -8,7 +8,6 @@ from __future__ import annotations
 import time
 from functools import lru_cache
 
-import numpy as np
 import pandas as pd
 import yfinance as yf
 

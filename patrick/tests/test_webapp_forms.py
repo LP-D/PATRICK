@@ -3,12 +3,11 @@ explicites (plus jamais lus dans `form`) -- un lancement peut soumettre
 plusieurs cibles à la fois, une par appel (cf. patrick/webapp/app.py)."""
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
-
-import numpy as np
-import pandas as pd
 
 from patrick.config import defaults as D
 from patrick.data.store import DataStore

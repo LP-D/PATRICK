@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from patrick.config.schema import ObjectiveConfig, RunConfig
+from patrick.config.schema import RunConfig
 from patrick.pipeline import engine as engine_module
 
 

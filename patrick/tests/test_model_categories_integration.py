@@ -27,9 +27,9 @@ from patrick.config.schema import RunConfig
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.pipeline.engine import (
     _fit_eval,
-    _select,
     _FoldContext,
     _FoldPoolBuilder,
+    _select,
     build_base_feature_pool,
 )
 from patrick.pipeline.leaderboard import Leaderboard
@@ -201,10 +201,11 @@ def test_grid_scan_picks_a_genuinely_different_n_features_when_it_is_clearly_opt
     l'un, et N=8 dans l'autre -- verifie que le scan suit reellement les
     donnees plutot que de retomber toujours sur le meme choix (ce que le
     `base_cfg` impose depuis global faisait avant ce correctif)."""
+    import os
+    import tempfile
+
     from patrick.config.schema import RunConfig
     from patrick.tracking import db as trackdb
-    import tempfile
-    import os
 
     rng = np.random.default_rng(7)
     n = 400

@@ -16,7 +16,6 @@ import pytest
 
 from patrick.tracking import portfolio as trackportfolio
 
-
 # ---------------------------------------------------------------------------
 # aggregate_signals_by_group
 # ---------------------------------------------------------------------------

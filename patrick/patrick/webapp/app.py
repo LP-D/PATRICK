@@ -28,7 +28,15 @@ from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import portfolio as trackportfolio
 from patrick.validation import equity_sufficiency, feasibility
-from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager, shap_chart
+from patrick.webapp import (
+    alerts,
+    asset_stats,
+    forms,
+    i18n,
+    market_data,
+    run_manager,
+    shap_chart,
+)
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing

@@ -38,7 +38,11 @@ import pytest
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.sources.yfinance_source import clean_symbol
-from patrick.features.technical import build_technical_features, ohlc_vol_features, returns
+from patrick.features.technical import (
+    build_technical_features,
+    ohlc_vol_features,
+    returns,
+)
 from patrick.pipeline.engine import _sanitize_lookback_windows, build_base_feature_pool
 
 

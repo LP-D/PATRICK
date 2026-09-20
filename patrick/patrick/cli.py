@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import typer
 
+from patrick import predict as predict_module
+from patrick import worker as worker_module
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
@@ -16,8 +18,6 @@ from patrick.data.store import DataStore
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
-from patrick import predict as predict_module
-from patrick import worker as worker_module
 
 app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
 audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraînent jamais un modèle de production.")

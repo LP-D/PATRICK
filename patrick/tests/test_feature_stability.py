@@ -8,7 +8,10 @@ import pandas as pd
 import pytest
 
 from patrick.selection.registry import select_features
-from patrick.selection.stability import MIN_MEAN_JACCARD_WARNING, feature_selection_stability, jaccard
+from patrick.selection.stability import (
+    feature_selection_stability,
+    jaccard,
+)
 
 
 def test_jaccard_identical_sets_is_one():

@@ -39,7 +39,7 @@ servi de cible depuis (`^GSPC`, `^VIX`, `BTC-USD`). Sur les 68 tickers de
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 
 import numpy as np
 import pandas as pd

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from patrick.config.defaults import ALL_ML_ALGOS, DEFAULT_ML_ALGOS
-from patrick.models.registry import MODEL_N_JOBS, ML_ALGOS, get_classifier
+from patrick.models.registry import ML_ALGOS, MODEL_N_JOBS, get_classifier
 from patrick.models.samplers import ALL_SAMPLERS, get_sampler
 from patrick.selection.registry import SELECTION_METHODS, select_features
 

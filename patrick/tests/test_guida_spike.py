@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from patrick.config.defaults import GUIDA_LOOKBACKS
 from patrick.features.spike import HURST_GUIDA_SUBSET, build_spike_features_base

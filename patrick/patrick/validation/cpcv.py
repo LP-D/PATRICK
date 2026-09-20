@@ -34,7 +34,6 @@ from itertools import combinations
 from math import comb
 
 import numpy as np
-import pandas as pd
 
 DEFAULT_N_GROUPS = 7
 DEFAULT_K_TEST_GROUPS = 2
