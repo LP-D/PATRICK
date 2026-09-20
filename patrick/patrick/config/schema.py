@@ -130,7 +130,7 @@ class ValidationConfig(BaseModel):
     scheme: Literal["walkforward", "cpcv"] = "walkforward"
     n_groups: int = D.DEFAULT_CPCV_N_GROUPS
     k_test_groups: int = D.DEFAULT_CPCV_K_TEST_GROUPS
-    n_wf_folds: int = D.DEFAULT_N_WF_FOLDS
+    n_wf_folds: int = Field(default=D.DEFAULT_N_WF_FOLDS, ge=1)
     min_train_frac: float = D.DEFAULT_MIN_TRAIN_FRAC
     purge: bool = D.DEFAULT_PURGE_ENABLED
     embargo_enabled: bool = D.DEFAULT_EMBARGO_ENABLED

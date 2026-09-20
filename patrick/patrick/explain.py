@@ -56,11 +56,7 @@ import shap
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
-from patrick.pipeline.engine import (
-    _apply_interaction_formulas,
-    build_base_feature_pool,
-    build_parametric_pool,
-)
+from patrick.pipeline.engine import build_full_feature_pool
 from patrick.tracking import db as trackdb
 from patrick.validation import drift
 
@@ -139,12 +135,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         # unlike `predict.py`'s live inference, this never needs today's bar.
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
 
-        base_pool = build_base_feature_pool(raw, config, target_col)
-        full_pool = pd.concat([base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
-        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
-        if interaction_formulas:
-            inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-            full_pool = pd.concat([full_pool, inter], axis=1)
+        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_pool if c not in full_pool.columns]
         if missing:
@@ -246,12 +237,7 @@ def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | N
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
 
-        base_pool = build_base_feature_pool(raw, config, target_col)
-        full_pool = pd.concat([base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
-        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
-        if interaction_formulas:
-            inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-            full_pool = pd.concat([full_pool, inter], axis=1)
+        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_names if c not in full_pool.columns]
         if missing:

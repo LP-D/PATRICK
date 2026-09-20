@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from datetime import date, datetime, timezone
 from glob import glob
 
@@ -68,8 +69,24 @@ class DataStore:
         return {}
 
     def _write_index(self, idx: dict) -> None:
-        with open(self._index_path(), "w") as f:
-            json.dump(idx, f, indent=1)
+        """Atomic write (worker process and web process both touch
+        `_index.json`, see module docstring / `_default_store_dir`): writes
+        to a temp file in the SAME directory, then `os.replace()` -- an
+        atomic rename on both Windows and Unix, unlike writing the target
+        path directly, which a concurrent reader could observe half-written
+        or which a second concurrent writer could interleave with."""
+        fd, tmp_path = tempfile.mkstemp(
+            prefix="_index.", suffix=".json.tmp", dir=self.root)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(idx, f, indent=1)
+            os.replace(tmp_path, self._index_path())
+        except BaseException:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def exists(self, key: str) -> bool:
         return bool(self._read_index().get(key, {}).get("snapshots"))

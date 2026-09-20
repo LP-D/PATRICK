@@ -19,6 +19,7 @@ retrain or select a model.
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 import joblib
@@ -28,12 +29,10 @@ import pandas as pd
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
-from patrick.pipeline.engine import (
-    _apply_interaction_formulas,
-    build_base_feature_pool,
-    build_parametric_pool,
-)
+from patrick.pipeline.engine import build_full_feature_pool
 from patrick.tracking import db as trackdb
+
+logger = logging.getLogger(__name__)
 
 
 def _find_best_trial(conn: sqlite3.Connection, run_id: str) -> dict | None:
@@ -61,7 +60,13 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
         future_idx = pos + horizon
         if future_idx >= len(series.index):
             continue  # horizon not yet elapsed
-        ret = series.iloc[future_idx] / series.iloc[pos] - 1
+        price_at_signal = series.iloc[pos]
+        if price_at_signal == 0:
+            logger.warning(
+                "_update_live_outcomes: zero price for %s at %s (trial %s) -- "
+                "return undefined, outcome left pending.", target_col, row["ts"], trial_id)
+            continue  # degenerate price, cannot compute a return (would be ZeroDivisionError/inf)
+        ret = series.iloc[future_idx] / price_at_signal - 1
         y_true_binary = 1.0 if ret > 0 else 0.0
         trackdb.update_prediction_outcome(conn, trial_id, row["ts"], y_true_binary)
         n_updated += 1
@@ -88,12 +93,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, force=True, data_quality=config.data_quality)
 
-        base_pool = build_base_feature_pool(raw, config, target_col)
-        full_pool = pd.concat([base_pool, build_parametric_pool(raw, config, fit_end_idx=None)], axis=1)
-        full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
-        if interaction_formulas:
-            inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-            full_pool = pd.concat([full_pool, inter], axis=1)
+        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_pool if c not in full_pool.columns]
         if missing:
