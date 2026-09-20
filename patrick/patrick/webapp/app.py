@@ -6,6 +6,7 @@ web interface.
 """
 from __future__ import annotations
 
+import html
 import os
 from pathlib import Path
 
@@ -143,10 +144,27 @@ def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
     }
 
 
+def _safe_redirect_target(next_path: str) -> str:
+    """Security (open redirect) -- `/set-lang?next=` used to 303-redirect to
+    `next` with no validation: a link that looks internal
+    (`/set-lang/fr?next=...`) could send the visitor anywhere. Accepts only
+    an internal relative path: must start with a single `/` (never `//`,
+    which browsers resolve as a scheme-relative absolute URL, e.g.
+    `next=//evil.com`) and must not embed an explicit `http(s)://` scheme
+    anywhere (e.g. `next=https://evil.com`). Anything else falls back to
+    `/`, the same default this route already had before `next` existed."""
+    if not next_path or not next_path.startswith("/") or next_path.startswith("//"):
+        return "/"
+    lowered = next_path.lower()
+    if "http://" in lowered or "https://" in lowered:
+        return "/"
+    return next_path
+
+
 @app.get("/set-lang/{lang}")
 def set_lang(lang: str, next: str = "/"):
     lang = lang if lang in i18n.SUPPORTED_LANGS else i18n.DEFAULT_LANG
-    resp = RedirectResponse(next or "/", status_code=303)
+    resp = RedirectResponse(_safe_redirect_target(next), status_code=303)
     resp.set_cookie(i18n.LANG_COOKIE, lang, max_age=60 * 60 * 24 * 365)
     return resp
 
@@ -350,6 +368,13 @@ async def create_run(request: Request):
 
     raw_output_dir = (form.get("output_dir") or "").strip()
     errors: list[str] = []
+    if raw_output_dir and not forms.validate_output_dir(raw_output_dir, errors):
+        # Rejected (path traversal / invalid character, see
+        # `forms.validate_output_dir`) -- clear it so the batch override
+        # below never applies; each target's own `build_config_dict` call
+        # independently re-validates the same raw form field and falls
+        # back to its own `runs/{name}` default.
+        raw_output_dir = ""
     configs: list[RunConfig] = []
     for sym in targets:
         name = run_manager.next_run_name(sym)
@@ -557,10 +582,20 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
             target_counts[tgt] = target_counts.get(tgt, 0) + 1
     targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
 
+    # Security (reflected XSS) -- `runs.html`'s footer concatenates these
+    # three query-param-derived strings directly into an HTML string that
+    # is then rendered with `{{ footer | safe }}` (`_components.html::
+    # data_table`) -- escaped here, at the one place they enter the
+    # template context, rather than in the template (which legitimately
+    # needs `|safe` for the rest of the footer's own server-built markup).
+    # A no-op for every real filter value (ticker symbols, "done"/
+    # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
     return templates.TemplateResponse(
         request, "runs.html",
-        {"runs": runs, "targets": targets, "filter_target": target or "",
-         "filter_status": status or "", "filter_scheme": scheme or "",
+        {"runs": runs, "targets": targets,
+         "filter_target": html.escape(target) if target else "",
+         "filter_status": html.escape(status) if status else "",
+         "filter_scheme": html.escape(scheme) if scheme else "",
          **_i18n_context(request)},
     )
 

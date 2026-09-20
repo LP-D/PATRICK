@@ -9,6 +9,7 @@ through SQLAlchemy).
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -687,6 +688,60 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
+def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, float | None]:
+    """Batched `best trial -> avg test/test_path F1_dir` lookup for every
+    run_id in `run_ids`: TWO fixed queries (best-trial ids, then their
+    fold_metric average) regardless of len(run_ids), instead of up to two
+    queries PER run in a Python loop (the N+1 `list_all_runs` used to have,
+    and the same shape `tracking.history.list_runs`/`target_detail` had
+    independently -- see those functions, which call this instead of
+    duplicating the pattern: `history.py` already depends on `db.py`, never
+    the reverse). A run_id with no best trial, or a best trial with no
+    matching fold_metric row, is simply absent from the returned dict."""
+    if not run_ids:
+        return {}
+    placeholders = ",".join("?" for _ in run_ids)
+    best_trial_by_run: dict[str, int] = dict(conn.execute(
+        f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({placeholders}) AND is_best = 1",
+        run_ids,
+    ))
+    trial_ids = list(best_trial_by_run.values())
+    best_f1_by_trial: dict[int, float] = {}
+    if trial_ids:
+        trial_placeholders = ",".join("?" for _ in trial_ids)
+        best_f1_by_trial = dict(conn.execute(
+            f"SELECT trial_id, AVG(value) FROM fold_metric WHERE trial_id IN ({trial_placeholders}) "
+            "AND split IN ('test', 'test_path') AND metric = 'F1_dir' GROUP BY trial_id",
+            trial_ids,
+        ))
+    return {run_id: best_f1_by_trial.get(trial_id) for run_id, trial_id in best_trial_by_run.items()}
+
+
+def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
+                      kind: str = "class_specific") -> dict[str, dict]:
+    """Batched `dm_result` lookup for every run_id in `run_ids`, filtered to
+    a single `kind` -- `dm_result`'s primary key is (run_id, kind), up to
+    TWO rows per run (see `save_dm_result`'s docstring: `class_specific` vs
+    `common`), so an unfiltered per-run `SELECT ... WHERE run_id = ?` (the
+    bug this replaces, see `list_all_runs` below) returns whichever of the
+    two SQLite happens to pick, not necessarily the one every other page
+    (`run_detail`/`target_detail`, via `history._dm_result_for_run`, same
+    `class_specific` default) actually displays. ONE query regardless of
+    len(run_ids), same batching rationale as `batch_best_f1_dir` above. A
+    run_id with no matching row is simply absent."""
+    if not run_ids:
+        return {}
+    placeholders = ",".join("?" for _ in run_ids)
+    return {
+        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at}
+        for run_id, baseline, dm_stat, p_value, computed_at in conn.execute(
+            f"SELECT run_id, baseline, dm_stat, p_value, computed_at FROM dm_result "
+            f"WHERE run_id IN ({placeholders}) AND kind = ?",
+            (*run_ids, kind),
+        )
+    }
+
+
 def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
     """All runs, most recent first — for exploratory surfaces (Phase 5).
     Includes `scheme`/`best_f1_dir`/`dm_p_value` (same queries as
@@ -702,12 +757,29 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     (not deleting) was chosen. `/predictions`/`/portfolio` need no
     equivalent change: both build their queries from the CURRENT universe
     (`config.defaults.DEFAULT_TARGET_GROUPS`), never from `run` directly,
-    so a legacy-ticker run was already invisible there."""
+    so a legacy-ticker run was already invisible there.
+
+    Performance (N+1 fix): used to run up to THREE extra queries per run
+    inside this loop (best trial, its avg F1_dir, its dm_result) -- now two
+    fixed batched lookups (`batch_best_f1_dir`/`batch_dm_results`) plus this
+    one query, regardless of how many runs are listed.
+
+    Security (stored XSS, `runs.html`'s `data_table` renders every cell via
+    `{{ cell | safe }}`): `target`/`name` can be arbitrary strings for a run
+    started via CLI (never sanitized the way the web form's `slug_target`
+    sanitizes a web-submitted target) -- escaped here, at the source, since
+    `_components.html::data_table` legitimately needs raw HTML for other
+    cells (links, badges) and so cannot escape indiscriminately itself."""
     query = "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials FROM run"
     if not include_archived:
         query += " WHERE is_archived = 0"
     query += " ORDER BY started_at DESC"
     rows = conn.execute(query).fetchall()
+
+    run_ids = [r[0] for r in rows]
+    best_f1_by_run = batch_best_f1_dir(conn, run_ids)
+    dm_by_run = batch_dm_results(conn, run_ids)
+
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
         name, scheme = None, "walkforward"
@@ -717,24 +789,15 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             scheme = cfg.get("validation", {}).get("scheme", "walkforward")
         except (TypeError, ValueError, AttributeError):
             pass
-        best_row = conn.execute(
-            "SELECT trial_id FROM trial WHERE run_id = ? AND is_best = 1 LIMIT 1", (run_id,)
-        ).fetchone()
-        best_f1_dir = None
-        if best_row:
-            metric_row = conn.execute(
-                "SELECT AVG(value) FROM fold_metric WHERE trial_id = ? "
-                "AND split IN ('test', 'test_path') AND metric = 'F1_dir'",
-                (best_row[0],),
-            ).fetchone()
-            best_f1_dir = metric_row[0] if metric_row and metric_row[0] is not None else None
-        dm_row = conn.execute("SELECT p_value FROM dm_result WHERE run_id = ?", (run_id,)).fetchone()
+        dm_result = dm_by_run.get(run_id)
         out.append({
-            "run_id": run_id, "target": target, "horizon": horizon,
+            "run_id": run_id, "target": html.escape(target) if isinstance(target, str) else target,
+            "horizon": horizon,
             "status": status, "started_at": started_at, "finished_at": finished_at,
-            "n_trials": n_trials, "name": name, "config_json": config_json,
-            "scheme": scheme, "best_f1_dir": best_f1_dir,
-            "dm_p_value": dm_row[0] if dm_row else None,
+            "n_trials": n_trials, "name": html.escape(name) if isinstance(name, str) else name,
+            "config_json": config_json,
+            "scheme": scheme, "best_f1_dir": best_f1_by_run.get(run_id),
+            "dm_p_value": dm_result["p_value"] if dm_result else None,
         })
     return out
 
