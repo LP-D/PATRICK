@@ -224,6 +224,33 @@ def test_ingest_history_rule_uses_configured_min_history_years_not_hardcoded_20(
         assert len(df_ok) > 0
 
 
+def test_ingest_insufficient_history_message_describes_a_true_inequality(monkeypatch, tmp_path):
+    """ÉTAPE 2 : la condition declenchante (data/ingest.py:188) est
+    `earliest > min_history` (earliest PLUS RECENT que le seuil, donc
+    insuffisant) -- mais le message (ligne 191) affichait `earliest.date()
+    < min_history.date()`, une inegalite FAUSSE pour le cas qui declenche
+    reellement l'erreur (deja observe : "2016-09-05 < 2006-09-19", ce qui
+    est manifestement faux comme comparaison de dates). Le message doit
+    decrire une relation VRAIE."""
+    min_history_years = 10
+    threshold_days = round(min_history_years * 365.25)
+    with pytest.raises(RuntimeError) as excinfo:
+        _ingest_with_history(monkeypatch, tmp_path, "MSG_TRUTH_CHECK",
+                              threshold_days - 15, min_history_years)
+
+    msg = str(excinfo.value)
+    m = re.search(r"earliest observation (\d{4}-\d{2}-\d{2}) ([<>]) (\d{4}-\d{2}-\d{2})", msg)
+    assert m is not None, f"message inattendu : {msg}"
+    earliest_str, operator, min_history_str = m.groups()
+    earliest_ts = pd.Timestamp(earliest_str)
+    min_history_ts = pd.Timestamp(min_history_str)
+    actual_relation = earliest_ts > min_history_ts
+    displayed_relation = (operator == ">")
+    assert displayed_relation == actual_relation, (
+        f"le message affiche '{earliest_str} {operator} {min_history_str}' mais la relation "
+        f"reelle entre ces deux dates est {'>' if actual_relation else '<'} -- inegalite fausse")
+
+
 def test_cli_min_history_years_option_rejects_out_of_bounds_and_overrides_yaml(tmp_path, monkeypatch):
     from typer.testing import CliRunner
 

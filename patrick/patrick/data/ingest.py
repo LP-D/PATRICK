@@ -188,7 +188,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if earliest > min_history:
         raise RuntimeError(
             f"[QUALITY] Insufficient history: data must go back at least {dq.min_history_years} years "
-            f"(earliest observation {earliest.date()} < {min_history.date()})."
+            f"(earliest observation {earliest.date()} > {min_history.date()})."
         )
 
     df = df.sort_index().ffill().dropna(subset=[target.name])
