@@ -25,10 +25,15 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sqlite3
 import sys
 import time
 
-from patrick.tracking.backup import DEFAULT_BACKUP_DIR, backup_database
+from patrick.tracking.backup import (
+    DEFAULT_BACKUP_DIR,
+    DEFAULT_RETENTION_DAYS,
+    backup_database,
+)
 
 logger = logging.getLogger("patrick.scripts.backup_db")
 
@@ -55,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
         "--log-file", default=None,
         help="Fichier de log en plus de stdout (recommande sous le Planificateur de taches Windows).",
     )
+    parser.add_argument(
+        "--retention-days", type=int, default=DEFAULT_RETENTION_DAYS,
+        help="Purge apres la sauvegarde les fichiers de --backup-dir plus vieux que N jours "
+             f"(0 pour desactiver la purge, defaut : {DEFAULT_RETENTION_DAYS}).",
+    )
     args = parser.parse_args(argv)
 
     handlers: list[logging.Handler] = [logging.StreamHandler()]
@@ -72,9 +82,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         dest_path = backup_database(
             args.source, args.backup_dir, pages=args.pages, sleep_s=args.sleep,
+            retention_days=args.retention_days,
         )
     except FileNotFoundError as exc:
         logger.error("Sauvegarde annulee : %s", exc)
+        return 1
+    except sqlite3.Error:
+        # sqlite3.OperationalError (base verrouillee, disque plein, etc.) et
+        # les autres sqlite3.Error pendant Connection.backup() -- log complet
+        # (traceback) pour rester exploitable dans --log-file, seule trace
+        # disponible sous le Planificateur de taches Windows (cf. docstring
+        # du module). backup_database() a deja nettoye le fichier de
+        # destination partiel avant de relever.
+        logger.exception("Sauvegarde annulee : erreur SQLite pendant la copie")
         return 1
 
     dt = time.perf_counter() - t0
