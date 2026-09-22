@@ -23,7 +23,7 @@ class LocalCache:
         return self.root / f"{key}{suffix}"
 
     def _meta_path(self, key: str) -> Path:
-        return self.root / f"{key}.json"
+        return self.root / f"{key}.meta.json"
 
     def _write_meta(self, key: str, payload: dict) -> None:
         with open(self._meta_path(key), "w", encoding="utf-8") as f:

@@ -6,6 +6,7 @@ web interface.
 """
 from __future__ import annotations
 
+import html
 import os
 from pathlib import Path
 
@@ -17,13 +18,16 @@ from pydantic import ValidationError
 
 from patrick import explain
 from patrick.config import defaults as D
+from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
+from patrick.data.sources import fundamentals_source
+from patrick.features import guida
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import portfolio as trackportfolio
-from patrick.validation import feasibility
+from patrick.validation import equity_sufficiency, feasibility
 from patrick.webapp import alerts, asset_stats, forms, i18n, market_data, run_manager, shap_chart
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
@@ -140,10 +144,27 @@ def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
     }
 
 
+def _safe_redirect_target(next_path: str) -> str:
+    """Security (open redirect) -- `/set-lang?next=` used to 303-redirect to
+    `next` with no validation: a link that looks internal
+    (`/set-lang/fr?next=...`) could send the visitor anywhere. Accepts only
+    an internal relative path: must start with a single `/` (never `//`,
+    which browsers resolve as a scheme-relative absolute URL, e.g.
+    `next=//evil.com`) and must not embed an explicit `http(s)://` scheme
+    anywhere (e.g. `next=https://evil.com`). Anything else falls back to
+    `/`, the same default this route already had before `next` existed."""
+    if not next_path or not next_path.startswith("/") or next_path.startswith("//"):
+        return "/"
+    lowered = next_path.lower()
+    if "http://" in lowered or "https://" in lowered:
+        return "/"
+    return next_path
+
+
 @app.get("/set-lang/{lang}")
 def set_lang(lang: str, next: str = "/"):
     lang = lang if lang in i18n.SUPPORTED_LANGS else i18n.DEFAULT_LANG
-    resp = RedirectResponse(next or "/", status_code=303)
+    resp = RedirectResponse(_safe_redirect_target(next), status_code=303)
     resp.set_cookie(i18n.LANG_COOKIE, lang, max_age=60 * 60 * 24 * 365)
     return resp
 
@@ -167,6 +188,29 @@ def _recent_runs(limit: int = 8) -> list[dict]:
         conn.close()
 
 
+def _target_groups_with_equity_badges() -> dict:
+    """CHANTIER (feature/equity-asset-class): badge d'insuffisance de
+    donnees (`validation/equity_sufficiency.py`) injecte directement dans le
+    libelle de chaque option du groupe "Actions individuelles" sur
+    `/launch` -- seul groupe concerne (seuil ABSOLU de jours de cotation,
+    independant du garde-fou horizon existant, `/api/horizon-feasibility`).
+    Recompute a CHAQUE requete (pas au chargement du module, contrairement a
+    `forms.TARGET_GROUPS`) : `equity_sufficiency.check_data_sufficiency`
+    appelle yfinance (via `download_one`, deja mis en cache localement 7
+    jours) -- un calcul au chargement du module figerait le badge au
+    demarrage du serveur, jamais rafraichi. Les autres groupes ne sont pas
+    touches (aucun appel reseau supplementaire pour eux)."""
+    groups = dict(forms.TARGET_GROUPS)
+    equity_items = []
+    for sym, label in groups.get(EQ.EQUITY_TARGET_GROUP, []):
+        result = equity_sufficiency.check_data_sufficiency(sym)
+        suffix = "" if result.sufficient else f" [données insuffisantes : {result.n_trading_days}j/{result.min_required}j]"
+        equity_items.append((sym, f"{label}{suffix}"))
+    if EQ.EQUITY_TARGET_GROUP in groups:
+        groups[EQ.EQUITY_TARGET_GROUP] = equity_items
+    return groups
+
+
 def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
                    initial_run_id: str | None = None):
     active = run_manager.active_run()
@@ -182,6 +226,7 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "movers": alerts.get_cached(),
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
+            "target_groups": _target_groups_with_equity_badges(),
             **_i18n_context(request),
         },
         status_code=status_code,
@@ -323,6 +368,13 @@ async def create_run(request: Request):
 
     raw_output_dir = (form.get("output_dir") or "").strip()
     errors: list[str] = []
+    if raw_output_dir and not forms.validate_output_dir(raw_output_dir, errors):
+        # Rejected (path traversal / invalid character, see
+        # `forms.validate_output_dir`) -- clear it so the batch override
+        # below never applies; each target's own `build_config_dict` call
+        # independently re-validates the same raw form field and falls
+        # back to its own `runs/{name}` default.
+        raw_output_dir = ""
     configs: list[RunConfig] = []
     for sym in targets:
         name = run_manager.next_run_name(sym)
@@ -530,10 +582,20 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
             target_counts[tgt] = target_counts.get(tgt, 0) + 1
     targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
 
+    # Security (reflected XSS) -- `runs.html`'s footer concatenates these
+    # three query-param-derived strings directly into an HTML string that
+    # is then rendered with `{{ footer | safe }}` (`_components.html::
+    # data_table`) -- escaped here, at the one place they enter the
+    # template context, rather than in the template (which legitimately
+    # needs `|safe` for the rest of the footer's own server-built markup).
+    # A no-op for every real filter value (ticker symbols, "done"/
+    # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
     return templates.TemplateResponse(
         request, "runs.html",
-        {"runs": runs, "targets": targets, "filter_target": target or "",
-         "filter_status": status or "", "filter_scheme": scheme or "",
+        {"runs": runs, "targets": targets,
+         "filter_target": html.escape(target) if target else "",
+         "filter_status": html.escape(status) if status else "",
+         "filter_scheme": html.escape(scheme) if scheme else "",
          **_i18n_context(request)},
     )
 
@@ -777,6 +839,54 @@ def macro_page(request: Request):
     return templates.TemplateResponse(
         request, "macro.html",
         {"assets": _asset_group_view(D.FRED_TARGET_GROUP), **_i18n_context(request)},
+    )
+
+
+def _equity_asset_group_view() -> list[dict]:
+    """CHANTIER (feature/equity-asset-class): same panel-skeleton shape as
+    `_asset_group_view` (symbol/label/slug), plus the data-sufficiency badge
+    (`validation/equity_sufficiency.py`) and the ticker's metadata
+    (`config.equity_universe.EQUITY_UNIVERSE`) -- unlike commodities/macro,
+    this group has few enough tickers (4) that computing the badge
+    server-side, once per page load, is cheap (cached 7 days via
+    `yfinance_source.download_one`'s own `LocalCache`)."""
+    out = []
+    for sym, meta in EQ.EQUITY_UNIVERSE.items():
+        result = equity_sufficiency.check_data_sufficiency(sym)
+        out.append({
+            "symbol": sym, "label": meta["label"], "slug": forms.slug_target(sym),
+            "currency": meta["currency"], "exchange": meta["exchange"],
+            "first_listed": meta["first_listed"],
+            "sufficient": result.sufficient, "n_trading_days": result.n_trading_days,
+            "min_required": result.min_required, "reason": result.reason,
+        })
+    return out
+
+
+@app.get("/equities")
+def equities_page(request: Request):
+    """CHANTIER (feature/equity-asset-class): "toute page listant des
+    tickers actions" (spec) -- prix/stats (memes panneaux que `/commodities`
+    /`/macro`, `asset_stats.js` contre `/api/asset-stats/{symbol}`) PLUS le
+    badge d'insuffisance de donnees et les fondamentaux, restant tous deux
+    visibles meme sous le seuil (seul le LANCEMENT d'un entrainement est
+    bloque, jamais l'affichage -- voir `validation/equity_sufficiency.py`).
+    Fondamentaux rendus cote serveur (4 tickers seulement, deja mis en cache
+    7 jours par `fundamentals_source.fetch_fundamentals`) plutot qu'un
+    nouvel aller-retour AJAX dedie."""
+    assets = _equity_asset_group_view()
+    fundamentals = {
+        a["symbol"]: fundamentals_source.fetch_fundamentals(a["symbol"]).tail(12).to_dict("records")
+        for a in assets
+    }
+    return templates.TemplateResponse(
+        request, "equities.html",
+        {
+            "assets": assets,
+            "fundamentals": fundamentals,
+            "exclusions": guida.equity_feature_exclusions(),
+            **_i18n_context(request),
+        },
     )
 
 

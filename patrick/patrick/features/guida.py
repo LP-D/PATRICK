@@ -70,6 +70,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.config import defaults as D
+from patrick.config.equity_universe import EQUITY_UNIVERSE
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.features._utils import safe_pct_change
 
@@ -281,6 +282,45 @@ def idiosyncratic_volatility_features(raw: pd.DataFrame, window: int = IDIO_VOL_
     if not parts:
         return pd.DataFrame(index=raw.index)
     return pd.concat(parts, axis=1)
+
+
+# ---------------------------------------------------------------------------
+# CHANTIER (feature/equity-asset-class) -- carry et cross-sectional momentum
+# restent desactives pour la classe "actions individuelles"
+# (`config.equity_universe.EQUITY_UNIVERSE`), PAR DESIGN et non par oubli :
+#   - carry : non applicable aux actions au sens Guida -- ce facteur repose
+#     sur une structure de futures/differentiel de taux qui n'existe pas
+#     pour une action au comptant (`eurusd_carry_features` ci-dessus est
+#     deja limite a EUR/USD faute d'equivalent, meme constat).
+#   - cross-sectional momentum : l'univers actions de ce projet
+#     (`len(EQUITY_UNIVERSE)` tickers) reste sous `_MIN_GROUP_SIZE_FOR_RANKING`
+#     tel que defini/applique ci-dessus pour "Matieres premieres (futures)" --
+#     meme raisonnement (classement relatif degenere en dessous de 3
+#     membres), applique ici EXPLICITEMENT a la nouvelle classe actions
+#     plutot que laisse implicite.
+# `equity_feature_exclusions()` expose ce message pour tout appelant (page
+# web, tests) qui doit l'afficher explicitement plutot que de laisser un
+# silence (feature simplement absente, sans explication) en tenir lieu.
+# ---------------------------------------------------------------------------
+
+EQUITY_FEATURE_EXCLUSIONS: dict[str, str] = {
+    "carry": (
+        "Carry non applicable aux actions individuelles au sens Guida : "
+        "ce facteur repose sur une structure de futures/differentiel de taux "
+        "qui n'existe pas pour une action au comptant."
+    ),
+    "cross_sectional_momentum": (
+        "Cross-sectional momentum desactive pour les actions individuelles : "
+        f"l'univers actions ({len(EQUITY_UNIVERSE)} tickers) est sous le seuil minimum "
+        f"({_MIN_GROUP_SIZE_FOR_RANKING}) requis pour un classement relatif non degenere."
+    ),
+}
+
+
+def equity_feature_exclusions() -> dict[str, str]:
+    """Messages explicites (jamais un silence) pour les familles Guida
+    volontairement absentes de la classe actions individuelles."""
+    return dict(EQUITY_FEATURE_EXCLUSIONS)
 
 
 # ---------------------------------------------------------------------------

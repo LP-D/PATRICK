@@ -310,6 +310,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # feature/ticker-stats-panel
     "nav_commodities": {"fr": "Matières premières", "en": "Commodities"},
     "nav_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
+    "nav_equities": {"fr": "Actions individuelles", "en": "Individual stocks"},
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
     # Phase 8 (feature/portfolio-view)
     "nav_portfolio": {"fr": "Portefeuille", "en": "Portfolio"},

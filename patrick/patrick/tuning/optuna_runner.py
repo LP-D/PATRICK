@@ -17,6 +17,19 @@ from patrick.validation.metrics import metrics
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
+def safe_resample(sampler_name: str, seed: int, X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Applies the configured sampler, falling back to the raw `(X, y)` when
+    it cannot fit-resample this fold/split's data (e.g. a class too small for
+    SMOTE's k-neighbors). Shared by the per-trial Optuna CV loop below
+    (`tune_config`) and the main scan's `_fit_eval`
+    (`pipeline/engine.py`) -- previously an identical try/except duplicated
+    in both places."""
+    try:
+        return get_sampler(sampler_name, seed).fit_resample(X, y)
+    except Exception:
+        return X, y
+
+
 def suggest_params(trial: optuna.Trial, algo: str, bounds: dict | None = None) -> dict:
     """`bounds` (Phase 1, feature/hyperparams-ui): optional per-run override
     of the [low, high] search bounds, keyed `{algo: {param: [low, high]}}`
@@ -68,10 +81,7 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
         for i, (tr_idx, va_idx) in enumerate(tscv.split(X)):
             X_tr, X_va = X[tr_idx], X[va_idx]
             y_tr, y_va = y[tr_idx], y[va_idx]
-            try:
-                Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_tr, y_tr)
-            except Exception:
-                Xr, yr = X_tr, y_tr
+            Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
             clf = get_classifier(algo, seed=seed, **params)
             clf.fit(Xr, yr)
             met = metrics(y_va, clf.predict(X_va))

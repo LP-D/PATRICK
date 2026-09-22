@@ -1,5 +1,9 @@
 # PATRICK
 
+> This README is partially outdated (see `ARCHITECTURE.md`). For the
+> up-to-date state of the project, read
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) first.
+
 Multi-asset ML/DL walk-forward pipeline: ingest, engineer features, select
 via SHAP, grid-search sampler×algo, tune with Optuna, validate against
 leakage/overfitting, and track everything in SQLite — configurable per

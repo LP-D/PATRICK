@@ -12,11 +12,22 @@ from __future__ import annotations
 import glob
 import os
 import re
+from pathlib import Path
 
 from patrick.config import defaults as D
-from patrick.validation import feasibility
+from patrick.config import equity_universe as EQ
+from patrick.validation import feasibility, history_length
 
+# CHANTIER (feature/equity-asset-class): equities are selectable as a run's
+# TARGET (merged into TARGET_SOURCE_BY_SYMBOL/TARGET_CHOICES/TARGET_GROUPS
+# below), but deliberately NOT merged into D.DEFAULT_UNIVERSE_YF_TICKERS --
+# `universe_excluding` below stays untouched, so no run's default FEATURE
+# pool (commodities/macro, any target) ever gains an equity column just
+# because this new group exists. See `config/equity_universe.py`'s module
+# docstring for the full rationale ("separate from the existing commo/macro
+# universe", per this chantier's spec).
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
+TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in EQ.equity_target_choices()})
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 
@@ -61,6 +72,7 @@ def default_config_dict() -> dict:
             "max_gap_bdays": D.DEFAULT_QUALITY_MAX_GAP_BDAYS,
             "max_robust_z": D.DEFAULT_QUALITY_MAX_ROBUST_Z,
             "max_universe_exclusion_frac": D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC,
+            "min_history_years": D.DEFAULT_MIN_HISTORY_YEARS,
         },
         "features": {
             "families": list(D.DEFAULT_FEATURE_FAMILIES),
@@ -130,8 +142,16 @@ ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
 # server-side regardless (`build_config_dict` below) -- never a fixed
 # "exhaustive set the pipeline can process" the way it used to be.
 ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
-TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES)
-TARGET_GROUPS = D.DEFAULT_TARGET_GROUPS
+# CHANTIER (feature/equity-asset-class): equity choices/group appended
+# (never merged into D.DEFAULT_TARGET_GROUPS itself, see
+# TARGET_SOURCE_BY_SYMBOL's comment above) -- keeps
+# `test_universe_matches_exactly_the_reduced_target_set` (asserting on
+# `D.DEFAULT_TARGET_GROUPS` directly) unaffected by this new group.
+TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + EQ.equity_target_choices()
+TARGET_GROUPS = {
+    **D.DEFAULT_TARGET_GROUPS,
+    EQ.EQUITY_TARGET_GROUP: [(sym, meta["label"]) for sym, meta in EQ.EQUITY_UNIVERSE.items()],
+}
 # Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
 # driving the "Lookbacks technical" section of `index.html` -- one
 # comma-separated `<input>` per `features/technical.py` function, same
@@ -190,6 +210,53 @@ def _kv_lines(raw: str) -> dict[str, str]:
 
 def _checked(form, name: str) -> bool:
     return form.get(name) in ("on", "true", "1")
+
+
+def validate_output_dir(raw: str, errors: list[str]) -> bool:
+    """Security -- `output_dir` (web form) becomes `RunConfig.output.dir`
+    and then reaches `os.makedirs(config.output.dir, ...)` downstream
+    (`pipeline/engine.py`, `worker.py`, `model_categories_training.py`)
+    with no validation at all. This is a local single-user tool (see
+    `tracking/db.py`'s module docstring; `PATRICK_DB_PATH`/
+    `PATRICK_STORE_ROOT` already accept an arbitrary absolute path the same
+    way, by design), and an explicit absolute path is an intentional,
+    already-tested feature of this field
+    (`tests/test_webapp_forms.py::test_build_config_dict_respects_explicit_output_dir`,
+    `tests/test_webapp_smoke.py::test_batch_submit_queues_one_job_per_target`
+    both submit an absolute `tmp_path`-based `output_dir` and expect it
+    honored verbatim) -- restricting `output_dir` to a single allowed root
+    would break that already-tested, intended behavior. The real, narrower
+    risk closed here: a relative `..` component that silently escapes the
+    intended `runs/` folder, and an embedded NUL byte (OS-level path
+    truncation/injection). Returns False and appends a precise error to
+    `errors` when rejected."""
+    if not raw:
+        return True
+    if "\x00" in raw or ".." in Path(raw).parts:
+        errors.append(
+            "« Répertoire de sortie » : chemin invalide (remontée de répertoire « .. » "
+            "ou caractère interdit).")
+        return False
+    return True
+
+
+def _parse_numeric_fields(form, specs: list[tuple[str, str, object, type]],
+                           errors: list[str], invalid_msg: str) -> dict:
+    """Parses each `(field_name, label, default, caster)` in `specs`
+    independently: an invalid value on ONE field falls back to only that
+    field's own default and appends ONE precise error naming it -- unlike a
+    single `try/except` wrapping every field, where one bad value silently
+    resets ALL of them to their defaults with no indication of which value
+    actually failed (see `build_config_dict`'s float/int blocks, the bug
+    this replaces)."""
+    out: dict[str, object] = {}
+    for field_name, label, default, caster in specs:
+        try:
+            out[field_name] = caster(form.get(field_name, default))
+        except (TypeError, ValueError):
+            errors.append(f"« {label} » : {invalid_msg}")
+            out[field_name] = default
+    return out
 
 
 def _parse_optuna_bounds(form, errors: list[str]) -> dict:
@@ -324,63 +391,98 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     target_source = TARGET_SOURCE_BY_SYMBOL.get(target_symbol, "yfinance")
     yf_tickers, fred_series = universe_excluding(target_symbol)
 
-    out_dir = (form.get("output_dir") or "").strip() or f"runs/{name}"
+    _raw_output_dir = (form.get("output_dir") or "").strip()
+    if _raw_output_dir and not validate_output_dir(_raw_output_dir, errors):
+        out_dir = f"runs/{name}"
+    else:
+        out_dir = _raw_output_dir or f"runs/{name}"
 
-    try:
-        flat_thr = float(form.get("flat_thr", D.DEFAULT_FLAT_THR))
-        yf_coverage = float(form.get("yf_coverage", 0.85))
-        min_train_frac = float(form.get("min_train_frac", D.DEFAULT_MIN_TRAIN_FRAC))
-        max_robust_z = float(form.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z))
-        max_universe_exclusion_frac = float(
-            form.get("max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC))
-        default_lo, default_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
-        regime_threshold_lo = float(form.get("regime_threshold_lo", default_lo))
-        regime_threshold_hi = float(form.get("regime_threshold_hi", default_hi))
-    except ValueError:
-        errors.append("Un champ numérique décimal est invalide.")
-        flat_thr, yf_coverage, min_train_frac = D.DEFAULT_FLAT_THR, 0.85, D.DEFAULT_MIN_TRAIN_FRAC
-        max_robust_z = D.DEFAULT_QUALITY_MAX_ROBUST_Z
-        max_universe_exclusion_frac = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
-        regime_threshold_lo, regime_threshold_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
+    default_lo, default_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
+    _float_values = _parse_numeric_fields(form, [
+        ("flat_thr", "Seuil plat (flat_thr)", D.DEFAULT_FLAT_THR, float),
+        ("yf_coverage", "Couverture yfinance minimale", 0.85, float),
+        ("min_train_frac", "Fraction minimale d'entraînement", D.DEFAULT_MIN_TRAIN_FRAC, float),
+        ("max_robust_z", "Z-score robuste maximum", D.DEFAULT_QUALITY_MAX_ROBUST_Z, float),
+        ("max_universe_exclusion_frac", "Fraction maximale d'exclusion de l'univers",
+         D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC, float),
+        ("regime_threshold_lo", "Seuil de régime (bas)", default_lo, float),
+        ("regime_threshold_hi", "Seuil de régime (haut)", default_hi, float),
+    ], errors, "valeur numérique décimale invalide.")
+    flat_thr = _float_values["flat_thr"]
+    yf_coverage = _float_values["yf_coverage"]
+    min_train_frac = _float_values["min_train_frac"]
+    max_robust_z = _float_values["max_robust_z"]
+    max_universe_exclusion_frac = _float_values["max_universe_exclusion_frac"]
+    regime_threshold_lo = _float_values["regime_threshold_lo"]
+    regime_threshold_hi = _float_values["regime_threshold_hi"]
 
     if not (0.0 <= regime_threshold_lo < regime_threshold_hi <= 1.0):
         errors.append("Régime : les seuils doivent vérifier 0 <= bas < haut <= 1.")
         regime_threshold_lo, regime_threshold_hi = D.DEFAULT_REGIME_THRESHOLD_VALUES
 
+    _int_values = _parse_numeric_fields(form, [
+        ("n_groups", "Nombre de groupes CPCV (n_groups)", D.DEFAULT_CPCV_N_GROUPS, int),
+        ("k_test_groups", "Groupes de test CPCV (k_test_groups)", D.DEFAULT_CPCV_K_TEST_GROUPS, int),
+        ("n_wf_folds", "Folds walk-forward (n_wf_folds)", D.DEFAULT_N_WF_FOLDS, int),
+        ("holdout_months", "Holdout terminal (mois)", D.DEFAULT_HOLDOUT_MONTHS, int),
+        ("min_train_rows", "Lignes minimales d'entraînement", 100, int),
+        ("min_test_rows", "Lignes minimales de test", 20, int),
+        ("interact_top_base", "Top base (interactions)", 40, int),
+        ("interact_top_pairs", "Top paires (interactions)", 20, int),
+        ("interact_final_n", "N final (interactions)", 30, int),
+        ("pool_prefilter", "Pré-filtre du pool", D.DEFAULT_POOL_PREFILTER, int),
+        ("shap_sample", "Échantillon SHAP", D.DEFAULT_SHAP_SAMPLE, int),
+        ("top_k", "Top-K configs affinées", D.DEFAULT_TUNING_TOP_K, int),
+        ("n_trials", "Essais Optuna", D.DEFAULT_TUNING_N_TRIALS, int),
+        ("cv_splits", "Folds CV", D.DEFAULT_TUNING_CV_SPLITS, int),
+        ("seed", "Graine (seed)", D.DEFAULT_SEED, int),
+        ("max_frozen_run", "Série figée maximale (max_frozen_run)", D.DEFAULT_QUALITY_MAX_FROZEN_RUN, int),
+        ("max_gap_bdays", "Écart maximal (jours ouvrés)", D.DEFAULT_QUALITY_MAX_GAP_BDAYS, int),
+        ("min_history_years", "Historique minimum (années)", D.DEFAULT_MIN_HISTORY_YEARS, int),
+    ], errors, "valeur entière invalide.")
+    n_groups = _int_values["n_groups"]
+    k_test_groups = _int_values["k_test_groups"]
+    n_wf_folds = _int_values["n_wf_folds"]
+    holdout_months = _int_values["holdout_months"]
+    min_train_rows = _int_values["min_train_rows"]
+    min_test_rows = _int_values["min_test_rows"]
+    interact_top_base = _int_values["interact_top_base"]
+    interact_top_pairs = _int_values["interact_top_pairs"]
+    interact_final_n = _int_values["interact_final_n"]
+    pool_prefilter = _int_values["pool_prefilter"]
+    shap_sample = _int_values["shap_sample"]
+    top_k = _int_values["top_k"]
+    n_trials = _int_values["n_trials"]
+    cv_splits = _int_values["cv_splits"]
+    seed = _int_values["seed"]
+    max_frozen_run = _int_values["max_frozen_run"]
+    max_gap_bdays = _int_values["max_gap_bdays"]
+    min_history_years = _int_values["min_history_years"]
+
+    embargo_bars_raw = (form.get("embargo_bars") or "").strip()
     try:
-        n_groups = int(form.get("n_groups", D.DEFAULT_CPCV_N_GROUPS))
-        k_test_groups = int(form.get("k_test_groups", D.DEFAULT_CPCV_K_TEST_GROUPS))
-        n_wf_folds = int(form.get("n_wf_folds", D.DEFAULT_N_WF_FOLDS))
-        holdout_months = int(form.get("holdout_months", D.DEFAULT_HOLDOUT_MONTHS))
-        min_train_rows = int(form.get("min_train_rows", 100))
-        min_test_rows = int(form.get("min_test_rows", 20))
-        interact_top_base = int(form.get("interact_top_base", 40))
-        interact_top_pairs = int(form.get("interact_top_pairs", 20))
-        interact_final_n = int(form.get("interact_final_n", 30))
-        pool_prefilter = int(form.get("pool_prefilter", D.DEFAULT_POOL_PREFILTER))
-        shap_sample = int(form.get("shap_sample", D.DEFAULT_SHAP_SAMPLE))
-        top_k = int(form.get("top_k", D.DEFAULT_TUNING_TOP_K))
-        n_trials = int(form.get("n_trials", D.DEFAULT_TUNING_N_TRIALS))
-        cv_splits = int(form.get("cv_splits", D.DEFAULT_TUNING_CV_SPLITS))
-        seed = int(form.get("seed", D.DEFAULT_SEED))
-        embargo_bars_raw = (form.get("embargo_bars") or "").strip()
         embargo_bars = int(embargo_bars_raw) if embargo_bars_raw else None
-        max_frozen_run = int(form.get("max_frozen_run", D.DEFAULT_QUALITY_MAX_FROZEN_RUN))
-        max_gap_bdays = int(form.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS))
     except ValueError:
-        errors.append("Un champ numérique entier est invalide.")
-        n_groups = D.DEFAULT_CPCV_N_GROUPS
-        k_test_groups = D.DEFAULT_CPCV_K_TEST_GROUPS
-        n_wf_folds = D.DEFAULT_N_WF_FOLDS
-        holdout_months = D.DEFAULT_HOLDOUT_MONTHS
-        min_train_rows, min_test_rows = 100, 20
-        interact_top_base, interact_top_pairs, interact_final_n = 40, 20, 30
-        pool_prefilter, shap_sample = D.DEFAULT_POOL_PREFILTER, D.DEFAULT_SHAP_SAMPLE
-        top_k, n_trials, cv_splits = D.DEFAULT_TUNING_TOP_K, D.DEFAULT_TUNING_N_TRIALS, D.DEFAULT_TUNING_CV_SPLITS
+        errors.append("« Embargo (barres) » : valeur entière invalide.")
         embargo_bars = D.DEFAULT_EMBARGO_BARS
-        seed = D.DEFAULT_SEED
-        max_frozen_run = D.DEFAULT_QUALITY_MAX_FROZEN_RUN
-        max_gap_bdays = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
+
+    # CHANTIER (feature/equity-asset-class, suite): bounds on the SUBMITTED
+    # value only (never on the default), same reset-to-default-on-error
+    # convention as regime_threshold/optuna_bounds/technical_lookbacks above.
+    if not (D.MIN_HISTORY_YEARS_BOUNDS["min_allowed"] <= min_history_years
+            <= D.MIN_HISTORY_YEARS_BOUNDS["max_allowed"]):
+        errors.append(
+            "« Historique minimum (années) » doit être compris entre "
+            f"{D.MIN_HISTORY_YEARS_BOUNDS['min_allowed']} et {D.MIN_HISTORY_YEARS_BOUNDS['max_allowed']}.")
+        min_history_years = D.DEFAULT_MIN_HISTORY_YEARS
+    elif target_symbol in TARGET_SOURCE_BY_SYMBOL:
+        # Checked at SUBMISSION time (before ingestion), only when the
+        # target's history is already known locally (`data/store.py`) --
+        # same "unknown = not blocked" principle as the horizon-feasibility
+        # check below (`validation/history_length.py`).
+        hist_result = history_length.check_min_history(target_symbol, min_history_years)
+        if not hist_result.feasible:
+            errors.append(f"« Historique minimum » : {hist_result.reason}")
 
     # Phase 1 (feature/expanded-horizons): a walk-forward run over an
     # infeasible (target, horizon) combination either crashes or produces
@@ -459,6 +561,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "max_gap_bdays": max_gap_bdays,
             "max_robust_z": max_robust_z,
             "max_universe_exclusion_frac": max_universe_exclusion_frac,
+            "min_history_years": min_history_years,
         },
         "features": {
             "families": families,
@@ -536,6 +639,7 @@ def to_view(cfg: dict) -> dict:
         "max_robust_z": dq.get("max_robust_z", D.DEFAULT_QUALITY_MAX_ROBUST_Z),
         "max_universe_exclusion_frac": dq.get(
             "max_universe_exclusion_frac", D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC),
+        "min_history_years": dq.get("min_history_years", D.DEFAULT_MIN_HISTORY_YEARS),
         "families": feat.get("families", []),
         "vol_models": feat.get("vol_models") or list(D.DEFAULT_VOL_MODELS),
         "interact_top_base": feat.get("interact_top_base", 40),

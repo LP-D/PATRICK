@@ -56,6 +56,12 @@ class DataQualityConfig(BaseModel):
     max_gap_bdays: int = D.DEFAULT_QUALITY_MAX_GAP_BDAYS
     max_robust_z: float = D.DEFAULT_QUALITY_MAX_ROBUST_Z
     max_universe_exclusion_frac: float = D.DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC
+    # CHANTIER (feature/equity-asset-class, suite) -- anciennete minimale
+    # d'historique (annees) exigee a l'ingestion (`data/ingest.py`), remplace
+    # le 20 fige en dur. Validee sur la valeur SOUMISE uniquement
+    # (`webapp/forms.py::_parse... ` / `cli.py --min-history-years`), jamais
+    # ici (pas de bounds pydantic, meme convention que le reste de RunConfig).
+    min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS
 
 
 class TechnicalLookbacksConfig(BaseModel):
@@ -103,6 +109,15 @@ class FeaturesConfig(BaseModel):
     # pool, unchanged -- this is a research toggle (scan-cost impact measured,
     # not yet judged for a default-on switch), never flipped on here.
     enable_guida_features: bool = D.DEFAULT_ENABLE_GUIDA_FEATURES
+    # CHANTIER (feature/equity-asset-class) -- master switch for equity
+    # fundamentals features (`features/equity_fundamentals.py`,
+    # `data/sources/fundamentals_source.py`): fiscalDateEnding + value,
+    # reindexed onto the daily pool. False (default): exactly the
+    # pre-existing feature pool, unchanged -- same "off by default research
+    # toggle" convention as `enable_guida_features` above. Only has an
+    # effect when the run's target is an equity symbol
+    # (`config.equity_universe.EQUITY_UNIVERSE`); a no-op otherwise.
+    enable_fundamentals_features: bool = D.DEFAULT_ENABLE_FUNDAMENTALS_FEATURES
     technical_lookbacks: TechnicalLookbacksConfig = Field(default_factory=TechnicalLookbacksConfig)
 
 
@@ -115,7 +130,7 @@ class ValidationConfig(BaseModel):
     scheme: Literal["walkforward", "cpcv"] = "walkforward"
     n_groups: int = D.DEFAULT_CPCV_N_GROUPS
     k_test_groups: int = D.DEFAULT_CPCV_K_TEST_GROUPS
-    n_wf_folds: int = D.DEFAULT_N_WF_FOLDS
+    n_wf_folds: int = Field(default=D.DEFAULT_N_WF_FOLDS, ge=1)
     min_train_frac: float = D.DEFAULT_MIN_TRAIN_FRAC
     purge: bool = D.DEFAULT_PURGE_ENABLED
     embargo_enabled: bool = D.DEFAULT_EMBARGO_ENABLED

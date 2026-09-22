@@ -8,21 +8,14 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from patrick.features import vol_models
-from patrick.tracking import db as trackdb
 
 
 def _synthetic_series(n=800, seed=0) -> pd.Series:
     rng = np.random.default_rng(seed)
     idx = pd.bdate_range("2018-01-01", periods=n)
     return pd.Series(100 + np.cumsum(rng.normal(0, 1.0, n)), index=idx, name="TICK")
-
-
-@pytest.fixture
-def conn(tmp_path):
-    return trackdb.connect(str(tmp_path / "patrick.db"))
 
 
 def _counting_wrapper(monkeypatch, func_name: str) -> dict:

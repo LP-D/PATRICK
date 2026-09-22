@@ -33,7 +33,23 @@
 
    `footer` = ligne de pied du listing (compte de lignes, portée, horodatage).
    Une sortie de solveur ferme toujours sa table ; laisser une liste sans pied
-   est ce qui fait lire un tableau comme tronqué. #}
+   est ce qui fait lire un tableau comme tronqué.
+
+   SÉCURITÉ (XSS stocké) -- chaque cellule (et `footer`) est rendue via
+   `{{ cell | safe }}`, sans échappement : nécessaire, certaines cellules
+   portent du HTML légitime déjà construit côté serveur (liens `<a>`,
+   `status_badge()`, icônes -- voir les appels de cette macro dans
+   `runs.html`/`target.html`/`synthesis.html`). La macro elle-même ne peut
+   pas distinguer une cellule "HTML de mise en forme" d'une cellule "texte
+   libre venant de la base" (`run.target`/le `name` du config JSON d'un run
+   lancé en CLI, jamais nettoyés comme `slug_target` le fait pour le
+   formulaire web) -- retirer `|safe` casserait les cellules à liens/icônes.
+   C'est donc à l'APPELANT d'échapper toute valeur texte libre AVANT de la
+   concaténer dans la chaîne de la cellule/du footer : voir
+   `tracking/db.py::list_all_runs` et
+   `tracking/history.py::_run_name`/`list_runs`/`synthesis_overview`
+   (`target`/`name`/`label`), qui le font déjà à la source pour cette
+   raison, et `webapp/app.py::runs_explorer` pour `footer` lui-même. #}
 {% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none, num_cols=none, footer=none) %}
 {% if rows %}
 {% set nc = num_cols or [] %}

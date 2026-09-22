@@ -14,6 +14,7 @@ independently of any `job_id`.
 """
 from __future__ import annotations
 
+import html
 import json
 import sqlite3
 
@@ -80,7 +81,14 @@ def _run_scheme(config_json: str | None) -> str:
 
 
 def _run_name(config_json: str | None) -> str | None:
-    return _config_field(config_json, "name")
+    """Security (stored XSS) -- `name` comes straight from `config_json`,
+    unsanitized for a run started via CLI (see `webapp/templates/
+    _components.html::data_table`'s docstring): escaped here, the single
+    place every caller (`list_runs`/`target_detail`/`run_detail`) reads it
+    from, since those callers' own output feeds table cells rendered
+    without escaping (`{{ cell | safe }}`)."""
+    name = _config_field(config_json, "name")
+    return html.escape(name) if isinstance(name, str) else name
 
 
 def _best_trial_id(conn: sqlite3.Connection, run_id: str) -> int | None:
@@ -208,7 +216,17 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     """P7.1 -- `/runs` browser: one row per run, most recent first. `scheme`
     filters after reading (not a `run` column, only present in
     `config_json`) -- acceptable, a single local user's history stays
-    modestly sized."""
+    modestly sized.
+
+    Performance (N+1 fix): used to call `_best_trial_id`/`_avg_metric`
+    (2 queries) per row inside the loop below -- now one batched
+    `trackdb.batch_best_f1_dir` call regardless of row count (`dm.p_value`
+    was already resolved via the JOIN above, never part of the N+1).
+
+    Security (stored XSS) -- `target` is escaped before being placed in the
+    output dict, same rationale/source as `_run_name`'s own docstring
+    (feeds `/runs`' and `/`'s `data_table` cells, rendered without
+    escaping)."""
     clauses, params = [], []
     if target:
         clauses.append("run.target = ?")
@@ -225,18 +243,19 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
         (*params, limit),
     ).fetchall()
 
+    best_f1_by_run = trackdb.batch_best_f1_dir(conn, [r[0] for r in rows])
+
     out = []
     for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p in rows:
         run_scheme = _run_scheme(config_json)
         if scheme and run_scheme != scheme:
             continue
-        best_id = _best_trial_id(conn, run_id)
-        best_f1 = (_avg_metric(conn, best_id, ("test", "test_path")) if best_id is not None else None)
         out.append({
-            "run_id": run_id, "target": tgt, "horizon": horizon, "status": status_,
+            "run_id": run_id, "target": html.escape(tgt) if isinstance(tgt, str) else tgt,
+            "horizon": horizon, "status": status_,
             "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials,
             "name": _run_name(config_json), "scheme": run_scheme,
-            "best_f1_dir": best_f1, "dm_p_value": dm_p,
+            "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p,
         })
     return out
 
@@ -357,7 +376,14 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
 
 def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10) -> dict | None:
     """P7.3 -- `/targets/{ticker}` page: aggregated view of the entire run
-    history for ONE target (across all horizons/schemes)."""
+    history for ONE target (across all horizons/schemes).
+
+    Performance (N+1 fix): used to call `_best_trial_id`/`_avg_metric`
+    (2 queries) AND `_dm_result_for_run` (1 more query) per run inside the
+    loop below -- now two batched lookups (`trackdb.batch_best_f1_dir`/
+    `trackdb.batch_dm_results`, shared with `db.py::list_all_runs`'s own
+    fix for the same N+1 shape) regardless of how many runs this target
+    has."""
     runs = conn.execute(
         "SELECT run_id, horizon, status, started_at, finished_at, config_json, n_trials "
         "FROM run WHERE target = ? ORDER BY started_at DESC, rowid DESC", (target,),
@@ -365,18 +391,20 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     if not runs:
         return None
 
+    run_ids = [r[0] for r in runs]
+    best_f1_by_run = trackdb.batch_best_f1_dir(conn, run_ids)
+    dm_by_run = trackdb.batch_dm_results(conn, run_ids)
+
     run_rows = []
     horizons = set()
     for run_id, horizon, status_, started_at, finished_at, config_json, n_trials in runs:
         horizons.add(horizon)
-        best_id = _best_trial_id(conn, run_id)
-        best_f1 = (_avg_metric(conn, best_id, ("test", "test_path")) if best_id is not None else None)
         run_rows.append({
             "run_id": run_id, "horizon": horizon, "status": status_,
             "started_at": started_at, "finished_at": finished_at,
             "name": _run_name(config_json), "scheme": _run_scheme(config_json),
             "n_trials": n_trials,
-            "best_f1_dir": best_f1, "dm_result": _dm_result_for_run(conn, run_id),
+            "best_f1_dir": best_f1_by_run.get(run_id), "dm_result": dm_by_run.get(run_id),
         })
 
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
@@ -1110,12 +1138,24 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
     fdr = trackstats.fdr_across_targets(conn, alpha=alpha)
     fdr_results = fdr["results"]
 
+    # Security (stored XSS) -- `target`/`label` are escaped only when placed
+    # into these three OUTPUT row dicts, never in the local `target`/`label`
+    # variables used as dict-lookup keys above/below (`fdr_results.get`,
+    # `latest_preds.get`, `direction_metrics.get`): those must stay the raw
+    # value the SQL queries were keyed on, since `list_distinct_targets`'s
+    # own `target` column is left unescaped (it also feeds `latest_predictions_by_target`/
+    # `direction_metrics_by_target` as a query parameter, where escaping
+    # would break the match against `run.target` in the database -- unlike
+    # `db.py::list_all_runs`/`list_runs` above, which are terminal, display-
+    # only lookups). `synthesis.html`'s three tables render `r.target`/
+    # `r.label` inside a raw `<a href=...>` cell (`data_table`, `{{ cell |
+    # safe }}`), same reason `_run_name`/`list_runs`'s `target` are escaped.
     quality_rows = []
     for t in targets:
         target = t["target"]
         q = fdr_results.get(target)
         quality_rows.append({
-            "target": target, "label": symbol_labels.get(target, target),
+            "target": html.escape(target), "label": html.escape(symbol_labels.get(target, target)),
             "p_value": q["p_value"] if q else None,
             "adjusted_p_value": q["adjusted_p_value"] if q else None,
             "significant": q["significant"] if q else None,
@@ -1136,9 +1176,9 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
         target = t["target"]
         label = symbol_labels.get(target, target)
         pred = latest_preds.get(target)
-        prediction_rows.append({"target": target, "label": label, "prediction": pred})
+        prediction_rows.append({"target": html.escape(target), "label": html.escape(label), "prediction": pred})
         dm = direction_metrics.get(target)
-        metric_rows.append({"target": target, "label": label, "metrics": dm})
+        metric_rows.append({"target": html.escape(target), "label": html.escape(label), "metrics": dm})
 
     return {
         "coverage": {

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import typer
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
@@ -22,11 +23,53 @@ app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
 audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraînent jamais un modèle de production.")
 app.add_typer(audit_app, name="audit")
 
+MIN_HISTORY_YEARS_OPTION = typer.Option(
+    None, "--min-history-years",
+    help=(f"Anciennete minimale d'historique exigee a l'ingestion (annees), "
+          f"remplace la valeur du YAML si fournie -- entier entre "
+          f"{D.MIN_HISTORY_YEARS_BOUNDS['min_allowed']} et {D.MIN_HISTORY_YEARS_BOUNDS['max_allowed']}."),
+)
+
+
+def _apply_min_history_years_override(cfg: RunConfig, min_history_years: int | None) -> None:
+    """CHANTIER (feature/equity-asset-class, suite) -- meme regle de bornes
+    que `webapp/forms.py::build_config_dict` (validation sur la valeur
+    SOUMISE uniquement, jamais sur le defaut YAML/`RunConfig`)."""
+    if min_history_years is None:
+        return
+    lo = D.MIN_HISTORY_YEARS_BOUNDS["min_allowed"]
+    hi = D.MIN_HISTORY_YEARS_BOUNDS["max_allowed"]
+    if not (lo <= min_history_years <= hi):
+        typer.echo(f"--min-history-years doit être un entier entre {lo} et {hi} (reçu {min_history_years}).")
+        raise typer.Exit(code=1)
+    cfg.data_quality.min_history_years = min_history_years
+
+
+def _reject_unsupported_fundamentals_features(cfg: RunConfig) -> None:
+    """CHANTIER (feature/equity-asset-class, suite) -- validation a la
+    SOUMISSION (avant ingestion) : yfinance n'offre aucune source
+    point-in-time pour les fondamentaux (voir `features/
+    equity_fundamentals.py`) -- `enable_fundamentals_features: true` n'a
+    aucun champ formulaire ni option CLI positive (seule voie de soumission
+    reelle : YAML/`--config`), rejete ici plutot que de laisser le run
+    echouer en profondeur, en plein milieu du pipeline, une fois deja
+    lance (garde complementaire, pas redondant : celui du wrapper reste le
+    filet de securite pour toute construction directe de `RunConfig`)."""
+    if cfg.features.enable_fundamentals_features:
+        typer.echo(
+            "features.enable_fundamentals_features=true refuse : yfinance ne fournit aucune "
+            "source point-in-time pour les fondamentaux (etat actuel seulement, potentiellement "
+            "retraite) -- les injecter comme feature introduirait un biais look-ahead deja "
+            "demontre empiriquement. Voir features/equity_fundamentals.py."
+        )
+        raise typer.Exit(code=1)
+
 
 @app.command(name="ingest")
 def ingest_cmd(
     config: str = typer.Option(..., "--config", help="Chemin du YAML de run"),
     force: bool = typer.Option(False, "--force", help="Retélécharge même si en cache"),
+    min_history_years: int | None = MIN_HISTORY_YEARS_OPTION,
 ) -> None:
     """Downloads and prepares the raw data (Phase 0): Yahoo Finance tickers
     and FRED series per the config. Data is cached locally (`~/.patrick/data`)
@@ -40,6 +83,8 @@ def ingest_cmd(
         patrick ingest --config configs/examples/vix_direction.yaml --force
     """
     cfg = RunConfig.from_yaml(config)
+    _reject_unsupported_fundamentals_features(cfg)
+    _apply_min_history_years_override(cfg, min_history_years)
     store = DataStore()
     df = ingest(cfg.objective, cfg.universe, store, force=force, data_quality=cfg.data_quality)
     typer.echo(f"Ingestion terminée : {df.shape[0]} lignes x {df.shape[1]} colonnes.")
@@ -65,6 +110,7 @@ def run_cmd(
     force_ingest: bool = typer.Option(False, "--force-ingest",
                                        help="Retélécharge les données même si en cache"),
     name: str | None = typer.Option(None, "--name", help="Nom du run ; par défaut, déduit de la cible"),
+    min_history_years: int | None = MIN_HISTORY_YEARS_OPTION,
 ) -> None:
     """Full end-to-end pipeline (Phase 1-4): data ingestion -> feature
     selection (SHAP) -> walk-forward cross-validation -> model grid -> Optuna
@@ -82,6 +128,8 @@ def run_cmd(
     cfg = RunConfig.from_yaml(config)
     if name:
         cfg.name = name
+    _apply_min_history_years_override(cfg, min_history_years)
+    _reject_unsupported_fundamentals_features(cfg)
     result = run_pipeline(cfg, force_ingest=force_ingest)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")

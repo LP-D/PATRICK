@@ -7,16 +7,31 @@ on:
 jobs:
   fast-suite:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # `pyproject.toml` declares `requires-python = ">=3.10"` -- exercise
+        # the full range it advertises (3.10/3.11/3.12), not just 3.11.
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
 
       - name: Install dependencies
         run: pip install -e "./patrick[dev,web]"
+
+      - name: Lint (ruff)
+        # `continue-on-error` volontaire : 223 violations pré-existantes au
+        # moment de l'introduction de ce step (2026-09-20) sur du code non
+        # touché par ce changement -- les rendre bloquantes immédiatement
+        # casserait la CI sur le prochain push sans rapport avec le lint.
+        # Retirer `continue-on-error` une fois ce passif nettoyé séparément.
+        run: ruff check .
+        working-directory: patrick
+        continue-on-error: true
 
       # Only the fast suite runs in CI. `pyproject.toml`'s own
       # `[tool.pytest.ini_options]` already documents why: the full suite
@@ -33,3 +48,25 @@ jobs:
       # before a release-sensitive merge to cover the excluded tests.
       - name: Run fast test suite
         run: pytest patrick/tests/ -q -m "not slow"
+
+  slow-suite:
+    # The ~42 tests marked `slow` (CPCV/DM/PBO, real model training, full
+    # pipeline runs, worker subprocess tests) are never run by `fast-suite`
+    # above. Running them on every push/PR would slow down iteration (see
+    # `fast-suite`'s own comment), so this job is gated to pushes on `main`
+    # only -- not pull requests.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e "./patrick[dev,web]"
+
+      - name: Run slow test suite
+        run: pytest patrick/tests/ -q -m "slow"

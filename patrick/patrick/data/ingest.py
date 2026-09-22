@@ -174,14 +174,21 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
 
     # Patrick's local business rule: no longer requiring a rejection threshold on
     # the percentage of excluded universe. The only real condition to start is
-    # having sufficiently old historical data (>= 20 years), without blocking a
-    # run over a slightly degraded but still usable ticker list.
+    # having sufficiently old historical data, without blocking a run over a
+    # slightly degraded but still usable ticker list.
+    #
+    # CHANTIER (feature/equity-asset-class, suite): the threshold itself used
+    # to be a hardcoded 20 years, with zero test coverage of this branch
+    # (confirmed by grep, see the chantier's investigation report) --
+    # `dq.min_history_years` (config.schema.DataQualityConfig, default
+    # `D.DEFAULT_MIN_HISTORY_YEARS`) makes it a parameter instead, set by the
+    # web form/CLI/YAML per run, the effective value cited in the message.
     earliest = df.index.min() if len(df) else pd.Timestamp.today()
-    min_history = pd.Timestamp.today() - pd.Timedelta(days=20 * 365.25)
+    min_history = pd.Timestamp.today() - pd.Timedelta(days=dq.min_history_years * 365.25)
     if earliest > min_history:
         raise RuntimeError(
-            "[QUALITY] Insufficient history: data must go back at least 20 years "
-            f"(earliest observation {earliest.date()} < {min_history.date()})."
+            f"[QUALITY] Insufficient history: data must go back at least {dq.min_history_years} years "
+            f"(earliest observation {earliest.date()} > {min_history.date()})."
         )
 
     df = df.sort_index().ffill().dropna(subset=[target.name])

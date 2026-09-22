@@ -5,8 +5,38 @@ project was negligible (delta F1_dir≈-0.002) but the option stays wired in.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
+
+# `compute_would_purge` is called once per (horizon, fold, regime) combination
+# within a run (`pipeline/engine.py::_FoldContext.prepare`), always against
+# the SAME `all_dates` object (set once in `_FoldContext.__init__`) -- tens of
+# calls per run in practice. Rebuilding `{date: position}` from scratch every
+# time is pure waste for an object that never changes across those calls.
+# Keyed by `id(all_dates)` (a `pd.DatetimeIndex` is not hashable) with the
+# index object itself kept alive alongside its `pos` dict, so a
+# garbage-collected-and-reused id can never be served a stale entry built for
+# an unrelated index. Bounded (small `OrderedDict`, FIFO eviction) so a
+# long-lived process (e.g. the webapp, many runs over time) doesn't
+# accumulate one entry per run forever.
+_POS_CACHE: "OrderedDict[int, tuple[pd.DatetimeIndex, dict]]" = OrderedDict()
+_POS_CACHE_MAXSIZE = 8
+
+
+def _positions(all_dates: pd.DatetimeIndex) -> dict:
+    key = id(all_dates)
+    cached = _POS_CACHE.get(key)
+    if cached is not None and cached[0] is all_dates:
+        _POS_CACHE.move_to_end(key)
+        return cached[1]
+    pos = {d: i for i, d in enumerate(all_dates)}
+    _POS_CACHE[key] = (all_dates, pos)
+    _POS_CACHE.move_to_end(key)
+    if len(_POS_CACHE) > _POS_CACHE_MAXSIZE:
+        _POS_CACHE.popitem(last=False)
+    return pos
 
 
 def compute_would_purge(all_dates: pd.DatetimeIndex, base_index: pd.DatetimeIndex,
@@ -14,7 +44,7 @@ def compute_would_purge(all_dates: pd.DatetimeIndex, base_index: pd.DatetimeInde
     """For each date in `base_index` (typically the fold's train index),
     computes whether its label window (horizon business days further in
     `all_dates`, the full history index) reaches or exceeds `cut_date`."""
-    pos = {d: i for i, d in enumerate(all_dates)}
+    pos = _positions(all_dates)
 
     def fwd_date(d):
         i = pos.get(d)
