@@ -148,7 +148,11 @@ def resume_cmd(
     checkpointing at that level, out of Phase 3 scope -- but Optuna trials
     already completed for each config are resumed via the persistent sqlite
     study (`<output_dir>/optuna.db`, `load_if_exists=True`) rather than redone
-    from scratch."""
+    from scratch.
+
+    Data: replays exactly the run's original snapshot (`run.snapshot_id`),
+    never the latest one available -- a newer FRED vintage/Yahoo revision
+    ingested since the interruption must not leak into the resumed run."""
     conn = trackdb.connect()
     row = trackdb.get_run(conn, run_id)
     conn.close()
@@ -157,7 +161,7 @@ def resume_cmd(
         raise typer.Exit(code=1)
     config = RunConfig.model_validate_json(row["config_json"])
     typer.echo(f"Reprise de '{config.name}' (run {run_id}, statut précédent={row['status']})...")
-    result = run_pipeline(config)
+    result = run_pipeline(config, snapshot_id=row["snapshot_id"])
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
