@@ -44,6 +44,40 @@ patrick = "patrick.cli:app"
 [tool.setuptools.packages.find]
 include = ["patrick*"]
 
+[tool.ruff.lint]
+# Dette, à réduire -- ces 34 familles de règles avaient des violations
+# préexistantes au moment où `ruff check` est devenu bloquant en CI
+# (2026-09-22, lot 2 de l'audit) : 159 occurrences au total, aucune
+# corrigée ici (pas de --fix sur ce lot, seul le lot précédent a
+# mécaniquement trié les imports/f-strings/espaces via
+# `--select I,F401,F541,W`). Ignorées explicitement plutôt que
+# silencieusement non détectées, pour que la CI reste verte sans masquer
+# ce qui reste à faire -- retirer un code de cette liste au fur et à
+# mesure qu'un lot le nettoie, pas tous d'un coup.
+# DTZ00x (datetime naïf) : ignoré jusqu'au chantier point-in-time dédié
+# (vintages FRED, cf. rapport d'audit R3c) -- ne pas traiter isolément,
+# la correction touche à la sémantique temporelle du pipeline.
+ignore = [
+    "B008", "B023",
+    "BLE001",
+    "C405", "C408",
+    "DTZ003", "DTZ005", "DTZ011",
+    "F401", "F601", "F821", "F841",
+    "FLY002",
+    "I001",
+    "ISC004",
+    "PERF102",
+    "PIE804", "PIE810",
+    "PLR0124", "PLR1730",
+    "PLW1510",
+    "PYI041",
+    "RUF007", "RUF013", "RUF046", "RUF059", "RUF100",
+    "S112",
+    "SIM115",
+    "TRY401",
+    "UP031", "UP034", "UP035", "UP037",
+]
+
 [tool.pytest.ini_options]
 # Rapport de correction, D1 : la suite complète (26 fichiers, ~130 tests)
 # prend ~55-60 min -- impraticable pour itérer. `pytest` sans argument
