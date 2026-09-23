@@ -229,7 +229,26 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
 .sidebar-nav {
   display: flex;
   flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* feature/nav-categories-registry: one group per nav_registry category.
+   Heading reuses the .metric-label vocabulary verbatim (Fira Code 11px,
+   uppercase, 0.04em, --color-muted-foreground) -- no new token. */
+.sidebar-nav-group {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
+}
+.sidebar-nav-heading {
+  font-family: "Fira Code", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted-foreground);
+  padding: 0 var(--space-sm);
+  margin-bottom: var(--space-xs);
+  white-space: nowrap;
 }
 
 .sidebar-nav a {
@@ -511,6 +530,9 @@ code, .pk-mono, .num { font-family: "Fira Code", ui-monospace, "SFMono-Regular",
     border-bottom: 1px solid var(--color-border);
   }
   .sidebar-nav { flex-direction: row; }
+  .sidebar-nav-group { flex-direction: row; align-items: center; }
+  .sidebar-nav-heading { margin-bottom: 0; }
+  .sidebar-nav-group a { white-space: nowrap; }
   .sidebar-footer { margin-top: 0; margin-left: auto; }
   .main-content { padding: var(--space-lg) var(--space-md); }
 }

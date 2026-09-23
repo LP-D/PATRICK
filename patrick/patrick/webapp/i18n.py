@@ -303,6 +303,12 @@ STRINGS: dict[str, dict[str, str]] = {
     # "/" landing point, hence reused by every breadcrumb's first link),
     # nav_launch is the new, separate entry for the launcher.
     "nav_home": {"fr": "Synthèse", "en": "Overview"},
+    # feature/nav-categories-registry -- en-tetes de section de la sidebar
+    # (webapp/nav_registry.py::CATEGORIES), deja en capitales.
+    "nav_cat_pilotage": {"fr": "PILOTAGE", "en": "CONTROL"},
+    "nav_cat_classes_actifs": {"fr": "CLASSES D'ACTIFS", "en": "ASSET CLASSES"},
+    "nav_cat_simulation": {"fr": "SIMULATION", "en": "SIMULATION"},
+    "nav_cat_patrimoine": {"fr": "PATRIMOINE", "en": "WEALTH"},
     "nav_launch": {"fr": "Lancer", "en": "Launch"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},

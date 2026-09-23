@@ -47,19 +47,18 @@ style.css untouched until their own turn in the priority order.
                 </svg>
                 <span>PATRICK</span>
             </a>
+            {# feature/nav-categories-registry : liens generes depuis
+               webapp/nav_registry.py (seule source, cf. MASTER.md "Navigation
+               Registry") -- ne jamais ajouter de <a> en dur ici. #}
             <nav class="sidebar-nav" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
-                <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ t('nav_home') if t else 'Synthèse' }}</a>
-                <a href="/launch" {% if request.url.path == '/launch' %}aria-current="page"{% endif %}>{{ t('nav_launch') if t else 'Lancer' }}</a>
-                <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>{{ t('nav_runs') if t else 'Historique' }}</a>
-                <a href="/universe" {% if request.url.path.startswith('/universe') %}aria-current="page"{% endif %}>{{ t('nav_universe') if t else 'Univers' }}</a>
-                <a href="/data-freshness" {% if request.url.path.startswith('/data-freshness') %}aria-current="page"{% endif %}>{{ t('nav_data_freshness') if t else 'Fraîcheur' }}</a>
-                <a href="/commodities" {% if request.url.path.startswith('/commodities') %}aria-current="page"{% endif %}>{{ t('nav_commodities') if t else 'Matières premières' }}</a>
-                <a href="/macro" {% if request.url.path.startswith('/macro') %}aria-current="page"{% endif %}>{{ t('nav_macro') if t else 'Macro (FRED)' }}</a>
-                <a href="/equities" {% if request.url.path.startswith('/equities') %}aria-current="page"{% endif %}>{{ t('nav_equities') if t else 'Actions individuelles' }}</a>
-                <a href="/predictions" {% if request.url.path.startswith('/predictions') %}aria-current="page"{% endif %}>{{ t('nav_predictions') if t else 'Prédictions' }}</a>
-                <a href="/portfolio" {% if request.url.path.startswith('/portfolio') %}aria-current="page"{% endif %}>{{ t('nav_portfolio') if t else 'Portefeuille' }}</a>
-                <a href="/simulate" {% if request.url.path.startswith('/simulate') %}aria-current="page"{% endif %}>{{ t('nav_simulate') if t else 'Simulateur' }}</a>
-                <a href="/phase9" {% if request.url.path.startswith('/phase9') %}aria-current="page"{% endif %}>Phase 9</a>
+                {% for section in nav_sections(request.url.path) %}
+                <div class="sidebar-nav-group" role="group" aria-labelledby="nav-cat-{{ section.key }}">
+                    <span class="sidebar-nav-heading" id="nav-cat-{{ section.key }}">{{ t(section.label_key) if t else section.label }}</span>
+                    {% for item in section.entries %}
+                    <a href="{{ item.url }}" {% if item.active %}aria-current="page"{% endif %}>{{ t(item.label_key) if (t and item.label_key) else item.label }}</a>
+                    {% endfor %}
+                </div>
+                {% endfor %}
             </nav>
             <div class="sidebar-footer">
                 <nav class="sidebar-lang" aria-label="Langue / Language">

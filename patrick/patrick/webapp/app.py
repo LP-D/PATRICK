@@ -34,6 +34,7 @@ from patrick.webapp import (
     forms,
     i18n,
     market_data,
+    nav_registry,
     run_manager,
     shap_chart,
 )
@@ -80,6 +81,9 @@ BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="PATRICK")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# feature/nav-categories-registry: sidebar built from the registry only
+# (base_v2.html iterates `nav_sections(request.url.path)`).
+templates.env.globals["nav_sections"] = nav_registry.nav_sections
 
 FORM_OPTIONS = {
     "all_families": forms.ALL_FEATURE_FAMILIES,
