@@ -12,7 +12,12 @@ dependencies = [
     "pandas",
     "pyarrow",
     "scikit-learn",
-    "xgboost",
+    # xgboost >= 3.1 serializes `base_score` as a vector string ("[5E-1]");
+    # shap only parses it from 0.50.0 (shap#4187), which requires Python
+    # >= 3.11 -- on 3.10 pip stops at shap 0.49.1 and TreeExplainer raises
+    # `ValueError: could not convert string to float`. Cap xgboost there only.
+    "xgboost<3.1; python_version < '3.11'",
+    "xgboost; python_version >= '3.11'",
     "lightgbm",
     "catboost",
     "imbalanced-learn",
