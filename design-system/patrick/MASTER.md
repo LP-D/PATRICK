@@ -201,6 +201,45 @@ Updated to reference the locked palette tokens (was hardcoded to the abandoned p
 - ❌ Client logos / trust badges
 - ❌ Multi-step funnel or path-selection ("I am a...")
 
+### Navigation Registry (extension formelle, post-lock)
+
+> **Introduit par :** commit `6b5a0bd` (branche `feature/nav-categories-registry`). Étend le pattern *Internal Cockpit* ci-dessus : la « fixed left sidebar navigation » n'est plus une liste de liens écrite à la main, c'est le rendu d'un registre unique.
+
+**Source unique :** `patrick/patrick/webapp/nav_registry.py`. `templates/base_v2.html` itère `nav_sections(request.url.path)` (global Jinja enregistré dans `webapp/app.py`) et ne contient **aucun** `<a href>` de nav en dur — garanti par `tests/test_nav_registry.py::test_base_template_has_no_hardcoded_nav_link`.
+
+**Structure :**
+
+| Objet | Champs | Rôle |
+|-------|--------|------|
+| `NavCategory` | `key`, `label` (repli FR), `label_key` (i18n) | Section de la sidebar. Tuple `CATEGORIES`, ordre fixe = ordre d'affichage. |
+| `NavEntry` | `slug` (unique), `label` (repli FR), `url`, `category`, `order`, `label_key` (i18n, optionnel), `child_routes` | Un lien de nav. `child_routes` = pages paramétrées rattachées à l'entrée mais non listées (ex. `/runs/{run_id}/detail`, `/targets/{ticker}`). |
+| `NON_PAGE_PREFIXES` / `NON_PAGE_ROUTES` | — | Routes GET qui ne sont pas des pages (`/api/*`, `/static`, `/set-lang/*`, statut/résultats/téléchargements de run). |
+
+**Taxonomie — 4 catégories fixes, dans cet ordre :**
+
+| Clé | En-tête | Règle d'appartenance |
+|-----|---------|----------------------|
+| `pilotage` | PILOTAGE | Piloter la station : vue d'ensemble, lancement et suivi des runs, sorties modèles transverses, santé des données, journal de décision. |
+| `classes_actifs` | CLASSES D'ACTIFS | Ce que PATRICK modélise, présenté par famille de sous-jacents (univers, matières premières, macro, actions…). |
+| `simulation` | SIMULATION | Rejouer des signaux déjà produits (jamais de ré-entraînement). |
+| `patrimoine` | PATRIMOINE | Construction / allocation de portefeuille et, à terme, gestion patrimoniale. |
+
+Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
+
+**Rendu (vocabulaire existant uniquement, aucun nouveau token) :**
+- En-tête de section `.sidebar-nav-heading` = copie conforme de `.metric-label` : Fira Code 11px, uppercase, `letter-spacing: 0.04em`, `--color-muted-foreground`.
+- Liens : style `.sidebar-nav a` inchangé ; état actif `aria-current="page"` (fond `--color-muted`, filet gauche `--color-accent`).
+- État actif : `/` en égalité stricte, toute autre entrée par préfixe de segment (`/runs` s'allume sur `/runs/{id}/detail`). Règle historique de `base_v2.html` conservée.
+- < 1024px : groupes à plat sur la barre horizontale, en-têtes conservés en ligne.
+
+**Procédure obligatoire pour toute nouvelle page :**
+1. Déclarer la route FastAPI dans `webapp/app.py` (le template étend `base_v2.html`).
+2. Ajouter **une** `NavEntry` dans `NAV_ENTRIES` (slug unique, catégorie parmi les 4, `order` libre dans la catégorie) — ou, pour une page paramétrée non listée, l'ajouter à `child_routes` de l'entrée parente.
+3. Ajouter la clé i18n `nav_<slug>` (fr + en) dans `webapp/i18n.py` si le libellé doit être traduit.
+4. `pytest tests/test_nav_registry.py` doit rester vert : une route GET absente du registre et non déclarée non-page fait échouer `test_no_orphan_page_route`.
+
+❌ **Interdit :** tout lien de navigation latérale écrit en dur dans un template, toute seconde liste de nav, toute logique d'état actif hors `nav_registry.is_active`. Les fils d'Ariane (`.breadcrumb`) et liens contextuels dans le contenu des pages ne sont pas de la nav latérale et restent hors registre.
+
 ---
 
 ## Anti-Patterns (Do NOT Use)
