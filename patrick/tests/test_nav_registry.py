@@ -125,7 +125,7 @@ def test_non_page_declarations_do_not_shadow_registry_pages():
 # ---------------------------------------------------------------------------
 
 def _sidebar(html: str) -> str:
-    m = re.search(r'<nav class="sidebar-nav".*?</nav>', html, re.S)
+    m = re.search(r'<nav class="sidebar-nav".*?</nav>', html, re.DOTALL)
     assert m is not None, "sidebar-nav introuvable"
     return m.group(0)
 
@@ -133,7 +133,7 @@ def _sidebar(html: str) -> str:
 def _groups(sidebar_html: str) -> list[tuple[str, list[str]]]:
     """[(en-tete, [hrefs...]), ...] dans l'ordre du rendu."""
     out = []
-    for g in re.finditer(r'<div class="sidebar-nav-group"[^>]*>(.*?)</div>', sidebar_html, re.S):
+    for g in re.finditer(r'<div class="sidebar-nav-group"[^>]*>(.*?)</div>', sidebar_html, re.DOTALL):
         body = g.group(1)
         heading = re.search(r'class="sidebar-nav-heading"[^>]*>([^<]*)<', body)
         hrefs = re.findall(r'<a href="([^"]+)"', body)
@@ -156,6 +156,29 @@ def test_sidebar_is_grouped_by_category_with_section_headings():
     headings = [h for h, _ in groups]
     assert headings[0] == "PILOTAGE"
     assert "CLASSES D&#39;ACTIFS" in headings
+
+
+def test_empty_category_is_not_rendered(monkeypatch):
+    """Une categorie sans entree ne produit ni section ni en-tete -- teste sur
+    un registre reduit, independamment du contenu courant de NAV_ENTRIES."""
+    subset = tuple(e for e in nav_registry.NAV_ENTRIES if e.category != "simulation")
+    monkeypatch.setattr(nav_registry, "NAV_ENTRIES", subset)
+    keys = [s["key"] for s in nav_registry.nav_sections("/")]
+    assert "simulation" not in keys
+    resp = TestClient(app).get("/")
+    side = _sidebar(resp.text)
+    assert 'id="nav-cat-simulation"' not in side
+    assert 'href="/simulate"' not in side
+
+
+def test_empty_patrimoine_category_is_not_rendered_today():
+    """PATRIMOINE reste vide tant que les pages comptes/mouvements n'existent
+    pas : ni en-tete ni section dans la sidebar."""
+    if nav_registry.entries_for("patrimoine"):
+        pytest.skip("PATRIMOINE a desormais des entrees")
+    side = _sidebar(TestClient(app).get("/").text)
+    assert "nav-cat-patrimoine" not in side
+    assert "PATRIMOINE" not in side
 
 
 def test_sidebar_links_all_registry_entries_exactly_once():
@@ -195,7 +218,7 @@ def test_base_template_has_no_hardcoded_nav_link():
     """Anti-duplication : la nav laterale ne contient plus aucun href en dur,
     tout vient du registre."""
     src = (TEMPLATES_DIR / "base_v2.html").read_text(encoding="utf-8")
-    m = re.search(r'<nav class="sidebar-nav".*?</nav>', src, re.S)
+    m = re.search(r'<nav class="sidebar-nav".*?</nav>', src, re.DOTALL)
     assert m is not None
     assert 'href="/' not in m.group(0)
 

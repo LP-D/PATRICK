@@ -60,10 +60,13 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("commodities", "Matières premières", "/commodities", "classes_actifs", 20, "nav_commodities"),
     NavEntry("macro", "Macro (FRED)", "/macro", "classes_actifs", 30, "nav_macro"),
     NavEntry("equities", "Actions individuelles", "/equities", "classes_actifs", 40, "nav_equities"),
+    # /portfolio = agregation de signaux par classe d'actifs + allocation HRP
+    # sur l'univers PATRICK : vue cross-actifs, pas gestion patrimoniale.
+    NavEntry("portfolio", "Portefeuille", "/portfolio", "classes_actifs", 50, "nav_portfolio"),
     # SIMULATION -- rejouer des signaux deja produits (jamais de re-entrainement).
     NavEntry("simulate", "Simulateur", "/simulate", "simulation", 10, "nav_simulate"),
-    # PATRIMOINE -- construction/allocation de portefeuille.
-    NavEntry("portfolio", "Portefeuille", "/portfolio", "patrimoine", 10, "nav_portfolio"),
+    # PATRIMOINE -- volontairement vide tant que les pages comptes/mouvements
+    # n'existent pas (categorie vide = non rendue, cf. nav_sections).
 )
 
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).
