@@ -56,7 +56,9 @@ import shap
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
-from patrick.pipeline.engine import build_full_feature_pool
+from patrick.features.feature_cache import FeatureCache
+from patrick.pipeline.engine import _snapshot_context, build_full_feature_pool
+from patrick.tracking import cache_tables
 from patrick.tracking import db as trackdb
 from patrick.validation import drift
 
@@ -88,6 +90,17 @@ def _find_best_trial_for_horizon(conn: sqlite3.Connection, target: str, horizon:
         if trial is not None and trial[1]:
             return {"run_id": run_id, "trial_id": trial[0], "artifact_path": trial[1]}
     return None
+
+
+def _cached_full_pool(raw: pd.DataFrame, config: RunConfig, target_col: str,
+                      interaction_formulas: list[str]) -> tuple[pd.DataFrame, str]:
+    """`build_full_feature_pool` through the versioned feature cache
+    (`features/feature_cache.py`, key = snapshot_id + hash of every
+    feature-affecting parameter). Returns (pool, snapshot_id)."""
+    snapshot_id = _snapshot_context(raw)[0]
+    pool = FeatureCache().get_or_build(raw, config, target_col, interaction_formulas,
+                                       snapshot_id, build_full_feature_pool)
+    return pool, snapshot_id
 
 
 def explain_last_prediction(target: str, horizon: int, db_path: str | None = None,
@@ -135,7 +148,12 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         # unlike `predict.py`'s live inference, this never needs today's bar.
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
 
-        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
+        snapshot_id = _snapshot_context(raw)[0]
+        cached = cache_tables.get_cached_shap(conn, best["trial_id"], str(latest["ts"]), snapshot_id)
+        if cached is not None:
+            return cached
+
+        full_pool, _ = _cached_full_pool(raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_pool if c not in full_pool.columns]
         if missing:
@@ -183,7 +201,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             key=lambda r: abs(r["shap"]), reverse=True,
         )
 
-        return {
+        result = {
             "run_id": best["run_id"], "trial_id": best["trial_id"],
             "ts": str(ts.date()), "split": latest["split"],
             "y_pred": pred_class, "y_pred_label": CLASS_NAMES[pred_class],
@@ -191,6 +209,8 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             "base_value": base_value, "final_value": final_value,
             "contributions": contributions, "n_features_total": len(feature_names),
         }
+        cache_tables.save_cached_shap(conn, best["trial_id"], str(latest["ts"]), snapshot_id, result)
+        return result
     finally:
         conn.close()
 
@@ -237,7 +257,7 @@ def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | N
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
 
-        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
+        full_pool, _ = _cached_full_pool(raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_names if c not in full_pool.columns]
         if missing:

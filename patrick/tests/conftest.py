@@ -22,3 +22,11 @@ def conn(tmp_path):
     (was duplicated identically in `test_selection_cache.py` and
     `test_vol_model_cache.py`)."""
     return trackdb.connect(str(tmp_path / "patrick.db"))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_local_caches(tmp_path, monkeypatch):
+    """Per-series Parquet layer and versioned feature cache: never write
+    to (or read a stale entry from) the real `~/.patrick` during tests."""
+    monkeypatch.setenv("PATRICK_SERIES_ROOT", str(tmp_path / "_series_cache"))
+    monkeypatch.setenv("PATRICK_FEATURE_CACHE_ROOT", str(tmp_path / "_feature_cache"))

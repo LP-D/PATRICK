@@ -14,6 +14,7 @@ from patrick.data import quality as quality_module
 from patrick.data.session_calendar import session_lag_days
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
+from patrick.data.series_store import SeriesStore
 from patrick.data.store import DataStore
 
 
@@ -208,7 +209,13 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
 
     df = df.sort_index().ffill().dropna(subset=[target.name])
     print(f"[INGEST] {df.shape} ({time.time()-t0:.1f}s) | cible={target.name}")
-    store.save(cache_key, df)
+    snapshot_id = store.save(cache_key, df)
+    # Per-series Parquet layer, key = (ticker, vintage=snapshot_id) -- see
+    # `data/series_store.py`. A cache write failure never fails ingestion.
+    try:
+        SeriesStore().save_frame(df, vintage=snapshot_id)
+    except OSError as exc:
+        print(f"  [WARN] per-series cache not written: {exc}")
     local_cache.save_dataframe(f"{cache_key}_local", df, max_age_days=30)
     _attach_snapshot_context(df, universe, quality_issues=issues if dq.enabled else None)
     return df
