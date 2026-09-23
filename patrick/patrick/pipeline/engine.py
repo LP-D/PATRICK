@@ -63,6 +63,7 @@ from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
 from patrick.models.uniqueness import average_uniqueness, build_indicator_matrix, effective_sample_size
 from patrick.pipeline.leaderboard import Leaderboard
+from patrick.selection import universe_reduction
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
@@ -1050,6 +1051,17 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                      data_quality=config.data_quality)
     t_ingest_end = time.time()
     target_col = clean_symbol(config.objective.target_symbol)
+    if config.universe.reduction_corr_threshold is not None:
+        # Point-in-time: `as_of` = end of the first walk-forward training
+        # window of the pre-holdout span -- no test fold / holdout data
+        # ever decides which candidate series are kept.
+        as_of = universe_reduction.reduction_as_of(
+            raw.index, config.validation.min_train_frac,
+            _walk_forward_span(raw.index, config.validation.holdout_months,
+                               config.validation.min_train_frac))
+        raw, _ = universe_reduction.apply_to_raw(
+            raw, target_col, as_of, config.universe.reduction_corr_threshold,
+            lookback=config.universe.reduction_lookback)
 
     conn = trackdb.connect(db_path)
     try:

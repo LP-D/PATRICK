@@ -42,6 +42,14 @@ class UniverseConfig(BaseModel):
     # specific to each fold cut. Documented, not resolved here (out of scope
     # for C7: measure the impact of existing fixes, not build a finer new one).
     vintage_realtime_date: str | None = None
+    # Candidate-universe reduction ahead of training (`selection/
+    # universe_reduction.py`): hierarchical clustering on 1-|corr| of the
+    # point-in-time correlation (shared with HRP/BL) at the end of the first
+    # walk-forward training window, one representative per cluster. None
+    # (default) = no reduction -- never a silent filter; values below
+    # `AGGRESSIVE_CORR_THRESHOLD` are accepted but warned about.
+    reduction_corr_threshold: float | None = Field(default=None, gt=0.0, le=1.0)
+    reduction_lookback: int = Field(default=252, ge=20)
 
 
 class DataQualityConfig(BaseModel):

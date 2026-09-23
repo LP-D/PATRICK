@@ -116,6 +116,20 @@ STRINGS: dict[str, dict[str, str]] = {
                               "series), excluding the target chosen above.")},
     "field_start_date": {"fr": "Date de début", "en": "Start date"},
     "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
+    "field_universe_scope": {"fr": "Univers candidat", "en": "Candidate universe"},
+    "universe_scope_default": {"fr": "Standard (66 séries)", "en": "Standard (66 series)"},
+    "universe_scope_extended": {"fr": "Étendu (indices, FX, ETF sectoriels/obligataires…)",
+                                "en": "Extended (indices, FX, sector/bond ETFs…)"},
+    "field_reduction_corr_threshold": {
+        "fr": "Seuil de réduction |corr| (vide = désactivé)",
+        "en": "Reduction |corr| threshold (empty = disabled)"},
+    "reduction_hint": {
+        "fr": ("Regroupe les séries candidates par clustering hiérarchique sur 1-|corr| (corrélation "
+               "point-in-time, calculée à la fin du 1er fold d'entraînement) et n'en garde qu'une par "
+               "groupe. En dessous de 0,8 : avertissement (réduction agressive)."),
+        "en": ("Groups candidate series by hierarchical clustering on 1-|corr| (point-in-time correlation, "
+               "computed at the end of the first training fold) and keeps one per group. Below 0.8: "
+               "warning (aggressive reduction).")},
 
     "section_data_quality": {"fr": "Qualité de données (portes à l'ingestion)",
                               "en": "Data quality (ingestion gates)"},

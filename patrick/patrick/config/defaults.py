@@ -429,3 +429,31 @@ DEFAULT_TARGET_CHOICES = _flatten_target_choices()
 # webapp/forms.py) to avoid a ticker predicting itself.
 DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src == "yfinance"]
 DEFAULT_UNIVERSE_FRED_SERIES = {label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"}
+
+# Expanded CANDIDATE universe (feature/replay-cache-universe, Phase 3):
+# additional Yahoo series offered as FEATURE candidates only -- never added
+# to DEFAULT_TARGET_GROUPS (the target list, and everything keyed on it such
+# as the legacy-ticker cleanup in tracking/db.py, stays unchanged). Opt-in
+# per run (web form "universe_scope" = "extended"); meant to be paired with
+# the correlation-clustering reduction (UniverseConfig.reduction_corr_threshold)
+# so redundant series are collapsed point-in-time ahead of training. Same
+# data source (yfinance), same ingestion quality gates (coverage, frozen
+# prices, aberrant returns) as the default universe.
+EXTENDED_CANDIDATE_EXTRA_YF_TICKERS = [
+    # Equity indices
+    "^DJI", "^IXIC", "^RUT", "^FTSE", "^GDAXI", "^FCHI", "^N225", "^HSI", "^STOXX50E",
+    # Rates / implied vol indices
+    "^TNX", "^IRX", "^FVX", "^TYX", "^VXN",
+    # FX majors
+    "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X",
+    # US sector ETFs
+    "XLE", "XLF", "XLK", "XLU", "XLV", "XLI", "XLP", "XLY", "XLB",
+    # Bond / credit ETFs
+    "TLT", "IEF", "SHY", "LQD", "HYG",
+    # Other futures / crypto
+    "PL=F", "PA=F", "HO=F", "RB=F", "ETH-USD",
+]
+EXTENDED_CANDIDATE_YF_TICKERS = DEFAULT_UNIVERSE_YF_TICKERS + [
+    t for t in EXTENDED_CANDIDATE_EXTRA_YF_TICKERS
+    if t not in DEFAULT_UNIVERSE_YF_TICKERS and t not in BAD_TICKERS
+]

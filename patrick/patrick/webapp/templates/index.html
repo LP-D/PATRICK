@@ -96,6 +96,16 @@
             <label>{{ t('field_yf_coverage') }}
                 <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
             </label>
+            <label>{{ t('field_universe_scope') }}
+                <select name="universe_scope">
+                    <option value="default" {% if view.universe_scope != 'extended' %}selected{% endif %}>{{ t('universe_scope_default') }}</option>
+                    <option value="extended" {% if view.universe_scope == 'extended' %}selected{% endif %}>{{ t('universe_scope_extended') }}</option>
+                </select>
+            </label>
+            <label>{{ t('field_reduction_corr_threshold') }}
+                <input type="number" step="any" min="0" max="1" name="reduction_corr_threshold" value="{{ view.reduction_corr_threshold }}">
+            </label>
+            <p class="hint">{{ t('reduction_hint') }}</p>
             </div>
         </details>
 
