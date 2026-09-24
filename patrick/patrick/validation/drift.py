@@ -83,10 +83,13 @@ def decile_reference(expected: Sequence[float], bins: int = 10) -> dict:
     without ever needing to keep the raw training sample around. Edges are
     widened to +/-inf at the extremes so a genuinely shifted future sample
     (outside the reference's observed range) still lands in the extreme
-    bin instead of being silently dropped by `np.histogram`."""
+    bin instead of being silently dropped by `np.histogram`. NaNs (rolling-
+    window warm-up rows in the training window) are ignored: a single one
+    would otherwise turn every percentile into NaN and collapse the
+    reference into the degenerate single bin below."""
     expected = np.asarray(expected, dtype=float)
     quantiles = np.linspace(0, 100, bins + 1)
-    breakpoints = np.unique(np.percentile(expected, quantiles))
+    breakpoints = np.unique(np.nanpercentile(expected, quantiles))
     if len(breakpoints) < 3:
         # Degenerate (near-constant) reference distribution -- a single
         # catch-all bin makes psi_from_reference return 0.0 rather than
