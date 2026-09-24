@@ -14,7 +14,9 @@ tous les tests partageraient la vraie base `~/.patrick/patrick.db`.
 """
 from __future__ import annotations
 
+import subprocess
 import time
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -25,6 +27,7 @@ from starlette.datastructures import FormData
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
+from patrick.tracking import jobs as jobs_db
 from patrick.webapp import forms, run_manager
 from patrick.webapp.app import app
 
@@ -47,6 +50,11 @@ def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
     return df
 
 
+# Every detached `patrick worker` spawned by `run_manager._spawn_worker`
+# during this module -- checked by the module's LAST test.
+_SPAWNED_WORKERS: list[subprocess.Popen] = []
+
+
 @pytest.fixture(autouse=True)
 def _isolated_env(tmp_path, monkeypatch):
     """Base + data lake dédiés à ce test, et arrêt automatique rapide du
@@ -55,6 +63,41 @@ def _isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
     monkeypatch.setenv("PATRICK_WORKER_IDLE_TIMEOUT", "8")
     DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw())
+
+    real_spawn_worker = run_manager._spawn_worker
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        proc = real_popen(*args, **kwargs)
+        _SPAWNED_WORKERS.append(proc)
+        return proc
+
+    def recording_spawn_worker(idle_timeout: float) -> None:
+        with mock.patch.object(run_manager.subprocess, "Popen", recording_popen):
+            real_spawn_worker(idle_timeout)
+
+    monkeypatch.setattr(run_manager, "_spawn_worker", recording_spawn_worker)
+    first_spawned = len(_SPAWNED_WORKERS)
+    yield
+
+    # Tests that don't wait for their runs to finish would otherwise leave
+    # the detached worker (`start_new_session`/`DETACHED_PROCESS`, see
+    # `_spawn_worker`) running full pipelines into the next tests: stop it,
+    # then empty this test's queue so nothing is left 'queued'/'running'.
+    spawned_here = _SPAWNED_WORKERS[first_spawned:]
+    for proc in spawned_here:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=30)
+    if spawned_here:
+        conn = trackdb.connect(str(tmp_path / "patrick.db"))
+        try:
+            for job_id in jobs_db.list_queued_job_ids(conn):
+                jobs_db.finish_job(conn, job_id, "error", error="aborted by test teardown")
+            while (job := jobs_db.active_job(conn)) is not None:
+                jobs_db.finish_job(conn, job["job_id"], "error", error="aborted by test teardown")
+        finally:
+            conn.close()
 
 
 def _form_data(tmp_path) -> dict:
@@ -303,3 +346,20 @@ def test_relaunch_404_on_unknown_run():
     client = TestClient(app)
     resp = client.post("/runs/does-not-exist/relaunch")
     assert resp.status_code == 404
+
+
+# Must stay the LAST test of this module (pytest runs tests in file order):
+# it checks what every previous test's teardown left behind.
+def test_no_spawned_worker_outlives_its_test():
+    """Tests that submit runs without waiting for them to finish
+    (`test_second_run_queues_then_auto_starts`,
+    `test_batch_submit_queues_one_job_per_target`, the job queued by
+    `/relaunch`...) used to leave their detached worker running full
+    pipelines after the test ended, competing for CPU with the next tests
+    (measured locally: `test_relaunch_reuses_config_with_fresh_name` ~2x
+    slower). Suspected -- not reproduced locally -- contributor to its
+    240s timeout on the CI runner."""
+    if not _SPAWNED_WORKERS:
+        pytest.skip("no worker spawned in this session -- run the whole module")
+    alive = [proc.pid for proc in _SPAWNED_WORKERS if proc.poll() is None]
+    assert alive == [], f"{len(alive)} worker(s) still running after their test: {alive}"
