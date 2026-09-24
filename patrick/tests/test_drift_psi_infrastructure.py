@@ -22,6 +22,8 @@ from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
 from patrick.tracking import db as trackdb
+from patrick.tracking import export as export_module
+from patrick.validation import drift
 
 TARGET_SYMBOL = "^TEST_DRIFT"
 HORIZON = 5
@@ -113,18 +115,40 @@ def test_export_best_model_rewrites_drift_reference_not_duplicates_on_refit(tmp_
     assert all(count == 1 for _feature, count in counts)  # rewritten, never accumulated
 
 
+# Base-pool features derived from the columns `_synthetic_raw` shifts, each
+# with rolling-window warm-up NaNs at the start of the training window
+# (ma10: 9 rows, ret_20d/vol_20d: 20 rows) -- exactly the case that used to
+# collapse `decile_reference` into a single bin (PSI stuck at 0.0).
+DRIFTED_WARMUP_FEATURES = ["NFCI_vs_ma10", "T10Y2Y_ret_20d", "SPX_LIKE_vol_20d"]
+
+
 @pytest.mark.slow
 def test_compute_drift_for_ticker_horizon_detects_simulated_drift_and_records_history(tmp_path, monkeypatch):
     """On-demand call against data that has genuinely drifted since
-    training: at least one feature must cross the 'significant' PSI
+    training: every exported feature must cross the 'significant' PSI
     threshold, and a history row must be written per computed feature. A
     second successive call must not duplicate the reference (still one row
     per feature) while the history keeps growing (one more row per
-    feature, not overwritten)."""
+    feature, not overwritten).
+
+    The exported features are pinned to `DRIFTED_WARMUP_FEATURES` rather
+    than left to the pipeline's own selection: which model/feature set wins
+    differs across platforms (RandomForest N=8 on the Linux CI runner vs
+    XGBoost N=5 on Windows, same seed and versions), and the test used to
+    pass only when that selection happened to include a NaN-free feature."""
     clean_raw = _synthetic_raw()
     monkeypatch.setattr(
         engine_module, "ingest",
         lambda objective, universe, store=None, force=False, data_quality=None: clean_raw)
+
+    real_export_best_model = engine_module.export_best_model
+
+    def export_with_pinned_features(pool, target_col, feature_pool, *args, **kwargs):
+        pinned = [feature_pool.index(f) for f in DRIFTED_WARMUP_FEATURES]
+        monkeypatch.setattr(export_module, "select_features", lambda *a, **k: pinned)
+        return real_export_best_model(pool, target_col, feature_pool, *args, **kwargs)
+
+    monkeypatch.setattr(engine_module, "export_best_model", export_with_pinned_features)
 
     db_path = str(tmp_path / "patrick.db")
     store = DataStore(root=str(tmp_path / "store"))
@@ -150,7 +174,8 @@ def test_compute_drift_for_ticker_horizon_detects_simulated_drift_and_records_hi
     first = explain_module.compute_drift_for_ticker_horizon(
         TARGET_SYMBOL, HORIZON, db_path=db_path, store=store)
     assert first is not None
-    assert any(info["status"] == "significant" for info in first.values())
+    assert sorted(first) == sorted(DRIFTED_WARMUP_FEATURES)
+    assert all(info["status"] == "significant" for info in first.values()), first
 
     conn = trackdb.connect(db_path)
     reference_count_after_first_call = conn.execute(
@@ -188,3 +213,22 @@ def test_compute_drift_for_ticker_horizon_returns_none_without_a_persisted_refer
     out = explain_module.compute_drift_for_ticker_horizon(
         "no-such-target", 5, db_path=str(tmp_path / "patrick.db"))
     assert out is None
+
+
+def test_decile_reference_ignores_rolling_window_warmup_nans():
+    """Any rolling-window feature (`_100d`, `_20d`, `ma10`...) starts with
+    warm-up NaNs in the training window `export_best_model` hands to
+    `decile_reference`. Those NaNs must be ignored, not collapse the
+    reference into the single catch-all bin -- which made
+    `psi_from_reference` return 0.0 for ANY shift, however large."""
+    rng = np.random.default_rng(0)
+    values = rng.normal(0, 1, 1000)
+    with_warmup = values.copy()
+    with_warmup[:20] = np.nan
+
+    reference = drift.decile_reference(with_warmup)
+
+    assert reference == drift.decile_reference(values[20:])  # NaNs ignored, nothing else changes
+    assert len(reference["expected_pct"]) == 10
+    shifted = values[:30] + 50.0
+    assert drift.psi_from_reference(reference, shifted) > drift.PSI_ALERT_THRESHOLD
