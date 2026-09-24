@@ -56,7 +56,9 @@ jobs:
     # `fast-suite`'s own comment), so this job is gated to pushes on `main`
     # only -- not pull requests.
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # TEMPORARY -- also run on fix/slow-suite-flakiness to validate its fix
+    # against the real CI runner. Revert before merge.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/slow-suite-flakiness')
     steps:
       - uses: actions/checkout@v4
 
