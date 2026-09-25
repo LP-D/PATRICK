@@ -78,7 +78,7 @@
             <label>{{ t('field_flat_thr') }}
                 <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
             </label>
-            <label>{{ t('field_regimes') }}
+            <label>{{ t('field_regimes') }}{{ info('regime', 'Régime de marché') }}
                 <input type="text" name="regimes" value="{{ view.regimes }}" required>
             </label>
         </fieldset>

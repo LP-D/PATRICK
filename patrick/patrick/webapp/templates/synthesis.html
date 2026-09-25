@@ -39,7 +39,7 @@
 {# ---- Dense content zones below ---- #}
 
 <section class="card" style="--enter-delay:60ms">
-<h2>Qualité par cible</h2>
+<h2>Qualité par cible <button type="button" class="info-icon" data-term="diebold_mariano" data-term-label="Diebold-Mariano" aria-label="{{ t('glossary_open_aria', term='Diebold-Mariano') }}">i</button></h2>
 {% if overview.fdr_n_tested == 0 %}
 {{ empty_state("Aucun résultat Diebold-Mariano en base.", "Nécessite au moins un run complet (walk-forward, hors CPCV) pour produire une p-value testable.") }}
 {% else %}
@@ -109,7 +109,7 @@
 </section>
 
 <section class="card" style="--enter-delay:180ms">
-<h2>Classification de régime</h2>
+<h2>Classification de régime <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
 {{ empty_state("Classification de régime jamais exécutée en production.", "patrick.phase9.classify_regime_daily existe et est testée, mais n'est appelée par aucun chemin de production — aucune table ne stocke de régime. Voir DASHBOARD_B1-B2.md.") }}
 </section>
 
