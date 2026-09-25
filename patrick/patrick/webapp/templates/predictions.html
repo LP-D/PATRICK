@@ -36,7 +36,7 @@
             {% set dir_cell = status_badge(r.direction, 'ok' if r.direction == 'UP' else 'warning') %}
             {% if r.dm_p_value is not none and r.dm_sample == 'last_wf_fold' %}
                 {# F08 : p-value calculee sur le fold qui a servi a choisir le modele -- jamais "significative". #}
-                {% set sig_cell = '<span class="tip" data-tip="Diebold-Mariano calculé sur le dernier fold walk-forward, qui fait partie du critère de sélection : p-value biaisée vers le significatif, exclue de la correction entre cibles. Relancer le run pour obtenir le test sur le holdout.">' ~ status_badge('p=%.4f · fold de sélection' | format(r.dm_p_value), 'warning') ~ '</span>' %}
+                {% set sig_cell %}<span class="tip" tabindex="0" data-tip="Diebold-Mariano calculé sur le dernier fold walk-forward, qui fait partie du critère de sélection : p-value biaisée vers le significatif, exclue de la correction entre cibles. Relancer le run pour obtenir le test sur le holdout.">{{ status_badge('p=%.4f · fold de sélection' | format(r.dm_p_value), 'warning') }}</span>{% endset %}
             {% elif r.dm_p_value is not none %}
                 {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < dm_significance_alpha else 'warning') %}
             {% else %}

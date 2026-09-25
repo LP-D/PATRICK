@@ -1,0 +1,74 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import empty_state, status_badge %}
+{% block title %}PATRICK — {{ t('nav_mouvements') }}{% endblock %}
+
+{# Roadmap bloc 4 -- glisser-déposer des mouvements entre comptes
+   (ledger.transfer_movement : réel → réel déplace, → fictif copie,
+   fictif → réel refusé) et import CSV par compte. #}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('nav_mouvements') }}</h1>
+    <p class="page-subtitle">{{ t('wealth_movements_subtitle') }}</p>
+  </div>
+</div>
+
+<div id="wealth-flash" class="banner hidden" role="status"></div>
+
+{% if accounts %}
+<section class="card">
+  <h2>Comptes — cibles de dépôt</h2>
+  <div class="account-grid">
+    {% for a in accounts %}
+    <div class="account-card drop-target" data-kind="{{ a.mode }}" data-account-id="{{ a.account_id }}"
+         data-account-mode="{{ a.mode }}" data-account-name="{{ a.name }}">
+      <div class="row">
+        <span class="account-type">{{ a.kind }}</span><span class="spacer"></span>
+        {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
+      </div>
+      <div class="account-name"><a href="/patrimoine/comptes/{{ a.account_id }}">{{ a.name }}</a></div>
+      <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button" style="min-height:72px; padding:10px">
+        {{ icon('upload') }}<span class="hint" style="margin:0">CSV</span>
+        <input type="file" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="import-preview" data-import-preview="{{ a.account_id }}"></div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Journal</h2>
+  {% if movements %}
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th aria-label="Glisser"></th><th>Date</th><th>Compte</th><th>Type</th><th>Actif</th><th class="num">Qté</th><th class="num">Prix</th><th class="num">Montant</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for m in movements %}
+    {% set acc = by_id[m.account_id] %}
+    <tr class="draggable-row" draggable="true" data-movement-id="{{ m.movement_id }}" data-account-mode="{{ acc.mode }}">
+      <td class="na">{{ icon('drag', 14) }}</td>
+      <td class="pk-mono">{{ m.ts }}</td>
+      <td>{{ acc.name }} {{ status_badge(t('wealth_mode_real') if acc.mode == 'real' else t('wealth_mode_fictive'), 'ok' if acc.mode == 'real' else 'pending') }}</td>
+      <td>{{ m.kind | mvkind }}</td>
+      <td class="pk-mono">{{ m.symbol or '' }}</td>
+      <td class="num">{{ m.quantity | qty if m.quantity is not none else '' }}</td>
+      <td class="num">{{ m.price | eur if m.price is not none else '' }}</td>
+      <td class="num {{ 'pos' if m.amount >= 0 else 'neg' }}">{{ m.amount | eur }}</td>
+      <td>{{ m.note or '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="table-footer">{{ movements | length }} mouvement(s) sur {{ accounts | length }} compte(s).</p>
+  {% else %}
+  {{ empty_state("Aucun mouvement.", "Dépose un relevé CSV sur un compte ci-dessus, ou saisis un mouvement depuis la fiche d'un compte.") }}
+  {% endif %}
+</section>
+{% else %}
+{{ empty_state("Aucun compte.", "Crée d'abord un compte depuis la page Comptes.") }}
+{% endif %}
+<script src="/static/wealth.js"></script>
+{% endblock %}

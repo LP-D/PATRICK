@@ -1664,6 +1664,21 @@ table .metric-value { font-size: 13px; font-weight: 500; letter-spacing: 0; }
 }
 .drop-zone:hover, .drop-zone[data-over] { border-color: var(--brand); background: var(--brand-soft); color: var(--text); }
 .drop-zone .icon { width: 22px; height: 22px; color: var(--brand); }
+a.account-card { display: block; color: var(--text); transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out); }
+a.account-card:hover { color: var(--text); border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.account-card .account-name a { color: inherit; }
+.import-preview:not(:empty) { margin-top: 12px; }
+dialog.modal {
+  width: min(560px, calc(100vw - 32px));
+  padding: 22px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xl);
+}
+dialog.modal::backdrop { background: var(--overlay); backdrop-filter: blur(2px); }
+dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .draggable-row { cursor: grab; }
 .draggable-row[data-dragging] { opacity: 0.5; }
 .drop-target[data-over] { outline: 2px dashed var(--brand); outline-offset: -2px; background: var(--brand-soft); }

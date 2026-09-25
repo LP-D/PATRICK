@@ -40,6 +40,7 @@ from patrick.webapp import (
     nav_registry,
     run_manager,
     shap_chart,
+    wealth_routes,
 )
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
@@ -835,6 +836,10 @@ def portfolio_page(request: Request, pairs: str | None = None):
             **_i18n_context(request),
         },
     )
+
+
+# Roadmap bloc 4 -- PATRIMOINE (pages /patrimoine, /mouvements + /api/wealth/*).
+wealth_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 @app.get("/commodities")

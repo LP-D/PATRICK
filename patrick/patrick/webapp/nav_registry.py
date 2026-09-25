@@ -65,8 +65,13 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("portfolio", "Portefeuille", "/portfolio", "classes_actifs", 50, "nav_portfolio"),
     # SIMULATION -- rejouer des signaux deja produits (jamais de re-entrainement).
     NavEntry("simulate", "Simulateur", "/simulate", "simulation", 10, "nav_simulate"),
-    # PATRIMOINE -- volontairement vide tant que les pages comptes/mouvements
-    # n'existent pas (categorie vide = non rendue, cf. nav_sections).
+    # PATRIMOINE -- comptes reels et fictifs (PEA, CTO, AV, livret, DAT) et
+    # leurs mouvements (roadmap bloc 4, webapp/wealth_routes.py). URLs a plat
+    # (`/mouvements`, pas `/patrimoine/mouvements`) : l'etat actif est par
+    # prefixe, une page enfant allumerait aussi `/patrimoine`.
+    NavEntry("patrimoine", "Comptes", "/patrimoine", "patrimoine", 10, "nav_patrimoine",
+             child_routes=("/patrimoine/comptes/{account_id}",)),
+    NavEntry("mouvements", "Mouvements", "/mouvements", "patrimoine", 20, "nav_mouvements"),
 )
 
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).

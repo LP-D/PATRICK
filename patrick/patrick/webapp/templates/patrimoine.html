@@ -1,0 +1,115 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import metric, data_table, empty_state, status_badge %}
+{% block title %}PATRICK — {{ t('wealth_title') }}{% endblock %}
+
+{# Roadmap bloc 4 -- vue d'ensemble du patrimoine (webapp/wealth_routes.py,
+   calculs dans patrick/wealth/). Les comptes fictifs ne sont JAMAIS
+   additionnés au réel : deux totaux distincts. Chaque carte de compte est
+   une cible de glisser-déposer pour les mouvements (wealth.js). #}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('wealth_title') }}</h1>
+    <p class="page-subtitle">{{ t('wealth_subtitle') }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn-secondary" href="/mouvements">{{ icon('movements') }} {{ t('nav_mouvements') }}</a>
+    <button type="button" class="btn" data-open-dialog="new-account-dialog">{{ icon('plus') }} {{ t('wealth_new_account') }}</button>
+  </div>
+</div>
+
+<div id="wealth-flash" class="banner hidden" role="status"></div>
+
+{% if data.warnings %}
+<div class="banner banner-warning">
+  <strong>À vérifier</strong>
+  <ul>{% for w in data.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% set n_real = data.accounts | selectattr('mode', 'equalto', 'real') | list | length %}
+{% set n_fictive = data.accounts | length - n_real %}
+<div class="metric-grid">
+{{ metric("Patrimoine réel", data.totals.real | eur, "Somme des " ~ n_real ~ " compte(s) réel(s), dont " ~ (data.real_cash | eur) ~ " de liquidités.", "neutral") }}
+{{ metric("Comptes fictifs", data.totals.fictive | eur, (n_fictive ~ " compte(s) bac à sable — jamais additionné(s) au réel."), "neutral") }}
+{% if data.risk.volatility is not none %}
+{{ metric("Volatilité ex-ante (réel)", data.risk.volatility | pct, "Annualisée, covariance Ledoit-Wolf" ~ ((" (δ = " ~ ("%.2f" | format(data.risk.shrinkage)) ~ ")") if data.risk.shrinkage is not none else "") ~ " ; liquidités et DAT à variance nulle ; " ~ (data.risk.covered_weight | pct(0)) ~ " du patrimoine couvert" ~ ((", sans historique : " ~ (data.risk.excluded | join(', '))) if data.risk.excluded else "") ~ ".", "neutral") }}
+{% else %}
+{{ metric("Volatilité ex-ante (réel)", "—", "Aucune position cotée avec assez d'historique (≥ 60 séances).", "pending") }}
+{% endif %}
+{{ metric("Positions (réel)", data.holdings | length, "Lignes consolidées sur l'ensemble des comptes réels.", "neutral") }}
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Comptes</h2></div>
+  {% if data.accounts %}
+  <div class="account-grid">
+    {% for a in data.accounts %}
+    <a class="account-card drop-target" href="/patrimoine/comptes/{{ a.account_id }}" data-kind="{{ a.mode }}"
+       data-account-id="{{ a.account_id }}" data-account-mode="{{ a.mode }}" data-account-name="{{ a.name }}">
+      <div class="row">
+        <span class="account-type">{{ a.kind }}</span>
+        <span class="spacer"></span>
+        {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
+      </div>
+      <div class="account-name">{{ a.name }}</div>
+      <div class="account-value">{{ a.value | eur }}</div>
+      <div class="hint">
+        {% if a.twr is not none %}TWR {{ a.twr | pct(1, true) }}{% else %}TWR —{% endif %}
+        {% if a.benchmark %} · <span class="tip" data-tip="Écart entre le TWR du compte et le rendement de {{ a.benchmark }} sur la même période.">vs {{ a.benchmark }} {{ a.excess | pct(1, true) }}</span>{% endif %}
+        · {{ a.n_movements }} mouvement(s)
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  {{ empty_state("Aucun compte.", "Crée un compte réel (PEA, CTO, assurance-vie, livret, dépôt à terme) ou un compte fictif pour tester une allocation.") }}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Positions consolidées (comptes réels)</h2>
+  {% set rows = [] %}
+  {% for r in data.holdings %}
+  {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
+     Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
+  {% set symbol_cell %}<span class="pk-mono">{{ r.symbol }}</span>{% if r.is_term_deposit %} <span class="tag">DAT</span>{% endif %}{% endset %}
+  {% set _ = rows.append([
+      symbol_cell,
+      r.quantity | qty,
+      r.value | eur,
+      r.weight | pct,
+      '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ '</span>',
+  ]) %}
+  {% endfor %}
+  {{ data_table(["Actif", "Quantité", "Valeur", "Poids", "Plus-value latente"], rows,
+                "Aucune position sur les comptes réels.", num_cols=[1, 2, 3, 4],
+                footer="Poids sur le patrimoine réel total (liquidités incluses). Valorisation au dernier cours connu (data lake local, sinon Yahoo Finance, cache 7 jours) ; à défaut, au dernier prix de transaction.") }}
+</section>
+
+<dialog id="new-account-dialog" class="modal">
+  <form class="form" data-api="/api/wealth/accounts" data-method="POST" data-redirect-account>
+    <h2>{{ t('wealth_new_account') }}</h2>
+    <label>Nom <input type="text" name="name" required maxlength="120" placeholder="PEA Boursorama"></label>
+    <div class="subgrid">
+      <label>Enveloppe
+        <select name="kind">{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
+      </label>
+      <label>Mode
+        <select name="mode"><option value="real">{{ t('wealth_mode_real') }}</option><option value="fictive">{{ t('wealth_mode_fictive') }}</option></select>
+      </label>
+    </div>
+    <div class="subgrid">
+      <label>Ouvert le <input type="date" name="opened_on"></label>
+      <label>Indice de référence <input type="text" name="benchmark" placeholder="défaut selon l'enveloppe"></label>
+    </div>
+    <p class="hint">PEA : la date d'ouverture sert au contrôle de la règle des 5 ans. Indice par défaut : Euro Stoxx 50 (PEA), MSCI World via URTH (CTO, AV), aucun (livret, DAT).</p>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn-secondary" data-close-dialog>Annuler</button>
+      <button type="submit" class="btn">Créer</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/wealth.js"></script>
+{% endblock %}

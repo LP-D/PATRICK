@@ -145,6 +145,7 @@ def test_pages_never_call_a_selection_fold_p_value_significant(tmp_path, monkeyp
     predictions = client.get("/predictions").text
     assert "fold de sélection" in predictions
     assert "status-ok\">p=0.0010" not in predictions
+    assert "&lt;span" not in predictions
     runs = client.get("/runs").text
     assert "fold de sélection" in runs
 

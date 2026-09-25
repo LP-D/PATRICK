@@ -331,6 +331,26 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
     # Phase 8 (feature/portfolio-view)
     "nav_portfolio": {"fr": "Portefeuille", "en": "Portfolio"},
+    # Roadmap bloc 4 -- PATRIMOINE
+    "nav_patrimoine": {"fr": "Comptes", "en": "Accounts"},
+    "nav_mouvements": {"fr": "Mouvements", "en": "Movements"},
+    "wealth_title": {"fr": "Patrimoine", "en": "Wealth"},
+    "wealth_subtitle": {
+        "fr": "Comptes réels et fictifs, valorisés aux derniers cours connus. Les positions se déduisent des mouvements — rien n'est saisi deux fois. Glisse un mouvement sur un compte fictif pour le copier dans le bac à sable.",
+        "en": "Real and fictive accounts, valued at the latest known prices. Positions are derived from movements — nothing is entered twice. Drag a movement onto a fictive account to copy it into the sandbox.",
+    },
+    "wealth_movements_subtitle": {
+        "fr": "Tous les mouvements, du plus récent au plus ancien. Glisse une ligne sur un compte : réel → réel déplace, vers un compte fictif copie, fictif → réel est refusé. Dépose un relevé CSV sur la zone d'import d'un compte pour le prévisualiser puis l'enregistrer.",
+        "en": "Every movement, newest first. Drag a row onto an account: real → real moves it, onto a fictive account copies it, fictive → real is refused. Drop a CSV statement on an account's import zone to preview then record it.",
+    },
+    "wealth_new_account": {"fr": "Nouveau compte", "en": "New account"},
+    "wealth_mode_real": {"fr": "Réel", "en": "Real"},
+    "wealth_mode_fictive": {"fr": "Fictif", "en": "Fictive"},
+    "wealth_drop_csv": {"fr": "Dépose un relevé CSV ici, ou clique pour choisir un fichier", "en": "Drop a CSV statement here, or click to choose a file"},
+    "wealth_import_preview": {"fr": "{n} mouvement(s) valide(s), {e} ligne(s) en erreur — rien n'est enregistré avant confirmation.", "en": "{n} valid movement(s), {e} line(s) in error — nothing is saved before confirmation."},
+    "wealth_import_done": {"fr": "{n} mouvement(s) enregistré(s).", "en": "{n} movement(s) saved."},
+    "wealth_transfer_moved": {"fr": "Mouvement déplacé.", "en": "Movement moved."},
+    "wealth_transfer_copied": {"fr": "Mouvement copié dans le compte fictif.", "en": "Movement copied into the fictive account."},
     "portfolio_subtitle": {
         "fr": "Synthèse cross-actifs de l'univers réduit : signaux haussiers/baissiers agrégés par catégorie (config/defaults.py::DEFAULT_TARGET_GROUPS), à partir du même dernier signal par (cible, horizon) que /predictions — aucune nouvelle requête, une agrégation en Python de la même donnée.",
         "en": "Cross-asset synthesis of the reduced universe: bullish/bearish signal counts aggregated per category (config/defaults.py::DEFAULT_TARGET_GROUPS), from the same latest (target, horizon) signal as /predictions — no new query, a Python aggregation of the same data.",
@@ -670,7 +690,7 @@ def js_strings(lang: str) -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty",
+        "cmdk_empty", "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done",
         "status_connection_lost", "status_running", "status_error", "status_done",
         "results_title", "results_summary", "results_summary_tuned", "results_best_config",
