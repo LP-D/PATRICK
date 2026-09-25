@@ -369,3 +369,34 @@ def test_dm_truncation_for_a_pair_ignores_what_a_third_category_covers():
     # chiffre ci-dessus n'est pas un hasard de calcul.
     direct = diebold_mariano(global_res.fold_loss, stacking_res.fold_loss)
     assert direct["n_obs"] == n_full
+
+
+def test_stacking_base_training_labels_never_overlap_the_oof_block(wired_context, monkeypatch):
+    """F02 applied to the stacking meta-split: every base fit whose eval
+    block is an OOF block (length n_train - split) was trained on at most
+    split - horizon rows -- label windows never overlap the OOF rows'."""
+    import patrick.pipeline.model_categories_training as mct
+
+    splits, calls = [], []
+    real_split, real_fit_eval = mct._oof_split, mct._fit_eval
+
+    def spy_split(n_train, *a, **k):
+        out = real_split(n_train, *a, **k)
+        if out is not None:
+            splits.append((n_train, out))
+        return out
+
+    def spy_fit_eval(X_tr, y_tr, X_te, y_te, *args, **kwargs):
+        calls.append((len(X_tr), len(X_te)))
+        return real_fit_eval(X_tr, y_tr, X_te, y_te, *args, **kwargs)
+
+    monkeypatch.setattr(mct, "_oof_split", spy_split)
+    monkeypatch.setattr(mct, "_fit_eval", spy_fit_eval)
+    horizon = wired_context["horizon"]
+    train_stacking_category(wired_context["ctx"], horizon, wired_context["n_wf_folds"],
+                             wired_context["config"], wired_context["seed"])
+    oof_lengths = {n - s: s for n, s in splits}
+    checked = [(n_base, n_eval) for n_base, n_eval in calls if n_eval in oof_lengths]
+    assert checked
+    for n_base, n_eval in checked:
+        assert n_base <= oof_lengths[n_eval] - horizon

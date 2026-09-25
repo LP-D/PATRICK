@@ -95,3 +95,17 @@ def test_infeasible_inner_cv_raises_a_dedicated_error(spy):
     X, y = _xy(300)
     with pytest.raises(optuna_runner.InnerCVInfeasible):
         optuna_runner.tune_config(X, y, "RandomForest", "none", n_trials=1, cv_splits=3, horizon=756)
+
+
+def test_stacking_base_rows_stop_one_horizon_before_the_oof_block():
+    from patrick.pipeline.model_categories_training import _oof_split, _purged_base_end
+
+    split = _oof_split(500, 0.2, gap=10)
+    assert split == 400
+    assert split - _purged_base_end(split, 10) == 10
+
+
+def test_stacking_oof_split_refuses_a_train_too_short_for_the_gap():
+    from patrick.pipeline.model_categories_training import _oof_split
+
+    assert _oof_split(60, 0.2, min_oof=20, gap=25) is None
