@@ -281,5 +281,50 @@ def audit_degradation_cmd(
                f"CSV : {result['csv_path']} -- markdown : {result['md_path']}")
 
 
+@audit_app.command(name="speed")
+def audit_speed_cmd(
+    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH / ~/.patrick/patrick.db)"),
+    target: str = typer.Option(None, "--target",
+                               help="Cible dont le snapshot brut le plus récent sert à mesurer le coût par famille"),
+    n_folds: int = typer.Option(5, "--n-folds", help="Folds walk-forward (les familles paramétriques sont refittées par fold)"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+) -> None:
+    """Les composants coûteux sont-ils réellement utilisés ? Part du pool,
+    part des features retenues par les modèles exportés, fréquences de
+    sélection walk-forward et coût mesuré, par famille de features. Lecture
+    seule : n'entraîne ni n'exporte aucun modèle."""
+    from patrick import audit_speed
+    from patrick.config.schema import RunConfig
+    from patrick.data.store import DataStore
+    from patrick.pipeline.engine import build_base_feature_pool, build_parametric_pool
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect(db)
+    try:
+        usage = audit_speed.usage_from_db(conn)
+        if target:
+            raw = DataStore().load(f"raw_{target}")
+            row = conn.execute("SELECT config_json FROM run WHERE target = ? ORDER BY started_at DESC LIMIT 1",
+                               (target,)).fetchone()
+            config = RunConfig.model_validate_json(row[0]) if row else RunConfig.model_validate(
+                {"objective": {"target_symbol": target}})
+            from patrick.data.sources.yfinance_source import clean_symbol
+            pool = build_base_feature_pool(raw, config, clean_symbol(target)).columns.union(
+                build_parametric_pool(raw, config, fit_end_idx=None).columns)
+            audit_speed.add_pool(usage, pool)
+            costs = audit_speed.measure_family_costs(raw, fit_end_idx=int(len(raw) * 0.6))
+            for fam, seconds in costs.items():
+                usage.setdefault(fam, audit_speed.FamilyUsage(fam)).cost_s = seconds
+    finally:
+        conn.close()
+    report = audit_speed.render_markdown(usage, n_folds=n_folds)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
+
+
 if __name__ == "__main__":
     app()
