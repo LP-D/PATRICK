@@ -1,7 +1,14 @@
-"""Optuna hyperparameter search (TPE + MedianPruner, TimeSeriesSplit CV) —
-VIX_FINAL_OPTUNA methodology: on this project, fine tuning improved 1 config
-out of 10 (average delta -0.0145) — most of the gain comes from model/
-feature choice, not fine tuning, but the step remains occasionally useful.
+"""Optuna hyperparameter search (TPE + MedianPruner, purged/embargoed
+time-series CV) — VIX_FINAL_OPTUNA methodology: on this project, fine tuning
+improved 1 config out of 10 (average delta -0.0145) — most of the gain comes
+from model/feature choice, not fine tuning, but the step remains
+occasionally useful.
+
+F02 -- the inner CV used `TimeSeriesSplit(n_splits)` with no gap: the last
+training rows of each split carried labels (forward returns over `horizon`
+bars) overlapping the validation rows' label windows, so hyperparameters
+were chosen on a leaky score. Train and validation are now separated by the
+same number of rows the outer walk-forward removes (`inner_cv_gap`).
 """
 from __future__ import annotations
 
@@ -56,10 +63,57 @@ def suggest_params(trial: optuna.Trial, algo: str, bounds: dict | None = None) -
     return out
 
 
+# Part of every persisted study name (`study_name_for`): `patrick resume`
+# reloads a study by name, and trials scored under a different inner-CV
+# protocol (the unpurged one before F02) are not comparable.
+INNER_CV_VERSION = "cvpurged1"
+
+
+def study_name_for(run_name: str, config_hash: str, horizon: int, regime: str, n_feat: int,
+                   sampler_name: str, algo: str) -> str:
+    return (f"{run_name}_{config_hash}_h{horizon}_{regime}_N{n_feat}_{sampler_name}_{algo}"
+            f"_{INNER_CV_VERSION}")
+
+
+def inner_cv_gap(horizon: int, embargo_bars: int | None = None, purge: bool = False,
+                 embargo_enabled: bool = True) -> int:
+    """Rows left out between each inner train block and its validation
+    block -- mirrors the outer walk-forward (`_FoldContext.prepare`): purge
+    (`horizon` rows, if enabled) + embargo (`embargo_bars`, `None` -> derived
+    from the horizon, if enabled), never less than `horizon`: label windows
+    of train and validation rows must never overlap, whatever the toggles."""
+    h = max(int(horizon), 1)
+    e = (h if embargo_bars is None else max(int(embargo_bars), 0)) if embargo_enabled else 0
+    return max((h if purge else 0) + e, h)
+
+
+class InnerCVInfeasible(ValueError):
+    """Not enough rows for even a 2-split purged inner CV at this horizon."""
+
+
+_MIN_INNER_TRAIN_ROWS = 20
+
+
+def feasible_inner_splits(n_rows: int, cv_splits: int, gap: int) -> int:
+    """Largest number of inner splits in [2, cv_splits] leaving at least
+    `_MIN_INNER_TRAIN_ROWS` rows in the first train block once `gap` rows are
+    removed (`TimeSeriesSplit` default test size: n // (splits + 1)). Long
+    horizons (252/504/756 bars) can exhaust a short train set: fewer, longer
+    splits are used before giving up (`InnerCVInfeasible`)."""
+    for k in range(max(int(cv_splits), 2), 1, -1):
+        if n_rows - gap - k * (n_rows // (k + 1)) >= _MIN_INNER_TRAIN_ROWS:
+            return k
+    raise InnerCVInfeasible(
+        f"{n_rows} rows cannot hold a purged inner CV with a {gap}-row gap "
+        f"(needs >= {_MIN_INNER_TRAIN_ROWS} rows in the first train block).")
+
+
 def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
                  n_trials: int = 100, cv_splits: int = 3, seed: int = 42,
                  storage_path: str | None = None, study_name: str | None = None,
-                 bounds: dict | None = None) -> tuple[dict, float]:
+                 bounds: dict | None = None, horizon: int = 1,
+                 embargo_bars: int | None = None, purge: bool = False,
+                 embargo_enabled: bool = True) -> tuple[dict, float]:
     """`storage_path`/`study_name` (Phase 3.2, `patrick resume`): persists
     the study in a dedicated SQLite file (`optuna.db`, never `patrick.db` —
     Optuna's internal schema changes between versions, must not be coupled
@@ -73,10 +127,18 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
 
     `bounds` (Phase 1, feature/hyperparams-ui): forwarded as-is to
     `suggest_params` -- see its docstring. `None` (default) preserves the
-    exact search space hardcoded before this parameter existed."""
+    exact search space hardcoded before this parameter existed.
+
+    `horizon`/`embargo_bars`/`purge`/`embargo_enabled` (F02): the rows of
+    `X` are in chronological order; see `inner_cv_gap`. Rows removed
+    upstream (flat labels, regime filter) only widen the real separation in
+    bars."""
+    gap = inner_cv_gap(horizon, embargo_bars, purge, embargo_enabled)
+    n_splits = feasible_inner_splits(len(X), cv_splits, gap)
+
     def objective(trial: optuna.Trial) -> float:
         params = suggest_params(trial, algo, bounds)
-        tscv = TimeSeriesSplit(n_splits=cv_splits)
+        tscv = TimeSeriesSplit(n_splits=n_splits, gap=gap)
         scores = []
         for i, (tr_idx, va_idx) in enumerate(tscv.split(X)):
             X_tr, X_va = X[tr_idx], X[va_idx]

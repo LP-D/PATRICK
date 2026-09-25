@@ -84,7 +84,12 @@ from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import phase_timing_log
 from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
-from patrick.tuning.optuna_runner import safe_resample, tune_config
+from patrick.tuning.optuna_runner import (
+    InnerCVInfeasible,
+    safe_resample,
+    study_name_for,
+    tune_config,
+)
 from patrick.validation import cpcv as cpcv_module
 from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
@@ -1285,12 +1290,22 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                 cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, seed)
                 X_tr_n = fd.X_tr[:, cols]
 
-                study_name = f"{config.name}_{config_hash}_h{horizon}_{regime}_N{n_feat}_{sampler_name}_{algo}"
-                best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
+                study_name = study_name_for(config.name, config_hash, horizon, regime, n_feat,
+                                            sampler_name, algo)
+                try:
+                    best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
                                                     n_trials=config.tuning.n_trials,
                                                     cv_splits=config.tuning.cv_splits, seed=seed,
                                                     storage_path=optuna_storage_path, study_name=study_name,
-                                                    bounds=config.tuning.optuna_bounds)
+                                                    bounds=config.tuning.optuna_bounds,
+                                                    horizon=horizon,
+                                                    embargo_bars=config.validation.embargo_bars,
+                                                    purge=config.validation.purge,
+                                                    embargo_enabled=config.validation.embargo_enabled)
+                except InnerCVInfeasible as exc:
+                    print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
+                          f"Optuna skipped -- {exc}")
+                    continue
                 print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
                       f"cv_F1_dir={best_cv:.4f} params={best_params}")
 
