@@ -296,6 +296,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_international_etfs": {"fr": "International (ETFs pays)", "en": "International (country ETFs)"},
     "group_stocks": {"fr": "Actions individuelles", "en": "Individual stocks"},
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
+    "group_world_indices": {"fr": "Indices mondiaux", "en": "World indices"},
+    "group_us_megacaps": {"fr": "Actions US (méga-capitalisations)", "en": "US stocks (mega caps)"},
+    "group_fr_cac40": {"fr": "Actions France (CAC 40)", "en": "French stocks (CAC 40)"},
+    "group_fx_majors": {"fr": "Devises (majeures)", "en": "Currencies (majors)"},
+    "group_crypto_majors": {"fr": "Crypto (majeures)", "en": "Crypto (majors)"},
 
     # Phase 7 — history/universe
     # P8: "/" became the synthesis dashboard, the launcher moved to
@@ -754,4 +759,10 @@ TARGET_GROUP_LABEL_KEYS = {
     "International (ETFs pays)": "group_international_etfs",
     "Actions individuelles": "group_stocks",
     "Macro (FRED)": "group_fred_macro",
+    # Roadmap bloc 4 -- groupes de l'univers etendu (config/universe_extension.py)
+    "Indices mondiaux": "group_world_indices",
+    "Actions US (méga-capitalisations)": "group_us_megacaps",
+    "Actions France (CAC 40)": "group_fr_cac40",
+    "Devises (majeures)": "group_fx_majors",
+    "Crypto (majeures)": "group_crypto_majors",
 }

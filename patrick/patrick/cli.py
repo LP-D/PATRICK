@@ -326,5 +326,36 @@ def audit_speed_cmd(
         typer.echo(report)
 
 
+@audit_app.command(name="tickers")
+def audit_tickers_cmd(
+    scope: str = typer.Option("all", "--scope", help="default | equities | extended | all"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+    workers: int = typer.Option(8, "--workers", help="Requêtes Yahoo en parallèle"),
+) -> None:
+    """Vérifie en direct que Yahoo sert chaque ticker yfinance de l'univers :
+    historique non vide, frais (<= 7 séances), profond (>= 750 séances).
+    Lecture seule ; ne modifie aucune configuration."""
+    from patrick.config import defaults as D
+    from patrick.config import equity_universe as EQ
+    from patrick.config import universe_extension as UX
+    from patrick.data import ticker_check
+
+    pools = {
+        "default": [s for s, _, src in D.DEFAULT_TARGET_CHOICES if src == "yfinance"],
+        "equities": list(EQ.EQUITY_UNIVERSE),
+        "extended": [s for s, _, _ in UX.extended_target_choices()],
+    }
+    if scope not in (*pools, "all"):
+        raise typer.BadParameter(f"scope inconnu : {scope}")
+    symbols = [s for k, v in pools.items() if scope in (k, "all") for s in v]
+    report = ticker_check.render_markdown(ticker_check.check_many(symbols, workers=workers))
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
+
+
 if __name__ == "__main__":
     app()

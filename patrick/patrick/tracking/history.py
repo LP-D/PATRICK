@@ -471,13 +471,15 @@ def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
 
 
 def universe_overview(conn: sqlite3.Connection) -> list[dict]:
-    """P7.5 -- `/universe`: joins the configurable target universe
-    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, already used by the launch
-    form) with the actual run history -- no new data, just the join of the
-    two."""
+    """P7.5 -- `/universe`: joins the configurable target universe (every
+    group of the launch form: `config.universe_extension.all_target_groups`
+    -- reduced default universe, individual equities, verified extension)
+    with the actual run history -- no new data, just the join of the two."""
+    from patrick.config.universe_extension import all_target_groups
+
     history = {h["target"]: h for h in list_distinct_targets(conn)}
     groups = []
-    for group_name, items in D.DEFAULT_TARGET_GROUPS.items():
+    for group_name, items in all_target_groups().items():
         source = "fred" if group_name == D.FRED_TARGET_GROUP else "yfinance"
         symbols = []
         for symbol, label in items:
