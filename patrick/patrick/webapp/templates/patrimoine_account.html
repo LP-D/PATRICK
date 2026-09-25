@@ -55,9 +55,11 @@
 {% elif a.benchmark %}
 {{ metric("vs " ~ a.benchmark, "—", "Cours de l'indice indisponibles (data lake local et Yahoo Finance).", "pending") }}
 {% endif %}
+{% set proxied = [] %}
+{% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " via " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (a priori)" if p.scale_source == "prior" else " (estimé)")) %}{% endfor %}
 {{ metric("Risque", (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
-          "Volatilité ex-ante annualisée (Ledoit-Wolf, liquidités et DAT à variance nulle)" ~ ((" ; réalisée " ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; drawdown max " ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ".",
-          "neutral" if detail.risk.volatility is not none else "pending") }}
+          "Volatilité ex-ante annualisée (Ledoit-Wolf, liquidités et DAT à variance nulle)" ~ ((" ; réalisée " ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; drawdown max " ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; sans historique propre, estimé(s) par proxy : " ~ (proxied | join(', ')) ~ " — corrélations du proxy, diversification sous-estimée") if proxied else "") ~ ".",
+          ("warning" if proxied else "neutral") if detail.risk.volatility is not none else "pending") }}
 </div>
 
 <section class="card">

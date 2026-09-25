@@ -222,3 +222,23 @@ def test_english_comma_csv_and_unreadable_files():
         importer.parse_csv("foo;bar\n1;2\n")
     with pytest.raises(ledger.LedgerError):
         importer.parse_csv(b"x" * (importer.MAX_BYTES + 1))
+
+
+def test_a_position_without_history_is_risked_through_its_proxy_and_says_so():
+    """D.A.T.E (ALDAT.PA) has no quote yet: its risk comes from ^FCHI x the
+    declared prior; without a proxy the position would be excluded."""
+    rng = np.random.default_rng(21)
+    fchi = _prices(rng.normal(0, 0.01, 290))
+    mvs = [ledger.normalize_movement(m) for m in (
+        {"kind": "deposit", "ts": DAYS[0], "amount": 1000},
+        {"kind": "buy", "ts": DAYS[0], "symbol": "ALDAT.PA", "quantity": 100, "price": 10},
+    )]
+    prices = performance.dict_price_provider({"^FCHI": fchi})
+    holdings = performance.holdings_table(mvs, prices, as_of=DAYS[0])
+    risk = performance.ex_ante_risk(holdings, prices)
+    fchi_vol = fchi.pct_change().dropna().iloc[-252:].std(ddof=1) * np.sqrt(252)
+    assert risk["excluded"] == []
+    assert risk["proxied"][0]["proxy"] == "^FCHI" and risk["proxied"][0]["scale_source"] == "prior"
+    assert risk["volatility"] == pytest.approx(2.0 * fchi_vol, rel=0.02)
+    without = performance.ex_ante_risk(holdings, prices, proxies={})
+    assert without["excluded"] == ["ALDAT.PA"] and without["volatility"] is None

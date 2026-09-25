@@ -86,3 +86,43 @@ def correlation_from_covariance(cov: pd.DataFrame) -> pd.DataFrame:
     corr = cov.values / outer
     np.fill_diagonal(corr, 1.0)
     return pd.DataFrame(corr, index=cov.index, columns=cov.columns)
+
+
+def backfill_with_proxy(own: pd.Series | None, proxy: pd.Series, prior_multiplier: float | None = None,
+                        min_overlap: int = 20) -> tuple[pd.Series, dict]:
+    """Roadmap bloc 4 -- an asset without (enough) price history (D.A.T.E,
+    listed 2026-09-25) gets a synthetic past: before its first quote, its
+    daily returns are the proxy's returns x `scale`; from its first quote
+    on, its own returns are kept untouched. Returns a price series (base
+    100) usable by `point_in_time_covariance`, plus how the scale was set.
+
+    `scale`: std(own) / std(proxy) on their common returns when there are
+    at least `min_overlap` of them ("estimated"); otherwise the declared
+    `prior_multiplier` ("prior", e.g. ~2 for a small cap proxied by a
+    large-cap index -- an assumption, to be shown as such); otherwise 1.
+
+    Limits (say them where the result is displayed): the synthetic past
+    carries the proxy's correlations (beta x scale, no idiosyncratic
+    part), so correlation to the rest of the portfolio is overstated and
+    diversification understated -- the conservative side for a risk
+    figure."""
+    own = own.dropna().sort_index() if own is not None else pd.Series(dtype=float)
+    proxy_ret = safe_pct_change(proxy.dropna().sort_index()).dropna()
+    own_ret = safe_pct_change(own).dropna() if len(own) > 1 else pd.Series(dtype=float)
+    overlap = own_ret.index.intersection(proxy_ret.index)
+    if len(overlap) >= min_overlap and float(proxy_ret.loc[overlap].std()) > 0:
+        scale, source = float(own_ret.loc[overlap].std() / proxy_ret.loc[overlap].std()), "estimated"
+    elif prior_multiplier:
+        scale, source = float(prior_multiplier), "prior"
+    else:
+        scale, source = 1.0, "default"
+    first = own.index.min() if len(own) else None
+    before = proxy_ret[proxy_ret.index <= first] if first is not None else proxy_ret
+    returns = pd.concat([before * scale, own_ret]).sort_index()
+    returns = returns[~returns.index.duplicated(keep="last")]
+    prices = 100.0 * (1.0 + returns).cumprod()
+    if len(proxy_ret):
+        # Base-100 anchor on the proxy's first date (its first return is the day after).
+        prices = pd.concat([pd.Series([100.0], index=[proxy.dropna().index.min()]), prices])
+        prices = prices[~prices.index.duplicated(keep="last")].sort_index()
+    return prices, {"own_obs": len(own), "scale": scale, "scale_source": source}

@@ -33,8 +33,10 @@
 <div class="metric-grid">
 {{ metric("Patrimoine réel", data.totals.real | eur, "Somme des " ~ n_real ~ " compte(s) réel(s), dont " ~ (data.real_cash | eur) ~ " de liquidités.", "neutral") }}
 {{ metric("Comptes fictifs", data.totals.fictive | eur, (n_fictive ~ " compte(s) bac à sable — jamais additionné(s) au réel."), "neutral") }}
+{% set proxied = [] %}
+{% for p in data.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " via " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (a priori)" if p.scale_source == "prior" else " (estimé)")) %}{% endfor %}
 {% if data.risk.volatility is not none %}
-{{ metric("Volatilité ex-ante (réel)", data.risk.volatility | pct, "Annualisée, covariance Ledoit-Wolf" ~ ((" (δ = " ~ ("%.2f" | format(data.risk.shrinkage)) ~ ")") if data.risk.shrinkage is not none else "") ~ " ; liquidités et DAT à variance nulle ; " ~ (data.risk.covered_weight | pct(0)) ~ " du patrimoine couvert" ~ ((", sans historique : " ~ (data.risk.excluded | join(', '))) if data.risk.excluded else "") ~ ".", "neutral") }}
+{{ metric("Volatilité ex-ante (réel)", data.risk.volatility | pct, "Annualisée, covariance Ledoit-Wolf" ~ ((" (δ = " ~ ("%.2f" | format(data.risk.shrinkage)) ~ ")") if data.risk.shrinkage is not none else "") ~ " ; liquidités et DAT à variance nulle ; " ~ (data.risk.covered_weight | pct(0)) ~ " du patrimoine couvert" ~ ((", sans historique : " ~ (data.risk.excluded | join(', '))) if data.risk.excluded else "") ~ ((" ; sans historique propre, estimé(s) par proxy : " ~ (proxied | join(', '))) if proxied else "") ~ ".", "warning" if proxied else "neutral") }}
 {% else %}
 {{ metric("Volatilité ex-ante (réel)", "—", "Aucune position cotée avec assez d'historique (≥ 60 séances).", "pending") }}
 {% endif %}

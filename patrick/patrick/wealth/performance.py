@@ -242,23 +242,45 @@ def holdings_table(movements: list[dict], prices: PriceProvider, as_of=None, acc
             "fees": state.fees}
 
 
-def ex_ante_risk(holdings: dict, prices: PriceProvider, lookback: int = 252, min_obs: int = 60) -> dict:
+def ex_ante_risk(holdings: dict, prices: PriceProvider, lookback: int = 252, min_obs: int = 60,
+                 proxies: dict[str, tuple[str, float | None]] | None = None) -> dict:
     """Annualised ex-ante volatility of the current holdings (cash and term
-    deposits: zero variance). Ledoit-Wolf covariance on the risky part;
-    assets without enough common history are listed, not silently dropped
-    -- they are then excluded from the estimate, which is said."""
-    from patrick.tracking.covariance import point_in_time_covariance
+    deposits: zero variance). Ledoit-Wolf covariance on the risky part.
+
+    An asset without enough history (D.A.T.E, listed 2026-09-25) is
+    backfilled from its declared proxy (`config.equity_universe.
+    history_proxies`, `tracking.covariance.backfill_with_proxy`) and listed
+    in `proxied` with the scale and whether it is estimated or a prior;
+    without a proxy it is excluded and listed in `excluded` -- never
+    silently dropped."""
+    from patrick.config.equity_universe import history_proxies
+    from patrick.tracking.covariance import (
+        backfill_with_proxy,
+        point_in_time_covariance,
+    )
+
+    proxies = history_proxies() if proxies is None else proxies
 
     total = holdings["total"]
     if not total or total <= 0:
-        return {"volatility": None, "covered_weight": 0.0, "excluded": [], "shrinkage": None}
+        return {"volatility": None, "covered_weight": 0.0, "excluded": [], "shrinkage": None, "proxied": []}
     risky = {r["symbol"]: r["value"] / total for r in holdings["rows"] if not r["is_term_deposit"] and r["value"]}
     series = {s: prices(s) for s in risky}
     usable = {s: v.dropna() for s, v in series.items() if v is not None and len(v.dropna()) > min_obs}
+    proxied = []
+    for s in sorted(set(risky) - set(usable)):
+        if s not in proxies:
+            continue
+        proxy_symbol, prior = proxies[s]
+        proxy_series = prices(proxy_symbol)
+        if proxy_series is None or len(proxy_series.dropna()) <= min_obs:
+            continue
+        usable[s], info = backfill_with_proxy(series.get(s), proxy_series, prior_multiplier=prior)
+        proxied.append({"symbol": s, "proxy": proxy_symbol, **info})
     excluded = sorted(set(risky) - set(usable))
     if not usable:
         return {"volatility": None if risky else 0.0, "covered_weight": 0.0 if risky else 1.0,
-                "excluded": excluded, "shrinkage": None}
+                "excluded": excluded, "shrinkage": None, "proxied": proxied}
     symbols = list(usable)
     if len(symbols) == 1:
         s = symbols[0]
@@ -273,4 +295,5 @@ def ex_ante_risk(holdings: dict, prices: PriceProvider, lookback: int = 252, min
     w = np.array([risky[s] for s in symbols])
     vol = float(np.sqrt(max(w @ cov.to_numpy() @ w, 0.0) * TRADING_DAYS))
     covered = float(sum(risky[s] for s in symbols) + (1.0 - sum(risky.values())))
-    return {"volatility": vol, "covered_weight": covered, "excluded": excluded, "shrinkage": shrinkage}
+    return {"volatility": vol, "covered_weight": covered, "excluded": excluded, "shrinkage": shrinkage,
+            "proxied": proxied}

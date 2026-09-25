@@ -105,3 +105,18 @@ def test_table_cells_render_html_not_escaped_markup(client):
     detail = client.get(f"/patrimoine/comptes/{acc}").text
     assert '<span class="pk-mono">MC.PA</span>' in detail
     assert "&lt;b&gt;x&lt;/b&gt;" in detail
+
+
+def test_a_position_without_history_shows_its_proxy_estimate(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    fchi = pd.Series(8000 * np.cumprod(1 + np.random.default_rng(4).normal(0, 0.01, 300)),
+                     index=pd.bdate_range("2025-01-01", periods=300))
+    monkeypatch.setattr(wealth_routes, "price_provider", lambda: performance.dict_price_provider({"^FCHI": fchi}))
+    client = TestClient(app)
+    acc = client.post("/api/wealth/accounts", json={"name": "PEA", "kind": "PEA"}).json()["account_id"]
+    client.post(f"/api/wealth/accounts/{acc}/movements", json={"kind": "deposit", "ts": "2026-09-25", "amount": "1000"})
+    client.post(f"/api/wealth/accounts/{acc}/movements",
+                json={"kind": "buy", "ts": "2026-09-25", "symbol": "ALDAT.PA", "quantity": "100", "price": "9.5"})
+    detail = client.get(f"/patrimoine/comptes/{acc}").text
+    assert "ALDAT.PA via ^FCHI × 2.0 (a priori)" in detail
+    assert "ALDAT.PA via ^FCHI" in client.get("/patrimoine").text
