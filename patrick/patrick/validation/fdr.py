@@ -15,6 +15,8 @@ builds this dict from `dm_result`/`run`.
 """
 from __future__ import annotations
 
+from patrick.numeric import is_nan
+
 
 def benjamini_hochberg(p_values: dict[str, float], alpha: float = 0.10) -> dict:
     """Benjamini-Hochberg (step-up) procedure: adjusted p-values (q-values)
@@ -25,7 +27,7 @@ def benjamini_hochberg(p_values: dict[str, float], alpha: float = 0.10) -> dict:
     `p_values`: {target: p_value}, NaN silently excluded (target with no
     valid DM trial, e.g. all its runs in CPCV mode -- see P6.1 limitation,
     Diebold-Mariano not computed in that scheme)."""
-    items = [(k, v) for k, v in p_values.items() if v == v]  # excludes NaN
+    items = [(k, v) for k, v in p_values.items() if not is_nan(v)]
     m = len(items)
     if m == 0:
         return {"alpha": alpha, "n_tested": 0, "n_raw_significant": 0,

@@ -38,7 +38,7 @@ class LocalCache:
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except (OSError, ValueError):
             return {}
 
     def _is_fresh(self, key: str, max_age_days: int = 7) -> bool:
@@ -48,14 +48,14 @@ class LocalCache:
             return False
         try:
             return utc_now() - parse_utc(last) < timedelta(days=max_age_days)
-        except Exception:
+        except (TypeError, ValueError):
             return False
 
     def save_dataframe(self, key: str, df: pd.DataFrame, *, max_age_days: int = 7,
                        extra_meta: dict | None = None) -> pd.DataFrame:
         path = self._file(key)
         df.to_parquet(path)
-        self._write_meta(key, {"updated_at": utc_now().isoformat(), "rows": int(len(df)),
+        self._write_meta(key, {"updated_at": utc_now().isoformat(), "rows": len(df),
                                "cols": int(df.shape[1]), **(extra_meta or {})})
         return df
 

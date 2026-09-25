@@ -16,6 +16,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+from patrick.numeric import is_nan
 from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
@@ -348,9 +349,9 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
                            "évaluée sur au moins 2 folds pour cet horizon).</p>")
     else:
         mj = feature_stability["mean_jaccard"]
-        mj_str = f"{mj:.3f}" if mj == mj else "non calculable (< 2 folds)"
+        mj_str = "non calculable (< 2 folds)" if is_nan(mj) else f"{mj:.3f}"
         warn_html = ""
-        if mj == mj and mj < stability_module.MIN_MEAN_JACCARD_WARNING:
+        if not is_nan(mj) and mj < stability_module.MIN_MEAN_JACCARD_WARNING:
             warn_html = (f"<p class='flag'>Sous le seuil ({stability_module.MIN_MEAN_JACCARD_WARNING}) -- "
                           "sélection instable, indiscernable de l'artefact de corrélation mesuré sur "
                           "données sans signal réel (cf. rapport de correction P6.3). Le signal "

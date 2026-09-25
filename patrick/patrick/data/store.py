@@ -153,7 +153,7 @@ class DataStore:
             "snapshot_id": snapshot_id,
             "content_hash": content_hash,
             "path": path,
-            "rows": int(len(df)),
+            "rows": len(df),
             "cols": int(df.shape[1]) if df.ndim == 2 else 1,
             "date_min": str(df.index.min()) if len(df) else None,
             "date_max": str(df.index.max()) if len(df) else None,

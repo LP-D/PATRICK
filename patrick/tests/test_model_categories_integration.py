@@ -121,7 +121,7 @@ def wired_context(tiny_config, tmp_path):
         cols = _select(conn, target_col, horizon, snapshot_id, tiny_config, fd.X_tr, fd.y_tr,
                         base_cfg["n_feat"], seed)
         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-        met, y_pred, _ = _fit_eval(X_tr_n, fd.y_tr, X_te_n, fd.y_te, base_cfg["sampler"], base_cfg["algo"], seed)
+        met, _y_pred, _ = _fit_eval(X_tr_n, fd.y_tr, X_te_n, fd.y_te, base_cfg["sampler"], base_cfg["algo"], seed)
         board.add(horizon=horizon, fold=k + 1, regime="GLOBAL", N=base_cfg["n_feat"],
                   sampler=base_cfg["sampler"], algo=base_cfg["algo"], **met)
 

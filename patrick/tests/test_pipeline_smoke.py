@@ -77,7 +77,7 @@ def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tm
 
     board = result["leaderboard"]
     assert len(board) > 0
-    assert set(["horizon", "fold", "regime", "N", "sampler", "algo", "F1_dir"]).issubset(board.columns)
+    assert {"horizon", "fold", "regime", "N", "sampler", "algo", "F1_dir"}.issubset(board.columns)
     assert board["F1_dir"].between(0, 1).all()
 
     assert result["final_best"] is not None

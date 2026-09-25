@@ -145,10 +145,10 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
                         detail.get("y_pred"), detail.get("y_proba"), detail.get("n_outcomes_updated"))
             summary.add(PredictOutcome(candidate=candidate, ok=True, detail=detail,
                                         started_at=started_at, finished_at=finished_at))
-        except Exception as exc:  # noqa: BLE001 -- volontaire : isole les échecs par candidat
+        except Exception as exc:
             finished_at = datetime.now(timezone.utc).isoformat()
-            logger.exception("FAIL  target=%s horizon=%s run_id=%s -- %s", candidate.target,
-                             candidate.horizon, candidate.run_id, exc)
+            logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
+                             candidate.horizon, candidate.run_id)
             summary.add(PredictOutcome(candidate=candidate, ok=False, error=str(exc),
                                         started_at=started_at, finished_at=finished_at))
     return summary

@@ -20,6 +20,8 @@ import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
+from patrick.numeric import is_nan
+
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 _CREATE_TABLE_RE = re.compile(r"^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
@@ -195,7 +197,7 @@ def current_git_sha(cwd: str | None = None) -> str:
             text=True, timeout=5, check=True,
         )
         return out.stdout.strip()
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
 
 
@@ -453,7 +455,7 @@ def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: 
     migration 0006; sqlite3/the Python driver does not guarantee a Python
     NaN survives `REAL` binding), the report displays it as "not
     computable", never as a misleading number."""
-    mean_jaccard_sql = mean_jaccard if mean_jaccard == mean_jaccard else None  # NaN != NaN
+    mean_jaccard_sql = None if is_nan(mean_jaccard) else mean_jaccard
     with conn:
         conn.execute(
             "INSERT INTO run_feature_stability (run_id, mean_jaccard, n_folds) VALUES (?, ?, ?) "
@@ -900,7 +902,7 @@ def mark_best_trial(conn: sqlite3.Connection, trial_id: int, artifact_path: str 
 def add_fold_metrics(conn: sqlite3.Connection, trial_id: int, fold_index: int,
                       split: str, metrics: dict) -> None:
     rows = [(trial_id, fold_index, split, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]  # excludes NaN
+            for name, value in metrics.items() if value is not None and not is_nan(value)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO fold_metric (trial_id, fold_index, split, metric, value) "
@@ -912,7 +914,7 @@ def add_fold_metrics(conn: sqlite3.Connection, trial_id: int, fold_index: int,
 def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
                           split: str, metrics: dict) -> None:
     rows = [(run_id, baseline, split, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]
+            for name, value in metrics.items() if value is not None and not is_nan(value)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO baseline_metric (run_id, baseline, split, metric, value) "

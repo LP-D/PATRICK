@@ -533,7 +533,7 @@ def latest_prediction_for_target(conn: sqlite3.Connection, target: str) -> dict 
     if row is None:
         return None
     ts, split, y_pred, y_proba, trial_id, run_id, horizon = row
-    cls = int(round(y_pred))
+    cls = round(y_pred)
     return {
         "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
         "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -596,7 +596,7 @@ def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -
     ).fetchall()
     out: dict[str, dict] = {}
     for target, ts, split, y_pred, y_proba, trial_id, run_id, horizon in rows:
-        cls = int(round(y_pred))
+        cls = round(y_pred)
         out[target] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
             "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -650,7 +650,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
     ).fetchall()
     out: dict[tuple[str, int], dict] = {}
     for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id in rows:
-        cls = int(round(y_pred))
+        cls = round(y_pred)
         out[(target, horizon)] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
             "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -743,8 +743,8 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
             out[key] = None
             continue
 
-        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
         counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
@@ -893,7 +893,7 @@ def live_hit_rate_by_target_and_horizon(conn: sqlite3.Connection, targets: list[
         n_hits = 0
         sq_errors = []
         for _ts, y_true, y_pred, y_proba in windowed:
-            predicted_up = int(round(y_pred)) >= 2
+            predicted_up = round(y_pred) >= 2
             hit = predicted_up == bool(y_true)
             n_hits += int(hit)
             if y_proba is not None:
@@ -1009,8 +1009,8 @@ def direction_metrics_by_target(conn: sqlite3.Connection, targets: list[str]) ->
             out[target] = None
             continue
 
-        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
         counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
@@ -1085,8 +1085,8 @@ def direction_metrics_for_target(conn: sqlite3.Connection, target: str) -> dict 
     if not rows:
         return None
 
-    y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-    y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+    y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+    y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
 
     counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
     # Each direction's threshold is independent: AAPL with 10 UP / 8 DOWN

@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from patrick.data.store import DataStore
+from patrick.numeric import is_nan
 from patrick.simulate import engine as sim
 from patrick.tracking import db as trackdb
 
@@ -127,7 +128,7 @@ def test_break_even_cost_reconciles_exactly_realistic_signal(tmp_path):
                        db_path=db_path, store_root=store_root)
     assert r0["ok"] is True
     be_bps = r0["strategy"]["break_even_cost_bps"]
-    assert be_bps == be_bps and be_bps > 0.0  # pas NaN, pas nul (il y a bien du turnover et un gain brut)
+    assert not is_nan(be_bps) and be_bps > 0.0  # pas NaN, pas nul (il y a bien du turnover et un gain brut)
 
     half = be_bps / 2
     r1 = sim.simulate(trial_id, sim.SimParams(spread_bps=half, commission_bps=half),
@@ -150,7 +151,7 @@ def test_break_even_cost_reconciles_at_low_return(tmp_path):
                        db_path=db_path, store_root=store_root)
     assert r0["ok"] is True
     be_bps = r0["strategy"]["break_even_cost_bps"]
-    if be_bps != be_bps or be_bps <= 0.0:
+    if is_nan(be_bps) or be_bps <= 0.0:
         pytest.skip("pas de turnover/gain brut positif sur ce tirage -- break-even non défini")
 
     half = be_bps / 2
@@ -214,7 +215,7 @@ def test_simulate_never_touches_model_or_trains_anything(tmp_path):
     `prediction` + le snapshot immuable -- pas de modèle chargé/entraîné.
     Vérifié indirectement : `simulate()` fonctionne sans qu'aucun artefact
     modèle (joblib) n'existe nulle part sur le run de test."""
-    db_path, store_root, trial_id, run_id = _setup_run_with_predictions(tmp_path)
+    db_path, store_root, trial_id, _run_id = _setup_run_with_predictions(tmp_path)
     conn = trackdb.connect(db_path)
     artifact_path = conn.execute(
         "SELECT artifact_path FROM trial WHERE trial_id = ?", (trial_id,)).fetchone()[0]

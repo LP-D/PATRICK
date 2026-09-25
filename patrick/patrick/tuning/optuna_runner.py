@@ -33,7 +33,7 @@ def safe_resample(sampler_name: str, seed: int, X: np.ndarray, y: np.ndarray) ->
     in both places."""
     try:
         return get_sampler(sampler_name, seed).fit_resample(X, y)
-    except Exception:
+    except Exception:  # noqa: BLE001 -- imblearn samplers raise various errors on small classes; documented raw fallback
         return X, y
 
 

@@ -170,7 +170,7 @@ def _export(rows: list[dict], output_dir: str) -> tuple[str, str]:
     sep = "|" + "|".join(["---"] * len(fieldnames)) + "|"
     body = "\n".join("| " + " | ".join(str(row.get(c, "")) for c in fieldnames) + " |" for row in rows)
     with open(md_path, "w") as f:
-        f.write("\n".join([header, sep, body]) + "\n")
+        f.write(f"{header}\n{sep}\n{body}" + "\n")
 
     return csv_path, md_path
 

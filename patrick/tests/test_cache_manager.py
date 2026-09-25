@@ -11,10 +11,9 @@ from datetime import timedelta
 import pandas as pd
 import pytest
 
-from patrick.clock import utc_now
-
 import patrick.cache_manager as cache_manager_module
 from patrick.cache_manager import LocalCache
+from patrick.clock import utc_now
 
 
 @pytest.fixture

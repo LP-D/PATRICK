@@ -179,7 +179,7 @@ def test_predict_live_works_for_every_horizon_in_a_multi_horizon_run(tmp_path, m
         predict_module, "ingest",
         lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
 
-    for horizon, run_id in run_ids.items():
+    for run_id in run_ids.values():
         live = predict_module.predict_live(run_id, db_path=db_path, store=store)
         assert live["y_pred"] in (0, 1, 2, 3)
         assert 0.0 <= live["y_proba"] <= 1.0

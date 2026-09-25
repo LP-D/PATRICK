@@ -111,7 +111,7 @@ def test_real_worker_subprocess_survives_without_web_server(tmp_path):
 
     proc = subprocess.run(
         [sys.executable, "-m", "patrick.cli", "worker", "--idle-timeout", "2", "--poll-interval", "0.2"],
-        capture_output=True, text=True, timeout=180,
+        capture_output=True, text=True, timeout=180, check=False,
     )
     assert proc.returncode == 0, f"stdout={proc.stdout}\nstderr={proc.stderr}"
 

@@ -57,7 +57,7 @@ def _compute_once() -> None:
 
     try:
         df = download_batch(tickers, start)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- background thread boundary: a provider failure must not kill the alerts loop
         with _lock:
             _cache["error"] = str(e)[:200]
         return

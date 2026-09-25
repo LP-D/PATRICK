@@ -210,7 +210,7 @@ def cross_sectional_momentum_features(
         return pd.DataFrame(index=raw.index)
     out = {}
     for w in windows:
-        rets = raw[cols].apply(lambda s: safe_pct_change(s, w))
+        rets = raw[cols].apply(lambda s, w=w: safe_pct_change(s, w))
         pct_rank = rets.rank(axis=1, pct=True)
         for c in cols:
             out[f"{c}_xsect_mom_{w}d_estimated"] = pct_rank[c]

@@ -400,9 +400,6 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Local-scope lines: each dense surface answers ITS OWN question,
     # without repeating the global verdict the banner already carries.
-    "scope_universe": {"fr": "CIBLES EXPLORÉES", "en": "TARGETS EXPLORED"},
-    "scope_universe_rel": {"fr": "dont {done} avec au moins un run terminé · {never} jamais lancées",
-                           "en": "of which {done} with at least one finished run · {never} never launched"},
     "scope_runs": {"fr": "RUNS COMPARÉS AUX BASELINES", "en": "RUNS COMPARED TO BASELINES"},
     "scope_runs_rel": {"fr": "runs affichés ayant produit un résultat Diebold-Mariano",
                        "en": "listed runs that produced a Diebold-Mariano result"},

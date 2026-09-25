@@ -9,6 +9,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
+from patrick.numeric import is_nan
 from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
 from patrick.validation.pbo_reliability import pbo_reliability
@@ -154,7 +155,7 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
         "GROUP BY run.target",
         (kind,),
     ).fetchall()
-    observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if p_min == p_min}
+    observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if not is_nan(p_min)}
 
     p_values: dict[str, float] = {}
     for target in family:

@@ -275,7 +275,7 @@ def test_migrate_concurrent_calls_on_fresh_db_do_not_raise(tmp_path):
             barrier.wait()
             conn = db.connect(path)
             conn.close()
-        except BaseException as exc:  # noqa: BLE001 -- reported from the main thread, not raised here
+        except BaseException as exc:  # noqa: BLE001 -- thread boundary: every error is re-raised by the test
             errors.append(exc)
 
     threads = [threading.Thread(target=worker) for _ in range(n_threads)]

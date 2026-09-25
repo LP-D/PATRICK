@@ -198,7 +198,7 @@ def ab2_run_experiment(horizon: int = 5):
                 for sampler_name in config.sampler.candidates:
                     for algo in config.models.algos:
                         t_algo = time.perf_counter()
-                        met, y_pred, confidence = _fit_eval(
+                        met, _y_pred, _confidence = _fit_eval(
                             X_tr_n, fd.y_tr, X_te_n, fd.y_te,
                             sampler_name, algo, seed,
                             calibration=config.models.calibration,

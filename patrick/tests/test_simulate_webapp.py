@@ -102,7 +102,7 @@ def test_api_list_trials_returns_best_trial(seeded_run):
 
 
 def test_api_simulate_end_to_end(seeded_run):
-    run_id, trial_id = seeded_run
+    _run_id, trial_id = seeded_run
     client = TestClient(app)
 
     resp = client.post("/api/simulate", json={

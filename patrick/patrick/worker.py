@@ -201,7 +201,7 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
     sys.stdout = capture
     try:
         result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
-    except Exception as exc:  # noqa: BLE001 - surfaced via job.error, never swallowed
+    except Exception as exc:  # noqa: BLE001 -- job boundary: any pipeline failure is recorded on the job, the worker keeps running
         sys.stdout = old_stdout
         capture.final_flush()
         jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")

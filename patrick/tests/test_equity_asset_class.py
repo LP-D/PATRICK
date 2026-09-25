@@ -18,7 +18,13 @@ from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
 from patrick.config import equity_universe
-from patrick.config.schema import DataQualityConfig, FeaturesConfig, ObjectiveConfig, RunConfig, UniverseConfig
+from patrick.config.schema import (
+    DataQualityConfig,
+    FeaturesConfig,
+    ObjectiveConfig,
+    RunConfig,
+    UniverseConfig,
+)
 from patrick.data import ingest as ingest_module
 from patrick.data.sources import fred_source, fundamentals_source, yfinance_source
 from patrick.data.store import DataStore
@@ -109,7 +115,7 @@ def test_equity_prices_are_dividend_adjusted_totalenergies_2026_06_30(monkeypatc
 #    60 jours fixes. Frontieres testees a T-1/T/T+1 JOURS exactement.
 # ---------------------------------------------------------------------------
 
-def _threshold_days(min_history_years: int = None) -> int:
+def _threshold_days(min_history_years: int | None = None) -> int:
     years = min_history_years if min_history_years is not None else D.DEFAULT_MIN_HISTORY_YEARS
     return years * equity_sufficiency.TRADING_DAYS_PER_YEAR
 

@@ -21,8 +21,8 @@ from patrick.config.schema import RunConfig
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import build_target
 from patrick.models.registry import get_classifier
-from patrick.models.samplers import get_sampler
 from patrick.selection.registry import select_features
+from patrick.tuning.optuna_runner import safe_resample
 
 
 def export_best_model(pool, target_col: str, feature_pool: list[str], config: RunConfig,
@@ -64,10 +64,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     X_n = X[:, cols]
     feat_names = [feature_pool[c] for c in cols]
 
-    try:
-        Xr, yr = get_sampler(sampler_name, seed).fit_resample(X_n, y)
-    except Exception:
-        Xr, yr = X_n, y
+    Xr, yr = safe_resample(sampler_name, seed, X_n, y)
     clf = get_classifier(algo, seed=seed, **best_params)
     clf.fit(Xr, yr)
 
@@ -104,7 +101,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     meta = {"horizon": horizon, "regime": regime, "N": n_feat, "sampler": sampler_name,
             "algo": algo, "best_params": best_params, "feature_names": feat_names,
             "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
-            "n_train_rows": int(len(y))}
+            "n_train_rows": len(y)}
     # Derived from `model_path` (not a second independent f-string) so it
     # stays in sync with whatever convention is above -- `worker.py`'s
     # `_summarize_result` re-derives this same meta path the same way

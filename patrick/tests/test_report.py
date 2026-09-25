@@ -80,7 +80,8 @@ def test_report_for_cli_run_without_job_id(tmp_path, monkeypatch):
     result_path = report_module.save_report(run_id, output_path=output_path, db_path=db_path)
     assert result_path == output_path
 
-    content = open(output_path, encoding="utf-8").read()
+    with open(output_path, encoding="utf-8") as f:
+        content = f.read()
     assert run_id in content
     assert "report_test" in content
     assert "Non disponible" in content  # pas de job_id -> stats Phase 2 absentes, pas inventées
@@ -116,7 +117,8 @@ def test_report_for_web_run_includes_phase2_stats(tmp_path):
 
         output_path = str(tmp_path / "report_web.html")
         report_module.save_report(run_id, output_path=output_path, db_path=db_path)
-        content = open(output_path, encoding="utf-8").read()
+        with open(output_path, encoding="utf-8") as f:
+            content = f.read()
         assert "Diebold-Mariano" in content
         assert "Essais cumulés" in content
         assert "Non disponible" not in content

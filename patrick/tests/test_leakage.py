@@ -348,7 +348,6 @@ def test_corrupting_beyond_test_fold_does_not_change_test_features_or_prediction
     all_dates = raw.index
     horizon = config.objective.horizons[0]
     fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds, config.validation.min_train_frac)
-    cut_date = all_dates[fold_cuts[0]]
     nxt_idx = fold_cuts[1] - 1
 
     # La cible de la DERNIÈRE ligne de test a légitimement besoin du prix à
@@ -425,7 +424,7 @@ def test_shifting_target_by_one_bar_collapses_performance_to_baseline(k, seed, t
     )
     raw = _driver_raw(seed=seed, k=k)
 
-    prepared, feature_pool = _prepare_fold(raw, config, fold_idx=0)
+    prepared, _feature_pool = _prepare_fold(raw, config, fold_idx=0)
     assert prepared is not None
     X_tr, y_tr, X_te, y_te = prepared.X_tr, prepared.y_tr, prepared.X_te, prepared.y_te
 

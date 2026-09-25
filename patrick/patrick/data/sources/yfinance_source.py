@@ -46,7 +46,7 @@ def _download_one_cached(ticker: str, start: str) -> pd.Series | None:
         s = s.copy()
         s.name = _clean_col(ticker)
         return s
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary: one failing ticker never loses the others
         print(f"  [WARN] yfinance {ticker}: {str(e)[:100]}")
         return None
 
@@ -150,7 +150,7 @@ def _download_ohlc_cached(symbol: str, start: str) -> pd.DataFrame | None:
         if len(cols) < 4:
             return None
         return df[list(cols)].dropna(how="all").copy()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary, OHLC is optional
         print(f"  [WARN] yfinance OHLC {symbol}: {str(e)[:100]}")
         return None
 

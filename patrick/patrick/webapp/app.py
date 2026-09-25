@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import html
 import os
+import sqlite3
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -129,11 +131,11 @@ def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
     unchanged for them."""
     try:
         conn = trackdb.connect()
-    except Exception:
+    except (sqlite3.Error, OSError):
         return None
     try:
         return trackhistory.station_verdict(conn, fdr_alpha=fdr_alpha)
-    except Exception:
+    except sqlite3.Error:
         return None
     finally:
         conn.close()
@@ -190,11 +192,11 @@ def _recent_runs(limit: int = 8) -> list[dict]:
     yet (first install)."""
     try:
         conn = trackdb.connect()
-    except Exception:
+    except (sqlite3.Error, OSError):
         return []
     try:
         return trackhistory.list_runs(conn, limit=limit)
-    except Exception:
+    except sqlite3.Error:
         return []
     finally:
         conn.close()
@@ -315,17 +317,17 @@ def movers():
 
 
 @app.get("/api/next-run-names")
-def next_run_names(target: list[str] = Query(default=[])):
+def next_run_names(target: Annotated[list[str] | None, Query()] = None):
     """(Read-only) preview of the name that will be assigned to each target
     if the form is submitted now — called by `app.js` when the target
     selection changes. Reserves nothing: the actual number may differ if
     other runs for the same target slot in before submission (see the
     batch-run-launch spec, known limitation)."""
-    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
+    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target or [])}
 
 
 @app.get("/api/horizon-feasibility")
-def horizon_feasibility(target: list[str] = Query(default=[])):
+def horizon_feasibility(target: Annotated[list[str] | None, Query()] = None):
     """Phase 1 (feature/expanded-horizons) -- data for `app.js` to disable
     infeasible `<option>`s in the shared `<select multiple name="horizons">`
     (index.html) as the target selection changes, mirroring
@@ -339,7 +341,7 @@ def horizon_feasibility(target: list[str] = Query(default=[])):
     `data/store.py`) -- never a static table, and never blocked when nothing
     is cached yet for a target (exposed with a warning instead, per this
     phase's guiding principle)."""
-    symbols = list(dict.fromkeys(target))
+    symbols = list(dict.fromkeys(target or []))
     out: dict[str, dict] = {}
     for h in D.SELECTABLE_HORIZONS:
         blocking = None
@@ -817,7 +819,7 @@ def portfolio_page(request: Request, pairs: str | None = None):
     # (meme esprit read-only-avec-avertissement que le reste de cette route).
     try:
         hrp = trackhrp.hrp_overview()
-    except Exception:
+    except Exception:  # noqa: BLE001 -- page robustness: HRP failure degrades to an empty panel, never a 500
         hrp = {"weights": None, "skipped": [], "as_of": None, "n_assets": 0}
     return templates.TemplateResponse(
         request, "portfolio.html",
@@ -1005,7 +1007,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
         raise HTTPException(status_code=404, detail="Cible inconnue")
     try:
         result = explain.explain_last_prediction(ticker, horizon)
-    except Exception as exc:  # never let an explanation failure break the page
+    except Exception as exc:  # noqa: BLE001 -- never let an explanation failure break the page
         return JSONResponse({"ok": False, "message": f"Erreur de calcul SHAP : {exc}"})
     if result is None:
         return JSONResponse({"ok": False, "message": "Aucune prédiction exploitable pour cet horizon."})

@@ -188,7 +188,7 @@ def train_per_regime_category(ctx: _FoldContext, raw_price_series: pd.Series, ho
                                          config.sampler.candidates, config.models.algos, seed,
                                          conn, target_col, horizon, snapshot_id)
 
-        last_k, last_fd = fold_data[-1]
+        _last_k, last_fd = fold_data[-1]
         cols = _select(conn, target_col, horizon, snapshot_id, config, last_fd.X_tr, last_fd.y_tr,
                         winner["n_feat"], seed)
         X_tr_n = last_fd.X_tr[:, cols]
@@ -298,7 +298,7 @@ def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, co
     # Optuna-tune EACH base algo at full budget, on the LAST fold's
     # OOF-training portion (X_base/y_base) -- mirrors global's "tune on the
     # last fold's train" convention.
-    last_k, last_fd, last_split = fold_prep[-1]
+    _last_k, last_fd, last_split = fold_prep[-1]
     cols = _select(conn, target_col, horizon, snapshot_id, config, last_fd.X_tr, last_fd.y_tr,
                     best["n_feat"], seed)
     last_base_end = _purged_base_end(last_split, horizon)

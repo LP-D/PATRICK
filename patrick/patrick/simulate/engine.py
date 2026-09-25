@@ -229,7 +229,6 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
     averages the active signals over [entry, entry+H), "renewed" holds the
     last signal until the next one."""
     n = len(daily_index)
-    date_to_idx = {d: i for i, d in enumerate(daily_index)}
     entry_idxs = []
     for d in signal_dates:
         pos_in_index = daily_index.searchsorted(d)
@@ -370,7 +369,6 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         gross_returns = exposure * underlying_ret - carry_cost
 
         equity = (1 + strategy_returns).cumprod()
-        gross_equity = (1 + gross_returns).cumprod()
         bh_equity = (1 + underlying_ret).cumprod()
 
         strat_summary = simmetrics.performance_summary(equity, strategy_returns, exposure)

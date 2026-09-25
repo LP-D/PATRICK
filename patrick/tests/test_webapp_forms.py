@@ -247,10 +247,7 @@ def test_build_config_dict_defaults_optuna_bounds_when_form_omits_them():
 
 
 def test_build_config_dict_reads_custom_optuna_bounds_from_form():
-    form = _minimal_form(**{
-        "ob__XGBoost__n_estimators__low": "120",
-        "ob__XGBoost__n_estimators__high": "180",
-    })
+    form = _minimal_form(ob__XGBoost__n_estimators__low="120", ob__XGBoost__n_estimators__high="180")
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_9")
     assert errors == []
     assert config_dict["tuning"]["optuna_bounds"]["XGBoost"]["n_estimators"] == [120, 180]
@@ -260,25 +257,19 @@ def test_build_config_dict_reads_custom_optuna_bounds_from_form():
 
 
 def test_build_config_dict_rejects_optuna_bound_low_greater_than_high():
-    form = _minimal_form(**{
-        "ob__RandomForest__n_estimators__low": "500",
-        "ob__RandomForest__n_estimators__high": "100",
-    })
+    form = _minimal_form(ob__RandomForest__n_estimators__low="500", ob__RandomForest__n_estimators__high="100")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_10")
     assert any("randomforest.n_estimators" in e.lower() for e in errors)
 
 
 def test_build_config_dict_rejects_optuna_bound_outside_allowed_range():
-    form = _minimal_form(**{
-        "ob__CatBoost__depth__low": "1",
-        "ob__CatBoost__depth__high": "9999",
-    })
+    form = _minimal_form(ob__CatBoost__depth__low="1", ob__CatBoost__depth__high="9999")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_11")
     assert any("catboost.depth" in e.lower() for e in errors)
 
 
 def test_build_config_dict_rejects_non_numeric_optuna_bound():
-    form = _minimal_form(**{"ob__XGBoost__max_depth__low": "abc"})
+    form = _minimal_form(ob__XGBoost__max_depth__low="abc")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_12")
     assert any("xgboost.max_depth" in e.lower() for e in errors)
 
@@ -370,7 +361,7 @@ def test_build_config_dict_defaults_technical_lookbacks_when_form_omits_them():
 
 
 def test_build_config_dict_reads_custom_technical_lookbacks_from_form():
-    form = _minimal_form(**{"tl__returns_windows": "3,7,14"})
+    form = _minimal_form(tl__returns_windows="3,7,14")
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_18")
     assert errors == []
     assert config_dict["features"]["technical_lookbacks"]["returns_windows"] == [3, 7, 14]
@@ -380,20 +371,20 @@ def test_build_config_dict_reads_custom_technical_lookbacks_from_form():
 
 def test_build_config_dict_accepts_range_syntax_for_technical_lookbacks():
     """Meme syntaxe `lo-hi` que `n_features_grid` (`_int_list`)."""
-    form = _minimal_form(**{"tl__rolling_vol_windows": "5-7"})
+    form = _minimal_form(tl__rolling_vol_windows="5-7")
     config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_19")
     assert errors == []
     assert config_dict["features"]["technical_lookbacks"]["rolling_vol_windows"] == [5, 6, 7]
 
 
 def test_build_config_dict_rejects_non_positive_returns_window():
-    form = _minimal_form(**{"tl__returns_windows": "-3,5"})
+    form = _minimal_form(tl__returns_windows="-3,5")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_20")
     assert any("rendements" in e.lower() for e in errors)
 
 
 def test_build_config_dict_rejects_zero_zscore_window():
-    form = _minimal_form(**{"tl__zscore_windows": "0,10"})
+    form = _minimal_form(tl__zscore_windows="0,10")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_21")
     assert any("z-score" in e.lower() for e in errors)
 
@@ -402,18 +393,18 @@ def test_build_config_dict_rejects_ohlc_vol_window_below_two():
     """`yang_zhang_vol` divise par (window - 1) -- window=1 ferait planter
     le pipeline avec un ZeroDivisionError (mesure, voir
     tests/test_technical_lookbacks.py) plutot que d'etre rejete ici."""
-    form = _minimal_form(**{"tl__ohlc_vol_windows": "1,10"})
+    form = _minimal_form(tl__ohlc_vol_windows="1,10")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_22")
     assert any("ohlc" in e.lower() for e in errors)
 
 
 def test_build_config_dict_rejects_non_numeric_technical_lookback():
-    form = _minimal_form(**{"tl__ma_ratio_windows": "abc"})
+    form = _minimal_form(tl__ma_ratio_windows="abc")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_23")
     assert any("moyenne mobile" in e.lower() for e in errors)
 
 
 def test_build_config_dict_rejects_technical_lookback_above_max_allowed():
-    form = _minimal_form(**{"tl__returns_windows": "999999"})
+    form = _minimal_form(tl__returns_windows="999999")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_24")
     assert any("rendements" in e.lower() for e in errors)

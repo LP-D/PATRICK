@@ -65,6 +65,6 @@ class Leaderboard:
         xlsx_path = os.path.join(out_dir, f"{name}_leaderboard.xlsx")
         try:
             df.to_excel(xlsx_path, index=False)
-        except Exception as e:
+        except (ImportError, OSError, ValueError) as e:
             print(f"  [WARN] export xlsx: {str(e)[:100]}")
         return csv_path

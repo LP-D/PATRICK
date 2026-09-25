@@ -42,7 +42,6 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     ret = ret.loc[~flat].dropna()
     reg_r = regime.reindex(ret.index)
 
-    cut_date = s.index[min(split_idx, len(s) - 1)]
     safe_fit_idx = max(split_idx - horizon, 0)
     safe_fit_cut_date = s.index[safe_fit_idx]
     ret_tr = ret.loc[ret.index < safe_fit_cut_date]

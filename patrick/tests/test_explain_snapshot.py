@@ -90,7 +90,7 @@ def test_live_prediction_after_the_run_snapshot_uses_the_earliest_snapshot_cover
 
 
 def test_missing_snapshot_returns_none_instead_of_downloading(tmp_path, monkeypatch):
-    store, db_path, _ = _setup(tmp_path, "2021-03-01", "test")
+    _store, db_path, _ = _setup(tmp_path, "2021-03-01", "test")
     empty_store = DataStore(root=str(tmp_path / "empty_store"))
     _capture_raw(monkeypatch)
     assert explain_module.explain_last_prediction(TARGET, 1, db_path=db_path, store=empty_store) is None

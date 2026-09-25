@@ -258,7 +258,7 @@ def main() -> None:
 
     study_name = f"profile_p4_{config.name}_h{horizon}_N{n_feat_optuna}_{algo_optuna}"
     t0 = time.perf_counter()
-    best_params, best_cv = tune_config(X_tr_n, fd_last.y_tr, algo_optuna, sampler_optuna,
+    _best_params, best_cv = tune_config(X_tr_n, fd_last.y_tr, algo_optuna, sampler_optuna,
                                         n_trials=args.optuna_trials, cv_splits=config.tuning.cv_splits,
                                         seed=seed, storage_path=optuna_storage_path, study_name=study_name)
     wall = time.perf_counter() - t0

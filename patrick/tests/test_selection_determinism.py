@@ -38,9 +38,9 @@ import textwrap
 import numpy as np
 import pytest
 
+from patrick.features import interactions
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import _common, lasso_select, shap_select
-from patrick.features import interactions
 
 _TIED_IMPORTANCES = "np.r_[[3.0, 1.0, 2.0, 1.0, 3.0], np.zeros(995)]"
 
@@ -127,9 +127,9 @@ def test_lasso_uses_a_fixed_thread_count(monkeypatch):
 
 def _rows(order):
     rows = {
-        "A": [dict(horizon=1, regime="GLOBAL", N=8, sampler="SMOTE", algo="RandomForest", fold=f, F1_dir=0.6)
+        "A": [{"horizon": 1, "regime": "GLOBAL", "N": 8, "sampler": "SMOTE", "algo": "RandomForest", "fold": f, "F1_dir": 0.6}
               for f in (1, 2)],
-        "B": [dict(horizon=1, regime="GLOBAL", N=5, sampler="SMOTE", algo="XGBoost", fold=f, F1_dir=0.6)
+        "B": [{"horizon": 1, "regime": "GLOBAL", "N": 5, "sampler": "SMOTE", "algo": "XGBoost", "fold": f, "F1_dir": 0.6}
               for f in (1, 2)],
     }
     return [r for key in order for r in rows[key]]
@@ -151,8 +151,8 @@ def test_top_k_is_invariant_to_insertion_order_on_tied_scores():
 
 def test_best_ranks_configs_by_walk_forward_mean_not_by_their_luckiest_fold():
     board = Leaderboard()
-    lucky = dict(horizon=1, regime="GLOBAL", N=5, sampler="SMOTE", algo="XGBoost")
-    steady = dict(horizon=1, regime="GLOBAL", N=8, sampler="SMOTE", algo="LightGBM")
+    lucky = {"horizon": 1, "regime": "GLOBAL", "N": 5, "sampler": "SMOTE", "algo": "XGBoost"}
+    steady = {"horizon": 1, "regime": "GLOBAL", "N": 8, "sampler": "SMOTE", "algo": "LightGBM"}
     for fold, f1 in enumerate((0.90, 0.10, 0.10), start=1):
         board.add(**lucky, fold=fold, F1_dir=f1)
     for fold in (1, 2, 3):

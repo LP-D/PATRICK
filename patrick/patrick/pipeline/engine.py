@@ -74,6 +74,7 @@ from patrick.models.uniqueness import (
     build_indicator_matrix,
     effective_sample_size,
 )
+from patrick.numeric import is_nan
 from patrick.pipeline.leaderboard import Leaderboard, rank_configs
 from patrick.selection._common import RANKING_VERSION
 from patrick.selection.registry import select_features
@@ -632,7 +633,7 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
             try:
                 y_proba = clf.predict_proba(X_te)
                 confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
-            except Exception:
+            except (AttributeError, IndexError, ValueError):
                 y_proba = None
     met = metrics(y_te, y_pred, y_proba=y_proba)
     return met, y_pred, confidence
@@ -667,7 +668,7 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
     return n_wf
 
 
-def _evaluate_holdout(conn, snapshot_id: str, pool_builder: "_FoldPoolBuilder", target_col: str,
+def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, target_col: str,
                        feature_pool: list[str], config: RunConfig, all_dates_full: pd.DatetimeIndex,
                        n_wf: int, best_cfg: dict, seed: int) -> dict | None:
     """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
@@ -735,7 +736,7 @@ _BASELINE_KIND_TO_KEY = {
 _COMMON_BASELINE_KEY = "BASELINE_persistence"
 
 
-def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str | None, np.ndarray | None]:
+def _best_baseline_among(fd: FoldData, candidate_keys: list[str]) -> tuple[str | None, np.ndarray | None]:
     """Among `candidate_keys` (`BASELINE_*` keys actually computed for this
     fold), keeps the one with the highest F1_dir -- same empirical selection
     logic as the historical behavior (a single "best on this fold"
@@ -747,12 +748,12 @@ def _best_baseline_among(fd: "FoldData", candidate_keys: list[str]) -> tuple[str
         if pred is None:
             continue
         f1 = (fd.baselines or {}).get(key, {}).get("F1_dir")
-        if f1 is not None and f1 == f1 and f1 > best_f1:
+        if f1 is not None and not is_nan(f1) and f1 > best_f1:
             best_f1, best_name, best_pred = f1, key, pred
     return best_name, best_pred
 
 
-def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: "_FoldContext", best_cfg: dict,
+def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cfg: dict,
                                last_fold: int, seed: int) -> dict | None:
     """DM (Phase 2.5) between the winning config and TWO baselines (Phase
     X5), on the most recent walk-forward fold — the period closest to the
@@ -960,8 +961,8 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                 buf["y_true"].extend(y_te[row_sel].tolist())
                                 buf["y_pred"].extend(np.asarray(y_pred)[row_sel].tolist())
                                 buf["y_proba"].extend(
-                                    (confidence[row_sel].tolist() if confidence is not None
-                                     else [None] * int(row_sel.sum())))
+                                    confidence[row_sel].tolist() if confidence is not None
+                                     else [None] * int(row_sel.sum()))
 
                             trial_key = (horizon, regime, n_feat, sampler_name, algo)
                             if trial_key not in trial_ids:
@@ -1366,7 +1367,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         for (run_id, baseline_name), fold_dicts in baseline_accum.items():
             agg = {}
             for m in {k for d in fold_dicts for k in d}:
-                values = [v for v in (d.get(m) for d in fold_dicts) if v is not None and v == v]
+                values = [v for v in (d.get(m) for d in fold_dicts) if v is not None and not is_nan(v)]
                 if values:
                     agg[m] = float(np.mean(values))
             trackdb.add_baseline_metrics(conn, run_id, baseline_name, split="test", metrics=agg)

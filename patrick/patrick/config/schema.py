@@ -282,7 +282,7 @@ class RunConfig(BaseModel):
         return data
 
     @classmethod
-    def from_yaml(cls, path: str) -> "RunConfig":
+    def from_yaml(cls, path: str) -> RunConfig:
         import yaml
 
         with open(path) as f:

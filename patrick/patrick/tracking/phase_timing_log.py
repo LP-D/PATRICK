@@ -35,7 +35,7 @@ def _format_duration(seconds: float) -> str:
     phase, jamais reconvertie en minutes (les runs mesurés vont de quelques
     secondes à plusieurs milliers, un format unique reste plus facile à
     comparer d'une ligne à l'autre qu'un mélange s/m)."""
-    return f"{int(round(seconds))}s"
+    return f"{round(seconds)}s"
 
 
 def _format_pct(seconds: float, total: float | None) -> str:

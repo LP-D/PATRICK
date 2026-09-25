@@ -97,7 +97,7 @@ def download_series(name: str, series_id: str, start: str,
             else web.DataReader(series_id, "fred", start).squeeze()
         s.name = name
         return s
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
         print(f"  [WARN] FRED {series_id}: {str(e)[:100]}")
         return None
 
@@ -123,7 +123,7 @@ def download_fred_universe(series_map: dict[str, str], start: str,
         for name, sid in series_map.items():
             try:
                 s = download_first_release(sid, start, api_key).rename(name)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
                 print(f"  [WARN] ALFRED {sid}: {str(e)[:100]}")
                 s = None
             if s is not None and not s.empty:

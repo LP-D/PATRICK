@@ -59,12 +59,12 @@ def render_waterfall_svg(base_value: float, contributions: list[dict], final_val
 
     zero_x = sx(0.0) if vmin <= 0.0 <= vmax else None
 
-    parts = [
+    parts = [(
         f'<svg class="shap-waterfall" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" '
         f'aria-label="Décomposition SHAP de la prédiction, {n} features, '
         f'de la référence {base_value:.3f} au résultat {final_value:.3f}">'
-    ]
+    )]
 
     if zero_x is not None:
         parts.append(

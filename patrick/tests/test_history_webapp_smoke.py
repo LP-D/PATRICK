@@ -207,7 +207,7 @@ def test_target_page_shows_real_fdr_correction_not_hardcoded_none(tmp_path, monk
     client = TestClient(app)
     resp = client.get("/targets/^VIX")
     assert resp.status_code == 200
-    expected_p = "%.4f" % expected["target_fdr"]["adjusted_p_value"]
+    expected_p = "{:.4f}".format(expected["target_fdr"]["adjusted_p_value"])
     assert expected_p in resp.text, (
         f"la p-value FDR ajustee reelle ({expected_p}) n'apparait pas dans la page -- "
         "target_page() ignore trackhistory.target_detail() et code target_fdr=None en dur"
