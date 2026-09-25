@@ -133,3 +133,26 @@ def test_api_simulate_unknown_trial_returns_404(seeded_run):
     client = TestClient(app)
     resp = client.post("/api/simulate", json={"trial_id": 999999, "params": {}})
     assert resp.status_code == 404
+
+
+def test_api_simulate_reports_and_honors_the_segment(seeded_run):
+    """F06: the API simulates ONE segment -- the default (no holdout in this
+    fixture) falls back to `test` with an explicit selection-bias warning;
+    an unknown segment is a 400, never silently pooled."""
+    _, trial_id = seeded_run
+    client = TestClient(app)
+    data = client.post("/api/simulate", json={"trial_id": trial_id, "params": {}}).json()
+    assert data["segment"] == "test"
+    assert data["segment_warning"]
+    assert set(data["available_segments"]) == {"test"}
+    resp = client.post("/api/simulate", json={"trial_id": trial_id, "params": {}, "segment": "all"})
+    assert resp.status_code == 400
+
+
+def test_api_simulate_rejects_the_obsolete_kelly_mode_with_a_400(seeded_run):
+    """The page offered `position_mode=kelly`, renamed `heuristic_leverage`
+    (D2): the engine's ValueError surfaced as a misleading 404."""
+    _, trial_id = seeded_run
+    client = TestClient(app)
+    resp = client.post("/api/simulate", json={"trial_id": trial_id, "params": {"position_mode": "kelly"}})
+    assert resp.status_code == 400

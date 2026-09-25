@@ -1151,9 +1151,18 @@ async def api_simulate(request: Request):
         params = sim_engine.SimParams(**raw_params)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    if params.position_mode not in ("threshold", "proportional", "heuristic_leverage"):
+        raise HTTPException(status_code=400, detail=f"position_mode inconnu : {params.position_mode}")
+    if params.overlap_mode not in ("tranches", "renewed"):
+        raise HTTPException(status_code=400, detail=f"overlap_mode inconnu : {params.overlap_mode}")
+
+    # F06: one statistical segment per simulation, never pooled.
+    segment = body.get("segment") or None
+    if segment is not None and segment not in sim_engine.SEGMENTS:
+        raise HTTPException(status_code=400, detail=f"segment inconnu : {segment}")
 
     try:
-        result = sim_engine.simulate(trial_id, params)
+        result = sim_engine.simulate(trial_id, params, segment=segment)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except FileNotFoundError as exc:

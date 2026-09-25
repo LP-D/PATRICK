@@ -173,7 +173,20 @@ def test_solve_break_even_cost_bps_edge_cases():
 
 
 def test_overlap_modes_produce_different_exposure(tmp_path):
+    """Only OVERLAPPING signals (spacing < horizon) can make the two modes
+    differ. The previous version used signals spaced exactly one horizon
+    apart and only passed because the simulated window ran past the last
+    signal (renewed held the last position to the snapshot's end, tranches
+    dropped to 0) -- an artifact removed by F06."""
     db_path, store_root, trial_id, _ = _setup_run_with_predictions(tmp_path, good_signal=True)
+    conn = trackdb.connect(db_path)
+    rows = conn.execute("SELECT ts, y_true, y_pred, y_proba FROM prediction WHERE trial_id = ?",
+                        (trial_id,)).fetchall()
+    shifted = [(str(pd.Timestamp(ts) + pd.offsets.BDay(2)), yt, 3 - yp, pr) for ts, yt, yp, pr in rows]
+    trackdb.add_predictions(conn, trial_id, fold_index=1, split="test", ts=[r[0] for r in shifted],
+                             y_true=[r[1] for r in shifted], y_pred=[r[2] for r in shifted],
+                             y_proba=[r[3] for r in shifted])
+    conn.close()
     tranches = sim.simulate(trial_id, sim.SimParams(overlap_mode="tranches"), db_path=db_path, store_root=store_root)
     renewed = sim.simulate(trial_id, sim.SimParams(overlap_mode="renewed"), db_path=db_path, store_root=store_root)
     assert tranches["ok"] and renewed["ok"]
