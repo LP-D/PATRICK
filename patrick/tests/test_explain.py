@@ -71,20 +71,21 @@ def _tiny_config(tmp_path) -> RunConfig:
 @pytest.mark.slow  # full pipeline run, same order of magnitude as test_predict_live.py
 def test_explain_last_prediction_is_internally_consistent(tmp_path, monkeypatch):
     raw = _synthetic_raw()
+    db_path = str(tmp_path / "patrick.db")
+    store = DataStore(root=str(tmp_path / "store"))
+    # As `ingest` does: the raw frame lives in the data lake, so the run
+    # records a snapshot_id that explain.py can reload -- explain must
+    # rebuild the SAME historical raw series the model was trained on, from
+    # the local data lake only (never `ingest`, never the network).
+    store.save(f"raw_{TARGET_SYMBOL}", raw)
     monkeypatch.setattr(
         engine_module, "ingest",
         lambda objective, universe, store=None, force=False, data_quality=None: raw)
 
-    db_path = str(tmp_path / "patrick.db")
-    store = DataStore(root=str(tmp_path / "store"))
     result = engine_module.run_pipeline(_tiny_config(tmp_path), store=store, db_path=db_path)
     assert result["model_path"] is not None
-
-    # explain.py must reconstruct the SAME historical raw series it was
-    # trained on to find the exact date of the most recent recorded
-    # prediction -- no network call needed (force=False), the point of this
-    # module vs. `predict.py`'s live inference.
-    monkeypatch.setattr(explain_module, "ingest", lambda objective, universe, store=None, data_quality=None: raw)
+    monkeypatch.setattr(explain_module, "ingest",
+                        lambda *a, **k: pytest.fail("explain must not call ingest()"), raising=False)
 
     out = explain_module.explain_last_prediction(TARGET_SYMBOL, HORIZON, db_path=db_path, store=store)
     assert out is not None

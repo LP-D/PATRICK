@@ -165,3 +165,20 @@ def test_a_cache_built_under_another_point_in_time_rule_is_never_served(tmp_path
                                  UniverseConfig(fred_series={"CPI": "CPIAUCSL"}, start_date=START),
                                  store=store, data_quality=DataQualityConfig(enabled=False))
     assert again.attrs["snapshot_id"] == df.attrs["snapshot_id"]
+
+
+def test_local_cache_hit_is_registered_in_the_data_lake(tmp_path, fake_sources, monkeypatch):
+    """The CACHE_LOCAL path used to return a frame the data lake never saw:
+    the run then recorded an ad hoc snapshot_id that `/simulate` and
+    `explain` could not reload."""
+    monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "cache"))
+    fake_sources["CPI"] = _monthly(name="CPI")
+    universe = UniverseConfig(fred_series={"CPI": "CPIAUCSL"}, start_date=START)
+    ingest_module.ingest(ObjectiveConfig(target_symbol="^TGT"), universe,
+                         store=DataStore(root=str(tmp_path / "store_a")), force=True,
+                         data_quality=DataQualityConfig(enabled=False))
+    fresh_store = DataStore(root=str(tmp_path / "store_b"))
+    df = ingest_module.ingest(ObjectiveConfig(target_symbol="^TGT"), universe, store=fresh_store,
+                              data_quality=DataQualityConfig(enabled=False))
+    reloaded = fresh_store.load("raw_^TGT", snapshot_id=df.attrs["snapshot_id"])
+    assert len(reloaded) == len(df)

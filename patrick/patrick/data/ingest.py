@@ -146,6 +146,10 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if not force and cached_local is not None and \
             local_cache.read_meta(f"{cache_key}_local").get("pit_version") == pit:
         df = cached_local.copy()
+        # Registered in the data lake (content-deduplicated): the run then
+        # records a real snapshot_id that `/simulate` and `explain` can
+        # reload, never an ad hoc one that exists nowhere on disk.
+        store.save(cache_key, df, meta={"pit_version": pit})
         _attach_snapshot_context(df, universe)
         print(f"[CACHE_LOCAL] {cache_key}: {df.shape} reused from local cache (missing rows only).")
         return df
