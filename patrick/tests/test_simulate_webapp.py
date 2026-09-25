@@ -156,3 +156,26 @@ def test_api_simulate_rejects_the_obsolete_kelly_mode_with_a_400(seeded_run):
     client = TestClient(app)
     resp = client.post("/api/simulate", json={"trial_id": trial_id, "params": {"position_mode": "kelly"}})
     assert resp.status_code == 400
+
+
+def test_simulate_page_only_offers_modes_the_api_accepts(seeded_run):
+    """The form offered `kelly`, which `/api/simulate` answers with a 400
+    since the mode was renamed `heuristic_leverage`: every `<option>` of the
+    mode selector must be a mode the API accepts."""
+    import re
+    html = TestClient(app).get("/simulate").text
+    select = re.search(r'<select id="sim-mode">(.*?)</select>', html, re.DOTALL).group(1)
+    modes = re.findall(r'<option value="([^"]+)"', select)
+    assert modes and set(modes) <= {"threshold", "proportional", "heuristic_leverage"}
+    assert "heuristic_leverage" in modes
+
+
+def test_simulate_page_exposes_the_segment_selector(seeded_run):
+    """F06: the API simulates one segment at a time; the page must let the
+    user choose it (and leave the default -- holdout first -- to the API)."""
+    import re
+    html = TestClient(app).get("/simulate").text
+    select = re.search(r'<select id="sim-segment">(.*?)</select>', html, re.DOTALL)
+    assert select is not None
+    assert re.findall(r'<option value="([^"]*)"', select.group(1)) == ["", "holdout", "test", "live"]
+    assert 'id="sim-segment-info"' in html

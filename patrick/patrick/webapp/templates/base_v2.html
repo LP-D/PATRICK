@@ -1,61 +1,67 @@
 <!doctype html>
 <html lang="{{ lang | default('fr') }}">
 <!--
-DESIGN SYSTEM v2 — "Internal Cockpit" (design-system/patrick/MASTER.md)
-Full reset, replaces Desk Amber. Fixed left sidebar nav, dense KPI/table
-content zones, no hero, no marketing chrome. Dark-only (locked palette has
-no light-mode counterpart, same as Desk Amber before it).
-
-This is a NEW layout used only by pages migrated to v2 (starting with `/`,
-synthesis.html). Unmigrated pages keep extending base.html + tokens.css/
-style.css untouched until their own turn in the priority order.
+DESIGN SYSTEM v3 — "Cockpit Pro" (design-system/patrick/MASTER.md, section v3).
+Shell: collapsible icon sidebar (nav_registry is still the ONLY source of
+nav links), sticky topbar (location + command palette + theme), content
+column capped at --content-max. Light and dark themes; the explicit choice
+is persisted in localStorage and applied before first paint by the inline
+script below (no flash), otherwise the OS preference applies.
 -->
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0F172A">
+    <meta name="theme-color" content="#0A0C10" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
     <title>{% block title %}PATRICK{% endblock %}</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230F172A'/%3E%3Ccircle cx='16' cy='16' r='12.3' fill='none' stroke='%23F8FAFC' stroke-opacity='.6' stroke-width='1.9'/%3E%3Cg stroke='%23F8FAFC' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10.9 20.8v-2.1'/%3E%3Cpath d='M16 20.8v-4.3'/%3E%3Cpath d='M21.1 20.8v-5.9'/%3E%3C/g%3E%3Ccircle cx='21.1' cy='11.7' r='2.5' fill='%2322C55E'/%3E%3C/svg%3E">
-    {# Fira Code/Fira Sans now vendored under static/fonts/ (@font-face rules
-       in patrick-v2.css) -- the Google Fonts CDN link tried first hung
-       specifically in Chrome during verification (direct HTTPS fetches via
-       urllib/pip/npm all worked fine in the same environment, so it wasn't
-       a real network-access problem); vendoring removes the dependency
-       either way and matches how Desk Amber already self-hosts its own
-       fonts. Preloaded here: both are used above the fold (page title,
-       every KPI/table value) so a font swap flash would be visible. #}
-    <link rel="preload" href="/static/fonts/firasans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="/static/fonts/firacode-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/patrick-v2.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%235B8DEF'/%3E%3Cstop offset='1' stop-color='%233D63C9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cg stroke='%23fff' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M10 22v-4'/%3E%3Cpath d='M16 22v-8'/%3E%3Cpath d='M22 22v-6'/%3E%3C/g%3E%3Ccircle cx='22' cy='10' r='2.6' fill='%237CF0B8'/%3E%3C/svg%3E">
+    <script>
+        (function () {
+            try {
+                var root = document.documentElement;
+                var theme = localStorage.getItem("patrick-theme");
+                if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+                if (localStorage.getItem("patrick-sidebar") === "collapsed") root.setAttribute("data-sidebar", "collapsed");
+            } catch (e) { /* storage blocked: OS theme, expanded sidebar */ }
+        })();
+    </script>
+    <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/static/patrick.css">
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
     <script>
         window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
     </script>
 </head>
 <body>
+    {% set sections = nav_sections(request.url.path) %}
+    {% set ns = namespace(cat=None, entry=None) %}
+    {% for section in sections %}{% for item in section.entries %}{% if item.active %}{% set ns.cat = section %}{% set ns.entry = item %}{% endif %}{% endfor %}{% endfor %}
+    <a class="visually-hidden" href="#main">{{ t('skip_to_content') if t else 'Aller au contenu' }}</a>
     <div class="app-shell">
-        <aside class="sidebar">
-            <a class="brand" href="/">
-                <svg class="brand-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-                    <circle cx="12" cy="12" r="9.25" fill="none" stroke="currentColor" stroke-opacity=".6" stroke-width="1.4"/>
-                    <g stroke="currentColor" stroke-width="2.25" stroke-linecap="round" fill="none">
-                        <path d="M8.2 15.6V14"/>
-                        <path d="M12 15.6v-3.2"/>
-                        <path d="M15.8 15.6v-4.4"/>
-                    </g>
-                    <circle class="mark-head" cx="15.8" cy="8.8" r="1.9"/>
-                </svg>
-                <span>PATRICK</span>
+        <aside class="sidebar" id="sidebar">
+            <a class="brand" href="/" title="PATRICK">
+                <span class="brand-mark">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none">
+                            <path d="M7 17v-3"/>
+                            <path d="M12 17v-6"/>
+                            <path d="M17 17v-4.5"/>
+                        </g>
+                        <circle class="mark-head" cx="17" cy="7.5" r="2"/>
+                    </svg>
+                </span>
+                <span class="brand-text">PATRICK<span class="brand-sub">{{ t('brand_tagline') if t else 'Station de recherche quantitative' }}</span></span>
             </a>
-            {# feature/nav-categories-registry : liens generes depuis
-               webapp/nav_registry.py (seule source, cf. MASTER.md "Navigation
-               Registry") -- ne jamais ajouter de <a> en dur ici. #}
+            {# Liens generes depuis webapp/nav_registry.py (seule source, cf.
+               MASTER.md "Navigation Registry") -- jamais de <a> en dur ici. #}
             <nav class="sidebar-nav" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
-                {% for section in nav_sections(request.url.path) %}
+                {% for section in sections %}
                 <div class="sidebar-nav-group" role="group" aria-labelledby="nav-cat-{{ section.key }}">
                     <span class="sidebar-nav-heading" id="nav-cat-{{ section.key }}">{{ t(section.label_key) if t else section.label }}</span>
                     {% for item in section.entries %}
-                    <a href="{{ item.url }}" {% if item.active %}aria-current="page"{% endif %}>{{ t(item.label_key) if (t and item.label_key) else item.label }}</a>
+                    {% set label = t(item.label_key) if (t and item.label_key) else item.label %}
+                    <a href="{{ item.url }}" title="{{ label }}" {% if item.active %}aria-current="page"{% endif %}>{{ nav_icon(item.slug) }}<span class="nav-label">{{ label }}</span></a>
                     {% endfor %}
                 </div>
                 {% endfor %}
@@ -65,49 +71,74 @@ style.css untouched until their own turn in the priority order.
                     <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>
                     <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
                 </nav>
+                <button type="button" class="icon-btn desktop-only" id="sidebar-toggle" aria-controls="sidebar" aria-label="{{ t('sidebar_toggle') if t else 'Réduire / déplier la navigation' }}" title="{{ t('sidebar_toggle') if t else 'Réduire / déplier la navigation' }}">{{ icon('sidebar') }}</button>
             </div>
         </aside>
+        <div class="nav-scrim" id="nav-scrim" hidden></div>
 
-        <main class="main-content">
-            {# base.html porte ce bloc HORS de .container, dans le bandeau
-               station -- v2 n'a pas de bandeau global, donc il vit en tete du
-               contenu de la page a la place. Absent de ce fichier avant la
-               migration de /runs/{id}/detail (feature/cockpit-v2-migrate-
-               remaining-pages) : un enfant qui definit un bloc que le parent
-               n'a pas voit son contenu silencieusement disparaitre (pas
-               d'erreur Jinja) -- c'est ce qui serait arrive au quadruplet de
-               reproductibilite (snapshot/config hash/git SHA/seed). #}
-            {% block session_context %}{% endblock %}
-            {% block content %}{% endblock %}
-        </main>
+        <div class="main-column">
+            <header class="topbar">
+                <button type="button" class="icon-btn mobile-only" id="nav-open" aria-controls="sidebar" aria-label="{{ t('nav_open') if t else 'Ouvrir la navigation' }}">{{ icon('menu') }}</button>
+                <div class="topbar-crumbs">
+                    {% if ns.entry %}
+                    <span>{{ (t(ns.cat.label_key) if t else ns.cat.label) | lower | capitalize }}</span>
+                    {{ icon('chevron-right', 14) }}
+                    <span class="crumb-current">{{ t(ns.entry.label_key) if (t and ns.entry.label_key) else ns.entry.label }}</span>
+                    {% else %}
+                    <span class="crumb-current">{{ self.title() | replace("PATRICK — ", "") | replace("PATRICK - ", "") }}</span>
+                    {% endif %}
+                </div>
+                <div class="topbar-actions">
+                    <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
+                        {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') if t else 'Rechercher une page…' }}</span><span class="kbd">Ctrl K</span>
+                    </button>
+                    <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}" title="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}">
+                        <span class="icon-moon">{{ icon('moon') }}</span><span class="icon-sun">{{ icon('sun') }}</span>
+                    </button>
+                </div>
+            </header>
+
+            <main class="main-content" id="main">
+                {# Contexte de reproductibilite (run detail) : bloc imprime en
+                   tete de contenu -- un enfant qui definit un bloc absent du
+                   parent verrait son contenu disparaitre sans erreur Jinja. #}
+                {% block session_context %}{% endblock %}
+                {% block content %}{% endblock %}
+            </main>
+        </div>
     </div>
 
-    {# Migration /launch (feature/cockpit-v2-migrate-remaining-pages) : glossary.js
-       et market.js portes ici (chrome global, comme dans base.html) -- premiere
-       page v2 qui en a besoin. glossary-popover rendu pour toute page v2 (CSS
-       .hidden le neutralise si aucun [data-term] n'est present) plutot que par
-       template, pour ne pas dupliquer ce bloc a chaque migration future.
+    <div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="{{ t('cmdk_title') if t else 'Navigation rapide' }}" hidden>
+        <div class="cmdk-panel">
+            <div class="cmdk-input-row">
+                {{ icon('search', 18) }}
+                <input class="cmdk-input" id="cmdk-input" type="text" autocomplete="off" spellcheck="false"
+                       role="combobox" aria-expanded="true" aria-controls="cmdk-list"
+                       placeholder="{{ t('cmdk_placeholder') if t else 'Rechercher une page…' }}">
+                <span class="kbd">Esc</span>
+            </div>
+            <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>
+            <div class="cmdk-foot"><span><span class="kbd">↑</span> <span class="kbd">↓</span> {{ t('cmdk_move') if t else 'naviguer' }}</span><span><span class="kbd">↵</span> {{ t('cmdk_open') if t else 'ouvrir' }}</span></div>
+        </div>
+    </div>
+    {% set cmdk_items = [] %}
+    {% for section in sections %}{% for item in section.entries %}
+    {% set _ = cmdk_items.append({"url": item.url, "label": t(item.label_key) if (t and item.label_key) else item.label, "group": t(section.label_key) if t else section.label, "icon": nav_icon(item.slug) | string}) %}
+    {% endfor %}{% endfor %}
+    <script id="cmdk-data" type="application/json">{{ cmdk_items | tojson }}</script>
 
-       observatory.js (heliocorder) reste absent : abandon explicite et documente
-       au commit de migration de / (09f681e) -- "signature visuelle propre a
-       Desk Amber, sans equivalent dans le pattern cockpit", pas un report. #}
     <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="false">
         <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
         <div id="glossary-popover-title" class="glossary-popover-title"></div>
         <div id="glossary-popover-body" class="glossary-popover-body"></div>
     </div>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
+    <script src="/static/shell.js"></script>
     <script src="/static/glossary.js"></script>
     <script src="/static/market.js"></script>
-    {# feature/ticker-stats-panel: no-op on every page except /commodities
-       and /macro (guarded by `querySelectorAll(".asset-panel[data-symbol]")`
-       finding nothing elsewhere) -- global include, same as market.js above,
-       rather than a per-template <script> block for two routes. #}
+    {# No-op sauf sur /commodities et /macro (garde `.asset-panel[data-symbol]`). #}
     <script src="/static/asset_stats.js"></script>
-    {# feature/shap-waterfall (Phase 7): no-op on every page except
-       `/targets/{ticker}` (guarded by `#shap-waterfall-widget[data-target]`
-       finding nothing elsewhere) -- same global-include convention as
-       asset_stats.js above. #}
+    {# No-op sauf sur /targets/{ticker} (garde `#shap-waterfall-widget[data-target]`). #}
     <script src="/static/shap_waterfall.js"></script>
 </body>
 </html>

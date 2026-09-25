@@ -1,4 +1,4 @@
-# Design System Master File
+# Design System Master File — v3 « Cockpit Pro »
 
 > **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file.
@@ -7,199 +7,79 @@
 ---
 
 **Project:** PATRICK
-**Generated (pass 1, generator):** 2026-08-22 19:13:45
-**Locked (manual, pass 3):** 2026-08-22
-**Category:** Financial Dashboard (dashboard style, manually locked — no `landing.csv` pattern exists for this category, see Page Pattern below)
+**v3 (refonte complète) :** 2026-09-25 — remplace v2 « Internal Cockpit » (2026-08-22 : sombre uniquement, Fira Code/Fira Sans, palette slate/vert). Historique v2 : `git log -- design-system/patrick/MASTER.md`.
+**Category:** Financial Dashboard — outil interne de recherche quantitative, pas un produit commercial.
+
+**Fichiers :** `webapp/static/patrick.css` (seule feuille), `webapp/templates/base_v2.html` (shell ; nom conservé pour ne pas toucher les 16 gabarits enfants), `webapp/static/shell.js` (thème, rail, tiroir, palette), `webapp/icons.py` (icônes).
+
+**Contrat de migration :** tous les noms de classes utilisés par les gabarits et par le JS (`app.js`, `simulate.js`, `market.js`, `drift.js`, `asset_stats.js`, `shap_waterfall.js`, `glossary.js`) sont conservés. La v3 est un re-skin + un nouveau shell, jamais un changement du balisage des zones de données.
 
 ---
 
-## Global Rules
+## Principes
 
-### Color Palette
+1. **La donnée d'abord.** Chiffres en JetBrains Mono tabulaire, alignés à droite dans les tableaux ; aucun ornement qui concurrence un nombre.
+2. **Aucun chiffre sans sa fiabilité** (hérité de la Phase 7) : `metric(label, value, reliability)` impose le troisième argument.
+3. **Sobre, pas plat.** Profondeur par surfaces étagées (`--bg` < `--surface` < `--surface-2` < `--surface-3`) et filets fins (`--line`), ombres discrètes ; pas de translation au survol des panneaux statiques.
+4. **Deux thèmes de première classe.** Sombre par défaut, clair complet ; choix explicite persisté (`localStorage['patrick-theme']`), sinon préférence OS. Appliqué avant le premier rendu (script inline dans `<head>`) : pas de flash.
+5. **Une seule couleur de marque** (`--brand`, bleu) pour l'interaction et l'état actif ; vert/rouge/ambre réservés au **sens** (gain/perte/alerte), jamais décoratifs.
 
-Locked from generator pass 2 ("SaaS dashboard internal admin" query — the only concrete dark/status-color hex set produced across the 3 passages).
+## Jetons
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Background | `#0F172A` | `--color-background` |
-| Card / Surface | `#1B2336` | `--color-card` |
-| Primary (structure) | `#1E293B` | `--color-primary` |
-| Secondary | `#334155` | `--color-secondary` |
-| Accent (positive / vert) | `#22C55E` | `--color-accent` |
-| Destructive (alerte / rouge) | `#EF4444` | `--color-destructive` |
-| Warning (à vérifier / ambre) | `#F59E0B` | `--color-warning` |
-| Foreground (texte) | `#F8FAFC` | `--color-foreground` |
-| Muted | `#272F42` | `--color-muted` |
-| Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
-| Border | `#64748B` | `--color-border` |
-| Ring | `#FFFFFF` | `--color-ring` |
-| On Accent | `#0F172A` | `--color-on-accent` |
-| On Destructive | `#000000` | `--color-on-destructive` |
+Définis sur `:root` (sombre) et `:root[data-theme="light"]` (+ `@media (prefers-color-scheme: light)` pour `:root:not([data-theme])`). Contrastes WCAG mesurés (luminance relative) notés dans `patrick.css`.
 
-**Color Notes:** Dark tech + status green/red. Red confirmed `#EF4444` (was unspecified in the prior chat summary — full hex table always had it). Border corrected from `#475569` (2.36:1 on `#0F172A`, fails WCAG 1.4.11 non-text 3:1) to `#64748B` (3.75:1) — same slate family, next step up (slate-500 vs slate-600).
+| Rôle | Sombre | Clair | Usage |
+|---|---|---|---|
+| `--bg` | `#0A0C10` | `#F5F6F8` | fond de page |
+| `--surface` | `#111419` | `#FFFFFF` | cartes, sidebar |
+| `--surface-2` | `#161A21` | `#F3F4F7` | en-têtes de tableau, survol |
+| `--surface-3` | `#1D222B` | `#E9EBF0` | pistes (progress), grilles |
+| `--line` / `--line-strong` | blanc 7.5 % / 14 % | `#E4E7EC` / `#CDD2DA` | filets / bordures de contrôles |
+| `--text` | `#E8EBF0` (16.3:1) | `#0F1419` (17.9:1) | texte |
+| `--text-2` | `#A3ABB9` (8.3:1) | `#4A5261` (8.0:1) | texte secondaire |
+| `--text-3` | `#7C8594` (5.1:1) | `#6A7282` (5.0:1) | métadonnées |
+| `--brand` | `#5B8DEF` (6.1:1) | `#2F5FD0` (6.0:1) | liens, actif, bouton primaire, courbe stratégie |
+| `--pos` | `#2FBF84` | `#0B7A55` | gain, significatif, OK |
+| `--neg` | `#F0616D` | `#C62834` | perte, erreur, drawdown |
+| `--warn` | `#E5A83B` | `#9A5B00` | à vérifier, biais signalé |
+| `--chart-bg` / `--chart-grid` | `#0D1015` / blanc 6 % | `#FBFBFC` / noir 7 % | fonds et grilles de graphiques |
 
-**Warning token (added post-lock, migration Cockpit v2 session 3):** the original 3 generator passes never produced a third status color (only green/red) — real pages (`run_detail.html`/`target.html`/`index.html`) needed a distinct "flag, not broken" state (p-value DM non significative, stabilité Jaccard sous seuil, échec du fetch movers) that a stopgap (`color-mix` depuis `--color-destructive`) covered provisionally. `#F59E0B` chosen (Tailwind `amber-500`) for the same reason `--color-accent`/`--color-destructive` are `green-500`/`red-500` — same weight, same family as the rest of the locked palette, not an arbitrary pick. Contrast measured (WCAG relative-luminance formula, same method as the Border correction above): `#F59E0B` vs `#0F172A` (background) = **8.31:1**, vs `#1B2336` (card) = **7.30:1** — both clear WCAG 1.4.11 non-text (≥3:1) and even AA normal-text (≥4.5:1) with margin, used as plain colored text (`.metric-value.status-warning`) as well as a tinted badge/banner (`.status-badge.status-warning`, `.banner-warning`), same tinted-background convention already used for `status-ok`/`status-error` (no separate `--color-on-warning` needed).
+Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`--color-*`, `--accent-ink`, `--ok-ink`, `--error-ink`, `--ink-2`, `--ink-text-2`, `--mono`) pointent vers ces jetons : lus par le JS des graphiques, ne jamais y mettre une couleur littérale.
 
-### Typography
+## Typographie
 
-**Stable across all 3 generator passes — no reroll, locked as-is.**
+- **UI :** Inter (variable, vendorisée `static/fonts/inter-*.woff2`, OFL), 14px de base, `cv11/ss01/ss03`.
+- **Chiffres et code :** JetBrains Mono (variable, vendorisée, OFL), `tabular-nums`.
+- Titres : 24px/650 (`.page-title`), cartes 15px/600, libellés KPI 12px/500 `--text-2`, en-têtes de tableau 11.5px/600.
+- Aucune requête externe (pas de CDN de polices : cf. l'incident Chrome/Google Fonts de la v2).
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+## Shell
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-```
+- **Sidebar** 248px (rail 64px replié) : marque, groupes du registre de navigation avec icônes, pied (langue + repli).
+- **Topbar** collante, translucide (`backdrop-filter`) : fil de localisation (catégorie › page, déduit du registre ; à défaut le `<title>` de la page), déclencheur de la **palette de commandes** (Ctrl K / ⌘K / `/`), bascule de thème. < 1024px : bouton menu (tiroir).
+- **Palette de commandes** : entrées = registre de navigation (JSON rendu serveur), recherche insensible aux accents, préfixe > sous-chaîne > sous-séquence, ↑ ↓ ↵ Échap.
+- **Contenu** : colonne `max-width: 1480px`, marges 28px (16px mobile).
 
-### Spacing Variables
+## Composants (classes stables)
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding (unused — no hero in this pattern) |
+| Composant | Classes | Notes |
+|---|---|---|
+| KPI | `.metric-grid > .metric` (`.metric-label`, `.metric-value.status-*`, `.metric-reliability`) | apparition échelonnée 35ms, désactivée par `prefers-reduced-motion` |
+| Carte | `.card` (`h2`, `.card-head`) | rayon 14px, pas de survol animé |
+| Tableau | `.table-scroll > .data-table` (`th.num`/`td.num`, `tr.best`) | en-tête collant dans son conteneur, survol de ligne |
+| Badge | `.status-badge.status-{ok,error,warning,pending,neutral,disabled}` | pastille + point coloré |
+| Bannière | `.banner.banner-{error,warning,info}` | filet gauche 3px |
+| Boutons | `button.primary` / `.btn`, `.btn-secondary`, `.btn-ghost`, `.icon-btn`, `.btn-danger` | 36px (44px en pointeur grossier) |
+| Formulaires | `.run-form`, `.form`, `.filter-bar`, `details.adv` | anneau de focus `--brand` 22 % |
+| Info-bulles | `.info-icon` (glossaire, `glossary.js`), `.tip[data-tip]` (CSS seul) | à utiliser sur toute surface régime/HRP/BL |
+| Segments | `.segmented` / `.preview-range-buttons > .range-btn` | |
+| Patrimoine | `.account-grid > .account-card[data-kind]`, `.drop-zone[data-over]`, `.draggable-row`, `.drop-target` | comptes réels/fictifs, glisser-déposer |
 
-### Shadow Depths
+## Graphiques
 
-> ✅ Recalibrated for the dark `#0F172A` background (was: light-mode black-alpha values, nearly invisible on near-black). A dark drop shadow on an already-dark page adds ~nothing — depth here comes from (1) a low-alpha **white ring** (`0 0 0 1px rgba(255,255,255,α)`) that draws the card edge against the background, combined with (2) the existing lighter card surface (`#1B2336` vs `#0F172A` background — Material dark-theme elevation-by-surface-lightness), plus a larger, softer black blur for ambient depth at bigger elevations (still contributes once blur radius is large enough to spread past the near-black floor). Validated visually — see report.
-
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 0 0 1px rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.4)` | Subtle lift, resting state |
-| `--shadow-md` | `0 0 0 1px rgba(255,255,255,0.06), 0 6px 16px rgba(0,0,0,0.5)` | Cards, buttons |
-| `--shadow-lg` | `0 0 0 1px rgba(255,255,255,0.08), 0 14px 32px rgba(0,0,0,0.55)` | Modals, dropdowns, card hover |
-| `--shadow-xl` | `0 0 0 1px rgba(255,255,255,0.10), 0 24px 56px rgba(0,0,0,0.6)` | Featured cards, popovers |
-
----
-
-## Component Specs
-
-Updated to reference the locked palette tokens (was hardcoded to the abandoned pass-1 blue/amber palette).
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: var(--color-foreground);
-  border: 2px solid var(--color-border);
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: var(--color-card);
-  color: var(--color-foreground);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  padding: 12px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: var(--color-ring);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: var(--color-card);
-  color: var(--color-foreground);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
+Canvas sans bibliothèque. Toute toile : (1) lit ses couleurs dans les jetons au moment du tracé, (2) se redessine sur `patrick:themechange` (émis par `shell.js`) et au redimensionnement, (3) dimensionne son buffer sur sa boîte CSS × `devicePixelRatio` (texte net, jamais étiré), (4) porte un `aria-label` décrivant les vraies séries.
 
 ---
-
-## Style Guidelines
-
-**Style:** Data-Dense Dashboard *(confirmed stable across all 3 passages — locked)*
-
-**Dashboard Style:** Financial Dashboard *(locked — from `products.csv` product-type match, not the generic Style catalog)*
-
-**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
-
-**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
-
-**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
-
-### Page Pattern
-
-**Pattern Name:** Internal Cockpit *(hand-authored — no entry in `landing.csv` fits; that catalog is 100% marketing-landing patterns. `products.csv` explicitly marks "Financial Dashboard" / "Analytics Dashboard" as `Landing Page Pattern: N/A`, which is the signal this pattern replaces.)*
-
-- **Layout:** Fixed left sidebar navigation. No hero, no marketing header.
-- **Content zones:** Top row = KPI card grid. Below = dense data tables / charts (drill-down, comparative).
-- **States:** Explicit empty state and loading state (skeleton/spinner) per data zone — no bare blank sections.
-- **No conversion flow:** no CTA, no "start trial", no pricing, no client logos, no funnel steps.
-
-**Explicitly avoid (pattern-level, in addition to Style anti-patterns below):**
-- ❌ Full-width hero / marketing header
-- ❌ Commercial CTA ("Start trial", "Contact Sales", "Book a demo")
-- ❌ Client logos / trust badges
-- ❌ Multi-step funnel or path-selection ("I am a...")
 
 ### Navigation Registry (extension formelle, post-lock)
 
@@ -226,11 +106,13 @@ Updated to reference the locked palette tokens (was hardcoded to the abandoned p
 
 Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
 
-**Rendu (vocabulaire existant uniquement, aucun nouveau token) :**
-- En-tête de section `.sidebar-nav-heading` = copie conforme de `.metric-label` : Fira Code 11px, uppercase, `letter-spacing: 0.04em`, `--color-muted-foreground`.
-- Liens : style `.sidebar-nav a` inchangé ; état actif `aria-current="page"` (fond `--color-muted`, filet gauche `--color-accent`).
+**Rendu (v3) :**
+- En-tête de section `.sidebar-nav-heading` : Inter 10.5px, 600, uppercase, `letter-spacing: 0.08em`, `--text-3`.
+- Chaque lien porte l'icône de son slug (`webapp/icons.py::NAV_ICONS`, défaut `layers`) puis son libellé dans `.nav-label` ; `title` = libellé (info-bulle du rail replié).
+- Liens : état actif `aria-current="page"` (fond `--brand-soft`, icône `--brand`, filet gauche `--brand`).
 - État actif : `/` en égalité stricte, toute autre entrée par préfixe de segment (`/runs` s'allume sur `/runs/{id}/detail`). Règle historique de `base_v2.html` conservée.
-- < 1024px : groupes à plat sur la barre horizontale, en-têtes conservés en ligne.
+- Rail replié (bouton en pied de sidebar, persisté `localStorage['patrick-sidebar']`) : icônes seules, en-têtes réduits à un filet.
+- < 1024px : tiroir hors-canevas ouvert par le bouton menu de la topbar, fermé par le voile ou Échap.
 
 **Procédure obligatoire pour toute nouvelle page :**
 1. Déclarer la route FastAPI dans `webapp/app.py` (le template étend `base_v2.html`).
@@ -242,35 +124,25 @@ Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est 
 
 ---
 
-## Anti-Patterns (Do NOT Use)
-
-*(Style-level, from Data-Dense Dashboard — unchanged, kept)*
-
-- ❌ Ornate design
-- ❌ No filtering
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
 
 ---
 
+## Anti-Patterns (Do NOT Use)
+
+- ❌ Emojis comme icônes — icônes Lucide via `icon()` uniquement (un seul jeu, trait 2px)
+- ❌ Couleur littérale dans un gabarit ou un script (hors `patrick.css` jetons)
+- ❌ Vert/rouge décoratifs (réservés au sens gain/perte)
+- ❌ Translation/zoom au survol de panneaux statiques (décale la mise en page)
+- ❌ Changement d'état instantané (transitions 100–200ms) ; animation ignorant `prefers-reduced-motion`
+- ❌ Focus invisible ; élément cliquable sans `cursor: pointer`
+- ❌ Hero, CTA commerciaux, logos clients, tunnels
+
 ## Pre-Delivery Checklist
 
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Dark mode: text contrast 4.5:1 minimum (background is dark by default now — verify against `#0F172A`, not the old light background)
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind the fixed sidebar
-- [ ] No horizontal scroll on mobile
+- [ ] Les deux thèmes vérifiés (capture sombre + clair)
+- [ ] 375px, 768px, 1024px, 1440px ; aucun défilement horizontal de page (`scrollWidth == clientWidth`)
+- [ ] Rail replié et tiroir mobile : aucun contenu masqué
+- [ ] Contraste texte ≥ 4.5:1 sur `--bg` et `--surface` dans les deux thèmes
+- [ ] Focus clavier visible ; palette utilisable au clavier seul
+- [ ] Graphiques : redessin au changement de thème, texte net en HiDPI
+- [ ] `pytest tests/test_nav_registry.py` vert

@@ -35,6 +35,7 @@ from patrick.webapp import (
     asset_stats,
     forms,
     i18n,
+    icons,
     market_data,
     nav_registry,
     run_manager,
@@ -86,6 +87,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only
 # (base_v2.html iterates `nav_sections(request.url.path)`).
 templates.env.globals["nav_sections"] = nav_registry.nav_sections
+# Design system v3: inline Lucide SVG icons (webapp/icons.py).
+templates.env.globals["icon"] = icons.icon
+templates.env.globals["nav_icon"] = icons.nav_icon
 
 FORM_OPTIONS = {
     "all_families": forms.ALL_FEATURE_FAMILIES,

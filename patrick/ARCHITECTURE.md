@@ -65,7 +65,7 @@ flowchart LR
     G --> H[Validation\nwalk-forward / CPCV\npurge, embargo, DM, PBO, FDR]
     H --> I[Export du meilleur modèle\npar (cible, horizon)]
     I --> J[Tracking SQLite\npatrick.db]
-    J --> K[Webapp FastAPI\nCockpit v2]
+    J --> K[Webapp FastAPI\nCockpit Pro v3]
     I --> L[patrick predict --live\nprédiction quotidienne]
     L --> J
 ```
@@ -132,9 +132,15 @@ mesurer sur la vraie base avant de considérer la tâche terminée.
 
 ## 6. Application web
 
-FastAPI + Jinja2, design system **Cockpit v2** :
-- Templates étendent `webapp/templates/base_v2.html`, CSS =
-  `webapp/static/patrick-v2.css`.
+FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
+(`design-system/patrick/MASTER.md`, section v3) :
+- Templates étendent `webapp/templates/base_v2.html` (nom conservé : shell
+  v3 — sidebar repliable, topbar, palette Ctrl K, thèmes clair/sombre),
+  CSS = `webapp/static/patrick.css`, comportements du shell =
+  `webapp/static/shell.js`, icônes Lucide inline = `webapp/icons.py`
+  (globals Jinja `icon()` / `nav_icon()`).
+- Les graphiques canvas lisent leurs couleurs dans les jetons CSS au moment
+  du tracé et se redessinent sur l'événement `patrick:themechange`.
 - Macros partagées `webapp/templates/_components.html` :
   `status_badge(label, state)` (états `ok`/`warning`/`neutral`/`disabled`),
   `data_table(...)`, `empty_state(...)`, `metric(...)`.

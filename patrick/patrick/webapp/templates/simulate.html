@@ -2,7 +2,12 @@
 {% block title %}PATRICK — {{ t('sim_title') }}{% endblock %}
 
 {% block content %}
-<h1 class="sim-title">{{ t('sim_title') }}</h1>
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('sim_title') }}</h1>
+    <p class="page-subtitle">{{ t('sim_subtitle') }}</p>
+  </div>
+</div>
 
 <div class="sim-grid">
 
@@ -23,6 +28,17 @@
             <label>{{ t('sim_field_trial') }}
                 <select id="sim-trial-select"><option value="">—</option></select>
             </label>
+            {# F06 : un seul segment statistique par simulation, jamais melanges.
+               Vide = defaut de l'API (holdout, sinon test, sinon live). #}
+            <label>{{ t('sim_field_segment') }}
+                <select id="sim-segment">
+                    <option value="">{{ t('sim_segment_auto') }}</option>
+                    <option value="holdout">{{ t('sim_segment_holdout') }}</option>
+                    <option value="test">{{ t('sim_segment_test') }}</option>
+                    <option value="live">{{ t('sim_segment_live') }}</option>
+                </select>
+                <span class="hint">{{ t('sim_segment_hint') }}</span>
+            </label>
 
             <fieldset>
                 <legend>{{ t('sim_field_mode') }}</legend>
@@ -30,14 +46,14 @@
                     <select id="sim-mode">
                         <option value="threshold">{{ t('sim_mode_threshold') }}</option>
                         <option value="proportional">{{ t('sim_mode_proportional') }}</option>
-                        <option value="kelly">{{ t('sim_mode_kelly') }}</option>
+                        <option value="heuristic_leverage">{{ t('sim_mode_heuristic') }}</option>
                     </select>
                 </label>
                 <div class="subgrid">
                     <label>{{ t('sim_field_threshold') }}
                         <input type="number" id="sim-threshold" step="0.01" min="0.5" max="1" value="0.55">
                     </label>
-                    <label>{{ t('sim_field_kelly_fraction') }}
+                    <label>{{ t('sim_field_leverage_fraction') }}
                         <input type="number" id="sim-kelly-fraction" step="0.05" min="0" max="1" value="0.5">
                     </label>
                     <label>{{ t('sim_field_max_leverage') }}
@@ -95,11 +111,12 @@
 <section class="dash-panel sim-panel-equity" aria-labelledby="sim-equity-title">
     <h2 id="sim-equity-title" class="dash-panel-title">{{ t('sim_section_equity') }}</h2>
     <div class="dash-panel-body">
+        <div id="sim-segment-info" class="banner hidden" role="status"></div>
         <p id="sim-overfitting-guard" class="hint sim-guard hidden"></p>
         <p class="sim-empty">{{ t('sim_empty_curves') }}</p>
         <div class="sim-graph-container">
             <h3 class="sim-graph-title">Equity Curve (Croissance du capital)</h3>
-            <p class="sim-graph-hint">Stratégie (or) vs Buy & Hold (gris) — axe Y: valeur du portefeuille, axe X: temps</p>
+            <p class="sim-graph-hint">Stratégie (bleu) vs Buy & Hold (gris) — axe Y: valeur du portefeuille, axe X: temps</p>
             <canvas id="sim-equity-canvas" width="520" height="180" role="img"
                     aria-label="{{ t('sim_aria_equity_empty') }}"></canvas>
         </div>

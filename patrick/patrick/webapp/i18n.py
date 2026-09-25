@@ -310,6 +310,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_cat_simulation": {"fr": "SIMULATION", "en": "SIMULATION"},
     "nav_cat_patrimoine": {"fr": "PATRIMOINE", "en": "WEALTH"},
     "nav_launch": {"fr": "Lancer", "en": "Launch"},
+    # Design system v3 shell (base_v2.html / static/shell.js).
+    "skip_to_content": {"fr": "Aller au contenu", "en": "Skip to content"},
+    "brand_tagline": {"fr": "Station de recherche quantitative", "en": "Quant research station"},
+    "sidebar_toggle": {"fr": "Réduire / déplier la navigation", "en": "Collapse / expand navigation"},
+    "nav_open": {"fr": "Ouvrir la navigation", "en": "Open navigation"},
+    "theme_toggle": {"fr": "Basculer thème clair / sombre", "en": "Toggle light / dark theme"},
+    "cmdk_title": {"fr": "Navigation rapide", "en": "Quick navigation"},
+    "cmdk_placeholder": {"fr": "Rechercher une page…", "en": "Search pages…"},
+    "cmdk_move": {"fr": "naviguer", "en": "move"},
+    "cmdk_open": {"fr": "ouvrir", "en": "open"},
+    "cmdk_empty": {"fr": "Aucun résultat", "en": "No results"},
     "nav_runs": {"fr": "Historique", "en": "History"},
     "nav_universe": {"fr": "Univers", "en": "Universe"},
     "nav_data_freshness": {"fr": "Fraîcheur", "en": "Freshness"},
@@ -389,12 +400,12 @@ STRINGS: dict[str, dict[str, str]] = {
     # The station's verdict. "What holds" is not colored --ok: the product's
     # stance is that a clearly established "no" is a successful result, so
     # zero survivors is not a bad state.
-    "verdict_survivors": {"fr": "CE QUI TIENT", "en": "WHAT HOLDS"},
+    "verdict_survivors": {"fr": "Signaux qui tiennent", "en": "Signals that hold"},
     "verdict_survivors_rel": {"fr": "cibles dont le signal survit à la correction entre cibles (BH, α={alpha})",
                               "en": "targets whose signal survives the across-target correction (BH, α={alpha})"},
     "verdict_not_computable": {"fr": "aucune cible n'a encore de résultat Diebold-Mariano",
                                "en": "no target has a Diebold-Mariano result yet"},
-    "verdict_cost": {"fr": "CE QUE ÇA A COÛTÉ", "en": "WHAT IT COST"},
+    "verdict_cost": {"fr": "Coût en essais", "en": "Trial cost"},
     "verdict_cost_rel": {"fr": "essais cumulés sur {runs} run(s), {targets} cible(s)",
                          "en": "cumulative trials over {runs} run(s), {targets} target(s)"},
 
@@ -451,9 +462,25 @@ STRINGS: dict[str, dict[str, str]] = {
     "sim_field_mode": {"fr": "Mode signal → position", "en": "Signal → position mode"},
     "sim_mode_threshold": {"fr": "Seuil binaire", "en": "Binary threshold"},
     "sim_mode_proportional": {"fr": "Proportionnel", "en": "Proportional"},
-    "sim_mode_kelly": {"fr": "Kelly fractionnaire", "en": "Fractional Kelly"},
+    # Ex-"Kelly fractionnaire" : l'API n'accepte plus que `heuristic_leverage`
+    # (ce n'est pas la formule de Kelly, cf. simulate/engine.py).
+    "sim_mode_heuristic": {"fr": "Levier heuristique (≠ Kelly)", "en": "Heuristic leverage (≠ Kelly)"},
+    "sim_subtitle": {
+        "fr": "Rejoue les signaux déjà enregistrés d'un modèle — aucun ré-entraînement. Chaque simulation est journalisée et comptée dans le Sharpe déflaté.",
+        "en": "Replays a model's recorded signals — no retraining. Every simulation is logged and counted in the deflated Sharpe.",
+    },
+    "sim_field_segment": {"fr": "Segment de prédictions", "en": "Prediction segment"},
+    "sim_segment_auto": {"fr": "Auto (holdout, sinon test, sinon live)", "en": "Auto (holdout, else test, else live)"},
+    "sim_segment_holdout": {"fr": "Holdout terminal (hors échantillon)", "en": "Terminal holdout (out of sample)"},
+    "sim_segment_test": {"fr": "Test walk-forward (biaisé : sert à la sélection)", "en": "Walk-forward test (biased: used for selection)"},
+    "sim_segment_live": {"fr": "Live (paper trading)", "en": "Live (paper trading)"},
+    "sim_segment_hint": {
+        "fr": "Un seul segment par simulation : les mélanger additionnerait des scores de sélection et des scores hors échantillon.",
+        "en": "One segment per simulation: pooling them would mix selection scores with out-of-sample scores.",
+    },
+    "sim_segment_used": {"fr": "Segment simulé : {segment} ({n} signaux). Disponibles : {available}.", "en": "Simulated segment: {segment} ({n} signals). Available: {available}."},
     "sim_field_threshold": {"fr": "Seuil (proba)", "en": "Threshold (proba)"},
-    "sim_field_kelly_fraction": {"fr": "Fraction de Kelly", "en": "Kelly fraction"},
+    "sim_field_leverage_fraction": {"fr": "Fraction de levier", "en": "Leverage fraction"},
     "sim_field_max_leverage": {"fr": "Levier max", "en": "Max leverage"},
     "sim_field_max_position": {"fr": "Position max", "en": "Max position"},
     "sim_field_short_allowed": {"fr": "Vente à découvert autorisée", "en": "Short selling allowed"},
@@ -643,6 +670,7 @@ def js_strings(lang: str) -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
+        "cmdk_empty",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done",
         "status_connection_lost", "status_running", "status_error", "status_done",
         "results_title", "results_summary", "results_summary_tuned", "results_best_config",
@@ -655,7 +683,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "queue_summary", "run_queued_confirm", "run_launch_error", "banner_fix_errors",
         "stat_holdout", "stat_dm_significant", "stat_dm_not_significant",
         "stat_cumulative_trials", "stat_pbo",
-        "sim_no_run_selected", "sim_loading", "sim_error", "sim_kelly_disabled",
+        "sim_no_run_selected", "sim_loading", "sim_error", "sim_kelly_disabled", "sim_segment_used",
         "sim_overfitting_guard", "sim_trades_none",
         "sim_metric_cagr", "sim_metric_vol", "sim_metric_sharpe", "sim_metric_sortino",
         "sim_metric_max_dd", "sim_metric_turnover", "sim_metric_hit_rate",
