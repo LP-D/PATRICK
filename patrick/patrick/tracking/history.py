@@ -453,8 +453,12 @@ def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
         "SELECT COUNT(*), COUNT(DISTINCT target) FROM run"
     ).fetchone()
     return {
-        "survivors": fdr["n_bh_significant"] if n_tested else None,
+        # F05: `n_tested` is now the whole BH family (CPCV-only targets
+        # included, as untestable); the measure is computable only once at
+        # least one target carries a DM p-value.
+        "survivors": fdr["n_bh_significant"] if fdr["n_with_p_value"] else None,
         "n_tested": n_tested,
+        "n_untestable": fdr["n_untestable"],
         "alpha": fdr["alpha"],
         "cumulative_trials": trials,
         "n_runs": runs,
@@ -1154,12 +1158,13 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
     for t in targets:
         target = t["target"]
         q = fdr_results.get(target)
+        testable = q is not None and not q.get("untestable", False)
         quality_rows.append({
             "target": html.escape(target), "label": html.escape(symbol_labels.get(target, target)),
-            "p_value": q["p_value"] if q else None,
+            "p_value": q["p_value"] if testable else None,
             "adjusted_p_value": q["adjusted_p_value"] if q else None,
-            "significant": q["significant"] if q else None,
-            "testable": q is not None,
+            "significant": q["significant"] if testable else None,
+            "testable": testable,
         })
 
     prediction_rows = []

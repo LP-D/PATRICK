@@ -109,28 +109,62 @@ def pbo_for_target_cpcv(conn: sqlite3.Connection, target: str, horizon: int, reg
 def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
                         kind: str = "class_specific") -> dict:
     """Phase 6.4 (P6.4) -- FDR correction (Benjamini-Hochberg) across ALL
-    targets that have a Diebold-Mariano result in the run history
-    (`dm_result`, migration 0009): for each target, the BEST (smallest) DM
-    p-value obtained across any of its runs is kept -- trying several
-    targets and keeping only the best raises the same multiple-testing
-    problem as trying several configs on a single target (section 4,
-    METHODOLOGY.md), this time at the target level. `compute_pbo`/
-    `benjamini_hochberg` themselves are never modified here (same discipline
-    as C5/P6.1) -- only the source query changes.
+    targets tested in the run history. Trying several targets and keeping
+    the significant one raises the same multiple-testing problem as trying
+    several configs on one target (section 4, METHODOLOGY.md), at the target
+    level. `benjamini_hochberg` itself is unchanged -- only the family and
+    the per-target p-value are built here.
 
-    `kind` (Phase X5, migration 0010): filters on `"class_specific"`
-    (default -- each target's own asset-class-specific comparison, the MAIN
-    result) or `"common"` (class-agnostic persistence, a secondary
-    comparison allowing classes to be checked against each other on an equal
-    footing) -- never both mixed into the same MIN, which would pit two
-    comparisons of a different nature against each other for the same
-    target."""
+    Family (F05): every target with at least one COMPLETED run (`status =
+    'done'`, archived runs included -- archiving hides a run, it does not
+    un-test it), whatever the validation scheme. A target without a
+    Diebold-Mariano p-value (CPCV-only: DM is not computed in that scheme;
+    or a walk-forward run whose DM was not computable) enters with p = 1:
+    never significant, but counted in m. The family used to be built from
+    `dm_result` alone, so CPCV-only targets silently shrank m and loosened
+    every other target's threshold.
+
+    Per-target p-value (F05b): Sidak-adjusted minimum over the target's k
+    runs, 1 - (1 - p_min)^k -- the minimum of k p-values is not uniform
+    under H0; picking it raw rewarded re-running a target until one run
+    came out significant. `best_run_p_value` keeps the raw minimum for
+    display.
+
+    `kind` (Phase X5, migration 0010): `"class_specific"` (default -- each
+    target's own asset-class-specific comparison, the MAIN result) or
+    `"common"` (class-agnostic persistence) -- never both mixed.
+
+    Returned counts: `n_tested` = family size m, `n_with_p_value`,
+    `n_untestable` (= m - n_with_p_value)."""
+    family = [t for (t,) in conn.execute(
+        "SELECT DISTINCT target FROM run WHERE status = 'done' ORDER BY target")]
     rows = conn.execute(
-        "SELECT run.target, MIN(dm_result.p_value) FROM dm_result "
+        "SELECT run.target, MIN(dm_result.p_value), COUNT(dm_result.p_value) FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
-        "WHERE dm_result.kind = ? "
+        "WHERE dm_result.kind = ? AND dm_result.p_value IS NOT NULL AND run.status = 'done' "
         "GROUP BY run.target",
         (kind,),
     ).fetchall()
-    p_values = {target: p for target, p in rows}
-    return benjamini_hochberg(p_values, alpha=alpha)
+    observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if p_min == p_min}
+
+    p_values: dict[str, float] = {}
+    for target in family:
+        if target in observed:
+            p_min, k = observed[target]
+            p_values[target] = p_min if k == 1 else float(-np.expm1(k * np.log1p(-p_min)))
+        else:
+            p_values[target] = 1.0
+
+    result = benjamini_hochberg(p_values, alpha=alpha)
+    for target, r in result["results"].items():
+        p_min, k = observed.get(target, (None, 0))
+        untestable = target not in observed
+        r["untestable"] = untestable
+        r["best_run_p_value"] = p_min
+        r["n_runs_with_p_value"] = k
+        if untestable:
+            r["significant"] = False
+    result["n_with_p_value"] = len(observed)
+    result["n_untestable"] = result["n_tested"] - len(observed)
+    result["n_bh_significant"] = sum(1 for r in result["results"].values() if r["significant"])
+    return result
