@@ -165,6 +165,54 @@ class DataStore:
         df.attrs["data_hash"] = content_hash
         return snapshot_id
 
+    # -- per-series last REAL observation (freshness) ----------------------
+    # `ingest` joins the whole universe under `raw_<target>` and forward-fills
+    # it: the date of each feature series' last genuinely published value is
+    # lost there. It is recorded here instead, per series, at every
+    # ingestion -- the only way the freshness dashboard can observe a series
+    # that was never itself a target.
+
+    def _series_index_path(self) -> str:
+        return os.path.join(self.root, "_series_observations.json")
+
+    def _read_series_index(self) -> dict:
+        path = self._series_index_path()
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+        return {}
+
+    def record_series_observations(self, last_dates: dict[str, str], source: str) -> None:
+        """`last_dates`: {original symbol / FRED id: ISO date of its last
+        published observation}. Keeps the latest date ever seen per series
+        (an ingestion from an older start date or a stale cache never moves
+        it backwards). Atomic write, like `_index.json`."""
+        if not last_dates:
+            return
+        idx = self._read_series_index()
+        now = datetime.now(timezone.utc).isoformat()
+        for symbol, date_max in last_dates.items():
+            if not date_max:
+                continue
+            date_max = str(pd.Timestamp(date_max).date())
+            entry = idx.get(symbol)
+            if entry is None or entry.get("date_max", "") < date_max:
+                idx[symbol] = {"date_max": date_max, "source": source, "recorded_at": now}
+        fd, tmp_path = tempfile.mkstemp(prefix="_series_observations.", suffix=".json.tmp", dir=self.root)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(idx, f, indent=1, sort_keys=True)
+            os.replace(tmp_path, self._series_index_path())
+        except BaseException:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    def series_observation(self, symbol: str) -> dict | None:
+        return self._read_series_index().get(symbol)
+
     def info(self) -> dict:
         return self._read_index()
 

@@ -46,6 +46,11 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
     return out
 
 
+def _last_date(s: pd.Series) -> str | None:
+    valid = s.dropna().index
+    return str(pd.Timestamp(valid.max()).date()) if len(valid) else None
+
+
 def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
                               quality_issues: list | None = None) -> None:
     """Context metadata (Phase 1.6) carried via `DataFrame.attrs` — read by
@@ -163,6 +168,8 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
             target = publication_lag.to_availability_index(target, objective.target_symbol)
 
     df = target.to_frame()
+    store.record_series_observations({objective.target_symbol: _last_date(target)},
+                                     source=objective.target_source)
     issues: list = []
     n_requested = len(universe.yf_tickers) + len(universe.fred_series)
     requested_end = pd.Timestamp(df.index.max()) if len(df) else pd.Timestamp.today()
@@ -171,6 +178,9 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         yf_df, yf_reported = yfinance_source.download_universe(
             universe.yf_tickers, universe.start_date, universe.yf_coverage, t0=t0,
             issues=issues if dq.enabled else None, return_unfilled=True)
+        reverse = {yfinance_source.clean_symbol(t): t for t in universe.yf_tickers}
+        store.record_series_observations(
+            {reverse.get(c, c): _last_date(yf_reported[c]) for c in yf_reported.columns}, source="yfinance")
         yf_df = _apply_session_lag(yf_df, universe.yf_tickers, objective)
         if dq.enabled and len(yf_df.columns):
             # Gates on the closes as REPORTED, never on the forward-filled
@@ -187,6 +197,9 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
             universe.fred_series, universe.start_date, realtime_date=universe.vintage_realtime_date,
             issues=issues if dq.enabled else None, first_release=use_alfred)
         already_pit = bool(fred_df.attrs.get("point_in_time"))
+        if not already_pit:
+            store.record_series_observations(
+                {universe.fred_series.get(c, c): _last_date(fred_df[c]) for c in fred_df.columns}, source="fred")
         if use_alfred and not already_pit:
             print("  [WARN] fred_point_in_time='alfred' requires FRED_API_KEY: falling back to the "
                   "publication-lag table (data/publication_lag.py).")
