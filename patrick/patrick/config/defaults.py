@@ -1,7 +1,9 @@
 """Defaults encoding the lessons learned from the VIX project (README) — can be
 switched on differently, never removed from the code: SHAP beats RFE/LASSO in
 direct testing, DL never beat classical ML, purge has a negligible effect,
-calibration only helps outside STRESS regimes.
+calibration only helps outside STRESS regimes. These are MEASURED results
+that set defaults, not design bans: DL and stacking are admissible model
+families under the same validation protocol (docs/ways-of-working.md).
 
 Stacking: the VIX-project finding that stacking lost on 93% of (horizon,
 fold) pairs applied to the single always-on `DEFAULT_STACKING_ENABLED`

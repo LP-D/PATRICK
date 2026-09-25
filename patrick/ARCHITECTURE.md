@@ -157,8 +157,11 @@ FastAPI + Jinja2, design system **Cockpit v2** :
   rouge d'abord, implémentation, test vert.
 - **SHAP > RFE/LASSO** pour la sélection de features (mesuré, pas un choix
   arbitraire).
-- **Stacking désactivé par défaut** (perd sur 93% des paires horizon/fold
-  testées en walk-forward).
+- **Stacking et DL : plus d'exclusion a priori** (`docs/ways-of-working.md`).
+  Le stacking est une catégorie comparée explicitement (global / par régime
+  / stacking) ; le toggle historique `DEFAULT_STACKING_ENABLED` reste
+  désactivé par défaut (perd sur 93% des paires horizon/fold en
+  walk-forward, résultat mesuré, pas un interdit).
 - **`MODEL_N_JOBS = 1`** (`models/registry.py`) — ne jamais repasser à `-1`
   sans revalider : cause avérée d'oversubscription CPU massive (variance de
   temps de tuning ×20+ mesurée avant fix).
