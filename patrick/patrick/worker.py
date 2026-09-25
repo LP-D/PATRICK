@@ -166,7 +166,7 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
     top_rows = []
     if len(leaderboard_df):
         top_rows = (
-            leaderboard_df.sort_values("F1_dir", ascending=False)
+            leaderboard_df.sort_values("F1_dir", ascending=False, kind="mergesort")
             .head(100)
             .to_dict(orient="records")
         )

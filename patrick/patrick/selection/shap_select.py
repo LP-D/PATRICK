@@ -7,7 +7,7 @@ import numpy as np
 import shap
 from xgboost import XGBClassifier
 
-from patrick.selection._common import prefilter_pool
+from patrick.selection._common import SELECTION_N_JOBS, prefilter_pool, rank_top
 
 
 def shap_rank(X_tr: np.ndarray, y_tr: np.ndarray, pool_names: list[str], top_n: int,
@@ -16,7 +16,7 @@ def shap_rank(X_tr: np.ndarray, y_tr: np.ndarray, pool_names: list[str], top_n: 
     Xk = X_tr[:, keep]
     pilot = XGBClassifier(n_estimators=80, max_depth=4, learning_rate=0.1,
                            objective="multi:softprob", eval_metric="mlogloss",
-                           random_state=seed, n_jobs=-1, verbosity=0)
+                           random_state=seed, n_jobs=SELECTION_N_JOBS, verbosity=0)
     pilot.fit(Xk, y_tr)
     sv = np.abs(np.array(shap.TreeExplainer(pilot).shap_values(Xk[:min(shap_sample, len(Xk))])))
     nfk = Xk.shape[1]
@@ -28,5 +28,5 @@ def shap_rank(X_tr: np.ndarray, y_tr: np.ndarray, pool_names: list[str], top_n: 
         arr = sv.mean(axis=tuple(ax for ax in range(sv.ndim) if ax != feat_axes[0]))
     else:
         arr = np.asarray(pilot.feature_importances_)
-    order = np.argsort(np.asarray(arr).ravel())[::-1][:top_n]
+    order = rank_top(arr, top_n)
     return list(keep[order])

@@ -22,7 +22,6 @@ from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
 from patrick.tracking import db as trackdb
-from patrick.tracking import export as export_module
 from patrick.validation import drift
 
 TARGET_SYMBOL = "^TEST_DRIFT"
@@ -115,40 +114,36 @@ def test_export_best_model_rewrites_drift_reference_not_duplicates_on_refit(tmp_
     assert all(count == 1 for _feature, count in counts)  # rewritten, never accumulated
 
 
-# Base-pool features derived from the columns `_synthetic_raw` shifts, each
-# with rolling-window warm-up NaNs at the start of the training window
-# (ma10: 9 rows, ret_20d/vol_20d: 20 rows) -- exactly the case that used to
-# collapse `decile_reference` into a single bin (PSI stuck at 0.0).
-DRIFTED_WARMUP_FEATURES = ["NFCI_vs_ma10", "T10Y2Y_ret_20d", "SPX_LIKE_vol_20d"]
+# Raw input columns `_synthetic_raw` shifts -- every feature derived from
+# one of them (and only those: the target's own features are never shifted)
+# must be flagged as significant drift.
+DRIFTED_INPUTS = ("SPX_LIKE", "NFCI", "T10Y2Y")
+
+
+def _derived_from_drifted_input(feature: str) -> bool:
+    return any(feature.startswith(col) for col in DRIFTED_INPUTS) and TARGET_COL not in feature
 
 
 @pytest.mark.slow
 def test_compute_drift_for_ticker_horizon_detects_simulated_drift_and_records_history(tmp_path, monkeypatch):
     """On-demand call against data that has genuinely drifted since
-    training: every exported feature must cross the 'significant' PSI
-    threshold, and a history row must be written per computed feature. A
-    second successive call must not duplicate the reference (still one row
-    per feature) while the history keeps growing (one more row per
-    feature, not overwritten).
+    training: every exported feature derived from a shifted input must
+    cross the 'significant' PSI threshold, and a history row must be
+    written per computed feature. A second successive call must not
+    duplicate the reference (still one row per feature) while the history
+    keeps growing (one more row per feature, not overwritten).
 
-    The exported features are pinned to `DRIFTED_WARMUP_FEATURES` rather
-    than left to the pipeline's own selection: which model/feature set wins
-    differs across platforms (RandomForest N=8 on the Linux CI runner vs
-    XGBoost N=5 on Windows, same seed and versions), and the test used to
-    pass only when that selection happened to include a NaN-free feature."""
+    No feature pinning: the exported feature set is the pipeline's own
+    selection, which is now identical across machines at identical seed
+    (`tests/test_selection_determinism.py` -- CPU-independent tie-break,
+    fixed thread count). The previous version pinned the exported features
+    through a monkeypatch because Linux and Windows selected different
+    models (RandomForest N=8 vs XGBoost N=5): that masked the
+    non-determinism instead of removing it."""
     clean_raw = _synthetic_raw()
     monkeypatch.setattr(
         engine_module, "ingest",
         lambda objective, universe, store=None, force=False, data_quality=None: clean_raw)
-
-    real_export_best_model = engine_module.export_best_model
-
-    def export_with_pinned_features(pool, target_col, feature_pool, *args, **kwargs):
-        pinned = [feature_pool.index(f) for f in DRIFTED_WARMUP_FEATURES]
-        monkeypatch.setattr(export_module, "select_features", lambda *a, **k: pinned)
-        return real_export_best_model(pool, target_col, feature_pool, *args, **kwargs)
-
-    monkeypatch.setattr(engine_module, "export_best_model", export_with_pinned_features)
 
     db_path = str(tmp_path / "patrick.db")
     store = DataStore(root=str(tmp_path / "store"))
@@ -174,8 +169,9 @@ def test_compute_drift_for_ticker_horizon_detects_simulated_drift_and_records_hi
     first = explain_module.compute_drift_for_ticker_horizon(
         TARGET_SYMBOL, HORIZON, db_path=db_path, store=store)
     assert first is not None
-    assert sorted(first) == sorted(DRIFTED_WARMUP_FEATURES)
-    assert all(info["status"] == "significant" for info in first.values()), first
+    drifted = {f: info for f, info in first.items() if _derived_from_drifted_input(f)}
+    assert drifted, f"no exported feature derives from a shifted input: {sorted(first)}"
+    assert all(info["status"] == "significant" for info in drifted.values()), first
 
     conn = trackdb.connect(db_path)
     reference_count_after_first_call = conn.execute(

@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
 
+from patrick.selection._common import SELECTION_N_JOBS, rank_top
+
 INTERACTION_TYPES = {
     "minus": lambda a, b: a - b,
     "prod": lambda a, b: a * b,
@@ -44,9 +46,9 @@ def _prefilter_top(X: np.ndarray, y: np.ndarray, names: list[str], top_n: int,
     top_n = min(top_n, len(names))
     pf = XGBClassifier(n_estimators=80, max_depth=4, learning_rate=0.1,
                         objective="multi:softprob", eval_metric="mlogloss",
-                        random_state=seed, n_jobs=-1, verbosity=0)
+                        random_state=seed, n_jobs=SELECTION_N_JOBS, verbosity=0)
     pf.fit(X, y)
-    order = np.argsort(pf.feature_importances_)[::-1][:top_n]
+    order = rank_top(pf.feature_importances_, top_n)
     return [names[i] for i in order]
 
 

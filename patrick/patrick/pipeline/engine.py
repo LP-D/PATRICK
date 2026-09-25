@@ -60,6 +60,7 @@ from patrick.features.interactions import (
     apply_interaction,
     discover_interactions,
 )
+from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import build_target
 from patrick.models.calibration import (
     calibrate_classifier,
@@ -73,7 +74,8 @@ from patrick.models.uniqueness import (
     build_indicator_matrix,
     effective_sample_size,
 )
-from patrick.pipeline.leaderboard import Leaderboard
+from patrick.pipeline.leaderboard import Leaderboard, rank_configs
+from patrick.selection._common import RANKING_VERSION
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
@@ -94,49 +96,8 @@ from patrick.validation.walkforward import build_fold_cuts, describe_folds
 logger = logging.getLogger(__name__)
 
 
-def _finite_features(values: np.ndarray, where: str) -> np.ndarray:
-    """Correction report, N2 -- replaces `np.nan_to_num(...)` at the three
-    places where the feature matrix is built (walk-forward, holdout, CPCV).
-
-    `np.nan_to_num` alone is NOT enough, and gave a false sense of safety: it
-    maps ±inf to ±1.797e308 (the float64 maximum), a value that's finite at
-    that instant but astronomical, which the `RobustScaler` applied right
-    after divides by the column's IQR. As soon as this IQR is < 1 -- a
-    common case among thousands of columns (returns, z-scores, bounded
-    indicators) -- the division PRODUCES ±inf again, and XGBoost rejects the
-    matrix ("Input data contains `inf` or a value too large, while `missing`
-    is not set to `inf`"). Measured: a single infinite cell in a column with
-    IQR 0.025 is enough to reproduce the error; since the scaler is fit on
-    train only, an inf present only in TEST also goes through this path.
-
-    An upstream ±inf always comes from a degenerate computation (division by
-    a ~0 denominator in a ratio/interaction, log of a value <= 0): it carries
-    no exploitable numeric information, so it is treated as a MISSING value
-    -- exactly the same path as NaN, already converted to 0.0 here -- and
-    never as "a very large number". Counted and reported, never silent (same
-    discipline as the D3 guard on excluded folds)."""
-    n_inf = int(np.isinf(values).sum())
-    if n_inf:
-        print(f"  [WARN] {where}: {n_inf} infinite value(s) in the feature pool "
-              f"(degenerate computation: denominator ~0, log of a value <= 0) — "
-              f"treated as missing.")
-    return np.nan_to_num(np.where(np.isfinite(values), values, np.nan))
-
-
-def _finite_scaled(scaled: np.ndarray, where: str) -> np.ndarray:
-    """Correction report, N2 -- guarantees after scaling the invariant
-    XGBoost needs (a fully finite matrix), which `_finite_features` alone
-    cannot guarantee: an input value that is simply VERY LARGE but finite
-    (never an inf, hence invisible upstream) can still overflow when divided
-    by a tiny IQR. A safety net on the way out, not a replacement for the
-    upstream cleanup -- both are necessary."""
-    if not np.isfinite(scaled).all():
-        n_bad = int((~np.isfinite(scaled)).sum())
-        print(f"  [WARN] {where}: {n_bad} non-finite value(s) AFTER scaling "
-              f"(overflow from an extreme value divided by a tiny IQR) — "
-              f"reset to the median (0 after RobustScaler).")
-        scaled = np.nan_to_num(np.where(np.isfinite(scaled), scaled, np.nan))
-    return scaled
+_finite_features = finite_features
+_finite_scaled = finite_scaled
 
 
 def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str) -> list[int]:
@@ -557,11 +518,16 @@ def _selector_config_hash(config: RunConfig, n_feat: int, seed: int) -> str:
     `_select()`, confirmed by direct reading of every call site -- including
     one would make two selector configs that produce the SAME result look
     different (needless cache misses); omitting one that mattered would make
-    two DIFFERENT results collide under the same key (silent corruption)."""
+    two DIFFERENT results collide under the same key (silent corruption).
+
+    `ranking` (`selection._common.RANKING_VERSION`): the ranking rule itself
+    -- a change to it (e.g. the switch to a CPU-independent tie-break)
+    changes the result for identical inputs, so it must change the key."""
     payload = json.dumps({
         "method": config.selection.method, "n_feat": n_feat,
         "shap_sample": config.selection.shap_sample,
         "pool_prefilter": config.features.pool_prefilter, "seed": seed,
+        "ranking": RANKING_VERSION,
     }, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -1391,8 +1357,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         group_cols = ["horizon", "regime", "N", "sampler", "algo"]
         tuned_agg = None
         if len(tuned_df):
-            tuned_agg = (tuned_df.groupby(group_cols + ["best_params"])["F1_dir"]
-                         .mean().reset_index().sort_values("F1_dir", ascending=False))
+            tuned_agg = rank_configs(
+                tuned_df.groupby(group_cols + ["best_params"])["F1_dir"].mean().reset_index(),
+                "F1_dir", group_cols + ["best_params"])
             if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
                 final_best = tuned_agg.iloc[0].to_dict()
 
