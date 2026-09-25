@@ -65,22 +65,33 @@ def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
 
 
 def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp,
-                               dq: DataQualityConfig, issues: list, *, prefilled: bool) -> list[str]:
+                               dq: DataQualityConfig, issues: list, *, prefilled: bool,
+                               fred_ids: dict[str, str] | None = None) -> list[str]:
     """P6.5 checks BEYOND coverage (already handled by `download_universe`/
     `download_fred_universe` themselves, see their `issues` parameter).
 
-    `prefilled`: `download_universe` already does an internal `.ffill()`
-    before returning the retained columns (coverage) -- real quoting gaps
-    are therefore already filled (NaNs gone) by the time this module sees
-    them; `check_quote_gaps`/`check_stale_tail` would be no-ops there (no
-    more NaN to detect), BUT a real prolonged interruption shows up there as
-    a frozen close (repeated ffilled value), already covered by
-    `check_frozen_prices` -- an accepted convergence, not a gap in the
-    guarantee. FRED series (`prefilled=False`) are not pre-filled here: all
-    four checks apply as-is."""
+    `prefilled`: whether `df_cols` was forward-filled (only the frozen-
+    price and aberrant-return gates then apply). `ingest` no longer passes a
+    filled frame: yfinance series are checked on their REPORTED closes
+    (`download_universe(return_unfilled=True)`) -- on a filled frame a
+    holiday bridge reads as frozen prices, which excluded GC=F, ^VIX,
+    EURUSD=X and every other future on real data.
+
+    `fred_ids` ({column: FRED id}): FRED columns go through
+    `quality.check_fred_series` instead -- the same gates on the series'
+    own publication calendar (frequency-aware gap/tail thresholds, no
+    frozen-price gate, see its docstring)."""
     to_drop = []
     for col in df_cols.columns:
         s = df_cols[col]
+        if fred_ids is not None:
+            issue = quality_module.check_fred_series(
+                s.rename(col), fred_ids.get(col, col), requested_end,
+                max_gap_bdays=dq.max_gap_bdays, max_robust_z=dq.max_robust_z)
+            if issue is not None:
+                issues.append(issue)
+                to_drop.append(col)
+            continue
         checks = (
             (quality_module.check_frozen_prices, {"max_run": dq.max_frozen_run}),
             (quality_module.check_aberrant_returns, {"max_robust_z": dq.max_robust_z}),
@@ -157,15 +168,17 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     requested_end = pd.Timestamp(df.index.max()) if len(df) else pd.Timestamp.today()
 
     if universe.yf_tickers:
-        yf_df = yfinance_source.download_universe(
+        yf_df, yf_reported = yfinance_source.download_universe(
             universe.yf_tickers, universe.start_date, universe.yf_coverage, t0=t0,
-            issues=issues if dq.enabled else None)
+            issues=issues if dq.enabled else None, return_unfilled=True)
         yf_df = _apply_session_lag(yf_df, universe.yf_tickers, objective)
         if dq.enabled and len(yf_df.columns):
-            # `download_universe` already ffilled internally -- `check_quote_gaps`/
-            # `check_stale_tail` would be no-ops there, see `prefilled` docstring.
-            to_drop = _run_extra_quality_checks(yf_df, requested_end, dq, issues, prefilled=True)
-            yf_df = yf_df.drop(columns=to_drop)
+            # Gates on the closes as REPORTED, never on the forward-filled
+            # frame: a filled holiday bridge reads as "frozen prices" (see
+            # `download_universe(return_unfilled=True)`), and real quoting
+            # gaps are only visible before the fill.
+            to_drop = _run_extra_quality_checks(yf_reported, requested_end, dq, issues, prefilled=False)
+            yf_df = yf_df.drop(columns=[c for c in to_drop if c in yf_df.columns])
         df = df.join(yf_df, how="outer")
 
     if universe.fred_series:
@@ -179,7 +192,8 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
                   "publication-lag table (data/publication_lag.py).")
         if dq.enabled and len(fred_df.columns):
             # FRED series not pre-filled at this stage: all 4 checks apply.
-            to_drop = _run_extra_quality_checks(fred_df, requested_end, dq, issues, prefilled=False)
+            to_drop = _run_extra_quality_checks(fred_df, requested_end, dq, issues, prefilled=False,
+                                                fred_ids=universe.fred_series)
             fred_df = fred_df.drop(columns=to_drop)
         if len(fred_df):
             # F01: every observation enters on its availability date, series

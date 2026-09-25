@@ -90,10 +90,18 @@ def check_frozen_prices(s: pd.Series, max_run: int = DEFAULT_MAX_FROZEN_RUN) -> 
     return None
 
 
-def check_quote_gaps(s: pd.Series, max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS) -> QualityIssue | None:
+def check_quote_gaps(s: pd.Series, max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
+                     expected_spacing_bdays: int = 1) -> QualityIssue | None:
     """Longest gap (in business days) between two consecutive non-NaN
     observations of `s`, on the full business-day index provided by the
-    caller (`s.index` must already be the expected business-day calendar)."""
+    caller (`s.index` must already be the expected business-day calendar).
+
+    `expected_spacing_bdays` (> 1 for weekly/monthly/quarterly FRED series):
+    the tolerated gap becomes two publication periods + `max_gap_bdays` --
+    one missing release (e.g. the October 2025 CPI, never published during
+    the US government shutdown) is not a broken series."""
+    if expected_spacing_bdays > 1:
+        max_gap_bdays = 2 * expected_spacing_bdays + max_gap_bdays
     valid_dates = s.dropna().index
     if len(valid_dates) < 2:
         return None
@@ -113,7 +121,18 @@ def check_quote_gaps(s: pd.Series, max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS) -
 
 
 def check_aberrant_returns(s: pd.Series, max_robust_z: float = DEFAULT_MAX_ROBUST_Z) -> QualityIssue | None:
-    ret = s.dropna().pct_change().dropna()
+    """Robust z-score of period-to-period changes: percentage returns for a
+    series that stays away from zero, first DIFFERENCES as soon as it takes a
+    non-positive value or comes close to zero relative to its own scale
+    (spreads, stress indices, rates near the zero bound, a futures price
+    that went negative) -- a percentage change around zero is meaningless
+    (STLFSI4 crossing zero read as a "-46950%" return, a 6-month bill yield
+    moving from 0.01 to 0.06 as "+500%")."""
+    clean = s.dropna()
+    magnitude = clean.abs()
+    use_levels = (clean <= 0).any() or (len(clean) and magnitude.min() < 0.05 * magnitude.median())
+    ret = clean.diff() if use_levels else clean.pct_change()
+    ret = ret.dropna()
     ret = ret.replace([np.inf, -np.inf], np.nan).dropna()
     if len(ret) < 30:
         return None
@@ -121,14 +140,21 @@ def check_aberrant_returns(s: pd.Series, max_robust_z: float = DEFAULT_MAX_ROBUS
     max_abs_z = z.abs().max()
     if max_abs_z > max_robust_z:
         worst_idx = z.abs().idxmax()
+        change = (f"change of {ret.loc[worst_idx]:+.4g}" if use_levels
+                  else f"return of {ret.loc[worst_idx]:.1%}")
         return QualityIssue(s.name, "rendement_aberrant",
-                             f"return of {ret.loc[worst_idx]:.1%} on {worst_idx.date()} "
+                             f"{change} on {worst_idx.date()} "
                              f"(robust z={max_abs_z:.1f}, threshold {max_robust_z})")
     return None
 
 
 def check_stale_tail(s: pd.Series, requested_end: pd.Timestamp,
-                      max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS) -> QualityIssue | None:
+                      max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
+                      allowed_extra_bdays: int = 0) -> QualityIssue | None:
+    """`allowed_extra_bdays`: normal distance between a low-frequency
+    series' last reference date and today (one period + its publication
+    delay + one missing release), added to `max_gap_bdays`."""
+    max_gap_bdays = max_gap_bdays + allowed_extra_bdays
     valid_dates = s.dropna().index
     if len(valid_dates) == 0:
         return None
@@ -140,6 +166,43 @@ def check_stale_tail(s: pd.Series, requested_end: pd.Timestamp,
                              f"last observation {last_date.date()}, "
                              f"~{gap_bdays:.0f} business days before the requested end "
                              f"({requested_end.date()}, threshold {max_gap_bdays}) -- likely delisted")
+    return None
+
+
+# Normal spacing between two observations, in business days, per FRED
+# publication frequency (`data/publication_lag.py::frequency_of`).
+EXPECTED_SPACING_BDAYS = {"daily": 1, "weekly": 5, "monthly": 23, "quarterly": 66}
+
+
+def check_fred_series(s: pd.Series, series_id: str, requested_end: pd.Timestamp, *,
+                      max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
+                      max_robust_z: float = DEFAULT_MAX_ROBUST_Z) -> QualityIssue | None:
+    """Quality gates for a FRED series ON ITS OWN publication calendar
+    (reference dates, before point-in-time alignment): gap and stale-tail
+    thresholds scale with the series' frequency; no frozen-price gate --
+    FRED does not forward-fill (a stale feed shows up as a stale tail), and
+    administered/quoted rates are legitimately flat for long stretches (DFF
+    at 0.12 for years of zero-interest-rate policy, yields quoted to 0.01),
+    far from the ~100-priced, 1.5%-vol quotes that gate was calibrated on."""
+    from patrick.data import publication_lag
+
+    clean = s.dropna()
+    freq = publication_lag.frequency_of(series_id, clean.index)
+    spacing = EXPECTED_SPACING_BDAYS[freq]
+    if len(clean):
+        release = publication_lag.availability_dates(clean.index[-1:], series_id)[0]
+        lag_bdays = int(max(np.busday_count(clean.index[-1].date(), release.date()), 0))
+    else:
+        lag_bdays = 0
+    for check, kwargs in (
+        (check_quote_gaps, {"max_gap_bdays": max_gap_bdays, "expected_spacing_bdays": spacing}),
+        (check_stale_tail, {"requested_end": requested_end, "max_gap_bdays": max_gap_bdays,
+                            "allowed_extra_bdays": (2 * spacing + lag_bdays) if spacing > 1 else lag_bdays}),
+        (check_aberrant_returns, {"max_robust_z": max_robust_z}),
+    ):
+        issue = check(s, **kwargs)
+        if issue is not None:
+            return issue
     return None
 
 
