@@ -396,6 +396,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     run_ids = [r[0] for r in runs]
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, run_ids)
     dm_by_run = trackdb.batch_dm_results(conn, run_ids)
+    benchmark_by_run = trackdb.batch_baseline_f1_dir(conn, run_ids)
 
     run_rows = []
     horizons = set()
@@ -407,6 +408,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "name": _run_name(config_json), "scheme": _run_scheme(config_json),
             "n_trials": n_trials,
             "best_f1_dir": best_f1_by_run.get(run_id), "dm_result": dm_by_run.get(run_id),
+            "benchmark_f1_dir": benchmark_by_run.get(run_id),
         })
 
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)

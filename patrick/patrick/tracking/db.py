@@ -739,6 +739,23 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str,
     return {run_id: best_f1_by_trial.get(trial_id) for run_id, trial_id in best_trial_by_run.items()}
 
 
+BENCHMARK_BASELINE = "BASELINE_persistence"
+
+
+def batch_baseline_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
+                          baseline: str = BENCHMARK_BASELINE) -> dict[str, float]:
+    """Roadmap bloc 4 ("benchmark column everywhere"): the common reference
+    baseline's F1_dir per run -- persistence, the class-agnostic reference
+    fixed across asset classes (Phase X5), aggregated over the test folds
+    exactly like the model's F1_dir. One query; runs without it are absent."""
+    if not run_ids:
+        return {}
+    placeholders = ",".join("?" for _ in run_ids)
+    return {run_id: float(value) for run_id, value in conn.execute(
+        f"SELECT run_id, value FROM baseline_metric WHERE run_id IN ({placeholders}) "
+        "AND baseline = ? AND split = 'test' AND metric = 'F1_dir'", (*run_ids, baseline))}
+
+
 def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
                       kind: str = "class_specific") -> dict[str, dict]:
     """Batched `dm_result` lookup for every run_id in `run_ids`, filtered to
@@ -802,6 +819,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     run_ids = [r[0] for r in rows]
     best_f1_by_run = batch_best_f1_dir(conn, run_ids)
     dm_by_run = batch_dm_results(conn, run_ids)
+    benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
 
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
@@ -822,6 +840,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "scheme": scheme, "best_f1_dir": best_f1_by_run.get(run_id),
             "dm_p_value": dm_result["p_value"] if dm_result else None,
             "dm_sample": dm_result["sample"] if dm_result else None,
+            "benchmark_f1_dir": benchmark_by_run.get(run_id),
         })
     return out
 

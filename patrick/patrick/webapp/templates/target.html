@@ -73,12 +73,14 @@
     r.started_at or '—',
     r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
     ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
+    ('%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '<span class="na">—</span>'),
+    (('<span class="' ~ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') ~ '">' ~ ('%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir)) ~ '</span>') if (r.best_f1_dir is not none and r.benchmark_f1_dir is not none) else '<span class="na">—</span>'),
     dm_cell,
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "DM p-value", "Relancer"],
-              rows, num_cols=[1, 5, 6, 7],
+{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "Persistance (F1_dir)", "Écart", "DM p-value", "Relancer"],
+              rows, num_cols=[1, 5, 6, 7, 8, 9],
               footer=(detail.runs | length) ~ " run(s) · F1_dir = meilleur essai sur n, non déflaté ; p-value DM brute — la version corrigée du test multiple (BH entre cibles) est le bloc de mesure en haut de cette page.") }}
 </section>
 
