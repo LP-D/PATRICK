@@ -59,14 +59,10 @@ include = ["patrick*"]
 # silencieusement non détectées, pour que la CI reste verte sans masquer
 # ce qui reste à faire -- retirer un code de cette liste au fur et à
 # mesure qu'un lot le nettoie, pas tous d'un coup.
-# DTZ00x (datetime naïf) : ignoré jusqu'au chantier point-in-time dédié
-# (vintages FRED, cf. rapport d'audit R3c) -- ne pas traiter isolément,
-# la correction touche à la sémantique temporelle du pipeline.
 ignore = [
     "B008", "B023",
     "BLE001",
     "C405", "C408",
-    "DTZ003", "DTZ005", "DTZ011",
     "F601", "F821", "F841",
     "FLY002",
     "I001",

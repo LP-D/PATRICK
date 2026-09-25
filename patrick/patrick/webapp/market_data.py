@@ -10,6 +10,8 @@ import datetime as dt
 import pandas_datareader.data as web
 import yfinance as yf
 
+from patrick.clock import utc_today
+
 PERIOD_DAYS = {"1mo": 30, "3mo": 90, "6mo": 182, "1y": 365, "5y": 365 * 5, "max": None}
 VALID_PERIODS = tuple(PERIOD_DAYS)
 
@@ -18,7 +20,7 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
     period = period if period in PERIOD_DAYS else "1y"
 
     if source == "fred":
-        end = dt.date.today()
+        end = utc_today()
         days = PERIOD_DAYS[period]
         start = end - dt.timedelta(days=days) if days else dt.date(1970, 1, 1)
         try:

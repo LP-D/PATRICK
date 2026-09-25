@@ -11,6 +11,7 @@ import datetime as dt
 import threading
 import time
 
+from patrick.clock import local_now, utc_today
 from patrick.config import defaults as D
 from patrick.data.sources.yfinance_source import clean_symbol, download_batch
 from patrick.tracking import db as trackdb
@@ -52,7 +53,7 @@ def _active_tickers() -> list[str]:
 def _compute_once() -> None:
     tickers = _active_tickers()
     reverse = {clean_symbol(t): t for t in tickers}
-    start = (dt.date.today() - dt.timedelta(days=LOOKBACK_DAYS * 3 + 5)).isoformat()
+    start = (utc_today() - dt.timedelta(days=LOOKBACK_DAYS * 3 + 5)).isoformat()
 
     try:
         df = download_batch(tickers, start)
@@ -91,7 +92,7 @@ def _compute_once() -> None:
     with _lock:
         _cache["gainers"] = _rows(ranked.head(TOP_N))
         _cache["losers"] = _rows(ranked.tail(TOP_N)[::-1])
-        _cache["updated_at"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+        _cache["updated_at"] = local_now().strftime("%Y-%m-%d %H:%M")
         _cache["error"] = None
 
 

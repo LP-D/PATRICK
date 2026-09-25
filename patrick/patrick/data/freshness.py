@@ -39,11 +39,11 @@ servi de cible depuis (`^GSPC`, `^VIX`, `BTC-USD`). Sur les 68 tickers de
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 
 import numpy as np
 import pandas as pd
 
+from patrick.clock import utc_today
 from patrick.data.store import DataStore
 
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ def business_days_late(date_max, as_of=None) -> int:
     """Nombre de jours ouvrés séparant `date_max` (dernière donnée connue,
     `date`/`str`/`Timestamp`) de `as_of` (par défaut aujourd'hui). Jamais
     négatif : une `date_max` égale ou postérieure à `as_of` renvoie 0."""
-    as_of = as_of if as_of is not None else date.today()
+    as_of = as_of if as_of is not None else utc_today()
     d0 = pd.Timestamp(date_max).normalize().date()
     d1 = pd.Timestamp(as_of).normalize().date()
     if d0 >= d1:
