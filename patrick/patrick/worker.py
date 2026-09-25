@@ -112,16 +112,18 @@ class _ProgressCapture:
 
 
 def _to_native(obj):
-    """Recursively converts numpy.int64/float64/bool_/NaN (from pandas
-    DataFrames) into native, JSON-serializable Python types."""
+    """Recursively converts numpy.int64/float64/bool_/NaN/±inf (from pandas
+    DataFrames) into native, STRICT-JSON-serializable Python types: ±inf
+    (e.g. a Diebold-Mariano statistic on a constant nonzero loss
+    differential) would otherwise be written as `Infinity`, which the
+    browser's `JSON.parse` rejects."""
     if isinstance(obj, dict):
         return {k: _to_native(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_to_native(v) for v in obj]
     if isinstance(obj, np.generic):
-        val = obj.item()
-        return None if isinstance(val, float) and np.isnan(val) else val
-    if isinstance(obj, float) and np.isnan(obj):
+        obj = obj.item()
+    if isinstance(obj, float) and not np.isfinite(obj):
         return None
     return obj
 
