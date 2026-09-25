@@ -21,9 +21,12 @@ import pandas as pd
 
 from patrick.features._utils import safe_pct_change
 
+COVARIANCE_ESTIMATORS = ("sample", "ledoit_wolf")
+
 
 def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
-                              lookback: int = 252, min_obs: int = 60) -> pd.DataFrame:
+                              lookback: int = 252, min_obs: int = 60,
+                              estimator: str = "sample") -> pd.DataFrame:
     """Matrice de covariance des rendements, au temps `as_of`, strictement
     point-in-time : chaque serie de `prices` est d'abord tronquee a
     `index <= as_of` -- aucune observation posterieure n'entre jamais dans
@@ -33,7 +36,17 @@ def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
     actifs demandes (inner join -- actifs a calendriers differents, ex. BTC
     7j/7 vs actions 5j/7) avant le calcul de covariance. Leve `ValueError`
     si moins de `min_obs` dates communes subsistent apres alignement --
-    jamais un resultat silencieusement degrade sur une matrice quasi-vide."""
+    jamais un resultat silencieusement degrade sur une matrice quasi-vide.
+
+    `estimator` (roadmap bloc 4) : `"sample"` (covariance empirique, sans
+    biais mais bruitee quand le nombre d'actifs N approche le nombre
+    d'observations T -- singuliere des que N > T) ou `"ledoit_wolf"`
+    (Ledoit & Wolf 2004 : combinaison convexe de la covariance empirique et
+    d'une cible diagonale a variance moyenne, intensite de retrecissement
+    estimee pour minimiser l'erreur quadratique attendue ; toujours definie
+    positive). L'intensite est exposee dans `result.attrs["shrinkage"]`."""
+    if estimator not in COVARIANCE_ESTIMATORS:
+        raise ValueError(f"estimateur de covariance inconnu : {estimator!r} ({COVARIANCE_ESTIMATORS})")
     as_of = pd.Timestamp(as_of)
     returns: dict[str, pd.Series] = {}
     for symbol, series in prices.items():
@@ -48,8 +61,19 @@ def point_in_time_covariance(prices: dict[str, pd.Series], as_of,
             f"(min_obs={min_obs}) pour {sorted(prices.keys())} a as_of={as_of.date()}."
         )
 
-    cov = aligned.cov()
-    return cov.loc[list(prices.keys()), list(prices.keys())]
+    symbols = list(prices.keys())
+    if estimator == "ledoit_wolf":
+        from sklearn.covariance import LedoitWolf
+
+        lw = LedoitWolf().fit(aligned[symbols].values)
+        cov = pd.DataFrame(lw.covariance_, index=symbols, columns=symbols)
+        cov.attrs["shrinkage"] = float(lw.shrinkage_)
+    else:
+        cov = aligned.cov().loc[symbols, symbols]
+        cov.attrs["shrinkage"] = 0.0
+    cov.attrs["estimator"] = estimator
+    cov.attrs["n_obs"] = len(aligned)
+    return cov
 
 
 def correlation_from_covariance(cov: pd.DataFrame) -> pd.DataFrame:

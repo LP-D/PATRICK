@@ -462,4 +462,110 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "whose best configs dominate can then capture the entire Optuna "
                "budget, leaving the other horizons with zero tuning trials."),
     },
+    # Portfolio / statistics surfaces (roadmap bloc 4: tooltips on regime/HRP/BL)
+    "hrp": {
+        "fr": ("Hierarchical Risk Parity (López de Prado, 2016) : regroupe les actifs par "
+               "similarité de corrélation, puis répartit le risque entre groupes par "
+               "bissection récursive, en inverse de la variance. N'utilise aucun rendement "
+               "espéré et n'inverse jamais la matrice de covariance — robuste là où Markowitz "
+               "concentre tout sur quelques actifs."),
+        "en": ("Hierarchical Risk Parity (López de Prado, 2016): clusters assets by "
+               "correlation similarity, then splits risk between clusters by recursive "
+               "bisection, inverse-variance. Uses no expected return and never inverts the "
+               "covariance matrix — robust where Markowitz concentrates on a few assets."),
+    },
+    "black_litterman": {
+        "fr": ("Black-Litterman : part des rendements implicites d'équilibre (ceux qui "
+               "justifient les poids de marché) et les ajuste par des vues (ici les signaux "
+               "des modèles), pondérées par leur incertitude. Une vue peu fiable déplace peu "
+               "l'allocation."),
+        "en": ("Black-Litterman: starts from equilibrium implied returns (those that justify "
+               "market weights) and tilts them with views (here, model signals) weighted by "
+               "their uncertainty. An unreliable view barely moves the allocation."),
+    },
+    "ledoit_wolf": {
+        "fr": ("Covariance Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une "
+               "cible structurée ; l'intensité δ ∈ [0, 1] est estimée pour minimiser l'erreur "
+               "quadratique. Indispensable quand le nombre d'actifs approche le nombre "
+               "d'observations."),
+        "en": ("Ledoit-Wolf covariance: weighted average of the sample covariance and a "
+               "structured target; the intensity δ ∈ [0, 1] is estimated to minimise the "
+               "squared error. Needed when the number of assets nears the number of "
+               "observations."),
+    },
+    "regime": {
+        "fr": ("Régime de marché : état (calme, normal, stress) déduit de la volatilité "
+               "réalisée de la cible. Un modèle « par régime » n'est entraîné que sur les "
+               "dates du même régime — plus spécialisé, mais sur moins de données."),
+        "en": ("Market regime: state (calm, normal, stress) inferred from the target's "
+               "realized volatility. A per-regime model is trained only on dates of the same "
+               "regime — more specialised, on less data."),
+    },
+    "diebold_mariano": {
+        "fr": ("Test de Diebold-Mariano (correction Harvey-Leybourne-Newbold) : le modèle "
+               "se trompe-t-il moins souvent que la baseline, au-delà du hasard ? Calculé sur "
+               "le holdout terminal, jamais sur les données qui ont servi à choisir le modèle."),
+        "en": ("Diebold-Mariano test (Harvey-Leybourne-Newbold correction): does the model "
+               "err less often than the baseline, beyond chance? Computed on the terminal "
+               "holdout, never on the data used to choose the model."),
+    },
+    "holdout": {
+        "fr": ("Holdout terminal : dernière période de l'historique, mise de côté avant tout "
+               "calcul et jamais utilisée pour choisir une configuration. Seule mesure hors "
+               "échantillon honnête d'un modèle déjà choisi."),
+        "en": ("Terminal holdout: the last period of history, set aside before any "
+               "computation and never used to choose a configuration. The only honest "
+               "out-of-sample measure of an already chosen model."),
+    },
+    "deflated_sharpe": {
+        "fr": ("Sharpe déflaté (Bailey & López de Prado) : probabilité que le vrai Sharpe soit "
+               "positif, compte tenu du nombre d'essais réalisés sur la cible, de la longueur "
+               "de l'historique et de l'asymétrie/aplatissement des rendements."),
+        "en": ("Deflated Sharpe (Bailey & López de Prado): probability that the true Sharpe "
+               "is positive, given the number of trials run on the target, the sample length "
+               "and the returns' skewness/kurtosis."),
+    },
+    "pbo": {
+        "fr": ("Probabilité de sur-sélection de backtest (PBO) : part des découpages où la "
+               "configuration la meilleure en échantillon finit sous la médiane hors "
+               "échantillon. Au-delà de 0,5, la sélection ne vaut pas mieux que le hasard."),
+        "en": ("Probability of backtest overfitting (PBO): share of splits where the best "
+               "in-sample configuration ends below the out-of-sample median. Above 0.5, "
+               "selection is no better than chance."),
+    },
+    "twr": {
+        "fr": ("Rendement pondéré par le temps (TWR) : performance de la gestion, neutralisée "
+               "des apports et retraits — c'est elle qui se compare à un indice de référence."),
+        "en": ("Time-weighted return (TWR): performance of the management itself, neutral to "
+               "deposits and withdrawals — the one to compare with a benchmark index."),
+    },
+    "xirr": {
+        "fr": ("Rendement pondéré par les capitaux (TRI / XIRR) : taux annuel qui annule la "
+               "valeur actuelle de tous les flux (apports, retraits, valeur finale). Mesure "
+               "l'expérience de l'investisseur, timing des apports inclus."),
+        "en": ("Money-weighted return (IRR / XIRR): annual rate that zeroes the present value "
+               "of all flows (deposits, withdrawals, final value). Measures the investor's "
+               "experience, including the timing of deposits."),
+    },
+    "pea": {
+        "fr": ("PEA : enveloppe fiscale française réservée aux actions européennes (et fonds "
+               "éligibles), versements plafonnés à 150 000 € ; tout retrait avant 5 ans clôture "
+               "le plan (sauf exceptions légales). Plafond et règles à vérifier auprès de la "
+               "source officielle (service-public.fr)."),
+        "en": ("PEA: French tax wrapper restricted to European equities (and eligible funds), "
+               "deposits capped at €150,000; any withdrawal before 5 years closes the plan "
+               "(legal exceptions aside). Check the cap and rules against the official source."),
+    },
+    "cto": {
+        "fr": "Compte-titres ordinaire : aucun plafond ni restriction d'actifs, fiscalité de droit commun.",
+        "en": "Ordinary securities account: no cap or asset restriction, standard taxation.",
+    },
+    "dat": {
+        "fr": ("Dépôt à terme : capital bloqué à taux fixe jusqu'à l'échéance. Aucun historique "
+               "de prix : valorisé par capitalisation du taux (intérêts simples au prorata) et "
+               "traité comme un actif sans risque de marché (variance et covariances nulles)."),
+        "en": ("Term deposit: capital locked at a fixed rate until maturity. No price history: "
+               "valued by accruing the rate (simple interest, pro rata) and treated as an asset "
+               "with no market risk (zero variance and covariances)."),
+    },
 }
