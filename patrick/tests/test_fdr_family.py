@@ -36,7 +36,7 @@ def _run(conn, run_id, target, scheme="walkforward", status="done", p_value=None
     trackdb.finish_run(conn, run_id, status=status)
     if p_value is not None:
         trackdb.save_dm_result(conn, run_id, {"baseline": "BASELINE_persistence", "dm_stat": -2.0,
-                                               "p_value": p_value}, kind="class_specific")
+                                               "p_value": p_value}, kind="class_specific", sample="holdout")
 
 
 def test_cpcv_only_targets_count_in_the_bh_family(conn):

@@ -63,7 +63,7 @@
     r.started_at or '—',
     r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
     ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
-    ('%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '<span class="na">—</span>'),
+    ((('%.4f' | format(r.dm_p_value)) ~ (' <span class="tag" title="calculé sur le fold de sélection : biaisé, exclu de la correction entre cibles">fold de sélection</span>' if r.dm_sample == 'last_wf_fold' else '')) if r.dm_p_value is not none else '<span class="na">—</span>'),
 ]) %}
 {% endfor %}
 {{ data_table(

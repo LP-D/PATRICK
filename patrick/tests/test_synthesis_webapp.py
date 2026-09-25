@@ -35,7 +35,7 @@ def _seed_run_with_predictions(conn, up_correct=8, up_wrong=2, down_correct=9, d
     trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
     db.mark_best_trial(conn, trial_id)
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6, "AUC_ovr_4cls": 0.58})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     ts, y_true, y_pred = [], [], []

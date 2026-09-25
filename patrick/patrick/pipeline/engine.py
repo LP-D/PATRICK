@@ -747,8 +747,14 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
                                          sampler_name, algo, seed,
                                          calibration=config.models.calibration, **best_params)
     test_dates = [str(d.date()) for d in idx[te_mask]]
+    # F08: the baselines predicted on the SAME holdout rows, so the final
+    # Diebold-Mariano test runs on data that never took part in a choice.
+    baseline_predictions = compute_baselines(
+        pool[target_col], target_series, idx, tr_mask, te_mask, y_tr, y_te, horizon, _thr, reg_r,
+        return_predictions=True)
     return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te,
-            "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te)}
+            "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te),
+            "baseline_predictions": baseline_predictions}
 
 
 # Phase X5 -- kind exposed in config (validation.baseline_by_asset_class) ->
@@ -786,58 +792,78 @@ def _best_baseline_among(fd: FoldData, candidate_keys: list[str]) -> tuple[str |
     return best_name, best_pred
 
 
+def _dm_against_baselines(y_true, y_pred, baseline_predictions: dict | None,
+                          class_name: str | None, horizon: int) -> dict:
+    """Diebold-Mariano (0/1 directional loss, HLN) of the model against the
+    class-specific baseline `class_name` and the common persistence
+    baseline, all predicted on the same rows. A baseline absent from
+    `baseline_predictions` gives `None` for its kind."""
+    y_true = np.asarray(y_true).ravel()
+    loss_model = (np.asarray(y_pred).ravel() != y_true).astype(float)
+
+    def against(name: str | None) -> dict | None:
+        pred = (baseline_predictions or {}).get(name) if name else None
+        if pred is None:
+            return None
+        dm = diebold_mariano(loss_model, (np.asarray(pred).ravel() != y_true).astype(float), h=horizon)
+        dm["baseline"] = name
+        return dm
+
+    return {"class_specific": against(class_name), "common": against(_COMMON_BASELINE_KEY)}
+
+
 def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cfg: dict,
-                               last_fold: int, seed: int) -> dict | None:
+                               last_fold: int, seed: int, holdout_eval: dict | None = None) -> dict | None:
     """DM (Phase 2.5) between the winning config and TWO baselines (Phase
-    X5), on the most recent walk-forward fold — the period closest to the
-    current market regime, rather than an average over the whole history
-    that would dilute a possible regime change:
+    X5):
 
-    - `class_specific`: the best one (highest F1_dir on this fold) among the
-      candidates configured for the target's asset class
-      (`validation.baseline_by_asset_class`, see `classify_asset_class`);
+    - `class_specific`: the best one (highest F1_dir) among the candidates
+      configured for the target's asset class
+      (`validation.baseline_by_asset_class`, see `classify_asset_class`),
+      CHOSEN ON THE LAST WALK-FORWARD FOLD (selection data);
     - `common`: class-agnostic persistence, ALWAYS computed in addition, as
-      a fixed reference allowing asset classes to be compared to each other
-      on an equal footing (never configurable).
+      a fixed reference allowing asset classes to be compared on an equal
+      footing (never configurable).
 
-    Returns `None` only if neither comparison could be computed (baselines
-    unavailable on this fold, e.g. HAR-RV with too short a train) -- otherwise
-    a dict with either key set to `None` depending on the case."""
+    Sample (F08): the test runs on the terminal holdout (`holdout_eval`,
+    the chosen model retrained before the holdout, baselines predicted on
+    the same rows) -- data that took no part in any choice. The last
+    walk-forward fold is part of the selection criterion (mean F1_dir over
+    all folds): testing there biased the p-value towards significance. It
+    is only the fallback when no holdout evaluation exists, recorded as
+    `sample = 'last_wf_fold'` and excluded from the cross-target BH family.
+
+    Returns `None` only if neither comparison could be computed -- otherwise
+    a dict with `sample`, `asset_class` and either kind possibly `None`."""
     horizon, regime = int(best_cfg["horizon"]), best_cfg["regime"]
-    n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
-    best_params = _parse_params(best_cfg.get("best_params"))
-
     fd = ctx.prepare(horizon, last_fold, regime, want_baselines=True)
     if fd is None or not fd.baseline_predictions:
         return None
-    cols = _select(conn, ctx.target_col, horizon, snapshot_id, ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
-    _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
-                              sampler_name, algo, seed,
-                              calibration=ctx.config.models.calibration, **best_params)
-    loss_model = (np.asarray(y_pred).ravel() != fd.y_te).astype(float)
-
     asset_class = classify_asset_class(ctx.config.objective.target_symbol,
                                         ctx.config.objective.target_source)
     candidate_kinds = ctx.config.validation.baseline_by_asset_class.get(asset_class, ["persistence"])
     candidate_keys = [_BASELINE_KIND_TO_KEY[k] for k in candidate_kinds if k in _BASELINE_KIND_TO_KEY]
-    class_name, class_pred = _best_baseline_among(fd, candidate_keys)
-    common_pred = (fd.baseline_predictions or {}).get(_COMMON_BASELINE_KEY)
+    class_name, _ = _best_baseline_among(fd, candidate_keys)
 
-    result: dict = {"asset_class": asset_class, "class_specific": None, "common": None}
-    if class_pred is not None:
-        loss_class = (np.asarray(class_pred).ravel() != fd.y_te).astype(float)
-        dm_class = diebold_mariano(loss_model, loss_class, h=horizon)
-        dm_class["baseline"] = class_name
-        result["class_specific"] = dm_class
-    if common_pred is not None:
-        loss_common = (np.asarray(common_pred).ravel() != fd.y_te).astype(float)
-        dm_common = diebold_mariano(loss_model, loss_common, h=horizon)
-        dm_common["baseline"] = _COMMON_BASELINE_KEY
-        result["common"] = dm_common
+    if holdout_eval is not None and holdout_eval.get("baseline_predictions"):
+        sample = "holdout"
+        dms = _dm_against_baselines(holdout_eval["y_true"], holdout_eval["y_pred"],
+                                    holdout_eval["baseline_predictions"], class_name, horizon)
+    else:
+        sample = "last_wf_fold"
+        n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
+        best_params = _parse_params(best_cfg.get("best_params"))
+        cols = _select(conn, ctx.target_col, horizon, snapshot_id, ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
+        _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
+                                  sampler_name, algo, seed,
+                                  calibration=ctx.config.models.calibration, **best_params)
+        print("  [WARN] Diebold-Mariano on the last walk-forward fold (no holdout evaluation): "
+              "selection-biased, excluded from the cross-target BH family.")
+        dms = _dm_against_baselines(fd.y_te, y_pred, fd.baseline_predictions, class_name, horizon)
 
-    if result["class_specific"] is None and result["common"] is None:
+    if dms["class_specific"] is None and dms["common"] is None:
         return None
-    return result
+    return {"asset_class": asset_class, "sample": sample, **dms}
 
 
 def _config_hash(config: RunConfig) -> str:
@@ -1447,7 +1473,9 @@ def _export_models(st: _RunState, final_best_by_horizon: dict[int, dict]) -> tup
 
 def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -> dict | None:
     """Phase 2.1 -- a single re-evaluation of the already-chosen config on the
-    terminal holdout, never used to choose among several."""
+    terminal holdout, never used to choose among several. Returns the whole
+    evaluation (metrics, predictions, baselines' holdout predictions -- the
+    latter feed the final Diebold-Mariano test, F08)."""
     if not st.has_holdout:
         return None
     holdout_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
@@ -1460,20 +1488,22 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
         trackdb.add_predictions(st.conn, best_trial_id, fold_index=0, split="holdout",
                                 ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
                                 y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
-    return holdout_eval["metrics"]
+    return holdout_eval
 
 
-def _final_diebold_mariano(st: _RunState, final_best: dict) -> dict | None:
-    """Phase 2.5 -- DM vs the class-specific and the common baseline,
-    persisted in `dm_result` (P6.4, X5). Walk-forward only."""
+def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict | None) -> dict | None:
+    """Phase 2.5 -- DM vs the class-specific and the common baseline, on the
+    terminal holdout (F08), persisted in `dm_result` with its sample (P6.4,
+    X5). Walk-forward only."""
     if not st.is_walkforward:
         return None
-    dm_result = _evaluate_diebold_mariano(st.conn, st.snapshot_id, st.ctx, final_best, st.last_fold, st.seed)
+    dm_result = _evaluate_diebold_mariano(st.conn, st.snapshot_id, st.ctx, final_best, st.last_fold, st.seed,
+                                          holdout_eval=holdout_eval)
     if dm_result is not None:
         run_id = st.run_ids[int(final_best["horizon"])]
         for kind in ("class_specific", "common"):
             if dm_result.get(kind) is not None:
-                trackdb.save_dm_result(st.conn, run_id, dm_result[kind], kind=kind)
+                trackdb.save_dm_result(st.conn, run_id, dm_result[kind], kind=kind, sample=dm_result["sample"])
     return dm_result
 
 
@@ -1545,8 +1575,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             final_horizon = int(final_best["horizon"])
             model_paths, trial_id_by_horizon = _export_models(st, final_best_by_horizon)
             model_path = model_paths.get(final_horizon)
-            holdout_result = _final_holdout(st, final_best, trial_id_by_horizon.get(final_horizon))
-            dm_result = _final_diebold_mariano(st, final_best)
+            holdout_eval = _final_holdout(st, final_best, trial_id_by_horizon.get(final_horizon))
+            holdout_result = holdout_eval["metrics"] if holdout_eval is not None else None
+            dm_result = _final_diebold_mariano(st, final_best, holdout_eval)
             # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
             # the whole history of this target/horizon (CPCV paths when that
             # scheme is active).

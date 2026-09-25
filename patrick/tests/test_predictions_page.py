@@ -24,7 +24,7 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6})
     db.add_predictions(conn, trial_id, fold_index=1, split="test",
                         ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0], y_proba=[0.7, 0.7])
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
     conn.close()
 

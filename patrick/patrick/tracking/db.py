@@ -27,6 +27,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 _CREATE_TABLE_RE = re.compile(r"^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
 _CREATE_INDEX_RE = re.compile(
     r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_ADD_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+[\"'`]?(\w+)[\"'`]?\s+ADD\s+COLUMN\s+[\"'`]?(\w+)", re.IGNORECASE)
 
 
 def default_db_path() -> str:
@@ -97,6 +98,13 @@ def _ddl_target_already_exists(conn: sqlite3.Connection, statement: str) -> bool
                 (obj_type, m.group(1)),
             ).fetchone()
             return row is not None
+    m = _ADD_COLUMN_RE.match(statement)
+    if m:
+        # ALTER TABLE ... ADD COLUMN is not idempotent in SQLite either: a
+        # re-run on a partially migrated base (the case this runner exists
+        # for) must skip a column that is already there.
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({m.group(1)})")}
+        return m.group(2) in columns
     return False
 
 
@@ -488,8 +496,11 @@ def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
             "selection_freq": [{"feature": f, "selection_freq": freq} for f, freq in freq_rows]}
 
 
+DM_SAMPLES = ("holdout", "last_wf_fold")
+
+
 def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
-                    kind: str = "class_specific") -> None:
+                    kind: str = "class_specific", *, sample: str) -> None:
     """Phase 6.4 (P6.4). Persists THIS run's Diebold-Mariano result (Phase
     2.5) so it is queryable across the whole history (see migration 0009)
     -- `dm_result` comes from `validation.diebold_mariano.diebold_mariano()`
@@ -499,14 +510,23 @@ def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
     `kind` (Phase X5, migration 0010): `"class_specific"` (baseline specific
     to the target's asset class, see `validation.baseline_by_asset_class`)
     or `"common"` (class-agnostic persistence, fixed reference across
-    classes) -- two distinct rows per run, PRIMARY KEY (run_id, kind)."""
+    classes) -- two distinct rows per run, PRIMARY KEY (run_id, kind).
+
+    `sample` (F08, migration 0022) is mandatory: `"holdout"` (terminal
+    holdout, never used to choose -- the only evidence) or `"last_wf_fold"`
+    (selection data, biased towards significance)."""
+    if sample not in DM_SAMPLES:
+        raise ValueError(f"unknown DM sample {sample!r} (expected one of {DM_SAMPLES})")
+    n_obs = dm_result.get("n_obs")
     with conn:
         conn.execute(
-            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value) VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value, sample, n_obs) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(run_id, kind) DO UPDATE SET baseline = excluded.baseline, "
-            "dm_stat = excluded.dm_stat, p_value = excluded.p_value, "
-            "computed_at = datetime('now')",
-            (run_id, kind, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"]),
+            "dm_stat = excluded.dm_stat, p_value = excluded.p_value, sample = excluded.sample, "
+            "n_obs = excluded.n_obs, computed_at = datetime('now')",
+            (run_id, kind, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"],
+             sample, int(n_obs) if n_obs is not None else None),
         )
 
 
@@ -735,9 +755,10 @@ def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
         return {}
     placeholders = ",".join("?" for _ in run_ids)
     return {
-        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at}
-        for run_id, baseline, dm_stat, p_value, computed_at in conn.execute(
-            f"SELECT run_id, baseline, dm_stat, p_value, computed_at FROM dm_result "
+        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at,
+                 "sample": sample}
+        for run_id, baseline, dm_stat, p_value, computed_at, sample in conn.execute(
+            f"SELECT run_id, baseline, dm_stat, p_value, computed_at, sample FROM dm_result "
             f"WHERE run_id IN ({placeholders}) AND kind = ?",
             (*run_ids, kind),
         )
@@ -800,6 +821,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "config_json": config_json,
             "scheme": scheme, "best_f1_dir": best_f1_by_run.get(run_id),
             "dm_p_value": dm_result["p_value"] if dm_result else None,
+            "dm_sample": dm_result["sample"] if dm_result else None,
         })
     return out
 

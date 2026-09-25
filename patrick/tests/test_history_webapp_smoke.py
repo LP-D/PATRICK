@@ -31,7 +31,7 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.62})
     db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.55})
     db.add_baseline_metrics(conn, "run1", "majority", "test", {"F1_dir": 0.5})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     config_cpcv = {

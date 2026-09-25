@@ -144,18 +144,29 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     target's own asset-class-specific comparison, the MAIN result) or
     `"common"` (class-agnostic persistence) -- never both mixed.
 
+    Sample (F08, migration 0022): only DM results computed on the terminal
+    holdout count. A p-value computed on the last walk-forward fold -- data
+    that took part in selecting the model -- is biased towards
+    significance: such a target enters untestable (p = 1) and is flagged
+    `selection_biased` (every row written before F08 is in that case).
+
     Returned counts: `n_tested` = family size m, `n_with_p_value`,
-    `n_untestable` (= m - n_with_p_value)."""
+    `n_untestable` (= m - n_with_p_value), `n_selection_biased`."""
     family = [t for (t,) in conn.execute(
         "SELECT DISTINCT target FROM run WHERE status = 'done' ORDER BY target")]
     rows = conn.execute(
         "SELECT run.target, MIN(dm_result.p_value), COUNT(dm_result.p_value) FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
         "WHERE dm_result.kind = ? AND dm_result.p_value IS NOT NULL AND run.status = 'done' "
+        "AND dm_result.sample = 'holdout' "
         "GROUP BY run.target",
         (kind,),
     ).fetchall()
     observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if not is_nan(p_min)}
+    biased = {t for (t,) in conn.execute(
+        "SELECT DISTINCT run.target FROM dm_result JOIN run ON dm_result.run_id = run.run_id "
+        "WHERE dm_result.kind = ? AND dm_result.sample = 'last_wf_fold' AND run.status = 'done'",
+        (kind,))} - set(observed)
 
     p_values: dict[str, float] = {}
     for target in family:
@@ -170,11 +181,13 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
         p_min, k = observed.get(target, (None, 0))
         untestable = target not in observed
         r["untestable"] = untestable
+        r["selection_biased"] = target in biased
         r["best_run_p_value"] = p_min
         r["n_runs_with_p_value"] = k
         if untestable:
             r["significant"] = False
     result["n_with_p_value"] = len(observed)
     result["n_untestable"] = result["n_tested"] - len(observed)
+    result["n_selection_biased"] = len(biased & set(family))
     result["n_bh_significant"] = sum(1 for r in result["results"].values() if r["significant"])
     return result

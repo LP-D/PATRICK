@@ -59,7 +59,7 @@
 {% set _ = quality_rows_fmt.append([
     '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
     '<span class="na">—</span>', '<span class="na">—</span>',
-    status_badge("Non testable", "disabled"),
+    status_badge("Fold de sélection (biaisé)", "warning") if r.selection_biased else status_badge("Non testable", "disabled"),
 ]) %}
 {% endif %}
 {% endfor %}

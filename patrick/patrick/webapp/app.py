@@ -743,6 +743,7 @@ def _predictions_overview() -> list[dict]:
                     "ts": pred["ts"] if pred else None,
                     "run_id": pred["run_id"] if pred else None,
                     "dm_p_value": dm["p_value"] if dm else None,
+                    "dm_sample": dm.get("sample") if dm else None,
                     "live_hit_rate": hit_rate["hit_rate"] if hit_rate else None,
                     "live_hit_rate_n": hit_rate["n"] if hit_rate else None,
                 })

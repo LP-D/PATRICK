@@ -115,12 +115,14 @@ def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class
     `"class_specific"` by default (the MAIN result shown everywhere except
     on explicit request for the common comparison)."""
     row = conn.execute(
-        "SELECT baseline, dm_stat, p_value, computed_at FROM dm_result WHERE run_id = ? AND kind = ?",
+        "SELECT baseline, dm_stat, p_value, computed_at, sample, n_obs FROM dm_result "
+        "WHERE run_id = ? AND kind = ?",
         (run_id, kind),
     ).fetchone()
     if row is None:
         return None
-    return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3]}
+    return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3],
+            "sample": row[4], "n_obs": row[5]}
 
 
 def phase_breakdown_for_run(conn: sqlite3.Connection, run_id: str) -> dict:
@@ -237,7 +239,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"SELECT run.run_id, run.target, run.horizon, run.status, run.started_at, "
-        f"run.finished_at, run.n_trials, run.config_json, dm.p_value "
+        f"run.finished_at, run.n_trials, run.config_json, dm.p_value, dm.sample "
         f"FROM run LEFT JOIN dm_result dm ON dm.run_id = run.run_id AND dm.kind = 'class_specific' "
         f"{where} ORDER BY run.started_at DESC, run.rowid DESC LIMIT ?",
         (*params, limit),
@@ -246,7 +248,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, [r[0] for r in rows])
 
     out = []
-    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p in rows:
+    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p, dm_sample in rows:
         run_scheme = _run_scheme(config_json)
         if scheme and run_scheme != scheme:
             continue
@@ -255,7 +257,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
             "horizon": horizon, "status": status_,
             "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials,
             "name": _run_name(config_json), "scheme": run_scheme,
-            "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p,
+            "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p, "dm_sample": dm_sample,
         })
     return out
 
@@ -725,11 +727,12 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
     auc_by_trial = dict(auc_rows)
 
     dm_rows = conn.execute(
-        f"SELECT run_id, baseline, p_value FROM dm_result "
+        f"SELECT run_id, baseline, p_value, sample FROM dm_result "
         f"WHERE run_id IN ({run_placeholders}) AND kind = 'class_specific'",
         tuple(run_ids),
     ).fetchall()
-    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value} for run_id, baseline, p_value in dm_rows}
+    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value, "sample": sample}
+                 for run_id, baseline, p_value, sample in dm_rows}
 
     out: dict[tuple[str, int], dict | None] = {}
     for key, (run_id, trial_id) in pair_by_key.items():
@@ -1165,6 +1168,7 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
             "adjusted_p_value": q["adjusted_p_value"] if q else None,
             "significant": q["significant"] if testable else None,
             "testable": testable,
+            "selection_biased": bool(q and q.get("selection_biased")),
         })
 
     prediction_rows = []

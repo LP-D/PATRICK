@@ -184,21 +184,22 @@
    "class_specific": {
     "baseline": "BASELINE_persistence",
     "correction": "HLN",
-    "dm_stat": -0.6765,
-    "mean_loss_diff": -0.045113,
-    "n_obs": 133,
-    "p_value": 0.4999,
+    "dm_stat": 0.3385,
+    "mean_loss_diff": 0.020492,
+    "n_obs": 244,
+    "p_value": 0.7353,
     "variance_kernel": "rectangular"
    },
    "common": {
     "baseline": "BASELINE_persistence",
     "correction": "HLN",
-    "dm_stat": -0.6765,
-    "mean_loss_diff": -0.045113,
-    "n_obs": 133,
-    "p_value": 0.4999,
+    "dm_stat": 0.3385,
+    "mean_loss_diff": 0.020492,
+    "n_obs": 244,
+    "p_value": 0.7353,
     "variance_kernel": "rectangular"
-   }
+   },
+   "sample": "holdout"
   },
   "final_best": {
    "F1_dir": 0.5250666667,
@@ -244,7 +245,7 @@
  },
  "tables": {
   "baseline_metric": "6544adf3cf20a0a4657ecb179371a3dc28b3b11cd8753137fc81a57c9e56c95b",
-  "dm_result": "7ade993306be768d530af2287b9ff9cbee1ee96b7d60590c05bf8a5a700be234",
+  "dm_result": "54b9bb578da9233fc88907ca2bc1c29f148f3977da642aed6629b375e19e935f",
   "feature_stability": "f77ddf2b8c1f5983c2f8d03497f40ad85583c6c85be070a184dbdd9c54b1fc13",
   "fold_metric": "1e3a3784e0d7c1d9ff296135a48359f8325e973b574611b6fbd5dcc62833964e",
   "holdout_diagnostic": "7eb47464090a71ebf1b611ef17a444a30faba2239f851352ed21c40202977a93",

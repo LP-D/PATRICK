@@ -96,7 +96,7 @@ def test_list_all_runs_query_count_does_not_scale_with_run_count(tmp_path):
         trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
         db.mark_best_trial(conn, trial_id)
         db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6})
-        db.save_dm_result(conn, run_id, {"baseline": "majority", "dm_stat": 1.0, "p_value": 0.04})
+        db.save_dm_result(conn, run_id, {"baseline": "majority", "dm_stat": 1.0, "p_value": 0.04}, sample="holdout")
         db.finish_run(conn, run_id, status="done", n_trials=1)
 
     queries: list[str] = []
