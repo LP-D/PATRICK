@@ -832,6 +832,36 @@ def list_trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
              "n_features": r[4], "selector": r[5], "is_best": bool(r[6])} for r in rows]
 
 
+def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, source: str,
+                    n_trials: int, run_id: str | None = None, detail: str | None = None) -> None:
+    """F03 -- appends one event to `trial_registry` (migration 0021): `n_trials`
+    configurations evaluated for `target`. Append-only, never updated or
+    deleted -- see the migration header."""
+    with conn:
+        conn.execute(
+            "INSERT INTO trial_registry (target, horizon, source, run_id, n_trials, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (target, horizon, source, run_id, int(n_trials), detail),
+        )
+
+
+class TrialRecorder:
+    """Optuna callback (`study.optimize(callbacks=[...])`) registering every
+    finished Optuna trial -- complete, pruned or failed: each one is an
+    evaluated configuration. Recorded as it finishes, so trials evaluated
+    before an interruption stay counted (`patrick resume` then only records
+    the remaining ones)."""
+
+    def __init__(self, conn: sqlite3.Connection, target: str, horizon: int | None,
+                 run_id: str | None = None, detail: str | None = None):
+        self.conn, self.target, self.horizon = conn, target, horizon
+        self.run_id, self.detail = run_id, detail
+
+    def __call__(self, study, trial) -> None:
+        register_trials(self.conn, self.target, self.horizon, "optuna", 1,
+                        run_id=self.run_id, detail=self.detail or study.study_name)
+
+
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
                   sampler: str, n_features: int, selector: str,
                   params_json: str = "{}", category: str = "global") -> int:
@@ -840,14 +870,25 @@ def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
     (global/per_regime/stacking, see
     `pipeline/model_categories_training.py`) -- every pre-existing call site
     (the main grid scan/Optuna loop) never passes it, so every trial it
-    produces stays correctly tagged 'global', unchanged."""
+    produces stays correctly tagged 'global', unchanged.
+
+    F03: an untuned trial (`params_json == "{}"`) is a newly evaluated
+    configuration and is registered in `trial_registry`. A tuned trial is
+    the re-evaluation of the best Optuna configuration, already registered
+    by `TrialRecorder` -- not counted twice."""
     with conn:
         cur = conn.execute(
             "INSERT INTO trial (run_id, regime, algo, sampler, n_features, selector, "
             "params_json, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, regime, algo, sampler, n_features, selector, params_json, category),
         )
-        return cur.lastrowid
+        trial_id = cur.lastrowid
+    if params_json in ("{}", "", None):
+        row = conn.execute("SELECT target, horizon FROM run WHERE run_id = ?", (run_id,)).fetchone()
+        if row is not None:
+            register_trials(conn, row[0], row[1], "scan" if category == "global" else "category", 1,
+                            run_id=run_id)
+    return trial_id
 
 
 def mark_best_trial(conn: sqlite3.Connection, trial_id: int, artifact_path: str | None = None) -> None:

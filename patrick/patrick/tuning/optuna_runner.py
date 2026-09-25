@@ -113,7 +113,7 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
                  storage_path: str | None = None, study_name: str | None = None,
                  bounds: dict | None = None, horizon: int = 1,
                  embargo_bars: int | None = None, purge: bool = False,
-                 embargo_enabled: bool = True) -> tuple[dict, float]:
+                 embargo_enabled: bool = True, registry=None) -> tuple[dict, float]:
     """`storage_path`/`study_name` (Phase 3.2, `patrick resume`): persists
     the study in a dedicated SQLite file (`optuna.db`, never `patrick.db` —
     Optuna's internal schema changes between versions, must not be coupled
@@ -132,7 +132,12 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
     `horizon`/`embargo_bars`/`purge`/`embargo_enabled` (F02): the rows of
     `X` are in chronological order; see `inner_cv_gap`. Rows removed
     upstream (flat labels, regime filter) only widen the real separation in
-    bars."""
+    bars.
+
+    `registry` (F03): optional Optuna callback -- typically
+    `tracking.db.TrialRecorder` -- called once per finished trial, so every
+    evaluated configuration reaches the DSR's `n_trials`."""
+    callbacks = [registry] if registry is not None else None
     gap = inner_cv_gap(horizon, embargo_bars, purge, embargo_enabled)
     n_splits = feasible_inner_splits(len(X), cv_splits, gap)
 
@@ -167,8 +172,8 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
         # the remaining balance rather than `n_trials` extra trials every time.
         n_remaining = max(n_trials - len(study.trials), 0)
         if n_remaining:
-            study.optimize(objective, n_trials=n_remaining, show_progress_bar=False)
+            study.optimize(objective, n_trials=n_remaining, show_progress_bar=False, callbacks=callbacks)
     else:
         study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False, callbacks=callbacks)
     return study.best_params, study.best_value

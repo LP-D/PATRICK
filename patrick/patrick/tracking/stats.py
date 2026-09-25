@@ -14,25 +14,34 @@ from patrick.validation.pbo import compute_pbo
 from patrick.validation.pbo_reliability import pbo_reliability
 
 
-def count_cumulative_trials(conn: sqlite3.Connection, target: str, horizon: int | None = None) -> int:
-    """Total number of trials (`trial`) run for this target, across the whole
-    run history — not just the current run (Phase 2.2). It is this number,
-    not a single run's, that must correct a Sharpe/PBO: searching for the
-    best config across 50 successive runs amounts to having tried far more
-    than a single isolated run would suggest."""
+def count_registered_trials(conn: sqlite3.Connection, target: str, horizon: int | None = None) -> int:
+    """F03 -- total number of configurations ever evaluated for `target`
+    (optionally one horizon), read from the append-only `trial_registry`
+    (migration 0021): scan trials, EVERY Optuna trial, simulations, model
+    categories -- across the whole run history, deleted runs included."""
     if horizon is not None:
         row = conn.execute(
-            "SELECT COUNT(*) FROM trial JOIN run ON trial.run_id = run.run_id "
-            "WHERE run.target = ? AND run.horizon = ?",
+            "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE target = ? AND horizon = ?",
             (target, horizon),
         ).fetchone()
     else:
         row = conn.execute(
-            "SELECT COUNT(*) FROM trial JOIN run ON trial.run_id = run.run_id "
-            "WHERE run.target = ?",
-            (target,),
+            "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE target = ?", (target,),
         ).fetchone()
     return int(row[0]) if row else 0
+
+
+def count_cumulative_trials(conn: sqlite3.Connection, target: str, horizon: int | None = None) -> int:
+    """Total number of trials run for this target, across the whole run
+    history — not just the current run (Phase 2.2). It is this number, not a
+    single run's, that must correct a Sharpe/PBO: searching for the best
+    config across 50 successive runs amounts to having tried far more than a
+    single isolated run would suggest.
+
+    F03: counted from `trial_registry` (see `count_registered_trials`), no
+    longer from `trial JOIN run` -- which counted a 100-trial Optuna tuning
+    as 1 and lost every trial of a deleted run (ON DELETE CASCADE)."""
+    return count_registered_trials(conn, target, horizon)
 
 
 def pbo_for_target(conn: sqlite3.Connection, target: str, horizon: int, regime: str,

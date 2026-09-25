@@ -53,6 +53,7 @@ from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.simulate import metrics as simmetrics
 from patrick.tracking import db as trackdb
+from patrick.tracking import stats as trackstats
 from patrick.validation.dsr import deflated_sharpe_ratio
 
 _UP_CLASSES = (2, 3)
@@ -348,9 +349,14 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         strat_summary["break_even_cost_bps"] = break_even_bps
 
         n_configs = count_simulations_for_target(conn, run["target"])
-        dsr = deflated_sharpe_ratio(strategy_returns.values, n_trials=max(n_configs, 1))
+        # F03: the strategy was selected among EVERY configuration evaluated
+        # for this target (scan, each Optuna trial, previous simulations --
+        # `trial_registry`), not only among past simulations; +1 for this one.
+        dsr_n_trials = trackstats.count_registered_trials(conn, run["target"]) + 1
+        dsr = deflated_sharpe_ratio(strategy_returns.values, n_trials=dsr_n_trials)
         strat_summary["deflated_sharpe"] = dsr["dsr"]
         strat_summary["sharpe_p_value"] = dsr["p_value"]
+        strat_summary["dsr_n_trials"] = dsr_n_trials
 
         result = {
             "ok": True,
@@ -404,6 +410,9 @@ def _series_to_points(s: pd.Series) -> list[dict]:
 
 
 def save_simulation(conn: sqlite3.Connection, trial_id: int, params: SimParams, result: dict) -> str:
+    """Persists the simulation and registers it in `trial_registry` (F03): a
+    simulated position rule is one more configuration evaluated on the
+    target, counted in every later DSR."""
     simulation_id = uuid.uuid4().hex[:12]
     with conn:
         conn.execute(
@@ -413,6 +422,11 @@ def save_simulation(conn: sqlite3.Connection, trial_id: int, params: SimParams, 
              json.dumps(result) if result.get("ok") else None,
              None if result.get("ok") else result.get("message")),
         )
+    row = conn.execute(
+        "SELECT run.target, run.horizon, run.run_id FROM trial JOIN run ON trial.run_id = run.run_id "
+        "WHERE trial.trial_id = ?", (trial_id,)).fetchone()
+    if row is not None:
+        trackdb.register_trials(conn, row[0], row[1], "simulation", 1, run_id=row[2], detail=simulation_id)
     return simulation_id
 
 

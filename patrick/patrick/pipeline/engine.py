@@ -1301,7 +1301,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                                                     horizon=horizon,
                                                     embargo_bars=config.validation.embargo_bars,
                                                     purge=config.validation.purge,
-                                                    embargo_enabled=config.validation.embargo_enabled)
+                                                    embargo_enabled=config.validation.embargo_enabled,
+                                                    registry=trackdb.TrialRecorder(
+                                                        conn, config.objective.target_symbol, horizon,
+                                                        run_id=run_id, detail=study_name))
                 except InnerCVInfeasible as exc:
                     print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
                           f"Optuna skipped -- {exc}")
