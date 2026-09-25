@@ -14,9 +14,11 @@ each fix rather than measuring 4 unordered combinations:
   - baseline_avant : no phase-0 fix (purge/embargo disabled,
     as-of alignment disabled, no vintage).
   - +purge         : + purge/embargo (Phase 0.1).
-  - +vintages      : + FRED/ALFRED vintages (Phase 0.5) -- requires
-    FRED_API_KEY (scrape fallback = always the current revision, a vintage
-    is impossible there, see `data/sources/fred_source.py`).
+  - +vintages      : + FRED point-in-time: every observation on its
+    publication date (F01, `data/publication_lag.py`; ALFRED first releases
+    when FRED_API_KEY is set) + the single-date vintage (Phase 0.5, API
+    only). The two previous configurations keep FRED series on their
+    reference dates (`fred_point_in_time="reference_date"`, pre-F01).
   - complet        : + per-asset-class as-of alignment (Phase 0.4) --
     current production configuration.
 """
@@ -24,8 +26,9 @@ from __future__ import annotations
 
 import csv
 import os
-from datetime import date, timedelta
+from datetime import timedelta
 
+from patrick.clock import utc_today
 from patrick.config.schema import (
     ModelsConfig,
     ObjectiveConfig,
@@ -74,7 +77,7 @@ def _vintage_date_for_audit() -> str:
     realtime_end=today` BY DEFAULT -- indistinguishable from the no-vintage
     case. One year back makes the difference visible (logged URL, retrieved
     values) and verifiable by the user under real conditions."""
-    return (date.today() - timedelta(days=365)).isoformat()
+    return (utc_today() - timedelta(days=365)).isoformat()
 
 
 def _config_for(target: dict, configuration: str, seed: int, output_dir: str) -> RunConfig:
@@ -98,6 +101,8 @@ def _config_for(target: dict, configuration: str, seed: int, output_dir: str) ->
             fred_series=target.get("fred_series", {}),
             start_date=target.get("start_date", "2015-01-01"),
             vintage_realtime_date=_vintage_date_for_audit() if vintages_on else None,
+            fred_point_in_time=(("alfred" if os.environ.get(FRED_API_KEY_ENV) else "publication_lag")
+                                if vintages_on else "reference_date"),
         ),
         validation=ValidationConfig(
             n_wf_folds=3, purge=purge_on, embargo_enabled=purge_on,

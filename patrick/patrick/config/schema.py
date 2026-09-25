@@ -42,6 +42,14 @@ class UniverseConfig(BaseModel):
     # specific to each fold cut. Documented, not resolved here (out of scope
     # for C7: measure the impact of existing fixes, not build a finer new one).
     vintage_realtime_date: str | None = None
+    # F01 -- how FRED observations are placed in time (`data/ingest.py`):
+    # "publication_lag" (default) re-indexes every observation on its
+    # estimated release date (`data/publication_lag.py`); "alfred" uses the
+    # ALFRED first releases indexed on their true publication date (needs
+    # FRED_API_KEY, falls back to "publication_lag" with a warning);
+    # "reference_date" is the pre-F01, LEAKY behavior, kept only so that
+    # `patrick audit degradation` can measure what F01 changes.
+    fred_point_in_time: Literal["publication_lag", "alfred", "reference_date"] = "publication_lag"
 
 
 class DataQualityConfig(BaseModel):

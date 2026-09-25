@@ -20,9 +20,11 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import pandas as pd
+
+from patrick.clock import utc_today
 
 
 def _default_store_dir() -> str:
@@ -112,19 +114,36 @@ class DataStore:
         df.attrs["data_hash"] = entry["content_hash"]
         return df
 
-    def save(self, key: str, df: pd.DataFrame) -> str:
+    def latest_entry(self, key: str) -> dict | None:
+        entries = self._read_index().get(key, {}).get("snapshots", [])
+        return dict(entries[-1]) if entries else None
+
+    def save(self, key: str, df: pd.DataFrame, meta: dict | None = None) -> str:
         """Writes `df` to a new immutable partition (deduplicates by content
         hash: if an identical snapshot already exists for this key, reuses
-        it rather than creating a new one). Returns the snapshot_id."""
+        it rather than creating a new one). Returns the snapshot_id.
+
+        `meta` (F01): extra fields recorded on the index entry -- e.g. the
+        point-in-time alignment version the frame was built under. Merged
+        into an existing identical-content entry (the data is the same, the
+        rule that produced it is recorded), which also moves that entry to
+        the end of the list: "latest" means "last produced"."""
         content_hash = _content_hash(df)
         idx = self._read_index()
         entries = idx.setdefault(key, {}).setdefault("snapshots", [])
 
         existing = next((e for e in entries if e["content_hash"] == content_hash), None)
         if existing is not None:
+            if meta:
+                existing.update(meta)
+                entries.remove(existing)
+                entries.append(existing)
+                self._write_index(idx)
+            df.attrs["snapshot_id"] = existing["snapshot_id"]
+            df.attrs["data_hash"] = content_hash
             return existing["snapshot_id"]
 
-        snapshot_date = date.today().isoformat()
+        snapshot_date = utc_today().isoformat()
         snapshot_id = f"{snapshot_date}__{self._safe_key(key)}__{content_hash}"
         path = self._snapshot_path(key, snapshot_date, content_hash)
         os.makedirs(self._partition_dir(snapshot_date), exist_ok=True)
@@ -139,6 +158,7 @@ class DataStore:
             "date_min": str(df.index.min()) if len(df) else None,
             "date_max": str(df.index.max()) if len(df) else None,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            **(meta or {}),
         })
         self._write_index(idx)
         df.attrs["snapshot_id"] = snapshot_id

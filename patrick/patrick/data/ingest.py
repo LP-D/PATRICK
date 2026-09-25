@@ -10,6 +10,7 @@ import pandas as pd
 
 from patrick.cache_manager import LocalCache
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
+from patrick.data import publication_lag
 from patrick.data import quality as quality_module
 from patrick.data.session_calendar import session_lag_days
 from patrick.data.sources import fred_source, yfinance_source
@@ -56,6 +57,7 @@ def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
     exclusions happened during the original fetch, not replayed here --
     same accepted limitation as `n_tickers`/`fred_source`, recomputed on
     every call rather than persisted with the data itself)."""
+    df.attrs["pit_version"] = f"{publication_lag.PIT_VERSION}:{universe.fred_point_in_time}"
     df.attrs["n_tickers"] = len(universe.yf_tickers)
     df.attrs["n_fred_series"] = len(universe.fred_series)
     df.attrs["fred_source"] = "api" if os.environ.get(FRED_API_KEY_ENV) else "scrape"
@@ -115,16 +117,25 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     cache_key = f"raw_{objective.target_symbol}"
     local_cache = LocalCache()
     cached_local = local_cache.load_dataframe(f"{cache_key}_local", max_age_days=30)
-    if not force and store.exists(cache_key):
+    # F01: a cached frame built under another point-in-time rule (or before
+    # F01 -- no version recorded: FRED series on their reference dates) is
+    # stale whatever its age, never served.
+    pit = f"{publication_lag.PIT_VERSION}:{universe.fred_point_in_time}"
+    latest = store.latest_entry(cache_key)
+    if not force and latest is not None and latest.get("pit_version") == pit:
         df = store.load(cache_key)
         _attach_snapshot_context(df, universe)
         print(f"[CACHE] {cache_key}: {df.shape} already cached (force=True to refresh).")
         return df
-    if not force and cached_local is not None:
+    if not force and cached_local is not None and \
+            local_cache.read_meta(f"{cache_key}_local").get("pit_version") == pit:
         df = cached_local.copy()
         _attach_snapshot_context(df, universe)
         print(f"[CACHE_LOCAL] {cache_key}: {df.shape} reused from local cache (missing rows only).")
         return df
+    if not force and latest is not None:
+        print(f"[CACHE] {cache_key}: cached snapshot built without point-in-time alignment "
+              f"({latest.get('pit_version') or 'pre-F01'}) -- refetching.")
 
     t0 = time.time()
     if objective.target_source == "yfinance":
@@ -134,6 +145,11 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
                                                universe.start_date)
         if target is None:
             raise RuntimeError(f"Could not fetch FRED target '{objective.target_symbol}'.")
+        # F01: a FRED target is placed on its publication dates too -- the
+        # label then predicts the next PUBLISHED values, the only thing
+        # observable at each decision date.
+        if universe.fred_point_in_time != "reference_date":
+            target = publication_lag.to_availability_index(target, objective.target_symbol)
 
     df = target.to_frame()
     issues: list = []
@@ -153,15 +169,25 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         df = df.join(yf_df, how="outer")
 
     if universe.fred_series:
+        use_alfred = universe.fred_point_in_time == "alfred"
         fred_df = fred_source.download_fred_universe(
             universe.fred_series, universe.start_date, realtime_date=universe.vintage_realtime_date,
-            issues=issues if dq.enabled else None)
+            issues=issues if dq.enabled else None, first_release=use_alfred)
+        already_pit = bool(fred_df.attrs.get("point_in_time"))
+        if use_alfred and not already_pit:
+            print("  [WARN] fred_point_in_time='alfred' requires FRED_API_KEY: falling back to the "
+                  "publication-lag table (data/publication_lag.py).")
         if dq.enabled and len(fred_df.columns):
             # FRED series not pre-filled at this stage: all 4 checks apply.
             to_drop = _run_extra_quality_checks(fred_df, requested_end, dq, issues, prefilled=False)
             fred_df = fred_df.drop(columns=to_drop)
         if len(fred_df):
-            fred_df = fred_df.reindex(df.index, method="ffill")
+            # F01: every observation enters on its availability date, series
+            # by series (see `publication_lag.align_to_calendar` for why not
+            # one `reindex(method="ffill")` on the concatenated frame).
+            fred_df = publication_lag.align_fred_frame(
+                fred_df, universe.fred_series, df.index,
+                already_point_in_time=already_pit or universe.fred_point_in_time == "reference_date")
             df = pd.concat([df, fred_df], axis=1)
 
     if dq.enabled and n_requested > 0:
@@ -193,7 +219,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
 
     df = df.sort_index().ffill().dropna(subset=[target.name])
     print(f"[INGEST] {df.shape} ({time.time()-t0:.1f}s) | cible={target.name}")
-    store.save(cache_key, df)
-    local_cache.save_dataframe(f"{cache_key}_local", df, max_age_days=30)
+    store.save(cache_key, df, meta={"pit_version": pit})
+    local_cache.save_dataframe(f"{cache_key}_local", df, max_age_days=30, extra_meta={"pit_version": pit})
     _attach_snapshot_context(df, universe, quality_issues=issues if dq.enabled else None)
     return df
