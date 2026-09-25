@@ -1,0 +1,227 @@
+{
+ "exported": {
+  "h3": {
+   "features": [
+    "IDX_GOLD_kalman_filtered",
+    "NFCI_skew_20d",
+    "SPX_LIKE_semivar_20d",
+    "SPX_LIKE_vol_20d",
+    "NFCI_vol_20d",
+    "SPX_LIKE_ret_20d"
+   ],
+   "proba": [
+    [
+     0.4328892842,
+     0.0541815685,
+     0.3224309714,
+     0.1904981759
+    ],
+    [
+     0.6811513142,
+     0.0871387419,
+     0.1374535188,
+     0.0942564251
+    ],
+    [
+     0.167307138,
+     0.4779801435,
+     0.1235237963,
+     0.2311889221
+    ],
+    [
+     0.0986739648,
+     0.2565501024,
+     0.2259508495,
+     0.4188250832
+    ],
+    [
+     0.6197503495,
+     0.1181110624,
+     0.0466984376,
+     0.2154401506
+    ],
+    [
+     0.0203047304,
+     0.1517181095,
+     0.0870563265,
+     0.7409208337
+    ],
+    [
+     0.0460762623,
+     0.0092684968,
+     0.0556010821,
+     0.8890541588
+    ],
+    [
+     0.0101069213,
+     0.3186132644,
+     0.1373937582,
+     0.533886056
+    ],
+    [
+     0.2534993464,
+     0.3393508717,
+     0.3389378703,
+     0.0682119115
+    ],
+    [
+     0.0110313577,
+     0.0060517167,
+     0.2537486301,
+     0.7291682955
+    ],
+    [
+     0.0350935873,
+     0.0504551936,
+     0.0981027871,
+     0.816348432
+    ],
+    [
+     0.362431172,
+     0.3167088799,
+     0.2045543645,
+     0.1163055836
+    ]
+   ]
+  },
+  "h5": {
+   "features": [
+    "IDX_GOLD_kalman_filtered",
+    "IDX_GOLD_rsi_14d",
+    "NFCI_skew_20d",
+    "SPX_LIKE_vol_20d",
+    "IDX_GOLD_vol_20d",
+    "NFCI_ret_5d"
+   ],
+   "proba": [
+    [
+     0.6468929084,
+     0.1537128501,
+     0.0821739405,
+     0.1172203011
+    ],
+    [
+     0.0522783803,
+     0.8220303298,
+     0.1091555204,
+     0.0165357696
+    ],
+    [
+     0.3013796452,
+     0.3761952613,
+     0.0313088718,
+     0.2911162217
+    ],
+    [
+     0.8163271708,
+     0.0473192158,
+     0.0339073936,
+     0.1024462198
+    ],
+    [
+     0.3287738998,
+     0.5699071531,
+     0.090913968,
+     0.0104049791
+    ],
+    [
+     0.0971681731,
+     0.0568509218,
+     0.0105949219,
+     0.8353859832
+    ],
+    [
+     0.1646079534,
+     0.0696296673,
+     0.0141353927,
+     0.7516269866
+    ],
+    [
+     0.2140918603,
+     0.4236543151,
+     0.1998094411,
+     0.1624443835
+    ],
+    [
+     0.1419364463,
+     0.6272122174,
+     0.1484784131,
+     0.0823729232
+    ],
+    [
+     0.053469364,
+     0.1040843283,
+     0.3691567505,
+     0.4732895572
+    ],
+    [
+     0.1271384071,
+     0.2442602766,
+     0.5724680027,
+     0.0561333136
+    ],
+    [
+     0.7263082341,
+     0.1434846358,
+     0.1105059098,
+     0.0197012203
+    ]
+   ]
+  }
+ },
+ "leaderboard": "c2dce88b107ee277bd3fe1e32ab5e35c57fdfbb7cb2b667f36e9e540847b6ce2",
+ "result": {
+  "best_before_tuning": {
+   "F1_dir": 0.5146,
+   "N": 6,
+   "algo": "LightGBM",
+   "horizon": 3,
+   "n_folds": 1,
+   "regime": "GLOBAL",
+   "sampler": "none"
+  },
+  "cumulative_trials": 8,
+  "diebold_mariano": null,
+  "final_best": {
+   "F1_dir": 0.5146,
+   "N": 6,
+   "algo": "LightGBM",
+   "horizon": 3,
+   "n_folds": 1,
+   "regime": "GLOBAL",
+   "sampler": "none"
+  },
+  "holdout": null,
+  "holdout_diagnostic": null,
+  "pbo": {
+   "mean_logit": -2.6012,
+   "n_blocks": 4,
+   "n_combinations": 6,
+   "n_trials": 8,
+   "pbo": 0.6667,
+   "reliability": {
+    "bootstrap_std": null,
+    "ci_high": null,
+    "ci_low": null,
+    "message": "PBO non calcul\u00e9 (4 blocs disponibles). PBO n\u00e9cessite au moins 6 blocs temporels (n_wf_folds, apr\u00e8s retrait \u00e9ventuel du bloc le plus ancien pour parit\u00e9) : C(6, 3) = 20 combinaisons IS/OOS, au-dessus du plancher de 10 (r\u00e8gle n*p>=5 et n*(1-p)>=5 pour une proportion, pire cas p=0.5) -- un plancher N\u00c9CESSAIRE mais pas suffisant : les combinaisons CSCV ne sont pas ind\u00e9pendantes (elles partagent des blocs), le vrai besoin est plus \u00e9lev\u00e9.",
+    "n_blocks": 4,
+    "n_combinations": 0,
+    "ok": false,
+    "pbo": null
+   }
+  }
+ },
+ "tables": {
+  "baseline_metric": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "dm_result": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "feature_stability": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "fold_metric": "d196f180cf41496fd951de54ea9816fc32b603ebc4003b86deec3a141198eb53",
+  "holdout_diagnostic": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "phases": "dd146f6c9df35197809ab8628373412dafe9eba17e278b34a680a21299f8fc43",
+  "prediction": "9c83344d92f042e1daa9211ed3133f53cdce45f7572bc6fb2cf89b27b912cabe",
+  "registry": "8be3557a614d08ad1553c32e646f2aaa46c7057d26d1673d2129ad8b963eee4c",
+  "run_status": "789dd280a07cc61324a4b7a8572f340498febd89744666b4a549f6ac21dcda31",
+  "trial": "d1d05e54e2d054c8038a7498f899f96b52c784c639b41edb4bdf755601ae7ae9"
+ },
+ "tuned": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+}

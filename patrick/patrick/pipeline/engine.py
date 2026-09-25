@@ -41,7 +41,7 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -1041,540 +1041,526 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     return board, trial_ids, n_trials_per_run, full_pool, feature_pool, interaction_formulas
 
 
+@dataclass
+class _RunState:
+    """Everything the phases of one `run_pipeline` call share. Before the
+    golden-master refactor (`tests/test_run_pipeline_golden.py`) these were
+    ~30 locals of a single 532-line function."""
+    config: RunConfig
+    conn: object
+    raw: pd.DataFrame
+    target_col: str
+    seed: int
+    t0: float
+    snapshot_id: str
+    config_hash: str
+    run_ids: dict[int, str]
+    base_pool: pd.DataFrame | None = None
+    all_dates_full: pd.DatetimeIndex | None = None
+    n_wf: int = 0
+    pool_builder: _FoldPoolBuilder | None = None
+    ctx: _FoldContext | None = None
+    feature_pool: list[str] = field(default_factory=list)
+    last_fold: int | None = None
+    board: Leaderboard = field(default_factory=Leaderboard)
+    trial_ids: dict[tuple, int] = field(default_factory=dict)
+    n_trials_per_run: dict[str, int] = field(default_factory=dict)
+    baseline_rows: list[dict] = field(default_factory=list)
+    baseline_accum: dict[tuple[str, str], list[dict]] = field(default_factory=dict)
+    tuned_rows: list[dict] = field(default_factory=list)
+    tuned_trial_ids: dict[tuple, int] = field(default_factory=dict)
+    cpcv_full_pool: pd.DataFrame | None = None
+    cpcv_interaction_formulas: list[str] | None = None
+
+    @property
+    def is_walkforward(self) -> bool:
+        return self.config.validation.scheme == "walkforward"
+
+    @property
+    def has_holdout(self) -> bool:
+        return self.n_wf < len(self.all_dates_full)
+
+    def record_phase_all_runs(self, phase: str, start: float, end: float) -> None:
+        """Phases that mix every horizon (ingestion, pool, holdout
+        diagnostic, CSV export): one identical start/end row per run_id,
+        never a false per-horizon split of a genuinely mixed loop."""
+        for run_id in self.run_ids.values():
+            trackdb.record_phase_timing(self.conn, run_id, phase, start, end)
+
+
+def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id: str | None,
+                   ) -> tuple[str, str, dict[int, str]]:
+    """Snapshot context (Phase 1.6) + one `run` row per horizon, sharing the
+    snapshot. Returns (snapshot_id, config_hash, run_ids)."""
+    snapshot_id, data_hash, n_tickers, n_fred_series, fred_src, quality_issues = _snapshot_context(raw)
+    trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
+    trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
+    config_json = config.model_dump_json()
+    config_hash = _config_hash(config)
+    git_sha = trackdb.current_git_sha()
+    run_ids: dict[int, str] = {}
+    for horizon in config.objective.horizons:
+        run_id = f"{config.name}_h{horizon}_{uuid.uuid4().hex[:8]}"
+        trackdb.create_run(conn, run_id, target=config.objective.target_symbol, horizon=horizon,
+                            snapshot_id=snapshot_id, config_json=config_json,
+                            config_hash=config_hash, git_sha=git_sha, seed=seed, job_id=job_id)
+        run_ids[horizon] = run_id
+    return snapshot_id, config_hash, run_ids
+
+
+def _scan_cpcv(st: _RunState) -> None:
+    """Phase 6.1 (P6.1) -- CPCV as an ALTERNATIVE to walk-forward. Its pool
+    build and scan loop are entangled inside `_run_cpcv_scan`: recorded as
+    "scan" only, no "pool_construction" row (see migration 0016)."""
+    t_scan_start = time.time()
+    (st.board, st.trial_ids, st.n_trials_per_run, st.cpcv_full_pool, st.feature_pool,
+     st.cpcv_interaction_formulas) = _run_cpcv_scan(st.raw, st.config, st.base_pool, st.target_col, st.conn,
+                                                    st.run_ids, st.seed, st.snapshot_id)
+    st.record_phase_all_runs("scan", t_scan_start, time.time())
+    st.n_wf = len(st.all_dates_full)  # CPCV: no terminal holdout (accepted limitation, see _run_cpcv_scan)
+
+
+def _prepare_walkforward(st: _RunState, t_pool_start: float) -> None:
+    """Terminal holdout span (Phase 2.1), fold cuts, first fold's full pool
+    (base + parametric + interactions) -- the only pool build cleanly
+    attributable to "pool_construction"; later folds' pools are built lazily
+    inside the scan (migration 0016's known limitation)."""
+    config = st.config
+    st.n_wf = _walk_forward_span(st.all_dates_full, config.validation.holdout_months,
+                                 config.validation.min_train_frac)
+    all_dates = st.all_dates_full[:st.n_wf]
+    fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds, config.validation.min_train_frac)
+    describe_folds(all_dates, fold_cuts)
+    if st.has_holdout:
+        print(f"[HOLDOUT] {len(st.all_dates_full) - st.n_wf} rows reserved "
+              f"({st.all_dates_full[st.n_wf].date()} -> {st.all_dates_full[-1].date()}), "
+              "never seen by selection/tuning.")
+    st.pool_builder = _FoldPoolBuilder(st.raw, config, st.target_col, st.base_pool, fold_cuts,
+                                       conn=st.conn, snapshot_id=st.snapshot_id)
+    st.feature_pool = [c for c in st.pool_builder.get(fold_cuts[0]).columns if c != st.target_col]
+    st.record_phase_all_runs("pool_construction", t_pool_start, time.time())
+    print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(st.feature_pool)} columns")
+    st.ctx = _FoldContext(st.pool_builder, st.target_col, st.feature_pool, config, all_dates, fold_cuts)
+    st.n_trials_per_run = {h: 0 for h in st.run_ids.values()}
+    st.last_fold = config.validation.n_wf_folds - 1
+
+
+def _trial_id_for(st: _RunState, run_id: str, trial_key: tuple) -> int:
+    """One `trial` row per (horizon, regime, N, sampler, algo), created on
+    first evaluation (and registered in `trial_registry`, F03)."""
+    if trial_key not in st.trial_ids:
+        _horizon, regime, n_feat, sampler_name, algo = trial_key
+        st.trial_ids[trial_key] = trackdb.create_trial(
+            st.conn, run_id, regime, algo, sampler_name, n_feat, selector=st.config.selection.method)
+        st.n_trials_per_run[run_id] += 1
+    return st.trial_ids[trial_key]
+
+
+def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, regime: str) -> None:
+    """Grid (N x sampler x algo) on one (horizon, fold, regime): leaderboard
+    rows, fold metrics and test predictions of every trial."""
+    config = st.config
+    fd = st.ctx.prepare(horizon, k, regime, want_baselines=True)
+    if fd is None:
+        return
+    for baseline_name, base_met in (fd.baselines or {}).items():
+        st.baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
+                                 "N": None, "sampler": None, "algo": baseline_name,
+                                 "features": "", "n_train": len(fd.y_tr), "n_test": len(fd.y_te),
+                                 "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
+        st.baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
+
+    for n_feat in config.selection.n_features_grid:
+        cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
+        X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
+        feat_names = [st.feature_pool[c] for c in cols]
+        for sampler_name in config.sampler.candidates:
+            for algo in config.models.algos:
+                met, y_pred, confidence = _fit_eval(
+                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed,
+                    calibration=config.models.calibration,
+                    sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+                    uniqueness_weights_enabled=config.sampling.uniqueness_weights)
+                # Phase 6.2 (P6.2): effective sample size (sum of uniquenesses)
+                # alongside n_train -- always computed.
+                st.board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
+                             sampler=sampler_name, algo=algo, features="|".join(feat_names),
+                             n_train=len(fd.y_tr), n_test=len(fd.y_te), effective_n_train=fd.effective_n,
+                             test_start=fd.test_start, test_end=fd.test_end, **met)
+                trial_id = _trial_id_for(st, run_id, (horizon, regime, n_feat, sampler_name, algo))
+                # n_eff stored as one more "metric" (generic trial/fold/split/metric
+                # schema) -- read by the HTML report alongside F1_dir.
+                met_with_n = dict(met)
+                met_with_n["n_train"] = float(len(fd.y_tr))
+                if fd.effective_n is not None:
+                    met_with_n["effective_n_train"] = fd.effective_n
+                trackdb.add_fold_metrics(st.conn, trial_id, fold_index=k + 1, split="test", metrics=met_with_n)
+                trackdb.add_predictions(st.conn, trial_id, fold_index=k + 1, split="test",
+                                        ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
+
+
+def _scan_walkforward(st: _RunState) -> None:
+    config = st.config
+    for horizon in config.objective.horizons:
+        run_id = st.run_ids[horizon]
+        t_scan_start = time.time()
+        for k in range(config.validation.n_wf_folds):
+            for regime in config.objective.regimes:
+                _scan_walkforward_fold(st, horizon, run_id, k, regime)
+            print(f"  h={horizon:2d}d fold{k+1}: {len(st.board.rows)} cumulative rows "
+                  f"[{time.time()-st.t0:.0f}s]")
+        trackdb.record_phase_timing(st.conn, run_id, "scan", t_scan_start, time.time())
+
+
+def _board_for_horizon(board: Leaderboard, horizon: int, models_only: bool = True) -> Leaderboard:
+    board_h = Leaderboard()
+    board_h.rows = [r for r in board.rows
+                    if r.get("horizon") == horizon and (not models_only or r.get("N") is not None)]
+    return board_h
+
+
+def _track_stability(st: _RunState) -> None:
+    """Phase 6.3 (P6.3) -- feature selection stability PER HORIZON, for the
+    locally winning (regime, N) config of that horizon (fold-averaged,
+    independent of the global `final_best`), measured on the features each
+    fold actually retained (`board.rows[...]["features"]`, no re-selection).
+    Walk-forward only (CPCV rows do not carry per-fold features)."""
+    if not (st.config.selection.track_stability and st.is_walkforward):
+        return
+    for horizon in st.config.objective.horizons:
+        board_h = _board_for_horizon(st.board, horizon)
+        top_h = board_h.top_k(1, metric="F1_dir")
+        if not top_h:
+            continue
+        winner = top_h[0]
+        t_start = time.time()
+        fold_feature_sets: dict[int, list[str]] = {}
+        for r in board_h.rows:
+            if r["regime"] == winner["regime"] and r["N"] == winner["N"]:
+                fold_feature_sets.setdefault(r["fold"], r["features"].split("|") if r["features"] else [])
+        stability = feature_selection_stability(fold_feature_sets)
+        trackdb.save_feature_stability(st.conn, st.run_ids[horizon], stability["mean_jaccard"],
+                                       stability["n_folds"], stability["selection_freq"])
+        if stability["warning"]:
+            print(f"  [STABILITY] h={horizon}d: {stability['warning']}")
+        trackdb.record_phase_timing(st.conn, st.run_ids[horizon], "stability", t_start, time.time())
+
+
+def _holdout_diagnostic(st: _RunState) -> None:
+    """Audit report, C4 -- holdout metrics of the WHOLE scan grid, written to
+    `holdout_diagnostic` (never read by selection/tuning): a test/holdout
+    rank correlation after the fact, never influencing the choice."""
+    if not (st.is_walkforward and st.has_holdout and st.trial_ids):
+        return
+    print(f"[HOLDOUT DIAGNOSTIC] evaluating {len(st.trial_ids)} trials on the holdout "
+          "(read-only, chooses nothing)...")
+    t_start = time.time()
+    for (h, regime, n_feat, sampler_name, algo), tid in st.trial_ids.items():
+        diag_cfg = {"horizon": h, "regime": regime, "N": n_feat, "sampler": sampler_name, "algo": algo,
+                    "best_params": {}}
+        diag_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
+                                      st.config, st.all_dates_full, st.n_wf, diag_cfg, st.seed)
+        if diag_eval is not None:
+            trackholdout.write_holdout_diagnostic(st.conn, tid, diag_eval["metrics"])
+    st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
+
+
+def _tuning_candidates(st: _RunState) -> list[dict]:
+    """Audit report, C3: top_k PER horizon by default -- a horizon whose best
+    scan trial dominates must not capture the whole Optuna budget."""
+    config = st.config
+    if not config.tuning.optuna_select_top_k_per_horizon:
+        return st.board.top_k(config.tuning.top_k, metric="F1_dir")
+    top_configs = []
+    for horizon in config.objective.horizons:
+        top_configs.extend(_board_for_horizon(st.board, horizon, models_only=False)
+                           .top_k(config.tuning.top_k, metric="F1_dir"))
+    return top_configs
+
+
+def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
+    """Optuna on the last fold's train (purged inner CV, F02; every trial
+    registered, F03), then the tuned config re-evaluated on every fold."""
+    config = st.config
+    horizon, regime, n_feat = int(cfg["horizon"]), cfg["regime"], int(cfg["N"])
+    sampler_name, algo = cfg["sampler"], cfg["algo"]
+    run_id = st.run_ids[horizon]
+    fd = st.ctx.prepare(horizon, st.last_fold, regime)
+    if fd is None or len(fd.y_tr) < config.validation.min_train_rows * 2:
+        return
+    t_tune_start = time.time()
+    cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
+    study_name = study_name_for(config.name, st.config_hash, horizon, regime, n_feat, sampler_name, algo)
+    try:
+        best_params, best_cv = tune_config(
+            fd.X_tr[:, cols], fd.y_tr, algo, sampler_name, n_trials=config.tuning.n_trials,
+            cv_splits=config.tuning.cv_splits, seed=st.seed, storage_path=optuna_storage_path,
+            study_name=study_name, bounds=config.tuning.optuna_bounds, horizon=horizon,
+            embargo_bars=config.validation.embargo_bars, purge=config.validation.purge,
+            embargo_enabled=config.validation.embargo_enabled,
+            registry=trackdb.TrialRecorder(st.conn, config.objective.target_symbol, horizon,
+                                           run_id=run_id, detail=study_name))
+    except InnerCVInfeasible as exc:
+        print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: Optuna skipped -- {exc}")
+        return
+    print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
+          f"cv_F1_dir={best_cv:.4f} params={best_params}")
+
+    tuned_key = (horizon, regime, n_feat, sampler_name, algo, json.dumps(best_params, sort_keys=True))
+    st.tuned_trial_ids[tuned_key] = trackdb.create_trial(
+        st.conn, run_id, regime, algo, sampler_name, n_feat,
+        selector=config.selection.method, params_json=json.dumps(best_params))
+    st.n_trials_per_run[run_id] += 1
+    tuned_trial_id = st.tuned_trial_ids[tuned_key]
+
+    for k in range(config.validation.n_wf_folds):
+        fd = st.ctx.prepare(horizon, k, regime)
+        if fd is None:
+            continue
+        cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
+        met, y_pred, confidence = _fit_eval(
+            fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te, sampler_name, algo, st.seed,
+            calibration=config.models.calibration, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+            uniqueness_weights_enabled=config.sampling.uniqueness_weights, **best_params)
+        st.tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime, "N": n_feat,
+                              "sampler": sampler_name, "algo": algo, "best_params": str(best_params),
+                              "effective_n_train": fd.effective_n, "test_start": fd.test_start,
+                              "test_end": fd.test_end, **met})
+        trackdb.add_fold_metrics(st.conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
+        trackdb.add_predictions(st.conn, tuned_trial_id, fold_index=k + 1, split="test",
+                                ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
+    trackdb.record_phase_timing(st.conn, run_id, "tuning", t_tune_start, time.time())
+
+
+def _tune(st: _RunState) -> None:
+    """Walk-forward only (relies on `ctx.prepare`'s train=prefix topology).
+    Phase 3.2 (`patrick resume`): studies persisted in `optuna.db` (never
+    `patrick.db`) under a deterministic, versioned name."""
+    config = st.config
+    if not (st.is_walkforward and config.tuning.enabled and len(st.board.rows)):
+        return
+    top_configs = _tuning_candidates(st)
+    print(f"\n[OPTUNA] tuning the {len(top_configs)} best configs "
+          f"({config.tuning.n_trials} trials, CV={config.tuning.cv_splits}, "
+          f"per_horizon={config.tuning.optuna_select_top_k_per_horizon})...")
+    os.makedirs(config.output.dir, exist_ok=True)
+    optuna_storage_path = os.path.join(config.output.dir, "optuna.db")
+    for cfg in top_configs:
+        _tune_one(st, cfg, optuna_storage_path)
+
+
+def _export_tables(st: _RunState) -> pd.DataFrame:
+    """Leaderboard (+ baselines) and tuned CSVs, then per-run averaged
+    baseline metrics (`baseline_metric` has no fold column). Returns the
+    tuned rows as a DataFrame."""
+    config = st.config
+    t_start = time.time()
+    tuned_df = pd.DataFrame(st.tuned_rows)
+    if st.baseline_rows:
+        st.board.rows.extend(st.baseline_rows)
+    csv_path = st.board.export(config.output.dir, config.name)
+    if len(tuned_df):
+        os.makedirs(config.output.dir, exist_ok=True)
+        tuned_path = os.path.join(config.output.dir, f"{config.name}_tuned.csv")
+        tuned_df.to_csv(tuned_path, index=False)
+        print(f"[EXPORT] {tuned_path}")
+    print(f"[EXPORT] {csv_path}")
+    st.record_phase_all_runs("export", t_start, time.time())
+
+    for (run_id, baseline_name), fold_dicts in st.baseline_accum.items():
+        agg = {}
+        for m in {k for d in fold_dicts for k in d}:
+            values = [v for v in (d.get(m) for d in fold_dicts) if v is not None and not is_nan(v)]
+            if values:
+                agg[m] = float(np.mean(values))
+        trackdb.add_baseline_metrics(st.conn, run_id, baseline_name, split="test", metrics=agg)
+    return tuned_df
+
+
+def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> tuple[dict | None, dict[int, dict]]:
+    """Global winner and one winner per horizon, each the better of the
+    fold-averaged scan and the fold-averaged tuned configs (F07: never a
+    single fold). Per-horizon export: `predict --live` needs an exported
+    model for EVERY horizon's run_id, not only the global winner's."""
+    group_cols = ["horizon", "regime", "N", "sampler", "algo"]
+    final_best = dict(best) if best else None
+    tuned_agg = None
+    if len(tuned_df):
+        tuned_agg = rank_configs(
+            tuned_df.groupby(group_cols + ["best_params"])["F1_dir"].mean().reset_index(),
+            "F1_dir", group_cols + ["best_params"])
+        if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
+            final_best = tuned_agg.iloc[0].to_dict()
+
+    final_best_by_horizon: dict[int, dict] = {}
+    for horizon in st.config.objective.horizons:
+        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir")
+        if tuned_agg is not None:
+            tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
+            if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
+                best_h = tuned_h.iloc[0].to_dict()
+        if best_h is not None:
+            final_best_by_horizon[horizon] = best_h
+    return final_best, final_best_by_horizon
+
+
+def _full_history_pool(st: _RunState) -> tuple[pd.DataFrame, list[str]]:
+    """Pool of the final models (parametric fit on the whole history). CPCV
+    already built it (single fit) -- reused as-is."""
+    if not st.is_walkforward:
+        return st.cpcv_full_pool, st.cpcv_interaction_formulas
+    full_pool = pd.concat([st.base_pool, build_parametric_pool(st.raw, st.config, fit_end_idx=None,
+                                                               conn=st.conn, snapshot_id=st.snapshot_id)], axis=1)
+    full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
+    formulas = st.pool_builder.interaction_formulas
+    if formulas:
+        full_pool = pd.concat([full_pool, _apply_interaction_formulas(full_pool, formulas)], axis=1)
+    return full_pool, formulas
+
+
+def _export_models(st: _RunState, final_best_by_horizon: dict[int, dict]) -> tuple[dict[int, str], dict[int, int]]:
+    """One exported model per horizon with a winner (joblib + meta + drift
+    reference), its trial marked `is_best`. Returns (model_paths,
+    trial_id_by_horizon)."""
+    full_pool, interaction_formulas = _full_history_pool(st)
+    model_paths: dict[int, str] = {}
+    trial_id_by_horizon: dict[int, int] = {}
+    for horizon, best_h in final_best_by_horizon.items():
+        t_start = time.time()
+        h_model_path = export_best_model(full_pool, st.target_col, st.feature_pool, st.config, best_h,
+                                         st.config.output.dir, seed=st.seed,
+                                         interaction_formulas=interaction_formulas,
+                                         conn=st.conn, symbol=st.config.objective.target_symbol)
+        trackdb.record_phase_timing(st.conn, st.run_ids[horizon], "export", t_start, time.time())
+        model_paths[horizon] = h_model_path
+
+        h_best_key = (int(best_h["horizon"]), best_h["regime"], int(best_h["N"]), best_h["sampler"], best_h["algo"])
+        h_trial_id = st.trial_ids.get(h_best_key)
+        if h_trial_id is None and "best_params" in best_h:
+            h_parsed_params = _parse_params(best_h["best_params"])
+            h_trial_id = st.tuned_trial_ids.get(h_best_key + (json.dumps(h_parsed_params, sort_keys=True),))
+        if h_trial_id is not None:
+            trackdb.mark_best_trial(st.conn, h_trial_id, artifact_path=h_model_path)
+            trial_id_by_horizon[horizon] = h_trial_id
+    return model_paths, trial_id_by_horizon
+
+
+def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -> dict | None:
+    """Phase 2.1 -- a single re-evaluation of the already-chosen config on the
+    terminal holdout, never used to choose among several."""
+    if not st.has_holdout:
+        return None
+    holdout_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
+                                     st.config, st.all_dates_full, st.n_wf, final_best, st.seed)
+    if holdout_eval is None:
+        return None
+    if best_trial_id is not None:
+        trackdb.add_fold_metrics(st.conn, best_trial_id, fold_index=0, split="holdout",
+                                 metrics=holdout_eval["metrics"])
+        trackdb.add_predictions(st.conn, best_trial_id, fold_index=0, split="holdout",
+                                ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
+                                y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
+    return holdout_eval["metrics"]
+
+
+def _final_diebold_mariano(st: _RunState, final_best: dict) -> dict | None:
+    """Phase 2.5 -- DM vs the class-specific and the common baseline,
+    persisted in `dm_result` (P6.4, X5). Walk-forward only."""
+    if not st.is_walkforward:
+        return None
+    dm_result = _evaluate_diebold_mariano(st.conn, st.snapshot_id, st.ctx, final_best, st.last_fold, st.seed)
+    if dm_result is not None:
+        run_id = st.run_ids[int(final_best["horizon"])]
+        for kind in ("class_specific", "common"):
+            if dm_result.get(kind) is not None:
+                trackdb.save_dm_result(st.conn, run_id, dm_result[kind], kind=kind)
+    return dm_result
+
+
+def _finish_runs(st: _RunState) -> None:
+    """`finish_run` for every horizon, then the plain-text phase timing log
+    (needs `run.finished_at` to compute totals, hence after)."""
+    for run_id in st.run_ids.values():
+        trackdb.finish_run(st.conn, run_id, status="done", n_trials=st.n_trials_per_run[run_id])
+    for run_id in st.run_ids.values():
+        breakdown = trackhistory.phase_breakdown_for_run(st.conn, run_id)
+        timing_log_path = phase_timing_log.write_phase_timing_log(st.config.output.dir, run_id, breakdown)
+        print(f"[EXPORT] phase timing log -> {timing_log_path}")
+
+
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
                   force_ingest: bool = False, db_path: str | None = None,
                   job_id: str | None = None) -> dict:
+    """Ingestion -> run registration -> base pool -> scan (walk-forward or
+    CPCV) -> stability -> holdout diagnostic -> Optuna -> CSV exports ->
+    final selection -> per-horizon model export -> holdout / Diebold-Mariano
+    / cumulative trials / PBO -> finish. Each phase is a function of
+    `_RunState`; the sequence is pinned by `tests/test_run_pipeline_golden.py`."""
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
 
-    # Phase timing (migration 0016): ingestion runs before any run_id
-    # exists (trackdb.create_run() below is the first point one does),
-    # so its start/end are captured here and written once run_ids are
-    # known -- same duplication run.started_at itself already has across
-    # a batch's horizons, see record_phase_timing()'s docstring.
+    # Ingestion runs before any run_id exists: timed here, written once the
+    # run rows are created (same duplication as run.started_at).
     t_ingest_start = time.time()
-    raw = ingest(config.objective, config.universe, store, force=force_ingest,
-                 data_quality=config.data_quality)
+    raw = ingest(config.objective, config.universe, store, force=force_ingest, data_quality=config.data_quality)
     t_ingest_end = time.time()
-    target_col = clean_symbol(config.objective.target_symbol)
 
     conn = trackdb.connect(db_path)
     try:
-        snapshot_id, data_hash, n_tickers, n_fred_series, fred_src, quality_issues = _snapshot_context(raw)
-        trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
-        trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
-        config_json = config.model_dump_json()
-        config_hash = _config_hash(config)
-        git_sha = trackdb.current_git_sha()
+        snapshot_id, config_hash, run_ids = _register_runs(conn, config, raw, seed, job_id)
+        st = _RunState(config=config, conn=conn, raw=raw, target_col=clean_symbol(config.objective.target_symbol),
+                       seed=seed, t0=t0, snapshot_id=snapshot_id, config_hash=config_hash, run_ids=run_ids,
+                       all_dates_full=raw.index)
+        st.record_phase_all_runs("ingestion", t_ingest_start, t_ingest_end)
 
-        run_ids: dict[int, str] = {}
-        for horizon in config.objective.horizons:
-            run_id = f"{config.name}_h{horizon}_{uuid.uuid4().hex[:8]}"
-            trackdb.create_run(conn, run_id, target=config.objective.target_symbol, horizon=horizon,
-                                snapshot_id=snapshot_id, config_json=config_json,
-                                config_hash=config_hash, git_sha=git_sha, seed=seed, job_id=job_id)
-            run_ids[horizon] = run_id
-
-        for _run_id in run_ids.values():
-            trackdb.record_phase_timing(conn, _run_id, "ingestion", t_ingest_start, t_ingest_end)
-
-        all_dates_full = raw.index
-        # Phase timing: base pool is shared by all folds/horizons, built once --
-        # in walk-forward, only the FIRST fold's full pool (base+parametric+
-        # interactions, built just below via pool_builder.get(fold_cuts[0]))
-        # is cleanly attributable here; later folds' pools are built lazily
-        # from inside the scan loop and land in the "scan" phase instead (see
-        # migration 0016's "known limitation"). CPCV builds its pool entirely
-        # inside _run_cpcv_scan(), entangled with its own scan loop -- not
-        # separately timed here, see that branch below.
         t_pool_start = time.time()
         print("[FEATURES] building the base pool (causal, shared by all folds)...")
-        base_pool = build_base_feature_pool(raw, config, target_col)
-        print(f"[FEATURES] base pool: {base_pool.shape[1]} columns ({time.time()-t0:.1f}s)")
-        assert (base_pool.index == all_dates_full).all(), "feature construction must not change the date index"
+        st.base_pool = build_base_feature_pool(raw, config, st.target_col)
+        print(f"[FEATURES] base pool: {st.base_pool.shape[1]} columns ({time.time()-t0:.1f}s)")
+        assert (st.base_pool.index == st.all_dates_full).all(), "feature construction must not change the date index"
 
-        baseline_rows: list[dict] = []
-        baseline_accum: dict[tuple[str, str], list[dict]] = {}
-        tuned_rows: list[dict] = []
-        tuned_trial_ids: dict[tuple, int] = {}
-
-        # Phase 6.1 (P6.1) -- CPCV as an ALTERNATIVE to walk-forward
-        # (`validation.scheme`), never a replacement: the walk-forward branch
-        # below is BIT-IDENTICAL to the pre-P6.1 behavior.
-        cpcv_full_pool = None
-        cpcv_interaction_formulas = None
-        if config.validation.scheme == "cpcv":
-            # Phase timing: _run_cpcv_scan() builds its pool AND runs its scan
-            # loop internally, entangled (unlike walk-forward, where the first
-            # fold's pool build is cleanly separable) -- not split further here
-            # to avoid restructuring that function; recorded as "scan" only,
-            # no "pool_construction" row for CPCV runs (see migration 0016).
-            t_scan_start = time.time()
-            board, trial_ids, n_trials_per_run, cpcv_full_pool, feature_pool, cpcv_interaction_formulas = (
-                _run_cpcv_scan(raw, config, base_pool, target_col, conn, run_ids, seed, snapshot_id))
-            t_scan_end = time.time()
-            for _run_id in run_ids.values():
-                trackdb.record_phase_timing(conn, _run_id, "scan", t_scan_start, t_scan_end)
-            pool_builder = None
-            ctx = None
-            all_dates = all_dates_full
-            n_wf = len(all_dates_full)  # CPCV: no terminal holdout (accepted limitation, see _run_cpcv_scan)
-            last_fold = None
+        if st.is_walkforward:
+            _prepare_walkforward(st, t_pool_start)
+            _scan_walkforward(st)
         else:
-            n_wf = _walk_forward_span(all_dates_full, config.validation.holdout_months,
-                                       config.validation.min_train_frac)
-            all_dates = all_dates_full[:n_wf]
-            fold_cuts = build_fold_cuts(all_dates, config.validation.n_wf_folds,
-                                         config.validation.min_train_frac)
-            describe_folds(all_dates, fold_cuts)
-            if n_wf < len(all_dates_full):
-                print(f"[HOLDOUT] {len(all_dates_full) - n_wf} rows reserved "
-                      f"({all_dates_full[n_wf].date()} -> {all_dates_full[-1].date()}), "
-                      "never seen by selection/tuning.")
+            _scan_cpcv(st)
 
-            pool_builder = _FoldPoolBuilder(raw, config, target_col, base_pool, fold_cuts,
-                                             conn=conn, snapshot_id=snapshot_id)
-            feature_pool = [c for c in pool_builder.get(fold_cuts[0]).columns if c != target_col]
-            t_pool_end = time.time()
-            for _run_id in run_ids.values():
-                trackdb.record_phase_timing(conn, _run_id, "pool_construction", t_pool_start, t_pool_end)
-            print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(feature_pool)} columns")
-            ctx = _FoldContext(pool_builder, target_col, feature_pool, config, all_dates, fold_cuts)
-
-            board = Leaderboard()
-            trial_ids: dict[tuple, int] = {}
-            n_trials_per_run: dict[str, int] = {h: 0 for h in run_ids.values()}
-            last_fold = config.validation.n_wf_folds - 1
-
-            for horizon in config.objective.horizons:
-                run_id = run_ids[horizon]
-                t_scan_start = time.time()
-                for k in range(config.validation.n_wf_folds):
-                    for regime in config.objective.regimes:
-                        fd = ctx.prepare(horizon, k, regime, want_baselines=True)
-                        if fd is None:
-                            continue
-
-                        for baseline_name, base_met in (fd.baselines or {}).items():
-                            baseline_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
-                                                   "N": None, "sampler": None, "algo": baseline_name,
-                                                   "features": "", "n_train": len(fd.y_tr), "n_test": len(fd.y_te),
-                                                   "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
-                            baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
-
-                        for n_feat in config.selection.n_features_grid:
-                            cols = _select(conn, target_col, horizon, snapshot_id,
-                                           config, fd.X_tr, fd.y_tr, n_feat, seed)
-                            X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-                            feat_names = [feature_pool[c] for c in cols]
-
-                            for sampler_name in config.sampler.candidates:
-                                for algo in config.models.algos:
-                                    met, y_pred, confidence = _fit_eval(
-                                        X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
-                                        calibration=config.models.calibration,
-                                        sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
-                                        uniqueness_weights_enabled=config.sampling.uniqueness_weights)
-                                    board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
-                                              sampler=sampler_name, algo=algo,
-                                              features="|".join(feat_names),
-                                              n_train=len(fd.y_tr), n_test=len(fd.y_te),
-                                              # Phase 6.2 (P6.2): effective sample size (sum of
-                                              # uniquenesses) alongside n_train -- always computed.
-                                              effective_n_train=fd.effective_n,
-                                              test_start=fd.test_start, test_end=fd.test_end, **met)
-
-                                    trial_key = (horizon, regime, n_feat, sampler_name, algo)
-                                    if trial_key not in trial_ids:
-                                        trial_ids[trial_key] = trackdb.create_trial(
-                                            conn, run_id, regime, algo, sampler_name, n_feat,
-                                            selector=config.selection.method)
-                                        n_trials_per_run[run_id] += 1
-                                    trial_id = trial_ids[trial_key]
-                                    # Phase 6.2 (P6.2): n_eff stored as one more "metric" (generic
-                                    # trial/fold_index/split/metric/value schema, no dedicated
-                                    # column) -- read by the HTML report alongside F1_dir/etc.
-                                    met_with_n = dict(met)
-                                    met_with_n["n_train"] = float(len(fd.y_tr))
-                                    if fd.effective_n is not None:
-                                        met_with_n["effective_n_train"] = fd.effective_n
-                                    trackdb.add_fold_metrics(conn, trial_id, fold_index=k + 1,
-                                                              split="test", metrics=met_with_n)
-                                    trackdb.add_predictions(conn, trial_id, fold_index=k + 1, split="test",
-                                                             ts=fd.test_dates, y_true=fd.y_te,
-                                                             y_pred=y_pred, y_proba=confidence)
-
-                    print(f"  h={horizon:2d}d fold{k+1}: {len(board.rows)} cumulative rows "
-                          f"[{time.time()-t0:.0f}s]")
-                t_scan_end = time.time()
-                trackdb.record_phase_timing(conn, run_id, "scan", t_scan_start, t_scan_end)
-
-        print(f"\n[SCAN] {len(board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
-        best = board.best(metric="F1_dir")
+        print(f"\n[SCAN] {len(st.board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
+        best = st.board.best(metric="F1_dir")
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
                   f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
 
-        # Phase 6.3 (P6.3) -- feature selection stability, PER HORIZON (each
-        # run_id is scoped to one horizon, see Phase 1.2 schema): for the
-        # locally winning (regime, N) config of THIS horizon (F1_dir averaged
-        # over its folds, independent of the global `final_best` choice below,
-        # which keeps only ONE horizon), stability measured on the features
-        # actually retained per fold (already captured in `board.rows[...]
-        # ["features"]`, no re-selection). sampler/algo do not influence
-        # selection (done before their loop): deduplicate them before Jaccard.
-        # Not computed in CPCV mode (features selected per combination are not
-        # captured in `board.rows` in the same shape -- accepted limitation,
-        # out of scope for P6.1).
-        if config.selection.track_stability and config.validation.scheme == "walkforward":
-            for horizon in config.objective.horizons:
-                board_h = Leaderboard()
-                board_h.rows = [r for r in board.rows if r.get("horizon") == horizon and r.get("N") is not None]
-                top_h = board_h.top_k(1, metric="F1_dir")
-                if not top_h:
-                    continue
-                winner = top_h[0]
-                # Phase timing (migration 0017): timed AFTER the cheap top_h
-                # lookup/continue above, same convention as "tuning"'s
-                # t_tune_start (set after its own pre-checks) -- one row per
-                # horizon that actually has a winner to measure stability on.
-                t_stability_start = time.time()
-                fold_feature_sets: dict[int, list[str]] = {}
-                for r in board_h.rows:
-                    if r["regime"] == winner["regime"] and r["N"] == winner["N"]:
-                        fold_feature_sets.setdefault(r["fold"], r["features"].split("|") if r["features"] else [])
-                stability = feature_selection_stability(fold_feature_sets)
-                trackdb.save_feature_stability(conn, run_ids[horizon], stability["mean_jaccard"],
-                                                stability["n_folds"], stability["selection_freq"])
-                if stability["warning"]:
-                    print(f"  [STABILITY] h={horizon}d: {stability['warning']}")
-                t_stability_end = time.time()
-                trackdb.record_phase_timing(conn, run_ids[horizon], "stability", t_stability_start, t_stability_end)
+        _track_stability(st)
+        _holdout_diagnostic(st)
+        _tune(st)
+        tuned_df = _export_tables(st)
+        final_best, final_best_by_horizon = _select_finals(st, best, tuned_df)
 
-        # Audit report, C4 -- holdout diagnostic of the WHOLE SCAN grid (not just
-        # the final winner), written to `holdout_diagnostic` (a table separate
-        # from `fold_metric`, never read by selection/tuning): allows an
-        # after-the-fact test/holdout rank correlation, without ever influencing
-        # the winning config's choice. Not applicable in CPCV mode (no terminal
-        # holdout, see _run_cpcv_scan).
-        if config.validation.scheme == "walkforward" and n_wf < len(all_dates_full) and trial_ids:
-            print(f"[HOLDOUT DIAGNOSTIC] evaluating {len(trial_ids)} trials on the holdout "
-                  "(read-only, chooses nothing)...")
-            # Phase timing (migration 0017): the loop below mixes every horizon's
-            # trials together (trial_ids spans all of them, not restructured
-            # here -- same discipline as pool_construction's CPCV branch above,
-            # which avoids splitting _run_cpcv_scan). One identical start/end
-            # written to every horizon's run_id, like "ingestion" already does,
-            # rather than a false per-horizon split of a genuinely mixed loop.
-            t_holdout_diag_start = time.time()
-            for (h, regime, n_feat, sampler_name, algo), tid in trial_ids.items():
-                diag_cfg = {"horizon": h, "regime": regime, "N": n_feat,
-                            "sampler": sampler_name, "algo": algo, "best_params": {}}
-                diag_eval = _evaluate_holdout(conn, snapshot_id, pool_builder, target_col, feature_pool,
-                                               config, all_dates_full, n_wf, diag_cfg, seed)
-                if diag_eval is not None:
-                    trackholdout.write_holdout_diagnostic(conn, tid, diag_eval["metrics"])
-            t_holdout_diag_end = time.time()
-            for _run_id in run_ids.values():
-                trackdb.record_phase_timing(conn, _run_id, "holdout_diagnostic", t_holdout_diag_start, t_holdout_diag_end)
-
-        # Optuna tuning: walk-forward only (relies on `ctx.prepare`,
-        # "train=prefix" topology -- not directly transposable to CPCV within
-        # this scope, see _run_cpcv_scan).
-        if config.validation.scheme == "walkforward" and config.tuning.enabled and len(board.rows):
-            if config.tuning.optuna_select_top_k_per_horizon:
-                # Audit report, C3: top_k selection PER horizon (not global) --
-                # otherwise a horizon whose best SCAN trial dominates can capture
-                # 100% of the Optuna budget, leaving other horizons zero trials.
-                top_configs = []
-                for horizon in config.objective.horizons:
-                    board_h = Leaderboard()
-                    board_h.rows = [r for r in board.rows if r.get("horizon") == horizon]
-                    top_configs.extend(board_h.top_k(config.tuning.top_k, metric="F1_dir"))
-            else:
-                top_configs = board.top_k(config.tuning.top_k, metric="F1_dir")
-            print(f"\n[OPTUNA] tuning the {len(top_configs)} best configs "
-                  f"({config.tuning.n_trials} trials, CV={config.tuning.cv_splits}, "
-                  f"per_horizon={config.tuning.optuna_select_top_k_per_horizon})...")
-            # Phase 3.2 (`patrick resume`): Optuna study persisted in a dedicated
-            # SQLite file (never `patrick.db`), a deterministic `study_name` per
-            # tested config -> a `patrick run`/`patrick resume` relaunched on the
-            # same config (same config_hash, hence same study name) after an
-            # interruption resumes the trials already done instead of starting
-            # from zero (see `tune_config`, `optuna_runner.py`).
-            os.makedirs(config.output.dir, exist_ok=True)
-            optuna_storage_path = os.path.join(config.output.dir, "optuna.db")
-            for cfg in top_configs:
-                horizon, regime, n_feat = int(cfg["horizon"]), cfg["regime"], int(cfg["N"])
-                sampler_name, algo = cfg["sampler"], cfg["algo"]
-                run_id = run_ids[horizon]
-
-                fd = ctx.prepare(horizon, last_fold, regime)
-                if fd is None:
-                    continue
-                if len(fd.y_tr) < config.validation.min_train_rows * 2:
-                    continue
-                # Phase timing: one row per top-config (tune_config() itself,
-                # here scoped to include the immediately-following per-fold
-                # refit+write below -- both are unavoidable cost of tuning this
-                # one config, not a separate concern). A run_id can legitimately
-                # get more than one "tuning" row (see migration 0016).
-                t_tune_start = time.time()
-                cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, seed)
-                X_tr_n = fd.X_tr[:, cols]
-
-                study_name = study_name_for(config.name, config_hash, horizon, regime, n_feat,
-                                            sampler_name, algo)
-                try:
-                    best_params, best_cv = tune_config(X_tr_n, fd.y_tr, algo, sampler_name,
-                                                    n_trials=config.tuning.n_trials,
-                                                    cv_splits=config.tuning.cv_splits, seed=seed,
-                                                    storage_path=optuna_storage_path, study_name=study_name,
-                                                    bounds=config.tuning.optuna_bounds,
-                                                    horizon=horizon,
-                                                    embargo_bars=config.validation.embargo_bars,
-                                                    purge=config.validation.purge,
-                                                    embargo_enabled=config.validation.embargo_enabled,
-                                                    registry=trackdb.TrialRecorder(
-                                                        conn, config.objective.target_symbol, horizon,
-                                                        run_id=run_id, detail=study_name))
-                except InnerCVInfeasible as exc:
-                    print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
-                          f"Optuna skipped -- {exc}")
-                    continue
-                print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
-                      f"cv_F1_dir={best_cv:.4f} params={best_params}")
-
-                tuned_key = (horizon, regime, n_feat, sampler_name, algo, json.dumps(best_params, sort_keys=True))
-                tuned_trial_ids[tuned_key] = trackdb.create_trial(
-                    conn, run_id, regime, algo, sampler_name, n_feat,
-                    selector=config.selection.method, params_json=json.dumps(best_params))
-                n_trials_per_run[run_id] += 1
-                tuned_trial_id = tuned_trial_ids[tuned_key]
-
-                for k in range(config.validation.n_wf_folds):
-                    fd = ctx.prepare(horizon, k, regime)
-                    if fd is None:
-                        continue
-                    cols = _select(conn, target_col, horizon, snapshot_id,
-                                   config, fd.X_tr, fd.y_tr, n_feat, seed)
-                    X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-                    met, y_pred, confidence = _fit_eval(
-                        X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, seed,
-                        calibration=config.models.calibration,
-                        sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
-                        uniqueness_weights_enabled=config.sampling.uniqueness_weights, **best_params)
-                    tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime,
-                                        "N": n_feat, "sampler": sampler_name, "algo": algo,
-                                        "best_params": str(best_params), "effective_n_train": fd.effective_n,
-                                        "test_start": fd.test_start, "test_end": fd.test_end, **met})
-                    trackdb.add_fold_metrics(conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
-                    trackdb.add_predictions(conn, tuned_trial_id, fold_index=k + 1, split="test",
-                                             ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
-                t_tune_end = time.time()
-                trackdb.record_phase_timing(conn, run_id, "tuning", t_tune_start, t_tune_end)
-
-        # Phase timing (migration 0017): board.export() + the tuned CSV write
-        # below produce ONE combined artifact set across every horizon (board
-        # mixes all of them together, exactly like holdout_diagnostic's loop
-        # above) -- same "identical start/end per run_id" convention as
-        # ingestion/holdout_diagnostic, not a per-horizon split.
-        t_export_start = time.time()
-        tuned_df = pd.DataFrame(tuned_rows)
-        if baseline_rows:
-            board.rows.extend(baseline_rows)
-        csv_path = board.export(config.output.dir, config.name)
-        if len(tuned_df):
-            os.makedirs(config.output.dir, exist_ok=True)
-            tuned_path = os.path.join(config.output.dir, f"{config.name}_tuned.csv")
-            tuned_df.to_csv(tuned_path, index=False)
-            print(f"[EXPORT] {tuned_path}")
-        print(f"[EXPORT] {csv_path}")
-        t_export_end = time.time()
-        for _run_id in run_ids.values():
-            trackdb.record_phase_timing(conn, _run_id, "export", t_export_start, t_export_end)
-
-        # baseline_metric has no fold_index column (Phase 1.2 schema): aggregated
-        # (averaged) per run rather than written per fold — see phase report.
-        for (run_id, baseline_name), fold_dicts in baseline_accum.items():
-            agg = {}
-            for m in {k for d in fold_dicts for k in d}:
-                values = [v for v in (d.get(m) for d in fold_dicts) if v is not None and not is_nan(v)]
-                if values:
-                    agg[m] = float(np.mean(values))
-            trackdb.add_baseline_metrics(conn, run_id, baseline_name, split="test", metrics=agg)
-
-        final_best = dict(best) if best else None
-        group_cols = ["horizon", "regime", "N", "sampler", "algo"]
-        tuned_agg = None
-        if len(tuned_df):
-            tuned_agg = rank_configs(
-                tuned_df.groupby(group_cols + ["best_params"])["F1_dir"].mean().reset_index(),
-                "F1_dir", group_cols + ["best_params"])
-            if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
-                final_best = tuned_agg.iloc[0].to_dict()
-
-        # Audit fix [per-horizon export]: `final_best` above is the single winner
-        # across ALL horizons combined (`board.best()`/`tuned_agg` are never
-        # grouped by horizon) -- exporting only THAT config's model silently
-        # discards every other horizon's own scan/tuning result, even though
-        # `trial`/`run` are already scoped per horizon (Phase 1.2 schema) and
-        # `predict.py::_find_best_trial` already queries `is_best` PER run_id.
-        # Same before/after-tuning comparison as `final_best`, just scoped to one
-        # horizon's own rows at a time.
-        final_best_by_horizon: dict[int, dict] = {}
-        for horizon in config.objective.horizons:
-            board_h = Leaderboard()
-            board_h.rows = [r for r in board.rows if r.get("horizon") == horizon and r.get("N") is not None]
-            best_h = board_h.best(metric="F1_dir")
-            if tuned_agg is not None:
-                tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
-                if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
-                    best_h = tuned_h.iloc[0].to_dict()
-            if best_h is not None:
-                final_best_by_horizon[horizon] = best_h
-
-        model_path = None
-        model_paths: dict[int, str] = {}
-        holdout_result = None
-        dm_result = None
-        pbo_result = None
+        model_path, model_paths = None, {}
+        holdout_result = dm_result = pbo_result = holdout_diagnostic_result = None
         cumulative_trials = 0
-        holdout_diagnostic_result = None
         if final_best is not None:
-            # CPCV (P6.1): `_run_cpcv_scan` already built this full pool (single
-            # fit over the whole history, same interaction formulas) -- reused
-            # as-is rather than rebuilt a second time.
-            if config.validation.scheme == "cpcv":
-                full_pool = cpcv_full_pool
-                interaction_formulas = cpcv_interaction_formulas
-            else:
-                full_pool = pd.concat(
-                    [base_pool, build_parametric_pool(raw, config, fit_end_idx=None,
-                                                       conn=conn, snapshot_id=snapshot_id)], axis=1)
-                full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
-                interaction_formulas = pool_builder.interaction_formulas
-                if interaction_formulas:
-                    full_inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-                    full_pool = pd.concat([full_pool, full_inter], axis=1)
-            # Fix [per-horizon export]: one model per horizon with a valid
-            # winning config, not just `final_best`'s own horizon -- otherwise
-            # `patrick predict --run-id <run_id_of_other_horizon> --live` finds
-            # no trial with is_best=1 for that run_id and always raises "No
-            # exported model for this run" (reproduced pre-fix on `tiny_config`,
-            # a 2-horizon fixture: only ever one `is_best` row across BOTH runs).
-            trial_id_by_horizon: dict[int, int] = {}
-            for horizon, best_h in final_best_by_horizon.items():
-                # Phase timing (migration 0017): second "export" occurrence for
-                # THIS horizon's own run_id -- model serialization (full-pool
-                # refit + joblib dump). One row per horizon now that
-                # export_best_model() runs once per horizon (fix/best-model-
-                # per-horizon), not once for the single global winner as before.
-                # Multiple rows per (run_id, phase) already supported (see
-                # migration 0016, "tuning").
-                t_export_model_start = time.time()
-                h_model_path = export_best_model(full_pool, target_col, feature_pool, config,
-                                                  best_h, config.output.dir, seed=seed,
-                                                  interaction_formulas=interaction_formulas,
-                                                  conn=conn, symbol=config.objective.target_symbol)
-                t_export_model_end = time.time()
-                trackdb.record_phase_timing(conn, run_ids[horizon], "export",
-                                             t_export_model_start, t_export_model_end)
-                model_paths[horizon] = h_model_path
-
-                h_best_key = (int(best_h["horizon"]), best_h["regime"], int(best_h["N"]),
-                              best_h["sampler"], best_h["algo"])
-                h_trial_id = trial_ids.get(h_best_key)
-                if h_trial_id is None and "best_params" in best_h:
-                    h_parsed_params = _parse_params(best_h["best_params"])
-                    h_tuned_key = h_best_key + (json.dumps(h_parsed_params, sort_keys=True),)
-                    h_trial_id = tuned_trial_ids.get(h_tuned_key)
-                if h_trial_id is not None:
-                    trackdb.mark_best_trial(conn, h_trial_id, artifact_path=h_model_path)
-                    trial_id_by_horizon[horizon] = h_trial_id
-
-            model_path = model_paths.get(int(final_best["horizon"]))
-            best_trial_id = trial_id_by_horizon.get(int(final_best["horizon"]))
-
-            # Phase 2.1 — terminal holdout: a single re-evaluation of the already-
-            # chosen config, never used to choose among several (see
-            # _evaluate_holdout docstring).
-            if n_wf < len(all_dates_full):
-                holdout_eval = _evaluate_holdout(conn, snapshot_id, pool_builder, target_col, feature_pool,
-                                                  config, all_dates_full, n_wf, final_best, seed)
-                if holdout_eval is not None:
-                    holdout_result = holdout_eval["metrics"]
-                    if best_trial_id is not None:
-                        trackdb.add_fold_metrics(conn, best_trial_id, fold_index=0, split="holdout",
-                                                  metrics=holdout_result)
-                        trackdb.add_predictions(conn, best_trial_id, fold_index=0, split="holdout",
-                                                 ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
-                                                 y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
-
-            # Phase 2.5 — Diebold-Mariano vs. best baseline (last walk-forward fold).
-            # Relies on `ctx.prepare` (train=prefix topology): not applicable in
-            # CPCV (`ctx is None`), see limitations documented in `_run_cpcv_scan`.
-            if config.validation.scheme == "walkforward":
-                dm_result = _evaluate_diebold_mariano(conn, snapshot_id, ctx, final_best, last_fold, seed)
-                if dm_result is not None:
-                    # Phase 6.4 (P6.4): persisted in a dedicated table (dm_result,
-                    # migration 0009), not just in job.result_json -- queryable
-                    # across the whole run history (including CLI, with no
-                    # associated web job), needed by `trackstats.fdr_across_targets`.
-                    # Phase X5: two rows per run (kind), class-specific AND common
-                    # (persistence).
-                    run_id_for_horizon = run_ids[int(final_best["horizon"])]
-                    if dm_result.get("class_specific") is not None:
-                        trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["class_specific"],
-                                                kind="class_specific")
-                    if dm_result.get("common") is not None:
-                        trackdb.save_dm_result(conn, run_id_for_horizon, dm_result["common"],
-                                                kind="common")
-
-            # Phase 2.2 — cumulative trials on this target/horizon, across the whole
-            # run history (not just this run). Phase 2.4 — PBO on this same history
-            # (P6.1: wired to CPCV paths rather than walk-forward blocks when this
-            # scheme is active, see `stats.pbo_for_target_cpcv`).
-            cumulative_trials = trackstats.count_cumulative_trials(
-                conn, config.objective.target_symbol, int(final_best["horizon"]))
-            if config.validation.scheme == "cpcv":
-                pbo_result = trackstats.pbo_for_target_cpcv(
-                    conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
-            else:
-                pbo_result = trackstats.pbo_for_target(
-                    conn, config.objective.target_symbol, int(final_best["horizon"]), final_best["regime"])
-
-            # Audit report, C4 -- diagnostic (READ ONLY, see holdout_diagnostic.py):
-            # does the selection procedure generalize from test to holdout? Never
-            # influences final_best, computed after the fact only. Not applicable
-            # in CPCV (no terminal holdout, see `_run_cpcv_scan`).
-            if config.validation.scheme == "walkforward":
+            final_horizon = int(final_best["horizon"])
+            model_paths, trial_id_by_horizon = _export_models(st, final_best_by_horizon)
+            model_path = model_paths.get(final_horizon)
+            holdout_result = _final_holdout(st, final_best, trial_id_by_horizon.get(final_horizon))
+            dm_result = _final_diebold_mariano(st, final_best)
+            # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
+            # the whole history of this target/horizon (CPCV paths when that
+            # scheme is active).
+            target = config.objective.target_symbol
+            cumulative_trials = trackstats.count_cumulative_trials(conn, target, final_horizon)
+            pbo_fn = trackstats.pbo_for_target if st.is_walkforward else trackstats.pbo_for_target_cpcv
+            pbo_result = pbo_fn(conn, target, final_horizon, final_best["regime"])
+            if st.is_walkforward:
                 holdout_diagnostic_result = trackholdout.spearman_test_vs_holdout(
-                    conn, run_ids[int(final_best["horizon"])], metric="F1_dir")
+                    conn, run_ids[final_horizon], metric="F1_dir")
 
-        for run_id in run_ids.values():
-            trackdb.finish_run(conn, run_id, status="done", n_trials=n_trials_per_run[run_id])
-
-        # Phase 4 (log de timing lisible) : complement texte brut a
-        # `run_phase_timing` (deja interrogeable en SQL), pour inspecter le
-        # timing d'un run sans requete DB -- ecrit ICI (fin de run_pipeline,
-        # apres finish_run() ci-dessus) plutot qu'au fil de l'execution : chaque
-        # ligne vient de `phase_breakdown_for_run()`, qui a besoin de
-        # `run.finished_at` (pose par finish_run) pour calculer `run_total_s`/
-        # les pourcentages -- l'ecrire plus tot forcerait soit un total inconnu,
-        # soit une deuxieme requete apres coup pour le completer. Un fichier par
-        # run_id (un par horizon), dans le meme `config.output.dir` que les
-        # autres artefacts de ce run (leaderboard CSV/xlsx, joblib exporte) --
-        # voir `tracking/phase_timing_log.py` pour le detail du format et de la
-        # convention de nommage.
-        for run_id in run_ids.values():
-            breakdown = trackhistory.phase_breakdown_for_run(conn, run_id)
-            timing_log_path = phase_timing_log.write_phase_timing_log(config.output.dir, run_id, breakdown)
-            print(f"[EXPORT] phase timing log -> {timing_log_path}")
-
+        _finish_runs(st)
         return {
-            "leaderboard": board.as_df(),
+            "leaderboard": st.board.as_df(),
             "tuned": tuned_df,
             "best_before_tuning": best,
             "final_best": final_best,
@@ -1589,4 +1575,3 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         }
     finally:
         conn.close()
-
