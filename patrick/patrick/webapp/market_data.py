@@ -50,7 +50,13 @@ def latest_news(symbol: str, limit: int = 6) -> list[dict]:
 
     out = []
     for item in items[:limit]:
-        c = item.get("content", item) if isinstance(item, dict) else {}
+        if not isinstance(item, dict):
+            continue
+        # Current payloads nest the article under `content`, legacy ones are
+        # flat; `content` can also be null (seen live) -- never crash on it.
+        c = item.get("content", item)
+        if not isinstance(c, dict):
+            continue
         title = c.get("title")
         if not title:
             continue
