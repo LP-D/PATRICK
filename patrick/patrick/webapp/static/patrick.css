@@ -714,7 +714,7 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
 .data-table tbody tr:last-child td, table.leaderboard tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td, table.leaderboard tbody tr:hover td { background: var(--surface-2); }
 .data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.data-table th.pk-mono, table.leaderboard th.pk-mono { font-family: var(--sans); }
+.data-table th.pk-mono, .data-table th.num, table.leaderboard th.pk-mono, table.leaderboard th.num { font-family: var(--sans); }
 .data-table a { color: var(--text); font-weight: 500; }
 .data-table a:hover { color: var(--brand); }
 .data-table tbody tr.best td { font-weight: 600; background: color-mix(in srgb, var(--brand) 6%, transparent); }

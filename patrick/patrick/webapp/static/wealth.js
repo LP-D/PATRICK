@@ -231,15 +231,9 @@
         });
     });
 
-    /* ---- account chart ---- */
-    var canvas = document.getElementById("wealth-chart");
-    var dataEl = document.getElementById("wealth-chart-data");
-    if (!canvas || !dataEl) return;
-    var chart;
-    try { chart = JSON.parse(dataEl.textContent); } catch (e) { return; }
+    /* ---- charts (HiDPI canvas, colours from the CSS tokens at draw time) ---- */
     var MONO = token("--mono") || "monospace";
-
-    function draw() {
+    function drawLines(canvas, series, fmtY) {
         var ratio = window.devicePixelRatio || 1;
         var w = Math.max(280, Math.round(canvas.getBoundingClientRect().width || 600));
         var h = 280;
@@ -249,17 +243,15 @@
         var ctx = canvas.getContext("2d");
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.clearRect(0, 0, w, h);
-        var series = [
-            { pts: chart.net_invested || [], color: token("--text-3"), width: 1.25, dash: [4, 4] },
-            { pts: chart.benchmark_replica || [], color: token("--warn"), width: 1.25 },
-            { pts: chart.value || [], color: token("--brand"), width: 2 },
-        ];
-        var all = [];
-        series.forEach(function (s) { s.pts.forEach(function (p) { all.push(p.v); }); });
-        if (all.length < 2) return;
+        var all = [], ref = null;
+        series.forEach(function (s) {
+            s.pts.forEach(function (p) { all.push(p.v); });
+            if (!ref && s.pts.length > 1) ref = s.pts;
+        });
+        if (all.length < 2 || !ref) return;
         var min = Math.min.apply(null, all), max = Math.max.apply(null, all);
         if (min === max) { min -= 1; max += 1; }
-        var t0 = new Date(chart.value[0].t).getTime(), t1 = new Date(chart.value[chart.value.length - 1].t).getTime();
+        var t0 = new Date(ref[0].t).getTime(), t1 = new Date(ref[ref.length - 1].t).getTime();
         if (t1 === t0) t1 = t0 + 86400000;
         var padL = 72, padR = 14, padT = 12, padB = 26;
         function x(t) { return padL + (new Date(t).getTime() - t0) / (t1 - t0) * (w - padL - padR); }
@@ -273,29 +265,162 @@
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
             ctx.fillStyle = token("--ink-text-2");
-            ctx.fillText(Math.round(v).toLocaleString("fr-FR") + " €", padL - 8, yy);
+            ctx.fillText(fmtY(v), padL - 8, yy);
         }
         ctx.textBaseline = "alphabetic";
         ctx.textAlign = "left";
-        ctx.fillText(chart.value[0].t, padL, h - 7);
+        ctx.fillText(ref[0].t, padL, h - 7);
         ctx.textAlign = "right";
-        ctx.fillText(chart.value[chart.value.length - 1].t, w - padR, h - 7);
+        ctx.fillText(ref[ref.length - 1].t, w - padR, h - 7);
         series.forEach(function (s) {
             if (s.pts.length < 2) return;
             ctx.beginPath();
-            ctx.strokeStyle = s.color;
-            ctx.lineWidth = s.width;
+            ctx.strokeStyle = token(s.color);
+            ctx.lineWidth = s.width || 1.5;
             ctx.setLineDash(s.dash || []);
             s.pts.forEach(function (p, k) { if (k === 0) ctx.moveTo(x(p.t), y(p.v)); else ctx.lineTo(x(p.t), y(p.v)); });
             ctx.stroke();
             ctx.setLineDash([]);
         });
-        var last = chart.value[chart.value.length - 1];
-        canvas.setAttribute("aria-label", "Valeur du compte du " + chart.value[0].t + " au " + last.t +
-            " : de " + Math.round(chart.value[0].v).toLocaleString("fr-FR") + " € à " + Math.round(last.v).toLocaleString("fr-FR") + " €.");
     }
-    draw();
-    window.addEventListener("patrick:themechange", draw);
-    var timer = null;
-    window.addEventListener("resize", function () { window.clearTimeout(timer); timer = window.setTimeout(draw, 150); });
+    var redraws = [];
+    window.addEventListener("patrick:themechange", function () { redraws.forEach(function (f) { f(); }); });
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(function () { redraws.forEach(function (f) { f(); }); }, 150);
+    });
+    function eur(v) { return Math.round(v).toLocaleString("fr-FR") + " €"; }
+    function pct(v, signed) {
+        if (v === null || v === undefined || Number.isNaN(v)) return "—";
+        var s = (v * 100).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+        return (signed && v > 0 ? "+" : "") + s;
+    }
+
+    /* ---- account chart ---- */
+    var canvas = document.getElementById("wealth-chart");
+    var dataEl = document.getElementById("wealth-chart-data");
+    if (canvas && dataEl) {
+        var chart = null;
+        try { chart = JSON.parse(dataEl.textContent); } catch (e) { chart = null; }
+        if (chart) {
+            var drawAccount = function () {
+                drawLines(canvas, [
+                    { pts: chart.net_invested || [], color: "--text-3", width: 1.25, dash: [4, 4] },
+                    { pts: chart.benchmark_replica || [], color: "--warn", width: 1.25 },
+                    { pts: chart.value || [], color: "--brand", width: 2 },
+                ], eur);
+                var v = chart.value || [];
+                if (v.length) {
+                    canvas.setAttribute("aria-label", "Valeur du compte du " + v[0].t + " au " + v[v.length - 1].t +
+                        " : de " + eur(v[0].v) + " à " + eur(v[v.length - 1].v) + ".");
+                }
+            };
+            drawAccount();
+            redraws.push(drawAccount);
+        }
+    }
+
+    /* ---- patrimoine replay (/patrimoine-simulation) ---- */
+    var replayForm = document.getElementById("replay-form");
+    if (replayForm) {
+        var lastReplay = null;
+        var replayCanvas = document.getElementById("replay-chart");
+        var drawReplay = function () {
+            if (!lastReplay || !replayCanvas) return;
+            drawLines(replayCanvas, [
+                { pts: lastReplay.portfolio_buy_and_hold || [], color: "--text-3", width: 1.25 },
+                { pts: lastReplay.portfolio || [], color: "--brand", width: 2 },
+            ], function (v) { return v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }); });
+        };
+        redraws.push(drawReplay);
+        function cell(tr_, text, cls) {
+            var td = document.createElement("td");
+            td.textContent = text;
+            if (cls) td.className = cls;
+            tr_.appendChild(td);
+        }
+        function table(headers, rows, numCols) {
+            var wrap = document.createElement("div");
+            wrap.className = "table-scroll";
+            var t = document.createElement("table");
+            t.className = "data-table";
+            var thead = document.createElement("thead"), hr = document.createElement("tr");
+            headers.forEach(function (h, i) {
+                var th = document.createElement("th");
+                th.textContent = h;
+                if (numCols.indexOf(i) >= 0) th.className = "num";
+                hr.appendChild(th);
+            });
+            thead.appendChild(hr);
+            t.appendChild(thead);
+            var tbody = document.createElement("tbody");
+            rows.forEach(function (r) {
+                var tr_ = document.createElement("tr");
+                r.forEach(function (v, i) { cell(tr_, v, numCols.indexOf(i) >= 0 ? "num pk-mono" : ""); });
+                tbody.appendChild(tr_);
+            });
+            t.appendChild(tbody);
+            wrap.appendChild(t);
+            return wrap;
+        }
+        replayForm.addEventListener("submit", async function (ev) {
+            ev.preventDefault();
+            var fd = new FormData(replayForm);
+            var btn = replayForm.querySelector("[type=submit]");
+            btn.disabled = true;
+            try {
+                var res = await call("/api/wealth/accounts/" + encodeURIComponent(fd.get("account_id")) + "/replay", "POST", {
+                    segment: fd.get("segment"),
+                    params: { position_mode: fd.get("position_mode"), threshold: parseFloat(fd.get("threshold")) || 0.55,
+                              short_allowed: fd.get("short_allowed") === "on" },
+                });
+                lastReplay = res;
+                document.getElementById("replay-empty").style.display = res.portfolio.length ? "none" : "block";
+                document.getElementById("replay-empty").textContent = res.portfolio.length ? "" :
+                    "Aucune position de ce compte n'a de modèle rejouable sur ce segment (voir les motifs ci-contre).";
+                document.getElementById("replay-result").classList.toggle("hidden", !res.portfolio.length);
+                var kpis = document.getElementById("replay-kpis");
+                kpis.innerHTML = "";
+                [["Positions suivant leur modèle", pct(res.strategy_return, true), "Sur la fenêtre commune " + (res.window ? res.window.join(" → ") : "—")],
+                 ["Mêmes positions conservées", pct(res.buy_and_hold_return, true), "Buy & hold, mêmes poids, même fenêtre"],
+                 ["Part couverte", pct(res.covered_weight), "du compte (le reste n'a pas de modèle)"],
+                 ["Drawdown max (modèles)", pct(res.max_drawdown), "segment " + res.segment]].forEach(function (k) {
+                    var m = document.createElement("div");
+                    m.className = "metric";
+                    ["metric-label", "metric-value", "metric-reliability"].forEach(function (c, i) {
+                        var d = document.createElement("div");
+                        d.className = c;
+                        d.textContent = k[i];
+                        m.appendChild(d);
+                    });
+                    kpis.appendChild(m);
+                });
+                var box = document.getElementById("replay-tables");
+                box.innerHTML = "";
+                if (res.covered.length) {
+                    box.appendChild(table(["Actif", "Poids", "Horizon", "Signaux", "Modèle", "Buy & hold", "Sharpe déflaté"],
+                        res.covered.map(function (c) {
+                            return [c.symbol, pct(c.weight), c.horizon + " j", String(c.n_signals), pct(c.strategy_return, true),
+                                    pct(c.buy_and_hold_return, true),
+                                    c.deflated_sharpe === null || c.deflated_sharpe === undefined ? "—" : c.deflated_sharpe.toFixed(2)];
+                        }), [1, 2, 3, 4, 5, 6]));
+                    var warns = res.covered.filter(function (c) { return c.segment_warning; });
+                    if (warns.length) say(warns[0].segment_warning, "warning");
+                }
+                if (res.skipped.length) {
+                    var h3 = document.createElement("h3");
+                    h3.textContent = "Écartées";
+                    box.appendChild(h3);
+                    box.appendChild(table(["Actif", "Poids", "Motif"],
+                        res.skipped.map(function (s) { return [s.symbol, pct(s.weight), s.reason]; }), [1]));
+                }
+                drawReplay();
+            } catch (e) {
+                say(String(e.message || e), "error");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
 })();

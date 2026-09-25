@@ -25,8 +25,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from patrick.numeric import is_nan
+from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
-from patrick.wealth import importer, ledger, service
+from patrick.wealth import importer, ledger, service, signal_replay
 from patrick.wealth import prices as wealth_prices
 
 
@@ -127,7 +128,43 @@ def register(app: FastAPI, templates, context) -> None:
             "accounts": accounts, "by_id": by_id, "movements": movements,
             "movement_kinds": ledger.MOVEMENT_KINDS, **context(request)})
 
+    @app.get("/patrimoine-simulation")
+    def patrimoine_simulation_page(request: Request):
+        conn = trackdb.connect()
+        try:
+            accounts = ledger.list_accounts(conn)
+        finally:
+            conn.close()
+        return templates.TemplateResponse(request, "patrimoine_simulation.html",
+                                          {"accounts": accounts, **context(request)})
+
     # ---------------------------------------------------------------- API
+
+    @app.post("/api/wealth/accounts/{account_id}/replay")
+    async def api_replay(request: Request, account_id: str):
+        """Replays each modeled position's signals (one segment, holdout by
+        default) and aggregates them at today's weights. Every per-asset
+        simulation is logged (it counts in later deflated Sharpes)."""
+        b = _json_body(await request.body())
+        fields = set(sim_engine.SimParams.__dataclass_fields__)
+        raw = {k: v for k, v in (b.get("params") or {}).items() if k in fields}
+        try:
+            params = sim_engine.SimParams(**raw)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if params.position_mode not in ("threshold", "proportional", "heuristic_leverage"):
+            raise HTTPException(status_code=400, detail=f"position_mode inconnu : {params.position_mode}")
+        segment = b.get("segment") or "holdout"
+        if segment not in sim_engine.SEGMENTS:
+            raise HTTPException(status_code=400, detail=f"segment inconnu : {segment}")
+        conn = trackdb.connect()
+        try:
+            detail = service.account_detail(conn, account_id, price_provider())
+        finally:
+            conn.close()
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Compte introuvable")
+        return signal_replay.replay_account(detail["holdings"], params, segment=segment)
 
     @app.post("/api/wealth/accounts")
     async def api_create_account(request: Request):

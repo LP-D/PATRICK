@@ -1,0 +1,74 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import empty_state %}
+{% block title %}PATRICK — {{ t('nav_patrimoine_simulation') }}{% endblock %}
+
+{# Roadmap bloc 4 -- /simulate etendu au patrimoine (wealth/signal_replay.py) :
+   chaque position modelisee rejoue les signaux de son modele gagnant sur
+   UN segment (holdout par defaut), agregation aux poids d'aujourd'hui. Les
+   positions sans modele sont listees avec leur motif, jamais renormalisees
+   en silence. Chaque simulation par actif est journalisee (DSR). #}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('nav_patrimoine_simulation') }}</h1>
+    <p class="page-subtitle">Et si chaque position avait suivi son modèle ? Rejoue les signaux déjà enregistrés des modèles gagnants sur les positions d'un compte, pondérées comme aujourd'hui, sans ré-entraînement. Seules les positions dont le symbole a été une cible de run sont couvertes.</p>
+  </div>
+</div>
+
+<div id="wealth-flash" class="banner hidden" role="status"></div>
+
+{% if accounts %}
+<div class="sim-grid">
+<section class="dash-panel sim-panel-config">
+  <h2 class="dash-panel-title">Paramètres</h2>
+  <form class="run-form" id="replay-form">
+    <label>Compte
+      <select name="account_id">
+        {% for a in accounts %}<option value="{{ a.account_id }}">{{ a.name }} ({{ t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive') }})</option>{% endfor %}
+      </select>
+    </label>
+    <label>Segment
+      <select name="segment">
+        <option value="holdout">{{ t('sim_segment_holdout') }}</option>
+        <option value="test">{{ t('sim_segment_test') }}</option>
+        <option value="live">{{ t('sim_segment_live') }}</option>
+      </select>
+    </label>
+    <label>Mode signal → position
+      <select name="position_mode">
+        <option value="threshold">{{ t('sim_mode_threshold') }}</option>
+        <option value="proportional">{{ t('sim_mode_proportional') }}</option>
+        <option value="heuristic_leverage">{{ t('sim_mode_heuristic') }}</option>
+      </select>
+    </label>
+    <label>{{ t('sim_field_threshold') }} <input type="number" name="threshold" step="0.01" min="0.5" max="1" value="0.55"></label>
+    <label class="checkbox"><input type="checkbox" name="short_allowed" checked> {{ t('sim_field_short_allowed') }}</label>
+    <button type="submit" class="btn">{{ icon('simulate') }} Rejouer</button>
+    <p class="hint">Chaque actif simulé est journalisé comme une simulation /simulate : il compte dans le Sharpe déflaté des essais suivants sur cette cible.</p>
+  </form>
+</section>
+
+<section class="dash-panel sim-panel-equity">
+  <h2 class="dash-panel-title">Résultat</h2>
+  <div id="replay-empty" class="sim-empty" style="display:block">Choisis un compte puis « Rejouer ».</div>
+  <div id="replay-result" class="hidden">
+    <div class="metric-grid" id="replay-kpis"></div>
+    <div class="drift-legend">
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>Positions suivant leur modèle</span>
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>Positions conservées (buy & hold)</span>
+    </div>
+    <div class="chart-wrap"><canvas id="replay-chart" class="chart-canvas" role="img" aria-label="Courbes rejouées"></canvas></div>
+  </div>
+</section>
+
+<section class="dash-panel sim-panel-metrics">
+  <h2 class="dash-panel-title">Positions couvertes et écartées</h2>
+  <div id="replay-tables"><p class="hint">—</p></div>
+</section>
+</div>
+{% else %}
+{{ empty_state("Aucun compte.", "Crée un compte sur la page Comptes pour rejouer les signaux sur ses positions.") }}
+{% endif %}
+<script src="/static/wealth.js"></script>
+{% endblock %}

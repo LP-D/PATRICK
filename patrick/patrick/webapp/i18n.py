@@ -334,6 +334,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # Roadmap bloc 4 -- PATRIMOINE
     "nav_patrimoine": {"fr": "Comptes", "en": "Accounts"},
     "nav_mouvements": {"fr": "Mouvements", "en": "Movements"},
+    "nav_patrimoine_simulation": {"fr": "Simulateur patrimoine", "en": "Wealth simulator"},
     "wealth_title": {"fr": "Patrimoine", "en": "Wealth"},
     "wealth_subtitle": {
         "fr": "Comptes réels et fictifs, valorisés aux derniers cours connus. Les positions se déduisent des mouvements — rien n'est saisi deux fois. Glisse un mouvement sur un compte fictif pour le copier dans le bac à sable.",
