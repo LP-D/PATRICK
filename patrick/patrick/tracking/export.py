@@ -18,6 +18,7 @@ import numpy as np
 from sklearn.preprocessing import RobustScaler
 
 from patrick.config.schema import RunConfig
+from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import build_target
 from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
@@ -56,7 +57,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     y = target_series.values[sel].astype(int)
     X_pool_df = pool[feature_pool].reindex(idx)
     sc = RobustScaler()
-    X = sc.fit_transform(np.nan_to_num(X_pool_df.values[sel]))
+    X = finite_scaled(sc.fit_transform(finite_features(X_pool_df.values[sel], "export")), "export")
 
     cols = select_features(config.selection.method, X, y, n_feat, config.features.pool_prefilter,
                             seed=seed, shap_sample=config.selection.shap_sample)

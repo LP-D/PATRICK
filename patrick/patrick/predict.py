@@ -23,12 +23,12 @@ import logging
 import sqlite3
 
 import joblib
-import numpy as np
 import pandas as pd
 
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
+from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.pipeline.engine import build_full_feature_pool
 from patrick.tracking import db as trackdb
 
@@ -103,7 +103,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
 
         last_row = full_pool[feature_pool].iloc[[-1]]
         last_ts = full_pool.index[-1]
-        X = scaler.transform(np.nan_to_num(last_row.values))
+        X = finite_scaled(scaler.transform(finite_features(last_row.values, "live")), "live")
         sel_idx = [feature_pool.index(n) for n in feature_names]
         X_sel = X[:, sel_idx]
 
