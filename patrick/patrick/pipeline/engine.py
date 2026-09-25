@@ -53,7 +53,14 @@ from patrick.data.ingest import ingest
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
-from patrick.features import equity_fundamentals, guida, spike, technical, vol_models
+from patrick.features import (
+    equity_fundamentals,
+    guida,
+    pool_cache,
+    spike,
+    technical,
+    vol_models,
+)
 from patrick.features import macro as feat_macro
 from patrick.features.interactions import (
     INTERACTION_TYPES,
@@ -131,11 +138,25 @@ def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str)
     return kept
 
 
+def _features_payload(config: RunConfig) -> dict:
+    return {"features": config.features.model_dump(mode="json"),
+            "fred": sorted(config.universe.fred_series), "target": config.objective.target_symbol}
+
+
 def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
     """Features causal by construction (rolling windows/lags, no globally
     estimated parameter): technical, spike (excluding the particle filter),
     macro, + the target's OHLC vol estimators. Computed once, shared across
-    all folds/horizons of a run — no leak risk (see module docstring)."""
+    all folds/horizons of a run — no leak risk (see module docstring).
+
+    Cached on disk per (raw content, feature config, feature code) --
+    `features/pool_cache.py`. The target's OHLC is fetched at build time
+    (not part of the snapshot): the cached pool freezes it per vintage."""
+    return pool_cache.cached("base", raw, {**_features_payload(config), "target_col": target_col},
+                             lambda: _build_base_feature_pool(raw, config, target_col))
+
+
+def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
     families = config.features.families
     guida_on = config.features.enable_guida_features
     guida_windows = list(D.GUIDA_LOOKBACKS) if guida_on else None
@@ -217,7 +238,19 @@ def build_parametric_pool(raw: pd.DataFrame, config: RunConfig,
     across separate runs of the same snapshot (CPCV, single fit). Does not
     cover `spike.build_spike_features_parametric` (particle filter) -- out
     of scope for this workstream (EGARCH/Kalman/HMM only, per the O1-O5
-    scope decision)."""
+    scope decision).
+
+    Cached on disk per (raw content, feature config, fit cut, feature code)
+    -- `features/pool_cache.py` -- which also covers the particle filter the
+    DB cache above does not."""
+    payload = {**_features_payload(config), "fit_end_idx": fit_end_idx, "test_end_idx": test_end_idx}
+    return pool_cache.cached(
+        "parametric", raw, payload,
+        lambda: _build_parametric_pool(raw, config, fit_end_idx, test_end_idx, conn, snapshot_id))
+
+
+def _build_parametric_pool(raw: pd.DataFrame, config: RunConfig, fit_end_idx: int | None,
+                           test_end_idx: int | None, conn, snapshot_id: str | None) -> pd.DataFrame:
     families = config.features.families
     parts: list[pd.DataFrame] = []
 

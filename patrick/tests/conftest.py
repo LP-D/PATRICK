@@ -22,3 +22,12 @@ def conn(tmp_path):
     (was duplicated identically in `test_selection_cache.py` and
     `test_vol_model_cache.py`)."""
     return trackdb.connect(str(tmp_path / "patrick.db"))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_feature_pool_cache(tmp_path, monkeypatch):
+    """The on-disk feature pool cache (`patrick/features/pool_cache.py`) is
+    per test: two tests building the same synthetic pool must never serve
+    each other a cached frame (a call-counting test would then see zero
+    calls)."""
+    monkeypatch.setenv("PATRICK_FEATURE_CACHE_ROOT", str(tmp_path / "feature_cache"))
