@@ -22,6 +22,7 @@ import numpy as np
 
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.keep_awake import keep_awake
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -200,7 +201,8 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
     old_stdout = sys.stdout
     sys.stdout = capture
     try:
-        result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
+        with keep_awake():
+            result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
     except Exception as exc:  # noqa: BLE001 -- job boundary: any pipeline failure is recorded on the job, the worker keeps running
         sys.stdout = old_stdout
         capture.final_flush()

@@ -15,6 +15,7 @@ from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
+from patrick.keep_awake import keep_awake
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
@@ -132,7 +133,8 @@ def run_cmd(
         cfg.name = name
     _apply_min_history_years_override(cfg, min_history_years)
     _reject_unsupported_fundamentals_features(cfg)
-    result = run_pipeline(cfg, force_ingest=force_ingest)
+    with keep_awake():
+        result = run_pipeline(cfg, force_ingest=force_ingest)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
@@ -159,7 +161,8 @@ def resume_cmd(
         raise typer.Exit(code=1)
     config = RunConfig.model_validate_json(row["config_json"])
     typer.echo(f"Reprise de '{config.name}' (run {run_id}, statut précédent={row['status']})...")
-    result = run_pipeline(config)
+    with keep_awake():
+        result = run_pipeline(config)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
