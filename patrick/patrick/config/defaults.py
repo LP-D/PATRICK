@@ -398,7 +398,10 @@ DEFAULT_TARGET_GROUPS = {
         ("DGS30", "US30Y_Rate"),
         ("DGS5", "US5Y_Rate"),
         ("DGS7", "US7Y_Rate"),
-        ("DTB1", "US1M_Rate"),
+        # DTB1 (1-month bill) discontinued 2001-08-24: replaced on 2026-09-26 by
+        # DTB4WK, the 4-week bill FRED still publishes daily. New label: a
+        # different series must not reuse the old column name.
+        ("DTB4WK", "US4W_Rate"),
         ("DTB3", "US3M_Rate"),
         ("DTB6", "US6M_Rate"),
         ("EFFR", "EFFR"),
@@ -406,7 +409,8 @@ DEFAULT_TARGET_GROUPS = {
         ("GDP", "GDP"),
         ("INDPRO", "Industrial_Production"),
         ("NFCI", "NFCI"),
-        ("OILPRICE", "Oil_Price"),
+        # OILPRICE removed 2026-09-26: discontinued since 2013-07-01 (empty for
+        # any later start date); oil stays covered by DCOILWTICO/DCOILBRENTEU.
         ("PAYEMS", "NonfarmPayrolls"),
         ("PCE", "PCE"),
         ("PCEPILFE", "Core_PCE"),

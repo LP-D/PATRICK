@@ -536,7 +536,7 @@ universe:
     US30Y_Rate: DGS30
     US5Y_Rate: DGS5
     US7Y_Rate: DGS7
-    US1M_Rate: DTB1
+    US4W_Rate: DTB4WK
     US3M_Rate: DTB3
     US6M_Rate: DTB6
     EFFR: EFFR
@@ -544,7 +544,6 @@ universe:
     GDP: GDP
     Industrial_Production: INDPRO
     NFCI: NFCI
-    Oil_Price: OILPRICE
     NonfarmPayrolls: PAYEMS
     PCE: PCE
     Core_PCE: PCEPILFE

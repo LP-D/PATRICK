@@ -129,7 +129,7 @@ def eurusd_carry_features(raw: pd.DataFrame, us_rate_col: str = EURUSD_US_RATE_C
     definition: real FX carry is a rate DIFFERENTIAL (foreign rate minus
     domestic rate, or equivalently the forward-implied points). This
     codebase's FRED universe (`config.defaults.DEFAULT_TARGET_GROUPS
-    ["Macro (FRED)"]`, audited by hand: DGS1/2/3/5/7/10/20/30, DTB1/3/6,
+    ["Macro (FRED)"]`, audited by hand: DGS1/2/3/5/7/10/20/30, DTB4WK/3/6,
     EFFR, DFF, FEDFUNDS, SOFR, ...) contains ONLY US-side short rates -- no
     EURIBOR/€STR/EONIA or any other Eurozone short-rate series. Rather than
     invent a Euro-side value, this proxy exposes ONLY the US leg (level and

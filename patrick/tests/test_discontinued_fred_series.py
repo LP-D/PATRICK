@@ -1,8 +1,9 @@
 """Found by the slow web smoke test on 2026-09-26 (real data, start 2015):
-two FRED series of the default universe are discontinued -- DTB1 (last
-observation 2001-08-24) and OILPRICE (2013-07-01). From any start date after
-their end, FRED returns an EMPTY series, which `download_fred_universe` kept
-as an all-NaN column (only `None` counted as missing on this path, unlike
+two FRED series of the default universe were discontinued -- DTB1 (last
+observation 2001-08-24) and OILPRICE (2013-07-01); both removed the same
+day. From any start date after their end, FRED returns an EMPTY series,
+which `download_fred_universe` kept as an all-NaN column (only `None`
+counted as missing on this path, unlike
 the ALFRED path which already checked `.empty`). The Kalman feature then
 crashed the whole run: `ValueError: array must not contain infs or NaNs`
 (pykalman -> scipy.linalg.pinv), phase "features".
@@ -51,3 +52,15 @@ def test_kalman_feature_ignores_isolated_infinite_values():
     s.iloc[50] = np.inf
     out = kalman_filtered_level(s, fit_end_idx=60)
     assert np.isfinite(out).all()
+
+
+def test_discontinued_series_are_out_of_the_default_universe():
+    """User decision (2026-09-26): DTB1 and OILPRICE removed, DTB4WK (4-week
+    T-bill, published daily) replaces DTB1 as the 1-month bill rate."""
+    from patrick.config import defaults as D
+    from patrick.data import publication_lag
+
+    fred_ids = set(D.DEFAULT_UNIVERSE_FRED_SERIES.values())
+    assert not fred_ids & {"DTB1", "OILPRICE"}
+    assert D.DEFAULT_UNIVERSE_FRED_SERIES.get("US4W_Rate") == "DTB4WK"
+    assert publication_lag.frequency_of("DTB4WK", pd.DatetimeIndex([])) == "daily"
