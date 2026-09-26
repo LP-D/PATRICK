@@ -18,6 +18,13 @@ ajoutées après vérification sur 112 candidates — ^EVZ écarté, vide).
   (2026-09-26) : LBS=F retiré** de `DEFAULT_TARGET_GROUPS` (65 cibles par
   défaut). LBR=F n'est pas ajouté : trop court pour le pool de features
   (couverture < 85 % depuis 2000).
+- **Séries FRED arrêtées (hors périmètre de ce contrôle Yahoo, trouvées par la
+  suite lente le 2026-09-26)** : DTB1 (dernière observation 2001-08-24) et
+  OILPRICE (2013-07-01) renvoyaient une série vide pour tout run démarrant
+  après leur fin. **Décision (2026-09-26)** : retirées ; DTB4WK (bon du Trésor
+  à 4 semaines, publié quotidiennement) remplace DTB1 sous le libellé
+  `US4W_Rate`. Le pétrole reste couvert par DCOILWTICO/DCOILBRENTEU.
+  64 cibles par défaut.
 - **ALDAT.PA (D.A.T.E)** : vide, attendu (introduction le jour même). Son
   risque est estimé via ^FCHI (`backfill_with_proxy`).
 - Les **39 tickers ajoutés sur le PC A** (branche `feature/replay-cache-universe`,

@@ -113,8 +113,8 @@ _EXPECTED_COMMODITIES_FUTURES = {
 _EXPECTED_MACRO_FRED = {
     "BAMLC0A0CM", "BAMLC0A4CBBB", "BAMLH0A0HYM2", "CPIAUCSL", "CPILFESL",
     "DCOILBRENTEU", "DCOILWTICO", "DFF", "DGS1", "DGS10", "DGS2", "DGS20",
-    "DGS3", "DGS30", "DGS5", "DGS7", "DTB1", "DTB3", "DTB6", "EFFR",
-    "FEDFUNDS", "GDP", "INDPRO", "NFCI", "OILPRICE", "PAYEMS", "PCE",
+    "DGS3", "DGS30", "DGS5", "DGS7", "DTB4WK", "DTB3", "DTB6", "EFFR",
+    "FEDFUNDS", "GDP", "INDPRO", "NFCI", "PAYEMS", "PCE",
     "PCEPILFE", "RSAFS", "SOFR", "SP500", "STLFSI4", "T10Y2Y", "T10Y3M",
     "T10YIE", "T5YIE", "T5YIFR", "TEDRATE", "UMCSENT", "UNRATE", "VIXCLS",
 }
@@ -123,7 +123,7 @@ _EXPECTED_MACRO_FRED = {
 def test_universe_matches_exactly_the_reduced_target_set():
     """Non-régression explicite (Phase 4, feature/universe-reduction) : la
     liste d'univers chargée au runtime doit correspondre EXACTEMENT à la
-    liste attendue -- 65 cibles (19 commodités futures + 41 macro FRED + 2
+    liste attendue -- 64 cibles (19 commodités futures + 40 macro FRED + 2
     indices + 2 devises + 1 crypto), pas "à peu près" (un ticker en trop ou
     en moins passerait inaperçu avec une simple assertion de longueur).
     DX-Y.NYB (US Dollar Index) ajouté aux devises -- ticker yfinance, ne doit
@@ -135,7 +135,10 @@ def test_universe_matches_exactly_the_reduced_target_set():
     Associates), pas un simple renommage (recherche "Wilshire" sur l'API
     FRED : 0 résultat). LBS=F retiré le 2026-09-26 : Yahoo ne sert plus
     aucune cotation (contrat CME remplacé par LBR=F en 2022, trop court pour
-    le pool -- docs/audits/verification-tickers-2026-09-25.md)."""
+    le pool -- docs/audits/verification-tickers-2026-09-25.md). Le même jour,
+    deux séries FRED arrêtées sont retirées : DTB1 (dernière observation
+    2001-08-24, remplacée par DTB4WK, bon du Trésor à 4 semaines) et OILPRICE
+    (2013-07-01) -- vides pour tout run démarrant après leur fin."""
     groups = D.DEFAULT_TARGET_GROUPS
     assert set(groups.keys()) == {"Indices", "Devises", "Matières premières (futures)", "Crypto", "Macro (FRED)"}
 
@@ -153,7 +156,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
 
     all_expected = (_EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO
                     | _EXPECTED_COMMODITIES_FUTURES | _EXPECTED_MACRO_FRED)
-    assert len(all_expected) == 65
+    assert len(all_expected) == 64
     all_actual = {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
     assert all_actual == all_expected
 
