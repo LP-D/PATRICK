@@ -312,6 +312,15 @@ def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dic
     return path_performance_distribution({i: v for i, (v,) in enumerate(rows)})
 
 
+def _outcome_class(y_true: float, split: str) -> int:
+    """4-class outcome of a stored prediction: `split='live'` rows store the
+    realised direction as BINARY (1.0 up / 0.0 down, predict.py), the other
+    splits the 4-class index -- a live 1.0 is an UP (3), never class 1."""
+    if split == "live":
+        return 3 if float(y_true) >= 0.5 else 0
+    return round(float(y_true))
+
+
 def conformal_for_trial(conn: sqlite3.Connection, trial_id: int, alpha: float = 0.2,
                         min_predictions: int = 60) -> dict:
     """Roadmap bloc 3 -- conformal direction sets from the trial's stored
@@ -329,7 +338,7 @@ def conformal_for_trial(conn: sqlite3.Connection, trial_id: int, alpha: float = 
         return {"available": False, "n": len(rows),
                 "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
                            else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
-    y_up = np.isin(np.array([r[1] for r in rows], dtype=float), (2.0, 3.0)).astype(int)
+    y_up = np.isin([_outcome_class(r[1], r[3]) for r in rows], (2, 3)).astype(int)
     p_up = np.array([r[2] for r in rows], dtype=float)
     out = {"available": True, "n": len(rows), "alpha": alpha,
            "splits": {s: sum(1 for r in rows if r[3] == s) for s in ("test", "holdout", "live")}}
@@ -349,14 +358,15 @@ def meta_labeling_for_trial(conn: sqlite3.Connection, trial_id: int, horizon: in
     from patrick.validation import meta_labeling
 
     rows = conn.execute(
-        "SELECT y_pred, y_true, p_up, y_proba FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
+        "SELECT y_pred, y_true, p_up, y_proba, split FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
         "AND y_true IS NOT NULL AND split IN ('test', 'holdout', 'live') ORDER BY ts, split",
         (trial_id,)).fetchall()
     if len(rows) < min_predictions:
         return {"available": False, "n": len(rows),
                 "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
                            else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
-    arr = np.array([[r[0], r[1], r[2], r[3] if r[3] is not None else np.nan] for r in rows], dtype=float)
+    arr = np.array([[r[0], _outcome_class(r[1], r[4]), r[2], r[3] if r[3] is not None else np.nan]
+                    for r in rows], dtype=float)
     res = meta_labeling.meta_label_sequence(arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], horizon=horizon)
     return {"available": res["n_evaluated"] > 0, "n": res["n"],
             "reason": None if res["n_evaluated"] else "pas assez d'appels résolus pour entraîner le méta-modèle",
@@ -827,6 +837,64 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
             "auc_overall": auc_by_trial.get(trial_id),
             "dm_result": dm_by_run.get(run_id),
         }
+    return out
+
+
+def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[int],
+                 min_hits: int = 30) -> dict[tuple[str, int], dict]:
+    """Roadmap bloc 3 -- drift badge per (target, horizon), from STORED data
+    only (two queries, no feature rebuild -- the PSI itself is measured on
+    demand, `explain.compute_drift_for_ticker_horizon`, POST
+    /api/drift/{target}/{horizon}):
+
+    - data drift: the worst feature PSI of the latest measurement
+      (`drift_psi_history`), classified by `validation.drift.data_drift_status`
+      (< 0.1 stable, 0.1-0.25 attention, > 0.25 significant);
+    - concept drift: Page-Hinkley on the resolved LIVE calls' hits, oldest
+      first (`validation.drift.page_hinkley_test`), once >= `min_hits`.
+
+    `state`: `insufficient_data` (no PSI measured), `provisional` (PSI, not
+    enough resolved calls), `confirmed` (both) -- the three states of
+    `validation.drift.DriftBadge`."""
+    from patrick.validation import drift as drift_lib
+
+    if not targets or not horizons:
+        return {}
+    ph_t, ph_h = ",".join("?" for _ in targets), ",".join("?" for _ in horizons)
+    latest = conn.execute(
+        f"SELECT d.symbol, d.horizon, d.feature, d.psi, d.computed_at FROM drift_psi_history d "
+        f"JOIN (SELECT symbol, horizon, MAX(computed_at) AS m FROM drift_psi_history "
+        f"      WHERE symbol IN ({ph_t}) AND horizon IN ({ph_h}) GROUP BY symbol, horizon) x "
+        f"ON d.symbol = x.symbol AND d.horizon = x.horizon AND d.computed_at = x.m",
+        (*targets, *horizons)).fetchall()
+    psi_by_pair: dict[tuple[str, int], list] = {}
+    for sym, h, feature, psi, at in latest:
+        psi_by_pair.setdefault((sym, int(h)), []).append((feature, float(psi), at))
+    live = conn.execute(
+        f"SELECT run.target, run.horizon, p.ts, p.y_pred, p.y_true FROM prediction p "
+        f"JOIN trial ON trial.trial_id = p.trial_id AND trial.is_best = 1 "
+        f"JOIN run ON run.run_id = trial.run_id "
+        f"WHERE p.split = 'live' AND p.y_true IS NOT NULL AND run.target IN ({ph_t}) AND run.horizon IN ({ph_h}) "
+        f"ORDER BY p.ts", (*targets, *horizons)).fetchall()
+    hits_by_pair: dict[tuple[str, int], list[int]] = {}
+    for sym, h, _ts, y_pred, y_true in live:
+        hits_by_pair.setdefault((sym, int(h)), []).append(int((y_pred >= 2) == (float(y_true) >= 0.5)))
+
+    out = {}
+    for sym in targets:
+        for h in horizons:
+            psis, hits = psi_by_pair.get((sym, h)), hits_by_pair.get((sym, h), [])
+            badge = {"psi": None, "status": "insufficient_data", "worst_feature": None, "measured_at": None,
+                     "n_features": 0, "concept_drift": None, "n_hits": len(hits), "state": "insufficient_data"}
+            if psis:
+                feature, psi, at = max(psis, key=lambda x: x[1])
+                badge.update(psi=psi, status=drift_lib.data_drift_status(psi), worst_feature=feature,
+                             measured_at=at, n_features=len(psis), state="provisional")
+            if len(hits) >= min_hits:
+                badge["concept_drift"] = drift_lib.page_hinkley_test(hits)["drift_detected"]
+                if psis:
+                    badge["state"] = "confirmed"
+            out[(sym, h)] = badge
     return out
 
 

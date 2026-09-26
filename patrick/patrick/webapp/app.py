@@ -726,6 +726,7 @@ def _predictions_overview() -> list[dict]:
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
+        drift = trackhistory.drift_badges(conn, all_symbols, horizons)
     finally:
         conn.close()
 
@@ -745,6 +746,7 @@ def _predictions_overview() -> list[dict]:
                     "run_id": pred["run_id"] if pred else None,
                     "dm_p_value": dm["p_value"] if dm else None,
                     "dm_sample": dm.get("sample") if dm else None,
+                    "drift": drift.get((sym, h)),
                     "live_hit_rate": hit_rate["hit_rate"] if hit_rate else None,
                     "live_hit_rate_n": hit_rate["n"] if hit_rate else None,
                 })
@@ -836,6 +838,27 @@ def portfolio_page(request: Request, pairs: str | None = None):
             **_i18n_context(request),
         },
     )
+
+
+@app.post("/api/drift/{target}/{horizon}")
+def api_measure_drift(target: str, horizon: int):
+    """Roadmap bloc 3 -- on-demand PSI of the exported model's features for
+    ONE (target, horizon) (`explain.compute_drift_for_ticker_horizon`, which
+    records it in `drift_psi_history`, read by the /predictions badge).
+    Rebuilds the feature pool: an explicit user action, never a page loop."""
+    from patrick import explain as explain_module
+    from patrick.validation.drift import data_drift_status
+
+    try:
+        result = explain_module.compute_drift_for_ticker_horizon(target, horizon)
+    except (ValueError, FileNotFoundError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=f"Mesure impossible : {exc}") from exc
+    if not result:
+        raise HTTPException(status_code=404, detail="Pas de modèle exporté avec une référence de dérive "
+                                                    "pour cette cible et cet horizon (ou historique récent insuffisant).")
+    features = sorted(({"feature": f, "psi": v["psi"], "status": v.get("status") or data_drift_status(v["psi"])}
+                       for f, v in result.items()), key=lambda r: -r["psi"])
+    return {"target": target, "horizon": horizon, "features": features}
 
 
 # Roadmap bloc 4 -- PATRIMOINE (pages /patrimoine, /mouvements + /api/wealth/*).

@@ -55,6 +55,16 @@
         {% else %}
             {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ')', 'ok' if r.live_hit_rate >= live_hit_rate_warning_threshold else 'warning') %}
         {% endif %}
+        {# Roadmap bloc 3 -- badge de derive (history.drift_badges, donnees
+           stockees uniquement ; PSI mesure a la demande sur la fiche cible). #}
+        {% set d = r.drift %}
+        {% if not d or d.psi is none %}
+            {% set drift_cell = status_badge('non mesurée', 'disabled') %}
+        {% else %}
+            {% set drift_state = {'stable': 'ok', 'attention': 'warning', 'significant': 'error'}[d.status] %}
+            {% set drift_label = {'stable': 'stable', 'attention': 'attention', 'significant': 'dérive'}[d.status] ~ ' · PSI ' ~ ('%.2f' | format(d.psi)) %}
+            {% set drift_cell %}<span class="tip" tabindex="0" data-tip="PSI maximal sur {{ d.n_features }} feature(s) du modèle ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}. < 0,10 stable, 0,10–0,25 attention, > 0,25 dérive significative.{% if d.concept_drift is not none %} Page-Hinkley sur {{ d.n_hits }} appels live résolus : {{ 'rupture de la réussite détectée' if d.concept_drift else 'pas de rupture' }}.{% else %} Dérive de concept : pas encore assez d'appels live résolus ({{ d.n_hits }}/30).{% endif %}">{{ status_badge(drift_label, 'error' if d.concept_drift else drift_state) }}</span>{% endset %}
+        {% endif %}
         {% set _ = rows.append([
             '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
             r.label,
@@ -63,11 +73,12 @@
             conf_label,
             sig_cell,
             hit_cell,
+            drift_cell,
             r.ts or '—',
         ]) %}
     {% endfor %}
     {% set n_pred = g.rows | selectattr('direction') | list | length %}
-    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dernier signal"], rows,
+    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dérive", "Dernier signal"], rows,
                   num_cols=[4],
                   footer=(g.rows | length) ~ " paire(s) · " ~ n_pred ~ " avec une prédiction disponible") }}
 </div>

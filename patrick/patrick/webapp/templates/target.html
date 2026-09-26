@@ -102,6 +102,25 @@
 {% endif %}
 </section>
 
+{# Roadmap bloc 3 -- mesure a la demande du PSI des features du modele
+   exporte (explain.compute_drift_for_ticker_horizon : reconstruit le pool de
+   features, ~30 s sur l'univers reel -- jamais en boucle sur la page). Le
+   resultat alimente le badge "Derive" de /predictions. #}
+{% if shap_horizons %}
+<section class="card" id="feature-drift-widget" data-target="{{ target }}">
+<h2>Dérive des features (PSI)</h2>
+<p class="hint">Compare la distribution récente de chaque feature du modèle exporté à celle de l'entraînement. Reconstruit le pool de features (≈ 30 s sur l'univers complet) ; le résultat alimente le badge « Dérive » de la page Prédictions.</p>
+<div class="shap-controls">
+  <label>Horizon
+    <select class="drift-horizon-select">{% for h in shap_horizons %}<option value="{{ h }}">{{ h }}j</option>{% endfor %}</select>
+  </label>
+  <button type="button" class="btn-secondary drift-measure-btn">Mesurer la dérive</button>
+</div>
+<div class="drift-output"></div>
+</section>
+<script src="/static/feature_drift.js"></script>
+{% endif %}
+
 {% endif %}
 
 <section class="card">

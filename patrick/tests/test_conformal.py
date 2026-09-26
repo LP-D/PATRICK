@@ -71,3 +71,21 @@ def test_run_page_shows_conformal_sets_from_stored_p_up(tmp_path, monkeypatch):
     tid2 = db.create_trial(conn, "r", "GLOBAL", "LightGBM", "none", 5, "shap")
     db.add_predictions(conn, tid2, 1, "test", ts[:10], y_true=[3] * 10, y_pred=[3] * 10)
     assert history.conformal_for_trial(conn, tid2)["available"] is False
+
+
+def test_live_rows_binary_outcome_is_read_as_a_direction_not_a_class(tmp_path):
+    """split='live' stores y_true as BINARY realised direction (1.0 up /
+    0.0 down, predict.py), test/holdout as the 4-class index: a live 1.0 is
+    an UP, not class 1 (DOWN_FAIBLE)."""
+    from patrick.tracking import db, history
+
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "s", "h", None, None, None)
+    db.create_run(conn, "r", "^T", 5, "s", "{}", "c", "g", 1)
+    tid = db.create_trial(conn, "r", "GLOBAL", "XGBoost", "none", 5, "shap")
+    import pandas as pd
+    ts = [str(d.date()) for d in pd.bdate_range("2024-01-01", periods=80)]
+    db.add_predictions(conn, tid, 0, "live", ts, y_true=[1.0] * 80, y_pred=[3] * 80, y_proba=[0.9] * 80,
+                       p_up=[0.9] * 80)
+    c = history.conformal_for_trial(conn, tid, min_predictions=60)
+    assert c["base_rate_up"] == 1.0
