@@ -56,6 +56,7 @@ from patrick.data.store import DataStore
 from patrick.features import (
     equity_fundamentals,
     guida,
+    long_cycle,
     pool_cache,
     spike,
     technical,
@@ -181,6 +182,8 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
         if "vol_models" in families:
             parts.append(vol_models.build_vol_model_features_base(
                 s, prefix=col, models=config.features.vol_models, guida_windows=guida_windows))
+        if "long_cycle" in families:
+            parts.append(long_cycle.build_long_cycle_features(s, prefix=col))
 
     if "macro" in families and config.universe.fred_series:
         macro_cols = list(config.universe.fred_series.keys())

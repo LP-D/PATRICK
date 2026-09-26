@@ -29,6 +29,7 @@ import pandas as pd
 _FAMILY_PATTERNS: tuple[tuple[str, str], ...] = (
     ("interactions", r"__(minus|prod|ratio|zrel|sum|max|min)__"),
     ("guida", r"_estimated$"),
+    ("long_cycle", r"_lc_"),
     ("particle_filter", r"_particle_vol$"),
     ("egarch", r"_egarch_vol$"),
     ("kalman", r"_kalman_filtered$"),

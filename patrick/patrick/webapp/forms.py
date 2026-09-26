@@ -131,7 +131,7 @@ def default_config_dict() -> dict:
     }
 
 
-ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
+ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro", "long_cycle"]
 ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)

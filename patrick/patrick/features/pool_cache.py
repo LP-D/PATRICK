@@ -34,7 +34,7 @@ import pandas as pd
 
 _FEATURE_SOURCES = (
     "technical.py", "spike.py", "vol_models.py", "macro.py", "guida.py",
-    "equity_fundamentals.py", "_utils.py", "interactions.py", "sanitize.py",
+    "equity_fundamentals.py", "_utils.py", "interactions.py", "sanitize.py", "long_cycle.py",
 )
 
 

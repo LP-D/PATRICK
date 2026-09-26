@@ -71,6 +71,20 @@ GLOSSARY: dict[str, dict[str, str]] = {
         "en": ("Joins of FRED macroeconomic series (rates, spreads, financial "
                "conditions) aligned on the market calendar."),
     },
+    "long_cycle": {
+        "fr": ("Features de long cycle pour les horizons 252/504/756 j : rendements "
+               "à 1, 2 et 3 ans (retournement de long terme), momentum 12-1 mois, "
+               "z-score et position dans la fourchette 1 an / 3 ans, drawdown depuis "
+               "le plus haut, ratio de volatilité 21 j / 252 j. Désactivée par "
+               "défaut. Limite : à 756 j, les labels se chevauchent et il ne reste "
+               "qu'environ une observation indépendante tous les 3 ans."),
+        "en": ("Long-cycle features for the 252/504/756-day horizons: 1-, 2- and "
+               "3-year returns (long-term reversal), 12-1 momentum, 1-/3-year "
+               "z-score and range position, drawdown from the running high, "
+               "21-/252-day volatility ratio. Off by default. Caveat: at 756 days "
+               "labels overlap and only about one independent observation per "
+               "3 years remains."),
+    },
 
     # Models in the vol_models family
     "egarch": {
