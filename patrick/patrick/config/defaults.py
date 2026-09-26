@@ -430,4 +430,13 @@ DEFAULT_TARGET_CHOICES = _flatten_target_choices()
 # The chosen target is removed from it when building the config (see
 # webapp/forms.py) to avoid a ticker predicting itself.
 DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src == "yfinance"]
-DEFAULT_UNIVERSE_FRED_SERIES = {label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"}
+# FRED series used as FEATURES only, never offered as targets: the ECB deposit
+# facility rate is a step function moved at policy meetings -- as a target
+# almost every label would be "flat". It gives EUR/USD carry its euro leg
+# (`features/guida.py::eurusd_carry_features`). FRED dates it on the EFFECTIVE
+# date, after the announcement: a lag, never a look-ahead.
+FEATURE_ONLY_FRED_SERIES = {"EUR_DFR_Rate": "ECBDFR"}
+DEFAULT_UNIVERSE_FRED_SERIES = {
+    **{label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"},
+    **FEATURE_ONLY_FRED_SERIES,
+}

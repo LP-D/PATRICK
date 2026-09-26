@@ -160,7 +160,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
     assert set(D.DEFAULT_UNIVERSE_YF_TICKERS) == (
         _EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO | _EXPECTED_COMMODITIES_FUTURES
     )
-    assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED
+    assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED | set(D.FEATURE_ONLY_FRED_SERIES.values())
 
 
 def test_dxy_is_a_yfinance_ticker_not_fred():

@@ -46,7 +46,7 @@ def universe_excluding(target_symbol: str) -> tuple[list[str], dict[str, str]]:
     ticker/source selection) -- except the target itself, so it isn't fed
     back in as an input feature (trivial leak)."""
     yf_tickers = [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != target_symbol]
-    fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if k != target_symbol}
+    fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if v != target_symbol}
     return yf_tickers, fred_series
 
 
