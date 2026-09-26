@@ -25,8 +25,8 @@ continuous monitor.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import numpy as np
 
@@ -51,13 +51,21 @@ MIN_OBS_FOR_DATA_DRIFT = 30
 # change-point test).
 MIN_HITS_FOR_CONCEPT_DRIFT = 30
 
-# Page-Hinkley defaults: `delta` (minimal change magnitude treated as real,
-# not noise) and `lambda_threshold` (cumulative deviation that triggers
-# detection) are the standard values used across the drift-detection
-# literature (river/scikit-multiflow's own PageHinkley defaults) -- not
-# re-derived here, no project-specific reason to deviate.
-PAGE_HINKLEY_DELTA = 0.005
-PAGE_HINKLEY_LAMBDA = 5.0
+# Page-Hinkley: `delta` (tolerated rise of the error rate, the CUSUM
+# allowance) and `lambda_threshold` (cumulative deviation that triggers).
+# Calibrated by simulation on 2026-09-26 (drift policy,
+# docs/ops/politique-derive.md) for a 0/1 hit series at ~55 % accuracy:
+# - literature defaults (river / scikit-multiflow: 0.005, 5): 41 % false
+#   alarms over 250 independent calls, 63 % over 750 -- with delta ~ 0 the
+#   statistic is a random walk whose range grows like sqrt(n), so it fires
+#   eventually whatever the model;
+# - 0.05 / 12, alarm at the FIRST crossing (stopping rule): 1.3 % false
+#   alarms over 250 independent calls, 5.7 % over 750; a 15-point hit-rate
+#   drop (55 % -> 40 %) is caught in ~60 % of cases within 250 calls,
+#   median delay ~107 calls. Deliberately conservative: a false alarm leads
+#   to a retrain, and every retrain adds trials to the DSR registry (F03).
+PAGE_HINKLEY_DELTA = 0.05
+PAGE_HINKLEY_LAMBDA = 12.0
 
 
 def population_stability_index(expected: Sequence[float], actual: Sequence[float],
@@ -136,11 +144,17 @@ def page_hinkley_test(hits: Sequence[int], delta: float = PAGE_HINKLEY_DELTA,
     """Standard incremental Page-Hinkley test for an increase in the mean
     of the ERROR series `1 - hit` (PH detects a rise in mean; a concept
     drift here means hit rate falling, i.e. errors rising). `hits` is the
-    realized 1/0 outcome of each directional call, oldest first."""
+    realized 1/0 outcome of each directional call, oldest first.
+
+    A stopping rule: the alarm is the FIRST time the statistic crosses
+    `lambda_threshold` (`detected_at`, 0-based index in `hits`) and stays
+    raised -- it was read at the last point only, so an alarm could appear
+    then vanish from one day to the next as the running mean caught up."""
     mean_error = 0.0
     cumulative = 0.0
     min_cumulative = 0.0
     ph_value = 0.0
+    detected_at = None
     n = 0
     for h in hits:
         error = 1 - h
@@ -149,9 +163,12 @@ def page_hinkley_test(hits: Sequence[int], delta: float = PAGE_HINKLEY_DELTA,
         cumulative += error - mean_error - delta
         min_cumulative = min(min_cumulative, cumulative)
         ph_value = cumulative - min_cumulative
+        if detected_at is None and ph_value > lambda_threshold:
+            detected_at = n - 1
     return {
         "ph_value": float(ph_value),
-        "drift_detected": bool(ph_value > lambda_threshold),
+        "drift_detected": detected_at is not None,
+        "detected_at": detected_at,
         "n": n,
         "mean_error_rate": float(mean_error),
     }

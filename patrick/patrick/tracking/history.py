@@ -18,6 +18,7 @@ import html
 import json
 import sqlite3
 
+import numpy as np
 from sklearn.metrics import precision_recall_fscore_support
 
 from patrick.config import defaults as D
@@ -115,12 +116,14 @@ def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class
     `"class_specific"` by default (the MAIN result shown everywhere except
     on explicit request for the common comparison)."""
     row = conn.execute(
-        "SELECT baseline, dm_stat, p_value, computed_at FROM dm_result WHERE run_id = ? AND kind = ?",
+        "SELECT baseline, dm_stat, p_value, computed_at, sample, n_obs FROM dm_result "
+        "WHERE run_id = ? AND kind = ?",
         (run_id, kind),
     ).fetchone()
     if row is None:
         return None
-    return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3]}
+    return {"baseline": row[0], "dm_stat": row[1], "p_value": row[2], "computed_at": row[3],
+            "sample": row[4], "n_obs": row[5]}
 
 
 def phase_breakdown_for_run(conn: sqlite3.Connection, run_id: str) -> dict:
@@ -237,7 +240,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
         f"SELECT run.run_id, run.target, run.horizon, run.status, run.started_at, "
-        f"run.finished_at, run.n_trials, run.config_json, dm.p_value "
+        f"run.finished_at, run.n_trials, run.config_json, dm.p_value, dm.sample "
         f"FROM run LEFT JOIN dm_result dm ON dm.run_id = run.run_id AND dm.kind = 'class_specific' "
         f"{where} ORDER BY run.started_at DESC, run.rowid DESC LIMIT ?",
         (*params, limit),
@@ -246,7 +249,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, [r[0] for r in rows])
 
     out = []
-    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p in rows:
+    for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p, dm_sample in rows:
         run_scheme = _run_scheme(config_json)
         if scheme and run_scheme != scheme:
             continue
@@ -255,7 +258,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
             "horizon": horizon, "status": status_,
             "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials,
             "name": _run_name(config_json), "scheme": run_scheme,
-            "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p,
+            "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p, "dm_sample": dm_sample,
         })
     return out
 
@@ -307,6 +310,67 @@ def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dic
     if not rows:
         return None
     return path_performance_distribution({i: v for i, (v,) in enumerate(rows)})
+
+
+def _outcome_class(y_true: float, split: str) -> int:
+    """4-class outcome of a stored prediction: `split='live'` rows store the
+    realised direction as BINARY (1.0 up / 0.0 down, predict.py), the other
+    splits the 4-class index -- a live 1.0 is an UP (3), never class 1."""
+    if split == "live":
+        return 3 if float(y_true) >= 0.5 else 0
+    return round(float(y_true))
+
+
+def conformal_for_trial(conn: sqlite3.Connection, trial_id: int, alpha: float = 0.2,
+                        min_predictions: int = 60) -> dict:
+    """Roadmap bloc 3 -- conformal direction sets from the trial's stored
+    OUT-OF-SAMPLE P(up) (walk-forward test folds, then holdout/live), in
+    time order: split conformal and ACI (`validation/conformal.py`).
+    `available=False` with the reason when there is not enough to say
+    anything (runs before migration 0024 have no P(up))."""
+    from patrick.validation import conformal
+
+    rows = conn.execute(
+        "SELECT ts, y_true, p_up, split FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
+        "AND y_true IS NOT NULL AND split IN ('test', 'holdout', 'live') ORDER BY ts, split",
+        (trial_id,)).fetchall()
+    if len(rows) < min_predictions:
+        return {"available": False, "n": len(rows),
+                "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
+                           else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
+    y_up = np.isin([_outcome_class(r[1], r[3]) for r in rows], (2, 3)).astype(int)
+    p_up = np.array([r[2] for r in rows], dtype=float)
+    out = {"available": True, "n": len(rows), "alpha": alpha,
+           "splits": {s: sum(1 for r in rows if r[3] == s) for s in ("test", "holdout", "live")}}
+    for method in ("split", "aci"):
+        res = conformal.direction_sets(p_up, y_up, alpha=alpha, method=method)
+        out[method] = {k: res[k] for k in ("coverage", "nominal", "no_call_rate", "n_called", "called_accuracy")}
+    out["base_rate_up"] = float(y_up.mean())
+    return out
+
+
+def meta_labeling_for_trial(conn: sqlite3.Connection, trial_id: int, horizon: int,
+                            min_predictions: int = 150) -> dict:
+    """Roadmap bloc 3 -- meta-labeling on the trial's stored out-of-sample
+    predictions (`validation/meta_labeling.py`): does the primary's own
+    confidence tell when it is right? Walk-forward, a call's meta model only
+    sees calls resolved before it."""
+    from patrick.validation import meta_labeling
+
+    rows = conn.execute(
+        "SELECT y_pred, y_true, p_up, y_proba, split FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
+        "AND y_true IS NOT NULL AND split IN ('test', 'holdout', 'live') ORDER BY ts, split",
+        (trial_id,)).fetchall()
+    if len(rows) < min_predictions:
+        return {"available": False, "n": len(rows),
+                "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
+                           else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
+    arr = np.array([[r[0], _outcome_class(r[1], r[4]), r[2], r[3] if r[3] is not None else np.nan]
+                    for r in rows], dtype=float)
+    res = meta_labeling.meta_label_sequence(arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], horizon=horizon)
+    return {"available": res["n_evaluated"] > 0, "n": res["n"],
+            "reason": None if res["n_evaluated"] else "pas assez d'appels résolus pour entraîner le méta-modèle",
+            **{k: res[k] for k in ("n_evaluated", "n_kept", "accuracy_all", "accuracy_kept", "kept_share")}}
 
 
 def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -> dict | None:
@@ -371,6 +435,9 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "stability_enabled": config.get("selection", {}).get("track_stability", True),
         "feature_stability": feature_stability,
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
+        "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
+        "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
+                          if best_trial else None),
     }
 
 
@@ -394,6 +461,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     run_ids = [r[0] for r in runs]
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, run_ids)
     dm_by_run = trackdb.batch_dm_results(conn, run_ids)
+    benchmark_by_run = trackdb.batch_baseline_f1_dir(conn, run_ids)
 
     run_rows = []
     horizons = set()
@@ -405,6 +473,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "name": _run_name(config_json), "scheme": _run_scheme(config_json),
             "n_trials": n_trials,
             "best_f1_dir": best_f1_by_run.get(run_id), "dm_result": dm_by_run.get(run_id),
+            "benchmark_f1_dir": benchmark_by_run.get(run_id),
         })
 
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
@@ -453,8 +522,12 @@ def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
         "SELECT COUNT(*), COUNT(DISTINCT target) FROM run"
     ).fetchone()
     return {
-        "survivors": fdr["n_bh_significant"] if n_tested else None,
+        # F05: `n_tested` is now the whole BH family (CPCV-only targets
+        # included, as untestable); the measure is computable only once at
+        # least one target carries a DM p-value.
+        "survivors": fdr["n_bh_significant"] if fdr["n_with_p_value"] else None,
         "n_tested": n_tested,
+        "n_untestable": fdr["n_untestable"],
         "alpha": fdr["alpha"],
         "cumulative_trials": trials,
         "n_runs": runs,
@@ -463,13 +536,15 @@ def station_verdict(conn: sqlite3.Connection, fdr_alpha: float = 0.10) -> dict:
 
 
 def universe_overview(conn: sqlite3.Connection) -> list[dict]:
-    """P7.5 -- `/universe`: joins the configurable target universe
-    (`config/defaults.py::DEFAULT_TARGET_GROUPS`, already used by the launch
-    form) with the actual run history -- no new data, just the join of the
-    two."""
+    """P7.5 -- `/universe`: joins the configurable target universe (every
+    group of the launch form: `config.universe_extension.all_target_groups`
+    -- reduced default universe, individual equities, verified extension)
+    with the actual run history -- no new data, just the join of the two."""
+    from patrick.config.universe_extension import all_target_groups
+
     history = {h["target"]: h for h in list_distinct_targets(conn)}
     groups = []
-    for group_name, items in D.DEFAULT_TARGET_GROUPS.items():
+    for group_name, items in all_target_groups().items():
         source = "fred" if group_name == D.FRED_TARGET_GROUP else "yfinance"
         symbols = []
         for symbol, label in items:
@@ -529,7 +604,7 @@ def latest_prediction_for_target(conn: sqlite3.Connection, target: str) -> dict 
     if row is None:
         return None
     ts, split, y_pred, y_proba, trial_id, run_id, horizon = row
-    cls = int(round(y_pred))
+    cls = round(y_pred)
     return {
         "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
         "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -592,7 +667,7 @@ def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -
     ).fetchall()
     out: dict[str, dict] = {}
     for target, ts, split, y_pred, y_proba, trial_id, run_id, horizon in rows:
-        cls = int(round(y_pred))
+        cls = round(y_pred)
         out[target] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
             "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -646,7 +721,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
     ).fetchall()
     out: dict[tuple[str, int], dict] = {}
     for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id in rows:
-        cls = int(round(y_pred))
+        cls = round(y_pred)
         out[(target, horizon)] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
             "direction": _CLASS_DIRECTION.get(cls, "?"),
@@ -721,11 +796,12 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
     auc_by_trial = dict(auc_rows)
 
     dm_rows = conn.execute(
-        f"SELECT run_id, baseline, p_value FROM dm_result "
+        f"SELECT run_id, baseline, p_value, sample FROM dm_result "
         f"WHERE run_id IN ({run_placeholders}) AND kind = 'class_specific'",
         tuple(run_ids),
     ).fetchall()
-    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value} for run_id, baseline, p_value in dm_rows}
+    dm_by_run = {run_id: {"baseline": baseline, "p_value": p_value, "sample": sample}
+                 for run_id, baseline, p_value, sample in dm_rows}
 
     out: dict[tuple[str, int], dict | None] = {}
     for key, (run_id, trial_id) in pair_by_key.items():
@@ -739,8 +815,8 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
             out[key] = None
             continue
 
-        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
         counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
@@ -761,6 +837,70 @@ def direction_metrics_by_target_and_horizon(conn: sqlite3.Connection, targets: l
             "auc_overall": auc_by_trial.get(trial_id),
             "dm_result": dm_by_run.get(run_id),
         }
+    return out
+
+
+def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[int],
+                 min_hits: int = 30) -> dict[tuple[str, int], dict]:
+    """Roadmap bloc 3 -- drift badge per (target, horizon), from STORED data
+    only (two queries, no feature rebuild -- the PSI itself is measured on
+    demand, `explain.compute_drift_for_ticker_horizon`, POST
+    /api/drift/{target}/{horizon}):
+
+    - data drift: the feature PSIs of the latest measurement
+      (`drift_psi_history`); the worst one is kept for the tooltip;
+    - concept drift: Page-Hinkley on the resolved LIVE calls' hits, oldest
+      first, thinned to independent calls.
+
+    The action (`retrain` / `watch` / `ok` / `unmeasured`), levels and
+    staleness follow `validation.drift_policy.assess` (policy of
+    2026-09-26). `state`: `insufficient_data` (no PSI measured),
+    `provisional` (PSI, concept drift not testable yet), `confirmed` (both)
+    -- the three states of `validation.drift.DriftBadge`. `min_hits` is kept
+    for callers; the policy's threshold applies to INDEPENDENT calls."""
+    from patrick.clock import utc_today
+    from patrick.validation import drift as drift_lib
+    from patrick.validation import drift_policy
+
+    if not targets or not horizons:
+        return {}
+    ph_t, ph_h = ",".join("?" for _ in targets), ",".join("?" for _ in horizons)
+    latest = conn.execute(
+        f"SELECT d.symbol, d.horizon, d.feature, d.psi, d.computed_at FROM drift_psi_history d "
+        f"JOIN (SELECT symbol, horizon, MAX(computed_at) AS m FROM drift_psi_history "
+        f"      WHERE symbol IN ({ph_t}) AND horizon IN ({ph_h}) GROUP BY symbol, horizon) x "
+        f"ON d.symbol = x.symbol AND d.horizon = x.horizon AND d.computed_at = x.m",
+        (*targets, *horizons)).fetchall()
+    psi_by_pair: dict[tuple[str, int], list] = {}
+    for sym, h, feature, psi, at in latest:
+        psi_by_pair.setdefault((sym, int(h)), []).append((feature, float(psi), at))
+    live = conn.execute(
+        f"SELECT run.target, run.horizon, p.ts, p.y_pred, p.y_true FROM prediction p "
+        f"JOIN trial ON trial.trial_id = p.trial_id AND trial.is_best = 1 "
+        f"JOIN run ON run.run_id = trial.run_id "
+        f"WHERE p.split = 'live' AND p.y_true IS NOT NULL AND run.target IN ({ph_t}) AND run.horizon IN ({ph_h}) "
+        f"ORDER BY p.ts", (*targets, *horizons)).fetchall()
+    hits_by_pair: dict[tuple[str, int], list[int]] = {}
+    for sym, h, _ts, y_pred, y_true in live:
+        hits_by_pair.setdefault((sym, int(h)), []).append(int((y_pred >= 2) == (float(y_true) >= 0.5)))
+
+    today = utc_today()
+    out = {}
+    for sym in targets:
+        for h in horizons:
+            psis, hits = psi_by_pair.get((sym, h)), hits_by_pair.get((sym, h), [])
+            badge = {"psi": None, "status": "insufficient_data", "worst_feature": None, "measured_at": None,
+                     "n_features": 0, "concept_drift": None, "n_hits": len(hits), "state": "insufficient_data"}
+            if psis:
+                feature, psi, at = max(psis, key=lambda x: x[1])
+                badge.update(psi=psi, status=drift_lib.data_drift_status(psi), worst_feature=feature,
+                             measured_at=at, n_features=len(psis), state="provisional")
+            policy = drift_policy.assess([p for _, p, _ in psis] if psis else None, badge["measured_at"],
+                                         hits, h, today)
+            badge.update(policy)
+            if psis and policy["concept_drift"] is not None:
+                badge["state"] = "confirmed"
+            out[(sym, h)] = badge
     return out
 
 
@@ -889,7 +1029,7 @@ def live_hit_rate_by_target_and_horizon(conn: sqlite3.Connection, targets: list[
         n_hits = 0
         sq_errors = []
         for _ts, y_true, y_pred, y_proba in windowed:
-            predicted_up = int(round(y_pred)) >= 2
+            predicted_up = round(y_pred) >= 2
             hit = predicted_up == bool(y_true)
             n_hits += int(hit)
             if y_proba is not None:
@@ -1005,8 +1145,8 @@ def direction_metrics_by_target(conn: sqlite3.Connection, targets: list[str]) ->
             out[target] = None
             continue
 
-        y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-        y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+        y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+        y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
         counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, labels=["DOWN", "UP"], average=None, zero_division=0,
@@ -1081,8 +1221,8 @@ def direction_metrics_for_target(conn: sqlite3.Connection, target: str) -> dict 
     if not rows:
         return None
 
-    y_true = [_CLASS_DIRECTION[int(round(t))] for t, _ in rows]
-    y_pred = [_CLASS_DIRECTION[int(round(p))] for _, p in rows]
+    y_true = [_CLASS_DIRECTION[round(t)] for t, _ in rows]
+    y_pred = [_CLASS_DIRECTION[round(p)] for _, p in rows]
 
     counts = {"UP": y_true.count("UP"), "DOWN": y_true.count("DOWN")}
     # Each direction's threshold is independent: AAPL with 10 UP / 8 DOWN
@@ -1154,12 +1294,14 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
     for t in targets:
         target = t["target"]
         q = fdr_results.get(target)
+        testable = q is not None and not q.get("untestable", False)
         quality_rows.append({
             "target": html.escape(target), "label": html.escape(symbol_labels.get(target, target)),
-            "p_value": q["p_value"] if q else None,
+            "p_value": q["p_value"] if testable else None,
             "adjusted_p_value": q["adjusted_p_value"] if q else None,
-            "significant": q["significant"] if q else None,
-            "testable": q is not None,
+            "significant": q["significant"] if testable else None,
+            "testable": testable,
+            "selection_biased": bool(q and q.get("selection_biased")),
         })
 
     prediction_rows = []
@@ -1189,6 +1331,7 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
         "quality_rows": quality_rows,
         "fdr_alpha": alpha,
         "fdr_n_tested": fdr["n_tested"],
+        "fdr_n_descriptive_runs": fdr.get("n_descriptive_runs", 0),
         "prediction_rows": prediction_rows,
         "metric_rows": metric_rows,
         "recent_runs": list_runs(conn, limit=8),

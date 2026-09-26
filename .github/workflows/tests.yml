@@ -24,12 +24,10 @@ jobs:
         run: pip install -e "./patrick[dev,web]"
 
       - name: Lint (ruff)
-        # Bloquant depuis le lot 2 de l'audit (2026-09-22) : les 159
-        # violations restantes (sur 223 au départ, 66 corrigées
-        # mécaniquement par le lot précédent) sont explicitement ignorées
-        # dans `pyproject.toml::[tool.ruff.lint].ignore`, commentées
-        # "dette, à réduire" -- `ruff check` sort donc en code 0 tant que
-        # rien de nouveau ne régresse sur les règles déjà actives.
+        # Bloquant depuis le lot 2 de l'audit (2026-09-22). Dette soldée le
+        # 2026-09-25 : `[tool.ruff.lint].ignore` est vide, les exceptions
+        # restantes sont des `noqa` motivés ligne par ligne -- toute
+        # nouvelle violation fait échouer la CI.
         run: ruff check .
         working-directory: patrick
 

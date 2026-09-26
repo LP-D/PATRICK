@@ -80,7 +80,7 @@ def classify_asset_class(symbol: str, source: str = "yfinance") -> str:
         return "volatility_index"
     if symbol in _INDEX_REGION:
         return _INDEX_REGION[symbol]
-    if symbol.endswith("-USD") or symbol.endswith("-USDT") or symbol.endswith("-USDC"):
+    if symbol.endswith(("-USD", "-USDT", "-USDC")):
         return "crypto"
     if symbol.endswith("=X"):
         return "fx"

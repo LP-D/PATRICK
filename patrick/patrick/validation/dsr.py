@@ -16,6 +16,8 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats
 
+from patrick.numeric import is_nan
+
 _EULER_MASCHERONI = 0.5772156649015329
 
 
@@ -77,11 +79,11 @@ def deflated_sharpe_ratio(returns: np.ndarray, n_trials: int, periods_per_year: 
     return {
         "sr": round(sr, 4),
         "sr_annualized": round(sr * np.sqrt(periods_per_year), 4),
-        "dsr": round(dsr, 4) if dsr == dsr else np.nan,
-        "p_value": p_value if p_value == p_value else np.nan,
+        "dsr": np.nan if is_nan(dsr) else round(dsr, 4),
+        "p_value": np.nan if is_nan(p_value) else p_value,
         "skew": round(skew, 4),
         "kurtosis": round(kurt, 4),
         "n_obs": n,
         "n_trials": n_trials,
-        "benchmark_sr": round(sr0, 6) if sr0 == sr0 else np.nan,
+        "benchmark_sr": np.nan if is_nan(sr0) else round(sr0, 6),
     }

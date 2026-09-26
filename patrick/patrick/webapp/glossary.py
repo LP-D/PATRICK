@@ -60,16 +60,33 @@ GLOSSARY: dict[str, dict[str, str]] = {
     },
     "vol_models": {
         "fr": ("Modèles de volatilité/dynamique temporelle appliqués à chaque "
-               "série (EGARCH, Kalman, HMM, AR/MA/ARMA/ARIMA...) — voir le "
-               "détail de chacun ci-dessous."),
+               "série (EGARCH, Kalman, AR/MA/ARMA/ARIMA...) — voir le détail de "
+               "chacun ci-dessous. Le HMM n'en fait plus partie : il sert aux "
+               "modèles par régime et à l'état du marché de la synthèse."),
         "en": ("Volatility/time-dynamics models applied to every series (EGARCH, "
-               "Kalman, HMM, AR/MA/ARMA/ARIMA...) — see each one's detail below."),
+               "Kalman, AR/MA/ARMA/ARIMA...) — see each one's detail below. The HMM "
+               "is no longer one of them: it serves per-regime models and the "
+               "synthesis page's market state."),
     },
     "macro": {
         "fr": ("Jointures des séries macroéconomiques FRED (taux, spreads, "
                "conditions financières) alignées sur le calendrier de marché."),
         "en": ("Joins of FRED macroeconomic series (rates, spreads, financial "
                "conditions) aligned on the market calendar."),
+    },
+    "long_cycle": {
+        "fr": ("Features de long cycle pour les horizons 252/504/756 j : rendements "
+               "à 1, 2 et 3 ans (retournement de long terme), momentum 12-1 mois, "
+               "z-score et position dans la fourchette 1 an / 3 ans, drawdown depuis "
+               "le plus haut, ratio de volatilité 21 j / 252 j. Désactivée par "
+               "défaut. Limite : à 756 j, les labels se chevauchent et il ne reste "
+               "qu'environ une observation indépendante tous les 3 ans."),
+        "en": ("Long-cycle features for the 252/504/756-day horizons: 1-, 2- and "
+               "3-year returns (long-term reversal), 12-1 momentum, 1-/3-year "
+               "z-score and range position, drawdown from the running high, "
+               "21-/252-day volatility ratio. Off by default. Caveat: at 756 days "
+               "labels overlap and only about one independent observation per "
+               "3 years remains."),
     },
 
     # Models in the vol_models family
@@ -96,10 +113,15 @@ GLOSSARY: dict[str, dict[str, str]] = {
     "hmm": {
         "fr": ("HMM (Hidden Markov Model) à 2 régimes gaussiens : estime, instant "
                "par instant et de façon causale, la probabilité d'être dans le "
-               "régime de plus forte variance (proxy de \"stress\" de marché)."),
+               "régime de plus forte variance (proxy de \"stress\" de marché). "
+               "Plus proposé comme feature depuis le 2026-09-26 (64 % du temps de "
+               "calcul pour aucune feature retenue) : réservé aux régimes et à "
+               "l'analyse de l'état du marché."),
         "en": ("HMM (Hidden Markov Model) with 2 gaussian regimes: estimates, "
                "causally at each point in time, the probability of being in the "
-               "highest-variance regime (a \"market stress\" proxy)."),
+               "highest-variance regime (a \"market stress\" proxy). No longer "
+               "offered as a feature since 2026-09-26 (64 % of the build time for "
+               "no feature kept): reserved for regimes and market-state analysis."),
     },
     "heston_proxy": {
         "fr": ("Proxy inspiré du modèle de Heston : mesure l'écart entre la "
@@ -461,5 +483,122 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "Top-K is selected globally across all horizons -- a horizon "
                "whose best configs dominate can then capture the entire Optuna "
                "budget, leaving the other horizons with zero tuning trials."),
+    },
+    # Portfolio / statistics surfaces (roadmap bloc 4: tooltips on regime/HRP/BL)
+    "hrp": {
+        "fr": ("Hierarchical Risk Parity (López de Prado, 2016) : regroupe les actifs par "
+               "similarité de corrélation, puis répartit le risque entre groupes par "
+               "bissection récursive, en inverse de la variance. N'utilise aucun rendement "
+               "espéré et n'inverse jamais la matrice de covariance — robuste là où Markowitz "
+               "concentre tout sur quelques actifs."),
+        "en": ("Hierarchical Risk Parity (López de Prado, 2016): clusters assets by "
+               "correlation similarity, then splits risk between clusters by recursive "
+               "bisection, inverse-variance. Uses no expected return and never inverts the "
+               "covariance matrix — robust where Markowitz concentrates on a few assets."),
+    },
+    "black_litterman": {
+        "fr": ("Black-Litterman : part des rendements implicites d'équilibre (ceux qui "
+               "justifient les poids de marché) et les ajuste par des vues (ici les signaux "
+               "des modèles), pondérées par leur incertitude. Une vue peu fiable déplace peu "
+               "l'allocation."),
+        "en": ("Black-Litterman: starts from equilibrium implied returns (those that justify "
+               "market weights) and tilts them with views (here, model signals) weighted by "
+               "their uncertainty. An unreliable view barely moves the allocation."),
+    },
+    "ledoit_wolf": {
+        "fr": ("Covariance Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une "
+               "cible structurée ; l'intensité δ ∈ [0, 1] est estimée pour minimiser l'erreur "
+               "quadratique. Indispensable quand le nombre d'actifs approche le nombre "
+               "d'observations."),
+        "en": ("Ledoit-Wolf covariance: weighted average of the sample covariance and a "
+               "structured target; the intensity δ ∈ [0, 1] is estimated to minimise the "
+               "squared error. Needed when the number of assets nears the number of "
+               "observations."),
+    },
+    "regime": {
+        "fr": ("Régime de marché : état (calme, normal, stress) déduit par un HMM (modèle "
+               "de Markov caché) des rendements quotidiens — terciles de la probabilité "
+               "d'être dans l'état le plus volatil. Un modèle « par régime » n'est entraîné "
+               "que sur les dates du même régime — plus spécialisé, mais sur moins de données."),
+        "en": ("Market regime: state (calm, normal, stress) inferred by an HMM (hidden "
+               "Markov model) from daily returns — terciles of the probability of being in "
+               "the most volatile state. A per-regime model is trained only on dates of the "
+               "same regime — more specialised, on less data."),
+    },
+    "diebold_mariano": {
+        "fr": ("Test de Diebold-Mariano (correction Harvey-Leybourne-Newbold) : le modèle "
+               "se trompe-t-il moins souvent que la baseline, au-delà du hasard ? Calculé sur "
+               "le holdout terminal, jamais sur les données qui ont servi à choisir le modèle."),
+        "en": ("Diebold-Mariano test (Harvey-Leybourne-Newbold correction): does the model "
+               "err less often than the baseline, beyond chance? Computed on the terminal "
+               "holdout, never on the data used to choose the model."),
+    },
+    "holdout": {
+        "fr": ("Holdout terminal : dernière période de l'historique, mise de côté avant tout "
+               "calcul et jamais utilisée pour choisir une configuration. Seule mesure hors "
+               "échantillon honnête d'un modèle déjà choisi."),
+        "en": ("Terminal holdout: the last period of history, set aside before any "
+               "computation and never used to choose a configuration. The only honest "
+               "out-of-sample measure of an already chosen model."),
+    },
+    "deflated_sharpe": {
+        "fr": ("Sharpe déflaté (Bailey & López de Prado) : probabilité que le vrai Sharpe soit "
+               "positif, compte tenu du nombre d'essais réalisés sur la cible, de la longueur "
+               "de l'historique et de l'asymétrie/aplatissement des rendements."),
+        "en": ("Deflated Sharpe (Bailey & López de Prado): probability that the true Sharpe "
+               "is positive, given the number of trials run on the target, the sample length "
+               "and the returns' skewness/kurtosis."),
+    },
+    "pbo": {
+        "fr": ("Probabilité de sur-sélection de backtest (PBO) : part des découpages où la "
+               "configuration la meilleure en échantillon finit sous la médiane hors "
+               "échantillon. Au-delà de 0,5, la sélection ne vaut pas mieux que le hasard."),
+        "en": ("Probability of backtest overfitting (PBO): share of splits where the best "
+               "in-sample configuration ends below the out-of-sample median. Above 0.5, "
+               "selection is no better than chance."),
+    },
+    "conformal": {
+        "fr": ("Prédiction conforme : au lieu d'une direction, un ensemble ({hausse}, {baisse} ou les deux) "
+               "construit pour contenir la réalisation avec une probabilité visée 1 − α. Un ensemble à deux "
+               "directions signifie « pas d'avis ». La garantie suppose des données échangeables ; la variante "
+               "adaptative (ACI) la rétablit en moyenne de long terme sous dérive."),
+        "en": ("Conformal prediction: instead of one direction, a set ({up}, {down} or both) built to contain the "
+               "outcome with target probability 1 − α. A two-direction set means 'no call'. The guarantee assumes "
+               "exchangeable data; the adaptive variant (ACI) restores it on the long-run average under drift."),
+    },
+    "twr": {
+        "fr": ("Rendement pondéré par le temps (TWR) : performance de la gestion, neutralisée "
+               "des apports et retraits — c'est elle qui se compare à un indice de référence."),
+        "en": ("Time-weighted return (TWR): performance of the management itself, neutral to "
+               "deposits and withdrawals — the one to compare with a benchmark index."),
+    },
+    "xirr": {
+        "fr": ("Rendement pondéré par les capitaux (TRI / XIRR) : taux annuel qui annule la "
+               "valeur actuelle de tous les flux (apports, retraits, valeur finale). Mesure "
+               "l'expérience de l'investisseur, timing des apports inclus."),
+        "en": ("Money-weighted return (IRR / XIRR): annual rate that zeroes the present value "
+               "of all flows (deposits, withdrawals, final value). Measures the investor's "
+               "experience, including the timing of deposits."),
+    },
+    "pea": {
+        "fr": ("PEA : enveloppe fiscale française réservée aux actions européennes (et fonds "
+               "éligibles), versements plafonnés à 150 000 € ; tout retrait avant 5 ans clôture "
+               "le plan (sauf exceptions légales). Plafond et règles à vérifier auprès de la "
+               "source officielle (service-public.fr)."),
+        "en": ("PEA: French tax wrapper restricted to European equities (and eligible funds), "
+               "deposits capped at €150,000; any withdrawal before 5 years closes the plan "
+               "(legal exceptions aside). Check the cap and rules against the official source."),
+    },
+    "cto": {
+        "fr": "Compte-titres ordinaire : aucun plafond ni restriction d'actifs, fiscalité de droit commun.",
+        "en": "Ordinary securities account: no cap or asset restriction, standard taxation.",
+    },
+    "dat": {
+        "fr": ("Dépôt à terme : capital bloqué à taux fixe jusqu'à l'échéance. Aucun historique "
+               "de prix : valorisé par capitalisation du taux (intérêts simples au prorata) et "
+               "traité comme un actif sans risque de marché (variance et covariances nulles)."),
+        "en": ("Term deposit: capital locked at a fixed rate until maturity. No price history: "
+               "valued by accruing the rate (simple interest, pro rata) and treated as an asset "
+               "with no market risk (zero variance and covariances)."),
     },
 }

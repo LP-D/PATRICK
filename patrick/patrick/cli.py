@@ -15,6 +15,7 @@ from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
+from patrick.keep_awake import keep_awake
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
@@ -22,6 +23,8 @@ from patrick.tracking import report as report_module
 app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
 audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraînent jamais un modèle de production.")
 app.add_typer(audit_app, name="audit")
+research_app = typer.Typer(help="Études de recherche -- lecture/mesure, n'entraînent aucun modèle.")
+app.add_typer(research_app, name="research")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -130,7 +133,8 @@ def run_cmd(
         cfg.name = name
     _apply_min_history_years_override(cfg, min_history_years)
     _reject_unsupported_fundamentals_features(cfg)
-    result = run_pipeline(cfg, force_ingest=force_ingest)
+    with keep_awake():
+        result = run_pipeline(cfg, force_ingest=force_ingest)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
@@ -157,7 +161,8 @@ def resume_cmd(
         raise typer.Exit(code=1)
     config = RunConfig.model_validate_json(row["config_json"])
     typer.echo(f"Reprise de '{config.name}' (run {run_id}, statut précédent={row['status']})...")
-    result = run_pipeline(config)
+    with keep_awake():
+        result = run_pipeline(config)
     typer.echo(f"\n[TERMINÉ] {len(result['leaderboard'])} lignes de leaderboard "
                f"en {result['elapsed_s']/60:.1f}min")
     if result["final_best"]:
@@ -279,6 +284,125 @@ def audit_degradation_cmd(
 
     typer.echo(f"\n[TERMINÉ] {len(result['rows'])} lignes -- "
                f"CSV : {result['csv_path']} -- markdown : {result['md_path']}")
+
+
+@audit_app.command(name="speed")
+def audit_speed_cmd(
+    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH / ~/.patrick/patrick.db)"),
+    target: str = typer.Option(None, "--target",
+                               help="Cible dont le snapshot brut le plus récent sert à mesurer le coût par famille"),
+    n_folds: int = typer.Option(5, "--n-folds", help="Folds walk-forward (les familles paramétriques sont refittées par fold)"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+) -> None:
+    """Les composants coûteux sont-ils réellement utilisés ? Part du pool,
+    part des features retenues par les modèles exportés, fréquences de
+    sélection walk-forward et coût mesuré, par famille de features. Lecture
+    seule : n'entraîne ni n'exporte aucun modèle."""
+    from patrick import audit_speed
+    from patrick.config.schema import RunConfig
+    from patrick.data.store import DataStore
+    from patrick.pipeline.engine import build_base_feature_pool, build_parametric_pool
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect(db)
+    try:
+        usage = audit_speed.usage_from_db(conn)
+        if target:
+            raw = DataStore().load(f"raw_{target}")
+            row = conn.execute("SELECT config_json FROM run WHERE target = ? ORDER BY started_at DESC LIMIT 1",
+                               (target,)).fetchone()
+            config = RunConfig.model_validate_json(row[0]) if row else RunConfig.model_validate(
+                {"objective": {"target_symbol": target}})
+            from patrick.data.sources.yfinance_source import clean_symbol
+            pool = build_base_feature_pool(raw, config, clean_symbol(target)).columns.union(
+                build_parametric_pool(raw, config, fit_end_idx=None).columns)
+            audit_speed.add_pool(usage, pool)
+            costs = audit_speed.measure_family_costs(raw, fit_end_idx=int(len(raw) * 0.6))
+            for fam, seconds in costs.items():
+                usage.setdefault(fam, audit_speed.FamilyUsage(fam)).cost_s = seconds
+    finally:
+        conn.close()
+    report = audit_speed.render_markdown(usage, n_folds=n_folds)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
+
+
+@audit_app.command(name="tickers")
+def audit_tickers_cmd(
+    scope: str = typer.Option("all", "--scope", help="default | equities | extended | all"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+    workers: int = typer.Option(8, "--workers", help="Requêtes Yahoo en parallèle"),
+) -> None:
+    """Vérifie en direct que Yahoo sert chaque ticker yfinance de l'univers :
+    historique non vide, frais (<= 7 séances), profond (>= 750 séances).
+    Lecture seule ; ne modifie aucune configuration."""
+    from patrick.config import defaults as D
+    from patrick.config import equity_universe as EQ
+    from patrick.config import universe_extension as UX
+    from patrick.data import ticker_check
+
+    pools = {
+        "default": [s for s, _, src in D.DEFAULT_TARGET_CHOICES if src == "yfinance"],
+        "equities": list(EQ.EQUITY_UNIVERSE),
+        "extended": [s for s, _, _ in UX.extended_target_choices()],
+    }
+    if scope not in (*pools, "all"):
+        raise typer.BadParameter(f"scope inconnu : {scope}")
+    symbols = [s for k, v in pools.items() if scope in (k, "all") for s in v]
+    report = ticker_check.render_markdown(ticker_check.check_many(symbols, workers=workers))
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
+
+
+@research_app.command(name="event-study")
+def research_event_study_cmd(
+    ticker: str = typer.Option(..., "--ticker", help="Actif étudié (ticker yfinance)"),
+    events: str = typer.Option(None, "--events", help="CSV : published_at[,label][,group]"),
+    earnings: bool = typer.Option(False, "--earnings", help="Publications de résultats Yahoo (groupes beat/miss)"),
+    benchmark: str = typer.Option("^GSPC", "--benchmark", help="Indice du modèle de marché"),
+    model: str = typer.Option("market", "--model", help="market | market_adjusted | constant_mean"),
+    pre: int = typer.Option(-5, "--pre", help="Début de la fenêtre d'événement (séances)"),
+    post: int = typer.Option(20, "--post", help="Fin de la fenêtre d'événement (séances)"),
+    start: str = typer.Option("2005-01-01", "--start", help="Début de l'historique de prix"),
+    title: str = typer.Option(None, "--title", help="Titre du rapport"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+) -> None:
+    """Étude d'événements (MacKinlay) : rendements anormaux autour de
+    publications horodatées, J0 = première séance dont la clôture suit
+    strictement la publication."""
+    from patrick.data.sources.yfinance_source import download_one
+    from patrick.research import event_sources
+    from patrick.research import event_study as es
+
+    if bool(events) == earnings:
+        raise typer.BadParameter("indiquer exactement une source : --events FICHIER ou --earnings")
+    ev = event_sources.yahoo_earnings(ticker) if earnings else event_sources.read_events_csv(events)
+    prices = download_one(ticker, start)
+    bench = download_one(benchmark, start) if model != "constant_mean" else None
+    if prices is None or (model != "constant_mean" and bench is None):
+        typer.echo("Historique de prix indisponible.")
+        raise typer.Exit(code=1)
+    kwargs = {"benchmark": bench, "model": model, "event_window": (pre, post)}
+    groups = {"tous": es.run_event_study(prices, list(ev["published_at"]), labels=list(ev["label"]), **kwargs)}
+    for name, sub in ev.groupby("group", sort=True):
+        if ev["group"].nunique() > 1:
+            groups[str(name)] = es.run_event_study(prices, list(sub["published_at"]), labels=list(sub["label"]),
+                                                   **kwargs)
+    report = es.render_markdown(groups, title or f"Étude d'événements -- {ticker} vs {benchmark}")
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
 
 
 if __name__ == "__main__":

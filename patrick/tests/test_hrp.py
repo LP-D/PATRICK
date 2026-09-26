@@ -150,3 +150,21 @@ def test_hrp_overview_reads_only_what_is_cached_and_reports_skipped(tmp_path, mo
     for sym in universe:
         if sym not in cached_symbols:
             assert sym in result["skipped"]
+
+
+def test_hrp_overview_uses_ledoit_wolf_and_reports_the_shrinkage(tmp_path):
+    """Roadmap bloc 4 : covariance retrecie (Ledoit-Wolf) par defaut pour
+    HRP ; l'estimateur et l'intensite sont exposes a la page."""
+    import patrick.config.defaults as D
+    from patrick.data.sources.yfinance_source import clean_symbol
+
+    store = DataStore(root=str(tmp_path))
+    rng = np.random.default_rng(7)
+    idx = pd.bdate_range("2018-01-01", periods=400)
+    for sym in D.DEFAULT_UNIVERSE_YF_TICKERS[:4]:
+        store.save(f"raw_{sym}", pd.DataFrame(
+            {clean_symbol(sym): 100 * np.cumprod(1 + rng.normal(0, 0.01, len(idx)))}, index=idx))
+    result = hrp_overview(store=store)
+    assert result["covariance"] == "ledoit_wolf"
+    assert 0.0 < result["shrinkage"] < 1.0
+    assert result["weights"].sum() == pytest.approx(1.0, abs=1e-9)

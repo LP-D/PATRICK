@@ -48,7 +48,7 @@
 {% set rel = pbo.reliability %}
 {% set rel_text = ("IC 90% [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (rel.message if (rel and rel.message) else "non calculable") %}
 {% set pbo_text = ("%.3f" | format(pbo.pbo)) if (rel and rel.ok) else "—" %}
-{% set _ = pbo_rows.append([horizon ~ "j", scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
+{% set _ = pbo_rows.append([horizon | hlabel, scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
 {% endif %}
 {% endfor %}
 {% endfor %}
@@ -63,22 +63,24 @@
 {% set rows = [] %}
 {% for r in detail.runs %}
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
-{% set dm_cell = ("%.4f" | format(r.dm_result.p_value)) if r.dm_result else '<span class="na">—</span>' %}
+{% set dm_cell = (("%.4f" | format(r.dm_result.p_value)) ~ (' <span class="tag" title="calculé sur le fold de sélection : biaisé, exclu de la correction entre cibles">fold de sélection</span>' if r.dm_result.sample == 'last_wf_fold' else '')) if r.dm_result else '<span class="na">—</span>' %}
 {% set relaunch_cell = '<form method="post" action="/runs/' ~ r.run_id ~ '/relaunch" class="inline-form"><button type="submit" class="primary">Relancer (tous horizons)</button></form>' %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
-    r.horizon ~ 'j',
+    r.horizon | hlabel,
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',
     r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
     ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
+    ('%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '<span class="na">—</span>'),
+    (('<span class="' ~ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') ~ '">' ~ ('%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir)) ~ '</span>') if (r.best_f1_dir is not none and r.benchmark_f1_dir is not none) else '<span class="na">—</span>'),
     dm_cell,
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "DM p-value", "Relancer"],
-              rows, num_cols=[1, 5, 6, 7],
+{{ data_table(["Run", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "Persistance (F1_dir)", "Écart", "DM p-value", "Relancer"],
+              rows, num_cols=[1, 5, 6, 7, 8, 9],
               footer=(detail.runs | length) ~ " run(s) · F1_dir = meilleur essai sur n, non déflaté ; p-value DM brute — la version corrigée du test multiple (BH entre cibles) est le bloc de mesure en haut de cette page.") }}
 </section>
 
@@ -99,6 +101,25 @@
 <p class="hint">{{ t('shap_no_model') }}</p>
 {% endif %}
 </section>
+
+{# Roadmap bloc 3 -- mesure a la demande du PSI des features du modele
+   exporte (explain.compute_drift_for_ticker_horizon : reconstruit le pool de
+   features, ~30 s sur l'univers reel -- jamais en boucle sur la page). Le
+   resultat alimente le badge "Derive" de /predictions. #}
+{% if shap_horizons %}
+<section class="card" id="feature-drift-widget" data-target="{{ target }}">
+<h2>Dérive des features (PSI)</h2>
+<p class="hint">Compare la distribution récente de chaque feature du modèle exporté à celle de l'entraînement. Reconstruit le pool de features (≈ 30 s sur l'univers complet) ; le résultat alimente le badge « Dérive » de la page Prédictions.</p>
+<div class="shap-controls">
+  <label>Horizon
+    <select class="drift-horizon-select">{% for h in shap_horizons %}<option value="{{ h }}">{{ h }}j</option>{% endfor %}</select>
+  </label>
+  <button type="button" class="btn-secondary drift-measure-btn">Mesurer la dérive</button>
+</div>
+<div class="drift-output"></div>
+</section>
+<script src="/static/feature_drift.js"></script>
+{% endif %}
 
 {% endif %}
 

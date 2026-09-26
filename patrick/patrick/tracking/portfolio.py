@@ -297,6 +297,8 @@ def portfolio_overview(
     `format_correlated_pairs` without re-deriving which one was active."""
     target_groups = D.DEFAULT_TARGET_GROUPS if target_groups is None else target_groups
     horizons = list(D.DEFAULT_HORIZONS) if horizons is None else horizons
+    # 504/756 days are descriptive (decision of 2026-09-26): never a signal here.
+    horizons = [h for h in horizons if h not in D.DESCRIPTIVE_HORIZONS]
     all_symbols = [sym for items in target_groups.values() for sym, _ in items]
 
     predictions = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)

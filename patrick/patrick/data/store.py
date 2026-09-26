@@ -20,9 +20,11 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import pandas as pd
+
+from patrick.clock import utc_today
 
 
 def _default_store_dir() -> str:
@@ -112,19 +114,36 @@ class DataStore:
         df.attrs["data_hash"] = entry["content_hash"]
         return df
 
-    def save(self, key: str, df: pd.DataFrame) -> str:
+    def latest_entry(self, key: str) -> dict | None:
+        entries = self._read_index().get(key, {}).get("snapshots", [])
+        return dict(entries[-1]) if entries else None
+
+    def save(self, key: str, df: pd.DataFrame, meta: dict | None = None) -> str:
         """Writes `df` to a new immutable partition (deduplicates by content
         hash: if an identical snapshot already exists for this key, reuses
-        it rather than creating a new one). Returns the snapshot_id."""
+        it rather than creating a new one). Returns the snapshot_id.
+
+        `meta` (F01): extra fields recorded on the index entry -- e.g. the
+        point-in-time alignment version the frame was built under. Merged
+        into an existing identical-content entry (the data is the same, the
+        rule that produced it is recorded), which also moves that entry to
+        the end of the list: "latest" means "last produced"."""
         content_hash = _content_hash(df)
         idx = self._read_index()
         entries = idx.setdefault(key, {}).setdefault("snapshots", [])
 
         existing = next((e for e in entries if e["content_hash"] == content_hash), None)
         if existing is not None:
+            if meta:
+                existing.update(meta)
+                entries.remove(existing)
+                entries.append(existing)
+                self._write_index(idx)
+            df.attrs["snapshot_id"] = existing["snapshot_id"]
+            df.attrs["data_hash"] = content_hash
             return existing["snapshot_id"]
 
-        snapshot_date = date.today().isoformat()
+        snapshot_date = utc_today().isoformat()
         snapshot_id = f"{snapshot_date}__{self._safe_key(key)}__{content_hash}"
         path = self._snapshot_path(key, snapshot_date, content_hash)
         os.makedirs(self._partition_dir(snapshot_date), exist_ok=True)
@@ -134,16 +153,65 @@ class DataStore:
             "snapshot_id": snapshot_id,
             "content_hash": content_hash,
             "path": path,
-            "rows": int(len(df)),
+            "rows": len(df),
             "cols": int(df.shape[1]) if df.ndim == 2 else 1,
             "date_min": str(df.index.min()) if len(df) else None,
             "date_max": str(df.index.max()) if len(df) else None,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            **(meta or {}),
         })
         self._write_index(idx)
         df.attrs["snapshot_id"] = snapshot_id
         df.attrs["data_hash"] = content_hash
         return snapshot_id
+
+    # -- per-series last REAL observation (freshness) ----------------------
+    # `ingest` joins the whole universe under `raw_<target>` and forward-fills
+    # it: the date of each feature series' last genuinely published value is
+    # lost there. It is recorded here instead, per series, at every
+    # ingestion -- the only way the freshness dashboard can observe a series
+    # that was never itself a target.
+
+    def _series_index_path(self) -> str:
+        return os.path.join(self.root, "_series_observations.json")
+
+    def _read_series_index(self) -> dict:
+        path = self._series_index_path()
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+        return {}
+
+    def record_series_observations(self, last_dates: dict[str, str], source: str) -> None:
+        """`last_dates`: {original symbol / FRED id: ISO date of its last
+        published observation}. Keeps the latest date ever seen per series
+        (an ingestion from an older start date or a stale cache never moves
+        it backwards). Atomic write, like `_index.json`."""
+        if not last_dates:
+            return
+        idx = self._read_series_index()
+        now = datetime.now(timezone.utc).isoformat()
+        for symbol, date_max in last_dates.items():
+            if not date_max:
+                continue
+            date_max = str(pd.Timestamp(date_max).date())
+            entry = idx.get(symbol)
+            if entry is None or entry.get("date_max", "") < date_max:
+                idx[symbol] = {"date_max": date_max, "source": source, "recorded_at": now}
+        fd, tmp_path = tempfile.mkstemp(prefix="_series_observations.", suffix=".json.tmp", dir=self.root)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(idx, f, indent=1, sort_keys=True)
+            os.replace(tmp_path, self._series_index_path())
+        except BaseException:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    def series_observation(self, symbol: str) -> dict | None:
+        return self._read_series_index().get(symbol)
 
     def info(self) -> dict:
         return self._read_index()

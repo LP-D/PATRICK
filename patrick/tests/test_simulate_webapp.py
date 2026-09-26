@@ -102,7 +102,7 @@ def test_api_list_trials_returns_best_trial(seeded_run):
 
 
 def test_api_simulate_end_to_end(seeded_run):
-    run_id, trial_id = seeded_run
+    _run_id, trial_id = seeded_run
     client = TestClient(app)
 
     resp = client.post("/api/simulate", json={
@@ -133,3 +133,49 @@ def test_api_simulate_unknown_trial_returns_404(seeded_run):
     client = TestClient(app)
     resp = client.post("/api/simulate", json={"trial_id": 999999, "params": {}})
     assert resp.status_code == 404
+
+
+def test_api_simulate_reports_and_honors_the_segment(seeded_run):
+    """F06: the API simulates ONE segment -- the default (no holdout in this
+    fixture) falls back to `test` with an explicit selection-bias warning;
+    an unknown segment is a 400, never silently pooled."""
+    _, trial_id = seeded_run
+    client = TestClient(app)
+    data = client.post("/api/simulate", json={"trial_id": trial_id, "params": {}}).json()
+    assert data["segment"] == "test"
+    assert data["segment_warning"]
+    assert set(data["available_segments"]) == {"test"}
+    resp = client.post("/api/simulate", json={"trial_id": trial_id, "params": {}, "segment": "all"})
+    assert resp.status_code == 400
+
+
+def test_api_simulate_rejects_the_obsolete_kelly_mode_with_a_400(seeded_run):
+    """The page offered `position_mode=kelly`, renamed `heuristic_leverage`
+    (D2): the engine's ValueError surfaced as a misleading 404."""
+    _, trial_id = seeded_run
+    client = TestClient(app)
+    resp = client.post("/api/simulate", json={"trial_id": trial_id, "params": {"position_mode": "kelly"}})
+    assert resp.status_code == 400
+
+
+def test_simulate_page_only_offers_modes_the_api_accepts(seeded_run):
+    """The form offered `kelly`, which `/api/simulate` answers with a 400
+    since the mode was renamed `heuristic_leverage`: every `<option>` of the
+    mode selector must be a mode the API accepts."""
+    import re
+    html = TestClient(app).get("/simulate").text
+    select = re.search(r'<select id="sim-mode">(.*?)</select>', html, re.DOTALL).group(1)
+    modes = re.findall(r'<option value="([^"]+)"', select)
+    assert modes and set(modes) <= {"threshold", "proportional", "heuristic_leverage"}
+    assert "heuristic_leverage" in modes
+
+
+def test_simulate_page_exposes_the_segment_selector(seeded_run):
+    """F06: the API simulates one segment at a time; the page must let the
+    user choose it (and leave the default -- holdout first -- to the API)."""
+    import re
+    html = TestClient(app).get("/simulate").text
+    select = re.search(r'<select id="sim-segment">(.*?)</select>', html, re.DOTALL)
+    assert select is not None
+    assert re.findall(r'<option value="([^"]*)"', select.group(1)) == ["", "holdout", "test", "live"]
+    assert 'id="sim-segment-info"' in html

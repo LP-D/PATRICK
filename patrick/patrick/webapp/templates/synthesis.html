@@ -39,7 +39,7 @@
 {# ---- Dense content zones below ---- #}
 
 <section class="card" style="--enter-delay:60ms">
-<h2>Qualité par cible</h2>
+<h2>Qualité par cible <button type="button" class="info-icon" data-term="diebold_mariano" data-term-label="Diebold-Mariano" aria-label="{{ t('glossary_open_aria', term='Diebold-Mariano') }}">i</button></h2>
 {% if overview.fdr_n_tested == 0 %}
 {{ empty_state("Aucun résultat Diebold-Mariano en base.", "Nécessite au moins un run complet (walk-forward, hors CPCV) pour produire une p-value testable.") }}
 {% else %}
@@ -59,11 +59,11 @@
 {% set _ = quality_rows_fmt.append([
     '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
     '<span class="na">—</span>', '<span class="na">—</span>',
-    status_badge("Non testable", "disabled"),
+    status_badge("Fold de sélection (biaisé)", "warning") if r.selection_biased else status_badge("Non testable", "disabled"),
 ]) %}
 {% endif %}
 {% endfor %}
-{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ ". Détail du calcul sur la fiche de chaque cible.") }}
+{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ "." ~ ((" " ~ overview.fdr_n_descriptive_runs ~ " run(s) à 504/756 j hors famille (horizons descriptifs).") if overview.fdr_n_descriptive_runs else "") ~ " Détail du calcul sur la fiche de chaque cible.") }}
 {% endif %}
 </section>
 
@@ -74,7 +74,7 @@
 {% set p = r.prediction %}
 {% set _ = pred_rows.append([
     '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    p.horizon ~ "j",
+    p.horizon | hlabel,
     p.direction ~ " (" ~ p.amplitude ~ ")",
     ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
     '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>',
@@ -109,9 +109,13 @@
 </section>
 
 <section class="card" style="--enter-delay:180ms">
-<h2>Classification de régime</h2>
-{{ empty_state("Classification de régime jamais exécutée en production.", "patrick.phase9.classify_regime_daily existe et est testée, mais n'est appelée par aucun chemin de production — aucune table ne stocke de régime. Voir DASHBOARD_B1-B2.md.") }}
+<h2>Classification de régime <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
+<div id="market-state" class="market-state">
+<p class="hint">Calcul de l'état du marché (HMM)…</p>
+</div>
+<p class="hint">Lecture descriptive, pas un signal testé : HMM gaussien à deux états (calme / stress) sur les rendements logarithmiques quotidiens, paramètres ajustés sur tout l'historique, probabilité filtrée (sans regarder le futur). Stress = P(état le plus volatil) &gt; 0,5. Recalculé toutes les 6 h.</p>
 </section>
+<script src="/static/market_state.js"></script>
 
 <section class="card" style="--enter-delay:220ms">
 <h2>{{ t('section_recent') }}</h2>
@@ -119,7 +123,7 @@
 {% for r in overview.recent_runs %}
 {% set _ = recent_rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
-    r.target, r.horizon ~ "j", status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
+    r.target, r.horizon | hlabel, status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
     ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>',
     r.started_at,
 ]) %}

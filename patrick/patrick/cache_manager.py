@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
+
+from patrick.clock import parse_utc, utc_now
 
 
 def _cache_root() -> Path:
@@ -36,7 +38,7 @@ class LocalCache:
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except (OSError, ValueError):
             return {}
 
     def _is_fresh(self, key: str, max_age_days: int = 7) -> bool:
@@ -45,16 +47,20 @@ class LocalCache:
         if not last:
             return False
         try:
-            dt = datetime.fromisoformat(last)
-            return datetime.utcnow() - dt < timedelta(days=max_age_days)
-        except Exception:
+            return utc_now() - parse_utc(last) < timedelta(days=max_age_days)
+        except (TypeError, ValueError):
             return False
 
-    def save_dataframe(self, key: str, df: pd.DataFrame, *, max_age_days: int = 7) -> pd.DataFrame:
+    def save_dataframe(self, key: str, df: pd.DataFrame, *, max_age_days: int = 7,
+                       extra_meta: dict | None = None) -> pd.DataFrame:
         path = self._file(key)
         df.to_parquet(path)
-        self._write_meta(key, {"updated_at": datetime.utcnow().isoformat(), "rows": int(len(df)), "cols": int(df.shape[1])})
+        self._write_meta(key, {"updated_at": utc_now().isoformat(), "rows": len(df),
+                               "cols": int(df.shape[1]), **(extra_meta or {})})
         return df
+
+    def read_meta(self, key: str) -> dict:
+        return self._read_meta(key)
 
     def load_dataframe(self, key: str, *, max_age_days: int = 7) -> pd.DataFrame | None:
         path = self._file(key)
@@ -66,7 +72,7 @@ class LocalCache:
         path = self._file(key, suffix=".json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
-        self._write_meta(key, {"updated_at": datetime.utcnow().isoformat()})
+        self._write_meta(key, {"updated_at": utc_now().isoformat()})
 
     def load_json(self, key: str, *, max_age_days: int = 7) -> dict | None:
         path = self._file(key, suffix=".json")

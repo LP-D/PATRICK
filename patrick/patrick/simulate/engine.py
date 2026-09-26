@@ -53,6 +53,7 @@ from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.simulate import metrics as simmetrics
 from patrick.tracking import db as trackdb
+from patrick.tracking import stats as trackstats
 from patrick.validation.dsr import deflated_sharpe_ratio
 
 _UP_CLASSES = (2, 3)
@@ -181,12 +182,36 @@ def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: i
     return True, f"Heuristic allocation enabled (Brier score {brier:.3f} on {len(rows)} test obs.)."
 
 
-def _load_predictions(conn: sqlite3.Connection, trial_id: int) -> pd.DataFrame:
+# F06 -- one track record per statistical status, never pooled:
+# `test` = walk-forward test folds (what the configuration was SELECTED on),
+# `holdout` = terminal holdout (evaluated once, after selection: the honest
+# out-of-sample segment), `live` = paper trading after the run.
+SEGMENTS = ("holdout", "test", "live")
+_DEFAULT_SEGMENT_ORDER = ("holdout", "test", "live")
+SEGMENT_WARNINGS = {
+    "test": ("Segment test walk-forward : c'est sur ces scores que la configuration a été "
+             "sélectionnée -- performance biaisée à la hausse (voir DSR), pas une mesure "
+             "hors échantillon."),
+    "live": ("Segment live (paper trading) : peu d'observations et issues binaires simplifiées "
+             "-- lecture indicative."),
+}
+
+
+def available_segments(conn: sqlite3.Connection, trial_id: int) -> dict[str, int]:
+    """Number of simulable predictions (with a confidence) per segment."""
+    rows = conn.execute(
+        "SELECT split, COUNT(*) FROM prediction WHERE trial_id = ? AND y_proba IS NOT NULL "
+        "AND split IN ('test', 'holdout', 'live') GROUP BY split", (trial_id,)).fetchall()
+    counts = dict(rows)
+    return {seg: int(counts[seg]) for seg in ("test", "holdout", "live") if counts.get(seg)}
+
+
+def _load_predictions(conn: sqlite3.Connection, trial_id: int, segment: str) -> pd.DataFrame:
     rows = conn.execute(
         "SELECT ts, y_pred, y_proba FROM prediction "
-        "WHERE trial_id = ? AND split IN ('test', 'holdout', 'live') AND y_proba IS NOT NULL "
+        "WHERE trial_id = ? AND split = ? AND y_proba IS NOT NULL "
         "ORDER BY ts",
-        (trial_id,),
+        (trial_id, segment),
     ).fetchall()
     df = pd.DataFrame(rows, columns=["ts", "y_pred", "y_proba"])
     df["ts"] = pd.to_datetime(df["ts"])
@@ -204,7 +229,6 @@ def _build_exposure(signal_dates: pd.DatetimeIndex, target_pos: np.ndarray,
     averages the active signals over [entry, entry+H), "renewed" holds the
     last signal until the next one."""
     n = len(daily_index)
-    date_to_idx = {d: i for i, d in enumerate(daily_index)}
     entry_idxs = []
     for d in signal_dates:
         pos_in_index = daily_index.searchsorted(d)
@@ -285,7 +309,13 @@ def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
 
 
 def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
-             store_root: str | None = None) -> dict:
+             store_root: str | None = None, segment: str | None = None) -> dict:
+    """`segment` (F06): `"holdout"`, `"test"` or `"live"` -- simulated alone,
+    never pooled. `None` -> the holdout if the trial has one (the only
+    honest out-of-sample segment), else test (flagged with
+    `segment_warning`), else live."""
+    if segment is not None and segment not in SEGMENTS:
+        raise ValueError(f"unknown segment: {segment!r} (expected one of {SEGMENTS})")
     conn = trackdb.connect(db_path)
     try:
         trial_row = conn.execute(
@@ -302,18 +332,29 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
             if not kelly_ok:
                 return {"ok": False, "message": kelly_message, "params": params.to_dict()}
 
-        pred_df = _load_predictions(conn, trial_id)
+        segments = available_segments(conn, trial_id)
+        if segment is None:
+            segment = next((seg for seg in _DEFAULT_SEGMENT_ORDER if segments.get(seg, 0) >= 10),
+                           next(iter(segments), "holdout"))
+        pred_df = _load_predictions(conn, trial_id, segment)
         if len(pred_df) < 10:
-            return {"ok": False, "message": "Not enough predictions (test/holdout/live) to simulate "
-                                             f"(found {len(pred_df)}, minimum 10).", "params": params.to_dict()}
+            return {"ok": False, "message": f"Not enough predictions in segment '{segment}' to simulate "
+                                             f"(found {len(pred_df)}, minimum 10).",
+                    "params": params.to_dict(), "segment": segment, "available_segments": segments}
 
         store = DataStore(root=store_root) if store_root else DataStore()
         raw = store.load(f"raw_{run['target']}", snapshot_id=run["snapshot_id"])
         target_col = clean_symbol(run["target"])
         underlying = raw[target_col].ffill().dropna()
 
+        # The simulated window ends when the last signal's position expires
+        # (entry = last signal + lag, held `horizon` bars) -- not at the end
+        # of the snapshot: beyond it the strategy has no exposure and the
+        # buy-and-hold comparison would run over a longer period (F06).
+        last_pos = underlying.index.searchsorted(pred_df["ts"].max())
+        end_pos = min(last_pos + params.execution_lag_bars + run["horizon"] - 1, len(underlying.index) - 1)
         daily_index = underlying.index[
-            (underlying.index >= pred_df["ts"].min()) & (underlying.index <= underlying.index[-1])]
+            (underlying.index >= pred_df["ts"].min()) & (underlying.index <= underlying.index[end_pos])]
         underlying = underlying.reindex(daily_index)
         underlying_ret = underlying.pct_change().fillna(0.0)
 
@@ -328,7 +369,6 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         gross_returns = exposure * underlying_ret - carry_cost
 
         equity = (1 + strategy_returns).cumprod()
-        gross_equity = (1 + gross_returns).cumprod()
         bh_equity = (1 + underlying_ret).cumprod()
 
         strat_summary = simmetrics.performance_summary(equity, strategy_returns, exposure)
@@ -348,13 +388,21 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         strat_summary["break_even_cost_bps"] = break_even_bps
 
         n_configs = count_simulations_for_target(conn, run["target"])
-        dsr = deflated_sharpe_ratio(strategy_returns.values, n_trials=max(n_configs, 1))
+        # F03: the strategy was selected among EVERY configuration evaluated
+        # for this target (scan, each Optuna trial, previous simulations --
+        # `trial_registry`), not only among past simulations; +1 for this one.
+        dsr_n_trials = trackstats.count_registered_trials(conn, run["target"]) + 1
+        dsr = deflated_sharpe_ratio(strategy_returns.values, n_trials=dsr_n_trials)
         strat_summary["deflated_sharpe"] = dsr["dsr"]
         strat_summary["sharpe_p_value"] = dsr["p_value"]
+        strat_summary["dsr_n_trials"] = dsr_n_trials
 
         result = {
             "ok": True,
             "message": kelly_message,
+            "segment": segment,
+            "segment_warning": SEGMENT_WARNINGS.get(segment),
+            "available_segments": segments,
             "params": params.to_dict(),
             "n_days": len(daily_index),
             "n_signals": len(pred_df),
@@ -404,6 +452,9 @@ def _series_to_points(s: pd.Series) -> list[dict]:
 
 
 def save_simulation(conn: sqlite3.Connection, trial_id: int, params: SimParams, result: dict) -> str:
+    """Persists the simulation and registers it in `trial_registry` (F03): a
+    simulated position rule is one more configuration evaluated on the
+    target, counted in every later DSR."""
     simulation_id = uuid.uuid4().hex[:12]
     with conn:
         conn.execute(
@@ -413,6 +464,11 @@ def save_simulation(conn: sqlite3.Connection, trial_id: int, params: SimParams, 
              json.dumps(result) if result.get("ok") else None,
              None if result.get("ok") else result.get("message")),
         )
+    row = conn.execute(
+        "SELECT run.target, run.horizon, run.run_id FROM trial JOIN run ON trial.run_id = run.run_id "
+        "WHERE trial.trial_id = ?", (trial_id,)).fetchone()
+    if row is not None:
+        trackdb.register_trials(conn, row[0], row[1], "simulation", 1, run_id=row[2], detail=simulation_id)
     return simulation_id
 
 

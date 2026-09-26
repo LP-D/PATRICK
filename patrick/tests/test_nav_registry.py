@@ -171,14 +171,15 @@ def test_empty_category_is_not_rendered(monkeypatch):
     assert 'href="/simulate"' not in side
 
 
-def test_empty_patrimoine_category_is_not_rendered_today():
-    """PATRIMOINE reste vide tant que les pages comptes/mouvements n'existent
-    pas : ni en-tete ni section dans la sidebar."""
-    if nav_registry.entries_for("patrimoine"):
-        pytest.skip("PATRIMOINE a desormais des entrees")
+def test_patrimoine_category_lists_accounts_and_movements():
+    """Roadmap bloc 4 : PATRIMOINE n'est plus vide -- comptes et mouvements,
+    URLs a plat pour qu'une seule entree s'allume a la fois."""
     side = _sidebar(TestClient(app).get("/").text)
-    assert "nav-cat-patrimoine" not in side
-    assert "PATRIMOINE" not in side
+    assert 'id="nav-cat-patrimoine"' in side
+    assert 'href="/patrimoine"' in side and 'href="/mouvements"' in side
+    current = re.findall(r'<a href="([^"]+)"[^>]*aria-current="page"',
+                         _sidebar(TestClient(app).get("/mouvements").text))
+    assert current == ["/mouvements"]
 
 
 def test_sidebar_links_all_registry_entries_exactly_once():

@@ -31,7 +31,7 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.62})
     db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.55})
     db.add_baseline_metrics(conn, "run1", "majority", "test", {"F1_dir": 0.5})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     config_cpcv = {
@@ -207,7 +207,7 @@ def test_target_page_shows_real_fdr_correction_not_hardcoded_none(tmp_path, monk
     client = TestClient(app)
     resp = client.get("/targets/^VIX")
     assert resp.status_code == 200
-    expected_p = "%.4f" % expected["target_fdr"]["adjusted_p_value"]
+    expected_p = "{:.4f}".format(expected["target_fdr"]["adjusted_p_value"])
     assert expected_p in resp.text, (
         f"la p-value FDR ajustee reelle ({expected_p}) n'apparait pas dans la page -- "
         "target_page() ignore trackhistory.target_detail() et code target_fdr=None en dur"

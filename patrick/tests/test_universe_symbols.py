@@ -107,7 +107,7 @@ _EXPECTED_DEVISES = {"EURUSD=X", "DX-Y.NYB"}
 _EXPECTED_CRYPTO = {"BTC-USD"}
 _EXPECTED_COMMODITIES_FUTURES = {
     "GC=F", "SI=F", "HG=F", "CL=F", "BZ=F", "NG=F", "ZC=F", "ZO=F", "KE=F",
-    "ZR=F", "ZS=F", "GF=F", "HE=F", "LE=F", "CC=F", "KC=F", "CT=F", "LBS=F",
+    "ZR=F", "ZS=F", "GF=F", "HE=F", "LE=F", "CC=F", "KC=F", "CT=F",
     "OJ=F", "SB=F",
 }
 _EXPECTED_MACRO_FRED = {
@@ -123,7 +123,7 @@ _EXPECTED_MACRO_FRED = {
 def test_universe_matches_exactly_the_reduced_target_set():
     """Non-régression explicite (Phase 4, feature/universe-reduction) : la
     liste d'univers chargée au runtime doit correspondre EXACTEMENT à la
-    liste attendue -- 66 cibles (20 commodités futures + 41 macro FRED + 2
+    liste attendue -- 65 cibles (19 commodités futures + 41 macro FRED + 2
     indices + 2 devises + 1 crypto), pas "à peu près" (un ticker en trop ou
     en moins passerait inaperçu avec une simple assertion de longueur).
     DX-Y.NYB (US Dollar Index) ajouté aux devises -- ticker yfinance, ne doit
@@ -133,7 +133,9 @@ def test_universe_matches_exactly_the_reduced_target_set():
     série FRED trouvée (recherche infructueuse), WILL5000IND correspond à
     une série Wilshire réellement retirée de FRED (licence Wilshire
     Associates), pas un simple renommage (recherche "Wilshire" sur l'API
-    FRED : 0 résultat)."""
+    FRED : 0 résultat). LBS=F retiré le 2026-09-26 : Yahoo ne sert plus
+    aucune cotation (contrat CME remplacé par LBR=F en 2022, trop court pour
+    le pool -- docs/audits/verification-tickers-2026-09-25.md)."""
     groups = D.DEFAULT_TARGET_GROUPS
     assert set(groups.keys()) == {"Indices", "Devises", "Matières premières (futures)", "Crypto", "Macro (FRED)"}
 
@@ -151,7 +153,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
 
     all_expected = (_EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO
                     | _EXPECTED_COMMODITIES_FUTURES | _EXPECTED_MACRO_FRED)
-    assert len(all_expected) == 66
+    assert len(all_expected) == 65
     all_actual = {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
     assert all_actual == all_expected
 
@@ -160,7 +162,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
     assert set(D.DEFAULT_UNIVERSE_YF_TICKERS) == (
         _EXPECTED_INDICES | _EXPECTED_DEVISES | _EXPECTED_CRYPTO | _EXPECTED_COMMODITIES_FUTURES
     )
-    assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED
+    assert set(D.DEFAULT_UNIVERSE_FRED_SERIES.values()) == _EXPECTED_MACRO_FRED | set(D.FEATURE_ONLY_FRED_SERIES.values())
 
 
 def test_dxy_is_a_yfinance_ticker_not_fred():

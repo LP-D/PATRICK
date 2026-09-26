@@ -30,20 +30,17 @@ def test_migration_seeds_the_nine_confirmed_unavailable_symbols():
 
 def test_active_tickers_excludes_seeded_symbols_but_keeps_the_rest():
     """Univers réduit (feature/universe-reduction) : des 9 symboles exclus
-    seedés par la migration 0013, seul LBS=F fait encore partie de
-    D.DEFAULT_UNIVERSE_YF_TICKERS (24 tickers) -- les 8 autres appartenaient
-    à des groupes entièrement retirés (Obligataire ETFs, Actions
-    individuelles, International ETFs pays, Matières premières & devises
-    ETFs, Indices hors VIX/GSPC). Leur exclusion ne filtre plus rien (ils
-    ne sont déjà plus dans l'univers), ce n'est pas une régression du
-    mécanisme M1 lui-même -- calculé dynamiquement plutôt que réaffirmé en
-    dur à "-9", qui supposait implicitement que les 9 étaient tous encore
-    dans l'univers (vrai avant cette réduction, ~330 tickers yfinance)."""
+    seedés par la migration 0013, LBS=F était le dernier encore présent dans
+    D.DEFAULT_UNIVERSE_YF_TICKERS ; il en est retiré le 2026-09-26 (plus
+    aucune cotation Yahoo). Les 8 autres appartenaient à des groupes
+    entièrement retirés. L'exclusion M1 reste en place pour tout univers
+    explicite (config YAML) qui les listerait encore -- calculé
+    dynamiquement plutôt que réaffirmé en dur."""
     active = alerts._active_tickers()
     seeded_excluded = {"LBS=F", "HYLD", "TBP", "GXG", "LVRK", "TERM", "^EVZ", "CYB", "BZF"}
     assert "LBS=F" not in active
     still_in_universe = seeded_excluded & set(D.DEFAULT_UNIVERSE_YF_TICKERS)
-    assert still_in_universe == {"LBS=F"}, (
+    assert still_in_universe == set(), (
         "précondition du test invalide : le jeu de tickers seedés comme exclus "
         "présents dans l'univers réduit a changé, ce test doit être revu"
     )

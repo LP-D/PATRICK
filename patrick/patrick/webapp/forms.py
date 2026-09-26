@@ -14,6 +14,7 @@ from pathlib import Path
 
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
+from patrick.config import universe_extension as UX
 from patrick.validation import feasibility, history_length
 
 # CHANTIER (feature/equity-asset-class): equities are selectable as a run's
@@ -26,6 +27,9 @@ from patrick.validation import feasibility, history_length
 # universe", per this chantier's spec).
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
 TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in EQ.equity_target_choices()})
+# Roadmap bloc 4: verified extended universe (config/universe_extension.py),
+# targets only -- same separation from the default feature pool as equities.
+TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in UX.extended_target_choices()})
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 
@@ -42,7 +46,7 @@ def universe_excluding(target_symbol: str) -> tuple[list[str], dict[str, str]]:
     ticker/source selection) -- except the target itself, so it isn't fed
     back in as an input feature (trivial leak)."""
     yf_tickers = [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != target_symbol]
-    fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if k != target_symbol}
+    fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if v != target_symbol}
     return yf_tickers, fred_series
 
 
@@ -127,7 +131,7 @@ def default_config_dict() -> dict:
     }
 
 
-ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
+ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro", "long_cycle"]
 ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
@@ -145,11 +149,8 @@ ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
 # TARGET_SOURCE_BY_SYMBOL's comment above) -- keeps
 # `test_universe_matches_exactly_the_reduced_target_set` (asserting on
 # `D.DEFAULT_TARGET_GROUPS` directly) unaffected by this new group.
-TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + EQ.equity_target_choices()
-TARGET_GROUPS = {
-    **D.DEFAULT_TARGET_GROUPS,
-    EQ.EQUITY_TARGET_GROUP: [(sym, meta["label"]) for sym, meta in EQ.EQUITY_UNIVERSE.items()],
-}
+TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + EQ.equity_target_choices() + UX.extended_target_choices()
+TARGET_GROUPS = UX.all_target_groups()
 # Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
 # driving the "Lookbacks technical" section of `index.html` -- one
 # comma-separated `<input>` per `features/technical.py` function, same

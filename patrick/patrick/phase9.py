@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
+from patrick.numeric import is_nan
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.fdr import benjamini_hochberg
 
@@ -164,7 +165,7 @@ def regime_summary(regime_labels: Sequence[str]) -> dict:
 
 def p_value_histogram(p_values: Mapping[str, float], bins: int = 10) -> dict:
     """Summarizes the shape of a p-value distribution for a visual diagnostic."""
-    values = [float(v) for v in p_values.values() if v == v]
+    values = [float(v) for v in p_values.values() if not is_nan(v)]
     if not values:
         return {"n_values": 0, "histogram": {}, "near_zero": 0, "uniform_like": True}
     series = pd.Series(values)
@@ -434,7 +435,7 @@ def validate_aggregate_signal_quality(
     else:
         corr = float(np.corrcoef(series.to_numpy(), signal_frame[target_column].astype(float).to_numpy())[0, 1]) if len(series) > 1 else np.nan
     status = "ok" if np.isfinite(corr) and corr < 0.0 else "warning"
-    return {"n_obs": int(len(series)), "correlation": corr, "status": status}
+    return {"n_obs": len(series), "correlation": corr, "status": status}
 
 
 def build_event_calendar(events: Iterable[Mapping[str, object]]) -> pd.DataFrame:

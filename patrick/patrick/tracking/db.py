@@ -20,11 +20,14 @@ import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
+from patrick.numeric import is_nan
+
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 _CREATE_TABLE_RE = re.compile(r"^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
 _CREATE_INDEX_RE = re.compile(
     r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF NOT EXISTS\s+)?[\"'`]?(\w+)[\"'`]?", re.IGNORECASE)
+_ADD_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+[\"'`]?(\w+)[\"'`]?\s+ADD\s+COLUMN\s+[\"'`]?(\w+)", re.IGNORECASE)
 
 
 def default_db_path() -> str:
@@ -95,6 +98,13 @@ def _ddl_target_already_exists(conn: sqlite3.Connection, statement: str) -> bool
                 (obj_type, m.group(1)),
             ).fetchone()
             return row is not None
+    m = _ADD_COLUMN_RE.match(statement)
+    if m:
+        # ALTER TABLE ... ADD COLUMN is not idempotent in SQLite either: a
+        # re-run on a partially migrated base (the case this runner exists
+        # for) must skip a column that is already there.
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({m.group(1)})")}
+        return m.group(2) in columns
     return False
 
 
@@ -195,7 +205,7 @@ def current_git_sha(cwd: str | None = None) -> str:
             text=True, timeout=5, check=True,
         )
         return out.stdout.strip()
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
 
 
@@ -453,7 +463,7 @@ def save_feature_stability(conn: sqlite3.Connection, run_id: str, mean_jaccard: 
     migration 0006; sqlite3/the Python driver does not guarantee a Python
     NaN survives `REAL` binding), the report displays it as "not
     computable", never as a misleading number."""
-    mean_jaccard_sql = mean_jaccard if mean_jaccard == mean_jaccard else None  # NaN != NaN
+    mean_jaccard_sql = None if is_nan(mean_jaccard) else mean_jaccard
     with conn:
         conn.execute(
             "INSERT INTO run_feature_stability (run_id, mean_jaccard, n_folds) VALUES (?, ?, ?) "
@@ -486,8 +496,11 @@ def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
             "selection_freq": [{"feature": f, "selection_freq": freq} for f, freq in freq_rows]}
 
 
+DM_SAMPLES = ("holdout", "last_wf_fold")
+
+
 def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
-                    kind: str = "class_specific") -> None:
+                    kind: str = "class_specific", *, sample: str) -> None:
     """Phase 6.4 (P6.4). Persists THIS run's Diebold-Mariano result (Phase
     2.5) so it is queryable across the whole history (see migration 0009)
     -- `dm_result` comes from `validation.diebold_mariano.diebold_mariano()`
@@ -497,14 +510,23 @@ def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
     `kind` (Phase X5, migration 0010): `"class_specific"` (baseline specific
     to the target's asset class, see `validation.baseline_by_asset_class`)
     or `"common"` (class-agnostic persistence, fixed reference across
-    classes) -- two distinct rows per run, PRIMARY KEY (run_id, kind)."""
+    classes) -- two distinct rows per run, PRIMARY KEY (run_id, kind).
+
+    `sample` (F08, migration 0022) is mandatory: `"holdout"` (terminal
+    holdout, never used to choose -- the only evidence) or `"last_wf_fold"`
+    (selection data, biased towards significance)."""
+    if sample not in DM_SAMPLES:
+        raise ValueError(f"unknown DM sample {sample!r} (expected one of {DM_SAMPLES})")
+    n_obs = dm_result.get("n_obs")
     with conn:
         conn.execute(
-            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value) VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value, sample, n_obs) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(run_id, kind) DO UPDATE SET baseline = excluded.baseline, "
-            "dm_stat = excluded.dm_stat, p_value = excluded.p_value, "
-            "computed_at = datetime('now')",
-            (run_id, kind, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"]),
+            "dm_stat = excluded.dm_stat, p_value = excluded.p_value, sample = excluded.sample, "
+            "n_obs = excluded.n_obs, computed_at = datetime('now')",
+            (run_id, kind, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"],
+             sample, int(n_obs) if n_obs is not None else None),
         )
 
 
@@ -717,6 +739,23 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str,
     return {run_id: best_f1_by_trial.get(trial_id) for run_id, trial_id in best_trial_by_run.items()}
 
 
+BENCHMARK_BASELINE = "BASELINE_persistence"
+
+
+def batch_baseline_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
+                          baseline: str = BENCHMARK_BASELINE) -> dict[str, float]:
+    """Roadmap bloc 4 ("benchmark column everywhere"): the common reference
+    baseline's F1_dir per run -- persistence, the class-agnostic reference
+    fixed across asset classes (Phase X5), aggregated over the test folds
+    exactly like the model's F1_dir. One query; runs without it are absent."""
+    if not run_ids:
+        return {}
+    placeholders = ",".join("?" for _ in run_ids)
+    return {run_id: float(value) for run_id, value in conn.execute(
+        f"SELECT run_id, value FROM baseline_metric WHERE run_id IN ({placeholders}) "
+        "AND baseline = ? AND split = 'test' AND metric = 'F1_dir'", (*run_ids, baseline))}
+
+
 def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
                       kind: str = "class_specific") -> dict[str, dict]:
     """Batched `dm_result` lookup for every run_id in `run_ids`, filtered to
@@ -733,9 +772,10 @@ def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
         return {}
     placeholders = ",".join("?" for _ in run_ids)
     return {
-        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at}
-        for run_id, baseline, dm_stat, p_value, computed_at in conn.execute(
-            f"SELECT run_id, baseline, dm_stat, p_value, computed_at FROM dm_result "
+        run_id: {"baseline": baseline, "dm_stat": dm_stat, "p_value": p_value, "computed_at": computed_at,
+                 "sample": sample}
+        for run_id, baseline, dm_stat, p_value, computed_at, sample in conn.execute(
+            f"SELECT run_id, baseline, dm_stat, p_value, computed_at, sample FROM dm_result "
             f"WHERE run_id IN ({placeholders}) AND kind = ?",
             (*run_ids, kind),
         )
@@ -779,6 +819,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     run_ids = [r[0] for r in rows]
     best_f1_by_run = batch_best_f1_dir(conn, run_ids)
     dm_by_run = batch_dm_results(conn, run_ids)
+    benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
 
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
@@ -798,6 +839,8 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "config_json": config_json,
             "scheme": scheme, "best_f1_dir": best_f1_by_run.get(run_id),
             "dm_p_value": dm_result["p_value"] if dm_result else None,
+            "dm_sample": dm_result["sample"] if dm_result else None,
+            "benchmark_f1_dir": benchmark_by_run.get(run_id),
         })
     return out
 
@@ -832,6 +875,36 @@ def list_trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
              "n_features": r[4], "selector": r[5], "is_best": bool(r[6])} for r in rows]
 
 
+def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, source: str,
+                    n_trials: int, run_id: str | None = None, detail: str | None = None) -> None:
+    """F03 -- appends one event to `trial_registry` (migration 0021): `n_trials`
+    configurations evaluated for `target`. Append-only, never updated or
+    deleted -- see the migration header."""
+    with conn:
+        conn.execute(
+            "INSERT INTO trial_registry (target, horizon, source, run_id, n_trials, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (target, horizon, source, run_id, int(n_trials), detail),
+        )
+
+
+class TrialRecorder:
+    """Optuna callback (`study.optimize(callbacks=[...])`) registering every
+    finished Optuna trial -- complete, pruned or failed: each one is an
+    evaluated configuration. Recorded as it finishes, so trials evaluated
+    before an interruption stay counted (`patrick resume` then only records
+    the remaining ones)."""
+
+    def __init__(self, conn: sqlite3.Connection, target: str, horizon: int | None,
+                 run_id: str | None = None, detail: str | None = None):
+        self.conn, self.target, self.horizon = conn, target, horizon
+        self.run_id, self.detail = run_id, detail
+
+    def __call__(self, study, trial) -> None:
+        register_trials(self.conn, self.target, self.horizon, "optuna", 1,
+                        run_id=self.run_id, detail=self.detail or study.study_name)
+
+
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
                   sampler: str, n_features: int, selector: str,
                   params_json: str = "{}", category: str = "global") -> int:
@@ -840,14 +913,25 @@ def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
     (global/per_regime/stacking, see
     `pipeline/model_categories_training.py`) -- every pre-existing call site
     (the main grid scan/Optuna loop) never passes it, so every trial it
-    produces stays correctly tagged 'global', unchanged."""
+    produces stays correctly tagged 'global', unchanged.
+
+    F03: an untuned trial (`params_json == "{}"`) is a newly evaluated
+    configuration and is registered in `trial_registry`. A tuned trial is
+    the re-evaluation of the best Optuna configuration, already registered
+    by `TrialRecorder` -- not counted twice."""
     with conn:
         cur = conn.execute(
             "INSERT INTO trial (run_id, regime, algo, sampler, n_features, selector, "
             "params_json, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, regime, algo, sampler, n_features, selector, params_json, category),
         )
-        return cur.lastrowid
+        trial_id = cur.lastrowid
+    if params_json in ("{}", "", None):
+        row = conn.execute("SELECT target, horizon FROM run WHERE run_id = ?", (run_id,)).fetchone()
+        if row is not None:
+            register_trials(conn, row[0], row[1], "scan" if category == "global" else "category", 1,
+                            run_id=run_id)
+    return trial_id
 
 
 def mark_best_trial(conn: sqlite3.Connection, trial_id: int, artifact_path: str | None = None) -> None:
@@ -859,7 +943,7 @@ def mark_best_trial(conn: sqlite3.Connection, trial_id: int, artifact_path: str 
 def add_fold_metrics(conn: sqlite3.Connection, trial_id: int, fold_index: int,
                       split: str, metrics: dict) -> None:
     rows = [(trial_id, fold_index, split, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]  # excludes NaN
+            for name, value in metrics.items() if value is not None and not is_nan(value)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO fold_metric (trial_id, fold_index, split, metric, value) "
@@ -871,7 +955,7 @@ def add_fold_metrics(conn: sqlite3.Connection, trial_id: int, fold_index: int,
 def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
                           split: str, metrics: dict) -> None:
     rows = [(run_id, baseline, split, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]
+            for name, value in metrics.items() if value is not None and not is_nan(value)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO baseline_metric (run_id, baseline, split, metric, value) "
@@ -881,7 +965,7 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
-                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1) -> None:
+                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1, p_up=None) -> None:
     """`y_true` can contain `None` (Phase 4.6, `split='live'`: the prediction
     is written BEFORE the outcome is known) -- stored as NULL rather than
     crashing on `float(None)`, backfilled later by
@@ -891,15 +975,23 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
     (walk-forward, unchanged behavior); under CPCV, a distinct backtest path
     (`validation/cpcv.py::path_assignment`) -- the same date can then appear
     in several `prediction` rows (one per path that covers it),
-    (trial_id, ts, path_id) distinguishes them."""
+    (trial_id, ts, path_id) distinguishes them.
+
+    `p_up` (roadmap bloc 3, migration 0024): P(slight up) + P(strong up),
+    calibrated when the run calibrates -- optional, NULL otherwise."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
+    ups = p_up if p_up is not None else [None] * len(ts)
+
+    def _f(v):
+        return float(v) if v is not None and not is_nan(v) else None
+
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
-              float(yp_proba) if yp_proba is not None else None, path_id)
-            for t, yt, yp, yp_proba in zip(ts, y_true, y_pred, proba)]
+              _f(yp_proba), path_id, _f(up))
+            for t, yt, yp, yp_proba, up in zip(ts, y_true, y_pred, proba, ups)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
-            "y_pred, y_proba, path_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "y_pred, y_proba, path_id, p_up) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
 

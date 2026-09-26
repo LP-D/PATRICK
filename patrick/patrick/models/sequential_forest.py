@@ -25,7 +25,7 @@ class SequentialBootstrapRandomForestClassifier:
     in `pipeline/engine.py::_fit_eval`)."""
 
     def __init__(self, n_estimators: int = DEFAULT_N_ESTIMATORS, max_depth: int = 6,
-                 min_samples_leaf: int = 5, max_features: str | int | float = "sqrt",
+                 min_samples_leaf: int = 5, max_features: str | float = "sqrt",
                  seed: int = 42):
         self.n_estimators = n_estimators
         self.max_depth = max_depth
@@ -36,7 +36,7 @@ class SequentialBootstrapRandomForestClassifier:
         self.classes_: np.ndarray | None = None
 
     def fit(self, X: np.ndarray, y: np.ndarray, ind_matrix: np.ndarray,
-            sample_weight: np.ndarray | None = None) -> "SequentialBootstrapRandomForestClassifier":
+            sample_weight: np.ndarray | None = None) -> SequentialBootstrapRandomForestClassifier:
         self.classes_ = np.unique(y)
         self.trees_ = []
         rng = np.random.default_rng(self.seed)

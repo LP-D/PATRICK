@@ -101,7 +101,7 @@ def test_two_identical_ingestions_produce_the_same_snapshot_id(tmp_path):
 
 
 def test_query_via_duckdb_reads_parquet_directly(tmp_path):
-    duckdb = pytest.importorskip("duckdb")
+    pytest.importorskip("duckdb")
     store = DataStore(root=str(tmp_path))
     store.save("mykey", _df(seed=0, n=5))
 

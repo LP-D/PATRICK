@@ -46,7 +46,7 @@ def _download_one_cached(ticker: str, start: str) -> pd.Series | None:
         s = s.copy()
         s.name = _clean_col(ticker)
         return s
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary: one failing ticker never loses the others
         print(f"  [WARN] yfinance {ticker}: {str(e)[:100]}")
         return None
 
@@ -67,7 +67,8 @@ def download_one(ticker: str, start: str) -> pd.Series | None:
 
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
-                       t0: float | None = None, issues: list | None = None) -> pd.DataFrame:
+                       t0: float | None = None, issues: list | None = None,
+                       return_unfilled: bool = False):
     """Downloads a universe of tickers with an individual fallback for
     failures/low coverage. Returns a DataFrame indexed by date, one column
     per retained ticker.
@@ -78,19 +79,34 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
     not reconstructed after the fact. The other quality checks (frozen
     prices, gaps, outlier returns, early series end) run separately in
     `data/ingest.py` on the surviving series, via `data/quality.py`.
+
+    `return_unfilled=True`: returns `(filled, unfilled)` -- `unfilled` holds
+    the closes as REPORTED (no forward fill), on the same columns. The
+    quality gates must run on it: forward-filling a holiday bridge turns it
+    into "identical closes" (measured on real data, 2000-2026: max run of
+    identical reported closes 2-3 on every liquid future/index, 4-12 once
+    forward-filled -- GC=F, ^VIX, EURUSD=X excluded as "frozen" for that
+    reason alone).
     """
     from patrick.data.quality import QualityIssue
 
     t0 = t0 or time.time()
     raw = download_batch(tickers, start)
     if len(raw):
-        coverage = raw.notna().mean()
+        # Coverage "of business days populated" -- measured on business days
+        # only: a weekend-trading ticker in the batch (BTC-USD) adds Saturday/
+        # Sunday rows to the union index and used to drag every exchange-
+        # traded ticker to ~5/7 coverage (^VIX excluded at 81.9%).
+        coverage = raw.loc[raw.index.dayofweek < 5].notna().mean()
         low_coverage = coverage[coverage < coverage_min]
         if issues is not None:
             for col, cov in low_coverage.items():
                 issues.append(QualityIssue(col, "couverture_insuffisante",
                                             f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
-        raw = raw.loc[:, raw.notna().mean() >= coverage_min].ffill().dropna(how="all")
+        unfilled = raw.loc[:, coverage >= coverage_min].dropna(how="all")
+        raw = unfilled.ffill()
+    else:
+        unfilled = raw.copy()
     kept = set(raw.columns) if len(raw) else set()
     missing = [t for t in tickers if _clean_col(t) not in kept]
     for t in missing:
@@ -100,16 +116,20 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
                 issues.append(QualityIssue(_clean_col(t), "echec_telechargement",
                                             "no data returned by yfinance (individual fallback)"))
             continue
+        s_reported = s.reindex(raw.index) if len(raw) else s
         if len(raw):
             s = s.reindex(raw.index).ffill()
-        cov = s.notna().mean()
+        cov = s_reported.loc[s_reported.index.dayofweek < 5].notna().mean()
         if cov >= coverage_min:
             raw[s.name] = s
+            unfilled[s.name] = s_reported
         elif issues is not None:
             issues.append(QualityIssue(s.name, "couverture_insuffisante",
                                         f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
     print(f"  [yfinance] {raw.shape[1] if len(raw) else 0}/{len(tickers)} tickers kept "
           f"(coverage>={coverage_min:.0%}) in {time.time()-t0:.1f}s")
+    if return_unfilled:
+        return raw, unfilled.reindex(columns=raw.columns) if len(raw) else unfilled
     return raw
 
 
@@ -130,7 +150,7 @@ def _download_ohlc_cached(symbol: str, start: str) -> pd.DataFrame | None:
         if len(cols) < 4:
             return None
         return df[list(cols)].dropna(how="all").copy()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary, OHLC is optional
         print(f"  [WARN] yfinance OHLC {symbol}: {str(e)[:100]}")
         return None
 

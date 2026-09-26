@@ -6,13 +6,14 @@ basé sur un fichier de métadonnées JSON à côté de chaque entrée
 `monkeypatch` pour figer le temps plutôt que `time.sleep`)."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pandas as pd
 import pytest
 
 import patrick.cache_manager as cache_manager_module
 from patrick.cache_manager import LocalCache
+from patrick.clock import utc_now
 
 
 @pytest.fixture
@@ -25,18 +26,11 @@ def _df() -> pd.DataFrame:
 
 
 def _freeze_utcnow(monkeypatch, days_from_now: float) -> None:
-    """Freezes `cache_manager.datetime.utcnow()` `days_from_now` days ahead
-    of the real current time, without sleeping in real time. Mirrors
-    `cache_manager.py`'s own naive (no-tz) `datetime.utcnow()` convention --
-    intentional, `_is_fresh()` compares directly against it."""
-    future = datetime.utcnow() + timedelta(days=days_from_now)  # noqa: DTZ003
-
-    class _FrozenDatetime(datetime):
-        @classmethod
-        def utcnow(cls):
-            return future
-
-    monkeypatch.setattr(cache_manager_module, "datetime", _FrozenDatetime)
+    """Freezes `cache_manager.utc_now()` (the package's single, timezone-
+    aware clock, `patrick/clock.py`) `days_from_now` days ahead -- a cache
+    written "now" then looks exactly that old to `_is_fresh`."""
+    future = utc_now() + timedelta(days=days_from_now)
+    monkeypatch.setattr(cache_manager_module, "utc_now", lambda: future)
 
 
 # -- DataFrame (save_dataframe/load_dataframe) --------------------------

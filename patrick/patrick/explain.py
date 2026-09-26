@@ -27,8 +27,11 @@ prediction requires SHAP values from THAT model, computed here.
 Deliberately NOT re-running live inference (`predict.py`'s job): this reads
 the most recent row already written to the `prediction` table (whichever
 split -- holdout/test/test_path/live) and rebuilds ONLY that historical
-date's feature row from cached raw data (`ingest(..., force=False)` --
-no network call), rather than forcing a fresh download of today's bar.
+date's feature row from the data snapshot that prediction was computed on
+(`_load_snapshot_for_prediction`: the run's own snapshot, or for a later
+`live` prediction the earliest stored snapshot covering its date) -- local
+data lake only, never `ingest()` (which returns the LATEST snapshot, i.e.
+possibly revised data the model never saw, and downloads on a cold lake).
 
 HONEST CAVEAT (found while smoke-testing against a real run, not part of
 the original SHAP-cost question but worth recording): the SHAP call is
@@ -56,6 +59,7 @@ import shap
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
+from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.pipeline.engine import build_full_feature_pool
 from patrick.tracking import db as trackdb
 from patrick.validation import drift
@@ -88,6 +92,37 @@ def _find_best_trial_for_horizon(conn: sqlite3.Connection, target: str, horizon:
         if trial is not None and trial[1]:
             return {"run_id": run_id, "trial_id": trial[0], "artifact_path": trial[1]}
     return None
+
+
+def _load_snapshot_for_prediction(store: DataStore, target: str, run_snapshot_id: str,
+                                   ts: pd.Timestamp) -> pd.DataFrame | None:
+    """Raw data the explained prediction was computed on -- local data lake
+    only, never a network fetch.
+
+    - The run's own snapshot (`run.snapshot_id`) when it covers `ts`: every
+      test/holdout prediction was produced from it, and the exported model
+      was trained on it.
+    - Otherwise (a `live` prediction made after the run, by `predict_live`,
+      which ingests with `force=True` and therefore saves a new snapshot
+      ending on the prediction date): the EARLIEST stored snapshot whose
+      last date covers `ts` -- the closest available state to what
+      `predict_live` saw, rather than today's revised data.
+
+    `None` when no local snapshot covers `ts`."""
+    key = f"raw_{target}"
+    try:
+        run_raw = store.load(key, snapshot_id=run_snapshot_id)
+    except FileNotFoundError:
+        run_raw = None
+    if run_raw is not None and ts in run_raw.index:
+        return run_raw
+    covering = [e for e in store.list_snapshots(key)
+                if e.get("date_max") and pd.Timestamp(e["date_max"]) >= ts]
+    if not covering:
+        return None
+    earliest = min(covering, key=lambda e: (pd.Timestamp(e["date_max"]), e.get("created_at", "")))
+    raw = store.load(key, snapshot_id=earliest["snapshot_id"])
+    return raw if ts in raw.index else None
 
 
 def explain_last_prediction(target: str, horizon: int, db_path: str | None = None,
@@ -130,10 +165,14 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         run = trackdb.get_run(conn, best["run_id"])
         config = RunConfig.model_validate_json(run["config_json"])
         store = store or DataStore()
-        # `force=False` (default): the date being explained already happened,
-        # so the locally cached raw series (no network call) is enough --
-        # unlike `predict.py`'s live inference, this never needs today's bar.
-        raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
+        ts = pd.Timestamp(latest["ts"])
+        # The snapshot the prediction was computed on (see
+        # `_load_snapshot_for_prediction`) -- never `ingest()`, which returns
+        # the latest stored snapshot (or downloads on a cold data lake).
+        raw = _load_snapshot_for_prediction(store, target, run["snapshot_id"], ts)
+        if raw is None:
+            return None
+        data_snapshot_id = raw.attrs.get("snapshot_id")
 
         full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
 
@@ -141,12 +180,11 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         if missing:
             return None
 
-        ts = pd.Timestamp(latest["ts"])
         if ts not in full_pool.index:
             return None
         row = full_pool[feature_pool].loc[[ts]]
 
-        X = scaler.transform(np.nan_to_num(row.values))
+        X = finite_scaled(scaler.transform(finite_features(row.values, "explain")), "explain")
         sel_idx = [feature_pool.index(n) for n in feature_names]
         X_sel = X[:, sel_idx]
 
@@ -185,7 +223,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
 
         return {
             "run_id": best["run_id"], "trial_id": best["trial_id"],
-            "ts": str(ts.date()), "split": latest["split"],
+            "ts": str(ts.date()), "split": latest["split"], "data_snapshot_id": data_snapshot_id,
             "y_pred": pred_class, "y_pred_label": CLASS_NAMES[pred_class],
             "y_proba": latest["y_proba"],
             "base_value": base_value, "final_value": final_value,

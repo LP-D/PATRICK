@@ -145,13 +145,51 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
                         detail.get("y_pred"), detail.get("y_proba"), detail.get("n_outcomes_updated"))
             summary.add(PredictOutcome(candidate=candidate, ok=True, detail=detail,
                                         started_at=started_at, finished_at=finished_at))
-        except Exception as exc:  # noqa: BLE001 -- volontaire : isole les échecs par candidat
+        except Exception as exc:
             finished_at = datetime.now(timezone.utc).isoformat()
-            logger.exception("FAIL  target=%s horizon=%s run_id=%s -- %s", candidate.target,
-                             candidate.horizon, candidate.run_id, exc)
+            logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
+                             candidate.horizon, candidate.run_id)
             summary.add(PredictOutcome(candidate=candidate, ok=False, error=str(exc),
                                         started_at=started_at, finished_at=finished_at))
     return summary
+
+
+def remeasure_stale_drift(candidates: list[PredictCandidate], db_path: str | None = None,
+                          measure_fn=None, today=None, limit: int = 10) -> dict:
+    """Politique de dérive du 2026-09-26 (`validation/drift_policy.py`) :
+    re-mesure le PSI des (ticker, horizon) jamais mesurés ou mesurés il y a
+    plus de `REMEASURE_DAYS` jours, au plus `limit` par nuit (~30 s chacun :
+    reconstruction complète du pool de features). Une erreur sur un item est
+    loggée et n'arrête jamais les suivants ; elle ne change pas le code de
+    sortie du script (celui-ci reste celui des prédictions)."""
+    from patrick.clock import utc_today
+    from patrick.validation import drift_policy
+
+    if measure_fn is None:
+        from patrick.explain import compute_drift_for_ticker_horizon as measure_fn
+    today = today or utc_today()
+    conn = trackdb.connect(db_path)
+    try:
+        latest = {(sym, int(h)): at for sym, h, at in conn.execute(
+            "SELECT symbol, horizon, MAX(computed_at) FROM drift_psi_history GROUP BY symbol, horizon")}
+    finally:
+        conn.close()
+    due = [c for c in candidates if drift_policy.needs_remeasure(latest.get((c.target, c.horizon)), today)]
+    report = {"measured": 0, "failed": 0, "skipped_fresh": len(candidates) - len(due),
+              "deferred": max(0, len(due) - limit)}
+    for c in due[:limit]:
+        try:
+            result = measure_fn(c.target, c.horizon, db_path=db_path)
+            if result is None:
+                logger.info("DRIFT target=%s horizon=%s : pas de référence de dérive", c.target, c.horizon)
+                report["failed"] += 1
+                continue
+            logger.info("DRIFT target=%s horizon=%s : %d feature(s) mesurée(s)", c.target, c.horizon, len(result))
+            report["measured"] += 1
+        except Exception:
+            logger.exception("DRIFT FAIL target=%s horizon=%s", c.target, c.horizon)
+            report["failed"] += 1
+    return report
 
 
 def print_summary(summary: RunSummary) -> None:
@@ -195,6 +233,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--log-file", default=None,
                          help="Fichier de log en plus de stdout (utile sous le Planificateur de "
                               "tâches Windows, dont la sortie standard n'est pas toujours capturée).")
+    parser.add_argument("--no-drift", action="store_true",
+                         help="Ne re-mesure pas la dérive (PSI) des modèles après les prédictions.")
+    parser.add_argument("--drift-limit", type=int, default=10,
+                         help="Nombre maximal de (ticker, horizon) dont le PSI est re-mesuré par exécution "
+                              "(~30 s chacun ; les suivants sont reportés).")
     args = parser.parse_args(argv)
 
     _configure_logging(args.log_file)
@@ -228,6 +271,10 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = run_daily_predictions(candidates, db_path=args.db_path)
     print_summary(summary)
+    if not args.no_drift:
+        drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
+        print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "
+              f"{drift_report['skipped_fresh']} à jour, {drift_report['deferred']} reportée(s) à demain.")
     return 1 if summary.failures else 0
 
 

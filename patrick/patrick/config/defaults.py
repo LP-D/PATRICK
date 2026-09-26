@@ -1,7 +1,9 @@
 """Defaults encoding the lessons learned from the VIX project (README) — can be
 switched on differently, never removed from the code: SHAP beats RFE/LASSO in
 direct testing, DL never beat classical ML, purge has a negligible effect,
-calibration only helps outside STRESS regimes.
+calibration only helps outside STRESS regimes. These are MEASURED results
+that set defaults, not design bans: DL and stacking are admissible model
+families under the same validation protocol (docs/ways-of-working.md).
 
 Stacking: the VIX-project finding that stacking lost on 93% of (horizon,
 fold) pairs applied to the single always-on `DEFAULT_STACKING_ENABLED`
@@ -39,6 +41,13 @@ DEFAULT_HORIZONS = [1, 2, 3, 5, 7, 10]
 MODERATE_HORIZONS = [15, 20, 30]
 LONG_HORIZONS = [252, 504, 756]
 SELECTABLE_HORIZONS = sorted(set(DEFAULT_HORIZONS) | set(MODERATE_HORIZONS) | set(LONG_HORIZONS))
+# Decision of 2026-09-26 (docs/modelisation/horizons-longs.md): launchable for
+# exploration but DESCRIPTIVE -- out of the cross-target Benjamini-Hochberg
+# family (tracking/stats.fdr_across_targets) and of every portfolio signal
+# (/portfolio, patrimoine signal replay), labelled "descriptif" everywhere.
+# On real prices, beating "always up" significantly at these horizons would
+# need ~98-100 % accuracy on the S&P 500 over its whole history.
+DESCRIPTIVE_HORIZONS = frozenset({504, 756})
 DEFAULT_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
 
 # Phase 2 (feature/guida-features-full) -- the 14 lookback windows (trading
@@ -298,8 +307,14 @@ TECHNICAL_LOOKBACK_BOUNDS: dict[str, dict[str, int]] = {
 # pipeline (always computed together until now) — kept enabled by default so as not
 # to change the already-validated F1_dir≈0.610 reference. AR/MA/ARMA/ARIMA are new,
 # never tested in walk-forward: disabled by default.
-ALL_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
-DEFAULT_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
+# HMM removed from both lists on 2026-09-26: it serves regime models
+# (features/regime_detection.py) and market-state analysis only, no longer as an
+# ML feature -- 64 % of the feature build time for 0 feature kept on the real
+# ^GSPC run (docs/audits/audit-vitesse-2026-09-25.md). `features/vol_models.py`
+# still builds it when a STORED config asks for it (predict/explain of models
+# exported before that date).
+ALL_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
+DEFAULT_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy"]
 
 # Open list of targets proposed by the web form ("what to predict?"), grouped
 # by category for a browsable dropdown despite their number — no more free-text
@@ -358,7 +373,8 @@ DEFAULT_TARGET_GROUPS = {
         ("CC=F", "Cocoa_Futures"),
         ("KC=F", "Coffee_Futures"),
         ("CT=F", "Cotton_Futures"),
-        ("LBS=F", "Lumber_Futures"),
+        # LBS=F (lumber) removed 2026-09-26: Yahoo serves no quote since the
+        # CME contract was replaced by LBR=F (2022), too short for the pool.
         ("OJ=F", "OrangeJuice_Futures"),
         ("SB=F", "Sugar_Futures"),
     ],
@@ -428,4 +444,13 @@ DEFAULT_TARGET_CHOICES = _flatten_target_choices()
 # The chosen target is removed from it when building the config (see
 # webapp/forms.py) to avoid a ticker predicting itself.
 DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src == "yfinance"]
-DEFAULT_UNIVERSE_FRED_SERIES = {label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"}
+# FRED series used as FEATURES only, never offered as targets: the ECB deposit
+# facility rate is a step function moved at policy meetings -- as a target
+# almost every label would be "flat". It gives EUR/USD carry its euro leg
+# (`features/guida.py::eurusd_carry_features`). FRED dates it on the EFFECTIVE
+# date, after the announcement: a lag, never a look-ahead.
+FEATURE_ONLY_FRED_SERIES = {"EUR_DFR_Rate": "ECBDFR"}
+DEFAULT_UNIVERSE_FRED_SERIES = {
+    **{label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"},
+    **FEATURE_ONLY_FRED_SERIES,
+}

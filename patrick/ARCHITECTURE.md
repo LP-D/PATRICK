@@ -65,7 +65,7 @@ flowchart LR
     G --> H[Validation\nwalk-forward / CPCV\npurge, embargo, DM, PBO, FDR]
     H --> I[Export du meilleur modèle\npar (cible, horizon)]
     I --> J[Tracking SQLite\npatrick.db]
-    J --> K[Webapp FastAPI\nCockpit v2]
+    J --> K[Webapp FastAPI\nCockpit Pro v3]
     I --> L[patrick predict --live\nprédiction quotidienne]
     L --> J
 ```
@@ -132,9 +132,15 @@ mesurer sur la vraie base avant de considérer la tâche terminée.
 
 ## 6. Application web
 
-FastAPI + Jinja2, design system **Cockpit v2** :
-- Templates étendent `webapp/templates/base_v2.html`, CSS =
-  `webapp/static/patrick-v2.css`.
+FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
+(`design-system/patrick/MASTER.md`, section v3) :
+- Templates étendent `webapp/templates/base_v2.html` (nom conservé : shell
+  v3 — sidebar repliable, topbar, palette Ctrl K, thèmes clair/sombre),
+  CSS = `webapp/static/patrick.css`, comportements du shell =
+  `webapp/static/shell.js`, icônes Lucide inline = `webapp/icons.py`
+  (globals Jinja `icon()` / `nav_icon()`).
+- Les graphiques canvas lisent leurs couleurs dans les jetons CSS au moment
+  du tracé et se redessinent sur l'événement `patrick:themechange`.
 - Macros partagées `webapp/templates/_components.html` :
   `status_badge(label, state)` (états `ok`/`warning`/`neutral`/`disabled`),
   `data_table(...)`, `empty_state(...)`, `metric(...)`.
@@ -157,8 +163,11 @@ FastAPI + Jinja2, design system **Cockpit v2** :
   rouge d'abord, implémentation, test vert.
 - **SHAP > RFE/LASSO** pour la sélection de features (mesuré, pas un choix
   arbitraire).
-- **Stacking désactivé par défaut** (perd sur 93% des paires horizon/fold
-  testées en walk-forward).
+- **Stacking et DL : plus d'exclusion a priori** (`docs/ways-of-working.md`).
+  Le stacking est une catégorie comparée explicitement (global / par régime
+  / stacking) ; le toggle historique `DEFAULT_STACKING_ENABLED` reste
+  désactivé par défaut (perd sur 93% des paires horizon/fold en
+  walk-forward, résultat mesuré, pas un interdit).
 - **`MODEL_N_JOBS = 1`** (`models/registry.py`) — ne jamais repasser à `-1`
   sans revalider : cause avérée d'oversubscription CPU massive (variance de
   temps de tuning ×20+ mesurée avant fix).

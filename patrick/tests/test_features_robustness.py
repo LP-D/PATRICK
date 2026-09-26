@@ -83,3 +83,32 @@ def test_technical_features_do_not_crash_on_zero_crossing_series():
     assert len(df) == len(s)
     numeric = df.select_dtypes(include=[np.number])
     assert not np.isinf(numeric.to_numpy(dtype=float)).any()
+
+
+def test_ma_ratio_is_bounded_on_a_series_whose_moving_average_crosses_zero():
+    """Qualification of the GSPC inf/nan report on real data (^GSPC, full
+    default universe, quality gates off, 2026-09-25): no exact inf in the
+    1432-column base pool, but `T10Y2Y_Spread_vs_ma10`,
+    `T10Y3M_Spread_vs_ma10` and `T10Y3M_Spread_vs_ma50` reached |x| > 1e12 --
+    `series / ma - 1` with a moving average that sits at ~1e-17 (floating
+    residue of a rolling mean crossing zero), exactly the near-zero-
+    denominator artifact `safe_pct_change` already clips for returns."""
+    from patrick.features.technical import ma_ratio
+
+    idx = pd.bdate_range("2019-01-01", periods=60)
+    s = pd.Series(np.tile([0.3, -0.1, -0.2], 20), index=idx)
+    ma = s.rolling(3).mean()
+    assert ((ma != 0) & (ma.abs() < 1e-15)).any()  # floating residue, not an exact 0
+    out = ma_ratio(s, windows=[3])
+    finite = out.to_numpy(dtype=float)
+    finite = finite[np.isfinite(finite)]
+    assert np.abs(finite).max() <= 10.0
+
+
+def test_ma_ratio_is_unchanged_on_a_regular_price_series():
+    from patrick.features.technical import ma_ratio
+
+    idx = pd.bdate_range("2019-01-01", periods=80)
+    s = pd.Series(100 + np.cumsum(np.random.default_rng(1).normal(0, 1, 80)), index=idx)
+    expected = s / s.rolling(20).mean() - 1
+    pd.testing.assert_series_equal(ma_ratio(s, windows=[20])["vs_ma20"], expected, check_names=False)

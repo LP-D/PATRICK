@@ -56,7 +56,7 @@ def fetch_fundamentals(symbol: str) -> pd.DataFrame:
 
     try:
         stmt = yf.Ticker(symbol).quarterly_income_stmt
-    except Exception:
+    except Exception:  # noqa: BLE001 -- provider boundary (yfinance scraping raises arbitrary errors)
         return _empty()
 
     if stmt is None or stmt.empty:

@@ -6,9 +6,15 @@ already in place in the project's selected features.
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
+
+from patrick.selection._common import SELECTION_N_JOBS, rank_top
+
+logger = logging.getLogger(__name__)
 
 INTERACTION_TYPES = {
     "minus": lambda a, b: a - b,
@@ -44,9 +50,9 @@ def _prefilter_top(X: np.ndarray, y: np.ndarray, names: list[str], top_n: int,
     top_n = min(top_n, len(names))
     pf = XGBClassifier(n_estimators=80, max_depth=4, learning_rate=0.1,
                         objective="multi:softprob", eval_metric="mlogloss",
-                        random_state=seed, n_jobs=-1, verbosity=0)
+                        random_state=seed, n_jobs=SELECTION_N_JOBS, verbosity=0)
     pf.fit(X, y)
-    order = np.argsort(pf.feature_importances_)[::-1][:top_n]
+    order = rank_top(pf.feature_importances_, top_n)
     return [names[i] for i in order]
 
 
@@ -64,10 +70,11 @@ def discover_interactions(X_df: pd.DataFrame, y: np.ndarray, top_base: int = 40,
             for tname, fn in INTERACTION_TYPES.items():
                 try:
                     col = apply_interaction(fn, X_df[a], X_df[b])
-                    if col.notna().sum() > 20:
-                        candidates[f"{a}__{tname}__{b}"] = col
-                except Exception:
+                except (TypeError, ValueError) as exc:
+                    logger.warning("interaction candidate %s__%s__%s skipped: %s", a, tname, b, exc)
                     continue
+                if col.notna().sum() > 20:
+                    candidates[f"{a}__{tname}__{b}"] = col
     if not candidates:
         return pd.DataFrame(index=X_df.index)
 

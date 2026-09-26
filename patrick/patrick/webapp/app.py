@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import html
 import os
+import sqlite3
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -33,10 +35,13 @@ from patrick.webapp import (
     asset_stats,
     forms,
     i18n,
+    icons,
     market_data,
+    market_regime,
     nav_registry,
     run_manager,
     shap_chart,
+    wealth_routes,
 )
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 
@@ -84,6 +89,21 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only
 # (base_v2.html iterates `nav_sections(request.url.path)`).
 templates.env.globals["nav_sections"] = nav_registry.nav_sections
+# Design system v3: inline Lucide SVG icons (webapp/icons.py).
+templates.env.globals["icon"] = icons.icon
+templates.env.globals["nav_icon"] = icons.nav_icon
+# 504/756-day horizons are descriptive (decision of 2026-09-26): labelled everywhere.
+templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
+
+
+def _horizon_label(h) -> str:
+    try:
+        return f"{h}j · descriptif" if int(h) in D.DESCRIPTIVE_HORIZONS else f"{h}j"
+    except (TypeError, ValueError):
+        return f"{h}j"
+
+
+templates.env.filters["hlabel"] = _horizon_label
 
 FORM_OPTIONS = {
     "all_families": forms.ALL_FEATURE_FAMILIES,
@@ -110,6 +130,7 @@ FORM_OPTIONS = {
 @app.on_event("startup")
 def _on_startup() -> None:
     alerts.start_background_refresh()
+    market_regime.start_background_refresh()
 
 
 def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
@@ -129,11 +150,11 @@ def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
     unchanged for them."""
     try:
         conn = trackdb.connect()
-    except Exception:
+    except (sqlite3.Error, OSError):
         return None
     try:
         return trackhistory.station_verdict(conn, fdr_alpha=fdr_alpha)
-    except Exception:
+    except sqlite3.Error:
         return None
     finally:
         conn.close()
@@ -190,11 +211,11 @@ def _recent_runs(limit: int = 8) -> list[dict]:
     yet (first install)."""
     try:
         conn = trackdb.connect()
-    except Exception:
+    except (sqlite3.Error, OSError):
         return []
     try:
         return trackhistory.list_runs(conn, limit=limit)
-    except Exception:
+    except sqlite3.Error:
         return []
     finally:
         conn.close()
@@ -314,18 +335,24 @@ def movers():
     return alerts.get_cached()
 
 
+@app.get("/api/market-state")
+def market_state_api():
+    """HMM market state (descriptive), refreshed in the background every 6 h."""
+    return market_regime.get_cached()
+
+
 @app.get("/api/next-run-names")
-def next_run_names(target: list[str] = Query(default=[])):
+def next_run_names(target: Annotated[list[str] | None, Query()] = None):
     """(Read-only) preview of the name that will be assigned to each target
     if the form is submitted now — called by `app.js` when the target
     selection changes. Reserves nothing: the actual number may differ if
     other runs for the same target slot in before submission (see the
     batch-run-launch spec, known limitation)."""
-    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target)}
+    return {t: run_manager.next_run_name(t) for t in dict.fromkeys(target or [])}
 
 
 @app.get("/api/horizon-feasibility")
-def horizon_feasibility(target: list[str] = Query(default=[])):
+def horizon_feasibility(target: Annotated[list[str] | None, Query()] = None):
     """Phase 1 (feature/expanded-horizons) -- data for `app.js` to disable
     infeasible `<option>`s in the shared `<select multiple name="horizons">`
     (index.html) as the target selection changes, mirroring
@@ -339,7 +366,7 @@ def horizon_feasibility(target: list[str] = Query(default=[])):
     `data/store.py`) -- never a static table, and never blocked when nothing
     is cached yet for a target (exposed with a warning instead, per this
     phase's guiding principle)."""
-    symbols = list(dict.fromkeys(target))
+    symbols = list(dict.fromkeys(target or []))
     out: dict[str, dict] = {}
     for h in D.SELECTABLE_HORIZONS:
         blocking = None
@@ -719,6 +746,7 @@ def _predictions_overview() -> list[dict]:
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
+        drift = trackhistory.drift_badges(conn, all_symbols, horizons)
     finally:
         conn.close()
 
@@ -737,6 +765,8 @@ def _predictions_overview() -> list[dict]:
                     "ts": pred["ts"] if pred else None,
                     "run_id": pred["run_id"] if pred else None,
                     "dm_p_value": dm["p_value"] if dm else None,
+                    "dm_sample": dm.get("sample") if dm else None,
+                    "drift": drift.get((sym, h)),
                     "live_hit_rate": hit_rate["hit_rate"] if hit_rate else None,
                     "live_hit_rate_n": hit_rate["n"] if hit_rate else None,
                 })
@@ -817,7 +847,7 @@ def portfolio_page(request: Request, pairs: str | None = None):
     # (meme esprit read-only-avec-avertissement que le reste de cette route).
     try:
         hrp = trackhrp.hrp_overview()
-    except Exception:
+    except Exception:  # noqa: BLE001 -- page robustness: HRP failure degrades to an empty panel, never a 500
         hrp = {"weights": None, "skipped": [], "as_of": None, "n_assets": 0}
     return templates.TemplateResponse(
         request, "portfolio.html",
@@ -828,6 +858,31 @@ def portfolio_page(request: Request, pairs: str | None = None):
             **_i18n_context(request),
         },
     )
+
+
+@app.post("/api/drift/{target}/{horizon}")
+def api_measure_drift(target: str, horizon: int):
+    """Roadmap bloc 3 -- on-demand PSI of the exported model's features for
+    ONE (target, horizon) (`explain.compute_drift_for_ticker_horizon`, which
+    records it in `drift_psi_history`, read by the /predictions badge).
+    Rebuilds the feature pool: an explicit user action, never a page loop."""
+    from patrick import explain as explain_module
+    from patrick.validation.drift import data_drift_status
+
+    try:
+        result = explain_module.compute_drift_for_ticker_horizon(target, horizon)
+    except (ValueError, FileNotFoundError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=f"Mesure impossible : {exc}") from exc
+    if not result:
+        raise HTTPException(status_code=404, detail="Pas de modèle exporté avec une référence de dérive "
+                                                    "pour cette cible et cet horizon (ou historique récent insuffisant).")
+    features = sorted(({"feature": f, "psi": v["psi"], "status": v.get("status") or data_drift_status(v["psi"])}
+                       for f, v in result.items()), key=lambda r: -r["psi"])
+    return {"target": target, "horizon": horizon, "features": features}
+
+
+# Roadmap bloc 4 -- PATRIMOINE (pages /patrimoine, /mouvements + /api/wealth/*).
+wealth_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 @app.get("/commodities")
@@ -1005,7 +1060,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
         raise HTTPException(status_code=404, detail="Cible inconnue")
     try:
         result = explain.explain_last_prediction(ticker, horizon)
-    except Exception as exc:  # never let an explanation failure break the page
+    except Exception as exc:  # noqa: BLE001 -- never let an explanation failure break the page
         return JSONResponse({"ok": False, "message": f"Erreur de calcul SHAP : {exc}"})
     if result is None:
         return JSONResponse({"ok": False, "message": "Aucune prédiction exploitable pour cet horizon."})
@@ -1151,9 +1206,18 @@ async def api_simulate(request: Request):
         params = sim_engine.SimParams(**raw_params)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    if params.position_mode not in ("threshold", "proportional", "heuristic_leverage"):
+        raise HTTPException(status_code=400, detail=f"position_mode inconnu : {params.position_mode}")
+    if params.overlap_mode not in ("tranches", "renewed"):
+        raise HTTPException(status_code=400, detail=f"overlap_mode inconnu : {params.overlap_mode}")
+
+    # F06: one statistical segment per simulation, never pooled.
+    segment = body.get("segment") or None
+    if segment is not None and segment not in sim_engine.SEGMENTS:
+        raise HTTPException(status_code=400, detail=f"segment inconnu : {segment}")
 
     try:
-        result = sim_engine.simulate(trial_id, params)
+        result = sim_engine.simulate(trial_id, params, segment=segment)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except FileNotFoundError as exc:

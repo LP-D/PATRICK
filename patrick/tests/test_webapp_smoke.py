@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
 from patrick.config.schema import RunConfig
+from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -37,6 +38,7 @@ from patrick.webapp.app import app
 pytestmark = pytest.mark.slow
 
 TARGET_SYMBOL = "^VIX"
+PIT_META = {"pit_version": f"{PIT_VERSION}:publication_lag"}
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
@@ -62,7 +64,10 @@ def _isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
     monkeypatch.setenv("PATRICK_WORKER_IDLE_TIMEOUT", "8")
-    DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw())
+    # Saved with the point-in-time version `ingest()` expects (F01): an
+    # unversioned snapshot is treated as stale and the worker then fetched REAL
+    # data (local cache or network) -- the test silently stopped being offline.
+    DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw(), meta=PIT_META)
 
     real_spawn_worker = run_manager._spawn_worker
     real_popen = subprocess.Popen

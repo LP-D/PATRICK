@@ -34,7 +34,10 @@
     {% for r in g.rows %}
         {% if r.direction %}
             {% set dir_cell = status_badge(r.direction, 'ok' if r.direction == 'UP' else 'warning') %}
-            {% if r.dm_p_value is not none %}
+            {% if r.dm_p_value is not none and r.dm_sample == 'last_wf_fold' %}
+                {# F08 : p-value calculee sur le fold qui a servi a choisir le modele -- jamais "significative". #}
+                {% set sig_cell %}<span class="tip" tabindex="0" data-tip="Diebold-Mariano calculé sur le dernier fold walk-forward, qui fait partie du critère de sélection : p-value biaisée vers le significatif, exclue de la correction entre cibles. Relancer le run pour obtenir le test sur le holdout.">{{ status_badge('p=%.4f · fold de sélection' | format(r.dm_p_value), 'warning') }}</span>{% endset %}
+            {% elif r.dm_p_value is not none %}
                 {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < dm_significance_alpha else 'warning') %}
             {% else %}
                 {% set sig_cell = status_badge('en attente', 'neutral') %}
@@ -52,19 +55,33 @@
         {% else %}
             {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ')', 'ok' if r.live_hit_rate >= live_hit_rate_warning_threshold else 'warning') %}
         {% endif %}
+        {# Badge de derive : politique du 2026-09-26 (validation/drift_policy.py,
+           docs/ops/politique-derive.md). Reentrainer = derive de concept sur
+           appels live independants ; surveiller = >= 10 % des features du
+           modele avec PSI > 0,25 ; jamais de reentrainement sur la seule
+           derive des donnees. #}
+        {% set d = r.drift %}
+        {% if not d or d.action == 'unmeasured' and not d.concept_drift %}
+            {% set drift_cell = status_badge('non mesurée', 'disabled') %}
+        {% else %}
+            {% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
+            {% set drift_label = d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · périmée' if d.stale else '') %}
+            {% set drift_cell %}<span class="tip" tabindex="0" data-tip="{{ d.reason }}{% if d.psi is not none %} PSI max {{ '%.2f' | format(d.psi) }} ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}.{% endif %} Politique : réentraîner seulement sur baisse de réussite (Page-Hinkley, appels live indépendants) ; surveiller dès 10 % des features en dérive (PSI > 0,25).">{{ status_badge(drift_label, drift_state) }}</span>{% endset %}
+        {% endif %}
         {% set _ = rows.append([
             '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
             r.label,
-            (r.horizon ~ 'j'),
+            (r.horizon | hlabel),
             dir_cell,
             conf_label,
             sig_cell,
             hit_cell,
+            drift_cell,
             r.ts or '—',
         ]) %}
     {% endfor %}
     {% set n_pred = g.rows | selectattr('direction') | list | length %}
-    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dernier signal"], rows,
+    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dérive", "Dernier signal"], rows,
                   num_cols=[4],
                   footer=(g.rows | length) ~ " paire(s) · " ~ n_pred ~ " avec une prédiction disponible") }}
 </div>

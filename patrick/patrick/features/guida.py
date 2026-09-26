@@ -117,12 +117,14 @@ def rolling_ols_residual_std(y: pd.Series, x: pd.Series, window: int) -> pd.Seri
 # ---------------------------------------------------------------------------
 
 EURUSD_US_RATE_COLUMN = "US3M_Rate"  # FRED DTB3 (3-month T-bill), see config/defaults.py
+EURUSD_EUR_RATE_COLUMN = "EUR_DFR_Rate"  # FRED ECBDFR (ECB deposit facility rate), feature-only series
 
 CARRY_GUIDA_WINDOWS: tuple[int, ...] = (22, 66, 252)
 
 
 def eurusd_carry_features(raw: pd.DataFrame, us_rate_col: str = EURUSD_US_RATE_COLUMN,
-                           windows: list[int] = CARRY_GUIDA_WINDOWS) -> pd.DataFrame:
+                           windows: list[int] = CARRY_GUIDA_WINDOWS,
+                           eur_rate_col: str = EURUSD_EUR_RATE_COLUMN) -> pd.DataFrame:
     """ESTIMATED EUR/USD carry proxy -- documented gap from the true Guida
     definition: real FX carry is a rate DIFFERENTIAL (foreign rate minus
     domestic rate, or equivalently the forward-implied points). This
@@ -140,7 +142,16 @@ def eurusd_carry_features(raw: pd.DataFrame, us_rate_col: str = EURUSD_US_RATE_C
 
     Returns an EMPTY DataFrame if `us_rate_col` is absent from `raw` (hard
     data constraint: no fabricated column) -- e.g. a run whose
-    `universe.fred_series` doesn't include DTB3/US3M_Rate."""
+    `universe.fred_series` doesn't include DTB3/US3M_Rate.
+
+    Roadmap bloc 3: when `eur_rate_col` (FRED ECBDFR, now a feature-only
+    series of the default universe) is present, the real differential is
+    added -- `EURUSD_carry_diff_*` = EUR rate - USD rate (carry of a long-EUR
+    position), level and change. Still `_estimated`: the deposit facility
+    rate was the FLOOR of the ECB corridor, ~100 bp under euro money-market
+    rates before the 2008 full-allotment regime and converged to within
+    ~10 bp of them since 2015 -- the level is biased low before 2009; its
+    changes (policy moves) are the informative part."""
     if us_rate_col not in raw.columns:
         return pd.DataFrame(index=raw.index)
     us_rate = raw[us_rate_col]
@@ -148,6 +159,11 @@ def eurusd_carry_features(raw: pd.DataFrame, us_rate_col: str = EURUSD_US_RATE_C
     for w in windows:
         out[f"EURUSD_carry_us_rate_level_{w}d_estimated"] = us_rate.rolling(w).mean()
         out[f"EURUSD_carry_us_rate_chg_{w}d_estimated"] = us_rate.diff(w)
+    if eur_rate_col in raw.columns:
+        diff = raw[eur_rate_col] - us_rate
+        for w in windows:
+            out[f"EURUSD_carry_diff_level_{w}d_estimated"] = diff.rolling(w).mean()
+            out[f"EURUSD_carry_diff_chg_{w}d_estimated"] = diff.diff(w)
     return pd.DataFrame(out, index=raw.index)
 
 
@@ -210,7 +226,7 @@ def cross_sectional_momentum_features(
         return pd.DataFrame(index=raw.index)
     out = {}
     for w in windows:
-        rets = raw[cols].apply(lambda s: safe_pct_change(s, w))
+        rets = raw[cols].apply(lambda s, w=w: safe_pct_change(s, w))
         pct_rank = rets.rank(axis=1, pct=True)
         for c in cols:
             out[f"{c}_xsect_mom_{w}d_estimated"] = pct_rank[c]

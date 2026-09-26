@@ -108,7 +108,8 @@ def hrp_weights(cov: pd.DataFrame) -> pd.Series:
     return weights.reindex(symbols)
 
 
-def hrp_overview(as_of=None, lookback: int = 252, min_obs: int = 60, store=None) -> dict:
+def hrp_overview(as_of=None, lookback: int = 252, min_obs: int = 60, store=None,
+                 estimator: str = "ledoit_wolf") -> dict:
     """Poids HRP sur l'univers complet (`config.defaults.DEFAULT_UNIVERSE_
     YF_TICKERS`) a partir des prix DEJA en cache localement (`DataStore`) --
     lit uniquement ce qui existe, ne telecharge jamais depuis cette page en
@@ -116,7 +117,12 @@ def hrp_overview(as_of=None, lookback: int = 252, min_obs: int = 60, store=None)
     exposer avec un avertissement plutot que bloquer). Les symboles absents
     du cache ou avec trop peu d'historique sont listes dans `"skipped"`,
     jamais silencieusement ignores -- consomme par `/portfolio`
-    (`webapp/app.py::portfolio_page`)."""
+    (`webapp/app.py::portfolio_page`).
+
+    `estimator` (roadmap bloc 4) : Ledoit-Wolf par defaut -- ~40 actifs sur
+    252 rendements (T/N ~ 6), la covariance empirique y est bruitee et HRP
+    en tire directement ses variances inverses et ses distances de
+    correlation. `covariance`/`shrinkage` sont renvoyes pour affichage."""
     from patrick.config import defaults as D
     from patrick.data.sources.yfinance_source import clean_symbol
     from patrick.data.store import DataStore
@@ -154,10 +160,12 @@ def hrp_overview(as_of=None, lookback: int = 252, min_obs: int = 60, store=None)
 
     from patrick.tracking.covariance import point_in_time_covariance
     try:
-        cov = point_in_time_covariance(usable, as_of=as_of_ts, lookback=lookback, min_obs=min_obs)
+        cov = point_in_time_covariance(usable, as_of=as_of_ts, lookback=lookback, min_obs=min_obs,
+                                       estimator=estimator)
     except ValueError:
         return {"weights": pd.Series(dtype=float), "skipped": sorted(set(skipped) | set(usable)),
                 "as_of": as_of_ts, "n_assets": 0}
 
     weights = hrp_weights(cov).sort_values(ascending=False)
-    return {"weights": weights, "skipped": sorted(set(skipped)), "as_of": as_of_ts, "n_assets": len(weights)}
+    return {"weights": weights, "skipped": sorted(set(skipped)), "as_of": as_of_ts, "n_assets": len(weights),
+            "covariance": estimator, "shrinkage": cov.attrs.get("shrinkage"), "n_obs": cov.attrs.get("n_obs")}

@@ -42,6 +42,14 @@ class UniverseConfig(BaseModel):
     # specific to each fold cut. Documented, not resolved here (out of scope
     # for C7: measure the impact of existing fixes, not build a finer new one).
     vintage_realtime_date: str | None = None
+    # F01 -- how FRED observations are placed in time (`data/ingest.py`):
+    # "publication_lag" (default) re-indexes every observation on its
+    # estimated release date (`data/publication_lag.py`); "alfred" uses the
+    # ALFRED first releases indexed on their true publication date (needs
+    # FRED_API_KEY, falls back to "publication_lag" with a warning);
+    # "reference_date" is the pre-F01, LEAKY behavior, kept only so that
+    # `patrick audit degradation` can measure what F01 changes.
+    fred_point_in_time: Literal["publication_lag", "alfred", "reference_date"] = "publication_lag"
 
 
 class DataQualityConfig(BaseModel):
@@ -210,6 +218,10 @@ class SamplingConfig(BaseModel):
 class ModelsConfig(BaseModel):
     algos: list[str] = Field(default_factory=lambda: list(D.DEFAULT_ML_ALGOS))
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
+    # Roadmap bloc 3: isotonic (non-parametric, needs more rows) or sigmoid
+    # (Platt, 2 parameters per class, stabler on the ~7% of a fold's train
+    # it is fitted on). Only used when `calibration` is True.
+    calibration_method: Literal["isotonic", "sigmoid"] = "isotonic"
     stacking: bool = D.DEFAULT_STACKING_ENABLED
 
 
@@ -274,7 +286,7 @@ class RunConfig(BaseModel):
         return data
 
     @classmethod
-    def from_yaml(cls, path: str) -> "RunConfig":
+    def from_yaml(cls, path: str) -> RunConfig:
         import yaml
 
         with open(path) as f:

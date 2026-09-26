@@ -35,6 +35,11 @@
         return (v > 0 ? "+" : "") + fmtNum(v, digits);
     }
 
+    // Design system v3: redraw every panel with the new palette on theme change.
+    window.addEventListener("patrick:themechange", function () {
+        document.querySelectorAll(".asset-chart").forEach(function (c) { if (c._closes) drawChart(c, c._closes); });
+    });
+
     function drawChart(canvas, closes) {
         if (!canvas) return;
         var ctx = canvas.getContext("2d");
@@ -153,6 +158,7 @@
             renderMetricsGrid(data);
 
         var canvas = body.querySelector(".asset-chart");
+        if (canvas) canvas._closes = data.closes;
         drawChart(canvas, data.closes);
         if (canvas && data.closes && data.closes.length) {
             var closes = data.closes;

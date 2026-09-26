@@ -59,6 +59,32 @@ def _download_via_api(series_id: str, start: str, api_key: str,
     return s
 
 
+def download_first_release(series_id: str, start: str, api_key: str) -> pd.Series:
+    """F01 -- ALFRED "initial release only" (`output_type=4`): each
+    observation's FIRST published value, indexed on its `realtime_start`
+    (the day it was published) rather than on its reference date. Exactly
+    point-in-time: no publication look-ahead, no revision look-ahead. API
+    path only (a key is required)."""
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "observation_start": start,
+        "realtime_start": "1776-07-04",
+        "realtime_end": "9999-12-31",
+        "output_type": 4,
+    }
+    resp = requests.get(FRED_API_URL, params=params, timeout=60)
+    resp.raise_for_status()
+    rows = [(o["realtime_start"], float(o["value"])) for o in resp.json()["observations"]
+            if o.get("value") not in (".", None, "")]
+    if not rows:
+        return pd.Series(dtype="float64", name=series_id)
+    s = pd.Series({pd.Timestamp(d): v for d, v in rows}, dtype="float64", name=series_id)
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s
+
+
 def download_series(name: str, series_id: str, start: str,
                      realtime_date: str | None = None) -> pd.Series | None:
     """`realtime_date` (YYYY-MM-DD): fetches the ALFRED vintage known as of
@@ -71,21 +97,44 @@ def download_series(name: str, series_id: str, start: str,
             else web.DataReader(series_id, "fred", start).squeeze()
         s.name = name
         return s
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
         print(f"  [WARN] FRED {series_id}: {str(e)[:100]}")
         return None
 
 
 def download_fred_universe(series_map: dict[str, str], start: str,
-                            realtime_date: str | None = None, issues: list | None = None) -> pd.DataFrame:
+                            realtime_date: str | None = None, issues: list | None = None,
+                            first_release: bool = False) -> pd.DataFrame:
     """series_map: {column_name: FRED_identifier}. `realtime_date`: see
     `download_series` — propagated to every series in the universe.
 
     `issues` (Phase 6.5, P6.5): if provided, every series with no data
-    (fetch failure or discontinued series) adds a `QualityIssue` to it."""
+    (fetch failure or discontinued series) adds a `QualityIssue` to it.
+
+    `first_release` (F01): ALFRED first releases indexed on their
+    publication date (`download_first_release`) -- requires FRED_API_KEY;
+    the caller checks `frame.attrs["point_in_time"]` to know whether the
+    frame is already point-in-time or still on reference dates."""
     from patrick.data.quality import check_fred_missing
 
     api_key = os.environ.get(FRED_API_KEY_ENV)
+    if first_release and api_key:
+        cols = []
+        for name, sid in series_map.items():
+            try:
+                s = download_first_release(sid, start, api_key).rename(name)
+            except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
+                print(f"  [WARN] ALFRED {sid}: {str(e)[:100]}")
+                s = None
+            if s is not None and not s.empty:
+                cols.append(s)
+            elif issues is not None:
+                issue = check_fred_missing(name, s)
+                if issue is not None:
+                    issues.append(issue)
+        frame = pd.concat(cols, axis=1) if cols else pd.DataFrame()
+        frame.attrs["point_in_time"] = True
+        return frame
     if not api_key:
         print("  [WARN] FRED_API_KEY not set: falling back to the public CSV scrape, which "
               "can only return the version REVISED TODAY of each series (no point-in-time "
@@ -96,7 +145,10 @@ def download_fred_universe(series_map: dict[str, str], start: str,
     cols = []
     for name, sid in series_map.items():
         s = download_series(name, sid, start, realtime_date=realtime_date)
-        if s is not None:
+        # An EMPTY series is missing too: a discontinued series (DTB1 ended
+        # 2001, OILPRICE 2013) returns nothing after its end date and used to
+        # become an all-NaN column that crashed the Kalman feature.
+        if s is not None and not s.dropna().empty:
             cols.append(s)
         elif issues is not None:
             issue = check_fred_missing(name, s)

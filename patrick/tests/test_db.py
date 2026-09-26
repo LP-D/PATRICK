@@ -275,7 +275,7 @@ def test_migrate_concurrent_calls_on_fresh_db_do_not_raise(tmp_path):
             barrier.wait()
             conn = db.connect(path)
             conn.close()
-        except BaseException as exc:  # noqa: BLE001 -- reported from the main thread, not raised here
+        except BaseException as exc:  # noqa: BLE001 -- thread boundary: every error is re-raised by the test
             errors.append(exc)
 
     threads = [threading.Thread(target=worker) for _ in range(n_threads)]
@@ -303,7 +303,7 @@ def test_migrate_repair_is_a_noop_when_dm_result_already_has_kind_column(tmp_pat
     conn = db.connect(path)
     db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
     db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfg1", "sha", 42)
-    db.save_dm_result(conn, "run1", {"baseline": "BASELINE_majority", "dm_stat": 1.2, "p_value": 0.05})
+    db.save_dm_result(conn, "run1", {"baseline": "BASELINE_majority", "dm_stat": 1.2, "p_value": 0.05}, sample="holdout")
     conn.close()
 
     conn = db.connect(path)  # reconnect/remigrate -- must not raise, must not touch dm_result
@@ -468,3 +468,18 @@ def test_record_phase_timing_cascades_on_run_delete(tmp_path):
 
     assert conn.execute("SELECT count(*) FROM run_phase_timing").fetchone()[0] == 0
     conn.close()
+
+
+def test_add_column_migration_is_skipped_when_the_column_exists(tmp_path):
+    """A migration re-run on a partially migrated base (schema_version row
+    lost) must not fail on `ALTER TABLE ... ADD COLUMN` -- same contract as
+    the CREATE TABLE/INDEX skip. Found with migration 0022 (dm_result.sample)."""
+    path = str(tmp_path / "p.db")
+    conn = db.connect(path)
+    with conn:
+        conn.execute("DELETE FROM schema_version WHERE version >= 22")
+    conn.close()
+    conn = db.connect(path)
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(dm_result)")]
+    assert cols.count("sample") == 1 and cols.count("n_obs") == 1
+    assert 22 in {r[0] for r in conn.execute("SELECT version FROM schema_version")}

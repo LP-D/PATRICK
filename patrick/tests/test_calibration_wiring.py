@@ -23,14 +23,14 @@ def _make_data(n=400, seed=0):
 
 def test_sampler_none_skips_resampling():
     X_tr, y_tr, X_te, y_te = _make_data()
-    met, y_pred, confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "none", "RandomForest", seed=42)
+    met, y_pred, _confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "none", "RandomForest", seed=42)
     assert len(y_pred) == len(y_te)
     assert "F1_dir" in met
 
 
 def test_calibration_produces_valid_predictions():
     X_tr, y_tr, X_te, y_te = _make_data(n=600)
-    met, y_pred, confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "none", "RandomForest",
+    _met, y_pred, confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "none", "RandomForest",
                                          seed=42, calibration=True)
     assert len(y_pred) == len(y_te)
     assert set(np.unique(y_pred)).issubset({0, 1, 2, 3})
@@ -43,7 +43,7 @@ def test_calibration_with_smote_also_works():
     SMOTE + calibration doit fonctionner tout comme class_weight seul +
     calibration."""
     X_tr, y_tr, X_te, y_te = _make_data(n=600)
-    met, y_pred, confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "SMOTE", "RandomForest",
+    _met, y_pred, _confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "SMOTE", "RandomForest",
                                          seed=42, calibration=True)
     assert len(y_pred) == len(y_te)
 
@@ -52,5 +52,5 @@ def test_calibration_disabled_by_default_unchanged_behavior():
     """`calibration=False` (défaut) doit produire exactement le même chemin
     de code qu'avant ce branchement -- argmax direct, pas de seuil recherché."""
     X_tr, y_tr, X_te, y_te = _make_data()
-    met, y_pred, confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "SMOTE", "RandomForest", seed=42)
+    _met, y_pred, _confidence = _fit_eval(X_tr, y_tr, X_te, y_te, "SMOTE", "RandomForest", seed=42)
     assert len(y_pred) == len(y_te)

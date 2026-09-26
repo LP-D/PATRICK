@@ -99,7 +99,7 @@
 
 {# feature/ticker-stats-panel (`/commodities`, `/macro`) -- one card per
    asset, rendered as a SKELETON only (three `.skeleton-line` bars, the
-   loading-state utility already defined in patrick-v2.css but unused until
+   loading-state utility defined in patrick.css, unused until
    now). `static/asset_stats.js` finds this container by `data-symbol`,
    fetches `/api/asset-stats/{symbol}` and replaces `.asset-panel-body`'s
    content with the real chart + stats table, or the empty state if the

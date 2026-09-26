@@ -1,0 +1,261 @@
+{
+ "exported": {
+  "h3": {
+   "features": [
+    "IDX_GOLD_kalman_filtered",
+    "SPX_LIKE_semivar_20d",
+    "NFCI_skew_20d",
+    "SPX_LIKE_ret_20d",
+    "SPX_LIKE_vol_20d",
+    "SPX_LIKE_kalman_filtered"
+   ],
+   "proba": [
+    [
+     0.5364272127,
+     0.206568841,
+     0.0501678825,
+     0.2068360638
+    ],
+    [
+     0.0394745286,
+     0.2935108769,
+     0.4996831714,
+     0.1673314232
+    ],
+    [
+     0.0234746832,
+     0.0334009985,
+     0.2449273925,
+     0.6981969257
+    ],
+    [
+     0.0130913974,
+     0.3200757288,
+     0.2752025569,
+     0.3916303169
+    ],
+    [
+     0.3551958794,
+     0.470334979,
+     0.0998589455,
+     0.0746101961
+    ],
+    [
+     0.0139507235,
+     0.6479515117,
+     0.0629628812,
+     0.2751348836
+    ],
+    [
+     0.1713281004,
+     0.1929690081,
+     0.0450149898,
+     0.5906879016
+    ],
+    [
+     0.2546988452,
+     0.5592400112,
+     0.1607259574,
+     0.0253351863
+    ],
+    [
+     0.1115709415,
+     0.3798083655,
+     0.4938786156,
+     0.0147420774
+    ],
+    [
+     0.007252518,
+     0.0367065665,
+     0.1288495787,
+     0.8271913368
+    ],
+    [
+     0.05360176,
+     0.0086894384,
+     0.8335179394,
+     0.1041908622
+    ],
+    [
+     0.3778067847,
+     0.4180155092,
+     0.1977026158,
+     0.0064750902
+    ]
+   ]
+  },
+  "h5": {
+   "features": [
+    "IDX_GOLD_kalman_filtered",
+    "SPX_LIKE_vol_20d",
+    "IDX_GOLD_vol_20d",
+    "IDX_GOLD_rsi_14d"
+   ],
+   "proba": [
+    [
+     0.6250044632,
+     0.3153157167,
+     0.020889985,
+     0.038789835
+    ],
+    [
+     0.0175172158,
+     0.196440547,
+     0.6764923159,
+     0.1095499214
+    ],
+    [
+     0.2543009396,
+     0.1538174088,
+     0.3291279191,
+     0.2627537325
+    ],
+    [
+     0.5357211488,
+     0.370128241,
+     0.0632032805,
+     0.0309473298
+    ],
+    [
+     0.3107583845,
+     0.3315838293,
+     0.1978891632,
+     0.159768623
+    ],
+    [
+     0.0493674629,
+     0.4243025492,
+     0.3141330627,
+     0.2121969251
+    ],
+    [
+     0.0081160596,
+     0.8119896231,
+     0.1047347577,
+     0.0751595596
+    ],
+    [
+     0.004938412,
+     0.2475168571,
+     0.0561012386,
+     0.6914434923
+    ],
+    [
+     0.0091596554,
+     0.2651114653,
+     0.6147888948,
+     0.1109399845
+    ],
+    [
+     0.0291964705,
+     0.3833874172,
+     0.1239077848,
+     0.4635083276
+    ],
+    [
+     0.1676777859,
+     0.1740413426,
+     0.4248127356,
+     0.2334681359
+    ],
+    [
+     0.0050118348,
+     0.6857659361,
+     0.2852105718,
+     0.0240116573
+    ]
+   ]
+  }
+ },
+ "leaderboard": "dd5894a85120335256ba181215a1f7d89bebf2642a30a2a0706b9db9396b09f9",
+ "result": {
+  "best_before_tuning": {
+   "F1_dir": 0.5250666667,
+   "N": 4,
+   "algo": "LightGBM",
+   "horizon": 5,
+   "n_folds": 3,
+   "regime": "GLOBAL",
+   "sampler": "none"
+  },
+  "cumulative_trials": 11,
+  "diebold_mariano": {
+   "asset_class": "other",
+   "class_specific": {
+    "baseline": "BASELINE_persistence",
+    "correction": "HLN",
+    "dm_stat": 0.3385,
+    "mean_loss_diff": 0.020492,
+    "n_obs": 244,
+    "p_value": 0.7353,
+    "variance_kernel": "rectangular"
+   },
+   "common": {
+    "baseline": "BASELINE_persistence",
+    "correction": "HLN",
+    "dm_stat": 0.3385,
+    "mean_loss_diff": 0.020492,
+    "n_obs": 244,
+    "p_value": 0.7353,
+    "variance_kernel": "rectangular"
+   },
+   "sample": "holdout"
+  },
+  "final_best": {
+   "F1_dir": 0.5250666667,
+   "N": 4,
+   "algo": "LightGBM",
+   "horizon": 5,
+   "n_folds": 3,
+   "regime": "GLOBAL",
+   "sampler": "none"
+  },
+  "holdout": {
+   "AUC_ovr_4cls": 0.5475,
+   "Acc_dir": 0.5533,
+   "BalAcc_4cls": 0.3057,
+   "Brier_up": 0.3676304177,
+   "ECE_up": 0.335551697,
+   "F1_4cls": 0.2743,
+   "F1_DOWN_FORT": 0.5545,
+   "F1_UP_FORT": 0.4,
+   "F1_dir": 0.5506,
+   "MCC_4cls": 0.0652
+  },
+  "holdout_diagnostic": {
+   "n_trials": 8,
+   "p_value": 0.5701563208,
+   "rho": -0.2380952381
+  },
+  "pbo": {
+   "mean_logit": 0.7175,
+   "n_blocks": 2,
+   "n_combinations": 2,
+   "n_trials": 9,
+   "pbo": 0.5,
+   "reliability": {
+    "bootstrap_std": null,
+    "ci_high": null,
+    "ci_low": null,
+    "message": "PBO non calcul\u00e9 (2 blocs disponibles). PBO n\u00e9cessite au moins 6 blocs temporels (n_wf_folds, apr\u00e8s retrait \u00e9ventuel du bloc le plus ancien pour parit\u00e9) : C(6, 3) = 20 combinaisons IS/OOS, au-dessus du plancher de 10 (r\u00e8gle n*p>=5 et n*(1-p)>=5 pour une proportion, pire cas p=0.5) -- un plancher N\u00c9CESSAIRE mais pas suffisant : les combinaisons CSCV ne sont pas ind\u00e9pendantes (elles partagent des blocs), le vrai besoin est plus \u00e9lev\u00e9.",
+    "n_blocks": 2,
+    "n_combinations": 0,
+    "ok": false,
+    "pbo": null
+   }
+  }
+ },
+ "tables": {
+  "baseline_metric": "6544adf3cf20a0a4657ecb179371a3dc28b3b11cd8753137fc81a57c9e56c95b",
+  "dm_result": "54b9bb578da9233fc88907ca2bc1c29f148f3977da642aed6629b375e19e935f",
+  "feature_stability": "f77ddf2b8c1f5983c2f8d03497f40ad85583c6c85be070a184dbdd9c54b1fc13",
+  "fold_metric": "a7ea1a6fa4a8ca28fb336b5f4cb0d4ad7ba6e4bfa632f6559b92ffbdbcae18f2",
+  "holdout_diagnostic": "ad0be6dd5859e0a4a0b65000f86148df370e48127d815e92e746af5a3a08e589",
+  "phases": "426e4cda8fe3aa515b3e5c178617911c44433a74e52b3b133a6131060b485728",
+  "prediction": "ba512ddf7411720bddf1f33ecc56df5746faf5eed33ac99101bd74c776505885",
+  "registry": "b360feae1baab4781ce2d4bc7a2389315143bf5e9708dec8bcd5591ba1890c66",
+  "run_status": "aa5ae6a7944229c7c05c8a6a68713993e64b15e145d7aceb0e7e9a26a8fb4b8b",
+  "trial": "87685a13e5dbb2251f2e78e362bc827cfc40a11e68079031d38c7b1e57c18392"
+ },
+ "tuned": "858a503cbb4d4d5a4ffea543a46ad24340f8b80070c267e987eab4302a389e37"
+}

@@ -25,7 +25,7 @@ existant, deja teste par ailleurs).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
@@ -37,6 +37,9 @@ from patrick.validation.feasibility import (
     is_feasible,
     min_obs_required,
 )
+
+if TYPE_CHECKING:
+    from hmmlearn.hmm import GaussianHMM
 
 ThresholdMode = Literal["quantile", "fixed"]
 REGIME_LABELS = ("calme", "normal", "stress")
@@ -55,7 +58,7 @@ def _fit_cutoff_index(n: int, fit_end_idx: int | None) -> int:
 
 
 def _causal_forward_filtered_probs(x: np.ndarray, n_states: int, seed: int,
-                                    fit_end_idx: int | None) -> tuple[np.ndarray, "GaussianHMM"]:
+                                    fit_end_idx: int | None) -> tuple[np.ndarray, GaussianHMM]:
     """Probabilites filtrees (causales) de chaque etat, par l'algorithme
     forward en log-space calcule a la main -- PAS `model.predict_proba`/
     `.decode`, qui lissent avec le futur (forward-backward/Viterbi). Meme
@@ -90,6 +93,13 @@ def _causal_forward_filtered_probs(x: np.ndarray, n_states: int, seed: int,
     log_norm = logsumexp(log_alpha, axis=1, keepdims=True)
     filtered = np.exp(log_alpha - log_norm)
     return filtered, model
+
+
+def filtered_state_probs(x: np.ndarray, n_states: int, seed: int = 42) -> tuple[np.ndarray, GaussianHMM]:
+    """Public entry to the causal forward filter above, fitted on the whole
+    of `x` -- for descriptive market-state reading (`tracking/market_state.py`),
+    not for walk-forward training (use `detect_regime(fit_end_idx=...)`)."""
+    return _causal_forward_filtered_probs(x, n_states, seed, None)
 
 
 def _hmm_free_params(n_states: int, n_features: int = 1) -> int:
@@ -131,8 +141,7 @@ def select_n_states_bic(x: np.ndarray, candidates: tuple[int, ...] = (2, 3, 4),
                                  random_state=seed + init, n_iter=200)
             model.fit(x)
             ll = float(model.score(x))
-            if ll > best_ll:
-                best_ll = ll
+            best_ll = max(best_ll, ll)
         n_params = _hmm_free_params(k, n_features)
         bic = -2 * best_ll + n_params * np.log(n)
         aic = -2 * best_ll + 2 * n_params

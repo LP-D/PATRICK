@@ -5,6 +5,7 @@ test, le purge est appliqué aux deux frontières de chaque groupe de test
 intérieur, le nombre de chemins correspond à la formule."""
 from __future__ import annotations
 
+import itertools
 from math import comb
 
 import pytest
@@ -44,7 +45,7 @@ def test_build_groups_covers_all_bars_contiguously_no_gap_no_overlap():
         assert len(groups) == n_groups
         assert groups[0][0] == 0
         assert groups[-1][1] == n_bars - 1
-        for (s1, e1), (s2, e2) in zip(groups, groups[1:]):
+        for (s1, e1), (s2, e2) in itertools.pairwise(groups):
             assert e1 + 1 == s2, "groupes doivent être contigus, sans trou ni chevauchement"
         assert sum(e - s + 1 for s, e in groups) == n_bars
 

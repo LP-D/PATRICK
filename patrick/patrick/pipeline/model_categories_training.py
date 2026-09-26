@@ -59,8 +59,9 @@ from patrick.features.regime_detection import (
 )
 from patrick.pipeline.engine import _config_hash, _fit_eval, _FoldContext, _select
 from patrick.pipeline.leaderboard import Leaderboard
+from patrick.tracking import db as trackdb
 from patrick.tracking.model_categories import CategoryResult
-from patrick.tuning.optuna_runner import tune_config
+from patrick.tuning.optuna_runner import INNER_CV_VERSION, tune_config
 from patrick.validation.metrics import metrics
 
 
@@ -99,6 +100,20 @@ def extract_global_category_result(ctx: _FoldContext, board: Leaderboard, horizo
 
     return CategoryResult(category="global", label=f"{best_cfg['algo']}_global",
                            fold_metric=fold_metric, fold_loss=fold_loss)
+
+
+def _inner_cv_kwargs(config, horizon: int, conn, study_name: str) -> dict:
+    """F02/F03 for the category tunings: same purged inner CV as the main
+    Optuna loop (`tuning/optuna_runner.py::inner_cv_gap`), every Optuna
+    trial registered in `trial_registry` (source 'optuna')."""
+    return {
+        "horizon": horizon,
+        "embargo_bars": config.validation.embargo_bars,
+        "purge": config.validation.purge,
+        "embargo_enabled": config.validation.embargo_enabled,
+        "registry": trackdb.TrialRecorder(conn, config.objective.target_symbol, horizon,
+                                          detail=study_name) if conn is not None else None,
+    }
 
 
 def _grid_scan_best_config(fold_data: list, config, n_feat_grid: list[int], samplers: list[str],
@@ -173,15 +188,17 @@ def train_per_regime_category(ctx: _FoldContext, raw_price_series: pd.Series, ho
                                          config.sampler.candidates, config.models.algos, seed,
                                          conn, target_col, horizon, snapshot_id)
 
-        last_k, last_fd = fold_data[-1]
+        _last_k, last_fd = fold_data[-1]
         cols = _select(conn, target_col, horizon, snapshot_id, config, last_fd.X_tr, last_fd.y_tr,
                         winner["n_feat"], seed)
         X_tr_n = last_fd.X_tr[:, cols]
-        study_name = f"{config.name}_{config_hash}_catB_per_regime_{regime_label}_h{horizon}_N{winner['n_feat']}_{winner['sampler']}_{winner['algo']}"
+        study_name = (f"{config.name}_{config_hash}_catB_per_regime_{regime_label}_h{horizon}"
+                      f"_N{winner['n_feat']}_{winner['sampler']}_{winner['algo']}_{INNER_CV_VERSION}")
         best_params, _ = tune_config(X_tr_n, last_fd.y_tr, winner["algo"], winner["sampler"],
                                       n_trials=config.tuning.n_trials, cv_splits=config.tuning.cv_splits,
                                       seed=seed, storage_path=optuna_storage_path, study_name=study_name,
-                                      bounds=config.tuning.optuna_bounds)
+                                      bounds=config.tuning.optuna_bounds,
+                                      **_inner_cv_kwargs(config, horizon, conn, study_name))
 
         y_te_parts, y_pred_parts = [], []
         for k, fd in fold_data:
@@ -204,16 +221,25 @@ def train_per_regime_category(ctx: _FoldContext, raw_price_series: pd.Series, ho
     return result, sub_models
 
 
-def _oof_split(n_train: int, oof_frac: float = 0.2, min_oof: int = 20) -> int | None:
+def _oof_split(n_train: int, oof_frac: float = 0.2, min_oof: int = 20, gap: int = 0) -> int | None:
     """Position splitting a fold's train rows (already chronological) into
     base-train (earlier) / out-of-fold (later) -- a TEMPORAL split, never a
     random K-fold (which would let a base model's own out-of-order
     "future" leak into meta-training). Returns None when the fold's train
-    is too small for a meaningful internal split."""
+    is too small for a meaningful internal split once `gap` rows are left
+    out before the OOF block (see `_purged_base_end`)."""
     n_oof = max(int(n_train * oof_frac), min_oof)
-    if n_oof >= n_train - min_oof:
+    if n_oof >= n_train - min_oof - gap:
         return None
     return n_train - n_oof
+
+
+def _purged_base_end(split: int, horizon: int) -> int:
+    """F02 applied to the stacking base/OOF split: base rows stop `horizon`
+    rows before the OOF block, so no base-training label window overlaps
+    an OOF label window (the meta-model would otherwise learn from
+    optimistic base predictions)."""
+    return max(split - max(int(horizon), 1), 0)
 
 
 def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, config,
@@ -239,7 +265,7 @@ def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, co
         fd = ctx.prepare(horizon, k, "GLOBAL")
         if fd is None:
             continue
-        split = _oof_split(len(fd.y_tr), oof_frac)
+        split = _oof_split(len(fd.y_tr), oof_frac, gap=horizon)
         if split is None:
             continue
         fold_prep.append((k, fd, split))
@@ -257,7 +283,8 @@ def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, co
             for k, fd, split in fold_prep:
                 cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, seed)
                 X_tr_n = fd.X_tr[:, cols]
-                X_base, y_base = X_tr_n[:split], fd.y_tr[:split]
+                base_end = _purged_base_end(split, horizon)
+                X_base, y_base = X_tr_n[:base_end], fd.y_tr[:base_end]
                 X_oof, y_oof = X_tr_n[split:], fd.y_tr[split:]
                 oof_preds = [_fit_eval(X_base, y_base, X_oof, y_oof, sampler_name, algo, seed)[1]
                              for algo in base_algos]
@@ -271,18 +298,21 @@ def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, co
     # Optuna-tune EACH base algo at full budget, on the LAST fold's
     # OOF-training portion (X_base/y_base) -- mirrors global's "tune on the
     # last fold's train" convention.
-    last_k, last_fd, last_split = fold_prep[-1]
+    _last_k, last_fd, last_split = fold_prep[-1]
     cols = _select(conn, target_col, horizon, snapshot_id, config, last_fd.X_tr, last_fd.y_tr,
                     best["n_feat"], seed)
-    X_base_last = last_fd.X_tr[:, cols][:last_split]
-    y_base_last = last_fd.y_tr[:last_split]
+    last_base_end = _purged_base_end(last_split, horizon)
+    X_base_last = last_fd.X_tr[:, cols][:last_base_end]
+    y_base_last = last_fd.y_tr[:last_base_end]
     tuned_params: dict[str, dict] = {}
     for algo in base_algos:
-        study_name = f"{config.name}_{config_hash}_catB_stacking_h{horizon}_N{best['n_feat']}_{best['sampler']}_{algo}"
+        study_name = (f"{config.name}_{config_hash}_catB_stacking_h{horizon}_N{best['n_feat']}"
+                      f"_{best['sampler']}_{algo}_{INNER_CV_VERSION}")
         best_params, _ = tune_config(X_base_last, y_base_last, algo, best["sampler"],
                                       n_trials=config.tuning.n_trials, cv_splits=config.tuning.cv_splits,
                                       seed=seed, storage_path=optuna_storage_path, study_name=study_name,
-                                      bounds=config.tuning.optuna_bounds)
+                                      bounds=config.tuning.optuna_bounds,
+                                      **_inner_cv_kwargs(config, horizon, conn, study_name))
         tuned_params[algo] = best_params
 
     fold_metrics: list[float] = []
@@ -290,7 +320,8 @@ def train_stacking_category(ctx: _FoldContext, horizon: int, n_wf_folds: int, co
     for k, fd, split in fold_prep:
         cols = _select(conn, target_col, horizon, snapshot_id, config, fd.X_tr, fd.y_tr, best["n_feat"], seed)
         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-        X_base, y_base = X_tr_n[:split], fd.y_tr[:split]
+        base_end = _purged_base_end(split, horizon)
+        X_base, y_base = X_tr_n[:base_end], fd.y_tr[:base_end]
         X_oof, y_oof = X_tr_n[split:], fd.y_tr[split:]
 
         oof_preds = [_fit_eval(X_base, y_base, X_oof, y_oof, best["sampler"], algo, seed,

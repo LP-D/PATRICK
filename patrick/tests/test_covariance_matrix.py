@@ -132,3 +132,63 @@ def test_covariance_matrix_is_symmetric_and_positive_semidefinite():
     assert np.allclose(cov.values, cov.values.T)
     eigenvalues = np.linalg.eigvalsh(cov.values)
     assert (eigenvalues >= -1e-10).all()  # tolerance numerique
+
+
+def test_ledoit_wolf_estimator_matches_sklearn_on_the_same_returns():
+    """Roadmap bloc 4 : HRP estime ~40x40 covariances sur 252 rendements --
+    la covariance empirique y est bruitee (T/N ~ 6). Ledoit-Wolf retrecit
+    vers une cible structuree avec une intensite estimee."""
+    from sklearn.covariance import LedoitWolf
+
+    prices = {f"S{i}": _price_series(i, 300) for i in range(5)}
+    idx = prices["S0"].index
+    cov = point_in_time_covariance(prices, as_of=idx[-1], lookback=250, estimator="ledoit_wolf")
+    rets = pd.DataFrame({k: v.pct_change() for k, v in prices.items()}).dropna().iloc[-250:]
+    expected = LedoitWolf().fit(rets.values).covariance_
+    np.testing.assert_allclose(cov.values, expected, rtol=1e-10)
+    assert 0.0 < cov.attrs["shrinkage"] < 1.0
+
+
+def test_ledoit_wolf_stays_invertible_when_assets_outnumber_observations():
+    prices = {f"S{i}": _price_series(100 + i, 40) for i in range(60)}
+    as_of = prices["S0"].index[-1]
+    sample = point_in_time_covariance(prices, as_of=as_of, lookback=0, min_obs=30)
+    shrunk = point_in_time_covariance(prices, as_of=as_of, lookback=0, min_obs=30, estimator="ledoit_wolf")
+    assert np.linalg.matrix_rank(sample.values) < 60
+    assert np.linalg.eigvalsh(shrunk.values).min() > 0
+
+
+def test_unknown_estimator_is_rejected():
+    prices = {"A": _price_series(1, 100), "B": _price_series(2, 100)}
+    with pytest.raises(ValueError):
+        point_in_time_covariance(prices, as_of=prices["A"].index[-1], estimator="oas")
+
+
+# --- roadmap bloc 4 : actif sans historique (D.A.T.E, introduit le 2026-09-25)
+
+def test_an_asset_without_history_is_backfilled_from_its_proxy_at_the_prior_scale():
+    from patrick.tracking.covariance import backfill_with_proxy
+
+    proxy = _price_series(11, 300)
+    empty = pd.Series(dtype=float)
+    synthetic, info = backfill_with_proxy(empty, proxy, prior_multiplier=2.0)
+    r_syn = synthetic.pct_change().dropna()
+    r_px = proxy.pct_change().dropna()
+    np.testing.assert_allclose(r_syn.to_numpy(), 2.0 * r_px.to_numpy(), rtol=1e-10)
+    assert info == {"own_obs": 0, "scale": 2.0, "scale_source": "prior"}
+
+
+def test_with_enough_own_history_the_scale_is_estimated_on_the_overlap():
+    from patrick.tracking.covariance import backfill_with_proxy
+
+    proxy = _price_series(12, 300, vol=0.01)
+    rng = np.random.default_rng(13)
+    idx = proxy.index[-60:]
+    own_ret = 3.0 * proxy.pct_change().loc[idx].fillna(0).to_numpy() + rng.normal(0, 1e-6, 60)
+    own = pd.Series(50 * np.cumprod(1 + own_ret), index=idx)
+    synthetic, info = backfill_with_proxy(own, proxy, prior_multiplier=2.0, min_overlap=20)
+    assert info["scale_source"] == "estimated" and info["scale"] == pytest.approx(3.0, rel=0.02)
+    # the asset's own returns are kept as observed where they exist
+    np.testing.assert_allclose(synthetic.pct_change().loc[idx[1:]].to_numpy(), own.pct_change().loc[idx[1:]].to_numpy(),
+                               rtol=1e-9)
+    assert synthetic.index.min() == proxy.index.min()

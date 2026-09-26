@@ -19,10 +19,12 @@ import sqlite3
 import numpy as np
 from scipy import stats
 
+from patrick.numeric import is_nan
+
 
 def write_holdout_diagnostic(conn: sqlite3.Connection, trial_id: int, metrics: dict) -> None:
     rows = [(trial_id, name, float(value))
-            for name, value in metrics.items() if value is not None and value == value]  # excludes NaN
+            for name, value in metrics.items() if value is not None and not is_nan(value)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO holdout_diagnostic (trial_id, metric, value) VALUES (?, ?, ?)",

@@ -65,6 +65,15 @@ EQUITY_UNIVERSE: dict[str, dict] = {
         "currency": "EUR",
         "exchange": "Euronext Growth Paris",
         "first_listed": "2026-09-25",
+        # Roadmap bloc 4 -- pas d'historique : risque estime via un proxy
+        # (tracking/covariance.py::backfill_with_proxy). Verifie le
+        # 2026-09-25 : ALDAT.PA ne renvoie encore aucune cotation ; aucun
+        # indice petites valeurs sur Yahoo (^CACS, ^CACMS : 404) -- ^FCHI
+        # (CAC 40) est le proxy disponible. Multiplicateur de volatilite
+        # A PRIORI (petite capitalisation vs grand indice), remplace par
+        # l'estimation sur le chevauchement des 20 premieres seances.
+        "proxy": "^FCHI",
+        "proxy_vol_multiplier": 2.0,
     },
 }
 
@@ -74,6 +83,13 @@ def equity_target_choices() -> list[tuple[str, str, str]]:
     `config.defaults.DEFAULT_TARGET_CHOICES`, source toujours "yfinance"
     (aucune action de cet univers n'est une serie FRED)."""
     return [(sym, meta["label"], "yfinance") for sym, meta in EQUITY_UNIVERSE.items()]
+
+
+def history_proxies() -> dict[str, tuple[str, float | None]]:
+    """{symbol: (proxy symbol, prior vol multiplier)} for assets declared
+    without enough history (roadmap bloc 4)."""
+    return {sym: (meta["proxy"], meta.get("proxy_vol_multiplier"))
+            for sym, meta in EQUITY_UNIVERSE.items() if meta.get("proxy")}
 
 
 def is_equity_symbol(symbol: str) -> bool:

@@ -94,7 +94,10 @@ def test_cpcv_run_never_writes_a_dm_result(tmp_path, monkeypatch):
     """Contre-épreuve P6.1/P6.4 : un run en mode CPCV ne calcule pas de
     Diebold-Mariano (limite documentée, cf. METHODOLOGY.md 11.4) -- ne doit
     donc jamais écrire de ligne dans `dm_result`, ni fausser
-    `fdr_across_targets` avec une p-value walk-forward réutilisée par erreur."""
+    `fdr_across_targets` avec une p-value walk-forward réutilisée par erreur.
+
+    F05 : la cible reste néanmoins MEMBRE de la famille BH (p = 1,
+    « non testable ») -- elle a bien été testée, elle compte dans m."""
     def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
         return _synthetic_raw_no_floor("IDX_TESTC")
 
@@ -114,4 +117,7 @@ def test_cpcv_run_never_writes_a_dm_result(tmp_path, monkeypatch):
     assert n_dm_rows == 0
     fdr_result = trackstats.fdr_across_targets(conn)
     conn.close()
-    assert fdr_result["n_tested"] == 0
+    assert fdr_result["n_tested"] == 1
+    assert fdr_result["n_with_p_value"] == 0
+    assert fdr_result["results"]["^TESTC"]["untestable"] is True
+    assert fdr_result["results"]["^TESTC"]["significant"] is False

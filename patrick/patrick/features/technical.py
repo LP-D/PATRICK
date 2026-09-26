@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from patrick.features._utils import safe_pct_change
+from patrick.features._utils import _MAX_ABS_RETURN, safe_pct_change
 
 
 def returns(series: pd.Series, windows: list[int] = (1, 5, 10, 20)) -> pd.DataFrame:
@@ -26,10 +26,17 @@ def zscore(series: pd.Series, windows: list[int] = (10, 20, 60)) -> pd.DataFrame
 
 
 def ma_ratio(series: pd.Series, windows: list[int] = (10, 20, 50)) -> pd.DataFrame:
+    """`series / MA - 1`. Same near-zero-denominator guard as
+    `safe_pct_change` (clip at +/-`_MAX_ABS_RETURN`): on a series whose
+    moving average crosses zero (T10Y2Y/T10Y3M spreads during an inversion)
+    the MA sits at a floating residue (~1e-17) and the raw ratio reaches
+    1e12-1e16 -- measured on the real ^GSPC universe, see
+    `tests/test_features_robustness.py`. Unchanged on any series far from 0."""
     out = {}
     for w in windows:
         ma = series.rolling(w).mean().replace(0, np.nan)
-        out[f"vs_ma{w}"] = series / ma - 1
+        ratio = (series / ma - 1).replace([np.inf, -np.inf], np.nan)
+        out[f"vs_ma{w}"] = ratio.clip(-_MAX_ABS_RETURN, _MAX_ABS_RETURN)
     return pd.DataFrame(out, index=series.index)
 
 

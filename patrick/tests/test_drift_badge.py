@@ -62,6 +62,28 @@ def test_page_hinkley_does_not_flag_a_stable_hit_rate():
     assert result["drift_detected"] is False
 
 
+def test_page_hinkley_false_alarm_rate_is_controlled_over_a_year_of_calls():
+    """Drift policy of 2026-09-26: the literature defaults (delta 0.005,
+    lambda 5) fired on ~63 % of 3-year simulations WITHOUT any drift (the
+    statistic is a random walk whose range grows like sqrt(n)). Calibrated
+    by simulation, alarm at the first crossing: <= 5 % false alarms over 250
+    independent calls at a 55 % hit rate (<= 10 % over 750), and a 15-point
+    drop still caught in about 60 % of cases, never before it happens."""
+    def run(hits):
+        return drift.page_hinkley_test(list(hits))
+
+    alarms_1y = sum(run(np.random.default_rng(s).binomial(1, 0.55, 250))["drift_detected"] for s in range(300))
+    alarms_3y = sum(run(np.random.default_rng(s).binomial(1, 0.55, 750))["drift_detected"] for s in range(150))
+    assert alarms_1y / 300 <= 0.05 and alarms_3y / 150 <= 0.10
+    detected = early = 0
+    for s in range(200):
+        rng = np.random.default_rng(1000 + s)
+        res = run(np.r_[rng.binomial(1, 0.55, 100), rng.binomial(1, 0.40, 250)])
+        detected += res["drift_detected"] and res["detected_at"] >= 100
+        early += res["drift_detected"] and res["detected_at"] < 100
+    assert detected / 200 >= 0.5 and early / 200 <= 0.02
+
+
 def test_badge_is_provisional_before_target_is_realized_in_enough_volume():
     """Data drift alone (horizon not yet elapsed on enough predictions to
     trust a concept-drift read) -> 'provisional', never 'confirmed' --

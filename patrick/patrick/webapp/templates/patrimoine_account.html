@@ -1,0 +1,159 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import metric, data_table, empty_state, status_badge %}
+{% set a = detail.account %}
+{% set perf = detail.performance %}
+{% set h = detail.holdings %}
+{% block title %}PATRICK — {{ a.name }}{% endblock %}
+
+{% macro info(term, label) %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ label }}" aria-label="{{ t('glossary_open_aria', term=label) }}">i</button>{% endmacro %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Fil d'Ariane">
+  <a href="/patrimoine">{{ t('wealth_title') }}</a>
+  <span aria-current="page">{{ a.name }}</span>
+</nav>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ a.name }}</h1>
+    <p class="page-subtitle">
+      {{ status_badge(a.kind, 'neutral') }}
+      {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
+      {% if a.kind in ('PEA', 'CTO', 'DAT') %}{{ info(a.kind | lower, a.kind) }}{% endif %}
+      {% if a.opened_on %} · ouvert le {{ a.opened_on }}{% endif %}
+      {% if a.benchmark %} · indice de référence <span class="pk-mono">{{ a.benchmark }}</span>{% endif %}
+      {% if a.source_account_id %} · <a href="/patrimoine/comptes/{{ a.source_account_id }}">compte source</a>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if a.mode == 'real' %}
+    <button type="button" class="btn-secondary" data-api="/api/wealth/accounts/{{ a.account_id }}/clone" data-method="POST" data-redirect-account>{{ icon('layers') }} Cloner en fictif</button>
+    {% endif %}
+    <button type="button" class="btn-ghost" data-api="/api/wealth/accounts/{{ a.account_id }}" data-method="DELETE"
+            data-confirm="Supprimer « {{ a.name }} » et ses {{ detail.movements | length }} mouvement(s) ?" data-redirect="/patrimoine">{{ icon('trash') }} Supprimer</button>
+  </div>
+</div>
+
+<div id="wealth-flash" class="banner hidden" role="status"></div>
+
+{% if h.warnings %}
+<div class="banner banner-warning"><strong>À vérifier</strong><ul>{% for w in h.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<div class="metric-grid">
+{{ metric("Valeur", h.total | eur, "Dont " ~ (h.cash | eur) ~ " de liquidités ; apports nets " ~ ((h.deposits - h.withdrawals) | eur) ~ ".", "neutral") }}
+{% if perf.twr is not none %}
+{{ metric("Performance (TWR)", perf.twr | pct(2, true), "Neutre aux apports/retraits, du " ~ perf.start ~ " au " ~ perf.end ~ ((" ; annualisée " ~ (perf.twr_annualized | pct(2, true))) if perf.twr_annualized is not none else "") ~ ".", "ok" if perf.twr >= 0 else "error") }}
+{% else %}
+{{ metric("Performance (TWR)", "—", "Pas encore de capital investi sur au moins deux séances.", "pending") }}
+{% endif %}
+{{ metric("TRI (XIRR)", perf.xirr | pct(2, true) if perf.xirr is not none else "—", "Taux annuel pondéré par les capitaux : inclut le calendrier de tes apports.", "neutral" if perf.xirr is not none else "pending") }}
+{% if a.benchmark and perf.benchmark_return is not none %}
+{{ metric("vs " ~ a.benchmark, perf.excess_vs_benchmark | pct(2, true) if perf.excess_vs_benchmark is not none else "—",
+          "Indice : " ~ (perf.benchmark_return | pct(2, true)) ~ " sur la période. Mêmes flux investis dans l'indice : " ~ (perf.benchmark_replica_value | eur) ~ "." ~ (" Indice de cours (dividendes non réinvestis) : comparaison flatteuse pour le compte." if a.benchmark.startswith('^') else ""),
+          ("ok" if perf.excess_vs_benchmark >= 0 else "warning") if perf.excess_vs_benchmark is not none else "neutral") }}
+{% elif a.benchmark %}
+{{ metric("vs " ~ a.benchmark, "—", "Cours de l'indice indisponibles (data lake local et Yahoo Finance).", "pending") }}
+{% endif %}
+{% set proxied = [] %}
+{% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " via " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (a priori)" if p.scale_source == "prior" else " (estimé)")) %}{% endfor %}
+{{ metric("Risque", (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
+          "Volatilité ex-ante annualisée (Ledoit-Wolf, liquidités et DAT à variance nulle)" ~ ((" ; réalisée " ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; drawdown max " ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; sans historique propre, estimé(s) par proxy : " ~ (proxied | join(', ')) ~ " — corrélations du proxy, diversification sous-estimée") if proxied else "") ~ ".",
+          ("warning" if proxied else "neutral") if detail.risk.volatility is not none else "pending") }}
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Évolution {{ info('twr', 'TWR') }}</h2>
+    <div class="drift-legend" id="wealth-legend">
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>Valeur du compte</span>
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>Apports nets cumulés</span>
+      {% if chart.benchmark_replica %}<span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--warn)"></span>Mêmes flux dans {{ a.benchmark }}</span>{% endif %}
+    </div>
+  </div>
+  {% if chart.value | length > 1 %}
+  <div class="chart-wrap"><canvas id="wealth-chart" class="chart-canvas" role="img" aria-label="Valeur du compte au cours du temps"></canvas></div>
+  <script id="wealth-chart-data" type="application/json">{{ chart | tojson }}</script>
+  {% else %}
+  {{ empty_state("Pas assez d'historique pour tracer une courbe.", "Ajoute des mouvements datés (apports, achats).") }}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Positions</h2>
+  {% set rows = [] %}
+  {% for r in h.rows %}
+  {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
+     Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
+  {% set symbol_cell %}<span class="pk-mono">{{ r.symbol }}</span>{% endset %}
+  {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">transaction</span>{% endif %}{% endset %}
+  {% set _ = rows.append([
+      symbol_cell,
+      r.quantity | qty,
+      r.pru | eur if r.pru is not none else '—',
+      price_cell,
+      r.value | eur,
+      r.weight | pct,
+      '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ '</span>',
+  ]) %}
+  {% endfor %}
+  {{ data_table(["Actif", "Qté", "PRU", "Cours", "Valeur", "Poids", "PV latente"], rows, "Aucune position ouverte.",
+                num_cols=[1, 2, 3, 4, 5, 6],
+                footer="PRU = prix de revient unitaire, frais d'achat inclus. Revenus perçus : " ~ (h.income | eur) ~ " ; frais : " ~ (h.fees | eur) ~ ".") }}
+</section>
+
+
+<section class="card">
+  <h2>Importer un relevé</h2>
+  <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
+    {{ icon('upload') }}
+    <span>{{ t('wealth_drop_csv') }}</span>
+    <span class="hint">Colonnes reconnues : date, type (achat, vente, versement, retrait, dividende, frais, intérêts, DAT), symbole, quantité, prix, montant, frais, taux, échéance, note. Séparateur ; ou , — dates jj/mm/aaaa ou ISO.</span>
+    <input type="file" accept=".csv,text/csv" hidden>
+  </div>
+  <div class="import-preview" data-import-preview="{{ a.account_id }}"></div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Mouvements</h2></div>
+  <form class="form add-movement" data-api="/api/wealth/accounts/{{ a.account_id }}/movements" data-method="POST" data-reload>
+    <div class="subgrid">
+      <label>Type
+        <select name="kind">
+          {% for k in movement_kinds %}<option value="{{ k }}">{{ k | mvkind }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Date <input type="date" name="ts" required></label>
+      <label>Symbole <input type="text" name="symbol" placeholder="MC.PA"></label>
+      <label>Quantité <input type="text" inputmode="decimal" name="quantity"></label>
+      <label>Prix <input type="text" inputmode="decimal" name="price"></label>
+      <label>Montant <input type="text" inputmode="decimal" name="amount"></label>
+      <label>Frais <input type="text" inputmode="decimal" name="fees"></label>
+      <label>Taux (DAT) <input type="text" inputmode="decimal" name="rate" placeholder="0.03"></label>
+      <label>Échéance (DAT) <input type="date" name="maturity"></label>
+    </div>
+    <div class="row"><input type="text" name="note" placeholder="Note (facultatif)" class="input" style="flex:1; margin-top:0"><button type="submit" class="btn">{{ icon('plus') }} Ajouter</button></div>
+    <p class="hint">Achat/vente : quantité et prix (le montant se déduit, frais inclus). Versement, retrait, dividende, intérêts, frais : montant. Dépôt à terme : montant, taux annuel et échéance.</p>
+  </form>
+
+  {% set mv_rows = [] %}
+  {% for m in detail.movements | reverse %}
+  {% set symbol_cell %}<span class="pk-mono">{{ m.symbol or '' }}</span>{% endset %}
+  {% set note_cell %}{{ m.note or '' }}{% endset %}
+  {% set delete_cell %}<button type="button" class="btn-ghost" data-api="/api/wealth/movements/{{ m.movement_id }}" data-method="DELETE" data-confirm="Supprimer ce mouvement ?" data-reload aria-label="Supprimer">{{ icon('trash', 14) }}</button>{% endset %}
+  {% set _ = mv_rows.append([
+      m.ts,
+      m.kind | mvkind,
+      symbol_cell,
+      m.quantity | qty if m.quantity is not none else '',
+      m.price | eur if m.price is not none else '',
+      '<span class="' ~ ('pos' if m.amount >= 0 else 'neg') ~ '">' ~ (m.amount | eur) ~ '</span>',
+      note_cell,
+      delete_cell,
+  ]) %}
+  {% endfor %}
+  {{ data_table(["Date", "Type", "Actif", "Qté", "Prix", "Montant", "Note", ""], mv_rows, "Aucun mouvement.", num_cols=[3, 4, 5],
+                footer=(detail.movements | length) ~ " mouvement(s). Pour déplacer ou copier un mouvement vers un autre compte : page Mouvements (glisser-déposer).") }}
+</section>
+<script src="/static/wealth.js"></script>
+{% endblock %}

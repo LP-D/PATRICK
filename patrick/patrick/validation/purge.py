@@ -21,7 +21,7 @@ import pandas as pd
 # an unrelated index. Bounded (small `OrderedDict`, FIFO eviction) so a
 # long-lived process (e.g. the webapp, many runs over time) doesn't
 # accumulate one entry per run forever.
-_POS_CACHE: "OrderedDict[int, tuple[pd.DatetimeIndex, dict]]" = OrderedDict()
+_POS_CACHE: OrderedDict[int, tuple[pd.DatetimeIndex, dict]] = OrderedDict()
 _POS_CACHE_MAXSIZE = 8
 
 

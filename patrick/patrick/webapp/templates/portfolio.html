@@ -79,7 +79,7 @@
 {% for c in overview.contradictions %}
 {% set _ = contradiction_rows.append([
     '<a href="/targets/' ~ c.symbol_a ~ '">' ~ c.symbol_a ~ '</a> / <a href="/targets/' ~ c.symbol_b ~ '">' ~ c.symbol_b ~ '</a>',
-    (c.horizon ~ 'j'),
+    (c.horizon | hlabel),
     status_badge(c.symbol_a ~ ' : ' ~ c.direction_a, 'ok' if c.direction_a == 'UP' else 'warning'),
     status_badge(c.symbol_b ~ ' : ' ~ c.direction_b, 'ok' if c.direction_b == 'UP' else 'warning'),
     ('négative attendue' if c.correlation == 'negative' else 'positive attendue'),
@@ -97,7 +97,7 @@
    localement (jamais de telechargement depuis cette page en lecture
    seule) -- tracking.hrp.hrp_overview(). #}
 <section class="card" style="--enter-delay:140ms">
-<h2>{{ t('portfolio_hrp_title') or 'Répartition HRP (Hierarchical Risk Parity)' }}</h2>
+<h2>{{ t('portfolio_hrp_title') or 'Répartition HRP (Hierarchical Risk Parity)' }} <button type="button" class="info-icon" data-term="hrp" data-term-label="HRP" aria-label="{{ t('glossary_open_aria', term='HRP') }}">i</button></h2>
 <p class="hint">{{ t('portfolio_hrp_hint') or 'Pondération par parité de risque hiérarchique : regroupe les actifs par similarité de corrélation (clustering) puis répartit le risque entre clusters plutôt qu\'entre actifs individuels — pas de rendement espéré requis, et contrairement à une optimisation Markowitz classique, jamais de concentration extrême sur une matrice de corrélation quasi-singulière (actifs très corrélés entre eux).' }}</p>
 
 {% if not hrp.weights is defined or hrp.weights is none or hrp.n_assets == 0 %}
@@ -112,6 +112,10 @@
 {% endfor %}
 {{ data_table(["Actif", "Poids HRP"], hrp_rows, num_cols=[1],
               footer=(hrp.n_assets) ~ " actif(s) pris en compte" ~ (" ; " ~ (hrp.skipped | length) ~ " écarté(s) (historique insuffisant ou absent du cache)." if hrp.skipped else ".")) }}
+{% if hrp.covariance == 'ledoit_wolf' and hrp.shrinkage is not none %}
+<p class="hint">Covariance <span class="tip" tabindex="0" data-tip="Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une cible diagonale (variance moyenne, corrélations nulles). L'intensité δ est estimée pour minimiser l'erreur quadratique attendue ; δ proche de 1 signale une covariance empirique très bruitée (peu d'observations par actif). HRP en tire ses variances inverses et ses distances de corrélation.">Ledoit-Wolf</span>
+   — intensité de rétrécissement δ = {{ "%.2f" | format(hrp.shrinkage) }} sur {{ hrp.n_obs }} rendements communs.</p>
+{% endif %}
 {% endif %}
 </section>
 {% endblock %}

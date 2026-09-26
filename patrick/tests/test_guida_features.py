@@ -188,6 +188,27 @@ def test_eurusd_carry_features_is_absent_without_the_us_rate_column():
     assert out.empty
 
 
+def test_eurusd_carry_uses_the_real_rate_differential_when_the_euro_leg_exists():
+    """Roadmap bloc 3: the ECB deposit facility rate (FRED ECBDFR, daily
+    since 1999) is now in the feature universe -- carry of a long-EUR
+    position = EUR rate - USD rate, level and change."""
+    raw = pd.DataFrame({"US3M_Rate": [1.0, 1.5, 2.0, 2.5, 3.0], "EUR_DFR_Rate": [0.5, 0.5, 0.5, 1.0, 1.0]})
+    out = guida.eurusd_carry_features(raw, windows=[2])
+    diff = out["EURUSD_carry_diff_level_2d_estimated"]
+    chg = out["EURUSD_carry_diff_chg_2d_estimated"]
+    assert diff.iloc[1] == pytest.approx(-0.75)            # mean(-0.5, -1.0)
+    assert diff.iloc[4] == pytest.approx(-1.75)            # mean(-1.5, -2.0)
+    assert chg.iloc[4] == pytest.approx(-2.0 - (-1.5))
+    assert "EURUSD_carry_us_rate_level_2d_estimated" in out  # the US leg alone stays available
+
+
+def test_euro_short_rate_is_a_feature_not_a_target():
+    from patrick.config import defaults as D
+
+    assert D.DEFAULT_UNIVERSE_FRED_SERIES.get(guida.EURUSD_EUR_RATE_COLUMN) == "ECBDFR"
+    assert "ECBDFR" not in {s for s, _, _ in D.DEFAULT_TARGET_CHOICES}
+
+
 # ---------------------------------------------------------------------------
 # Absent families -- documented, not implemented
 # ---------------------------------------------------------------------------
@@ -212,3 +233,17 @@ def test_every_column_from_the_estimated_families_carries_the_suffix():
     pool = guida.build_guida_estimated_features(raw)
     assert len(pool.columns) > 0
     assert all(c.endswith("_estimated") for c in pool.columns)
+
+
+def test_a_fred_target_is_removed_from_its_own_feature_universe():
+    """`DEFAULT_UNIVERSE_FRED_SERIES` is {column label: FRED id}; the
+    exclusion compared the LABEL with the target symbol, so a FRED target
+    (DTB3, VIXCLS...) came back as a duplicate feature column under its
+    label (US3M_Rate, VIX)."""
+    from patrick.webapp import forms
+
+    for target in ("DTB3", "VIXCLS", "ECBDFR"):
+        _yf, fred = forms.universe_excluding(target)
+        assert target not in fred.values()
+    _yf, fred = forms.universe_excluding("^GSPC")
+    assert "DTB3" in fred.values() and "ECBDFR" in fred.values()

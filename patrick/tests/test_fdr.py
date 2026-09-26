@@ -38,7 +38,7 @@ def test_significant_matches_adjusted_p_value_below_alpha():
     p = {"A": 0.001, "B": 0.02, "C": 0.5, "D": 0.8}
     alpha = 0.10
     result = benjamini_hochberg(p, alpha=alpha)
-    for target, r in result["results"].items():
+    for r in result["results"].values():
         assert r["significant"] == (r["adjusted_p_value"] <= alpha)
 
 

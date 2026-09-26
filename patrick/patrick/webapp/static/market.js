@@ -41,6 +41,9 @@
         return v.toLocaleString(document.documentElement.lang || "fr", { maximumFractionDigits: 2 });
     }
 
+    // Design system v3: redraw with the new palette on theme change.
+    window.addEventListener("patrick:themechange", function () { if (currentSeries) drawChart(currentSeries); });
+
     function drawChart(series) {
         if (!canvas) return;
         var ctx = canvas.getContext("2d");

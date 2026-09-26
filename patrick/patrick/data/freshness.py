@@ -7,43 +7,33 @@ l'API FRED. Le but est d'afficher rapidement, sans latence réseau ni risque
 d'échec externe, l'état de fraîcheur de ce que PATRICK a déjà sur disque.
 
 --------------------------------------------------------------------------
-Limite d'architecture importante (constat d'audit, pas un bug à corriger
-ici) : `data/ingest.py::ingest()` sauvegarde TOUJOURS le DataFrame joint
-(cible + univers complet, features yfinance et FRED confondues) sous une
-seule clé `raw_{target_symbol}` -- jamais une clé par ticker d'univers. Les
-colonnes de features sont en outre `ffill()`-ées avant l'écriture sur
-disque (voir `ingest.py` ligne `df.sort_index().ffill()...`), ce qui détruit
-l'information "dernière vraie observation" pour toute colonne qui n'est pas
-la cible elle-même -- une valeur figée en fin de série est indiscernable
-d'une valeur réellement republiée ce jour-là, une fois écrite en parquet.
+Sources lues (les deux locales) :
 
-Conséquence directe et assumée : la SEULE fraîcheur qu'on peut lire de
-façon fiable depuis `_index.json` est celle d'une clé `raw_{symbol}`, c'est-
-à-dire d'un ticker qui a lui-même déjà servi de CIBLE dans au moins un run
-(`ingest()` n'est jamais appelé avec un `target_symbol` autre que la cible
-choisie). Un ticker de l'univers qui n'a jamais été lui-même une cible n'a
-donc, à ce jour, aucune fraîcheur observable dans le data lake -- ce n'est
-pas une erreur de calcul, c'est l'état réel du cache : ce module l'affiche
-comme "jamais mis en cache" (`cached=False`, état `disabled`), jamais comme
-une erreur serveur.
+1. les snapshots `raw_{symbol}` -- un ticker qui a lui-même servi de CIBLE ;
+2. `_series_observations.json` (`DataStore.record_series_observations`) --
+   la date de la dernière observation RÉELLEMENT publiée de chaque série de
+   l'univers, enregistrée à chaque ingestion avant tout forward-fill.
 
-Audit du cache réel (`~/.patrick/store/_index.json`, constaté le
-2026-09-05) : 15 clés au total, essentiellement d'anciens indices d'AVANT la
-réduction d'univers (`^AORD`, `^AXJO`, `^BVSP`, `^DJI`, `^EVZ`, `^FCHI`,
-`^FTSE`, `^GDAXI`, `^GVZ`, `^HSI`, `^IBEX`, `MC.PA` -- aucun n'appartient à
-`DEFAULT_TARGET_GROUPS` actuel) plus 3 tickers de l'univers actuel qui ont
-servi de cible depuis (`^GSPC`, `^VIX`, `BTC-USD`). Sur les 68 tickers de
-`DEFAULT_TARGET_GROUPS`, 65 (les 2 devises, les 20 commodités futures, les
-43 séries FRED) n'ont donc À CE JOUR jamais été mis en cache localement.
+Avant (2), seule la source (1) existait : `ingest()` sauvegarde le frame joint
+sous une unique clé `raw_{target}`, colonnes de features forward-fillées (la
+dernière vraie observation y est perdue). Audit du cache réel (2026-09-05) :
+3 des 68 tickers de `DEFAULT_TARGET_GROUPS` observables. Désormais toute
+série ingérée au moins une fois (comme cible OU comme feature) l'est.
+
+Séries FRED : le retard est mesuré contre la publication ATTENDUE de
+l'observation suivante (`fred_business_days_late`, calendrier de
+`data/publication_lag.py`), pas contre la date de référence de la dernière
+observation -- qui est, par construction, antérieure de plusieurs semaines à
+sa propre publication.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 
 import numpy as np
 import pandas as pd
 
+from patrick.clock import utc_today
 from patrick.data.store import DataStore
 
 # ---------------------------------------------------------------------------
@@ -146,12 +136,39 @@ def business_days_late(date_max, as_of=None) -> int:
     """Nombre de jours ouvrés séparant `date_max` (dernière donnée connue,
     `date`/`str`/`Timestamp`) de `as_of` (par défaut aujourd'hui). Jamais
     négatif : une `date_max` égale ou postérieure à `as_of` renvoie 0."""
-    as_of = as_of if as_of is not None else date.today()
+    as_of = as_of if as_of is not None else utc_today()
     d0 = pd.Timestamp(date_max).normalize().date()
     d1 = pd.Timestamp(as_of).normalize().date()
     if d0 >= d1:
         return 0
     return int(np.busday_count(d0, d1))
+
+
+# FRED -- tolérance (jours ouvrés) au-delà de la date de publication ATTENDUE
+# de l'observation suivante (`fred_business_days_late`).
+FRED_RELEASE_MARGIN_BDAYS = {"daily": 2, "weekly": 3, "monthly": 5, "quarterly": 10}
+
+_NEXT_PERIOD = {
+    "daily": pd.offsets.BDay(1),
+    "weekly": pd.Timedelta(days=7),
+    "monthly": pd.offsets.MonthBegin(1),
+    "quarterly": pd.offsets.QuarterBegin(1, startingMonth=1),
+}
+
+
+def fred_business_days_late(series_id: str, date_max, periodicity: str, as_of=None) -> int:
+    """Retard d'une série FRED mesuré contre la publication ATTENDUE de
+    l'observation suivante (période suivante + délai de publication,
+    `data/publication_lag.py`), pas contre sa date de référence : le CPI de
+    mai (daté du 1er mai) reste la dernière valeur disponible jusqu'à la
+    publication de juin, mi-juillet -- 43 jours ouvrés « de retard » au 1er
+    juillet sur la date de référence, zéro en réalité."""
+    from patrick.data import publication_lag
+
+    as_of = as_of if as_of is not None else utc_today()
+    next_ref = pd.Timestamp(date_max) + _NEXT_PERIOD[periodicity]
+    expected = publication_lag.availability_dates(pd.DatetimeIndex([next_ref]), series_id)[0]
+    return business_days_late(expected, as_of=as_of)
 
 
 def classify_freshness(periodicity: str, business_days_late: int) -> str:
@@ -195,7 +212,14 @@ def compute_freshness(symbol: str, label: str, source: str,
     snapshots = store.list_snapshots(_store_key(symbol))
     dated_snapshots = [s for s in snapshots if s.get("date_max")]
 
-    if not dated_snapshots:
+    # Dernière observation réellement publiée de la série, enregistrée à
+    # chaque ingestion (`DataStore.record_series_observations`) -- la seule
+    # source pour une série qui n'a jamais été elle-même une cible.
+    observed = store.series_observation(symbol)
+    candidates = [s["date_max"][:10] for s in dated_snapshots]
+    if observed and observed.get("date_max"):
+        candidates.append(observed["date_max"])
+    if not candidates:
         return FreshnessResult(symbol=symbol, label=label, source=source,
                                 periodicity=periodicity, cached=False,
                                 date_max=None, business_days_late=None, state="disabled")
@@ -203,9 +227,13 @@ def compute_freshness(symbol: str, label: str, source: str,
     # Plusieurs snapshots (contenus différents, cf. `store.py`) peuvent
     # coexister pour une même clé -- on retient la donnée la PLUS RÉCENTE
     # jamais vue, pas nécessairement le dernier snapshot ajouté à l'index.
-    date_max = max(s["date_max"] for s in dated_snapshots)
-    late = business_days_late(date_max, as_of=as_of)
-    state = classify_freshness(periodicity, late)
+    date_max = max(candidates)
+    if source == "fred":
+        late = fred_business_days_late(symbol, date_max, periodicity, as_of=as_of)
+        state = "warning" if late > FRED_RELEASE_MARGIN_BDAYS[periodicity] else "ok"
+    else:
+        late = business_days_late(date_max, as_of=as_of)
+        state = classify_freshness(periodicity, late)
     return FreshnessResult(symbol=symbol, label=label, source=source,
                             periodicity=periodicity, cached=True,
                             date_max=date_max, business_days_late=late, state=state)

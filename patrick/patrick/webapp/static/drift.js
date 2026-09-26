@@ -173,6 +173,8 @@
     }
 
     draw();
+    // Design system v3: redraw with the new palette on theme change.
+    window.addEventListener("patrick:themechange", draw);
 
     // Équivalent textuel : sans lui, la toile ne dit rien à un lecteur
     // d'écran (même principe que market.js/simulate.js).

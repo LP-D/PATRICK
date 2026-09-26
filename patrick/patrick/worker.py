@@ -22,6 +22,7 @@ import numpy as np
 
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.keep_awake import keep_awake
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -112,16 +113,18 @@ class _ProgressCapture:
 
 
 def _to_native(obj):
-    """Recursively converts numpy.int64/float64/bool_/NaN (from pandas
-    DataFrames) into native, JSON-serializable Python types."""
+    """Recursively converts numpy.int64/float64/bool_/NaN/±inf (from pandas
+    DataFrames) into native, STRICT-JSON-serializable Python types: ±inf
+    (e.g. a Diebold-Mariano statistic on a constant nonzero loss
+    differential) would otherwise be written as `Infinity`, which the
+    browser's `JSON.parse` rejects."""
     if isinstance(obj, dict):
         return {k: _to_native(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_to_native(v) for v in obj]
     if isinstance(obj, np.generic):
-        val = obj.item()
-        return None if isinstance(val, float) and np.isnan(val) else val
-    if isinstance(obj, float) and np.isnan(obj):
+        obj = obj.item()
+    if isinstance(obj, float) and not np.isfinite(obj):
         return None
     return obj
 
@@ -166,7 +169,7 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
     top_rows = []
     if len(leaderboard_df):
         top_rows = (
-            leaderboard_df.sort_values("F1_dir", ascending=False)
+            leaderboard_df.sort_values("F1_dir", ascending=False, kind="mergesort")
             .head(100)
             .to_dict(orient="records")
         )
@@ -198,8 +201,9 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
     old_stdout = sys.stdout
     sys.stdout = capture
     try:
-        result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
-    except Exception as exc:  # noqa: BLE001 - surfaced via job.error, never swallowed
+        with keep_awake():
+            result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
+    except Exception as exc:  # noqa: BLE001 -- job boundary: any pipeline failure is recorded on the job, the worker keeps running
         sys.stdout = old_stdout
         capture.final_flush()
         jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")

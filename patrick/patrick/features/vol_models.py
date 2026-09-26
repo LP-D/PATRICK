@@ -144,7 +144,7 @@ def egarch_conditional_vol(series: pd.Series, p: int = 1, o: int = 1, q: int = 1
         cv.loc[res.conditional_volatility.index] = res.conditional_volatility.values
         cv = cv / 100
         return cv.reindex(series.index).rename("egarch_vol")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- arch raises arbitrary numerical errors on degenerate series; feature -> NaN
         print(f"  [WARN] EGARCH: {str(e)[:100]}")
         return pd.Series(np.nan, index=series.index, name="egarch_vol")
 
@@ -157,8 +157,11 @@ def kalman_filtered_level(series: pd.Series, fit_end_idx: int | None = None) -> 
     only (the fold's train), not the whole series."""
     from pykalman import KalmanFilter
 
-    values = series.ffill().bfill().values.astype(float)
-    if len(values) < 5:
+    # +-inf treated as missing; a series with no finite value (a discontinued
+    # FRED series after its end date) gives NaN like EGARCH does, instead of
+    # crashing pykalman ("array must not contain infs or NaNs").
+    values = series.replace([np.inf, -np.inf], np.nan).ffill().bfill().values.astype(float)
+    if len(values) < 5 or not np.isfinite(values).all():
         return pd.Series(np.nan, index=series.index, name="kalman_filtered")
     fit_end = min(fit_end_idx, len(values)) if fit_end_idx is not None else len(values)
     fit_end = max(fit_end, 5)
@@ -203,7 +206,7 @@ def hmm_filtered_stress_prob(series: pd.Series, n_states: int = 2, seed: int = 4
                          random_state=seed, n_iter=100)
     try:
         model.fit(x_fit)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- hmmlearn raises arbitrary numerical errors on degenerate series; feature -> NaN
         # [FIX] safety net on top of safe_pct_change: a still-degenerate series
         # (near-constant, etc.) can make the HMM fit fail for reasons other than
         # inf values — must not crash the whole run.
@@ -282,7 +285,7 @@ def _arima_family_resid(series: pd.Series, order: tuple[int, int, int], name: st
         full_res = res.apply(ret.values)
         resid = pd.Series(full_res.resid, index=ret.index, name=name)
         return resid.reindex(series.index)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- statsmodels raises arbitrary numerical errors on degenerate series; feature -> NaN
         print(f"  [WARN] {name}: {str(e)[:100]}")
         return pd.Series(np.nan, index=series.index, name=name)
 

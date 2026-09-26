@@ -20,7 +20,9 @@ def test_synthesis_page_renders_empty_states_on_empty_db(tmp_path, monkeypatch):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "Aucun résultat Diebold-Mariano en base" in resp.text
-    assert "Classification de régime jamais exécutée en production" in resp.text
+    # The regime card no longer depends on the run database: it reads the HMM
+    # market state computed in the background (tests/test_market_state.py).
+    assert 'id="market-state"' in resp.text
     assert "Aucune prédiction enregistrée" in resp.text
     assert "Aucune métrique par direction disponible" in resp.text
 
@@ -35,7 +37,7 @@ def _seed_run_with_predictions(conn, up_correct=8, up_wrong=2, down_correct=9, d
     trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
     db.mark_best_trial(conn, trial_id)
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6, "AUC_ovr_4cls": 0.58})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03})
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     ts, y_true, y_pred = [], [], []
