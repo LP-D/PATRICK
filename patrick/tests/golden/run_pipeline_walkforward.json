@@ -167,7 +167,7 @@
    ]
   }
  },
- "leaderboard": "e524546a22986b2c23c04a976f2076aa24d4ece6cfee6f29af5b55c5ae785cf4",
+ "leaderboard": "dd5894a85120335256ba181215a1f7d89bebf2642a30a2a0706b9db9396b09f9",
  "result": {
   "best_before_tuning": {
    "F1_dir": 0.5250666667,
@@ -214,6 +214,8 @@
    "AUC_ovr_4cls": 0.5475,
    "Acc_dir": 0.5533,
    "BalAcc_4cls": 0.3057,
+   "Brier_up": 0.3676304177,
+   "ECE_up": 0.335551697,
    "F1_4cls": 0.2743,
    "F1_DOWN_FORT": 0.5545,
    "F1_UP_FORT": 0.4,
@@ -247,13 +249,13 @@
   "baseline_metric": "6544adf3cf20a0a4657ecb179371a3dc28b3b11cd8753137fc81a57c9e56c95b",
   "dm_result": "54b9bb578da9233fc88907ca2bc1c29f148f3977da642aed6629b375e19e935f",
   "feature_stability": "f77ddf2b8c1f5983c2f8d03497f40ad85583c6c85be070a184dbdd9c54b1fc13",
-  "fold_metric": "1e3a3784e0d7c1d9ff296135a48359f8325e973b574611b6fbd5dcc62833964e",
-  "holdout_diagnostic": "7eb47464090a71ebf1b611ef17a444a30faba2239f851352ed21c40202977a93",
+  "fold_metric": "a7ea1a6fa4a8ca28fb336b5f4cb0d4ad7ba6e4bfa632f6559b92ffbdbcae18f2",
+  "holdout_diagnostic": "ad0be6dd5859e0a4a0b65000f86148df370e48127d815e92e746af5a3a08e589",
   "phases": "426e4cda8fe3aa515b3e5c178617911c44433a74e52b3b133a6131060b485728",
   "prediction": "ba512ddf7411720bddf1f33ecc56df5746faf5eed33ac99101bd74c776505885",
   "registry": "b360feae1baab4781ce2d4bc7a2389315143bf5e9708dec8bcd5591ba1890c66",
   "run_status": "aa5ae6a7944229c7c05c8a6a68713993e64b15e145d7aceb0e7e9a26a8fb4b8b",
   "trial": "87685a13e5dbb2251f2e78e362bc827cfc40a11e68079031d38c7b1e57c18392"
  },
- "tuned": "220578801ab1ab09b35a98614f677a079af99cc047d7768543c6f2dca0c14640"
+ "tuned": "858a503cbb4d4d5a4ffea543a46ad24340f8b80070c267e987eab4302a389e37"
 }

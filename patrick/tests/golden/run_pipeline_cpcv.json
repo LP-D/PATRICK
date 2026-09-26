@@ -215,7 +215,7 @@
   "baseline_metric": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "dm_result": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "feature_stability": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "fold_metric": "d196f180cf41496fd951de54ea9816fc32b603ebc4003b86deec3a141198eb53",
+  "fold_metric": "1bae790c3cbb5e352fecc2ed77fd6fd2bf7df8e0cb0a2db5ecf9023cc067ba30",
   "holdout_diagnostic": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "phases": "dd146f6c9df35197809ab8628373412dafe9eba17e278b34a680a21299f8fc43",
   "prediction": "9c83344d92f042e1daa9211ed3133f53cdce45f7572bc6fb2cf89b27b912cabe",

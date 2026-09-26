@@ -218,6 +218,10 @@ class SamplingConfig(BaseModel):
 class ModelsConfig(BaseModel):
     algos: list[str] = Field(default_factory=lambda: list(D.DEFAULT_ML_ALGOS))
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
+    # Roadmap bloc 3: isotonic (non-parametric, needs more rows) or sigmoid
+    # (Platt, 2 parameters per class, stabler on the ~7% of a fold's train
+    # it is fitted on). Only used when `calibration` is True.
+    calibration_method: Literal["isotonic", "sigmoid"] = "isotonic"
     stacking: bool = D.DEFAULT_STACKING_ENABLED
 
 

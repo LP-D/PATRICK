@@ -69,11 +69,7 @@ from patrick.features.interactions import (
 )
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import build_target
-from patrick.models.calibration import (
-    calibrate_classifier,
-    predict_with_threshold,
-    search_threshold,
-)
+from patrick.models import calibration as calibration_lib
 from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
 from patrick.models.uniqueness import (
@@ -602,10 +598,25 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
               sampler_name: str, algo: str, seed: int, calibration: bool = False,
               sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
               uniqueness_weights_enabled: bool = True, **algo_overrides):
-    """Returns (metrics_dict, y_pred, predicted_confidence) —
+    """Returns (metrics_dict, y_pred, predicted_confidence) -- the historical
+    3-tuple API, see `_fit_eval_full` (which also returns P(up))."""
+    met, y_pred, confidence, _p_up = _fit_eval_full(
+        X_tr, y_tr, X_te, y_te, sampler_name, algo, seed, calibration=calibration,
+        sample_weight=sample_weight, ind_matrix=ind_matrix,
+        uniqueness_weights_enabled=uniqueness_weights_enabled, **algo_overrides)
+    return met, y_pred, confidence
+
+
+def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
+                   sampler_name: str, algo: str, seed: int, calibration: bool = False,
+                   sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
+                   uniqueness_weights_enabled: bool = True, calibration_method: str = "isotonic",
+                   calibration_gap: int = 0, **algo_overrides):
+    """Returns (metrics_dict, y_pred, predicted_confidence, p_up).
     `predicted_confidence` (probability of the predicted class, one value per
-    test row) feeds `prediction.y_proba`, which has only one column (not a
-    per-class vector).
+    test row) feeds `prediction.y_proba`; `p_up` (P(slight up) + P(strong
+    up), roadmap bloc 3) feeds `prediction.p_up` and the `Brier_up` /
+    `ECE_up` metrics -- `None` when the model has no `predict_proba`.
 
     `sampler_name="none"` (Phase 5.3, `models/samplers.py::_NoResample`): no
     resampling, relies on `class_weight`/`auto_class_weights` already
@@ -613,12 +624,15 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     XGBoost/GradientBoosting have no native multiclass equivalent and
     therefore stay unweighted in this case.
 
-    `calibration=True` (Phase 5.3, `config.models.calibration`): isotonic
-    calibration + causal threshold search (`models/calibration.py`, not
-    wired in until now) rather than a plain `argmax`. The threshold
-    validation slice is the MOST RECENT 15% of the resampled train set (rows
-    are already in chronological order at this stage) -- never the test set,
-    consistent with the rest of the pipeline.
+    `calibration=True` (`config.models.calibration`, method
+    `config.models.calibration_method`): the train rows are split in time
+    (`models/calibration.py::calibration_split`): fit | `calibration_gap`
+    purged rows (label overlap, the horizon) | calibration | threshold. The
+    classifier is fitted on the (resampled) fit rows only; the isotonic or
+    Platt map on the REAL calibration rows; the threshold on the REAL
+    threshold rows. (The Phase 5.3 path calibrated on the resampled array
+    and chose the threshold on its tail -- SMOTE's synthetic rows.) Too
+    short a train falls back to the uncalibrated path.
 
     `sample_weight`/`ind_matrix` (Phase 6.2, P6.2): uniqueness weights and
     observation x bar indicator matrix, computed on `X_tr`/`y_tr` BEFORE
@@ -629,26 +643,30 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     (`SequentialBootstrapRandomForestClassifier`) rather than sklearn's
     uniform bootstrap. For other algos that support it: `sample_weight`
     passed directly to `.fit()`. Combination with `calibration=True` not
-    handled (out of scope for P6.2, documented limitation): the calibrated
-    path stays unweighted even when weights are available."""
+    handled (documented limitation): the calibrated path stays unweighted
+    even when weights are available."""
     apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
                          and sample_weight is not None)
-    Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
-    weight_applies = apply_uniqueness and len(Xr) == len(X_tr)
     clf = get_classifier(algo, seed=seed, **algo_overrides)
+    split = calibration_lib.calibration_split(len(X_tr), gap=calibration_gap) if calibration else None
 
-    n_val = max(int(len(Xr) * 0.15), 20)
-    if calibration and n_val < len(Xr) - 20:
-        X_fit, y_fit = Xr[:-n_val], yr[:-n_val]
-        X_val, y_val = Xr[-n_val:], yr[-n_val:]
-        cal_clf = calibrate_classifier(clf, X_fit, y_fit)
-        threshold, _ = search_threshold(cal_clf, X_val, y_val)
-        y_pred = predict_with_threshold(cal_clf, X_te, threshold)
+    p_up = None
+    if split is not None:
+        Xf, yf = safe_resample(sampler_name, seed, X_tr[:split.fit_end], y_tr[:split.fit_end])
+        clf.fit(Xf, yf)
+        cal_clf = calibration_lib.fit_prefit_calibrator(
+            clf, X_tr[split.cal_start:split.thr_start], y_tr[split.cal_start:split.thr_start],
+            method=calibration_method)
+        threshold, _ = calibration_lib.search_threshold(cal_clf, X_tr[split.thr_start:], y_tr[split.thr_start:])
+        y_pred = calibration_lib.predict_with_threshold(cal_clf, X_te, threshold)
         y_proba = cal_clf.predict_proba(X_te)
         classes = list(cal_clf.classes_)
         confidence = np.array([row[classes.index(p)] if p in classes else np.nan
                                 for row, p in zip(y_proba, y_pred)])
+        p_up = calibration_lib.p_up_from_proba(y_proba, classes)
     else:
+        Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
+        weight_applies = apply_uniqueness and len(Xr) == len(X_tr)
         if weight_applies and algo == "RandomForest":
             clf = SequentialBootstrapRandomForestClassifier(seed=seed)
             clf.fit(Xr, yr, ind_matrix=ind_matrix, sample_weight=sample_weight)
@@ -668,8 +686,15 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
                 confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
             except (AttributeError, IndexError, ValueError):
                 y_proba = None
+            if y_proba is not None:
+                classes = list(getattr(clf, "classes_", range(y_proba.shape[1])))
+                p_up = calibration_lib.p_up_from_proba(y_proba, classes)
     met = metrics(y_te, y_pred, y_proba=y_proba)
-    return met, y_pred, confidence
+    if p_up is not None and len(p_up) == len(y_te):
+        y_up = np.isin(np.asarray(y_te), calibration_lib.UP_CLASSES).astype(float)
+        met["Brier_up"] = calibration_lib.brier_score(p_up, y_up)
+        met["ECE_up"] = calibration_lib.expected_calibration_error(p_up, y_up)
+    return met, y_pred, confidence, p_up
 
 
 def _parse_params(raw_params) -> dict:
@@ -743,16 +768,17 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     X_te = _finite_scaled(
         sc.transform(_finite_features(X_pool_df.values[te_mask], f"{where} test")), where)
     cols = _select(conn, target_col, horizon, snapshot_id, config, X_tr, y_tr, n_feat, seed)
-    met, y_pred, confidence = _fit_eval(X_tr[:, cols], y_tr, X_te[:, cols], y_te,
-                                         sampler_name, algo, seed,
-                                         calibration=config.models.calibration, **best_params)
+    met, y_pred, confidence, p_up = _fit_eval_full(
+        X_tr[:, cols], y_tr, X_te[:, cols], y_te, sampler_name, algo, seed,
+        calibration=config.models.calibration, calibration_method=config.models.calibration_method,
+        calibration_gap=horizon, **best_params)
     test_dates = [str(d.date()) for d in idx[te_mask]]
     # F08: the baselines predicted on the SAME holdout rows, so the final
     # Diebold-Mariano test runs on data that never took part in a choice.
     baseline_predictions = compute_baselines(
         pool[target_col], target_series, idx, tr_mask, te_mask, y_tr, y_te, horizon, _thr, reg_r,
         return_predictions=True)
-    return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te,
+    return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te, "p_up": p_up,
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te),
             "baseline_predictions": baseline_predictions}
 
@@ -1202,10 +1228,10 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
         feat_names = [st.feature_pool[c] for c in cols]
         for sampler_name in config.sampler.candidates:
             for algo in config.models.algos:
-                met, y_pred, confidence = _fit_eval(
+                met, y_pred, confidence, p_up = _fit_eval_full(
                     X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed,
-                    calibration=config.models.calibration,
-                    sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+                    calibration=config.models.calibration, calibration_method=config.models.calibration_method,
+                    calibration_gap=horizon, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
                     uniqueness_weights_enabled=config.sampling.uniqueness_weights)
                 # Phase 6.2 (P6.2): effective sample size (sum of uniquenesses)
                 # alongside n_train -- always computed.
@@ -1222,7 +1248,8 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                     met_with_n["effective_n_train"] = fd.effective_n
                 trackdb.add_fold_metrics(st.conn, trial_id, fold_index=k + 1, split="test", metrics=met_with_n)
                 trackdb.add_predictions(st.conn, trial_id, fold_index=k + 1, split="test",
-                                        ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
+                                        ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence,
+                                        p_up=p_up)
 
 
 def _scan_walkforward(st: _RunState) -> None:
@@ -1344,9 +1371,10 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
         if fd is None:
             continue
         cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
-        met, y_pred, confidence = _fit_eval(
+        met, y_pred, confidence, p_up = _fit_eval_full(
             fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te, sampler_name, algo, st.seed,
-            calibration=config.models.calibration, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
+            calibration=config.models.calibration, calibration_method=config.models.calibration_method,
+            calibration_gap=horizon, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
             uniqueness_weights_enabled=config.sampling.uniqueness_weights, **best_params)
         st.tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime, "N": n_feat,
                               "sampler": sampler_name, "algo": algo, "best_params": str(best_params),
@@ -1354,7 +1382,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
                               "test_end": fd.test_end, **met})
         trackdb.add_fold_metrics(st.conn, tuned_trial_id, fold_index=k + 1, split="test", metrics=met)
         trackdb.add_predictions(st.conn, tuned_trial_id, fold_index=k + 1, split="test",
-                                ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence)
+                                ts=fd.test_dates, y_true=fd.y_te, y_pred=y_pred, y_proba=confidence, p_up=p_up)
     trackdb.record_phase_timing(st.conn, run_id, "tuning", t_tune_start, time.time())
 
 
@@ -1487,7 +1515,8 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
                                  metrics=holdout_eval["metrics"])
         trackdb.add_predictions(st.conn, best_trial_id, fold_index=0, split="holdout",
                                 ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
-                                y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"])
+                                y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"],
+                                p_up=holdout_eval.get("p_up"))
     return holdout_eval
 
 

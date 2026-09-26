@@ -29,6 +29,7 @@ from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
 from patrick.features.sanitize import finite_features, finite_scaled
+from patrick.models import calibration as calibration_lib
 from patrick.pipeline.engine import build_full_feature_pool
 from patrick.tracking import db as trackdb
 
@@ -109,15 +110,19 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
 
         pred_class = int(model.predict(X_sel)[0])
         proba_row = model.predict_proba(X_sel)[0]
-        confidence = float(proba_row[pred_class])
+        # Column of the predicted class by `classes_`, not by its value: a
+        # class absent from the final fit shifts the columns.
+        classes = list(getattr(model, "classes_", range(len(proba_row))))
+        confidence = float(proba_row[classes.index(pred_class)]) if pred_class in classes else float("nan")
+        p_up = float(calibration_lib.p_up_from_proba(proba_row[None, :], classes)[0])
 
         trackdb.add_predictions(conn, best["trial_id"], fold_index=0, split="live",
                                  ts=[str(last_ts)], y_true=[None], y_pred=[pred_class],
-                                 y_proba=[confidence])
+                                 y_proba=[confidence], p_up=[p_up])
 
         n_updated = _update_live_outcomes(conn, best["trial_id"], run["horizon"], raw, target_col)
 
         return {"run_id": run_id, "trial_id": best["trial_id"], "ts": str(last_ts),
-                "y_pred": pred_class, "y_proba": confidence, "n_outcomes_updated": n_updated}
+                "y_pred": pred_class, "y_proba": confidence, "p_up": p_up, "n_outcomes_updated": n_updated}
     finally:
         conn.close()

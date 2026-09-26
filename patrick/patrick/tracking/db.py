@@ -965,7 +965,7 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
-                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1) -> None:
+                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1, p_up=None) -> None:
     """`y_true` can contain `None` (Phase 4.6, `split='live'`: the prediction
     is written BEFORE the outcome is known) -- stored as NULL rather than
     crashing on `float(None)`, backfilled later by
@@ -975,15 +975,23 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
     (walk-forward, unchanged behavior); under CPCV, a distinct backtest path
     (`validation/cpcv.py::path_assignment`) -- the same date can then appear
     in several `prediction` rows (one per path that covers it),
-    (trial_id, ts, path_id) distinguishes them."""
+    (trial_id, ts, path_id) distinguishes them.
+
+    `p_up` (roadmap bloc 3, migration 0024): P(slight up) + P(strong up),
+    calibrated when the run calibrates -- optional, NULL otherwise."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
+    ups = p_up if p_up is not None else [None] * len(ts)
+
+    def _f(v):
+        return float(v) if v is not None and not is_nan(v) else None
+
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
-              float(yp_proba) if yp_proba is not None else None, path_id)
-            for t, yt, yp, yp_proba in zip(ts, y_true, y_pred, proba)]
+              _f(yp_proba), path_id, _f(up))
+            for t, yt, yp, yp_proba, up in zip(ts, y_true, y_pred, proba, ups)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
-            "y_pred, y_proba, path_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "y_pred, y_proba, path_id, p_up) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
 
