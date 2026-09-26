@@ -1,12 +1,12 @@
 /* HMM market state on the synthesis page: reads /api/market-state (cache
-   filled by a background thread, ~12 s per market) and polls while the first
+   filled by a background thread, a few seconds per market) and polls while the first
    computation is still running. No-op without #market-state. */
 (function () {
     "use strict";
     var root = document.getElementById("market-state");
     if (!root) return;
-    var STATE = { calme: "ok", normal: "neutral", stress: "error" };
-    var LABEL = { calme: "calme", normal: "normal", stress: "stress" };
+    var STATE = { calme: "ok", stress: "error" };
+    var LABEL = { calme: "calme", stress: "stress" };
 
     function pct(x) { return (x * 100).toFixed(1).replace(".", ",") + " %"; }
 
@@ -34,7 +34,7 @@
         table.className = "data-table";
         table.innerHTML = "<thead><tr><th>Marché</th><th>Régime</th><th class='num'>P(stress)</th>" +
             "<th>Depuis</th><th class='num'>Stress (63 s.)</th><th class='num'>Vol. 21 s.</th>" +
-            "<th class='num'>Vol. long terme</th><th class='num'>États</th></tr></thead>";
+            "<th class='num'>Vol. long terme</th><th class='num'>Vol. état calme / stress</th></tr></thead>";
         var tbody = document.createElement("tbody");
         data.rows.forEach(function (r) {
             var tr = document.createElement("tr");
@@ -55,7 +55,7 @@
             cell(tr, pct(r.share_stress_63), "num pk-mono");
             cell(tr, pct(r.vol_21d), "num pk-mono");
             cell(tr, pct(r.vol_long), "num pk-mono");
-            cell(tr, String(r.n_states), "num pk-mono");
+            cell(tr, pct(r.vol_calm) + " / " + pct(r.vol_stress), "num pk-mono");
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
@@ -74,7 +74,7 @@
             var data = await res.json();
             if (data.rows && data.rows.length) { render(data); return; }
             if (data.error) { note(data.error); return; }
-            note("Calcul de l'état du marché (HMM) en cours — environ 10 s par marché…");
+            note("Calcul de l'état du marché (HMM) en cours…");
             if (attempt < 40) setTimeout(function () { load(attempt + 1); }, 5000);
         } catch (e) {
             note("État du marché indisponible : " + e);

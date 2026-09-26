@@ -95,6 +95,13 @@ def _causal_forward_filtered_probs(x: np.ndarray, n_states: int, seed: int,
     return filtered, model
 
 
+def filtered_state_probs(x: np.ndarray, n_states: int, seed: int = 42) -> tuple[np.ndarray, GaussianHMM]:
+    """Public entry to the causal forward filter above, fitted on the whole
+    of `x` -- for descriptive market-state reading (`tracking/market_state.py`),
+    not for walk-forward training (use `detect_regime(fit_end_idx=...)`)."""
+    return _causal_forward_filtered_probs(x, n_states, seed, None)
+
+
 def _hmm_free_params(n_states: int, n_features: int = 1) -> int:
     """Nombre de parametres libres d'un GaussianHMM a covariance diagonale :
     transitions (n_states-1 par ligne), etat initial (n_states-1), moyennes

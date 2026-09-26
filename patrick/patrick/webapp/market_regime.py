@@ -1,7 +1,8 @@
 """Background refresh of the HMM market state (`tracking/market_state.py`) for
-the synthesis page -- same pattern as `alerts.py`: one fit costs ~12 s per
-market, far too slow for a page load, so it runs in a daemon thread started
-with the app and the page reads the cache through `/api/market-state`.
+the synthesis page -- same pattern as `alerts.py`: one fit per market (a few
+seconds on 25 years of data) is too slow for a page load, so it runs in a
+daemon thread started with the app and the page reads the cache through
+`/api/market-state`.
 Status strings stay in French, like the rest of the interface.
 """
 from __future__ import annotations

@@ -113,7 +113,7 @@
 <div id="market-state" class="market-state">
 <p class="hint">Calcul de l'état du marché (HMM)…</p>
 </div>
-<p class="hint">Lecture descriptive, pas un signal testé : HMM gaussien sur les rendements quotidiens, nombre d'états choisi par BIC, paramètres ajustés sur tout l'historique. Calme / normal / stress = terciles de la probabilité filtrée de l'état le plus volatil, sur l'historique propre à chaque marché. Recalculé toutes les 6 h.</p>
+<p class="hint">Lecture descriptive, pas un signal testé : HMM gaussien à deux états (calme / stress) sur les rendements logarithmiques quotidiens, paramètres ajustés sur tout l'historique, probabilité filtrée (sans regarder le futur). Stress = P(état le plus volatil) &gt; 0,5. Recalculé toutes les 6 h.</p>
 </section>
 <script src="/static/market_state.js"></script>
 
