@@ -110,8 +110,12 @@
 
 <section class="card" style="--enter-delay:180ms">
 <h2>Classification de régime <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
-{{ empty_state("Classification de régime jamais exécutée en production.", "patrick.phase9.classify_regime_daily existe et est testée, mais n'est appelée par aucun chemin de production — aucune table ne stocke de régime. Voir DASHBOARD_B1-B2.md.") }}
+<div id="market-state" class="market-state">
+<p class="hint">Calcul de l'état du marché (HMM)…</p>
+</div>
+<p class="hint">Lecture descriptive, pas un signal testé : HMM gaussien sur les rendements quotidiens, nombre d'états choisi par BIC, paramètres ajustés sur tout l'historique. Calme / normal / stress = terciles de la probabilité filtrée de l'état le plus volatil, sur l'historique propre à chaque marché. Recalculé toutes les 6 h.</p>
 </section>
+<script src="/static/market_state.js"></script>
 
 <section class="card" style="--enter-delay:220ms">
 <h2>{{ t('section_recent') }}</h2>

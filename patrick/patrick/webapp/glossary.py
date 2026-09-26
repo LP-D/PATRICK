@@ -60,10 +60,13 @@ GLOSSARY: dict[str, dict[str, str]] = {
     },
     "vol_models": {
         "fr": ("Modèles de volatilité/dynamique temporelle appliqués à chaque "
-               "série (EGARCH, Kalman, HMM, AR/MA/ARMA/ARIMA...) — voir le "
-               "détail de chacun ci-dessous."),
+               "série (EGARCH, Kalman, AR/MA/ARMA/ARIMA...) — voir le détail de "
+               "chacun ci-dessous. Le HMM n'en fait plus partie : il sert aux "
+               "modèles par régime et à l'état du marché de la synthèse."),
         "en": ("Volatility/time-dynamics models applied to every series (EGARCH, "
-               "Kalman, HMM, AR/MA/ARMA/ARIMA...) — see each one's detail below."),
+               "Kalman, AR/MA/ARMA/ARIMA...) — see each one's detail below. The HMM "
+               "is no longer one of them: it serves per-regime models and the "
+               "synthesis page's market state."),
     },
     "macro": {
         "fr": ("Jointures des séries macroéconomiques FRED (taux, spreads, "
@@ -110,10 +113,15 @@ GLOSSARY: dict[str, dict[str, str]] = {
     "hmm": {
         "fr": ("HMM (Hidden Markov Model) à 2 régimes gaussiens : estime, instant "
                "par instant et de façon causale, la probabilité d'être dans le "
-               "régime de plus forte variance (proxy de \"stress\" de marché)."),
+               "régime de plus forte variance (proxy de \"stress\" de marché). "
+               "Plus proposé comme feature depuis le 2026-09-26 (64 % du temps de "
+               "calcul pour aucune feature retenue) : réservé aux régimes et à "
+               "l'analyse de l'état du marché."),
         "en": ("HMM (Hidden Markov Model) with 2 gaussian regimes: estimates, "
                "causally at each point in time, the probability of being in the "
-               "highest-variance regime (a \"market stress\" proxy)."),
+               "highest-variance regime (a \"market stress\" proxy). No longer "
+               "offered as a feature since 2026-09-26 (64 % of the build time for "
+               "no feature kept): reserved for regimes and market-state analysis."),
     },
     "heston_proxy": {
         "fr": ("Proxy inspiré du modèle de Heston : mesure l'écart entre la "
@@ -508,12 +516,14 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "observations."),
     },
     "regime": {
-        "fr": ("Régime de marché : état (calme, normal, stress) déduit de la volatilité "
-               "réalisée de la cible. Un modèle « par régime » n'est entraîné que sur les "
-               "dates du même régime — plus spécialisé, mais sur moins de données."),
-        "en": ("Market regime: state (calm, normal, stress) inferred from the target's "
-               "realized volatility. A per-regime model is trained only on dates of the same "
-               "regime — more specialised, on less data."),
+        "fr": ("Régime de marché : état (calme, normal, stress) déduit par un HMM (modèle "
+               "de Markov caché) des rendements quotidiens — terciles de la probabilité "
+               "d'être dans l'état le plus volatil. Un modèle « par régime » n'est entraîné "
+               "que sur les dates du même régime — plus spécialisé, mais sur moins de données."),
+        "en": ("Market regime: state (calm, normal, stress) inferred by an HMM (hidden "
+               "Markov model) from daily returns — terciles of the probability of being in "
+               "the most volatile state. A per-regime model is trained only on dates of the "
+               "same regime — more specialised, on less data."),
     },
     "diebold_mariano": {
         "fr": ("Test de Diebold-Mariano (correction Harvey-Leybourne-Newbold) : le modèle "

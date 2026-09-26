@@ -300,8 +300,14 @@ TECHNICAL_LOOKBACK_BOUNDS: dict[str, dict[str, int]] = {
 # pipeline (always computed together until now) — kept enabled by default so as not
 # to change the already-validated F1_dir≈0.610 reference. AR/MA/ARMA/ARIMA are new,
 # never tested in walk-forward: disabled by default.
-ALL_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
-DEFAULT_VOL_MODELS = ["egarch", "kalman", "hmm", "heston_proxy", "vrp_proxy"]
+# HMM removed from both lists on 2026-09-26: it serves regime models
+# (features/regime_detection.py) and market-state analysis only, no longer as an
+# ML feature -- 64 % of the feature build time for 0 feature kept on the real
+# ^GSPC run (docs/audits/audit-vitesse-2026-09-25.md). `features/vol_models.py`
+# still builds it when a STORED config asks for it (predict/explain of models
+# exported before that date).
+ALL_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima"]
+DEFAULT_VOL_MODELS = ["egarch", "kalman", "heston_proxy", "vrp_proxy"]
 
 # Open list of targets proposed by the web form ("what to predict?"), grouped
 # by category for a browsable dropdown despite their number — no more free-text

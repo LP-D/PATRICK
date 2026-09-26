@@ -67,13 +67,18 @@ coût — corrigé, test `test_a_family_absent_from_the_pool_is_reported_as_not_
 - Le coût est mesuré sur la machine de session (CPU partagé), une coupe de
   fold : l'ordre de grandeur est fiable, pas la décimale.
 
-## Décision proposée (non appliquée — à trancher)
+## Décision (2026-09-26)
 
-1. Lancer l'audit sur les 5 cibles de référence (`patrick audit speed` par
-   cible) ; si HMM reste à 0 retenue sur toutes, le retirer de
-   `DEFAULT_VOL_MODELS` (il reste activable par config).
-2. Ablation HMM sur ^GSPC et ^VIX (F1_dir holdout avec/sans).
-3. Le cache de pools (`features/pool_cache.py`, clé = contenu du vintage +
+Le HMM ne sert plus que les modèles par régime (`features/regime_detection.py`)
+et l'analyse de l'état du marché (carte « Classification de régime » de la
+synthèse, `tracking/market_state.py`). Il est retiré de `DEFAULT_VOL_MODELS`
+et de `ALL_VOL_MODELS` : plus proposé comme feature au lancement.
+`features/vol_models.py` le calcule encore quand une configuration
+**enregistrée** le demande, pour que `predict`/`explain` reconstruisent le
+pool des modèles exportés avant cette date. L'ablation proposée n'a pas été
+lancée : la décision porte sur le rôle du HMM, pas sur sa valeur prédictive.
+
+Reste valable : le cache de pools (`features/pool_cache.py`, clé = contenu du vintage +
    config + coupe de fit + hash du code des features) supprime déjà le
    recalcul sur un relancement à l'identique ; il ne réduit pas le coût du
    premier run ni le refit par fold.

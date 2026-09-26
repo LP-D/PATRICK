@@ -37,6 +37,7 @@ from patrick.webapp import (
     i18n,
     icons,
     market_data,
+    market_regime,
     nav_registry,
     run_manager,
     shap_chart,
@@ -117,6 +118,7 @@ FORM_OPTIONS = {
 @app.on_event("startup")
 def _on_startup() -> None:
     alerts.start_background_refresh()
+    market_regime.start_background_refresh()
 
 
 def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
@@ -319,6 +321,12 @@ def news(symbol: str):
 @app.get("/api/movers")
 def movers():
     return alerts.get_cached()
+
+
+@app.get("/api/market-state")
+def market_state_api():
+    """HMM market state (descriptive), refreshed in the background every 6 h."""
+    return market_regime.get_cached()
 
 
 @app.get("/api/next-run-names")

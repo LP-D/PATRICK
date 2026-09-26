@@ -20,7 +20,9 @@ def test_synthesis_page_renders_empty_states_on_empty_db(tmp_path, monkeypatch):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "Aucun résultat Diebold-Mariano en base" in resp.text
-    assert "Classification de régime jamais exécutée en production" in resp.text
+    # The regime card no longer depends on the run database: it reads the HMM
+    # market state computed in the background (tests/test_market_state.py).
+    assert 'id="market-state"' in resp.text
     assert "Aucune prédiction enregistrée" in resp.text
     assert "Aucune métrique par direction disponible" in resp.text
 
