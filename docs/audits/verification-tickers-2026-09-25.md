@@ -14,11 +14,10 @@ ajoutées après vérification sur 112 candidates — ^EVZ écarté, vide).
 - **LBS=F (bois d'œuvre, univers par défaut) : plus aucune cotation.** Le
   contrat CME historique a été remplacé ; `LBR=F` est servi depuis le
   2022-08-05 (1 040 séances au 2026-09-25). Aujourd'hui chaque run télécharge
-  LBS=F pour rien (la série vide est ensuite écartée). **Décision à prendre**
-  (non appliquée : elle change le pool de features de tous les runs et la
-  liste figée de `tests/test_universe_symbols.py`) : retirer LBS=F de
-  `DEFAULT_TARGET_GROUPS` ; LBR=F est trop court pour le pool de features
-  (couverture < 85 % depuis 2000) mais éligible comme cible.
+  LBS=F pour rien (la série vide est ensuite écartée). **Décision
+  (2026-09-26) : LBS=F retiré** de `DEFAULT_TARGET_GROUPS` (65 cibles par
+  défaut). LBR=F n'est pas ajouté : trop court pour le pool de features
+  (couverture < 85 % depuis 2000).
 - **ALDAT.PA (D.A.T.E)** : vide, attendu (introduction le jour même). Son
   risque est estimé via ^FCHI (`backfill_with_proxy`).
 - Les **39 tickers ajoutés sur le PC A** (branche `feature/replay-cache-universe`,

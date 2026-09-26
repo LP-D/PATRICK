@@ -360,7 +360,8 @@ DEFAULT_TARGET_GROUPS = {
         ("CC=F", "Cocoa_Futures"),
         ("KC=F", "Coffee_Futures"),
         ("CT=F", "Cotton_Futures"),
-        ("LBS=F", "Lumber_Futures"),
+        # LBS=F (lumber) removed 2026-09-26: Yahoo serves no quote since the
+        # CME contract was replaced by LBR=F (2022), too short for the pool.
         ("OJ=F", "OrangeJuice_Futures"),
         ("SB=F", "Sugar_Futures"),
     ],
