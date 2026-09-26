@@ -847,16 +847,20 @@ def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[in
     demand, `explain.compute_drift_for_ticker_horizon`, POST
     /api/drift/{target}/{horizon}):
 
-    - data drift: the worst feature PSI of the latest measurement
-      (`drift_psi_history`), classified by `validation.drift.data_drift_status`
-      (< 0.1 stable, 0.1-0.25 attention, > 0.25 significant);
+    - data drift: the feature PSIs of the latest measurement
+      (`drift_psi_history`); the worst one is kept for the tooltip;
     - concept drift: Page-Hinkley on the resolved LIVE calls' hits, oldest
-      first (`validation.drift.page_hinkley_test`), once >= `min_hits`.
+      first, thinned to independent calls.
 
-    `state`: `insufficient_data` (no PSI measured), `provisional` (PSI, not
-    enough resolved calls), `confirmed` (both) -- the three states of
-    `validation.drift.DriftBadge`."""
+    The action (`retrain` / `watch` / `ok` / `unmeasured`), levels and
+    staleness follow `validation.drift_policy.assess` (policy of
+    2026-09-26). `state`: `insufficient_data` (no PSI measured),
+    `provisional` (PSI, concept drift not testable yet), `confirmed` (both)
+    -- the three states of `validation.drift.DriftBadge`. `min_hits` is kept
+    for callers; the policy's threshold applies to INDEPENDENT calls."""
+    from patrick.clock import utc_today
     from patrick.validation import drift as drift_lib
+    from patrick.validation import drift_policy
 
     if not targets or not horizons:
         return {}
@@ -880,6 +884,7 @@ def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[in
     for sym, h, _ts, y_pred, y_true in live:
         hits_by_pair.setdefault((sym, int(h)), []).append(int((y_pred >= 2) == (float(y_true) >= 0.5)))
 
+    today = utc_today()
     out = {}
     for sym in targets:
         for h in horizons:
@@ -890,10 +895,11 @@ def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[in
                 feature, psi, at = max(psis, key=lambda x: x[1])
                 badge.update(psi=psi, status=drift_lib.data_drift_status(psi), worst_feature=feature,
                              measured_at=at, n_features=len(psis), state="provisional")
-            if len(hits) >= min_hits:
-                badge["concept_drift"] = drift_lib.page_hinkley_test(hits)["drift_detected"]
-                if psis:
-                    badge["state"] = "confirmed"
+            policy = drift_policy.assess([p for _, p, _ in psis] if psis else None, badge["measured_at"],
+                                         hits, h, today)
+            badge.update(policy)
+            if psis and policy["concept_drift"] is not None:
+                badge["state"] = "confirmed"
             out[(sym, h)] = badge
     return out
 

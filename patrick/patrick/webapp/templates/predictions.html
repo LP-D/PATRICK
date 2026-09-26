@@ -55,15 +55,18 @@
         {% else %}
             {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ')', 'ok' if r.live_hit_rate >= live_hit_rate_warning_threshold else 'warning') %}
         {% endif %}
-        {# Roadmap bloc 3 -- badge de derive (history.drift_badges, donnees
-           stockees uniquement ; PSI mesure a la demande sur la fiche cible). #}
+        {# Badge de derive : politique du 2026-09-26 (validation/drift_policy.py,
+           docs/ops/politique-derive.md). Reentrainer = derive de concept sur
+           appels live independants ; surveiller = >= 10 % des features du
+           modele avec PSI > 0,25 ; jamais de reentrainement sur la seule
+           derive des donnees. #}
         {% set d = r.drift %}
-        {% if not d or d.psi is none %}
+        {% if not d or d.action == 'unmeasured' and not d.concept_drift %}
             {% set drift_cell = status_badge('non mesurée', 'disabled') %}
         {% else %}
-            {% set drift_state = {'stable': 'ok', 'attention': 'warning', 'significant': 'error'}[d.status] %}
-            {% set drift_label = {'stable': 'stable', 'attention': 'attention', 'significant': 'dérive'}[d.status] ~ ' · PSI ' ~ ('%.2f' | format(d.psi)) %}
-            {% set drift_cell %}<span class="tip" tabindex="0" data-tip="PSI maximal sur {{ d.n_features }} feature(s) du modèle ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}. < 0,10 stable, 0,10–0,25 attention, > 0,25 dérive significative.{% if d.concept_drift is not none %} Page-Hinkley sur {{ d.n_hits }} appels live résolus : {{ 'rupture de la réussite détectée' if d.concept_drift else 'pas de rupture' }}.{% else %} Dérive de concept : pas encore assez d'appels live résolus ({{ d.n_hits }}/30).{% endif %}">{{ status_badge(drift_label, 'error' if d.concept_drift else drift_state) }}</span>{% endset %}
+            {% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
+            {% set drift_label = d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · périmée' if d.stale else '') %}
+            {% set drift_cell %}<span class="tip" tabindex="0" data-tip="{{ d.reason }}{% if d.psi is not none %} PSI max {{ '%.2f' | format(d.psi) }} ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}.{% endif %} Politique : réentraîner seulement sur baisse de réussite (Page-Hinkley, appels live indépendants) ; surveiller dès 10 % des features en dérive (PSI > 0,25).">{{ status_badge(drift_label, drift_state) }}</span>{% endset %}
         {% endif %}
         {% set _ = rows.append([
             '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',

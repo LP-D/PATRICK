@@ -32,20 +32,32 @@ def test_states_follow_what_is_measured(conn):
     assert b["worst_feature"] == "f2" and b["n_features"] == 2
 
 
-def test_page_hinkley_on_resolved_live_calls_confirms_a_concept_drift(conn):
-    _seed(conn, n_live=120, flip_at=60)
+def test_page_hinkley_on_independent_live_calls_confirms_a_concept_drift(conn):
+    """Horizon 5: one live call in five is independent -- 400 daily calls
+    give 80, enough to test; the hit rate collapses halfway -> retrain."""
+    _seed(conn, n_live=400, flip_at=200)
     db.record_drift_psi(conn, "^VIX", 5, "f1", 0.02)
     b = history.drift_badges(conn, ["^VIX"], [5])[("^VIX", 5)]
     assert b["state"] == "confirmed" and b["concept_drift"] is True and b["status"] == "stable"
+    assert b["n_independent"] == 80 and b["action"] == "retrain"
+
+
+def test_overlapping_live_calls_are_not_counted_as_independent(conn):
+    _seed(conn, n_live=120, flip_at=60)
+    db.record_drift_psi(conn, "^VIX", 5, "f1", 0.02)
+    b = history.drift_badges(conn, ["^VIX"], [5])[("^VIX", 5)]
+    assert b["n_independent"] == 24 and b["concept_drift"] is None
+    assert b["state"] == "provisional" and b["action"] == "ok"
 
 
 def test_predictions_page_shows_the_badge(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
     conn = db.connect(str(tmp_path / "p.db"))
     _seed(conn)
-    db.record_drift_psi(conn, "^VIX", 5, "f1", 0.18)
+    db.record_drift_psi(conn, "^VIX", 5, "f1", 0.31)
+    db.record_drift_psi(conn, "^VIX", 5, "f2", 0.02)
     html = TestClient(app).get("/predictions").text
-    assert "attention · PSI 0.18" in html and "non mesurée" in html
+    assert "surveiller · 1/2" in html and "PSI max 0.31 (f1)" in html
 
 
 def test_measure_route(monkeypatch):

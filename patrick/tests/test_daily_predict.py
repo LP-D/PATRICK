@@ -204,3 +204,41 @@ def test_run_daily_predictions_empty_candidate_list():
     assert summary.outcomes == []
     assert summary.successes == []
     assert summary.failures == []
+
+
+# ------------------------------------------------------------------
+# Drift policy of 2026-09-26: the nightly job re-measures stale PSIs
+# ------------------------------------------------------------------
+
+def test_nightly_drift_remeasures_only_stale_or_unmeasured_pairs(tmp_path):
+    import datetime as dt
+
+    db_path = str(tmp_path / "patrick.db")
+    conn = trackdb.connect(db_path)
+    with conn:
+        conn.execute("INSERT INTO drift_psi_history (symbol, horizon, feature, computed_at, psi) "
+                     "VALUES ('^GSPC', 1, 'f', '2026-09-24 22:10:00', 0.01)")
+        conn.execute("INSERT INTO drift_psi_history (symbol, horizon, feature, computed_at, psi) "
+                     "VALUES ('^VIX', 5, 'f', '2026-09-01 22:10:00', 0.01)")
+    conn.close()
+    cands = [daily_predict.PredictCandidate("^GSPC", 1, "r1", 1, "a"),
+             daily_predict.PredictCandidate("^VIX", 5, "r2", 2, "b"),
+             daily_predict.PredictCandidate("BTC-USD", 20, "r3", 3, "c"),
+             daily_predict.PredictCandidate("GC=F", 5, "r4", 4, "d")]
+    measured = []
+
+    def fake_measure(target, horizon, db_path=None):
+        measured.append((target, horizon))
+        if target == "GC=F":
+            raise RuntimeError("no reference")
+        return {"f": {"psi": 0.1}}
+
+    report = daily_predict.remeasure_stale_drift(cands, db_path=db_path, measure_fn=fake_measure,
+                                                 today=dt.date(2026, 9, 26), limit=10)
+    assert measured == [("^VIX", 5), ("BTC-USD", 20), ("GC=F", 5)]      # ^GSPC measured 2 days ago
+    assert report == {"measured": 2, "failed": 1, "skipped_fresh": 1, "deferred": 0}
+
+    measured.clear()
+    report = daily_predict.remeasure_stale_drift(cands, db_path=db_path, measure_fn=fake_measure,
+                                                 today=dt.date(2026, 9, 26), limit=1)
+    assert len(measured) == 1 and report["deferred"] == 2
