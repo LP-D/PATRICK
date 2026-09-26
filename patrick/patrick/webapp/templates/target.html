@@ -48,7 +48,7 @@
 {% set rel = pbo.reliability %}
 {% set rel_text = ("IC 90% [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (rel.message if (rel and rel.message) else "non calculable") %}
 {% set pbo_text = ("%.3f" | format(pbo.pbo)) if (rel and rel.ok) else "—" %}
-{% set _ = pbo_rows.append([horizon ~ "j", scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
+{% set _ = pbo_rows.append([horizon | hlabel, scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
 {% endif %}
 {% endfor %}
 {% endfor %}
@@ -67,7 +67,7 @@
 {% set relaunch_cell = '<form method="post" action="/runs/' ~ r.run_id ~ '/relaunch" class="inline-form"><button type="submit" class="primary">Relancer (tous horizons)</button></form>' %}
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
-    r.horizon ~ 'j',
+    r.horizon | hlabel,
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',

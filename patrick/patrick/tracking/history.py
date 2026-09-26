@@ -1331,6 +1331,7 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
         "quality_rows": quality_rows,
         "fdr_alpha": alpha,
         "fdr_n_tested": fdr["n_tested"],
+        "fdr_n_descriptive_runs": fdr.get("n_descriptive_runs", 0),
         "prediction_rows": prediction_rows,
         "metric_rows": metric_rows,
         "recent_runs": list_runs(conn, limit=8),

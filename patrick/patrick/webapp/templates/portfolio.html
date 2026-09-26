@@ -79,7 +79,7 @@
 {% for c in overview.contradictions %}
 {% set _ = contradiction_rows.append([
     '<a href="/targets/' ~ c.symbol_a ~ '">' ~ c.symbol_a ~ '</a> / <a href="/targets/' ~ c.symbol_b ~ '">' ~ c.symbol_b ~ '</a>',
-    (c.horizon ~ 'j'),
+    (c.horizon | hlabel),
     status_badge(c.symbol_a ~ ' : ' ~ c.direction_a, 'ok' if c.direction_a == 'UP' else 'warning'),
     status_badge(c.symbol_b ~ ' : ' ~ c.direction_b, 'ok' if c.direction_b == 'UP' else 'warning'),
     ('négative attendue' if c.correlation == 'negative' else 'positive attendue'),

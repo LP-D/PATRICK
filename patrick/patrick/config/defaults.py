@@ -41,6 +41,13 @@ DEFAULT_HORIZONS = [1, 2, 3, 5, 7, 10]
 MODERATE_HORIZONS = [15, 20, 30]
 LONG_HORIZONS = [252, 504, 756]
 SELECTABLE_HORIZONS = sorted(set(DEFAULT_HORIZONS) | set(MODERATE_HORIZONS) | set(LONG_HORIZONS))
+# Decision of 2026-09-26 (docs/modelisation/horizons-longs.md): launchable for
+# exploration but DESCRIPTIVE -- out of the cross-target Benjamini-Hochberg
+# family (tracking/stats.fdr_across_targets) and of every portfolio signal
+# (/portfolio, patrimoine signal replay), labelled "descriptif" everywhere.
+# On real prices, beating "always up" significantly at these horizons would
+# need ~98-100 % accuracy on the S&P 500 over its whole history.
+DESCRIPTIVE_HORIZONS = frozenset({504, 756})
 DEFAULT_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro"]
 
 # Phase 2 (feature/guida-features-full) -- the 14 lookback windows (trading

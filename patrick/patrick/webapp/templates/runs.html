@@ -57,7 +57,7 @@
 {% set _ = rows.append([
     '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
     '<a href="/targets/' ~ r.target ~ '">' ~ r.target ~ '</a>',
-    r.horizon ~ 'j',
+    r.horizon | hlabel,
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',

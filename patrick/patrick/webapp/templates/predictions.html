@@ -71,7 +71,7 @@
         {% set _ = rows.append([
             '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
             r.label,
-            (r.horizon ~ 'j'),
+            (r.horizon | hlabel),
             dir_cell,
             conf_label,
             sig_cell,

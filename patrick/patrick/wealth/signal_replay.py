@@ -26,18 +26,22 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
+from patrick.config import defaults as D
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 
 
 def _winning_trial(conn: sqlite3.Connection, symbol: str) -> tuple[str, int, int] | None:
     """(run_id, trial_id, horizon) of the most recent completed run on
-    `symbol` that has a winning trial."""
+    `symbol` that has a winning trial -- never at a descriptive horizon
+    (`D.DESCRIPTIVE_HORIZONS`, 504/756 days: not a portfolio signal)."""
+    descriptive = sorted(D.DESCRIPTIVE_HORIZONS)
     row = conn.execute(
         "SELECT run.run_id, trial.trial_id, run.horizon FROM run "
         "JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1 "
-        "WHERE run.target = ? AND run.status = 'done' "
-        "ORDER BY run.started_at DESC, run.rowid DESC LIMIT 1", (symbol,)).fetchone()
+        f"WHERE run.target = ? AND run.status = 'done' "
+        f"AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
+        "ORDER BY run.started_at DESC, run.rowid DESC LIMIT 1", (symbol, *descriptive)).fetchone()
     return (row[0], int(row[1]), int(row[2])) if row else None
 
 

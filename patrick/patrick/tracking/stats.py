@@ -9,6 +9,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
+from patrick.config.defaults import DESCRIPTIVE_HORIZONS
 from patrick.numeric import is_nan
 from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
@@ -150,23 +151,35 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     significance: such a target enters untestable (p = 1) and is flagged
     `selection_biased` (every row written before F08 is in that case).
 
+    Descriptive horizons (decision of 2026-09-26, `D.DESCRIPTIVE_HORIZONS`
+    = 504/756 days): their runs are outside the family altogether -- a
+    target only ever run at those horizons is not "tested", and their
+    p-values never enter a target's minimum. Counted in `n_descriptive_runs`.
+
     Returned counts: `n_tested` = family size m, `n_with_p_value`,
-    `n_untestable` (= m - n_with_p_value), `n_selection_biased`."""
+    `n_untestable` (= m - n_with_p_value), `n_selection_biased`,
+    `n_descriptive_runs`."""
+    descriptive = sorted(DESCRIPTIVE_HORIZONS)
+    not_descriptive = f"run.horizon NOT IN ({','.join('?' for _ in descriptive)})"
     family = [t for (t,) in conn.execute(
-        "SELECT DISTINCT target FROM run WHERE status = 'done' ORDER BY target")]
+        f"SELECT DISTINCT target FROM run WHERE status = 'done' AND {not_descriptive} ORDER BY target",
+        descriptive)]
     rows = conn.execute(
         "SELECT run.target, MIN(dm_result.p_value), COUNT(dm_result.p_value) FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
         "WHERE dm_result.kind = ? AND dm_result.p_value IS NOT NULL AND run.status = 'done' "
-        "AND dm_result.sample = 'holdout' "
+        f"AND dm_result.sample = 'holdout' AND {not_descriptive} "
         "GROUP BY run.target",
-        (kind,),
+        (kind, *descriptive),
     ).fetchall()
     observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if not is_nan(p_min)}
     biased = {t for (t,) in conn.execute(
         "SELECT DISTINCT run.target FROM dm_result JOIN run ON dm_result.run_id = run.run_id "
-        "WHERE dm_result.kind = ? AND dm_result.sample = 'last_wf_fold' AND run.status = 'done'",
-        (kind,))} - set(observed)
+        f"WHERE dm_result.kind = ? AND dm_result.sample = 'last_wf_fold' AND run.status = 'done' "
+        f"AND {not_descriptive}",
+        (kind, *descriptive))} - set(observed)
+    n_descriptive_runs = conn.execute(
+        f"SELECT COUNT(*) FROM run WHERE status = 'done' AND NOT ({not_descriptive})", descriptive).fetchone()[0]
 
     p_values: dict[str, float] = {}
     for target in family:
@@ -190,4 +203,5 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     result["n_untestable"] = result["n_tested"] - len(observed)
     result["n_selection_biased"] = len(biased & set(family))
     result["n_bh_significant"] = sum(1 for r in result["results"].values() if r["significant"])
+    result["n_descriptive_runs"] = int(n_descriptive_runs)
     return result

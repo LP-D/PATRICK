@@ -92,6 +92,18 @@ templates.env.globals["nav_sections"] = nav_registry.nav_sections
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
 templates.env.globals["nav_icon"] = icons.nav_icon
+# 504/756-day horizons are descriptive (decision of 2026-09-26): labelled everywhere.
+templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
+
+
+def _horizon_label(h) -> str:
+    try:
+        return f"{h}j · descriptif" if int(h) in D.DESCRIPTIVE_HORIZONS else f"{h}j"
+    except (TypeError, ValueError):
+        return f"{h}j"
+
+
+templates.env.filters["hlabel"] = _horizon_label
 
 FORM_OPTIONS = {
     "all_families": forms.ALL_FEATURE_FAMILIES,

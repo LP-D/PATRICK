@@ -63,7 +63,7 @@
 ]) %}
 {% endif %}
 {% endfor %}
-{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ ". Détail du calcul sur la fiche de chaque cible.") }}
+{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ "." ~ ((" " ~ overview.fdr_n_descriptive_runs ~ " run(s) à 504/756 j hors famille (horizons descriptifs).") if overview.fdr_n_descriptive_runs else "") ~ " Détail du calcul sur la fiche de chaque cible.") }}
 {% endif %}
 </section>
 
@@ -74,7 +74,7 @@
 {% set p = r.prediction %}
 {% set _ = pred_rows.append([
     '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    p.horizon ~ "j",
+    p.horizon | hlabel,
     p.direction ~ " (" ~ p.amplitude ~ ")",
     ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
     '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>',
@@ -123,7 +123,7 @@
 {% for r in overview.recent_runs %}
 {% set _ = recent_rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
-    r.target, r.horizon ~ "j", status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
+    r.target, r.horizon | hlabel, status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
     ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>',
     r.started_at,
 ]) %}

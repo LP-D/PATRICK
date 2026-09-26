@@ -38,11 +38,15 @@ Script de mesure : rendement `s.shift(-h) / s - 1`, taux de hausse, N_eff = T / 
    trompeuse à long horizon : F1 directionnel, Brier et comparaison à la persistance sont les seuls
    indicateurs honnêtes — déjà la colonne « benchmark » de `/runs`.
 
-## Recommandation
+## Décision (2026-09-26)
 
-- Garder 252/504/756 j sélectionnables pour l'exploration, mais les présenter comme **descriptifs** : ne pas
-  les inclure dans la famille Benjamini-Hochberg ni dans un signal de portefeuille tant que N_eff du holdout
-  est < 30. Décision produit à prendre (non implémentée).
+- **504 et 756 j sont descriptifs** (`D.DESCRIPTIVE_HORIZONS`) : toujours lançables pour l'exploration, mais
+  hors de la famille Benjamini-Hochberg (une cible testée seulement à ces horizons n'est pas « testée »,
+  leurs p-values n'entrent jamais dans le minimum d'une cible), hors de tout signal de portefeuille
+  (`/portfolio`, rejeu des signaux sur un compte de patrimoine), et marqués « descriptif » sur toutes les
+  pages. La synthèse indique combien de runs sont ainsi hors famille.
+- **252 j reste testé** : validable sur un actif sans dérive dominante (EUR/USD), avec la même prudence
+  qu'au point 2 ci-dessus.
 - Pour un signal long terme exploitable, préférer une cible continue (rendement à 252 j régressé) ou un
   panel multi-actifs (N_eff × nombre d'actifs faiblement corrélés) plutôt qu'une classification par actif.
 - Les taux zone euro étaient absents : ECBDFR (facilité de dépôt BCE, quotidien depuis 1999) est désormais
