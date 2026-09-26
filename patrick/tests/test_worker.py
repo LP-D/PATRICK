@@ -20,6 +20,7 @@ import pytest
 
 from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
+from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -73,7 +74,9 @@ def _tiny_config(tmp_path) -> RunConfig:
 def _isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
-    DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw_no_floor())
+    # Point-in-time version expected by `ingest()` (F01), else the worker fetches real data.
+    DataStore(root=str(tmp_path / "store")).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw_no_floor(),
+                                                 meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
 
 
 def test_run_worker_loop_finishes_job_without_any_web_process(tmp_path):

@@ -12,6 +12,7 @@ import pytest
 
 from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
+from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
 from patrick.tracking import db as trackdb
@@ -97,7 +98,9 @@ def test_report_for_web_run_includes_phase2_stats(tmp_path):
     inclut holdout/DM/PBO/essais cumulés, persistés dans `job.result_json`."""
     db_path = str(tmp_path / "patrick.db")
     store_root = str(tmp_path / "store")
-    DataStore(root=store_root).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw_no_floor())
+    # Point-in-time version expected by `ingest()` (F01), else the worker fetches real data.
+    DataStore(root=store_root).save(f"raw_{TARGET_SYMBOL}", _synthetic_raw_no_floor(),
+                                    meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
 
     import os
     os.environ["PATRICK_DB_PATH"] = db_path

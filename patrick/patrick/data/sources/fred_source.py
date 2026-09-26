@@ -145,7 +145,10 @@ def download_fred_universe(series_map: dict[str, str], start: str,
     cols = []
     for name, sid in series_map.items():
         s = download_series(name, sid, start, realtime_date=realtime_date)
-        if s is not None:
+        # An EMPTY series is missing too: a discontinued series (DTB1 ended
+        # 2001, OILPRICE 2013) returns nothing after its end date and used to
+        # become an all-NaN column that crashed the Kalman feature.
+        if s is not None and not s.dropna().empty:
             cols.append(s)
         elif issues is not None:
             issue = check_fred_missing(name, s)

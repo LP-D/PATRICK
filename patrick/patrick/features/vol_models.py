@@ -157,8 +157,11 @@ def kalman_filtered_level(series: pd.Series, fit_end_idx: int | None = None) -> 
     only (the fold's train), not the whole series."""
     from pykalman import KalmanFilter
 
-    values = series.ffill().bfill().values.astype(float)
-    if len(values) < 5:
+    # +-inf treated as missing; a series with no finite value (a discontinued
+    # FRED series after its end date) gives NaN like EGARCH does, instead of
+    # crashing pykalman ("array must not contain infs or NaNs").
+    values = series.replace([np.inf, -np.inf], np.nan).ffill().bfill().values.astype(float)
+    if len(values) < 5 or not np.isfinite(values).all():
         return pd.Series(np.nan, index=series.index, name="kalman_filtered")
     fit_end = min(fit_end_idx, len(values)) if fit_end_idx is not None else len(values)
     fit_end = max(fit_end, 5)
