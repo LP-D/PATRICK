@@ -42,7 +42,7 @@ MODELS = ("market", "market_adjusted", "constant_mean")
 
 def event_day_zero(event_ts, trading_days: pd.DatetimeIndex, market_close: str = "16:00",
                    market_tz: str = "America/New_York") -> pd.Timestamp | None:
-    """First trading session whose close is at or after the event's
+    """First trading session whose close is strictly after the event's
     publication. `event_ts`: a date (assumed pre-open, same day is day 0) or
     a timestamp (naive = market timezone). After-close or non-trading-day
     events move to the next session. `None` if beyond the calendar."""
@@ -54,7 +54,7 @@ def event_day_zero(event_ts, trading_days: pd.DatetimeIndex, market_close: str =
     day = ts.normalize()
     if has_time:
         close = pd.Timestamp(f"{day.date()} {market_close}")
-        if ts > close:
+        if ts >= close:  # a 16:00:00 stamp (Yahoo's after-close earnings convention) is not in the close
             day = day + pd.Timedelta(days=1)
     pos = days.searchsorted(day)
     return days[pos] if pos < len(days) else None
@@ -70,6 +70,7 @@ class EventResult:
     sigma_est: float                # std of estimation-window residuals
     scar: float                     # standardized CAR (Patell)
     n_est: int
+    resid_est: pd.Series | None = None   # estimation-window abnormal returns (placebo distribution)
 
 
 @dataclass
@@ -91,9 +92,55 @@ class EventStudy:
     def caar(self) -> pd.Series:
         return self.aar().cumsum()
 
-    def tests(self) -> dict:
-        cars = np.array([r.car for r in self.results])
-        scars = np.array([r.scar for r in self.results])
+    def abnormal_variance(self, window: tuple[int, int] = (0, 1)) -> dict:
+        """Does the price move MORE than usual around the event, whatever
+        the direction? For events whose sign is unknown ex ante (keynotes,
+        earnings without the surprise), where positive and negative
+        reactions cancel in the CAAR.
+        - chi2: z_i = CAR_i[window] / (sigma_i sqrt(L)), sum z_i^2 ~ chi2(n)
+          under H0 -- assumes Gaussian abnormal returns, over-rejects under
+          fat tails;
+        - rank (default verdict): percentile of |CAR_i[window]| among the
+          |L-day sums| of its own estimation-window abnormal returns,
+          U(0, 1) under H0 whatever the tails; mean percentile tested
+          one-sided (Normal approximation, variance 1/(12 n)). Volatility
+          clustering around events still breaks exchangeability -- read with
+          the estimation window's calm/stress context in mind."""
+        a, b = window
+        length = b - a + 1
+        z2, pct = [], []
+        for r in self.results:
+            s = float(r.ar.loc[a:b].sum())
+            if r.sigma_est > 0:
+                z2.append(s ** 2 / (length * r.sigma_est ** 2))
+            if r.resid_est is not None and len(r.resid_est) > length:
+                placebo = np.abs(r.resid_est.rolling(length).sum().dropna().to_numpy())
+                pct.append(float((placebo < abs(s)).mean() + 0.5 * (placebo == abs(s)).mean()))
+        n, m = len(z2), len(pct)
+        mean_pct = float(np.mean(pct)) if m else np.nan
+        z_rank = (mean_pct - 0.5) / np.sqrt(1 / (12 * m)) if m else np.nan
+        return {
+            "window": window, "n_events": n,
+            "mean_z2": float(np.mean(z2)) if n else np.nan,
+            "p_chi2": float(stats.chi2.sf(float(np.sum(z2)), n)) if n else np.nan,
+            "mean_percentile": mean_pct,
+            "p_rank": float(stats.norm.sf(z_rank)) if m else np.nan,
+        }
+
+    def tests(self, window: tuple[int, int] | None = None) -> dict:
+        """Signed tests on the full event window, or on a sub-window
+        (e.g. the [0, +1] reaction): CAR summed over it, standardized by
+        sigma sqrt(L) -- the market-model estimation correction (O(L / n_est),
+        ~1 % here) is dropped on sub-windows."""
+        if window is None:
+            cars = np.array([r.car for r in self.results])
+            scars = np.array([r.scar for r in self.results])
+        else:
+            a, b = window
+            length = b - a + 1
+            cars = np.array([float(r.ar.loc[a:b].sum()) for r in self.results])
+            sig = np.array([r.sigma_est for r in self.results])
+            scars = np.where(sig > 0, cars / (sig * np.sqrt(length)), np.nan)
         n = len(cars)
         if n < 2:
             return {"n_events": n, "caar": float(cars.mean()) if n else np.nan}
@@ -194,7 +241,8 @@ def run_event_study(prices: pd.Series, events, benchmark: pd.Series | None = Non
         else:
             var_car = sigma ** 2 * length
         scar = car / np.sqrt(var_car) if var_car > 0 else np.nan
-        results.append(EventResult(pd.Timestamp(ev), d0, label, ar, car, sigma, float(scar), n_est))
+        results.append(EventResult(pd.Timestamp(ev), d0, label, ar, car, sigma, float(scar), n_est,
+                                   resid_est=resid.reset_index(drop=True)))
         windows.append((d0, w0, w1, label or str(d0.date())))
 
     overlaps = []
@@ -203,3 +251,54 @@ def run_event_study(prices: pd.Series, events, benchmark: pd.Series | None = Non
             if windows[a][1] <= windows[b][2] and windows[b][1] <= windows[a][2]:
                 overlaps.append((windows[a][3], windows[b][3]))
     return EventStudy(results, event_window, model, skipped, overlaps)
+
+
+def _fmt(x: float, pct: bool = False) -> str:
+    if x is None or not np.isfinite(x):
+        return "—"
+    return f"{x * 100:+.2f} %" if pct else f"{x:.3f}"
+
+
+def render_markdown(groups: dict[str, EventStudy], title: str, reaction_window: tuple[int, int] = (0, 1)) -> str:
+    """One summary row per group (all events, or e.g. beat / miss), then the
+    per-event table. Signed tests answer "which direction on average", the
+    variance tests "does the price move more than usual"."""
+    a, b = reaction_window
+    lines = [f"# {title}", "",
+             (f"Réaction mesurée sur [{a}, +{b}] séances autour de J0 (J0 = première séance dont la clôture "
+              "suit strictement la publication). Rendements anormaux LOGARITHMIQUES (-43 % log = -35 % simple). "
+              "Verdict signé : BMP ; verdict non signé : test de rang (robuste aux queues épaisses, le χ² "
+              "est indicatif)."), "",
+             "| Groupe | N | CAAR réaction | p BMP | p signe | CAAR fenêtre | p BMP fenêtre | z² moyen | p rang | p χ² |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for name, study in groups.items():
+        if not study.n_events:
+            lines.append(f"| {name} | 0 | — | — | — | — | — | — | — | — |")
+            continue
+        full = study.tests()
+        react = study.tests(reaction_window)
+        v = study.abnormal_variance(reaction_window)
+        lines.append(f"| {name} | {study.n_events} | {_fmt(react['caar'], True)} | "
+                     f"{_fmt(react.get('p_bmp', np.nan))} | {_fmt(react.get('p_sign', np.nan))} | "
+                     f"{_fmt(full['caar'], True)} | {_fmt(full.get('p_bmp', np.nan))} | "
+                     f"{_fmt(v['mean_z2'])} | {_fmt(v['p_rank'])} | {_fmt(v['p_chi2'])} |")
+    lines += ["", "| Événement | Publication | J0 | AR J0 | CAR réaction | CAR fenêtre | σ estim. |",
+              "|---|---|---|---:|---:|---:|---:|"]
+    rows = sorted((r for s in groups.values() for r in s.results), key=lambda r: r.day_zero)
+    seen = set()
+    for r in rows:
+        if (r.event, r.label) in seen:
+            continue
+        seen.add((r.event, r.label))
+        lines.append(f"| {r.label or '—'} | {r.event:%Y-%m-%d %H:%M} | {r.day_zero:%Y-%m-%d} | "
+                     f"{_fmt(float(r.ar.loc[0]), True)} | {_fmt(float(r.ar.loc[a:b].sum()), True)} | "
+                     f"{_fmt(r.car, True)} | {r.sigma_est * 100:.2f} % |")
+    skipped = [s for st in groups.values() for s in st.skipped]
+    overlaps = [o for st in groups.values() for o in st.overlapping_events]
+    if skipped:
+        lines += ["", f"Événements écartés : {len(skipped)} — " +
+                  "; ".join(f"{s['event']} ({s['reason']})" for s in skipped[:10])]
+    if overlaps:
+        lines += ["", (f"Fenêtres qui se chevauchent : {len(overlaps)} paire(s) — les tests en coupe "
+                       "surestiment alors la significativité.")]
+    return "\n".join(lines)

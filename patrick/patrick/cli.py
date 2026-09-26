@@ -22,6 +22,8 @@ from patrick.tracking import report as report_module
 app = typer.Typer(help="PATRICK — pipeline ML/DL multi-actifs autonome.")
 audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraînent jamais un modèle de production.")
 app.add_typer(audit_app, name="audit")
+research_app = typer.Typer(help="Études de recherche -- lecture/mesure, n'entraînent aucun modèle.")
+app.add_typer(research_app, name="research")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -349,6 +351,49 @@ def audit_tickers_cmd(
         raise typer.BadParameter(f"scope inconnu : {scope}")
     symbols = [s for k, v in pools.items() if scope in (k, "all") for s in v]
     report = ticker_check.render_markdown(ticker_check.check_many(symbols, workers=workers))
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(report + "\n")
+        typer.echo(f"Rapport écrit : {output}")
+    else:
+        typer.echo(report)
+
+
+@research_app.command(name="event-study")
+def research_event_study_cmd(
+    ticker: str = typer.Option(..., "--ticker", help="Actif étudié (ticker yfinance)"),
+    events: str = typer.Option(None, "--events", help="CSV : published_at[,label][,group]"),
+    earnings: bool = typer.Option(False, "--earnings", help="Publications de résultats Yahoo (groupes beat/miss)"),
+    benchmark: str = typer.Option("^GSPC", "--benchmark", help="Indice du modèle de marché"),
+    model: str = typer.Option("market", "--model", help="market | market_adjusted | constant_mean"),
+    pre: int = typer.Option(-5, "--pre", help="Début de la fenêtre d'événement (séances)"),
+    post: int = typer.Option(20, "--post", help="Fin de la fenêtre d'événement (séances)"),
+    start: str = typer.Option("2005-01-01", "--start", help="Début de l'historique de prix"),
+    title: str = typer.Option(None, "--title", help="Titre du rapport"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown de sortie (défaut : stdout)"),
+) -> None:
+    """Étude d'événements (MacKinlay) : rendements anormaux autour de
+    publications horodatées, J0 = première séance dont la clôture suit
+    strictement la publication."""
+    from patrick.data.sources.yfinance_source import download_one
+    from patrick.research import event_sources
+    from patrick.research import event_study as es
+
+    if bool(events) == earnings:
+        raise typer.BadParameter("indiquer exactement une source : --events FICHIER ou --earnings")
+    ev = event_sources.yahoo_earnings(ticker) if earnings else event_sources.read_events_csv(events)
+    prices = download_one(ticker, start)
+    bench = download_one(benchmark, start) if model != "constant_mean" else None
+    if prices is None or (model != "constant_mean" and bench is None):
+        typer.echo("Historique de prix indisponible.")
+        raise typer.Exit(code=1)
+    kwargs = {"benchmark": bench, "model": model, "event_window": (pre, post)}
+    groups = {"tous": es.run_event_study(prices, list(ev["published_at"]), labels=list(ev["label"]), **kwargs)}
+    for name, sub in ev.groupby("group", sort=True):
+        if ev["group"].nunique() > 1:
+            groups[str(name)] = es.run_event_study(prices, list(sub["published_at"]), labels=list(sub["label"]),
+                                                   **kwargs)
+    report = es.render_markdown(groups, title or f"Étude d'événements -- {ticker} vs {benchmark}")
     if output:
         with open(output, "w", encoding="utf-8") as f:
             f.write(report + "\n")
