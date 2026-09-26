@@ -121,6 +121,37 @@
 
 {# Panneau frère, pas imbriqué : un panneau DANS un panneau ne dit rien de plus
    que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}
+{% if detail.conformal %}
+<section id="conforme" class="card">
+<h2>Prédiction conforme (direction) <button type="button" class="info-icon" data-term="conformal" data-term-label="Prédiction conforme" aria-label="{{ t('glossary_open_aria', term='Prédiction conforme') }}">i</button></h2>
+{% set c = detail.conformal %}
+{% if not c.available %}
+{{ empty_state("Non calculable pour ce run.", c.reason) }}
+{% else %}
+<p class="hint">Ensembles de prédiction sur la direction à α = {{ c.alpha }} (couverture visée {{ "%.0f" | format((1 - c.alpha) * 100) }} %), calculés sur les {{ c.n }} P(hausse) hors échantillon du meilleur essai ({{ c.splits.test }} test walk-forward, {{ c.splits.holdout }} holdout, {{ c.splits.live }} live), chacune calibrée sur les prédictions antérieures seulement. « Pas d'avis » = l'ensemble contient les deux directions. Base : {{ "%.0f" | format(c.base_rate_up * 100) }} % de hausses.</p>
+<div class="metric-grid">
+{{ metric("Couverture (split)", "%.1f %%" | format(c.split.coverage * 100), "Visée " ~ ("%.0f" | format(c.split.nominal * 100)) ~ " % — garantie seulement si les données sont échangeables, ce qu'une série financière n'est pas.", "ok" if c.split.coverage >= c.split.nominal - 0.03 else "warning") }}
+{{ metric("Couverture (ACI)", "%.1f %%" | format(c.aci.coverage * 100), "Conformal adaptatif (Gibbs & Candès 2021) : erreur de couverture à long terme → 0 même sous dérive.", "ok" if c.aci.coverage >= c.aci.nominal - 0.03 else "warning") }}
+{{ metric("Pas d'avis (ACI)", "%.0f %%" | format(c.aci.no_call_rate * 100), c.aci.n_called ~ " prédiction(s) avec une seule direction retenue.", "neutral") }}
+{{ metric("Justesse quand avis (ACI)", ("%.1f %%" | format(c.aci.called_accuracy * 100)) if c.aci.n_called else "—", "Direction exacte parmi les appels conformes — à comparer au taux de hausses de base.", "neutral" if c.aci.n_called else "pending") }}
+</div>
+{% endif %}
+{% set m = detail.meta_labeling %}
+{% if m %}
+<h3>Meta-labeling</h3>
+{% if not m.available %}
+<p class="hint">Non calculable : {{ m.reason }}.</p>
+{% else %}
+<p class="hint">Un méta-modèle (régression logistique) apprend, sur les appels déjà résolus uniquement, si le modèle principal va avoir raison — à partir de la force de sa P(hausse), de sa confiance et de son taux de réussite récent. Un appel est retenu quand sa probabilité de succès dépasse le taux de réussite historique du modèle.</p>
+<div class="metric-grid">
+{{ metric("Justesse, tous les appels", "%.1f %%" | format(m.accuracy_all * 100), m.n_evaluated ~ " appels évalués.", "neutral") }}
+{{ metric("Justesse, appels retenus", ("%.1f %%" | format(m.accuracy_kept * 100)) if m.n_kept else "—", m.n_kept ~ " appels retenus (" ~ ("%.0f" | format(m.kept_share * 100)) ~ " %).", ("ok" if m.accuracy_kept > m.accuracy_all else "warning") if m.n_kept else "pending") }}
+</div>
+{% endif %}
+{% endif %}
+</section>
+{% endif %}
+
 <section class="card">
 <h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>
 {% if detail.data_quality_enabled %}

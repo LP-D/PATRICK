@@ -533,6 +533,15 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "in-sample configuration ends below the out-of-sample median. Above 0.5, "
                "selection is no better than chance."),
     },
+    "conformal": {
+        "fr": ("Prédiction conforme : au lieu d'une direction, un ensemble ({hausse}, {baisse} ou les deux) "
+               "construit pour contenir la réalisation avec une probabilité visée 1 − α. Un ensemble à deux "
+               "directions signifie « pas d'avis ». La garantie suppose des données échangeables ; la variante "
+               "adaptative (ACI) la rétablit en moyenne de long terme sous dérive."),
+        "en": ("Conformal prediction: instead of one direction, a set ({up}, {down} or both) built to contain the "
+               "outcome with target probability 1 − α. A two-direction set means 'no call'. The guarantee assumes "
+               "exchangeable data; the adaptive variant (ACI) restores it on the long-run average under drift."),
+    },
     "twr": {
         "fr": ("Rendement pondéré par le temps (TWR) : performance de la gestion, neutralisée "
                "des apports et retraits — c'est elle qui se compare à un indice de référence."),

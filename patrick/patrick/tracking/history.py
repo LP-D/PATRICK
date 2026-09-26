@@ -18,6 +18,7 @@ import html
 import json
 import sqlite3
 
+import numpy as np
 from sklearn.metrics import precision_recall_fscore_support
 
 from patrick.config import defaults as D
@@ -311,6 +312,57 @@ def _path_distribution_for_trial(conn: sqlite3.Connection, trial_id: int) -> dic
     return path_performance_distribution({i: v for i, (v,) in enumerate(rows)})
 
 
+def conformal_for_trial(conn: sqlite3.Connection, trial_id: int, alpha: float = 0.2,
+                        min_predictions: int = 60) -> dict:
+    """Roadmap bloc 3 -- conformal direction sets from the trial's stored
+    OUT-OF-SAMPLE P(up) (walk-forward test folds, then holdout/live), in
+    time order: split conformal and ACI (`validation/conformal.py`).
+    `available=False` with the reason when there is not enough to say
+    anything (runs before migration 0024 have no P(up))."""
+    from patrick.validation import conformal
+
+    rows = conn.execute(
+        "SELECT ts, y_true, p_up, split FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
+        "AND y_true IS NOT NULL AND split IN ('test', 'holdout', 'live') ORDER BY ts, split",
+        (trial_id,)).fetchall()
+    if len(rows) < min_predictions:
+        return {"available": False, "n": len(rows),
+                "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
+                           else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
+    y_up = np.isin(np.array([r[1] for r in rows], dtype=float), (2.0, 3.0)).astype(int)
+    p_up = np.array([r[2] for r in rows], dtype=float)
+    out = {"available": True, "n": len(rows), "alpha": alpha,
+           "splits": {s: sum(1 for r in rows if r[3] == s) for s in ("test", "holdout", "live")}}
+    for method in ("split", "aci"):
+        res = conformal.direction_sets(p_up, y_up, alpha=alpha, method=method)
+        out[method] = {k: res[k] for k in ("coverage", "nominal", "no_call_rate", "n_called", "called_accuracy")}
+    out["base_rate_up"] = float(y_up.mean())
+    return out
+
+
+def meta_labeling_for_trial(conn: sqlite3.Connection, trial_id: int, horizon: int,
+                            min_predictions: int = 150) -> dict:
+    """Roadmap bloc 3 -- meta-labeling on the trial's stored out-of-sample
+    predictions (`validation/meta_labeling.py`): does the primary's own
+    confidence tell when it is right? Walk-forward, a call's meta model only
+    sees calls resolved before it."""
+    from patrick.validation import meta_labeling
+
+    rows = conn.execute(
+        "SELECT y_pred, y_true, p_up, y_proba FROM prediction WHERE trial_id = ? AND p_up IS NOT NULL "
+        "AND y_true IS NOT NULL AND split IN ('test', 'holdout', 'live') ORDER BY ts, split",
+        (trial_id,)).fetchall()
+    if len(rows) < min_predictions:
+        return {"available": False, "n": len(rows),
+                "reason": ("aucune P(hausse) enregistrée (run antérieur à la migration 0024)" if not rows
+                           else f"{len(rows)} prédictions hors échantillon < {min_predictions}")}
+    arr = np.array([[r[0], r[1], r[2], r[3] if r[3] is not None else np.nan] for r in rows], dtype=float)
+    res = meta_labeling.meta_label_sequence(arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], horizon=horizon)
+    return {"available": res["n_evaluated"] > 0, "n": res["n"],
+            "reason": None if res["n_evaluated"] else "pas assez d'appels résolus pour entraîner le méta-modèle",
+            **{k: res[k] for k in ("n_evaluated", "n_kept", "accuracy_all", "accuracy_kept", "kept_share")}}
+
+
 def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -> dict | None:
     """P7.2 -- `/runs/{id}` detail page: same components as `report.py`
     (never recomputed differently), but returned as a Python structure for
@@ -373,6 +425,9 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "stability_enabled": config.get("selection", {}).get("track_stability", True),
         "feature_stability": feature_stability,
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
+        "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
+        "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
+                          if best_trial else None),
     }
 
 
