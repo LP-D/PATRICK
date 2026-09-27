@@ -117,6 +117,21 @@ def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp
     return to_drop
 
 
+def load_snapshot(objective: ObjectiveConfig, universe: UniverseConfig, snapshot_id: str,
+                  store: DataStore | None = None) -> pd.DataFrame:
+    """Exact replay of an already-ingested snapshot (`patrick resume`): loads
+    `snapshot_id` from the local data lake, never the latest snapshot of the
+    key and never the network. Raises `FileNotFoundError` if that snapshot
+    is not (or no longer) in the store -- silently falling back to `latest`
+    would train the resumed run on a different FRED vintage / Yahoo
+    revision than the trials already persisted for it."""
+    store = store or DataStore()
+    df = store.load(f"raw_{objective.target_symbol}", snapshot_id=snapshot_id)
+    _attach_snapshot_context(df, universe)
+    print(f"[REPLAY] raw_{objective.target_symbol}: snapshot {snapshot_id} {df.shape}.")
+    return df
+
+
 def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
            store: DataStore | None = None, force: bool = False,
            data_quality: DataQualityConfig | None = None) -> pd.DataFrame:

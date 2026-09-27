@@ -49,7 +49,7 @@ from sklearn.preprocessing import RobustScaler
 
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
-from patrick.data.ingest import ingest
+from patrick.data.ingest import ingest, load_snapshot
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
@@ -1552,12 +1552,18 @@ def _finish_runs(st: _RunState) -> None:
 
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
                   force_ingest: bool = False, db_path: str | None = None,
-                  job_id: str | None = None) -> dict:
+                  job_id: str | None = None, snapshot_id: str | None = None) -> dict:
     """Ingestion -> run registration -> base pool -> scan (walk-forward or
     CPCV) -> stability -> holdout diagnostic -> Optuna -> CSV exports ->
     final selection -> per-horizon model export -> holdout / Diebold-Mariano
     / cumulative trials / PBO -> finish. Each phase is a function of
-    `_RunState`; the sequence is pinned by `tests/test_run_pipeline_golden.py`."""
+    `_RunState`; the sequence is pinned by `tests/test_run_pipeline_golden.py`.
+
+    `snapshot_id` (`patrick resume`): replays exactly that snapshot from the
+    local data lake (`data.ingest.load_snapshot`) instead of `ingest()` --
+    which would load the LATEST snapshot of the key, i.e. possibly a newer
+    FRED vintage than the one the interrupted run was launched on. `None`
+    (default, every fresh run) keeps the regular `ingest()` path."""
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
@@ -1565,7 +1571,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     # Ingestion runs before any run_id exists: timed here, written once the
     # run rows are created (same duplication as run.started_at).
     t_ingest_start = time.time()
-    raw = ingest(config.objective, config.universe, store, force=force_ingest, data_quality=config.data_quality)
+    if snapshot_id is not None:
+        raw = load_snapshot(config.objective, config.universe, snapshot_id, store)
+    else:
+        raw = ingest(config.objective, config.universe, store, force=force_ingest,
+                     data_quality=config.data_quality)
     t_ingest_end = time.time()
 
     conn = trackdb.connect(db_path)
