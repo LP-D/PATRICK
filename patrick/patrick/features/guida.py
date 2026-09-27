@@ -66,6 +66,8 @@ question SHAP selection already answers for every other feature.
 """
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -358,3 +360,33 @@ def build_guida_estimated_features(raw: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(index=raw.index)
     pool = pd.concat(parts, axis=1)
     return pool.loc[:, ~pool.columns.duplicated()]
+
+
+# ---------------------------------------------------------------------------
+# Dependencies of the group-relative features above (predict/explain rebuild
+# only the series a model needs, `selection/universe_reduction.py`).
+# ---------------------------------------------------------------------------
+
+_XSECT_RE = re.compile(r"_xsect_mom_\d+d_estimated$")
+_IDIO_RE = re.compile(r"_idio_vol_(?P<label>[A-Za-z]+)_\d+d_estimated$")
+
+
+def multi_series_dependencies(feature: str, raw_columns) -> frozenset[str] | None:
+    """Raw series a feature of THIS module is computed from when that is
+    more than its own prefix -- cross-sectional momentum (rank within the
+    commodity group), idiosyncratic vol (leave-one-out group factor), carry
+    (rate columns) -- restricted to the columns present in `raw_columns`
+    (the builders above only use those). None for any other feature name."""
+    if feature.startswith("EURUSD_carry_diff_"):
+        return frozenset({EURUSD_US_RATE_COLUMN, EURUSD_EUR_RATE_COLUMN})
+    if feature.startswith("EURUSD_carry_us_rate_"):
+        return frozenset({EURUSD_US_RATE_COLUMN})
+    if _XSECT_RE.search(feature):
+        return frozenset(_commodity_columns(raw_columns))
+    match = _IDIO_RE.search(feature)
+    if match:
+        group = {label: name for name, label in _GROUP_LABELS.items()}.get(match.group("label"))
+        if group is not None:
+            members = {clean_symbol(sym) for sym, _ in D.DEFAULT_TARGET_GROUPS[group]}
+            return frozenset(c for c in raw_columns if c in members)
+    return None

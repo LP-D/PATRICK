@@ -41,11 +41,17 @@ def slug_target(symbol: str) -> str:
     return _SLUG_RE.sub("_", symbol).strip("_")
 
 
-def universe_excluding(target_symbol: str) -> tuple[list[str], dict[str, str]]:
+UNIVERSE_SCOPES = ("default", "extended")
+
+
+def universe_excluding(target_symbol: str, scope: str = "default") -> tuple[list[str], dict[str, str]]:
     """The feature universe is always "everything we have" (no more manual
     ticker/source selection) -- except the target itself, so it isn't fed
-    back in as an input feature (trivial leak)."""
-    yf_tickers = [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != target_symbol]
+    back in as an input feature (trivial leak). `scope="extended"` (opt-in,
+    ported from feature/replay-cache-universe): the default universe plus
+    the verified feature candidates of `universe_extension`."""
+    base = UX.extended_candidate_yf_tickers() if scope == "extended" else D.DEFAULT_UNIVERSE_YF_TICKERS
+    yf_tickers = [t for t in base if t != target_symbol]
     fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if v != target_symbol}
     return yf_tickers, fred_series
 
@@ -388,7 +394,26 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     if target_symbol not in TARGET_SOURCE_BY_SYMBOL:
         errors.append("« Que prédire » : choix invalide.")
     target_source = TARGET_SOURCE_BY_SYMBOL.get(target_symbol, "yfinance")
-    yf_tickers, fred_series = universe_excluding(target_symbol)
+    universe_scope = form.get("universe_scope") or "default"
+    if universe_scope not in UNIVERSE_SCOPES:
+        errors.append("« Univers candidat » : choix invalide.")
+        universe_scope = "default"
+    yf_tickers, fred_series = universe_excluding(target_symbol, universe_scope)
+
+    # Per-fold correlation-clustering reduction (selection/universe_reduction.py):
+    # empty = disabled (the default, never a silent filter); aggressive values
+    # are accepted -- the pipeline warns, the form does not refuse.
+    reduction_raw = (form.get("reduction_corr_threshold") or "").strip().replace(",", ".")
+    reduction_corr_threshold = None
+    if reduction_raw:
+        try:
+            reduction_corr_threshold = float(reduction_raw)
+        except ValueError:
+            errors.append("« Seuil de réduction |corr| » : valeur numérique décimale invalide.")
+        else:
+            if not 0.0 < reduction_corr_threshold <= 1.0:
+                errors.append("« Seuil de réduction |corr| » doit être dans ]0, 1] (vide = désactivé).")
+                reduction_corr_threshold = None
 
     _raw_output_dir = (form.get("output_dir") or "").strip()
     if _raw_output_dir and not validate_output_dir(_raw_output_dir, errors):
@@ -553,6 +578,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "fred_series": fred_series,
             "start_date": (form.get("start_date") or "2000-01-01").strip(),
             "yf_coverage": yf_coverage,
+            "reduction_corr_threshold": reduction_corr_threshold,
         },
         "data_quality": {
             "enabled": _checked(form, "data_quality_enabled"),
@@ -632,6 +658,10 @@ def to_view(cfg: dict) -> dict:
         "regimes": ",".join(obj.get("regimes", [])),
         "start_date": uni.get("start_date", "2000-01-01"),
         "yf_coverage": uni.get("yf_coverage", 0.85),
+        "universe_scope": "extended" if (set(uni.get("yf_tickers", [])) & set(UX.EXTENDED_FEATURE_CANDIDATES))
+        - set(D.DEFAULT_UNIVERSE_YF_TICKERS) else "default",
+        "reduction_corr_threshold": "" if uni.get("reduction_corr_threshold") is None
+        else uni["reduction_corr_threshold"],
         "data_quality_enabled": bool(dq.get("enabled", True)),
         "max_frozen_run": dq.get("max_frozen_run", D.DEFAULT_QUALITY_MAX_FROZEN_RUN),
         "max_gap_bdays": dq.get("max_gap_bdays", D.DEFAULT_QUALITY_MAX_GAP_BDAYS),

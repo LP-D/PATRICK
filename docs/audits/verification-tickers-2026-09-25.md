@@ -28,8 +28,9 @@ ajoutées après vérification sur 112 candidates — ^EVZ écarté, vide).
 - **ALDAT.PA (D.A.T.E)** : vide, attendu (introduction le jour même). Son
   risque est estimé via ^FCHI (`backfill_with_proxy`).
 - Les **39 tickers ajoutés sur le PC A** (branche `feature/replay-cache-universe`,
-  absente du dépôt distant) n'ont pas pu être vérifiés ici : lancer
-  `patrick audit tickers` sur le PC A après la fusion.
+  absente du dépôt distant) n'ont pas pu être vérifiés ici. **Suite (2026-09-27)** :
+  vérifiés (39/39) sur le PC A et dans le conteneur, fusionnés dans
+  `universe_extension` -- voir `verification-tickers-2026-09-27.md`.
 
 ## Détail
 

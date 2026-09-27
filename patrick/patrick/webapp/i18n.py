@@ -116,6 +116,20 @@ STRINGS: dict[str, dict[str, str]] = {
                               "series), excluding the target chosen above.")},
     "field_start_date": {"fr": "Date de début", "en": "Start date"},
     "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
+    "field_universe_scope": {"fr": "Univers candidat", "en": "Candidate universe"},
+    "universe_scope_default": {"fr": "Standard (univers par défaut)", "en": "Standard (default universe)"},
+    "universe_scope_extended": {"fr": "Étendu (+ indices, taux, FX, ETF sectoriels/obligataires…)",
+                                "en": "Extended (+ indices, rates, FX, sector/bond ETFs…)"},
+    "field_reduction_corr_threshold": {
+        "fr": "Seuil de réduction |corr| (vide = désactivé)",
+        "en": "Reduction |corr| threshold (empty = disabled)"},
+    "reduction_hint": {
+        "fr": ("Regroupe les séries candidates par clustering hiérarchique sur 1-|corr| et n'en garde qu'une "
+               "par groupe. Décidé dans chaque fold, sur ses seules données d'entraînement (walk-forward, "
+               "holdout, CPCV, modèle final). En dessous de 0,8 : avertissement (réduction agressive)."),
+        "en": ("Groups candidate series by hierarchical clustering on 1-|corr| and keeps one per group. "
+               "Decided inside each fold, on its training data only (walk-forward, holdout, CPCV, final "
+               "model). Below 0.8: warning (aggressive reduction).")},
 
     "section_data_quality": {"fr": "Qualité de données (portes à l'ingestion)",
                               "en": "Data quality (ingestion gates)"},
@@ -301,6 +315,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_fr_cac40": {"fr": "Actions France (CAC 40)", "en": "French stocks (CAC 40)"},
     "group_fx_majors": {"fr": "Devises (majeures)", "en": "Currencies (majors)"},
     "group_crypto_majors": {"fr": "Crypto (majeures)", "en": "Crypto (majors)"},
+    "group_us_rates_indices": {"fr": "Taux US (indices CBOE)", "en": "US rates (CBOE indices)"},
+    "group_commodities_extra": {"fr": "Matières premières (compléments)", "en": "Commodities (additional)"},
 
     # Phase 7 — history/universe
     # P8: "/" became the synthesis dashboard, the launcher moved to
@@ -765,4 +781,6 @@ TARGET_GROUP_LABEL_KEYS = {
     "Actions France (CAC 40)": "group_fr_cac40",
     "Devises (majeures)": "group_fx_majors",
     "Crypto (majeures)": "group_crypto_majors",
+    "Taux US (indices CBOE)": "group_us_rates_indices",
+    "Matières premières (compléments)": "group_commodities_extra",
 }

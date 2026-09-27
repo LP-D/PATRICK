@@ -5,8 +5,12 @@ on the most recent data, writes the prediction to `prediction` with
 
 Never retrains and never re-selects anything: loads the already-exported
 model+scaler (`tracking.export.export_best_model`) and only rebuilds today's
-feature vector, following the same recipe as at export time (`feature_pool`
-+ interaction formulas persisted alongside the model).
+feature vector, following the same recipe as at export time (interaction
+formulas persisted alongside the model) -- restricted to the model's
+SELECTED features and the raw series they are computed from
+(`selection.universe_reduction.restrict_to_required_series`; the scaler is
+applied to those columns only, `tracking.export.scale_selected`), not the
+whole universe.
 
 `y_true` for `split='live'` is simplified to binary (1.0 if the realized
 return over the horizon is positive, 0.0 otherwise) rather than reclassified
@@ -31,7 +35,9 @@ from patrick.data.store import DataStore
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.models import calibration as calibration_lib
 from patrick.pipeline.engine import build_full_feature_pool
+from patrick.selection.universe_reduction import restrict_to_required_series
 from patrick.tracking import db as trackdb
+from patrick.tracking.export import scale_selected
 
 logger = logging.getLogger(__name__)
 
@@ -94,19 +100,19 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, force=True, data_quality=config.data_quality)
 
-        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
+        model_raw = restrict_to_required_series(raw, feature_names, target_col)
+        full_pool = build_full_feature_pool(model_raw, config, target_col, interaction_formulas)
 
-        missing = [c for c in feature_pool if c not in full_pool.columns]
+        missing = [c for c in feature_names if c not in full_pool.columns]
         if missing:
             raise ValueError(
                 f"Training pool columns missing from the fresh data: {missing[:5]}"
                 f"{'...' if len(missing) > 5 else ''} -- the config may have changed since export.")
 
-        last_row = full_pool[feature_pool].iloc[[-1]]
+        last_row = full_pool[feature_names].iloc[[-1]]
         last_ts = full_pool.index[-1]
-        X = finite_scaled(scaler.transform(finite_features(last_row.values, "live")), "live")
         sel_idx = [feature_pool.index(n) for n in feature_names]
-        X_sel = X[:, sel_idx]
+        X_sel = finite_scaled(scale_selected(scaler, finite_features(last_row.values, "live"), sel_idx), "live")
 
         pred_class = int(model.predict(X_sel)[0])
         proba_row = model.predict_proba(X_sel)[0]
