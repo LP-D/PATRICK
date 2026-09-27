@@ -6,17 +6,21 @@ killing the web process during a run no longer loses the run.
 """
 from __future__ import annotations
 
+import ctypes
 import json
+import os
 import sqlite3
 import uuid
 
 # A heartbeat older than this -> worker considered dead (`ensure_worker_running`
-# relaunches one). The worker refreshes its heartbeat on every loop iteration
-# AND during a run's execution (throttled to ~1/s, see worker.py), but
-# importing its ML dependencies (xgboost/shap/arch/...) even before entering
-# its loop already takes ~5s cold -> generous margin to avoid confusing
-# "worker starting up" with "worker dead" (which would spawn a duplicate
-# second worker, see `ensure_worker_running`).
+# relaunches one). The worker refreshes its heartbeat from a dedicated thread
+# every few seconds (`worker._HEARTBEAT_INTERVAL_S`), whatever the pipeline
+# prints -- it used to depend on printed lines, and a silent phase of more
+# than 30s made a live worker look dead (2026-09-27, GSPC_62). Importing its
+# ML dependencies (xgboost/shap/arch/...) before the thread starts already
+# takes ~5s cold -> generous margin to avoid confusing "worker starting up"
+# with "worker dead" (which would spawn a duplicate second worker, see
+# `ensure_worker_running`).
 HEARTBEAT_STALE_S = 30.0
 
 _JOB_COLUMNS = [
@@ -123,21 +127,62 @@ def active_job(conn: sqlite3.Connection) -> dict | None:
     return _row_to_dict(row) if row else None
 
 
+def pid_alive(pid: int | None) -> bool:
+    """True if a process with this pid currently exists. Never signals the
+    process: on Windows `os.kill(pid, 0)` would TERMINATE it, hence the
+    OpenProcess/GetExitCodeProcess query."""
+    if not pid or pid <= 0:
+        return False
+    if os.name == "nt":
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: exists, not ours
+        try:
+            code = wintypes.DWORD()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def reap_stale_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
-    """Jobs left 'running' beyond `max_age_s` -> their worker died without
-    being able to mark the failure (kill -9, crash, power loss): they are
-    switched to error rather than left blocking the queue indefinitely.
-    Called at `run_worker_loop` startup, never during an ongoing execution (a
-    legitimately long run must not be cut down by its own worker)."""
+    """Jobs left 'running' whose worker process no longer exists (kill -9,
+    crash, power loss) are switched to error rather than left blocking the
+    queue indefinitely -- as soon as the worker is gone, however recent the
+    job. A job whose worker is still alive is never touched, however old: a
+    reference run lasts hours, and the former "older than `max_age_s`" rule
+    alone marked a live job as dead (2026-09-27, GSPC_62). `max_age_s` only
+    still applies to legacy rows without a recorded `worker_pid`.
+    Called at `run_worker_loop` startup, never during an ongoing execution."""
+    rows = conn.execute(
+        "SELECT job_id, worker_pid, (julianday('now') - julianday(started_at)) * 86400 "
+        "FROM job WHERE status = 'running'"
+    ).fetchall()
+    dead = [
+        job_id for job_id, worker_pid, age_s in rows
+        if (not pid_alive(worker_pid) if worker_pid else (age_s or 0) > max_age_s)
+    ]
     with conn:
-        cur = conn.execute(
-            "UPDATE job SET status = 'error', finished_at = datetime('now'), "
-            "error = 'worker interrupted (process died)' "
-            "WHERE status = 'running' AND "
-            "(julianday('now') - julianday(started_at)) * 86400 > ?",
-            (max_age_s,),
-        )
-    return cur.rowcount
+        for job_id in dead:
+            conn.execute(
+                "UPDATE job SET status = 'error', finished_at = datetime('now'), "
+                "error = 'worker interrupted (process died)' "
+                "WHERE job_id = ? AND status = 'running'",
+                (job_id,),
+            )
+    return len(dead)
 
 
 def write_heartbeat(conn: sqlite3.Connection, pid: int) -> None:
