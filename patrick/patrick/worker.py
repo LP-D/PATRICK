@@ -12,11 +12,13 @@ nothing).
 """
 from __future__ import annotations
 
+import faulthandler
 import json
 import os
 import re
 import sys
 import time
+import traceback
 
 import numpy as np
 
@@ -43,6 +45,57 @@ _PHASE_MARKERS = [
 # every write is a SQLite transaction.
 _FLUSH_THROTTLE_S = 1.0
 
+# The web server spawns the worker with stdout/stderr on DEVNULL
+# (`run_manager._spawn_worker`): without its own log file, a worker that dies
+# takes its traceback with it (2026-09-27: job GSPC_61 left 'running' by a
+# worker that vanished without a trace). One file per worker process, in
+# `logs/` next to the tracking DB; only the most recent ones are kept.
+_WORKER_LOGS_KEPT = 20
+
+
+class _Tee:
+    """Duplicates a stream into the worker log file. The original stream may
+    be DEVNULL (spawned worker) or a real console (`patrick worker` run by
+    hand): its failures never prevent writing the log."""
+
+    def __init__(self, stream, log):
+        self._stream = stream
+        self._log = log
+
+    def write(self, text: str) -> int:
+        if self._stream is not None:
+            try:
+                self._stream.write(text)
+            except (OSError, ValueError):
+                pass
+        self._log.write(text)
+        self._log.flush()
+        return len(text)
+
+    def flush(self) -> None:
+        if self._stream is not None:
+            try:
+                self._stream.flush()
+            except (OSError, ValueError):
+                pass
+        self._log.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._stream if self._stream is not None else self._log, name)
+
+
+def _open_worker_log(db_path: str, pid: int):
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(db_path)), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    olds = sorted(n for n in os.listdir(log_dir) if n.startswith("worker-") and n.endswith(".log"))
+    for name in olds[: max(len(olds) - (_WORKER_LOGS_KEPT - 1), 0)]:
+        try:
+            os.remove(os.path.join(log_dir, name))
+        except OSError:
+            pass
+    path = os.path.join(log_dir, f"worker-{time.strftime('%Y%m%d-%H%M%S')}-{pid}.log")
+    return open(path, "a", encoding="utf-8", buffering=1)  # closed in run_worker_loop's finally
+
 
 def _estimate_total(config: RunConfig) -> int:
     total = (
@@ -68,6 +121,9 @@ class _ProgressCapture:
         self._conn = conn
         self._job_id = job_id
         self._pid = pid
+        # The stream in place before the capture (the worker log's tee), not
+        # `sys.__stdout__`, so that the pipeline output also reaches the log.
+        self._out = sys.stdout
         self._buffer = ""
         self._log_lines: list[str] = []
         self._phase = "ingestion"
@@ -75,7 +131,7 @@ class _ProgressCapture:
         self._last_flush = 0.0
 
     def write(self, text: str) -> int:
-        sys.__stdout__.write(text)
+        self._out.write(text)
         self._buffer += text
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
@@ -84,7 +140,7 @@ class _ProgressCapture:
         return len(text)
 
     def flush(self) -> None:
-        sys.__stdout__.flush()
+        self._out.flush()
 
     def _handle_line(self, line: str) -> None:
         self._log_lines.append(line)
@@ -205,6 +261,7 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
             result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
     except Exception as exc:  # noqa: BLE001 -- job boundary: any pipeline failure is recorded on the job, the worker keeps running
         sys.stdout = old_stdout
+        traceback.print_exc()  # full traceback in the worker log; the job only keeps the message
         capture.final_flush()
         jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")
         return
@@ -218,9 +275,37 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
     """Main loop: claims the next queued job and runs it, in a loop, until
     `idle_timeout` seconds pass with no job available (the worker then
     stops on its own; `run_manager.ensure_worker_running` relaunches one on
-    the next submission)."""
+    the next submission).
+
+    Everything the worker prints -- and its traceback if it dies -- also goes
+    to its own log file (`logs/` next to the DB, see `_open_worker_log`). An
+    abrupt end of that file, without the final `[WORKER] exit` line, means
+    the process was killed from outside."""
     pid = os.getpid()
     db_path = trackdb.default_db_path()
+    log = _open_worker_log(db_path, pid)
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    faulthandler_was_enabled = faulthandler.is_enabled()
+    sys.stdout, sys.stderr = _Tee(old_stdout, log), _Tee(old_stderr, log)
+    faulthandler.enable(file=log, all_threads=True)  # native crashes (C extensions) too
+    try:
+        _worker_loop(pid, db_path, poll_interval, idle_timeout)
+    except BaseException:
+        log.write(f"[WORKER] died (pid={pid}):\n{traceback.format_exc()}")
+        raise
+    finally:
+        log.write(f"[WORKER] exit (pid={pid}) {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+        faulthandler.disable()
+        if faulthandler_was_enabled:
+            try:
+                faulthandler.enable(file=sys.__stderr__)
+            except (AttributeError, OSError, ValueError):
+                pass
+        log.close()
+
+
+def _worker_loop(pid: int, db_path: str, poll_interval: float, idle_timeout: float) -> None:
     conn = trackdb.connect(db_path)
     n_reaped = jobs_db.reap_stale_running_jobs(conn)
     if n_reaped:
@@ -241,4 +326,7 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
             time.sleep(poll_interval)
             continue
         idle_since = time.monotonic()
+        print(f"[WORKER] job {job['job_id']} claimed")
         _run_one_job(conn, job, pid)
+        finished = jobs_db.get_job(conn, job["job_id"]) or {}
+        print(f"[WORKER] job {job['job_id']} finished: {finished.get('status')}")
