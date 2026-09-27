@@ -49,7 +49,9 @@ implying it is free.
 """
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -59,8 +61,10 @@ import shap
 from patrick.config.schema import RunConfig
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
+from patrick.features.pool_cache import FEATURE_CODE_HASH
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.pipeline.engine import build_full_feature_pool
+from patrick.tracking import cache_tables
 from patrick.tracking import db as trackdb
 from patrick.validation import drift
 
@@ -68,6 +72,17 @@ from patrick.validation import drift
 # once for display purposes -- that module fixes the mapping, this one only
 # names it.
 CLASS_NAMES = ["DOWN_FORT", "DOWN_FAIBLE", "UP_FAIBLE", "UP_FORT"]
+
+
+def _explanation_code_hash() -> str:
+    """Part of the SHAP cache key (`tracking/cache_tables.py`): this module's
+    source plus the feature code hash -- a change to how an explanation or a
+    feature is computed never serves a cached payload built by older code."""
+    blob = Path(__file__).read_bytes() + FEATURE_CODE_HASH.encode()
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+EXPLANATION_CODE_HASH = _explanation_code_hash()
 
 # Same order-of-magnitude minimum sample as `tracking.history.LIVE_HIT_RATE_WINDOW`:
 # below this many recent reconstructed rows, a PSI read is noise, not signal.
@@ -173,6 +188,14 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         if raw is None:
             return None
         data_snapshot_id = raw.attrs.get("snapshot_id")
+        # SHAP cache (ported from feature/replay-cache-universe): same trial,
+        # same prediction date, same data snapshot, same code -> the payload
+        # computed on a previous page open, without rebuilding the pool.
+        cache_key = (best["trial_id"], str(latest["ts"]), data_snapshot_id, EXPLANATION_CODE_HASH)
+        if data_snapshot_id is not None:
+            cached = cache_tables.get_cached_shap(conn, *cache_key)
+            if cached is not None:
+                return cached
 
         full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
 
@@ -221,7 +244,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             key=lambda r: abs(r["shap"]), reverse=True,
         )
 
-        return {
+        result = {
             "run_id": best["run_id"], "trial_id": best["trial_id"],
             "ts": str(ts.date()), "split": latest["split"], "data_snapshot_id": data_snapshot_id,
             "y_pred": pred_class, "y_pred_label": CLASS_NAMES[pred_class],
@@ -229,6 +252,9 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             "base_value": base_value, "final_value": final_value,
             "contributions": contributions, "n_features_total": len(feature_names),
         }
+        if data_snapshot_id is not None:
+            cache_tables.save_cached_shap(conn, *cache_key, result)
+        return result
     finally:
         conn.close()
 
