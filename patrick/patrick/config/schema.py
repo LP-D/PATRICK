@@ -50,6 +50,14 @@ class UniverseConfig(BaseModel):
     # "reference_date" is the pre-F01, LEAKY behavior, kept only so that
     # `patrick audit degradation` can measure what F01 changes.
     fred_point_in_time: Literal["publication_lag", "alfred", "reference_date"] = "publication_lag"
+    # Candidate-universe reduction (`selection/universe_reduction.py`):
+    # hierarchical clustering on 1-|corr| of returns, one representative per
+    # cluster, decided INSIDE each fold from its training bars only (walk-
+    # forward fold, holdout, CPCV combination, final model). None (default)
+    # = no reduction -- never a silent filter; values below
+    # `AGGRESSIVE_CORR_THRESHOLD` are accepted but warned about.
+    reduction_corr_threshold: float | None = Field(default=None, gt=0.0, le=1.0)
+    reduction_lookback: int = Field(default=252, ge=20)
 
 
 class DataQualityConfig(BaseModel):

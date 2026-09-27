@@ -25,11 +25,31 @@ from patrick.selection.registry import select_features
 from patrick.tuning.optuna_runner import safe_resample
 
 
+def scale_selected(scaler: RobustScaler, values: np.ndarray, columns: list[int]) -> np.ndarray:
+    """`scaler.transform(full)[:, columns]` computed from those columns
+    alone: RobustScaler is column-wise (`(x - center_) / scale_`), so the
+    result is identical while predict/explain only rebuild the features the
+    model selected (and the raw series they come from) instead of the whole
+    pool the scaler was fit on."""
+    out = np.array(values, dtype=float, copy=True)
+    if scaler.with_centering:
+        out -= scaler.center_[columns]
+    if scaler.with_scaling:
+        out /= scaler.scale_[columns]
+    return out
+
+
 def export_best_model(pool, target_col: str, feature_pool: list[str], config: RunConfig,
                        best_cfg: dict, out_dir: str, seed: int = 42,
                        interaction_formulas: list[str] | None = None,
-                       conn=None, symbol: str | None = None) -> str:
-    """`conn`/`symbol` (feature/drift-psi-infrastructure): when both are
+                       conn=None, symbol: str | None = None,
+                       universe_reduction: dict | None = None) -> str:
+    """`universe_reduction`: the whole-history reduction decision the
+    caller already applied to `feature_pool` (kept/dropped series,
+    threshold) -- recorded in the bundle and the meta json, never applied
+    here. None = no reduction (key absent from both).
+
+    `conn`/`symbol` (feature/drift-psi-infrastructure): when both are
     given, persists a PSI reference (`validation.drift.decile_reference`)
     for every SELECTED feature, keyed by (symbol, horizon, feature) --
     REPLACED at each call, never accumulated (`tracking.db.save_drift_reference`
@@ -94,14 +114,16 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     # Interaction formulas are discovered once per run (pilot fold, see
     # `_FoldPoolBuilder`) and without them, `predict --live` cannot reproduce
     # the training pool's interaction columns.
-    joblib.dump({"model": clf, "scaler": sc, "feature_names": feat_names,
-                 "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
-                 "target_col": target_col}, model_path)
-
+    bundle = {"model": clf, "scaler": sc, "feature_names": feat_names,
+              "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
+              "target_col": target_col}
     meta = {"horizon": horizon, "regime": regime, "N": n_feat, "sampler": sampler_name,
             "algo": algo, "best_params": best_params, "feature_names": feat_names,
             "feature_pool": feature_pool, "interaction_formulas": interaction_formulas or [],
             "n_train_rows": len(y)}
+    if universe_reduction is not None:
+        bundle["universe_reduction"] = meta["universe_reduction"] = universe_reduction
+    joblib.dump(bundle, model_path)
     # Derived from `model_path` (not a second independent f-string) so it
     # stays in sync with whatever convention is above -- `worker.py`'s
     # `_summarize_result` re-derives this same meta path the same way

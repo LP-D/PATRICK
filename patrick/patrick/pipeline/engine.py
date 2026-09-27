@@ -80,6 +80,7 @@ from patrick.models.uniqueness import (
 )
 from patrick.numeric import is_nan
 from patrick.pipeline.leaderboard import Leaderboard, rank_configs
+from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
 from patrick.selection.registry import select_features
 from patrick.selection.stability import feature_selection_stability
@@ -406,6 +407,59 @@ class _FoldPoolBuilder:
         return self._cache[cut_idx]
 
 
+class _FoldUniverse:
+    """Candidate-universe reduction decided per fold (`selection/
+    universe_reduction.py`): the features a fold may use are `feature_pool`
+    minus those of the series dropped on THAT fold's training bars. One
+    decision per distinct training mask (memoized: the holdout diagnostic
+    and Optuna re-evaluations reuse the fold's decision). Disabled
+    (`reduction_corr_threshold=None`): `features()` returns `feature_pool`
+    unchanged, nothing is computed."""
+
+    def __init__(self, raw: pd.DataFrame, target_col: str, config: RunConfig):
+        self.threshold = config.universe.reduction_corr_threshold
+        self.lookback = config.universe.reduction_lookback
+        self.raw_columns = list(raw.columns)
+        self.candidates = raw[[c for c in raw.columns if c != target_col]]
+        self._decisions: dict[bytes, universe_reduction.ReductionResult] = {}
+        self._logged: set[bytes] = set()
+        self._owners: dict[str, frozenset[str] | None] = {}
+
+    @property
+    def enabled(self) -> bool:
+        return self.threshold is not None
+
+    @staticmethod
+    def _key(train_mask: np.ndarray) -> bytes:
+        mask = np.asarray(train_mask, dtype=bool)
+        return np.packbits(mask).tobytes() + len(mask).to_bytes(8, "little")
+
+    def decision(self, train_mask: np.ndarray) -> universe_reduction.ReductionResult | None:
+        if not self.enabled:
+            return None
+        key = self._key(train_mask)
+        if key not in self._decisions:
+            self._decisions[key] = universe_reduction.reduce_on_mask(
+                self.candidates, train_mask, self.threshold, lookback=self.lookback)
+        return self._decisions[key]
+
+    def features(self, feature_pool: list[str], train_mask: np.ndarray, label: str) -> list[str]:
+        result = self.decision(train_mask)
+        if result is None:
+            return feature_pool
+        feats = universe_reduction.mask_features(feature_pool, result.dropped, self.raw_columns, self._owners)
+        key = self._key(train_mask)
+        if key not in self._logged:
+            self._logged.add(key)
+            print(universe_reduction.summary_line(label, result, self.candidates.shape[1], len(feats),
+                                                  len(feature_pool), self.threshold))
+        return feats
+
+    def prefix_mask(self, end_pos: int) -> np.ndarray:
+        """Training bars of a walk-forward fold / the holdout: positions < `end_pos`."""
+        return np.arange(len(self.candidates)) < end_pos
+
+
 @dataclass
 class FoldData:
     """Output of `_FoldContext.prepare()` — a named object rather than a
@@ -429,6 +483,9 @@ class FoldData:
     sample_weight: np.ndarray | None = None
     ind_matrix: np.ndarray | None = None
     effective_n: float | None = None
+    # Column names of X_tr/X_te: the run's feature pool, minus the features
+    # of the series this fold's universe reduction dropped (`_FoldUniverse`).
+    feature_names: list[str] | None = None
 
 
 class _FoldContext:
@@ -438,13 +495,23 @@ class _FoldContext:
     embargo, scaling)."""
 
     def __init__(self, pool_builder: _FoldPoolBuilder, target_col: str, feature_pool: list[str],
-                 config: RunConfig, all_dates: pd.DatetimeIndex, fold_cuts: list[int]):
+                 config: RunConfig, all_dates: pd.DatetimeIndex, fold_cuts: list[int],
+                 universe: _FoldUniverse | None = None):
         self.pool_builder = pool_builder
         self.target_col = target_col
         self.feature_pool = feature_pool
         self.config = config
         self.all_dates = all_dates
         self.fold_cuts = fold_cuts
+        self.universe = universe
+
+    def fold_features(self, fold_idx: int) -> list[str]:
+        """Feature pool of fold `fold_idx`, after the universe reduction
+        decided on its training bars (every bar before its cut)."""
+        if self.universe is None:
+            return self.feature_pool
+        cut = self.fold_cuts[fold_idx]
+        return self.universe.features(self.feature_pool, self.universe.prefix_mask(cut), f"fold {fold_idx + 1}")
 
     def prepare(self, horizon: int, fold_idx: int, regime: str,
                 want_baselines: bool = False,
@@ -502,7 +569,8 @@ class _FoldContext:
                   f"test={len(y_te)} (min {cfg.validation.min_test_rows}).")
             return None
 
-        X_pool_df = pool[self.feature_pool].reindex(idx)
+        feature_names = self.fold_features(fold_idx)
+        X_pool_df = pool[feature_names].reindex(idx)
         where = f"fold {fold_idx + 1} (h={horizon}d regime={regime})"
         sc = RobustScaler()
         X_tr = _finite_scaled(
@@ -545,7 +613,7 @@ class _FoldContext:
 
         return FoldData(X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()),
                          test_dates, baselines, baseline_predictions,
-                         sample_weight, ind_matrix, effective_n)
+                         sample_weight, ind_matrix, effective_n, feature_names)
 
 
 def _selector_config_hash(config: RunConfig, n_feat: int, seed: int) -> str:
@@ -731,14 +799,20 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
 
 def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, target_col: str,
                        feature_pool: list[str], config: RunConfig, all_dates_full: pd.DatetimeIndex,
-                       n_wf: int, best_cfg: dict, seed: int) -> dict | None:
+                       n_wf: int, best_cfg: dict, seed: int,
+                       universe: _FoldUniverse | None = None) -> dict | None:
     """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
     the model is retrained ONLY on data prior to the holdout
     (`pool_builder.get(n_wf)` -> parametric fit on `raw.iloc[:n_wf]`, same
     causal mechanism as the walk-forward folds), then tested on the never-
     seen rows. A single config evaluated here — the one already chosen by
     the walk-forward scan — never used to choose among several (anti-pattern
-    #1 of the original plan: never rank/select on the holdout)."""
+    #1 of the original plan: never rank/select on the holdout).
+
+    `universe`: the reduction is decided on the pre-holdout bars, like
+    every other training set."""
+    if universe is not None:
+        feature_pool = universe.features(feature_pool, universe.prefix_mask(n_wf), "holdout")
     horizon = int(best_cfg["horizon"])
     regime = best_cfg["regime"]
     n_feat = int(best_cfg["N"])
@@ -919,7 +993,8 @@ def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | No
 
 
 def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame, target_col: str,
-                    conn, run_ids: dict[int, str], seed: int, snapshot_id: str
+                    conn, run_ids: dict[int, str], seed: int, snapshot_id: str,
+                    universe: _FoldUniverse | None = None
                     ) -> tuple[Leaderboard, dict, dict, pd.DataFrame, list[str], list[str]]:
     """Phase 6.1 (P6.1) -- CPCV scan, AS AN ALTERNATIVE to the walk-forward
     scan (`config.validation.scheme == "cpcv"`), never a replacement.
@@ -945,6 +1020,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
       the measured effect was negligible on a SINGLE boundary) -- CPCV
       structurally exposes more boundaries, hence more potential leak
       surface to close by construction.
+
+    Universe reduction (`universe`, when enabled): decided per combination
+    on `split.train_mask` -- the non-contiguous train complement, purged
+    and embargoed -- so no test group of that combination ever influences
+    which series it may use (the branch version decided once, at a date
+    CPCV test groups can precede).
 
     Returns (board, trial_ids, n_trials_per_run, full_pool, feature_pool,
     interaction_formulas) -- the first three elements follow the same
@@ -981,6 +1062,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         full_pool = pd.concat([full_pool, inter], axis=1)
 
     feature_pool = [c for c in full_pool.columns if c != target_col]
+    feature_position = {name: i for i, name in enumerate(feature_pool)}
 
     board = Leaderboard()
     trial_ids: dict[tuple, int] = {}
@@ -1023,9 +1105,14 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                 continue
 
                             where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
+                            X_combo = X_all
+                            if universe is not None and universe.enabled:
+                                combo_feats = universe.features(feature_pool, split.train_mask,
+                                                                f"CPCV combo {combo} (h={horizon}d)")
+                                X_combo = X_all[:, [feature_position[f] for f in combo_feats]]
                             sc = RobustScaler()
-                            X_tr_full = _finite_scaled(sc.fit_transform(X_all[tr_mask]), where)
-                            X_te_full = _finite_scaled(sc.transform(X_all[te_mask]), where)
+                            X_tr_full = _finite_scaled(sc.fit_transform(X_combo[tr_mask]), where)
+                            X_te_full = _finite_scaled(sc.transform(X_combo[te_mask]), where)
                             cols = _select(conn, target_col, horizon, snapshot_id,
                                            config, X_tr_full, y_tr, n_feat, seed)
                             X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
@@ -1126,6 +1213,7 @@ class _RunState:
     tuned_trial_ids: dict[tuple, int] = field(default_factory=dict)
     cpcv_full_pool: pd.DataFrame | None = None
     cpcv_interaction_formulas: list[str] | None = None
+    universe: _FoldUniverse | None = None
 
     @property
     def is_walkforward(self) -> bool:
@@ -1170,7 +1258,7 @@ def _scan_cpcv(st: _RunState) -> None:
     t_scan_start = time.time()
     (st.board, st.trial_ids, st.n_trials_per_run, st.cpcv_full_pool, st.feature_pool,
      st.cpcv_interaction_formulas) = _run_cpcv_scan(st.raw, st.config, st.base_pool, st.target_col, st.conn,
-                                                    st.run_ids, st.seed, st.snapshot_id)
+                                                    st.run_ids, st.seed, st.snapshot_id, universe=st.universe)
     st.record_phase_all_runs("scan", t_scan_start, time.time())
     st.n_wf = len(st.all_dates_full)  # CPCV: no terminal holdout (accepted limitation, see _run_cpcv_scan)
 
@@ -1195,7 +1283,8 @@ def _prepare_walkforward(st: _RunState, t_pool_start: float) -> None:
     st.feature_pool = [c for c in st.pool_builder.get(fold_cuts[0]).columns if c != st.target_col]
     st.record_phase_all_runs("pool_construction", t_pool_start, time.time())
     print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(st.feature_pool)} columns")
-    st.ctx = _FoldContext(st.pool_builder, st.target_col, st.feature_pool, config, all_dates, fold_cuts)
+    st.ctx = _FoldContext(st.pool_builder, st.target_col, st.feature_pool, config, all_dates, fold_cuts,
+                          universe=st.universe)
     st.n_trials_per_run = {h: 0 for h in st.run_ids.values()}
     st.last_fold = config.validation.n_wf_folds - 1
 
@@ -1228,7 +1317,8 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
     for n_feat in config.selection.n_features_grid:
         cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
-        feat_names = [st.feature_pool[c] for c in cols]
+        fold_names = fd.feature_names if fd.feature_names is not None else st.feature_pool
+        feat_names = [fold_names[c] for c in cols]
         for sampler_name in config.sampler.candidates:
             for algo in config.models.algos:
                 met, y_pred, confidence, p_up = _fit_eval_full(
@@ -1315,7 +1405,8 @@ def _holdout_diagnostic(st: _RunState) -> None:
         diag_cfg = {"horizon": h, "regime": regime, "N": n_feat, "sampler": sampler_name, "algo": algo,
                     "best_params": {}}
         diag_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
-                                      st.config, st.all_dates_full, st.n_wf, diag_cfg, st.seed)
+                                      st.config, st.all_dates_full, st.n_wf, diag_cfg, st.seed,
+                                      universe=st.universe)
         if diag_eval is not None:
             trackholdout.write_holdout_diagnostic(st.conn, tid, diag_eval["metrics"])
     st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
@@ -1480,14 +1571,23 @@ def _export_models(st: _RunState, final_best_by_horizon: dict[int, dict]) -> tup
     reference), its trial marked `is_best`. Returns (model_paths,
     trial_id_by_horizon)."""
     full_pool, interaction_formulas = _full_history_pool(st)
+    # The final models train on the whole history: so does their universe
+    # reduction (never the decision of an earlier, shorter fold).
+    export_features, reduction_info = st.feature_pool, None
+    if st.universe is not None and st.universe.enabled:
+        whole_history = np.ones(len(st.raw), dtype=bool)
+        export_features = st.universe.features(st.feature_pool, whole_history, "final model (whole history)")
+        reduction_info = {"corr_threshold": st.universe.threshold, "lookback": st.universe.lookback,
+                          **st.universe.decision(whole_history).to_dict()}
     model_paths: dict[int, str] = {}
     trial_id_by_horizon: dict[int, int] = {}
     for horizon, best_h in final_best_by_horizon.items():
         t_start = time.time()
-        h_model_path = export_best_model(full_pool, st.target_col, st.feature_pool, st.config, best_h,
+        h_model_path = export_best_model(full_pool, st.target_col, export_features, st.config, best_h,
                                          st.config.output.dir, seed=st.seed,
                                          interaction_formulas=interaction_formulas,
-                                         conn=st.conn, symbol=st.config.objective.target_symbol)
+                                         conn=st.conn, symbol=st.config.objective.target_symbol,
+                                         universe_reduction=reduction_info)
         trackdb.record_phase_timing(st.conn, st.run_ids[horizon], "export", t_start, time.time())
         model_paths[horizon] = h_model_path
 
@@ -1510,7 +1610,8 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
     if not st.has_holdout:
         return None
     holdout_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
-                                     st.config, st.all_dates_full, st.n_wf, final_best, st.seed)
+                                     st.config, st.all_dates_full, st.n_wf, final_best, st.seed,
+                                     universe=st.universe)
     if holdout_eval is None:
         return None
     if best_trial_id is not None:
@@ -1584,6 +1685,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         st = _RunState(config=config, conn=conn, raw=raw, target_col=clean_symbol(config.objective.target_symbol),
                        seed=seed, t0=t0, snapshot_id=snapshot_id, config_hash=config_hash, run_ids=run_ids,
                        all_dates_full=raw.index)
+        st.universe = _FoldUniverse(raw, st.target_col, config)
         st.record_phase_all_runs("ingestion", t_ingest_start, t_ingest_end)
 
         t_pool_start = time.time()

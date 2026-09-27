@@ -46,6 +46,13 @@ means the "generate explanation" button on `/targets/{ticker}` is a genuine
 wait, not an instant refresh; the page reflects that (`shap_loading`
 message + disabled button while the request is in flight) rather than
 implying it is free.
+
+Since the per-fold universe reduction (roadmap bloc 1-2): the pool is
+rebuilt only for the model's SELECTED features and the raw series they are
+computed from (`selection.universe_reduction.restrict_to_required_series`,
+scaler applied column-wise by `tracking.export.scale_selected`) -- same
+values, a fraction of the series (a model with N=15 features typically
+reads a handful of the ~65 series).
 """
 from __future__ import annotations
 
@@ -64,8 +71,12 @@ from patrick.data.store import DataStore
 from patrick.features.pool_cache import FEATURE_CODE_HASH
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.pipeline.engine import build_full_feature_pool
+from patrick.selection import universe_reduction
+from patrick.selection.universe_reduction import restrict_to_required_series
 from patrick.tracking import cache_tables
 from patrick.tracking import db as trackdb
+from patrick.tracking import export as tracking_export
+from patrick.tracking.export import scale_selected
 from patrick.validation import drift
 
 # `features/target.py::build_target`'s class order (0..3), spelled out here
@@ -75,11 +86,14 @@ CLASS_NAMES = ["DOWN_FORT", "DOWN_FAIBLE", "UP_FAIBLE", "UP_FORT"]
 
 
 def _explanation_code_hash() -> str:
-    """Part of the SHAP cache key (`tracking/cache_tables.py`): this module's
-    source plus the feature code hash -- a change to how an explanation or a
-    feature is computed never serves a cached payload built by older code."""
-    blob = Path(__file__).read_bytes() + FEATURE_CODE_HASH.encode()
-    return hashlib.sha256(blob).hexdigest()[:16]
+    """Part of the SHAP cache key (`tracking/cache_tables.py`): the source of
+    this module and of the two helpers it rebuilds the row with (series
+    restriction, column-wise scaling), plus the feature code hash -- a
+    change to how an explanation or a feature is computed never serves a
+    cached payload built by older code."""
+    sources = (__file__, universe_reduction.__file__, tracking_export.__file__)
+    blob = b"".join(Path(path).read_bytes() for path in sources)
+    return hashlib.sha256(blob + FEATURE_CODE_HASH.encode()).hexdigest()[:16]
 
 
 EXPLANATION_CODE_HASH = _explanation_code_hash()
@@ -197,19 +211,21 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
             if cached is not None:
                 return cached
 
-        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
+        # Only the model's selected features and the raw series they come
+        # from (same values as the whole pool, see `predict.py`).
+        model_raw = restrict_to_required_series(raw, feature_names, target_col)
+        full_pool = build_full_feature_pool(model_raw, config, target_col, interaction_formulas)
 
-        missing = [c for c in feature_pool if c not in full_pool.columns]
+        missing = [c for c in feature_names if c not in full_pool.columns]
         if missing:
             return None
 
         if ts not in full_pool.index:
             return None
-        row = full_pool[feature_pool].loc[[ts]]
+        row = full_pool[feature_names].loc[[ts]]
 
-        X = finite_scaled(scaler.transform(finite_features(row.values, "explain")), "explain")
         sel_idx = [feature_pool.index(n) for n in feature_names]
-        X_sel = X[:, sel_idx]
+        X_sel = finite_scaled(scale_selected(scaler, finite_features(row.values, "explain"), sel_idx), "explain")
 
         pred_class = int(latest["y_pred"])
 
@@ -301,7 +317,8 @@ def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | N
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
 
-        full_pool = build_full_feature_pool(raw, config, target_col, interaction_formulas)
+        model_raw = restrict_to_required_series(raw, feature_names, target_col)
+        full_pool = build_full_feature_pool(model_raw, config, target_col, interaction_formulas)
 
         missing = [c for c in feature_names if c not in full_pool.columns]
         if missing:

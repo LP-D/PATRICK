@@ -79,6 +79,31 @@ le tuning Optuna, ni le tri du leaderboard ne les voient jamais.
 holdout, jamais pour choisir entre plusieurs configs (anti-pattern #1
 ci-dessous).
 
+### Réduction de l'univers candidat : décidée dans chaque fold
+
+`universe.reduction_corr_threshold` (désactivé par défaut) regroupe les séries
+candidates par clustering hiérarchique (lien moyen) sur `1 - |corr|` des
+rendements et n'en garde qu'une par groupe (`selection/universe_reduction.py`).
+La décision est prise **sur les seules barres d'entraînement de chaque jeu** :
+avant la coupure pour un fold walk-forward, avant le holdout pour le holdout,
+le complément purgé et embargué des groupes de test pour une combinaison CPCV,
+tout l'historique pour le modèle exporté. Les rendements ne sont calculés
+qu'entre deux barres d'entraînement consécutives (aucun rendement ne
+chevauche un bloc de test). Une série écartée retire du fold les features
+dont elle est la série propriétaire (préfixe de colonne), interactions
+comprises.
+
+Pourquoi pas une seule décision avant l'entraînement (version de la branche
+`feature/replay-cache-universe`) : prise à la fin de la première fenêtre
+walk-forward, elle précède les groupes de test CPCV du début d'historique
+(fuite), et le modèle final hérite d'un choix fait sur 40 % des données.
+
+`predict` / `explain` / dérive PSI ne reconstruisent plus que les séries dont
+dépendent les features **sélectionnées** du modèle (`required_series`, qui suit
+aussi les features de groupe Guida), le scaler étant appliqué colonne par
+colonne (`tracking/export.py::scale_selected`) : valeurs identiques au pool
+complet (test d'équivalence exacte), pour une fraction des séries.
+
 ## 4. Correction multi-tests (validité statistique)
 
 Chercher la meilleure config parmi *N* essais gonfle mécaniquement le
