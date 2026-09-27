@@ -12,7 +12,15 @@ Chaque ticker a ete verifie le 2026-09-25 par `patrick audit tickers`
 (`data/ticker_check.py`) : historique Yahoo non vide, derniere cotation a
 moins de 7 seances, au moins 750 seances. `first` = premiere date servie
 par Yahoo (pas la date historique de cotation). Ecarte a la verification :
-^EVZ (aucune cotation servie). Les actions ci-dessous ne sont PAS dans
+^EVZ (aucune cotation servie). Ajoutes le 2026-09-27 (`ADDED_ON_2026_09_27`,
+meme controle, sur le PC A et dans le conteneur) : les 9 tickers de la
+branche feature/replay-cache-universe absents de cette liste.
+
+`EXTENDED_FEATURE_CANDIDATES` : la liste de candidats FEATURES de cette
+branche (39 tickers), fusionnee ici -- une seule source de verite, chaque
+candidat est un symbole verifie de `EXTENDED_TARGET_GROUPS`. Opt-in par run
+(formulaire, « Univers candidat » = etendu), a coupler avec la reduction
+par clustering de correlation (`UniverseConfig.reduction_corr_threshold`). Les actions ci-dessous ne sont PAS dans
 `EQUITY_UNIVERSE` : pas de features fondamentales ni de momentum
 cross-sectionnel pour elles (decisions prises pour cet univers-la, voir
 `features/guida.py`), seulement le pipeline standard.
@@ -97,6 +105,19 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
         ("^GSPTSE", "TSX", "1979-06-29"),
         ("^KS11", "KOSPI", "1996-12-11"),
         ("^NSEI", "Nifty50", "2007-09-17"),
+        ("^IXIC", "NasdaqComposite", "1971-02-05"),
+    ],
+    "Taux US (indices CBOE)": [
+        ("^IRX", "UST_13W_Yield", "1960-01-04"),
+        ("^FVX", "UST_5Y_Yield", "1962-01-02"),
+        ("^TNX", "UST_10Y_Yield", "1962-01-02"),
+        ("^TYX", "UST_30Y_Yield", "1977-02-15"),
+    ],
+    "Matières premières (compléments)": [
+        ("PL=F", "Platinum", "1997-10-29"),
+        ("PA=F", "Palladium", "1998-09-28"),
+        ("HO=F", "HeatingOil", "2000-09-01"),
+        ("RB=F", "RBOB_Gasoline", "2000-11-01"),
     ],
     "Actions US (méga-capitalisations)": [
         ("AAPL", "Apple", "1980-12-12"),
@@ -161,11 +182,39 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
 
 EXCLUDED_AT_VERIFICATION = ('^EVZ',)
 
+ADDED_ON_2026_09_27 = ("^IXIC", "^IRX", "^FVX", "^TNX", "^TYX", "PL=F", "PA=F", "HO=F", "RB=F")
+
+# Candidats FEATURES de feature/replay-cache-universe (Phase 3), tous dans
+# `EXTENDED_TARGET_GROUPS` ci-dessus (verifie par tests/test_universe_reduction.py).
+EXTENDED_FEATURE_CANDIDATES: tuple[str, ...] = (
+    # Indices actions
+    "^DJI", "^IXIC", "^RUT", "^FTSE", "^GDAXI", "^FCHI", "^N225", "^HSI", "^STOXX50E",
+    # Taux / volatilite implicite
+    "^TNX", "^IRX", "^FVX", "^TYX", "^VXN",
+    # Devises majeures
+    "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X",
+    # ETFs sectoriels US
+    "XLE", "XLF", "XLK", "XLU", "XLV", "XLI", "XLP", "XLY", "XLB",
+    # ETFs obligataires / credit
+    "TLT", "IEF", "SHY", "LQD", "HYG",
+    # Autres futures / crypto
+    "PL=F", "PA=F", "HO=F", "RB=F", "ETH-USD",
+)
 
 
 def extended_target_choices() -> list[tuple[str, str, str]]:
     """(symbole, libelle, source) -- meme forme que DEFAULT_TARGET_CHOICES."""
     return [(sym, label, "yfinance") for items in EXTENDED_TARGET_GROUPS.values() for sym, label, _ in items]
+
+
+def extended_candidate_yf_tickers() -> list[str]:
+    """Univers de features « etendu » : l'univers par defaut
+    (`defaults.DEFAULT_UNIVERSE_YF_TICKERS`) puis les candidats ci-dessus
+    qui n'y sont pas deja (ni dans `BAD_TICKERS`)."""
+    from patrick.config import defaults as D
+
+    base = list(D.DEFAULT_UNIVERSE_YF_TICKERS)
+    return base + [t for t in EXTENDED_FEATURE_CANDIDATES if t not in base and t not in D.BAD_TICKERS]
 
 
 def extended_target_groups() -> dict[str, list[tuple[str, str]]]:

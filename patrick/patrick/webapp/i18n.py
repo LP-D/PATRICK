@@ -301,6 +301,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_fr_cac40": {"fr": "Actions France (CAC 40)", "en": "French stocks (CAC 40)"},
     "group_fx_majors": {"fr": "Devises (majeures)", "en": "Currencies (majors)"},
     "group_crypto_majors": {"fr": "Crypto (majeures)", "en": "Crypto (majors)"},
+    "group_us_rates_indices": {"fr": "Taux US (indices CBOE)", "en": "US rates (CBOE indices)"},
+    "group_commodities_extra": {"fr": "Matières premières (compléments)", "en": "Commodities (additional)"},
 
     # Phase 7 — history/universe
     # P8: "/" became the synthesis dashboard, the launcher moved to
@@ -765,4 +767,6 @@ TARGET_GROUP_LABEL_KEYS = {
     "Actions France (CAC 40)": "group_fr_cac40",
     "Devises (majeures)": "group_fx_majors",
     "Crypto (majeures)": "group_crypto_majors",
+    "Taux US (indices CBOE)": "group_us_rates_indices",
+    "Matières premières (compléments)": "group_commodities_extra",
 }

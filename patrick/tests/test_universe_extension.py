@@ -39,3 +39,16 @@ def test_launch_and_universe_pages_list_the_extension(tmp_path, monkeypatch):
     assert 'value="MC.PA"' in client.get("/launch").text
     universe = client.get("/universe").text
     assert "XLK" in universe and "Actions France (CAC 40)" in universe
+
+
+def test_extended_candidates_are_verified_extension_symbols_outside_the_default_pool():
+    """The branch's 39 candidates and main's verified extension, merged:
+    one source of truth. Still never part of the DEFAULT feature pool."""
+    extension = {s for s, _, _ in UX.extended_target_choices()}
+    assert len(UX.EXTENDED_FEATURE_CANDIDATES) == 39 == len(set(UX.EXTENDED_FEATURE_CANDIDATES))
+    assert set(UX.EXTENDED_FEATURE_CANDIDATES) <= extension
+    assert set(UX.ADDED_ON_2026_09_27) <= extension
+    assert not set(UX.EXTENDED_FEATURE_CANDIDATES) & set(D.DEFAULT_UNIVERSE_YF_TICKERS)
+    assert not set(UX.extended_candidate_yf_tickers()) & D.BAD_TICKERS
+    assert UX.extended_candidate_yf_tickers()[:len(D.DEFAULT_UNIVERSE_YF_TICKERS)] == D.DEFAULT_UNIVERSE_YF_TICKERS
+    assert len(D.DEFAULT_TARGET_CHOICES) == 64
