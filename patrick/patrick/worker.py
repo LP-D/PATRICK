@@ -281,6 +281,7 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
         "diebold_mariano": result.get("diebold_mariano"),
         "cumulative_trials": result.get("cumulative_trials"),
         "pbo": result.get("pbo"),
+        "champions": {str(h): d for h, d in (result.get("champions") or {}).items()},
     })
 
 

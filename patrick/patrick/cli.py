@@ -25,6 +25,8 @@ audit_app = typer.Typer(help="Diagnostics d'audit -- lecture/mesure, n'entraîne
 app.add_typer(audit_app, name="audit")
 research_app = typer.Typer(help="Études de recherche -- lecture/mesure, n'entraînent aucun modèle.")
 app.add_typer(research_app, name="research")
+champions_app = typer.Typer(help="Modèles en titre (champion/challenger) : un seul modèle par cible et horizon.")
+app.add_typer(champions_app, name="champions")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -407,6 +409,86 @@ def research_event_study_cmd(
         typer.echo(f"Rapport écrit : {output}")
     else:
         typer.echo(report)
+
+
+@champions_app.command(name="list")
+def champions_list_cmd() -> None:
+    """Le modèle en titre de chaque (cible, horizon) déjà départagé."""
+    from patrick.tracking import champions
+
+    conn = trackdb.connect()
+    try:
+        rows = champions.list_champions(conn)
+        if not rows:
+            typer.echo("Aucun modèle en titre enregistré (lance `patrick champions init`).")
+            return
+        for r in rows:
+            score = f"F1_dir holdout={r['holdout_f1_dir']:.4f}" if r["holdout_f1_dir"] is not None else "sans duel"
+            typer.echo(f"{r['target']:<12} h={r['horizon']:<4} {r['run_id']:<32} {r['algo'] or '?':<13} "
+                       f"N={r['n_features'] or '?':<3} {r['reason']:<15} {score}")
+    finally:
+        conn.close()
+
+
+@champions_app.command(name="history")
+def champions_history_cmd(
+    target: str = typer.Option(..., "--target", help="Cible (ex. ^GSPC)"),
+    horizon: int = typer.Option(None, "--horizon", help="Horizon en jours (défaut : tous)"),
+) -> None:
+    """Les modèles remplacés ou rejetés d'une cible, avec le score de leur duel."""
+    import json
+
+    from patrick.tracking import champions
+
+    conn = trackdb.connect()
+    try:
+        rows = champions.list_archive(conn, target, horizon)
+        if not rows:
+            typer.echo("Aucun modèle archivé.")
+        for r in rows:
+            duel = json.loads(r["duel_json"]) if r["duel_json"] else None
+            detail = (f"duel : titre {duel['champion']['f1_dir']:.4f} vs challenger {duel['challenger']['f1_dir']:.4f}"
+                      if duel else "sans duel")
+            typer.echo(f"{r['decided_at']}  h={r['horizon']:<4} {r['role']:<20} {r['run_id']:<32} "
+                       f"{r['algo'] or '?':<13} N={r['n_features'] or '?':<3} {detail}")
+    finally:
+        conn.close()
+
+
+@champions_app.command(name="init")
+def champions_init_cmd(
+    apply: bool = typer.Option(False, "--apply", help="Appliquer (défaut : simulation, rien n'est modifié)"),
+) -> None:
+    """Désigne un modèle en titre par (cible, horizon) parmi les runs existants :
+    le champion explicite s'il existe, sinon le plus récent (celui que l'app
+    utilise déjà). Les autres modèles de la paire sont archivés (fiche
+    descriptive) puis leurs données lourdes supprimées. Pas de duel rétroactif.
+    Refusé tant qu'un worker tourne : les suppressions ne doivent jamais
+    concurrencer un run."""
+    from patrick.tracking import champions
+    from patrick.tracking import jobs as jobs_db
+
+    conn = trackdb.connect()
+    try:
+        plan = champions.plan_initialization(conn)
+        for item in plan:
+            origin = "champion explicite" if item["explicit"] else "le plus récent"
+            typer.echo(f"{item['target']:<12} h={item['horizon']:<4} garde {item['keep']} ({origin}), "
+                       f"remplace {len(item['supersede'])} ancien(s) modèle(s)")
+        n_superseded = sum(len(i["supersede"]) for i in plan)
+        if not apply:
+            typer.echo(f"Simulation : {len(plan)} paire(s), {n_superseded} modèle(s) à archiver puis supprimer. "
+                       "Rien n'a été modifié -- relance avec --apply pour appliquer.")
+            return
+        running = conn.execute("SELECT COUNT(*) FROM job WHERE status = 'running'").fetchone()[0]
+        if running or jobs_db.worker_is_alive(conn):
+            typer.echo("Un run est en cours : initialisation refusée, relance-la quand plus aucun run ne tourne.")
+            raise typer.Exit(code=1)
+        summary = champions.apply_initialization(conn, plan)
+        typer.echo(f"Fait : {summary['promoted']} modèle(s) mis en titre, {summary['superseded']} archivé(s) "
+                   "puis supprimé(s).")
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
