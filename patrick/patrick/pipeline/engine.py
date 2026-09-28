@@ -1715,12 +1715,16 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         model_path, model_paths = None, {}
         holdout_result = dm_result = pbo_result = holdout_diagnostic_result = None
         cumulative_trials = 0
+        trial_id_by_horizon: dict[int, int] = {}
+        known_holdout_evals: dict[int, dict] = {}
         if final_best is not None:
             final_horizon = int(final_best["horizon"])
             model_paths, trial_id_by_horizon = _export_models(st, final_best_by_horizon)
             model_path = model_paths.get(final_horizon)
             holdout_eval = _final_holdout(st, final_best, trial_id_by_horizon.get(final_horizon))
             holdout_result = holdout_eval["metrics"] if holdout_eval is not None else None
+            if holdout_eval is not None and final_best_by_horizon.get(final_horizon) == final_best:
+                known_holdout_evals[final_horizon] = holdout_eval
             dm_result = _final_diebold_mariano(st, final_best, holdout_eval)
             # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
             # the whole history of this target/horizon (CPCV paths when that
@@ -1734,6 +1738,14 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     conn, run_ids[final_horizon], metric="F1_dir")
 
         _finish_runs(st)
+        # Champion / challenger (option A): once the runs are finished, each
+        # exported horizon's model duels the model in title on the same
+        # holdout; the loser is archived then pruned. Never fails the run.
+        champion_decisions = {}
+        if trial_id_by_horizon:
+            from patrick.pipeline.champion_duel import duel_and_promote
+            champion_decisions = duel_and_promote(st, final_best_by_horizon, trial_id_by_horizon,
+                                                  known_holdout_evals)
         return {
             "leaderboard": st.board.as_df(),
             "tuned": tuned_df,
@@ -1747,6 +1759,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             "cumulative_trials": cumulative_trials,
             "pbo": pbo_result,
             "holdout_diagnostic": holdout_diagnostic_result,
+            "champions": champion_decisions,
         }
     finally:
         conn.close()
