@@ -55,6 +55,17 @@ jobs:
     # only -- not pull requests.
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Pinned numeric environment -- the golden master of `run_pipeline`
+    # (patrick/tests/test_run_pipeline_golden.py) is bit-exact only in the
+    # environment that generated it. Unpinned, it failed or passed depending
+    # on the day's releases and on the runner's CPU (measured 2026-09-28:
+    # another OpenBLAS kernel alone moves 23 CPCV values). Hence exact
+    # versions (bump: re-run the `uv pip compile` in the constraints header,
+    # then regenerate the golden, see golden-regen.yml) and one kernel /
+    # SIMD level for every runner, Intel AVX-512 or AMD: Haswell = AVX2+FMA.
+    env:
+      OPENBLAS_CORETYPE: Haswell
+      NPY_ENABLE_CPU_FEATURES: X86_V3
     steps:
       - uses: actions/checkout@v4
 
@@ -63,8 +74,13 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install dependencies
-        run: pip install -e "./patrick[dev,web]"
+      - name: Install dependencies (pinned)
+        # annotate-failures: each failing test becomes an annotation on the
+        # commit, readable without opening the log.
+        run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
+
+      - name: Numeric environment
+        run: python .github/scripts/numeric_env.py
 
       - name: Run slow test suite
         run: pytest patrick/tests/ -q -m "slow"
