@@ -1,4 +1,29 @@
 {
+ "environment": {
+  "arch": "8.0.0",
+  "blas": [
+   "openblas:Haswell"
+  ],
+  "hmmlearn": "0.3.3",
+  "imbalanced-learn": "0.14.2",
+  "joblib": "1.6.0",
+  "lightgbm": "4.7.0",
+  "numba": "0.67.0",
+  "numpy": "2.4.6",
+  "numpy_simd": [
+   "X86_V3"
+  ],
+  "optuna": "5.0.0",
+  "pandas": "3.0.6",
+  "platform": "linux-x86_64",
+  "pykalman": "0.11.2",
+  "python": "3.11",
+  "scikit-learn": "1.9.1",
+  "scipy": "1.17.1",
+  "shap": "0.51.0",
+  "statsmodels": "0.15.0",
+  "xgboost": "3.2.0"
+ },
  "exported": {
   "h3": {
    "features": [
@@ -169,10 +194,10 @@
    ]
   }
  },
- "leaderboard": "c2dce88b107ee277bd3fe1e32ab5e35c57fdfbb7cb2b667f36e9e540847b6ce2",
+ "leaderboard": "30ae74797b70dee6615b1b7334a1a3f03fb65c2f1a7452765dad1bf128178e31",
  "result": {
   "best_before_tuning": {
-   "F1_dir": 0.5146,
+   "F1_dir": 0.51465,
    "N": 6,
    "algo": "LightGBM",
    "horizon": 3,
@@ -183,7 +208,7 @@
   "cumulative_trials": 8,
   "diebold_mariano": null,
   "final_best": {
-   "F1_dir": 0.5146,
+   "F1_dir": 0.51465,
    "N": 6,
    "algo": "LightGBM",
    "horizon": 3,
@@ -194,7 +219,7 @@
   "holdout": null,
   "holdout_diagnostic": null,
   "pbo": {
-   "mean_logit": -2.6012,
+   "mean_logit": -2.5601,
    "n_blocks": 4,
    "n_combinations": 6,
    "n_trials": 8,
@@ -215,10 +240,10 @@
   "baseline_metric": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "dm_result": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "feature_stability": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "fold_metric": "1bae790c3cbb5e352fecc2ed77fd6fd2bf7df8e0cb0a2db5ecf9023cc067ba30",
+  "fold_metric": "823915fdab6622e71b8811d1101d2cec9afd4941341e5a767e2b86254fa3f56f",
   "holdout_diagnostic": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "phases": "dd146f6c9df35197809ab8628373412dafe9eba17e278b34a680a21299f8fc43",
-  "prediction": "9c83344d92f042e1daa9211ed3133f53cdce45f7572bc6fb2cf89b27b912cabe",
+  "prediction": "98da5489df494f2a5563524f47ba182fbd8820bba397b1af7968b602a02460f3",
   "registry": "8be3557a614d08ad1553c32e646f2aaa46c7057d26d1673d2129ad8b963eee4c",
   "run_status": "789dd280a07cc61324a4b7a8572f340498febd89744666b4a549f6ac21dcda31",
   "trial": "d1d05e54e2d054c8038a7498f899f96b52c784c639b41edb4bdf755601ae7ae9"

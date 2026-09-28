@@ -192,6 +192,11 @@ ingestion.
 - **Test suite**: `pytest` (224 tests, fast, excludes `@pytest.mark.slow`)
   during development; `pytest -m slow` (42 tests: full pipeline runs,
   worker subprocess, EGARCH, webapp smoke) before a commit/push or in CI.
+  The `run_pipeline` golden master (`tests/test_run_pipeline_golden.py`) is
+  bit-exact only in the pinned CI environment that generated it: on another
+  machine it is skipped, use a local golden (`PATRICK_GOLDEN_DIR`, see the
+  test's docstring); regenerate the CI one by pushing a `golden-regen/<name>`
+  branch.
 
 ## Development notes
 

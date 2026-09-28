@@ -6,21 +6,45 @@ full content of every table the run writes (trials, fold metrics,
 predictions, registry, DM results, stability), plus the exported model's
 predictions on a fixed matrix.
 
-The golden file was generated BEFORE the refactor, from the post-F01..F07
-code (`PATRICK_UPDATE_GOLDEN=1`); the refactored `run_pipeline` must
-reproduce it bit for bit (floats compared after rounding to 10 decimals).
+The refactored `run_pipeline` must reproduce the golden bit for bit (floats
+compared after rounding to 10 decimals) -- which only means something in ONE
+numeric environment. Library versions, the OS and the CPU (OpenBLAS kernel,
+numpy SIMD level) all move the last bits of the Kalman features and linear
+algebra, and feature selection and LightGBM's binning amplify them into
+different models (measured 2026-09-28: a Sandybridge instead of Haswell
+OpenBLAS kernel alone changes 23 CPCV values on the same machine). So each
+golden records the environment that produced it (`_environment`); against
+another environment the comparison is refused -- skipped locally, failed in
+CI, where the environment is pinned (`.github/constraints-py311.txt`,
+`OPENBLAS_CORETYPE=Haswell`, `NPY_ENABLE_CPU_FEATURES=X86_V3`).
+
+- CI golden (`tests/golden/`): regenerated only in that pinned environment,
+  by pushing a `golden-regen/<name>` branch (`.github/workflows/
+  golden-regen.yml` generates it, checks it on other runners, commits it).
+- Local golden: `PATRICK_GOLDEN_DIR=<dir>` points the test at a golden of
+  YOUR environment. Generate it on the unchanged code, then re-run after
+  each change (the tracking DB of this test is always under `tmp_path`)::
+
+      PATRICK_GOLDEN_DIR=~/.patrick/golden PATRICK_UPDATE_GOLDEN=1 pytest -m "" tests/test_run_pipeline_golden.py
+      PATRICK_GOLDEN_DIR=~/.patrick/golden pytest -m "" tests/test_run_pipeline_golden.py
 """
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
+import platform
+import sys
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.linalg  # noqa: F401 -- loads scipy's own OpenBLAS before `_environment` lists the BLAS kernels
+import threadpoolctl
+from numpy._core import _multiarray_umath
 
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
@@ -29,7 +53,11 @@ from patrick.tracking import db as trackdb
 
 pytestmark = pytest.mark.slow
 
-GOLDEN_DIR = Path(__file__).parent / "golden"
+GOLDEN_DIR = Path(os.path.expanduser(os.environ.get("PATRICK_GOLDEN_DIR") or Path(__file__).parent / "golden"))
+
+# Every library whose version can move the pipeline's numbers.
+_NUMERIC_PACKAGES = ("numpy", "pandas", "scipy", "scikit-learn", "xgboost", "lightgbm", "shap", "numba",
+                     "optuna", "imbalanced-learn", "statsmodels", "arch", "pykalman", "hmmlearn", "joblib")
 
 
 def _raw(n=1100, seed=7) -> pd.DataFrame:
@@ -57,6 +85,39 @@ def _config(tmp_path, scheme: str) -> RunConfig:
         "tuning": {"enabled": scheme == "walkforward", "top_k": 1, "n_trials": 3, "cv_splits": 2},
         "output": {"dir": str(tmp_path / "out"), "seed": 42},
     })
+
+
+def _version(package: str) -> str | None:
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _environment() -> dict:
+    """Everything outside the code that moves the golden's numbers: OS, Python,
+    library versions, the OpenBLAS kernels in use and numpy's SIMD level."""
+    blas = sorted({f"{lib['internal_api']}:{lib.get('architecture')}"
+                   for lib in threadpoolctl.threadpool_info() if lib["user_api"] == "blas"})
+    simd = [f for f in _multiarray_umath.__cpu_dispatch__ if _multiarray_umath.__cpu_features__.get(f)]
+    return {"platform": f"{sys.platform}-{platform.machine()}", "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+            "blas": blas, "numpy_simd": simd, **{p: _version(p) for p in _NUMERIC_PACKAGES}}
+
+
+def _require_same_environment(expected: dict | None, current: dict) -> None:
+    if expected == current:
+        return
+    expected = expected or {}
+    diff = {k: f"{expected.get(k)} -> {current.get(k)}" for k in sorted(set(expected) | set(current))
+            if expected.get(k) != current.get(k)}
+    msg = (f"golden master of another numeric environment, its numbers cannot be reproduced here "
+           f"(golden -> current: {diff}). Locally: use PATRICK_GOLDEN_DIR (module docstring). "
+           f"In CI: the pinned environment moved -- regenerate through a `golden-regen/<name>` branch.")
+    # Only the committed CI golden run on a dev machine is skipped: in CI, or
+    # against a local golden (PATRICK_GOLDEN_DIR), a mismatch is an error.
+    if os.environ.get("CI") or os.environ.get("PATRICK_GOLDEN_DIR"):
+        pytest.fail(msg)
+    pytest.skip(msg)
 
 
 def _norm(obj):
@@ -129,6 +190,14 @@ def _capture(result: dict, db_path: str, model_paths: dict) -> dict:
 
 @pytest.mark.parametrize("scheme", ["walkforward", "cpcv"])
 def test_run_pipeline_matches_its_golden_master(tmp_path, monkeypatch, scheme):
+    golden_path = GOLDEN_DIR / f"run_pipeline_{scheme}.json"
+    environment = _environment()
+    update = os.environ.get("PATRICK_UPDATE_GOLDEN") == "1"
+    if not update:
+        if not golden_path.exists():
+            pytest.fail(f"no golden master at {golden_path} -- generate it first on the unchanged code "
+                        f"(PATRICK_UPDATE_GOLDEN=1, module docstring)")
+        _require_same_environment(json.loads(golden_path.read_text()).get("environment"), environment)
     raw = _raw()
     monkeypatch.setattr(engine_module, "ingest", lambda *a, **k: raw.copy())
     monkeypatch.setattr(engine_module, "download_ohlc", lambda *a, **k: None)
@@ -136,9 +205,9 @@ def test_run_pipeline_matches_its_golden_master(tmp_path, monkeypatch, scheme):
     result = engine_module.run_pipeline(_config(tmp_path, scheme), store=DataStore(root=str(tmp_path / "s")),
                                         db_path=db_path)
     captured = _capture(result, db_path, result["model_paths"])
-    golden_path = GOLDEN_DIR / f"run_pipeline_{scheme}.json"
-    if os.environ.get("PATRICK_UPDATE_GOLDEN") == "1":
-        GOLDEN_DIR.mkdir(exist_ok=True)
+    if update:
+        captured["environment"] = environment
+        GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
         golden_path.write_text(json.dumps(captured, indent=1, sort_keys=True))
         pytest.skip("golden master regenerated")
     golden = json.loads(golden_path.read_text())

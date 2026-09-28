@@ -58,6 +58,32 @@ que la logique propre à la route (traduction i18n du nom de groupe, qui a
 besoin de `request` et n'a donc pas sa place dans la couche lecture seule
 `tracking/history.py`).
 
+### 5. `test_run_pipeline_golden.py` (walkforward et cpcv) — résolu 2026-09-28
+
+Échec local (Python 3.14, Windows) et slow-suite CI rouge/verte en
+alternance sur `main` (rouge 4cdeba3, 6e495a6, 2e5bcea ; verte a8636d8,
+7247fff, e1f4e92). **Pas une régression** : la sortie du pipeline est
+identique au bit près sur tous les commits de 3dc8753 (dernière
+régénération du golden) à 2e5bcea — aucun bisect possible. Cause :
+l'environnement numérique. (1) Versions : le venv local 3.14 (numpy 2.5,
+xgboost 3.4, shap 0.52) ne retient pas les mêmes features que la CI 3.11
+(numpy 2.4, xgboost 3.2, shap 0.51). (2) CPU : même avec les versions
+exactes de la CI, 7-8 valeurs diffèrent encore ; forcer le noyau OpenBLAS
+Sandybridge au lieu de Haswell sur la même machine en change 23 (seules les
+prédictions LightGBM bougent : écarts au dernier bit des features Kalman,
+amplifiés par le binning). Le golden n'était donc reproductible que sur un
+runner du même type de CPU que la machine qui l'avait généré -- cause
+probable de l'alternance CI (non confirmée : logs CI illisibles sans
+connexion GitHub).
+
+Corrigé : chaque golden enregistre l'environnement qui l'a produit et la
+comparaison est refusée ailleurs (skip en local, échec en CI) ; la
+slow-suite tourne dans un environnement figé (`.github/constraints-py311.txt`,
+`OPENBLAS_CORETYPE=Haswell`, `NPY_ENABLE_CPU_FEATURES=X86_V3`) où le golden
+est régénéré par `.github/workflows/golden-regen.yml` (branche
+`golden-regen/<nom>`) ; en local, un golden de sa propre machine via
+`PATRICK_GOLDEN_DIR` (docstring du test).
+
 ---
 
 ## Contexte de découverte

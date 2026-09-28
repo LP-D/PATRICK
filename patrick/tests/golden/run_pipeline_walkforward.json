@@ -1,4 +1,29 @@
 {
+ "environment": {
+  "arch": "8.0.0",
+  "blas": [
+   "openblas:Haswell"
+  ],
+  "hmmlearn": "0.3.3",
+  "imbalanced-learn": "0.14.2",
+  "joblib": "1.6.0",
+  "lightgbm": "4.7.0",
+  "numba": "0.67.0",
+  "numpy": "2.4.6",
+  "numpy_simd": [
+   "X86_V3"
+  ],
+  "optuna": "5.0.0",
+  "pandas": "3.0.6",
+  "platform": "linux-x86_64",
+  "pykalman": "0.11.2",
+  "python": "3.11",
+  "scikit-learn": "1.9.1",
+  "scipy": "1.17.1",
+  "shap": "0.51.0",
+  "statsmodels": "0.15.0",
+  "xgboost": "3.2.0"
+ },
  "exported": {
   "h3": {
    "features": [
