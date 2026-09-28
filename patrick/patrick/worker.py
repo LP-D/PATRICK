@@ -16,7 +16,9 @@ import faulthandler
 import json
 import os
 import re
+import sqlite3
 import sys
+import threading
 import time
 import traceback
 
@@ -51,6 +53,39 @@ _FLUSH_THROTTLE_S = 1.0
 # worker that vanished without a trace). One file per worker process, in
 # `logs/` next to the tracking DB; only the most recent ones are kept.
 _WORKER_LOGS_KEPT = 20
+
+# Heartbeat period of the dedicated thread, well under
+# `jobs.HEARTBEAT_STALE_S` (30s). It used to be refreshed only when the
+# pipeline printed a line: during a silent phase of more than 30s
+# (holdout diagnostic), the web server took the live worker for dead and
+# spawned a second one (2026-09-27, GSPC_62).
+_HEARTBEAT_INTERVAL_S = 5.0
+
+
+class _HeartbeatThread(threading.Thread):
+    """Keeps the worker's heartbeat fresh whatever the pipeline is doing.
+    Own SQLite connection: a connection is not shared across threads."""
+
+    def __init__(self, db_path: str, pid: int):
+        super().__init__(name="patrick-worker-heartbeat", daemon=True)
+        self._db_path = db_path
+        self._pid = pid
+        self._stopped = threading.Event()
+
+    def run(self) -> None:
+        conn = trackdb.connect(self._db_path)
+        try:
+            while not self._stopped.wait(_HEARTBEAT_INTERVAL_S):
+                try:
+                    jobs_db.write_heartbeat(conn, self._pid)
+                except sqlite3.Error as exc:
+                    print(f"[WORKER] heartbeat not written: {exc}", file=sys.stderr)
+        finally:
+            conn.close()
+
+    def stop(self) -> None:
+        self._stopped.set()
+        self.join(timeout=10)
 
 
 class _Tee:
@@ -110,12 +145,9 @@ def _estimate_total(config: RunConfig) -> int:
 
 
 class _ProgressCapture:
-    """Redirects stdout to the real console + persists progress/logs to the
-    database. Also serves as a heartbeat during a run's execution: without
-    this, a long run (several minutes between two `run_worker_loop`
-    iterations) would let the heartbeat go stale and
-    `ensure_worker_running` would believe this worker dead while it's
-    working."""
+    """Redirects stdout to the worker's output + persists progress/logs to
+    the database. It also refreshes the heartbeat, but only when the
+    pipeline prints: silent phases are covered by `_HeartbeatThread`."""
 
     def __init__(self, conn, job_id: str, pid: int):
         self._conn = conn
@@ -158,11 +190,17 @@ class _ProgressCapture:
 
     def _flush(self, now: float) -> None:
         self._last_flush = now
-        jobs_db.update_job_progress(
-            self._conn, self._job_id, phase=self._phase,
-            progress_done=self._progress_done, log_tail=self._log_lines[-200:],
-        )
-        jobs_db.write_heartbeat(self._conn, self._pid)
+        try:
+            jobs_db.update_job_progress(
+                self._conn, self._job_id, phase=self._phase,
+                progress_done=self._progress_done, log_tail=self._log_lines[-200:],
+            )
+            jobs_db.write_heartbeat(self._conn, self._pid)
+        except sqlite3.Error as exc:
+            # Progress display only: a busy database must not abort a
+            # multi-hour run (2026-09-27: a "database is locked" here killed
+            # two workers mid-run). The next flush retries.
+            self._out.write(f"[WORKER] progress not saved ({exc}), will retry\n")
 
     def final_flush(self) -> None:
         self._flush(time.monotonic())
@@ -288,12 +326,15 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
     faulthandler_was_enabled = faulthandler.is_enabled()
     sys.stdout, sys.stderr = _Tee(old_stdout, log), _Tee(old_stderr, log)
     faulthandler.enable(file=log, all_threads=True)  # native crashes (C extensions) too
+    heartbeat = _HeartbeatThread(db_path, pid)
+    heartbeat.start()
     try:
         _worker_loop(pid, db_path, poll_interval, idle_timeout)
     except BaseException:
         log.write(f"[WORKER] died (pid={pid}):\n{traceback.format_exc()}")
         raise
     finally:
+        heartbeat.stop()
         log.write(f"[WORKER] exit (pid={pid}) {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         sys.stdout, sys.stderr = old_stdout, old_stderr
         faulthandler.disable()

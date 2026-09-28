@@ -53,10 +53,13 @@ _TRACKED_LIBS = (
 def connect(path: str | None = None) -> sqlite3.Connection:
     path = path or default_db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=30.0)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 5000")
+    # 30s, not 5s: a writer holding the lock a few seconds (a second worker,
+    # a manual cleanup, a backup) must delay a multi-hour run, not kill it
+    # with "database is locked" (2026-09-27: GSPC_62 and HO_PA_1 lost that way).
+    conn.execute("PRAGMA busy_timeout = 30000")
     migrate(conn)
     return conn
 
@@ -589,6 +592,10 @@ def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> i
     documents that two workers can briefly, legitimately overlap (no
     distributed lock), so a run genuinely in progress under a live worker
     -- itself possibly just started -- must not be reaped out from under it.
+    The age alone is not enough either: a run whose job is still 'running'
+    (its worker alive, see `jobs.reap_stale_running_jobs`, called just
+    before) is never reaped, however long it has been going (2026-09-27,
+    GSPC_62: a live 2h reference run marked 'failed').
     Called once at `run_worker_loop` startup, never during an ongoing
     execution."""
     with conn:
@@ -596,7 +603,8 @@ def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> i
             "UPDATE run SET status = 'failed', finished_at = datetime('now'), "
             "error = 'orphaned: no matching process at worker startup' "
             "WHERE status = 'running' AND "
-            "(julianday('now') - julianday(started_at)) * 86400 > ?",
+            "(julianday('now') - julianday(started_at)) * 86400 > ? AND "
+            "(job_id IS NULL OR job_id NOT IN (SELECT job_id FROM job WHERE status = 'running'))",
             (max_age_s,),
         )
     return cur.rowcount
