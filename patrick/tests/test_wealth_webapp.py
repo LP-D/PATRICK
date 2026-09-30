@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from patrick.config import defaults as D
 from patrick.wealth import performance
 from patrick.webapp import wealth_routes
 from patrick.webapp.app import app
@@ -120,3 +121,34 @@ def test_a_position_without_history_shows_its_proxy_estimate(tmp_path, monkeypat
     detail = client.get(f"/patrimoine/comptes/{acc}").text
     assert "ALDAT.PA via ^FCHI × 2.0 (a priori)" in detail
     assert "ALDAT.PA via ^FCHI" in client.get("/patrimoine").text
+
+
+def test_add_movement_form_picks_the_asset_from_the_ticker_bank(client):
+    """Dropdown, not a free field: ALDAT.PA under its company name, FRED
+    series left out, the account's own symbols first (off-bank ones too),
+    plus an explicit escape hatch for a symbol missing from the bank."""
+    acc = _account(client)
+    for mv in ({"kind": "deposit", "ts": "2024-01-02", "amount": "10000"},
+               {"kind": "buy", "ts": "2024-01-03", "symbol": "CW8.PA", "quantity": "1", "price": "400"}):
+        assert client.post(f"/api/wealth/accounts/{acc}/movements", json=mv).status_code == 200
+    page = client.get(f"/patrimoine/comptes/{acc}").text
+    form = page[page.index('class="form add-movement"'):page.index("</form>", page.index('class="form add-movement"'))]
+
+    assert '<select name="symbol" data-symbol-select>' in form
+    assert 'type="text" name="symbol"' in form and "disabled" in form  # the free field is off by default
+    assert '<option value="ALDAT.PA">Date Devel Applic Tech Energie SA — ALDAT.PA</option>' in form
+    assert 'value="MC.PA"' in form and 'value="__other__"' in form
+    assert 'value="DFF"' not in form and 'value="CPIAUCSL"' not in form  # FRED: nothing to hold
+    held = form.index(f'label="{wealth_routes.HELD_GROUP}"')
+    assert held < form.index('value="ALDAT.PA"')
+    assert '<option value="CW8.PA">hors banque de tickers — CW8.PA</option>' in form
+
+
+def test_symbol_groups_keep_fred_out_and_held_symbols_first():
+    groups = wealth_routes.symbol_groups(["MC.PA", "ZZZ.PA"])
+    assert groups[0] == (wealth_routes.HELD_GROUP, [("MC.PA", "LVMH"), ("ZZZ.PA", "hors banque de tickers")])
+    symbols = {sym for _, items in groups[1:] for sym, _ in items}
+    assert {"ALDAT.PA", "^GSPC", "GC=F", "XLK"} <= symbols
+    fred = {sym for sym, _, src in D.DEFAULT_TARGET_CHOICES if src == "fred"}
+    assert "CPIAUCSL" in fred and not symbols & fred
+    assert wealth_routes.symbol_groups([])[0][0] != wealth_routes.HELD_GROUP

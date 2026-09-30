@@ -875,6 +875,7 @@ button.primary:disabled, .btn:disabled {
   font-weight: 550;
   color: var(--text-2);
 }
+.run-form label[hidden], .form label[hidden] { display: none; }
 .run-form label.checkbox, .form label.checkbox {
   display: inline-flex;
   align-items: center;

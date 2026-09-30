@@ -57,6 +57,24 @@
         btn.addEventListener("click", function () { var d = btn.closest("dialog"); if (d) d.close(); });
     });
 
+    /* ---- asset dropdown: "Autre symbole Yahoo" swaps in a free-text field.
+       Only one of the two controls carries name="symbol" at a time (a
+       nameless or disabled control is left out of FormData). ---- */
+    document.querySelectorAll("select[data-symbol-select]").forEach(function (sel) {
+        var other = sel.form && sel.form.querySelector("[data-symbol-other]");
+        if (!other) return;
+        var input = other.querySelector("input");
+        function sync(focus) {
+            var isOther = sel.value === "__other__";
+            other.hidden = !isOther;
+            input.disabled = !isOther;
+            sel.name = isOther ? "" : "symbol";
+            if (isOther && focus) input.focus();
+        }
+        sel.addEventListener("change", function () { sync(true); });
+        sync(false);
+    });
+
     /* ---- JSON forms ---- */
     document.querySelectorAll("form[data-api]").forEach(function (form) {
         form.addEventListener("submit", async function (ev) {

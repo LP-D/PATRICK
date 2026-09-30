@@ -124,7 +124,18 @@
         </select>
       </label>
       <label>Date <input type="date" name="ts" required></label>
-      <label>Symbole <input type="text" name="symbol" placeholder="MC.PA"></label>
+      <label>Actif
+        <select name="symbol" data-symbol-select>
+          <option value="">— sans actif</option>
+          {% for group, items in symbol_groups %}
+          <optgroup label="{{ group_labels.get(group, group) }}">
+            {% for sym, sym_label in items %}<option value="{{ sym }}">{{ sym_label }} — {{ sym }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
+          <option value="__other__">Autre symbole Yahoo…</option>
+        </select>
+      </label>
+      <label data-symbol-other hidden>Symbole Yahoo <input type="text" name="symbol" placeholder="CW8.PA" disabled></label>
       <label>Quantité <input type="text" inputmode="decimal" name="quantity"></label>
       <label>Prix <input type="text" inputmode="decimal" name="price"></label>
       <label>Montant <input type="text" inputmode="decimal" name="amount"></label>
@@ -133,7 +144,7 @@
       <label>Échéance (DAT) <input type="date" name="maturity"></label>
     </div>
     <div class="row"><input type="text" name="note" placeholder="Note (facultatif)" class="input" style="flex:1; margin-top:0"><button type="submit" class="btn">{{ icon('plus') }} Ajouter</button></div>
-    <p class="hint">Achat/vente : quantité et prix (le montant se déduit, frais inclus). Versement, retrait, dividende, intérêts, frais : montant. Dépôt à terme : montant, taux annuel et échéance.</p>
+    <p class="hint">Actif : choisi dans la banque de tickers (symbole Yahoo, donc valorisé au dernier cours) ; « Autre symbole Yahoo » pour un titre absent de la banque. Achat/vente : quantité et prix (le montant se déduit, frais inclus). Versement, retrait, dividende, intérêts, frais : montant. Dépôt à terme : montant, taux annuel et échéance.</p>
   </form>
 
   {% set mv_rows = [] %}
