@@ -13,8 +13,14 @@ add/delete/transfer movements, CSV import with a mandatory preview step
 writes only the valid rows). Every write goes through `wealth.ledger`,
 whose validation errors become 400s.
 
-Prices: `price_provider()` (local data lake, then yfinance with a 7-day
-cache) -- module-level so tests can replace it.
+Prices: `price_provider()` (`wealth.prices`: yfinance with a short cache,
+the local data lake as offline fallback) -- module-level so tests can
+replace it.
+
+Add-movement form: the asset is picked from a dropdown (`symbol_groups`)
+rather than typed, so every position carries a Yahoo symbol the price
+provider can value -- a typo ("ALDAT" for "ALDAT.PA") used to leave the
+position without a price, hence without P&L.
 """
 from __future__ import annotations
 
@@ -24,6 +30,8 @@ import sqlite3
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from patrick.config import defaults as D
+from patrick.config import universe_extension as UX
 from patrick.numeric import is_nan
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
@@ -33,6 +41,28 @@ from patrick.wealth import prices as wealth_prices
 
 def price_provider():
     return wealth_prices.make_provider()
+
+
+HELD_GROUP = "Positions du compte"
+
+
+def symbol_groups(held: list[str]) -> list[tuple[str, list[tuple[str, str]]]]:
+    """Choices of the add-movement "Actif" dropdown, as (group, [(symbol,
+    label)]): the account's own symbols first (kept even when absent from
+    the ticker bank, e.g. imported from a CSV), then every Yahoo symbol of
+    the bank, grouped as on the launch page. FRED series are left out: no
+    Yahoo quote, nothing to hold."""
+    fred = {sym for sym, _, src in D.DEFAULT_TARGET_CHOICES if src == "fred"}
+    bank = [(g, [(sym, label.replace("_", " ")) for sym, label in items if sym not in fred])
+            for g, items in UX.all_target_groups().items()]
+    bank = [(g, items) for g, items in bank if items]
+    label_of = {sym: label for _, items in bank for sym, label in items}
+    own = [(sym, label_of.get(sym, "hors banque de tickers")) for sym in held]
+    return ([(HELD_GROUP, own)] if own else []) + bank
+
+
+def _held_symbols(movements: list[dict]) -> list[str]:
+    return sorted({m["symbol"] for m in movements if m["symbol"] and not m["symbol"].startswith("DAT:")})
 
 
 def _json_body(raw: bytes) -> dict:
@@ -112,7 +142,8 @@ def register(app: FastAPI, templates, context) -> None:
             raise HTTPException(status_code=404, detail="Compte introuvable")
         return templates.TemplateResponse(request, "patrimoine_account.html", {
             "detail": detail, "accounts": accounts, "chart": service.chart_payload(detail),
-            "movement_kinds": ledger.MOVEMENT_KINDS, **context(request)})
+            "movement_kinds": ledger.MOVEMENT_KINDS,
+            "symbol_groups": symbol_groups(_held_symbols(detail["movements"])), **context(request)})
 
     @app.get("/mouvements")
     def movements_page(request: Request):

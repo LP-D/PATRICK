@@ -87,7 +87,7 @@
   {% endfor %}
   {{ data_table(["Actif", "Quantité", "Valeur", "Poids", "Plus-value latente"], rows,
                 "Aucune position sur les comptes réels.", num_cols=[1, 2, 3, 4],
-                footer="Poids sur le patrimoine réel total (liquidités incluses). Valorisation au dernier cours connu (data lake local, sinon Yahoo Finance, cache 7 jours) ; à défaut, au dernier prix de transaction.") }}
+                footer="Poids sur le patrimoine réel total (liquidités incluses). Valorisation au dernier cours de clôture Yahoo Finance (non ajusté des dividendes, rafraîchi toutes les 6 h ; data lake local si hors ligne) ; à défaut, au dernier prix de transaction.") }}
 </section>
 
 <dialog id="new-account-dialog" class="modal">

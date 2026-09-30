@@ -61,17 +61,19 @@ EQUITY_UNIVERSE: dict[str, dict] = {
         "first_listed": "1997-05-15",
     },
     "ALDAT.PA": {
-        "label": "D.A.T.E",
+        # Raison sociale telle que servie par Yahoo ("DATE DEVEL APPLIC TECH
+        # ENERGIE", 2026-09-30) ; mnemonique Euronext ALDAT.
+        "label": "Date Devel Applic Tech Energie SA",
         "currency": "EUR",
         "exchange": "Euronext Growth Paris",
         "first_listed": "2026-09-25",
-        # Roadmap bloc 4 -- pas d'historique : risque estime via un proxy
-        # (tracking/covariance.py::backfill_with_proxy). Verifie le
-        # 2026-09-25 : ALDAT.PA ne renvoie encore aucune cotation ; aucun
-        # indice petites valeurs sur Yahoo (^CACS, ^CACMS : 404) -- ^FCHI
-        # (CAC 40) est le proxy disponible. Multiplicateur de volatilite
-        # A PRIORI (petite capitalisation vs grand indice), remplace par
-        # l'estimation sur le chevauchement des 20 premieres seances.
+        # Roadmap bloc 4 -- historique trop court : risque estime via un
+        # proxy (tracking/covariance.py::backfill_with_proxy). Verifie le
+        # 2026-09-30 : Yahoo sert ALDAT.PA depuis le 2026-09-25 (4 seances) ;
+        # aucun indice petites valeurs sur Yahoo (^CACS, ^CACMS : 404) --
+        # ^FCHI (CAC 40) est le proxy disponible. Multiplicateur de
+        # volatilite A PRIORI (petite capitalisation vs grand indice),
+        # remplace par l'estimation des qu'il y a 20 seances communes.
         "proxy": "^FCHI",
         "proxy_vol_multiplier": 2.0,
     },
