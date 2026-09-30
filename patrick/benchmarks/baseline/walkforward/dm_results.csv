@@ -1,0 +1,3 @@
+horizon,kind,baseline,dm_stat,p_value
+1,class_specific,BASELINE_persistence,-1.4863,0.1389
+1,common,BASELINE_persistence,-1.4863,0.1389

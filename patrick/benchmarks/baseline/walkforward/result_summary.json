@@ -1,0 +1,87 @@
+{
+ "best_before_tuning": {
+  "F1_dir": 0.628725,
+  "N": 10,
+  "algo": "XGBoost",
+  "horizon": 1,
+  "n_folds": 4,
+  "regime": "GLOBAL",
+  "sampler": "SMOTE"
+ },
+ "champions": {
+  "1": {
+   "challenger_f1_dir": 0.575,
+   "decision": "promoted_first"
+  },
+  "5": {
+   "challenger_f1_dir": 0.4636,
+   "decision": "promoted_first"
+  }
+ },
+ "cumulative_trials": 52,
+ "diebold_mariano": {
+  "asset_class": "other",
+  "class_specific": {
+   "baseline": "BASELINE_persistence",
+   "correction": "HLN",
+   "dm_stat": -1.4863,
+   "mean_loss_diff": -0.069892,
+   "n_obs": 186,
+   "p_value": 0.1389,
+   "variance_kernel": "rectangular"
+  },
+  "common": {
+   "baseline": "BASELINE_persistence",
+   "correction": "HLN",
+   "dm_stat": -1.4863,
+   "mean_loss_diff": -0.069892,
+   "n_obs": 186,
+   "p_value": 0.1389,
+   "variance_kernel": "rectangular"
+  },
+  "sample": "holdout"
+ },
+ "final_best": {
+  "F1_dir": 0.628725,
+  "N": 10,
+  "algo": "XGBoost",
+  "horizon": 1,
+  "n_folds": 4,
+  "regime": "GLOBAL",
+  "sampler": "SMOTE"
+ },
+ "holdout": {
+  "AUC_ovr_4cls": 0.5889,
+  "Acc_dir": 0.5753,
+  "BalAcc_4cls": 0.3335,
+  "Brier_up": 0.2413900229023588,
+  "ECE_up": 0.0470878299205534,
+  "F1_4cls": 0.3254,
+  "F1_DOWN_FORT": 0.5455,
+  "F1_UP_FORT": 0.4615,
+  "F1_dir": 0.575,
+  "MCC_4cls": 0.1119
+ },
+ "holdout_diagnostic": {
+  "n_trials": 12,
+  "p_value": 0.08422878043475898,
+  "rho": 0.5183895865703763
+ },
+ "pbo": {
+  "mean_logit": -0.427,
+  "n_blocks": 4,
+  "n_combinations": 6,
+  "n_trials": 14,
+  "pbo": 0.8333,
+  "reliability": {
+   "bootstrap_std": null,
+   "ci_high": null,
+   "ci_low": null,
+   "message": "PBO non calcul\u00e9 (4 blocs disponibles). PBO n\u00e9cessite au moins 6 blocs temporels (n_wf_folds, apr\u00e8s retrait \u00e9ventuel du bloc le plus ancien pour parit\u00e9) : C(6, 3) = 20 combinaisons IS/OOS, au-dessus du plancher de 10 (r\u00e8gle n*p>=5 et n*(1-p)>=5 pour une proportion, pire cas p=0.5) -- un plancher N\u00c9CESSAIRE mais pas suffisant : les combinaisons CSCV ne sont pas ind\u00e9pendantes (elles partagent des blocs), le vrai besoin est plus \u00e9lev\u00e9.",
+   "n_blocks": 4,
+   "n_combinations": 0,
+   "ok": false,
+   "pbo": null
+  }
+ }
+}
