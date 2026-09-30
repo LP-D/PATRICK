@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
-from patrick.wealth import performance
+from patrick.wealth import performance, symbols
 from patrick.webapp import wealth_routes
 from patrick.webapp.app import app
 
@@ -25,6 +25,7 @@ def client(tmp_path, monkeypatch):
         "^STOXX50E": pd.Series(4500 * np.cumprod(1 + rng.normal(0, 0.008, len(DAYS))), index=DAYS),
     }
     monkeypatch.setattr(wealth_routes, "price_provider", lambda: performance.dict_price_provider(prices))
+    monkeypatch.setattr(wealth_routes, "symbol_resolver", lambda ccy: symbols.make_resolver(ccy, search=None))
     return TestClient(app)
 
 
@@ -62,13 +63,39 @@ def test_invalid_input_is_a_400_with_the_reason(client):
 
 def test_csv_import_previews_before_writing(client):
     acc = _account(client)
-    csv_text = "date;type;montant\n02/01/2024;versement;1000\n03/01/2024;inconnu;1\n"
+    csv_text = "date;type;montant\n02/01/2024;versement;1000\n03/01/2024;inconnu;\n"
     preview = client.post(f"/api/wealth/accounts/{acc}/import", json={"csv": csv_text})
     assert preview.status_code == 200
     assert preview.json()["written"] == 0 and len(preview.json()["rows"]) == 1 and len(preview.json()["errors"]) == 1
     assert "data-movement-id" not in client.get("/mouvements").text
     commit = client.post(f"/api/wealth/accounts/{acc}/import", json={"csv": csv_text, "commit": True})
     assert commit.json()["written"] == 1
+    again = client.post(f"/api/wealth/accounts/{acc}/import", json={"csv": csv_text, "commit": True})
+    assert again.json()["written"] == 0 and again.json()["rows"][0]["status"] == "doublon"
+
+
+def test_csv_import_maps_the_account_column_onto_accounts(client):
+    """Trade Republic mixes its securities account (DEFAULT) and its PEA in
+    one export: each source goes to the chosen account, or is skipped."""
+    cto = _account(client, name="CTO", kind="CTO")
+    pea = _account(client, name="PEA")
+    csv_text = ("date,account_type,type,symbol,shares,price,amount,fee\n"
+                "2024-01-02,DEFAULT,TRANSFER_INSTANT_INBOUND,,,,500,\n"
+                "2024-01-03,DEFAULT,TRANSFER_OUT,,,,-100,\n"
+                "2024-01-03,PEA,TRANSFER_IN,,,,100,\n"
+                "2024-01-04,PEA,BUY,MC.PA,0.1,700,-70,-1\n")
+    url = f"/api/wealth/accounts/{cto}/import"
+    preview = client.post(url, json={"csv": csv_text}).json()
+    assert preview["sources"] == {"DEFAULT": 2, "PEA": 2}
+    assert [r["status"] for r in preview["rows"]] == ["", "virement interne", "virement interne", ""]
+    assert {a["account_id"] for a in preview["accounts"]} == {cto, pea}
+
+    done = client.post(url, json={"csv": csv_text, "commit": True, "accounts": {"PEA": pea}}).json()
+    assert done["written"] == 4
+    assert {r["target"] for r in done["rows"] if r["source"] == "PEA"} == {pea}
+    assert client.post(url, json={"csv": csv_text, "accounts": {"PEA": "acc_missing"}}).status_code == 400
+    skipped = client.post(url, json={"csv": csv_text, "accounts": {"PEA": ""}}).json()
+    assert [r["status"] for r in skipped["rows"] if r["source"] == "PEA"] == ["ignoré", "ignoré"]
 
 
 def test_drag_and_drop_transfer_rules_through_the_api(client):

@@ -32,7 +32,7 @@ ACCOUNT_MODES = ("real", "fictive")
 MOVEMENT_KINDS = ("deposit", "withdrawal", "buy", "sell", "dividend", "fee", "interest", "term_deposit")
 EXTERNAL_FLOW_KINDS = ("deposit", "withdrawal")
 MOVEMENT_LABELS_FR = {"deposit": "Versement", "withdrawal": "Retrait", "buy": "Achat", "sell": "Vente",
-                      "dividend": "Dividende", "fee": "Frais", "interest": "Intérêts", "term_deposit": "Dépôt à terme"}
+                      "dividend": "Dividende", "fee": "Frais", "interest": "Intérêts / bonus", "term_deposit": "Dépôt à terme"}
 
 # Default benchmark per wrapper: what a passive investor in that wrapper
 # would typically hold. Editable per account.

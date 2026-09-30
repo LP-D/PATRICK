@@ -10,7 +10,9 @@ Pages (nav_registry, category `patrimoine`):
 API (`/api/wealth/*`): create/update/delete accounts, clone as fictive,
 add/delete/transfer movements, CSV import with a mandatory preview step
 (`commit=false` returns the parsed rows and per-line errors, `commit=true`
-writes only the valid rows). Every write goes through `wealth.ledger`,
+writes only the valid rows; symbols resolved to Yahoo quotes, the file's
+account column mapped onto accounts, internal transfers and duplicates
+skipped). Every write goes through `wealth.ledger`,
 whose validation errors become 400s.
 
 Prices: `price_provider()` (`wealth.prices`: yfinance with a short cache,
@@ -35,12 +37,18 @@ from patrick.config import universe_extension as UX
 from patrick.numeric import is_nan
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
-from patrick.wealth import importer, ledger, service, signal_replay
+from patrick.wealth import importer, ledger, service, signal_replay, symbols
 from patrick.wealth import prices as wealth_prices
 
 
 def price_provider():
     return wealth_prices.make_provider()
+
+
+def symbol_resolver(currency: str):
+    """Symbols of an imported CSV -> Yahoo quotes (module-level so tests can
+    replace the network search)."""
+    return symbols.make_resolver(currency)
 
 
 HELD_GROUP = "Positions du compte"
@@ -239,25 +247,49 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/wealth/accounts/{account_id}/import")
     async def api_import(request: Request, account_id: str):
-        """`{"csv": "<text>", "commit": false}` -> preview; `commit: true`
-        writes the valid rows (the errors are returned again, never
-        silently dropped)."""
+        """`{"csv": "<text>", "commit": false, "accounts": {source:
+        account_id | ""}}` -> preview; `commit: true` writes the rows whose
+        status is empty (errors, skipped sources, internal transfers and
+        duplicates are returned again, never silently dropped). `accounts`
+        maps the values of the file's account column (Trade Republic:
+        DEFAULT / PEA) onto accounts, "" skipping one; unmapped -> this
+        account."""
         b = _json_body(await request.body())
         text = b.get("csv")
         if not isinstance(text, str):
             raise HTTPException(status_code=400, detail="champ csv (texte) manquant")
+        mapping = b.get("accounts") or {}
+        if not isinstance(mapping, dict):
+            raise HTTPException(status_code=400, detail="accounts : objet {source: compte} attendu")
+        conn = trackdb.connect()
         try:
-            parsed = importer.parse_csv(text.encode("utf-8"))
-        except ledger.LedgerError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        written: list[int] = []
-        if b.get("commit"):
-            conn = trackdb.connect()
+            target = ledger.get_account(conn, account_id)
+            if target is None:
+                raise HTTPException(status_code=404, detail="Compte introuvable")
+            accounts = ledger.list_accounts(conn)
+            known = {a["account_id"] for a in accounts}
+            unknown = sorted(str(v) for v in mapping.values() if v and v not in known)
+            if unknown:
+                raise HTTPException(status_code=400, detail=f"compte(s) introuvable(s) : {unknown}")
             try:
-                if ledger.get_account(conn, account_id) is None:
-                    raise HTTPException(status_code=404, detail="Compte introuvable")
-                written = [ledger.add_movement(conn, account_id, row) for row in parsed["rows"]]
-            finally:
-                conn.close()
-        return JSONResponse({"rows": parsed["rows"], "errors": parsed["errors"], "columns": parsed["columns"],
-                             "written": len(written)})
+                parsed = importer.parse_csv(text.encode("utf-8"), resolve=symbol_resolver(target["currency"]))
+            except ledger.LedgerError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            targets = {account_id, *(v for v in mapping.values() if v)}
+            plan = importer.plan_import(parsed["rows"], mapping, account_id,
+                                        {acc: ledger.list_movements(conn, acc) for acc in targets})
+            written = 0
+            if b.get("commit"):
+                for row in plan:
+                    if row["status"] == "":
+                        ledger.add_movement(conn, row["target"], row)
+                        written += 1
+        finally:
+            conn.close()
+        return JSONResponse({
+            "rows": plan,
+            "errors": parsed["errors"], "warnings": parsed["warnings"], "columns": parsed["columns"],
+            "sources": parsed["sources"],
+            "accounts": [{"account_id": a["account_id"], "name": a["name"], "kind": a["kind"], "mode": a["mode"]}
+                         for a in accounts],
+            "to_write": sum(1 for row in plan if row["status"] == ""), "written": written})
