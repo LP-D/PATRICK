@@ -19,11 +19,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from patrick import explain
+from patrick import settings as settings_store
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
 from patrick.data.sources import fundamentals_source
-from patrick.features import guida
+from patrick.features import guida, parametric_parallel
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -386,6 +387,27 @@ def horizon_feasibility(target: Annotated[list[str] | None, Query()] = None):
                 "n_obs_required": blocking.n_obs_required,
             }
     return out
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Réglages machine exposés à la page « Lancer » (hors config des runs)."""
+    cpu = os.cpu_count() or 1
+    return {"parametric_jobs": settings_store.get_parametric_jobs(), "max_parametric_jobs": cpu,
+            "env_override": os.environ.get(parametric_parallel.ENV_JOBS)}
+
+
+@app.post("/api/settings/parametric-jobs")
+async def set_parametric_jobs(request: Request):
+    try:
+        jobs = int((await request.json())["jobs"])
+    except (ValueError, KeyError, TypeError):
+        return JSONResponse({"error": "jobs doit être un entier."}, status_code=400)
+    cpu = os.cpu_count() or 1
+    if not 1 <= jobs <= cpu:
+        return JSONResponse({"error": f"jobs doit être compris entre 1 et {cpu}."}, status_code=400)
+    settings_store.save({settings_store.KEY_PARAMETRIC_JOBS: jobs})
+    return {"parametric_jobs": jobs}
 
 
 @app.post("/runs")
