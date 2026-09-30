@@ -208,10 +208,12 @@ def test_french_broker_csv_is_parsed_day_first_with_decimal_commas():
                 "31/02/2024;Retrait;;;;10;;\n")
     out = importer.parse_csv(csv_text.encode("utf-8-sig"))
     assert out["delimiter"] == ";"
-    assert [r["kind"] for r in out["rows"]] == ["deposit", "buy", "dividend"]
+    assert [r["kind"] for r in out["rows"]] == ["deposit", "buy", "dividend", "deposit"]
     assert out["rows"][0]["ts"] == "2024-01-03" and out["rows"][0]["amount"] == 5000.0
     assert out["rows"][1]["amount"] == pytest.approx(-(2 * 712.40 + 1.99))
-    assert [e["line"] for e in out["errors"]] == [6, 7]
+    # An unknown label with an amount is imported, classified by its sign, and flagged.
+    assert out["rows"][3]["kind"] == "deposit" and [w["line"] for w in out["warnings"]] == [6]
+    assert [e["line"] for e in out["errors"]] == [7]
 
 
 def test_english_comma_csv_and_unreadable_files():

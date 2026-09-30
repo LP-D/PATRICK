@@ -155,53 +155,116 @@
     });
 
     /* ---- CSV import: drop -> preview -> confirm ---- */
-    function renderPreview(box, accountId, csvText, data) {
+    var KIND_FR = { deposit: "Versement", withdrawal: "Retrait", buy: "Achat", sell: "Vente", dividend: "Dividende",
+                    fee: "Frais", interest: "Intérêts / bonus", term_deposit: "Dépôt à terme" };
+    function hintList(items) {
+        var ul = document.createElement("ul");
+        ul.className = "hint";
+        items.slice(0, 20).forEach(function (text) {
+            var li = document.createElement("li");
+            li.textContent = text;
+            ul.appendChild(li);
+        });
+        return ul;
+    }
+    /* A file with an account column (Trade Republic: DEFAULT / PEA) gets one
+       selector per value: which account its lines go to, or skipped. Every
+       change re-asks the server for the preview (internal transfers and
+       duplicates depend on the mapping). */
+    function mappingControls(data, accountId, mapping, onChange) {
+        var sources = Object.keys(data.sources || {});
+        if (sources.length < 2) return null;
+        var box = document.createElement("div");
+        box.className = "hint";
+        sources.forEach(function (src) {
+            var label = document.createElement("label");
+            label.style.display = "block";
+            label.style.marginTop = "6px";
+            label.textContent = "Lignes « " + src + " » (" + data.sources[src] + ") → ";
+            var sel = document.createElement("select");
+            (data.accounts || []).forEach(function (a) {
+                var o = document.createElement("option");
+                o.value = a.account_id;
+                o.textContent = a.name + " (" + a.kind + (a.mode === "fictive" ? ", fictif" : "") + ")";
+                sel.appendChild(o);
+            });
+            var skip = document.createElement("option");
+            skip.value = "";
+            skip.textContent = "Ignorer ces lignes";
+            sel.appendChild(skip);
+            sel.value = src in mapping ? mapping[src] : accountId;
+            sel.addEventListener("change", function () { mapping[src] = sel.value; onChange(); });
+            label.appendChild(sel);
+            box.appendChild(label);
+        });
+        return box;
+    }
+    function renderPreview(box, accountId, csvText, data, mapping) {
         box.innerHTML = "";
+        var multi = Object.keys(data.sources || {}).length > 1;
+        var names = {};
+        (data.accounts || []).forEach(function (a) { names[a.account_id] = a.name; });
         var p = document.createElement("p");
         p.className = "hint";
-        p.textContent = tr("wealth_import_preview", "{n} valid, {e} errors.", { n: data.rows.length, e: data.errors.length });
+        var skipped = data.rows.length - data.to_write;
+        p.textContent = tr("wealth_import_preview", "{n} valid, {e} errors.", { n: data.to_write, e: data.errors.length })
+            + (skipped ? " " + skipped + " ligne(s) écartée(s) : virements internes, doublons déjà enregistrés ou lignes ignorées." : "");
         box.appendChild(p);
+        var controls = mappingControls(data, accountId, mapping, async function () {
+            try {
+                var again = await call("/api/wealth/accounts/" + encodeURIComponent(accountId) + "/import", "POST",
+                                       { csv: csvText, commit: false, accounts: mapping });
+                renderPreview(box, accountId, csvText, again, mapping);
+            } catch (e) {
+                say(String(e.message || e), "error");
+            }
+        });
+        if (controls) box.appendChild(controls);
         if (data.errors.length) {
-            var ul = document.createElement("ul");
-            ul.className = "hint";
-            data.errors.slice(0, 20).forEach(function (err) {
-                var li = document.createElement("li");
-                li.textContent = "ligne " + err.line + " : " + err.error;
-                ul.appendChild(li);
-            });
-            box.appendChild(ul);
+            box.appendChild(hintList(data.errors.map(function (err) { return "ligne " + err.line + " : " + err.error; })));
+        }
+        if ((data.warnings || []).length) {
+            box.appendChild(hintList(data.warnings.map(function (w) { return "ligne " + w.line + " : " + w.warning; })));
         }
         if (data.rows.length) {
             var wrap = document.createElement("div");
             wrap.className = "table-scroll";
             var table = document.createElement("table");
             table.className = "data-table";
-            table.innerHTML = "<thead><tr><th>Date</th><th>Type</th><th>Actif</th><th class='num'>Montant</th></tr></thead>";
+            table.innerHTML = "<thead><tr><th>Date</th><th>Type</th><th>Actif</th><th class='num'>Qté</th><th class='num'>Montant</th>"
+                + (multi ? "<th>Compte</th>" : "") + "<th>Statut</th></tr></thead>";
             var tbody = document.createElement("tbody");
-            data.rows.slice(0, 50).forEach(function (r) {
+            data.rows.slice(0, 200).forEach(function (r) {
                 var tr_ = document.createElement("tr");
-                [r.ts, r.kind, r.symbol || "", (r.amount || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })]
-                    .forEach(function (v, i) {
-                        var td = document.createElement("td");
-                        td.textContent = v;
-                        if (i === 3) td.className = "num";
-                        tr_.appendChild(td);
-                    });
+                var cells = [r.ts, KIND_FR[r.kind] || r.kind, r.symbol || "",
+                             r.quantity ? r.quantity.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "",
+                             (r.amount || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })];
+                if (multi) cells.push((r.source || "") + " → " + (r.target ? names[r.target] || r.target : "—"));
+                cells.push(r.status || "à enregistrer");
+                cells.forEach(function (v, i) {
+                    var td = document.createElement("td");
+                    td.textContent = v;
+                    if (i === 3 || i === 4) td.className = "num";
+                    tr_.appendChild(td);
+                });
+                if (r.status) tr_.style.opacity = "0.55";
                 tbody.appendChild(tr_);
             });
             table.appendChild(tbody);
             wrap.appendChild(table);
             box.appendChild(wrap);
+        }
+        if (data.to_write) {
             var btn = document.createElement("button");
             btn.type = "button";
             btn.className = "btn";
             btn.style.marginTop = "10px";
-            btn.textContent = "Enregistrer " + data.rows.length + " mouvement(s)";
+            btn.textContent = "Enregistrer " + data.to_write + " mouvement(s)";
             btn.addEventListener("click", async function () {
                 btn.disabled = true;
                 try {
                     var done = await call("/api/wealth/accounts/" + encodeURIComponent(accountId) + "/import", "POST",
-                                          { csv: csvText, commit: true });
+                                          { csv: csvText, commit: true, accounts: mapping });
                     say(tr("wealth_import_done", "{n} saved.", { n: done.written }), "info");
                     window.setTimeout(function () { window.location.reload(); }, 700);
                 } catch (e) {
@@ -217,11 +280,17 @@
         var box = document.querySelector('[data-import-preview="' + accountId + '"]');
         if (!file) return;
         if (file.size > 1000000) { say("Fichier trop volumineux (max 1 Mo).", "error"); return; }
-        var text = await file.text();
+        var bytes = await file.arrayBuffer();
+        var text;
+        try {
+            text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch (e) {
+            text = new TextDecoder("windows-1252").decode(bytes);  // French Excel export
+        }
         try {
             var data = await call("/api/wealth/accounts/" + encodeURIComponent(accountId) + "/import", "POST",
                                   { csv: text, commit: false });
-            if (box) renderPreview(box, accountId, text, data);
+            if (box) renderPreview(box, accountId, text, data, {});
         } catch (e) {
             say(String(e.message || e), "error");
         }
