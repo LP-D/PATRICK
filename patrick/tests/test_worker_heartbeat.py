@@ -189,3 +189,19 @@ def test_heartbeat_stays_fresh_during_a_silent_phase(db_path, monkeypatch):
     worker_module.run_worker_loop(poll_interval=0.01, idle_timeout=0.01)
 
     assert seen_alive == [True]
+
+
+def test_heartbeat_timestamp_keeps_milliseconds(db_path):
+    """Deterministic twin of the test above: a second-truncated timestamp
+    let the age read by `worker_is_alive` exceed the real one by up to 1 s
+    (the intermittent 3.12 CI failure of 2026-09-30)."""
+    conn = trackdb.connect(db_path)
+    try:
+        jobs_db.write_heartbeat(conn, pid=1)
+        stamp = conn.execute("SELECT updated_at FROM worker_heartbeat WHERE id = 1").fetchone()[0]
+        age = conn.execute("SELECT (julianday('now') - julianday(updated_at)) * 86400 "
+                           "FROM worker_heartbeat WHERE id = 1").fetchone()[0]
+    finally:
+        conn.close()
+    assert len(stamp.rsplit(".", 1)[-1]) == 3 and "." in stamp  # 'YYYY-MM-DD HH:MM:SS.mmm'
+    assert age < 0.5

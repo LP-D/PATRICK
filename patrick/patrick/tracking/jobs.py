@@ -186,9 +186,15 @@ def reap_stale_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0)
 
 
 def write_heartbeat(conn: sqlite3.Connection, pid: int) -> None:
+    """Millisecond timestamp: `datetime('now')` truncates to the second while
+    `worker_is_alive` reads `julianday('now')` with milliseconds, so the age
+    it saw could exceed the real one by up to 1 s (a write at hh:mm:ss.95
+    read 0.2 s later looked 1.15 s old) -- the source of the intermittent
+    `test_heartbeat_stays_fresh_during_a_silent_phase` failure (1 s threshold)."""
     with conn:
         conn.execute(
-            "INSERT INTO worker_heartbeat (id, pid, updated_at) VALUES (1, ?, datetime('now')) "
+            "INSERT INTO worker_heartbeat (id, pid, updated_at) "
+            "VALUES (1, ?, strftime('%Y-%m-%d %H:%M:%f', 'now')) "
             "ON CONFLICT(id) DO UPDATE SET pid = excluded.pid, updated_at = excluded.updated_at",
             (pid,),
         )
