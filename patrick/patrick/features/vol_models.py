@@ -364,26 +364,48 @@ def _cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, se
     does not dedupe NULLs against each other in a composite PRIMARY KEY).
     `data_hash` (sha256 of the actual `series` content) is the correctness
     guarantee -- same role as the SHAP cache's `data_hash`."""
+    cached = lookup_cached_parametric_model(conn, snapshot_id, ticker, model, series, fit_end_idx, test_end_idx)
+    if cached is not None:
+        return cached
+
+    result = _timed_model_call(model, _PARAMETRIC_MODELS[model], series, fit_end_idx, test_end_idx)
+    store_cached_parametric_model(conn, snapshot_id, ticker, model, series, fit_end_idx, test_end_idx, result)
+    return result
+
+
+def _cache_key(model: str, series: pd.Series, fit_end_idx: int | None, test_end_idx: int | None):
     fit_key = fit_end_idx if fit_end_idx is not None else -1
     test_key = test_end_idx if test_end_idx is not None else -1
     data_hash = hashlib.sha256(np.ascontiguousarray(series.to_numpy(dtype=float)).tobytes()).hexdigest()
-    col_name = _MODEL_OUTPUT_COLUMN[model]
+    return fit_key, test_key, data_hash, _MODEL_OUTPUT_COLUMN[model]
 
+
+def lookup_cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, series: pd.Series,
+                                   fit_end_idx: int | None, test_end_idx: int | None) -> pd.DataFrame | None:
+    """Read half of `_cached_parametric_model` (split out so the parallel
+    parametric-pool build can look up in the parent process, which owns the
+    SQLite connection, and compute the misses in workers)."""
+    fit_key, test_key, data_hash, col_name = _cache_key(model, series, fit_end_idx, test_end_idx)
     cached = trackdb.get_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash)
-    if cached is not None:
-        # Bug found 2026-08-23: `cached` can hold Python `None` (a failed
-        # fit's NaN values round-tripped through JSON, see the write below)
-        # -- an explicit float dtype is required here, or a list containing
-        # `None` makes pandas infer `object`, not `float64`. An object-dtype
-        # column downstream makes np.isinf() raise in
-        # pipeline/engine.py::_finite_features() (regression test:
-        # test_cached_result_preserves_float_dtype_when_the_underlying_fit_failed).
-        return pd.DataFrame({col_name: pd.Series(cached, index=series.index, dtype=float)})
+    if cached is None:
+        return None
+    # Bug found 2026-08-23: `cached` can hold Python `None` (a failed
+    # fit's NaN values round-tripped through JSON, see the write below)
+    # -- an explicit float dtype is required here, or a list containing
+    # `None` makes pandas infer `object`, not `float64`. An object-dtype
+    # column downstream makes np.isinf() raise in
+    # pipeline/engine.py::_finite_features() (regression test:
+    # test_cached_result_preserves_float_dtype_when_the_underlying_fit_failed).
+    return pd.DataFrame({col_name: pd.Series(cached, index=series.index, dtype=float)})
 
-    result = _timed_model_call(model, _PARAMETRIC_MODELS[model], series, fit_end_idx, test_end_idx)
+
+def store_cached_parametric_model(conn, snapshot_id: str, ticker: str, model: str, series: pd.Series,
+                                  fit_end_idx: int | None, test_end_idx: int | None,
+                                  result: pd.DataFrame) -> None:
+    """Write half of `_cached_parametric_model`."""
+    fit_key, test_key, data_hash, col_name = _cache_key(model, series, fit_end_idx, test_end_idx)
     values = [None if pd.isna(v) else float(v) for v in result[col_name].to_numpy()]
     trackdb.save_cached_vol_model(conn, snapshot_id, ticker, model, fit_key, test_key, data_hash, values)
-    return result
 
 
 # Phase 2 (feature/guida-features-full) -- heston_proxy/vrp_proxy are the

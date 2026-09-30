@@ -57,6 +57,7 @@ from patrick.features import (
     equity_fundamentals,
     guida,
     long_cycle,
+    parametric_parallel,
     pool_cache,
     spike,
     technical,
@@ -254,15 +255,22 @@ def _build_parametric_pool(raw: pd.DataFrame, config: RunConfig, fit_end_idx: in
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
-    for col in raw.columns:
-        s = raw[col]
-        if "vol_models" in families:
-            parts.append(vol_models.build_vol_model_features_parametric(
-                s, prefix=col, models=config.features.vol_models,
-                fit_end_idx=fit_end_idx, test_end_idx=test_end_idx,
-                conn=conn, snapshot_id=snapshot_id))
-        if "spike" in families:
-            parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
+    n_jobs = parametric_parallel.resolve_jobs(len(raw.columns))
+    if n_jobs > 1:
+        # Sprint 2 (exact): same parts, same order, computed by worker processes
+        # (`PATRICK_PARAMETRIC_JOBS`, default 1 = the sequential loop below).
+        parts = parametric_parallel.build_parts(raw, families, config.features.vol_models, fit_end_idx,
+                                                test_end_idx, conn, snapshot_id, n_jobs)
+    else:
+        for col in raw.columns:
+            s = raw[col]
+            if "vol_models" in families:
+                parts.append(vol_models.build_vol_model_features_parametric(
+                    s, prefix=col, models=config.features.vol_models,
+                    fit_end_idx=fit_end_idx, test_end_idx=test_end_idx,
+                    conn=conn, snapshot_id=snapshot_id))
+            if "spike" in families:
+                parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
 
     if not parts:
         return pd.DataFrame(index=raw.index)

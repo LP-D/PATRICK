@@ -5,7 +5,14 @@ Commande de comparaison avant/après : `python -m patrick.benchmark run` puis
 `python -m patrick.benchmark compare benchmarks/baseline/walkforward <nouveau_dossier>`
 (digests identiques attendus pour toute optimisation **exacte**).
 
-## Sprint 2 — optimisations exactes (proposition, rien d'implémenté)
+## Sprint 2 — optimisations exactes
+
+**Étape 1 faite** : pools paramétriques parallèles (`features/parametric_parallel.py`, activé par `PATRICK_PARAMETRIC_JOBS=N`, défaut 1 = code d'origine).
+Mesuré (walk-forward, même machine, threads BLAS=4, jobs=2) : 559 s -> 479 s (-14 %), paramétriques 155 s -> 81 s (-48 %), CPU 853 s -> 632 s ;
+digests des artefacts et compteurs **identiques** à la baseline (`benchmarks/sprint2_parametric_jobs2/`). Coût : pic RSS 525 Mo -> 1002 Mo.
+Non fait : défaut jobs>1, CPCV (un seul pool paramétrique : gain attendu faible), jobs=3/4 (nécessite de fixer les threads BLAS : comparer à part).
+
+Proposition initiale des étapes (la 1 est faite) :
 
 Critère commun : digests de `benchmarks/baseline/{walkforward,cpcv}` identiques, compteurs en baisse.
 Ordre proposé (par gain attendu, hypothèses à confirmer) :
