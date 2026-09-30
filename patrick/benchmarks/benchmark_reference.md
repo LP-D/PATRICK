@@ -1,6 +1,6 @@
 # Benchmark de référence PATRICK — Sprint 1 (mesure, aucune optimisation)
 
-Généré le 2026-09-30T21:48:56+02:00 — commit `a434118ce5` (working tree modifié).
+Généré le 2026-09-30T22:31:53+02:00 — commit `96d772f76f` (working tree modifié).
 
 > Sections 1-3 : **mesuré / observé**. Section 4 : **hypothèses / recommandations** (non mesurées).
 
@@ -35,13 +35,11 @@ Snapshot rejoué via `run_pipeline(snapshot_id=...)` (chemin `patrick resume`) :
 | CPU | Intel64 Family 6 Model 189 Stepping 1, GenuineIntel |
 | Cœurs logiques | 8 |
 | Python | 3.12.7 |
-| Env threads | {'MKL_NUM_THREADS': '4', 'NUMEXPR_NUM_THREADS': '4', 'OMP_NUM_THREADS': '4', 'OPENBLAS_NUM_THREADS': '4', 'PATRICK_FEATURE_CACHE': None, 'VECLIB_MAXIMUM_THREADS': None} |
+| Env threads | {'OMP_NUM_THREADS': '4', 'OPENBLAS_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4', 'NUMEXPR_NUM_THREADS': '4', 'VECLIB_MAXIMUM_THREADS': None, 'PATRICK_FEATURE_CACHE': None} |
 | Pools BLAS/OpenMP | ['openblas:Haswell:4', 'openmp:None:4'] |
-| Paquets | arch 8.0.0, catboost 1.2.10, duckdb 1.5.5, hmmlearn 0.3.3, imbalanced-learn 0.14.2, joblib 1.5.3, lightgbm 4.7.0, numba 0.67.0, numpy 2.5.3, optuna 4.9.0, pandas 3.0.5, pyarrow 25.0.1, pykalman 0.11.2, scikit-learn 1.9.0, scipy 1.18.1, shap 0.52.0, statsmodels 0.15.0, xgboost 3.4.1 |
+| Paquets | numpy 2.5.3, pandas 3.0.5, scipy 1.18.1, scikit-learn 1.9.0, xgboost 3.4.1, lightgbm 4.7.0, catboost 1.2.10, shap 0.52.0, numba 0.67.0, optuna 4.9.0, imbalanced-learn 0.14.2, statsmodels 0.15.0, arch 8.0.0, pykalman 0.11.2, hmmlearn 0.3.3, joblib 1.5.3, pyarrow 25.0.1, duckdb 1.5.5 |
 
 ## 3. Mesures
-
-> **Bruit de mesure** : Bruit de durée très élevé sur cette machine (portable, Chrome actif) : le même calcul walk-forward a pris 515 s (non instrumenté), 833 s, 839 s, 1153 s, 1611 s et 5095 s ; CPCV 1402 s, 1513 s (instrumentés) et 1982 s (non instrumenté). Les compteurs et les artefacts sont identiques dans tous ces runs, seuls les temps changent. Le run de référence walk-forward est le run de calibration (838.9 s), cohérent avec la répétition n°2 (832.8 s) du premier lancement ; le surcoût d'instrumentation n'est pas mesurable (bruit >> surcoût).
 
 ### Scénario `cpcv`
 
@@ -158,34 +156,34 @@ Snapshot rejoué via `run_pipeline(snapshot_id=...)` (chemin `patrick resume`) :
 
 | Indicateur | Valeur |
 |---|---|
-| Durée totale (instrumentée, run de référence) | 837.9 s |
-| Temps CPU process (somme threads) | 1140.8 s (CPU/mural = 1.36) |
-| Pic mémoire RSS (process + enfants) | 530 MB |
-| Temps hors phases instrumentées | 0.3 s (0.0%) |
-| Durées des répétitions instrumentées | 1610.8 s, 1153.0 s, 5095.0 s, 837.9 s |
-| Run non instrumenté | 515.5 s -> surcoût instrumentation non mesurable (bruit >> surcoût, voir note) |
-| Run de référence des phases | calibration (838.9 s, artefacts identiques) |
+| Durée totale (instrumentée, run de référence) | 559.1 s |
+| Temps CPU process (somme threads) | 853.5 s (CPU/mural = 1.53) |
+| Pic mémoire RSS (process + enfants) | 525 MB |
+| Temps hors phases instrumentées | 0.2 s (0.0%) |
+| Durées des répétitions instrumentées | 570.2 s, 559.1 s, 565.8 s |
+| Run non instrumenté | 514.1 s -> surcoût instrumentation +8.7% |
+| Run de référence des phases | rep2 |
 
 **Durée par phase**
 
 | Phase | Mural (s) | % total | CPU (s) | Pic RSS (MB) | Occurrences |
 |---|---|---|---|---|---|
-| scan_walkforward | 464.64 | 55.5% | 671.08 | 461 | 1 |
-| holdout_diagnostic | 133.42 | 15.9% | 189.92 | 480 | 1 |
-| tuning | 105.47 | 12.6% | 104.95 | 468 | 1 |
-| export_models | 66.81 | 8.0% | 92.45 | 530 | 1 |
-| walkforward_prepare | 50.61 | 6.0% | 66.20 | 396 | 1 |
-| base_feature_pool | 14.00 | 1.7% | 13.34 | 311 | 1 |
-| final_holdout | 0.96 | 0.1% | 0.94 | 434 | 1 |
-| champion_duel | 0.91 | 0.1% | 0.92 | 462 | 1 |
-| final_diebold_mariano | 0.32 | 0.0% | 0.30 | 435 | 1 |
-| export_tables | 0.15 | 0.0% | 0.14 | 430 | 1 |
-| register_runs | 0.11 | 0.0% | 0.11 | 298 | 1 |
-| ingestion | 0.08 | 0.0% | 0.08 | 290 | 1 |
-| final_stats | 0.05 | 0.0% | 0.02 | 422 | 3 |
-| select_finals | 0.03 | 0.0% | 0.05 | 430 | 1 |
-| stability | 0.03 | 0.0% | 0.05 | 384 | 1 |
-| finish_runs | 0.02 | 0.0% | 0.02 | 422 | 1 |
+| scan_walkforward | 309.53 | 55.4% | 504.95 | 520 | 1 |
+| holdout_diagnostic | 94.95 | 17.0% | 148.69 | 518 | 1 |
+| tuning | 74.80 | 13.4% | 75.55 | 496 | 1 |
+| export_models | 40.80 | 7.3% | 66.75 | 525 | 1 |
+| walkforward_prepare | 31.41 | 5.6% | 50.08 | 487 | 1 |
+| base_feature_pool | 5.80 | 1.0% | 5.75 | 412 | 1 |
+| final_holdout | 0.60 | 0.1% | 0.61 | 475 | 1 |
+| champion_duel | 0.58 | 0.1% | 0.58 | 468 | 1 |
+| final_diebold_mariano | 0.19 | 0.0% | 0.17 | 464 | 1 |
+| export_tables | 0.06 | 0.0% | 0.05 | 450 | 1 |
+| register_runs | 0.06 | 0.0% | 0.05 | 402 | 1 |
+| final_stats | 0.02 | 0.0% | 0.03 | 450 | 3 |
+| ingestion | 0.02 | 0.0% | 0.02 | 401 | 1 |
+| stability | 0.02 | 0.0% | 0.02 | 442 | 1 |
+| select_finals | 0.02 | 0.0% | 0.02 | 449 | 1 |
+| finish_runs | 0.01 | 0.0% | 0.00 | 450 | 1 |
 
 **Compteurs (totaux du run)**
 
@@ -219,32 +217,32 @@ Snapshot rejoué via `run_pipeline(snapshot_id=...)` (chemin `patrick resume`) :
 
 | Composant | Appels | Exclusif (s) | % total | Inclusif (s) |
 |---|---|---|---|---|
-| feature_pool.compute[parametric] | 6 | 272.31 | 32.5% | 274.55 |
-| select_features.compute | 30 | 235.10 | 28.1% | 235.10 |
-| fit_eval_full | 138 | 181.58 | 21.7% | 181.59 |
-| optuna.tune_config | 4 | 90.66 | 10.8% | 90.72 |
-| feature_pool.compute[base] | 1 | 13.77 | 1.6% | 13.77 |
-| interactions.discover | 1 | 8.57 | 1.0% | 8.59 |
-| scaler.fit_transform | 57 | 5.11 | 0.6% | 5.53 |
-| sqlite.commit | 1150 | 2.59 | 0.3% | 2.59 |
-| fold_context.prepare | 29 | 1.99 | 0.2% | 145.25 |
-| compute_baselines | 35 | 1.68 | 0.2% | 1.68 |
-| build_target | 56 | 1.20 | 0.1% | 1.20 |
-| sqlite.execute | 1812 | 0.54 | 0.1% | 0.54 |
-| scaler.transform | 112 | 0.48 | 0.1% | 0.48 |
-| select.xy_data_hash | 70 | 0.44 | 0.1% | 0.44 |
-| parametric_pool.build | 6 | 0.42 | 0.1% | 274.97 |
-| sqlite.executemany | 268 | 0.25 | 0.0% | 0.25 |
-| uniqueness.average | 29 | 0.23 | 0.0% | 0.23 |
-| interactions.apply | 6 | 0.03 | 0.0% | 0.03 |
+| select_features.compute | 30 | 183.65 | 32.9% | 183.65 |
+| feature_pool.compute[parametric] | 6 | 155.36 | 27.8% | 156.82 |
+| fit_eval_full | 138 | 118.31 | 21.2% | 118.31 |
+| optuna.tune_config | 4 | 64.49 | 11.5% | 64.54 |
+| interactions.discover | 1 | 6.07 | 1.1% | 6.08 |
+| feature_pool.compute[base] | 1 | 5.64 | 1.0% | 5.64 |
+| scaler.fit_transform | 57 | 3.31 | 0.6% | 3.61 |
+| sqlite.commit | 1150 | 1.84 | 0.3% | 1.84 |
+| fold_context.prepare | 29 | 1.30 | 0.2% | 81.13 |
+| compute_baselines | 35 | 0.95 | 0.2% | 0.95 |
+| build_target | 56 | 0.69 | 0.1% | 0.69 |
+| select.xy_data_hash | 70 | 0.40 | 0.1% | 0.40 |
+| scaler.transform | 112 | 0.34 | 0.1% | 0.34 |
+| parametric_pool.build | 6 | 0.31 | 0.1% | 157.13 |
+| sqlite.execute | 1812 | 0.24 | 0.0% | 0.24 |
+| uniqueness.average | 29 | 0.17 | 0.0% | 0.17 |
+| sqlite.executemany | 268 | 0.15 | 0.0% | 0.15 |
+| interactions.apply | 6 | 0.04 | 0.0% | 0.04 |
 
 **Composants par phase (top 6 par phase, exclusif)**
 
-- `scan_walkforward` (464.6 s): select_features.compute 187.8s (x24); feature_pool.compute[parametric] 137.8s (x3); fit_eval_full 134.0s (x96); sqlite.commit 1.5s (x599); fold_context.prepare 1.0s (x8); scaler.fit_transform 0.7s (x8)
-- `holdout_diagnostic` (133.4 s): select_features.compute 47.3s (x6); feature_pool.compute[parametric] 45.0s (x1); fit_eval_full 34.9s (x24); scaler.fit_transform 2.4s (x24); compute_baselines 1.1s (x24); build_target 0.4s (x24)
-- `tuning` (105.5 s): optuna.tune_config 90.7s (x4); fit_eval_full 11.4s (x16); scaler.fit_transform 1.5s (x20); fold_context.prepare 0.8s (x20); build_target 0.4s (x20); uniqueness.average 0.2s (x20)
-- `export_models` (66.8 s): feature_pool.compute[parametric] 47.8s (x1); sqlite.commit 0.3s (x139); scaler.fit_transform 0.2s (x2); sqlite.execute 0.1s (x250); parametric_pool.build 0.1s (x1); scaler.transform 0.0s (x2)
-- `walkforward_prepare` (50.6 s): feature_pool.compute[parametric] 41.6s (x1); interactions.discover 8.6s (x1); sqlite.commit 0.2s (x113); sqlite.execute 0.1s (x224); parametric_pool.build 0.1s (x1); build_target 0.0s (x1)
+- `scan_walkforward` (309.5 s): select_features.compute 144.0s (x24); fit_eval_full 86.0s (x96); feature_pool.compute[parametric] 76.5s (x3); sqlite.commit 1.0s (x599); fold_context.prepare 0.6s (x8); scaler.fit_transform 0.4s (x8)
+- `holdout_diagnostic` (95.0 s): select_features.compute 39.7s (x6); feature_pool.compute[parametric] 27.5s (x1); fit_eval_full 23.4s (x24); scaler.fit_transform 1.6s (x24); compute_baselines 0.7s (x24); build_target 0.3s (x24)
+- `tuning` (74.8 s): optuna.tune_config 64.5s (x4); fit_eval_full 8.0s (x16); scaler.fit_transform 1.0s (x20); fold_context.prepare 0.6s (x20); build_target 0.2s (x20); uniqueness.average 0.1s (x20)
+- `export_models` (40.8 s): feature_pool.compute[parametric] 26.3s (x1); sqlite.commit 0.2s (x139); scaler.fit_transform 0.1s (x2); parametric_pool.build 0.0s (x1); sqlite.execute 0.0s (x250); scaler.transform 0.0s (x2)
+- `walkforward_prepare` (31.4 s): feature_pool.compute[parametric] 25.0s (x1); interactions.discover 6.1s (x1); sqlite.commit 0.2s (x113); parametric_pool.build 0.0s (x1); sqlite.execute 0.0s (x224); build_target 0.0s (x1)
 
 **Recalculs observés** (appels vs clés distinctes)
 
@@ -265,7 +263,7 @@ Snapshot rejoué via `run_pipeline(snapshot_id=...)` (chemin `patrick resume`) :
 | Features distinctes retenues (leaderboard) | 68 |
 | Colonnes base pool | 653 |
 | Colonnes pool du dernier fold (base+param+interactions) | 813 |
-| Champion | {'F1_dir': 0.628725, 'N': 10, 'algo': 'XGBoost', 'horizon': 1, 'n_folds': 4, 'regime': 'GLOBAL', 'sampler': 'SMOTE'} |
+| Champion | {'horizon': 1, 'regime': 'GLOBAL', 'N': 10, 'sampler': 'SMOTE', 'algo': 'XGBoost', 'F1_dir': 0.628725, 'n_folds': 4} |
 
 **Reproductibilité**
 
@@ -273,8 +271,6 @@ Snapshot rejoué via `run_pipeline(snapshot_id=...)` (chemin `patrick resume`) :
 - digests des artefacts identiques entre répétitions: True
 - compteurs (calls/hit/miss/trials) identiques entre répétitions: True
 - résultats identiques avec/sans instrumentation: True
-
-**Run « cache de features tiède »** (même snapshot, cache disque des pools conservé, base SQLite neuve): 404.3 s (vs 837.9 s à froid). Cache de pools : feature_pool_cache.base.hit=1, feature_pool_cache.parametric.hit=6
 
 ## 3b. Non-régression : artefacts sauvegardés
 

@@ -67,6 +67,7 @@ def cmd_run(args) -> int:
     out.mkdir(parents=True, exist_ok=True)
     work_root = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="patrick_bench_"))
     schemes = [s for s in args.schemes.split(",") if s]
+    extra_env = dict(kv.split("=", 1) for kv in args.env)
     scenarios: dict = {}
     data_hash = None
     cfg_digests = {}
@@ -80,7 +81,8 @@ def cmd_run(args) -> int:
             if base.exists():
                 shutil.rmtree(base)
             print(f"  run instrumenté {i + 1}/{args.repeats} ...", flush=True)
-            r = runner.run_scenario(spec, scheme, wd, instrument=True, baseline_dir=base, label=f"rep{i + 1}")
+            r = runner.run_scenario(spec, scheme, wd, instrument=True, baseline_dir=base, label=f"rep{i + 1}",
+                                   extra_env=extra_env)
             print(f"    -> {r['wall_s']:.1f}s", flush=True)
             runs.append(r)
         plain = None
@@ -88,14 +90,16 @@ def cmd_run(args) -> int:
             wd = work_root / f"{scheme}_plain"
             base = wd / "baseline"
             print("  run non instrumenté ...", flush=True)
-            plain = runner.run_scenario(spec, scheme, wd, instrument=False, baseline_dir=base, label="plain")
+            plain = runner.run_scenario(spec, scheme, wd, instrument=False, baseline_dir=base, label="plain",
+                                        extra_env=extra_env)
             print(f"    -> {plain['wall_s']:.1f}s", flush=True)
         warm = None
         if args.warm:
             print("  run cache de features tiède ...", flush=True)
             warm = runner.run_scenario(spec, scheme, work_root / f"{scheme}_warm", instrument=True,
-                                       feature_cache_dir=work_root / f"{scheme}_rep1" / "feature_cache", label="warm")
-        ref = sorted(runs, key=lambda r: r["wall_s"])[len(runs) // 2]   # médiane (le plus lent si 2 répétitions)
+                                       feature_cache_dir=work_root / f"{scheme}_rep1" / "feature_cache", label="warm",
+                                       extra_env=extra_env)
+        ref = min(runs, key=lambda r: r["wall_s"])   # le moins perturbé par le bruit machine (mêmes compteurs/artefacts)
         ref_first = runs[0]
         data_hash = ref["snapshot"]["data_hash"]
         cfg_digests[scheme] = ref["config_digest"]
@@ -168,6 +172,9 @@ def main(argv=None) -> int:
     r.add_argument("--notes", default="benchmarks/reference_notes.md")
     r.add_argument("--skip-plain", action="store_true")
     r.add_argument("--warm", action="store_true")
+    r.add_argument("--env", action="append", default=[], metavar="KEY=VAL",
+                   help="variables d'optimisation activées pour CE run (ex. PATRICK_PARAMETRIC_JOBS=4) ; "
+                        "sans --env, le comportement historique est mesuré")
     r.set_defaults(fn=cmd_run)
     c = sub.add_parser("compare")
     c.add_argument("dir_a")

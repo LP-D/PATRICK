@@ -60,11 +60,11 @@
    "openmp:None:4"
   ]
  },
- "generated_at": "2026-09-30T21:48:56+02:00",
+ "generated_at": "2026-09-30T22:31:53+02:00",
  "git": {
-  "branch": "claude/import-csv-tolerant",
+  "branch": "perf/sprint1-benchmark",
   "dirty": true,
-  "sha": "a434118ce5206fd37bceac7fbff275aaa16afe70"
+  "sha": "96d772f76ff33ff893b676f2e958cdb99e3e5e34"
  },
  "limits": [
   "`config_hash` du moteur inclut `output.dir` (chemin) : il varie d'un espace de travail \u00e0 l'autre et est donc exclu des artefacts compar\u00e9s (`config_digest` du benchmark l'exclut aussi). Noms d'\u00e9tudes Optuna normalis\u00e9s pour la m\u00eame raison.",
@@ -1121,8 +1121,8 @@
    }
   },
   "walkforward": {
-   "instrumentation_overhead_pct": null,
-   "plain_wall_s": 515.541,
+   "instrumentation_overhead_pct": 8.74097242078195,
+   "plain_wall_s": 514.119,
    "reference_run": {
     "config_digest": "67643047f6c4aea0d529736398b60546057582b55ef7a1d5295bed30e5e5473b",
     "digests": {
@@ -1144,23 +1144,23 @@
     "engine_phase_timing_table_s": [
      {
       "phase": "scan",
-      "seconds": 465
+      "seconds": 309
      },
      {
       "phase": "holdout_diagnostic",
-      "seconds": 268
+      "seconds": 190
      },
      {
       "phase": "pool_construction",
-      "seconds": 128
+      "seconds": 74
      },
      {
       "phase": "tuning",
-      "seconds": 105
+      "seconds": 73
      },
      {
       "phase": "export",
-      "seconds": 19
+      "seconds": 14
      },
      {
       "phase": "stability",
@@ -1172,20 +1172,20 @@
      }
     ],
     "instrumented": true,
-    "label": "rep1",
-    "pipeline_elapsed_s": 837.85,
+    "label": "rep2",
+    "pipeline_elapsed_s": 559.029,
     "profile": "reference",
     "profile_data": {
      "component_totals": {
       "build_target": {
        "count": 56,
-       "inclusive_s": 1.1975,
-       "self_s": 1.1975
+       "inclusive_s": 0.6938,
+       "self_s": 0.6938
       },
       "compute_baselines": {
        "count": 35,
-       "inclusive_s": 1.6828,
-       "self_s": 1.6828
+       "inclusive_s": 0.9515,
+       "self_s": 0.9515
       },
       "download_ohlc": {
        "count": 1,
@@ -1194,118 +1194,118 @@
       },
       "feature_pool.compute[base]": {
        "count": 1,
-       "inclusive_s": 13.7724,
-       "self_s": 13.7724
+       "inclusive_s": 5.6441,
+       "self_s": 5.6441
       },
       "feature_pool.compute[parametric]": {
        "count": 6,
-       "inclusive_s": 274.5519,
-       "self_s": 272.3127
+       "inclusive_s": 156.8237,
+       "self_s": 155.3601
       },
       "fit_eval_full": {
        "count": 138,
-       "inclusive_s": 181.5881,
-       "self_s": 181.5835
+       "inclusive_s": 118.3124,
+       "self_s": 118.309
       },
       "fold_context.prepare": {
        "count": 29,
-       "inclusive_s": 145.252,
-       "self_s": 1.9915
+       "inclusive_s": 81.1255,
+       "self_s": 1.2973
       },
       "fold_pool_builder.get": {
        "count": 56,
-       "inclusive_s": 184.8176,
-       "self_s": 0.0193
+       "inclusive_s": 105.2902,
+       "self_s": 0.0138
       },
       "get_classifier.engine": {
        "count": 138,
-       "inclusive_s": 0.0046,
-       "self_s": 0.0046
+       "inclusive_s": 0.0033,
+       "self_s": 0.0033
       },
       "get_classifier.optuna": {
        "count": 166,
-       "inclusive_s": 0.0047,
-       "self_s": 0.0047
+       "inclusive_s": 0.0038,
+       "self_s": 0.0038
       },
       "interactions.apply": {
        "count": 6,
-       "inclusive_s": 0.0346,
-       "self_s": 0.0346
+       "inclusive_s": 0.0367,
+       "self_s": 0.0367
       },
       "interactions.discover": {
        "count": 1,
-       "inclusive_s": 8.5938,
-       "self_s": 8.5698
+       "inclusive_s": 6.0805,
+       "self_s": 6.0686
       },
       "optuna.tune_config": {
        "count": 4,
-       "inclusive_s": 90.7231,
-       "self_s": 90.6641
+       "inclusive_s": 64.5417,
+       "self_s": 64.4939
       },
       "parametric_pool.build": {
        "count": 6,
-       "inclusive_s": 274.9743,
-       "self_s": 0.4223
+       "inclusive_s": 157.1298,
+       "self_s": 0.3061
       },
       "scaler.fit_transform": {
        "count": 57,
-       "inclusive_s": 5.5278,
-       "self_s": 5.1082
+       "inclusive_s": 3.6063,
+       "self_s": 3.3063
       },
       "scaler.transform": {
        "count": 112,
-       "inclusive_s": 0.484,
-       "self_s": 0.484
+       "inclusive_s": 0.3382,
+       "self_s": 0.3382
       },
       "select (cache lookup + compute)": {
        "count": 70,
-       "inclusive_s": 235.6361,
-       "self_s": 0.0095
+       "inclusive_s": 184.1475,
+       "self_s": 0.005
       },
       "select.xy_data_hash": {
        "count": 70,
-       "inclusive_s": 0.4356,
-       "self_s": 0.4356
+       "inclusive_s": 0.4028,
+       "self_s": 0.4028
       },
       "select_features.compute": {
        "count": 30,
-       "inclusive_s": 235.0999,
-       "self_s": 235.0999
+       "inclusive_s": 183.6522,
+       "self_s": 183.6522
       },
       "selection_cache.lookup": {
        "count": 70,
-       "inclusive_s": 0.0295,
-       "self_s": 0.0021
+       "inclusive_s": 0.0115,
+       "self_s": 0.0013
       },
       "sqlite.commit": {
        "count": 1150,
-       "inclusive_s": 2.5855,
-       "self_s": 2.5855
+       "inclusive_s": 1.8392,
+       "self_s": 1.8392
       },
       "sqlite.execute": {
        "count": 1812,
-       "inclusive_s": 0.5423,
-       "self_s": 0.5423
+       "inclusive_s": 0.2419,
+       "self_s": 0.2419
       },
       "sqlite.executemany": {
        "count": 268,
-       "inclusive_s": 0.252,
-       "self_s": 0.252
+       "inclusive_s": 0.1484,
+       "self_s": 0.1484
       },
       "uniqueness.average": {
        "count": 29,
-       "inclusive_s": 0.225,
-       "self_s": 0.225
+       "inclusive_s": 0.1664,
+       "self_s": 0.1664
       },
       "uniqueness.indicator_matrix": {
        "count": 29,
-       "inclusive_s": 0.0279,
-       "self_s": 0.0279
+       "inclusive_s": 0.0226,
+       "self_s": 0.0226
       },
       "vol_model_cache.lookup": {
        "count": 666,
-       "inclusive_s": 0.0849,
-       "self_s": 0.0164
+       "inclusive_s": 0.0502,
+       "self_s": 0.0102
       }
      },
      "counter_totals": {
@@ -1343,7 +1343,7 @@
        "distinct": 30
       }
      },
-     "peak_rss_mb": 529.5,
+     "peak_rss_mb": 525.3,
      "phases": {
       "base_feature_pool": {
        "components": {
@@ -1354,8 +1354,8 @@
         },
         "feature_pool.compute[base]": {
          "count": 1,
-         "inclusive_s": 13.7724,
-         "self_s": 13.7724
+         "inclusive_s": 5.6441,
+         "self_s": 5.6441
         }
        },
        "count": 1,
@@ -1363,27 +1363,27 @@
         "download_ohlc.calls": 1,
         "feature_pool_cache.base.miss": 1
        },
-       "cpu_s": 13.3438,
-       "peak_rss_mb": 311.0,
-       "rss_start_mb": 291.8,
-       "wall_s": 13.9979
+       "cpu_s": 5.75,
+       "peak_rss_mb": 411.8,
+       "rss_start_mb": 402.1,
+       "wall_s": 5.8002
       },
       "champion_duel": {
        "components": {
         "build_target": {
          "count": 1,
-         "inclusive_s": 0.0208,
-         "self_s": 0.0208
+         "inclusive_s": 0.0181,
+         "self_s": 0.0181
         },
         "compute_baselines": {
          "count": 1,
-         "inclusive_s": 0.0572,
-         "self_s": 0.0572
+         "inclusive_s": 0.026,
+         "self_s": 0.026
         },
         "fit_eval_full": {
          "count": 1,
-         "inclusive_s": 0.6122,
-         "self_s": 0.6122
+         "inclusive_s": 0.4164,
+         "self_s": 0.4164
         },
         "fold_pool_builder.get": {
          "count": 1,
@@ -1397,38 +1397,38 @@
         },
         "scaler.fit_transform": {
          "count": 1,
-         "inclusive_s": 0.1049,
-         "self_s": 0.0986
+         "inclusive_s": 0.072,
+         "self_s": 0.066
         },
         "scaler.transform": {
          "count": 2,
-         "inclusive_s": 0.0073,
-         "self_s": 0.0073
+         "inclusive_s": 0.0066,
+         "self_s": 0.0066
         },
         "select (cache lookup + compute)": {
          "count": 1,
          "inclusive_s": 0.0069,
-         "self_s": 0.0001
+         "self_s": 0.0
         },
         "select.xy_data_hash": {
          "count": 1,
-         "inclusive_s": 0.0066,
-         "self_s": 0.0066
+         "inclusive_s": 0.0067,
+         "self_s": 0.0067
         },
         "selection_cache.lookup": {
          "count": 1,
-         "inclusive_s": 0.0002,
+         "inclusive_s": 0.0001,
          "self_s": 0.0
         },
         "sqlite.commit": {
          "count": 2,
-         "inclusive_s": 0.0037,
-         "self_s": 0.0037
+         "inclusive_s": 0.0033,
+         "self_s": 0.0033
         },
         "sqlite.execute": {
          "count": 7,
-         "inclusive_s": 0.0007,
-         "self_s": 0.0007
+         "inclusive_s": 0.0004,
+         "self_s": 0.0004
         }
        },
        "count": 1,
@@ -1443,52 +1443,52 @@
         "sqlite.commit": 2,
         "sqlite.execute": 7
        },
-       "cpu_s": 0.9219,
-       "peak_rss_mb": 462.2,
-       "rss_start_mb": 422.3,
-       "wall_s": 0.9064
+       "cpu_s": 0.5781,
+       "peak_rss_mb": 467.8,
+       "rss_start_mb": 450.4,
+       "wall_s": 0.5848
       },
       "export_models": {
        "components": {
         "feature_pool.compute[parametric]": {
          "count": 1,
-         "inclusive_s": 48.1714,
-         "self_s": 47.8167
+         "inclusive_s": 26.5312,
+         "self_s": 26.2962
         },
         "interactions.apply": {
          "count": 1,
-         "inclusive_s": 0.0054,
-         "self_s": 0.0054
+         "inclusive_s": 0.0037,
+         "self_s": 0.0037
         },
         "parametric_pool.build": {
          "count": 1,
-         "inclusive_s": 48.2275,
-         "self_s": 0.0561
+         "inclusive_s": 26.5729,
+         "self_s": 0.0417
         },
         "scaler.fit_transform": {
          "count": 2,
-         "inclusive_s": 0.2472,
-         "self_s": 0.2313
+         "inclusive_s": 0.1459,
+         "self_s": 0.1336
         },
         "scaler.transform": {
          "count": 2,
-         "inclusive_s": 0.0159,
-         "self_s": 0.0159
+         "inclusive_s": 0.0123,
+         "self_s": 0.0123
         },
         "sqlite.commit": {
          "count": 139,
-         "inclusive_s": 0.3072,
-         "self_s": 0.3072
+         "inclusive_s": 0.2158,
+         "self_s": 0.2158
         },
         "sqlite.execute": {
          "count": 250,
-         "inclusive_s": 0.0625,
-         "self_s": 0.0625
+         "inclusive_s": 0.031,
+         "self_s": 0.031
         },
         "vol_model_cache.lookup": {
          "count": 111,
-         "inclusive_s": 0.0096,
-         "self_s": 0.0027
+         "inclusive_s": 0.0204,
+         "self_s": 0.0018
         }
        },
        "count": 1,
@@ -1502,27 +1502,27 @@
         "sqlite.execute": 250,
         "vol_model_cache.miss": 111
        },
-       "cpu_s": 92.4531,
-       "peak_rss_mb": 529.5,
-       "rss_start_mb": 430.3,
-       "wall_s": 66.8096
+       "cpu_s": 66.75,
+       "peak_rss_mb": 525.3,
+       "rss_start_mb": 449.1,
+       "wall_s": 40.8008
       },
       "export_tables": {
        "components": {
         "sqlite.commit": {
          "count": 18,
-         "inclusive_s": 0.0087,
-         "self_s": 0.0087
+         "inclusive_s": 0.0074,
+         "self_s": 0.0074
         },
         "sqlite.execute": {
          "count": 2,
-         "inclusive_s": 0.0002,
-         "self_s": 0.0002
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
         },
         "sqlite.executemany": {
          "count": 16,
-         "inclusive_s": 0.0012,
-         "self_s": 0.0012
+         "inclusive_s": 0.0008,
+         "self_s": 0.0008
         }
        },
        "count": 1,
@@ -1531,27 +1531,27 @@
         "sqlite.execute": 2,
         "sqlite.executemany": 16
        },
-       "cpu_s": 0.1406,
-       "peak_rss_mb": 430.3,
-       "rss_start_mb": 429.3,
-       "wall_s": 0.1545
+       "cpu_s": 0.0469,
+       "peak_rss_mb": 449.6,
+       "rss_start_mb": 449.6,
+       "wall_s": 0.0591
       },
       "final_diebold_mariano": {
        "components": {
         "build_target": {
          "count": 1,
-         "inclusive_s": 0.0314,
-         "self_s": 0.0314
+         "inclusive_s": 0.0169,
+         "self_s": 0.0169
         },
         "compute_baselines": {
          "count": 1,
-         "inclusive_s": 0.0501,
-         "self_s": 0.0501
+         "inclusive_s": 0.0283,
+         "self_s": 0.0283
         },
         "fold_context.prepare": {
          "count": 1,
-         "inclusive_s": 0.3067,
-         "self_s": 0.1221
+         "inclusive_s": 0.1813,
+         "self_s": 0.0693
         },
         "fold_pool_builder.get": {
          "count": 1,
@@ -1560,33 +1560,33 @@
         },
         "scaler.fit_transform": {
          "count": 1,
-         "inclusive_s": 0.0921,
-         "self_s": 0.0874
+         "inclusive_s": 0.059,
+         "self_s": 0.0547
         },
         "scaler.transform": {
          "count": 2,
-         "inclusive_s": 0.0058,
-         "self_s": 0.0058
+         "inclusive_s": 0.0049,
+         "self_s": 0.0049
         },
         "sqlite.commit": {
          "count": 2,
-         "inclusive_s": 0.0031,
-         "self_s": 0.0031
+         "inclusive_s": 0.0015,
+         "self_s": 0.0015
         },
         "sqlite.execute": {
          "count": 2,
-         "inclusive_s": 0.0003,
-         "self_s": 0.0003
+         "inclusive_s": 0.0002,
+         "self_s": 0.0002
         },
         "uniqueness.average": {
          "count": 1,
-         "inclusive_s": 0.0087,
-         "self_s": 0.0087
+         "inclusive_s": 0.0063,
+         "self_s": 0.0063
         },
         "uniqueness.indicator_matrix": {
          "count": 1,
-         "inclusive_s": 0.0011,
-         "self_s": 0.0011
+         "inclusive_s": 0.0009,
+         "self_s": 0.0009
         }
        },
        "count": 1,
@@ -1598,27 +1598,27 @@
         "sqlite.commit": 2,
         "sqlite.execute": 2
        },
-       "cpu_s": 0.2969,
-       "peak_rss_mb": 435.3,
-       "rss_start_mb": 422.1,
-       "wall_s": 0.3162
+       "cpu_s": 0.1719,
+       "peak_rss_mb": 463.6,
+       "rss_start_mb": 450.4,
+       "wall_s": 0.1899
       },
       "final_holdout": {
        "components": {
         "build_target": {
          "count": 1,
-         "inclusive_s": 0.0292,
-         "self_s": 0.0292
+         "inclusive_s": 0.0108,
+         "self_s": 0.0108
         },
         "compute_baselines": {
          "count": 1,
-         "inclusive_s": 0.0518,
-         "self_s": 0.0518
+         "inclusive_s": 0.0228,
+         "self_s": 0.0228
         },
         "fit_eval_full": {
          "count": 1,
-         "inclusive_s": 0.7127,
-         "self_s": 0.7127
+         "inclusive_s": 0.4533,
+         "self_s": 0.4533
         },
         "fold_pool_builder.get": {
          "count": 1,
@@ -1632,33 +1632,33 @@
         },
         "scaler.fit_transform": {
          "count": 1,
-         "inclusive_s": 0.1076,
-         "self_s": 0.1017
+         "inclusive_s": 0.0631,
+         "self_s": 0.0582
         },
         "scaler.transform": {
          "count": 2,
-         "inclusive_s": 0.0067,
-         "self_s": 0.0067
+         "inclusive_s": 0.0055,
+         "self_s": 0.0055
         },
         "select (cache lookup + compute)": {
          "count": 1,
-         "inclusive_s": 0.0054,
-         "self_s": 0.0001
+         "inclusive_s": 0.0057,
+         "self_s": 0.0
         },
         "select.xy_data_hash": {
          "count": 1,
-         "inclusive_s": 0.0051,
-         "self_s": 0.0051
+         "inclusive_s": 0.0056,
+         "self_s": 0.0056
         },
         "selection_cache.lookup": {
          "count": 1,
-         "inclusive_s": 0.0002,
+         "inclusive_s": 0.0001,
          "self_s": 0.0
         },
         "sqlite.commit": {
          "count": 2,
-         "inclusive_s": 0.0032,
-         "self_s": 0.0032
+         "inclusive_s": 0.0018,
+         "self_s": 0.0018
         },
         "sqlite.execute": {
          "count": 1,
@@ -1667,8 +1667,8 @@
         },
         "sqlite.executemany": {
          "count": 2,
-         "inclusive_s": 0.0016,
-         "self_s": 0.0016
+         "inclusive_s": 0.0009,
+         "self_s": 0.0009
         }
        },
        "count": 1,
@@ -1684,39 +1684,39 @@
         "sqlite.execute": 1,
         "sqlite.executemany": 2
        },
-       "cpu_s": 0.9375,
-       "peak_rss_mb": 433.6,
-       "rss_start_mb": 411.6,
-       "wall_s": 0.9585
+       "cpu_s": 0.6094,
+       "peak_rss_mb": 474.8,
+       "rss_start_mb": 450.4,
+       "wall_s": 0.6
       },
       "final_stats": {
        "components": {
         "sqlite.execute": {
          "count": 4,
-         "inclusive_s": 0.0007,
-         "self_s": 0.0007
+         "inclusive_s": 0.0005,
+         "self_s": 0.0005
         }
        },
        "count": 3,
        "counters": {
         "sqlite.execute": 4
        },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 422.2,
-       "rss_start_mb": 422.2,
-       "wall_s": 0.0509
+       "cpu_s": 0.0312,
+       "peak_rss_mb": 450.4,
+       "rss_start_mb": 450.4,
+       "wall_s": 0.0247
       },
       "finish_runs": {
        "components": {
         "sqlite.commit": {
          "count": 2,
-         "inclusive_s": 0.0017,
-         "self_s": 0.0017
+         "inclusive_s": 0.0014,
+         "self_s": 0.0014
         },
         "sqlite.execute": {
          "count": 8,
-         "inclusive_s": 0.0005,
-         "self_s": 0.0005
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
         }
        },
        "count": 1,
@@ -1724,102 +1724,102 @@
         "sqlite.commit": 2,
         "sqlite.execute": 8
        },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 422.3,
-       "rss_start_mb": 422.2,
-       "wall_s": 0.0153
+       "cpu_s": 0.0,
+       "peak_rss_mb": 450.4,
+       "rss_start_mb": 450.4,
+       "wall_s": 0.0085
       },
       "holdout_diagnostic": {
        "components": {
         "build_target": {
          "count": 24,
-         "inclusive_s": 0.4366,
-         "self_s": 0.4366
+         "inclusive_s": 0.299,
+         "self_s": 0.299
         },
         "compute_baselines": {
          "count": 24,
-         "inclusive_s": 1.1418,
-         "self_s": 1.1418
+         "inclusive_s": 0.6628,
+         "self_s": 0.6628
         },
         "feature_pool.compute[parametric]": {
          "count": 1,
-         "inclusive_s": 45.3773,
-         "self_s": 45.0215
+         "inclusive_s": 27.8027,
+         "self_s": 27.5306
         },
         "fit_eval_full": {
          "count": 24,
-         "inclusive_s": 34.8669,
-         "self_s": 34.866
+         "inclusive_s": 23.4412,
+         "self_s": 23.4406
         },
         "fold_pool_builder.get": {
          "count": 24,
-         "inclusive_s": 45.4406,
-         "self_s": 0.005
+         "inclusive_s": 27.857,
+         "self_s": 0.0038
         },
         "get_classifier.engine": {
          "count": 24,
-         "inclusive_s": 0.0009,
-         "self_s": 0.0009
+         "inclusive_s": 0.0006,
+         "self_s": 0.0006
         },
         "interactions.apply": {
          "count": 1,
-         "inclusive_s": 0.0051,
-         "self_s": 0.0051
+         "inclusive_s": 0.0115,
+         "self_s": 0.0115
         },
         "parametric_pool.build": {
          "count": 1,
-         "inclusive_s": 45.4306,
-         "self_s": 0.0533
+         "inclusive_s": 27.8417,
+         "self_s": 0.039
         },
         "scaler.fit_transform": {
          "count": 24,
-         "inclusive_s": 2.5847,
-         "self_s": 2.3876
+         "inclusive_s": 1.7334,
+         "self_s": 1.584
         },
         "scaler.transform": {
          "count": 48,
-         "inclusive_s": 0.2311,
-         "self_s": 0.2311
+         "inclusive_s": 0.1662,
+         "self_s": 0.1662
         },
         "select (cache lookup + compute)": {
          "count": 24,
-         "inclusive_s": 47.4716,
-         "self_s": 0.003
+         "inclusive_s": 39.8733,
+         "self_s": 0.0015
         },
         "select.xy_data_hash": {
          "count": 24,
-         "inclusive_s": 0.1738,
-         "self_s": 0.1738
+         "inclusive_s": 0.1779,
+         "self_s": 0.1779
         },
         "select_features.compute": {
          "count": 6,
-         "inclusive_s": 47.2665,
-         "self_s": 47.2665
+         "inclusive_s": 39.6692,
+         "self_s": 39.6692
         },
         "selection_cache.lookup": {
          "count": 24,
-         "inclusive_s": 0.0149,
-         "self_s": 0.0009
+         "inclusive_s": 0.0085,
+         "self_s": 0.0005
         },
         "sqlite.commit": {
          "count": 143,
-         "inclusive_s": 0.4154,
-         "self_s": 0.4154
+         "inclusive_s": 0.2883,
+         "self_s": 0.2883
         },
         "sqlite.execute": {
          "count": 254,
-         "inclusive_s": 0.0516,
-         "self_s": 0.0516
+         "inclusive_s": 0.0648,
+         "self_s": 0.0648
         },
         "sqlite.executemany": {
          "count": 24,
-         "inclusive_s": 0.0739,
-         "self_s": 0.0739
+         "inclusive_s": 0.0162,
+         "self_s": 0.0162
         },
         "vol_model_cache.lookup": {
          "count": 111,
-         "inclusive_s": 0.02,
-         "self_s": 0.0026
+         "inclusive_s": 0.0063,
+         "self_s": 0.0018
         }
        },
        "count": 1,
@@ -1841,31 +1841,31 @@
         "sqlite.executemany": 24,
         "vol_model_cache.miss": 111
        },
-       "cpu_s": 189.9219,
-       "peak_rss_mb": 480.4,
-       "rss_start_mb": 384.1,
-       "wall_s": 133.4234
+       "cpu_s": 148.6875,
+       "peak_rss_mb": 517.7,
+       "rss_start_mb": 442.2,
+       "wall_s": 94.9534
       },
       "ingestion": {
        "components": {},
        "count": 1,
        "counters": {},
-       "cpu_s": 0.0781,
-       "peak_rss_mb": 290.4,
-       "rss_start_mb": 282.6,
-       "wall_s": 0.0798
+       "cpu_s": 0.0156,
+       "peak_rss_mb": 401.4,
+       "rss_start_mb": 399.9,
+       "wall_s": 0.0229
       },
       "register_runs": {
        "components": {
         "sqlite.commit": {
          "count": 3,
-         "inclusive_s": 0.0038,
-         "self_s": 0.0038
+         "inclusive_s": 0.0086,
+         "self_s": 0.0086
         },
         "sqlite.execute": {
          "count": 3,
-         "inclusive_s": 0.0005,
-         "self_s": 0.0005
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
         }
        },
        "count": 1,
@@ -1873,117 +1873,117 @@
         "sqlite.commit": 3,
         "sqlite.execute": 3
        },
-       "cpu_s": 0.1094,
-       "peak_rss_mb": 298.2,
-       "rss_start_mb": 291.2,
-       "wall_s": 0.1127
+       "cpu_s": 0.0469,
+       "peak_rss_mb": 402.1,
+       "rss_start_mb": 401.5,
+       "wall_s": 0.0586
       },
       "scan_walkforward": {
        "components": {
         "build_target": {
          "count": 8,
-         "inclusive_s": 0.2829,
-         "self_s": 0.2829
+         "inclusive_s": 0.0997,
+         "self_s": 0.0997
         },
         "compute_baselines": {
          "count": 8,
-         "inclusive_s": 0.3818,
-         "self_s": 0.3818
+         "inclusive_s": 0.2117,
+         "self_s": 0.2117
         },
         "feature_pool.compute[parametric]": {
          "count": 3,
-         "inclusive_s": 139.0871,
-         "self_s": 137.8437
+         "inclusive_s": 77.2123,
+         "self_s": 76.4914
         },
         "fit_eval_full": {
          "count": 96,
-         "inclusive_s": 133.9794,
-         "self_s": 133.9762
+         "inclusive_s": 86.0447,
+         "self_s": 86.0424
         },
         "fold_context.prepare": {
          "count": 8,
-         "inclusive_s": 141.9152,
-         "self_s": 1.0431
+         "inclusive_s": 78.843,
+         "self_s": 0.6141
         },
         "fold_pool_builder.get": {
          "count": 8,
-         "inclusive_s": 139.3768,
-         "self_s": 0.0142
+         "inclusive_s": 77.4332,
+         "self_s": 0.0099
         },
         "get_classifier.engine": {
          "count": 96,
-         "inclusive_s": 0.0032,
-         "self_s": 0.0032
+         "inclusive_s": 0.0024,
+         "self_s": 0.0024
         },
         "interactions.apply": {
          "count": 3,
-         "inclusive_s": 0.0162,
-         "self_s": 0.0162
+         "inclusive_s": 0.0178,
+         "self_s": 0.0178
         },
         "parametric_pool.build": {
          "count": 3,
-         "inclusive_s": 139.3463,
-         "self_s": 0.2592
+         "inclusive_s": 77.4055,
+         "self_s": 0.1932
         },
         "scaler.fit_transform": {
          "count": 8,
-         "inclusive_s": 0.7488,
-         "self_s": 0.6793
+         "inclusive_s": 0.4286,
+         "self_s": 0.3968
         },
         "scaler.transform": {
          "count": 16,
-         "inclusive_s": 0.0774,
-         "self_s": 0.0774
+         "inclusive_s": 0.0373,
+         "self_s": 0.0373
         },
         "select (cache lookup + compute)": {
          "count": 24,
-         "inclusive_s": 188.0218,
-         "self_s": 0.0044
+         "inclusive_s": 144.1622,
+         "self_s": 0.0025
         },
         "select.xy_data_hash": {
          "count": 24,
-         "inclusive_s": 0.1337,
-         "self_s": 0.1337
+         "inclusive_s": 0.1155,
+         "self_s": 0.1155
         },
         "select_features.compute": {
          "count": 24,
-         "inclusive_s": 187.8334,
-         "self_s": 187.8334
+         "inclusive_s": 143.983,
+         "self_s": 143.983
         },
         "selection_cache.lookup": {
          "count": 24,
-         "inclusive_s": 0.002,
-         "self_s": 0.0003
+         "inclusive_s": 0.0014,
+         "self_s": 0.0002
         },
         "sqlite.commit": {
          "count": 599,
-         "inclusive_s": 1.4957,
-         "self_s": 1.4957
+         "inclusive_s": 1.0131,
+         "self_s": 1.0131
         },
         "sqlite.execute": {
          "count": 788,
-         "inclusive_s": 0.3097,
-         "self_s": 0.3097
+         "inclusive_s": 0.0953,
+         "self_s": 0.0953
         },
         "sqlite.executemany": {
          "count": 192,
-         "inclusive_s": 0.1448,
-         "self_s": 0.1448
+         "inclusive_s": 0.114,
+         "self_s": 0.114
         },
         "uniqueness.average": {
          "count": 8,
-         "inclusive_s": 0.0662,
-         "self_s": 0.0662
+         "inclusive_s": 0.0441,
+         "self_s": 0.0441
         },
         "uniqueness.indicator_matrix": {
          "count": 8,
-         "inclusive_s": 0.0078,
-         "self_s": 0.0078
+         "inclusive_s": 0.0061,
+         "self_s": 0.0061
         },
         "vol_model_cache.lookup": {
          "count": 333,
-         "inclusive_s": 0.0469,
-         "self_s": 0.0087
+         "inclusive_s": 0.0178,
+         "self_s": 0.005
         }
        },
        "count": 1,
@@ -2005,36 +2005,36 @@
         "sqlite.executemany": 192,
         "vol_model_cache.miss": 333
        },
-       "cpu_s": 671.0781,
-       "peak_rss_mb": 461.0,
-       "rss_start_mb": 327.3,
-       "wall_s": 464.638
+       "cpu_s": 504.9531,
+       "peak_rss_mb": 519.8,
+       "rss_start_mb": 425.2,
+       "wall_s": 309.5274
       },
       "select_finals": {
        "components": {},
        "count": 1,
        "counters": {},
-       "cpu_s": 0.0469,
-       "peak_rss_mb": 430.3,
-       "rss_start_mb": 430.3,
-       "wall_s": 0.0338
+       "cpu_s": 0.0156,
+       "peak_rss_mb": 449.1,
+       "rss_start_mb": 449.1,
+       "wall_s": 0.0173
       },
       "stability": {
        "components": {
         "sqlite.commit": {
          "count": 4,
-         "inclusive_s": 0.0032,
-         "self_s": 0.0032
+         "inclusive_s": 0.0025,
+         "self_s": 0.0025
         },
         "sqlite.execute": {
          "count": 6,
-         "inclusive_s": 0.0005,
-         "self_s": 0.0005
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
         },
         "sqlite.executemany": {
          "count": 2,
-         "inclusive_s": 0.0002,
-         "self_s": 0.0002
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
         }
        },
        "count": 1,
@@ -2043,97 +2043,97 @@
         "sqlite.execute": 6,
         "sqlite.executemany": 2
        },
-       "cpu_s": 0.0469,
-       "peak_rss_mb": 384.1,
-       "rss_start_mb": 384.1,
-       "wall_s": 0.0323
+       "cpu_s": 0.0156,
+       "peak_rss_mb": 442.2,
+       "rss_start_mb": 442.2,
+       "wall_s": 0.0182
       },
       "tuning": {
        "components": {
         "build_target": {
          "count": 20,
-         "inclusive_s": 0.3725,
-         "self_s": 0.3725
+         "inclusive_s": 0.2374,
+         "self_s": 0.2374
         },
         "fit_eval_full": {
          "count": 16,
-         "inclusive_s": 11.4169,
-         "self_s": 11.4164
+         "inclusive_s": 7.9567,
+         "self_s": 7.9564
         },
         "fold_context.prepare": {
          "count": 20,
-         "inclusive_s": 3.0301,
-         "self_s": 0.8263
+         "inclusive_s": 2.1012,
+         "self_s": 0.6139
         },
         "fold_pool_builder.get": {
          "count": 20,
-         "inclusive_s": 0.0001,
-         "self_s": 0.0001
+         "inclusive_s": 0.0,
+         "self_s": 0.0
         },
         "get_classifier.engine": {
          "count": 16,
-         "inclusive_s": 0.0005,
-         "self_s": 0.0005
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
         },
         "get_classifier.optuna": {
          "count": 166,
-         "inclusive_s": 0.0047,
-         "self_s": 0.0047
+         "inclusive_s": 0.0038,
+         "self_s": 0.0038
         },
         "optuna.tune_config": {
          "count": 4,
-         "inclusive_s": 90.7231,
-         "self_s": 90.6641
+         "inclusive_s": 64.5417,
+         "self_s": 64.4939
         },
         "scaler.fit_transform": {
          "count": 20,
-         "inclusive_s": 1.6425,
-         "self_s": 1.5222
+         "inclusive_s": 1.1042,
+         "self_s": 1.0128
         },
         "scaler.transform": {
          "count": 40,
-         "inclusive_s": 0.1399,
-         "self_s": 0.1399
+         "inclusive_s": 0.1054,
+         "self_s": 0.1054
         },
         "select (cache lookup + compute)": {
          "count": 20,
-         "inclusive_s": 0.1303,
-         "self_s": 0.0019
+         "inclusive_s": 0.0995,
+         "self_s": 0.0009
         },
         "select.xy_data_hash": {
          "count": 20,
-         "inclusive_s": 0.1162,
-         "self_s": 0.1162
+         "inclusive_s": 0.0971,
+         "self_s": 0.0971
         },
         "selection_cache.lookup": {
          "count": 20,
-         "inclusive_s": 0.0122,
-         "self_s": 0.0008
+         "inclusive_s": 0.0015,
+         "self_s": 0.0005
         },
         "sqlite.commit": {
          "count": 120,
-         "inclusive_s": 0.1247,
-         "self_s": 0.1247
+         "inclusive_s": 0.084,
+         "self_s": 0.084
         },
         "sqlite.execute": {
          "count": 108,
-         "inclusive_s": 0.0287,
-         "self_s": 0.0287
+         "inclusive_s": 0.0133,
+         "self_s": 0.0133
         },
         "sqlite.executemany": {
          "count": 32,
-         "inclusive_s": 0.0302,
-         "self_s": 0.0302
+         "inclusive_s": 0.0164,
+         "self_s": 0.0164
         },
         "uniqueness.average": {
          "count": 20,
-         "inclusive_s": 0.1501,
-         "self_s": 0.1501
+         "inclusive_s": 0.116,
+         "self_s": 0.116
         },
         "uniqueness.indicator_matrix": {
          "count": 20,
-         "inclusive_s": 0.019,
-         "self_s": 0.019
+         "inclusive_s": 0.0156,
+         "self_s": 0.0156
         }
        },
        "count": 1,
@@ -2154,22 +2154,22 @@
         "sqlite.execute": 108,
         "sqlite.executemany": 32
        },
-       "cpu_s": 104.9531,
-       "peak_rss_mb": 468.4,
-       "rss_start_mb": 390.1,
-       "wall_s": 105.4735
+       "cpu_s": 75.5469,
+       "peak_rss_mb": 495.9,
+       "rss_start_mb": 445.3,
+       "wall_s": 74.796
       },
       "walkforward_prepare": {
        "components": {
         "build_target": {
          "count": 1,
-         "inclusive_s": 0.024,
-         "self_s": 0.024
+         "inclusive_s": 0.0119,
+         "self_s": 0.0119
         },
         "feature_pool.compute[parametric]": {
          "count": 1,
-         "inclusive_s": 41.9162,
-         "self_s": 41.631
+         "inclusive_s": 25.2775,
+         "self_s": 25.042
         },
         "fold_pool_builder.get": {
          "count": 1,
@@ -2178,33 +2178,33 @@
         },
         "interactions.apply": {
          "count": 1,
-         "inclusive_s": 0.0078,
-         "self_s": 0.0078
+         "inclusive_s": 0.0037,
+         "self_s": 0.0037
         },
         "interactions.discover": {
          "count": 1,
-         "inclusive_s": 8.5938,
-         "self_s": 8.5698
+         "inclusive_s": 6.0805,
+         "self_s": 6.0686
         },
         "parametric_pool.build": {
          "count": 1,
-         "inclusive_s": 41.9699,
-         "self_s": 0.0537
+         "inclusive_s": 25.3097,
+         "self_s": 0.0322
         },
         "sqlite.commit": {
          "count": 113,
-         "inclusive_s": 0.2122,
-         "self_s": 0.2122
+         "inclusive_s": 0.2083,
+         "self_s": 0.2083
         },
         "sqlite.execute": {
          "count": 224,
-         "inclusive_s": 0.0728,
-         "self_s": 0.0728
+         "inclusive_s": 0.0273,
+         "self_s": 0.0273
         },
         "vol_model_cache.lookup": {
          "count": 111,
-         "inclusive_s": 0.0083,
-         "self_s": 0.0024
+         "inclusive_s": 0.0057,
+         "self_s": 0.0016
         }
        },
        "count": 1,
@@ -2217,16 +2217,16 @@
         "sqlite.execute": 224,
         "vol_model_cache.miss": 111
        },
-       "cpu_s": 66.2031,
-       "peak_rss_mb": 395.8,
-       "rss_start_mb": 311.0,
-       "wall_s": 50.6109
+       "cpu_s": 50.0781,
+       "peak_rss_mb": 487.1,
+       "rss_start_mb": 411.8,
+       "wall_s": 31.4064
       }
      },
-     "sum_of_phases_wall_s": 837.6138,
-     "total_cpu_s": 1140.8281,
-     "total_wall_s": 837.8895,
-     "unaccounted_wall_s": 0.2757,
+     "sum_of_phases_wall_s": 558.8682,
+     "total_cpu_s": 853.4844,
+     "total_wall_s": 559.0518,
+     "unaccounted_wall_s": 0.1835,
      "values": {
       "base_pool.columns": 653,
       "feature_pool.base.columns_computed": 653.0,
@@ -2262,70 +2262,69 @@
      ],
      "snapshot_id": "2026-09-30__raw_IDX_SYN__f3fd02ef7273"
     },
-    "wall_s": 837.908
+    "wall_s": 559.058
    },
-   "reference_run_label": "calibration (838.9 s, artefacts identiques)",
+   "reference_run_label": "rep2",
    "repeat_phase_walls_s": [
     {
-     "base_feature_pool": 26.0956,
-     "champion_duel": 1.5736,
-     "export_models": 129.1759,
-     "export_tables": 0.4214,
-     "final_diebold_mariano": 0.5862,
-     "final_holdout": 1.7628,
-     "final_stats": 0.0849,
-     "finish_runs": 0.0437,
-     "holdout_diagnostic": 248.5799,
-     "ingestion": 0.1555,
-     "register_runs": 0.2199,
-     "scan_walkforward": 854.473,
-     "select_finals": 0.0727,
-     "stability": 0.0654,
-     "tuning": 229.3857,
-     "walkforward_prepare": 117.6479
+     "base_feature_pool": 5.9061,
+     "champion_duel": 0.5921,
+     "export_models": 40.3177,
+     "export_tables": 0.12,
+     "final_diebold_mariano": 0.1904,
+     "final_holdout": 0.601,
+     "final_stats": 0.029,
+     "finish_runs": 0.0091,
+     "holdout_diagnostic": 91.5108,
+     "ingestion": 0.0442,
+     "register_runs": 0.065,
+     "scan_walkforward": 321.416,
+     "select_finals": 0.0175,
+     "stability": 0.0173,
+     "tuning": 73.6117,
+     "walkforward_prepare": 35.5384
     },
     {
-     "base_feature_pool": 25.0693,
-     "champion_duel": 0.8365,
-     "export_models": 56.5939,
-     "export_tables": 0.0709,
-     "final_diebold_mariano": 0.2939,
-     "final_holdout": 0.9117,
-     "final_stats": 0.0391,
-     "finish_runs": 0.0189,
-     "holdout_diagnostic": 257.7241,
-     "ingestion": 0.0537,
-     "register_runs": 0.2161,
-     "scan_walkforward": 592.5626,
-     "select_finals": 0.0292,
-     "stability": 0.0275,
-     "tuning": 117.8375,
-     "walkforward_prepare": 100.379
+     "base_feature_pool": 5.8002,
+     "champion_duel": 0.5848,
+     "export_models": 40.8008,
+     "export_tables": 0.0591,
+     "final_diebold_mariano": 0.1899,
+     "final_holdout": 0.6,
+     "final_stats": 0.0247,
+     "finish_runs": 0.0085,
+     "holdout_diagnostic": 94.9534,
+     "ingestion": 0.0229,
+     "register_runs": 0.0586,
+     "scan_walkforward": 309.5274,
+     "select_finals": 0.0173,
+     "stability": 0.0182,
+     "tuning": 74.796,
+     "walkforward_prepare": 31.4064
     },
     {
-     "base_feature_pool": 8.8345,
-     "champion_duel": 0.5973,
-     "export_models": 41.6927,
-     "export_tables": 0.0557,
-     "final_diebold_mariano": 0.1963,
-     "final_holdout": 0.6201,
-     "final_stats": 0.0282,
-     "finish_runs": 0.0089,
-     "holdout_diagnostic": 97.0485,
-     "ingestion": 0.0429,
-     "register_runs": 0.0827,
-     "scan_walkforward": 4828.6377,
-     "select_finals": 0.0245,
-     "stability": 0.0249,
-     "tuning": 74.0634,
-     "walkforward_prepare": 42.8475
+     "base_feature_pool": 5.8128,
+     "champion_duel": 0.5992,
+     "export_models": 42.1677,
+     "export_tables": 0.0612,
+     "final_diebold_mariano": 0.279,
+     "final_holdout": 0.6258,
+     "final_stats": 0.0278,
+     "finish_runs": 0.0085,
+     "holdout_diagnostic": 92.3134,
+     "ingestion": 0.0268,
+     "register_runs": 0.0582,
+     "scan_walkforward": 317.6982,
+     "select_finals": 0.0174,
+     "stability": 0.0178,
+     "tuning": 73.9899,
+     "walkforward_prepare": 31.9593
     }
    ],
    "repeat_walls_s": [
-    1610.841,
-    1152.99,
-    5095.009,
-    837.908
+    570.174,
+    559.058,
+    565.843
    ],
    "reproducibility": {
     "counters_identical_across_repeats": true,
@@ -2336,992 +2335,9 @@
     "same_data_hash": true,
     "same_seed": true
    },
-   "warm_run": {
-    "profile_data": {
-     "component_totals": {
-      "build_target": {
-       "count": 56,
-       "inclusive_s": 0.6657,
-       "self_s": 0.6657
-      },
-      "compute_baselines": {
-       "count": 35,
-       "inclusive_s": 0.9385,
-       "self_s": 0.9385
-      },
-      "fit_eval_full": {
-       "count": 138,
-       "inclusive_s": 120.7595,
-       "self_s": 120.7561
-      },
-      "fold_context.prepare": {
-       "count": 29,
-       "inclusive_s": 3.834,
-       "self_s": 1.3639
-      },
-      "fold_pool_builder.get": {
-       "count": 56,
-       "inclusive_s": 0.0961,
-       "self_s": 0.0024
-      },
-      "get_classifier.engine": {
-       "count": 138,
-       "inclusive_s": 0.0034,
-       "self_s": 0.0034
-      },
-      "get_classifier.optuna": {
-       "count": 166,
-       "inclusive_s": 0.0039,
-       "self_s": 0.0039
-      },
-      "interactions.apply": {
-       "count": 6,
-       "inclusive_s": 0.0228,
-       "self_s": 0.0228
-      },
-      "interactions.discover": {
-       "count": 1,
-       "inclusive_s": 6.7372,
-       "self_s": 6.725
-      },
-      "optuna.tune_config": {
-       "count": 4,
-       "inclusive_s": 64.7916,
-       "self_s": 64.7466
-      },
-      "parametric_pool.build": {
-       "count": 6,
-       "inclusive_s": 0.1127,
-       "self_s": 0.1127
-      },
-      "scaler.fit_transform": {
-       "count": 57,
-       "inclusive_s": 3.5507,
-       "self_s": 3.2372
-      },
-      "scaler.transform": {
-       "count": 112,
-       "inclusive_s": 0.3514,
-       "self_s": 0.3514
-      },
-      "select (cache lookup + compute)": {
-       "count": 70,
-       "inclusive_s": 188.7447,
-       "self_s": 0.0051
-      },
-      "select.xy_data_hash": {
-       "count": 70,
-       "inclusive_s": 0.3929,
-       "self_s": 0.3929
-      },
-      "select_features.compute": {
-       "count": 30,
-       "inclusive_s": 188.2808,
-       "self_s": 188.2808
-      },
-      "selection_cache.lookup": {
-       "count": 70,
-       "inclusive_s": 0.0043,
-       "self_s": 0.0012
-      },
-      "sqlite.commit": {
-       "count": 484,
-       "inclusive_s": 0.6105,
-       "self_s": 0.6105
-      },
-      "sqlite.execute": {
-       "count": 480,
-       "inclusive_s": 0.0404,
-       "self_s": 0.0404
-      },
-      "sqlite.executemany": {
-       "count": 268,
-       "inclusive_s": 0.1637,
-       "self_s": 0.1637
-      },
-      "uniqueness.average": {
-       "count": 29,
-       "inclusive_s": 0.1641,
-       "self_s": 0.1641
-      },
-      "uniqueness.indicator_matrix": {
-       "count": 29,
-       "inclusive_s": 0.0236,
-       "self_s": 0.0236
-      }
-     },
-     "counter_totals": {
-      "feature_pool_cache.base.hit": 1,
-      "feature_pool_cache.parametric.hit": 6,
-      "fit_eval_full.calls": 138,
-      "fold_context.prepare": 29,
-      "fold_pool_builder.get": 56,
-      "interactions.apply": 6,
-      "models.constructed": 138,
-      "optuna.cv_fits": 166,
-      "optuna.studies": 4,
-      "optuna.trials.complete": 41,
-      "optuna.trials.pruned": 39,
-      "parametric_pool.builds": 6,
-      "scaler.fit_transform": 57,
-      "scaler.transform": 112,
-      "select.calls": 70,
-      "select_features.computed": 30,
-      "selection_cache.hit": 40,
-      "selection_cache.miss": 30,
-      "sqlite.commit": 484,
-      "sqlite.execute": 480,
-      "sqlite.executemany": 268
-     },
-     "distinct_keys": {
-      "fold_context.prepare": {
-       "calls": 29,
-       "distinct": 8
-      },
-      "selection_cache.lookup": {
-       "calls": 70,
-       "distinct": 30
-      }
-     },
-     "peak_rss_mb": 541.2,
-     "phases": {
-      "base_feature_pool": {
-       "components": {},
-       "count": 1,
-       "counters": {
-        "feature_pool_cache.base.hit": 1
-       },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 402.0,
-       "rss_start_mb": 372.8,
-       "wall_s": 0.0435
-      },
-      "champion_duel": {
-       "components": {
-        "build_target": {
-         "count": 1,
-         "inclusive_s": 0.0118,
-         "self_s": 0.0118
-        },
-        "compute_baselines": {
-         "count": 1,
-         "inclusive_s": 0.0291,
-         "self_s": 0.0291
-        },
-        "fit_eval_full": {
-         "count": 1,
-         "inclusive_s": 0.4352,
-         "self_s": 0.4352
-        },
-        "fold_pool_builder.get": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "get_classifier.engine": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "scaler.fit_transform": {
-         "count": 1,
-         "inclusive_s": 0.0807,
-         "self_s": 0.0747
-        },
-        "scaler.transform": {
-         "count": 2,
-         "inclusive_s": 0.0067,
-         "self_s": 0.0067
-        },
-        "select (cache lookup + compute)": {
-         "count": 1,
-         "inclusive_s": 0.0069,
-         "self_s": 0.0
-        },
-        "select.xy_data_hash": {
-         "count": 1,
-         "inclusive_s": 0.0068,
-         "self_s": 0.0068
-        },
-        "selection_cache.lookup": {
-         "count": 1,
-         "inclusive_s": 0.0001,
-         "self_s": 0.0
-        },
-        "sqlite.commit": {
-         "count": 2,
-         "inclusive_s": 0.0035,
-         "self_s": 0.0035
-        },
-        "sqlite.execute": {
-         "count": 7,
-         "inclusive_s": 0.0004,
-         "self_s": 0.0004
-        }
-       },
-       "count": 1,
-       "counters": {
-        "fit_eval_full.calls": 1,
-        "fold_pool_builder.get": 1,
-        "models.constructed": 1,
-        "scaler.fit_transform": 1,
-        "scaler.transform": 2,
-        "select.calls": 1,
-        "selection_cache.hit": 1,
-        "sqlite.commit": 2,
-        "sqlite.execute": 7
-       },
-       "cpu_s": 0.625,
-       "peak_rss_mb": 483.3,
-       "rss_start_mb": 454.8,
-       "wall_s": 0.6119
-      },
-      "export_models": {
-       "components": {
-        "interactions.apply": {
-         "count": 1,
-         "inclusive_s": 0.0035,
-         "self_s": 0.0035
-        },
-        "parametric_pool.build": {
-         "count": 1,
-         "inclusive_s": 0.0181,
-         "self_s": 0.0181
-        },
-        "scaler.fit_transform": {
-         "count": 2,
-         "inclusive_s": 0.1466,
-         "self_s": 0.134
-        },
-        "scaler.transform": {
-         "count": 2,
-         "inclusive_s": 0.0125,
-         "self_s": 0.0125
-        },
-        "sqlite.commit": {
-         "count": 28,
-         "inclusive_s": 0.0131,
-         "self_s": 0.0131
-        },
-        "sqlite.execute": {
-         "count": 28,
-         "inclusive_s": 0.0008,
-         "self_s": 0.0008
-        }
-       },
-       "count": 1,
-       "counters": {
-        "feature_pool_cache.parametric.hit": 1,
-        "interactions.apply": 1,
-        "parametric_pool.builds": 1,
-        "scaler.fit_transform": 2,
-        "scaler.transform": 2,
-        "sqlite.commit": 28,
-        "sqlite.execute": 28
-       },
-       "cpu_s": 28.7969,
-       "peak_rss_mb": 541.2,
-       "rss_start_mb": 450.6,
-       "wall_s": 14.3305
-      },
-      "export_tables": {
-       "components": {
-        "sqlite.commit": {
-         "count": 18,
-         "inclusive_s": 0.004,
-         "self_s": 0.004
-        },
-        "sqlite.execute": {
-         "count": 2,
-         "inclusive_s": 0.0001,
-         "self_s": 0.0001
-        },
-        "sqlite.executemany": {
-         "count": 16,
-         "inclusive_s": 0.0006,
-         "self_s": 0.0006
-        }
-       },
-       "count": 1,
-       "counters": {
-        "sqlite.commit": 18,
-        "sqlite.execute": 2,
-        "sqlite.executemany": 16
-       },
-       "cpu_s": 0.0312,
-       "peak_rss_mb": 450.6,
-       "rss_start_mb": 450.6,
-       "wall_s": 0.0734
-      },
-      "final_diebold_mariano": {
-       "components": {
-        "build_target": {
-         "count": 1,
-         "inclusive_s": 0.018,
-         "self_s": 0.018
-        },
-        "compute_baselines": {
-         "count": 1,
-         "inclusive_s": 0.0301,
-         "self_s": 0.0301
-        },
-        "fold_context.prepare": {
-         "count": 1,
-         "inclusive_s": 0.1913,
-         "self_s": 0.0744
-        },
-        "fold_pool_builder.get": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "scaler.fit_transform": {
-         "count": 1,
-         "inclusive_s": 0.0612,
-         "self_s": 0.0549
-        },
-        "scaler.transform": {
-         "count": 2,
-         "inclusive_s": 0.0068,
-         "self_s": 0.0068
-        },
-        "sqlite.commit": {
-         "count": 2,
-         "inclusive_s": 0.0104,
-         "self_s": 0.0104
-        },
-        "sqlite.execute": {
-         "count": 2,
-         "inclusive_s": 0.0002,
-         "self_s": 0.0002
-        },
-        "uniqueness.average": {
-         "count": 1,
-         "inclusive_s": 0.0062,
-         "self_s": 0.0062
-        },
-        "uniqueness.indicator_matrix": {
-         "count": 1,
-         "inclusive_s": 0.0009,
-         "self_s": 0.0009
-        }
-       },
-       "count": 1,
-       "counters": {
-        "fold_context.prepare": 1,
-        "fold_pool_builder.get": 1,
-        "scaler.fit_transform": 1,
-        "scaler.transform": 2,
-        "sqlite.commit": 2,
-        "sqlite.execute": 2
-       },
-       "cpu_s": 0.2031,
-       "peak_rss_mb": 479.2,
-       "rss_start_mb": 454.8,
-       "wall_s": 0.2091
-      },
-      "final_holdout": {
-       "components": {
-        "build_target": {
-         "count": 1,
-         "inclusive_s": 0.0174,
-         "self_s": 0.0174
-        },
-        "compute_baselines": {
-         "count": 1,
-         "inclusive_s": 0.0244,
-         "self_s": 0.0244
-        },
-        "fit_eval_full": {
-         "count": 1,
-         "inclusive_s": 0.4795,
-         "self_s": 0.4795
-        },
-        "fold_pool_builder.get": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "get_classifier.engine": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "scaler.fit_transform": {
-         "count": 1,
-         "inclusive_s": 0.0634,
-         "self_s": 0.0586
-        },
-        "scaler.transform": {
-         "count": 2,
-         "inclusive_s": 0.0055,
-         "self_s": 0.0055
-        },
-        "select (cache lookup + compute)": {
-         "count": 1,
-         "inclusive_s": 0.0058,
-         "self_s": 0.0
-        },
-        "select.xy_data_hash": {
-         "count": 1,
-         "inclusive_s": 0.0057,
-         "self_s": 0.0057
-        },
-        "selection_cache.lookup": {
-         "count": 1,
-         "inclusive_s": 0.0001,
-         "self_s": 0.0
-        },
-        "sqlite.commit": {
-         "count": 2,
-         "inclusive_s": 0.0017,
-         "self_s": 0.0017
-        },
-        "sqlite.execute": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "sqlite.executemany": {
-         "count": 2,
-         "inclusive_s": 0.0012,
-         "self_s": 0.0012
-        }
-       },
-       "count": 1,
-       "counters": {
-        "fit_eval_full.calls": 1,
-        "fold_pool_builder.get": 1,
-        "models.constructed": 1,
-        "scaler.fit_transform": 1,
-        "scaler.transform": 2,
-        "select.calls": 1,
-        "selection_cache.hit": 1,
-        "sqlite.commit": 2,
-        "sqlite.execute": 1,
-        "sqlite.executemany": 2
-       },
-       "cpu_s": 0.6719,
-       "peak_rss_mb": 477.5,
-       "rss_start_mb": 454.8,
-       "wall_s": 0.6322
-      },
-      "final_stats": {
-       "components": {
-        "sqlite.execute": {
-         "count": 4,
-         "inclusive_s": 0.0004,
-         "self_s": 0.0004
-        }
-       },
-       "count": 3,
-       "counters": {
-        "sqlite.execute": 4
-       },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 454.8,
-       "rss_start_mb": 454.8,
-       "wall_s": 0.0222
-      },
-      "finish_runs": {
-       "components": {
-        "sqlite.commit": {
-         "count": 2,
-         "inclusive_s": 0.0072,
-         "self_s": 0.0072
-        },
-        "sqlite.execute": {
-         "count": 8,
-         "inclusive_s": 0.0005,
-         "self_s": 0.0005
-        }
-       },
-       "count": 1,
-       "counters": {
-        "sqlite.commit": 2,
-        "sqlite.execute": 8
-       },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 454.8,
-       "rss_start_mb": 454.8,
-       "wall_s": 0.0148
-      },
-      "holdout_diagnostic": {
-       "components": {
-        "build_target": {
-         "count": 24,
-         "inclusive_s": 0.2702,
-         "self_s": 0.2702
-        },
-        "compute_baselines": {
-         "count": 24,
-         "inclusive_s": 0.6588,
-         "self_s": 0.6588
-        },
-        "fit_eval_full": {
-         "count": 24,
-         "inclusive_s": 23.2285,
-         "self_s": 23.2279
-        },
-        "fold_pool_builder.get": {
-         "count": 24,
-         "inclusive_s": 0.0286,
-         "self_s": 0.0007
-        },
-        "get_classifier.engine": {
-         "count": 24,
-         "inclusive_s": 0.0006,
-         "self_s": 0.0006
-        },
-        "interactions.apply": {
-         "count": 1,
-         "inclusive_s": 0.0035,
-         "self_s": 0.0035
-        },
-        "parametric_pool.build": {
-         "count": 1,
-         "inclusive_s": 0.0244,
-         "self_s": 0.0244
-        },
-        "scaler.fit_transform": {
-         "count": 24,
-         "inclusive_s": 1.647,
-         "self_s": 1.492
-        },
-        "scaler.transform": {
-         "count": 48,
-         "inclusive_s": 0.1699,
-         "self_s": 0.1699
-        },
-        "select (cache lookup + compute)": {
-         "count": 24,
-         "inclusive_s": 38.8864,
-         "self_s": 0.0015
-        },
-        "select.xy_data_hash": {
-         "count": 24,
-         "inclusive_s": 0.1548,
-         "self_s": 0.1548
-        },
-        "select_features.compute": {
-         "count": 6,
-         "inclusive_s": 38.7161,
-         "self_s": 38.7161
-        },
-        "selection_cache.lookup": {
-         "count": 24,
-         "inclusive_s": 0.0017,
-         "self_s": 0.0005
-        },
-        "sqlite.commit": {
-         "count": 32,
-         "inclusive_s": 0.0699,
-         "self_s": 0.0699
-        },
-        "sqlite.execute": {
-         "count": 32,
-         "inclusive_s": 0.0016,
-         "self_s": 0.0016
-        },
-        "sqlite.executemany": {
-         "count": 24,
-         "inclusive_s": 0.0025,
-         "self_s": 0.0025
-        }
-       },
-       "count": 1,
-       "counters": {
-        "feature_pool_cache.parametric.hit": 1,
-        "fit_eval_full.calls": 24,
-        "fold_pool_builder.get": 24,
-        "interactions.apply": 1,
-        "models.constructed": 24,
-        "parametric_pool.builds": 1,
-        "scaler.fit_transform": 24,
-        "scaler.transform": 48,
-        "select.calls": 24,
-        "select_features.computed": 6,
-        "selection_cache.hit": 18,
-        "selection_cache.miss": 6,
-        "sqlite.commit": 32,
-        "sqlite.execute": 32,
-        "sqlite.executemany": 24
-       },
-       "cpu_s": 108.4531,
-       "peak_rss_mb": 535.0,
-       "rss_start_mb": 447.9,
-       "wall_s": 65.7203
-      },
-      "ingestion": {
-       "components": {},
-       "count": 1,
-       "counters": {},
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 370.6,
-       "rss_start_mb": 369.4,
-       "wall_s": 0.0253
-      },
-      "register_runs": {
-       "components": {
-        "sqlite.commit": {
-         "count": 3,
-         "inclusive_s": 0.0051,
-         "self_s": 0.0051
-        },
-        "sqlite.execute": {
-         "count": 3,
-         "inclusive_s": 0.0068,
-         "self_s": 0.0068
-        }
-       },
-       "count": 1,
-       "counters": {
-        "sqlite.commit": 3,
-        "sqlite.execute": 3
-       },
-       "cpu_s": 0.0312,
-       "peak_rss_mb": 372.8,
-       "rss_start_mb": 371.2,
-       "wall_s": 0.0643
-      },
-      "scan_walkforward": {
-       "components": {
-        "build_target": {
-         "count": 8,
-         "inclusive_s": 0.1,
-         "self_s": 0.1
-        },
-        "compute_baselines": {
-         "count": 8,
-         "inclusive_s": 0.196,
-         "self_s": 0.196
-        },
-        "fit_eval_full": {
-         "count": 96,
-         "inclusive_s": 88.7834,
-         "self_s": 88.781
-        },
-        "fold_context.prepare": {
-         "count": 8,
-         "inclusive_s": 1.5425,
-         "self_s": 0.68
-        },
-        "fold_pool_builder.get": {
-         "count": 8,
-         "inclusive_s": 0.0674,
-         "self_s": 0.0017
-        },
-        "get_classifier.engine": {
-         "count": 96,
-         "inclusive_s": 0.0024,
-         "self_s": 0.0024
-        },
-        "interactions.apply": {
-         "count": 3,
-         "inclusive_s": 0.0104,
-         "self_s": 0.0104
-        },
-        "parametric_pool.build": {
-         "count": 3,
-         "inclusive_s": 0.0553,
-         "self_s": 0.0553
-        },
-        "scaler.fit_transform": {
-         "count": 8,
-         "inclusive_s": 0.4417,
-         "self_s": 0.4082
-        },
-        "scaler.transform": {
-         "count": 16,
-         "inclusive_s": 0.0393,
-         "self_s": 0.0393
-        },
-        "select (cache lookup + compute)": {
-         "count": 24,
-         "inclusive_s": 149.7353,
-         "self_s": 0.0025
-        },
-        "select.xy_data_hash": {
-         "count": 24,
-         "inclusive_s": 0.1178,
-         "self_s": 0.1178
-        },
-        "select_features.compute": {
-         "count": 24,
-         "inclusive_s": 149.5647,
-         "self_s": 149.5647
-        },
-        "selection_cache.lookup": {
-         "count": 24,
-         "inclusive_s": 0.0011,
-         "self_s": 0.0002
-        },
-        "sqlite.commit": {
-         "count": 266,
-         "inclusive_s": 0.3962,
-         "self_s": 0.3962
-        },
-        "sqlite.execute": {
-         "count": 122,
-         "inclusive_s": 0.0126,
-         "self_s": 0.0126
-        },
-        "sqlite.executemany": {
-         "count": 192,
-         "inclusive_s": 0.141,
-         "self_s": 0.141
-        },
-        "uniqueness.average": {
-         "count": 8,
-         "inclusive_s": 0.0455,
-         "self_s": 0.0455
-        },
-        "uniqueness.indicator_matrix": {
-         "count": 8,
-         "inclusive_s": 0.0061,
-         "self_s": 0.0061
-        }
-       },
-       "count": 1,
-       "counters": {
-        "feature_pool_cache.parametric.hit": 3,
-        "fit_eval_full.calls": 96,
-        "fold_context.prepare": 8,
-        "fold_pool_builder.get": 8,
-        "interactions.apply": 3,
-        "models.constructed": 96,
-        "parametric_pool.builds": 3,
-        "scaler.fit_transform": 8,
-        "scaler.transform": 16,
-        "select.calls": 24,
-        "select_features.computed": 24,
-        "selection_cache.miss": 24,
-        "sqlite.commit": 266,
-        "sqlite.execute": 122,
-        "sqlite.executemany": 192
-       },
-       "cpu_s": 405.9375,
-       "peak_rss_mb": 521.9,
-       "rss_start_mb": 431.0,
-       "wall_s": 240.5947
-      },
-      "select_finals": {
-       "components": {},
-       "count": 1,
-       "counters": {},
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 450.6,
-       "rss_start_mb": 450.6,
-       "wall_s": 0.0247
-      },
-      "stability": {
-       "components": {
-        "sqlite.commit": {
-         "count": 4,
-         "inclusive_s": 0.0021,
-         "self_s": 0.0021
-        },
-        "sqlite.execute": {
-         "count": 6,
-         "inclusive_s": 0.0003,
-         "self_s": 0.0003
-        },
-        "sqlite.executemany": {
-         "count": 2,
-         "inclusive_s": 0.0001,
-         "self_s": 0.0001
-        }
-       },
-       "count": 1,
-       "counters": {
-        "sqlite.commit": 4,
-        "sqlite.execute": 6,
-        "sqlite.executemany": 2
-       },
-       "cpu_s": 0.0156,
-       "peak_rss_mb": 447.9,
-       "rss_start_mb": 447.9,
-       "wall_s": 0.0169
-      },
-      "tuning": {
-       "components": {
-        "build_target": {
-         "count": 20,
-         "inclusive_s": 0.2361,
-         "self_s": 0.2361
-        },
-        "fit_eval_full": {
-         "count": 16,
-         "inclusive_s": 7.8328,
-         "self_s": 7.8325
-        },
-        "fold_context.prepare": {
-         "count": 20,
-         "inclusive_s": 2.1002,
-         "self_s": 0.6096
-        },
-        "fold_pool_builder.get": {
-         "count": 20,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "get_classifier.engine": {
-         "count": 16,
-         "inclusive_s": 0.0003,
-         "self_s": 0.0003
-        },
-        "get_classifier.optuna": {
-         "count": 166,
-         "inclusive_s": 0.0039,
-         "self_s": 0.0039
-        },
-        "optuna.tune_config": {
-         "count": 4,
-         "inclusive_s": 64.7916,
-         "self_s": 64.7466
-        },
-        "scaler.fit_transform": {
-         "count": 20,
-         "inclusive_s": 1.1101,
-         "self_s": 1.0147
-        },
-        "scaler.transform": {
-         "count": 40,
-         "inclusive_s": 0.1107,
-         "self_s": 0.1107
-        },
-        "select (cache lookup + compute)": {
-         "count": 20,
-         "inclusive_s": 0.1103,
-         "self_s": 0.0009
-        },
-        "select.xy_data_hash": {
-         "count": 20,
-         "inclusive_s": 0.1079,
-         "self_s": 0.1079
-        },
-        "selection_cache.lookup": {
-         "count": 20,
-         "inclusive_s": 0.0014,
-         "self_s": 0.0005
-        },
-        "sqlite.commit": {
-         "count": 120,
-         "inclusive_s": 0.0925,
-         "self_s": 0.0925
-        },
-        "sqlite.execute": {
-         "count": 108,
-         "inclusive_s": 0.0081,
-         "self_s": 0.0081
-        },
-        "sqlite.executemany": {
-         "count": 32,
-         "inclusive_s": 0.0182,
-         "self_s": 0.0182
-        },
-        "uniqueness.average": {
-         "count": 20,
-         "inclusive_s": 0.1124,
-         "self_s": 0.1124
-        },
-        "uniqueness.indicator_matrix": {
-         "count": 20,
-         "inclusive_s": 0.0166,
-         "self_s": 0.0166
-        }
-       },
-       "count": 1,
-       "counters": {
-        "fit_eval_full.calls": 16,
-        "fold_context.prepare": 20,
-        "fold_pool_builder.get": 20,
-        "models.constructed": 16,
-        "optuna.cv_fits": 166,
-        "optuna.studies": 4,
-        "optuna.trials.complete": 41,
-        "optuna.trials.pruned": 39,
-        "scaler.fit_transform": 20,
-        "scaler.transform": 40,
-        "select.calls": 20,
-        "selection_cache.hit": 20,
-        "sqlite.commit": 120,
-        "sqlite.execute": 108,
-        "sqlite.executemany": 32
-       },
-       "cpu_s": 75.1094,
-       "peak_rss_mb": 495.3,
-       "rss_start_mb": 449.2,
-       "wall_s": 74.9477
-      },
-      "walkforward_prepare": {
-       "components": {
-        "build_target": {
-         "count": 1,
-         "inclusive_s": 0.0122,
-         "self_s": 0.0122
-        },
-        "fold_pool_builder.get": {
-         "count": 1,
-         "inclusive_s": 0.0,
-         "self_s": 0.0
-        },
-        "interactions.apply": {
-         "count": 1,
-         "inclusive_s": 0.0054,
-         "self_s": 0.0054
-        },
-        "interactions.discover": {
-         "count": 1,
-         "inclusive_s": 6.7372,
-         "self_s": 6.725
-        },
-        "parametric_pool.build": {
-         "count": 1,
-         "inclusive_s": 0.0149,
-         "self_s": 0.0149
-        },
-        "sqlite.commit": {
-         "count": 2,
-         "inclusive_s": 0.0008,
-         "self_s": 0.0008
-        },
-        "sqlite.execute": {
-         "count": 2,
-         "inclusive_s": 0.0002,
-         "self_s": 0.0002
-        }
-       },
-       "count": 1,
-       "counters": {
-        "feature_pool_cache.parametric.hit": 1,
-        "fold_pool_builder.get": 1,
-        "interactions.apply": 1,
-        "parametric_pool.builds": 1,
-        "sqlite.commit": 2,
-        "sqlite.execute": 2
-       },
-       "cpu_s": 14.4531,
-       "peak_rss_mb": 495.4,
-       "rss_start_mb": 402.0,
-       "wall_s": 6.7733
-      }
-     },
-     "sum_of_phases_wall_s": 404.1049,
-     "total_cpu_s": 634.6094,
-     "total_wall_s": 404.2757,
-     "unaccounted_wall_s": 0.1708,
-     "values": {
-      "base_pool.columns": 653,
-      "fold_pool.columns_last": 813,
-      "parametric_pool.columns_built": 888.0
-     }
-    },
-    "wall_s": 404.283
-   }
+   "warm_run": null
   }
  },
  "seed": 42,
- "threads": 4,
- "timing_noise_note": "Bruit de dur\u00e9e tr\u00e8s \u00e9lev\u00e9 sur cette machine (portable, Chrome actif) : le m\u00eame calcul walk-forward a pris 515 s (non instrument\u00e9), 833 s, 839 s, 1153 s, 1611 s et 5095 s ; CPCV 1402 s, 1513 s (instrument\u00e9s) et 1982 s (non instrument\u00e9). Les compteurs et les artefacts sont identiques dans tous ces runs, seuls les temps changent. Le run de r\u00e9f\u00e9rence walk-forward est le run de calibration (838.9 s), coh\u00e9rent avec la r\u00e9p\u00e9tition n\u00b02 (832.8 s) du premier lancement ; le surco\u00fbt d'instrumentation n'est pas mesurable (bruit >> surco\u00fbt)."
+ "threads": 4
 }

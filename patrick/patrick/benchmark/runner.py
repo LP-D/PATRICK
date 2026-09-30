@@ -56,7 +56,7 @@ def prepare_snapshot(spec: reference.ProfileSpec, store_root: str) -> tuple[Data
 
 def run_scenario(spec: reference.ProfileSpec, scheme: str, workdir: str | Path, *, instrument: bool = True,
                  baseline_dir: str | Path | None = None, feature_cache_dir: str | Path | None = None,
-                 label: str = "run") -> dict:
+                 label: str = "run", extra_env: dict[str, str] | None = None) -> dict:
     """`feature_cache_dir=None` -> cache de features neuf (départ à froid)."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ def run_scenario(spec: reference.ProfileSpec, scheme: str, workdir: str | Path, 
     cfg_digest = reference.config_digest(config)
 
     env = {"PATRICK_DB_PATH": db_path, "PATRICK_STORE_ROOT": str(workdir / "store"),
-           "PATRICK_CACHE_ROOT": str(workdir / "cache"), "PATRICK_FEATURE_CACHE_ROOT": fcache}
+           "PATRICK_CACHE_ROOT": str(workdir / "cache"), "PATRICK_FEATURE_CACHE_ROOT": fcache, **(extra_env or {})}
     gc.collect()
     prof = profiler.Profiler() if instrument else None
     t0 = time.perf_counter()
@@ -106,7 +106,7 @@ def run_scenario(spec: reference.ProfileSpec, scheme: str, workdir: str | Path, 
         "wall_s": round(wall, 3), "pipeline_elapsed_s": round(result["elapsed_s"], 3),
         "snapshot": {"snapshot_id": snapshot_id, "data_hash": data_hash or store.latest_entry(
             f"raw_{reference.TARGET_SYMBOL}")["content_hash"], "shape": list(shape)},
-        "config_digest": cfg_digest, "seed": reference.PIPELINE_SEED,
+        "config_digest": cfg_digest, "seed": reference.PIPELINE_SEED, "extra_env": dict(extra_env or {}),
         "results": {"leaderboard_rows": len(lb), "tuned_rows": len(result["tuned"]),
                     "trials_db": n_trials_db, "fold_metric_rows": n_fold_metric, "prediction_rows": n_pred,
                     "features_retained_distinct": len(features_retained),
