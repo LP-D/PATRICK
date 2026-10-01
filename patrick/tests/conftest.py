@@ -37,8 +37,8 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
 def _isolated_machine_settings(tmp_path, monkeypatch):
     """Machine settings and shell-level worker overrides must not affect tests.
 
-    Parallel workers run in subprocesses, where tests that count calls in the
-    current process cannot observe the feature computations.
+    Overrides can send work to subprocesses, which call-counting tests in the
+    current process cannot observe.
     """
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.delenv("PATRICK_PARAMETRIC_JOBS", raising=False)
