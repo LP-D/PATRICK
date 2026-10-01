@@ -35,7 +35,11 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolated_machine_settings(tmp_path, monkeypatch):
-    """`~/.patrick/settings.json` (workers de calcul réglés depuis l'interface) ne doit
-    jamais influencer un test : sans cela, un réglage > 1 fait exécuter les builds dans des
-    processus workers que les tests (qui comptent les appels en process) ne voient pas."""
+    """Machine settings and shell-level worker overrides must not affect tests.
+
+    Parallel workers run in subprocesses, where tests that count calls in the
+    current process cannot observe the feature computations.
+    """
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("PATRICK_PARAMETRIC_JOBS", raising=False)
+    monkeypatch.delenv("PATRICK_SCAN_JOBS", raising=False)
