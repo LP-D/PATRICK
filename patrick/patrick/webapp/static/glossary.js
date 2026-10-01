@@ -2,15 +2,24 @@
     "use strict";
 
     var dataEl = document.getElementById("glossary-data");
+    var I18N = window.I18N || {};
     var GLOSSARY = {};
     if (dataEl) {
         try { GLOSSARY = JSON.parse(dataEl.textContent || "{}"); } catch (e) { GLOSSARY = {}; }
+    }
+    var labelsEl = document.getElementById("glossary-labels");
+    var LABELS = {};
+    if (labelsEl) {
+        try { LABELS = JSON.parse(labelsEl.textContent || "{}"); } catch (e) { LABELS = {}; }
     }
 
     var popover = document.getElementById("glossary-popover");
     var titleEl = document.getElementById("glossary-popover-title");
     var bodyEl = document.getElementById("glossary-popover-body");
     var closeBtn = document.getElementById("glossary-popover-close");
+    var searchInput = document.getElementById("glossary-search-input");
+    var searchStatus = document.getElementById("glossary-search-status");
+    var resultsEl = document.getElementById("glossary-search-results");
     if (!popover || !titleEl || !bodyEl) return;
 
     // L'élément qui a ouvert le popover : le focus doit lui revenir à la
@@ -24,10 +33,64 @@
     // en deux mutations de classe consécutives.
     var openedAt = 0;
 
+    function termLabel(term) {
+        return LABELS[term] || term;
+    }
+
+    function showTerm(term, label) {
+        var text = GLOSSARY[term];
+        if (!text) return;
+        titleEl.textContent = label || termLabel(term);
+        bodyEl.textContent = text;
+        popover.dataset.openTerm = term;
+    }
+
+    function normalized(value) {
+        return String(value || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function renderResults() {
+        if (!searchInput || !resultsEl || !searchStatus) return;
+        var query = normalized(searchInput.value.trim());
+        resultsEl.replaceChildren();
+        if (!query) {
+            resultsEl.hidden = true;
+            searchStatus.textContent = "";
+            return;
+        }
+
+        var matches = Object.keys(GLOSSARY).filter(function (term) {
+            return normalized(termLabel(term) + " " + term + " " + GLOSSARY[term]).indexOf(query) !== -1;
+        });
+        matches.forEach(function (term) {
+            var item = document.createElement("li");
+            var button = document.createElement("button");
+            var label = document.createElement("span");
+            var excerpt = document.createElement("span");
+            button.type = "button";
+            button.className = "glossary-search-result";
+            button.dataset.term = term;
+            label.className = "glossary-search-result-title";
+            label.textContent = termLabel(term);
+            excerpt.className = "glossary-search-result-excerpt";
+            excerpt.textContent = GLOSSARY[term];
+            button.appendChild(label);
+            button.appendChild(excerpt);
+            item.appendChild(button);
+            resultsEl.appendChild(item);
+        });
+        resultsEl.hidden = false;
+        searchStatus.textContent = matches.length
+            ? (I18N.glossary_search_count || "{count} results").replace("{count}", matches.length)
+            : (I18N.glossary_search_empty || "No matching terms");
+    }
+
     function hide(restoreFocus) {
         if (popover.classList.contains("hidden")) return;
         popover.classList.add("hidden");
         popover.dataset.openTerm = "";
+        if (searchInput) searchInput.value = "";
+        renderResults();
         popover.removeAttribute("tabindex");
         var toRestore = restoreFocus && opener && document.contains(opener) ? opener : null;
         opener = null;
@@ -35,10 +98,10 @@
     }
 
     function showFor(anchorEl, term) {
-        var text = GLOSSARY[term];
-        if (!text) return;
-        titleEl.textContent = anchorEl.getAttribute("data-term-label") || term;
-        bodyEl.textContent = text;
+        if (!GLOSSARY[term]) return;
+        if (searchInput) searchInput.value = "";
+        renderResults();
+        showTerm(term, anchorEl.getAttribute("data-term-label") || term);
         popover.classList.remove("hidden");
 
         /* Le popover s'ouvrait sans que rien ne bouge : au clavier comme au
@@ -107,6 +170,15 @@
     });
 
     if (closeBtn) closeBtn.addEventListener("click", function () { hide(true); });
+    if (searchInput) searchInput.addEventListener("input", renderResults);
+    if (resultsEl && searchInput) resultsEl.addEventListener("click", function (ev) {
+        var button = ev.target.closest ? ev.target.closest("button[data-term]") : null;
+        if (!button || !resultsEl.contains(button)) return;
+        showTerm(button.dataset.term);
+        searchInput.value = "";
+        renderResults();
+        searchInput.focus();
+    });
     window.addEventListener("resize", function () { hide(false); });
     window.addEventListener("scroll", function () {
         if (Date.now() - openedAt < 350) return;

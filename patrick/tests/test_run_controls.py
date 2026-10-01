@@ -13,6 +13,45 @@ from patrick.webapp import run_manager
 from patrick.webapp.app import app
 
 
+def test_run_eta_requires_measurable_progress_and_caps_completed_work():
+    assert run_manager._estimated_remaining_s(100, 0, 10) is None
+    assert run_manager._estimated_remaining_s(100, 1, 10) is None
+    assert run_manager._estimated_remaining_s(100, 2, 10) == 400
+    assert run_manager._estimated_remaining_s(0, 2, 10) is None
+    assert run_manager._estimated_remaining_s(100, 10, 10) is None
+    assert run_manager._estimated_remaining_s(100, 12, 10) is None
+    assert run_manager._estimated_remaining_s(100, 2, 0) is None
+    assert run_manager._eta_confidence(2, 10) == "low"
+    assert run_manager._eta_confidence(5, 10) == "moderate"
+    assert run_manager._eta_confidence(10, 10) is None
+
+
+def test_job_view_exposes_eta_and_caps_progress(monkeypatch):
+    monkeypatch.setattr(run_manager, "_elapsed_s", lambda _: 100.0)
+    job = {
+        "job_id": "active",
+        "config_json": '{"name":"test"}',
+        "status": "running",
+        "pause_requested": 0,
+        "phase": "scan",
+        "progress_done": 3,
+        "progress_total": 10,
+        "log_tail": [],
+        "error": None,
+    }
+
+    view = run_manager._job_view(job, None)
+    assert view["progress"] == {"done": 3, "total": 10}
+    assert view["estimated_remaining_s"] == 233
+    assert view["eta_confidence"] == "low"
+
+    job["progress_done"] = 20
+    view = run_manager._job_view(job, None)
+    assert view["progress"] == {"done": 10, "total": 10}
+    assert view["estimated_remaining_s"] is None
+    assert view["eta_confidence"] is None
+
+
 def _running_job(conn, job_id: str, worker_pid: int = 12345) -> None:
     with conn:
         conn.execute(

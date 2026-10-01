@@ -12,17 +12,17 @@ from fastapi.testclient import TestClient
 from patrick.tracking import db
 from patrick.tracking import history as trackhistory
 from patrick.webapp.app import app
+from patrick.webapp.forms import default_config_dict
 
 
 def _seed_db(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     conn = db.connect(str(tmp_path / "patrick.db"))
-    config = {
-        "name": "vix_smoke", "target": "^VIX",
-        "validation": {"scheme": "walkforward"},
-        "data_quality": {"enabled": True},
-        "selection": {"track_stability": True},
-    }
+    config = default_config_dict()
+    config["name"] = "vix_smoke"
+    config["objective"].update({"target_symbol": "^VIX", "horizons": [5], "regimes": ["GLOBAL"]})
+    config["models"]["algos"] = ["RandomForest"]
+    config["sampler"]["candidates"] = ["SMOTE"]
     db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
     db.create_run(conn, "run1", "^VIX", 5, "snap1", json.dumps(config), "cfghash", "sha", 42)
     trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
@@ -34,10 +34,11 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
-    config_cpcv = {
-        "name": "vix_cpcv_smoke",
-        "validation": {"scheme": "cpcv", "n_groups": 7, "k_test_groups": 2},
-    }
+    config_cpcv = default_config_dict()
+    config_cpcv["name"] = "vix_cpcv_smoke"
+    config_cpcv["objective"].update({"target_symbol": "^VIX", "horizons": [10], "regimes": ["GLOBAL"]})
+    config_cpcv["models"]["algos"] = ["XGBoost"]
+    config_cpcv["validation"].update({"scheme": "cpcv", "n_groups": 7, "k_test_groups": 2})
     db.upsert_snapshot(conn, "snap2", "hash2", None, None, None)
     db.create_run(conn, "run2", "^VIX", 10, "snap2", json.dumps(config_cpcv), "cfghash2", "sha", 42)
     trial_id2 = db.create_trial(conn, "run2", "GLOBAL", "XGBoost", "SMOTE", 6, "shap")
@@ -129,6 +130,51 @@ def test_runs_explorer_filters_by_scheme(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert "vix_cpcv_smoke" in resp.text
     assert "vix_smoke" not in resp.text
+
+
+def test_history_filters_by_query_algorithm_date_and_duration(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+
+    filtered = client.get("/runs", params={
+        "q": "vix_smoke", "algo": "RandomForest", "started_after": "2000-01-01", "min_duration_s": 0,
+    })
+    assert filtered.status_code == 200
+    assert "vix_smoke" in filtered.text
+    assert "vix_cpcv_smoke" not in filtered.text
+
+    none = client.get("/runs", params={"started_after": "2999-01-01"})
+    assert none.status_code == 200
+    assert "vix_smoke" not in none.text
+    assert client.get("/runs", params={"min_duration_s": 10, "max_duration_s": 1}).status_code == 400
+
+
+def test_run_comparison_renders_metrics_and_configuration(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    response = TestClient(app).get("/compare-runs", params={"run_ids": ["run1", "run2"]})
+    assert response.status_code == 200
+    assert "Comparaison de runs" in response.text
+    assert "vix_smoke" in response.text
+    assert "RandomForest" in response.text
+    assert "0.6100" in response.text
+    assert "XGBoost" in response.text
+
+
+def test_run_comparison_requires_two_to_four_existing_runs(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    assert client.get("/compare-runs", params={"run_ids": ["run1"]}).status_code == 400
+    assert client.get("/compare-runs", params={"run_ids": ["run1", "missing"]}).status_code == 404
+
+
+def test_launch_can_load_a_historical_config_for_editing(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    response = TestClient(app).get("/launch", params={"run_id": "run1"})
+    assert response.status_code == 200
+    assert "chargée comme base" in response.text
+    assert 'value="^VIX"' in response.text
+    assert 'value="RandomForest"' in response.text
+    assert 'name="output_dir" value=""' in response.text
 
 
 def test_run_detail_page_renders_for_walkforward_run(tmp_path, monkeypatch):

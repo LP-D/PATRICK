@@ -17,35 +17,190 @@
     const form = document.getElementById("run-form");
     const settingsModeToggle = document.getElementById("settings-mode-toggle");
     const settingsModeHint = document.getElementById("settings-mode-hint");
-    const SETTINGS_MODE_KEY = "patrick-launch-settings-mode";
+    const settingsModeStorageKey = "patrick-launch-settings-mode";
+    const profileStorageKey = "patrick-launch-profiles";
+    const profileNameInput = document.getElementById("launch-profile-name");
+    const profileList = document.getElementById("launch-profile-list");
+    const profileStatus = document.getElementById("launch-profile-status");
+    const saveProfileButton = document.getElementById("save-launch-profile");
+    const loadProfileButton = document.getElementById("load-launch-profile");
+    const deleteProfileButton = document.getElementById("delete-launch-profile");
 
-    if (form && settingsModeToggle && settingsModeHint) {
-        let expertMode = false;
-        try {
-            expertMode = window.localStorage.getItem(SETTINGS_MODE_KEY) === "expert";
-        } catch (e) {
-            // Keep the lightweight default if browser storage is unavailable.
+    const compareForm = document.getElementById("compare-runs-form");
+    if (compareForm) {
+        const compareButton = document.getElementById("compare-runs-submit");
+        const compareCount = document.getElementById("compare-runs-count");
+        const compareBoxes = Array.from(document.querySelectorAll(".compare-run-checkbox"));
+        function updateCompareRunSelection() {
+            const checked = compareBoxes.filter((checkbox) => checkbox.checked).length;
+            if (compareButton) compareButton.disabled = checked < 2 || checked > 4;
+            if (compareCount) compareCount.textContent = fmtStr(
+                tr("compare_runs_selection", "Selected: {count}. Choose 2 to 4 completed runs."),
+                { count: checked },
+            );
+            compareBoxes.forEach((checkbox) => {
+                checkbox.disabled = !checkbox.checked && checked >= 4;
+            });
         }
+        compareBoxes.forEach((checkbox) => checkbox.addEventListener("change", updateCompareRunSelection));
+        updateCompareRunSelection();
+    }
 
-        function setSettingsMode(expert) {
-            expertMode = expert;
-            form.dataset.mode = expertMode ? "expert" : "simple";
-            settingsModeToggle.setAttribute("aria-pressed", String(expertMode));
-            settingsModeToggle.textContent = expertMode
-                ? tr("settings_mode_hide_expert", "Hide advanced settings")
-                : tr("settings_mode_show_expert", "Show advanced settings");
-            settingsModeHint.textContent = expertMode
-                ? tr("settings_mode_expert_hint", "All exploratory settings are available below.")
-                : tr("settings_mode_simple_hint", "Advanced controls are hidden; their current values are preserved.");
+    function setSettingsMode(mode, persist) {
+        if (!form || !settingsModeToggle) return;
+        const expert = mode === "expert";
+        form.dataset.mode = expert ? "expert" : "simple";
+        settingsModeToggle.setAttribute("aria-pressed", String(expert));
+        settingsModeToggle.textContent = tr(
+            expert ? "settings_mode_hide_expert" : "settings_mode_show_expert",
+            expert ? "Hide advanced settings" : "Show advanced settings",
+        );
+        if (settingsModeHint) {
+            settingsModeHint.textContent = tr(
+                expert ? "settings_mode_expert_hint" : "settings_mode_simple_hint",
+                expert
+                    ? "All exploratory options are available below."
+                    : "Advanced controls are hidden; their current values are preserved.",
+            );
+        }
+        if (persist) {
             try {
-                window.localStorage.setItem(SETTINGS_MODE_KEY, expertMode ? "expert" : "simple");
+                localStorage.setItem(settingsModeStorageKey, expert ? "expert" : "simple");
             } catch (e) {
-                // Mode still works for this page load without persistent storage.
+                // The toggle still works for this page when storage is unavailable.
             }
         }
+    }
 
-        settingsModeToggle.addEventListener("click", () => setSettingsMode(!expertMode));
-        setSettingsMode(expertMode);
+    if (form && settingsModeToggle) {
+        let savedMode = "simple";
+        try {
+            savedMode = localStorage.getItem(settingsModeStorageKey) === "expert" ? "expert" : "simple";
+        } catch (e) {
+            // The default mode remains usable when storage is unavailable.
+        }
+        setSettingsMode(savedMode, false);
+        settingsModeToggle.addEventListener("click", function () {
+            setSettingsMode(form.dataset.mode === "expert" ? "simple" : "expert", true);
+        });
+    }
+
+    function showProfileStatus(message, isError) {
+        if (!profileStatus) return;
+        profileStatus.textContent = message;
+        profileStatus.dataset.error = isError ? "true" : "false";
+    }
+
+    function readProfiles() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(profileStorageKey) || "[]");
+            if (!Array.isArray(parsed)) throw new Error("Stored profiles are not a list.");
+            return parsed.filter((profile) =>
+                profile && typeof profile.name === "string" && profile.fields && typeof profile.fields === "object");
+        } catch (error) {
+            showProfileStatus(tr("profile_read_error", "Saved profiles could not be read."), true);
+            return [];
+        }
+    }
+
+    function updateProfileOptions() {
+        if (!profileList) return;
+        const previous = profileList.value;
+        const profiles = readProfiles();
+        profileList.replaceChildren(new Option(tr("profile_choose", "Choose a saved profile"), ""));
+        profiles.forEach((profile) => profileList.add(new Option(profile.name, profile.name)));
+        if (profiles.some((profile) => profile.name === previous)) profileList.value = previous;
+        const available = Boolean(profileList.value);
+        if (loadProfileButton) loadProfileButton.disabled = !available;
+        if (deleteProfileButton) deleteProfileButton.disabled = !available;
+    }
+
+    function serializeLaunchForm() {
+        const fields = {};
+        Array.from(form.elements).forEach((element) => {
+            if (!element.name || element.disabled || ["button", "submit", "reset", "file"].includes(element.type)) return;
+            const controls = Array.from(form.elements).filter((candidate) => candidate.name === element.name);
+            if (Object.prototype.hasOwnProperty.call(fields, element.name)) return;
+            if (element.type === "checkbox" || element.type === "radio") {
+                fields[element.name] = controls.filter((candidate) => candidate.checked).map((candidate) => candidate.value);
+            } else if (element instanceof HTMLSelectElement && element.multiple) {
+                fields[element.name] = Array.from(element.selectedOptions).map((option) => option.value);
+            } else {
+                fields[element.name] = [element.value];
+            }
+        });
+        return fields;
+    }
+
+    function applyLaunchProfile(fields) {
+        Object.entries(fields).forEach(([name, values]) => {
+            if (!Array.isArray(values)) return;
+            const controls = Array.from(form.elements).filter((element) => element.name === name);
+            controls.forEach((element) => {
+                if (element.type === "checkbox" || element.type === "radio") {
+                    element.checked = values.includes(element.value);
+                } else if (element instanceof HTMLSelectElement && element.multiple) {
+                    Array.from(element.options).forEach((option) => { option.selected = values.includes(option.value); });
+                } else if (values.length) {
+                    element.value = values[0];
+                }
+                element.dispatchEvent(new Event("input", { bubbles: true }));
+                element.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+        });
+        if (typeof refreshAdvStates === "function") refreshAdvStates();
+    }
+
+    if (form && profileList && saveProfileButton && loadProfileButton && deleteProfileButton) {
+        updateProfileOptions();
+        if (profileNameInput) {
+            profileNameInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") event.preventDefault();
+            });
+        }
+        profileList.addEventListener("change", updateProfileOptions);
+        saveProfileButton.addEventListener("click", function () {
+            const name = (profileNameInput ? profileNameInput.value : "").trim();
+            if (!name) {
+                showProfileStatus(tr("profile_name_required", "Enter a name for this profile."), true);
+                if (profileNameInput) profileNameInput.focus();
+                return;
+            }
+            try {
+                const profiles = readProfiles().filter((profile) => profile.name !== name);
+                profiles.push({ name: name, fields: serializeLaunchForm() });
+                localStorage.setItem(profileStorageKey, JSON.stringify(profiles));
+                updateProfileOptions();
+                profileList.value = name;
+                updateProfileOptions();
+                showProfileStatus(tr("profile_saved_notice", "Profile saved."), false);
+            } catch (error) {
+                showProfileStatus(tr("profile_save_error", "The profile could not be saved in this browser."), true);
+            }
+        });
+        loadProfileButton.addEventListener("click", function () {
+            const profile = readProfiles().find((entry) => entry.name === profileList.value);
+            if (!profile) {
+                showProfileStatus(tr("profile_missing", "Select a profile that still exists."), true);
+                updateProfileOptions();
+                return;
+            }
+            applyLaunchProfile(profile.fields);
+            if (profileNameInput) profileNameInput.value = profile.name;
+            showProfileStatus(tr("profile_loaded", "Profile loaded. Review it before launching."), false);
+        });
+        deleteProfileButton.addEventListener("click", function () {
+            const name = profileList.value;
+            if (!name) return;
+            try {
+                const profiles = readProfiles().filter((profile) => profile.name !== name);
+                localStorage.setItem(profileStorageKey, JSON.stringify(profiles));
+                updateProfileOptions();
+                showProfileStatus(tr("profile_deleted", "Profile deleted."), false);
+            } catch (error) {
+                showProfileStatus(tr("profile_delete_error", "The profile could not be deleted."), true);
+            }
+        });
     }
 
     const errorsBanner = document.getElementById("run-errors");
@@ -156,6 +311,9 @@
         detailPollTimer = setInterval(detailPoll, 1500);
     }
 
+    const progressStallThresholdMs = 10 * 60 * 1000;
+    let progressWatch = { runId: null, done: null, phase: null, status: null, since: 0, warned: false };
+
     async function detailPoll() {
         if (!trackedRunId) return;
         let data;
@@ -181,6 +339,13 @@
         // features) : rien n'est mesurable, la barre balaie au lieu de mentir.
         const done = data.progress.done || 0;
         const total = data.progress.total || 0;
+        if (progressWatch.runId !== data.id || progressWatch.done !== done ||
+            progressWatch.phase !== data.phase || progressWatch.status !== data.status) {
+            progressWatch = {
+                runId: data.id, done: done, phase: data.phase, status: data.status,
+                since: Date.now(), warned: false,
+            };
+        }
         const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
         setProgress(pct, data.status === "running" && done === 0);
         logTail.textContent = data.log_tail.join("\n");
@@ -188,22 +353,37 @@
 
         if (data.status === "running") {
             const progressText = total > 0
-                ? fmtStr(tr("status_progress_units", "{done}/{total} units"), { done: done, total: total })
+                ? fmtStr(tr("status_progress_units", "{done}/{total} scan units"), { done: done, total: total })
                 : "";
             const elapsed = Math.max(0, Math.round(data.elapsed_s));
-            const remaining = done >= Math.max(2, Math.ceil(total * 0.1)) && total > done
-                ? Math.round((elapsed / done) * (total - done))
+            const remaining = Number.isFinite(data.estimated_remaining_s)
+                ? Math.round(data.estimated_remaining_s)
                 : null;
-            const statusText = remaining === null
-                ? tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)")
-                : tr("status_running_eta", "{phase} ({pct}%, {progress}, {elapsed}s elapsed, approx. {remaining}s remaining)");
-            statusLine.textContent = fmtStr(statusText, {
+            const confidence = data.eta_confidence === "moderate" ? "moderate" : "low";
+            const statusText = remaining !== null
+                ? tr("status_running_eta", "{phase} ({pct}%, {progress}, {elapsed}s elapsed, {confidence} estimate: {remaining}s remaining)")
+                : total > 0
+                    ? tr("status_running_progress", "{phase} ({pct}%, {progress}, {elapsed}s elapsed)")
+                    : tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)");
+            const params = {
                 phase: PHASE_LABELS[data.phase] || data.phase,
                 pct: pct,
                 progress: progressText,
                 elapsed: elapsed,
                 remaining: remaining,
-            });
+                confidence: tr("eta_confidence_" + confidence,
+                    confidence === "moderate" ? "rough" : "preliminary"),
+            };
+            let renderedStatus = fmtStr(statusText, params);
+            if (data.phase === "scan" && done > 0 && !progressWatch.warned &&
+                Date.now() - progressWatch.since >= progressStallThresholdMs) {
+                renderedStatus += " " + tr(
+                    "status_progress_stalled",
+                    "No new scan unit for 10 minutes; check the log. Long individual fits may be normal.",
+                );
+                progressWatch.warned = true;
+            }
+            statusLine.textContent = renderedStatus;
         } else if (data.status === "paused") {
             statusLine.textContent = tr("run_paused", "Paused — resume any time.");
         } else if (data.status === "error") {
@@ -667,6 +847,9 @@
             : "?";
         var horizons = selectedValues(form.querySelector("[name=horizons]")).join(", ") || "?";
         var regimes = (form.querySelector("[name=regimes]") || {}).value || "?";
+        var algos = Array.prototype.map.call(form.querySelectorAll("[name=algos]:checked"),
+            function (el) { return el.value; });
+        var targetCount = targetSelect ? targetSelect.selectedOptions.length : 0;
         var schemeSel = form.querySelector("[name=scheme]");
         var scheme = schemeSel && schemeSel.selectedIndex >= 0
             ? schemeSel.options[schemeSel.selectedIndex].textContent.trim() : "?";
@@ -684,8 +867,16 @@
                 { t: target, h: horizons, r: regimes }),
             fmtStr(tr("confirm_line_scheme", "Schéma {s}."), { s: scheme }),
             combos !== null
-                ? fmtStr(tr("confirm_line_combos", "{n} combinaisons à évaluer."), { n: combos })
+                ? fmtStr(tr("confirm_line_combos", "{n} combinaisons à évaluer par cible."), { n: combos })
                 : tr("confirm_line_combos_unknown", "Nombre de combinaisons non calculable depuis ce formulaire."),
+            fmtStr(tr("confirm_line_models", "Modèles : {models}. Runs cibles en file : {targets}."),
+                { models: algos.join(", ") || "?", targets: targetCount }),
+            form.querySelector("[name=tuning_enabled]") && form.querySelector("[name=tuning_enabled]").checked
+                ? tr("confirm_line_tuning", "Le tuning Optuna est activé et ajoutera des calculs après le scan.")
+                : tr("confirm_line_tuning_off", "Le tuning Optuna est désactivé."),
+            combos !== null && combos >= 1000
+                ? tr("confirm_line_large", "Espace de recherche important : vérifie si toutes les grilles et tous les modèles sont utiles.")
+                : "",
             queuedCount > 0
                 ? fmtStr(tr("confirm_line_queue", "{n} run(s) déjà en file : celui-ci démarrera après."), { n: queuedCount })
                 : tr("confirm_line_queue_free", "Aucun run en file : celui-ci démarre immédiatement."),
@@ -693,7 +884,7 @@
         if (gates.length) {
             bits.push(fmtStr(tr("confirm_line_gates", "Rigueur : {g}."), { g: gates.join(", ") }));
         }
-        if (launchRecap) launchRecap.textContent = bits.join(" ");
+        if (launchRecap) launchRecap.textContent = bits.filter(Boolean).join(" ");
         launchBtn.textContent = tr("btn_confirm_launch", "Confirmer le lancement");
         if (!cancelBtn) {
             cancelBtn = document.createElement("button");

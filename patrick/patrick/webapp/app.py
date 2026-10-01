@@ -7,8 +7,10 @@ web interface.
 from __future__ import annotations
 
 import html
+import json
 import os
 import sqlite3
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -248,7 +250,7 @@ def _target_groups_with_equity_badges() -> dict:
 
 
 def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
-                   initial_run_id: str | None = None):
+                   initial_run_id: str | None = None, duplicated_run_id: str | None = None):
     active = run_manager.active_run()
     return templates.TemplateResponse(
         request,
@@ -259,6 +261,7 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "active_run": active,
             "queued_runs": run_manager.queued_runs(),
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
+            "duplicated_run_id": duplicated_run_id,
             "movers": alerts.get_cached(),
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
@@ -270,13 +273,26 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
 
 
 @app.get("/launch")
-def launch_page(request: Request):
+def launch_page(request: Request, run_id: str | None = None):
     """P8 (synthesis dashboard chantier): moved from `/` to free that route
     for the new synthesis page. Same handler, same template
     (`index.html`), only the route changed -- nav/breadcrumb links updated
     accordingly (see `base.html`, `i18n.py::nav_launch`)."""
     cfg = forms.default_config_dict()
-    return _render_index(request, forms.to_view(cfg), [])
+    if run_id:
+        config = run_manager.get_run_config(run_id)
+        if config is None:
+            conn = trackdb.connect()
+            try:
+                row = trackdb.get_run(conn, run_id)
+            finally:
+                conn.close()
+            if row is None or not row.get("config_json"):
+                raise HTTPException(status_code=404, detail="Configuration de run introuvable.")
+            config = RunConfig.model_validate_json(row["config_json"])
+        cfg = config.model_dump()
+        cfg["output"]["dir"] = ""
+    return _render_index(request, forms.to_view(cfg), [], duplicated_run_id=run_id)
 
 
 @app.get("/")
@@ -672,8 +688,15 @@ def download_artifact(run_id: str, artifact: str):
 
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
-                   scheme: str | None = None):
+                   scheme: str | None = None, q: str | None = None, algo: str | None = None,
+                   started_after: date | None = None, started_before: date | None = None,
+                   min_duration_s: float | None = Query(default=None, ge=0),
+                   max_duration_s: float | None = Query(default=None, ge=0)):
     """Phase 7.1 — full run-history explorer."""
+    if started_after and started_before and started_after > started_before:
+        raise HTTPException(status_code=400, detail="La date de début doit précéder la date de fin.")
+    if min_duration_s is not None and max_duration_s is not None and min_duration_s > max_duration_s:
+        raise HTTPException(status_code=400, detail="La durée minimale dépasse la durée maximale.")
     conn = trackdb.connect()
     try:
         all_runs = trackdb.list_all_runs(conn)
@@ -689,6 +712,30 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     if scheme:
         # Scheme stored in config_json — extracted on the Python side
         runs = [r for r in runs if _extract_scheme(r) == scheme]
+    algorithm_options = sorted({
+        model for run in all_runs for model in _extract_algorithms(run.get("config_json"))
+    })
+    if algo:
+        runs = [r for r in runs if algo in _extract_algorithms(r.get("config_json"))]
+    if q:
+        needle = q.casefold()
+        runs = [
+            r for r in runs
+            if needle in str(r.get("name") or "").casefold()
+            or needle in str(r.get("target") or "").casefold()
+            or needle in str(r.get("run_id") or "").casefold()
+        ]
+    if started_after:
+        runs = [r for r in runs if r.get("started_at") and r["started_at"][:10] >= started_after.isoformat()]
+    if started_before:
+        runs = [r for r in runs if r.get("started_at") and r["started_at"][:10] <= started_before.isoformat()]
+    if min_duration_s is not None or max_duration_s is not None:
+        runs = [
+            r for r in runs
+            if (duration := _run_duration_seconds(r)) is not None
+            and (min_duration_s is None or duration >= min_duration_s)
+            and (max_duration_s is None or duration <= max_duration_s)
+        ]
 
     # Count runs per target for the dropdown filter
     target_counts = {}
@@ -712,7 +759,78 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
          "filter_target": html.escape(target) if target else "",
          "filter_status": html.escape(status) if status else "",
          "filter_scheme": html.escape(scheme) if scheme else "",
+         "filter_query": q or "",
+         "filter_algo": algo or "",
+         "filter_started_after": started_after.isoformat() if started_after else "",
+         "filter_started_before": started_before.isoformat() if started_before else "",
+         "filter_min_duration_s": min_duration_s if min_duration_s is not None else "",
+         "filter_max_duration_s": max_duration_s if max_duration_s is not None else "",
+         "algorithms": algorithm_options,
          **_i18n_context(request)},
+    )
+
+
+def _extract_algorithms(config_json: str | None) -> list[str]:
+    if not config_json:
+        return []
+    try:
+        config = json.loads(config_json)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(config, dict):
+        return []
+    models = config.get("models")
+    algorithms = models.get("algos", []) if isinstance(models, dict) else []
+    return [algorithm for algorithm in algorithms if isinstance(algorithm, str)] if isinstance(algorithms, list) else []
+
+
+def _run_duration_seconds(run: dict) -> float | None:
+    if not run.get("started_at") or not run.get("finished_at"):
+        return None
+    try:
+        started = datetime.strptime(run["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        finished = datetime.strptime(run["finished_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, (finished - started).total_seconds())
+
+
+@app.get("/compare-runs")
+def compare_runs(request: Request, run_ids: Annotated[list[str] | None, Query()] = None):
+    selected_ids = list(dict.fromkeys(run_ids or []))
+    if not 2 <= len(selected_ids) <= 4:
+        raise HTTPException(status_code=400, detail="Sélectionne entre 2 et 4 runs à comparer.")
+    conn = trackdb.connect()
+    try:
+        runs_by_id = {run["run_id"]: run for run in trackdb.list_all_runs(conn)}
+    finally:
+        conn.close()
+    if any(run_id not in runs_by_id for run_id in selected_ids):
+        raise HTTPException(status_code=404, detail="Un run sélectionné est introuvable.")
+    selected_runs = []
+    for run_id in selected_ids:
+        run = runs_by_id[run_id]
+        try:
+            config = json.loads(run["config_json"]) if run.get("config_json") else {}
+        except (TypeError, ValueError):
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        objective = config.get("objective") if isinstance(config.get("objective"), dict) else {}
+        sampler = config.get("sampler") if isinstance(config.get("sampler"), dict) else {}
+        horizons = objective.get("horizons", [run.get("horizon")])
+        selected_runs.append({
+            **run,
+            "name": config.get("name") or run_id,
+            "target": html.unescape(run.get("target") or ""),
+            "algorithms": _extract_algorithms(run.get("config_json")),
+            "samplers": sampler.get("candidates", []) if isinstance(sampler.get("candidates", []), list) else [],
+            "horizons": horizons if isinstance(horizons, list) else [run.get("horizon")],
+            "duration_s": _run_duration_seconds(run),
+        })
+    return templates.TemplateResponse(
+        request, "compare_runs.html",
+        {"runs": selected_runs, **_i18n_context(request)},
     )
 
 
