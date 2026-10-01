@@ -1,0 +1,49 @@
+{
+ "best_before_tuning": {
+  "F1_dir": 0.6009500000000001,
+  "N": 6,
+  "algo": "RandomForest",
+  "horizon": 1,
+  "n_folds": 1,
+  "regime": "GLOBAL",
+  "sampler": "SMOTE"
+ },
+ "champions": {
+  "1": {
+   "decision": "promoted_first"
+  },
+  "5": {
+   "decision": "promoted_first"
+  }
+ },
+ "cumulative_trials": 12,
+ "diebold_mariano": null,
+ "final_best": {
+  "F1_dir": 0.6009500000000001,
+  "N": 6,
+  "algo": "RandomForest",
+  "horizon": 1,
+  "n_folds": 1,
+  "regime": "GLOBAL",
+  "sampler": "SMOTE"
+ },
+ "holdout": null,
+ "holdout_diagnostic": null,
+ "pbo": {
+  "mean_logit": 1.8161,
+  "n_blocks": 4,
+  "n_combinations": 6,
+  "n_trials": 12,
+  "pbo": 0.0,
+  "reliability": {
+   "bootstrap_std": null,
+   "ci_high": null,
+   "ci_low": null,
+   "message": "PBO non calcul\u00e9 (4 blocs disponibles). PBO n\u00e9cessite au moins 6 blocs temporels (n_wf_folds, apr\u00e8s retrait \u00e9ventuel du bloc le plus ancien pour parit\u00e9) : C(6, 3) = 20 combinaisons IS/OOS, au-dessus du plancher de 10 (r\u00e8gle n*p>=5 et n*(1-p)>=5 pour une proportion, pire cas p=0.5) -- un plancher N\u00c9CESSAIRE mais pas suffisant : les combinaisons CSCV ne sont pas ind\u00e9pendantes (elles partagent des blocs), le vrai besoin est plus \u00e9lev\u00e9.",
+   "n_blocks": 4,
+   "n_combinations": 0,
+   "ok": false,
+   "pbo": null
+  }
+ }
+}

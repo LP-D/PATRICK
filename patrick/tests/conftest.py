@@ -31,3 +31,11 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
     each other a cached frame (a call-counting test would then see zero
     calls)."""
     monkeypatch.setenv("PATRICK_FEATURE_CACHE_ROOT", str(tmp_path / "feature_cache"))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_machine_settings(tmp_path, monkeypatch):
+    """`~/.patrick/settings.json` (workers de calcul réglés depuis l'interface) ne doit
+    jamais influencer un test : sans cela, un réglage > 1 fait exécuter les builds dans des
+    processus workers que les tests (qui comptent les appels en process) ne voient pas."""
+    monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))

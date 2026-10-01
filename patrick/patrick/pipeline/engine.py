@@ -57,6 +57,7 @@ from patrick.features import (
     equity_fundamentals,
     guida,
     long_cycle,
+    parametric_parallel,
     pool_cache,
     spike,
     technical,
@@ -79,6 +80,7 @@ from patrick.models.uniqueness import (
     effective_sample_size,
 )
 from patrick.numeric import is_nan
+from patrick.pipeline import parallel
 from patrick.pipeline.leaderboard import Leaderboard, rank_configs
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
@@ -254,15 +256,22 @@ def _build_parametric_pool(raw: pd.DataFrame, config: RunConfig, fit_end_idx: in
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
-    for col in raw.columns:
-        s = raw[col]
-        if "vol_models" in families:
-            parts.append(vol_models.build_vol_model_features_parametric(
-                s, prefix=col, models=config.features.vol_models,
-                fit_end_idx=fit_end_idx, test_end_idx=test_end_idx,
-                conn=conn, snapshot_id=snapshot_id))
-        if "spike" in families:
-            parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
+    n_jobs = parametric_parallel.resolve_jobs(len(raw.columns))
+    if n_jobs > 1:
+        # Sprint 2 (exact): same parts, same order, computed by worker processes
+        # (`PATRICK_PARAMETRIC_JOBS`, default 1 = the sequential loop below).
+        parts = parametric_parallel.build_parts(raw, families, config.features.vol_models, fit_end_idx,
+                                                test_end_idx, conn, snapshot_id, n_jobs)
+    else:
+        for col in raw.columns:
+            s = raw[col]
+            if "vol_models" in families:
+                parts.append(vol_models.build_vol_model_features_parametric(
+                    s, prefix=col, models=config.features.vol_models,
+                    fit_end_idx=fit_end_idx, test_end_idx=test_end_idx,
+                    conn=conn, snapshot_id=snapshot_id))
+            if "spike" in families:
+                parts.append(spike.build_spike_features_parametric(s, prefix=col, fit_end_idx=fit_end_idx))
 
     if not parts:
         return pd.DataFrame(index=raw.index)
@@ -663,6 +672,35 @@ def _select(conn, target: str, horizon: int, snapshot_id: str,
                                              shap_sample=config.selection.shap_sample)]
     trackdb.save_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash, cols)
     return cols
+
+
+def _select_batch(conn, target: str, horizon: int, snapshot_id: str, config: RunConfig,
+                  items: list[tuple[np.ndarray, np.ndarray, int]], seed: int, jobs: int) -> list[list[int]]:
+    """Same result as `[_select(conn, ..., X, y, n, seed) for X, y, n in items]`,
+    with the cache misses computed by `jobs` worker processes (Sprint 2, exact):
+    lookups and writes stay in this process, in the order of `items`; a key
+    appearing twice is computed once. `jobs <= 1`: literally the loop above."""
+    if jobs <= 1:
+        return [_select(conn, target, horizon, snapshot_id, config, X, y, n, seed) for X, y, n in items]
+    keys = [(_xy_data_hash(X, y), _selector_config_hash(config, n, seed)) for X, y, n in items]
+    found: dict[tuple[str, str], list[int]] = {}
+    todo: list[int] = []
+    for i, key in enumerate(keys):
+        if key in found:
+            continue
+        cached = trackdb.get_cached_selection(conn, target, horizon, snapshot_id, key[0], key[1])
+        if cached is not None:
+            found[key] = cached
+        elif all(keys[j] != key for j in todo):
+            todo.append(i)
+    tasks = [("select_features", (config.selection.method, items[i][0], items[i][1], items[i][2],
+                                config.features.pool_prefilter),
+              {"seed": seed, "shap_sample": config.selection.shap_sample}) for i in todo]
+    for i, cols in zip(todo, parallel.run_ordered(tasks, jobs), strict=True):
+        cols = [int(c) for c in cols]
+        trackdb.save_cached_selection(conn, target, horizon, snapshot_id, keys[i][0], keys[i][1], cols)
+        found[keys[i]] = cols
+    return [found[k] for k in keys]
 
 
 def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
@@ -1082,45 +1120,81 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         for regime in config.objective.regimes:
             regime_sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
 
-            for n_feat in config.selection.n_features_grid:
+            def prep_combo(ci, combo, horizon=horizon, regime=regime, idx=idx, regime_sel=regime_sel,
+                           y_all=y_all, X_all=X_all):
+                """Masks, train/test labels and scaled matrices of one CPCV combination
+                (None when excluded for too few rows)."""
+                split = cpcv_module.build_split(groups, combo, horizon,
+                                                 embargo_bars=config.validation.embargo_bars)
+                train_dates = set(all_dates[split.train_mask])
+                test_dates = set(all_dates[split.test_mask])
+                tr_mask = np.asarray([d in train_dates for d in idx]) & regime_sel
+                te_mask = np.asarray([d in test_dates for d in idx]) & regime_sel
+
+                y_tr, y_te = y_all[tr_mask], y_all[te_mask]
+                if (len(y_tr) < config.validation.min_train_rows
+                        or len(y_te) < config.validation.min_test_rows):
+                    print(f"  [WARN] CPCV combo {combo} excluded (h={horizon}d regime={regime}): "
+                          f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
+                          f"test={len(y_te)} (min {config.validation.min_test_rows}).")
+                    return None
+
+                where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
+                X_combo = X_all
+                if universe is not None and universe.enabled:
+                    combo_feats = universe.features(feature_pool, split.train_mask,
+                                                    f"CPCV combo {combo} (h={horizon}d)")
+                    X_combo = X_all[:, [feature_position[f] for f in combo_feats]]
+                sc = RobustScaler()
+                X_tr_full = _finite_scaled(sc.fit_transform(X_combo[tr_mask]), where)
+                X_te_full = _finite_scaled(sc.transform(X_combo[te_mask]), where)
+                return {"te_mask": te_mask, "y_tr": y_tr, "y_te": y_te, "X_tr_full": X_tr_full, "X_te_full": X_te_full}
+
+            grid = list(config.selection.n_features_grid)
+            jobs = parallel.resolve_jobs()
+            pre_fit: dict[tuple, tuple] = {}
+            combo_cache: dict[int, dict | None] = {}
+            if jobs > 1:
+                # Sprint 2 (exact): every combination prepared once, every selection and fit of
+                # this (horizon, regime) computed by worker processes, consumed below in the
+                # sequential order (`PATRICK_SCAN_JOBS`).
+                combo_cache = {ci: prep_combo(ci, combo) for ci, combo in enumerate(combos)}
+                valid = [ci for ci in range(len(combos)) if combo_cache[ci] is not None]
+                sel_items = [(combo_cache[ci]["X_tr_full"], combo_cache[ci]["y_tr"], n) for ci in valid for n in grid]
+                sel_cols = iter(_select_batch(conn, target_col, horizon, snapshot_id, config, sel_items, seed, jobs))
+                cols_of = {(ci, n): next(sel_cols) for ci in valid for n in grid}
+                fit_keys = [(n, sampler_name, algo, ci) for n in grid for sampler_name in config.sampler.candidates
+                            for algo in config.models.algos for ci in valid]
+                fit_results = parallel.run_ordered(
+                    [("fit_eval", (combo_cache[ci]["X_tr_full"][:, cols_of[(ci, n)]], combo_cache[ci]["y_tr"],
+                                  combo_cache[ci]["X_te_full"][:, cols_of[(ci, n)]], combo_cache[ci]["y_te"],
+                                  sampler_name, algo, seed),
+                      {"calibration": config.models.calibration, "uniqueness_weights_enabled": False})
+                     for n, sampler_name, algo, ci in fit_keys], jobs)
+                pre_fit = dict(zip(fit_keys, fit_results, strict=True))
+
+            for n_feat in grid:
                 for sampler_name in config.sampler.candidates:
                     for algo in config.models.algos:
                         path_buf = {p: {"dates": [], "y_true": [], "y_pred": [], "y_proba": []}
                                     for p in paths}
 
                         for ci, combo in enumerate(combos):
-                            split = cpcv_module.build_split(groups, combo, horizon,
-                                                             embargo_bars=config.validation.embargo_bars)
-                            train_dates = set(all_dates[split.train_mask])
-                            test_dates = set(all_dates[split.test_mask])
-                            tr_mask = np.asarray([d in train_dates for d in idx]) & regime_sel
-                            te_mask = np.asarray([d in test_dates for d in idx]) & regime_sel
-
-                            y_tr, y_te = y_all[tr_mask], y_all[te_mask]
-                            if (len(y_tr) < config.validation.min_train_rows
-                                    or len(y_te) < config.validation.min_test_rows):
-                                print(f"  [WARN] CPCV combo {combo} excluded (h={horizon}d regime={regime}): "
-                                      f"train={len(y_tr)} (min {config.validation.min_train_rows}), "
-                                      f"test={len(y_te)} (min {config.validation.min_test_rows}).")
+                            prepared = combo_cache[ci] if jobs > 1 else prep_combo(ci, combo)
+                            if prepared is None:
                                 continue
+                            te_mask, y_te = prepared["te_mask"], prepared["y_te"]
+                            if jobs > 1:
+                                met, y_pred, confidence = pre_fit[(n_feat, sampler_name, algo, ci)]
+                            else:
+                                cols = _select(conn, target_col, horizon, snapshot_id,
+                                               config, prepared["X_tr_full"], prepared["y_tr"], n_feat, seed)
+                                X_tr_n, X_te_n = prepared["X_tr_full"][:, cols], prepared["X_te_full"][:, cols]
 
-                            where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
-                            X_combo = X_all
-                            if universe is not None and universe.enabled:
-                                combo_feats = universe.features(feature_pool, split.train_mask,
-                                                                f"CPCV combo {combo} (h={horizon}d)")
-                                X_combo = X_all[:, [feature_position[f] for f in combo_feats]]
-                            sc = RobustScaler()
-                            X_tr_full = _finite_scaled(sc.fit_transform(X_combo[tr_mask]), where)
-                            X_te_full = _finite_scaled(sc.transform(X_combo[te_mask]), where)
-                            cols = _select(conn, target_col, horizon, snapshot_id,
-                                           config, X_tr_full, y_tr, n_feat, seed)
-                            X_tr_n, X_te_n = X_tr_full[:, cols], X_te_full[:, cols]
-
-                            met, y_pred, confidence = _fit_eval(
-                                X_tr_n, y_tr, X_te_n, y_te, sampler_name, algo, seed,
-                                calibration=config.models.calibration,
-                                uniqueness_weights_enabled=False)  # P6.2: spans undefined on scattered train
+                                met, y_pred, confidence = _fit_eval(
+                                    X_tr_n, prepared["y_tr"], X_te_n, y_te, sampler_name, algo, seed,
+                                    calibration=config.models.calibration,
+                                    uniqueness_weights_enabled=False)  # P6.2: spans undefined on scattered train
 
                             test_idx_dates = idx[te_mask]
                             test_groups_of_rows = date_group.reindex(test_idx_dates).values
@@ -1314,18 +1388,35 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                                  "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
         st.baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
 
-    for n_feat in config.selection.n_features_grid:
-        cols = _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed)
+    grid = list(config.selection.n_features_grid)
+    fit_kwargs = {"calibration": config.models.calibration, "calibration_method": config.models.calibration_method,
+                  "calibration_gap": horizon, "sample_weight": fd.sample_weight, "ind_matrix": fd.ind_matrix,
+                  "uniqueness_weights_enabled": config.sampling.uniqueness_weights}
+    jobs = parallel.resolve_jobs()
+    fits = None
+    if jobs > 1:
+        # Sprint 2 (exact): selections then fits of the whole grid computed by worker
+        # processes, consumed below in the sequential order (`PATRICK_SCAN_JOBS`).
+        cols_by_n = _select_batch(st.conn, st.target_col, horizon, st.snapshot_id, config,
+                                  [(fd.X_tr, fd.y_tr, n) for n in grid], st.seed, jobs)
+        fits = iter(parallel.run_ordered(
+            [("fit_eval_full", (fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te, sampler_name, algo, st.seed),
+              fit_kwargs)
+             for cols in cols_by_n for sampler_name in config.sampler.candidates for algo in config.models.algos],
+            jobs))
+    for i_n, n_feat in enumerate(grid):
+        cols = (cols_by_n[i_n] if fits is not None
+                else _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed))
         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
         fold_names = fd.feature_names if fd.feature_names is not None else st.feature_pool
         feat_names = [fold_names[c] for c in cols]
         for sampler_name in config.sampler.candidates:
             for algo in config.models.algos:
-                met, y_pred, confidence, p_up = _fit_eval_full(
-                    X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed,
-                    calibration=config.models.calibration, calibration_method=config.models.calibration_method,
-                    calibration_gap=horizon, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
-                    uniqueness_weights_enabled=config.sampling.uniqueness_weights)
+                if fits is not None:
+                    met, y_pred, confidence, p_up = next(fits)
+                else:
+                    met, y_pred, confidence, p_up = _fit_eval_full(
+                        X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed, **fit_kwargs)
                 # Phase 6.2 (P6.2): effective sample size (sum of uniquenesses)
                 # alongside n_train -- always computed.
                 st.board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,

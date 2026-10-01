@@ -1,0 +1,1334 @@
+{
+ "baseline_artifacts": [
+  "baseline_metrics.csv",
+  "dm_results.csv",
+  "exported_models.json",
+  "feature_stability.csv",
+  "fold_metrics.csv",
+  "holdout_diagnostic.csv",
+  "leaderboard.csv",
+  "optuna_trials.csv",
+  "predictions.csv",
+  "result_summary.json",
+  "run_rows.csv",
+  "trial_registry.csv",
+  "tuned.csv"
+ ],
+ "baseline_digests": {
+  "walkforward": "37328949dd01689b2381d3a387e3122fb23ee0eff3243390d886337b9d823075"
+ },
+ "config_digests": {
+  "walkforward": "67643047f6c4aea0d529736398b60546057582b55ef7a1d5295bed30e5e5473b"
+ },
+ "data_hash": "f3fd02ef7273",
+ "environment": {
+  "cpu_count_logical": 8,
+  "machine": "AMD64",
+  "packages": {
+   "arch": "8.0.0",
+   "catboost": "1.2.10",
+   "duckdb": "1.5.5",
+   "hmmlearn": "0.3.3",
+   "imbalanced-learn": "0.14.2",
+   "joblib": "1.5.3",
+   "lightgbm": "4.7.0",
+   "numba": "0.67.0",
+   "numpy": "2.5.3",
+   "optuna": "4.9.0",
+   "pandas": "3.0.5",
+   "pyarrow": "25.0.1",
+   "pykalman": "0.11.2",
+   "scikit-learn": "1.9.0",
+   "scipy": "1.18.1",
+   "shap": "0.52.0",
+   "statsmodels": "0.15.0",
+   "xgboost": "3.4.1"
+  },
+  "platform": "Windows-11-10.0.26340-SP0",
+  "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
+  "python": "3.12.7",
+  "thread_env": {
+   "MKL_NUM_THREADS": "4",
+   "NUMEXPR_NUM_THREADS": "4",
+   "OMP_NUM_THREADS": "4",
+   "OPENBLAS_NUM_THREADS": "4",
+   "PATRICK_FEATURE_CACHE": null,
+   "VECLIB_MAXIMUM_THREADS": null
+  },
+  "threadpools": [
+   "openblas:Haswell:4",
+   "openmp:None:4"
+  ]
+ },
+ "generated_at": "2026-09-30T22:50:09+02:00",
+ "git": {
+  "branch": "perf/sprint1-benchmark",
+  "dirty": true,
+  "sha": "9edf5953bef3d32d9df83c51b71a7159a241993e"
+ },
+ "limits": [
+  "`config_hash` du moteur inclut `output.dir` (chemin) : il varie d'un espace de travail \u00e0 l'autre et est donc exclu des artefacts compar\u00e9s (`config_digest` du benchmark l'exclut aussi). Noms d'\u00e9tudes Optuna normalis\u00e9s pour la m\u00eame raison.",
+  "T\u00e9l\u00e9chargement (Yahoo/FRED) et ingestion r\u00e9seau : NON mesur\u00e9s (snapshot rejou\u00e9 hors ligne). `ingestion` = lecture parquet du snapshot.",
+  "Dataset synth\u00e9tique, pas ^GSPC : les proportions entre phases d\u00e9pendent de la taille de l'univers et de la grille ; \u00e0 confirmer sur un run r\u00e9el avant de fixer des seuils (le module accepte un autre profil).",
+  "CPU = `time.process_time()` du process (somme des threads, hors processus enfants) ; les workers loky \u00e9ventuels ne sont pas compt\u00e9s en CPU (leur RSS l'est dans le pic m\u00e9moire).",
+  "Pic m\u00e9moire = \u00e9chantillonnage RSS \u00e0 20 Hz : un pic plus court que 50 ms peut \u00eatre manqu\u00e9.",
+  "`models.constructed` compte les appels \u00e0 `get_classifier` ; le RandomForest \u00ab bootstrap s\u00e9quentiel \u00bb est instanci\u00e9 directement dans `_fit_eval_full` et n'y figure pas : `fit_eval_full.calls` est le d\u00e9compte exact des entra\u00eenements de la grille/re-\u00e9valuation.",
+  "Les fits internes \u00e0 Optuna sont compt\u00e9s par `optuna.cv_fits` (un par split de CV interne et par essai non \u00e9lagu\u00e9).",
+  "Le temps SQLite mesure `execute`/`executemany`/`commit` de la connexion du pipeline ; le stockage propre d'Optuna (`optuna.db`) est inclus dans `optuna.tune_config`, non s\u00e9par\u00e9.",
+  "Le d\u00e9compte de \u00ab features calcul\u00e9es \u00bb = colonnes du base pool + colonnes des pools param\u00e9triques construits ; avec le cache disque les colonnes ne sont pas recalcul\u00e9es (voir hits/miss)."
+ ],
+ "not_available": [
+  "Probabilit\u00e9s compl\u00e8tes par classe : seuls `y_proba` (probabilit\u00e9 de la classe pr\u00e9dite) et `p_up` sont persist\u00e9s.",
+  "Pr\u00e9dictions des essais Optuna internes (CV interne) : seuls les scores/param\u00e8tres existent (`optuna_trials.csv`) ; les pr\u00e9dictions ne sont persist\u00e9es que pour le r\u00e9-entra\u00eenement de la config tun\u00e9e sur chaque fold.",
+  "Mod\u00e8le export\u00e9 : le fichier joblib n'est pas compar\u00e9 octet \u00e0 octet ; on compare ses features et ses `predict_proba` sur une matrice fixe (`exported_models.json`).",
+  "Le champion \u00ab duel \u00bb (`champion_duel`) \u00e9crit dans la base/dossier de mod\u00e8les du run isol\u00e9 : sa d\u00e9cision est dans `result_summary.json`."
+ ],
+ "profile_spec": {
+  "algos": [
+   "XGBoost",
+   "LightGBM",
+   "RandomForest",
+   "CatBoost"
+  ],
+  "cpcv_k_test_groups": 2,
+  "cpcv_n_groups": 5,
+  "dataset": {
+   "n_days": 2600,
+   "n_fred": 6,
+   "n_tickers": 30,
+   "seed": 20260930,
+   "start": "2012-01-02"
+  },
+  "holdout_months": 12,
+  "horizons": [
+   1,
+   5
+  ],
+  "n_features_grid": [
+   6,
+   10,
+   14
+  ],
+  "n_wf_folds": 4,
+  "name": "reference",
+  "pool_prefilter": 200,
+  "samplers": [
+   "SMOTE"
+  ],
+  "shap_sample": 300,
+  "tuning_cv_splits": 3,
+  "tuning_n_trials": 20,
+  "tuning_top_k": 2,
+  "vol_models": [
+   "egarch",
+   "kalman",
+   "hmm"
+  ]
+ },
+ "repeats": 2,
+ "scenarios": {
+  "walkforward": {
+   "instrumentation_overhead_pct": null,
+   "plain_wall_s": null,
+   "reference_run": {
+    "config_digest": "67643047f6c4aea0d529736398b60546057582b55ef7a1d5295bed30e5e5473b",
+    "digests": {
+     "__all__": "37328949dd01689b2381d3a387e3122fb23ee0eff3243390d886337b9d823075",
+     "baseline_metrics.csv": "59b30ef2eab732300762bac611c52ca3baf520ab5ba5072e3e6079f3c0c79e88",
+     "dm_results.csv": "7f5e0e5a6cf778ad451309eb474e2a6949a9d84681ae0d08b328631763f53cee",
+     "exported_models.json": "0c4ba052567167e57c00af4585d2e381f43d9cd2b62a150b43f2f7e1f92a95d8",
+     "feature_stability.csv": "3ae9b93b078363c88973dbf0bb8ac65dfb38fa77a22a1d18f8ba17aee343cde0",
+     "fold_metrics.csv": "0776908794d498359cdba5082c18a34f4a06ad4d59a145a48571537718260e08",
+     "holdout_diagnostic.csv": "6633c3352ac0b436b7e94e091bb1fd3aec9f57a4fc64f4cd3c3ed69ef0812435",
+     "leaderboard.csv": "126901d92596ff86750fcaa8af76953f90e34ada1d7482a2dae4bf3c1dfd4281",
+     "optuna_trials.csv": "cccfe51c01d60054c033223bf3b68b322f43217684a9733402810be5901307eb",
+     "predictions.csv": "cdaf0b8847cb0cc9c77e59a02e86b9ef3d351e777a40f6079334c49bcc59bbae",
+     "result_summary.json": "2c415452ca29ca4a3387d89b864a856aa6ff56d74f7bd9935dcf2496f9ec6f83",
+     "run_rows.csv": "1c386f6c5148bae58bb883258ca02f8e5c7f54fddbb0b7faccf9be5d679b941e",
+     "trial_registry.csv": "6a89014257a5afef8f1dd62637f2340ad6d43d388e9dc7795abcae455e1a69a8",
+     "tuned.csv": "60e2314ca596eefbf30bc67308ee90f94c2c9a5e3bb767251274df6c58e3cb56"
+    },
+    "engine_phase_timing_table_s": [
+     {
+      "phase": "scan",
+      "seconds": 271
+     },
+     {
+      "phase": "holdout_diagnostic",
+      "seconds": 158
+     },
+     {
+      "phase": "tuning",
+      "seconds": 74
+     },
+     {
+      "phase": "pool_construction",
+      "seconds": 50
+     },
+     {
+      "phase": "export",
+      "seconds": 15
+     },
+     {
+      "phase": "stability",
+      "seconds": 0
+     },
+     {
+      "phase": "ingestion",
+      "seconds": 0
+     }
+    ],
+    "extra_env": {
+     "PATRICK_PARAMETRIC_JOBS": "2"
+    },
+    "instrumented": true,
+    "label": "rep2",
+    "pipeline_elapsed_s": 478.75,
+    "profile": "reference",
+    "profile_data": {
+     "component_totals": {
+      "build_target": {
+       "count": 56,
+       "inclusive_s": 0.6709,
+       "self_s": 0.6709
+      },
+      "compute_baselines": {
+       "count": 35,
+       "inclusive_s": 0.9187,
+       "self_s": 0.9187
+      },
+      "download_ohlc": {
+       "count": 1,
+       "inclusive_s": 0.0,
+       "self_s": 0.0
+      },
+      "feature_pool.compute[base]": {
+       "count": 1,
+       "inclusive_s": 5.6321,
+       "self_s": 5.6321
+      },
+      "feature_pool.compute[parametric]": {
+       "count": 6,
+       "inclusive_s": 81.2252,
+       "self_s": 80.6922
+      },
+      "fit_eval_full": {
+       "count": 138,
+       "inclusive_s": 118.2251,
+       "self_s": 118.2216
+      },
+      "fold_context.prepare": {
+       "count": 29,
+       "inclusive_s": 44.3565,
+       "self_s": 1.4567
+      },
+      "fold_pool_builder.get": {
+       "count": 56,
+       "inclusive_s": 54.636,
+       "self_s": 0.0131
+      },
+      "get_classifier.engine": {
+       "count": 138,
+       "inclusive_s": 0.0034,
+       "self_s": 0.0034
+      },
+      "get_classifier.optuna": {
+       "count": 166,
+       "inclusive_s": 0.0038,
+       "self_s": 0.0038
+      },
+      "interactions.apply": {
+       "count": 6,
+       "inclusive_s": 0.0228,
+       "self_s": 0.0228
+      },
+      "interactions.discover": {
+       "count": 1,
+       "inclusive_s": 6.2128,
+       "self_s": 6.2006
+      },
+      "optuna.tune_config": {
+       "count": 4,
+       "inclusive_s": 63.5238,
+       "self_s": 63.479
+      },
+      "parametric_pool.build": {
+       "count": 6,
+       "inclusive_s": 81.4463,
+       "self_s": 0.2211
+      },
+      "scaler.fit_transform": {
+       "count": 57,
+       "inclusive_s": 3.5279,
+       "self_s": 3.224
+      },
+      "scaler.transform": {
+       "count": 112,
+       "inclusive_s": 0.34,
+       "self_s": 0.34
+      },
+      "select (cache lookup + compute)": {
+       "count": 70,
+       "inclusive_s": 180.3074,
+       "self_s": 0.0051
+      },
+      "select.xy_data_hash": {
+       "count": 70,
+       "inclusive_s": 0.3956,
+       "self_s": 0.3956
+      },
+      "select_features.compute": {
+       "count": 30,
+       "inclusive_s": 179.831,
+       "self_s": 179.831
+      },
+      "selection_cache.lookup": {
+       "count": 70,
+       "inclusive_s": 0.0112,
+       "self_s": 0.0013
+      },
+      "sqlite.commit": {
+       "count": 1150,
+       "inclusive_s": 1.032,
+       "self_s": 1.032
+      },
+      "sqlite.execute": {
+       "count": 1812,
+       "inclusive_s": 0.0954,
+       "self_s": 0.0954
+      },
+      "sqlite.executemany": {
+       "count": 268,
+       "inclusive_s": 0.165,
+       "self_s": 0.165
+      },
+      "uniqueness.average": {
+       "count": 29,
+       "inclusive_s": 0.1793,
+       "self_s": 0.1793
+      },
+      "uniqueness.indicator_matrix": {
+       "count": 29,
+       "inclusive_s": 0.0223,
+       "self_s": 0.0223
+      },
+      "vol_model_cache.lookup": {
+       "count": 666,
+       "inclusive_s": 0.006,
+       "self_s": 0.0023
+      }
+     },
+     "counter_totals": {
+      "download_ohlc.calls": 1,
+      "feature_pool_cache.base.miss": 1,
+      "feature_pool_cache.parametric.miss": 6,
+      "fit_eval_full.calls": 138,
+      "fold_context.prepare": 29,
+      "fold_pool_builder.get": 56,
+      "interactions.apply": 6,
+      "models.constructed": 138,
+      "optuna.cv_fits": 166,
+      "optuna.studies": 4,
+      "optuna.trials.complete": 41,
+      "optuna.trials.pruned": 39,
+      "parametric_pool.builds": 6,
+      "scaler.fit_transform": 57,
+      "scaler.transform": 112,
+      "select.calls": 70,
+      "select_features.computed": 30,
+      "selection_cache.hit": 40,
+      "selection_cache.miss": 30,
+      "sqlite.commit": 1150,
+      "sqlite.execute": 1812,
+      "sqlite.executemany": 268,
+      "vol_model_cache.miss": 666
+     },
+     "distinct_keys": {
+      "fold_context.prepare": {
+       "calls": 29,
+       "distinct": 8
+      },
+      "selection_cache.lookup": {
+       "calls": 70,
+       "distinct": 30
+      }
+     },
+     "peak_rss_mb": 1002.1,
+     "phases": {
+      "base_feature_pool": {
+       "components": {
+        "download_ohlc": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "feature_pool.compute[base]": {
+         "count": 1,
+         "inclusive_s": 5.6321,
+         "self_s": 5.6321
+        }
+       },
+       "count": 1,
+       "counters": {
+        "download_ohlc.calls": 1,
+        "feature_pool_cache.base.miss": 1
+       },
+       "cpu_s": 5.75,
+       "peak_rss_mb": 879.7,
+       "rss_start_mb": 872.1,
+       "wall_s": 5.7775
+      },
+      "champion_duel": {
+       "components": {
+        "build_target": {
+         "count": 1,
+         "inclusive_s": 0.012,
+         "self_s": 0.012
+        },
+        "compute_baselines": {
+         "count": 1,
+         "inclusive_s": 0.0331,
+         "self_s": 0.0331
+        },
+        "fit_eval_full": {
+         "count": 1,
+         "inclusive_s": 0.4157,
+         "self_s": 0.4156
+        },
+        "fold_pool_builder.get": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "get_classifier.engine": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "scaler.fit_transform": {
+         "count": 1,
+         "inclusive_s": 0.073,
+         "self_s": 0.0669
+        },
+        "scaler.transform": {
+         "count": 2,
+         "inclusive_s": 0.0067,
+         "self_s": 0.0067
+        },
+        "select (cache lookup + compute)": {
+         "count": 1,
+         "inclusive_s": 0.0109,
+         "self_s": 0.0001
+        },
+        "select.xy_data_hash": {
+         "count": 1,
+         "inclusive_s": 0.0108,
+         "self_s": 0.0108
+        },
+        "selection_cache.lookup": {
+         "count": 1,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0
+        },
+        "sqlite.commit": {
+         "count": 2,
+         "inclusive_s": 0.0024,
+         "self_s": 0.0024
+        },
+        "sqlite.execute": {
+         "count": 7,
+         "inclusive_s": 0.0064,
+         "self_s": 0.0064
+        }
+       },
+       "count": 1,
+       "counters": {
+        "fit_eval_full.calls": 1,
+        "fold_pool_builder.get": 1,
+        "models.constructed": 1,
+        "scaler.fit_transform": 1,
+        "scaler.transform": 2,
+        "select.calls": 1,
+        "selection_cache.hit": 1,
+        "sqlite.commit": 2,
+        "sqlite.execute": 7
+       },
+       "cpu_s": 0.5938,
+       "peak_rss_mb": 943.2,
+       "rss_start_mb": 916.9,
+       "wall_s": 0.596
+      },
+      "export_models": {
+       "components": {
+        "feature_pool.compute[parametric]": {
+         "count": 1,
+         "inclusive_s": 13.5505,
+         "self_s": 13.4524
+        },
+        "interactions.apply": {
+         "count": 1,
+         "inclusive_s": 0.0036,
+         "self_s": 0.0036
+        },
+        "parametric_pool.build": {
+         "count": 1,
+         "inclusive_s": 13.5898,
+         "self_s": 0.0393
+        },
+        "scaler.fit_transform": {
+         "count": 2,
+         "inclusive_s": 0.1554,
+         "self_s": 0.1423
+        },
+        "scaler.transform": {
+         "count": 2,
+         "inclusive_s": 0.0131,
+         "self_s": 0.0131
+        },
+        "sqlite.commit": {
+         "count": 139,
+         "inclusive_s": 0.1028,
+         "self_s": 0.1028
+        },
+        "sqlite.execute": {
+         "count": 250,
+         "inclusive_s": 0.0128,
+         "self_s": 0.0128
+        },
+        "vol_model_cache.lookup": {
+         "count": 111,
+         "inclusive_s": 0.0011,
+         "self_s": 0.0004
+        }
+       },
+       "count": 1,
+       "counters": {
+        "feature_pool_cache.parametric.miss": 1,
+        "interactions.apply": 1,
+        "parametric_pool.builds": 1,
+        "scaler.fit_transform": 2,
+        "scaler.transform": 2,
+        "sqlite.commit": 139,
+        "sqlite.execute": 250,
+        "vol_model_cache.miss": 111
+       },
+       "cpu_s": 31.0625,
+       "peak_rss_mb": 1002.1,
+       "rss_start_mb": 916.1,
+       "wall_s": 28.1618
+      },
+      "export_tables": {
+       "components": {
+        "sqlite.commit": {
+         "count": 18,
+         "inclusive_s": 0.0069,
+         "self_s": 0.0069
+        },
+        "sqlite.execute": {
+         "count": 2,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
+        },
+        "sqlite.executemany": {
+         "count": 16,
+         "inclusive_s": 0.001,
+         "self_s": 0.001
+        }
+       },
+       "count": 1,
+       "counters": {
+        "sqlite.commit": 18,
+        "sqlite.execute": 2,
+        "sqlite.executemany": 16
+       },
+       "cpu_s": 0.0469,
+       "peak_rss_mb": 916.6,
+       "rss_start_mb": 916.6,
+       "wall_s": 0.0608
+      },
+      "final_diebold_mariano": {
+       "components": {
+        "build_target": {
+         "count": 1,
+         "inclusive_s": 0.0169,
+         "self_s": 0.0169
+        },
+        "compute_baselines": {
+         "count": 1,
+         "inclusive_s": 0.0291,
+         "self_s": 0.0291
+        },
+        "fold_context.prepare": {
+         "count": 1,
+         "inclusive_s": 0.1833,
+         "self_s": 0.0712
+        },
+        "fold_pool_builder.get": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "scaler.fit_transform": {
+         "count": 1,
+         "inclusive_s": 0.058,
+         "self_s": 0.0534
+        },
+        "scaler.transform": {
+         "count": 2,
+         "inclusive_s": 0.0051,
+         "self_s": 0.0051
+        },
+        "sqlite.commit": {
+         "count": 2,
+         "inclusive_s": 0.0078,
+         "self_s": 0.0078
+        },
+        "sqlite.execute": {
+         "count": 2,
+         "inclusive_s": 0.0002,
+         "self_s": 0.0002
+        },
+        "uniqueness.average": {
+         "count": 1,
+         "inclusive_s": 0.0065,
+         "self_s": 0.0065
+        },
+        "uniqueness.indicator_matrix": {
+         "count": 1,
+         "inclusive_s": 0.0009,
+         "self_s": 0.0009
+        }
+       },
+       "count": 1,
+       "counters": {
+        "fold_context.prepare": 1,
+        "fold_pool_builder.get": 1,
+        "scaler.fit_transform": 1,
+        "scaler.transform": 2,
+        "sqlite.commit": 2,
+        "sqlite.execute": 2
+       },
+       "cpu_s": 0.2031,
+       "peak_rss_mb": 930.0,
+       "rss_start_mb": 916.9,
+       "wall_s": 0.1983
+      },
+      "final_holdout": {
+       "components": {
+        "build_target": {
+         "count": 1,
+         "inclusive_s": 0.0112,
+         "self_s": 0.0112
+        },
+        "compute_baselines": {
+         "count": 1,
+         "inclusive_s": 0.0228,
+         "self_s": 0.0228
+        },
+        "fit_eval_full": {
+         "count": 1,
+         "inclusive_s": 0.4557,
+         "self_s": 0.4556
+        },
+        "fold_pool_builder.get": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "get_classifier.engine": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "scaler.fit_transform": {
+         "count": 1,
+         "inclusive_s": 0.062,
+         "self_s": 0.0567
+        },
+        "scaler.transform": {
+         "count": 2,
+         "inclusive_s": 0.0058,
+         "self_s": 0.0058
+        },
+        "select (cache lookup + compute)": {
+         "count": 1,
+         "inclusive_s": 0.0058,
+         "self_s": 0.0
+        },
+        "select.xy_data_hash": {
+         "count": 1,
+         "inclusive_s": 0.0057,
+         "self_s": 0.0057
+        },
+        "selection_cache.lookup": {
+         "count": 1,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0
+        },
+        "sqlite.commit": {
+         "count": 2,
+         "inclusive_s": 0.0016,
+         "self_s": 0.0016
+        },
+        "sqlite.execute": {
+         "count": 1,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
+        },
+        "sqlite.executemany": {
+         "count": 2,
+         "inclusive_s": 0.001,
+         "self_s": 0.001
+        }
+       },
+       "count": 1,
+       "counters": {
+        "fit_eval_full.calls": 1,
+        "fold_pool_builder.get": 1,
+        "models.constructed": 1,
+        "scaler.fit_transform": 1,
+        "scaler.transform": 2,
+        "select.calls": 1,
+        "selection_cache.hit": 1,
+        "sqlite.commit": 2,
+        "sqlite.execute": 1,
+        "sqlite.executemany": 2
+       },
+       "cpu_s": 0.5938,
+       "peak_rss_mb": 929.5,
+       "rss_start_mb": 916.9,
+       "wall_s": 0.6045
+      },
+      "final_stats": {
+       "components": {
+        "sqlite.execute": {
+         "count": 4,
+         "inclusive_s": 0.0005,
+         "self_s": 0.0005
+        }
+       },
+       "count": 3,
+       "counters": {
+        "sqlite.execute": 4
+       },
+       "cpu_s": 0.0469,
+       "peak_rss_mb": 916.9,
+       "rss_start_mb": 916.9,
+       "wall_s": 0.0221
+      },
+      "finish_runs": {
+       "components": {
+        "sqlite.commit": {
+         "count": 2,
+         "inclusive_s": 0.0013,
+         "self_s": 0.0013
+        },
+        "sqlite.execute": {
+         "count": 8,
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
+        }
+       },
+       "count": 1,
+       "counters": {
+        "sqlite.commit": 2,
+        "sqlite.execute": 8
+       },
+       "cpu_s": 0.0,
+       "peak_rss_mb": 916.9,
+       "rss_start_mb": 916.9,
+       "wall_s": 0.0087
+      },
+      "holdout_diagnostic": {
+       "components": {
+        "build_target": {
+         "count": 24,
+         "inclusive_s": 0.2919,
+         "self_s": 0.2919
+        },
+        "compute_baselines": {
+         "count": 24,
+         "inclusive_s": 0.6411,
+         "self_s": 0.6411
+        },
+        "feature_pool.compute[parametric]": {
+         "count": 1,
+         "inclusive_s": 14.0417,
+         "self_s": 13.9469
+        },
+        "fit_eval_full": {
+         "count": 24,
+         "inclusive_s": 22.9947,
+         "self_s": 22.9941
+        },
+        "fold_pool_builder.get": {
+         "count": 24,
+         "inclusive_s": 14.0882,
+         "self_s": 0.0031
+        },
+        "get_classifier.engine": {
+         "count": 24,
+         "inclusive_s": 0.0006,
+         "self_s": 0.0006
+        },
+        "interactions.apply": {
+         "count": 1,
+         "inclusive_s": 0.0037,
+         "self_s": 0.0037
+        },
+        "parametric_pool.build": {
+         "count": 1,
+         "inclusive_s": 14.0814,
+         "self_s": 0.0397
+        },
+        "scaler.fit_transform": {
+         "count": 24,
+         "inclusive_s": 1.6725,
+         "self_s": 1.521
+        },
+        "scaler.transform": {
+         "count": 48,
+         "inclusive_s": 0.1663,
+         "self_s": 0.1663
+        },
+        "select (cache lookup + compute)": {
+         "count": 24,
+         "inclusive_s": 38.58,
+         "self_s": 0.0015
+        },
+        "select.xy_data_hash": {
+         "count": 24,
+         "inclusive_s": 0.1605,
+         "self_s": 0.1605
+        },
+        "select_features.compute": {
+         "count": 6,
+         "inclusive_s": 38.3982,
+         "self_s": 38.3982
+        },
+        "selection_cache.lookup": {
+         "count": 24,
+         "inclusive_s": 0.0084,
+         "self_s": 0.0005
+        },
+        "sqlite.commit": {
+         "count": 143,
+         "inclusive_s": 0.1594,
+         "self_s": 0.1594
+        },
+        "sqlite.execute": {
+         "count": 254,
+         "inclusive_s": 0.0136,
+         "self_s": 0.0136
+        },
+        "sqlite.executemany": {
+         "count": 24,
+         "inclusive_s": 0.0091,
+         "self_s": 0.0091
+        },
+        "vol_model_cache.lookup": {
+         "count": 111,
+         "inclusive_s": 0.0011,
+         "self_s": 0.0004
+        }
+       },
+       "count": 1,
+       "counters": {
+        "feature_pool_cache.parametric.miss": 1,
+        "fit_eval_full.calls": 24,
+        "fold_pool_builder.get": 24,
+        "interactions.apply": 1,
+        "models.constructed": 24,
+        "parametric_pool.builds": 1,
+        "scaler.fit_transform": 24,
+        "scaler.transform": 48,
+        "select.calls": 24,
+        "select_features.computed": 6,
+        "selection_cache.hit": 18,
+        "selection_cache.miss": 6,
+        "sqlite.commit": 143,
+        "sqlite.execute": 254,
+        "sqlite.executemany": 24,
+        "vol_model_cache.miss": 111
+       },
+       "cpu_s": 109.9375,
+       "peak_rss_mb": 985.1,
+       "rss_start_mb": 908.8,
+       "wall_s": 79.2458
+      },
+      "ingestion": {
+       "components": {},
+       "count": 1,
+       "counters": {},
+       "cpu_s": 0.0156,
+       "peak_rss_mb": 871.2,
+       "rss_start_mb": 870.0,
+       "wall_s": 0.0233
+      },
+      "register_runs": {
+       "components": {
+        "sqlite.commit": {
+         "count": 3,
+         "inclusive_s": 0.0027,
+         "self_s": 0.0027
+        },
+        "sqlite.execute": {
+         "count": 3,
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
+        }
+       },
+       "count": 1,
+       "counters": {
+        "sqlite.commit": 3,
+        "sqlite.execute": 3
+       },
+       "cpu_s": 0.0312,
+       "peak_rss_mb": 878.4,
+       "rss_start_mb": 871.2,
+       "wall_s": 0.0522
+      },
+      "scan_walkforward": {
+       "components": {
+        "build_target": {
+         "count": 8,
+         "inclusive_s": 0.0995,
+         "self_s": 0.0995
+        },
+        "compute_baselines": {
+         "count": 8,
+         "inclusive_s": 0.1925,
+         "self_s": 0.1925
+        },
+        "feature_pool.compute[parametric]": {
+         "count": 3,
+         "inclusive_s": 40.418,
+         "self_s": 40.1605
+        },
+        "fit_eval_full": {
+         "count": 96,
+         "inclusive_s": 86.6293,
+         "self_s": 86.6268
+        },
+        "fold_context.prepare": {
+         "count": 8,
+         "inclusive_s": 42.0882,
+         "self_s": 0.7553
+        },
+        "fold_pool_builder.get": {
+         "count": 8,
+         "inclusive_s": 40.5477,
+         "self_s": 0.0099
+        },
+        "get_classifier.engine": {
+         "count": 96,
+         "inclusive_s": 0.0024,
+         "self_s": 0.0024
+        },
+        "interactions.apply": {
+         "count": 3,
+         "inclusive_s": 0.0115,
+         "self_s": 0.0115
+        },
+        "parametric_pool.build": {
+         "count": 3,
+         "inclusive_s": 40.5263,
+         "self_s": 0.1083
+        },
+        "scaler.fit_transform": {
+         "count": 8,
+         "inclusive_s": 0.4309,
+         "self_s": 0.3948
+        },
+        "scaler.transform": {
+         "count": 16,
+         "inclusive_s": 0.0416,
+         "self_s": 0.0416
+        },
+        "select (cache lookup + compute)": {
+         "count": 24,
+         "inclusive_s": 141.6062,
+         "self_s": 0.0026
+        },
+        "select.xy_data_hash": {
+         "count": 24,
+         "inclusive_s": 0.1166,
+         "self_s": 0.1166
+        },
+        "select_features.compute": {
+         "count": 24,
+         "inclusive_s": 141.4328,
+         "self_s": 141.4328
+        },
+        "selection_cache.lookup": {
+         "count": 24,
+         "inclusive_s": 0.0011,
+         "self_s": 0.0002
+        },
+        "sqlite.commit": {
+         "count": 599,
+         "inclusive_s": 0.5874,
+         "self_s": 0.5874
+        },
+        "sqlite.execute": {
+         "count": 788,
+         "inclusive_s": 0.0335,
+         "self_s": 0.0335
+        },
+        "sqlite.executemany": {
+         "count": 192,
+         "inclusive_s": 0.128,
+         "self_s": 0.128
+        },
+        "uniqueness.average": {
+         "count": 8,
+         "inclusive_s": 0.0508,
+         "self_s": 0.0508
+        },
+        "uniqueness.indicator_matrix": {
+         "count": 8,
+         "inclusive_s": 0.0059,
+         "self_s": 0.0059
+        },
+        "vol_model_cache.lookup": {
+         "count": 333,
+         "inclusive_s": 0.0029,
+         "self_s": 0.0012
+        }
+       },
+       "count": 1,
+       "counters": {
+        "feature_pool_cache.parametric.miss": 3,
+        "fit_eval_full.calls": 96,
+        "fold_context.prepare": 8,
+        "fold_pool_builder.get": 8,
+        "interactions.apply": 3,
+        "models.constructed": 96,
+        "parametric_pool.builds": 3,
+        "scaler.fit_transform": 8,
+        "scaler.transform": 16,
+        "select.calls": 24,
+        "select_features.computed": 24,
+        "selection_cache.miss": 24,
+        "sqlite.commit": 599,
+        "sqlite.execute": 788,
+        "sqlite.executemany": 192,
+        "vol_model_cache.miss": 333
+       },
+       "cpu_s": 393.875,
+       "peak_rss_mb": 983.4,
+       "rss_start_mb": 897.7,
+       "wall_s": 270.794
+      },
+      "select_finals": {
+       "components": {},
+       "count": 1,
+       "counters": {},
+       "cpu_s": 0.0312,
+       "peak_rss_mb": 916.1,
+       "rss_start_mb": 916.1,
+       "wall_s": 0.0243
+      },
+      "stability": {
+       "components": {
+        "sqlite.commit": {
+         "count": 4,
+         "inclusive_s": 0.0024,
+         "self_s": 0.0024
+        },
+        "sqlite.execute": {
+         "count": 6,
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
+        },
+        "sqlite.executemany": {
+         "count": 2,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
+        }
+       },
+       "count": 1,
+       "counters": {
+        "sqlite.commit": 4,
+        "sqlite.execute": 6,
+        "sqlite.executemany": 2
+       },
+       "cpu_s": 0.0156,
+       "peak_rss_mb": 908.8,
+       "rss_start_mb": 908.8,
+       "wall_s": 0.0171
+      },
+      "tuning": {
+       "components": {
+        "build_target": {
+         "count": 20,
+         "inclusive_s": 0.2272,
+         "self_s": 0.2272
+        },
+        "fit_eval_full": {
+         "count": 16,
+         "inclusive_s": 7.7298,
+         "self_s": 7.7294
+        },
+        "fold_context.prepare": {
+         "count": 20,
+         "inclusive_s": 2.085,
+         "self_s": 0.6302
+        },
+        "fold_pool_builder.get": {
+         "count": 20,
+         "inclusive_s": 0.0001,
+         "self_s": 0.0001
+        },
+        "get_classifier.engine": {
+         "count": 16,
+         "inclusive_s": 0.0003,
+         "self_s": 0.0003
+        },
+        "get_classifier.optuna": {
+         "count": 166,
+         "inclusive_s": 0.0038,
+         "self_s": 0.0038
+        },
+        "optuna.tune_config": {
+         "count": 4,
+         "inclusive_s": 63.5238,
+         "self_s": 63.479
+        },
+        "scaler.fit_transform": {
+         "count": 20,
+         "inclusive_s": 1.0762,
+         "self_s": 0.9889
+        },
+        "scaler.transform": {
+         "count": 40,
+         "inclusive_s": 0.1014,
+         "self_s": 0.1014
+        },
+        "select (cache lookup + compute)": {
+         "count": 20,
+         "inclusive_s": 0.1043,
+         "self_s": 0.0009
+        },
+        "select.xy_data_hash": {
+         "count": 20,
+         "inclusive_s": 0.102,
+         "self_s": 0.102
+        },
+        "selection_cache.lookup": {
+         "count": 20,
+         "inclusive_s": 0.0015,
+         "self_s": 0.0005
+        },
+        "sqlite.commit": {
+         "count": 120,
+         "inclusive_s": 0.0829,
+         "self_s": 0.0829
+        },
+        "sqlite.execute": {
+         "count": 108,
+         "inclusive_s": 0.0076,
+         "self_s": 0.0076
+        },
+        "sqlite.executemany": {
+         "count": 32,
+         "inclusive_s": 0.0257,
+         "self_s": 0.0257
+        },
+        "uniqueness.average": {
+         "count": 20,
+         "inclusive_s": 0.1219,
+         "self_s": 0.1219
+        },
+        "uniqueness.indicator_matrix": {
+         "count": 20,
+         "inclusive_s": 0.0155,
+         "self_s": 0.0155
+        }
+       },
+       "count": 1,
+       "counters": {
+        "fit_eval_full.calls": 16,
+        "fold_context.prepare": 20,
+        "fold_pool_builder.get": 20,
+        "models.constructed": 16,
+        "optuna.cv_fits": 166,
+        "optuna.studies": 4,
+        "optuna.trials.complete": 41,
+        "optuna.trials.pruned": 39,
+        "scaler.fit_transform": 20,
+        "scaler.transform": 40,
+        "select.calls": 20,
+        "selection_cache.hit": 20,
+        "sqlite.commit": 120,
+        "sqlite.execute": 108,
+        "sqlite.executemany": 32
+       },
+       "cpu_s": 74.5938,
+       "peak_rss_mb": 948.9,
+       "rss_start_mb": 904.1,
+       "wall_s": 73.5456
+      },
+      "walkforward_prepare": {
+       "components": {
+        "build_target": {
+         "count": 1,
+         "inclusive_s": 0.0122,
+         "self_s": 0.0122
+        },
+        "feature_pool.compute[parametric]": {
+         "count": 1,
+         "inclusive_s": 13.215,
+         "self_s": 13.1324
+        },
+        "fold_pool_builder.get": {
+         "count": 1,
+         "inclusive_s": 0.0,
+         "self_s": 0.0
+        },
+        "interactions.apply": {
+         "count": 1,
+         "inclusive_s": 0.004,
+         "self_s": 0.004
+        },
+        "interactions.discover": {
+         "count": 1,
+         "inclusive_s": 6.2128,
+         "self_s": 6.2006
+        },
+        "parametric_pool.build": {
+         "count": 1,
+         "inclusive_s": 13.2488,
+         "self_s": 0.0338
+        },
+        "sqlite.commit": {
+         "count": 113,
+         "inclusive_s": 0.0722,
+         "self_s": 0.0722
+        },
+        "sqlite.execute": {
+         "count": 224,
+         "inclusive_s": 0.0113,
+         "self_s": 0.0113
+        },
+        "vol_model_cache.lookup": {
+         "count": 111,
+         "inclusive_s": 0.0009,
+         "self_s": 0.0004
+        }
+       },
+       "count": 1,
+       "counters": {
+        "feature_pool_cache.parametric.miss": 1,
+        "fold_pool_builder.get": 1,
+        "interactions.apply": 1,
+        "parametric_pool.builds": 1,
+        "sqlite.commit": 113,
+        "sqlite.execute": 224,
+        "vol_model_cache.miss": 111
+       },
+       "cpu_s": 14.9844,
+       "peak_rss_mb": 958.9,
+       "rss_start_mb": 879.4,
+       "wall_s": 19.4773
+      }
+     },
+     "sum_of_phases_wall_s": 478.6092,
+     "total_cpu_s": 631.9219,
+     "total_wall_s": 478.7712,
+     "unaccounted_wall_s": 0.162,
+     "values": {
+      "base_pool.columns": 653,
+      "feature_pool.base.columns_computed": 653.0,
+      "feature_pool.parametric.columns_computed": 888.0,
+      "fold_pool.columns_last": 813,
+      "parametric_pool.columns_built": 888.0
+     }
+    },
+    "results": {
+     "features_retained_distinct": 68,
+     "final_best": {
+      "F1_dir": 0.628725,
+      "N": 10,
+      "algo": "XGBoost",
+      "horizon": 1,
+      "n_folds": 4,
+      "regime": "GLOBAL",
+      "sampler": "SMOTE"
+     },
+     "fold_metric_rows": 1322,
+     "leaderboard_rows": 160,
+     "prediction_rows": 25680,
+     "trials_db": 28,
+     "tuned_rows": 16
+    },
+    "scheme": "walkforward",
+    "seed": 42,
+    "snapshot": {
+     "data_hash": "f3fd02ef7273",
+     "shape": [
+      2600,
+      37
+     ],
+     "snapshot_id": "2026-09-30__raw_IDX_SYN__f3fd02ef7273"
+    },
+    "wall_s": 478.778
+   },
+   "reference_run_label": "rep2",
+   "repeat_phase_walls_s": [
+    {
+     "base_feature_pool": 5.8645,
+     "champion_duel": 0.5895,
+     "export_models": 27.6863,
+     "export_tables": 0.1001,
+     "final_diebold_mariano": 0.1918,
+     "final_holdout": 0.5978,
+     "final_stats": 0.0302,
+     "finish_runs": 0.0089,
+     "holdout_diagnostic": 78.5519,
+     "ingestion": 0.0477,
+     "register_runs": 0.0603,
+     "scan_walkforward": 272.879,
+     "select_finals": 0.0172,
+     "stability": 0.0172,
+     "tuning": 72.6042,
+     "walkforward_prepare": 23.0981
+    },
+    {
+     "base_feature_pool": 5.7775,
+     "champion_duel": 0.596,
+     "export_models": 28.1618,
+     "export_tables": 0.0608,
+     "final_diebold_mariano": 0.1983,
+     "final_holdout": 0.6045,
+     "final_stats": 0.0221,
+     "finish_runs": 0.0087,
+     "holdout_diagnostic": 79.2458,
+     "ingestion": 0.0233,
+     "register_runs": 0.0522,
+     "scan_walkforward": 270.794,
+     "select_finals": 0.0243,
+     "stability": 0.0171,
+     "tuning": 73.5456,
+     "walkforward_prepare": 19.4773
+    }
+   ],
+   "repeat_walls_s": [
+    482.531,
+    478.778
+   ],
+   "reproducibility": {
+    "counters_identical_across_repeats": true,
+    "differences": [],
+    "digests_identical_across_repeats": true,
+    "instrumentation_leaves_results_unchanged": null,
+    "same_config_digest": true,
+    "same_data_hash": true,
+    "same_seed": true
+   },
+   "warm_run": null
+  }
+ },
+ "seed": 42,
+ "threads": 4
+}

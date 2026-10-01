@@ -238,6 +238,24 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_seed": {"fr": "Seed", "en": "Seed"},
 
     "btn_launch_run": {"fr": "Lancer le run", "en": "Launch run"},
+    "section_performance": {"fr": "Performance (cette machine)", "en": "Performance (this machine)"},
+    "field_parametric_jobs": {"fr": "Workers du pool paramétrique", "en": "Parametric pool workers"},
+    "hint_parametric_jobs": {
+        "fr": "1 = séquentiel (comportement d'origine). Plus de workers accélère la construction des features "
+              "paramétriques sans changer les résultats, au prix de plus de mémoire. S'applique aux prochains runs.",
+        "en": "1 = sequential (original behaviour). More workers speed up parametric feature building without "
+              "changing results, at the cost of more memory. Applies to the next runs."},
+    "field_scan_jobs": {"fr": "Workers de calcul des modèles (sélection + entraînements)",
+                        "en": "Model compute workers (selection + training)"},
+    "hint_scan_jobs": {
+        "fr": "1 = séquentiel. Plus de workers entraîne plusieurs modèles en parallèle (un cœur chacun) sans changer "
+              "les résultats, au prix de plus de mémoire. Évitez de dépasser le nombre de cœurs. S'applique aux prochains runs.",
+        "en": "1 = sequential. More workers train several models in parallel (one core each) without changing results, "
+              "at the cost of more memory. Do not exceed your core count. Applies to the next runs."},
+    "btn_save_setting": {"fr": "Enregistrer", "en": "Save"},
+    "setting_saved": {"fr": "Enregistré.", "en": "Saved."},
+    "setting_env_override": {"fr": "Une variable d'environnement (PATRICK_PARAMETRIC_JOBS / PATRICK_SCAN_JOBS) est définie et prime sur ce réglage.",
+                             "en": "An environment variable (PATRICK_PARAMETRIC_JOBS / PATRICK_SCAN_JOBS) is set and overrides this setting."},
 
     # app.js (injected via window.I18N)
     "phase_ingestion": {"fr": "Ingestion des données…", "en": "Ingesting data…"},
