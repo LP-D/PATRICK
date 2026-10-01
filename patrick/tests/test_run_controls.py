@@ -111,3 +111,22 @@ def test_pause_is_observed_at_next_worker_log_checkpoint(tmp_path, monkeypatch):
     conn.close()
     assert wrote_line.is_set()
     assert not thread.is_alive()
+
+
+def test_finished_jobs_clear_and_reset_pause_requests(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    _running_job(conn, "active")
+    jobs.set_job_paused(conn, "active", True)
+    jobs.finish_job(conn, "active", "done", result_json='{}')
+    job = jobs.get_job(conn, "active")
+    assert job["status"] == "done"
+    assert job["pause_requested"] == 0
+
+    _running_job(conn, "stopped")
+    jobs.set_job_paused(conn, "stopped", True)
+    assert jobs.finish_user_stopped_job(conn, "stopped") is True
+    stopped = jobs.get_job(conn, "stopped")
+    assert stopped["status"] == "error"
+    assert stopped["pause_requested"] == 0
+    conn.close()

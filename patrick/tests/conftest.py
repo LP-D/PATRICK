@@ -31,3 +31,15 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
     each other a cached frame (a call-counting test would then see zero
     calls)."""
     monkeypatch.setenv("PATRICK_FEATURE_CACHE_ROOT", str(tmp_path / "feature_cache"))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_machine_settings(tmp_path, monkeypatch):
+    """Machine settings and shell-level worker overrides must not affect tests.
+
+    Parallel workers run in subprocesses, where tests that count calls in the
+    current process cannot observe the feature computations.
+    """
+    monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("PATRICK_PARAMETRIC_JOBS", raising=False)
+    monkeypatch.delenv("PATRICK_SCAN_JOBS", raising=False)

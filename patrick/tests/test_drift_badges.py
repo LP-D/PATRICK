@@ -25,11 +25,21 @@ def _seed(conn, n_live=0, flip_at=None):
 def test_states_follow_what_is_measured(conn):
     _seed(conn)
     assert history.drift_badges(conn, ["^VIX"], [5])[("^VIX", 5)]["state"] == "insufficient_data"
-    db.record_drift_psi(conn, "^VIX", 5, "f1", 0.05)
-    db.record_drift_psi(conn, "^VIX", 5, "f2", 0.31)
+    db.record_drift_psi_batch(conn, "^VIX", 5, {"f1": 0.05, "f2": 0.31})
     b = history.drift_badges(conn, ["^VIX"], [5])[("^VIX", 5)]
     assert b["state"] == "provisional" and b["status"] == "significant"
     assert b["worst_feature"] == "f2" and b["n_features"] == 2
+
+
+def test_drift_badge_uses_one_complete_latest_measurement(conn):
+    _seed(conn)
+    db.record_drift_psi_batch(conn, "^VIX", 5, {"f1": 0.05, "f2": 0.31})
+    db.record_drift_psi_batch(conn, "^VIX", 5, {"f3": 0.08})
+
+    badge = history.drift_badges(conn, ["^VIX"], [5])[("^VIX", 5)]
+
+    assert badge["n_features"] == 1
+    assert badge["worst_feature"] == "f3"
 
 
 def test_page_hinkley_on_independent_live_calls_confirms_a_concept_drift(conn):
@@ -54,8 +64,7 @@ def test_predictions_page_shows_the_badge(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
     conn = db.connect(str(tmp_path / "p.db"))
     _seed(conn)
-    db.record_drift_psi(conn, "^VIX", 5, "f1", 0.31)
-    db.record_drift_psi(conn, "^VIX", 5, "f2", 0.02)
+    db.record_drift_psi_batch(conn, "^VIX", 5, {"f1": 0.31, "f2": 0.02})
     html = TestClient(app).get("/predictions").text
     assert "surveiller · 1/2" in html and "PSI max 0.31 (f1)" in html
 

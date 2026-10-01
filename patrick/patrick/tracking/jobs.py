@@ -95,7 +95,7 @@ def finish_job(conn: sqlite3.Connection, job_id: str, status: str,
     with conn:
         conn.execute(
             "UPDATE job SET status = ?, finished_at = datetime('now'), "
-            "result_json = ?, error = ? WHERE job_id = ?",
+            "result_json = ?, error = ?, pause_requested = 0 WHERE job_id = ?",
             (status, result_json, error, job_id),
         )
 
@@ -163,8 +163,8 @@ def finish_user_stopped_job(conn: sqlite3.Connection, job_id: str) -> bool:
     error = "Stopped by user."
     with conn:
         cur = conn.execute(
-            "UPDATE job SET status = 'error', finished_at = datetime('now'), error = ? "
-            "WHERE job_id = ? AND status = 'running'",
+            "UPDATE job SET status = 'error', finished_at = datetime('now'), error = ?, "
+            "pause_requested = 0 WHERE job_id = ? AND status = 'running'",
             (error, job_id),
         )
         if cur.rowcount:

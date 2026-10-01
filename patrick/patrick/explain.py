@@ -330,14 +330,16 @@ def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | N
         recent = recent.tail(recent_window)
 
         results = {}
+        psi_values = {}
         for feature in feature_names:
             reference = trackdb.get_drift_reference(conn, target, horizon, feature)
             if reference is None:
                 continue
             psi = drift.psi_from_reference(reference, recent[feature].to_numpy())
             status = drift.data_drift_status(psi)
-            trackdb.record_drift_psi(conn, target, horizon, feature, psi)
+            psi_values[feature] = psi
             results[feature] = {"psi": psi, "status": status}
+        trackdb.record_drift_psi_batch(conn, target, horizon, psi_values)
         return results or None
     finally:
         conn.close()

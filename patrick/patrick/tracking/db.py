@@ -9,6 +9,7 @@ through SQLAlchemy).
 """
 from __future__ import annotations
 
+import datetime
 import html
 import json
 import os
@@ -331,12 +332,39 @@ def record_drift_psi(conn: sqlite3.Connection, symbol: str, horizon: int, featur
     (`drift_feature_reference` above is a point-in-time reference,
     replaced not accumulated). Written only on an on-demand computation
     (`explain.compute_drift_for_ticker_horizon`), never a periodic job."""
-    with conn:
-        conn.execute(
+    record_drift_psi_batch(conn, symbol, horizon, {feature: psi})
+
+
+def record_drift_psi_batch(conn: sqlite3.Connection, symbol: str, horizon: int,
+                           feature_psi: dict[str, float]) -> None:
+    """Append one on-demand PSI measurement for all selected features.
+
+    Rows in one measurement share an exact timestamp; the dashboard uses that
+    timestamp to distinguish the latest feature batch from prior measurements.
+    """
+    if not feature_psi:
+        return
+    computed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        latest = conn.execute(
+            "SELECT MAX(computed_at) FROM drift_psi_history WHERE symbol = ? AND horizon = ?",
+            (symbol, horizon),
+        ).fetchone()[0]
+        if latest is not None:
+            latest_at = datetime.datetime.fromisoformat(latest)
+            if computed_at <= latest_at:
+                computed_at = latest_at + datetime.timedelta(microseconds=1)
+        timestamp = computed_at.strftime("%Y-%m-%d %H:%M:%S.%f")
+        conn.executemany(
             "INSERT INTO drift_psi_history (symbol, horizon, feature, computed_at, psi) "
-            "VALUES (?, ?, ?, datetime('now'), ?)",
-            (symbol, horizon, feature, psi),
+            "VALUES (?, ?, ?, ?, ?)",
+            [(symbol, horizon, feature, timestamp, psi) for feature, psi in feature_psi.items()],
         )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def list_drift_psi_history(conn: sqlite3.Connection, symbol: str, horizon: int,

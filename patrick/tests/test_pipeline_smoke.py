@@ -458,15 +458,24 @@ def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_conf
     conn = sqlite3.connect(db_path)
     n_snapshots = conn.execute("SELECT count(*) FROM snapshot").fetchone()[0]
     n_runs = conn.execute("SELECT count(*) FROM run").fetchone()[0]
+    archived_runs = conn.execute(
+        "SELECT count(*) FROM model_archive WHERE role = 'rejected_challenger' AND pruned = 1"
+    ).fetchone()[0]
     n_trials = conn.execute("SELECT count(*) FROM trial").fetchone()[0]
     n_fold_metrics = conn.execute("SELECT count(*) FROM fold_metric").fetchone()[0]
     n_baselines = conn.execute("SELECT count(*) FROM baseline_metric").fetchone()[0]
     n_predictions = conn.execute("SELECT count(*) FROM prediction").fetchone()[0]
 
-    # deux runs sur données identiques -> un seul snapshot (dédupliqué par hash),
-    # mais deux fois plus de runs/trials/predictions (deux exécutions distinctes).
+    # Le second run reproduit les mêmes modèles : le duel garde le champion en
+    # titre et archive/prune le challenger par horizon. Les configurations
+    # testées par les challengers restent dans trial_registry.
     assert n_snapshots == 1
-    assert n_runs == 2 * len(tiny_config.objective.horizons)
+    assert n_runs == len(tiny_config.objective.horizons)
+    assert archived_runs == len(tiny_config.objective.horizons)
+    assert conn.execute(
+        "SELECT count(*) FROM trial_registry tr JOIN model_archive ma ON ma.run_id = tr.run_id "
+        "WHERE ma.role = 'rejected_challenger' AND ma.pruned = 1"
+    ).fetchone()[0] > 0
     assert n_trials > 0
     assert n_fold_metrics > 0
     assert n_baselines > 0

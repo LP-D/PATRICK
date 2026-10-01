@@ -423,11 +423,19 @@
         const active = data.active_run;
         activeJobId = active ? active.id : null;
         if (runControls) runControls.classList.toggle("hidden", !active);
-        if (active && pauseRunBtn) {
-            pauseRunBtn.dataset.jobId = active.id;
-            pauseRunBtn.dataset.paused = active.status === "paused" ? "true" : "false";
-            pauseRunBtn.textContent = active.status === "paused"
-                ? tr("run_resume", "Resume") : tr("run_pause", "Pause");
+        if (pauseRunBtn) {
+            if (!active) {
+                delete pauseRunBtn.dataset.jobId;
+                delete pauseRunBtn.dataset.paused;
+                pauseRunBtn.disabled = true;
+                pauseRunBtn.textContent = tr("run_pause", "Pause");
+            } else {
+                pauseRunBtn.dataset.jobId = active.id;
+                pauseRunBtn.dataset.paused = active.status === "paused" ? "true" : "false";
+                pauseRunBtn.disabled = false;
+                pauseRunBtn.textContent = active.status === "paused"
+                    ? tr("run_resume", "Resume") : tr("run_pause", "Pause");
+            }
         }
 
         // Le run actif côté serveur a changé (ex: la file d'attente a avancé
