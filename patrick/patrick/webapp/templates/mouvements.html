@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import empty_state, status_badge %}
+{% from "_components.html" import empty_state, status_badge, help_icon %}
 {% block title %}PATRICK — {{ t('nav_mouvements') }}{% endblock %}
 
 {# Roadmap bloc 4 -- glisser-déposer des mouvements entre comptes
@@ -9,8 +9,10 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ t('nav_mouvements') }}</h1>
-    <p class="page-subtitle">{{ t('wealth_movements_subtitle') }}</p>
+    <h1 class="page-title">{{ t('nav_mouvements') }}
+      {{ help_icon('wealth_movements', t('nav_mouvements'), t('glossary_open_aria', term=t('nav_mouvements'))) }}
+    </h1>
+    <p class="page-subtitle">Journal et import des mouvements.</p>
   </div>
 </div>
 

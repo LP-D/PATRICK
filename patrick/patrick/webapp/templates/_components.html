@@ -11,6 +11,8 @@
 
 {% macro status_badge(label, state='neutral') %}<span class="status-badge status-{{ state }}">{{ label }}</span>{% endmacro %}
 
+{% macro help_icon(term, label, aria_label) %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ label }}" aria-label="{{ aria_label }}">?</button>{% endmacro %}
+
 {% macro metric(label, value, reliability, state='neutral') %}
 <div class="metric">
   <div class="metric-label">{{ label }}</div>

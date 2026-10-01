@@ -25,6 +25,13 @@ def test_commodities_page_returns_200():
     assert resp.status_code == 200
 
 
+def test_asset_statistics_explanations_are_clickable():
+    response = TestClient(app).get("/commodities")
+    assert 'data-term="asset_statistics"' in response.text
+    assert 'data-term="asset_bar_windows"' in response.text
+    assert "Fenêtres exprimées en barres de la série" not in response.text
+
+
 def test_commodities_page_lists_every_asset_label_and_symbol():
     client = TestClient(app)
     resp = client.get("/commodities")

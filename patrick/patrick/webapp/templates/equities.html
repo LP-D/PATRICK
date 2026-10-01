@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import asset_panel, status_badge %}
+{% from "_components.html" import asset_panel, status_badge, help_icon %}
 {% block title %}PATRICK — Actions individuelles{% endblock %}
 
 {% block content %}
@@ -8,12 +8,14 @@
     <span aria-current="page">{{ t('nav_equities') or 'Actions individuelles' }}</span>
 </nav>
 
-<h1 class="page-title">{{ t('nav_equities') or 'Actions individuelles' }}</h1>
-<p class="page-subtitle">Univers actions (config/equity_universe.py::EQUITY_UNIVERSE), séparé de l'univers commodités/macro : chaque titre reste sélectionnable comme cible sur /launch, jamais injecté comme feature dans un autre run.</p>
+<h1 class="page-title">{{ t('nav_equities') or 'Actions individuelles' }}
+    {{ help_icon('equity_universe', 'Univers actions', t('glossary_open_aria', term='Univers actions')) }}
+</h1>
 
 <div class="group-block">
-<h2>Badge d'insuffisance de données</h2>
-<p class="hint">Seuil absolu de jours de cotation disponibles avant d'envisager un entraînement — indépendant du garde-fou horizon (/api/horizon-feasibility). L'affichage prix/fondamentaux reste disponible même sous le seuil.</p>
+<h2>Disponibilité des données
+    {{ help_icon('equity_min_history', 'Seuil d’historique', t('glossary_open_aria', term='Seuil d’historique')) }}
+</h2>
 {% for a in assets %}
 <p>
   <strong>{{ a.label }}</strong> <span class="hint pk-mono">{{ a.symbol }}</span>
@@ -25,8 +27,9 @@
 </div>
 
 <div class="group-block">
-<h2>Familles Guida non applicables à cette classe</h2>
-<p class="hint">Message explicite plutôt qu'un silence — voir features/guida.py::EQUITY_FEATURE_EXCLUSIONS.</p>
+<h2>Features non applicables
+    {{ help_icon('equity_feature_exclusions', 'Features non applicables', t('glossary_open_aria', term='Features non applicables')) }}
+</h2>
 <ul>
 {% for family, reason in exclusions.items() %}
 <li><strong>{{ family }}</strong> — {{ reason }}</li>
@@ -41,8 +44,9 @@
 </div>
 
 <div class="group-block">
-<h2>Fondamentaux</h2>
-<p class="hint">Collecte hors pipeline ML par défaut (enable_fundamentals_features=False) — fiscalDateEnding + valeur, aucune garantie de non-révision, délai de publication réel non vérifié (data/sources/fundamentals_source.py).</p>
+<h2>Fondamentaux
+    {{ help_icon('equity_fundamentals', 'Données fondamentales', t('glossary_open_aria', term='Données fondamentales')) }}
+</h2>
 {% for a in assets %}
 <h3>{{ a.label }} <span class="hint pk-mono">{{ a.symbol }}</span></h3>
 {% set rows = fundamentals.get(a.symbol, []) %}

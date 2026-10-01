@@ -40,6 +40,14 @@ def test_data_freshness_page_returns_200_on_empty_store(tmp_path, monkeypatch):
     assert resp.status_code == 200
 
 
+def test_data_freshness_details_are_behind_a_clickable_note(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
+    resp = TestClient(app).get("/data-freshness")
+    assert resp.status_code == 200
+    assert 'data-term="data_freshness"' in resp.text
+    assert "aucun appel réseau yfinance/FRED depuis cette page" not in resp.text
+
+
 def test_data_freshness_page_shows_never_cached_state_for_uncached_ticker(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "store"))
     client = TestClient(app)

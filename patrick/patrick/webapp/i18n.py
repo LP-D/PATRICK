@@ -440,6 +440,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
         "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",
     },
+    "assetpanel_help_label": {"fr": "Statistiques par actif", "en": "Per-asset statistics"},
+    "assetpanel_bars_help_label": {"fr": "Fenêtres de calcul", "en": "Calculation windows"},
     "assetpanel_bars_hint": {
         "fr": "Fenêtres exprimées en barres de la série (jours de bourse pour ces futures), pas en durée calendaire.",
         "en": "Windows are counted in bars of the series (trading days for these futures), not calendar time.",

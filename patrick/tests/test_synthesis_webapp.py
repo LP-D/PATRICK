@@ -141,6 +141,17 @@ def test_launch_page_serves_the_run_launcher(tmp_path, monkeypatch):
     assert 'id="run-form"' in resp.text
 
 
+def test_launch_page_uses_clickable_notes_for_long_setup_explanations(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    resp = TestClient(app).get("/launch")
+    assert resp.status_code == 200
+    for term in ("universe", "reduction", "data_quality_enabled", "staged_screening", "optuna_bounds"):
+        assert f'class="info-icon" data-term="{term}"' in resp.text
+    from patrick.webapp.glossary import GLOSSARY
+    assert GLOSSARY["reduction"]["fr"]
+
+
 def test_launch_page_has_no_example_loader(tmp_path, monkeypatch):
     """fix/remove-launch-example-loader : le dropdown "Charger un exemple"
     (id="load" / id="example-form") rechargeait la page et ecrasait
@@ -168,12 +179,9 @@ def test_launch_page_ignores_stale_load_query_param(tmp_path, monkeypatch):
     assert 'id="run-form"' in resp.text
 
 
-def test_phase9_page_no_longer_carries_fabricated_signal_quality(tmp_path, monkeypatch):
+def test_phase9_page_is_removed(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
     resp = client.get("/phase9")
-    assert resp.status_code == 200
-    assert "Journal de décision" in resp.text
-    assert "Qualité des signaux" not in resp.text
-    assert "Classification de régime" not in resp.text
+    assert resp.status_code == 404

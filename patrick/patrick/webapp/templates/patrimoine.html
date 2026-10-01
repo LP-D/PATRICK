@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import metric, data_table, empty_state, status_badge %}
+{% from "_components.html" import metric, data_table, empty_state, status_badge, help_icon %}
 {% block title %}PATRICK — {{ t('wealth_title') }}{% endblock %}
 
 {# Roadmap bloc 4 -- vue d'ensemble du patrimoine (webapp/wealth_routes.py,
@@ -10,8 +10,10 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ t('wealth_title') }}</h1>
-    <p class="page-subtitle">{{ t('wealth_subtitle') }}</p>
+    <h1 class="page-title">{{ t('wealth_title') }}
+      {{ help_icon('wealth_summary', t('wealth_title'), t('glossary_open_aria', term=t('wealth_title'))) }}
+    </h1>
+    <p class="page-subtitle">Comptes réels et fictifs, positions calculées depuis les mouvements.</p>
   </div>
   <div class="page-actions">
     <a class="btn-secondary" href="/mouvements">{{ icon('movements') }} {{ t('nav_mouvements') }}</a>
@@ -104,9 +106,11 @@
     </div>
     <div class="subgrid">
       <label>Ouvert le <input type="date" name="opened_on"></label>
-      <label>Indice de référence <input type="text" name="benchmark" placeholder="défaut selon l'enveloppe"></label>
+      <label>Indice de référence
+        {{ help_icon('wealth_account_rules', 'Règles par enveloppe', t('glossary_open_aria', term='Règles par enveloppe')) }}
+        <input type="text" name="benchmark" placeholder="défaut selon l'enveloppe">
+      </label>
     </div>
-    <p class="hint">PEA : la date d'ouverture sert au contrôle de la règle des 5 ans. Indice par défaut : Euro Stoxx 50 (PEA), MSCI World via URTH (CTO, AV), aucun (livret, DAT).</p>
     <div class="row" style="justify-content:flex-end">
       <button type="button" class="btn-secondary" data-close-dialog>Annuler</button>
       <button type="submit" class="btn">Créer</button>

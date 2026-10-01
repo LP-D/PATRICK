@@ -150,7 +150,8 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   run), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
   `/commodities`, `/macro` (stats par actif, calcul côté client via
   `asset_stats.js`/`/api/asset-stats/{symbol}`), `/predictions` (vue
-  d'ensemble cible×horizon), `/simulate`, `/phase9` (journal + snapshots).
+  d'ensemble cible×horizon) et `/simulate`. Le journal et les snapshots
+  Phase 9 restent accessibles via API, sans page de navigation dédiée.
 - La file de jobs web (`tracking/jobs.py` + `worker.py`, lancé
   automatiquement par `run_manager.ensure_worker_running`) exécute les runs
   soumis depuis `/launch` de façon asynchrone.

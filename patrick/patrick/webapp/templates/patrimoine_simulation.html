@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import empty_state %}
+{% from "_components.html" import empty_state, help_icon %}
 {% block title %}PATRICK — {{ t('nav_patrimoine_simulation') }}{% endblock %}
 
 {# Roadmap bloc 4 -- /simulate etendu au patrimoine (wealth/signal_replay.py) :
@@ -11,8 +11,10 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ t('nav_patrimoine_simulation') }}</h1>
-    <p class="page-subtitle">Et si chaque position avait suivi son modèle ? Rejoue les signaux déjà enregistrés des modèles gagnants sur les positions d'un compte, pondérées comme aujourd'hui, sans ré-entraînement. Seules les positions dont le symbole a été une cible de run sont couvertes.</p>
+    <h1 class="page-title">{{ t('nav_patrimoine_simulation') }}
+      {{ help_icon('wealth_simulation', t('nav_patrimoine_simulation'), t('glossary_open_aria', term=t('nav_patrimoine_simulation'))) }}
+    </h1>
+    <p class="page-subtitle">Rejoue les signaux enregistrés sur les positions d'un compte, sans ré-entraînement.</p>
   </div>
 </div>
 
@@ -45,7 +47,7 @@
     <label>{{ t('sim_field_threshold') }} <input type="number" name="threshold" step="0.01" min="0.5" max="1" value="0.55"></label>
     <label class="checkbox"><input type="checkbox" name="short_allowed" checked> {{ t('sim_field_short_allowed') }}</label>
     <button type="submit" class="btn">{{ icon('simulate') }} Rejouer</button>
-    <p class="hint">Chaque actif simulé est journalisé comme une simulation /simulate : il compte dans le Sharpe déflaté des essais suivants sur cette cible.</p>
+    <p class="hint">{{ help_icon('wealth_simulation_trials', 'Impact sur les essais', t('glossary_open_aria', term='Impact sur les essais')) }}</p>
   </form>
 </section>
 

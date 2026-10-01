@@ -89,23 +89,21 @@
                 <span class="adv-state" data-adv-state="section_universe"></span>
             </summary>
             <div class="adv-body">
-            <p class="hint">{{ t('universe_hint') }}</p>
             <label>{{ t('field_start_date') }}
                 <input type="date" name="start_date" value="{{ view.start_date }}">
             </label>
             <label>{{ t('field_yf_coverage') }}
                 <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
             </label>
-            <label>{{ t('field_universe_scope') }}
+            <label>{{ t('field_universe_scope') }}{{ info('universe', 'Univers de données') }}
                 <select name="universe_scope">
                     <option value="default" {% if view.universe_scope != 'extended' %}selected{% endif %}>{{ t('universe_scope_default') }}</option>
                     <option value="extended" {% if view.universe_scope == 'extended' %}selected{% endif %}>{{ t('universe_scope_extended') }}</option>
                 </select>
             </label>
-            <label>{{ t('field_reduction_corr_threshold') }}
+            <label>{{ t('field_reduction_corr_threshold') }}{{ info('reduction') }}
                 <input type="number" step="any" min="0" max="1" name="reduction_corr_threshold" value="{{ view.reduction_corr_threshold }}">
             </label>
-            <p class="hint">{{ t('reduction_hint') }}</p>
             </div>
         </details>
 
@@ -115,7 +113,6 @@
                 <span class="adv-state" data-adv-state="section_data_quality"></span>
             </summary>
             <div class="adv-body">
-            <p class="hint">{{ t('data_quality_hint') }}</p>
             <label class="checkbox">
                 <input type="checkbox" name="data_quality_enabled" {% if view.data_quality_enabled %}checked{% endif %}>
                 {{ t('field_data_quality_enabled') }}{{ info('data_quality_enabled') }}
@@ -152,7 +149,6 @@
             {% endfor %}
 
             <div class="subfieldset">
-                <p class="hint">{{ t('vol_models_hint') }}</p>
                 {% for m in all_vol_models %}
                 <label class="checkbox">
                     <input type="checkbox" name="vol_models" value="{{ m }}" {% if m in view.vol_models %}checked{% endif %}>
@@ -193,10 +189,9 @@
                 <span class="adv-state" data-adv-state="section_technical_lookbacks"></span>
             </summary>
             <div class="adv-body">
-            <p class="hint">{{ t('technical_lookbacks_hint') }}</p>
             <div class="subgrid">
             {% for field, label in technical_lookback_fields %}
-                <label>{{ label }}
+                <label>{{ label }}{% if loop.first %}{{ info('technical_lookbacks') }}{% endif %}
                     <input type="text" name="tl__{{ field }}" value="{{ view.technical_lookbacks.get(field, '') }}">
                 </label>
             {% endfor %}
@@ -308,9 +303,8 @@
             </label>
             <label class="checkbox">
                 <input type="checkbox" name="staged_screening" {% if view.staged_screening %}checked{% endif %}>
-                {{ t('field_staged_screening') }}
+                {{ t('field_staged_screening') }}{{ info('staged_screening') }}
             </label>
-            <p class="hint">{{ t('hint_staged_screening') }}</p>
             <label>{{ t('field_screening_finalists') }}
                 <input type="number" min="1" max="100" name="screening_finalists_per_group"
                        value="{{ view.screening_finalists_per_group }}">
@@ -402,7 +396,7 @@
                 <span class="adv-state" data-adv-state="section_optuna_bounds"></span>
             </summary>
             <div class="adv-body">
-            <p class="hint">{{ t('optuna_bounds_hint') }}</p>
+            <p class="hint">{{ t('section_optuna_bounds') }}{{ info('optuna_bounds', 'Bornes de recherche Optuna') }}</p>
             {% for algo, params in optuna_param_specs.items() %}
             <div class="subfieldset">
                 <p class="hint"><strong>{{ algo }}</strong></p>

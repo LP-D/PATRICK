@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table %}
+{% from "_components.html" import status_badge, data_table, help_icon %}
 {% block title %}PATRICK — Fraîcheur des données{% endblock %}
 
 {% block content %}
@@ -8,8 +8,9 @@
     <span aria-current="page">{{ t('nav_data_freshness') or 'Fraîcheur' }}</span>
 </nav>
 
-<h1 class="page-title">{{ t('nav_data_freshness') or 'Fraîcheur des données' }}</h1>
-<p class="page-subtitle">Dernière donnée connue par ticker/série, lue uniquement depuis le data lake local (aucun appel réseau yfinance/FRED depuis cette page). Un ticker qui n'a jamais servi de cible d'un run n'a, à ce jour, aucune fraîcheur observable dans le cache — état "jamais mis en cache", pas une erreur.</p>
+<h1 class="page-title">{{ t('nav_data_freshness') or 'Fraîcheur des données' }}
+    {{ help_icon('data_freshness', 'Fraîcheur des données', t('glossary_open_aria', term='Fraîcheur des données')) }}
+</h1>
 
 {% set ns = namespace(total=0, cached=0) %}
 {% for g in groups %}{% for r in g.results %}

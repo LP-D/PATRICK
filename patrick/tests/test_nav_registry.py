@@ -195,7 +195,6 @@ def test_sidebar_links_all_registry_entries_exactly_once():
     ("/commodities", "/commodities"),
     ("/simulate", "/simulate"),
     ("/portfolio", "/portfolio"),
-    ("/phase9", "/phase9"),
 ])
 def test_sidebar_active_state_follows_current_route(path, expected_current):
     resp = TestClient(app).get(path)

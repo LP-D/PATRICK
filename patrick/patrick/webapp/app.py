@@ -1232,28 +1232,6 @@ def simulate_page(request: Request, run_id: str | None = None):
     )
 
 
-@app.get("/phase9")
-def phase9_overview(request: Request):
-    """P8/B6: trimmed to what is genuinely unique here after the synthesis
-    dashboard (`/`) absorbed signal quality -- the manual decision journal
-    and named snapshots (`tracking/db.py`, real persistence) have no other
-    surface in the product. `signal_quality`/`regime_summary` (hardcoded
-    literals, `phase9.determine_signal_quality_status`/`regime_summary`)
-    removed rather than kept duplicated -- same real data now lives on `/`,
-    the fake numbers here served no one. See DASHBOARD_B1-B2.md."""
-    conn = trackdb.connect()
-    try:
-        entries = trackdb.list_phase9_journal_entries(conn, limit=20)
-        snapshots = trackdb.list_phase9_snapshots(conn, limit=10)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(
-        request,
-        "phase9_overview.html",
-        {"entries": entries, "snapshots": snapshots, **_i18n_context(request)},
-    )
-
-
 @app.get("/api/phase9/journal")
 def api_phase9_journal(limit: int = 20):
     conn = trackdb.connect()

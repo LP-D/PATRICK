@@ -30,6 +30,11 @@ TERM_LABEL_KEYS: dict[str, str] = {
     "regime_threshold_mode": "field_regime_threshold_mode",
     "tuning_enabled": "field_enabled",
     "optuna_select_top_k_per_horizon": "field_optuna_select_top_k_per_horizon",
+    "universe": "field_universe_scope",
+    "reduction": "field_reduction_corr_threshold",
+    "technical_lookbacks": "section_technical_lookbacks",
+    "staged_screening": "field_staged_screening",
+    "optuna_bounds": "section_optuna_bounds",
 }
 
 GLOSSARY: dict[str, dict[str, str]] = {
@@ -500,6 +505,152 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "correlation similarity, then splits risk between clusters by recursive "
                "bisection, inverse-variance. Uses no expected return and never inverts the "
                "covariance matrix — robust where Markowitz concentrates on a few assets."),
+    },
+    "universe": {
+        "fr": ("Les séries disponibles (tickers yfinance et séries FRED) sont utilisées comme "
+               "features, à l'exception de la cible sélectionnée."),
+        "en": ("Available series (yfinance tickers and FRED series) are used as features, "
+               "excluding the selected target."),
+    },
+    "reduction": {
+        "fr": ("Regroupe les séries candidates corrélées et en conserve une par groupe. "
+               "La décision est prise séparément dans chaque fold avec les seules données "
+               "d'entraînement. Un seuil inférieur à 0,8 est considéré agressif."),
+        "en": ("Clusters correlated candidate series and keeps one per group. The decision "
+               "is made separately in each fold using training data only. A threshold below "
+               "0.8 is considered aggressive."),
+    },
+    "technical_lookbacks": {
+        "fr": ("Fenêtres roulantes, en barres, utilisées par les indicateurs techniques. "
+               "Saisir une liste d'entiers (ex. 10,20,60) ou un intervalle (ex. 5-15). "
+               "Les valeurs par défaut conservent le comportement existant."),
+        "en": ("Rolling windows, in bars, used by technical indicators. Enter comma-separated "
+               "integers (e.g. 10,20,60) or a range (e.g. 5-15). Defaults preserve existing behavior."),
+    },
+    "staged_screening": {
+        "fr": ("Évalue toute la grille sur le premier fold, puis ne garde que les meilleurs "
+               "candidats pour les folds suivants. Le mode exhaustif reste disponible et "
+               "reste le défaut. Requiert au moins deux folds walk-forward."),
+        "en": ("Evaluates the full grid on the first fold, then keeps only the best candidates "
+               "for later folds. Exhaustive mode remains available and is the default. "
+               "Requires at least two walk-forward folds."),
+    },
+    "optuna_bounds": {
+        "fr": ("Ces bornes définissent les intervalles dans lesquels Optuna explore les "
+               "hyperparamètres. Elles ne changent rien si le réglage Optuna est désactivé."),
+        "en": ("These bounds define the intervals Optuna searches for each hyperparameter. "
+               "They have no effect when Optuna tuning is disabled."),
+    },
+    "asset_statistics": {
+        "fr": ("Statistiques calculées directement depuis les cours de chaque actif : "
+               "rendements, tendance, z-score et volatilité. Ce ne sont pas des prédictions "
+               "du modèle."),
+        "en": ("Statistics computed directly from each asset's prices: returns, trend, z-score, "
+               "and volatility. These are not model predictions."),
+    },
+    "asset_bar_windows": {
+        "fr": ("Les fenêtres sont comptées en observations de la série, pas en jours calendaires. "
+               "Pour les séries macro mensuelles ou trimestrielles, une barre représente un mois "
+               "ou un trimestre."),
+        "en": ("Windows are counted in observations, not calendar days. For monthly or quarterly "
+               "macro series, one bar represents a month or quarter."),
+    },
+    "data_freshness": {
+        "fr": ("Données lues dans le cache local, sans téléchargement depuis cette page. "
+               "« Jamais mis en cache » signifie qu'aucun run n'a encore chargé cette série."),
+        "en": ("Data is read from the local cache; this page does not download anything. "
+               "\"Never cached\" means no run has loaded the series yet."),
+    },
+    "equity_universe": {
+        "fr": ("Univers actions séparé des features des autres classes. Chaque titre peut être "
+               "choisi comme cible d'un run, mais n'est pas injecté dans les autres modèles."),
+        "en": ("The equity universe is separate from other asset-class features. Each stock can "
+               "be selected as a run target but is not injected into other models."),
+    },
+    "equity_min_history": {
+        "fr": ("Le badge indique si l'historique disponible atteint le seuil minimal pour "
+               "envisager un entraînement. Les prix et fondamentaux restent consultables "
+               "en dessous de ce seuil."),
+        "en": ("The badge indicates whether available history reaches the minimum threshold "
+               "to consider training. Prices and fundamentals remain viewable below it."),
+    },
+    "equity_feature_exclusions": {
+        "fr": ("Certaines familles de features ne s'appliquent pas aux actions individuelles. "
+               "Chaque exclusion est listée avec son motif."),
+        "en": ("Some feature families do not apply to individual equities. Each exclusion is "
+               "listed with its reason."),
+    },
+    "equity_fundamentals": {
+        "fr": ("Données collectées hors pipeline ML. Les valeurs fondamentales peuvent être "
+               "révisées et leur date réelle de publication n'est pas vérifiée."),
+        "en": ("Collected outside the ML pipeline. Fundamentals may be revised, and their "
+               "actual publication date is not verified."),
+    },
+    "prediction_overview": {
+        "fr": ("Affiche le dernier signal enregistré par cible et horizon, ainsi que sa "
+               "significativité. Vue en lecture seule : aucun modèle n'est recalculé."),
+        "en": ("Shows the latest recorded signal by target and horizon, with its significance. "
+               "Read-only view: no model is recalculated."),
+    },
+    "live_reliability": {
+        "fr": ("Taux de réussite des prédictions live dont l'issue est connue, distinct du "
+               "backtest. Une alerte n'apparaît qu'après au moins 10 résultats observés."),
+        "en": ("Hit rate for live predictions whose outcome is known, separate from the backtest. "
+               "A warning appears only after at least 10 observed outcomes."),
+    },
+    "portfolio_contradictions": {
+        "fr": ("Signale des paires historiquement corrélées dont les derniers signaux, au même "
+               "horizon, ne respectent pas le sens de corrélation attendu."),
+        "en": ("Flags historically correlated pairs whose latest signals at the same horizon "
+               "do not match the expected correlation direction."),
+    },
+    "portfolio_pairs": {
+        "fr": ("Une paire par ligne au format symbole_A:symbole_B:sens, avec positive ou "
+               "negative comme sens. Un champ vide restaure les paires par défaut."),
+        "en": ("One pair per line in symbol_A:symbol_B:direction format, using positive or "
+               "negative. An empty field restores the default pairs."),
+    },
+    "wealth_summary": {
+        "fr": ("Les soldes et positions sont calculés depuis les mouvements. Les comptes "
+               "fictifs restent séparés du patrimoine réel ; glisse un mouvement vers un "
+               "compte fictif pour le copier."),
+        "en": ("Balances and positions are calculated from movements. Fictive accounts stay "
+               "separate from real wealth; drag a movement to a fictive account to copy it."),
+    },
+    "wealth_account_rules": {
+        "fr": ("Pour un PEA, la date d'ouverture sert au contrôle des 5 ans. Les indices par "
+               "défaut sont Euro Stoxx 50 pour PEA, MSCI World (URTH) pour CTO/AV, aucun pour "
+               "livret et dépôt à terme."),
+        "en": ("For a PEA, the opening date is used for the 5-year rule. Default benchmarks are "
+               "Euro Stoxx 50 for PEA, MSCI World (URTH) for CTO/AV, and none for savings or term deposits."),
+    },
+    "wealth_movements": {
+        "fr": ("Glisser une ligne vers un compte réel la déplace, vers un compte fictif la copie ; "
+               "un transfert vers un compte réel depuis un compte fictif est refusé. Les CSV "
+               "peuvent être déposés sur un compte pour prévisualisation avant import."),
+        "en": ("Drag a row to a real account to move it or to a fictive account to copy it; "
+               "transfers from fictive to real accounts are rejected. CSV files can be dropped "
+               "on an account for preview before import."),
+    },
+    "wealth_csv_import": {
+        "fr": ("Les colonnes françaises et anglaises sont reconnues. Les types de mouvements "
+               "sont déduits des libellés ; frais, taxes, ISIN et cryptomonnaies sont pris en charge. "
+               "L'aperçu permet de contrôler les lignes avant l'enregistrement et évite les doublons."),
+        "en": ("French and English columns are recognized. Movement types are inferred from labels; "
+               "fees, taxes, ISINs, and cryptocurrencies are supported. Preview rows before saving; "
+               "re-imports do not create duplicates."),
+    },
+    "wealth_simulation": {
+        "fr": ("Rejoue les prédictions déjà enregistrées sur les positions dont le symbole a été "
+               "une cible de run. Le résultat suit les pondérations actuelles et n'entraîne aucun modèle."),
+        "en": ("Replays saved predictions for positions whose symbols have been run targets. Results "
+               "use current position weights and do not train any models."),
+    },
+    "wealth_simulation_trials": {
+        "fr": ("Chaque actif simulé est enregistré comme une simulation et contribue au Sharpe "
+               "déflaté des essais futurs sur cette cible."),
+        "en": ("Each simulated asset is recorded as a simulation and contributes to the deflated "
+               "Sharpe ratio of future trials on that target."),
     },
     "black_litterman": {
         "fr": ("Black-Litterman : part des rendements implicites d'équilibre (ceux qui "

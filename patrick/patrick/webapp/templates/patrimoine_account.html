@@ -108,7 +108,7 @@
   <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
     {{ icon('upload') }}
     <span>{{ t('wealth_drop_csv') }}</span>
-    <span class="hint">Export de courtier tel quel (Trade Republic, Boursorama, relevé bancaire…) : colonnes FR/EN reconnues, types déduits des mots-clés ou des signes, ISIN et cryptos convertis en cotations Yahoo, frais et taxes repris. Rien n'est enregistré avant l'aperçu ; un fichier réimporté ne crée pas de doublons.</span>
+    <span class="hint">{{ info('wealth_csv_import', 'Détails de l’import CSV') }} Aucun mouvement n'est enregistré avant l'aperçu.</span>
     <input type="file" accept=".csv,text/csv" hidden>
   </div>
   <div class="import-preview" data-import-preview="{{ a.account_id }}"></div>

@@ -146,7 +146,7 @@ def test_phase9_aggregation_and_execution_supports_all_blocks():
     assert engine.journal.export().shape[0] >= 2
 
 
-def test_phase9_tracking_persistence_and_overview_route(tmp_path, monkeypatch):
+def test_phase9_tracking_api_remains_available_without_the_page(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "phase9.db"))
     from fastapi.testclient import TestClient
 
@@ -160,8 +160,7 @@ def test_phase9_tracking_persistence_and_overview_route(tmp_path, monkeypatch):
 
     client = TestClient(app)
     response = client.get("/phase9")
-    assert response.status_code == 200
-    assert "Journal de décision" in response.text
+    assert response.status_code == 404
 
     journal = client.get("/api/phase9/journal").json()
     assert journal["entries"]
