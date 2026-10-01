@@ -220,6 +220,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_shap_sample": {"fr": "Échantillon SHAP", "en": "SHAP sample"},
     "field_track_stability": {"fr": "Suivre la stabilité de la sélection (Jaccard entre folds)",
                                "en": "Track selection stability (Jaccard across folds)"},
+    "field_staged_screening": {"fr": "Présélection progressive (1er fold complet, puis finalistes)",
+                               "en": "Staged screening (full first fold, then finalists)"},
+    "field_screening_finalists": {"fr": "Finalistes par horizon et régime", "en": "Finalists per horizon and regime"},
+    "hint_staged_screening": {
+        "fr": "Le premier fold entraîne toute la grille; les folds suivants et Optuna ne gardent que les meilleurs candidats par horizon/régime. Moins cher mais moins robuste qu'une comparaison exhaustive : la grille complète et le fold de sélection restent visibles. Mode exhaustif décoché.",
+        "en": "The first fold trains the full grid; later folds and Optuna keep only top candidates per horizon/regime. Faster but less robust than exhaustive comparison: the full grid and screening fold remain visible. Off means exhaustive mode.",
+    },
 
     "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
     "field_uniqueness_weights": {"fr": "Poids d'unicité / bootstrap séquentiel (horizons chevauchants)",
@@ -255,16 +262,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_parametric_jobs": {"fr": "Workers du pool paramétrique", "en": "Parametric pool workers"},
     "hint_parametric_jobs": {
         "fr": "1 = séquentiel (comportement d'origine). Plus de workers accélère la construction des features "
-              "paramétriques sans changer les résultats, au prix de plus de mémoire. S'applique aux prochains runs.",
+              "paramétriques sans changer les résultats. Le nombre réel est plafonné selon CPU et mémoire disponible. "
+              "S'applique aux prochains runs.",
         "en": "1 = sequential (original behaviour). More workers speed up parametric feature building without "
-              "changing results, at the cost of more memory. Applies to the next runs."},
+              "changing results. The effective count is capped by CPU and available memory. Applies to the next runs."},
     "field_scan_jobs": {"fr": "Workers de calcul des modèles (sélection + entraînements)",
                         "en": "Model compute workers (selection + training)"},
     "hint_scan_jobs": {
         "fr": "1 = séquentiel. Plus de workers entraîne plusieurs modèles en parallèle (un cœur chacun) sans changer "
-              "les résultats, au prix de plus de mémoire. Évitez de dépasser le nombre de cœurs. S'applique aux prochains runs.",
+              "les résultats. Le nombre réel est plafonné selon CPU et mémoire disponible. S'applique aux prochains runs.",
         "en": "1 = sequential. More workers train several models in parallel (one core each) without changing results, "
-              "at the cost of more memory. Do not exceed your core count. Applies to the next runs."},
+              "with the effective count capped by CPU and available memory. Applies to the next runs."},
     "btn_save_setting": {"fr": "Enregistrer", "en": "Save"},
     "setting_saved": {"fr": "Enregistré.", "en": "Saved."},
     "setting_env_override": {"fr": "Une variable d'environnement (PATRICK_PARAMETRIC_JOBS / PATRICK_SCAN_JOBS) est définie et prime sur ce réglage.",

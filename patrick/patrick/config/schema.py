@@ -199,6 +199,8 @@ class SelectionConfig(BaseModel):
     method: Literal["shap", "rfe", "lasso"] = D.DEFAULT_SELECTION_METHOD
     n_features_grid: list[int] = Field(default_factory=lambda: list(D.DEFAULT_N_FEATURES_GRID))
     shap_sample: int = D.DEFAULT_SHAP_SAMPLE
+    screening_mode: Literal["exhaustive", "staged"] = "exhaustive"
+    screening_finalists_per_group: int = Field(default=8, ge=1, le=100)
     # Phase 6.3 (P6.3) -- selection stability across folds (Jaccard +
     # selection frequency, `selection/stability.py`). True (default): never a
     # silently disabled default (cross-cutting constraint, phase 6).
@@ -238,12 +240,10 @@ class TuningConfig(BaseModel):
     top_k: int = D.DEFAULT_TUNING_TOP_K
     n_trials: int = D.DEFAULT_TUNING_N_TRIALS
     cv_splits: int = D.DEFAULT_TUNING_CV_SPLITS
-    # Audit report, C3: True (default) = `top_k` is selected INDEPENDENTLY for
-    # each horizon (each horizon receives its own `top_k` configs refined by
-    # `n_trials` Optuna trials) -- fixes the original global cross-horizon
-    # selection, which could allocate 100% of the Optuna budget to a single
-    # horizon. False = old behavior (global top_k across all horizons),
-    # kept for explicit backward compatibility.
+    # True (default) = select `top_k` independently for each horizon. Since
+    # scores across horizons are not directly comparable, this guarantees each
+    # horizon gets its own tuning budget. `top_k=1` tunes only its best scan
+    # model by default; larger values retain broader exploratory searches.
     optuna_select_top_k_per_horizon: bool = D.DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON
     # Phase 1 (feature/hyperparams-ui): per-algo Optuna search-space bounds
     # (`{algo: {param: [low, high]}}`), forwarded to

@@ -26,11 +26,12 @@ from joblib import Parallel, delayed
 
 from patrick import settings
 from patrick.features import spike, vol_models
+from patrick.resource_budget import cap_workers
 
 ENV_JOBS = "PATRICK_PARAMETRIC_JOBS"
 
 
-def resolve_jobs(n_columns: int) -> int:
+def resolve_jobs(n_columns: int, input_bytes: int = 0) -> int:
     """1 (séquentiel) sauf demande explicite : `PATRICK_PARAMETRIC_JOBS` (prioritaire),
     sinon le réglage de l'interface (`patrick.settings`, relu à chaque appel).
     Plafonné au nombre de colonnes et au nombre de cœurs logiques."""
@@ -42,7 +43,7 @@ def resolve_jobs(n_columns: int) -> int:
             return 1
     else:
         requested = settings.get_parametric_jobs()
-    return max(1, min(requested, n_columns, os.cpu_count() or 1))
+    return cap_workers(requested, n_columns, input_bytes)
 
 
 def _column_task(series: pd.Series, col: str, models: list[str], run_vol: bool, run_spike: bool,

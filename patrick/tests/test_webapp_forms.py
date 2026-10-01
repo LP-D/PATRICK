@@ -180,6 +180,34 @@ def test_build_config_dict_accepts_valid_tuning_bounds():
 # flexibility-gaps Gap 7 -- validation.holdout_months (config/schema.py,
 # already YAML-configurable, bounds 12-24) was never exposed on /launch.
 # Same "server-side bound before RunConfig ever sees it" pattern as the
+def test_build_config_dict_defaults_optuna_to_one_candidate():
+    config_dict, errors = forms.build_config_dict(
+        _minimal_form(), target_symbol="^VIX", name="VIX_Optuna_1"
+    )
+
+    assert not errors
+    assert config_dict["tuning"]["top_k"] == 1
+
+
+def test_build_config_dict_exposes_staged_screening_and_finalist_budget():
+    config_dict, errors = forms.build_config_dict(
+        _minimal_form(staged_screening="on", screening_finalists_per_group="3"),
+        target_symbol="^VIX", name="VIX_Screen_1",
+    )
+
+    assert not errors
+    assert config_dict["selection"]["screening_mode"] == "staged"
+    assert config_dict["selection"]["screening_finalists_per_group"] == 3
+
+
+def test_build_config_dict_rejects_invalid_screening_finalist_budget():
+    _config, errors = forms.build_config_dict(
+        _minimal_form(screening_finalists_per_group="101"),
+        target_symbol="^VIX", name="VIX_Screen_2",
+    )
+    assert any("Finalistes par horizon et régime" in error for error in errors)
+
+
 # n_trials/top_k/cv_splits tests above.
 
 def test_build_config_dict_defaults_holdout_months_when_form_omits_it():

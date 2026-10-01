@@ -256,7 +256,8 @@ def _build_parametric_pool(raw: pd.DataFrame, config: RunConfig, fit_end_idx: in
     families = config.features.families
     parts: list[pd.DataFrame] = []
 
-    n_jobs = parametric_parallel.resolve_jobs(len(raw.columns))
+    n_jobs = parametric_parallel.resolve_jobs(
+        len(raw.columns), int(raw.memory_usage(deep=True).sum()))
     if n_jobs > 1:
         # Sprint 2 (exact): same parts, same order, computed by worker processes
         # (`PATRICK_PARAMETRIC_JOBS`, default 1 = the sequential loop below).
@@ -1151,7 +1152,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                 return {"te_mask": te_mask, "y_tr": y_tr, "y_te": y_te, "X_tr_full": X_tr_full, "X_te_full": X_te_full}
 
             grid = list(config.selection.n_features_grid)
-            jobs = parallel.resolve_jobs()
+            jobs = parallel.resolve_jobs(len(grid) * len(config.sampler.candidates) * len(config.models.algos))
             pre_fit: dict[tuple, tuple] = {}
             combo_cache: dict[int, dict | None] = {}
             if jobs > 1:
@@ -1288,6 +1289,7 @@ class _RunState:
     cpcv_full_pool: pd.DataFrame | None = None
     cpcv_interaction_formulas: list[str] | None = None
     universe: _FoldUniverse | None = None
+    screening_finalists: dict[tuple[int, str], set[tuple[int, str, str]]] = field(default_factory=dict)
 
     @property
     def is_walkforward(self) -> bool:
@@ -1374,7 +1376,8 @@ def _trial_id_for(st: _RunState, run_id: str, trial_key: tuple) -> int:
     return st.trial_ids[trial_key]
 
 
-def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, regime: str) -> None:
+def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, regime: str,
+                           candidate_filter: set[tuple[int, str, str]] | None = None) -> None:
     """Grid (N x sampler x algo) on one (horizon, fold, regime): leaderboard
     rows, fold metrics and test predictions of every trial."""
     config = st.config
@@ -1388,32 +1391,52 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                                  "test_start": fd.test_start, "test_end": fd.test_end, **base_met})
         st.baseline_accum.setdefault((run_id, baseline_name), []).append(base_met)
 
-    grid = list(config.selection.n_features_grid)
+    grid = [n for n in config.selection.n_features_grid
+            if candidate_filter is None or any(item[0] == n for item in candidate_filter)]
+    if not grid:
+        return
+    active_candidates = [
+        (n, sampler_name, algo) for n in grid
+        for sampler_name in config.sampler.candidates for algo in config.models.algos
+        if candidate_filter is None or (n, sampler_name, algo) in candidate_filter
+    ]
     fit_kwargs = {"calibration": config.models.calibration, "calibration_method": config.models.calibration_method,
                   "calibration_gap": horizon, "sample_weight": fd.sample_weight, "ind_matrix": fd.ind_matrix,
                   "uniqueness_weights_enabled": config.sampling.uniqueness_weights}
-    jobs = parallel.resolve_jobs()
-    fits = None
+    jobs = parallel.resolve_jobs(len(active_candidates), int(fd.X_tr.nbytes + fd.X_te.nbytes))
+    fit_results = {}
     if jobs > 1:
         # Sprint 2 (exact): selections then fits of the whole grid computed by worker
         # processes, consumed below in the sequential order (`PATRICK_SCAN_JOBS`).
         cols_by_n = _select_batch(st.conn, st.target_col, horizon, st.snapshot_id, config,
                                   [(fd.X_tr, fd.y_tr, n) for n in grid], st.seed, jobs)
-        fits = iter(parallel.run_ordered(
-            [("fit_eval_full", (fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te, sampler_name, algo, st.seed),
-              fit_kwargs)
-             for cols in cols_by_n for sampler_name in config.sampler.candidates for algo in config.models.algos],
-            jobs))
+        cols_for_n = dict(zip(grid, cols_by_n, strict=True))
+        fit_tasks = [
+            ("fit_eval_full",
+             (fd.X_tr[:, cols_for_n[n]], fd.y_tr, fd.X_te[:, cols_for_n[n]], fd.y_te,
+              sampler_name, algo, st.seed), fit_kwargs)
+            for n, sampler_name, algo in active_candidates
+        ]
+        fit_keys = [
+            (tuple(cols_for_n[n]), sampler_name, algo, st.seed, config.models.calibration,
+             config.models.calibration_method, horizon, config.sampling.uniqueness_weights)
+            for n, sampler_name, algo in active_candidates
+        ]
+        fit_results = dict(zip(active_candidates, parallel.run_ordered(
+            fit_tasks, jobs, deduplicate_keys=fit_keys), strict=True))
     for i_n, n_feat in enumerate(grid):
-        cols = (cols_by_n[i_n] if fits is not None
+        cols = (cols_by_n[i_n] if jobs > 1
                 else _select(st.conn, st.target_col, horizon, st.snapshot_id, config, fd.X_tr, fd.y_tr, n_feat, st.seed))
         X_tr_n, X_te_n = fd.X_tr[:, cols], fd.X_te[:, cols]
         fold_names = fd.feature_names if fd.feature_names is not None else st.feature_pool
         feat_names = [fold_names[c] for c in cols]
         for sampler_name in config.sampler.candidates:
             for algo in config.models.algos:
-                if fits is not None:
-                    met, y_pred, confidence, p_up = next(fits)
+                candidate = (n_feat, sampler_name, algo)
+                if candidate_filter is not None and candidate not in candidate_filter:
+                    continue
+                if jobs > 1:
+                    met, y_pred, confidence, p_up = fit_results[candidate]
                 else:
                     met, y_pred, confidence, p_up = _fit_eval_full(
                         X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed, **fit_kwargs)
@@ -1436,6 +1459,45 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                                         p_up=p_up)
 
 
+def _select_screening_finalists(st: _RunState, horizon: int, regime: str, run_id: str) -> None:
+    """Keep the best first-fold candidates for later folds and Optuna."""
+    group_rows = [row for row in st.board.rows
+                  if row.get("horizon") == horizon and row.get("regime") == regime and row.get("fold") == 1]
+    group_board = Leaderboard()
+    group_board.rows = group_rows
+    ranked = group_board.top_k(st.config.selection.screening_finalists_per_group,
+                               metric="F1_dir", group_cols=("N", "sampler", "algo"))
+    selected = {(int(row["N"]), row["sampler"], row["algo"]) for row in ranked}
+    score_by_key = {
+        (int(row["N"]), row["sampler"], row["algo"]): row.get("F1_dir")
+        for row in group_board.top_k(len(group_rows), metric="F1_dir", group_cols=("N", "sampler", "algo"))
+    }
+    rank_by_key = {key: rank for rank, key in enumerate(
+        ((int(row["N"]), row["sampler"], row["algo"]) for row in ranked), start=1)}
+    all_candidates = sorted(score_by_key, key=lambda key: (rank_by_key.get(key, len(rank_by_key) + 1), key))
+    decisions = [
+        {"horizon": horizon, "N": n_features, "sampler": sampler, "algo": algo,
+         "score": score_by_key[(n_features, sampler, algo)], "rank": rank_by_key.get((n_features, sampler, algo)),
+         "decision": "finalist" if (n_features, sampler, algo) in selected else "screened_out",
+         "reason": ("retenu selon F1_dir du fold 1" if (n_features, sampler, algo) in selected
+                    else f"hors des {st.config.selection.screening_finalists_per_group} finalistes selon F1_dir du fold 1")}
+        for n_features, sampler, algo in all_candidates
+    ]
+    st.screening_finalists[(horizon, regime)] = selected
+    trackdb.record_screening_decisions(st.conn, run_id, regime, decisions)
+    st.board.rows = [
+        row for row in st.board.rows
+        if not (row.get("horizon") == horizon and row.get("regime") == regime
+                and (row.get("N"), row.get("sampler"), row.get("algo")) not in selected)
+    ]
+    st.trial_ids = {
+        key: trial_id for key, trial_id in st.trial_ids.items()
+        if not (key[0] == horizon and key[1] == regime and key[2:] not in selected)
+    }
+    print(f"  [SCREENING] h={horizon}d {regime}: {len(selected)}/{len(all_candidates)} finalistes "
+          f"pour les folds suivants.")
+
+
 def _scan_walkforward(st: _RunState) -> None:
     config = st.config
     for horizon in config.objective.horizons:
@@ -1443,7 +1505,11 @@ def _scan_walkforward(st: _RunState) -> None:
         t_scan_start = time.time()
         for k in range(config.validation.n_wf_folds):
             for regime in config.objective.regimes:
-                _scan_walkforward_fold(st, horizon, run_id, k, regime)
+                candidate_filter = (st.screening_finalists.get((horizon, regime))
+                                    if config.selection.screening_mode == "staged" and k > 0 else None)
+                _scan_walkforward_fold(st, horizon, run_id, k, regime, candidate_filter)
+                if config.selection.screening_mode == "staged" and k == 0:
+                    _select_screening_finalists(st, horizon, regime, run_id)
             print(f"  h={horizon:2d}d fold{k+1}: {len(st.board.rows)} cumulative rows "
                   f"[{time.time()-st.t0:.0f}s]")
         trackdb.record_phase_timing(st.conn, run_id, "scan", t_scan_start, time.time())
@@ -1756,6 +1822,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     which would load the LATEST snapshot of the key, i.e. possibly a newer
     FRED vintage than the one the interrupted run was launched on. `None`
     (default, every fresh run) keeps the regular `ingest()` path."""
+    if config.selection.screening_mode == "staged":
+        if config.validation.scheme != "walkforward":
+            raise ValueError("La présélection progressive nécessite le schéma walk-forward.")
+        if config.validation.n_wf_folds < 2:
+            raise ValueError("La présélection progressive nécessite au moins deux folds walk-forward.")
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()

@@ -1265,6 +1265,9 @@ legend {
   cursor: pointer;
 }
 .queue-action:hover { color: var(--text); background: var(--surface-3); }
+.history-model-actions { display: grid; gap: var(--space-xs); min-width: 12rem; }
+.history-model-actions form { display: flex; align-items: center; gap: var(--space-xs); }
+.history-model-actions input { min-width: 0; width: 8rem; }
 .queue-action.danger { border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); color: var(--neg); }
 .queue-action[hidden] { display: none; }
 .queue-panel > .queue-action { margin-top: 10px; }

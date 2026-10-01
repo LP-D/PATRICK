@@ -28,11 +28,12 @@ from typing import Any
 from joblib import Parallel, delayed, parallel_config
 
 from patrick import settings
+from patrick.resource_budget import cap_workers
 
 ENV_JOBS = "PATRICK_SCAN_JOBS"
 
 
-def resolve_jobs() -> int:
+def resolve_jobs(task_count: int | None = None, input_bytes: int = 0) -> int:
     """`PATRICK_SCAN_JOBS` (prioritaire), sinon le réglage de l'interface ;
     1 = séquentiel. Plafonné au nombre de cœurs logiques."""
     env = os.environ.get(ENV_JOBS)
@@ -43,7 +44,7 @@ def resolve_jobs() -> int:
             return 1
     else:
         requested = settings.get_scan_jobs()
-    return max(1, min(requested, os.cpu_count() or 1))
+    return cap_workers(requested, task_count, input_bytes)
 
 
 def _blas_threads() -> int | None:
@@ -69,13 +70,35 @@ def _dispatch(name: str, args: tuple, kwargs: dict) -> Any:
     return _resolve(name)(*args, **kwargs)
 
 
-def run_ordered(tasks: Sequence[tuple[str | Callable[..., Any], tuple, dict]], jobs: int) -> list:
+def _deduplicate_tasks(tasks: Sequence[tuple[str | Callable[..., Any], tuple, dict]],
+                       keys: Sequence[Any]) -> tuple[list, list[int]]:
+    if len(keys) != len(tasks):
+        raise ValueError("deduplication keys must match the task count")
+    unique = []
+    positions = {}
+    task_indexes = []
+    for task, key in zip(tasks, keys, strict=True):
+        if key not in positions:
+            positions[key] = len(unique)
+            unique.append(task)
+        task_indexes.append(positions[key])
+    return unique, task_indexes
+
+
+def run_ordered(tasks: Sequence[tuple[str | Callable[..., Any], tuple, dict]], jobs: int,
+                deduplicate_keys: Sequence[Any] | None = None) -> list:
     """Exécute chaque tâche `(fonction ou nom, args, kwargs)` et renvoie les résultats
     DANS L'ORDRE des tâches. `jobs <= 1` ou une seule tâche : exécution directe
     dans ce processus (même code que la version séquentielle)."""
-    if jobs <= 1 or len(tasks) <= 1:
-        return [(_resolve(fn) if isinstance(fn, str) else fn)(*args, **kwargs) for fn, args, kwargs in tasks]
-    with parallel_config(backend="loky", n_jobs=min(jobs, len(tasks)), inner_max_num_threads=_blas_threads()):
-        return Parallel()(
-            delayed(_dispatch)(fn, args, kwargs) if isinstance(fn, str) else delayed(fn)(*args, **kwargs)
-            for fn, args, kwargs in tasks)
+    unique, task_indexes = (_deduplicate_tasks(tasks, deduplicate_keys) if deduplicate_keys is not None
+                            else (list(tasks), list(range(len(tasks)))))
+    if jobs <= 1 or len(unique) <= 1:
+        results = [(_resolve(fn) if isinstance(fn, str) else fn)(*args, **kwargs)
+                   for fn, args, kwargs in unique]
+    else:
+        with parallel_config(backend="loky", n_jobs=min(jobs, len(unique)),
+                             inner_max_num_threads=_blas_threads()):
+            results = Parallel()(
+                delayed(_dispatch)(fn, args, kwargs) if isinstance(fn, str) else delayed(fn)(*args, **kwargs)
+                for fn, args, kwargs in unique)
+    return [results[i] for i in task_indexes]

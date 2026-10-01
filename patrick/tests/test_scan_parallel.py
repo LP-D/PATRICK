@@ -36,6 +36,17 @@ def test_run_ordered_keeps_task_order():
     assert parallel.run_ordered(tasks, 2) == [i * i for i in range(7)]
 
 
+def test_run_ordered_reuses_exact_duplicate_fit_tasks():
+    tasks = [(pow, (2, 3), {}), (pow, (4, 2), {}), (pow, (2, 3), {})]
+    keys = [("columns", (1, 2), "RF"), ("columns", (1, 3), "RF"), ("columns", (1, 2), "RF")]
+
+    unique, indexes = parallel._deduplicate_tasks(tasks, keys)
+
+    assert len(unique) == 2
+    assert indexes == [0, 1, 0]
+    assert parallel.run_ordered(tasks, 1, deduplicate_keys=keys) == [8, 16, 8]
+
+
 @pytest.mark.slow
 def test_select_batch_equals_sequential_selects(tmp_path):
     cfg = RunConfig.model_validate({"name": "sb", "objective": {"target_symbol": "^X", "horizons": [1]},

@@ -27,6 +27,7 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
 from patrick.simulate import engine as sim_engine
+from patrick.tracking import champions as trackchampions
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
@@ -713,6 +714,43 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
          "filter_scheme": html.escape(scheme) if scheme else "",
          **_i18n_context(request)},
     )
+
+
+@app.post("/runs/{run_id}/rename")
+async def rename_historical_run(run_id: str, request: Request):
+    form = await request.form()
+    name = form.get("name")
+    conn = trackdb.connect()
+    try:
+        run = trackdb.get_run(conn, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        if run["status"] in {"running", "queued"}:
+            raise HTTPException(status_code=409, detail="Un run en cours ne peut pas être renommé.")
+        try:
+            trackdb.rename_run(conn, run_id, name if isinstance(name, str) else "")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Run introuvable") from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        conn.close()
+    return RedirectResponse("/runs", status_code=303)
+
+
+@app.post("/runs/{run_id}/delete")
+def delete_historical_run(run_id: str):
+    conn = trackdb.connect()
+    try:
+        if trackdb.get_run(conn, run_id) is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        try:
+            trackchampions.delete_non_champion_run(conn, run_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    finally:
+        conn.close()
+    return RedirectResponse("/runs", status_code=303)
 
 
 def _extract_scheme(run: dict) -> str:

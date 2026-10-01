@@ -746,6 +746,50 @@ def get_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
     return dict(zip(_RUN_COLUMNS, row)) if row else None
 
 
+def rename_run(conn: sqlite3.Connection, run_id: str, name: str) -> None:
+    """Change a run's display name without touching its config hash or outputs."""
+    name = name.strip()
+    if not name or len(name) > 120:
+        raise ValueError("Le nom doit contenir entre 1 et 120 caractères.")
+    run = get_run(conn, run_id)
+    if run is None:
+        raise KeyError(run_id)
+    try:
+        config = json.loads(run["config_json"]) if run["config_json"] else {}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Configuration du run illisible: {run_id}") from exc
+    if not isinstance(config, dict):
+        raise TypeError(f"Configuration du run invalide: {run_id}")
+    config["name"] = name
+    with conn:
+        conn.execute("UPDATE run SET config_json = ? WHERE run_id = ?",
+                     (json.dumps(config, ensure_ascii=False), run_id))
+
+
+def record_screening_decisions(conn: sqlite3.Connection, run_id: str, regime: str,
+                               decisions: list[dict]) -> None:
+    """Persist first-fold screening results for every candidate in a group."""
+    with conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO screening_decision "
+            "(run_id, horizon, regime, n_features, sampler, algo, score, rank, decision, reason) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(run_id, int(item["horizon"]), regime, int(item["N"]), item["sampler"], item["algo"],
+              item.get("score"), item.get("rank"), item["decision"], item["reason"])
+             for item in decisions],
+        )
+
+
+def list_screening_decisions(conn: sqlite3.Connection, run_id: str) -> list[dict]:
+    cursor = conn.execute(
+        "SELECT horizon, regime, n_features, sampler, algo, score, rank, decision, reason "
+        "FROM screening_decision WHERE run_id = ? ORDER BY rank IS NULL, rank, n_features, algo",
+        (run_id,),
+    )
+    keys = ("horizon", "regime", "n_features", "sampler", "algo", "score", "rank", "decision", "reason")
+    return [dict(zip(keys, row)) for row in cursor.fetchall()]
+
+
 def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, float | None]:
     """Batched `best trial -> avg test/test_path F1_dir` lookup for every
     run_id in `run_ids`: TWO fixed queries (best-trial ids, then their

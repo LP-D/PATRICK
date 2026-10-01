@@ -56,7 +56,7 @@ def tiny_config(tmp_path) -> RunConfig:
             "pool_prefilter": 60,
         },
         "validation": {"n_wf_folds": 2, "min_train_frac": 0.5},
-        "selection": {"method": "shap", "n_features_grid": [5, 8], "shap_sample": 200},
+        "selection": {"method": "shap", "n_features_grid": [5], "shap_sample": 200},
         "sampler": {"candidates": ["SMOTE"]},
         "models": {"algos": ["RandomForest", "XGBoost"]},
         "tuning": {"enabled": True, "top_k": 2, "n_trials": 3, "cv_splits": 2},
@@ -569,3 +569,41 @@ def test_walkforward_scheme_is_default_and_bit_identical_to_before_p61(tiny_conf
     assert "scheme" not in result["leaderboard"].columns or result["leaderboard"]["scheme"].isna().all()
     assert result["holdout"] is not None
     assert result["diebold_mariano"] is not None
+
+
+def test_staged_screening_limits_later_folds_to_first_fold_finalist(tiny_config, monkeypatch, tmp_path):
+    """The full grid is scored on fold 1; only its selected candidate reaches fold 2."""
+    tiny_config.selection.screening_mode = "staged"
+    tiny_config.selection.screening_finalists_per_group = 1
+    tiny_config.tuning.enabled = False
+
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_staged_screening.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config,
+        store=DataStore(root=str(tiny_config.output.dir) + "_staged_screening_store"),
+        db_path=db_path,
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        decisions = conn.execute(
+            "SELECT horizon, algo, decision FROM screening_decision ORDER BY horizon, decision"
+        ).fetchall()
+
+    assert len(decisions) == len(tiny_config.objective.horizons) * len(tiny_config.models.algos)
+    board = result["leaderboard"]
+    model_rows = board[board["N"].notna()]
+    assert set(model_rows["fold"]) == {1, 2}
+    for horizon in tiny_config.objective.horizons:
+        horizon_decisions = [row for row in decisions if row[0] == horizon]
+        finalists = {algo for _, algo, decision in horizon_decisions if decision == "finalist"}
+        screened_out = {algo for _, algo, decision in horizon_decisions if decision == "screened_out"}
+        assert len(finalists) == 1
+        assert len(screened_out) == len(tiny_config.models.algos) - 1
+        horizon_board = model_rows[model_rows["horizon"] == horizon]
+        assert set(horizon_board["algo"]) == finalists
+        assert set(horizon_board["fold"]) == {1, 2}

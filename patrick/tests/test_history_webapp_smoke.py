@@ -57,6 +57,71 @@ def test_runs_explorer_lists_seeded_runs(tmp_path, monkeypatch):
     assert "run2" in resp.text or "vix_cpcv_smoke" in resp.text
 
 
+def test_runs_explorer_renames_model_without_changing_results(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+
+    response = client.post("/runs/run1/rename", data={"name": "VIX finaliste"})
+
+    assert response.status_code == 200
+    history_page = client.get("/runs")
+    assert "VIX finaliste" in history_page.text
+    detail_page = client.get("/runs/run1")
+    assert detail_page.status_code == 200
+    assert "0.03" in detail_page.text
+
+
+def test_runs_explorer_rejects_empty_rename(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    response = TestClient(app).post("/runs/run1/rename", data={"name": "  "})
+    assert response.status_code == 400
+
+
+def test_renamed_model_name_is_escaped_in_history(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+
+    response = client.post("/runs/run1/rename", data={"name": "<script>alert(1)</script>"})
+
+    assert response.status_code == 200
+    history_page = client.get("/runs")
+    assert "<script>alert(1)</script>" not in history_page.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in history_page.text
+
+
+def test_runs_explorer_deletes_non_champion_and_preserves_archive(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+
+    response = client.post("/runs/run2/delete")
+
+    assert response.status_code == 200
+    assert "vix_cpcv_smoke" not in client.get("/runs").text
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    assert db.get_run(conn, "run2") is None
+    archive = conn.execute(
+        "SELECT role, pruned FROM model_archive WHERE run_id = 'run2'"
+    ).fetchone()
+    assert archive == ("user_deleted", 1)
+    assert conn.execute("SELECT COUNT(*) FROM trial_registry WHERE run_id = 'run2'").fetchone()[0] > 0
+    conn.close()
+
+
+def test_runs_explorer_protects_current_model_from_deletion(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    conn.execute("UPDATE trial SET artifact_path = 'missing-model.joblib' WHERE run_id = 'run1'")
+    conn.commit()
+    conn.close()
+
+    response = TestClient(app).post("/runs/run1/delete")
+
+    assert response.status_code == 409
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    assert db.get_run(conn, "run1") is not None
+    conn.close()
+
+
 def test_runs_explorer_filters_by_scheme(tmp_path, monkeypatch):
     _seed_db(tmp_path, monkeypatch)
     client = TestClient(app)
@@ -73,6 +138,20 @@ def test_run_detail_page_renders_for_walkforward_run(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert "vix_smoke" in resp.text
     assert "0.03" in resp.text  # p-value DM
+
+
+def test_run_detail_shows_phase_durations_and_model_fit_counts(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.record_phase_timing(conn, "run1", "scan", started_at=0.0, finished_at=60.0)
+    conn.close()
+
+    response = TestClient(app).get("/runs/run1/detail")
+
+    assert response.status_code == 200
+    assert "Temps de calcul et budget exploration" in response.text
+    assert "60 s" in response.text
+    assert "fits de scan : 2" in response.text
 
 
 def test_run_detail_page_renders_for_cpcv_run(tmp_path, monkeypatch):

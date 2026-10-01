@@ -48,6 +48,19 @@ patrick run --config configs/examples/vix_direction.yaml --force-ingest
 patrick run --config configs/examples/vix_direction.yaml --name my_custom_run
 ```
 
+#### Exploration speed controls
+
+The scan remains exhaustive by default. In the web form, optional staged
+screening evaluates every candidate on the first walk-forward fold, then sends
+only the top configured finalists per horizon/regime to later folds; the run
+detail page records each screening decision. This mode requires at least two
+walk-forward folds and is not available for CPCV.
+
+Optuna tunes only the best scan candidate per horizon by default
+(`tuning.top_k: 1`); increase `top_k` to explore more candidates. Scan and
+feature workers are capped by available CPU and estimated free memory, and
+identical fit tasks within a scan are reused.
+
 ### `patrick resume --run-id <id>`
 Resumes an interrupted run from its config persisted in `run` (SQLite). The
 grid scan is always replayed in full; Optuna trials already completed for

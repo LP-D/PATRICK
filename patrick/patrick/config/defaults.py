@@ -100,7 +100,7 @@ DEFAULT_BASELINE_BY_ASSET_CLASS: dict[str, list[str]] = {
 # Optuna is part of the loop by default (explicit requirement): selecting the
 # best model without tuning it does not fulfill "return the best model".
 DEFAULT_TUNING_ENABLED = True
-DEFAULT_TUNING_TOP_K = 5
+DEFAULT_TUNING_TOP_K = 1
 DEFAULT_TUNING_N_TRIALS = 100
 DEFAULT_TUNING_CV_SPLITS = 3
 # Audit report, C3: `top_k` used to be selected GLOBALLY across all horizons --

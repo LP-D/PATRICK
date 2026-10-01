@@ -42,6 +42,7 @@
 <nav class="section-index" aria-label="Sections de la page">
     <span class="section-index-label">Sections</span>
     <a href="#resume">Résumé</a>
+    <a href="#durees">Durées</a>
     <a href="#essais">Essais</a>
     <a href="#config">Configuration</a>
 </nav>
@@ -116,6 +117,34 @@
 </div>
 {% if refus_rest is defined and refus_rest %}
 <p class="block-note"><span class="block-note-marker">†</span> {{ refus_rest }}</p>
+{% endif %}
+</section>
+
+<section id="durees" class="card">
+<h2>Temps de calcul et budget exploration</h2>
+{% set phase_rows = [] %}
+{% for p in detail.phase_breakdown.phases %}
+{% set _ = phase_rows.append([p.phase, p.duration_s ~ ' s', p.occurrences]) %}
+{% endfor %}
+{{ data_table(["Phase", "Durée cumulée", "Occurrences"], phase_rows,
+              "Aucune durée instrumentée pour ce run.",
+              footer=("Temps total run : " ~ (detail.phase_breakdown.run_total_s ~ " s" if detail.phase_breakdown.run_total_s is not none else "en cours/inconnu")
+                     ~ " · non attribué aux phases instrumentées : "
+                     ~ (detail.phase_breakdown.unaccounted_s ~ " s" if detail.phase_breakdown.unaccounted_s is not none else "—")
+                     ~ " · fits de scan : " ~ detail.phase_breakdown.scan_model_fits
+                     ~ " · essais Optuna : " ~ detail.phase_breakdown.optuna_trials)) }}
+{% if detail.screening_decisions %}
+<h3>Décisions de présélection (premier fold)</h3>
+{% set screening_rows = [] %}
+{% for c in detail.screening_decisions %}
+{% set _ = screening_rows.append([c.regime, c.n_features, c.sampler, c.algo,
+    ('%.4f' | format(c.score)) if c.score is not none else '—',
+    c.rank if c.rank is not none else '—',
+    ('finaliste' if c.decision == 'finalist' else 'écarté'),
+    c.reason]) %}
+{% endfor %}
+{{ data_table(["Régime", "N", "Sampler", "Algo", "F1_dir fold 1", "Rang", "Décision", "Motif"],
+              screening_rows, num_cols=[1, 4, 5]) }}
 {% endif %}
 </section>
 

@@ -306,6 +306,15 @@
                 <input type="checkbox" name="track_stability" {% if view.track_stability %}checked{% endif %}>
                 {{ t('field_track_stability') }}{{ info('track_stability') }}
             </label>
+            <label class="checkbox">
+                <input type="checkbox" name="staged_screening" {% if view.staged_screening %}checked{% endif %}>
+                {{ t('field_staged_screening') }}
+            </label>
+            <p class="hint">{{ t('hint_staged_screening') }}</p>
+            <label>{{ t('field_screening_finalists') }}
+                <input type="number" min="1" max="100" name="screening_finalists_per_group"
+                       value="{{ view.screening_finalists_per_group }}">
+            </label>
             </div>
         </details>
 

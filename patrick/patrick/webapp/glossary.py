@@ -474,15 +474,20 @@ GLOSSARY: dict[str, dict[str, str]] = {
     "optuna_select_top_k_per_horizon": {
         "fr": ("Coché (recommandé) : chaque horizon reçoit son propre budget "
                "Top-K/essais Optuna, indépendamment des autres horizons. "
+               "Top-K vaut 1 par défaut : seul le meilleur candidat du scan "
+               "est affiné pour chaque horizon ; augmente-le pour explorer "
+               "plusieurs finalistes. "
                "Décoché : le Top-K est sélectionné globalement tous horizons "
                "confondus -- un horizon dont les meilleures configs dominent "
                "peut alors capter tout le budget Optuna, laissant les autres "
                "horizons sans aucun essai de tuning."),
         "en": ("Checked (recommended): each horizon gets its own Top-K/Optuna "
-               "trial budget, independently of the other horizons. Unchecked: "
-               "Top-K is selected globally across all horizons -- a horizon "
-               "whose best configs dominate can then capture the entire Optuna "
-               "budget, leaving the other horizons with zero tuning trials."),
+               "trial budget, independently of the other horizons. Top-K "
+               "defaults to 1, tuning only the best scan candidate per horizon; "
+               "raise it to explore more finalists. Unchecked: Top-K is selected "
+               "globally across all horizons -- a horizon whose best configs "
+               "dominate can then capture the entire Optuna budget, leaving the "
+               "other horizons with zero tuning trials."),
     },
     # Portfolio / statistics surfaces (roadmap bloc 4: tooltips on regime/HRP/BL)
     "hrp": {

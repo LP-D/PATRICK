@@ -170,6 +170,23 @@ def prune_run(conn: sqlite3.Connection, run_id: str) -> dict:
     return counts
 
 
+def delete_non_champion_run(conn: sqlite3.Connection, run_id: str) -> dict:
+    """Archive and prune a finished run unless it is still the current model."""
+    run = conn.execute(
+        "SELECT target, horizon, status FROM run WHERE run_id = ?", (run_id,)
+    ).fetchone()
+    if run is None:
+        raise ValueError(f"Run not found: {run_id}")
+    target, horizon, status = run
+    if status in {"running", "queued"}:
+        raise ValueError(f"Cannot delete a {status} run: {run_id}")
+    incumbent = current(conn, target, horizon)
+    if incumbent is not None and incumbent["run_id"] == run_id:
+        raise ValueError(f"{run_id} is the current model for {target} h={horizon}: promote another model first")
+    archive(conn, run_id, role="user_deleted")
+    return prune_run(conn, run_id)
+
+
 def plan_initialization(conn: sqlite3.Connection) -> list[dict]:
     """`patrick champions init`: for each (target, horizon) having exported
     models, the one kept in title -- the explicit champion if any, else the

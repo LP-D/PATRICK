@@ -411,6 +411,16 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
 
     quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
     feature_stability = trackdb.get_feature_stability(conn, run_id)
+    phase_breakdown = phase_breakdown_for_run(conn, run_id)
+    phase_breakdown["scan_model_fits"] = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT fm.trial_id, fm.fold_index FROM fold_metric fm "
+        "JOIN trial t ON t.trial_id = fm.trial_id WHERE t.run_id = ? "
+        "AND fm.split IN ('test', 'test_path') AND fm.metric = 'F1_dir')", (run_id,)
+    ).fetchone()[0]
+    phase_breakdown["optuna_trials"] = conn.execute(
+        "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE run_id = ? "
+        "AND source IN ('optuna', 'backfill_optuna')", (run_id,)
+    ).fetchone()[0]
 
     return {
         "run": run,
@@ -438,6 +448,8 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
         "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
                           if best_trial else None),
+        "phase_breakdown": phase_breakdown,
+        "screening_decisions": trackdb.list_screening_decisions(conn, run_id),
     }
 
 
