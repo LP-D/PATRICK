@@ -107,10 +107,13 @@ Pages (nav: Synthèse · Lancer · Historique · Univers · Simulateur · Phase 
 - `/` — synthesis dashboard: coverage, per-target DM/BH quality, latest
   prediction, winning-model metrics by direction, recent-run history. No page
   cache, recomputed on every load from the database.
-- `/launch` — the config form (target/horizons/features/validation/models),
-  run tracking, launch queue. Was on `/` before the synthesis dashboard
-  replaced it there.
-- `/runs`, `/runs/{id}` — run history browser and detail page.
+- `/launch` — the config form (essential settings by default, with every
+  advanced control available in Expert mode), browser-local launch profiles,
+  run tracking with phase/scan progress and a confidence-qualified indicative
+  ETA, and the launch queue. `/launch?run_id=...` loads a previous run's
+  configuration for editing without reusing its output directory.
+- `/runs`, `/runs/{id}` — searchable/filterable run history and detail pages;
+  the history can compare 2–4 completed runs at `/compare-runs?run_ids=...`.
 - `/universe` — configured target universe crossed with run history.
 - `/targets/{ticker}` — aggregated run history for one target.
 - `/simulate` — position-sizing/backtest simulator on a trained model.

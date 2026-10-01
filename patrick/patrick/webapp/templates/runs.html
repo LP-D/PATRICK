@@ -9,7 +9,7 @@
 </nav>
 
 <h1 class="page-title">{{ t('nav_runs') or 'Historique des runs' }}</h1>
-<p class="page-subtitle">Runs persistés en base (<code>patrick.db</code>), lancés depuis l'interface web ou en CLI (<code>patrick run</code>/<code>patrick resume</code>). Renomme les résultats, ou supprime un modèle historique après archivage de son descriptif. Le modèle en titre et les runs en cours sont protégés.</p>
+<p class="page-subtitle">Runs persistés en base. Filtre-les, compare jusqu'à quatre runs ou duplique leur configuration depuis le détail.</p>
 
 {# Portée LOCALE, même règle que sur `/universe` : le bandeau porte le verdict
    global, cette ligne répond à la question de CETTE page — parmi les runs
@@ -24,6 +24,9 @@
 </p>
 
 <form class="filter-bar" method="get" action="/runs">
+    <label>Recherche
+        <input type="search" name="q" value="{{ filter_query }}" placeholder="Nom, cible ou ID">
+    </label>
     <label>Cible
         <select name="target" onchange="this.form.submit()">
             <option value="">— toutes —</option>
@@ -47,16 +50,43 @@
             <option value="cpcv" {% if filter_scheme == "cpcv" %}selected{% endif %}>CPCV</option>
         </select>
     </label>
+    <label>Algorithme
+        <select name="algo">
+            <option value="">— tous —</option>
+            {% for model in algorithms %}
+            <option value="{{ model }}" {% if model == filter_algo %}selected{% endif %}>{{ model }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Depuis
+        <input type="date" name="started_after" value="{{ filter_started_after }}">
+    </label>
+    <label>Jusqu'au
+        <input type="date" name="started_before" value="{{ filter_started_before }}">
+    </label>
+    <label>Durée min. (s)
+        <input type="number" name="min_duration_s" min="0" step="1" value="{{ filter_min_duration_s }}">
+    </label>
+    <label>Durée max. (s)
+        <input type="number" name="max_duration_s" min="0" step="1" value="{{ filter_max_duration_s }}">
+    </label>
+    <button type="submit">Filtrer</button>
+    <a class="btn-secondary" href="/runs">Effacer</a>
     <noscript><button type="submit">Filtrer</button></noscript>
 </form>
 
 {% if runs %}
+<form id="compare-runs-form" method="get" action="/compare-runs" class="compare-run-actions">
+    <button type="submit" id="compare-runs-submit" class="primary" disabled>Comparer 2 à 4 runs</button>
+    <span id="compare-runs-count" class="hint" aria-live="polite">Sélectionne 2 à 4 runs terminés.</span>
+</form>
 {% set rows = [] %}
 {% for r in runs %}
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
 {% set _ = rows.append([
-    '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>',
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.target ~ '</a>',
+    ('<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="' ~ (r.run_id | e) ~ '" aria-label="Sélectionner run ' ~ (r.run_id | e) ~ ' pour comparaison">' if r.status not in ('running', 'queued') else '<span class="na">—</span>')
+        ~ ' <a href="/runs/' ~ r.run_id ~ '/detail">' ~ ((r.name or r.run_id) | safe) ~ '</a>',
+    '<a href="/targets/' ~ r.target ~ '">' ~ (r.target | safe) ~ '</a>',
     r.horizon | hlabel,
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
@@ -76,7 +106,7 @@
 ]) %}
 {% endfor %}
 {{ data_table(
-    ["Run", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "Persistance (F1_dir)", "Écart", "DM p-value", "Actions"],
+    ["Run (cocher pour comparer)", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "Persistance (F1_dir)", "Écart", "DM p-value", "Actions"],
     rows, num_cols=[2, 6, 7, 8, 9, 10],
     footer=(runs | length) ~ " run(s) affiché(s)"
         ~ (" · cible = " ~ filter_target if filter_target else "")

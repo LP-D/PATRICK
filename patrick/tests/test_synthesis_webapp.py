@@ -141,6 +141,29 @@ def test_launch_page_serves_the_run_launcher(tmp_path, monkeypatch):
     assert 'id="run-form"' in resp.text
 
 
+def test_launch_page_renders_profiles_and_keeps_hidden_expert_fields_submittable(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    response = TestClient(app).get("/launch")
+    assert response.status_code == 200
+    assert 'id="save-launch-profile"' in response.text
+    assert 'id="launch-profile-list"' in response.text
+    assert 'data-adv="section_validation"' in response.text
+    assert 'name="purge"' in response.text
+    assert 'name="purge" disabled' not in response.text
+
+
+def test_launch_page_defaults_to_simple_mode_and_keeps_expert_controls(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    db.connect(str(tmp_path / "patrick.db")).close()
+    response = TestClient(app).get("/launch")
+    assert response.status_code == 200
+    assert 'id="run-form" data-mode="simple"' in response.text
+    assert 'id="settings-mode-toggle"' in response.text
+    assert 'data-adv="section_validation"' in response.text
+    assert 'data-adv="section_optuna_bounds"' in response.text
+
+
 def test_launch_page_has_no_example_loader(tmp_path, monkeypatch):
     """fix/remove-launch-example-loader : le dropdown "Charger un exemple"
     (id="load" / id="example-form") rechargeait la page et ecrasait

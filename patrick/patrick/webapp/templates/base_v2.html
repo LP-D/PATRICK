@@ -131,8 +131,17 @@ script below (no flash), otherwise the OS preference applies.
         <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
         <div id="glossary-popover-title" class="glossary-popover-title"></div>
         <div id="glossary-popover-body" class="glossary-popover-body"></div>
+        <div class="glossary-search">
+            <label for="glossary-search-input">{{ t('glossary_search_label') if t else 'Search glossary' }}</label>
+            <input id="glossary-search-input" type="search" autocomplete="off"
+                   placeholder="{{ t('glossary_search_placeholder') if t else 'Search terms' }}"
+                   aria-controls="glossary-search-results" aria-describedby="glossary-search-status">
+            <div id="glossary-search-status" class="glossary-search-status" role="status" aria-live="polite"></div>
+            <ul id="glossary-search-results" class="glossary-search-results" aria-label="{{ t('glossary_search_results') if t else 'Glossary search results' }}"></ul>
+        </div>
     </div>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
+    <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
     <script src="/static/shell.js"></script>
     <script src="/static/glossary.js"></script>
     <script src="/static/market.js"></script>

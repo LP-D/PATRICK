@@ -80,6 +80,25 @@ def _elapsed_s(job: dict) -> float:
     return (end - start).total_seconds()
 
 
+def _estimated_remaining_s(elapsed_s: float, progress_done: int, progress_total: int) -> int | None:
+    """Estimate remaining time from scan progress once a useful sample exists."""
+    if elapsed_s <= 0 or progress_total <= 0 or progress_done <= 0 or progress_done >= progress_total:
+        return None
+    min_sample = max(2, (progress_total + 9) // 10)
+    if progress_done < min_sample:
+        return None
+    return max(0, round(elapsed_s / progress_done * (progress_total - progress_done)))
+
+
+def _eta_confidence(progress_done: int, progress_total: int) -> str | None:
+    """Describe sample size, not statistical certainty, for the rough ETA."""
+    if progress_total <= 0 or progress_done <= 0 or progress_done >= progress_total:
+        return None
+    if progress_done < max(5, (progress_total + 3) // 4):
+        return "low"
+    return "moderate"
+
+
 def _job_view(job: dict, queue_position: int | None) -> dict:
     name = None
     try:
@@ -87,16 +106,23 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
     except (TypeError, ValueError, AttributeError):
         pass
     paused = job["status"] == "running" and bool(job.get("pause_requested"))
+    progress_total = max(0, int(job["progress_total"] or 0))
+    progress_done = max(0, int(job["progress_done"] or 0))
+    if progress_total:
+        progress_done = min(progress_done, progress_total)
+    elapsed_s = _elapsed_s(job)
     return {
         "id": job["job_id"],
         "name": name,
         "status": "paused" if paused else job["status"],  # queued | running | paused | done | error
         "paused": paused,
         "phase": job["phase"],
-        "progress": {"done": job["progress_done"], "total": job["progress_total"]},
+        "progress": {"done": progress_done, "total": progress_total},
         "log_tail": job["log_tail"],
         "error": job["error"],
-        "elapsed_s": _elapsed_s(job),
+        "elapsed_s": elapsed_s,
+        "estimated_remaining_s": _estimated_remaining_s(elapsed_s, progress_done, progress_total),
+        "eta_confidence": _eta_confidence(progress_done, progress_total),
         "queue_position": queue_position,
     }
 

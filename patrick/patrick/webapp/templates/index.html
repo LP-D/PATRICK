@@ -36,7 +36,33 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
-    <form method="post" action="/runs" class="run-form" id="run-form">
+    <form method="post" action="/runs" class="run-form" id="run-form" data-mode="simple">
+        {% if duplicated_run_id %}
+        <p class="banner" role="status">{{ t('duplicate_run_loaded', run_id=duplicated_run_id) }}</p>
+        {% endif %}
+        <div class="settings-mode">
+            <div>
+                <strong>{{ t('settings_mode_simple_title') }}</strong>
+                <p class="hint">{{ t('settings_mode_hint') }}</p>
+            </div>
+            <button type="button" class="queue-action" id="settings-mode-toggle" aria-pressed="false">
+                {{ t('settings_mode_show_expert') }}
+            </button>
+        </div>
+        <div class="launch-profiles">
+            <label for="launch-profile-name">{{ t('profile_name') }}
+                <input type="text" id="launch-profile-name" maxlength="60" autocomplete="off">
+            </label>
+            <button type="button" class="queue-action" id="save-launch-profile">{{ t('profile_save') }}</button>
+            <label for="launch-profile-list">{{ t('profile_saved') }}
+                <select id="launch-profile-list">
+                    <option value="">{{ t('profile_choose') }}</option>
+                </select>
+            </label>
+            <button type="button" class="queue-action" id="load-launch-profile" disabled>{{ t('profile_load') }}</button>
+            <button type="button" class="queue-action danger" id="delete-launch-profile" disabled>{{ t('profile_delete') }}</button>
+            <span id="launch-profile-status" class="hint" role="status" aria-live="polite"></span>
+        </div>
 
         <fieldset>
             <legend>{{ t('section_run') }}</legend>

@@ -1,0 +1,33 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — Comparaison de runs{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Chemin de navigation">
+    <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
+    <span aria-current="page">Comparaison</span>
+</nav>
+<h1 class="page-title">Comparer les runs</h1>
+<p class="page-subtitle">Comparaison descriptive des résultats enregistrés; les runs peuvent différer par leurs cibles, horizons ou schémas de validation.</p>
+<div class="compare-runs-table-wrap">
+<table class="data-table compare-runs-table">
+    <thead>
+        <tr><th>Mesure</th>{% for run in runs %}<th><a href="/runs/{{ run.run_id }}/detail">{{ run.name }}</a></th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+        <tr><th>Cible</th>{% for run in runs %}<td>{{ run.target }}</td>{% endfor %}</tr>
+        <tr><th>Horizons configurés</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} jours</td>{% endfor %}</tr>
+        <tr><th>Validation</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
+        <tr><th>Statut</th>{% for run in runs %}<td>{{ run.status }}</td>{% endfor %}</tr>
+        <tr><th>Durée</th>{% for run in runs %}<td>{{ '%.0f s' | format(run.duration_s) if run.duration_s is not none else 'En cours / indisponible' }}</td>{% endfor %}</tr>
+        <tr><th>Essais</th>{% for run in runs %}<td>{{ run.n_trials if run.n_trials is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>F1 direction (meilleur essai)</th>{% for run in runs %}<td>{{ '%.4f' | format(run.best_f1_dir) if run.best_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>Baseline F1 direction</th>{% for run in runs %}<td>{{ '%.4f' | format(run.benchmark_f1_dir) if run.benchmark_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>DM p-value</th>{% for run in runs %}<td>{{ '%.4f' | format(run.dm_p_value) if run.dm_p_value is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>Algorithmes configurés</th>{% for run in runs %}<td>{{ run.algorithms | join(', ') if run.algorithms else '—' }}</td>{% endfor %}</tr>
+        <tr><th>Samplers configurés</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>
+        <tr><th>Démarré le</th>{% for run in runs %}<td>{{ run.started_at or '—' }}</td>{% endfor %}</tr>
+    </tbody>
+</table>
+</div>
+<p><a class="btn-secondary" href="/runs">Retour à l'historique</a></p>
+{% endblock %}
