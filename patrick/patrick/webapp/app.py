@@ -530,9 +530,48 @@ def run_state():
     `/runs/{run_id}/status` (progress/logs of a specific run)."""
     active = run_manager.active_run()
     return {
-        "active_run": {"id": active["id"], "name": active["name"]} if active else None,
-        "queue": [{"id": s["id"], "name": s["name"]} for s in run_manager.queued_runs()],
+        "active_run": active,
+        "queue": run_manager.queued_runs(),
     }
+
+
+@app.post("/api/jobs/{job_id}/pause")
+def pause_job(job_id: str):
+    job = run_manager.set_active_run_paused(job_id, True)
+    if job is None:
+        raise HTTPException(status_code=409, detail="Ce run n'est plus actif.")
+    return job
+
+
+@app.post("/api/jobs/{job_id}/resume")
+def resume_job(job_id: str):
+    job = run_manager.set_active_run_paused(job_id, False)
+    if job is None:
+        raise HTTPException(status_code=409, detail="Ce run n'est plus actif.")
+    return job
+
+
+@app.post("/api/jobs/{job_id}/stop")
+def stop_job(job_id: str):
+    try:
+        stopped = run_manager.stop_active_run(job_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if not stopped:
+        raise HTTPException(status_code=409, detail="Ce run n'est plus actif.")
+    return {"stopped": True}
+
+
+@app.delete("/api/queue/{job_id}")
+def remove_queued_job(job_id: str):
+    if not run_manager.remove_queued_run(job_id):
+        raise HTTPException(status_code=409, detail="Cet élément n'est plus dans la file.")
+    return {"removed": 1}
+
+
+@app.delete("/api/queue")
+def clear_queued_jobs():
+    return {"removed": run_manager.clear_queued_runs()}
 
 
 def _get_run_or_404(run_id: str) -> dict:

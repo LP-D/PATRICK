@@ -42,6 +42,28 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
     }
 
 
+def _as_mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _url_from(candidate):
+    if isinstance(candidate, str):
+        return candidate
+    if isinstance(candidate, dict):
+        value = candidate.get("url") or ""
+        return value if isinstance(value, str) else ""
+    return ""
+
+
+def _publisher_name(candidate):
+    if isinstance(candidate, str):
+        return candidate
+    if isinstance(candidate, dict):
+        value = candidate.get("displayName") or ""
+        return value if isinstance(value, str) else ""
+    return ""
+
+
 def latest_news(symbol: str, limit: int = 6) -> list[dict]:
     try:
         items = yf.Ticker(symbol).news or []
@@ -61,11 +83,11 @@ def latest_news(symbol: str, limit: int = 6) -> list[dict]:
         if not title:
             continue
         link = (
-            (c.get("canonicalUrl") or {}).get("url")
-            or (c.get("clickThroughUrl") or {}).get("url")
+            _url_from(c.get("canonicalUrl"))
+            or _url_from(c.get("clickThroughUrl"))
             or ""
         )
-        publisher = (c.get("provider") or {}).get("displayName", "")
+        publisher = _publisher_name(c.get("provider"))
         out.append({
             "title": title,
             "link": link,

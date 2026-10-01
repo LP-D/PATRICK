@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 from patrick.config.schema import RunConfig
@@ -84,10 +86,12 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
         name = json.loads(job["config_json"]).get("name")
     except (TypeError, ValueError, AttributeError):
         pass
+    paused = job["status"] == "running" and bool(job.get("pause_requested"))
     return {
         "id": job["job_id"],
         "name": name,
-        "status": job["status"],  # queued | running | done | error
+        "status": "paused" if paused else job["status"],  # queued | running | paused | done | error
+        "paused": paused,
         "phase": job["phase"],
         "progress": {"done": job["progress_done"], "total": job["progress_total"]},
         "log_tail": job["log_tail"],
@@ -172,6 +176,79 @@ def queued_runs() -> list[dict]:
         return views
     finally:
         conn.close()
+
+
+def set_active_run_paused(job_id: str, paused: bool) -> dict | None:
+    conn = _connect()
+    try:
+        if not jobs_db.set_job_paused(conn, job_id, paused):
+            return None
+        job = jobs_db.get_job(conn, job_id)
+        return _job_view(job, None) if job else None
+    finally:
+        conn.close()
+
+
+def remove_queued_run(job_id: str) -> bool:
+    conn = _connect()
+    try:
+        return jobs_db.delete_queued_job(conn, job_id)
+    finally:
+        conn.close()
+
+
+def clear_queued_runs() -> int:
+    conn = _connect()
+    try:
+        return jobs_db.clear_queued_jobs(conn)
+    finally:
+        conn.close()
+
+
+def _terminate_worker(pid: int) -> None:
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"Expiration du délai d'arrêt du worker {pid}.") from exc
+        if result.returncode and jobs_db.pid_alive(pid):
+            detail = result.stderr.strip() or result.stdout.strip() or "taskkill failed"
+            raise RuntimeError(f"Impossible d'arrêter le worker {pid} : {detail}")
+    elif jobs_db.pid_alive(pid):
+        try:
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGTERM)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+
+    deadline = time.monotonic() + 10
+    while jobs_db.pid_alive(pid) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if jobs_db.pid_alive(pid):
+        raise RuntimeError(f"Le worker {pid} ne s'est pas arrêté après le signal.")
+
+
+def stop_active_run(job_id: str) -> bool:
+    conn = _connect()
+    try:
+        job = jobs_db.get_job(conn, job_id)
+        if job is None or job["status"] != "running":
+            return False
+        pid = job.get("worker_pid")
+        if not pid or pid <= 0:
+            raise RuntimeError("Le PID du worker actif est indisponible.")
+        _terminate_worker(pid)
+        stopped = jobs_db.finish_user_stopped_job(conn, job_id)
+    finally:
+        conn.close()
+    if queued_runs():
+        ensure_worker_running()
+    return stopped
 
 
 def ensure_worker_running() -> None:

@@ -175,6 +175,8 @@ class _ProgressCapture:
         self._out.flush()
 
     def _handle_line(self, line: str) -> None:
+        while jobs_db.pause_requested(self._conn, self._job_id):
+            time.sleep(0.5)
         self._log_lines.append(line)
         for marker, phase in _PHASE_MARKERS:
             if marker in line:

@@ -154,8 +154,21 @@ def compute_stats(
     requested, only the JSON key stays fixed."""
     ma_windows = list(MA_WINDOWS) if ma_windows is None else list(ma_windows)
     long_windows_bars = list(LONG_WINDOWS_BARS) if long_windows_bars is None else list(long_windows_bars)
-    dates = series.get("dates") or []
-    closes = series.get("closes") or []
+    dates = list(series.get("dates") or [])
+    closes = list(series.get("closes") or [])
+    if len(dates) != len(closes):
+        n = min(len(dates), len(closes))
+        dates = dates[:n]
+        closes = closes[:n]
+
+    frame = pd.DataFrame({
+        "date": pd.to_datetime(dates, errors="coerce"),
+        "close": pd.to_numeric(closes, errors="coerce"),
+    }).dropna().sort_values("date").drop_duplicates(subset="date", keep="last")
+
+    dates = [d.strftime("%Y-%m-%d") for d in frame["date"]]
+    closes = [float(v) for v in frame["close"]]
+
     out: dict = {
         "n_obs": len(closes),
         "error": series.get("error"),
