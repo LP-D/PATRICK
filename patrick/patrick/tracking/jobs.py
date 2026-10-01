@@ -26,6 +26,7 @@ HEARTBEAT_STALE_S = 30.0
 _JOB_COLUMNS = [
     "job_id", "config_json", "status", "created_at", "started_at", "finished_at",
     "error", "result_json", "phase", "progress_done", "progress_total", "log_tail",
+    "worker_pid", "pause_requested",
 ]
 
 
@@ -125,6 +126,54 @@ def active_job(conn: sqlite3.Connection) -> dict | None:
         "ORDER BY started_at LIMIT 1"
     ).fetchone()
     return _row_to_dict(row) if row else None
+
+
+def set_job_paused(conn: sqlite3.Connection, job_id: str, paused: bool) -> bool:
+    with conn:
+        cur = conn.execute(
+            "UPDATE job SET pause_requested = ? WHERE job_id = ? AND status = 'running'",
+            (int(paused), job_id),
+        )
+    return cur.rowcount == 1
+
+
+def delete_queued_job(conn: sqlite3.Connection, job_id: str) -> bool:
+    with conn:
+        cur = conn.execute(
+            "DELETE FROM job WHERE job_id = ? AND status = 'queued'", (job_id,)
+        )
+    return cur.rowcount == 1
+
+
+def clear_queued_jobs(conn: sqlite3.Connection) -> int:
+    with conn:
+        cur = conn.execute("DELETE FROM job WHERE status = 'queued'")
+    return cur.rowcount
+
+
+def pause_requested(conn: sqlite3.Connection, job_id: str) -> bool:
+    row = conn.execute(
+        "SELECT pause_requested FROM job WHERE job_id = ? AND status = 'running'",
+        (job_id,),
+    ).fetchone()
+    return bool(row and row[0])
+
+
+def finish_user_stopped_job(conn: sqlite3.Connection, job_id: str) -> bool:
+    error = "Stopped by user."
+    with conn:
+        cur = conn.execute(
+            "UPDATE job SET status = 'error', finished_at = datetime('now'), error = ? "
+            "WHERE job_id = ? AND status = 'running'",
+            (error, job_id),
+        )
+        if cur.rowcount:
+            conn.execute(
+                "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ? "
+                "WHERE job_id = ? AND status = 'running'",
+                (error, job_id),
+            )
+    return cur.rowcount == 1
 
 
 def pid_alive(pid: int | None) -> bool:

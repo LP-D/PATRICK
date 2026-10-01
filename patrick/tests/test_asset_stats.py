@@ -203,3 +203,17 @@ def test_parse_window_list_rejects_non_positive_entry():
 def test_parse_window_list_rejects_entry_above_cap():
     with pytest.raises(asset_stats.InvalidWindowError):
         asset_stats.parse_window_list(str(asset_stats.MAX_WINDOW_BARS + 1), [1])
+
+
+def test_compute_stats_sanitizes_malformed_and_reverse_chronology():
+    dates = pd.date_range("2020-01-01", periods=50, freq="D").strftime("%Y-%m-%d").tolist()
+    closes = [float(i) for i in range(50)]
+    series = {
+        "dates": list(reversed(dates)) + ["not-a-date"],
+        "closes": list(reversed(closes)) + ["oops"],
+    }
+    out = asset_stats.compute_stats(series)
+    assert out["n_obs"] == 50
+    assert out["insufficient_history"] is False
+    assert out["dates"][0] < out["dates"][-1]
+    assert out["returns"]["1"] is not None

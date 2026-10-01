@@ -459,6 +459,9 @@
 
     <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
         <p class="hint" id="queue-summary"></p>
+        <ol id="queue-list" class="queue-list"></ol>
+        <button type="button" id="clear-queue-btn" class="queue-action"
+                data-confirm="{{ t('queue_clear_confirm') }}">{{ t('queue_clear') }}</button>
     </div>
 
     {# Ce message ne vaut que si la colonne est REELLEMENT vide. Avec la liste
@@ -491,6 +494,11 @@
 
     <div id="status-panel" class="{% if not initial_run_id %}hidden{% endif %}">
         <p id="run-name-line" class="run-name-line"></p>
+        <div id="run-controls" class="run-controls hidden">
+            <button type="button" id="pause-run-btn" class="queue-action"></button>
+            <button type="button" id="stop-run-btn" class="queue-action danger"
+                    data-confirm="{{ t('run_stop_confirm') }}">{{ t('run_stop') }}</button>
+        </div>
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
         <p id="status-line">…</p>
         <pre id="log-tail" class="log-tail"></pre>

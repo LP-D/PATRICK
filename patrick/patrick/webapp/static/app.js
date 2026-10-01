@@ -40,8 +40,14 @@
     const resultsPanel = document.getElementById("results-panel");
     const queuePanel = document.getElementById("queue-panel");
     const queueSummary = document.getElementById("queue-summary");
+    const queueList = document.getElementById("queue-list");
+    const clearQueueBtn = document.getElementById("clear-queue-btn");
+    const runControls = document.getElementById("run-controls");
+    const pauseRunBtn = document.getElementById("pause-run-btn");
+    const stopRunBtn = document.getElementById("stop-run-btn");
 
     let trackedRunId = null;
+    let activeJobId = null;
     let resultsLoaded = false;
     let detailPollTimer = null;
 
@@ -151,6 +157,8 @@
             statusLine.textContent = fmtStr(tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)"), {
                 phase: PHASE_LABELS[data.phase] || data.phase, pct: pct, elapsed: Math.round(data.elapsed_s),
             });
+        } else if (data.status === "paused") {
+            statusLine.textContent = tr("run_paused", "Paused — resume any time.");
         } else if (data.status === "error") {
             statusLine.innerHTML = `<span class="error-text">${escapeHtml(fmtStr(tr("status_error", "Error: {error}"), { error: data.error }))}</span>`;
             clearInterval(detailPollTimer);
@@ -391,16 +399,85 @@
             const names = data.queue.map((q) => q.name).join(", ");
             queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued: {names}"),
                 { n: data.queue.length, names: names });
+            queueList.replaceChildren();
+            data.queue.forEach((job) => {
+                const item = document.createElement("li");
+                const label = document.createElement("span");
+                label.textContent = job.name || job.id;
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "queue-action";
+                remove.dataset.jobId = job.id;
+                remove.dataset.jobAction = "remove";
+                remove.textContent = tr("queue_remove", "Remove");
+                remove.setAttribute("aria-label", `${tr("queue_remove", "Remove")} ${job.name || job.id}`);
+                item.append(label, remove);
+                queueList.appendChild(item);
+            });
             queuePanel.classList.remove("hidden");
         } else {
             queuePanel.classList.add("hidden");
+            queueList.replaceChildren();
+        }
+
+        const active = data.active_run;
+        activeJobId = active ? active.id : null;
+        if (runControls) runControls.classList.toggle("hidden", !active);
+        if (active && pauseRunBtn) {
+            pauseRunBtn.dataset.jobId = active.id;
+            pauseRunBtn.dataset.paused = active.status === "paused" ? "true" : "false";
+            pauseRunBtn.textContent = active.status === "paused"
+                ? tr("run_resume", "Resume") : tr("run_pause", "Pause");
         }
 
         // Le run actif côté serveur a changé (ex: la file d'attente a avancé
         // automatiquement) : on bascule le suivi dessus sans recharger la page.
-        if (data.active_run && data.active_run.id !== trackedRunId) {
-            startTracking(data.active_run.id);
+        if (active && active.id !== trackedRunId) {
+            startTracking(active.id);
         }
+    }
+
+    async function sendJobControl(url, options, confirmMessage) {
+        if (confirmMessage && !window.confirm(confirmMessage)) return;
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                const detail = await response.json().catch(() => ({}));
+                window.alert(detail.detail || tr("run_control_error", "Could not apply this action."));
+                return;
+            }
+            await runStatePoll();
+            if (trackedRunId) detailPoll();
+        } catch (e) {
+            window.alert(tr("run_control_error", "Could not apply this action."));
+        }
+    }
+
+    if (pauseRunBtn) {
+        pauseRunBtn.addEventListener("click", () => {
+            const paused = pauseRunBtn.dataset.paused === "true";
+            const action = paused ? "resume" : "pause";
+            sendJobControl(`/api/jobs/${pauseRunBtn.dataset.jobId}/${action}`, { method: "POST" });
+        });
+    }
+    if (stopRunBtn) {
+        stopRunBtn.addEventListener("click", () => {
+            sendJobControl(`/api/jobs/${activeJobId}/stop`, { method: "POST" },
+                stopRunBtn.dataset.confirm);
+        });
+    }
+    if (queueList) {
+        queueList.addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-job-action='remove']");
+            if (!button) return;
+            sendJobControl(`/api/queue/${button.dataset.jobId}`, { method: "DELETE" },
+                tr("queue_remove_confirm", "Remove this run from the queue?"));
+        });
+    }
+    if (clearQueueBtn) {
+        clearQueueBtn.addEventListener("click", () => {
+            sendJobControl("/api/queue", { method: "DELETE" }, clearQueueBtn.dataset.confirm);
+        });
     }
 
     // --- soumission du formulaire settings, sans rechargement de page ---

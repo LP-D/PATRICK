@@ -1245,6 +1245,30 @@ legend {
   font-size: 13px;
 }
 .queue-panel .hint { margin: 0; }
+.queue-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+.queue-list li { padding-left: 2px; }
+.queue-list li > span { margin-right: 10px; }
+.queue-action {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.queue-action:hover { color: var(--text); background: var(--surface-3); }
+.queue-action.danger { border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); color: var(--neg); }
+.queue-action[hidden] { display: none; }
+.queue-panel > .queue-action { margin-top: 10px; }
+.run-controls { display: flex; gap: 8px; margin: 8px 0; }
 
 .progress-bar { height: 6px; overflow: hidden; border-radius: 999px; background: var(--surface-3); }
 .progress-fill {
