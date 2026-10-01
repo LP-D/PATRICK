@@ -94,6 +94,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "run_control_error": {"fr": "Impossible d'appliquer cette action.", "en": "Could not apply this action."},
     "run_queued_confirm": {"fr": "Run « {name} » mis en file d'attente (position {position}).",
                             "en": "Run “{name}” queued (position {position})."},
+    "status_progress_units": {"fr": "{done}/{total} unités", "en": "{done}/{total} units"},
+    "status_running_eta": {
+        "fr": "{phase} ({pct} %, {progress}, {elapsed} s écoulées, reste estimé ~{remaining} s)",
+        "en": "{phase} ({pct}%, {progress}, {elapsed}s elapsed, approx. {remaining}s remaining)",
+    },
     "run_launch_error": {"fr": "Erreur lors du lancement.", "en": "Error launching the run."},
 
     "movers_title": {"fr": "Plus fortes variations (5 jours)", "en": "Biggest movers (5 days)"},
@@ -103,6 +108,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "movers_losers": {"fr": "▼ Baisses", "en": "▼ Losers"},
 
     "section_run": {"fr": "Run", "en": "Run"},
+    "settings_mode_simple_title": {"fr": "Réglages essentiels", "en": "Essential settings"},
+    "settings_mode_simple_hint": {
+        "fr": "Les réglages avancés sont masqués ; leurs valeurs actuelles restent conservées.",
+        "en": "Advanced controls are hidden; their current values are preserved.",
+    },
+    "settings_mode_expert_hint": {
+        "fr": "Toutes les options d’exploration sont disponibles ci-dessous.",
+        "en": "All exploratory options are available below.",
+    },
+    "settings_mode_show_expert": {"fr": "Afficher les réglages avancés", "en": "Show advanced settings"},
+    "settings_mode_hide_expert": {"fr": "Masquer les réglages avancés", "en": "Hide advanced settings"},
     "field_run_name": {"fr": "Nom du run (généré automatiquement)", "en": "Run name (auto-generated)"},
 
     "section_objective": {"fr": "Objectif — que prédire ?", "en": "Objective — what to predict?"},

@@ -15,6 +15,39 @@
     };
 
     const form = document.getElementById("run-form");
+    const settingsModeToggle = document.getElementById("settings-mode-toggle");
+    const settingsModeHint = document.getElementById("settings-mode-hint");
+    const SETTINGS_MODE_KEY = "patrick-launch-settings-mode";
+
+    if (form && settingsModeToggle && settingsModeHint) {
+        let expertMode = false;
+        try {
+            expertMode = window.localStorage.getItem(SETTINGS_MODE_KEY) === "expert";
+        } catch (e) {
+            // Keep the lightweight default if browser storage is unavailable.
+        }
+
+        function setSettingsMode(expert) {
+            expertMode = expert;
+            form.dataset.mode = expertMode ? "expert" : "simple";
+            settingsModeToggle.setAttribute("aria-pressed", String(expertMode));
+            settingsModeToggle.textContent = expertMode
+                ? tr("settings_mode_hide_expert", "Hide advanced settings")
+                : tr("settings_mode_show_expert", "Show advanced settings");
+            settingsModeHint.textContent = expertMode
+                ? tr("settings_mode_expert_hint", "All exploratory settings are available below.")
+                : tr("settings_mode_simple_hint", "Advanced controls are hidden; their current values are preserved.");
+            try {
+                window.localStorage.setItem(SETTINGS_MODE_KEY, expertMode ? "expert" : "simple");
+            } catch (e) {
+                // Mode still works for this page load without persistent storage.
+            }
+        }
+
+        settingsModeToggle.addEventListener("click", () => setSettingsMode(!expertMode));
+        setSettingsMode(expertMode);
+    }
+
     const errorsBanner = document.getElementById("run-errors");
     const errorsList = document.getElementById("run-errors-list");
     const launchBtn = document.getElementById("launch-btn");
@@ -154,8 +187,22 @@
         logTail.scrollTop = logTail.scrollHeight;
 
         if (data.status === "running") {
-            statusLine.textContent = fmtStr(tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)"), {
-                phase: PHASE_LABELS[data.phase] || data.phase, pct: pct, elapsed: Math.round(data.elapsed_s),
+            const progressText = total > 0
+                ? fmtStr(tr("status_progress_units", "{done}/{total} units"), { done: done, total: total })
+                : "";
+            const elapsed = Math.max(0, Math.round(data.elapsed_s));
+            const remaining = done >= Math.max(2, Math.ceil(total * 0.1)) && total > done
+                ? Math.round((elapsed / done) * (total - done))
+                : null;
+            const statusText = remaining === null
+                ? tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)")
+                : tr("status_running_eta", "{phase} ({pct}%, {progress}, {elapsed}s elapsed, approx. {remaining}s remaining)");
+            statusLine.textContent = fmtStr(statusText, {
+                phase: PHASE_LABELS[data.phase] || data.phase,
+                pct: pct,
+                progress: progressText,
+                elapsed: elapsed,
+                remaining: remaining,
             });
         } else if (data.status === "paused") {
             statusLine.textContent = tr("run_paused", "Paused — resume any time.");

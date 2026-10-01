@@ -36,7 +36,16 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
-    <form method="post" action="/runs" class="run-form" id="run-form">
+    <form method="post" action="/runs" class="run-form expert-settings" id="run-form" data-mode="simple">
+        <div class="settings-mode" id="settings-mode">
+            <div>
+                <strong>{{ t('settings_mode_simple_title') }}</strong>
+                <p class="hint" id="settings-mode-hint">{{ t('settings_mode_simple_hint') }}</p>
+            </div>
+            <button type="button" class="queue-action" id="settings-mode-toggle" aria-pressed="false">
+                {{ t('settings_mode_show_expert') }}
+            </button>
+        </div>
 
         <fieldset>
             <legend>{{ t('section_run') }}</legend>

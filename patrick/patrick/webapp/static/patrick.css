@@ -1190,6 +1190,21 @@ legend {
 }
 .dash-panel-body { display: flex; flex-direction: column; gap: var(--space-md); }
 
+.settings-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.settings-mode strong { font-size: 13px; }
+.settings-mode .hint { margin-top: 2px; }
+.settings-mode button { flex: none; }
+.run-form[data-mode="simple"] details.adv { display: none; }
+
 .launch-bar {
   position: sticky;
   bottom: 0;

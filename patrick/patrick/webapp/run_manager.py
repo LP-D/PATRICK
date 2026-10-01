@@ -80,6 +80,15 @@ def _elapsed_s(job: dict) -> float:
     return (end - start).total_seconds()
 
 
+def _estimated_remaining_s(elapsed_s: float, progress_done: int, progress_total: int) -> int | None:
+    """Return a rough run-level ETA only after enough measurable scan work."""
+    if progress_total <= 0 or progress_done >= progress_total:
+        return None
+    if progress_done < max(2, int(progress_total * 0.1 + 0.999)):
+        return None
+    return max(0, round(elapsed_s / progress_done * (progress_total - progress_done)))
+
+
 def _job_view(job: dict, queue_position: int | None) -> dict:
     name = None
     try:
@@ -87,16 +96,20 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
     except (TypeError, ValueError, AttributeError):
         pass
     paused = job["status"] == "running" and bool(job.get("pause_requested"))
+    progress_total = int(job["progress_total"] or 0)
+    progress_done = min(int(job["progress_done"] or 0), progress_total) if progress_total else 0
+    elapsed_s = _elapsed_s(job)
     return {
         "id": job["job_id"],
         "name": name,
         "status": "paused" if paused else job["status"],  # queued | running | paused | done | error
         "paused": paused,
         "phase": job["phase"],
-        "progress": {"done": job["progress_done"], "total": job["progress_total"]},
+        "progress": {"done": progress_done, "total": progress_total},
         "log_tail": job["log_tail"],
         "error": job["error"],
-        "elapsed_s": _elapsed_s(job),
+        "elapsed_s": elapsed_s,
+        "estimated_remaining_s": _estimated_remaining_s(elapsed_s, progress_done, progress_total),
         "queue_position": queue_position,
     }
 
