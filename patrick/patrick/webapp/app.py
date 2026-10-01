@@ -25,6 +25,7 @@ from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
 from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
+from patrick.pipeline import parallel as scan_parallel
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -394,7 +395,8 @@ def get_settings():
     """Réglages machine exposés à la page « Lancer » (hors config des runs)."""
     cpu = os.cpu_count() or 1
     return {"parametric_jobs": settings_store.get_parametric_jobs(), "max_parametric_jobs": cpu,
-            "env_override": os.environ.get(parametric_parallel.ENV_JOBS)}
+            "env_override": os.environ.get(parametric_parallel.ENV_JOBS),
+            "scan_jobs": settings_store.get_scan_jobs(), "env_override_scan": os.environ.get(scan_parallel.ENV_JOBS)}
 
 
 @app.post("/api/settings/parametric-jobs")
@@ -408,6 +410,19 @@ async def set_parametric_jobs(request: Request):
         return JSONResponse({"error": f"jobs doit être compris entre 1 et {cpu}."}, status_code=400)
     settings_store.save({settings_store.KEY_PARAMETRIC_JOBS: jobs})
     return {"parametric_jobs": jobs}
+
+
+@app.post("/api/settings/scan-jobs")
+async def set_scan_jobs(request: Request):
+    try:
+        jobs = int((await request.json())["jobs"])
+    except (ValueError, KeyError, TypeError):
+        return JSONResponse({"error": "jobs doit être un entier."}, status_code=400)
+    cpu = os.cpu_count() or 1
+    if not 1 <= jobs <= cpu:
+        return JSONResponse({"error": f"jobs doit être compris entre 1 et {cpu}."}, status_code=400)
+    settings_store.save({settings_store.KEY_SCAN_JOBS: jobs})
+    return {"scan_jobs": jobs}
 
 
 @app.post("/runs")

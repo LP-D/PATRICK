@@ -440,6 +440,10 @@
                 <input type="number" id="setting-parametric-jobs" min="1" step="1" value="1">
             </label>
             <p class="hint">{{ t('hint_parametric_jobs') }}</p>
+            <label>{{ t('field_scan_jobs') }}
+                <input type="number" id="setting-scan-jobs" min="1" step="1" value="1">
+            </label>
+            <p class="hint">{{ t('hint_scan_jobs') }}</p>
             <p class="hint" id="setting-env-note" hidden>{{ t('setting_env_override') }}</p>
             <button type="button" id="setting-parametric-save">{{ t('btn_save_setting') }}</button>
             <span id="setting-parametric-status" aria-live="polite"></span>
@@ -600,20 +604,27 @@
 <script src="/static/app.js"></script>
 <script>
 (function () {
-    var input = document.getElementById("setting-parametric-jobs");
+    var pj = document.getElementById("setting-parametric-jobs");
+    var sj = document.getElementById("setting-scan-jobs");
     var status = document.getElementById("setting-parametric-status");
-    if (!input) { return; }
+    if (!pj || !sj) { return; }
     fetch("/api/settings").then(function (r) { return r.json(); }).then(function (s) {
-        input.value = s.parametric_jobs;
-        input.max = s.max_parametric_jobs;
-        if (s.env_override !== null) { document.getElementById("setting-env-note").hidden = false; }
+        pj.value = s.parametric_jobs; pj.max = s.max_parametric_jobs;
+        sj.value = s.scan_jobs; sj.max = s.max_parametric_jobs;
+        if (s.env_override !== null || s.env_override_scan !== null) { document.getElementById("setting-env-note").hidden = false; }
     });
+    function post(url, value) {
+        return fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                           body: JSON.stringify({jobs: parseInt(value, 10)})})
+            .then(function (r) { return r.json().then(function (b) { return [r.ok, b]; }); });
+    }
     document.getElementById("setting-parametric-save").addEventListener("click", function () {
-        fetch("/api/settings/parametric-jobs", {
-            method: "POST", headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({jobs: parseInt(input.value, 10)})
-        }).then(function (r) { return r.json().then(function (b) { return [r.ok, b]; }); })
-          .then(function (res) { status.textContent = res[0] ? {{ t('setting_saved') | tojson }} : res[1].error; });
+        post("/api/settings/parametric-jobs", pj.value).then(function (res) {
+            if (!res[0]) { status.textContent = res[1].error; return; }
+            post("/api/settings/scan-jobs", sj.value).then(function (res2) {
+                status.textContent = res2[0] ? {{ t('setting_saved') | tojson }} : res2[1].error;
+            });
+        });
     });
 })();
 </script>

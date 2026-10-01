@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 KEY_PARAMETRIC_JOBS = "parametric_jobs"
+KEY_SCAN_JOBS = "scan_jobs"
 
 
 def settings_path() -> Path:
@@ -47,5 +48,13 @@ def get_parametric_jobs() -> int:
     """Nombre de workers du pool paramétrique réglé depuis l'interface (1 = séquentiel)."""
     try:
         return max(1, int(load().get(KEY_PARAMETRIC_JOBS, 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def get_scan_jobs() -> int:
+    """Workers de calcul des modèles (sélection SHAP + fits du scan) réglés depuis l'interface (1 = séquentiel)."""
+    try:
+        return max(1, int(load().get(KEY_SCAN_JOBS, 1)))
     except (TypeError, ValueError):
         return 1

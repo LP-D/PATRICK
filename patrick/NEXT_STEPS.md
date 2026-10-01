@@ -13,6 +13,11 @@ digests des artefacts et compteurs **identiques** à la baseline (`benchmarks/sp
 Réglable depuis l'interface (page « Lancer » > Performance, `~/.patrick/settings.json`, relu à chaque run ; la variable d'environnement prime).
 Non fait : défaut jobs>1, CPCV (un seul pool paramétrique : gain attendu faible), jobs=3/4 (nécessite de fixer les threads BLAS : comparer à part).
 
+**Étape 2 faite (non chronométrée)** : sélection SHAP + fits du scan (walk-forward et CPCV) en parallèle (`pipeline/parallel.py`, `PATRICK_SCAN_JOBS` ou page Lancer).
+Exactitude vérifiée : artefacts identiques à la baseline sur le benchmark de référence walk-forward (jobs=4) et sur le profil tiny (walk-forward + CPCV).
+Gain de durée NON mesuré proprement : le run GSPC de l'utilisateur tournait en parallèle et saturait la machine (mesure à 1538 s, toutes phases ralenties, donc inutilisable). À refaire sur machine au repos.
+Reste à paralléliser : Optuna (études indépendantes, mais persistance `optuna.db` + callback `TrialRecorder` à rejouer dans le parent), holdout_diagnostic, export_models.
+
 Proposition initiale des étapes (la 1 est faite) :
 
 Critère commun : digests de `benchmarks/baseline/{walkforward,cpcv}` identiques, compteurs en baisse.

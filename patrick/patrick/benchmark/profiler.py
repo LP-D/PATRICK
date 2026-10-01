@@ -294,7 +294,7 @@ def install(profiler: Profiler):
     import sklearn.preprocessing as skpre
 
     from patrick.features import pool_cache
-    from patrick.pipeline import champion_duel
+    from patrick.pipeline import champion_duel, parallel
     from patrick.pipeline import engine as E
     from patrick.tracking import db as trackdb
     from patrick.tracking import holdout_diagnostic as trackholdout
@@ -354,6 +354,8 @@ def install(profiler: Profiler):
              on_call=lambda p, a, k: p.count("models.constructed"))
         comp(OR, "get_classifier", "get_classifier.optuna",
              on_call=lambda p, a, k: p.count("optuna.cv_fits"))
+        comp(parallel, "run_ordered", "parallel.run_ordered",
+             on_call=lambda p, a, k: (p.count("parallel.batches"), p.count("parallel.tasks", len(a[0]))))
         comp(E, "tune_config", "optuna.tune_config", on_call=lambda p, a, k: p.count("optuna.studies"))
         comp(E, "build_target", "build_target")
         comp(E, "compute_baselines", "compute_baselines")

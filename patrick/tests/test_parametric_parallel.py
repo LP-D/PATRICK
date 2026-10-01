@@ -13,6 +13,11 @@ from patrick.pipeline import engine
 from patrick.tracking import db as trackdb
 
 
+@pytest.fixture(autouse=True)
+def _isolated_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
+
+
 def _raw(n=500, cols=4, seed=3):
     rng = np.random.default_rng(seed)
     idx = pd.bdate_range("2018-01-01", periods=n)
