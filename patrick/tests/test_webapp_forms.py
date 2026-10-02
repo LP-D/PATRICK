@@ -436,3 +436,39 @@ def test_build_config_dict_rejects_technical_lookback_above_max_allowed():
     form = _minimal_form(tl__returns_windows="999999")
     _config_dict, errors = forms.build_config_dict(form, target_symbol="^VIX", name="VIX_24")
     assert any("rendements" in e.lower() for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Default exploration logic (2026-10-02): staged screening -- the whole grid on
+# the first fold, then ONLY the best candidate of each horizon on the complete
+# period -- and Optuna on that best candidate only (`top_k=1`).
+# ---------------------------------------------------------------------------
+
+def test_default_config_screens_in_stages_and_keeps_only_the_best_candidate():
+    config = forms.default_config_dict()
+
+    assert config["selection"]["screening_mode"] == "staged"
+    assert config["selection"]["screening_finalists_per_group"] == 1
+    assert config["tuning"]["top_k"] == 1
+
+
+def test_default_view_checks_the_staged_screening_box_with_one_finalist():
+    view = forms.to_view(forms.default_config_dict())
+
+    assert view["staged_screening"] is True
+    assert view["screening_finalists_per_group"] == 1
+
+
+def test_missing_finalist_field_means_one_finalist():
+    config_dict, errors = forms.build_config_dict(
+        _minimal_form(staged_screening="on"), target_symbol="^VIX", name="VIX_Screen_3")
+
+    assert not errors
+    assert config_dict["selection"]["screening_finalists_per_group"] == 1
+
+
+def test_a_stored_config_without_screening_keeps_its_exhaustive_behaviour():
+    legacy = forms.default_config_dict()
+    del legacy["selection"]["screening_mode"], legacy["selection"]["screening_finalists_per_group"]
+
+    assert forms.to_view(legacy)["staged_screening"] is False

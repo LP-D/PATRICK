@@ -40,6 +40,7 @@ import json
 import logging
 import os
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
 
@@ -89,6 +90,7 @@ from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import holdout_diagnostic as trackholdout
+from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import phase_timing_log
 from patrick.tracking import stats as trackstats
 from patrick.tracking.export import export_best_model
@@ -1322,6 +1324,7 @@ class _RunState:
     cpcv_full_pool: pd.DataFrame | None = None
     cpcv_interaction_formulas: list[str] | None = None
     universe: _FoldUniverse | None = None
+    n_scan_evals: int = 0  # scan fits actually done (staged screening removes rows from the board)
     screening_finalists: dict[tuple[int, str], set[tuple[int, str, str]]] = field(default_factory=dict)
 
     @property
@@ -1479,6 +1482,7 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                              sampler=sampler_name, algo=algo, features="|".join(feat_names),
                              n_train=len(fd.y_tr), n_test=len(fd.y_te), effective_n_train=fd.effective_n,
                              test_start=fd.test_start, test_end=fd.test_end, **met)
+                st.n_scan_evals += 1
                 trial_id = _trial_id_for(st, run_id, (horizon, regime, n_feat, sampler_name, algo))
                 # n_eff stored as one more "metric" (generic trial/fold/split/metric
                 # schema) -- read by the HTML report alongside F1_dir.
@@ -1543,7 +1547,7 @@ def _scan_walkforward(st: _RunState) -> None:
                 _scan_walkforward_fold(st, horizon, run_id, k, regime, candidate_filter)
                 if config.selection.screening_mode == "staged" and k == 0:
                     _select_screening_finalists(st, horizon, regime, run_id)
-            print(f"  h={horizon:2d}d fold{k+1}: {len(st.board.rows)} cumulative rows "
+            print(f"  h={horizon:2d}d fold{k+1}: {st.n_scan_evals} cumulative rows "
                   f"[{time.time()-st.t0:.0f}s]")
         trackdb.record_phase_timing(st.conn, run_id, "scan", t_scan_start, time.time())
 
@@ -1896,8 +1900,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         else:
             _scan_cpcv(st)
 
-        print(f"\n[SCAN] {len(st.board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
-        _report_calibration_skips(len(st.board.rows))
+        n_scan_fits = st.n_scan_evals or len(st.board.rows)  # CPCV does not count fits one by one
+        print(f"\n[SCAN] {n_scan_fits} evaluations in {(time.time()-t0)/60:.1f}min")
+        _report_calibration_skips(n_scan_fits)
         best = st.board.best(metric="F1_dir")
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
@@ -1935,6 +1940,15 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
                     conn, run_ids[final_horizon], metric="F1_dir")
 
         _finish_runs(st)
+        # KPI summary of this launch (per algorithm, per number of features,
+        # ranking, best per horizon): printed in the worker log, returned for
+        # the job summary and the web page. Never fails a finished run.
+        kpi_summary_result = None
+        try:
+            kpi_summary_result = trackkpi.summarize(conn, list(run_ids.values()))
+            print("\n" + trackkpi.format_text(kpi_summary_result) + "\n")
+        except Exception:  # noqa: BLE001 -- reporting only: a failed summary must never fail a finished run
+            traceback.print_exc()
         # Champion / challenger (option A): once the runs are finished, each
         # exported horizon's model duels the model in title on the same
         # holdout; the loser is archived then pruned. Never fails the run.
@@ -1957,6 +1971,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             "pbo": pbo_result,
             "holdout_diagnostic": holdout_diagnostic_result,
             "champions": champion_decisions,
+            "kpi_summary": kpi_summary_result,
         }
     finally:
         conn.close()

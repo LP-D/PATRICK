@@ -33,6 +33,7 @@ from patrick.tracking import champions as trackchampions
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
+from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import portfolio as trackportfolio
 from patrick.validation import equity_sufficiency, feasibility
 from patrick.webapp import (
@@ -637,13 +638,14 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     conn = trackdb.connect()
     try:
         detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
+        kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable (ni en mémoire, ni en base)")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
 
@@ -1324,13 +1326,15 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
     conn = trackdb.connect()
     try:
         detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
+        # KPI of the WHOLE launch (all the horizons that share this run's job)
+        kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
 

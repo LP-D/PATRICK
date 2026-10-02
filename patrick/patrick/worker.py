@@ -133,15 +133,17 @@ def _open_worker_log(db_path: str, pid: int):
 
 
 def _estimate_total(config: RunConfig) -> int:
-    total = (
-        len(config.objective.horizons)
-        * config.validation.n_wf_folds
-        * len(config.objective.regimes)
-        * len(config.selection.n_features_grid)
-        * len(config.sampler.candidates)
-        * len(config.models.algos)
-    )
-    return max(total, 1)
+    """Scan fits the progress bar and the ETA divide by. Exhaustive: every
+    candidate on every fold. Staged screening: every candidate on fold 1,
+    then only the finalists (per horizon and regime) on the other folds."""
+    candidates = len(config.selection.n_features_grid) * len(config.sampler.candidates) * len(config.models.algos)
+    folds = config.validation.n_wf_folds
+    if config.selection.screening_mode == "staged" and folds > 1:
+        finalists = min(config.selection.screening_finalists_per_group, candidates)
+        per_group = candidates + finalists * (folds - 1)
+    else:
+        per_group = candidates * folds
+    return max(len(config.objective.horizons) * len(config.objective.regimes) * per_group, 1)
 
 
 class _ProgressCapture:
@@ -284,6 +286,7 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
         "cumulative_trials": result.get("cumulative_trials"),
         "pbo": result.get("pbo"),
         "champions": {str(h): d for h, d in (result.get("champions") or {}).items()},
+        "kpi_summary": result.get("kpi_summary"),
     })
 
 

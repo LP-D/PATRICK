@@ -854,6 +854,13 @@
         var scheme = schemeSel && schemeSel.selectedIndex >= 0
             ? schemeSel.options[schemeSel.selectedIndex].textContent.trim() : "?";
         var combos = projectedCombinations();
+        var stagedBox = form.querySelector("[name=staged_screening]");
+        var finalists = parseInt((form.querySelector("[name=screening_finalists_per_group]") || {}).value, 10) || 1;
+        var topK = parseInt((form.querySelector("[name=top_k]") || {}).value, 10) || 1;
+        var perHorizon = combos !== null ? combos / Math.max(1, selectedValues(form.querySelector("[name=horizons]")).length) : null;
+        var stagedLine = stagedBox && stagedBox.checked && perHorizon !== null
+            ? fmtStr(tr("confirm_line_staged", "Dépistage par étapes : les {n} candidats sont testés sur le 1er fold, seuls les {f} meilleur(s) de chaque horizon continuent sur les folds suivants."), { n: perHorizon, f: finalists })
+            : tr("confirm_line_exhaustive", "Exploration exhaustive : chaque candidat est évalué sur tous les folds.");
         // L'état des briques de rigueur, à l'instant où le refus coûte encore
         // zéro seconde de calcul. Les nommer seulement dans les blocs repliés
         // ne suffit pas : on confirme sans les avoir rouverts.
@@ -869,10 +876,12 @@
             combos !== null
                 ? fmtStr(tr("confirm_line_combos", "{n} combinaisons à évaluer par cible."), { n: combos })
                 : tr("confirm_line_combos_unknown", "Nombre de combinaisons non calculable depuis ce formulaire."),
+            stagedLine,
             fmtStr(tr("confirm_line_models", "Modèles : {models}. Runs cibles en file : {targets}."),
                 { models: algos.join(", ") || "?", targets: targetCount }),
             form.querySelector("[name=tuning_enabled]") && form.querySelector("[name=tuning_enabled]").checked
                 ? tr("confirm_line_tuning", "Le tuning Optuna est activé et ajoutera des calculs après le scan.")
+                  + " " + fmtStr(tr("confirm_line_topk", "Optuna affinera les {k} meilleure(s) configuration(s) de chaque horizon."), { k: topK })
                 : tr("confirm_line_tuning_off", "Le tuning Optuna est désactivé."),
             combos !== null && combos >= 1000
                 ? tr("confirm_line_large", "Espace de recherche important : vérifie si toutes les grilles et tous les modèles sont utiles.")

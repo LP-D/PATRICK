@@ -7,12 +7,14 @@ doit être relancée par un humain sur une machine avec accès réseau.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
@@ -84,6 +86,9 @@ def test_pipeline_runs_end_to_end_on_synthetic_data(tiny_config, monkeypatch, tm
     assert result["model_path"] is not None
     import os
     assert os.path.exists(result["model_path"])
+    # KPI summary of the launch: exhaustive scan -> candidates compared on all folds
+    assert result["kpi_summary"]["window"]["mode"] == "all_folds"
+    assert result["kpi_summary"]["n_candidates"] == len(tiny_config.objective.horizons) * len(tiny_config.models.algos)
 
 
 def test_optuna_budget_is_allocated_to_every_horizon(tiny_config, monkeypatch, tmp_path):
@@ -571,7 +576,7 @@ def test_walkforward_scheme_is_default_and_bit_identical_to_before_p61(tiny_conf
     assert result["diebold_mariano"] is not None
 
 
-def test_staged_screening_limits_later_folds_to_first_fold_finalist(tiny_config, monkeypatch, tmp_path):
+def test_staged_screening_limits_later_folds_to_first_fold_finalist(tiny_config, monkeypatch, tmp_path, capsys):
     """The full grid is scored on fold 1; only its selected candidate reaches fold 2."""
     tiny_config.selection.screening_mode = "staged"
     tiny_config.selection.screening_finalists_per_group = 1
@@ -607,3 +612,18 @@ def test_staged_screening_limits_later_folds_to_first_fold_finalist(tiny_config,
         horizon_board = model_rows[model_rows["horizon"] == horizon]
         assert set(horizon_board["algo"]) == finalists
         assert set(horizon_board["fold"]) == {1, 2}
+
+    # Progress counts the fits actually done (screened-out rows leave the
+    # board, they must not make the counter go backwards) and ends at the
+    # total the progress bar divides by.
+    out = capsys.readouterr().out
+    counts = [int(n) for n in re.findall(r":\s*(\d+)\s*cumulative rows", out)]
+    assert counts == sorted(counts) and len(set(counts)) == len(counts)
+    assert counts[-1] == worker_module._estimate_total(tiny_config) == 6
+    assert re.search(r"\[SCAN\] 6 evaluations", out)
+
+    # KPI summary printed at the end and returned: 4 candidates on fold 1, the finalists beyond
+    assert "[KPI] Synthèse des modèles" in out
+    kpi = result["kpi_summary"]
+    assert kpi["n_candidates"] == 4 and kpi["window"]["mode"] == "first_fold"
+    assert {r["full_folds"] for r in kpi["by_horizon"]} == {2}

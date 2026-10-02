@@ -58,6 +58,18 @@ STRINGS: dict[str, dict[str, str]] = {
                             "en": "Target {t}, horizons {h}, regimes {r}."},
     "confirm_line_scheme": {"fr": "Schéma {s}.", "en": "Scheme {s}."},
     "confirm_line_combos": {"fr": "{n} combinaisons à évaluer par cible.", "en": "{n} scan combinations per target."},
+    "confirm_line_staged": {
+        "fr": "Dépistage par étapes : les {n} candidats sont testés sur le 1er fold, seuls les {f} meilleur(s) de chaque horizon continuent sur les folds suivants.",
+        "en": "Staged screening: all {n} candidates are tested on the first fold, only the best {f} of each horizon continue on the later folds.",
+    },
+    "confirm_line_exhaustive": {
+        "fr": "Exploration exhaustive : chaque candidat est évalué sur tous les folds.",
+        "en": "Exhaustive exploration: every candidate is evaluated on all folds.",
+    },
+    "confirm_line_topk": {
+        "fr": "Optuna affinera les {k} meilleure(s) configuration(s) de chaque horizon.",
+        "en": "Optuna will tune the best {k} configuration(s) of each horizon.",
+    },
     "confirm_line_combos_unknown": {"fr": "Nombre de combinaisons non calculable depuis ce formulaire.",
                                     "en": "Combination count not computable from this form."},
     "confirm_line_models": {
@@ -833,6 +845,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "compare_runs_selection",
         "glossary_search_count", "glossary_search_empty",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_models",
+        "confirm_line_staged", "confirm_line_exhaustive", "confirm_line_topk",
         "confirm_line_tuning", "confirm_line_tuning_off", "confirm_line_large",
         "results_title", "results_summary", "results_summary_tuned", "results_best_config",
         "results_leaderboard", "artifact_leaderboard_csv", "artifact_leaderboard_xlsx",
