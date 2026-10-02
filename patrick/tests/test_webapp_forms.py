@@ -196,7 +196,7 @@ def test_build_config_dict_exposes_staged_screening_and_finalist_budget():
     )
 
     assert not errors
-    assert config_dict["selection"]["screening_mode"] == "staged"
+    assert config_dict["selection"]["screening_mode"] == "total_window"
     assert config_dict["selection"]["screening_finalists_per_group"] == 3
 
 
@@ -447,7 +447,7 @@ def test_build_config_dict_rejects_technical_lookback_above_max_allowed():
 def test_default_config_screens_in_stages_and_keeps_only_the_best_candidate():
     config = forms.default_config_dict()
 
-    assert config["selection"]["screening_mode"] == "staged"
+    assert config["selection"]["screening_mode"] == "total_window"
     assert config["selection"]["screening_finalists_per_group"] == 1
     assert config["tuning"]["top_k"] == 1
 
@@ -472,3 +472,18 @@ def test_a_stored_config_without_screening_keeps_its_exhaustive_behaviour():
     del legacy["selection"]["screening_mode"], legacy["selection"]["screening_finalists_per_group"]
 
     assert forms.to_view(legacy)["staged_screening"] is False
+
+
+def test_the_staged_screening_box_selects_the_total_window_protocol():
+    config_dict, errors = forms.build_config_dict(
+        _minimal_form(staged_screening="on"), target_symbol="^VIX", name="VIX_Screen_4")
+    assert not errors and config_dict["selection"]["screening_mode"] == "total_window"
+
+    config_dict, errors = forms.build_config_dict(_minimal_form(), target_symbol="^VIX", name="VIX_Screen_5")
+    assert not errors and config_dict["selection"]["screening_mode"] == "exhaustive"
+
+
+def test_a_stored_first_fold_config_still_shows_the_box_checked():
+    legacy = forms.default_config_dict()
+    legacy["selection"]["screening_mode"] = "staged"
+    assert forms.to_view(legacy)["staged_screening"] is True

@@ -5,12 +5,15 @@ decide which setup to launch next.
 Read-only, computed from the tracking database (`trial` / `fold_metric`), so
 it works for any past run and costs nothing at training time.
 
-Comparison window. Candidates must be compared on the SAME rows: the window
-is the set of folds every candidate of a horizon went through. In staged
-screening that is the first fold only (non-finalists stop there); in
-exhaustive mode, all folds. A candidate's score is the mean of its test
-metrics over that window. The best candidate's score over ITS complete
-period (all the folds it went through) is reported separately.
+Comparison window. Candidates must be compared on the SAME rows:
+- total-window screening: every candidate was scored once on the whole
+  out-of-sample window (split 'valid', fold 0); that is the window.
+- otherwise, the set of folds every candidate of a horizon went through: the
+  first fold only in first-fold staged screening (non-finalists stop there),
+  all folds in exhaustive mode. A candidate's score is the mean of its test
+  metrics over that window.
+The best candidate's walk-forward score over ITS complete period (all the
+'test' folds it went through) is reported separately.
 
 The grid is the untuned `global` scan: Optuna re-evaluations (params_json
 other than '{}') and the other model categories are not candidates.
@@ -59,15 +62,19 @@ def _load_trials(conn: sqlite3.Connection, run_ids: list[str]) -> list[dict]:
     by_id = {t["trial_id"]: t for t in trials}
     for t in trials:
         t["folds"] = {}
+        t["screen"] = {}
     ids = list(by_id)
     for chunk in _chunks(ids):
         marks = ",".join("?" * len(chunk))
-        for trial_id, fold, metric, value in conn.execute(
-                f"SELECT trial_id, fold_index, metric, value FROM fold_metric WHERE trial_id IN ({marks}) "
-                "AND split = 'test' AND metric IN (" + ",".join("?" * len(METRICS)) + ")",
+        for trial_id, split, fold, metric, value in conn.execute(
+                f"SELECT trial_id, split, fold_index, metric, value FROM fold_metric WHERE trial_id IN ({marks}) "
+                "AND split IN ('test', 'valid') AND metric IN (" + ",".join("?" * len(METRICS)) + ")",
                 [*chunk, *METRICS]):
-            by_id[trial_id]["folds"].setdefault(int(fold), {})[metric] = value
-    return [t for t in trials if t["folds"]]   # a candidate without any test result is not comparable
+            if split == "valid":
+                by_id[trial_id]["screen"][metric] = value        # total-window screening score
+            else:
+                by_id[trial_id]["folds"].setdefault(int(fold), {})[metric] = value
+    return [t for t in trials if t["folds"] or t["screen"]]   # a candidate without any result is not comparable
 
 
 def _score(folds: dict[int, dict], which) -> dict[str, float | None]:
@@ -92,7 +99,7 @@ def _group(trials: list[dict], key_fields: tuple[str, ...]) -> list[dict]:
         row["n"] = len(members)
         row["n_horizons"] = len({m["horizon"] for m in members})
         for metric in METRICS:
-            row[metric] = _mean(m["score"][metric] for m in members)
+            row[metric] = _mean(m["score"].get(metric) for m in members)
         rows.append(row)
     return _ranked(rows)
 
@@ -127,20 +134,33 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
 
     folds_by_horizon: dict[int, list[int]] = {}
     extended = False
+    total_window = False
     for run_id, horizon in runs.items():
         members = [t for t in trials if t["run_id"] == run_id]
-        common = set.intersection(*(set(t["folds"]) for t in members))
+        if all(t["screen"] for t in members):                  # every candidate screened on the total window
+            total_window = True
+            folds_by_horizon[horizon] = [0]
+            for t in members:
+                t["window"] = [0]
+                t["score"] = {m: t["screen"].get(m) for m in METRICS}
+            continue
+        members = [t for t in members if t["folds"]]
+        common = set.intersection(*(set(t["folds"]) for t in members)) if members else set()
         folds_by_horizon[horizon] = sorted(common)
         extended = extended or any(set(t["folds"]) != common for t in members)
         for t in members:
             t["window"] = sorted(common)
-    trials = [t for t in trials if t["window"]]
-    for t in trials:
-        t["score"] = _score(t["folds"], t["window"])
+            t["score"] = _score(t["folds"], t["window"]) if common else {}
+    trials = [t for t in trials if t.get("window")]
 
     target = trials[0]["target"] if trials else None
     if not trials:
         note = "Aucun candidat de la grille d'exploration n'a de résultat pour ce lancement."
+    elif total_window:
+        note = ("Tous les candidats sont comparés sur la même fenêtre : la fenêtre totale (un seul entraînement par "
+                "candidat, testé d'un coup sur toute la période hors-échantillon ; seul le meilleur de chaque horizon "
+                "passe ensuite au walk-forward). Le meilleur y étant choisi, son score sur cette fenêtre est "
+                "optimiste : compare-le à sa performance en walk-forward (toute sa période) et au holdout.")
     elif extended:
         note = ("Tous les candidats sont comparés sur la même fenêtre : le premier fold (dépistage par étapes : "
                 "seul le meilleur de chaque horizon est évalué sur les folds suivants). Le meilleur y étant choisi, "
@@ -151,19 +171,19 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
     by_horizon = []
     for run_id, horizon in sorted(runs.items(), key=lambda kv: kv[1]):
         members = [t for t in trials if t["run_id"] == run_id]
-        best = min(members, key=lambda t: (-(t["score"]["F1_dir"] or 0.0), t["algo"], t["n_features"]))
-        full = _score(best["folds"], sorted(best["folds"]))
+        best = min(members, key=lambda t: (-(t["score"].get("F1_dir") or 0.0), t["algo"], t["n_features"]))
+        full = _score(best["folds"], sorted(best["folds"])) if best["folds"] else dict.fromkeys(METRICS)
         by_horizon.append({
             "horizon": horizon, "run_id": run_id, "algo": best["algo"], "n_features": best["n_features"],
             "sampler": best["sampler"],
-            "window_F1_dir": best["score"]["F1_dir"], "window_Acc_dir": best["score"]["Acc_dir"],
+            "window_F1_dir": best["score"].get("F1_dir"), "window_Acc_dir": best["score"].get("Acc_dir"),
             "full_F1_dir": full["F1_dir"], "full_Acc_dir": full["Acc_dir"], "full_folds": len(best["folds"]),
             **_holdout_diagnostic(conn, best["trial_id"]), **_final_model(conn, run_id)})
 
     return {
         "run_ids": list(runs), "target": target, "horizons": sorted(set(runs.values())),
         "n_candidates": len(trials),
-        "window": {"mode": "first_fold" if extended else "all_folds",
+        "window": {"mode": "total_window" if total_window else ("first_fold" if extended else "all_folds"),
                    "folds_by_horizon": folds_by_horizon, "note": note},
         "by_algo": _group(trials, ("algo",)),
         "by_n_features": _group(trials, ("n_features",)),

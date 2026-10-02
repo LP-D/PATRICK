@@ -627,3 +627,86 @@ def test_staged_screening_limits_later_folds_to_first_fold_finalist(tiny_config,
     kpi = result["kpi_summary"]
     assert kpi["n_candidates"] == 4 and kpi["window"]["mode"] == "first_fold"
     assert {r["full_folds"] for r in kpi["by_horizon"]} == {2}
+
+
+def test_total_window_screening_scores_every_candidate_once_then_walks_forward_the_best(
+        tiny_config, monkeypatch, tmp_path, capsys):
+    """Protocol of 2026-10-02: every candidate is fitted ONCE and scored on the
+    whole out-of-sample window (split 'valid', fold 0, no predictions stored);
+    only the best one of each horizon goes on to the walk-forward folds."""
+    tiny_config.selection.screening_mode = "total_window"
+    tiny_config.selection.screening_finalists_per_group = 1
+    tiny_config.tuning.enabled = False
+
+    def fake_ingest(objective, universe, store=None, force=False, data_quality=None):
+        return _synthetic_raw_no_floor()
+
+    monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    db_path = str(tmp_path / "patrick_test_total_window.db")
+
+    result = engine_module.run_pipeline(
+        tiny_config, store=DataStore(root=str(tiny_config.output.dir) + "_total_window_store"), db_path=db_path)
+    out = capsys.readouterr().out
+
+    horizons, algos = tiny_config.objective.horizons, tiny_config.models.algos
+    with sqlite3.connect(db_path) as conn:
+        decisions = conn.execute(
+            "SELECT horizon, algo, decision, reason, score FROM screening_decision ORDER BY horizon, rank IS NULL, rank").fetchall()
+        screen = conn.execute(
+            "SELECT r.horizon, t.algo, fm.value FROM fold_metric fm JOIN trial t ON t.trial_id = fm.trial_id "
+            "JOIN run r ON r.run_id = t.run_id WHERE fm.split = 'valid' AND fm.fold_index = 0 "
+            "AND fm.metric = 'F1_dir'").fetchall()
+        screen_n_test = dict(conn.execute(
+            "SELECT r.horizon, fm.value FROM fold_metric fm JOIN trial t ON t.trial_id = fm.trial_id "
+            "JOIN run r ON r.run_id = t.run_id WHERE fm.split = 'valid' AND fm.metric = 'n_test' "
+            "AND t.algo = ?", (algos[0],)).fetchall())
+        prediction_splits = {r[0] for r in conn.execute("SELECT DISTINCT split FROM prediction")}
+        n_trials = [r[0] for r in conn.execute("SELECT n_trials FROM run")]
+
+    # every candidate scored once on the total window; the best of each horizon is the finalist
+    assert len(screen) == len(horizons) * len(algos)
+    assert len(decisions) == len(horizons) * len(algos)
+    for horizon in horizons:
+        group = [d for d in decisions if d[0] == horizon]
+        assert [d[2] for d in group] == ["finalist"] + ["screened_out"] * (len(algos) - 1)
+        assert "fenêtre totale" in group[0][3]
+        assert group[0][4] == max(v for h, _a, v in screen if h == horizon)      # best screening F1_dir wins
+
+    # only the finalist is walked forward, on every fold; no prediction is stored for the screening window
+    board = result["leaderboard"]
+    model_rows = board[board["N"].notna()]
+    assert set(model_rows["fold"]) == {1, 2}
+    for horizon in horizons:
+        finalist = next(d[1] for d in decisions if d[0] == horizon and d[2] == "finalist")
+        assert set(model_rows[model_rows["horizon"] == horizon]["algo"]) == {finalist}
+    assert "valid" not in prediction_splits and "test" in prediction_splits
+    assert n_trials == [len(algos)] * len(horizons)                              # every candidate is a registered trial
+
+    # the screening window is the whole out-of-sample window: the union of the walk-forward test folds
+    for horizon in horizons:
+        folds_n_test = model_rows[model_rows["horizon"] == horizon]["n_test"].tolist()
+        assert screen_n_test[horizon] >= max(folds_n_test)
+        assert abs(screen_n_test[horizon] - sum(folds_n_test)) <= 2 * max(horizons)
+
+    # progress: the screening fits then the finalist's folds; the counter ends at the progress bar's total
+    counts = [int(n) for n in re.findall(r":\s*(\d+)\s*cumulative rows", out)]
+    assert counts == sorted(counts) and len(set(counts)) == len(counts)
+    assert counts[-1] == worker_module._estimate_total(tiny_config) == len(horizons) * (len(algos) + 1 * 2)
+    assert re.search(rf"\[SCAN\] {counts[-1]} evaluations", out)
+    assert "screening:" in out and "[SCREENING]" in out
+
+    # KPI summary: candidates compared on the total window, the winner also over its walk-forward folds
+    kpi = result["kpi_summary"]
+    assert kpi["window"]["mode"] == "total_window" and kpi["n_candidates"] == len(horizons) * len(algos)
+    assert {r["full_folds"] for r in kpi["by_horizon"]} == {2}
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        run_id = conn.execute("SELECT run_id FROM run WHERE horizon = ?", (horizons[0],)).fetchone()[0]
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import history as trackhistory
+    conn = trackdb.connect(db_path)
+    try:
+        # scan fits of the page: the screening fits + the finalist's folds
+        assert trackhistory.run_detail(conn, run_id)["phase_breakdown"]["scan_model_fits"] == len(algos) + 2
+    finally:
+        conn.close()

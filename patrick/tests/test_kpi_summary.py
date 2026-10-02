@@ -176,3 +176,55 @@ def test_text_report_lists_the_three_views(conn, staged):
         assert heading in text
     assert "0.550" in text          # A's mean F1_dir
     assert "premier fold" in text   # the comparison window is stated
+
+
+# ---------------------------------------------------------------------------
+# Total-window screening: every candidate scored ONCE on the whole
+# out-of-sample window (split 'valid', fold 0 -- the validation window the finalist is
+# chosen on); only the best one goes on to the walk-forward folds ('test'
+# split, folds 1..n).
+# ---------------------------------------------------------------------------
+
+def _screened(conn, run_id: str, algo: str, n: int, screen: tuple[float, float],
+              folds: dict[int, tuple[float, float]] | None = None) -> int:
+    tid = trackdb.create_trial(conn, run_id, "GLOBAL", algo, "SMOTE", n, "shap")
+    f1, acc = screen
+    trackdb.add_fold_metrics(conn, tid, 0, "valid", {"F1_dir": f1, "Acc_dir": acc,
+                                                       "MCC_4cls": f1 / 10, "BalAcc_4cls": f1 / 2})
+    for fold, (f1, acc) in (folds or {}).items():
+        trackdb.add_fold_metrics(conn, tid, fold, "test", {"F1_dir": f1, "Acc_dir": acc})
+    return tid
+
+
+@pytest.fixture
+def total_window(conn):
+    _run(conn, "r_h1", 1)
+    _screened(conn, "r_h1", "A", 5, (0.50, 0.55))
+    _screened(conn, "r_h1", "A", 6, (0.60, 0.65), folds={1: (0.42, 0.50), 2: (0.44, 0.52), 3: (0.40, 0.48)})
+    _screened(conn, "r_h1", "B", 5, (0.40, 0.45))
+    _screened(conn, "r_h1", "B", 6, (0.30, 0.35))
+
+
+def test_candidates_are_compared_on_the_total_window_when_they_were_screened_on_it(conn, total_window):
+    s = kpi_summary.summarize(conn, ["r_h1"])
+
+    assert s["window"]["mode"] == "total_window" and s["window"]["folds_by_horizon"] == {1: [0]}
+    assert "fenêtre totale" in s["window"]["note"] and "optimiste" in s["window"]["note"]
+    by_algo = _by(s["by_algo"], "algo")
+    assert by_algo["A"]["F1_dir"] == pytest.approx((0.50 + 0.60) / 2)       # screen scores, not the folds'
+    assert by_algo["B"]["F1_dir"] == pytest.approx((0.40 + 0.30) / 2)
+    assert [r["algo"] for r in s["by_algo"]] == ["A", "B"]
+    assert s["n_candidates"] == 4
+
+
+def test_the_screening_winner_is_reported_on_the_total_window_and_on_its_walk_forward(conn, total_window):
+    h = kpi_summary.summarize(conn, ["r_h1"])["by_horizon"][0]
+
+    assert (h["algo"], h["n_features"]) == ("A", 6)
+    assert h["window_F1_dir"] == pytest.approx(0.60)                          # total window (screening)
+    assert h["full_F1_dir"] == pytest.approx((0.42 + 0.44 + 0.40) / 3)         # its walk-forward folds
+    assert h["full_Acc_dir"] == pytest.approx((0.50 + 0.52 + 0.48) / 3) and h["full_folds"] == 3
+
+
+def test_text_report_names_the_total_window(conn, total_window):
+    assert "fenêtre totale" in kpi_summary.format_text(kpi_summary.summarize(conn, ["r_h1"]))

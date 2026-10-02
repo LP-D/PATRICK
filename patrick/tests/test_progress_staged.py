@@ -42,3 +42,22 @@ def test_finalists_are_capped_by_the_number_of_candidates():
 def test_staged_total_counts_each_regime_as_its_own_group():
     cfg = _config("staged", 1, horizons=(1,), regimes=("GLOBAL", "CALME"))
     assert worker._estimate_total(cfg) == 2 * (44 + 1 * 4)
+
+
+# ---------------------------------------------------------------------------
+# Total-window screening: ONE fit per candidate on the whole out-of-sample
+# window, then the finalists on every walk-forward fold.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("finalists, per_horizon", [(1, 44 + 1 * 5), (3, 44 + 3 * 5)])
+def test_total_window_total_is_one_fit_per_candidate_plus_finalists_on_every_fold(finalists, per_horizon):
+    assert worker._estimate_total(_config("total_window", finalists)) == 2 * per_horizon
+
+
+def test_total_window_finalists_are_capped_by_the_number_of_candidates():
+    assert worker._estimate_total(_config("total_window", 100)) == 2 * (44 + 44 * 5)
+
+
+def test_total_window_counts_each_regime_as_its_own_group():
+    cfg = _config("total_window", 1, horizons=(1,), regimes=("GLOBAL", "CALME"))
+    assert worker._estimate_total(cfg) == 2 * (44 + 1 * 5)

@@ -117,10 +117,11 @@ def default_config_dict() -> dict:
             "method": D.DEFAULT_SELECTION_METHOD,
             "n_features_grid": list(D.DEFAULT_N_FEATURES_GRID),
             "shap_sample": D.DEFAULT_SHAP_SAMPLE,
-            # Default exploration logic (2026-10-02): the whole grid on the first fold, then ONLY the best
-            # candidate of each horizon on the complete period (and on Optuna, `top_k=1`). The schema
-            # default stays exhaustive: CLI/YAML runs and the golden master are unchanged.
-            "screening_mode": "staged",
+            # Default exploration logic (2026-10-02): every candidate fitted ONCE and scored on the whole
+            # out-of-sample window, then ONLY the best candidate of each horizon on the walk-forward folds
+            # (and on Optuna, `top_k=1`). The schema default stays exhaustive: CLI/YAML runs and the golden
+            # master are unchanged.
+            "screening_mode": "total_window",
             "screening_finalists_per_group": 1,
             "track_stability": True,
         },
@@ -627,7 +628,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "method": form.get("selection_method", D.DEFAULT_SELECTION_METHOD),
             "n_features_grid": n_features_grid,
             "shap_sample": shap_sample,
-            "screening_mode": "staged" if _checked(form, "staged_screening") else "exhaustive",
+            "screening_mode": "total_window" if _checked(form, "staged_screening") else "exhaustive",
             "screening_finalists_per_group": screening_finalists,
             "track_stability": _checked(form, "track_stability"),
         },
@@ -720,7 +721,7 @@ def to_view(cfg: dict) -> dict:
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),
         "n_features_grid": ",".join(str(n) for n in sel.get("n_features_grid", [])),
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),
-        "staged_screening": sel.get("screening_mode", "exhaustive") == "staged",
+        "staged_screening": sel.get("screening_mode", "exhaustive") in ("staged", "total_window"),
         "screening_finalists_per_group": sel.get("screening_finalists_per_group", 1),
         "track_stability": bool(sel.get("track_stability", True)),
         "sampler_candidates": sam.get("candidates", []),

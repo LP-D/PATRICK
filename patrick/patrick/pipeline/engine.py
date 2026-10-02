@@ -374,7 +374,8 @@ class _FoldPoolBuilder:
 
     def __init__(self, raw: pd.DataFrame, config: RunConfig, target_col: str,
                  base_pool: pd.DataFrame, fold_cuts: list[int],
-                 conn=None, snapshot_id: str | None = None):
+                 conn=None, snapshot_id: str | None = None,
+                 interaction_formulas: list[str] | None = None):
         self.raw = raw
         self.config = config
         self.target_col = target_col
@@ -384,7 +385,11 @@ class _FoldPoolBuilder:
         self.snapshot_id = snapshot_id
         self._cache: dict[int, pd.DataFrame] = {}
         self.interaction_formulas: list[str] = []
-        if "interactions" in config.features.families:
+        if interaction_formulas is not None:
+            # Formulas already discovered by another builder on the same pilot training bars (the total-window
+            # screening builder shares the fold builder's): no second discovery.
+            self.interaction_formulas = list(interaction_formulas)
+        elif "interactions" in config.features.families:
             self._init_interactions()
 
     def _merge_base_and_parametric(self, cut_idx: int) -> pd.DataFrame:
@@ -1325,6 +1330,8 @@ class _RunState:
     cpcv_interaction_formulas: list[str] | None = None
     universe: _FoldUniverse | None = None
     n_scan_evals: int = 0  # scan fits actually done (staged screening removes rows from the board)
+    screen_ctx: _FoldContext | None = None  # total-window screening: ONE window = the whole out-of-sample span
+    screen_rows: dict[tuple[int, str], list[dict]] = field(default_factory=dict)
     screening_finalists: dict[tuple[int, str], set[tuple[int, str, str]]] = field(default_factory=dict)
 
     @property
@@ -1397,6 +1404,15 @@ def _prepare_walkforward(st: _RunState, t_pool_start: float) -> None:
     print(f"[FEATURES] full pool (fold 1, base+parametric+interactions): {len(st.feature_pool)} columns")
     st.ctx = _FoldContext(st.pool_builder, st.target_col, st.feature_pool, config, all_dates, fold_cuts,
                           universe=st.universe)
+    if config.selection.screening_mode == "total_window":
+        # One window: train on the first fold's training bars, test on EVERYTHING after them up to the holdout.
+        # Same causal mechanics as a fold (thresholds, scaler, parametric fits on the training bars only).
+        screen_cuts = [fold_cuts[0], fold_cuts[-1]]
+        screen_builder = _FoldPoolBuilder(st.raw, config, st.target_col, st.base_pool, screen_cuts,
+                                          conn=st.conn, snapshot_id=st.snapshot_id,
+                                          interaction_formulas=st.pool_builder.interaction_formulas)
+        st.screen_ctx = _FoldContext(screen_builder, st.target_col, st.feature_pool, config, all_dates,
+                                     screen_cuts, universe=st.universe)
     st.n_trials_per_run = {h: 0 for h in st.run_ids.values()}
     st.last_fold = config.validation.n_wf_folds - 1
 
@@ -1413,11 +1429,18 @@ def _trial_id_for(st: _RunState, run_id: str, trial_key: tuple) -> int:
 
 
 def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, regime: str,
-                           candidate_filter: set[tuple[int, str, str]] | None = None) -> None:
+                           candidate_filter: set[tuple[int, str, str]] | None = None,
+                           screen: bool = False) -> None:
     """Grid (N x sampler x algo) on one (horizon, fold, regime): leaderboard
-    rows, fold metrics and test predictions of every trial."""
+    rows, fold metrics and test predictions of every trial.
+
+    `screen=True` (total-window screening): the window is the whole
+    out-of-sample span (`st.screen_ctx`), each candidate is fitted once, its
+    metrics are stored as split 'valid' / fold 0 and kept in `st.screen_rows`
+    -- no leaderboard row, no stored prediction, no baseline."""
     config = st.config
-    fd = st.ctx.prepare(horizon, k, regime, want_baselines=True)
+    ctx = st.screen_ctx if screen else st.ctx
+    fd = ctx.prepare(horizon, 0 if screen else k, regime, want_baselines=not screen)
     if fd is None:
         return
     for baseline_name, base_met in (fd.baselines or {}).items():
@@ -1476,6 +1499,18 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                 else:
                     met, y_pred, confidence, p_up = _fit_eval_full(
                         X_tr_n, fd.y_tr, X_te_n, fd.y_te, sampler_name, algo, st.seed, **fit_kwargs)
+                if screen:
+                    st.n_scan_evals += 1
+                    st.screen_rows.setdefault((horizon, regime), []).append(
+                        {"N": n_feat, "sampler": sampler_name, "algo": algo, **met})
+                    trial_id = _trial_id_for(st, run_id, (horizon, regime, n_feat, sampler_name, algo))
+                    screen_met = dict(met)
+                    screen_met["n_train"] = float(len(fd.y_tr))
+                    screen_met["n_test"] = float(len(fd.y_te))
+                    if fd.effective_n is not None:
+                        screen_met["effective_n_train"] = fd.effective_n
+                    trackdb.add_fold_metrics(st.conn, trial_id, fold_index=0, split="valid", metrics=screen_met)
+                    continue
                 # Phase 6.2 (P6.2): effective sample size (sum of uniquenesses)
                 # alongside n_train -- always computed.
                 st.board.add(horizon=horizon, fold=k + 1, regime=regime, N=n_feat,
@@ -1535,15 +1570,61 @@ def _select_screening_finalists(st: _RunState, horizon: int, regime: str, run_id
           f"pour les folds suivants.")
 
 
+def _select_total_window_finalists(st: _RunState, horizon: int, regime: str, run_id: str) -> None:
+    """Total-window screening: the best candidates of (horizon, regime) by F1_dir on the whole out-of-sample
+    window go on to the walk-forward folds (and Optuna); the whole grid's scores stay recorded."""
+    rows = st.screen_rows.get((horizon, regime), [])
+    if not rows:
+        print(f"  [WARN] total-window screening impossible for h={horizon}d {regime} (window too short): "
+              "every candidate goes through the walk-forward folds.")
+        return
+    n_finalists = st.config.selection.screening_finalists_per_group
+    group_board = Leaderboard()
+    group_board.rows = [{"horizon": horizon, "regime": regime, "fold": 0, **row} for row in rows]
+    ranked = group_board.top_k(n_finalists, metric="F1_dir", group_cols=("N", "sampler", "algo"))
+    selected = {(int(row["N"]), row["sampler"], row["algo"]) for row in ranked}
+    score_by_key = {(int(row["N"]), row["sampler"], row["algo"]): row.get("F1_dir")
+                    for row in group_board.top_k(len(rows), metric="F1_dir", group_cols=("N", "sampler", "algo"))}
+    rank_by_key = {key: rank for rank, key in enumerate(
+        ((int(row["N"]), row["sampler"], row["algo"]) for row in ranked), start=1)}
+    all_candidates = sorted(score_by_key, key=lambda key: (rank_by_key.get(key, len(rank_by_key) + 1), key))
+    decisions = [
+        {"horizon": horizon, "N": n_features, "sampler": sampler, "algo": algo,
+         "score": score_by_key[(n_features, sampler, algo)], "rank": rank_by_key.get((n_features, sampler, algo)),
+         "decision": "finalist" if (n_features, sampler, algo) in selected else "screened_out",
+         "reason": ("retenu selon F1_dir sur la fenêtre totale" if (n_features, sampler, algo) in selected
+                    else f"hors des {n_finalists} finalistes selon F1_dir sur la fenêtre totale")}
+        for n_features, sampler, algo in all_candidates
+    ]
+    st.screening_finalists[(horizon, regime)] = selected
+    trackdb.record_screening_decisions(st.conn, run_id, regime, decisions)
+    st.trial_ids = {
+        key: trial_id for key, trial_id in st.trial_ids.items()
+        if not (key[0] == horizon and key[1] == regime and key[2:] not in selected)
+    }
+    print(f"  [SCREENING] h={horizon}d {regime}: {len(all_candidates)} candidats classés sur la fenêtre totale, "
+          f"{len(selected)} finaliste(s) pour le walk-forward.")
+
+
 def _scan_walkforward(st: _RunState) -> None:
     config = st.config
+    total_window = config.selection.screening_mode == "total_window"
     for horizon in config.objective.horizons:
         run_id = st.run_ids[horizon]
         t_scan_start = time.time()
+        if total_window:
+            for regime in config.objective.regimes:
+                _scan_walkforward_fold(st, horizon, run_id, 0, regime, None, screen=True)
+                _select_total_window_finalists(st, horizon, regime, run_id)
+            print(f"  h={horizon:2d}d screening: {st.n_scan_evals} cumulative rows "
+                  f"[{time.time()-st.t0:.0f}s]")
         for k in range(config.validation.n_wf_folds):
             for regime in config.objective.regimes:
-                candidate_filter = (st.screening_finalists.get((horizon, regime))
-                                    if config.selection.screening_mode == "staged" and k > 0 else None)
+                if total_window:
+                    candidate_filter = st.screening_finalists.get((horizon, regime))
+                else:
+                    candidate_filter = (st.screening_finalists.get((horizon, regime))
+                                        if config.selection.screening_mode == "staged" and k > 0 else None)
                 _scan_walkforward_fold(st, horizon, run_id, k, regime, candidate_filter)
                 if config.selection.screening_mode == "staged" and k == 0:
                     _select_screening_finalists(st, horizon, regime, run_id)
@@ -1859,11 +1940,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     which would load the LATEST snapshot of the key, i.e. possibly a newer
     FRED vintage than the one the interrupted run was launched on. `None`
     (default, every fresh run) keeps the regular `ingest()` path."""
-    if config.selection.screening_mode == "staged":
-        if config.validation.scheme != "walkforward":
-            raise ValueError("La présélection progressive nécessite le schéma walk-forward.")
-        if config.validation.n_wf_folds < 2:
-            raise ValueError("La présélection progressive nécessite au moins deux folds walk-forward.")
+    mode = config.selection.screening_mode
+    if mode in ("staged", "total_window") and config.validation.scheme != "walkforward":
+        raise ValueError("La présélection progressive nécessite le schéma walk-forward.")
+    if mode == "staged" and config.validation.n_wf_folds < 2:
+        raise ValueError("La présélection progressive nécessite au moins deux folds walk-forward.")
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
