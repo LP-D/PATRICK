@@ -168,3 +168,14 @@ def test_matching_classes_still_calibrate(capsys, monkeypatch):
     engine._fit_eval_full(X_tr, y_tr, X_te, y_te, "none", "RandomForest", 42,
                           calibration=True, calibration_method="isotonic")
     assert "calibration skipped" not in capsys.readouterr().out
+
+
+def test_end_of_scan_summary_counts_the_uncalibrated_fits(capsys, monkeypatch):
+    monkeypatch.setattr(engine, "_CALIBRATION_SKIPS", 7)
+    engine._report_calibration_skips(220)
+    out = capsys.readouterr().out
+    assert "7 of 220 scan fits ran UNCALIBRATED" in out
+
+    engine._reset_calibration_skips()
+    engine._report_calibration_skips(220)
+    assert capsys.readouterr().out == ""   # nothing to report: silent

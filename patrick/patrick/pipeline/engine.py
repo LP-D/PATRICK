@@ -722,6 +722,20 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
 _CALIBRATION_SKIPS = 0
 
 
+def _reset_calibration_skips() -> None:
+    global _CALIBRATION_SKIPS
+    _CALIBRATION_SKIPS = 0
+
+
+def _report_calibration_skips(n_fits: int) -> None:
+    """End-of-scan summary: how many scan fits ran uncalibrated because the
+    calibration rows lacked a class of the model. Their scores are those of
+    an uncalibrated model, not comparable to calibrated fits of the same run."""
+    if _CALIBRATION_SKIPS:
+        print(f"[CALIBRATION] {_CALIBRATION_SKIPS} of {n_fits} scan fits ran UNCALIBRATED (a class of the model "
+              "was missing from the calibration rows): their scores are not comparable to the calibrated ones.")
+
+
 def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
                    sampler_name: str, algo: str, seed: int, calibration: bool = False,
                    sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
@@ -1849,6 +1863,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     store = store or DataStore()
     seed = config.output.seed
     t0 = time.time()
+    _reset_calibration_skips()
 
     # Ingestion runs before any run_id exists: timed here, written once the
     # run rows are created (same duplication as run.started_at).
@@ -1882,6 +1897,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             _scan_cpcv(st)
 
         print(f"\n[SCAN] {len(st.board.rows)} evaluations in {(time.time()-t0)/60:.1f}min")
+        _report_calibration_skips(len(st.board.rows))
         best = st.board.best(metric="F1_dir")
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
