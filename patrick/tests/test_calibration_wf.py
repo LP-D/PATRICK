@@ -88,3 +88,83 @@ def test_p_up_brier_and_ece_on_hand_computable_inputs():
     assert cal.brier_score(p, y) == pytest.approx((0.01 + 0.81 + 0.01 + 0.01) / 4)
     # two bins: {0.1, 0.1} -> mean 0.1 vs freq 0; {0.9, 0.9} -> mean 0.9 vs freq 0.5
     assert cal.expected_calibration_error(p, y, n_bins=2) == pytest.approx(0.5 * 0.1 + 0.5 * 0.4)
+
+
+# ---------------------------------------------------------------------------
+# A calibration slice that does not hold exactly the classes the model was
+# fitted on (2026-10-02, HO.PA h=252: "IndexError: index 3 is out of bounds
+# for axis 1 with size 3" after 3h of scan). `CalibratedClassifierCV` maps
+# the classifier's probability columns to the classes of the calibration
+# labels: when the calibration rows miss a class the model outputs, it
+# crashes. (The reverse -- an extra class in the calibration rows -- works:
+# the calibrator then covers that class too, with probability 0.) Like a
+# train too short to be split, the fit falls back to the uncalibrated path
+# instead of failing.
+# ---------------------------------------------------------------------------
+
+def _data_with_calibration_slice(drop_class_in_cal=None, drop_class_in_fit=None, n=400):
+    X_tr, y_tr, X_te, y_te = _data(n=int(n / 0.75))
+    s = cal.calibration_split(len(X_tr))
+    y_tr = y_tr.copy()
+    if drop_class_in_cal is not None:
+        y_tr[s.cal_start:s.thr_start][y_tr[s.cal_start:s.thr_start] == drop_class_in_cal] = 2 if drop_class_in_cal != 2 else 1
+    if drop_class_in_fit is not None:
+        y_tr[:s.fit_end][y_tr[:s.fit_end] == drop_class_in_fit] = 1 if drop_class_in_fit != 1 else 2
+    assert (drop_class_in_cal is None) or drop_class_in_cal not in set(y_tr[s.cal_start:s.thr_start])
+    assert (drop_class_in_fit is None) or drop_class_in_fit not in set(y_tr[:s.fit_end])
+    return X_tr, y_tr, X_te, y_te
+
+
+def test_classes_match_helper():
+    from sklearn.ensemble import RandomForestClassifier
+
+    X, y = make_classification(n_samples=200, n_features=6, n_informative=4, n_classes=4,
+                               n_clusters_per_class=1, random_state=0)
+    clf = RandomForestClassifier(n_estimators=5, random_state=0).fit(X, y)
+    assert cal.calibration_classes_match(clf, y[:60]) is True
+    assert cal.calibration_classes_match(clf, y[y != 3][:60]) is False      # a model class missing from the slice
+    clf3 = RandomForestClassifier(n_estimators=5, random_state=0).fit(X[y != 0], y[y != 0])
+    assert cal.calibration_classes_match(clf3, y[:60]) is True              # extra class in the slice: fine
+
+
+@pytest.mark.parametrize("method", ["isotonic", "sigmoid"])
+def test_a_class_missing_from_the_calibration_rows_falls_back_to_the_uncalibrated_path(method, capsys, monkeypatch):
+    monkeypatch.setattr(engine, "_CALIBRATION_SKIPS", 0)
+    X_tr, y_tr, X_te, y_te = _data_with_calibration_slice(drop_class_in_cal=3)
+
+    met, y_pred, _conf, p_up = engine._fit_eval_full(X_tr, y_tr, X_te, y_te, "none", "RandomForest", 42,
+                                                     calibration=True, calibration_method=method)
+
+    assert len(y_pred) == len(y_te) and "F1_dir" in met
+    assert p_up is not None and np.all((p_up >= 0) & (p_up <= 1))
+    assert "calibration skipped" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("method", ["isotonic", "sigmoid"])
+def test_an_extra_class_in_the_calibration_rows_still_calibrates(method, capsys, monkeypatch):
+    monkeypatch.setattr(engine, "_CALIBRATION_SKIPS", 0)
+    X_tr, y_tr, X_te, y_te = _data_with_calibration_slice(drop_class_in_fit=0)
+
+    _met, y_pred, _conf, p_up = engine._fit_eval_full(X_tr, y_tr, X_te, y_te, "none", "RandomForest", 42,
+                                                      calibration=True, calibration_method=method)
+
+    assert len(y_pred) == len(y_te) and np.all((p_up >= 0) & (p_up <= 1))
+    assert "calibration skipped" not in capsys.readouterr().out
+
+
+def test_the_skip_warning_is_throttled(capsys, monkeypatch):
+    monkeypatch.setattr(engine, "_CALIBRATION_SKIPS", 0)
+    X_tr, y_tr, X_te, y_te = _data_with_calibration_slice(drop_class_in_cal=3)
+    for _ in range(3):
+        engine._fit_eval_full(X_tr, y_tr, X_te, y_te, "none", "RandomForest", 42,
+                              calibration=True, calibration_method="isotonic")
+    assert capsys.readouterr().out.count("calibration skipped") == 1
+    assert engine._CALIBRATION_SKIPS == 3
+
+
+def test_matching_classes_still_calibrate(capsys, monkeypatch):
+    monkeypatch.setattr(engine, "_CALIBRATION_SKIPS", 0)
+    X_tr, y_tr, X_te, y_te = _data(n=900)
+    engine._fit_eval_full(X_tr, y_tr, X_te, y_te, "none", "RandomForest", 42,
+                          calibration=True, calibration_method="isotonic")
+    assert "calibration skipped" not in capsys.readouterr().out

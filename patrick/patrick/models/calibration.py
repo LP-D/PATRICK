@@ -55,6 +55,18 @@ def calibration_split(n: int, frac: float = 0.15, min_rows: int = 20, gap: int =
     return CalibrationSplit(n=n, fit_end=fit_end, cal_start=cal_start, thr_start=cal_start + n_hold // 2)
 
 
+def calibration_classes_match(clf, y_cal: np.ndarray) -> bool:
+    """True if every class the fitted `clf` outputs also appears in the
+    calibration labels `y_cal`. `CalibratedClassifierCV` maps the
+    classifier's probability columns to the classes of the calibration
+    labels: when the calibration rows miss a class of the model (rare
+    classes on long horizons -- HO.PA h=252 lost a 3h run to
+    "IndexError: index 3 is out of bounds for axis 1 with size 3"), it
+    crashes. The reverse -- an extra class in `y_cal` -- is handled (the
+    calibrator covers it, with probability 0)."""
+    return set(np.asarray(clf.classes_).tolist()) <= set(np.asarray(y_cal).tolist())
+
+
 def fit_prefit_calibrator(clf, X_cal: np.ndarray, y_cal: np.ndarray, method: str = "isotonic"):
     """Calibrates an already fitted classifier on held-out rows (one-vs-rest
     maps, renormalised)."""

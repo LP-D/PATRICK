@@ -717,6 +717,11 @@ def _fit_eval(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.nda
     return met, y_pred, confidence
 
 
+# Fits that fell back to the uncalibrated path because the calibration rows lacked a class of the
+# model (see `_fit_eval_full`); throttles the warning. Per process.
+_CALIBRATION_SKIPS = 0
+
+
 def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
                    sampler_name: str, algo: str, seed: int, calibration: bool = False,
                    sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
@@ -761,20 +766,34 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     split = calibration_lib.calibration_split(len(X_tr), gap=calibration_gap) if calibration else None
 
     p_up = None
+    calibrated = False
     if split is not None:
         Xf, yf = safe_resample(sampler_name, seed, X_tr[:split.fit_end], y_tr[:split.fit_end])
         clf.fit(Xf, yf)
-        cal_clf = calibration_lib.fit_prefit_calibrator(
-            clf, X_tr[split.cal_start:split.thr_start], y_tr[split.cal_start:split.thr_start],
-            method=calibration_method)
-        threshold, _ = calibration_lib.search_threshold(cal_clf, X_tr[split.thr_start:], y_tr[split.thr_start:])
-        y_pred = calibration_lib.predict_with_threshold(cal_clf, X_te, threshold)
-        y_proba = cal_clf.predict_proba(X_te)
-        classes = list(cal_clf.classes_)
-        confidence = np.array([row[classes.index(p)] if p in classes else np.nan
-                                for row, p in zip(y_proba, y_pred)])
-        p_up = calibration_lib.p_up_from_proba(y_proba, classes)
-    else:
+        y_cal = y_tr[split.cal_start:split.thr_start]
+        if calibration_lib.calibration_classes_match(clf, y_cal):
+            cal_clf = calibration_lib.fit_prefit_calibrator(
+                clf, X_tr[split.cal_start:split.thr_start], y_cal, method=calibration_method)
+            threshold, _ = calibration_lib.search_threshold(cal_clf, X_tr[split.thr_start:], y_tr[split.thr_start:])
+            y_pred = calibration_lib.predict_with_threshold(cal_clf, X_te, threshold)
+            y_proba = cal_clf.predict_proba(X_te)
+            classes = list(cal_clf.classes_)
+            confidence = np.array([row[classes.index(p)] if p in classes else np.nan
+                                    for row, p in zip(y_proba, y_pred)])
+            p_up = calibration_lib.p_up_from_proba(y_proba, classes)
+            calibrated = True
+        else:
+            # Like a train too short to be split: no calibration rather than a
+            # crash (a rare class absent from the calibration rows -- long
+            # horizons). This fit uses the uncalibrated path below.
+            global _CALIBRATION_SKIPS
+            _CALIBRATION_SKIPS += 1
+            if _CALIBRATION_SKIPS == 1 or _CALIBRATION_SKIPS % 50 == 0:
+                print(f"  [WARN] calibration skipped for this fit (x{_CALIBRATION_SKIPS} so far): the "
+                      f"calibration rows lack class(es) {sorted(set(np.asarray(clf.classes_).tolist()) - set(np.asarray(y_cal).tolist()))} "
+                      "of the model -- uncalibrated probabilities used.")
+            clf = get_classifier(algo, seed=seed, **algo_overrides)
+    if not calibrated:
         Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
         weight_applies = apply_uniqueness and len(Xr) == len(X_tr)
         if weight_applies and algo == "RandomForest":
