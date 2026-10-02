@@ -528,12 +528,14 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "integers (e.g. 10,20,60) or a range (e.g. 5-15). Defaults preserve existing behavior."),
     },
     "staged_screening": {
-        "fr": ("Évalue toute la grille sur le premier fold, puis ne garde que les meilleurs "
-               "candidats pour les folds suivants. Le mode exhaustif reste disponible et "
-               "reste le défaut. Requiert au moins deux folds walk-forward."),
-        "en": ("Evaluates the full grid on the first fold, then keeps only the best candidates "
-               "for later folds. Exhaustive mode remains available and is the default. "
-               "Requires at least two walk-forward folds."),
+        "fr": ("Entraîne chaque candidat une seule fois et le note d'un coup sur toute la période "
+               "hors-échantillon (la fenêtre totale), puis ne passe que les meilleurs de chaque horizon "
+               "au walk-forward complet (tous les découpages) et à Optuna. Le mode exhaustif reste "
+               "disponible : chaque candidat est alors évalué sur tous les découpages."),
+        "en": ("Fits each candidate once and scores it in one go on the whole out-of-sample period "
+               "(the total window), then only the best of each horizon go through the full "
+               "walk-forward (every fold) and Optuna. Exhaustive mode remains available: every "
+               "candidate is then evaluated on all folds."),
     },
     "optuna_bounds": {
         "fr": ("Ces bornes définissent les intervalles dans lesquels Optuna explore les "

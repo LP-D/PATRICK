@@ -415,7 +415,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
     phase_breakdown["scan_model_fits"] = conn.execute(
         "SELECT COUNT(*) FROM (SELECT DISTINCT fm.trial_id, fm.fold_index FROM fold_metric fm "
         "JOIN trial t ON t.trial_id = fm.trial_id WHERE t.run_id = ? "
-        "AND fm.split IN ('test', 'test_path') AND fm.metric = 'F1_dir')", (run_id,)
+        "AND fm.split IN ('test', 'test_path', 'valid') AND fm.metric = 'F1_dir')", (run_id,)
     ).fetchone()[0]
     phase_breakdown["optuna_trials"] = conn.execute(
         "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE run_id = ? "

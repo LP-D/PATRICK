@@ -199,7 +199,10 @@ class SelectionConfig(BaseModel):
     method: Literal["shap", "rfe", "lasso"] = D.DEFAULT_SELECTION_METHOD
     n_features_grid: list[int] = Field(default_factory=lambda: list(D.DEFAULT_N_FEATURES_GRID))
     shap_sample: int = D.DEFAULT_SHAP_SAMPLE
-    screening_mode: Literal["exhaustive", "staged"] = "exhaustive"
+    # exhaustive: every candidate on every fold. staged: whole grid on the FIRST fold, then the finalists on the
+    # later folds. total_window: every candidate fitted ONCE and scored on the whole out-of-sample window (split
+    # 'valid', fold 0), then only the finalists on the walk-forward folds.
+    screening_mode: Literal["exhaustive", "staged", "total_window"] = "exhaustive"
     screening_finalists_per_group: int = Field(default=8, ge=1, le=100)
     # Phase 6.3 (P6.3) -- selection stability across folds (Jaccard +
     # selection frequency, `selection/stability.py`). True (default): never a

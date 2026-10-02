@@ -58,6 +58,18 @@ STRINGS: dict[str, dict[str, str]] = {
                             "en": "Target {t}, horizons {h}, regimes {r}."},
     "confirm_line_scheme": {"fr": "Schéma {s}.", "en": "Scheme {s}."},
     "confirm_line_combos": {"fr": "{n} combinaisons à évaluer par cible.", "en": "{n} scan combinations per target."},
+    "confirm_line_staged": {
+        "fr": "Dépistage par étapes : les {n} candidats de chaque horizon sont entraînés une fois et notés sur toute la période hors-échantillon ; seuls les {f} meilleur(s) passent au walk-forward complet.",
+        "en": "Staged screening: the {n} candidates of each horizon are fitted once and scored on the whole out-of-sample period; only the best {f} go through the full walk-forward.",
+    },
+    "confirm_line_exhaustive": {
+        "fr": "Exploration exhaustive : chaque candidat est évalué sur tous les folds.",
+        "en": "Exhaustive exploration: every candidate is evaluated on all folds.",
+    },
+    "confirm_line_topk": {
+        "fr": "Optuna affinera les {k} meilleure(s) configuration(s) de chaque horizon.",
+        "en": "Optuna will tune the best {k} configuration(s) of each horizon.",
+    },
     "confirm_line_combos_unknown": {"fr": "Nombre de combinaisons non calculable depuis ce formulaire.",
                                     "en": "Combination count not computable from this form."},
     "confirm_line_models": {
@@ -275,12 +287,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_shap_sample": {"fr": "Échantillon SHAP", "en": "SHAP sample"},
     "field_track_stability": {"fr": "Suivre la stabilité de la sélection (Jaccard entre folds)",
                                "en": "Track selection stability (Jaccard across folds)"},
-    "field_staged_screening": {"fr": "Présélection progressive (1er fold complet, puis finalistes)",
-                               "en": "Staged screening (full first fold, then finalists)"},
+    "field_staged_screening": {"fr": "Présélection progressive (fenêtre totale, puis walk-forward du meilleur)",
+                               "en": "Staged screening (total window, then walk-forward of the best)"},
     "field_screening_finalists": {"fr": "Finalistes par horizon et régime", "en": "Finalists per horizon and regime"},
     "hint_staged_screening": {
-        "fr": "Le premier fold entraîne toute la grille; les folds suivants et Optuna ne gardent que les meilleurs candidats par horizon/régime. Moins cher mais moins robuste qu'une comparaison exhaustive : la grille complète et le fold de sélection restent visibles. Mode exhaustif décoché.",
-        "en": "The first fold trains the full grid; later folds and Optuna keep only top candidates per horizon/regime. Faster but less robust than exhaustive comparison: the full grid and screening fold remain visible. Off means exhaustive mode.",
+        "fr": "Chaque candidat est entraîné une seule fois et noté d'un coup sur toute la période hors-échantillon ; seuls les meilleurs par horizon/régime passent ensuite au walk-forward complet puis à Optuna. Beaucoup moins cher, mais le modèle n'est pas ré-entraîné au fil des années pendant le classement : ses scores sont plus sévères que ceux du walk-forward. Toute la grille et son score restent visibles. Décoché : mode exhaustif (chaque candidat sur tous les folds).",
+        "en": "Each candidate is fitted once and scored in one go on the whole out-of-sample period; only the best ones per horizon/regime then go through the full walk-forward and Optuna. Much cheaper, but the model is not retrained over the years during the ranking: its scores are harsher than walk-forward ones. The whole grid and its scores stay visible. Off means exhaustive mode (every candidate on all folds).",
     },
 
     "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
@@ -833,6 +845,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "compare_runs_selection",
         "glossary_search_count", "glossary_search_empty",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_models",
+        "confirm_line_staged", "confirm_line_exhaustive", "confirm_line_topk",
         "confirm_line_tuning", "confirm_line_tuning_off", "confirm_line_large",
         "results_title", "results_summary", "results_summary_tuned", "results_best_config",
         "results_leaderboard", "artifact_leaderboard_csv", "artifact_leaderboard_xlsx",

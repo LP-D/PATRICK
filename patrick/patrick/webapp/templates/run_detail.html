@@ -43,6 +43,7 @@
 <nav class="section-index" aria-label="Sections de la page">
     <span class="section-index-label">Sections</span>
     <a href="#resume">Résumé</a>
+    {% if kpi and kpi.n_candidates %}<a href="#kpi">KPI</a>{% endif %}
     <a href="#durees">Durées</a>
     <a href="#essais">Essais</a>
     <a href="#config">Configuration</a>
@@ -120,6 +121,52 @@
 <p class="block-note"><span class="block-note-marker">†</span> {{ refus_rest }}</p>
 {% endif %}
 </section>
+
+{% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
+{% if kpi and kpi.n_candidates %}
+<section id="kpi" class="card">
+<h2>Synthèse des modèles (KPI)</h2>
+<p>Cible <strong>{{ kpi.target }}</strong> · horizons {{ kpi.horizons | join(', ') }} · {{ kpi.n_candidates }} candidats testés.
+{{ kpi.window.note }} Le F1_dir est la qualité de la prédiction de la direction (hausse ou baisse) ; l'Acc_dir, la part de directions justes.
+Moyennes sur les horizons de ce lancement, pour décider quelle configuration relancer.</p>
+
+<h3>Par algorithme</h3>
+{% set algo_rows = [] %}
+{% for r in kpi.by_algo %}
+{% set _ = algo_rows.append([r.rank, r.algo, r.n, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls), f3(r.BalAcc_4cls)]) %}
+{% endfor %}
+{{ data_table(["Rang", "Algorithme", "Candidats", "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
+
+<h3>Par nombre de variables</h3>
+{% set n_rows = [] %}
+{% for r in kpi.by_n_features %}
+{% set _ = n_rows.append([r.rank, r.n_features, r.n, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls), f3(r.BalAcc_4cls)]) %}
+{% endfor %}
+{{ data_table(["Rang", "Variables (N)", "Candidats", "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], n_rows, num_cols=[0, 1, 2, 3, 4, 5, 6]) }}
+
+<h3>Classement des configurations (algorithme × nombre de variables)</h3>
+{% set rank_rows = [] %}
+{% for r in kpi.ranking[:15] %}
+{% set _ = rank_rows.append([r.rank, r.algo, r.n_features, r.sampler, r.n_horizons, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls)]) %}
+{% endfor %}
+{{ data_table(["Rang", "Algorithme", "Variables (N)", "Sampler", "Horizons", "F1_dir", "Acc_dir", "MCC_4cls"], rank_rows,
+              num_cols=[0, 2, 4, 5, 6, 7],
+              footer=("15 meilleures sur " ~ kpi.ranking | length ~ " configurations." if kpi.ranking | length > 15 else none)) }}
+
+<h3>Par horizon : meilleure configuration, modèle final et holdout</h3>
+{% set h_rows = [] %}
+{% for r in kpi.by_horizon %}
+{% set _ = h_rows.append([r.horizon, r.algo ~ ' · N=' ~ r.n_features, f3(r.window_F1_dir),
+    f3(r.full_F1_dir) ~ ' (' ~ r.full_folds ~ ' fold' ~ ('s' if r.full_folds > 1 else '') ~ ')', f3(r.full_Acc_dir),
+    f3(r.diag_F1_dir), f3(r.diag_Acc_dir),
+    (r.final_algo ~ ' · N=' ~ r.final_n_features) if r.final_algo else '—', f3(r.holdout_F1_dir)]) %}
+{% endfor %}
+{{ data_table(["Horizon (j)", "Meilleure configuration", "F1_dir (fenêtre commune)", "F1_dir (toute sa période)", "Acc_dir (toute sa période)",
+               "F1_dir holdout", "Acc_dir holdout", "Modèle final (Optuna)", "F1_dir holdout du modèle final"], h_rows,
+              num_cols=[0, 2, 3, 4, 5, 6, 8],
+              footer="Holdout : les derniers mois, jamais utilisés pour choisir. Il est mesuré pour la meilleure configuration de chaque horizon (avant Optuna) ; le modèle final n'est évalué sur le holdout que pour le meilleur horizon du lancement.") }}
+</section>
+{% endif %}
 
 <section id="durees" class="card">
 <h2>Temps de calcul et budget exploration</h2>

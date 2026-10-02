@@ -117,8 +117,12 @@ def default_config_dict() -> dict:
             "method": D.DEFAULT_SELECTION_METHOD,
             "n_features_grid": list(D.DEFAULT_N_FEATURES_GRID),
             "shap_sample": D.DEFAULT_SHAP_SAMPLE,
-            "screening_mode": "exhaustive",
-            "screening_finalists_per_group": 8,
+            # Default exploration logic (2026-10-02): every candidate fitted ONCE and scored on the whole
+            # out-of-sample window, then ONLY the best candidate of each horizon on the walk-forward folds
+            # (and on Optuna, `top_k=1`). The schema default stays exhaustive: CLI/YAML runs and the golden
+            # master are unchanged.
+            "screening_mode": "total_window",
+            "screening_finalists_per_group": 1,
             "track_stability": True,
         },
         "sampler": {"candidates": list(D.DEFAULT_SAMPLER)},
@@ -458,7 +462,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         ("interact_final_n", "N final (interactions)", 30, int),
         ("pool_prefilter", "Pré-filtre du pool", D.DEFAULT_POOL_PREFILTER, int),
         ("shap_sample", "Échantillon SHAP", D.DEFAULT_SHAP_SAMPLE, int),
-        ("screening_finalists_per_group", "Finalistes par horizon et régime", 8, int),
+        ("screening_finalists_per_group", "Finalistes par horizon et régime", 1, int),
         ("top_k", "Top-K configs affinées", D.DEFAULT_TUNING_TOP_K, int),
         ("n_trials", "Essais Optuna", D.DEFAULT_TUNING_N_TRIALS, int),
         ("cv_splits", "Folds CV", D.DEFAULT_TUNING_CV_SPLITS, int),
@@ -555,7 +559,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         errors.append("« Top-K configs affinées » doit être un entier strictement positif.")
     if not 1 <= screening_finalists <= 100:
         errors.append("« Finalistes par horizon et régime » doit être compris entre 1 et 100.")
-        screening_finalists = 8
+        screening_finalists = 1
     if cv_splits < 2:
         errors.append("« Folds CV » doit être un entier >= 2.")
 
@@ -624,7 +628,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "method": form.get("selection_method", D.DEFAULT_SELECTION_METHOD),
             "n_features_grid": n_features_grid,
             "shap_sample": shap_sample,
-            "screening_mode": "staged" if _checked(form, "staged_screening") else "exhaustive",
+            "screening_mode": "total_window" if _checked(form, "staged_screening") else "exhaustive",
             "screening_finalists_per_group": screening_finalists,
             "track_stability": _checked(form, "track_stability"),
         },
@@ -717,8 +721,8 @@ def to_view(cfg: dict) -> dict:
         "selection_method": sel.get("method", D.DEFAULT_SELECTION_METHOD),
         "n_features_grid": ",".join(str(n) for n in sel.get("n_features_grid", [])),
         "shap_sample": sel.get("shap_sample", D.DEFAULT_SHAP_SAMPLE),
-        "staged_screening": sel.get("screening_mode", "exhaustive") == "staged",
-        "screening_finalists_per_group": sel.get("screening_finalists_per_group", 8),
+        "staged_screening": sel.get("screening_mode", "exhaustive") in ("staged", "total_window"),
+        "screening_finalists_per_group": sel.get("screening_finalists_per_group", 1),
         "track_stability": bool(sel.get("track_stability", True)),
         "sampler_candidates": sam.get("candidates", []),
         "uniqueness_weights": bool(cfg.get("sampling", {}).get("uniqueness_weights", True)),
