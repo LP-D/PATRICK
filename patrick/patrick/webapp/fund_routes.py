@@ -76,6 +76,16 @@ def register(app: FastAPI, templates, context) -> None:
     templates.env.filters.setdefault("pct", fmt_pct)
     templates.env.filters.setdefault("qty", fmt_qty)
 
+    # -------------------------------------------------------------- pages
+
+    @app.get("/simulate")
+    def simulate_page(request: Request, strategy: str | None = None, placed: int = 0):
+        today = service.current_date()
+        data = _call(service.overview, today)
+        return templates.TemplateResponse(request, "simulate.html", {
+            "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
+            "today": today.isoformat(), "futures": futures_payload(today), **context(request)})
+
     # ---------------------------------------------------------------- API
 
     @app.get("/api/fund/overview")

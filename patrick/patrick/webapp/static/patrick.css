@@ -2065,3 +2065,20 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .pop-track-table { border-collapse: collapse; margin-bottom: 4px; }
 .pop-track-table td { padding: 1px 12px 1px 0; }
 .pop-track-table td.n { font-variant-numeric: tabular-nums; text-align: right; padding-right: 0; }
+
+/* ---- Simulation (refonte chantier 1) : ticket d'ordre et aperçu ---- */
+[data-kinds][hidden] { display: none; }
+.fund-ticket-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: var(--space-lg); align-items: start; }
+.fund-preview {
+  position: sticky; top: calc(var(--topbar-h) + var(--space-md));
+  padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+}
+.fund-preview-list { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--space-md); margin: 0 0 var(--space-md); font-size: 13px; }
+.fund-preview-list dt { color: var(--text-2); }
+.fund-preview-list dd { margin: 0; text-align: right; }
+.fund-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); }
+.fund-choice legend { padding: 0 var(--space-xs); }
+@media (max-width: 900px) {
+  .fund-ticket-grid { grid-template-columns: 1fr; }
+  .fund-preview { position: static; }
+}

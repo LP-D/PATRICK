@@ -29,7 +29,6 @@ from patrick.config.schema import RunConfig
 from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
-from patrick.simulate import engine as sim_engine
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -1434,22 +1433,6 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
     )
 
 
-@app.get("/simulate")
-def simulate_page(request: Request, run_id: str | None = None):
-    """Phase 4 -- dedicated view (not the dashboard's 2x2 grid: variable-
-    height content). The simulator never re-runs a model: it only reads
-    already-`done` runs and their persisted `prediction` rows."""
-    conn = trackdb.connect()
-    try:
-        runs = trackdb.list_done_runs(conn)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(
-        request, "simulate.html",
-        {"runs": runs, "initial_run_id": run_id, **_i18n_context(request)},
-    )
-
-
 @app.get("/api/phase9/journal")
 def api_phase9_journal(limit: int = 20):
     conn = trackdb.connect()
@@ -1495,73 +1478,6 @@ def api_list_trials(run_id: str):
         return {"trials": trackdb.list_trials_for_run(conn, run_id)}
     finally:
         conn.close()
-
-
-_SIM_PARAM_FIELDS = set(sim_engine.SimParams.__dataclass_fields__)
-
-
-@app.post("/api/simulate")
-async def api_simulate(request: Request):
-    """Runs a simulation (Phase 4) and ALWAYS logs it to the database (Phase
-    4.5, anti-overfitting guard), success or failure -- the number of
-    configurations tried must never be hidden."""
-    body = await request.json()
-    try:
-        trial_id = int(body["trial_id"])
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="trial_id manquant ou invalide")
-
-    raw_params = {k: v for k, v in (body.get("params") or {}).items() if k in _SIM_PARAM_FIELDS}
-    try:
-        params = sim_engine.SimParams(**raw_params)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    if params.position_mode not in ("threshold", "proportional", "heuristic_leverage"):
-        raise HTTPException(status_code=400, detail=f"position_mode inconnu : {params.position_mode}")
-    if params.overlap_mode not in ("tranches", "renewed"):
-        raise HTTPException(status_code=400, detail=f"overlap_mode inconnu : {params.overlap_mode}")
-
-    # F06: one statistical segment per simulation, never pooled.
-    segment = body.get("segment") or None
-    if segment is not None and segment not in sim_engine.SEGMENTS:
-        raise HTTPException(status_code=400, detail=f"segment inconnu : {segment}")
-
-    try:
-        result = sim_engine.simulate(trial_id, params, segment=segment)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"Données de la cible introuvables : {exc}")
-
-    conn = trackdb.connect()
-    try:
-        simulation_id = sim_engine.save_simulation(conn, trial_id, params, result)
-    finally:
-        conn.close()
-    result["simulation_id"] = simulation_id
-    return result
-
-
-@app.get("/api/simulate/{simulation_id}")
-def api_get_simulation(simulation_id: str):
-    import json as _json
-    conn = trackdb.connect()
-    try:
-        row = conn.execute(
-            "SELECT trial_id, params_json, metrics_json, error FROM simulation WHERE simulation_id = ?",
-            (simulation_id,),
-        ).fetchone()
-    finally:
-        conn.close()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Simulation introuvable")
-    trial_id, params_json, metrics_json, error = row
-    return {
-        "trial_id": trial_id,
-        "params": _json.loads(params_json),
-        "result": _json.loads(metrics_json) if metrics_json else None,
-        "error": error,
-    }
 
 
 def main() -> None:

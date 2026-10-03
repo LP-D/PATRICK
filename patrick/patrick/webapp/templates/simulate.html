@@ -1,172 +1,150 @@
 {% extends "base_v2.html" %}
-{% block title %}PATRICK — {{ t('sim_title') }}{% endblock %}
+{% from "_components.html" import sparkline, empty_state %}
+{% block title %}PATRICK — {{ t('fund_sim_title') }}{% endblock %}
+
+{# Refonte Simulation (chantier 1) : ticket d'ordre en haut, portefeuilles par
+   stratégie en dessous. Toutes les écritures passent par /api/fund/*
+   (webapp/fund_routes.py) ; l'aperçu est calculé par le serveur à chaque
+   modification du ticket (/api/fund/quote), jamais par le navigateur. #}
 
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ t('sim_title') }}</h1>
-    <p class="page-subtitle">{{ t('sim_subtitle') }}</p>
+    <h1 class="page-title">{{ t('fund_sim_title') }}</h1>
+    <p class="page-subtitle">{{ t('fund_sim_subtitle') }}</p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="btn-secondary" data-open-dialog="new-strategy-dialog">{{ icon('plus') }} {{ t('fund_new_strategy') }}</button>
   </div>
 </div>
 
-<div class="sim-grid">
+<div id="fund-flash" class="banner hidden" role="status"></div>
+{% if placed %}<div class="banner banner-info" role="status">{{ t('fund_placed') }}</div>{% endif %}
 
-<section class="dash-panel sim-panel-config" aria-labelledby="sim-config-title">
-    <h2 id="sim-config-title" class="dash-panel-title">{{ t('sim_section_config') }}</h2>
-    <div class="dash-panel-body">
-        <form id="sim-form" class="run-form">
-            <label>{{ t('sim_field_run') }}
-                <select id="sim-run-select">
-                    <option value="">—</option>
-                    {% for r in runs %}
-                    <option value="{{ r.run_id }}" {% if r.run_id == initial_run_id %}selected{% endif %}>
-                        {{ r.name or r.run_id }} — {{ r.target }} h={{ r.horizon }}j ({{ r.started_at }})
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>{{ t('sim_field_trial') }}
-                <select id="sim-trial-select"><option value="">—</option></select>
-            </label>
-            {# F06 : un seul segment statistique par simulation, jamais melanges.
-               Vide = defaut de l'API (holdout, sinon test, sinon live). #}
-            <label>{{ t('sim_field_segment') }}
-                <select id="sim-segment">
-                    <option value="">{{ t('sim_segment_auto') }}</option>
-                    <option value="holdout">{{ t('sim_segment_holdout') }}</option>
-                    <option value="test">{{ t('sim_segment_test') }}</option>
-                    <option value="live">{{ t('sim_segment_live') }}</option>
-                </select>
-                <span class="hint">{{ t('sim_segment_hint') }}</span>
-            </label>
+{% if strategies %}
+<section class="card fund-ticket" aria-labelledby="ticket-title">
+  <h2 id="ticket-title">{{ t('fund_ticket_title') }}</h2>
+  <div class="fund-ticket-grid">
+    <form id="ticket-form" class="form" autocomplete="off" data-today="{{ today }}">
+      <label>{{ t('fund_field_strategy') }}
+        <select name="strategy_id" id="f-strategy">
+          {% for s in strategies %}
+          <option value="{{ s.strategy.strategy_id }}" data-opened="{{ s.strategy.opened_on }}"{% if s.strategy.strategy_id == selected_id %} selected{% endif %}>{{ s.strategy.name }} · {{ s.strategy.wrapper }}</option>
+          {% endfor %}
+        </select>
+      </label>
 
-            <fieldset>
-                <legend>{{ t('sim_field_mode') }}</legend>
-                <label>{{ t('sim_field_mode') }}
-                    <select id="sim-mode">
-                        <option value="threshold">{{ t('sim_mode_threshold') }}</option>
-                        <option value="proportional">{{ t('sim_mode_proportional') }}</option>
-                        <option value="heuristic_leverage">{{ t('sim_mode_heuristic') }}</option>
-                    </select>
-                </label>
-                <div class="subgrid">
-                    <label>{{ t('sim_field_threshold') }}
-                        <input type="number" id="sim-threshold" step="0.01" min="0.5" max="1" value="0.55">
-                    </label>
-                    <label>{{ t('sim_field_leverage_fraction') }}
-                        <input type="number" id="sim-kelly-fraction" step="0.05" min="0" max="1" value="0.5">
-                    </label>
-                    <label>{{ t('sim_field_max_leverage') }}
-                        <input type="number" id="sim-max-leverage" step="0.1" min="0" value="1.0">
-                    </label>
-                    <label>{{ t('sim_field_max_position') }}
-                        <input type="number" id="sim-max-position" step="0.1" min="0" value="1.0">
-                    </label>
-                </div>
-                <label class="checkbox"><input type="checkbox" id="sim-short-allowed" checked> {{ t('sim_field_short_allowed') }}</label>
-                <label>{{ t('sim_field_overlap_mode') }}
-                    <select id="sim-overlap-mode">
-                        <option value="tranches">{{ t('sim_overlap_tranches') }}</option>
-                        <option value="renewed">{{ t('sim_overlap_renewed') }}</option>
-                    </select>
-                </label>
-            </fieldset>
+      <fieldset class="fund-choice">
+        <legend>{{ t('fund_field_kind') }}</legend>
+        {% for key in ['equity', 'etf', 'future', 'cfd'] %}
+        <label class="checkbox"><input type="radio" name="instrument_kind" value="{{ key }}"{% if loop.first %} checked{% endif %}> {{ t('fund_kind_' ~ key) }}</label>
+        {% endfor %}
+      </fieldset>
 
-            <fieldset>
-                <legend>{{ t('sim_section_metrics') }} — frictions</legend>
-                <label>{{ t('sim_field_asset_class') }}
-                    <select id="sim-asset-class">
-                        <option value="">—</option>
-                        <option value="futures_liquid" selected>Futures liquides (1bp)</option>
-                        <option value="us_large_cap">US large cap (3bp)</option>
-                        <option value="eu_mid_cap">EU mid cap (15bp)</option>
-                        <option value="crypto_non_major">Crypto hors majors (30bp)</option>
-                    </select>
-                </label>
-                <!-- Phase 10 : défaut pré-rempli et DOCUMENTÉ (pas 0) -- préréglage
-                     "futures_liquid" présélectionné ci-dessus (1bp round-turn, cf.
-                     simulate.engine.ASSET_CLASS_FRICTION_BPS et sa justification en
-                     commentaire) réparti 0.5bp spread + 0.5bp commission ; ces deux
-                     champs restent éditables et sont resynchronisés par
-                     simulate.js si l'utilisateur change de classe d'actif. -->
-                <div class="subgrid">
-                    <label>{{ t('sim_field_spread_bps') }}
-                        <input type="number" id="sim-spread-bps" step="0.5" min="0" value="0.5">
-                    </label>
-                    <label>{{ t('sim_field_commission_bps') }}
-                        <input type="number" id="sim-commission-bps" step="0.5" min="0" value="0.5">
-                    </label>
-                    <label>{{ t('sim_field_carry_bps') }}
-                        <input type="number" id="sim-carry-bps" step="1" min="0" value="0">
-                    </label>
-                </div>
-            </fieldset>
+      <label data-kinds="equity etf cfd">{{ t('fund_field_symbol') }}
+        <input type="text" name="symbol" id="f-symbol" list="f-symbol-list" placeholder="MC.PA · AAPL · ^GSPC · EURUSD=X" maxlength="40">
+        <datalist id="f-symbol-list"></datalist>
+      </label>
+      <div class="subgrid" data-kinds="future" hidden>
+        <label>{{ t('fund_field_root') }} <select name="root" id="f-root"></select></label>
+        <label>{{ t('fund_field_contract') }} <select name="contract" id="f-contract"></select></label>
+      </div>
 
-            <button type="submit" class="primary" id="sim-run-btn">{{ t('sim_run_button') }}</button>
-        </form>
-        <p id="sim-status" class="hint">{{ t('sim_no_run_selected') }}</p>
-    </div>
+      <fieldset class="fund-choice">
+        <legend>{{ t('fund_field_side') }}</legend>
+        <label class="checkbox"><input type="radio" name="side" value="long" checked> {{ t('fund_side_long') }}</label>
+        <label class="checkbox"><input type="radio" name="side" value="short"> {{ t('fund_side_short') }}</label>
+      </fieldset>
+
+      <div class="subgrid" data-kinds="equity etf">
+        <label>{{ t('fund_field_quantity') }} <input type="number" name="quantity" min="1" step="1"></label>
+        <label>{{ t('fund_field_amount') }} <input type="number" name="amount" min="0" step="any"></label>
+      </div>
+      <div class="subgrid" data-kinds="future" hidden>
+        <label>{{ t('fund_field_contracts') }} <input type="number" name="contracts" min="1" step="1"></label>
+      </div>
+      <div class="subgrid" data-kinds="cfd" hidden>
+        <label>{{ t('fund_field_units') }} <input type="number" name="units" min="0" step="any"></label>
+        <label>{{ t('fund_field_leverage') }} <input type="number" name="leverage" id="f-leverage" min="1" step="any">
+          <span class="hint" id="f-leverage-hint"></span></label>
+      </div>
+      <div class="subgrid" data-kinds="future cfd" hidden>
+        <label>{{ t('fund_field_stop') }} <input type="number" name="stop" min="0" step="any"></label>
+        <label>{{ t('fund_field_target') }} <input type="number" name="target" min="0" step="any"></label>
+      </div>
+
+      <div class="subgrid">
+        <label>{{ t('fund_field_date') }} <input type="date" name="date" id="f-date" value="{{ today }}" max="{{ today }}"></label>
+        <label class="checkbox"><input type="checkbox" name="manual_price" id="f-manual-price"> {{ t('fund_field_manual_price') }}</label>
+        <label>{{ t('fund_field_price') }} <input type="number" name="price" id="f-price" min="0" step="any" disabled></label>
+      </div>
+
+      <fieldset class="fund-choice">
+        <legend>{{ t('fund_field_fees') }}</legend>
+        <label class="checkbox"><input type="radio" name="fees_mode" value="estimated" checked> {{ t('fund_fees_estimated') }}</label>
+        <label class="checkbox"><input type="radio" name="fees_mode" value="manual"> {{ t('fund_fees_manual') }}</label>
+        <input type="number" name="fees" id="f-fees" min="0" step="any" disabled aria-label="{{ t('fund_fees_manual') }}">
+      </fieldset>
+
+      <button type="submit" class="btn" id="ticket-submit" disabled>{{ t('fund_submit') }}</button>
+    </form>
+
+    <aside id="ticket-preview" class="fund-preview" aria-live="polite" aria-label="{{ t('fund_preview_title') }}">
+      <p class="hint">{{ t('fund_preview_empty') }}</p>
+    </aside>
+  </div>
+</section>
+{% else %}
+{{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
+{% endif %}
+
+<section class="card" aria-labelledby="portfolios-title">
+  <div class="card-head"><h2 id="portfolios-title">{{ t('fund_portfolios_title') }}</h2></div>
+  {% if strategies %}
+  <div class="account-grid">
+    {% for s in strategies %}{% set k = s.kpis %}
+    <article class="account-card">
+      <div class="row">
+        <span class="account-type">{{ s.strategy.wrapper }}</span>
+        <span class="spacer"></span>
+        <a href="/fonds?strategy={{ s.strategy.strategy_id }}">{{ t('fund_card_open_fund') }}</a>
+      </div>
+      <div class="account-name">{{ s.strategy.name }}</div>
+      <div class="account-value">{{ k.nav | eur }}</div>
+      <div class="hint">
+        <span class="{{ 'pos' if k.pnl >= 0 else 'neg' }}">{{ k.pnl | eur }} · {{ k.pnl_pct | pct(1, true) }}</span>
+        · {{ t('fund_card_cash') }} {{ k.cash | eur }} · {{ t('fund_card_positions', n=k.n_open_positions) }}
+      </div>
+      {{ sparkline(s.series | map(attribute='nav') | list) }}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="hint">{{ t('fund_no_strategy') }}</p>
+  {% endif %}
 </section>
 
-<section class="dash-panel sim-panel-equity" aria-labelledby="sim-equity-title">
-    <h2 id="sim-equity-title" class="dash-panel-title">{{ t('sim_section_equity') }}</h2>
-    <div class="dash-panel-body">
-        <div id="sim-segment-info" class="banner hidden" role="status"></div>
-        <p id="sim-overfitting-guard" class="hint sim-guard hidden"></p>
-        <p class="sim-empty">{{ t('sim_empty_curves') }}</p>
-        <div class="sim-graph-container">
-            <h3 class="sim-graph-title">Equity Curve (Croissance du capital)</h3>
-            <p class="sim-graph-hint">Stratégie (bleu) vs Buy & Hold (gris) — axe Y: valeur du portefeuille, axe X: temps</p>
-            <canvas id="sim-equity-canvas" width="520" height="180" role="img"
-                    aria-label="{{ t('sim_aria_equity_empty') }}"></canvas>
-        </div>
-        <div class="sim-graph-container">
-            <h3 class="sim-graph-title">Drawdown (Pertes cumulatives)</h3>
-            <p class="sim-graph-hint">Déclin depuis le pic le plus proche — plus positif = mieux. Axe Y: % de baisse, axe X: temps</p>
-            <canvas id="sim-drawdown-canvas" width="520" height="90" role="img"
-                    aria-label="{{ t('sim_aria_drawdown_empty') }}"></canvas>
-        </div>
+<dialog id="new-strategy-dialog" class="modal">
+  <form class="form" id="new-strategy-form">
+    <h2>{{ t('fund_dlg_title') }}</h2>
+    <label>{{ t('fund_field_name') }} <input type="text" name="name" required maxlength="120"></label>
+    <div class="subgrid">
+      <label>{{ t('fund_field_wrapper') }}
+        <select name="wrapper">
+          <option value="CTO">{{ t('fund_wrapper_cto') }}</option>
+          <option value="PEA">{{ t('fund_wrapper_pea') }}</option>
+        </select>
+      </label>
+      <label>{{ t('fund_field_capital') }} <input type="number" name="initial_capital" required min="1" step="any" value="100000"></label>
     </div>
-</section>
-
-<section class="dash-panel sim-panel-metrics" aria-labelledby="sim-metrics-title">
-    <h2 id="sim-metrics-title" class="dash-panel-title">{{ t('sim_section_metrics') }}</h2>
-    <div class="dash-panel-body">
-        <p class="sim-empty">{{ t('sim_empty_metrics') }}</p>
-        <table class="leaderboard" id="sim-metrics-table">
-            <thead><tr><th></th><th>{{ t('sim_col_strategy') }}</th><th>{{ t('sim_col_buy_hold') }}</th></tr></thead>
-            <tbody></tbody>
-        </table>
+    <label>{{ t('fund_field_opened') }} <input type="date" name="opened_on" required value="{{ today }}" max="{{ today }}"></label>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="btn-secondary" data-close-dialog>{{ t('fund_btn_cancel') }}</button>
+      <button type="submit" class="btn">{{ t('fund_btn_create') }}</button>
     </div>
-</section>
+  </form>
+</dialog>
 
-<section class="dash-panel sim-panel-distribution" aria-labelledby="sim-dist-title">
-    <h2 id="sim-dist-title" class="dash-panel-title">{{ t('sim_section_distribution') }}</h2>
-    <div class="dash-panel-body">
-        <p class="sim-empty">{{ t('sim_empty_distribution') }}</p>
-        <p class="sim-graph-hint">Distribution des rendements par trade — <span style="color: var(--ok-ink);">vert = gains</span>, <span style="color: var(--error-ink);">rouge = pertes</span>. La forme dit si tu as un edge.</p>
-        <div class="sim-graph-container">
-            <h3 class="sim-graph-title">Rendements par Trade (Return per Trade)</h3>
-            <canvas id="sim-dist-canvas" width="520" height="160" role="img"
-                    aria-label="{{ t('sim_aria_dist_empty') }}"></canvas>
-        </div>
-    </div>
-</section>
-
-<section class="dash-panel sim-panel-trades" aria-labelledby="sim-trades-title">
-    <h2 id="sim-trades-title" class="dash-panel-title">{{ t('sim_section_trades') }}</h2>
-    <div class="dash-panel-body">
-        <a href="#" id="sim-trades-download" class="hidden">{{ t('sim_trades_download') }}</a>
-        <p class="sim-empty">{{ t('sim_empty_trades') }}</p>
-        <table class="leaderboard" id="sim-trades-table">
-            <thead><tr><th>#</th><th>{{ t('sim_col_strategy') }}</th></tr></thead>
-            <tbody></tbody>
-        </table>
-    </div>
-</section>
-
-</div>
-
-<script>window.SIM_INITIAL_RUN_ID = {{ initial_run_id | tojson }};</script>
+<script id="futures-data" type="application/json">{{ futures | tojson }}</script>
 <script src="/static/simulate.js"></script>
 {% endblock %}

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
+from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
+
 LANG_COOKIE = "patrick_lang"
 SUPPORTED_LANGS = ("fr", "en")
 DEFAULT_LANG = "fr"
@@ -814,6 +816,10 @@ STRINGS: dict[str, dict[str, str]] = {
 }
 
 
+# Pages Simulation et Fonds (webapp/i18n_fund.py) ; leurs chaînes écrasent la clé homonyme nav_simulate.
+STRINGS.update(FUND_STRINGS)
+
+
 def get_lang(request: Request) -> str:
     lang = request.query_params.get("lang") or request.cookies.get(LANG_COOKIE)
     return lang if lang in SUPPORTED_LANGS else DEFAULT_LANG
@@ -833,7 +839,7 @@ def js_strings(lang: str) -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", *FUND_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",
