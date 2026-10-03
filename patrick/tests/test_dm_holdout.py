@@ -146,8 +146,9 @@ def test_pages_never_call_a_selection_fold_p_value_significant(tmp_path, monkeyp
     assert "fold de sélection" in predictions
     assert "status-ok\">p=0.0010" not in predictions
     assert "&lt;span" not in predictions
-    runs = client.get("/runs").text
-    assert "fold de sélection" in runs
+    panel = client.get("/runs/run1/panel").text
+    assert "fold de sélection" in panel
+    assert "significatif" not in panel
 
 
 def test_synthesis_flags_a_target_whose_only_dm_is_selection_biased(tmp_path, monkeypatch):

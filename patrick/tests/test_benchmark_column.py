@@ -37,12 +37,18 @@ def test_batch_lookup_returns_the_persistence_f1(tmp_path, monkeypatch):
     assert runs["r1"]["benchmark_f1_dir"] == 0.55 and runs["r2"]["benchmark_f1_dir"] is None
 
 
-def test_runs_page_shows_the_benchmark_and_the_gap(tmp_path, monkeypatch):
+def test_run_panel_shows_the_benchmark_and_the_gap(tmp_path, monkeypatch):
+    """The history table is compact: the benchmark and the gap live in the
+    side panel opened on a run (`/runs/{run_id}/panel`)."""
     _seed(tmp_path, monkeypatch)
-    html = TestClient(app).get("/runs").text
+    client = TestClient(app)
+    html = client.get("/runs/r1/panel").text
     assert "Persistance" in html
     assert "0.5500" in html
     assert "+0.0600" in html
+    # a run without baseline shows neither a benchmark nor a gap
+    bare = client.get("/runs/r2/panel").text
+    assert "Persistance" in bare and "0.5500" not in bare and "+0.0600" not in bare
 
 
 def test_target_page_shows_the_benchmark_and_the_gap(tmp_path, monkeypatch):
