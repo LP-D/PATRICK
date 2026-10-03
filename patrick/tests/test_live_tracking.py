@@ -132,3 +132,19 @@ def test_predictions_page_shows_the_tally_in_the_hover_detail(tmp_path, monkeypa
     assert "Réussites par mouvement prédit" in html and "depuis le 2026-09-01" in html
     assert "Baisse forte" in html and "1/3 · 33 %" in html  # hausse forte predite 3x, 1 bonne
     assert html.count("<th>") >= 7  # Actif + une colonne par horizon, pas une ligne par paire
+
+
+def test_backfilled_bar_is_simulated_as_of_its_own_date(monkeypatch):
+    """Anti-fuite : le pool d'une barre reconstituee ne voit AUCUNE donnee posterieure
+    a cette barre (les ajustements parametriques sont refaits sur la coupe)."""
+    seen = []
+
+    def fake_pool(raw, config, target_col, formulas=None):
+        seen.append(raw.index.max())
+        return pd.DataFrame({"f": range(len(raw))}, index=raw.index)
+
+    monkeypatch.setattr(predict_module, "build_full_feature_pool", fake_pool)
+    raw = pd.DataFrame({"X": range(20)}, index=pd.bdate_range("2026-09-01", periods=20))
+    t = raw.index[12]
+    pool = predict_module._pool_as_of(raw, None, "X", [], t)
+    assert seen == [t] and pool.index.max() == t

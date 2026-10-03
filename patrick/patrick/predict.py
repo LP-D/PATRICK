@@ -108,12 +108,26 @@ def _bars_to_record(full_pool: pd.DataFrame, already: set[str], model_date: pd.T
     return todo
 
 
+def _pool_as_of(model_raw: pd.DataFrame, config: RunConfig, target_col: str,
+                interaction_formulas: list[str], t: pd.Timestamp) -> pd.DataFrame:
+    """Feature pool exactly as it would have been computed ON bar `t`: the raw
+    series are cut at `t` and EVERYTHING is rebuilt from that cut, parametric
+    fits included (vol models are fitted on the whole history they are given,
+    so a pool built on today's history is not the pool of an earlier day:
+    measured, 4 of 12 features of a real model differ slightly). ~14 s per
+    model and per bar -- the price of a backfill without data leakage."""
+    return build_full_feature_pool(model_raw.loc[:t], config, target_col, interaction_formulas)
+
+
 def predict_live(run_id: str, db_path: str | None = None, store: DataStore | None = None,
-                 raw_cache: dict | None = None, max_backfill: int = 400) -> dict:
+                 raw_cache: dict | None = None, max_backfill: int = 30) -> dict:
     """Records today's signal and every bar since the model's training date
     that was never recorded (`live_backfill=1`: app not opened that day).
-    Idempotent per bar. `raw_cache` (optional dict) shares one download
-    between runs built on the same objective/universe."""
+    Idempotent per bar. Reconstituted bars are simulated AS OF their own date
+    (`_pool_as_of`): no information posterior to the bar is used. At most
+    `max_backfill` most recent missing bars per call (cost: ~14 s each).
+    `raw_cache` (optional dict) shares one download between runs built on the
+    same objective/universe."""
     conn = trackdb.connect(db_path)
     try:
         run = trackdb.get_run(conn, run_id)
@@ -161,9 +175,15 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         n_written = 0
         new_signal = False
         for t, is_backfill in _bars_to_record(full_pool, already, model_date, max_backfill):
-            row_values = full_pool.loc[[t], feature_names].values
-            if is_backfill and not np.isfinite(row_values).all():
-                continue  # reconstituted rows only from complete feature vectors
+            if is_backfill:
+                pool_t = _pool_as_of(model_raw, config, target_col, interaction_formulas, t)
+                if t not in pool_t.index or any(c not in pool_t.columns for c in feature_names):
+                    continue
+                row_values = pool_t.loc[[t], feature_names].values
+                if not np.isfinite(row_values).all():
+                    continue  # reconstituted rows only from complete feature vectors
+            else:
+                row_values = full_pool.loc[[t], feature_names].values
             X_sel = finite_scaled(scale_selected(scaler, finite_features(row_values, "live"), sel_idx), "live")
             pred_class = int(model.predict(X_sel)[0])
             proba_row = model.predict_proba(X_sel)[0]

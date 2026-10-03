@@ -121,6 +121,50 @@ def test_predict_live_writes_then_backfills_outcome(tmp_path, monkeypatch):
     assert row[0] in (0.0, 1.0)
 
 
+@pytest.mark.slow
+def test_predict_live_backfills_missed_bars_as_of_their_date(tmp_path, monkeypatch):
+    """Jours ou l'app n'a pas ete ouverte : chaque barre posterieure a l'entrainement est
+    rejouee avec les donnees coupees a sa date (jamais le pool complet) ; une seconde
+    execution ne reecrit rien."""
+    raw_v1 = _synthetic_raw()
+    monkeypatch.setattr(engine_module, "ingest", lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+    db_path = str(tmp_path / "patrick.db")
+    store = DataStore(root=str(tmp_path / "store"))
+    engine_module.run_pipeline(_tiny_config(tmp_path), store=store, db_path=db_path)
+
+    conn = sqlite3.connect(db_path)
+    run_id = conn.execute("SELECT run_id FROM run WHERE horizon = ?", (HORIZON,)).fetchone()[0]
+    model_day = raw_v1.index[-5]  # entrainement il y a 4 barres : 3 barres manquantes + aujourd'hui
+    conn.execute("UPDATE run SET finished_at = ? WHERE run_id = ?", (str(model_day), run_id))
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(predict_module, "ingest", lambda objective, universe, store=None, force=False, data_quality=None: raw_v1)
+    cut_ends = []
+    real_pool = predict_module.build_full_feature_pool
+
+    def spy(raw, *args, **kwargs):
+        cut_ends.append(raw.index.max())
+        return real_pool(raw, *args, **kwargs)
+
+    monkeypatch.setattr(predict_module, "build_full_feature_pool", spy)
+    live = predict_module.predict_live(run_id, db_path=db_path, store=store)
+
+    assert live["n_written"] == 4 and live["new_signal"] is True
+    backfill_bars = [t for t in cut_ends if t < raw_v1.index[-1]]
+    assert sorted(backfill_bars) == list(raw_v1.index[-4:-1])  # une coupe par barre manquante, a sa date
+    assert all(t > model_day for t in backfill_bars)  # jamais une barre vue a l'entrainement
+
+    conn = sqlite3.connect(db_path)
+    flags = [r[0] for r in conn.execute(
+        "SELECT live_backfill FROM prediction WHERE split = 'live' ORDER BY ts")]
+    conn.close()
+    assert flags == [1, 1, 1, 0]
+
+    again = predict_module.predict_live(run_id, db_path=db_path, store=store)
+    assert again["n_written"] == 0 and again["new_signal"] is False  # marche ferme : rien de nouveau
+
+
 def test_predict_live_unknown_run_raises(tmp_path):
     with pytest.raises(ValueError):
         predict_module.predict_live("no-such-run", db_path=str(tmp_path / "patrick.db"))
