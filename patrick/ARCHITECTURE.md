@@ -91,7 +91,8 @@ Sous `patrick/patrick/` :
 | `pipeline/engine.py` | Orchestrateur central, `run_pipeline()` — voir §4. |
 | `tracking/` | `db.py` (schéma SQLite + toutes les fonctions d'écriture), `history.py` (fonctions de lecture optimisées pour la webapp — voir §5), `export.py` (export du meilleur modèle par cible/horizon), `report.py` (rapport HTML autonome), `jobs.py` (file d'attente pour les runs lancés depuis le web), `stats.py`, `holdout_diagnostic.py`, `migrations/*.sql` (numérotées, auto-découvertes par `MIGRATIONS_DIR.glob("*.sql")`). |
 | `webapp/` | FastAPI + Jinja2 — voir §6. |
-| `simulate/` | Moteur de simulation P&L théorique à partir des prédictions persistées (jamais de ré-entraînement), utilisé par `/simulate`. |
+| `fund/` | Stratégies, ordres et valorisation de positions fictives (action/ETF, future, CFD) : `engine.py` (rejeu des ordres jour par jour), `service.py` (aperçu et passage d'ordres), `prices.py` (cotations persistantes), `rules.py` (PEA/CTO), `fees.py`, `instruments.py`, `kpis.py`, `store.py` — pages `/simulate` et `/fonds`. |
+| `simulate/` | Moteur de simulation P&L théorique à partir des prédictions persistées (jamais de ré-entraînement). Plus de page depuis la refonte Simulation/Fonds : réutilisé par le mode ML du chantier 3. |
 | `cli.py` | Tous les sous-commandes (`patrick run/resume/predict/report/ingest/audit degradation/worker/serve`) — voir §8. |
 | `predict.py` | `predict_live()` : scoring en production sans ré-entraînement, écrit `prediction.split='live'`, backfille aussi les issues réelles des prédictions live passées dont l'horizon est désormais écoulé. |
 | `audit.py` | Audits ponctuels de validation (ex. `run_degradation_audit` : impact mesuré des correctifs anti-fuite Phase 0, PAS un moniteur de dérive continue). |
@@ -150,7 +151,7 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   run), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
   `/commodities`, `/macro` (stats par actif, calcul côté client via
   `asset_stats.js`/`/api/asset-stats/{symbol}`), `/predictions` (vue
-  d'ensemble cible×horizon) et `/simulate`. Le journal et les snapshots
+  d'ensemble cible×horizon), `/simulate` (ticket d'ordres) et `/fonds`. Le journal et les snapshots
   Phase 9 restent accessibles via API, sans page de navigation dédiée.
 - La file de jobs web (`tracking/jobs.py` + `worker.py`, lancé
   automatiquement par `run_manager.ensure_worker_running`) exécute les runs

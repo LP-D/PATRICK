@@ -11,7 +11,7 @@ def test_estimate_is_reproducible_and_future_commission_is_fixed():
                           commission_per_contract_base=2.0, tick_bps=0.5)
     a = fees.estimate_fees(ctx, fees.make_seed("s", "p", "2026-01-06", 1))
     b = fees.estimate_fees(ctx, fees.make_seed("s", "p", "2026-01-06", 1))
-    assert a == b and a.commission == 4.0 and a.fx > 0
+    assert a == b and a.commission == 4.0 and a.fx == 0.0         # le notionnel d'un future n'est pas converti
     c = fees.estimate_fees(ctx, fees.make_seed("s", "p", "2026-01-06", 2))
     assert c.spread != a.spread and c.commission == a.commission
 
@@ -37,14 +37,22 @@ def test_etf_spread_is_three_halves_of_a_large_cap_for_the_same_draw():
     assert thin.spread > large.spread * 4       # action peu liquide : médiane 8 bps et plus grande participation
 
 
-def test_cfd_has_no_commission_and_foreign_currency_pays_the_conversion_fee():
+def test_cfd_has_no_commission_and_no_conversion_fee_on_its_notional():
     eur = fees.estimate_fees(fees.FeeContext(kind="cfd", notional_base=100_000.0, quantity=10, currency="EUR",
                                              fee_class="cfd_index"), 5)
     usd = fees.estimate_fees(fees.FeeContext(kind="cfd", notional_base=100_000.0, quantity=10, currency="USD",
                                              fee_class="cfd_index"), 5)
     assert eur.commission == 0.0 and eur.fx == 0.0
-    assert usd.fx == pytest.approx(100.0) and usd.spread == eur.spread
-    assert usd.total == pytest.approx(usd.spread + usd.fx, abs=0.01)
+    assert usd.fx == 0.0 and usd.spread == eur.spread                 # seul le P&L est converti, pas le notionnel
+
+
+def test_a_foreign_equity_pays_the_conversion_fee_on_the_whole_amount():
+    kw = {"notional_base": 10_000.0, "quantity": 10}
+    usd = fees.estimate_fees(fees.FeeContext(kind="equity", currency="USD", **kw), 1)
+    eur = fees.estimate_fees(fees.FeeContext(kind="equity", currency="EUR", **kw), 1)
+    assert usd.fx == pytest.approx(10.0) and eur.fx == 0.0 and usd.spread == eur.spread
+    etf = fees.estimate_fees(fees.FeeContext(kind="etf", currency="USD", **kw), 1)
+    assert etf.fx == pytest.approx(10.0)
 
 
 def test_larger_derivative_orders_pay_a_larger_spread_per_unit_of_notional():

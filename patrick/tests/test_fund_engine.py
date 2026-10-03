@@ -197,3 +197,20 @@ def test_accounting_identity_holds_across_instruments():
     assert res.daily["fees_cum"].iloc[-1] == pytest.approx(fees)
     assert any(p["dividends"] > 0 for p in res.positions)
     assert any(p["financing"] > 0 for p in res.positions)
+
+
+def test_an_open_future_has_nothing_realized_and_a_closed_one_realizes_everything():
+    """Le règlement quotidien (converti au change du jour) ne doit pas laisser de « réalisé » fantôme sur une
+    position ouverte : tout est latent tant que rien n'est sorti, tout est réalisé une fois fermée."""
+    fx = pd.Series([0.9, 0.9, 0.92, 0.95] + [0.95] * 6, index=DAYS)
+    mkt = MarketData(bars={"FUT": bars([5000, 5000, 4990, 4980] + [4980.0] * 6)}, fx={"USD": fx})
+    opened = fut(currency="USD", fx_rate=0.9)
+    p = pos_of(simulate(STRAT, [opened], mkt, END))
+    settled = 1000 * 0.92 + 1000 * 0.95                       # variation du 7 puis du 8 janvier, au change du jour
+    assert p["realized"] == 0.0 and p["latent"] == pytest.approx(settled)
+    assert p["price_effect"] + p["fx_effect"] == pytest.approx(settled)
+    close = order(order_id=2, ts="2026-01-09", action="close", instrument_kind="future", symbol="FUT", side="short",
+                  quantity=2.0, price=4980.0, currency="USD", fx_rate=0.95, spec=dict(FUT_SPEC))
+    done = pos_of(simulate(STRAT, [opened, close], mkt, END))
+    assert done["status"] == "closed" and done["latent"] == 0.0
+    assert done["realized"] == pytest.approx(settled) and done["pnl"] == pytest.approx(settled)

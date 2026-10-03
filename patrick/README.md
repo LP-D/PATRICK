@@ -102,7 +102,7 @@ patrick serve --host 0.0.0.0 --port 9000
 patrick serve --reload                     # dev, hot reload
 ```
 
-Pages (nav: Synthèse · Lancer · Historique · Univers · Simulateur · Phase 9):
+Pages (nav: Synthèse · Lancer · Historique · Univers · Simulation · Fonds · Phase 9):
 
 - `/` — synthesis dashboard: coverage, per-target DM/BH quality, latest
   prediction, winning-model metrics by direction, recent-run history. No page
@@ -116,7 +116,11 @@ Pages (nav: Synthèse · Lancer · Historique · Univers · Simulateur · Phase 
   the history can compare 2–4 completed runs at `/compare-runs?run_ids=...`.
 - `/universe` — configured target universe crossed with run history.
 - `/targets/{ticker}` — aggregated run history for one target.
-- `/simulate` — position-sizing/backtest simulator on a trained model.
+- `/simulate` — order ticket: open long/short paper positions (stock/ETF, future, CFD) on a strategy
+  (capital, PEA or CTO wrapper) at a chosen execution date, with market prices and typed or estimated
+  fees; portfolios by strategy below the ticket.
+- `/fonds` (EN: LP Fund) — every strategy with portfolio KPIs (P&L in € and %, currency and FX effect,
+  value chart); click one to adjust, correct or close its positions.
 - `/phase9` — decision journal + named snapshots only (manual review audit
   trail persisted in SQLite). Signal quality and regime classification, shown
   here in an earlier iteration, moved to `/` (regime classification is not

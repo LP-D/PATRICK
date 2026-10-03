@@ -101,7 +101,7 @@ Canvas sans bibliothèque. Toute toile : (1) lit ses couleurs dans les jetons au
 |-----|---------|----------------------|
 | `pilotage` | PILOTAGE | Piloter la station : vue d'ensemble, lancement et suivi des runs, sorties modèles transverses, santé des données, journal de décision. |
 | `classes_actifs` | CLASSES D'ACTIFS | Ce que PATRICK modélise, présenté par famille de sous-jacents (univers, matières premières, macro, actions…), y compris les vues cross-actifs sur l'univers PATRICK (`/portfolio` : agrégation de signaux par classe + allocation HRP). |
-| `simulation` | SIMULATION | Rejouer des signaux déjà produits (jamais de ré-entraînement). |
+| `simulation` | SIMULATION | Ouvrir des positions fictives (ticket d'ordres) et suivre les stratégies du fonds. |
 | `patrimoine` | PATRIMOINE | Gestion patrimoniale réelle ou fictive (comptes, mouvements…). **Vide à ce jour** — non pré-peuplée, donc non rendue, tant que ces pages n'existent pas. |
 
 Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).

@@ -185,6 +185,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
         else:  # future : règle la variation de la quantité sortante jusqu'au prix de l'ordre
             local = pos.sgn * q * pos.multiplier * (p - pos.mark)
             gain = local * fx
+            pos.realized += pos.sgn * q * pos.multiplier * (p - pos.avg_local) * fx   # lots sortis, au prix d'entrée moyen
             pos.pnl_local_cum += local
             pos.var_cum += gain
             cash += gain
@@ -373,10 +374,13 @@ def _view(pos: _Pos, market: MarketData, end_ts: pd.Timestamp) -> dict:
             fx_effect = latent - price_effect
             margin = pos.qty * close * fx_now / float(pos.spec.get("leverage") or 1.0)
         else:
-            latent = pos.sgn * pos.qty * pos.multiplier * (close - pos.avg_local) * pos.fx_ref
+            # futures : réalisé / latent plus bas, depuis le règlement cumulé
             margin = pos.qty * float(pos.spec.get("margin_per_unit", 0.0)) * fx_now
     if pos.kind == "future":
-        realized = pos.var_cum - latent
+        # Le règlement quotidien est déjà en cash : tant que la position est ouverte, ce qui n'a pas été
+        # réalisé par une sortie est latent ; une fois fermée, tout est réalisé (aucun résidu de change).
+        realized = pos.realized if is_open else pos.var_cum
+        latent = pos.var_cum - realized if is_open else 0.0
         price_effect = pos.pnl_local_cum * pos.fx_ref
         fx_effect = pos.var_cum - price_effect
         gross = pos.var_cum

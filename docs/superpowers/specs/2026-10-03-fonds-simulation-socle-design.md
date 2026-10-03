@@ -254,8 +254,10 @@ Frais estimés = commission + coût de spread + frais de change.
   crypto 30. `facteur_taille = 1 + min(5, 100·participation)` pour action/ETF,
   `participation = quantité / volume moyen 20 jours` ; `1 + min(2, notionnel / 1 M€)`
   pour future et CFD.
-- Frais de change : 10 bps du montant converti quand la devise de l'instrument
-  diffère de la base.
+- Frais de change : 10 bps du montant converti, **pour les actions et ETF** dont la
+  devise diffère de la base. Futures et CFD ne convertissent que leur P&L, pas leur
+  notionnel : pas de frais de change (constaté avec de vraies cotations : sinon un
+  contrat ES coûtait 341 € de frais).
 - La graine (`fee_seed`) est dérivée de `strategy_id|position_id|ts|numéro` ;
   le tirage est fait à l'aperçu du ticket, la graine est renvoyée avec l'aperçu
   et réutilisée à la validation : **le montant affiché est celui qui est

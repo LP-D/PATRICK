@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 
 SIGMA = 0.5                       # écart-type du log du coût de spread
-FX_FEE_BPS = 10.0                 # frais de change si devise instrument != devise de base
+FX_FEE_BPS = 10.0                 # frais de change d'une action/ETF en devise étrangère (montant converti)
 EQUITY_MIN_COMMISSION = 1.0       # € par ordre action/ETF
 EQUITY_COMMISSION_RATE = 0.0005   # 0,05 % du montant
 LARGE_CAP_ADV_BASE = 20_000_000.0  # volume moyen quotidien (devise de base) au-delà duquel une action est « grande capitalisation »
@@ -81,5 +81,8 @@ def estimate_fees(ctx: FeeContext, seed: int) -> FeeBreakdown:
     else:
         raise ValueError(f"type d'instrument inconnu : {ctx.kind!r}")
     spread = notional * median / 1e4 * math.exp(SIGMA * z) * size
-    fx = notional * FX_FEE_BPS / 1e4 if ctx.currency != ctx.base_currency else 0.0
+    # Seuls action/ETF convertissent leur montant ; futures et CFD règlent leur P&L en devise de base
+    # sans convertir le notionnel (frais de change nuls, sinon 1 contrat ES coûterait 0,1 % du notionnel).
+    converted = ctx.kind in ("equity", "etf") and ctx.currency != ctx.base_currency
+    fx = notional * FX_FEE_BPS / 1e4 if converted else 0.0
     return FeeBreakdown(round(commission, 6), round(spread, 6), round(fx, 6))
