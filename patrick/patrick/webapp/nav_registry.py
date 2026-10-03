@@ -62,12 +62,9 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # /portfolio = agregation de signaux par classe d'actifs + allocation HRP
     # sur l'univers PATRICK : vue cross-actifs, pas gestion patrimoniale.
     NavEntry("portfolio", "Portefeuille", "/portfolio", "classes_actifs", 50, "nav_portfolio"),
-    # SIMULATION -- rejouer des signaux deja produits (jamais de re-entrainement).
-    NavEntry("simulate", "Simulateur", "/simulate", "simulation", 10, "nav_simulate"),
-    # Roadmap bloc 4 : rejouer les signaux sur un patrimoine (URL a plat, cf.
-    # PATRIMOINE ci-dessous : `/simulate/...` allumerait aussi `/simulate`).
-    NavEntry("patrimoine_simulation", "Simulateur patrimoine", "/patrimoine-simulation", "simulation", 20,
-             "nav_patrimoine_simulation"),
+    # SIMULATION -- ouvrir des positions fictives (ticket d'ordres) puis suivre les strategies du fonds.
+    NavEntry("simulate", "Simulation", "/simulate", "simulation", 10, "nav_simulate"),
+    NavEntry("fonds", "Fonds", "/fonds", "simulation", 20, "nav_fonds"),
     # PATRIMOINE -- comptes reels et fictifs (PEA, CTO, AV, livret, DAT) et
     # leurs mouvements (roadmap bloc 4, webapp/wealth_routes.py). URLs a plat
     # (`/mouvements`, pas `/patrimoine/mouvements`) : l'etat actif est par
@@ -84,6 +81,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
+    "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
 })
 
 

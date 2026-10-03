@@ -321,6 +321,7 @@ total, P&L total en € et en %, répartition par stratégie.
 | `POST /api/fund/strategies/{id}/orders` | Ouvrir, renforcer, alléger, fermer, modifier. Revalide toute la chronologie. |
 | `PATCH /api/fund/orders/{id}` | Corriger l'ordre d'ouverture (revalidation complète). |
 | `DELETE /api/fund/positions/{id}` | Supprimer une position entière. |
+| `GET /api/fund/strategies/{id}/panel` | Fragment HTML (rendu serveur, échappé) du détail d'une stratégie pour `/fonds`. |
 | `GET /api/fund/strategies/{id}/detail` | KPI, série de NAV, positions, ordres. |
 | `GET /api/fund/overview` | Portefeuilles par stratégie + total du fonds. |
 

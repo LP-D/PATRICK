@@ -77,7 +77,7 @@ NAV_ICONS: dict[str, str] = {
     "simulate": "simulate",
     "event_study": "event",
     "patrimoine": "wallet",
-    "patrimoine_simulation": "briefcase",
+    "fonds": "briefcase",
     "mouvements": "movements",
 }
 

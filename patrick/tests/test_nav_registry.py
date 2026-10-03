@@ -194,6 +194,7 @@ def test_sidebar_links_all_registry_entries_exactly_once():
     ("/runs", "/runs"),
     ("/commodities", "/commodities"),
     ("/simulate", "/simulate"),
+    ("/fonds", "/fonds"),
     ("/portfolio", "/portfolio"),
 ])
 def test_sidebar_active_state_follows_current_route(path, expected_current):

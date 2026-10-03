@@ -2082,3 +2082,16 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .fund-ticket-grid { grid-template-columns: 1fr; }
   .fund-preview { position: static; }
 }
+
+/* ---- Fonds (refonte chantier 1) : tableau des stratégies et panneau de détail ---- */
+.fund-form-row[hidden], .fund-form-error[hidden], .fund-inline-form label[hidden] { display: none; }
+.fund-row { cursor: pointer; }
+.fund-row:hover, .fund-row.is-selected { background: var(--surface-2); }
+.fund-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.fund-panel { margin-top: var(--space-lg); }
+.fund-panel h3 { margin: var(--space-lg) 0 var(--space-sm); }
+.fund-actions { white-space: nowrap; text-align: right; }
+.fund-inline-form { padding: var(--space-sm) 0; }
+.fund-form-row > td { background: var(--surface-2); }
+.fund-orders { margin-top: var(--space-lg); }
+.fund-orders summary { cursor: pointer; font-weight: 600; }

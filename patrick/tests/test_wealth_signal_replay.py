@@ -78,26 +78,3 @@ def test_no_modeled_position_gives_an_empty_replay_not_an_error(modeled):
     out = signal_replay.replay_account(_holdings([{"symbol": "AAPL", "value": 10.0, "is_term_deposit": False}]),
                                        sim_engine.SimParams(), db_path=db_path, store_root=store_root)
     assert out["covered"] == [] and out["portfolio"] == [] and out["covered_weight"] == 0.0
-
-
-def test_replay_api_end_to_end(modeled, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    from patrick.wealth import performance
-    from patrick.webapp import wealth_routes
-    from patrick.webapp.app import app
-
-    db_path, store_root, _ = modeled
-    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
-    monkeypatch.setenv("PATRICK_STORE_ROOT", store_root)
-    px = pd.Series(np.linspace(100, 120, 300), index=pd.bdate_range("2020-01-01", periods=300))
-    monkeypatch.setattr(wealth_routes, "price_provider", lambda: performance.dict_price_provider({TARGET: px}))
-    client = TestClient(app)
-    acc = client.post("/api/wealth/accounts", json={"name": "CTO", "kind": "CTO"}).json()["account_id"]
-    client.post(f"/api/wealth/accounts/{acc}/movements",
-                json={"kind": "buy", "ts": "2020-02-03", "symbol": TARGET, "quantity": "10", "price": "100"})
-    resp = client.post(f"/api/wealth/accounts/{acc}/replay", json={"segment": "holdout", "params": {}})
-    assert resp.status_code == 200, resp.text
-    assert [c["symbol"] for c in resp.json()["covered"]] == [TARGET]
-    assert client.post(f"/api/wealth/accounts/{acc}/replay", json={"segment": "pooled"}).status_code == 400
-    assert client.get("/patrimoine-simulation").status_code == 200

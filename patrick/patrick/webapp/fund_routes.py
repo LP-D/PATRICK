@@ -10,6 +10,7 @@ import json
 import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
 
 from patrick.fund import instruments, service, store
 from patrick.tracking import db as trackdb
@@ -85,6 +86,28 @@ def register(app: FastAPI, templates, context) -> None:
         return templates.TemplateResponse(request, "simulate.html", {
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today), **context(request)})
+
+    @app.get("/fonds")
+    def fonds_page(request: Request, strategy: str | None = None):
+        data = _call(service.overview, service.current_date())
+        return templates.TemplateResponse(request, "fonds.html", {
+            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy,
+            **context(request)})
+
+    @app.get("/patrimoine-simulation")
+    def legacy_wealth_simulation_page():
+        """Ancienne page « Simulateur patrimoine » : remplacée par /fonds."""
+        return RedirectResponse("/fonds", status_code=308)
+
+    @app.get("/api/fund/strategies/{strategy_id}/panel")
+    def api_strategy_panel(request: Request, strategy_id: str):
+        """Fragment HTML (rendu serveur, échappé) du détail d'une stratégie pour /fonds."""
+        today = service.current_date()
+
+        def run(conn):
+            return service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
+        return templates.TemplateResponse(request, "_fund_panel.html", {
+            "snap": _call(run), "today": today.isoformat(), **context(request)})
 
     # ---------------------------------------------------------------- API
 

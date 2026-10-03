@@ -1,0 +1,146 @@
+"""Page /fonds et fragment /api/fund/strategies/{id}/panel : rendu serveur, échappement, i18n, navigation."""
+from __future__ import annotations
+
+import re
+
+import fund_support as fs
+import pytest
+from fastapi.testclient import TestClient
+
+from patrick.webapp import i18n, i18n_fund, nav_registry
+from patrick.webapp.app import app
+
+XSS = "<script>alert(1)</script>"
+XSS_ESCAPED = "&lt;script&gt;alert(1)&lt;/script&gt;"
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    fs.install(monkeypatch)
+    fs.freeze_today(monkeypatch)
+    return TestClient(app)
+
+
+def test_fonds_page_lists_strategies_and_totals(client):
+    assert "Aucune stratégie." in client.get("/fonds").text
+    a = fs.make_strategy(client)
+    fs.make_strategy(client, "Actions PEA", wrapper="PEA", initial_capital=50_000)
+    fs.place(client, a)
+    html = client.get(f"/fonds?strategy={a}").text
+    assert html.count('class="fund-row') == 2 and f'data-strategy-id="{a}"' in html
+    assert "Valeur du fonds" in html and "Capital total" in html and "150 000,00 €" in html
+    assert 'id="fund-panel"' in html and '<script src="/static/fonds.js"></script>' in html
+    assert fs.json_script(html, "fund-selected") == a and 'class="fund-row is-selected"' in html
+    assert fs.json_script(client.get("/fonds").text, "fund-selected") is None
+
+
+def test_fonds_page_is_available_in_english(client):
+    fs.make_strategy(client)
+    fund = client.get("/fonds?lang=en").text
+    assert "LP Fund" in fund and "Fund value" in fund and "Valeur du fonds" not in fund
+
+
+def test_the_old_wealth_simulator_url_redirects_to_the_fund_page(client):
+    resp = client.get("/patrimoine-simulation", follow_redirects=False)
+    assert resp.status_code == 308 and resp.headers["location"] == "/fonds"
+    assert client.get("/patrimoine-simulation").url.path == "/fonds"
+
+
+def test_navigation_lists_fonds_in_the_simulation_category_and_lights_it_up(client):
+    entries = [e.slug for e in nav_registry.entries_for("simulation")]
+    assert entries == ["simulate", "fonds"]
+    side = client.get("/fonds").text
+    assert 'href="/fonds"' in side and 'href="/patrimoine-simulation"' not in side
+    current = re.findall(r'<a href="([^"]+)"[^>]*aria-current="page"', side)
+    assert current == ["/fonds"]
+    assert "/patrimoine-simulation" not in nav_registry.registered_routes()
+    assert nav_registry.is_non_page_route("/patrimoine-simulation")
+
+
+def test_strategy_names_are_escaped_on_the_fund_page_and_in_the_panel(client):
+    sid = fs.make_strategy(client, XSS)
+    fs.place(client, sid)
+    for url in ("/fonds", f"/api/fund/strategies/{sid}/panel"):
+        html = client.get(url).text
+        assert XSS_ESCAPED in html, url
+        assert XSS not in html, url
+
+
+def test_panel_for_a_strategy_without_positions(client):
+    sid = fs.make_strategy(client)
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert "Aucune position ouverte." in html and f'href="/simulate?strategy={sid}"' in html
+    assert "Valeur (NAV)" in html and "Historique des ordres (0)" in html
+    assert "Positions fermées" not in html and "data-form=" not in html
+    assert client.get("/api/fund/strategies/str_missing/panel").status_code == 404
+
+
+def test_panel_shows_kpis_chart_positions_and_per_position_forms(client):
+    sid = fs.make_strategy(client)
+    fs.place(client, sid, instrument_kind="equity", symbol="AAPL", quantity=10)
+    fs.place(client, sid, instrument_kind="future", side="short", quantity=1, date="2026-01-08",
+             spec={"root": "ES", "year": 2026, "month": 12, "stop": 7000})
+    fs.place(client, sid, instrument_kind="cfd", symbol="^GSPC", quantity=2, date="2026-01-09", spec={"leverage": 10})
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    for label in ("Valeur (NAV)", "Réalisé", "Latent", "Frais cumulés", "Volatilité annualisée", "Drawdown max",
+                  "Exposition brute", "Levier brut", "Marge utilisée", "Liquidités disponibles", "Cash"):
+        assert label in html, label
+    chart = fs.json_script(html, "fund-chart-data")
+    assert chart["capital"] == 100_000 and len(chart["series"]) > 5
+    assert html.count('class="fund-position"') == 3 and html.count('data-form="adjust"') == 3
+    assert html.count('data-form="correct"') == 3 and html.count('data-act="delete-position"') == 3
+    assert "AAPL" in html and "ESZ26.CME" in html and "^GSPC" in html and "USD · " in html
+    assert "éch. 2026-12-18" in html and "10:1" in html and "S 7" in html            # échéance, levier, stop
+    assert html.count('value="modify"') == 2                                          # future et CFD seulement
+    assert html.count('name="leverage"') == 2                                         # CFD : ajustement et correction
+    assert "taux de référence USD" in html                                            # note affichée (FRED non configuré)
+    assert 'id="fund-chart"' in html
+
+
+def test_panel_lists_closed_positions_and_the_order_history(client):
+    sid = fs.make_strategy(client)
+    pid = fs.place(client, sid, quantity=4)["preview"]["position_id"]
+    client.post(f"/api/fund/strategies/{sid}/orders", json={"action": "close", "position_id": pid, "date": "2026-01-12"})
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert "Positions fermées" in html and "Fermée" in html and "2026-01-07 → 2026-01-12" in html
+    assert "Historique des ordres (2)" in html and "Ouverture" in html and "Clôture" in html
+    assert "Aucune position ouverte." in html and 'class="fund-position"' not in html
+
+
+def test_panel_flags_manual_prices_and_fees_in_the_history(client):
+    sid = fs.make_strategy(client)
+    fs.place(client, sid, price=650, fees_mode="manual", fees=3)
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert "650 *" in html.replace(" ", " ") and "3,00 € *" in html
+
+
+def test_no_untranslated_key_leaks_into_the_pages_in_either_language(client):
+    sid = fs.make_strategy(client)
+    pid = fs.place(client, sid, instrument_kind="cfd", symbol="^GSPC", quantity=2, spec={"leverage": 10})["preview"][
+        "position_id"]
+    fs.place(client, sid, symbol="AAPL", quantity=5, date="2026-01-08")
+    client.post(f"/api/fund/strategies/{sid}/orders", json={"action": "close", "position_id": pid, "date": "2026-01-12"})
+    for lang in ("fr", "en"):
+        for url in ("/simulate", "/fonds", f"/api/fund/strategies/{sid}/panel"):
+            html = re.sub(r'<script id="i18n-data".*?</script>', "", client.get(f"{url}{'&' if '?' in url else '?'}lang={lang}").text,
+                          flags=re.DOTALL)
+            assert re.findall(r"\bfund_[a-z_]+\b", html) == [], (url, lang)
+
+
+def test_dynamic_label_families_are_all_translated():
+    expected = {f"fund_kind_{k}" for k in ("equity", "etf", "future", "cfd")}
+    expected |= {f"fund_side_{s}" for s in ("long", "short")}
+    expected |= {f"fund_status_{s}" for s in ("open", "closed", "stop", "target", "expired")}
+    expected |= {f"fund_action_{a}" for a in ("open", "increase", "reduce", "close", "modify")}
+    assert expected <= set(i18n_fund.FUND_STRINGS)
+    for key, entry in i18n_fund.FUND_STRINGS.items():
+        assert entry["fr"] and entry["en"], key
+    assert set(i18n.STRINGS) >= set(i18n_fund.FUND_STRINGS)
+
+
+def test_the_fund_script_uses_only_exposed_and_defined_strings(client):
+    js = client.get("/static/fonds.js").text
+    used = set(re.findall(r"""['"](fund_[a-z_]+)['"]""", js)) | set(re.findall(r"""I18N\.(fund_[a-z_]+)""", js))
+    assert used <= set(i18n.STRINGS), used - set(i18n.STRINGS)
+    assert used <= set(i18n.js_strings("fr")), used - set(i18n.js_strings("fr"))

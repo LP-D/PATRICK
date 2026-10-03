@@ -1,0 +1,73 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import metric, empty_state %}
+{% block title %}PATRICK — {{ t('fund_title') }}{% endblock %}
+
+{# Page Fonds (chantier 1) : toutes les stratégies, total consolidé en tête.
+   Un clic sur une ligne charge le panneau de détail (fragment HTML rendu par
+   le serveur : /api/fund/strategies/{id}/panel -> _fund_panel.html, échappé
+   par Jinja) sous le tableau. L'ajout d'une position se fait sur /simulate. #}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('fund_title') }}</h1>
+    <p class="page-subtitle">{{ t('fund_subtitle') }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/simulate">{{ icon('plus') }} {{ t('fund_new_position') }}</a>
+  </div>
+</div>
+
+<div id="fund-flash" class="banner hidden" role="status"></div>
+
+{% if strategies %}
+<div class="metric-grid">
+  {{ metric(t('fund_total_nav'), fund.nav | eur, t('fund_total_nav_hint', n=fund.n_strategies), "neutral") }}
+  {{ metric(t('fund_total_capital'), fund.capital | eur, t('fund_total_capital_hint'), "neutral") }}
+  {{ metric(t('fund_total_pnl'), fund.pnl | eur, fund.pnl_pct | pct(1, true), "neutral") }}
+</div>
+
+<section class="card" aria-labelledby="fund-table-title">
+  <div class="card-head"><h2 id="fund-table-title">{{ t('fund_strategies_title') }}</h2></div>
+  <div class="table-scroll">
+    <table class="data-table fund-table">
+      <thead>
+        <tr>
+          <th>{{ t('fund_col_strategy') }}</th>
+          <th>{{ t('fund_col_wrapper') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_nav') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_pnl') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_exposure') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_leverage') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_margin') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_positions') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in strategies %}{% set k = s.kpis %}
+        <tr class="fund-row{% if s.strategy.strategy_id == selected_id %} is-selected{% endif %}" data-strategy-id="{{ s.strategy.strategy_id }}"
+            tabindex="0" role="button" aria-controls="fund-panel">
+          <td>{{ s.strategy.name }}</td>
+          <td><span class="tag">{{ s.strategy.wrapper }}</span></td>
+          <td class="num pk-mono">{{ k.nav | eur }}</td>
+          <td class="num pk-mono"><span class="{{ 'pos' if k.pnl >= 0 else 'neg' }}">{{ k.pnl | eur }} · {{ k.pnl_pct | pct(1, true) }}</span></td>
+          <td class="num pk-mono">{{ k.gross_exposure_pct | pct(0) }}</td>
+          <td class="num pk-mono">{{ k.leverage | qty }}×</td>
+          <td class="num pk-mono">{{ k.margin_used | eur(0) }}</td>
+          <td class="num pk-mono">{{ k.n_open_positions }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-footer">{{ t('fund_table_footer') }}</p>
+</section>
+
+<section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
+{% else %}
+{{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
+{% endif %}
+
+<script id="fund-selected" type="application/json">{{ selected_id | tojson }}</script>
+<script src="/static/fonds.js"></script>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% from "_components.html" import metric %}
+{# Fragment « détail d'une stratégie » de /fonds (rendu serveur, échappé par Jinja ;
+   injecté tel quel par fonds.js). `snap` = fund.service.strategy_snapshot. #}
+{% set s = snap.strategy %}{% set k = snap.kpis %}
+{% set open_positions = snap.positions | selectattr('status', 'equalto', 'open') | list %}
+{% set closed_positions = snap.positions | rejectattr('status', 'equalto', 'open') | list %}
+<div class="card-head">
+  <h2>{{ s.name }} <span class="tag">{{ s.wrapper }}</span></h2>
+  <div class="row">
+    <button type="button" class="btn-ghost" data-act="rename" data-strategy-id="{{ s.strategy_id }}" data-name="{{ s.name }}">{{ t('fund_act_rename') }}</button>
+    <button type="button" class="btn-ghost" data-act="archive" data-strategy-id="{{ s.strategy_id }}">{{ t('fund_act_archive') }}</button>
+    <button type="button" class="btn-ghost" data-act="delete-strategy" data-strategy-id="{{ s.strategy_id }}"
+            data-confirm="{{ t('fund_confirm_delete_strategy') }}">{{ t('fund_act_delete_strategy') }}</button>
+    <button type="button" class="btn-secondary" data-act="close-panel">{{ t('fund_panel_close') }}</button>
+  </div>
+</div>
+<p class="hint">{{ t('fund_panel_meta', start=s.opened_on, capital=(k.capital | eur)) }}</p>
+
+{% for n in snap.notes %}<div class="banner banner-warning">{{ n }}</div>{% endfor %}
+{% for v in snap.violations %}<div class="banner banner-error">{{ v }}</div>{% endfor %}
+{% if snap.alert_days %}<div class="banner banner-warning">{{ t('fund_alert_margin', n=snap.alert_days | length, first=snap.alert_days[0]) }}</div>{% endif %}
+
+<div class="metric-grid">
+  {{ metric(t('fund_kpi_nav'), k.nav | eur, t('fund_hint_nav'), "neutral") }}
+  {{ metric(t('fund_kpi_pnl'), (k.pnl | eur) ~ ' · ' ~ (k.pnl_pct | pct(1, true)), t('fund_hint_pnl'), "neutral") }}
+  {{ metric(t('fund_kpi_realized'), k.realized | eur, t('fund_hint_realized'), "neutral") }}
+  {{ metric(t('fund_kpi_latent'), k.latent | eur, t('fund_hint_latent'), "neutral") }}
+  {{ metric(t('fund_kpi_fees'), k.fees | eur, t('fund_hint_fees'), "neutral") }}
+  {{ metric(t('fund_kpi_dividends'), k.dividends | eur, t('fund_hint_dividends'), "neutral") }}
+  {{ metric(t('fund_kpi_financing'), k.financing | eur, t('fund_hint_financing'), "neutral") }}
+  {{ metric(t('fund_kpi_vol'), k.volatility | pct(1), t('fund_hint_vol'), "neutral") }}
+  {{ metric(t('fund_kpi_sharpe'), k.sharpe | qty, t('fund_hint_sharpe'), "neutral") }}
+  {{ metric(t('fund_kpi_dd'), k.max_drawdown | pct(1), t('fund_hint_dd'), "neutral") }}
+  {{ metric(t('fund_kpi_gross'), k.gross_exposure_pct | pct(0), t('fund_hint_gross'), "neutral") }}
+  {{ metric(t('fund_kpi_net'), k.net_exposure_pct | pct(0), t('fund_hint_net'), "neutral") }}
+  {{ metric(t('fund_kpi_leverage'), (k.leverage | qty) ~ '×', t('fund_hint_leverage'), "neutral") }}
+  {{ metric(t('fund_kpi_margin'), k.margin_used | eur, t('fund_hint_margin'), "neutral") }}
+  {{ metric(t('fund_kpi_power'), k.buying_power | eur, t('fund_hint_power'), "neutral") }}
+  {{ metric(t('fund_kpi_cash'), k.cash | eur, t('fund_hint_cash'), "neutral") }}
+</div>
+
+<h3>{{ t('fund_chart_title') }}</h3>
+<div class="drift-legend">
+  <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>{{ t('fund_chart_nav') }}</span>
+  <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>{{ t('fund_chart_capital') }}</span>
+</div>
+<div class="chart-wrap"><canvas id="fund-chart" class="chart-canvas" role="img" aria-label="{{ t('fund_chart_title') }}"></canvas></div>
+<script id="fund-chart-data" type="application/json">{{ {"series": snap.series, "capital": k.capital} | tojson }}</script>
+
+<h3>{{ t('fund_pos_title') }} <span class="hint">({{ open_positions | length }})</span></h3>
+{% if open_positions %}
+<div class="table-scroll">
+  <table class="data-table fund-positions">
+    <thead>
+      <tr>
+        <th>{{ t('fund_pcol_instrument') }}</th><th>{{ t('fund_pcol_side') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_qty') }}</th><th class="num pk-mono">{{ t('fund_pcol_entry') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_price') }}</th><th>{{ t('fund_pcol_fx') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_value') }}</th><th class="num pk-mono">{{ t('fund_pcol_pnl') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_fx_effect') }}</th><th class="num pk-mono">{{ t('fund_pcol_margin') }}</th>
+        <th>{{ t('fund_pcol_levels') }}</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in open_positions %}
+      {% set opening = snap.orders | selectattr('position_id', 'equalto', p.position_id) | selectattr('action', 'equalto', 'open') | first %}
+      <tr class="fund-position">
+        <td>
+          <span class="pk-mono">{{ p.symbol }}</span> <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span>
+          {% if p.expiry %}<span class="hint">{{ t('fund_expiry', date=p.expiry) }}</span>{% endif %}
+          {% if p.leverage and p.kind == 'cfd' %}<span class="hint">{{ p.leverage | qty }}:1</span>{% endif %}
+          {% if p.price_quality %}<span class="tag" title="{{ t('fund_quality_continuous') }}">!</span>{% endif %}
+        </td>
+        <td>{{ t('fund_side_' ~ p.side) }}</td>
+        <td class="num pk-mono">{{ p.quantity | qty }}</td>
+        <td class="num pk-mono">{{ p.avg_entry | qty }}</td>
+        <td class="num pk-mono">{{ p.last_price | qty }}</td>
+        <td class="pk-mono">{{ p.currency }}{% if p.currency != s.base_currency %} · {{ p.fx_open | qty }} → {{ p.fx_now | qty }}{% endif %}</td>
+        <td class="num pk-mono">{{ p.value_base | eur }}</td>
+        <td class="num pk-mono"><span class="{{ 'pos' if p.pnl >= 0 else 'neg' }}">{{ p.pnl | eur }} · {{ p.pnl_pct | pct(1, true) }}</span></td>
+        <td class="num pk-mono">{{ p.fx_effect | eur }}</td>
+        <td class="num pk-mono">{{ p.margin | eur(0) }}</td>
+        <td class="pk-mono">{% if p.stop %}S {{ p.stop | qty }}{% endif %}{% if p.target %} · O {{ p.target | qty }}{% endif %}{% if not p.stop and not p.target %}—{% endif %}</td>
+        <td class="fund-actions">
+          <button type="button" class="btn-ghost" data-act="toggle" data-target="adj-{{ p.position_id }}">{{ t('fund_act_adjust') }}</button>
+          {% if opening %}<button type="button" class="btn-ghost" data-act="toggle" data-target="cor-{{ p.position_id }}">{{ t('fund_act_correct') }}</button>{% endif %}
+          <button type="button" class="btn-ghost" data-act="delete-position" data-position-id="{{ p.position_id }}"
+                  data-confirm="{{ t('fund_confirm_delete_position') }}">{{ t('fund_act_delete') }}</button>
+        </td>
+      </tr>
+      <tr class="fund-form-row" id="adj-{{ p.position_id }}" hidden>
+        <td colspan="12">
+          <form class="form fund-inline-form" data-form="adjust" data-strategy-id="{{ s.strategy_id }}"
+                data-position-id="{{ p.position_id }}" data-kind="{{ p.kind }}">
+            <div class="subgrid">
+              <label>{{ t('fund_adj_action') }}
+                <select name="action">
+                  <option value="increase">{{ t('fund_adj_increase') }}</option>
+                  <option value="reduce">{{ t('fund_adj_reduce') }}</option>
+                  <option value="close">{{ t('fund_adj_close') }}</option>
+                  {% if p.kind in ('future', 'cfd') %}<option value="modify">{{ t('fund_adj_modify') }}</option>{% endif %}
+                </select>
+              </label>
+              <label data-actions="increase reduce">{{ t('fund_field_quantity') }} <input type="number" name="quantity" min="0" step="any"></label>
+              <label>{{ t('fund_field_date') }} <input type="date" name="date" value="{{ today }}" min="{{ s.opened_on }}" max="{{ today }}"></label>
+              <label data-actions="increase reduce close">{{ t('fund_field_price') }} <input type="number" name="price" min="0" step="any" placeholder="{{ t('fund_price_market') }}"></label>
+              <label data-actions="increase reduce close">{{ t('fund_field_fees') }}
+                <select name="fees_mode"><option value="estimated">{{ t('fund_fees_estimated') }}</option><option value="manual">{{ t('fund_fees_manual') }}</option></select>
+              </label>
+              <label data-actions="increase reduce close">{{ t('fund_fees_manual') }} <input type="number" name="fees" min="0" step="any"></label>
+              {% if p.kind in ('future', 'cfd') %}
+              <label data-actions="modify">{{ t('fund_field_stop') }} <input type="number" name="stop" min="0" step="any" value="{{ p.stop if p.stop else '' }}"></label>
+              <label data-actions="modify">{{ t('fund_field_target') }} <input type="number" name="target" min="0" step="any" value="{{ p.target if p.target else '' }}"></label>
+              {% endif %}
+              {% if p.kind == 'cfd' %}
+              <label data-actions="modify">{{ t('fund_field_leverage') }} <input type="number" name="leverage" min="1" step="any" value="{{ p.leverage }}"></label>
+              {% endif %}
+            </div>
+            <p class="fund-form-error banner banner-error" hidden></p>
+            <div class="row"><button type="submit" class="btn">{{ t('fund_adj_apply') }}</button></div>
+          </form>
+        </td>
+      </tr>
+      {% if opening %}
+      <tr class="fund-form-row" id="cor-{{ p.position_id }}" hidden>
+        <td colspan="12">
+          <form class="form fund-inline-form" data-form="correct" data-order-id="{{ opening.order_id }}" data-kind="{{ p.kind }}">
+            <div class="subgrid">
+              <label>{{ t('fund_field_quantity') }} <input type="number" name="quantity" min="0" step="any" value="{{ opening.quantity }}"></label>
+              <label>{{ t('fund_field_date') }} <input type="date" name="date" value="{{ opening.ts }}" min="{{ s.opened_on }}" max="{{ today }}"></label>
+              <label>{{ t('fund_field_price') }} <input type="number" name="price" min="0" step="any" placeholder="{{ t('fund_price_market') }}"></label>
+              <label>{{ t('fund_field_fees') }}
+                <select name="fees_mode"><option value="estimated">{{ t('fund_fees_estimated') }}</option><option value="manual">{{ t('fund_fees_manual') }}</option></select>
+              </label>
+              <label>{{ t('fund_fees_manual') }} <input type="number" name="fees" min="0" step="any" value="{{ opening.fees if opening.fees_source == 'manual' else '' }}"></label>
+              {% if p.kind in ('future', 'cfd') %}
+              <label>{{ t('fund_field_stop') }} <input type="number" name="stop" min="0" step="any" value="{{ opening.spec.stop if opening.spec.stop else '' }}"></label>
+              <label>{{ t('fund_field_target') }} <input type="number" name="target" min="0" step="any" value="{{ opening.spec.target if opening.spec.target else '' }}"></label>
+              {% endif %}
+              {% if p.kind == 'cfd' %}
+              <label>{{ t('fund_field_leverage') }} <input type="number" name="leverage" min="1" step="any" value="{{ opening.spec.leverage }}"></label>
+              {% endif %}
+            </div>
+            <p class="fund-form-error banner banner-error" hidden></p>
+            <div class="row"><button type="submit" class="btn">{{ t('fund_adj_apply') }}</button></div>
+          </form>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="hint">{{ t('fund_pos_none') }} <a href="/simulate?strategy={{ s.strategy_id }}">{{ t('fund_new_position') }}</a></p>
+{% endif %}
+
+{% if closed_positions %}
+<h3>{{ t('fund_pos_closed_title') }} <span class="hint">({{ closed_positions | length }})</span></h3>
+<div class="table-scroll">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>{{ t('fund_pcol_instrument') }}</th><th>{{ t('fund_pcol_side') }}</th><th>{{ t('fund_pcol_period') }}</th>
+        <th>{{ t('fund_pcol_status') }}</th><th class="num pk-mono">{{ t('fund_pcol_pnl') }}</th>
+        <th class="num pk-mono">{{ t('fund_kpi_fees') }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in closed_positions %}
+      <tr>
+        <td><span class="pk-mono">{{ p.symbol }}</span> <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span></td>
+        <td>{{ t('fund_side_' ~ p.side) }}</td>
+        <td class="pk-mono">{{ p.opened_on }} → {{ p.closed_on }}</td>
+        <td>{{ t('fund_status_' ~ p.status) }}</td>
+        <td class="num pk-mono"><span class="{{ 'pos' if p.pnl >= 0 else 'neg' }}">{{ p.pnl | eur }} · {{ p.pnl_pct | pct(1, true) }}</span></td>
+        <td class="num pk-mono">{{ p.fees | eur }}</td>
+        <td class="fund-actions">
+          <button type="button" class="btn-ghost" data-act="delete-position" data-position-id="{{ p.position_id }}"
+                  data-confirm="{{ t('fund_confirm_delete_position') }}">{{ t('fund_act_delete') }}</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<details class="fund-orders">
+  <summary>{{ t('fund_orders_title') }} ({{ snap.orders | length }})</summary>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t('fund_field_date') }}</th><th>{{ t('fund_pcol_action') }}</th><th>{{ t('fund_pcol_instrument') }}</th>
+          <th>{{ t('fund_pcol_side') }}</th><th class="num pk-mono">{{ t('fund_pcol_qty') }}</th>
+          <th class="num pk-mono">{{ t('fund_pcol_price') }}</th><th class="num pk-mono">{{ t('fund_kpi_fees') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in snap.orders | reverse %}
+        <tr>
+          <td class="pk-mono">{{ o.ts }}</td><td>{{ t('fund_action_' ~ o.action) }}</td>
+          <td class="pk-mono">{{ o.symbol }}</td><td>{{ t('fund_side_' ~ o.side) }}</td>
+          <td class="num pk-mono">{{ o.quantity | qty }}</td>
+          <td class="num pk-mono">{{ o.price | qty }}{% if o.price_source == 'manual' %} *{% endif %}</td>
+          <td class="num pk-mono">{{ o.fees | eur }}{% if o.fees_source == 'manual' %} *{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-footer">{{ t('fund_orders_footer') }}</p>
+</details>
