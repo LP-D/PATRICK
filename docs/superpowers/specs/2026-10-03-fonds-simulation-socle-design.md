@@ -58,6 +58,7 @@ pour deux utilitaires réutilisés tels quels : `wealth.symbols.yahoo_search`
 | `fund/engine.py` | Rejeu des événements jour par jour : cash, positions, marge, valeur, P&L. Fonctions pures. |
 | `fund/kpis.py` | KPI d'une stratégie à partir de la série de valeur. |
 | `fund/service.py` | Agrégats pour les pages et l'API (une fonction par écran). |
+| `fund/store.py` | Persistance des stratégies et des ordres ; validation de la création d'une stratégie. |
 | `webapp/fund_routes.py` | Routes de pages et API, même motif que `wealth_routes.py`. |
 | `templates/simulate.html` (réécrit), `templates/fonds.html` | Pages. |
 | `static/simulate.js` (réécrit), `static/fonds.js` | Interactions et graphiques canvas. |
@@ -111,8 +112,15 @@ CREATE TABLE fund_price (
     symbol TEXT NOT NULL,
     day TEXT NOT NULL,
     open REAL, high REAL, low REAL, close REAL,
+    volume REAL NOT NULL DEFAULT 0,        -- volume moyen 20 jours : taille des frais estimés
     dividend REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (symbol, day)
+);
+
+CREATE TABLE fund_price_meta (              -- devise ISO du symbole et dernière actualisation (cache 6 h)
+    symbol TEXT PRIMARY KEY,
+    currency TEXT,
+    refreshed_at TEXT
 );
 ```
 
