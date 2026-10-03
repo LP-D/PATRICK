@@ -1079,19 +1079,45 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
 def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int) -> list[dict]:
     """`split='live'` predictions whose outcome is not yet known (Phase 4.6)
     -- candidates for `update_prediction_outcome` once their horizon has
-    elapsed."""
+    elapsed. `thr_lo`/`thr_hi`: causal 4-class thresholds stored at signal
+    time (migration 0028), `None` for rows written before it."""
     rows = conn.execute(
-        "SELECT ts FROM prediction WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
+        "SELECT ts, live_thr_lo, live_thr_hi FROM prediction "
+        "WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
         (trial_id,),
     ).fetchall()
-    return [{"ts": r[0]} for r in rows]
+    return [{"ts": r[0], "thr_lo": r[1], "thr_hi": r[2]} for r in rows]
 
 
-def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: float) -> None:
+def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: float,
+                              y_class: int | None = None) -> None:
+    """`y_class` (migration 0028): realized 4-class index (0..3), `None`
+    when the signal-time thresholds are unknown."""
     with conn:
         conn.execute(
-            "UPDATE prediction SET y_true = ? WHERE trial_id = ? AND ts = ?",
-            (float(y_true), trial_id, ts),
+            "UPDATE prediction SET y_true = ?, y_class = ? WHERE trial_id = ? AND ts = ?",
+            (float(y_true), None if y_class is None else int(y_class), trial_id, ts),
+        )
+
+
+def live_prediction_timestamps(conn: sqlite3.Connection, trial_id: int) -> set[str]:
+    """Every `ts` already recorded as `split='live'` for this trial -- a
+    second app launch on a closed-market day must not rewrite the signal of
+    the same session."""
+    return {r[0] for r in conn.execute(
+        "SELECT ts FROM prediction WHERE trial_id = ? AND split = 'live'", (trial_id,))}
+
+
+def set_live_signal_context(conn: sqlite3.Connection, trial_id: int, ts: str,
+                            thr_lo: float | None, thr_hi: float | None, backfill: bool) -> None:
+    """Stores, on an already-written live row, the causal 4-class thresholds
+    of the signal day and whether it was reconstituted after the fact
+    (`add_predictions` is `INSERT OR REPLACE` and does not carry these)."""
+    with conn:
+        conn.execute(
+            "UPDATE prediction SET live_thr_lo = ?, live_thr_hi = ?, live_backfill = ? "
+            "WHERE trial_id = ? AND ts = ? AND split = 'live'",
+            (thr_lo, thr_hi, 1 if backfill else 0, trial_id, ts),
         )
 
 

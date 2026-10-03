@@ -20,8 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from patrick import explain
+from patrick import explain, live_refresh
 from patrick import settings as settings_store
+from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
@@ -136,6 +137,7 @@ FORM_OPTIONS = {
 @app.on_event("startup")
 def _on_startup() -> None:
     alerts.start_background_refresh()
+    live_refresh.start_background_refresh()
     market_regime.start_background_refresh()
 
 
@@ -976,7 +978,7 @@ def _asset_group_view(group_key: str) -> list[dict]:
     ]
 
 
-def _predictions_overview() -> list[dict]:
+def _predictions_overview() -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
     grouping `/universe` already uses). Server-rendered live from the DB on
@@ -997,43 +999,91 @@ def _predictions_overview() -> list[dict]:
     backtest and still be missing live track record (`live_hit_rate is
     None`), or vice versa.
 
-    Raw data only (direction, confidence, dm p-value, live hit rate) -- the
+    Returns `{"groups": [{group, assets: [{symbol, label, cells: {horizon: cell}}]}], "horizons": [...]}`:
+    one row per ASSET, one cell per horizon. Raw data (direction, confidence, dm p-value, live hit rate,
+    live tally per movement) -- the
     ok/warning state and badge label are computed in the template, same
     convention as `universe.html`'s own inline `{% set state = ... %}`, not
     precomputed here as HTML strings."""
     all_symbols = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
-    horizons = list(D.DEFAULT_HORIZONS)
     conn = trackdb.connect()
     try:
+        # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
+        trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
+        horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
+        tallies = trackhistory.live_class_tally_by_target_and_horizon(conn, all_symbols, horizons)
         drift = trackhistory.drift_badges(conn, all_symbols, horizons)
     finally:
         conn.close()
 
+    today = utc_today()
     groups = []
     for group_name, items in D.DEFAULT_TARGET_GROUPS.items():
-        rows = []
+        assets = []
         for sym, label in items:
+            cells = {}
             for h in horizons:
                 pred = preds.get((sym, h))
                 dm = (metrics.get((sym, h)) or {}).get("dm_result") if metrics.get((sym, h)) else None
                 hit_rate = live_hit_rates.get((sym, h))
-                rows.append({
-                    "symbol": sym, "label": label, "horizon": h,
+                tally = tallies.get((sym, h))
+                signal = None
+                market_closed = False
+                if pred:
+                    signal = _PREDICTION_SIGNALS.get((pred["direction"], pred["amplitude"]))
+                    try:
+                        market_closed = date.fromisoformat(str(pred["ts"])[:10]) < today
+                    except ValueError:
+                        market_closed = False
+                cells[h] = {
+                    "horizon": h,
                     "direction": pred["direction"] if pred else None,
+                    "signal": signal,
                     "confidence": pred["confidence"] if pred else None,
                     "ts": pred["ts"] if pred else None,
+                    "split": pred["split"] if pred else None,
+                    "market_closed": market_closed,
                     "run_id": pred["run_id"] if pred else None,
                     "dm_p_value": dm["p_value"] if dm else None,
                     "dm_sample": dm.get("sample") if dm else None,
                     "drift": drift.get((sym, h)),
                     "live_hit_rate": hit_rate["hit_rate"] if hit_rate else None,
                     "live_hit_rate_n": hit_rate["n"] if hit_rate else None,
-                })
-        groups.append({"group": group_name, "rows": rows})
-    return groups
+                    "tally": _tally_view(tally),
+                }
+            assets.append({"symbol": sym, "label": label, "cells": cells})
+        groups.append({"group": group_name, "assets": assets})
+    return {"groups": groups, "horizons": horizons}
+
+
+# (direction, amplitude) -> (libelle, fleches, etat du badge) : les 4 mouvements du modele.
+_PREDICTION_SIGNALS = {
+    ("UP", "FORT"): ("Hausse forte", "▲▲", "ok"),
+    ("UP", "FAIBLE"): ("Hausse faible", "▲", "ok"),
+    ("DOWN", "FAIBLE"): ("Baisse faible", "▼", "warning"),
+    ("DOWN", "FORT"): ("Baisse forte", "▼▼", "warning"),
+}
+_LIVE_CLASS_ORDER = (3, 2, 1, 0)  # indices de classe : 3 hausse forte ... 0 baisse forte
+_LIVE_CLASS_LABELS = {3: "Hausse forte", 2: "Hausse faible", 1: "Baisse faible", 0: "Baisse forte"}
+
+
+def _tally_view(tally: dict | None) -> dict | None:
+    """Suivi live par mouvement, pret a afficher : « bonnes / jugees » par classe predite."""
+    if not tally:
+        return None
+    return {
+        "since": str(tally["since"])[:10],
+        "pending": tally["pending"],
+        "direction_n": tally["direction_n"],
+        "direction_hits": tally["direction_hits"],
+        "classes": [
+            {"label": _LIVE_CLASS_LABELS[c], "n": tally["classes"][c]["n"], "hits": tally["classes"][c]["hits"]}
+            for c in _LIVE_CLASS_ORDER
+        ],
+    }
 
 
 @app.get("/predictions")
@@ -1059,7 +1109,8 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     return templates.TemplateResponse(
         request, "predictions.html",
         {
-            "groups": _predictions_overview(),
+            **_predictions_overview(),
+            "live_refresh": live_refresh.refresh_status(),
             "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
             "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
             "dm_significance_alpha": dm_alpha,

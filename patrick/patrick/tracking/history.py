@@ -1058,6 +1058,76 @@ def live_hit_rate_by_target_and_horizon(conn: sqlite3.Connection, targets: list[
     return out
 
 
+def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: list[str],
+                                            horizons: list[int]) -> dict[tuple[str, int], dict]:
+    """Suivi live depuis le lancement du modele, sur les 4 mouvements.
+
+    Pour chaque (cible, horizon) : toutes les predictions `split='live'` des
+    trials gagnants (une par barre, ecrites par `predict.py::predict_live`,
+    y compris les barres reconstituees `live_backfill=1`), et pour chaque
+    classe PREDITE (3 = hausse forte, 2 = hausse faible, 1 = baisse faible,
+    0 = baisse forte) : `n` predictions deja jugees, `hits` bonnes (classe
+    realisee `y_class` == classe predite), `direction_hits` (bon sens, via
+    `y_true` binaire). Une prediction non resolue (horizon pas ecoule) compte
+    dans `pending`, jamais dans `n`. Une ligne resolue sans `y_class`
+    (anterieure a la migration 0028, seuils inconnus) ne compte que dans
+    `direction_n`/`direction_hits` : jamais de « fort/faible » invente.
+
+    `since` = date de la plus ancienne prediction live (debut du suivi),
+    `latest_ts` = la plus recente. Meme resolution run -> trial gagnant et meme
+    lecture a plat que `live_hit_rate_by_target_and_horizon` (pas de fenetre
+    SQL sur la table `prediction`, ~12M lignes). Une paire sans aucune
+    prediction live est absente du resultat."""
+    if not targets or not horizons:
+        return {}
+    target_placeholders = ",".join("?" for _ in targets)
+    horizon_placeholders = ",".join("?" for _ in horizons)
+    resolved = conn.execute(
+        "SELECT DISTINCT run.target, run.horizon, trial.trial_id "
+        "FROM run JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1 "
+        f"WHERE run.target IN ({target_placeholders}) AND run.horizon IN ({horizon_placeholders})",
+        tuple(targets) + tuple(horizons),
+    ).fetchall()
+    if not resolved:
+        return {}
+    trial_ids_by_key: dict[tuple[str, int], list[int]] = {}
+    for target, horizon, trial_id in resolved:
+        trial_ids_by_key.setdefault((target, horizon), []).append(trial_id)
+    all_trial_ids = {t for ids in trial_ids_by_key.values() for t in ids}
+    trial_placeholders = ",".join("?" for _ in all_trial_ids)
+    pred_rows = conn.execute(
+        "SELECT trial_id, ts, y_true, y_pred, y_class FROM prediction "
+        "INDEXED BY sqlite_autoindex_prediction_1 "
+        f"WHERE trial_id IN ({trial_placeholders}) AND split = 'live'",
+        tuple(all_trial_ids),
+    ).fetchall()
+    rows_by_trial: dict[int, list[tuple]] = {}
+    for row in pred_rows:
+        rows_by_trial.setdefault(row[0], []).append(row[1:])
+
+    out: dict[tuple[str, int], dict] = {}
+    for key, trial_ids in trial_ids_by_key.items():
+        rows = [r for tid in trial_ids for r in rows_by_trial.get(tid, [])]
+        if not rows:
+            continue
+        classes = {c: {"n": 0, "hits": 0} for c in (3, 2, 1, 0)}
+        pending = direction_n = direction_hits = 0
+        for _ts, y_true, y_pred, y_class in rows:
+            if y_true is None:
+                pending += 1
+                continue
+            pred = int(round(y_pred))
+            direction_n += 1
+            direction_hits += int((pred >= 2) == bool(y_true))
+            if y_class is not None and pred in classes:
+                classes[pred]["n"] += 1
+                classes[pred]["hits"] += int(int(y_class) == pred)
+        stamps = sorted(r[0] for r in rows)
+        out[key] = {"classes": classes, "pending": pending, "direction_n": direction_n,
+                    "direction_hits": direction_hits, "since": stamps[0], "latest_ts": stamps[-1]}
+    return out
+
+
 def direction_metrics_by_target(conn: sqlite3.Connection, targets: list[str]) -> dict[str, dict | None]:
     """P8.1 perf fix -- grouped equivalent of calling
     `direction_metrics_for_target()` once per target. Same result shape

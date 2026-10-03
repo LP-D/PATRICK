@@ -1975,3 +1975,42 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 @media (max-width: 960px) {
   .history-table th:nth-child(8), .history-table td:nth-child(8) { display: none; }
 }
+
+/* ============ /predictions : une ligne par actif, une case par horizon ============ */
+
+.pred-table th, .pred-table td { white-space: nowrap; }
+.pred-table td { padding-top: 6px; padding-bottom: 6px; }
+.pred { display: inline-block; cursor: help; border-radius: var(--radius-sm, 6px); }
+.pred:focus-visible, .q-mark:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.pred .status-badge { white-space: nowrap; }
+.pred-arrows { letter-spacing: -1px; font-size: 10px; }
+.pred-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: var(--space-sm, 8px) 0; }
+.refresh-line { margin: 4px 0; }
+.q-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; margin-left: 4px; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--text-3);
+  font-size: 10px; font-weight: 600; line-height: 1; cursor: help; vertical-align: middle;
+}
+.q-mark:hover { color: var(--brand); border-color: var(--brand); }
+.pop-content { display: none; }
+
+.pred-pop {
+  position: fixed; z-index: 100; width: max-content; max-width: 340px;
+  padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text);
+  font-family: var(--sans); font-size: 12px; font-weight: 400; line-height: 1.5;
+  text-align: left; white-space: normal; pointer-events: none;
+}
+.pred-pop[hidden] { display: none; }
+.pred-pop .pop-title { display: block; margin-bottom: 6px; font-size: 13px; }
+.pred-pop .pop-line { display: block; }
+.pred-pop .hint { display: inline; font-size: 11px; }
+.pop-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
+.pop-grid dt { color: var(--text-3); }
+.pop-grid dd { margin: 0; }
+.pop-track { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.pop-track-title { display: block; margin-bottom: 4px; color: var(--text-3); }
+.pop-track-table { border-collapse: collapse; margin-bottom: 4px; }
+.pop-track-table td { padding: 1px 12px 1px 0; }
+.pop-track-table td.n { font-variant-numeric: tabular-nums; text-align: right; padding-right: 0; }
