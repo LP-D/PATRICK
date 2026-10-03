@@ -873,6 +873,34 @@ def delete_historical_run(run_id: str):
     return RedirectResponse("/runs", status_code=303)
 
 
+@app.get("/runs/{run_id}/panel")
+def run_side_panel(request: Request, run_id: str):
+    """HTML fragment for the history page's right-hand panel (one section per
+    selected run, fetched by `static/runs_panel.js`)."""
+    conn = trackdb.connect()
+    try:
+        run = next((r for r in trackdb.list_all_runs(conn) if r["run_id"] == run_id), None)
+    finally:
+        conn.close()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run introuvable")
+    try:
+        config = json.loads(run["config_json"]) if run.get("config_json") else {}
+    except (TypeError, ValueError):
+        config = {}
+    config = config if isinstance(config, dict) else {}
+    objective = config.get("objective") if isinstance(config.get("objective"), dict) else {}
+    sampler = config.get("sampler") if isinstance(config.get("sampler"), dict) else {}
+    samplers = sampler.get("candidates", [])
+    return templates.TemplateResponse(
+        request, "_run_panel.html",
+        {"r": run, "algorithms": _extract_algorithms(run.get("config_json")),
+         "samplers": [s for s in samplers if isinstance(s, str)] if isinstance(samplers, list) else [],
+         "horizons": objective.get("horizons") or [run.get("horizon")],
+         "duration_s": _run_duration_seconds(run), **_i18n_context(request)},
+    )
+
+
 def _extract_scheme(run: dict) -> str:
     """Extract the validation scheme from the run (stored in config_json)."""
     import json

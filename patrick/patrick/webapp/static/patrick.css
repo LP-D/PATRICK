@@ -1899,3 +1899,79 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   white-space: nowrap;
 }
 .hidden { display: none; }
+
+/* ============ /runs : tableau compact + panneau latéral ============ */
+
+.history-filters { gap: 8px 12px; }
+.history-filters > label:first-child { flex: 1 1 220px; }
+.history-filters > label:first-child input { flex: 1; min-width: 0; }
+.history-filters .filter-more { flex: 1 0 100%; }
+.history-filters .filter-more summary { cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.filter-more-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; }
+.filter-more-grid input { max-width: 9.5rem; }
+
+.history-table-wrap { overflow-x: hidden; }
+.history-table { table-layout: fixed; }
+.history-table th, .history-table td { padding: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-table .hc-check { width: 34px; }
+.history-table .hc-actions { width: 76px; text-align: right; }
+.history-table .hc-date { width: 118px; color: var(--text-2); }
+.history-table .hc-name { font-weight: 500; }
+.history-table th:nth-child(3) { width: 96px; }
+.history-table th:nth-child(4) { width: 76px; }
+.history-table th:nth-child(5) { width: 100px; }
+.history-table th:nth-child(6), .history-table th:nth-child(7), .history-table th:nth-child(8) { width: 74px; }
+.history-row { cursor: pointer; }
+.history-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.history-row.is-selected td { background: color-mix(in srgb, var(--brand) 9%, transparent); }
+.history-row.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--brand); }
+.history-table .inline-form { display: inline; }
+.history-table .icon-btn { width: 28px; height: 28px; }
+.history-table .icon-btn.danger:hover { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); }
+.has-run-panel .history-table th:nth-child(8), .has-run-panel .history-table td:nth-child(8),
+.has-run-panel .history-table th:nth-child(9), .has-run-panel .history-table td:nth-child(9) { display: none; }
+
+.history-dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 18px; width: min(420px, 92vw); }
+.history-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.history-dialog form { display: grid; gap: 10px; }
+.history-dialog input { width: 100%; }
+.history-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.run-panel {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: var(--run-panel-w, 360px);
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.run-panel[hidden] { display: none; }
+.run-panel-close { align-self: flex-end; margin: 8px 10px 4px; flex: none; }
+.run-panel-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.run-panel-section { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 10px 16px 12px; border-top: 1px solid var(--line); scrollbar-width: thin; }
+.rp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.rp-title { display: grid; min-width: 0; }
+.rp-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-sub { color: var(--text-3); font-size: 12px; }
+.rp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin: 0; font-size: 12.5px; }
+.rp-grid dt { color: var(--text-3); font-size: 11px; }
+.rp-grid dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.rp-wide { grid-column: 1 / -1; }
+.rp-foot { margin-top: 8px; }
+.has-run-panel .main-column { margin-right: var(--run-panel-w, 360px); }
+
+@media (max-width: 960px) {
+  .run-panel { width: 100%; }
+  .has-run-panel .main-column { margin-right: 0; }
+}
+@media (max-width: 1180px) {
+  .history-table th:nth-child(9), .history-table td:nth-child(9) { display: none; }
+  .history-table th:nth-child(3) { width: 78px; }
+}
+@media (max-width: 960px) {
+  .history-table th:nth-child(8), .history-table td:nth-child(8) { display: none; }
+}

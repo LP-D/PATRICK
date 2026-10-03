@@ -403,3 +403,17 @@ def test_target_page_renders_drift_chart_with_phase_timing(tmp_path, monkeypatch
     assert '"phase": "scan"' in resp.text
     assert '"duration_s": 60' in resp.text
     assert "/static/drift.js" in resp.text
+
+
+def test_history_table_renders_html_and_side_panel_fragment(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+
+    page = client.get("/runs").text
+    assert "&lt;span" not in page and "&lt;a href" not in page
+    assert 'data-rename="run1"' in page and "/runs/run1/delete" in page
+
+    panel = client.get("/runs/run1/panel")
+    assert panel.status_code == 200
+    assert "vix_smoke" in panel.text and "/runs/run1/detail" in panel.text
+    assert client.get("/runs/missing/panel").status_code == 404

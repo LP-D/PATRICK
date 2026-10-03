@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, empty_state %}
+{% from "_components.html" import status_badge, empty_state %}
 {% block title %}PATRICK — Historique des runs{% endblock %}
 
 {% block content %}
@@ -23,7 +23,7 @@
     <span class="scope-rel">{{ t('scope_runs_rel') }}</span>
 </p>
 
-<form class="filter-bar" method="get" action="/runs">
+<form class="filter-bar history-filters" method="get" action="/runs">
     <label>Recherche
         <input type="search" name="q" value="{{ filter_query }}" placeholder="Nom, cible ou ID">
     </label>
@@ -58,63 +58,95 @@
             {% endfor %}
         </select>
     </label>
-    <label>Depuis
-        <input type="date" name="started_after" value="{{ filter_started_after }}">
-    </label>
-    <label>Jusqu'au
-        <input type="date" name="started_before" value="{{ filter_started_before }}">
-    </label>
-    <label>Durée min. (s)
-        <input type="number" name="min_duration_s" min="0" step="1" value="{{ filter_min_duration_s }}">
-    </label>
-    <label>Durée max. (s)
-        <input type="number" name="max_duration_s" min="0" step="1" value="{{ filter_max_duration_s }}">
-    </label>
     <button type="submit">Filtrer</button>
     <a class="btn-secondary" href="/runs">Effacer</a>
-    <noscript><button type="submit">Filtrer</button></noscript>
+    <details class="filter-more"{% if filter_started_after or filter_started_before or filter_min_duration_s != '' or filter_max_duration_s != '' %} open{% endif %}>
+        <summary>Plus de filtres (dates, durée)</summary>
+        <div class="filter-more-grid">
+            <label>Depuis
+                <input type="date" name="started_after" value="{{ filter_started_after }}">
+            </label>
+            <label>Jusqu'au
+                <input type="date" name="started_before" value="{{ filter_started_before }}">
+            </label>
+            <label>Durée min. (s)
+                <input type="number" name="min_duration_s" min="0" step="1" value="{{ filter_min_duration_s }}">
+            </label>
+            <label>Durée max. (s)
+                <input type="number" name="max_duration_s" min="0" step="1" value="{{ filter_max_duration_s }}">
+            </label>
+        </div>
+    </details>
 </form>
 
 {% if runs %}
 <form id="compare-runs-form" method="get" action="/compare-runs" class="compare-run-actions">
     <button type="submit" id="compare-runs-submit" class="primary" disabled>Comparer 2 à 4 runs</button>
-    <span id="compare-runs-count" class="hint" aria-live="polite">Sélectionne 2 à 4 runs terminés.</span>
+    <span id="compare-runs-count" class="hint" aria-live="polite">Coche 2 à 4 runs terminés ; clique une ligne pour ouvrir son résumé (3 runs max).</span>
 </form>
-{% set rows = [] %}
-{% for r in runs %}
-{% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
-{% set _ = rows.append([
-    ('<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="' ~ (r.run_id | e) ~ '" aria-label="Sélectionner run ' ~ (r.run_id | e) ~ ' pour comparaison">' if r.status not in ('running', 'queued') else '<span class="na">—</span>')
-        ~ ' <a href="/runs/' ~ r.run_id ~ '/detail">' ~ ((r.name or r.run_id) | safe) ~ '</a>',
-    '<a href="/targets/' ~ r.target ~ '">' ~ (r.target | safe) ~ '</a>',
-    r.horizon | hlabel,
-    ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
-    status_badge(r.status, state),
-    r.started_at or '—',
-    r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
-    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
-    ('%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '<span class="na">—</span>'),
-    (('<span class="' ~ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') ~ '">' ~ ('%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir)) ~ '</span>') if (r.best_f1_dir is not none and r.benchmark_f1_dir is not none) else '<span class="na">—</span>'),
-    ((('%.4f' | format(r.dm_p_value)) ~ (' <span class="tag" title="calculé sur le fold de sélection : biaisé, exclu de la correction entre cibles">fold de sélection</span>' if r.dm_sample == 'last_wf_fold' else '')) if r.dm_p_value is not none else '<span class="na">—</span>'),
-    (('<div class="history-model-actions">'
-        ~ '<form method="post" action="/runs/' ~ (r.run_id | e) ~ '/rename">'
-        ~ '<input name="name" value="' ~ (r.name or (r.run_id | e)) ~ '" maxlength="120" required aria-label="Nom du modèle">'
-        ~ '<button type="submit">Renommer</button></form>'
-        ~ '<form method="post" action="/runs/' ~ (r.run_id | e) ~ '/delete" onsubmit="return confirm(\'Supprimer ce modèle et ses détails ? Son descriptif restera archivé.\')">'
-        ~ '<button type="submit" class="queue-action danger">Supprimer</button></form></div>')
-        if r.status not in ('running', 'queued') else '<span class="na">—</span>'),
-]) %}
-{% endfor %}
-{{ data_table(
-    ["Run (cocher pour comparer)", "Cible", "Horizon", "Schéma", "Statut", "Démarré", "Essais", "F1_dir (meilleur essai)", "Persistance (F1_dir)", "Écart", "DM p-value", "Actions"],
-    rows, num_cols=[2, 6, 7, 8, 9, 10],
-    footer=(runs | length) ~ " run(s) affiché(s)"
-        ~ (" · cible = " ~ filter_target if filter_target else "")
-        ~ (" · statut = " ~ filter_status if filter_status else "")
-        ~ (" · schéma = " ~ filter_scheme if filter_scheme else "")
-        ~ " · F1_dir = meilleur essai sur n, non déflaté du nombre d'essais (Sharpe déflaté et PBO sur la page du run)"
-        ~ " · Persistance = baseline de référence commune (le prochain mouvement répète le dernier), mêmes folds de test"
-        ~ " · p-value DM brute, non corrigée du test multiple (correction BH sur la page de la cible)") }}
+<div class="table-scroll history-table-wrap">
+<table class="data-table history-table">
+    <thead><tr>
+        <th class="hc-check"><span class="visually-hidden">Comparer</span></th>
+        <th>Run</th>
+        <th>Cible</th>
+        <th>Horizon</th>
+        <th>Statut</th>
+        <th class="num">F1_dir</th>
+        <th class="num">Écart</th>
+        <th class="num">DM p</th>
+        <th>Démarré</th>
+        <th class="hc-actions"><span class="visually-hidden">Actions</span></th>
+    </tr></thead>
+    <tbody>
+    {% for r in runs %}
+    {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+    {% set locked = r.status in ('running', 'queued') %}
+    <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
+        <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="Sélectionner {{ r.run_id }} pour comparaison">{% endif %}</td>
+        <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}</td>
+        <td>{{ r.target | safe }}</td>
+        <td>{{ r.horizon | hlabel }}</td>
+        <td>{{ status_badge(r.status, state) }}</td>
+        <td class="num pk-mono">{{ '%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
+        <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
+        <td class="num pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
+        <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
+        <td class="hc-actions">{% if not locked %}
+            <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="Renommer {{ r.run_id }}" title="Renommer">{{ icon('pencil', 14) }}</button>
+            <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form" onsubmit="return confirm('Supprimer ce modèle et ses détails ? Son descriptif restera archivé.')">
+                <button type="submit" class="icon-btn danger" aria-label="Supprimer {{ r.run_id }}" title="Supprimer">{{ icon('trash', 14) }}</button>
+            </form>
+        {% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{# filter_* sont déjà échappés par la route (`runs_explorer`) : `| safe`, sinon double échappement. #}
+<p class="table-footer">{{ runs | length }} run(s) affiché(s)
+    {%- if filter_target %} · cible = {{ filter_target | safe }}{% endif %}
+    {%- if filter_status %} · statut = {{ filter_status | safe }}{% endif %}
+    {%- if filter_scheme %} · schéma = {{ filter_scheme | safe }}{% endif %}
+    · F1_dir = meilleur essai sur n, non déflaté du nombre d'essais · Écart = F1_dir moins la persistance (le prochain mouvement répète le dernier), mêmes folds de test
+    · p-value DM brute, non corrigée du test multiple (correction BH sur la page de la cible)</p>
+
+<dialog id="rename-dialog" class="history-dialog">
+    <form method="post" id="rename-form">
+        <label for="rename-input">Nouveau nom du run</label>
+        <input id="rename-input" name="name" maxlength="120" required autocomplete="off">
+        <div class="history-dialog-actions">
+            <button type="button" class="btn-secondary" id="rename-cancel">Annuler</button>
+            <button type="submit" class="primary">Renommer</button>
+        </div>
+    </form>
+</dialog>
+
+<aside class="run-panel" id="run-panel" aria-label="Résumé des runs sélectionnés" hidden>
+    <button type="button" class="icon-btn run-panel-close" id="run-panel-close" aria-label="Fermer le panneau" title="Fermer">{{ icon('close', 16) }}</button>
+    <div class="run-panel-body" id="run-panel-body"></div>
+</aside>
+<script src="/static/runs_panel.js" defer></script>
 {% else %}
 <div class="card">
     <p class="empty-state-title">{{ t('empty_runs_title') or "Aucun run pour l'instant." }}</p>
