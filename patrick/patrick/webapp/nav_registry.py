@@ -50,7 +50,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
     NavEntry("launch", "Lancer", "/launch", "pilotage", 20, "nav_launch"),
     NavEntry("runs", "Historique", "/runs", "pilotage", 30, "nav_runs",
-             child_routes=("/runs/{run_id}", "/runs/{run_id}/detail")),
+             child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
@@ -81,6 +81,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
 NON_PAGE_PREFIXES: tuple[str, ...] = ("/api/", "/static", "/set-lang/")
 NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/status",
+    "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
 })
