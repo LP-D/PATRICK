@@ -1,6 +1,71 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, empty_state, help_icon %}
+{% from "_components.html" import status_badge, empty_state, help_icon %}
 {% block title %}PATRICK — Prédictions{% endblock %}
+
+{# Petit « ? » : le texte s'affiche au survol (popover flottant, predictions_pop.js --
+   le tableau défile dans son propre conteneur, un tooltip CSS y serait rogné). #}
+{% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
+
+{# Une case = la prédiction seule ; tout le détail est dans le popover au survol. #}
+{% macro pred_cell(c, name, alpha, warn_thr) %}
+{% set s = c.signal %}
+<span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0">
+{% if s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ s[0] }}</span>{% else %}<span class="na">—</span>{% endif %}
+<span class="pop-content">
+<strong class="pop-title">{{ name }} · {{ c.horizon | hlabel }}</strong>
+{% if not (s or c.drift or c.live_hit_rate is not none or c.tally) %}
+<span class="pop-line">{{ status_badge('aucune prédiction', 'disabled') }}</span>
+{% else %}
+<dl class="pop-grid">
+{% if s %}
+<dt>Direction</dt><dd>{{ s[0] }}{% if c.confidence is not none %} · confiance {{ '%.2f' | format(c.confidence) }}{% endif %}</dd>
+<dt>Dernier signal</dt><dd>{{ c.ts }}{% if c.market_closed %}<br><span class="hint">Marché fermé ou séance non publiée : signal de la dernière séance, inchangé.</span>{% endif %}</dd>
+{% else %}
+<dt>Direction</dt><dd>{{ status_badge('aucune prédiction', 'disabled') }}</dd>
+{% endif %}
+<dt>Significativité</dt><dd>
+{% if c.dm_p_value is not none and c.dm_sample == 'last_wf_fold' %}
+{# F08 : p-value calculee sur le fold qui a servi a choisir le modele -- jamais "significative". #}
+{{ status_badge('p=%.4f · fold de sélection' | format(c.dm_p_value), 'warning') }}<br><span class="hint">Diebold-Mariano (test de supériorité sur un modèle naïf) calculé sur le fold de sélection : biaisé vers le significatif. Relancer le run pour le test sur le holdout.</span>
+{% elif c.dm_p_value is not none %}
+{{ status_badge('p=%.4f' | format(c.dm_p_value), 'ok' if c.dm_p_value < alpha else 'warning') }}<br><span class="hint">Diebold-Mariano : p &lt; {{ ('%.2f' | format(alpha)) | replace('.', ',') }} = meilleur qu'un modèle naïf.</span>
+{% else %}{{ status_badge('en attente', 'neutral') }}{% endif %}
+</dd>
+<dt>Fiabilité live</dt><dd>
+{% if c.live_hit_rate is none %}{{ status_badge('pas de recul live', 'disabled') }}
+{% elif c.live_hit_rate_n < 10 %}{{ status_badge('%.0f' | format(c.live_hit_rate * 100) ~ '% (n=' ~ c.live_hit_rate_n ~ ', peu de recul)', 'neutral') }}
+{% else %}{{ status_badge('%.0f' | format(c.live_hit_rate * 100) ~ '% (n=' ~ c.live_hit_rate_n ~ ')', 'ok' if c.live_hit_rate >= warn_thr else 'warning') }}{% endif %}
+<br><span class="hint">Part de bonnes directions (hausse/baisse) sur les derniers signaux déjà résolus.</span>
+</dd>
+<dt>Dérive</dt><dd>
+{% set d = c.drift %}
+{% if not d or d.action == 'unmeasured' and not d.concept_drift %}{{ status_badge('non mesurée', 'disabled') }}
+{% else %}
+{% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
+{{ status_badge(d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · périmée' if d.stale else ''), drift_state) }}<br>
+<span class="hint">{{ d.reason }}{% if d.psi is not none %} PSI max {{ '%.2f' | format(d.psi) }} ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}.{% endif %} Réentraîner seulement sur baisse de réussite ; surveiller dès 10 % des features en dérive (PSI &gt; 0,25).</span>
+{% endif %}
+</dd>
+</dl>
+{# Suivi depuis le lancement du modèle : combien de fois chaque mouvement prédit s'est réalisé. #}
+{% set t = c.tally %}
+<div class="pop-track">
+<span class="pop-track-title">Réussites par mouvement prédit{% if t %} · depuis le {{ t.since }}{% endif %}</span>
+{% if t %}
+<table class="pop-track-table">
+{% for k in t.classes %}
+<tr><td>{{ k.label }}</td><td class="n">{% if k.n %}{{ k.hits }}/{{ k.n }} · {{ '%.0f' | format(k.hits * 100 / k.n) }} %{% else %}—{% endif %}</td></tr>
+{% endfor %}
+</table>
+<span class="hint">Bon sens (hausse/baisse) : {{ t.direction_hits }}/{{ t.direction_n }}{% if t.pending %} · {{ t.pending }} signal(aux) en attente du résultat{% endif %}</span>
+{% else %}
+<span class="hint">Pas encore de signal suivi : le suivi démarre au premier lancement de l'app après l'entraînement.</span>
+{% endif %}
+</div>
+{% endif %}
+</span>
+</span>
+{% endmacro %}
 
 {% block content %}
 <nav class="breadcrumb" aria-label="Chemin de navigation">
@@ -12,17 +77,29 @@
     {{ help_icon('prediction_overview', 'Dernier signal', t('glossary_open_aria', term='Dernier signal')) }}
     {{ help_icon('live_reliability', 'Fiabilité live', t('glossary_open_aria', term='Fiabilité live')) }}
 </h1>
-<p class="page-subtitle">Dernier signal par cible et horizon · seuil de significativité p &lt; {{ ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') }}.</p>
+<p class="page-subtitle">Signal du jour par actif et par horizon · survole une case pour le détail · seuil de significativité p &lt; {{ ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') }}.</p>
 
 {% set ns = namespace(total=0, with_pred=0) %}
-{% for g in groups %}{% for r in g.rows %}
+{% for g in groups %}{% for a in g.assets %}{% for h in horizons %}
 {% set ns.total = ns.total + 1 %}
-{% if r.direction %}{% set ns.with_pred = ns.with_pred + 1 %}{% endif %}
-{% endfor %}{% endfor %}
+{% if a.cells[h].direction %}{% set ns.with_pred = ns.with_pred + 1 %}{% endif %}
+{% endfor %}{% endfor %}{% endfor %}
 <p class="scope-line">
     <b>Couverture</b>
     <span class="scope-value">{{ ns.with_pred }} / {{ ns.total }}</span>
-    <span class="scope-rel">paire(s) cible × horizon avec au moins une prédiction</span>
+    <span class="scope-rel">paire(s) actif × horizon avec au moins une prédiction</span>
+</p>
+
+{% if live_refresh.running %}
+<p class="hint refresh-line">Actualisation des signaux au lancement : {{ live_refresh.done }} / {{ live_refresh.total }} modèle(s) — recharge la page pour voir les mises à jour.</p>
+{% elif live_refresh.finished_at and live_refresh.total %}
+<p class="hint refresh-line">Signaux actualisés le {{ live_refresh.finished_at[:10] }} à {{ live_refresh.finished_at[11:16] }} UTC{% if live_refresh.failed %} · {{ live_refresh.failed }} échec(s) (voir les logs){% endif %}.</p>
+{% endif %}
+
+<p class="pred-legend">
+    {{ status_badge('▲▲ Hausse forte', 'ok') }} {{ status_badge('▲ Hausse faible', 'ok') }}
+    {{ status_badge('▼ Baisse faible', 'warning') }} {{ status_badge('▼▼ Baisse forte', 'warning') }}
+    {{ q("Fort / faible : amplitude au-delà ou en deçà des 25 % / 75 % de rendements habituels de l'actif.") }}
 </p>
 
 {% if ns.total == 0 %}
@@ -31,61 +108,27 @@
 
 {% for g in groups %}
 <div class="group-block">
-    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.rows | length }} paire(s))</span></h2>
-    {% set rows = [] %}
-    {% for r in g.rows %}
-        {% if r.direction %}
-            {% set dir_cell = status_badge(r.direction, 'ok' if r.direction == 'UP' else 'warning') %}
-            {% if r.dm_p_value is not none and r.dm_sample == 'last_wf_fold' %}
-                {# F08 : p-value calculee sur le fold qui a servi a choisir le modele -- jamais "significative". #}
-                {% set sig_cell %}<span class="tip" tabindex="0" data-tip="Diebold-Mariano calculé sur le dernier fold walk-forward, qui fait partie du critère de sélection : p-value biaisée vers le significatif, exclue de la correction entre cibles. Relancer le run pour obtenir le test sur le holdout.">{{ status_badge('p=%.4f · fold de sélection' | format(r.dm_p_value), 'warning') }}</span>{% endset %}
-            {% elif r.dm_p_value is not none %}
-                {% set sig_cell = status_badge('p=%.4f' | format(r.dm_p_value), 'ok' if r.dm_p_value < dm_significance_alpha else 'warning') %}
-            {% else %}
-                {% set sig_cell = status_badge('en attente', 'neutral') %}
-            {% endif %}
-            {% set conf_label = ('%.2f' | format(r.confidence)) if r.confidence is not none else '<span class="na">—</span>' %}
-        {% else %}
-            {% set dir_cell = '<span class="na">—</span>' %}
-            {% set sig_cell = status_badge('aucune prédiction', 'disabled') %}
-            {% set conf_label = '<span class="na">—</span>' %}
-        {% endif %}
-        {% if r.live_hit_rate is none %}
-            {% set hit_cell = status_badge('pas de recul live', 'disabled') %}
-        {% elif r.live_hit_rate_n < 10 %}
-            {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ', peu de recul)', 'neutral') %}
-        {% else %}
-            {% set hit_cell = status_badge('%.0f' | format(r.live_hit_rate * 100) ~ '% (n=' ~ r.live_hit_rate_n ~ ')', 'ok' if r.live_hit_rate >= live_hit_rate_warning_threshold else 'warning') %}
-        {% endif %}
-        {# Badge de derive : politique du 2026-09-26 (validation/drift_policy.py,
-           docs/ops/politique-derive.md). Reentrainer = derive de concept sur
-           appels live independants ; surveiller = >= 10 % des features du
-           modele avec PSI > 0,25 ; jamais de reentrainement sur la seule
-           derive des donnees. #}
-        {% set d = r.drift %}
-        {% if not d or d.action == 'unmeasured' and not d.concept_drift %}
-            {% set drift_cell = status_badge('non mesurée', 'disabled') %}
-        {% else %}
-            {% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
-            {% set drift_label = d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · périmée' if d.stale else '') %}
-            {% set drift_cell %}<span class="tip" tabindex="0" data-tip="{{ d.reason }}{% if d.psi is not none %} PSI max {{ '%.2f' | format(d.psi) }} ({{ d.worst_feature }}), mesuré le {{ d.measured_at }}.{% endif %} Politique : réentraîner seulement sur baisse de réussite (Page-Hinkley, appels live indépendants) ; surveiller dès 10 % des features en dérive (PSI > 0,25).">{{ status_badge(drift_label, drift_state) }}</span>{% endset %}
-        {% endif %}
-        {% set _ = rows.append([
-            '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
-            r.label,
-            (r.horizon | hlabel),
-            dir_cell,
-            conf_label,
-            sig_cell,
-            hit_cell,
-            drift_cell,
-            r.ts or '—',
-        ]) %}
-    {% endfor %}
-    {% set n_pred = g.rows | selectattr('direction') | list | length %}
-    {{ data_table(["Cible", "Libellé", "Horizon", "Direction", "Confiance", "Significativité", "Fiabilité live", "Dérive", "Dernier signal"], rows,
-                  num_cols=[4],
-                  footer=(g.rows | length) ~ " paire(s) · " ~ n_pred ~ " avec une prédiction disponible") }}
+    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.assets | length }} actif(s))</span></h2>
+    <div class="table-scroll">
+    <table class="data-table pred-table">
+        <thead><tr>
+            <th>Actif</th>
+            {% for h in horizons %}<th>{{ h | hlabel }} {{ q("Horizon en séances de bourse de l'actif : week-ends et jours fériés ne comptent pas.") }}</th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for a in g.assets %}
+        <tr>
+            <td><a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.label }}</a></td>
+            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.label, dm_significance_alpha, live_hit_rate_warning_threshold) }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% set n_pred = namespace(v=0) %}
+    {% for a in g.assets %}{% for h in horizons %}{% if a.cells[h].direction %}{% set n_pred.v = n_pred.v + 1 %}{% endif %}{% endfor %}{% endfor %}
+    <p class="table-footer">{{ g.assets | length }} actif(s) · {{ n_pred.v }} prédiction(s) disponible(s)</p>
 </div>
 {% endfor %}
+<script src="/static/predictions_pop.js" defer></script>
 {% endblock %}

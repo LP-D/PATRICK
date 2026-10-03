@@ -72,6 +72,27 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     return target, reg_r, thr
 
 
+def live_class_thresholds(series: pd.Series, horizon: int,
+                          flat_thr: float = 0.003) -> tuple[float, float]:
+    """Seuils (q25, q75) du rendement a `horizon` pour le regime du DERNIER
+    point de `series`, ajustes uniquement sur ce qui est deja connu a cette
+    date (meme logique causale que `build_target`, appelee avec `split_idx =
+    len(series)` : les fenetres de label qui debordent apres le dernier point
+    sont exclues). Sert au suivi live : la classe realisee d'un signal est
+    jugee avec les seuils d'AUJOURD'HUI, jamais avec ceux du futur."""
+    s = series.ffill().bfill()
+    _, _, thr = build_target(s, horizon, len(s), flat_thr)
+    level = s.iloc[-1]
+    if level < s.quantile(0.33):
+        regime = "CALM"
+    elif level >= s.quantile(0.67):
+        regime = "STRESS"
+    else:
+        regime = "NORMAL"
+    lo, hi = thr.get(regime, thr["GLOBAL"])
+    return float(lo), float(hi)
+
+
 def classify_return(r: float, reg: str, thr: dict) -> int:
     q25, q75 = thr.get(reg, (0, 0))
     if r < q25:

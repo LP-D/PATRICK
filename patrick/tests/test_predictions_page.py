@@ -45,7 +45,7 @@ def test_predictions_page_shows_significant_prediction(tmp_path, monkeypatch):
     assert "^VIX" in resp.text
     assert "5j" in resp.text
     # UP (classe 3, cf. _CLASS_DIRECTION) + p=0.0300 < 0.05 -> badge "ok".
-    assert "UP" in resp.text
+    assert "Hausse forte" in resp.text  # classe 3 = UP + FORT
     assert "0.0300" in resp.text
 
 
