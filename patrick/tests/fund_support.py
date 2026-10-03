@@ -5,11 +5,13 @@ chemin d'import, comme `conftest`)."""
 from __future__ import annotations
 
 import datetime as dt
+import json
+import re
 
 import numpy as np
 import pandas as pd
 
-from patrick.fund import prices
+from patrick.fund import prices, service
 
 IDX = pd.bdate_range("2025-06-02", "2026-10-02")
 # symbole -> (devise brute, prix de départ, dérive quotidienne)
@@ -51,3 +53,28 @@ def install(monkeypatch) -> None:
     CALLS.clear()
     monkeypatch.setattr(prices, "download_bars", fake_download)
     monkeypatch.delenv("FRED_API_KEY", raising=False)
+
+
+def freeze_today(monkeypatch) -> None:
+    """Fige « aujourd'hui » au 2026-01-16 pour les tests de routes (les contrats expirent sinon avec le temps)."""
+    monkeypatch.setattr(service, "current_date", lambda: TODAY)
+
+
+def make_strategy(client, name="Macro CTO", **kw) -> str:
+    body = {"name": name, "wrapper": "CTO", "initial_capital": 100_000, "opened_on": "2026-01-05", **kw}
+    resp = client.post("/api/fund/strategies", json=body)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["strategy_id"]
+
+
+def place(client, strategy_id, **kw) -> dict:
+    body = {"instrument_kind": "equity", "symbol": "MC.PA", "side": "long", "quantity": 4, "date": "2026-01-07", **kw}
+    resp = client.post(f"/api/fund/strategies/{strategy_id}/orders", json=body)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def json_script(html: str, script_id: str):
+    match = re.search(rf'<script id="{script_id}" type="application/json">(.*?)</script>', html, re.DOTALL)
+    assert match, script_id
+    return json.loads(match.group(1))

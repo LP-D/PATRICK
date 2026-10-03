@@ -41,6 +41,7 @@ from patrick.webapp import (
     alerts,
     asset_stats,
     forms,
+    fund_routes,
     i18n,
     icons,
     market_data,
@@ -1209,6 +1210,9 @@ def api_measure_drift(target: str, horizon: int):
 
 # Roadmap bloc 4 -- PATRIMOINE (pages /patrimoine, /mouvements + /api/wealth/*).
 wealth_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Refonte Simulation + Fonds (chantier 1) : pages /simulate, /fonds et API /api/fund/*.
+fund_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 @app.get("/commodities")
