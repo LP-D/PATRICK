@@ -117,6 +117,8 @@ def test_launch_dashboard_queue_is_a_collapsible_list_without_confirm_dialog(tmp
     # Plus de fenêtre `confirm()` du navigateur sur « Vider la file ».
     clear_button = html[html.index('id="clear-queue-btn"'):].split(">", 1)[0]
     assert "data-confirm" not in clear_button
+    stop_button = html[html.index('id="stop-run-btn"'):].split(">", 1)[0]
+    assert "data-confirm" not in stop_button
 
 
 def test_reorder_queue_changes_worker_claim_order(tmp_path, monkeypatch):

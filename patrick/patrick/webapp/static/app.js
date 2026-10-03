@@ -769,8 +769,7 @@
         }
     }
 
-    async function sendJobControl(url, options, confirmMessage) {
-        if (confirmMessage && !window.confirm(confirmMessage)) return;
+    async function sendJobControl(url, options) {
         try {
             const response = await fetch(url, options);
             if (!response.ok) {
@@ -794,8 +793,7 @@
     }
     if (stopRunBtn) {
         stopRunBtn.addEventListener("click", () => {
-            sendJobControl(`/api/jobs/${activeJobId}/stop`, { method: "POST" },
-                stopRunBtn.dataset.confirm);
+            sendJobControl(`/api/jobs/${activeJobId}/stop`, { method: "POST" });
         });
     }
     if (queueToggle) {
