@@ -112,6 +112,10 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_confirm_delete_strategy": _s("Supprimer cette stratégie, toutes ses positions et tous ses ordres ?",
                                        "Delete this strategy with all its positions and orders?"),
     "fund_rename_prompt": _s("Nouveau nom de la stratégie", "New strategy name"),
+    "fund_confirm_archive": _s("Archiver cette stratégie ? Elle disparaît de la liste et peut être restaurée depuis « Stratégies archivées ».",
+                               "Archive this strategy? It leaves the list and can be restored from “Archived strategies”."),
+    "fund_archived_title": _s("Stratégies archivées ({n})", "Archived strategies ({n})"),
+    "fund_act_unarchive": _s("Désarchiver", "Restore"),
     "fund_alert_margin": _s("Marge : la valeur nette est passée sous 50 % de la marge requise ({n} jour(s), dès le {first}). Un courtier aurait liquidé des positions.",
                             "Margin: net value fell below 50% of the required margin ({n} day(s), from {first}). A broker would have closed positions."),
 

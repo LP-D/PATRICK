@@ -18,7 +18,7 @@ IDX = pd.bdate_range("2025-06-02", "2026-10-02")
 FAKE = {
     "AAPL": ("USD", 200.0, 0.4), "MC.PA": ("EUR", 700.0, 0.5), "TTE.PA": ("EUR", 60.0, 0.05),
     "VOD.L": ("GBp", 70.0, 0.02), "EURUSD=X": ("USD", 1.10, 0.0004), "EURGBP=X": ("GBP", 0.85, 0.0),
-    "ESZ26.CME": ("USD", 6000.0, 3.0), "^GSPC": ("USD", 6000.0, 3.0),
+    "ESZ26.CME": ("USD", 6000.0, 3.0), "^GSPC": ("USD", 6000.0, 3.0), "CLM26.NYM": ("USD", 70.0, 0.05),
 }
 TODAY = dt.date(2026, 1, 16)
 CALLS: list[tuple[str, str | None]] = []
@@ -45,12 +45,14 @@ def fake_download(symbol, start=None):
     ccy, p0, drift = FAKE[symbol]
     close = p0 + drift * np.arange(len(IDX))
     df = pd.DataFrame({"open": close, "high": close * 1.002, "low": close * 0.998, "close": close,
-                       "volume": 5_000_000.0, "dividend": 0.0}, index=IDX)
+                       "volume": 5_000_000.0, "dividend": 0.0, "split": 0.0}, index=IDX)
     return df, ccy
 
 
 def install(monkeypatch) -> None:
     CALLS.clear()
+    for cache in ("_FAILED_UNTIL", "_RATE_CACHE"):          # caches de module : jamais partagés entre tests
+        getattr(prices, cache, {}).clear()
     monkeypatch.setattr(prices, "download_bars", fake_download)
     monkeypatch.delenv("FRED_API_KEY", raising=False)
 

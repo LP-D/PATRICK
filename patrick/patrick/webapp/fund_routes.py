@@ -11,6 +11,7 @@ import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from patrick.fund import instruments, service, store
 from patrick.tracking import db as trackdb
@@ -90,8 +91,9 @@ def register(app: FastAPI, templates, context) -> None:
     @app.get("/fonds")
     def fonds_page(request: Request, strategy: str | None = None):
         data = _call(service.overview, service.current_date())
+        archived = _call(lambda conn: [s for s in store.list_strategies(conn, include_archived=True) if s["archived"]])
         return templates.TemplateResponse(request, "fonds.html", {
-            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy,
+            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy, "archived": archived,
             **context(request)})
 
     @app.get("/patrimoine-simulation")
@@ -124,8 +126,8 @@ def register(app: FastAPI, templates, context) -> None:
     @app.post("/api/fund/strategies")
     async def api_create_strategy(request: Request):
         b = _json_body(await request.body())
-        strategy_id = _call(store.create_strategy, b.get("name"), b.get("wrapper"), b.get("initial_capital"),
-                            b.get("opened_on"))
+        strategy_id = await run_in_threadpool(_call, store.create_strategy, b.get("name"), b.get("wrapper"),
+                                              b.get("initial_capital"), b.get("opened_on"))
         return {"strategy_id": strategy_id}
 
     @app.patch("/api/fund/strategies/{strategy_id}")
@@ -139,7 +141,7 @@ def register(app: FastAPI, templates, context) -> None:
             _require_strategy(conn, strategy_id)
             store.update_strategy(conn, strategy_id, **fields)
             return {"ok": True}
-        return _call(run)
+        return await run_in_threadpool(_call, run)
 
     @app.delete("/api/fund/strategies/{strategy_id}")
     def api_delete_strategy(strategy_id: str):
@@ -160,16 +162,16 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/fund/quote")
     async def api_quote(request: Request):
-        return _call(service.quote, _json_body(await request.body()))
+        return await run_in_threadpool(_call, service.quote, _json_body(await request.body()))
 
     @app.post("/api/fund/strategies/{strategy_id}/orders")
     async def api_place_order(request: Request, strategy_id: str):
         b = _json_body(await request.body())
-        return _call(service.place_order, {**b, "strategy_id": strategy_id})
+        return await run_in_threadpool(_call, service.place_order, {**b, "strategy_id": strategy_id})
 
     @app.patch("/api/fund/orders/{order_id}")
     async def api_correct_order(request: Request, order_id: int):
-        return _call(service.correct_order, order_id, _json_body(await request.body()))
+        return await run_in_threadpool(_call, service.correct_order, order_id, _json_body(await request.body()))
 
     @app.delete("/api/fund/positions/{position_id}")
     def api_delete_position(position_id: str):

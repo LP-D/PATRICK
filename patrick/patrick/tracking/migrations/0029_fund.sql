@@ -50,6 +50,7 @@ CREATE TABLE fund_price (
     open REAL, high REAL, low REAL, close REAL,
     volume REAL NOT NULL DEFAULT 0,
     dividend REAL NOT NULL DEFAULT 0,
+    split REAL NOT NULL DEFAULT 0,          -- ratio d'un fractionnement à cette date (10 = 10 pour 1), 0 sinon
     PRIMARY KEY (symbol, day)
 );
 CREATE TABLE fund_price_meta (

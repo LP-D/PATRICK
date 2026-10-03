@@ -27,7 +27,7 @@ def static_checks(strategy: dict, order: dict, today: dt.date) -> Check:
     spec = order.get("spec") or {}
     if order["ts"] > today.isoformat():
         chk.blocking.append("date d'exécution dans le futur")
-    if order["ts"] < strategy["opened_on"]:
+    if order.get("requested", order["ts"]) < strategy["opened_on"]:
         chk.blocking.append(f"date antérieure à l'ouverture de la stratégie ({strategy['opened_on']})")
     if action in ("open", "increase", "reduce") and not (order.get("quantity") and order["quantity"] > 0):
         chk.blocking.append("quantité strictement positive requise")
@@ -61,6 +61,10 @@ def validate(strategy: dict, orders: list[dict], candidate: dict, market: engine
     déjà présent dans `orders`, il le remplace (correction)."""
     chk = static_checks(strategy, candidate, today)
     cid = candidate.get("order_id")
+    if cid is None and candidate["action"] != "open":
+        previous = [o["ts"] for o in orders if o["position_id"] == candidate["position_id"]]
+        if previous and candidate["ts"] < max(previous):
+            chk.blocking.append(f"date antérieure à l'ordre précédent de la position ({max(previous)})")
     timeline = [o for o in orders if cid is None or o.get("order_id") != cid] + [candidate]
     result = engine.simulate(strategy, timeline, market, end=today)
     if baseline is None:

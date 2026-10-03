@@ -164,8 +164,9 @@
     }
     async function submitCorrect(form) {
         var f = form.elements;
-        var req = { quantity: f.quantity.value, date: f.date.value, fees_mode: f.fees_mode.value, spec: specOf(form) };
-        if (present(f.price.value)) req.price = f.price.value;
+        // prix vide = cours du marché : toujours envoyé, sinon le serveur garderait l'ancien prix saisi
+        var req = { quantity: f.quantity.value, date: f.date.value, fees_mode: f.fees_mode.value, spec: specOf(form),
+                    price: f.price.value };
         if (req.fees_mode === "manual") req.fees = f.fees.value;
         await call("/api/fund/orders/" + encodeURIComponent(form.getAttribute("data-order-id")), "PATCH", req);
     }
@@ -220,6 +221,20 @@
             say((err.blocking || [err.message]).join(" · "), "error");
         }
     });
+
+    var archivedBox = document.querySelector(".fund-archived");
+    if (archivedBox) {
+        archivedBox.addEventListener("click", async function (e) {
+            var btn = e.target.closest('[data-act="unarchive"]');
+            if (!btn) return;
+            try {
+                await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "PATCH", { archived: false });
+                reload(null);
+            } catch (err) {
+                say((err.blocking || [err.message]).join(" · "), "error");
+            }
+        });
+    }
 
     var pre = document.getElementById("fund-selected");
     var wanted = pre ? JSON.parse(pre.textContent) : null;

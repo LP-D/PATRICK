@@ -63,9 +63,22 @@
   <p class="table-footer">{{ t('fund_table_footer') }}</p>
 </section>
 
-<section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
 {% else %}
 {{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
+{% endif %}
+
+<section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
+
+{% if archived %}
+<details class="fund-archived">
+  <summary>{{ t('fund_archived_title', n=archived | length) }}</summary>
+  <ul>
+    {% for s in archived %}
+    <li><span>{{ s.name }}</span> <span class="tag">{{ s.wrapper }}</span>
+      <button type="button" class="btn-ghost" data-act="unarchive" data-strategy-id="{{ s.strategy_id }}">{{ t('fund_act_unarchive') }}</button></li>
+    {% endfor %}
+  </ul>
+</details>
 {% endif %}
 
 <script id="fund-selected" type="application/json">{{ selected_id | tojson }}</script>

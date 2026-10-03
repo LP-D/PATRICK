@@ -2095,3 +2095,6 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .fund-form-row > td { background: var(--surface-2); }
 .fund-orders { margin-top: var(--space-lg); }
 .fund-orders summary { cursor: pointer; font-weight: 600; }
+.fund-archived { margin-top: var(--space-lg); }
+.fund-archived summary { cursor: pointer; font-weight: 600; }
+.fund-archived li { display: flex; align-items: center; gap: var(--space-sm); padding: 4px 0; }

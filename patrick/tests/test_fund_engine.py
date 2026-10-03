@@ -156,7 +156,7 @@ def test_violations_are_reported_not_raised():
     assert any("insuffisant" in v["message"] for v in res.violations)
     oversell = [order(order_id=1), order(order_id=2, ts="2026-01-07", action="reduce", quantity=50.0)]
     assert any("détenus" in v["message"] for v in simulate(STRAT, oversell, mkt, END).violations)
-    early = order(ts="2026-01-02")
+    early = order(ts="2025-12-30")          # avant la dernière séance précédant l'ouverture
     assert any("antérieur" in v["message"] for v in simulate(STRAT, [early], mkt, END).violations)
     closed = [order(order_id=1), order(order_id=2, ts="2026-01-07", action="close"),
               order(order_id=3, ts="2026-01-08", action="increase")]
@@ -214,3 +214,142 @@ def test_an_open_future_has_nothing_realized_and_a_closed_one_realizes_everythin
     done = pos_of(simulate(STRAT, [opened, close], mkt, END))
     assert done["status"] == "closed" and done["latent"] == 0.0
     assert done["realized"] == pytest.approx(settled) and done["pnl"] == pytest.approx(settled)
+
+
+STRAT_10K = {"initial_capital": 10_100.0, "opened_on": "2026-01-05"}    # 100 € de marge de manoeuvre pour le financement
+
+
+def test_a_candidate_without_an_order_id_is_replayed_after_the_stored_orders_of_its_day():
+    mkt = MarketData(bars={"AAA": bars([100.0] * 10)})
+    stored = order(order_id=1, ts="2026-01-07")
+    candidate = order(order_id=None, ts="2026-01-07", action="increase", quantity=5.0)
+    res = simulate(STRAT, [candidate, stored], mkt, END)
+    assert not res.violations and pos_of(res)["quantity"] == 15
+
+
+def test_orders_that_reduce_risk_are_not_blocked_while_available_cash_is_negative():
+    spec = {"leverage": 1.0, "fee_ctx": {"fee_class": "cfd_index"}}
+    short = order(order_id=1, instrument_kind="cfd", symbol="IDX", side="short", quantity=100.0, price=100.0, spec=spec)
+    mkt = MarketData(bars={"IDX": bars([100.0, 100.0] + [110.0] * 8)})
+    base = simulate(STRAT_10K, [short], mkt, END)
+    assert not base.violations and base.daily["buying_power"].iloc[-1] < 0      # le short perd : marge > cash disponible
+
+    def later(**kw):
+        return order(order_id=2, ts="2026-01-14", instrument_kind="cfd", symbol="IDX", side="short", price=110.0,
+                     spec={}, **kw)
+    assert not simulate(STRAT_10K, [short, later(action="reduce", quantity=5.0)], mkt, END).violations
+    assert not simulate(STRAT_10K, [short, later(action="close", quantity=100.0)], mkt, END).violations
+    more = simulate(STRAT_10K, [short, later(action="increase", quantity=5.0)], mkt, END)
+    assert any("insuffisant" in v["message"] for v in more.violations)           # augmenter le risque reste refusé
+
+
+def test_an_open_future_is_not_expired_early_when_the_stored_quotes_are_stale():
+    spec = dict(FUT_SPEC, expiry="2026-02-20")
+    o = order(instrument_kind="future", symbol="FUT", side="long", quantity=1.0, price=5000.0, spec=spec)
+    mkt = MarketData(bars={"FUT": bars([5000.0] * 4)})                       # les cotations s'arrêtent le 8 janvier
+    p = pos_of(simulate(STRAT, [o], mkt, END))
+    assert p["status"] == "open" and p["closed_on"] is None
+
+
+def test_an_order_on_the_last_session_before_a_weekend_opening_is_accepted():
+    strat = {"initial_capital": 100_000.0, "opened_on": "2026-01-10"}          # un samedi
+    mkt = MarketData(bars={"AAA": bars([100.0] * 10)})
+    ok = simulate(strat, [order(ts="2026-01-09")], mkt, "2026-01-12")
+    assert not ok.violations and ok.daily.index[0] == pd.Timestamp("2026-01-09")
+    early = simulate(strat, [order(ts="2026-01-07")], mkt, "2026-01-12")
+    assert any("antérieur" in v["message"] for v in early.violations)
+
+
+def test_a_stock_split_scales_the_position_so_that_value_and_pnl_are_unchanged():
+    frame = bars([10.0] * 10)                       # historique déjà ajusté du fractionnement 10 pour 1
+    frame["split"] = [0, 0, 0, 0, 10.0] + [0] * 5   # ex-date : le 9 janvier
+    mkt = MarketData(bars={"AAA": frame})
+    before = order(ts="2026-01-06", quantity=5.0, price=100.0)                 # saisi avant, au prix d'alors
+    p = pos_of(simulate(STRAT, [before], mkt, END))
+    assert p["quantity"] == pytest.approx(50.0) and p["avg_entry"] == pytest.approx(10.0)
+    assert p["pnl"] == pytest.approx(0.0, abs=1e-9)
+    after = order(order_id=2, ts="2026-01-12", action="increase", quantity=2.0, price=10.0)   # saisi après : déjà en titres nouveaux
+    assert pos_of(simulate(STRAT, [before, after], mkt, END))["quantity"] == pytest.approx(52.0)
+
+
+def test_market_lookups_follow_the_last_known_value():
+    mkt = MarketData(bars={"AAA": bars([100.0, 101.0, 102.0])},
+                     fx={"USD": pd.Series([0.9, 0.91, 0.92], index=DAYS[:3])})
+    assert mkt.close_at("AAA", DAYS[0] - pd.Timedelta(days=1)) is None
+    assert mkt.close_at("AAA", DAYS[1]) == 101.0
+    assert mkt.close_at("AAA", DAYS[1] + pd.Timedelta(hours=12)) == 101.0       # sans cotation ce jour-là : dernier cours
+    assert mkt.close_at("AAA", DAYS[9]) == 102.0 and mkt.close_at("NONE", DAYS[0]) is None
+    assert mkt.fx_at("EUR", DAYS[1]) == 1.0 and mkt.fx_at("USD", DAYS[2]) == 0.92
+    assert mkt.fx_at("USD", DAYS[0] - pd.Timedelta(days=1), default=0.5) == 0.5
+    assert mkt.fx_at("GBP", DAYS[0], default=0.7) == 0.7
+
+
+def test_replaying_a_long_history_stays_fast():
+    import time
+
+    import numpy as np
+
+    idx = pd.bdate_range("2000-01-03", "2026-01-16")
+    close = 100.0 + np.arange(len(idx)) * 0.01
+    big = pd.DataFrame({"open": close, "high": close, "low": close, "close": close, "volume": 1e6,
+                        "dividend": 0.0}, index=idx)
+    mkt = MarketData(bars={"AAA": big}, fx={"USD": pd.Series(0.9 + np.arange(len(idx)) * 1e-5, index=idx)})
+    days = pd.bdate_range("2024-01-02", "2025-06-30")
+    orders = [order(order_id=i + 1, position_id=f"p{i}", ts=days[i * 15].date().isoformat(), quantity=1.0,
+                    price=float(close[idx.get_loc(days[i * 15])]), currency="USD", fx_rate=0.9) for i in range(20)]
+    started = time.perf_counter()
+    res = simulate({"initial_capital": 1_000_000.0, "opened_on": "2024-01-02"}, orders, mkt, "2026-01-16")
+    assert not res.violations and len(res.positions) == 20
+    assert time.perf_counter() - started < 4.0
+
+
+def test_accounting_identity_holds_on_random_histories():
+    import numpy as np
+
+    days = pd.bdate_range("2026-01-05", periods=60)
+
+    def walk(rng, p0, vol):
+        return p0 * np.cumprod(1 + rng.normal(0, vol, len(days)))
+
+    def frame(close, dividend=0.0):
+        return pd.DataFrame({"open": close, "high": close * 1.01, "low": close * 0.99, "close": close,
+                             "volume": 1e6, "dividend": dividend}, index=days)
+
+    for seed in range(12):
+        rng = np.random.default_rng(seed)
+        div = np.zeros(len(days))
+        div[rng.integers(5, 55)] = 0.3
+        mkt = MarketData(bars={"AAA": frame(walk(rng, 100, 0.01), div), "FUT": frame(walk(rng, 5000, 0.006)),
+                               "IDX": frame(walk(rng, 50, 0.012))},
+                         fx={"USD": pd.Series(walk(rng, 0.92, 0.003), index=days)})
+        kinds = {"equity": ("AAA", {}), "future": ("FUT", dict(FUT_SPEC, expiry="2027-01-01")),
+                 "cfd": ("IDX", {"leverage": 5.0, "fee_ctx": {"fee_class": "cfd_index"}})}
+        orders, oid = [], 0
+        for k, (kind, (symbol, spec)) in enumerate(kinds.items()):
+            side = "long" if kind == "equity" else str(rng.choice(["long", "short"]))
+            held, t = 0, int(rng.integers(1, 8))
+            for step in range(4):
+                if t >= 55:
+                    break
+                action = "open" if step == 0 else str(rng.choice(["increase", "reduce", "close"]))
+                if action == "reduce" and held < 2:
+                    action = "increase"
+                qty = float(rng.integers(1, 4)) if action != "close" else float(held)
+                if action == "reduce":
+                    qty = float(rng.integers(1, held))
+                day = days[t]
+                oid += 1
+                orders.append(order(order_id=oid, position_id=f"p{k}", ts=day.date().isoformat(), action=action,
+                                    instrument_kind=kind, symbol=symbol, side=side, quantity=qty,
+                                    price=mkt.close_at(symbol, day), currency="USD", fx_rate=mkt.fx_at("USD", day),
+                                    fees=float(rng.integers(0, 5)), spec=spec))
+                held = held + qty if action in ("open", "increase") else held - qty
+                if action == "close":
+                    break
+                t += int(rng.integers(3, 12))
+        strat = {"initial_capital": 1_000_000.0, "opened_on": "2026-01-05"}
+        res = simulate(strat, orders, mkt, days[-1])
+        assert res.violations == [], (seed, res.violations)
+        assert res.daily["nav"].iloc[-1] - 1_000_000.0 == pytest.approx(sum(p["pnl"] for p in res.positions), abs=1e-6)
+        assert res.daily["fees_cum"].iloc[-1] == pytest.approx(sum(p["fees"] for p in res.positions))
+        assert res.daily["dividends_cum"].iloc[-1] == pytest.approx(sum(p["dividends"] for p in res.positions))

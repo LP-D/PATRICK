@@ -144,3 +144,29 @@ def test_the_fund_script_uses_only_exposed_and_defined_strings(client):
     used = set(re.findall(r"""['"](fund_[a-z_]+)['"]""", js)) | set(re.findall(r"""I18N\.(fund_[a-z_]+)""", js))
     assert used <= set(i18n.STRINGS), used - set(i18n.STRINGS)
     assert used <= set(i18n.js_strings("fr")), used - set(i18n.js_strings("fr"))
+
+
+def test_archived_strategies_are_listed_and_can_be_restored_and_archiving_asks_for_confirmation(client):
+    archived = fs.make_strategy(client, "Ancienne")
+    kept = fs.make_strategy(client, "Garde")
+    client.patch(f"/api/fund/strategies/{archived}", json={"archived": True})
+    html = client.get("/fonds").text
+    assert 'class="fund-archived"' in html and "Stratégies archivées (1)" in html
+    assert re.search(rf'data-act="unarchive"[^>]*data-strategy-id="{archived}"', html)
+    assert f'data-strategy-id="{kept}"' in html and html.count('class="fund-row') == 1
+    panel = client.get(f"/api/fund/strategies/{kept}/panel").text
+    assert re.search(r'data-act="archive"[^>]*data-confirm="[^"]+"', panel)
+    client.patch(f"/api/fund/strategies/{archived}", json={"archived": False})
+    again = client.get("/fonds").text
+    assert 'class="fund-archived"' not in again and again.count('class="fund-row') == 2
+
+
+def test_the_correction_form_is_prefilled_with_the_manual_price_and_fees(client):
+    sid = fs.make_strategy(client)
+    fs.place(client, sid, price=650, fees_mode="manual", fees=3)
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    correct = html.split('data-form="correct"')[1].split("</form>")[0]
+    assert 'value="650.0"' in correct and '<option value="manual" selected>' in correct
+    fs.place(client, sid, symbol="TTE.PA", quantity=2, date="2026-01-08")
+    second = client.get(f"/api/fund/strategies/{sid}/panel").text.split('data-form="correct"')[2].split("</form>")[0]
+    assert '<option value="estimated" selected>' in second and 'name="price" min="0" step="any" value=""' in second

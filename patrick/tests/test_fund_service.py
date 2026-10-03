@@ -260,3 +260,114 @@ def test_modify_cfd_leverage_respects_the_cap(conn):
     assert not over["ok"] and any("plafond 20:1" in m for m in over["blocking"])
     keep = service.quote(conn, {**modify, "spec": {"leverage": ""}}, TODAY)
     assert keep["ok"] and "leverage" not in keep["order"]["spec"]
+
+
+def test_orders_of_the_same_day_chain_on_one_position(conn):
+    sid = cto(conn)
+    pid = service.place_order(conn, equity(sid, quantity=4), TODAY)["preview"]["position_id"]
+    more = service.place_order(conn, {"strategy_id": sid, "action": "increase", "position_id": pid, "quantity": 2,
+                                      "date": "2026-01-07"}, TODAY)
+    assert more["preview"]["quantity"] == 2
+    close = service.place_order(conn, {"strategy_id": sid, "action": "close", "position_id": pid,
+                                       "date": "2026-01-07"}, TODAY)
+    assert close["preview"]["quantity"] == 6
+
+
+def test_a_new_strategy_trades_the_last_close_when_there_is_no_session_today(conn):
+    saturday = dt.date(2026, 1, 17)
+    sid = store.create_strategy(conn, "Week-end", "CTO", 100_000, "2026-01-17")
+    placed = service.place_order(conn, equity(sid, quantity=2, date="2026-01-17"), saturday)
+    assert placed["preview"]["exec_day"] == "2026-01-16"
+    snap = service.strategy_snapshot(conn, store.get_strategy(conn, sid), saturday)
+    assert not snap["violations"] and snap["kpis"]["n_open_positions"] == 1
+    assert snap["positions"][0]["quantity"] == 2
+
+
+def test_a_requested_date_after_the_last_stored_quote_is_refused_instead_of_moved_earlier(conn, monkeypatch):
+    from patrick.fund import prices
+
+    def truncated(symbol, start=None):
+        df, currency = fs.fake_download(symbol, start)
+        return (None, None) if df is None else (df[df.index <= "2025-12-19"], currency)
+    monkeypatch.setattr(prices, "download_bars", truncated)
+    sid = store.create_strategy(conn, "Hors ligne", "CTO", 100_000, "2025-12-01")
+    stale = service.quote(conn, equity(sid, quantity=1, date="2026-01-12"), TODAY)
+    assert not stale["ok"] and "pas de cotation après le 2025-12-19" in stale["blocking"][0]
+    assert service.quote(conn, equity(sid, quantity=1, date="2025-12-18"), TODAY)["ok"]
+
+
+def test_quotes_dated_after_today_are_never_used_for_an_execution(conn):
+    sid = cto(conn)
+    q = service.quote(conn, equity(sid, quantity=1, date="2026-01-16"), TODAY)
+    assert q["ok"] and q["preview"]["exec_day"] == "2026-01-16"          # les cotations stockées vont jusqu'en octobre
+
+
+def test_a_future_order_on_or_after_the_contract_expiry_is_refused(conn):
+    sid = cto(conn)
+    today = dt.date(2026, 5, 27)
+    cl = {"strategy_id": sid, "instrument_kind": "future", "side": "long", "quantity": 1,
+          "spec": {"root": "CL", "year": 2026, "month": 6}}
+    late = service.quote(conn, {**cl, "date": "2026-05-26"}, today)
+    assert not late["ok"] and "contrat échu le 2026-05-20" in late["blocking"][0]
+    early = service.quote(conn, {**cl, "date": "2026-05-18"}, today)
+    assert early["ok"], early["blocking"]
+
+
+def test_a_fractional_reduce_is_refused_like_a_fractional_open(conn):
+    sid = cto(conn)
+    pid = service.place_order(conn, equity(sid, quantity=4), TODAY)["preview"]["position_id"]
+    reduce = {"strategy_id": sid, "action": "reduce", "position_id": pid, "date": "2026-01-09"}
+    half = service.quote(conn, {**reduce, "quantity": 0.5}, TODAY)
+    assert not half["ok"] and "quantité entière" in half["blocking"][0]
+    assert service.quote(conn, {**reduce, "quantity": 1}, TODAY)["ok"]
+
+
+def test_correcting_only_the_quantity_keeps_manual_price_fees_date_and_the_fee_seed(conn):
+    sid = cto(conn)
+    manual = service.place_order(conn, equity(sid, quantity=3, price=650.0, fees_mode="manual", fees=3.0), TODAY)
+    service.correct_order(conn, manual["order_id"], {"quantity": 4}, TODAY)
+    row = store.get_order(conn, manual["order_id"])
+    assert row["quantity"] == 4 and row["ts"] == "2026-01-07"
+    assert row["price"] == 650.0 and row["price_source"] == "manual"
+    assert row["fees"] == 3.0 and row["fees_source"] == "manual"
+    estimated = service.place_order(conn, equity(sid, "AAPL", quantity=5, date="2026-01-08"), TODAY)
+    before = store.get_order(conn, estimated["order_id"])
+    service.correct_order(conn, estimated["order_id"], {"quantity": 5}, TODAY)
+    after = store.get_order(conn, estimated["order_id"])
+    assert after["fee_seed"] == before["fee_seed"] and after["fees"] == before["fees"] and after["ts"] == "2026-01-08"
+    service.correct_order(conn, manual["order_id"], {"quantity": 4, "price": ""}, TODAY)     # prix vide = cours du marché
+    assert store.get_order(conn, manual["order_id"])["price_source"] == "market"
+
+
+def test_two_concurrent_orders_cannot_spend_the_same_cash(tmp_path, monkeypatch, conn):
+    import threading
+    import time
+
+    from patrick.fund import rules
+    from patrick.tracking import db as trackdb
+
+    sid = cto(conn, 10_000)
+    original = rules.validate
+
+    def slow_validate(*args, **kwargs):
+        out = original(*args, **kwargs)
+        time.sleep(0.3)                                  # élargit la fenêtre entre validation et écriture
+        return out
+    monkeypatch.setattr(rules, "validate", slow_validate)
+    results = []
+
+    def worker():
+        c = trackdb.connect(str(tmp_path / "patrick.db"))
+        try:
+            results.append(service.place_order(c, equity(sid, quantity=12), TODAY)["order_id"])    # ~9 200 € : un seul tient
+        except service.FundRuleError as exc:
+            results.append(exc)
+        finally:
+            c.close()
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(store.list_orders(conn, sid)) == 1
+    assert sum(isinstance(r, service.FundRuleError) for r in results) == 1

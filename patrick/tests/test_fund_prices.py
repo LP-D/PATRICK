@@ -94,3 +94,61 @@ def test_reference_rates_use_fred_when_the_key_is_set(monkeypatch):
 def test_reference_rates_fall_back_to_constants_without_the_key():
     rates, notes = prices.reference_rates({"EUR", "AUD"})
     assert rates == {"EUR": 0.02, "AUD": 0.03} and len(notes) == 2
+
+
+def test_a_failed_download_is_not_retried_for_fifteen_minutes(conn, monkeypatch):
+    prices.ensure_bars(conn, "MC.PA")
+    calls = []
+
+    def offline(symbol, start=None):
+        calls.append(symbol)
+        return None, None
+    monkeypatch.setattr(prices, "download_bars", offline)
+    t0 = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    assert prices.ensure_bars(conn, "MC.PA", now=t0).status == "stored"
+    prices.ensure_bars(conn, "MC.PA", now=t0 + dt.timedelta(minutes=5))
+    assert calls == ["MC.PA"]
+    prices.ensure_bars(conn, "MC.PA", now=t0 + dt.timedelta(minutes=20))
+    assert calls == ["MC.PA", "MC.PA"]
+    prices.ensure_bars(conn, "GHOST", now=t0)
+    prices.ensure_bars(conn, "GHOST", now=t0 + dt.timedelta(minutes=5))
+    assert calls == ["MC.PA", "MC.PA", "GHOST"]
+
+
+def test_reference_rates_are_cached_between_calls_even_when_fred_fails(monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "key")
+    seen = []
+    monkeypatch.setattr(fred_source, "download_series", lambda name, sid, start: seen.append(sid) or pd.Series([4.5]))
+    prices.reference_rates({"USD"})
+    prices.reference_rates({"USD"})
+    assert seen == ["SOFR"]
+    prices._RATE_CACHE.clear()
+    monkeypatch.setattr(fred_source, "download_series", lambda name, sid, start: seen.append("fail") or None)
+    prices.reference_rates({"USD"})
+    rates, notes = prices.reference_rates({"USD"})
+    assert seen == ["SOFR", "fail"] and rates["USD"] == 0.04 and len(notes) == 1
+
+
+def test_a_new_split_triggers_a_full_refetch_so_that_history_stays_consistent(conn, monkeypatch):
+    full = fs.fake_download("MC.PA")[0]
+    first = full[full.index <= "2026-01-09"]
+    adjusted = full[full.index <= "2026-01-16"].copy()
+    adjusted[["open", "high", "low", "close"]] = adjusted[["open", "high", "low", "close"]] / 10.0   # tout l'historique ajusté
+    adjusted.loc["2026-01-13", "split"] = 10.0
+    calls = []
+
+    def downloader(symbol, start=None):
+        calls.append(start)
+        if len(calls) == 1:
+            return first, "EUR"
+        return (adjusted[adjusted.index >= start], "EUR") if start else (adjusted, "EUR")
+    monkeypatch.setattr(prices, "download_bars", downloader)
+    prices.ensure_bars(conn, "MC.PA")
+    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    prices.ensure_bars(conn, "MC.PA", now=later)
+    assert calls == [None, "2026-01-02", None]
+    stored = prices.load_bars(conn, "MC.PA")
+    assert len(stored) == len(adjusted) and stored["split"].sum() == 10.0
+    assert stored["close"].iloc[0] == pytest.approx(adjusted["close"].iloc[0])
+    prices.ensure_bars(conn, "MC.PA", now=later + dt.timedelta(hours=7))
+    assert len(calls) == 4 and calls[3] is not None            # déjà connu : pas de nouvel historique complet

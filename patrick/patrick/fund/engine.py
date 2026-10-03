@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from patrick.clock import utc_today
@@ -38,13 +39,40 @@ class MarketData:
     fx: dict[str, pd.Series] = field(default_factory=dict)        # devise -> unités de base par unité de devise
     ref_rates: dict[str, float] = field(default_factory=dict)
     base_currency: str = "EUR"
+    _cache: dict = field(default_factory=dict, repr=False, compare=False)
+
+    def _arrays(self, kind: str, key: str, owner, extract):
+        """(dates, valeurs) triées de la série, mises en cache : une recherche dichotomique par jour
+        au lieu d'un filtre de tout l'historique (qui rendait le rejeu quadratique)."""
+        cached = self._cache.get((kind, key))
+        if cached is None or cached[0] is not owner:
+            series = extract(owner).dropna() if owner is not None else None
+            arrays = None
+            if series is not None and len(series):
+                arrays = (series.index.values.astype("datetime64[ns]"), series.to_numpy(dtype=float))
+            cached = (owner, arrays)
+            self._cache[(kind, key)] = cached
+        return cached[1]
+
+    @staticmethod
+    def _last_at(arrays, day) -> float | None:
+        if arrays is None:
+            return None
+        i = int(np.searchsorted(arrays[0], pd.Timestamp(day).to_datetime64(), side="right")) - 1
+        return float(arrays[1][i]) if i >= 0 else None
 
     def close_at(self, symbol: str, day: pd.Timestamp) -> float | None:
         df = self.bars.get(symbol)
-        if df is None or df.empty:
-            return None
-        s = df["close"][df.index <= day].dropna()
-        return float(s.iloc[-1]) if len(s) else None
+        return self._last_at(self._arrays("close", symbol, df, lambda d: d["close"]), day)
+
+    def split_factor_after(self, symbol: str, day: pd.Timestamp) -> float:
+        """Produit des ratios de fractionnement dont l'ex-date suit `day` (1.0 si aucun)."""
+        df = self.bars.get(symbol)
+        if df is None or "split" not in df.columns:
+            return 1.0
+        splits = df["split"]
+        after = splits[(splits.index > pd.Timestamp(day)) & (splits > 0)]
+        return float(np.prod(after.to_numpy(dtype=float))) if len(after) else 1.0
 
     def bar_on(self, symbol: str, day: pd.Timestamp) -> pd.Series | None:
         df = self.bars.get(symbol)
@@ -65,11 +93,8 @@ class MarketData:
     def fx_at(self, currency: str, day: pd.Timestamp, default: float = 1.0) -> float:
         if currency == self.base_currency:
             return 1.0
-        s = self.fx.get(currency)
-        if s is None or s.empty:
-            return default
-        s = s[s.index <= day].dropna()
-        return float(s.iloc[-1]) if len(s) else default
+        value = self._last_at(self._arrays("fx", currency, self.fx.get(currency), lambda s: s), day)
+        return default if value is None else value
 
     def ref_rate(self, currency: str) -> float:
         return self.ref_rates.get(currency, DEFAULT_REF_RATES.get(currency, 0.03))
@@ -125,12 +150,21 @@ class SimResult:
 
 def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -> SimResult:
     base = market.base_currency
-    start = pd.Timestamp(strategy["opened_on"])
+    opened = pd.Timestamp(strategy["opened_on"])
     end_ts = pd.Timestamp(end if end is not None else utc_today())
+    # Un ordre « du jour » est exécuté à la dernière clôture connue : un week-end ou le matin, c'est la séance
+    # qui précède l'ouverture de la stratégie. Il reste valide, et la grille démarre alors à cette séance.
+    early = [pd.Timestamp(o["ts"]) for o in orders if opened - pd.offsets.BDay(1) <= pd.Timestamp(o["ts"]) < opened]
+    start = min(early) if early else opened
     days = pd.bdate_range(start, end_ts)
     violations: list[dict] = []
     by_day: dict[pd.Timestamp, list[dict]] = {}
-    for o in sorted(orders, key=lambda o: (o["ts"], o.get("order_id") or 0)):
+
+    def sort_key(o: dict):
+        # un candidat (sans identifiant) se rejoue APRÈS les ordres déjà enregistrés du même jour
+        return (o["ts"], o["order_id"] if o.get("order_id") is not None else float("inf"))
+    for o in sorted(orders, key=sort_key):
+        o = _split_adjusted(o, market)
         d = pd.Timestamp(o["ts"])
         if d < start:
             violations.append({"day": o["ts"], "message": f"ordre du {o['ts']} antérieur à l'ouverture de la stratégie"})
@@ -242,6 +276,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
                 auto_close(pos, hit[1], day, hit[0])
 
         # c. ordres du jour
+        risk_up = False
         for o in by_day.get(day, []):
             pid, act = o["position_id"], o["action"]
             pos = positions.get(pid)
@@ -260,6 +295,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
                 continue
             if act in ("open", "increase"):
                 apply_open_or_increase(pos, o, fx)
+                risk_up = True
             elif act in ("reduce", "close"):
                 apply_reduce(pos, o, fx, iso, whole=(act == "close"))
             elif act == "modify":
@@ -287,7 +323,8 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
                 pos.mark = close
                 last = market.last_bar_day(pos.symbol)
                 expiry = pd.Timestamp(pos.spec["expiry"]) if pos.spec.get("expiry") else None
-                if expiry is not None and last is not None and last < end_ts - pd.Timedelta(days=7):
+                if (expiry is not None and last is not None and expiry <= end_ts
+                        and last < end_ts - pd.Timedelta(days=7)):
                     expiry = min(expiry, last)
                 if expiry is not None and day >= expiry:
                     auto_close(pos, close, day, "expired")
@@ -328,7 +365,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
                 pos.engaged_peak = max(pos.engaged_peak, m)
         nav = cash + equity_value + cfd_unreal
         buying_power = cash + cfd_unreal - margin
-        if by_day.get(day) and buying_power < -1e-6:
+        if risk_up and buying_power < -1e-6:        # alléger ou fermer ne doit jamais être bloqué
             violate(iso, f"liquidités ou marge insuffisantes le {iso} (disponible {buying_power:,.2f} {base})")
         if margin > EPS and nav < 0.5 * margin:
             alert_days.append(iso)
@@ -339,6 +376,21 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
 
     daily = pd.DataFrame(rows).set_index("date") if rows else pd.DataFrame(columns=DAILY_COLUMNS)
     return SimResult(daily, [_view(p, market, end_ts) for p in positions.values()], violations, alert_days)
+
+
+def _split_adjusted(o: dict, market: MarketData) -> dict:
+    """Ordre action/ETF exprimé en titres d'aujourd'hui : un fractionnement postérieur à l'ordre multiplie la
+    quantité et divise le prix (l'historique stocké est déjà ajusté), valeur et P&L sont inchangés."""
+    if o["instrument_kind"] not in EQUITY_KINDS:
+        return o
+    factor = market.split_factor_after(o["symbol"], pd.Timestamp(o["ts"]))
+    if factor == 1.0:
+        return o
+    adjusted = dict(o)
+    adjusted["quantity"] = float(o["quantity"]) * factor
+    if o.get("price"):
+        adjusted["price"] = float(o["price"]) / factor
+    return adjusted
 
 
 def _trigger(pos: _Pos, o: float, h: float, lo: float) -> tuple[str, float] | None:

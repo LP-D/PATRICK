@@ -8,7 +8,8 @@
   <h2>{{ s.name }} <span class="tag">{{ s.wrapper }}</span></h2>
   <div class="row">
     <button type="button" class="btn-ghost" data-act="rename" data-strategy-id="{{ s.strategy_id }}" data-name="{{ s.name }}">{{ t('fund_act_rename') }}</button>
-    <button type="button" class="btn-ghost" data-act="archive" data-strategy-id="{{ s.strategy_id }}">{{ t('fund_act_archive') }}</button>
+    <button type="button" class="btn-ghost" data-act="archive" data-strategy-id="{{ s.strategy_id }}"
+            data-confirm="{{ t('fund_confirm_archive') }}">{{ t('fund_act_archive') }}</button>
     <button type="button" class="btn-ghost" data-act="delete-strategy" data-strategy-id="{{ s.strategy_id }}"
             data-confirm="{{ t('fund_confirm_delete_strategy') }}">{{ t('fund_act_delete_strategy') }}</button>
     <button type="button" class="btn-secondary" data-act="close-panel">{{ t('fund_panel_close') }}</button>
@@ -128,9 +129,9 @@
             <div class="subgrid">
               <label>{{ t('fund_field_quantity') }} <input type="number" name="quantity" min="0" step="any" value="{{ opening.quantity }}"></label>
               <label>{{ t('fund_field_date') }} <input type="date" name="date" value="{{ opening.ts }}" min="{{ s.opened_on }}" max="{{ today }}"></label>
-              <label>{{ t('fund_field_price') }} <input type="number" name="price" min="0" step="any" placeholder="{{ t('fund_price_market') }}"></label>
+              <label>{{ t('fund_field_price') }} <input type="number" name="price" min="0" step="any" value="{{ opening.price if opening.price_source == 'manual' else '' }}" placeholder="{{ t('fund_price_market') }}"></label>
               <label>{{ t('fund_field_fees') }}
-                <select name="fees_mode"><option value="estimated">{{ t('fund_fees_estimated') }}</option><option value="manual">{{ t('fund_fees_manual') }}</option></select>
+                <select name="fees_mode"><option value="estimated"{% if opening.fees_source != 'manual' %} selected{% endif %}>{{ t('fund_fees_estimated') }}</option><option value="manual"{% if opening.fees_source == 'manual' %} selected{% endif %}>{{ t('fund_fees_manual') }}</option></select>
               </label>
               <label>{{ t('fund_fees_manual') }} <input type="number" name="fees" min="0" step="any" value="{{ opening.fees if opening.fees_source == 'manual' else '' }}"></label>
               {% if p.kind in ('future', 'cfd') %}

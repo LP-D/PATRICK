@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 import sqlite3
+import threading
 
 import pandas as pd
 
@@ -14,6 +15,8 @@ from patrick.fund import engine, instruments, kpis, prices, rules, store
 from patrick.fund import fees as fees_mod
 
 TICK_HALF = 0.5
+MAX_STALE_DAYS = 4        # écart toléré entre aujourd'hui et la dernière séance (week-end prolongé, matin)
+_WRITE_LOCK = threading.RLock()   # validation + écriture d'un ordre : jamais deux à la fois dans ce processus
 
 
 class FundRuleError(ValueError):
@@ -53,10 +56,19 @@ def _execution_day(df: pd.DataFrame, requested: str, today: dt.date) -> tuple[pd
     day = pd.Timestamp(requested)
     if day.date() > today:
         raise FundRuleError(["date d'exécution dans le futur"])
-    if day < df.index[0]:
-        raise FundRuleError([f"pas de cotation avant le {df.index[0].date()} pour ce symbole"])
-    i = df.index.searchsorted(day)
-    exec_day = df.index[i] if i < len(df) else df.index[-1]
+    known = df[df.index <= pd.Timestamp(today)]                  # jamais de cotation postérieure à aujourd'hui
+    if known.empty or day < known.index[0]:
+        first = (known.index[0] if not known.empty else df.index[0]).date()
+        raise FundRuleError([f"pas de cotation avant le {first} pour ce symbole"])
+    i = known.index.searchsorted(day)
+    if i < len(known):
+        exec_day = known.index[i]
+    else:
+        last = known.index[-1]
+        if (pd.Timestamp(today) - last).days > MAX_STALE_DAYS:
+            raise FundRuleError([(f"pas de cotation après le {last.date()} pour ce symbole "
+                                  "(contrat échu ou données hors ligne)")])
+        exec_day = last
     return exec_day, exec_day.date() == today
 
 
@@ -106,7 +118,14 @@ def _prepare(conn: sqlite3.Connection, req: dict, today: dt.date, replace_order_
     currency = opening["currency"] if opening else bars.currency
     if not currency:
         raise FundRuleError([f"{symbol} : devise inconnue"])
-    exec_day, provisional = _execution_day(bars.df, req.get("date") or today.isoformat(), today)
+    requested = req.get("date") or today.isoformat()
+    exec_day, provisional = _execution_day(bars.df, requested, today)
+    expiry_iso = None
+    if kind == "future":
+        expiry_iso = (opening["spec"].get("expiry") if opening
+                      else fut.expiry(int(req_spec["year"]), int(req_spec["month"])).isoformat())
+    if expiry_iso and action in ("open", "increase") and exec_day.date().isoformat() >= expiry_iso:
+        raise FundRuleError([f"contrat échu le {expiry_iso} : ordre impossible à partir de cette date"])
     manual_price = _number(req.get("price"), "prix", positive=True)
     price = manual_price if manual_price is not None else float(bars.df["close"].loc[exec_day])
     price_source = "manual" if manual_price is not None else "market"
@@ -127,14 +146,14 @@ def _prepare(conn: sqlite3.Connection, req: dict, today: dt.date, replace_order_
                 raise FundRuleError(["montant insuffisant pour une action entière"])
         if quantity is None:
             raise store.FundError("quantité ou montant requis")
-        if kind in ("equity", "etf", "future"):
-            if abs(quantity - round(quantity)) > 1e-9 or round(quantity) < 1:
-                raise store.FundError("quantité entière >= 1 requise")
-            quantity = float(round(quantity))
     elif action == "reduce" and quantity is None:
         raise store.FundError("quantité requise")
     elif action == "close" or action == "modify":
         quantity = 0.0
+    if action in ("open", "increase", "reduce") and kind in ("equity", "etf", "future") and quantity is not None:
+        if abs(quantity - round(quantity)) > 1e-9 or round(quantity) < 1:
+            raise store.FundError("quantité entière >= 1 requise")
+        quantity = float(round(quantity))
 
     # --- composantes
     spec: dict = {}
@@ -202,6 +221,7 @@ def _prepare(conn: sqlite3.Connection, req: dict, today: dt.date, replace_order_
         "side": side, "quantity": quantity, "price": None if action == "modify" else price,
         "price_source": None if action == "modify" else price_source, "currency": currency, "fx_rate": fx,
         "fees": fees, "fees_source": fees_source, "fee_seed": fee_seed, "spec": spec, "note": req.get("note"),
+        "requested": pd.Timestamp(requested).date().isoformat(),   # date demandée (≠ ts quand il n'y a pas de séance)
     }
     return {"strategy": strategy, "orders": orders, "candidate": candidate, "provisional": provisional,
             "breakdown": breakdown, "multiplier": mult, "opening": opening, "future": fut}
@@ -273,11 +293,12 @@ def quote(conn: sqlite3.Connection, req: dict, today: dt.date | None = None) -> 
 
 def place_order(conn: sqlite3.Connection, req: dict, today: dt.date | None = None) -> dict:
     today = _today(today)
-    prep = _prepare(conn, req, today)
-    check, result, notes = _evaluate(conn, prep, today)
-    if check.blocking:
-        raise FundRuleError(check.blocking)
-    order_id = store.insert_order(conn, prep["candidate"])
+    with _WRITE_LOCK:
+        prep = _prepare(conn, req, today)
+        check, result, notes = _evaluate(conn, prep, today)
+        if check.blocking:
+            raise FundRuleError(check.blocking)
+        order_id = store.insert_order(conn, prep["candidate"])
     return {"order_id": order_id, **_preview(prep, check, result, notes)}
 
 
@@ -292,11 +313,23 @@ def correct_order(conn: sqlite3.Connection, order_id: int, req: dict, today: dt.
               "side": existing["side"], "symbol": existing["symbol"]}
     if existing["instrument_kind"] == "future":
         merged["spec"] = {**{k: existing["spec"][k] for k in ("root", "year", "month")}, **(req.get("spec") or {})}
-    prep = _prepare(conn, merged, today, replace_order_id=order_id)
-    check, result, notes = _evaluate(conn, prep, today)
-    if check.blocking:
-        raise FundRuleError(check.blocking)
-    store.update_order(conn, order_id, prep["candidate"])
+    # Ce que la correction ne mentionne pas reste tel quel : date, prix et frais saisis à la main, tirage des frais.
+    merged.setdefault("date", existing["ts"])
+    if "price" not in req and existing["price_source"] == "manual":
+        merged["price"] = existing["price"]
+    if "fees_mode" not in req:
+        if existing["fees_source"] == "manual":
+            merged["fees_mode"], merged["fees"] = "manual", existing["fees"]
+        else:
+            merged["fees_mode"] = "estimated"
+    if merged["fees_mode"] != "manual":
+        merged.setdefault("fee_seed", existing["fee_seed"])
+    with _WRITE_LOCK:
+        prep = _prepare(conn, merged, today, replace_order_id=order_id)
+        check, result, notes = _evaluate(conn, prep, today)
+        if check.blocking:
+            raise FundRuleError(check.blocking)
+        store.update_order(conn, order_id, prep["candidate"])
     return {"order_id": order_id, **_preview(prep, check, result, notes)}
 
 

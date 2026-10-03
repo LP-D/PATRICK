@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import sqlite3
+import time
 from dataclasses import dataclass
 
 import pandas as pd
@@ -18,7 +19,11 @@ from patrick.fund.engine import DEFAULT_REF_RATES, MarketData
 
 HISTORY_START = "2000-01-01"
 MAX_AGE_HOURS = 6.0
-BAR_COLUMNS = ["open", "high", "low", "close", "volume", "dividend"]
+BAR_COLUMNS = ["open", "high", "low", "close", "volume", "dividend", "split"]
+NEGATIVE_CACHE_MINUTES = 15.0     # un téléchargement échoué n'est pas retenté avant ce délai
+RATE_CACHE_SECONDS = 3600.0       # taux de référence FRED conservés (succès comme échec)
+_FAILED_UNTIL: dict[str, dt.datetime] = {}
+_RATE_CACHE: dict[str, tuple[float, float | None]] = {}
 PENCE = {"GBp": ("GBP", 0.01), "GBX": ("GBP", 0.01), "ZAc": ("ZAR", 0.01), "ILA": ("ILS", 0.01)}
 # Série FRED du taux court de chaque devise (si FRED_API_KEY est défini).
 FRED_RATE_SERIES = {"USD": "SOFR", "EUR": "ECBESTRVOLWGTTRMDMNRT", "GBP": "IUDSOIA"}
@@ -45,7 +50,7 @@ def download_bars(symbol: str, start: str | None = None) -> tuple[pd.DataFrame |
         print(f"  [WARN] yfinance {symbol}: {str(exc)[:100]}")
         return None, None
     df = raw.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close",
-                             "Volume": "volume", "Dividends": "dividend"})
+                             "Volume": "volume", "Dividends": "dividend", "Stock Splits": "split"})
     for col in BAR_COLUMNS:
         if col not in df.columns:
             df[col] = 0.0
@@ -56,20 +61,24 @@ def download_bars(symbol: str, start: str | None = None) -> tuple[pd.DataFrame |
 
 
 def save_bars(conn: sqlite3.Connection, symbol: str, df: pd.DataFrame, raw_currency: str | None,
-              now: dt.datetime | None = None) -> None:
+              now: dt.datetime | None = None, replace: bool = False) -> None:
     currency, scale = iso_currency(raw_currency)
     rows = []
     for day, r in df.iterrows():
         px = [None if pd.isna(r[c]) else float(r[c]) * scale for c in ("open", "high", "low", "close")]
+        split = r.get("split", 0.0)
         rows.append((symbol, day.date().isoformat(), *px, float(r["volume"]) if not pd.isna(r["volume"]) else 0.0,
-                     float(r["dividend"]) * scale if not pd.isna(r["dividend"]) else 0.0))
+                     float(r["dividend"]) * scale if not pd.isna(r["dividend"]) else 0.0,
+                     0.0 if pd.isna(split) else float(split)))
     stamp = (now or dt.datetime.now(dt.timezone.utc)).strftime("%Y-%m-%d %H:%M:%S")
     with conn:
+        if replace:       # historique entier re-téléchargé (nouveau fractionnement) : on remplace tout
+            conn.execute("DELETE FROM fund_price WHERE symbol = ?", (symbol,))
         conn.executemany(
-            "INSERT INTO fund_price (symbol, day, open, high, low, close, volume, dividend) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol, day) DO UPDATE SET open = excluded.open, "
+            "INSERT INTO fund_price (symbol, day, open, high, low, close, volume, dividend, split) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol, day) DO UPDATE SET open = excluded.open, "
             "high = excluded.high, low = excluded.low, close = excluded.close, volume = excluded.volume, "
-            "dividend = excluded.dividend", rows)
+            "dividend = excluded.dividend, split = excluded.split", rows)
         conn.execute(
             "INSERT INTO fund_price_meta (symbol, currency, refreshed_at) VALUES (?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET currency = COALESCE(excluded.currency, fund_price_meta.currency), "
@@ -77,7 +86,7 @@ def save_bars(conn: sqlite3.Connection, symbol: str, df: pd.DataFrame, raw_curre
 
 
 def load_bars(conn: sqlite3.Connection, symbol: str) -> pd.DataFrame | None:
-    rows = conn.execute("SELECT day, open, high, low, close, volume, dividend FROM fund_price "
+    rows = conn.execute("SELECT day, open, high, low, close, volume, dividend, split FROM fund_price "
                         "WHERE symbol = ? ORDER BY day", (symbol,)).fetchall()
     if not rows:
         return None
@@ -109,13 +118,35 @@ def ensure_bars(conn: sqlite3.Connection, symbol: str, *, max_age_hours: float =
         if age < dt.timedelta(hours=max_age_hours):
             return BarsResult(stored, meta["currency"], "fresh")
     start = (stored.index[-1] - pd.Timedelta(days=7)).date().isoformat() if stored is not None else None
-    fetched, raw_ccy = download_bars(symbol, start)
+    skip_until = _FAILED_UNTIL.get(symbol)
+    if skip_until is not None and now < skip_until:
+        fetched, raw_ccy = None, None           # échec récent : on ne harcèle pas Yahoo à chaque page
+    else:
+        fetched, raw_ccy = download_bars(symbol, start)
+        if fetched is None or fetched.empty:
+            _FAILED_UNTIL[symbol] = now + dt.timedelta(minutes=NEGATIVE_CACHE_MINUTES)
+        else:
+            _FAILED_UNTIL.pop(symbol, None)
     if fetched is not None and not fetched.empty:
-        save_bars(conn, symbol, fetched, raw_ccy, now)
+        replace = False
+        if stored is not None and _has_new_split(stored, fetched):
+            # Yahoo ré-ajuste tout l'historique à chaque fractionnement : on le re-télécharge en entier
+            full, full_ccy = download_bars(symbol, None)
+            if full is not None and not full.empty:
+                fetched, raw_ccy, replace = full, full_ccy or raw_ccy, True
+        save_bars(conn, symbol, fetched, raw_ccy, now, replace=replace)
         return BarsResult(load_bars(conn, symbol), get_meta(conn, symbol)["currency"], "fresh")
     if stored is not None:
         return BarsResult(stored, meta["currency"] if meta else None, "stored")
     return BarsResult(None, None, "missing")
+
+
+def _has_new_split(stored: pd.DataFrame, fetched: pd.DataFrame) -> bool:
+    """Le téléchargement incrémental contient-il un fractionnement que la base ne connaît pas encore ?"""
+    if "split" not in fetched.columns:
+        return False
+    known = set(stored.index[stored["split"] > 0]) if "split" in stored.columns else set()
+    return any(day not in known for day in fetched.index[fetched["split"] > 0])
 
 
 def fx_symbol(base: str, currency: str) -> str:
@@ -138,10 +169,15 @@ def reference_rates(currencies: set[str]) -> tuple[dict[str, float], list[str]]:
     for ccy in sorted(currencies):
         value = None
         if os.environ.get("FRED_API_KEY") and ccy in FRED_RATE_SERIES:
-            from patrick.data.sources import fred_source
-            s = fred_source.download_series(ccy, FRED_RATE_SERIES[ccy], "2024-01-01")
-            if s is not None and len(s.dropna()):
-                value = float(s.dropna().iloc[-1]) / 100.0
+            cached = _RATE_CACHE.get(ccy)
+            if cached is not None and time.monotonic() - cached[0] < RATE_CACHE_SECONDS:
+                value = cached[1]
+            else:
+                from patrick.data.sources import fred_source
+                s = fred_source.download_series(ccy, FRED_RATE_SERIES[ccy], "2024-01-01")
+                if s is not None and len(s.dropna()):
+                    value = float(s.dropna().iloc[-1]) / 100.0
+                _RATE_CACHE[ccy] = (time.monotonic(), value)
         if value is None:
             value = DEFAULT_REF_RATES.get(ccy, 0.03)
             notes.append(f"taux de référence {ccy} : constante {value:.2%} (FRED indisponible ou non configuré)")

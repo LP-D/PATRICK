@@ -137,3 +137,14 @@ def test_series_points_are_rounded_and_dated():
     pts = kpis.series_points(res.daily)
     assert pts[0] == {"t": "2026-01-05", "nav": 100000.0, "cash": 100000.0} and len(pts) == 10
     assert kpis.series_points(pd.DataFrame()) == []
+
+
+def test_an_order_dated_before_the_previous_order_of_its_position_is_refused():
+    market = engine.MarketData(bars={"MC.PA": bars([100.0] * 10)})
+    existing = [order(order_id=1, ts="2026-01-06", quantity=10.0),
+                order(order_id=2, ts="2026-01-12", action="increase", quantity=5.0)]
+    backdated = order(order_id=None, ts="2026-01-08", action="reduce", quantity=8.0)
+    chk, _ = rules.validate(CTO, existing, backdated, market, TODAY)
+    assert any("antérieure à l'ordre précédent" in m for m in chk.blocking)
+    later = order(order_id=None, ts="2026-01-13", action="reduce", quantity=8.0)
+    assert rules.validate(CTO, existing, later, market, TODAY)[0].blocking == []
