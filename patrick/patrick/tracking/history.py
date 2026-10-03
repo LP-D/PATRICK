@@ -1116,7 +1116,7 @@ def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: li
             if y_true is None:
                 pending += 1
                 continue
-            pred = int(round(y_pred))
+            pred = round(y_pred)
             direction_n += 1
             direction_hits += int((pred >= 2) == bool(y_true))
             if y_class is not None and pred in classes:

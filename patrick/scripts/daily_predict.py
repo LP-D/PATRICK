@@ -40,9 +40,15 @@ import logging
 import os
 import sys
 
-from patrick import predict as predict_module  # noqa: F401  (re-exporté pour compatibilité)
+from patrick import (
+    predict as predict_module,  # noqa: F401  (re-exporté pour compatibilité)
+)
 from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le package, partagée avec l'app web)
-    PredictCandidate, PredictOutcome, RunSummary, find_predictable_candidates, run_daily_predictions,
+    PredictCandidate,
+    PredictOutcome,
+    RunSummary,
+    find_predictable_candidates,
+    run_daily_predictions,
 )
 from patrick.tracking import db as trackdb
 
