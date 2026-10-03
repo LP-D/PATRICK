@@ -506,11 +506,21 @@
         data-title-active="{{ t('section_progress') }}">{{ t('section_progress') if initial_run_id else t('section_recent') }}</h2>
     <div class="dash-panel-body">
 
+    {# File d'attente en liste déroulante, repliée par défaut : déployée en
+       permanence, une file de plusieurs dizaines de runs repoussait tout le
+       reste du panneau hors de l'écran. Le résumé (nombre + prochain run)
+       n'est affiché qu'une fois — il répétait auparavant tous les noms juste
+       au-dessus de la liste qui les contient déjà. #}
     <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
-        <p class="hint" id="queue-summary"></p>
-        <ol id="queue-list" class="queue-list"></ol>
-        <button type="button" id="clear-queue-btn" class="queue-action"
-                data-confirm="{{ t('queue_clear_confirm') }}">{{ t('queue_clear') }}</button>
+        <div class="queue-head">
+            <button type="button" id="queue-toggle" class="queue-toggle" aria-expanded="false"
+                    aria-controls="queue-list">
+                <span class="queue-caret" aria-hidden="true"></span>
+                <span id="queue-summary"></span>
+            </button>
+            <button type="button" id="clear-queue-btn" class="queue-action danger">{{ t('queue_clear') }}</button>
+        </div>
+        <ol id="queue-list" class="queue-list" hidden></ol>
     </div>
 
     {# Ce message ne vaut que si la colonne est REELLEMENT vide. Avec la liste

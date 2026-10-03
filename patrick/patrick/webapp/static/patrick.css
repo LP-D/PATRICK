@@ -1343,21 +1343,73 @@ legend {
 .launch-cancel[hidden] { display: none; }
 
 .queue-panel {
+  container-type: inline-size;
   margin: 0 0 var(--space-md);
   padding: 10px 14px;
   border-radius: var(--radius);
   background: var(--surface-2);
   font-size: 13px;
 }
-.queue-panel .hint { margin: 0; }
+.queue-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#clear-queue-btn { flex: none; white-space: nowrap; }
+.queue-toggle {
+  display: inline-flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.queue-caret {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 0.15s var(--ease-out);
+}
+.queue-toggle[aria-expanded="true"] .queue-caret { transform: rotate(90deg); }
+/* Liste bornée : une file de plusieurs dizaines de runs défile dans son cadre
+   au lieu de repousser le reste du panneau hors de l'écran. */
 .queue-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  max-height: min(46vh, 22rem);
   margin: 8px 0 0;
-  padding-left: 22px;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
 }
-.queue-list li { padding-left: 2px; }
-.queue-list li > span { margin-right: 10px; }
+.queue-list[hidden] { display: none; }
+.queue-item {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: var(--surface);
+  cursor: grab;
+}
+.queue-item.dragging { opacity: 0.45; }
+.queue-rank { color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; }
+.queue-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-item-actions { display: inline-flex; gap: 4px; }
+.queue-icon { min-width: 28px; min-height: 28px; padding: 2px 6px; line-height: 1; }
+.queue-icon:disabled { opacity: 0.35; cursor: default; }
+/* Colonne étroite : les actions passent sous le nom plutôt que de le tronquer à une lettre. */
+@container (max-width: 340px) {
+  .queue-item { grid-template-columns: 2.2em minmax(0, 1fr); row-gap: 2px; }
+  .queue-item-actions { grid-column: 2; }
+}
 .queue-action {
   min-height: 30px;
   padding: 4px 10px;
@@ -1375,7 +1427,6 @@ legend {
 .history-model-actions input { min-width: 0; width: 8rem; }
 .queue-action.danger { border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); color: var(--neg); }
 .queue-action[hidden] { display: none; }
-.queue-panel > .queue-action { margin-top: 10px; }
 .run-controls { display: flex; gap: 8px; margin: 8px 0; }
 
 .progress-bar { height: 6px; overflow: hidden; border-radius: 999px; background: var(--surface-3); }

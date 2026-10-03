@@ -223,6 +223,15 @@ def remove_queued_run(job_id: str) -> bool:
         conn.close()
 
 
+def reorder_queued_runs(order: list[str]) -> list[dict]:
+    conn = _connect()
+    try:
+        jobs_db.reorder_queued_jobs(conn, order)
+    finally:
+        conn.close()
+    return queued_runs()
+
+
 def clear_queued_runs() -> int:
     conn = _connect()
     try:

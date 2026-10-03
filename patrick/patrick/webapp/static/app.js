@@ -229,6 +229,7 @@
     const queuePanel = document.getElementById("queue-panel");
     const queueSummary = document.getElementById("queue-summary");
     const queueList = document.getElementById("queue-list");
+    const queueToggle = document.getElementById("queue-toggle");
     const clearQueueBtn = document.getElementById("clear-queue-btn");
     const runControls = document.getElementById("run-controls");
     const pauseRunBtn = document.getElementById("pause-run-btn");
@@ -606,6 +607,127 @@
         return div.innerHTML;
     }
 
+    // --- file d'attente : liste déroulante, réordonnable ---
+
+    const QUEUE_OPEN_KEY = "patrick.queueOpen";
+    let queueData = [];          // dernier état connu, dans l'ordre d'exécution
+    let queueSignature = null;   // ne reconstruire la liste que si elle a changé : un poll toutes les 4 s qui la vide perdait défilement et focus
+    let queueDragging = null;    // <li> en cours de glisser-déposer
+    let queuePendingFocus = null;
+
+    function setQueueOpen(open) {
+        if (!queueToggle) return;
+        queueToggle.setAttribute("aria-expanded", open ? "true" : "false");
+        queueList.hidden = !open;
+        try { localStorage.setItem(QUEUE_OPEN_KEY, open ? "1" : "0"); } catch (e) { /* stockage indisponible */ }
+    }
+    let queueStoredOpen = false;
+    try { queueStoredOpen = localStorage.getItem(QUEUE_OPEN_KEY) === "1"; } catch (e) { /* idem */ }
+    setQueueOpen(queueStoredOpen);
+
+    function buildQueueItem(job, index, total) {
+        const label = job.name || job.id;
+        const item = document.createElement("li");
+        item.className = "queue-item";
+        item.draggable = true;
+        item.dataset.jobId = job.id;
+        item.title = tr("queue_drag", "Drag to change the execution order");
+
+        const rank = document.createElement("span");
+        rank.className = "queue-rank";
+        rank.textContent = `${index + 1}.`;
+        const name = document.createElement("span");
+        name.className = "queue-name";
+        name.textContent = label;
+
+        const actions = document.createElement("span");
+        actions.className = "queue-item-actions";
+        [
+            ["top", "⤒", "queue_move_top", "Move to top", index === 0],
+            ["up", "↑", "queue_move_up", "Move up", index === 0],
+            ["down", "↓", "queue_move_down", "Move down", index === total - 1],
+            ["remove", "✕", "queue_remove", "Remove", false],
+        ].forEach(([action, glyph, key, fallback, disabled]) => {
+            const text = tr(key, fallback);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "queue-action queue-icon" + (action === "remove" ? " danger" : "");
+            button.dataset.jobAction = action;
+            button.textContent = glyph;
+            button.disabled = disabled;
+            button.title = text;
+            button.setAttribute("aria-label", `${text} ${label}`);
+            actions.appendChild(button);
+        });
+        item.append(rank, name, actions);
+        return item;
+    }
+
+    function renderQueue(queue) {
+        queueData = queue;
+        queuedCount = queue.length;
+        if (!queuePanel) return;
+        if (!queue.length) {
+            queuePanel.classList.add("hidden");
+            queueList.replaceChildren();
+            queueSignature = null;
+            return;
+        }
+        queuePanel.classList.remove("hidden");
+        queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued · next: {next}"),
+            { n: queue.length, next: queue[0].name || queue[0].id });
+
+        const signature = queue.map((q) => `${q.id}:${q.name}`).join("|");
+        if (signature === queueSignature || queueDragging) return;
+        queueSignature = signature;
+        const scrollTop = queueList.scrollTop;
+        queueList.replaceChildren(...queue.map((job, index) => buildQueueItem(job, index, queue.length)));
+        queueList.scrollTop = scrollTop;
+
+        if (queuePendingFocus) {
+            const row = queueList.querySelector(`li[data-job-id="${queuePendingFocus.jobId}"]`);
+            if (row) {
+                const preferred = row.querySelector(`button[data-job-action="${queuePendingFocus.action}"]`);
+                const target = preferred && !preferred.disabled ? preferred : row.querySelector("button:not(:disabled)");
+                if (target) target.focus();
+            }
+            queuePendingFocus = null;
+        }
+    }
+
+    // Pas de fenêtre de confirmation : retirer ou réordonner un run en attente
+    // est immédiat et sans conséquence durable (le run se relance depuis
+    // l'historique). La réponse du serveur est la vérité : si la requête
+    // échoue (élément déjà démarré, réseau), on resynchronise sans alerte.
+    async function queueRequest(url, options) {
+        let queue = null;
+        try {
+            const response = await fetch(url, options);
+            if (response.ok) queue = (await response.json().catch(() => ({}))).queue || null;
+        } catch (e) { /* réseau : resynchronisation ci-dessous */ }
+        if (queue) { renderQueue(queue); return; }
+        queueSignature = null;   // le DOM a pu être réordonné à la main
+        await runStatePoll();
+    }
+
+    function reorderQueue(ids) {
+        return queueRequest("/api/queue/reorder", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order: ids }),
+        });
+    }
+
+    function moveQueueItem(jobId, action) {
+        const ids = queueData.map((q) => q.id);
+        const from = ids.indexOf(jobId);
+        const to = action === "top" ? 0 : action === "up" ? from - 1 : from + 1;
+        if (from < 0 || to < 0 || to >= ids.length || to === from) return;
+        ids.splice(to, 0, ids.splice(from, 1)[0]);
+        queuePendingFocus = { jobId: jobId, action: action };
+        reorderQueue(ids);
+    }
+
     // --- état agrégé (file d'attente + détection du run actif courant) ---
 
     async function runStatePoll() {
@@ -620,32 +742,7 @@
         // Retenu pour le récapitulatif de confirmation : « suis-je 3e ? » est
         // la seule question temporelle qui change le comportement avant de
         // lancer, et elle n'était visible nulle part au moment du clic.
-        queuedCount = (data.queue && data.queue.length) || 0;
-
-        if (data.queue && data.queue.length) {
-            const names = data.queue.map((q) => q.name).join(", ");
-            queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued: {names}"),
-                { n: data.queue.length, names: names });
-            queueList.replaceChildren();
-            data.queue.forEach((job) => {
-                const item = document.createElement("li");
-                const label = document.createElement("span");
-                label.textContent = job.name || job.id;
-                const remove = document.createElement("button");
-                remove.type = "button";
-                remove.className = "queue-action";
-                remove.dataset.jobId = job.id;
-                remove.dataset.jobAction = "remove";
-                remove.textContent = tr("queue_remove", "Remove");
-                remove.setAttribute("aria-label", `${tr("queue_remove", "Remove")} ${job.name || job.id}`);
-                item.append(label, remove);
-                queueList.appendChild(item);
-            });
-            queuePanel.classList.remove("hidden");
-        } else {
-            queuePanel.classList.add("hidden");
-            queueList.replaceChildren();
-        }
+        renderQueue(data.queue || []);
 
         const active = data.active_run;
         activeJobId = active ? active.id : null;
@@ -701,18 +798,61 @@
                 stopRunBtn.dataset.confirm);
         });
     }
+    if (queueToggle) {
+        queueToggle.addEventListener("click", () => {
+            setQueueOpen(queueToggle.getAttribute("aria-expanded") !== "true");
+        });
+    }
     if (queueList) {
         queueList.addEventListener("click", (event) => {
-            const button = event.target.closest("button[data-job-action='remove']");
-            if (!button) return;
-            sendJobControl(`/api/queue/${button.dataset.jobId}`, { method: "DELETE" },
-                tr("queue_remove_confirm", "Remove this run from the queue?"));
+            const button = event.target.closest("button[data-job-action]");
+            if (!button || button.disabled) return;
+            const jobId = button.closest("li").dataset.jobId;
+            if (button.dataset.jobAction === "remove") {
+                queueRequest(`/api/queue/${jobId}`, { method: "DELETE" });
+            } else {
+                moveQueueItem(jobId, button.dataset.jobAction);
+            }
+        });
+
+        // Glisser-déposer : le <li> est déplacé dans le DOM pendant le survol ;
+        // l'ordre résultant n'est envoyé qu'au dépôt. Déposer hors de la liste
+        // (ou Échap) annule : dropEffect vaut alors "none".
+        queueList.addEventListener("dragstart", (event) => {
+            const row = event.target.closest && event.target.closest("li.queue-item");
+            if (!row) return;
+            queueDragging = row;
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", row.dataset.jobId);   // Firefox l'exige
+            row.classList.add("dragging");
+        });
+        queueList.addEventListener("dragover", (event) => {
+            if (!queueDragging) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            const over = event.target.closest("li.queue-item");
+            if (!over || over === queueDragging) return;
+            const rect = over.getBoundingClientRect();
+            const reference = event.clientY > rect.top + rect.height / 2 ? over.nextSibling : over;
+            if (reference !== queueDragging.nextSibling) queueList.insertBefore(queueDragging, reference);
+        });
+        queueList.addEventListener("drop", (event) => event.preventDefault());
+        queueList.addEventListener("dragend", (event) => {
+            if (!queueDragging) return;
+            queueDragging.classList.remove("dragging");
+            queueDragging = null;
+            const ids = Array.from(queueList.children, (li) => li.dataset.jobId);
+            const moved = ids.some((id, i) => !queueData[i] || id !== queueData[i].id);
+            if (moved && event.dataTransfer.dropEffect !== "none") {
+                reorderQueue(ids);
+            } else {
+                queueSignature = null;
+                renderQueue(queueData);
+            }
         });
     }
     if (clearQueueBtn) {
-        clearQueueBtn.addEventListener("click", () => {
-            sendJobControl("/api/queue", { method: "DELETE" }, clearQueueBtn.dataset.confirm);
-        });
+        clearQueueBtn.addEventListener("click", () => queueRequest("/api/queue", { method: "DELETE" }));
     }
 
     // --- soumission du formulaire settings, sans rechargement de page ---

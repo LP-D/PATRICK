@@ -49,7 +49,7 @@ def claim_next_job(conn: sqlite3.Connection, worker_pid: int) -> dict | None:
     try:
         row = conn.execute(
             "SELECT job_id, config_json FROM job WHERE status = 'queued' "
-            "ORDER BY created_at LIMIT 1"
+            "ORDER BY created_at, rowid LIMIT 1"
         ).fetchone()
         if row is None:
             conn.execute("ROLLBACK")
@@ -115,9 +115,57 @@ def get_job(conn: sqlite3.Connection, job_id: str) -> dict | None:
 
 def list_queued_job_ids(conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute(
-        "SELECT job_id FROM job WHERE status = 'queued' ORDER BY created_at"
+        "SELECT job_id FROM job WHERE status = 'queued' ORDER BY created_at, rowid"
     ).fetchall()
     return [r[0] for r in rows]
+
+
+def reorder_queued_jobs(conn: sqlite3.Connection, ordered_ids: list[str]) -> list[str]:
+    """Rewrites the execution order of the still-queued jobs and returns it.
+
+    The worker claims `ORDER BY created_at` (see `claim_next_job`), and a
+    worker already alive keeps running the code it was started with -- a new
+    `rank` column would be ignored by it for the whole remaining queue, which
+    is precisely the queue being reordered. So the order is stored where every
+    worker version already reads it: each queued job gets a distinct
+    whole-second `created_at`, strictly increasing with its new rank, all
+    earlier than the oldest queued job's previous value (so a job enqueued
+    afterwards, stamped `datetime('now')`, still sorts last, and the
+    `YYYY-MM-DD HH:MM:SS` shape `run_manager._parse_dt` expects is kept).
+
+    `ordered_ids` need not match the queue exactly: ids no longer queued
+    (claimed or deleted meanwhile) are ignored, queued jobs it omits (enqueued
+    meanwhile) keep their relative order after the listed ones. `BEGIN
+    IMMEDIATE` serialises against `claim_next_job` and `enqueue_job`."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        current = [r[0] for r in conn.execute(
+            "SELECT job_id FROM job WHERE status = 'queued' ORDER BY created_at, rowid"
+        )]
+        listed = set(current)
+        wanted: list[str] = []
+        for job_id in ordered_ids:
+            if job_id in listed:
+                wanted.append(job_id)
+                listed.discard(job_id)
+        final = wanted + [job_id for job_id in current if job_id in listed]
+        if final == current:
+            conn.execute("ROLLBACK")
+            return current
+        oldest = conn.execute(
+            "SELECT MIN(created_at) FROM job WHERE status = 'queued'"
+        ).fetchone()[0]
+        for rank, job_id in enumerate(final):
+            conn.execute(
+                "UPDATE job SET created_at = datetime(?, ?) "
+                "WHERE job_id = ? AND status = 'queued'",
+                (oldest, f"-{len(final) - rank} seconds", job_id),
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return final
 
 
 def active_job(conn: sqlite3.Connection) -> dict | None:

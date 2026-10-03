@@ -103,6 +103,79 @@ def test_queue_controls_remove_only_queued_jobs(tmp_path, monkeypatch):
     assert client.get("/api/run-state").json()["active_run"]["id"] == "active"
 
 
+def _queue_ids(client) -> list[str]:
+    return [q["id"] for q in client.get("/api/run-state").json()["queue"]]
+
+
+def test_launch_dashboard_queue_is_a_collapsible_list_without_confirm_dialog(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    html = TestClient(app).get("/launch").text
+    assert 'id="queue-toggle"' in html
+    assert 'aria-controls="queue-list"' in html
+    # Le nombre et le prochain run sont résumés ; les noms ne sont pas répétés.
+    assert 'id="queue-summary"' in html
+    # Plus de fenêtre `confirm()` du navigateur sur « Vider la file ».
+    clear_button = html[html.index('id="clear-queue-btn"'):].split(">", 1)[0]
+    assert "data-confirm" not in clear_button
+
+
+def test_reorder_queue_changes_worker_claim_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    ids = [jobs.enqueue_job(conn, json.dumps({"name": n})) for n in ("a", "b", "c", "d")]
+    _running_job(conn, "active")
+    client = TestClient(app)
+    assert _queue_ids(client) == ids
+
+    a, b, c, d = ids
+    response = client.post("/api/queue/reorder", json={"order": [c, a, d, b]})
+    assert response.status_code == 200
+    assert [q["id"] for q in response.json()["queue"]] == [c, a, d, b]
+    assert [q["queue_position"] for q in response.json()["queue"]] == [1, 2, 3, 4]
+    assert _queue_ids(client) == [c, a, d, b]
+
+    # Le worker réclame dans le nouvel ordre ; le run actif n'est pas touché.
+    assert jobs.claim_next_job(conn, 999)["job_id"] == c
+    assert jobs.claim_next_job(conn, 999)["job_id"] == a
+    assert client.get("/api/run-state").json()["active_run"]["id"] == "active"
+    conn.close()
+
+
+def test_reorder_queue_keeps_new_jobs_last_and_survives_repeated_moves(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    a, b, c = [jobs.enqueue_job(conn, json.dumps({"name": n})) for n in "abc"]
+    client = TestClient(app)
+    for order in ([c, b, a], [b, a, c], [a, c, b]):
+        client.post("/api/queue/reorder", json={"order": order})
+        assert _queue_ids(client) == order
+    # Un run lancé ensuite passe après toute la file réordonnée.
+    late = jobs.enqueue_job(conn, json.dumps({"name": "late"}))
+    assert _queue_ids(client) == [a, c, b, late]
+    conn.close()
+
+
+def test_reorder_queue_ignores_stale_ids_and_appends_unlisted_jobs(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    a, b, c = [jobs.enqueue_job(conn, json.dumps({"name": n})) for n in "abc"]
+    conn.close()
+    client = TestClient(app)
+    # `ghost` n'est plus en file, `a` est oublié (lancé entre-temps côté client).
+    client.post("/api/queue/reorder", json={"order": [c, "ghost", b, b]})
+    assert _queue_ids(client) == [c, b, a]
+
+
+def test_reorder_queue_rejects_malformed_body(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    client = TestClient(app)
+    assert client.post("/api/queue/reorder", json={"order": "x"}).status_code == 400
+    assert client.post("/api/queue/reorder", json={"order": [1, 2]}).status_code == 400
+    assert client.post("/api/queue/reorder", json={}).status_code == 400
+    assert client.post("/api/queue/reorder", content=b"nope").status_code == 400
+    assert client.post("/api/queue/reorder", json={"order": []}).json() == {"queue": []}
+
+
 def test_stop_terminates_active_worker_and_marks_job_error(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     conn = db.connect()

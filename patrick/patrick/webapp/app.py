@@ -589,6 +589,19 @@ def remove_queued_job(job_id: str):
     return {"removed": 1}
 
 
+@app.post("/api/queue/reorder")
+async def reorder_queued_jobs(request: Request):
+    """Body `{"order": [job_id, ...]}` = the full desired execution order of
+    the queue. Returns the queue as it actually stands afterwards."""
+    try:
+        order = (await request.json())["order"]
+        if not isinstance(order, list) or not all(isinstance(i, str) for i in order):
+            raise TypeError
+    except (ValueError, KeyError, TypeError):
+        return JSONResponse({"error": "order doit être une liste d'identifiants."}, status_code=400)
+    return {"queue": run_manager.reorder_queued_runs(order)}
+
+
 @app.delete("/api/queue")
 def clear_queued_jobs():
     return {"removed": run_manager.clear_queued_runs()}
