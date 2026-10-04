@@ -189,3 +189,22 @@ def test_the_positions_table_separates_the_price_effect_from_the_fx_effect(clien
     assert 'colspan="12"' not in html and 'colspan="13"' in html
     row = html.split('class="fund-position"')[1].split("</tr>")[0]
     assert row.count('class="num pk-mono"') >= 8
+
+
+def test_the_fund_scripts_never_open_a_native_browser_dialog(client):
+    native = re.compile(r"(?<![\w.])(?:window\.)?(?:confirm|prompt|alert)\(")
+    for script in ("fonds.js", "simulate.js"):
+        found = native.findall(client.get(f"/static/{script}").text)
+        assert found == [], (script, found)
+
+
+def test_the_fonds_page_ships_in_page_dialogs_for_confirming_and_renaming(client):
+    fs.make_strategy(client)
+    html = client.get("/fonds").text
+    assert '<dialog id="fund-confirm-dialog" class="modal"' in html
+    assert 'id="fund-confirm-message"' in html and 'id="fund-confirm-ok"' in html
+    assert '<dialog id="fund-rename-dialog" class="modal"' in html and 'id="fund-rename-form"' in html
+    assert "Nouveau nom de la stratégie" in html and "Confirmation" in html
+    english = client.get("/fonds?lang=en").text
+    assert "New strategy name" in english and "Confirmation" in english and "Cancel" in english
+    assert "fund-confirm-dialog" not in client.get("/api/fund/strategies/str_x/panel").text    # jamais dans le fragment rechargé

@@ -122,6 +122,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_confirm_delete_strategy": _s("Supprimer cette stratégie, toutes ses positions et tous ses ordres ?",
                                        "Delete this strategy with all its positions and orders?"),
     "fund_rename_prompt": _s("Nouveau nom de la stratégie", "New strategy name"),
+    "fund_confirm_title": _s("Confirmation", "Confirmation"),
     "fund_confirm_archive": _s("Archiver cette stratégie ? Elle disparaît de la liste et peut être restaurée depuis « Stratégies archivées ».",
                                "Archive this strategy? It leaves the list and can be restored from “Archived strategies”."),
     "fund_archived_title": _s("Stratégies archivées ({n})", "Archived strategies ({n})"),
@@ -216,5 +217,5 @@ FUND_JS_KEYS: tuple[str, ...] = (
     "fund_side_short_blocked", "fund_preview_empty", "fund_leverage_cap", "fund_blocking_title",
     "fund_warnings_title", "fund_pv_day", "fund_pv_price", "fund_pv_fx", "fund_pv_quantity",
     "fund_pv_notional", "fund_pv_margin", "fund_pv_fees", "fund_pv_fees_detail", "fund_pv_cash_after",
-    "fund_pv_power_after", "fund_pv_provisional", "fund_pv_manual", "fund_rename_prompt",
+    "fund_pv_power_after", "fund_pv_provisional", "fund_pv_manual",
 )

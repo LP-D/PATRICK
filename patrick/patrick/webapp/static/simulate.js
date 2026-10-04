@@ -14,7 +14,7 @@
     }
     var flash = document.getElementById("fund-flash");
     function say(text, kind) {
-        if (!flash) { window.alert(text); return; }
+        if (!flash) return;
         flash.textContent = text;
         flash.className = "banner " + (kind === "error" ? "banner-error" : "banner-info");
         flash.scrollIntoView({ block: "nearest", behavior: "smooth" });
