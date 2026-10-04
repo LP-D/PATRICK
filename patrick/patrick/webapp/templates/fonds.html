@@ -83,18 +83,8 @@
 <section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
 
 {% if strategies %}
-{# Boîtes de la page (jamais celles du navigateur) : confirmation d'une action sans retour, saisie du nouveau nom.
-   fonds.js remplit le message et le libellé du bouton ; elles restent hors du fragment rechargé du panneau. #}
-<dialog id="fund-confirm-dialog" class="modal" aria-labelledby="fund-confirm-title">
-  <form method="dialog" class="form">
-    <h2 id="fund-confirm-title">{{ t('fund_confirm_title') }}</h2>
-    <p id="fund-confirm-message"></p>
-    <div class="row" style="justify-content:flex-end">
-      <button type="button" class="btn-secondary" data-close-dialog autofocus>{{ t('fund_btn_cancel') }}</button>
-      <button type="submit" class="btn" id="fund-confirm-ok" value="ok"></button>
-    </div>
-  </form>
-</dialog>
+{# Saisie du nouveau nom : boîte de la page (jamais celle du navigateur), ouverte par fonds.js ; la confirmation
+   des suppressions est la boîte partagée de base_v2.html. Hors du fragment rechargé du panneau. #}
 <dialog id="fund-rename-dialog" class="modal" aria-labelledby="fund-rename-title">
   <form method="dialog" class="form" id="fund-rename-form">
     <h2 id="fund-rename-title">{{ t('fund_rename_prompt') }}</h2>

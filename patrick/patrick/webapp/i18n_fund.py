@@ -122,7 +122,6 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_confirm_delete_strategy": _s("Supprimer cette stratégie, toutes ses positions et tous ses ordres ?",
                                        "Delete this strategy with all its positions and orders?"),
     "fund_rename_prompt": _s("Nouveau nom de la stratégie", "New strategy name"),
-    "fund_confirm_title": _s("Confirmation", "Confirmation"),
     "fund_confirm_archive": _s("Archiver cette stratégie ? Elle disparaît de la liste et peut être restaurée depuis « Stratégies archivées ».",
                                "Archive this strategy? It leaves the list and can be restored from “Archived strategies”."),
     "fund_archived_title": _s("Stratégies archivées ({n})", "Archived strategies ({n})"),

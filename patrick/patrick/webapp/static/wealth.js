@@ -104,7 +104,8 @@
             ev.preventDefault();
             ev.stopPropagation();
             var confirmText = btn.getAttribute("data-confirm");
-            if (confirmText && !window.confirm(confirmText)) return;
+            if (confirmText && !(await window.patrickDialog.confirm(
+                confirmText, btn.getAttribute("aria-label") || btn.textContent.trim(), true))) return;
             btn.disabled = true;
             try {
                 after(btn, await call(btn.getAttribute("data-api"), btn.getAttribute("data-method"), {}));

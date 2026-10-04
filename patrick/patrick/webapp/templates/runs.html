@@ -114,7 +114,8 @@
         <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
         <td class="hc-actions">{% if not locked %}
             <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="Renommer {{ r.run_id }}" title="Renommer">{{ icon('pencil', 14) }}</button>
-            <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form" onsubmit="return confirm('Supprimer ce modèle et ses détails ? Son descriptif restera archivé.')">
+            <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
+                  data-confirm="Supprimer ce modèle et ses détails ? Son descriptif restera archivé." data-confirm-label="Supprimer" data-confirm-danger>
                 <button type="submit" class="icon-btn danger" aria-label="Supprimer {{ r.run_id }}" title="Supprimer">{{ icon('trash', 14) }}</button>
             </form>
         {% endif %}</td>

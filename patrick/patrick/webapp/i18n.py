@@ -459,6 +459,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_open": {"fr": "Ouvrir la navigation", "en": "Open navigation"},
     "theme_toggle": {"fr": "Basculer thème clair / sombre", "en": "Toggle light / dark theme"},
     "cmdk_title": {"fr": "Navigation rapide", "en": "Quick navigation"},
+    # Boîte de confirmation partagée (base_v2.html / static/confirm.js) : remplace window.confirm.
+    "confirm_title": {"fr": "Confirmation", "en": "Confirmation"},
+    "confirm_cancel": {"fr": "Annuler", "en": "Cancel"},
+    "confirm_ok": {"fr": "Confirmer", "en": "Confirm"},
     "cmdk_placeholder": {"fr": "Rechercher une page…", "en": "Search pages…"},
     "cmdk_move": {"fr": "naviguer", "en": "move"},
     "cmdk_open": {"fr": "ouvrir", "en": "open"},

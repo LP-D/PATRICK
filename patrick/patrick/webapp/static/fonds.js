@@ -35,47 +35,16 @@
         }
         return data;
     }
-    /* ---- boîtes de dialogue de la page (aucune boîte du navigateur) : confirmation et nouveau nom ---- */
-    var confirmDialog = document.getElementById("fund-confirm-dialog");
+    /* ---- boîtes de dialogue de la page (aucune boîte du navigateur) : confirmation et nouveau nom.
+       Les aides sont celles de confirm.js (window.patrickDialog), chargé après ce script : appelées à l'usage. ---- */
     var renameDialog = document.getElementById("fund-rename-dialog");
-    /* Ouvre `dialog` en modal et rend `result()` si l'utilisateur valide (soumission du formulaire), null s'il
-       annule (bouton Annuler, Échap). Le résultat vient des boutons et de la soumission, pas de l'événement
-       « close » : il n'est pas déclenché partout. */
-    function ask(dialog, prepare, result) {
-        return new Promise(function (resolve) {
-            var form = dialog ? dialog.querySelector("form") : null;
-            if (!form || !dialog.showModal) { resolve(null); return; }
-            function finish(value) {
-                form.removeEventListener("submit", onSubmit);
-                dialog.removeEventListener("click", onClick);
-                dialog.removeEventListener("cancel", onDismiss);
-                dialog.removeEventListener("close", onDismiss);
-                if (dialog.open) dialog.close();
-                resolve(value);
-            }
-            function onSubmit(e) { e.preventDefault(); finish(result()); }
-            function onClick(e) { if (e.target.closest("[data-close-dialog]")) finish(null); }
-            function onDismiss() { finish(null); }
-            form.addEventListener("submit", onSubmit);
-            dialog.addEventListener("click", onClick);
-            dialog.addEventListener("cancel", onDismiss);
-            dialog.addEventListener("close", onDismiss);
-            prepare();
-            dialog.showModal();
-        });
-    }
-    async function confirmAction(message, label, danger) {
-        var answer = await ask(confirmDialog, function () {
-            var ok = document.getElementById("fund-confirm-ok");
-            document.getElementById("fund-confirm-message").textContent = message;
-            ok.textContent = label;
-            ok.classList.toggle("btn-danger", danger);
-        }, function () { return true; });
-        return answer === true;
+    function confirmAction(message, label, danger) {
+        return window.patrickDialog.confirm(message, label, danger);
     }
     function askName(current) {
         var input = renameDialog ? renameDialog.querySelector('input[name="name"]') : null;
-        return ask(renameDialog, function () { input.value = current; }, function () { return input.value.trim(); });
+        return window.patrickDialog.ask(renameDialog, function () { input.value = current; },
+                                        function () { return input.value.trim(); });
     }
     function reload(id) { window.location.href = "/fonds" + (id ? "?strategy=" + encodeURIComponent(id) : ""); }
 

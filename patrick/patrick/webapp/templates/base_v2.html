@@ -140,8 +140,19 @@ script below (no flash), otherwise the OS preference applies.
             <ul id="glossary-search-results" class="glossary-search-results" aria-label="{{ t('glossary_search_results') if t else 'Glossary search results' }}"></ul>
         </div>
     </div>
+    <dialog id="confirm-dialog" class="modal" aria-labelledby="confirm-title">
+        <form method="dialog" class="form">
+            <h2 id="confirm-title">{{ t('confirm_title') if t else 'Confirmation' }}</h2>
+            <p id="confirm-message"></p>
+            <div class="row" style="justify-content:flex-end">
+                <button type="button" class="btn-secondary" data-close-dialog autofocus>{{ t('confirm_cancel') if t else 'Annuler' }}</button>
+                <button type="submit" class="btn" id="confirm-ok" data-default-label="{{ t('confirm_ok') if t else 'Confirmer' }}"></button>
+            </div>
+        </form>
+    </dialog>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
     <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
+    <script src="/static/confirm.js"></script>
     <script src="/static/shell.js"></script>
     <script src="/static/glossary.js"></script>
     <script src="/static/market.js"></script>
