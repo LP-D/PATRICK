@@ -184,7 +184,9 @@ change du jour ; `B` devise de base. Prix moyen d'entrée = moyenne pondérée
 - Valeur = `n · close · fx_jour`.
 - Décomposition du P&L latent : effet prix = `n·(close − p_moy)·fx_moy` ;
   effet change = `n·close·(fx_jour − fx_moy)`. La somme égale `valeur − coût`.
-- Composantes du ticket : quantité **ou** montant (quantité = montant arrondi
+- Composantes du ticket : quantité **ou** montant (le montant couvre les titres
+  **et** les frais : « investir tout mon cash » ne dépasse jamais le cash ;
+  quantité = montant arrondi
   à l'entier inférieur au prix du jour, fractions interdites).
 
 **Future**
@@ -223,7 +225,10 @@ change du jour ; `B` devise de base. Prix moyen d'entrée = moyenne pondérée
   `+notionnel · (taux_ref − marge_fin) / 365` (peut être négatif). `taux_ref`
   = taux court de la devise du sous-jacent (€STR, SOFR, SONIA via FRED quand la
   clé FRED est configurée ; sinon constante documentée par devise, avec un
-  avertissement affiché). `marge_fin` = 2,5 % par défaut (constante modifiable).
+  avertissement affiché). Avec FRED, `taux_ref` est celui **en vigueur le jour
+  financé** (historique quotidien depuis 2015 ; avant sa première observation,
+  la première valeur connue), pas le taux actuel. `marge_fin` = 2,5 % par
+  défaut (constante modifiable).
 - Alerte, sans liquidation : jours où `NAV < 50 % de la marge requise`
   (règle de clôture automatique ESMA, simulée en alerte seulement).
 
@@ -290,7 +295,11 @@ classe ; marge insuffisante.
 
 ## 10. Valorisation et KPI
 
-Série quotidienne (jours ouvrés, de `opened_on` à aujourd'hui) :
+Série quotidienne (jours ouvrés, de `opened_on` à aujourd'hui ; les samedis et
+dimanches s'y ajoutent quand un symbole de la stratégie cote ces jours-là,
+cryptoactifs : un ordre du week-end est alors rejoué le jour même, et non le
+lundi). Volatilité et Sharpe sont mesurés sur les clôtures de jours ouvrés
+(annualisation sur 252 jours) :
 `NAV = cash + valeur des actions/ETF + P&L latent des CFD`.
 Identité comptable vérifiée par test : `NAV − capital initial = Σ P&L des
 positions (réalisé + latent) + dividendes − frais − financement`.
@@ -327,7 +336,14 @@ total, P&L total en € et en %, répartition par stratégie.
 | `GET /api/fund/strategies/{id}/detail` | KPI, série de NAV, positions, ordres. |
 | `GET /api/fund/overview` | Portefeuilles par stratégie + total du fonds. |
 
-Les erreurs de règle renvoient 422 avec la liste des blocages en français.
+Les erreurs de règle renvoient 422 avec la liste des blocages en français ; une
+saisie mal formée (date illisible, champ du mauvais type, année de contrat
+absente…) renvoie 400, jamais 500. Les écritures exigent
+`Content-Type: application/json` (415 sinon : un POST « simple » d'un autre site
+ne peut rien écrire). L'identifiant d'une nouvelle position, proposé par
+l'aperçu, a la forme `pos_` + 10 caractères hexadécimaux et ne peut pas déjà
+servir (dans aucune stratégie) : `DELETE /api/fund/positions/{id}` vise donc
+une seule position.
 
 ## 12. Pages
 

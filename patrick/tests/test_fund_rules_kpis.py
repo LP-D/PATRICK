@@ -148,3 +148,30 @@ def test_an_order_dated_before_the_previous_order_of_its_position_is_refused():
     assert any("antérieure à l'ordre précédent" in m for m in chk.blocking)
     later = order(order_id=None, ts="2026-01-13", action="reduce", quantity=8.0)
     assert rules.validate(CTO, existing, later, market, TODAY)[0].blocking == []
+
+
+def test_a_new_violation_with_the_same_text_on_another_day_is_not_masked_by_an_old_one():
+    mkt = engine.MarketData(bars={"MC.PA": bars([100.0] * 10)})
+    old = [order(order_id=1, position_id="p1", quantity=3.0),
+           order(order_id=2, position_id="p1", action="reduce", quantity=5.0, ts="2026-01-07"),   # anomalie ancienne
+           order(order_id=3, position_id="p2", quantity=3.0)]
+    candidate = order(order_id=None, position_id="p2", action="reduce", quantity=5.0, ts="2026-01-08")
+    chk, _ = rules.validate(CTO, old, candidate, mkt, TODAY)
+    assert chk.blocking == ["MC.PA : vente de 5 pour 3 détenus"]
+    # l'anomalie ancienne seule ne bloque pas un ordre sans rapport
+    harmless = order(order_id=None, position_id="p3", quantity=1.0, ts="2026-01-08")
+    assert rules.validate(CTO, old, harmless, mkt, TODAY)[0].blocking == []
+
+
+def test_volatility_is_measured_on_weekday_closes_even_when_the_series_has_weekend_rows():
+    from patrick.simulate import metrics as simmetrics
+
+    days = pd.date_range("2026-01-05", "2026-01-18")
+    nav = pd.Series([100_000 * (1 + 0.01 * ((i * 7) % 5 - 2)) for i in range(len(days))], index=days)
+    daily = pd.DataFrame({"nav": nav})
+    result = engine.SimResult(daily, [], [], [])
+    weekdays = nav[nav.index.dayofweek < 5]
+    expected = simmetrics.annualized_vol(weekdays.pct_change().dropna())
+    out = kpis.compute({"initial_capital": 100_000.0}, result)
+    assert out["volatility"] == pytest.approx(expected)
+    assert out["volatility"] != pytest.approx(simmetrics.annualized_vol(nav.pct_change().dropna()))

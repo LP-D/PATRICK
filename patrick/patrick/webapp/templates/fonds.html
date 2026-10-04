@@ -27,6 +27,19 @@
   {{ metric(t('fund_total_pnl'), fund.pnl | eur, fund.pnl_pct | pct(1, true), "neutral") }}
 </div>
 
+<section class="card" aria-labelledby="fund-share-title">
+  <div class="card-head"><h2 id="fund-share-title">{{ t('fund_breakdown_title') }}</h2></div>
+  <ul class="fund-breakdown">
+    {% for r in fund.breakdown %}
+    <li class="fund-share" data-strategy-id="{{ r.strategy_id }}">
+      <span class="fund-share-name">{{ r.name }} <span class="tag">{{ r.wrapper }}</span></span>
+      <span class="fund-share-bar" aria-hidden="true"><span style="width: {{ '%.1f' % ((r.share or 0) * 100) }}%"></span></span>
+      <span class="pk-mono">{{ r.nav | eur }} · {{ r.share | pct(1) }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
 <section class="card" aria-labelledby="fund-table-title">
   <div class="card-head"><h2 id="fund-table-title">{{ t('fund_strategies_title') }}</h2></div>
   <div class="table-scroll">

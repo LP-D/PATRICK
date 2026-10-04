@@ -71,3 +71,15 @@ def test_the_page_script_uses_only_exposed_and_defined_strings(client):
     assert used <= set(i18n.STRINGS), used - set(i18n.STRINGS)
     exposed = set(i18n.js_strings("fr"))
     assert used <= exposed, used - exposed
+
+
+def test_the_ticket_exposes_the_name_of_each_cfd_leverage_class(client):
+    from patrick.fund import instruments
+
+    fs.make_strategy(client)
+    names = fs.json_script(client.get("/simulate").text, "cfd-classes")
+    assert set(names) == set(instruments.CFD_LEVERAGE_CAPS) and all(names.values())
+    assert names["fx_major"] == "Paires de devises majeures" and names["crypto"] == "Cryptoactifs"
+    english = fs.json_script(client.get("/simulate?lang=en").text, "cfd-classes")
+    assert english["fx_major"] == "Major currency pairs" and english["crypto"] == "Crypto-assets"
+    assert "cfd-classes" in client.get("/static/simulate.js").text

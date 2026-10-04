@@ -9,6 +9,7 @@ bloquent définitivement la stratégie."""
 from __future__ import annotations
 
 import datetime as dt
+from collections import Counter
 from dataclasses import dataclass, field
 
 from patrick.fund import engine, instruments
@@ -69,8 +70,15 @@ def validate(strategy: dict, orders: list[dict], candidate: dict, market: engine
     result = engine.simulate(strategy, timeline, market, end=today)
     if baseline is None:
         baseline = engine.simulate(strategy, orders, market, end=today)
-    known = {v["message"] for v in baseline.violations}
-    chk.blocking.extend(v["message"] for v in result.violations if v["message"] not in known)
+    # Une violation est « ancienne » si la même (jour, message) existait déjà : deux anomalies de même texte
+    # mais de jours différents sont deux événements, la seconde n'est pas masquée par la première.
+    known = Counter((v["day"], v["message"]) for v in baseline.violations)
+    seen: Counter = Counter()
+    for v in result.violations:
+        key = (v["day"], v["message"])
+        seen[key] += 1
+        if seen[key] > known[key]:
+            chk.blocking.append(v["message"])
     if result.alert_days:
         chk.warnings.append(f"marge : la valeur nette passe sous 50 % de la marge requise "
                             f"({len(result.alert_days)} jour(s), dès le {result.alert_days[0]})")

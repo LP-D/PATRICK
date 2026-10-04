@@ -152,3 +152,16 @@ def test_a_new_split_triggers_a_full_refetch_so_that_history_stays_consistent(co
     assert stored["close"].iloc[0] == pytest.approx(adjusted["close"].iloc[0])
     prices.ensure_bars(conn, "MC.PA", now=later + dt.timedelta(hours=7))
     assert len(calls) == 4 and calls[3] is not None            # déjà connu : pas de nouvel historique complet
+
+
+def test_build_market_keeps_the_fred_history_for_cfd_financing(conn, monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "key")
+    series = pd.Series([4.0, 5.0], index=pd.to_datetime(["2026-01-05", "2026-01-12"]))
+    monkeypatch.setattr(fred_source, "download_series", lambda name, sid, start: series)
+    market, _ = prices.build_market(conn, [{"symbol": "^GSPC", "currency": "USD", "instrument_kind": "cfd"}], "EUR")
+    history = market.ref_rate_history["USD"]
+    assert history.iloc[0] == pytest.approx(0.04) and history.iloc[-1] == pytest.approx(0.05)
+    assert market.ref_rate("USD", pd.Timestamp("2026-01-06")) == pytest.approx(0.04)
+    assert market.ref_rate("USD", pd.Timestamp("2026-01-13")) == pytest.approx(0.05)
+    assert market.ref_rates["USD"] == pytest.approx(0.05)
+    assert market.ref_rate("JPY", pd.Timestamp("2026-01-13")) == 0.005

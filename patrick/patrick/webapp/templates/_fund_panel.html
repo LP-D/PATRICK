@@ -58,7 +58,8 @@
         <th class="num pk-mono">{{ t('fund_pcol_qty') }}</th><th class="num pk-mono">{{ t('fund_pcol_entry') }}</th>
         <th class="num pk-mono">{{ t('fund_pcol_price') }}</th><th>{{ t('fund_pcol_fx') }}</th>
         <th class="num pk-mono">{{ t('fund_pcol_value') }}</th><th class="num pk-mono">{{ t('fund_pcol_pnl') }}</th>
-        <th class="num pk-mono">{{ t('fund_pcol_fx_effect') }}</th><th class="num pk-mono">{{ t('fund_pcol_margin') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_price_effect') }}</th><th class="num pk-mono">{{ t('fund_pcol_fx_effect') }}</th>
+        <th class="num pk-mono">{{ t('fund_pcol_margin') }}</th>
         <th>{{ t('fund_pcol_levels') }}</th><th></th>
       </tr>
     </thead>
@@ -79,6 +80,7 @@
         <td class="pk-mono">{{ p.currency }}{% if p.currency != s.base_currency %} · {{ p.fx_open | qty }} → {{ p.fx_now | qty }}{% endif %}</td>
         <td class="num pk-mono">{{ p.value_base | eur }}</td>
         <td class="num pk-mono"><span class="{{ 'pos' if p.pnl >= 0 else 'neg' }}">{{ p.pnl | eur }} · {{ p.pnl_pct | pct(1, true) }}</span></td>
+        <td class="num pk-mono">{{ p.price_effect | eur }}</td>
         <td class="num pk-mono">{{ p.fx_effect | eur }}</td>
         <td class="num pk-mono">{{ p.margin | eur(0) }}</td>
         <td class="pk-mono">{% if p.stop %}S {{ p.stop | qty }}{% endif %}{% if p.target %} · O {{ p.target | qty }}{% endif %}{% if not p.stop and not p.target %}—{% endif %}</td>
@@ -90,7 +92,7 @@
         </td>
       </tr>
       <tr class="fund-form-row" id="adj-{{ p.position_id }}" hidden>
-        <td colspan="12">
+        <td colspan="13">
           <form class="form fund-inline-form" data-form="adjust" data-strategy-id="{{ s.strategy_id }}"
                 data-position-id="{{ p.position_id }}" data-kind="{{ p.kind }}">
             <div class="subgrid">
@@ -124,7 +126,7 @@
       </tr>
       {% if opening %}
       <tr class="fund-form-row" id="cor-{{ p.position_id }}" hidden>
-        <td colspan="12">
+        <td colspan="13">
           <form class="form fund-inline-form" data-form="correct" data-order-id="{{ opening.order_id }}" data-kind="{{ p.kind }}">
             <div class="subgrid">
               <label>{{ t('fund_field_quantity') }} <input type="number" name="quantity" min="0" step="any" value="{{ opening.quantity }}"></label>

@@ -145,6 +145,8 @@
   </form>
 </dialog>
 
+{% set cfd_names = {} %}{% for c in cfd_classes %}{% set _ = cfd_names.update({c: t('fund_cfd_class_' ~ c)}) %}{% endfor %}
 <script id="futures-data" type="application/json">{{ futures | tojson }}</script>
+<script id="cfd-classes" type="application/json">{{ cfd_names | tojson }}</script>
 <script src="/static/simulate.js"></script>
 {% endblock %}

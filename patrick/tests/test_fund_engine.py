@@ -353,3 +353,40 @@ def test_accounting_identity_holds_on_random_histories():
         assert res.daily["nav"].iloc[-1] - 1_000_000.0 == pytest.approx(sum(p["pnl"] for p in res.positions), abs=1e-6)
         assert res.daily["fees_cum"].iloc[-1] == pytest.approx(sum(p["fees"] for p in res.positions))
         assert res.daily["dividends_cum"].iloc[-1] == pytest.approx(sum(p["dividends"] for p in res.positions))
+
+
+def seven_day_bars(symbol_closes):
+    days = pd.date_range("2026-01-05", periods=len(symbol_closes))
+    return pd.DataFrame({"open": symbol_closes, "high": symbol_closes, "low": symbol_closes, "close": symbol_closes,
+                         "volume": 1e6, "dividend": 0.0}, index=days)
+
+
+def test_weekend_sessions_of_a_seven_day_market_are_replayed_on_their_own_day():
+    closes = [100.0 + i for i in range(12)]                                   # 5 -> 16 janvier, week-ends compris
+    spec = {"leverage": 2.0, "fee_ctx": {"fee_class": "cfd_crypto"}}
+    o = order(instrument_kind="cfd", symbol="BTC", quantity=1.0, price=105.0, ts="2026-01-10", spec=spec)   # samedi
+    res = simulate(STRAT, [o], MarketData(bars={"BTC": seven_day_bars(closes)}), "2026-01-11")             # fin : dimanche
+    assert res.violations == []
+    d = res.daily
+    assert pd.Timestamp("2026-01-10") in d.index and pd.Timestamp("2026-01-11") in d.index
+    assert d.loc["2026-01-09", "margin_used"] == 0 and d.loc["2026-01-10", "margin_used"] > 0
+    assert d.loc["2026-01-11", "cfd_unrealized"] == pytest.approx(1.0)
+    assert d["financing_cum"].iloc[-1] == pytest.approx((105.0 + 106.0) * (0.02 + 0.025) / 365)
+
+
+def test_a_strategy_of_exchange_listed_stocks_keeps_a_weekday_calendar():
+    res = simulate(STRAT, [order()], MarketData(bars={"AAA": bars([100.0] * 10)}), END)
+    assert (res.daily.index.dayofweek < 5).all() and len(res.daily) == 10
+
+
+def test_cfd_financing_uses_the_reference_rate_in_force_each_day():
+    spec = {"leverage": 10.0, "fee_ctx": {"fee_class": "cfd_index"}}
+    o = order(instrument_kind="cfd", symbol="IDX", quantity=100.0, price=50.0, ts="2026-01-06", spec=spec)
+    history = pd.Series([0.01] * 5 + [0.05] * 5, index=DAYS)
+    mkt = MarketData(bars={"IDX": bars([50.0] * 10)}, ref_rates={"EUR": 0.05}, ref_rate_history={"EUR": history})
+    nightly = simulate(STRAT, [o], mkt, END).daily["financing_cum"].diff()
+    assert nightly.loc["2026-01-07"] == pytest.approx(5000 * (0.01 + 0.025) / 365)
+    assert nightly.loc["2026-01-14"] == pytest.approx(5000 * (0.05 + 0.025) / 365)
+    late = MarketData(bars={"IDX": bars([50.0] * 10)}, ref_rate_history={"EUR": pd.Series([0.05] * 3, index=DAYS[5:8])})
+    before_first = simulate(STRAT, [o], late, END).daily["financing_cum"].diff()
+    assert before_first.loc["2026-01-07"] == pytest.approx(5000 * (0.05 + 0.025) / 365)    # avant la série : 1re valeur connue

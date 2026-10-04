@@ -2,6 +2,7 @@
 ni aucun solde n'est stocké : tout se recalcule depuis les ordres."""
 from __future__ import annotations
 
+import datetime as dt
 import json
 import math
 import sqlite3
@@ -31,16 +32,23 @@ def new_id(prefix: str) -> str:
 
 
 def _iso(value) -> str:
+    if not isinstance(value, (str, dt.date)):                # liste, nombre, None : refus lisible, jamais une exception
+        raise FundError(f"date invalide : {value!r}")
     try:
-        return pd.Timestamp(value).date().isoformat()
+        day = pd.Timestamp(value)
     except (TypeError, ValueError) as exc:
         raise FundError(f"date invalide : {value!r}") from exc
+    if pd.isna(day):
+        raise FundError(f"date invalide : {value!r}")
+    return day.date().isoformat()
 
 
 # -------------------------------------------------------------- strategies
 
 def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_capital, opened_on,
                     base_currency: str = "EUR") -> str:
+    if name is not None and not isinstance(name, str):
+        raise FundError("nom de stratégie invalide : texte attendu")
     name = (name or "").strip()
     if not name:
         raise FundError("nom de stratégie manquant")
@@ -84,8 +92,12 @@ def update_strategy(conn: sqlite3.Connection, strategy_id: str, **fields) -> Non
     unknown = set(fields) - allowed
     if unknown:
         raise FundError(f"champ(s) non modifiable(s) : {sorted(unknown)}")
-    if "name" in fields and not str(fields["name"]).strip():
-        raise FundError("nom de stratégie manquant")
+    if "name" in fields:
+        if not isinstance(fields["name"], str):
+            raise FundError("nom de stratégie invalide : texte attendu")
+        if not fields["name"].strip():
+            raise FundError("nom de stratégie manquant")
+        fields["name"] = fields["name"].strip()[:120]
     if not fields:
         return
     sets = ", ".join(f"{k} = ?" for k in fields)

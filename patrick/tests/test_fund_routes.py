@@ -1,6 +1,8 @@
 """API /api/fund/* de bout en bout par FastAPI, base isolée, cotations factices (aucun réseau)."""
 from __future__ import annotations
 
+import json
+
 import fund_support as fs
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +17,9 @@ def client(tmp_path, monkeypatch):
     fs.install(monkeypatch)
     fs.freeze_today(monkeypatch)
     return TestClient(app)
+
+
+JSON = {"Content-Type": "application/json"}
 
 
 def strategy(client, **kw):
@@ -49,8 +54,8 @@ def test_invalid_input_is_a_400_with_the_reason(client):
     resp = client.post("/api/fund/strategies", json={"name": "PEA", "wrapper": "PEA", "initial_capital": 200_000,
                                                      "opened_on": "2026-01-05"})
     assert resp.status_code == 400 and "plafond" in resp.json()["detail"]
-    assert client.post("/api/fund/strategies", content=b"not json").status_code == 400
-    assert client.post("/api/fund/strategies", content=b"[1]").status_code == 400
+    assert client.post("/api/fund/strategies", content=b"not json", headers=JSON).status_code == 400
+    assert client.post("/api/fund/strategies", content=b"[1]", headers=JSON).status_code == 400
     sid = strategy(client)
     assert client.patch(f"/api/fund/strategies/{sid}", json={"name": " "}).status_code == 400
 
@@ -126,3 +131,59 @@ def test_search_symbols_filters_yahoo_quotes_by_kind(monkeypatch):
     assert [r["symbol"] for r in fund_routes.search_symbols("x", "cfd")] == ["MC.PA", "CW8.PA", "^GSPC"]
     assert fund_routes.search_symbols("x", "equity")[0] == {"symbol": "MC.PA", "name": "LVMH", "exchange": "Paris",
                                                            "type": "EQUITY"}
+
+
+@pytest.fixture
+def lenient(tmp_path, monkeypatch):
+    """Client qui renvoie un 500 au lieu de relancer l'exception du serveur."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    fs.install(monkeypatch)
+    fs.freeze_today(monkeypatch)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_malformed_values_in_a_json_body_are_a_400_or_422_never_a_500(lenient):
+    client = lenient
+    base = {"name": "Macro", "wrapper": "CTO", "initial_capital": 100_000, "opened_on": "2026-01-05"}
+    for patch in ({"name": 5}, {"name": ["a"]}, {"wrapper": ["CTO"]}, {"initial_capital": [1]},
+                  {"opened_on": ["2026-01-05"]}, {"opened_on": None}, {"opened_on": "n'importe quoi"}):
+        resp = client.post("/api/fund/strategies", json={**base, **patch})
+        assert resp.status_code == 400, (patch, resp.status_code, resp.text)
+    sid = strategy(client)
+    for patch in ({"name": 5}, {"name": ["x"]}, {"name": {"a": 1}}):
+        assert client.patch(f"/api/fund/strategies/{sid}", json=patch).status_code == 400, patch
+    for patch in ({"date": "nope"}, {"fee_seed": "abc"}, {"spec": "abc"}, {"spec": [1]}, {"note": {"a": 1}},
+                  {"position_id": ["p"]}):
+        resp = client.post(f"/api/fund/strategies/{sid}/orders", json={**equity(fees_mode="estimated"), **patch})
+        assert resp.status_code in (400, 422), (patch, resp.status_code, resp.text)
+    for patch in ({"date": "nope"}, {"fee_seed": "abc"}, {"spec": "abc"}, {"spec": [1]}, {"note": {"a": 1}},
+                  {"position_id": ["p"]}, {"strategy_id": ["x"]}):      # l'aperçu lit la stratégie dans le corps
+        quoted = client.post("/api/fund/quote", json={"strategy_id": sid, **equity(fees_mode="estimated"), **patch})
+        assert quoted.status_code == 200 and quoted.json()["ok"] is False, (patch, quoted.text)
+    assert client.get(f"/api/fund/strategies/{sid}/detail").json()["orders"] == []
+
+
+def test_json_routes_refuse_a_body_that_is_not_declared_as_json(client):
+    """Un POST « simple » (text/plain) venu d'un autre site ne doit rien écrire : 415."""
+    sid = strategy(client)
+    plain = {"Content-Type": "text/plain"}
+    body = json.dumps({"strategy_id": sid, **equity()})
+    assert client.post("/api/fund/quote", content=body, headers=plain).status_code == 415
+    assert client.post(f"/api/fund/strategies/{sid}/orders", content=body, headers=plain).status_code == 415
+    assert client.post("/api/fund/strategies", content=json.dumps({"name": "x", "wrapper": "CTO", "initial_capital": 1,
+                                                                   "opened_on": "2026-01-05"}),
+                       headers=plain).status_code == 415
+    assert client.patch(f"/api/fund/strategies/{sid}", content=json.dumps({"name": "y"}), headers=plain).status_code == 415
+    assert client.patch("/api/fund/orders/1", content=json.dumps({"quantity": 1}), headers=plain).status_code == 415
+    assert client.post(f"/api/fund/strategies/{sid}/orders", content=b"{}", headers={}).status_code == 415
+    assert client.get(f"/api/fund/strategies/{sid}/detail").json()["orders"] == []
+    ok = client.post("/api/fund/quote", content=body, headers={"Content-Type": "application/json; charset=utf-8"})
+    assert ok.status_code == 200 and ok.json()["ok"]
+
+
+def test_the_listed_contracts_of_one_root_have_their_own_route(client):
+    resp = client.get("/api/fund/futures/ES/contracts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["root"] == "ES" and data["contracts"][0]["symbol"] == "ESH26.CME" and len(data["contracts"]) >= 4
+    assert client.get("/api/fund/futures/XX/contracts").status_code == 404

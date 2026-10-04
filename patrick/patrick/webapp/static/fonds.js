@@ -175,21 +175,32 @@
         var form = e.target.closest("form[data-form]");
         if (form && e.target.name === "action") syncActions(form);
     });
+    /* Un envoi à la fois : tant que la requête n'est pas revenue, le bouton est inactif (un double clic créait
+       deux ordres). Sur succès la page se recharge ; sur échec le bouton est rendu. */
+    function setBusy(control, busy) {
+        control.disabled = busy;
+        control.setAttribute("aria-busy", busy ? "true" : "false");
+    }
     panel.addEventListener("submit", async function (e) {
         var form = e.target.closest("form[data-form]");
         if (!form) return;
         e.preventDefault();
+        var send = form.querySelector('button[type="submit"]');
+        if (send.disabled) return;
+        setBusy(send, true);
         try {
             if (form.getAttribute("data-form") === "adjust") await submitAdjust(form); else await submitCorrect(form);
             reload(current);
         } catch (err) {
             showError(form, err.blocking || [err.message]);
+            setBusy(send, false);
         }
     });
     panel.addEventListener("click", async function (e) {
         var btn = e.target.closest("[data-act]");
         if (!btn) return;
         var act = btn.getAttribute("data-act");
+        if (btn.disabled) return;
         try {
             if (act === "close-panel") { close(); return; }
             if (act === "toggle") {
@@ -202,6 +213,7 @@
                 return;
             }
             if (btn.hasAttribute("data-confirm") && !window.confirm(btn.getAttribute("data-confirm"))) return;
+            setBusy(btn, true);
             if (act === "delete-position") {
                 await call("/api/fund/positions/" + encodeURIComponent(btn.getAttribute("data-position-id")), "DELETE");
                 reload(current);
@@ -213,12 +225,13 @@
                 reload(null);
             } else if (act === "rename") {
                 var name = window.prompt(I18N.fund_rename_prompt || "", btn.getAttribute("data-name") || "");
-                if (name === null || !name.trim()) return;
+                if (name === null || !name.trim()) { setBusy(btn, false); return; }
                 await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "PATCH", { name: name.trim() });
                 reload(current);
             }
         } catch (err) {
             say((err.blocking || [err.message]).join(" · "), "error");
+            setBusy(btn, false);
         }
     });
 
@@ -226,12 +239,14 @@
     if (archivedBox) {
         archivedBox.addEventListener("click", async function (e) {
             var btn = e.target.closest('[data-act="unarchive"]');
-            if (!btn) return;
+            if (!btn || btn.disabled) return;
+            setBusy(btn, true);
             try {
                 await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "PATCH", { archived: false });
                 reload(null);
             } catch (err) {
                 say((err.blocking || [err.message]).join(" · "), "error");
+                setBusy(btn, false);
             }
         });
     }

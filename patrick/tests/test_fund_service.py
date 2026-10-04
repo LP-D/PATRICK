@@ -243,7 +243,7 @@ def test_snapshot_and_overview_are_consistent_across_instruments(conn):
 
 def test_overview_of_an_empty_fund_and_a_strategy_without_orders(conn):
     assert service.overview(conn, TODAY) == {"strategies": [], "fund": {
-        "nav": 0, "capital": 0, "pnl": 0, "pnl_pct": None, "n_strategies": 0}}
+        "nav": 0, "capital": 0, "pnl": 0, "pnl_pct": None, "n_strategies": 0, "breakdown": []}}
     cto(conn)
     snap = service.overview(conn, TODAY)["strategies"][0]
     assert snap["kpis"]["nav"] == 100_000 and snap["positions"] == [] and snap["orders"] == []
@@ -371,3 +371,89 @@ def test_two_concurrent_orders_cannot_spend_the_same_cash(tmp_path, monkeypatch,
         t.join()
     assert len(store.list_orders(conn, sid)) == 1
     assert sum(isinstance(r, service.FundRuleError) for r in results) == 1
+
+
+MALFORMED = [
+    {"date": "pas-une-date"}, {"date": [2026, 1, 7]}, {"fee_seed": "abc"}, {"spec": "abc"}, {"spec": [1, 2]},
+    {"strategy_id": ["x"]}, {"note": {"a": 1}}, {"position_id": ["p"]},
+]
+
+
+@pytest.mark.parametrize("patch", MALFORMED, ids=[f"{key}-{type(value).__name__}" for p in MALFORMED
+                                                  for key, value in p.items()])
+def test_malformed_input_is_refused_with_a_reason_instead_of_crashing(conn, patch):
+    sid = cto(conn)
+    req = {**equity(sid, quantity=1, fees_mode="estimated"), **patch}
+    quoted = service.quote(conn, req, TODAY)
+    assert not quoted["ok"] and quoted["blocking"] and all(isinstance(m, str) and m for m in quoted["blocking"])
+    with pytest.raises((service.FundRuleError, store.FundError)):
+        service.place_order(conn, req, TODAY)
+    assert store.list_orders(conn, sid) == []
+
+
+def test_a_future_without_a_valid_contract_year_or_month_is_refused_with_a_reason(conn):
+    sid = cto(conn)
+    for spec in ({"root": "ES", "month": 12}, {"root": "ES", "year": "abc", "month": 12}, {"root": "ES", "year": 2026}):
+        q = service.quote(conn, es_future(sid, spec=spec), TODAY)
+        assert not q["ok"] and "contrat" in q["blocking"][0], spec
+
+
+def test_a_position_id_chosen_by_the_client_must_be_well_formed_and_unused(conn):
+    a, b = cto(conn), cto(conn)
+    placed = service.place_order(conn, equity(a, quantity=1), TODAY)
+    pid = placed["preview"]["position_id"]
+    for bad in ("../x", "pos_1", "pos_ZZZZZZZZZZ", "x" * 200):
+        q = service.quote(conn, equity(a, quantity=1, position_id=bad), TODAY)
+        assert not q["ok"] and "identifiant de position" in q["blocking"][0], bad
+    for strategy in (a, b):                                  # déjà pris, dans cette stratégie comme dans une autre
+        reuse = service.quote(conn, equity(strategy, quantity=1, position_id=pid), TODAY)
+        assert not reuse["ok"] and "déjà utilisé" in reuse["blocking"][0]
+    fresh = service.quote(conn, equity(b, quantity=1), TODAY)["preview"]["position_id"]
+    assert service.place_order(conn, equity(b, quantity=1, position_id=fresh), TODAY)["preview"]["position_id"] == fresh
+    fixed = service.correct_order(conn, placed["order_id"], {"quantity": 2}, TODAY)      # la correction garde son identifiant
+    assert fixed["preview"]["position_id"] == pid
+
+
+def test_the_cfd_margin_preview_follows_a_later_leverage_change(conn):
+    sid = cto(conn, 200_000)
+    cfd = {"strategy_id": sid, "instrument_kind": "cfd", "symbol": "^GSPC", "side": "long", "quantity": 10,
+           "date": "2026-01-07", "spec": {"leverage": 10}}
+    pid = service.place_order(conn, cfd, TODAY)["preview"]["position_id"]
+    service.place_order(conn, {"strategy_id": sid, "action": "modify", "position_id": pid, "date": "2026-01-08",
+                               "spec": {"leverage": 4}}, TODAY)
+    more = service.quote(conn, {"strategy_id": sid, "action": "increase", "position_id": pid, "quantity": 5,
+                                "date": "2026-01-09"}, TODAY)
+    assert more["ok"], more["blocking"]
+    assert more["preview"]["margin_required"] == pytest.approx(more["preview"]["notional_base"] / 4)
+
+
+def test_sizing_by_amount_leaves_room_for_the_fees(conn):
+    price = fs.price_on("MC.PA", "2026-01-07")
+    sid = cto(conn, 4 * price)                                  # le capital achète exactement 4 titres, frais exclus
+    q = service.quote(conn, equity(sid, amount=4 * price, fees_mode="estimated"), TODAY)
+    assert q["ok"], q["blocking"]
+    assert q["preview"]["quantity"] == 3 and q["preview"]["cash_after"] >= 0
+    manual = service.quote(conn, equity(sid, amount=4 * price, fees_mode="manual", fees=10.0), TODAY)
+    assert manual["ok"] and manual["preview"]["quantity"] == 3
+    rich = cto(conn, 100_000)
+    assert service.quote(conn, equity(rich, amount=5000), TODAY)["preview"]["quantity"] == int(5000 // price)
+
+
+def test_a_cfd_on_a_continuous_futures_series_warns_in_the_preview(conn):
+    sid = cto(conn)
+    cfd = {"strategy_id": sid, "instrument_kind": "cfd", "symbol": "CL=F", "side": "long", "quantity": 10,
+           "date": "2026-01-07", "spec": {"leverage": 5}}
+    q = service.quote(conn, cfd, TODAY)
+    assert q["ok"], q["blocking"]
+    assert any("série continue" in w for w in q["warnings"])
+    assert not any("série continue" in w for w in service.quote(conn, equity(sid, quantity=1), TODAY)["warnings"])
+
+
+def test_overview_gives_each_strategy_its_share_of_the_fund_nav(conn):
+    store.create_strategy(conn, "A", "CTO", 30_000, "2026-01-05")
+    store.create_strategy(conn, "B", "PEA", 10_000, "2026-01-05")
+    rows = service.overview(conn, TODAY)["fund"]["breakdown"]
+    assert [r["name"] for r in rows] == ["A", "B"] and [r["wrapper"] for r in rows] == ["CTO", "PEA"]
+    assert rows[0]["share"] == pytest.approx(0.75) and rows[1]["share"] == pytest.approx(0.25)
+    assert rows[0]["nav"] == pytest.approx(30_000) and sum(r["share"] for r in rows) == pytest.approx(1)
+    assert service.overview(conn, TODAY)["fund"]["n_strategies"] == 2

@@ -2098,3 +2098,11 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .fund-archived { margin-top: var(--space-lg); }
 .fund-archived summary { cursor: pointer; font-weight: 600; }
 .fund-archived li { display: flex; align-items: center; gap: var(--space-sm); padding: 4px 0; }
+.fund-breakdown { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
+.fund-share { display: grid; grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) auto; align-items: center; gap: var(--space-md); }
+.fund-share-bar { height: 8px; border-radius: var(--radius-sm); background: var(--surface-3); overflow: hidden; }
+.fund-share-bar > span { display: block; height: 100%; background: var(--brand); }
+@media (max-width: 640px) {
+  .fund-share { grid-template-columns: minmax(0, 1fr) auto; }
+  .fund-share-bar { grid-column: 1 / -1; grid-row: 2; }
+}

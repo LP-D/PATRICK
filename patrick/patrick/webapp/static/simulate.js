@@ -56,6 +56,9 @@
     if (newForm) {
         newForm.addEventListener("submit", async function (ev) {
             ev.preventDefault();
+            var send = newForm.querySelector('button[type="submit"]');
+            if (send.disabled) return;          // double clic : la première requête est déjà partie
+            send.disabled = true;
             var fd = new FormData(newForm);
             try {
                 var res = await call("/api/fund/strategies", "POST", {
@@ -66,6 +69,7 @@
             } catch (e) {
                 var d = newForm.closest("dialog");
                 if (d) d.close();
+                send.disabled = false;
                 say(e.message, "error");
             }
         });
@@ -75,6 +79,7 @@
     var form = document.getElementById("ticket-form");
     if (!form) return;
     var futures = JSON.parse(document.getElementById("futures-data").textContent || "[]");
+    var cfdClasses = JSON.parse(document.getElementById("cfd-classes").textContent || "{}");
     var box = document.getElementById("ticket-preview");
     var submit = document.getElementById("ticket-submit");
     var rootSel = document.getElementById("f-root");
@@ -209,7 +214,8 @@
             }
             if (p.leverage_cap) {
                 levInput.max = p.leverage_cap;
-                levHint.textContent = tr("fund_leverage_cap", "", { cap: p.leverage_cap });
+                levHint.textContent = tr("fund_leverage_cap", "", { cap: p.leverage_cap }) +
+                    (cfdClasses[p.underlying_class] ? " · " + cfdClasses[p.underlying_class] : "");
             }
         }
         messages("banner-error", tr("fund_blocking_title"), q.blocking);

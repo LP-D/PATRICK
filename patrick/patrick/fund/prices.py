@@ -22,8 +22,9 @@ MAX_AGE_HOURS = 6.0
 BAR_COLUMNS = ["open", "high", "low", "close", "volume", "dividend", "split"]
 NEGATIVE_CACHE_MINUTES = 15.0     # un téléchargement échoué n'est pas retenté avant ce délai
 RATE_CACHE_SECONDS = 3600.0       # taux de référence FRED conservés (succès comme échec)
+RATE_HISTORY_START = "2015-01-01"
 _FAILED_UNTIL: dict[str, dt.datetime] = {}
-_RATE_CACHE: dict[str, tuple[float, float | None]] = {}
+_RATE_CACHE: dict[str, tuple[float, pd.Series | None]] = {}
 PENCE = {"GBp": ("GBP", 0.01), "GBX": ("GBP", 0.01), "ZAc": ("ZAR", 0.01), "ILA": ("ILS", 0.01)}
 # Série FRED du taux court de chaque devise (si FRED_API_KEY est défini).
 FRED_RATE_SERIES = {"USD": "SOFR", "EUR": "ECBESTRVOLWGTTRMDMNRT", "GBP": "IUDSOIA"}
@@ -161,6 +162,38 @@ def fx_series(conn: sqlite3.Connection, base: str, currency: str) -> pd.Series |
     return (1.0 / res.df["close"]).rename(currency)
 
 
+def _fred_history(ccy: str) -> pd.Series | None:
+    """Taux court quotidien de `ccy` en décimal (FRED, depuis RATE_HISTORY_START), ou None. Conservé
+    RATE_CACHE_SECONDS, succès comme échec : une page n'interroge pas FRED à chaque affichage."""
+    cached = _RATE_CACHE.get(ccy)
+    if cached is not None and time.monotonic() - cached[0] < RATE_CACHE_SECONDS:
+        return cached[1]
+    from patrick.data.sources import fred_source
+    raw = fred_source.download_series(ccy, FRED_RATE_SERIES[ccy], RATE_HISTORY_START)
+    series = None
+    if raw is not None and len(raw.dropna()):
+        series = raw.dropna().astype(float) / 100.0
+        if isinstance(series.index, pd.DatetimeIndex):
+            series = series.sort_index()
+    _RATE_CACHE[ccy] = (time.monotonic(), series)
+    return series
+
+
+def _fred_enabled(ccy: str) -> bool:
+    return bool(os.environ.get("FRED_API_KEY")) and ccy in FRED_RATE_SERIES
+
+
+def reference_rate_history(currencies: set[str]) -> dict[str, pd.Series]:
+    """Taux court quotidien de chaque devise connue de FRED (clé FRED_API_KEY définie) : le financement d'un CFD
+    à une date passée utilise le taux de CE jour-là, pas le taux actuel."""
+    out: dict[str, pd.Series] = {}
+    for ccy in sorted(currencies):
+        series = _fred_history(ccy) if _fred_enabled(ccy) else None
+        if series is not None and isinstance(series.index, pd.DatetimeIndex):
+            out[ccy] = series
+    return out
+
+
 def reference_rates(currencies: set[str]) -> tuple[dict[str, float], list[str]]:
     """Taux court annuel par devise (FRED si FRED_API_KEY est défini, sinon constantes
     de `engine.DEFAULT_REF_RATES`) et avertissements à afficher."""
@@ -168,16 +201,10 @@ def reference_rates(currencies: set[str]) -> tuple[dict[str, float], list[str]]:
     notes: list[str] = []
     for ccy in sorted(currencies):
         value = None
-        if os.environ.get("FRED_API_KEY") and ccy in FRED_RATE_SERIES:
-            cached = _RATE_CACHE.get(ccy)
-            if cached is not None and time.monotonic() - cached[0] < RATE_CACHE_SECONDS:
-                value = cached[1]
-            else:
-                from patrick.data.sources import fred_source
-                s = fred_source.download_series(ccy, FRED_RATE_SERIES[ccy], "2024-01-01")
-                if s is not None and len(s.dropna()):
-                    value = float(s.dropna().iloc[-1]) / 100.0
-                _RATE_CACHE[ccy] = (time.monotonic(), value)
+        if _fred_enabled(ccy):
+            series = _fred_history(ccy)
+            if series is not None:
+                value = float(series.iloc[-1])
         if value is None:
             value = DEFAULT_REF_RATES.get(ccy, 0.03)
             notes.append(f"taux de référence {ccy} : constante {value:.2%} (FRED indisponible ou non configuré)")
@@ -214,5 +241,6 @@ def build_market(conn: sqlite3.Connection, orders: list[dict], base: str = "EUR"
             market.fx[ccy] = s
     if with_rates and cfd_currencies:
         market.ref_rates, rate_notes = reference_rates(cfd_currencies)
+        market.ref_rate_history = reference_rate_history(cfd_currencies)
         notes.extend(rate_notes)
     return market, notes

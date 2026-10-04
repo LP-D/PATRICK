@@ -28,7 +28,10 @@ def compute(strategy: dict, result: SimResult) -> dict:
         nav = float(daily["nav"].iloc[-1])
         last = daily.iloc[-1].to_dict()
     pnl = nav - capital
-    returns = daily["nav"].pct_change().dropna() if len(daily) > 1 else pd.Series(dtype=float)
+    # Volatilité et Sharpe sont annualisés sur 252 jours : on mesure sur les clôtures de jours ouvrés, même quand la
+    # série contient des samedis et dimanches (stratégie détenant un cryptoactif).
+    weekday_nav = daily["nav"][daily.index.dayofweek < 5] if len(daily) else daily["nav"]
+    returns = weekday_nav.pct_change().dropna() if len(weekday_nav) > 1 else pd.Series(dtype=float)
     max_dd = simmetrics.max_drawdown(daily["nav"])[0] if len(daily) > 1 else float("nan")
     gross = float(last.get("gross_exposure", 0.0))
     net = float(last.get("net_exposure", 0.0))

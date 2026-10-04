@@ -170,3 +170,22 @@ def test_the_correction_form_is_prefilled_with_the_manual_price_and_fees(client)
     fs.place(client, sid, symbol="TTE.PA", quantity=2, date="2026-01-08")
     second = client.get(f"/api/fund/strategies/{sid}/panel").text.split('data-form="correct"')[2].split("</form>")[0]
     assert '<option value="estimated" selected>' in second and 'name="price" min="0" step="any" value=""' in second
+
+
+def test_the_fund_header_breaks_the_total_down_by_strategy(client):
+    fs.make_strategy(client, "Grande", initial_capital=75_000)
+    fs.make_strategy(client, "Petite", wrapper="PEA", initial_capital=25_000)
+    html = client.get("/fonds").text
+    block = html.split('class="fund-breakdown"')[1].split("</ul>")[0]
+    assert block.count('class="fund-share"') == 2 and "Grande" in block and "Petite" in block
+    assert "width: 75.0%" in block and "width: 25.0%" in block
+
+
+def test_the_positions_table_separates_the_price_effect_from_the_fx_effect(client):
+    sid = fs.make_strategy(client)
+    fs.place(client, sid, symbol="AAPL", quantity=3)
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert "dont prix €" in html and "dont change €" in html
+    assert 'colspan="12"' not in html and 'colspan="13"' in html
+    row = html.split('class="fund-position"')[1].split("</tr>")[0]
+    assert row.count('class="num pk-mono"') >= 8

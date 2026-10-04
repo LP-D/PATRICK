@@ -40,7 +40,12 @@ def futures_payload(today) -> list[dict]:
             for s in instruments.FUTURES_CATALOG.values()]
 
 
-def _json_body(raw: bytes) -> dict:
+async def _json_body(request: Request) -> dict:
+    """Corps JSON d'une écriture. Le type de contenu est exigé : un formulaire ou un `fetch` en text/plain venu d'un
+    autre site (requête « simple », sans contrôle préalable du navigateur) ne doit rien pouvoir écrire."""
+    if (request.headers.get("content-type") or "").split(";")[0].strip().lower() != "application/json":
+        raise HTTPException(status_code=415, detail="Content-Type application/json requis")
+    raw = await request.body()
     try:
         body = json.loads(raw or b"{}")
     except ValueError as exc:
@@ -86,7 +91,8 @@ def register(app: FastAPI, templates, context) -> None:
         data = _call(service.overview, today)
         return templates.TemplateResponse(request, "simulate.html", {
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
-            "today": today.isoformat(), "futures": futures_payload(today), **context(request)})
+            "today": today.isoformat(), "futures": futures_payload(today),
+            "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS), **context(request)})
 
     @app.get("/fonds")
     def fonds_page(request: Request, strategy: str | None = None):
@@ -125,14 +131,14 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/fund/strategies")
     async def api_create_strategy(request: Request):
-        b = _json_body(await request.body())
+        b = await _json_body(request)
         strategy_id = await run_in_threadpool(_call, store.create_strategy, b.get("name"), b.get("wrapper"),
                                               b.get("initial_capital"), b.get("opened_on"))
         return {"strategy_id": strategy_id}
 
     @app.patch("/api/fund/strategies/{strategy_id}")
     async def api_update_strategy(request: Request, strategy_id: str):
-        b = _json_body(await request.body())
+        b = await _json_body(request)
         fields = {k: b[k] for k in ("name", "archived") if k in b}
         if "archived" in fields:
             fields["archived"] = 1 if fields["archived"] else 0
@@ -160,18 +166,24 @@ def register(app: FastAPI, templates, context) -> None:
     def api_futures_catalog():
         return {"futures": futures_payload(service.current_date())}
 
+    @app.get("/api/fund/futures/{root}/contracts")
+    def api_futures_contracts(root: str):
+        if root not in instruments.FUTURES_CATALOG:
+            raise HTTPException(status_code=404, detail="Racine de future inconnue")
+        return {"root": root, "contracts": instruments.listed_contracts(root, service.current_date())}
+
     @app.post("/api/fund/quote")
     async def api_quote(request: Request):
-        return await run_in_threadpool(_call, service.quote, _json_body(await request.body()))
+        return await run_in_threadpool(_call, service.quote, await _json_body(request))
 
     @app.post("/api/fund/strategies/{strategy_id}/orders")
     async def api_place_order(request: Request, strategy_id: str):
-        b = _json_body(await request.body())
+        b = await _json_body(request)
         return await run_in_threadpool(_call, service.place_order, {**b, "strategy_id": strategy_id})
 
     @app.patch("/api/fund/orders/{order_id}")
     async def api_correct_order(request: Request, order_id: int):
-        return await run_in_threadpool(_call, service.correct_order, order_id, _json_body(await request.body()))
+        return await run_in_threadpool(_call, service.correct_order, order_id, await _json_body(request))
 
     @app.delete("/api/fund/positions/{position_id}")
     def api_delete_position(position_id: str):

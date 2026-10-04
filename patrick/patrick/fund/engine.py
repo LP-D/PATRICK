@@ -38,6 +38,7 @@ class MarketData:
     bars: dict[str, pd.DataFrame] = field(default_factory=dict)   # open high low close volume dividend
     fx: dict[str, pd.Series] = field(default_factory=dict)        # devise -> unités de base par unité de devise
     ref_rates: dict[str, float] = field(default_factory=dict)
+    ref_rate_history: dict[str, pd.Series] = field(default_factory=dict)   # devise -> taux court quotidien (décimal)
     base_currency: str = "EUR"
     _cache: dict = field(default_factory=dict, repr=False, compare=False)
 
@@ -96,7 +97,14 @@ class MarketData:
         value = self._last_at(self._arrays("fx", currency, self.fx.get(currency), lambda s: s), day)
         return default if value is None else value
 
-    def ref_rate(self, currency: str) -> float:
+    def ref_rate(self, currency: str, day: pd.Timestamp | None = None) -> float:
+        """Taux de référence de `currency` : celui en vigueur à `day` si l'historique est connu (avant sa première
+        observation : la première), sinon le taux courant, sinon la constante par défaut."""
+        if day is not None:
+            arrays = self._arrays("rate", currency, self.ref_rate_history.get(currency), lambda s: s)
+            if arrays is not None:
+                value = self._last_at(arrays, day)
+                return float(arrays[1][0]) if value is None else value
         return self.ref_rates.get(currency, DEFAULT_REF_RATES.get(currency, 0.03))
 
 
@@ -156,7 +164,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
     # qui précède l'ouverture de la stratégie. Il reste valide, et la grille démarre alors à cette séance.
     early = [pd.Timestamp(o["ts"]) for o in orders if opened - pd.offsets.BDay(1) <= pd.Timestamp(o["ts"]) < opened]
     start = min(early) if early else opened
-    days = pd.bdate_range(start, end_ts)
+    days = _session_days(start, end_ts, market, orders)
     violations: list[dict] = []
     by_day: dict[pd.Timestamp, list[dict]] = {}
 
@@ -330,7 +338,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
                     auto_close(pos, close, day, "expired")
             elif pos.kind == "cfd":
                 notional = pos.qty * close * fx
-                rate = market.ref_rate(pos.currency)
+                rate = market.ref_rate(pos.currency, day)
                 fin = (-notional * (rate + FINANCING_SPREAD) if pos.side == "long"
                        else notional * (rate - FINANCING_SPREAD)) * cal_days / 365.0
                 cash += fin
@@ -376,6 +384,22 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
 
     daily = pd.DataFrame(rows).set_index("date") if rows else pd.DataFrame(columns=DAILY_COLUMNS)
     return SimResult(daily, [_view(p, market, end_ts) for p in positions.values()], violations, alert_days)
+
+
+def _session_days(start: pd.Timestamp, end_ts: pd.Timestamp, market: MarketData,
+                  orders: list[dict]) -> pd.DatetimeIndex:
+    """Jours rejoués : les jours ouvrés, plus les samedis et dimanches où un symbole de la stratégie a coté
+    (cryptoactifs : sans eux un ordre du week-end serait rejoué le lundi, ou refusé s'il tombe après le dernier
+    vendredi). Une stratégie d'actions garde un calendrier de jours ouvrés."""
+    days = pd.bdate_range(start, end_ts)
+    weekend: set[pd.Timestamp] = set()
+    for symbol in {o["symbol"] for o in orders}:
+        df = market.bars.get(symbol)
+        if df is None or df.empty:
+            continue
+        idx = df.index
+        weekend.update(idx[(idx >= start) & (idx <= end_ts) & (idx.dayofweek >= 5)])
+    return days.union(pd.DatetimeIndex(sorted(weekend))) if weekend else days
 
 
 def _split_adjusted(o: dict, market: MarketData) -> dict:
