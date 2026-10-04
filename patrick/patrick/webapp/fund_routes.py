@@ -7,6 +7,7 @@ remplacent la recherche réseau."""
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
@@ -16,7 +17,9 @@ from starlette.concurrency import run_in_threadpool
 from patrick.fund import instruments, service, store
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
-from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty
+from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty, symbol_groups
+
+log = logging.getLogger("patrick.fund")
 
 SEARCH_TYPES = {"equity": {"EQUITY"}, "etf": {"ETF", "MUTUALFUND"},
                 "cfd": {"EQUITY", "ETF", "INDEX", "CURRENCY", "FUTURE", "CRYPTOCURRENCY"}}
@@ -38,6 +41,21 @@ def futures_payload(today) -> list[dict]:
              "tick_size": s.tick_size, "margin": s.margin, "commission": s.commission, "group": s.group,
              "contracts": instruments.listed_contracts(s.root, today)}
             for s in instruments.FUTURES_CATALOG.values()]
+
+
+def ticker_bank(labels: dict[str, str]) -> dict[str, list[dict]]:
+    """Banque de tickers du ticket, par type d'instrument : {type: [{group, items: [[symbole, nom]]}]}. Action/ETF :
+    titres cotés au comptant seulement (groupes « ETF » pour le type ETF, les autres pour Action) ; CFD : tout,
+    indices, devises, matières premières et cryptos compris. Un ticker absent de la banque se saisit à la main."""
+    out: dict[str, list[dict]] = {"equity": [], "etf": [], "cfd": []}
+    for group, items in symbol_groups([]):
+        label = labels.get(group, group)
+        out["cfd"].append({"group": label, "items": [[s, n] for s, n in items]})
+        cash = [[s, n] for s, n in items
+                if instruments.classify_cfd_underlying(s) == "equity" and not s.upper().endswith(".NYB")]
+        if cash:
+            out["etf" if "ETF" in group else "equity"].append({"group": label, "items": cash})
+    return out
 
 
 async def _json_body(request: Request) -> dict:
@@ -66,6 +84,19 @@ def _call(fn, *args, **kwargs):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=400, detail=f"contrainte violée : {exc}") from exc
+    except HTTPException:
+        raise
+    except sqlite3.OperationalError as exc:
+        log.exception("API fonds : erreur SQLite")
+        if "locked" in str(exc) or "busy" in str(exc):
+            raise HTTPException(status_code=503,
+                                detail="Base de données occupée (un run écrit ?) : réessaie dans un instant.") from exc
+        raise HTTPException(status_code=500, detail=(
+            f"Erreur de base de données : {exc}. Si elle parle d'une colonne ou d'une table, redémarre "
+            "« patrick serve » pour appliquer les migrations.")) from exc
+    except Exception as exc:  # frontière web : on montre la cause plutôt qu'un « HTTP 500 » muet
+        log.exception("API fonds : erreur inattendue")
+        raise HTTPException(status_code=500, detail=f"Erreur interne ({type(exc).__name__}) : {exc}") from exc
     finally:
         conn.close()
 
@@ -89,10 +120,12 @@ def register(app: FastAPI, templates, context) -> None:
     def simulate_page(request: Request, strategy: str | None = None, placed: int = 0):
         today = service.current_date()
         data = _call(service.overview, today)
+        ctx = context(request)
         return templates.TemplateResponse(request, "simulate.html", {
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today),
-            "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS), **context(request)})
+            "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),
+            "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **ctx})
 
     @app.get("/fonds")
     def fonds_page(request: Request, strategy: str | None = None):

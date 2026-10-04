@@ -187,3 +187,38 @@ def test_the_listed_contracts_of_one_root_have_their_own_route(client):
     data = resp.json()
     assert data["root"] == "ES" and data["contracts"][0]["symbol"] == "ESH26.CME" and len(data["contracts"]) >= 4
     assert client.get("/api/fund/futures/XX/contracts").status_code == 404
+
+
+def test_an_unexpected_failure_is_reported_with_its_cause_instead_of_a_bare_500(client, monkeypatch):
+    from patrick.fund import service
+
+    def boom(conn, req, today=None):
+        raise RuntimeError("boom du service")
+    monkeypatch.setattr(service, "quote", boom)
+    resp = client.post("/api/fund/quote", json={"strategy_id": "x"})
+    assert resp.status_code == 500
+    assert "RuntimeError" in resp.json()["detail"] and "boom du service" in resp.json()["detail"]
+
+
+def test_a_stale_database_schema_is_named_and_a_busy_database_is_a_503(client, monkeypatch):
+    import sqlite3
+
+    from patrick.fund import service
+
+    def stale(conn, req, today=None):
+        raise sqlite3.OperationalError("no such column: split")
+
+    def busy(conn, req, today=None):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(service, "quote", stale)
+    resp = client.post("/api/fund/quote", json={"strategy_id": "x"})
+    assert resp.status_code == 500
+    assert "no such column: split" in resp.json()["detail"] and "patrick serve" in resp.json()["detail"]
+    monkeypatch.setattr(service, "quote", busy)
+    resp = client.post("/api/fund/quote", json={"strategy_id": "x"})
+    assert resp.status_code == 503 and "occupée" in resp.json()["detail"]
+
+
+def test_business_errors_keep_their_status_next_to_the_generic_handler(client):
+    assert client.get("/api/fund/strategies/str_missing/detail").status_code == 404
+    assert client.post("/api/fund/strategies/str_missing/orders", json={"instrument_kind": "equity"}).status_code == 400

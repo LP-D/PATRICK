@@ -165,3 +165,27 @@ def test_build_market_keeps_the_fred_history_for_cfd_financing(conn, monkeypatch
     assert market.ref_rate("USD", pd.Timestamp("2026-01-13")) == pytest.approx(0.05)
     assert market.ref_rates["USD"] == pytest.approx(0.05)
     assert market.ref_rate("JPY", pd.Timestamp("2026-01-13")) == 0.005
+
+
+def test_a_database_migrated_by_a_preliminary_0029_gets_the_split_column(tmp_path):
+    """Base réelle de l'utilisateur : `fund_price` créée sans `split` (version préliminaire de 0029) -> 500
+    « no such column: split » à chaque aperçu. La migration 0030 ajoute la colonne, sans rien casser ailleurs."""
+    from patrick.tracking import db as trackdb
+
+    path = str(tmp_path / "stale.db")
+    conn = trackdb.connect(path)
+    conn.execute("DROP TABLE fund_price")
+    conn.execute("CREATE TABLE fund_price (symbol TEXT NOT NULL, day TEXT NOT NULL, open REAL, high REAL, low REAL, "
+                 "close REAL, volume REAL NOT NULL DEFAULT 0, dividend REAL NOT NULL DEFAULT 0, PRIMARY KEY (symbol, day))")
+    conn.execute("INSERT INTO fund_price VALUES ('X', '2026-01-05', 1, 1, 1, 1, 10, 0)")
+    conn.execute("DELETE FROM schema_version WHERE version >= 30")
+    conn.commit()
+    conn.close()
+    conn = trackdb.connect(path)                                   # la migration s'applique à l'ouverture
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(fund_price)")]
+    assert "split" in columns
+    assert conn.execute("SELECT split, close FROM fund_price WHERE symbol = 'X'").fetchone() == (0.0, 1.0)
+    assert prices.load_bars(conn, "X")["split"].tolist() == [0.0]
+    conn.close()
+    assert [r[1] for r in trackdb.connect(str(tmp_path / "fresh.db")).execute("PRAGMA table_info(fund_price)")] \
+        .count("split") == 1                                       # base neuve : la colonne n'est pas ajoutée deux fois

@@ -2106,3 +2106,5 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .fund-share { grid-template-columns: minmax(0, 1fr) auto; }
   .fund-share-bar { grid-column: 1 / -1; grid-row: 2; }
 }
+.fund-ticker { display: grid; gap: var(--space-sm); }
+.fund-ticker[hidden], .fund-ticker label[hidden] { display: none; }

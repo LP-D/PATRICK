@@ -769,18 +769,28 @@
         }
     }
 
+    // Erreur de contrôle (pause / reprise / arrêt) : bannière de la page, effacée à l'action suivante.
+    function showRunControlError(message) {
+        const box = document.getElementById("run-control-error");
+        if (!box) return;
+        box.textContent = message || "";
+        box.classList.toggle("hidden", !message);
+    }
+
     async function sendJobControl(url, options) {
+        showRunControlError("");
         try {
             const response = await fetch(url, options);
             if (!response.ok) {
                 const detail = await response.json().catch(() => ({}));
-                window.alert(detail.detail || tr("run_control_error", "Could not apply this action."));
+                showRunControlError(typeof detail.detail === "string" && detail.detail
+                    ? detail.detail : tr("run_control_error", "Could not apply this action."));
                 return;
             }
             await runStatePoll();
             if (trackedRunId) detailPoll();
         } catch (e) {
-            window.alert(tr("run_control_error", "Could not apply this action."));
+            showRunControlError(tr("run_control_error", "Could not apply this action."));
         }
     }
 

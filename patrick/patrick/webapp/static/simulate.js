@@ -80,6 +80,9 @@
     if (!form) return;
     var futures = JSON.parse(document.getElementById("futures-data").textContent || "[]");
     var cfdClasses = JSON.parse(document.getElementById("cfd-classes").textContent || "{}");
+    var tickerBank = JSON.parse(document.getElementById("ticker-bank").textContent || "{}");
+    var symbolPick = document.getElementById("f-symbol-pick");
+    var symbolManual = document.getElementById("f-symbol-manual");
     var box = document.getElementById("ticket-preview");
     var submit = document.getElementById("ticket-submit");
     var rootSel = document.getElementById("f-root");
@@ -106,8 +109,32 @@
         futures.forEach(function (f) { option(rootSel, f.root + " — " + f.name, f.root); });
         fillContracts();
     }
+    /* Ticker : liste groupée (banque de tickers du type d'instrument) ou « Autre ticker Yahoo » = saisie libre. */
+    function symbolValue() {
+        return symbolPick.value === "__other__" ? form.symbol.value.trim() : symbolPick.value;
+    }
+    function syncTicker(focus) {
+        var other = symbolPick.value === "__other__";
+        symbolManual.hidden = !other;
+        form.symbol.disabled = !other;
+        if (other && focus) form.symbol.focus();
+    }
+    function fillTickers() {
+        var keep = symbolPick.value, otherOption = symbolPick.querySelector('option[value="__other__"]');
+        symbolPick.querySelectorAll("optgroup").forEach(function (g) { g.remove(); });
+        (tickerBank[kind()] || []).forEach(function (group) {
+            var og = document.createElement("optgroup");
+            og.label = group.group;
+            group.items.forEach(function (it) { option(og, it[1] + " — " + it[0], it[0]); });
+            symbolPick.insertBefore(og, otherOption);
+        });
+        symbolPick.value = keep;
+        if (symbolPick.value !== keep) symbolPick.value = "";       // ce ticker n'est pas proposé pour ce type
+        syncTicker(false);
+    }
     function applyKind() {
         var k = kind();
+        fillTickers();
         form.querySelectorAll("[data-kinds]").forEach(function (el) {
             el.hidden = el.getAttribute("data-kinds").split(" ").indexOf(k) === -1;
         });
@@ -136,8 +163,8 @@
             req.spec.month = Number(ym[1]);
             req.quantity = fd.get("contracts");
         } else {
-            if (!present(fd.get("symbol"))) return null;
-            req.symbol = String(fd.get("symbol")).trim();
+            if (!present(symbolValue())) return null;
+            req.symbol = symbolValue();
         }
         if (k === "equity" || k === "etf") {
             req.quantity = fd.get("quantity");
@@ -265,6 +292,7 @@
 
     form.addEventListener("input", schedule);
     form.addEventListener("change", function (ev) {
+        if (ev.target.id === "f-symbol-pick") syncTicker(true);
         if (ev.target.name === "instrument_kind") applyKind();
         if (ev.target.name === "root") fillContracts();
         if (ev.target.name === "strategy_id") applyStrategy();

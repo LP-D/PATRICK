@@ -41,10 +41,18 @@
         {% endfor %}
       </fieldset>
 
-      <label data-kinds="equity etf cfd">{{ t('fund_field_symbol') }}
-        <input type="text" name="symbol" id="f-symbol" list="f-symbol-list" placeholder="MC.PA · AAPL · ^GSPC · EURUSD=X" maxlength="40">
-        <datalist id="f-symbol-list"></datalist>
-      </label>
+      <div class="fund-ticker" data-kinds="equity etf cfd">
+        <label>{{ t('fund_field_symbol') }}
+          <select id="f-symbol-pick">
+            <option value="">{{ t('fund_symbol_pick') }}</option>
+            <option value="__other__">{{ t('fund_symbol_other') }}</option>
+          </select>
+        </label>
+        <label id="f-symbol-manual" hidden>{{ t('fund_symbol_manual') }}
+          <input type="text" name="symbol" id="f-symbol" list="f-symbol-list" placeholder="MC.PA · AAPL · ^GSPC · EURUSD=X" maxlength="40" disabled>
+          <datalist id="f-symbol-list"></datalist>
+        </label>
+      </div>
       <div class="subgrid" data-kinds="future" hidden>
         <label>{{ t('fund_field_root') }} <select name="root" id="f-root"></select></label>
         <label>{{ t('fund_field_contract') }} <select name="contract" id="f-contract"></select></label>
@@ -148,5 +156,6 @@
 {% set cfd_names = {} %}{% for c in cfd_classes %}{% set _ = cfd_names.update({c: t('fund_cfd_class_' ~ c)}) %}{% endfor %}
 <script id="futures-data" type="application/json">{{ futures | tojson }}</script>
 <script id="cfd-classes" type="application/json">{{ cfd_names | tojson }}</script>
+<script id="ticker-bank" type="application/json">{{ ticker_bank | tojson }}</script>
 <script src="/static/simulate.js"></script>
 {% endblock %}

@@ -83,3 +83,25 @@ def test_the_ticket_exposes_the_name_of_each_cfd_leverage_class(client):
     english = fs.json_script(client.get("/simulate?lang=en").text, "cfd-classes")
     assert english["fx_major"] == "Major currency pairs" and english["crypto"] == "Crypto-assets"
     assert "cfd-classes" in client.get("/static/simulate.js").text
+
+
+def test_the_ticker_is_picked_from_a_grouped_list_or_typed_by_hand(client):
+    fs.make_strategy(client)
+    html = client.get("/simulate").text
+    assert 'id="f-symbol-pick"' in html and 'id="f-symbol-manual"' in html
+    assert "Choisir un ticker" in html and "Autre ticker Yahoo" in html
+    bank = fs.json_script(html, "ticker-bank")
+    assert set(bank) == {"equity", "etf", "cfd"}
+
+    def symbols(kind):
+        return {s for g in bank[kind] for s, _ in g["items"]}
+    stocks_only = {"^GSPC", "EURUSD=X", "CL=F", "BTC-USD", "XLK"}
+    assert {"AAPL", "MC.PA"} <= symbols("equity") and not symbols("equity") & stocks_only
+    assert "XLK" in symbols("etf") and not symbols("etf") & {"AAPL", "^GSPC", "EURUSD=X", "CL=F", "BTC-USD"}
+    assert {"^GSPC", "EURUSD=X", "CL=F", "BTC-USD", "AAPL", "XLK"} <= symbols("cfd")
+    assert all(g["group"] and g["items"] for kind in bank for g in bank[kind])
+    assert fs.json_script(client.get("/simulate?lang=en").text, "ticker-bank") != bank        # noms de groupes traduits
+    english = client.get("/simulate?lang=en").text
+    assert "Pick a ticker" in english and "Other Yahoo ticker" in english
+    js = client.get("/static/simulate.js").text
+    assert "ticker-bank" in js and "f-symbol-pick" in js

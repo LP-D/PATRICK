@@ -20,7 +20,7 @@
     function token(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
     var flash = document.getElementById("wealth-flash");
     function say(text, kind) {
-        if (!flash) { if (kind === "error") window.alert(text); return; }
+        if (!flash) return;
         flash.textContent = text;
         flash.className = "banner " + (kind === "error" ? "banner-error" : kind === "warning" ? "banner-warning" : "banner-info");
         flash.scrollIntoView({ block: "nearest", behavior: "smooth" });
