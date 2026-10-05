@@ -7,6 +7,8 @@ the rest of the French-language product surface (see the D4 translation
 scope note in `README.md`)."""
 from __future__ import annotations
 
+import os
+
 import typer
 
 from patrick import predict as predict_module
@@ -27,6 +29,8 @@ research_app = typer.Typer(help="Études de recherche -- lecture/mesure, n'entra
 app.add_typer(research_app, name="research")
 champions_app = typer.Typer(help="Modèles en titre (champion/challenger) : un seul modèle par cible et horizon.")
 app.add_typer(champions_app, name="champions")
+sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
+app.add_typer(sync_app, name="sync")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -489,6 +493,66 @@ def champions_init_cmd(
                    "puis supprimé(s).")
     finally:
         conn.close()
+
+
+@sync_app.command(name="push")
+def sync_push_cmd(
+    to: str = typer.Option("github", "--to", help="'github' (release data-latest du dépôt) ou un dossier "
+                                                  "(ex. Google Drive synchronisé)"),
+    include_personal: bool = typer.Option(False, "--include-personal", help="Dossier privé uniquement : "
+                                          "inclut aussi le patrimoine et les fonds (jamais vers GitHub)"),
+    repo: str = typer.Option(None, "--repo", help="Dépôt GitHub (défaut : celui du dossier courant)"),
+) -> None:
+    """Publie la base (sans patrimoine ni fonds perso), les modèles et le magasin de données."""
+    from patrick import sync
+
+    try:
+        manifest = sync.push(to, include_personal=include_personal, repo=repo)
+    except sync.SyncError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    size_mb = sum(f["size"] for f in manifest["files"].values()) / 1e6
+    typer.echo(f"Publié vers {to} : {manifest['runs']} run(s), {manifest['models']['included']} modèle(s), "
+               f"{manifest['store']['files']} fichier(s) de données, {size_mb:.1f} Mo.")
+    if manifest["excluded_tables"]:
+        typer.echo("Tables perso vidées dans l'export : " + ", ".join(manifest["excluded_tables"]))
+    if manifest["models"]["missing"]:
+        typer.echo(f"{len(manifest['models']['missing'])} modèle(s) introuvable(s) sur ce PC, non publiés.")
+
+
+@sync_app.command(name="pull")
+def sync_pull_cmd(
+    source: str = typer.Option("github", "--from", help="'github' (release data-latest) ou un dossier"),
+    force: bool = typer.Option(False, "--force", help="Accepter de perdre des runs locaux absents du partage"),
+    repo: str = typer.Option(None, "--repo", help="Dépôt GitHub (défaut : celui du dossier courant)"),
+) -> None:
+    """Restaure le partage sur ce PC : la recherche vient du partage, le patrimoine local est conservé
+    (la base locale est sauvegardée avant remplacement)."""
+    from patrick import sync
+    from patrick.tracking import jobs as jobs_db
+
+    db_path = trackdb.default_db_path()
+    if os.path.exists(db_path):
+        conn = trackdb.connect()
+        try:
+            busy = (conn.execute("SELECT COUNT(*) FROM job WHERE status = 'running'").fetchone()[0]
+                    or jobs_db.worker_is_alive(conn))
+        finally:
+            conn.close()
+        if busy:
+            typer.echo("Un run est en cours : restauration refusée, relance-la quand plus aucun run ne tourne.")
+            raise typer.Exit(code=1)
+    try:
+        result = sync.pull(source, db_path=db_path, force=force, repo=repo)
+    except sync.SyncError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Restauré (partage du {result['created_at']}) : {result['runs']} run(s), {result['models']} modèle(s), "
+               f"{result['store_files']} fichier(s) de données ajouté(s).")
+    if result["backup"]:
+        typer.echo(f"Ancienne base sauvegardée : {result['backup']}")
+    if result["personal_tables_kept"]:
+        typer.echo("Patrimoine/fonds locaux conservés (" + ", ".join(result["personal_tables_kept"]) + ").")
 
 
 if __name__ == "__main__":
