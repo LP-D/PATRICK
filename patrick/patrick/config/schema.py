@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from patrick.config import defaults as D
+from patrick.config.target_label import run_label
 
 
 class ObjectiveConfig(BaseModel):
@@ -31,11 +32,15 @@ class ObjectiveConfig(BaseModel):
     benchmark: str | None = None
     benchmark_source: Literal["auto", "manual"] | None = None
 
+    def run_label(self) -> str:
+        """Étiquette de cible de ce run en base (`run.target`) : le symbole, ou `symbole__alpha_benchmark`
+        (voir `config/target_label.py`)."""
+        return run_label(self.target_symbol, self.target_kind, self.benchmark)
+
     def raw_cache_key(self) -> str:
         """Clé du snapshot de données de ce run dans le data lake. Une cible alpha a la sienne : le snapshot brut
         `raw_<cible>` ne contient pas le benchmark, et lui servir ce cache donnerait un run sans benchmark."""
-        base = f"raw_{self.target_symbol}"
-        return base if self.target_kind != "alpha" else f"{base}__alpha_{self.benchmark}"
+        return f"raw_{self.run_label()}"
 
 
 class UniverseConfig(BaseModel):

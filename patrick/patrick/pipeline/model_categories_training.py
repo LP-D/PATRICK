@@ -111,7 +111,7 @@ def _inner_cv_kwargs(config, horizon: int, conn, study_name: str) -> dict:
         "embargo_bars": config.validation.embargo_bars,
         "purge": config.validation.purge,
         "embargo_enabled": config.validation.embargo_enabled,
-        "registry": trackdb.TrialRecorder(conn, config.objective.target_symbol, horizon,
+        "registry": trackdb.TrialRecorder(conn, config.objective.run_label(), horizon,
                                           detail=study_name) if conn is not None else None,
     }
 

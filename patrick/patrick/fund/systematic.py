@@ -26,6 +26,7 @@ import sqlite3
 import pandas as pd
 
 from patrick.config import defaults as D
+from patrick.config.target_label import ALPHA_SEP, is_alpha_label
 from patrick.fund import service, store
 from patrick.simulate import engine as sim_engine
 
@@ -162,8 +163,13 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
     if not name:
         raise store.FundError("nom de règle manquant")
     cfg = validate_config(config)
-    if conn.execute("SELECT 1 FROM trial WHERE trial_id = ?", (cfg["trial_id"],)).fetchone() is None:
+    run = conn.execute("SELECT run.target FROM trial JOIN run ON run.run_id = trial.run_id WHERE trial.trial_id = ?",
+                       (cfg["trial_id"],)).fetchone()
+    if run is None:
         raise store.FundError(f"essai {cfg['trial_id']} introuvable")
+    if is_alpha_label(run[0]):
+        raise store.FundError("modèle de cible alpha : il prédit une surperformance face à un benchmark, pas la "
+                              "direction du prix, et ne peut pas piloter une position seule")
     if sim_engine.available_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
         raise store.FundError(f"aucun signal du segment {cfg['segment']!r} pour l'essai {cfg['trial_id']}")
     rule_id = store.new_id("rule")
@@ -209,6 +215,7 @@ def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
         "FROM trial JOIN run ON run.run_id = trial.run_id "
         "LEFT JOIN champion ON champion.trial_id = trial.trial_id "
         f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
+        f"AND run.target NOT LIKE '%{ALPHA_SEP.replace('_', chr(92) + '_')}%' ESCAPE '{chr(92)}' "
         "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC LIMIT ?", (*descriptive, limit)).fetchall()
     out = []
     for trial_id, run_id, algo, target, horizon, started_at, is_champion in rows:

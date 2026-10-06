@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import brentq
 
+from patrick.config.target_label import is_alpha_label
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.simulate import metrics as simmetrics
@@ -325,6 +326,9 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         run = trackdb.get_run(conn, trial_row[0])
         if run is None:
             raise ValueError(f"Run not found for trial {trial_id}")
+        if is_alpha_label(run["target"]):
+            raise ValueError("Cible alpha : ce modèle prédit une surperformance face à un benchmark ; simuler une "
+                             "position sur le seul prix de l'actif serait faux (portefeuille long/short hedgé : à venir).")
 
         kelly_ok, kelly_message = (True, None)
         if params.position_mode == "heuristic_leverage":

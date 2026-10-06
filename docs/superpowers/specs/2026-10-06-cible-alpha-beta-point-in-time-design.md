@@ -46,20 +46,37 @@ monde (`URTH`), reste → monde. Jamais la cible elle-même (repli sur le monde)
 un indice de volatilité, une série macro ou bitcoin lui-même : l'erreur le dit et propose le choix manuel. Le résultat
 porte sa raison et sa provenance (`auto` | `manual`), à enregistrer avec le run (reproductibilité si la table évolue).
 
-## 5 bis. Jalon 2b : branchement au pipeline (à faire)
+## 5 bis. Jalon 2b : branchement au pipeline (livré, sauf prédiction live et page « Lancer »)
 
-Décision de conception à ne pas prendre à la légère : `run.target` est lu à ~127 endroits (historique, prédictions,
-simulation, rejeu patrimoine, champions). Un run alpha ne doit **jamais** se mélanger silencieusement aux runs bruts :
+**Étiquette de cible distincte.** `run.target` est lu par ~68 requêtes SQL (champions, registre d'essais, familles DM/BH,
+rejeu du patrimoine, historique). Plutôt qu'une colonne à filtrer partout, un run alpha a une étiquette propre :
+`MC.PA__alpha_^GSPC` (`config/target_label.py`), qui est aussi la clé de son snapshot (`raw_<étiquette>`). Conséquences :
 
-- un champion « implicite » (dernier run terminé) serait un modèle d'alpha à la place d'un modèle de direction;
-- un modèle d'alpha prédit une surperformance, pas la direction du prix : le rejouer comme signal de prix serait faux.
+- champions, registre d'essais (DSR) et familles DM/BH se séparent d'eux-mêmes; un run alpha plus récent ne devient jamais
+  le champion « implicite » du symbole brut;
+- le rejeu du patrimoine ne le retient jamais (il cherche le symbole exact), les règles du fonds le refusent
+  (`available_models`, `create_rule`), la simulation le refuse avec un message explicite : un modèle d'alpha prédit une
+  surperformance, pas la direction du prix;
+- tout consommateur qui attend un symbole échoue franchement au lieu de mélanger. Aucune migration.
 
-Approche retenue : colonnes `run.target_kind` (`raw` par défaut) et `run.benchmark` (migration), `run.target` inchangé;
-toutes les lectures « signal de direction » (champions, rejeu patrimoine, règles du fonds, simulation) filtrent
-`target_kind = 'raw'`; le registre d'essais et les familles DM/BH utilisent la clé `symbole|alpha:benchmark`.
-Ensuite : champs `objective.target_kind` et `objective.benchmark` (vide = automatique, valeur enregistrée dans le run),
-ajout du benchmark à l'univers d'ingestion, constructeur de cible unique remplaçant les appels `build_target` du moteur,
-de l'export et du suivi live, sélecteur dans la page « Lancer ».
+**Configuration.** `objective.target_kind` (`raw` | `alpha`), `objective.benchmark` (vide = automatique, sinon choix
+manuel) et `objective.benchmark_source`. Le validateur de `RunConfig` résout le benchmark, l'écrit avec sa provenance
+(une config relue n'est jamais réinterprétée) et l'ajoute à l'univers pour qu'il soit téléchargé, nettoyé et décalé comme
+le reste. Cible FRED refusée. Le hachage d'un run brut est **inchangé** (test de régression sur la valeur d'avant).
+
+**Décalage de séance.** L'ingestion décale d'une barre les séries qui clôturent après la cible. Le benchmark du pipeline
+est donc « tel que connu à la décision » : les labels utilisent son vrai calendrier (`shift(-bench_lag)`), le β connu en
+*t* est décalé de `bench_lag` barres (le rendement du jour d'un benchmark qui clôture après la décision n'est pas connu).
+
+**Moteur.** `run_target` remplace les cinq `build_target(pool[cible], ...)` du moteur et de l'export; les baselines de prix
+(momentum, marche aléatoire, HAR-RV) lisent le niveau d'alpha (`alpha_level_series`), pas le prix. Les baselines de classe
+(majorité, persistance) lisent déjà les classes alpha.
+
+**Reste à faire.**
+
+- Prédiction quotidienne live (`predict.py`) et classes réalisées des signaux live : seuils et classes d'alpha à calculer;
+- sélecteur « Cible brute | Alpha » et benchmark (automatique, modifiable) dans la page « Lancer »;
+- simulation d'un portefeuille long/short couvert (actif contre β × benchmark) pour juger un modèle d'alpha en rendement.
 
 ## 6. Points ouverts
 

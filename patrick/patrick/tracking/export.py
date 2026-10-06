@@ -18,8 +18,8 @@ import numpy as np
 from sklearn.preprocessing import RobustScaler
 
 from patrick.config.schema import RunConfig
+from patrick.features.alpha_target import run_target
 from patrick.features.sanitize import finite_features, finite_scaled
-from patrick.features.target import build_target
 from patrick.models.registry import get_classifier
 from patrick.selection.registry import select_features
 from patrick.tuning.optuna_runner import safe_resample
@@ -68,8 +68,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     best_params = ast.literal_eval(raw_params) if raw_params else {}
 
     split_idx = len(pool) - 1
-    target_series, reg_r, _ = build_target(pool[target_col], horizon, split_idx,
-                                            config.objective.flat_thr)
+    target_series, reg_r, _ = run_target(pool, config, target_col, horizon, split_idx)
     idx = target_series.index
     reg_al = reg_r.reindex(idx).fillna("NORMAL").values
     sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
