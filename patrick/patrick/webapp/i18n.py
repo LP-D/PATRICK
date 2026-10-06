@@ -175,6 +175,19 @@ STRINGS: dict[str, dict[str, str]] = {
 
     "section_objective": {"fr": "Objectif — que prédire ?", "en": "Objective — what to predict?"},
     "field_target": {"fr": "Cible(s)", "en": "Target(s)"},
+    "field_target_kind": {"fr": "Type de cible", "en": "Target type"},
+    "target_kind_raw": {"fr": "Rendement brut de la cible", "en": "Raw return of the target"},
+    "target_kind_alpha": {"fr": "Alpha : rendement excédentaire vs benchmark", "en": "Alpha: excess return vs benchmark"},
+    "target_kind_hint": {
+        "fr": "Alpha : le modèle prédit si la cible fait mieux ou moins bien que son benchmark (rendement − β × benchmark, β estimé sans regarder le futur). Le taux de hausse de base est proche de 0,5 au lieu de dépendre du marché. Les runs alpha ont leur propre historique, champion et registre d'essais.",
+        "en": "Alpha: the model predicts whether the target beats or lags its benchmark (return − β × benchmark, β estimated without looking ahead). The base up-rate is close to 0.5 instead of following the market. Alpha runs have their own history, champion and trial registry.",
+    },
+    "field_benchmark": {"fr": "Benchmark", "en": "Benchmark"},
+    "benchmark_auto_placeholder": {"fr": "vide = déterminé automatiquement", "en": "empty = chosen automatically"},
+    "benchmark_hint": {
+        "fr": "Laisser vide pour un benchmark choisi d'après la classe d'actif et la région (action US → ^GSPC, zone euro → ^STOXX50E, crypto → BTC-USD...), ou saisir un ticker Yahoo. Un seul benchmark saisi s'applique à toutes les cibles sélectionnées.",
+        "en": "Leave empty for a benchmark chosen from the asset class and region (US stock → ^GSPC, euro area → ^STOXX50E, crypto → BTC-USD...), or type a Yahoo ticker. A typed benchmark applies to every selected target.",
+    },
     "target_multiselect_hint": {
         "fr": "Ctrl/Cmd + clic (ou glisser) pour sélectionner plusieurs cibles — un run est lancé par cible, à la suite.",
         "en": "Ctrl/Cmd + click (or drag) to pick multiple targets — one run launches per target, in sequence.",
