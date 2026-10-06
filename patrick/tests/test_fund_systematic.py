@@ -100,6 +100,16 @@ def test_validate_config_rejects_bad_values(patch, message):
         systematic.validate_config(_config(1, **patch))
 
 
+def test_validate_config_future_needs_root_year_and_month():
+    base = _config(1, allow_short=True, sizing={"quantity": 1},
+                   instrument={"kind": "future", "spec": {"root": "ES", "year": 2026, "month": 12}})
+    assert systematic.validate_config(base)["instrument"]["spec"]["month"] == 12
+    for spec in ({"root": "ES"}, {"root": "ES", "year": 2026, "month": 13}, {"root": "ES", "year": "2026", "month": 12},
+                 {"year": 2026, "month": 12}):
+        with pytest.raises(store.FundError, match="future"):
+            systematic.validate_config({**base, "instrument": {"kind": "future", "spec": spec}})
+
+
 def test_validate_config_cfd_short_needs_a_whole_quantity():
     cfg = _config(1, allow_short=True, instrument={"kind": "cfd", "symbol": "^GSPC", "spec": {"leverage": 2}},
                   sizing={"quantity": 3})

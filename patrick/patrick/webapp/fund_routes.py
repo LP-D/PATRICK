@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from patrick.fund import instruments, service, store
+from patrick.fund import instruments, service, store, systematic
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
 from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty, symbol_groups
@@ -146,9 +146,11 @@ def register(app: FastAPI, templates, context) -> None:
         today = service.current_date()
 
         def run(conn):
-            return service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
+            snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
+            return snap, systematic.rule_summaries(conn, strategy_id), systematic.available_models(conn)
+        snap, rules, models = _call(run)
         return templates.TemplateResponse(request, "_fund_panel.html", {
-            "snap": _call(run), "today": today.isoformat(), **context(request)})
+            "snap": snap, "rules": rules, "models": models, "today": today.isoformat(), **context(request)})
 
     # ---------------------------------------------------------------- API
 
@@ -223,5 +225,38 @@ def register(app: FastAPI, templates, context) -> None:
         def run(conn):
             if store.delete_position(conn, position_id) == 0:
                 raise HTTPException(status_code=404, detail="Position introuvable")
+            return {"ok": True}
+        return _call(run)
+
+    # ------------------------------------------------- règles automatiques (mode ML à seuils)
+
+    @app.get("/api/fund/models")
+    def api_models():
+        """Essais gagnants dont on peut rejouer les signaux (formulaire de création d'une règle)."""
+        return {"models": _call(systematic.available_models)}
+
+    @app.get("/api/fund/strategies/{strategy_id}/rules")
+    def api_list_rules(strategy_id: str):
+        def run(conn):
+            _require_strategy(conn, strategy_id)
+            return {"rules": systematic.rule_summaries(conn, strategy_id)}
+        return _call(run)
+
+    @app.post("/api/fund/strategies/{strategy_id}/rules")
+    async def api_create_rule(request: Request, strategy_id: str):
+        b = await _json_body(request)
+        rule_id = await run_in_threadpool(_call, systematic.create_rule, strategy_id, b.get("name"), b.get("config"))
+        return {"rule_id": rule_id}
+
+    @app.post("/api/fund/rules/{rule_id}/apply")
+    async def api_apply_rule(request: Request, rule_id: str):
+        await _json_body(request)
+        return await run_in_threadpool(_call, systematic.apply, rule_id, service.current_date())
+
+    @app.delete("/api/fund/rules/{rule_id}")
+    def api_delete_rule(rule_id: str):
+        def run(conn):
+            if not systematic.delete_rule(conn, rule_id):
+                raise HTTPException(status_code=404, detail="Règle introuvable")
             return {"ok": True}
         return _call(run)

@@ -56,10 +56,20 @@ configuration de plus essayée sur la cible et comptent dans tous les DSR suivan
 Migration `0031_fund_rule.sql` : table `fund_rule` (`rule_id`, `strategy_id`, `name`, `config_json`, `created_at`).
 Préfixe `fund_` : exclue automatiquement de `patrick sync` vers GitHub.
 
-## 7. Hors périmètre de ce jalon
+## 7. Jalon 2 : page web (livré)
 
-- Page web de gestion des règles (jalon suivant) : ce jalon livre le module et la CLI
-  (`patrick fund rule-create | rule-list | rule-apply`).
+Section « Règles automatiques » du panneau d'une stratégie sur `/fonds` : liste (modèle, segment, seuils,
+instrument, taille, nombre d'ordres générés), boutons Appliquer et Supprimer (la suppression garde les ordres déjà
+passés), formulaire de création (modèle parmi les essais gagnants avec signaux, segments proposés selon le modèle,
+champs selon l'instrument). API : `GET /api/fund/models`, `GET|POST /api/fund/strategies/{id}/rules`,
+`POST /api/fund/rules/{id}/apply`, `DELETE /api/fund/rules/{id}`.
+
+Choix assumé : **pas d'aperçu des seuils avant création**. Essayer des seuils jusqu'à trouver les meilleurs est
+exactement le degré de liberté que le registre d'essais compte : la création est donc l'acte comptabilisé, et le plan
+d'une règle se lit après.
+
+## 7 bis. Hors périmètre
+
 - Planification automatique quotidienne de `apply`.
 - Dimensionnement proportionnel au score (seul le tout-ou-rien à seuils est fourni).
 - Carry trade.

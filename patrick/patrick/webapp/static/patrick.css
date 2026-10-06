@@ -2092,6 +2092,8 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .fund-panel h3 { margin: var(--space-lg) 0 var(--space-sm); }
 .fund-actions { white-space: nowrap; text-align: right; }
 .fund-inline-form { padding: var(--space-sm) 0; }
+.fund-inline-form label.fund-check { flex-direction: row; align-items: center; gap: var(--space-xs); }
+.fund-rule-new { margin: var(--space-sm) 0; }
 .fund-form-row > td { background: var(--surface-2); }
 .fund-orders { margin-top: var(--space-lg); }
 .fund-orders summary { cursor: pointer; font-weight: 600; }

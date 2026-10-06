@@ -25,6 +25,7 @@ import sqlite3
 
 import pandas as pd
 
+from patrick.config import defaults as D
 from patrick.fund import service, store
 from patrick.simulate import engine as sim_engine
 
@@ -73,6 +74,10 @@ def validate_config(config: dict) -> dict:
     if kind == "future":
         if not spec.get("root"):
             raise store.FundError("future : racine requise dans spec (voir le catalogue)")
+        year, month = spec.get("year"), spec.get("month")
+        if (isinstance(year, bool) or not isinstance(year, int) or isinstance(month, bool)
+                or not isinstance(month, int) or not 1 <= month <= 12):
+            raise store.FundError("future : année et mois (1 à 12) du contrat requis dans spec")
     elif not symbol:
         raise store.FundError("symbole manquant")
     if allow_short and kind in EQUITY_KINDS:
@@ -171,6 +176,47 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
         sim_engine.SimParams(position_mode="threshold", threshold=cfg["enter"], short_allowed=cfg["allow_short"]),
         {"ok": True, "kind": "fund_rule", "rule_id": rule_id, "enter": cfg["enter"], "exit": cfg["exit"]})
     return rule_id
+
+
+def delete_rule(conn: sqlite3.Connection, rule_id: str) -> bool:
+    """Supprime la règle (jamais les ordres déjà passés, qui restent des ordres du fonds). False si inconnue."""
+    with conn:
+        cur = conn.execute("DELETE FROM fund_rule WHERE rule_id = ?", (rule_id,))
+    return cur.rowcount > 0
+
+
+def rule_summaries(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
+    """Règles d'une stratégie avec le modèle visé et le nombre d'ordres déjà générés."""
+    notes = [o["note"] for o in store.list_orders(conn, strategy_id) if o.get("note")]
+    out = []
+    for rule in list_rules(conn, strategy_id):
+        prefix = f"{NOTE_PREFIX}:{rule['rule_id']}:"
+        model = conn.execute(
+            "SELECT run.target, run.horizon, trial.algo FROM trial JOIN run ON run.run_id = trial.run_id "
+            "WHERE trial.trial_id = ?", (rule["config"]["trial_id"],)).fetchone()
+        out.append({**rule, "n_orders": sum(1 for n in notes if n.startswith(prefix)),
+                    "model": dict(zip(("target", "horizon", "algo"), model)) if model else None})
+    return out
+
+
+def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
+    """Essais gagnants dont on peut rejouer les signaux : un run terminé, jamais un horizon descriptif (pas un
+    signal de portefeuille), au moins un signal dans un segment. Les modèles en titre d'abord, puis les plus récents."""
+    descriptive = sorted(D.DESCRIPTIVE_HORIZONS)
+    rows = conn.execute(
+        "SELECT trial.trial_id, trial.run_id, trial.algo, run.target, run.horizon, run.started_at, "
+        "       (champion.trial_id IS NOT NULL) "
+        "FROM trial JOIN run ON run.run_id = trial.run_id "
+        "LEFT JOIN champion ON champion.trial_id = trial.trial_id "
+        f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
+        "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC LIMIT ?", (*descriptive, limit)).fetchall()
+    out = []
+    for trial_id, run_id, algo, target, horizon, started_at, is_champion in rows:
+        segments = sim_engine.available_segments(conn, trial_id)
+        if segments:
+            out.append({"trial_id": trial_id, "run_id": run_id, "algo": algo, "target": target, "horizon": horizon,
+                        "started_at": started_at, "champion": bool(is_champion), "segments": segments})
+    return out
 
 
 # --------------------------------------------------------------------------- plan et exécution
