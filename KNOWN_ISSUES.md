@@ -84,6 +84,15 @@ est régénéré par `.github/workflows/golden-regen.yml` (branche
 `golden-regen/<nom>`) ; en local, un golden de sa propre machine via
 `PATRICK_GOLDEN_DIR` (docstring du test).
 
+### 6. `test_backup_db.py::test_backup_database_creates_timestamped_file_in_dest_dir` -- résolu 2026-10-06
+
+Même famille que les points 1-2-4 (date figée dans un test), mais côté rétention : le test sauvegardait avec
+l'horodatage fixe `20260905_161500`, et `backup_database` purge juste après toute sauvegarde dont l'horodatage
+(lu dans le NOM du fichier) dépasse `retention_days` (30 jours par défaut). Le 2026-10-05, ce fichier est devenu
+« trop vieux » : il était créé puis supprimé par la purge, d'où `dest_path.exists()` faux. Confirmé par exécution :
+rouge avant, vert avec `retention_days=0`. Le test porte sur le nommage, pas sur la rétention (testée ailleurs dans le
+fichier avec des dates relatives) : correctif = `retention_days=0` dans cet appel, sans toucher au code de production.
+
 ---
 
 ## Contexte de découverte
