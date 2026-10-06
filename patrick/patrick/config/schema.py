@@ -31,6 +31,12 @@ class ObjectiveConfig(BaseModel):
     benchmark: str | None = None
     benchmark_source: Literal["auto", "manual"] | None = None
 
+    def raw_cache_key(self) -> str:
+        """Clé du snapshot de données de ce run dans le data lake. Une cible alpha a la sienne : le snapshot brut
+        `raw_<cible>` ne contient pas le benchmark, et lui servir ce cache donnerait un run sans benchmark."""
+        base = f"raw_{self.target_symbol}"
+        return base if self.target_kind != "alpha" else f"{base}__alpha_{self.benchmark}"
+
 
 class UniverseConfig(BaseModel):
     """The pool of tickers/series that features are derived from (not the target)."""
