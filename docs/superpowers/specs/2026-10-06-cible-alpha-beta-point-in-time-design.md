@@ -76,14 +76,24 @@ est donc « tel que connu à la décision » : les labels utilisent son vrai cal
 pour toutes les cibles sélectionnées). Un cas sans benchmark naturel (VIX, change, bitcoin, macro) est refusé avec la sortie
 « choisir un benchmark manuellement ». Relancer un run alpha restaure le choix (un benchmark automatique se redétermine).
 
-**Prédiction live.** Refusée explicitement pour un run alpha (`predict_live`) et écartée de la sélection quotidienne
-(`find_predictable_candidates`) : les classes réalisées d'un signal live se jugent sur le prix brut, fausses pour l'alpha.
+**Prédiction live.** Seuils (q25, q75) et classes réalisées calculés sur le rendement excédentaire : au jour du signal avec
+le β connu ce jour-là (jamais le futur), et un signal reste en attente tant que l'excédent n'est pas défini. Les runs alpha
+rejoignent la sélection quotidienne (`find_predictable_candidates`).
+
+**Simulation.** `simulate()` accepte un run alpha : le « prix » simulé est le niveau d'un portefeuille long actif / short
+`β_connu × benchmark`, couverture réajustée chaque jour, P&L sur le vrai calendrier du benchmark (`alpha_pair_level`).
+Retard d'exécution, DSR (famille alpha), métriques inchangés ; coûts appliqués aux deux jambes (`1 + |β|` médian),
+financement non modélisé (signalé dans le résultat).
+
+**Règles du fonds.** Un modèle d'alpha se trade en paire : l'actif du modèle d'un côté, le benchmark de l'autre (CFD ou
+future) pour `|β| × montant de l'actif`, du côté opposé si β > 0. Les deux jambes sont cotées avant tout placement, placées
+ou refusées ensemble ; si la seconde échoue après la première, la première est retirée. Détail dans la spec du fonds (§7 ter).
 
 **Reste à faire.**
 
-- Prédiction live d'un modèle d'alpha : seuils et classes réalisées sur le rendement excédentaire;
-- simulation d'un portefeuille long/short couvert (actif contre β × benchmark) pour juger un modèle d'alpha en rendement;
-- règles du fonds pilotées par un modèle d'alpha (positions couvertes) : refusées tant que cette simulation n'existe pas.
+- règles du fonds : jambe benchmark en future depuis la page (l'API la gère déjà), couverture proportionnelle réajustée
+  pendant la vie de la position (aujourd'hui : β figé à l'ouverture);
+- financement des positions courtes (CFD) dans la simulation couverte.
 
 ## 6. Points ouverts
 

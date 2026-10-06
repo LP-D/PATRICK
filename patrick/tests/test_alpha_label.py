@@ -3,12 +3,10 @@ champions, registre d'essais, familles DM/BH et rejeu patrimoine se séparent d'
 une surperformance, pas la direction du prix) n'est jamais rejoué comme un signal de prix."""
 from __future__ import annotations
 
-import pytest
 from test_fund_systematic import _model
 
 from patrick.config import target_label as tl
 from patrick.config.schema import RunConfig
-from patrick.fund import systematic
 from patrick.tracking import champions
 from patrick.tracking import db as trackdb
 from patrick.wealth import signal_replay
@@ -42,21 +40,6 @@ def _alpha_run(conn):
     conn.execute("UPDATE trial SET is_best = 1, artifact_path = 'x.joblib' WHERE trial_id = ?", (tid,))
     conn.commit()
     return tid
-
-
-def test_fund_rules_never_offer_an_alpha_model_as_a_price_signal(conn):
-    _alpha_run(conn)
-    assert systematic.available_models(conn) == []
-
-
-def test_fund_rules_refuse_an_alpha_trial_even_when_its_id_is_given_directly(conn):
-    from patrick.fund import store
-    tid = _alpha_run(conn)
-    sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
-    cfg = {"trial_id": tid, "segment": "holdout", "enter": 0.6, "exit": 0.5,
-           "instrument": {"kind": "equity", "symbol": "AAPL"}, "sizing": {"amount": 5000}}
-    with pytest.raises(store.FundError, match="alpha"):
-        systematic.create_rule(conn, sid, "x", cfg)
 
 
 def test_patrimoine_replay_never_picks_an_alpha_run_for_a_holding(conn):

@@ -68,6 +68,23 @@ Choix assumé : **pas d'aperçu des seuils avant création**. Essayer des seuils
 exactement le degré de liberté que le registre d'essais compte : la création est donc l'acte comptabilisé, et le plan
 d'une règle se lit après.
 
+## 7 ter. Modèle d'alpha : paire couverte
+
+Un essai dont la cible est alpha (`actif__alpha_benchmark`) prédit la surperformance de l'actif sur son benchmark, pas la
+direction de son prix. La règle exige alors une **couverture** (`hedge` : `cfd` ou `future`) et l'instrument négocié est la
+cible du modèle (le symbole se complète tout seul). Chaque signal ouvre une paire :
+
+- jambe actif : comme une règle ordinaire (montant ou quantité, long, ou short en CFD/future);
+- jambe benchmark : côté opposé si β > 0, pour `|β| × montant de l'actif`, au cours du jour d'exécution (CFD au prix du
+  benchmark, quantité arrondie à 4 décimales ; future arrondi au contrat entier, 1 au minimum);
+- β estimé sur les cotations du fonds (fenêtre glissante de 252 jours, au moins 60 rendements communs), décalé du retard de
+  séance du benchmark : jamais le futur. Sans β connu à la date du signal, la paire est refusée avec ce motif.
+
+Les deux jambes sont cotées avant tout placement et refusées ensemble (levier au-delà du plafond, liquidités, PEA qui interdit
+les CFD...). Si la seconde échoue après la première, la première est retirée : jamais de jambe actif non couverte. Notes :
+`auto:<règle>:<date>:open` / `open_hedge` / `close` / `close_hedge`; `apply` reste idempotent. β figé à l'ouverture (pas de
+réajustement pendant la vie de la position).
+
 ## 7 bis. Hors périmètre
 
 - Planification automatique quotidienne de `apply`.

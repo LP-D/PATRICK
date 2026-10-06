@@ -254,6 +254,13 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_rule_short_on": _s("short autorisé", "short allowed"),
     "fund_rule_test_warning": _s("Segment test : sélectionné sur ces scores, performance biaisée à la hausse.",
                                  "Test segment: selected on these scores, upward-biased performance."),
+    "fund_rule_hedge_symbol": _s("Couverture : symbole (CFD, vide = benchmark du modèle)",
+                                 "Hedge: symbol (CFD, empty = the model's benchmark)"),
+    "fund_rule_hedge_leverage": _s("Couverture : levier (CFD)", "Hedge: leverage (CFD)"),
+    "fund_rule_alpha_hint": _s(
+        "Modèle d'alpha : il prédit une surperformance face à son benchmark. Chaque signal ouvre une paire : l'actif d'un côté, le benchmark de l'autre pour β × le montant de l'actif (β estimé sans regarder le futur, avec les cotations du fonds). Les deux jambes sont placées ou refusées ensemble ; la jambe benchmark est un CFD (interdit en PEA).",
+        "Alpha model: it predicts out-performance against its benchmark. Each signal opens a pair: the asset on one side, the benchmark on the other for β × the asset amount (β estimated without looking ahead, from the fund's quotes). Both legs are placed or refused together; the benchmark leg is a CFD (not allowed in a PEA)."),
+    "fund_rule_hedged_vs": _s("couvert contre {symbol}", "hedged against {symbol}"),
     "fund_rule_result": _s("{placed} ordre(s) placé(s), {already} déjà présent(s), {pending} en attente, {refused} refusé(s), {skipped} sauté(s).",
                            "{placed} order(s) placed, {already} already there, {pending} pending, {refused} refused, {skipped} skipped."),
 }

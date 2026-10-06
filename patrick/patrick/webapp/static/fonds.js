@@ -171,6 +171,13 @@
         if (f.allow_short) { f.allow_short.disabled = !shortable; if (!shortable) f.allow_short.checked = false; }
         var opt = f.trial_id.options[f.trial_id.selectedIndex], segments = {};
         try { segments = JSON.parse(opt.getAttribute("data-segments") || "{}"); } catch (e) { segments = {}; }
+        /* modèle d'alpha : la jambe de couverture apparaît, l'actif négocié est celui du modèle */
+        var alpha = opt.getAttribute("data-kind") === "alpha";
+        form.querySelectorAll("[data-alpha-only]").forEach(function (el) { el.hidden = !alpha; });
+        if (alpha) {
+            f.hedge_symbol.placeholder = opt.getAttribute("data-benchmark") || "";
+            if (f.symbol && !f.symbol.value.trim()) f.symbol.value = opt.getAttribute("data-asset") || "";
+        }
         Array.prototype.forEach.call(f.segment.options, function (o) { o.disabled = !segments[o.value]; });
         if (f.segment.options[f.segment.selectedIndex].disabled) {
             var first = Array.prototype.find.call(f.segment.options, function (o) { return !o.disabled; });
@@ -194,6 +201,11 @@
             instrument: instrument,
             sizing: (kind === "equity" || kind === "etf") ? { amount: Number(f.amount.value) } : { quantity: Number(f.quantity.value) },
         };
+        var chosen = f.trial_id.options[f.trial_id.selectedIndex];
+        if (chosen && chosen.getAttribute("data-kind") === "alpha") {
+            config.hedge = { kind: "cfd", symbol: f.hedge_symbol.value.trim() };
+            if (present(f.hedge_leverage.value)) config.hedge.spec = { leverage: Number(f.hedge_leverage.value) };
+        }
         await call("/api/fund/strategies/" + encodeURIComponent(form.getAttribute("data-strategy-id")) + "/rules", "POST",
                    { name: f["name"].value.trim(), config: config });
     }
