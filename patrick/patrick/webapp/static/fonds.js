@@ -1,6 +1,7 @@
 /* Page /fonds : un clic sur une stratégie charge son panneau (fragment HTML rendu par
    le serveur, échappé : GET /api/fund/strategies/{id}/panel), puis :
    - graphique de la valeur (canvas HiDPI, couleurs lues dans les jetons CSS au dessin) ;
+   - règles automatiques : créer, appliquer, supprimer (/api/fund/.../rules, /api/fund/rules/{id}/apply) ;
    - Ajuster / Corriger / Supprimer une position, renommer / archiver / supprimer la stratégie,
      tous via /api/fund/* ; les refus de règle (422) s'affichent dans le formulaire. */
 (function () {
@@ -125,6 +126,7 @@
                 if (current !== id) return;
                 panel.innerHTML = html;          // fragment rendu serveur, échappé par Jinja
                 drawChart();
+                initRuleForms();
                 panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
             })
             .catch(function () { if (current === id) loading.textContent = "—"; });
@@ -159,6 +161,50 @@
         });
         return spec;
     }
+    /* ---- formulaire « Nouvelle règle » : champs visibles selon l'instrument, segments selon le modèle ---- */
+    function syncRuleForm(form) {
+        var f = form.elements, kind = f.kind.value;
+        form.querySelectorAll("[data-kinds]").forEach(function (el) {
+            el.hidden = el.getAttribute("data-kinds").split(" ").indexOf(kind) === -1;
+        });
+        var shortable = kind === "cfd" || kind === "future";
+        if (f.allow_short) { f.allow_short.disabled = !shortable; if (!shortable) f.allow_short.checked = false; }
+        var opt = f.trial_id.options[f.trial_id.selectedIndex], segments = {};
+        try { segments = JSON.parse(opt.getAttribute("data-segments") || "{}"); } catch (e) { segments = {}; }
+        Array.prototype.forEach.call(f.segment.options, function (o) { o.disabled = !segments[o.value]; });
+        if (f.segment.options[f.segment.selectedIndex].disabled) {
+            var first = Array.prototype.find.call(f.segment.options, function (o) { return !o.disabled; });
+            if (first) f.segment.value = first.value;
+        }
+    }
+    function initRuleForms() {
+        panel.querySelectorAll('form[data-form="rule"]').forEach(syncRuleForm);
+    }
+    async function submitRule(form) {
+        var f = form.elements, kind = f.kind.value, instrument = { kind: kind };
+        if (kind === "future") {
+            instrument.spec = { root: f.root.value.trim().toUpperCase(), year: Number(f.year.value), month: Number(f.month.value) };
+        } else {
+            instrument.symbol = f.symbol.value.trim();
+            if (kind === "cfd" && present(f.leverage.value)) instrument.spec = { leverage: Number(f.leverage.value) };
+        }
+        var config = {
+            trial_id: Number(f.trial_id.value), segment: f.segment.value,
+            enter: Number(f.enter.value), exit: Number(f.exit.value), allow_short: !!f.allow_short.checked,
+            instrument: instrument,
+            sizing: (kind === "equity" || kind === "etf") ? { amount: Number(f.amount.value) } : { quantity: Number(f.quantity.value) },
+        };
+        await call("/api/fund/strategies/" + encodeURIComponent(form.getAttribute("data-strategy-id")) + "/rules", "POST",
+                   { name: f["name"].value.trim(), config: config });
+    }
+    function ruleResult(r) {
+        var text = (window.I18N && window.I18N.fund_rule_result) || "{placed} / {already} / {pending} / {refused} / {skipped}";
+        var counts = { placed: r.placed.length, already: r.already, pending: r.pending.length,
+                       refused: r.refused.length, skipped: r.skipped.length };
+        Object.keys(counts).forEach(function (k) { text = text.replace("{" + k + "}", counts[k]); });
+        r.refused.slice(0, 3).forEach(function (x) { text += " " + x.signal + " " + x.action + " : " + x.reasons.join(", ") + "."; });
+        return text;
+    }
     async function submitAdjust(form) {
         var f = form.elements, action = f.action.value;
         var req = { action: action, position_id: form.getAttribute("data-position-id"), date: f.date.value };
@@ -183,7 +229,9 @@
 
     panel.addEventListener("change", function (e) {
         var form = e.target.closest("form[data-form]");
-        if (form && e.target.name === "action") syncActions(form);
+        if (!form) return;
+        if (form.getAttribute("data-form") === "rule") { syncRuleForm(form); return; }
+        if (e.target.name === "action") syncActions(form);
     });
     /* Un envoi à la fois : tant que la requête n'est pas revenue, le bouton est inactif (un double clic créait
        deux ordres). Sur succès la page se recharge ; sur échec le bouton est rendu. */
@@ -199,7 +247,10 @@
         if (send.disabled) return;
         setBusy(send, true);
         try {
-            if (form.getAttribute("data-form") === "adjust") await submitAdjust(form); else await submitCorrect(form);
+            var which = form.getAttribute("data-form");
+            if (which === "adjust") await submitAdjust(form);
+            else if (which === "rule") await submitRule(form);
+            else await submitCorrect(form);
             reload(current);
         } catch (err) {
             showError(form, err.blocking || [err.message]);
@@ -239,6 +290,14 @@
             } else if (act === "delete-strategy") {
                 await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "DELETE");
                 reload(null);
+            } else if (act === "apply-rule") {
+                var result = await call("/api/fund/rules/" + encodeURIComponent(btn.getAttribute("data-rule-id")) + "/apply", "POST", {});
+                say(ruleResult(result), result.refused.length ? "error" : "info");
+                setBusy(btn, false);
+                open(current);
+            } else if (act === "delete-rule") {
+                await call("/api/fund/rules/" + encodeURIComponent(btn.getAttribute("data-rule-id")), "DELETE");
+                open(current);
             } else if (act === "archive") {
                 await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "PATCH", { archived: true });
                 reload(null);

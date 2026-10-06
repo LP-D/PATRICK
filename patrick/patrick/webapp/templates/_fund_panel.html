@@ -190,6 +190,89 @@
 </div>
 {% endif %}
 
+<h3>{{ t('fund_rules_title') }} <span class="hint">({{ rules | length }})</span></h3>
+<p class="hint">{{ t('fund_rules_hint') }}</p>
+{% if rules %}
+<div class="table-scroll">
+  <table class="data-table fund-rules">
+    <thead>
+      <tr>
+        <th>{{ t('fund_rule_col_name') }}</th><th>{{ t('fund_rule_col_model') }}</th>
+        <th>{{ t('fund_rule_col_thresholds') }}</th><th>{{ t('fund_rule_col_instrument') }}</th>
+        <th class="num pk-mono">{{ t('fund_rule_col_size') }}</th><th class="num pk-mono">{{ t('fund_rule_col_orders') }}</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rules %}{% set c = r.config %}
+      <tr class="fund-rule">
+        <td>{{ r.name }}</td>
+        <td class="pk-mono">
+          {% if r.model %}{{ r.model.target }} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}—{% endif %}
+          <span class="tag">{{ c.segment }}</span>
+          {% if c.segment == 'test' %}<span class="tag" title="{{ t('fund_rule_test_warning') }}">!</span>{% endif %}
+        </td>
+        <td class="pk-mono">{{ t('fund_rule_enter') }} {{ c.enter }} · {{ t('fund_rule_exit') }} {{ c.exit }}{% if c.allow_short %} · {{ t('fund_rule_short_on') }}{% endif %}</td>
+        <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol or c.instrument.spec.root }}</span></td>
+        <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>
+        <td class="num pk-mono">{{ r.n_orders }}</td>
+        <td class="fund-actions">
+          <button type="button" class="btn-ghost" data-act="apply-rule" data-rule-id="{{ r.rule_id }}">{{ t('fund_rule_apply') }}</button>
+          <button type="button" class="btn-ghost" data-act="delete-rule" data-rule-id="{{ r.rule_id }}"
+                  data-confirm="{{ t('fund_rule_confirm_delete') }}">{{ t('fund_rule_delete') }}</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="hint">{{ t('fund_rules_none') }}</p>
+{% endif %}
+
+<details class="fund-rule-new"{% if not rules and models %} open{% endif %}>
+  <summary>{{ t('fund_rule_new') }}</summary>
+  {% if models %}
+  <form class="form fund-inline-form" data-form="rule" data-strategy-id="{{ s.strategy_id }}">
+    <div class="subgrid">
+      <label>{{ t('fund_rule_name') }} <input type="text" name="name" required maxlength="120"></label>
+      <label>{{ t('fund_rule_model') }}
+        <select name="trial_id">
+          {% for m in models %}
+          <option value="{{ m.trial_id }}" data-segments='{{ m.segments | tojson }}'>{{ m.target }} h{{ m.horizon }} · {{ m.algo }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %} · {{ m.started_at[:10] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>{{ t('fund_rule_segment') }}
+        <select name="segment">
+          <option value="holdout">{{ t('fund_rule_segment_holdout') }}</option>
+          <option value="live">{{ t('fund_rule_segment_live') }}</option>
+          <option value="test">{{ t('fund_rule_segment_test') }}</option>
+        </select>
+      </label>
+      <label>{{ t('fund_rule_enter') }} <input type="number" name="enter" min="0.51" max="0.99" step="0.01" value="0.60" required></label>
+      <label>{{ t('fund_rule_exit') }} <input type="number" name="exit" min="0.5" max="0.99" step="0.01" value="0.50" required></label>
+      <label>{{ t('fund_rule_instrument') }}
+        <select name="kind">
+          {% for kind in ('equity', 'etf', 'cfd', 'future') %}<option value="{{ kind }}">{{ t('fund_kind_' ~ kind) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label data-kinds="equity etf cfd">{{ t('fund_rule_symbol') }} <input type="text" name="symbol" maxlength="30" placeholder="AAPL"></label>
+      <label data-kinds="future">{{ t('fund_rule_root') }} <input type="text" name="root" maxlength="10" placeholder="ES"></label>
+      <label data-kinds="future">{{ t('fund_rule_year') }} <input type="number" name="year" min="2000" max="2100" step="1" value="{{ today[:4] }}"></label>
+      <label data-kinds="future">{{ t('fund_rule_month') }} <input type="number" name="month" min="1" max="12" step="1"></label>
+      <label data-kinds="cfd">{{ t('fund_rule_leverage') }} <input type="number" name="leverage" min="1" step="any"></label>
+      <label data-kinds="equity etf">{{ t('fund_rule_amount') }} <input type="number" name="amount" min="1" step="any"></label>
+      <label data-kinds="cfd future">{{ t('fund_rule_quantity') }} <input type="number" name="quantity" min="1" step="1"></label>
+      <label data-kinds="cfd future" class="fund-check"><input type="checkbox" name="allow_short"> {{ t('fund_rule_allow_short') }}</label>
+    </div>
+    <p class="fund-form-error banner banner-error" hidden></p>
+    <div class="row"><button type="submit" class="btn">{{ t('fund_rule_create') }}</button></div>
+  </form>
+  {% else %}
+  <p class="hint">{{ t('fund_rule_no_model') }}</p>
+  {% endif %}
+</details>
+
 <details class="fund-orders">
   <summary>{{ t('fund_orders_title') }} ({{ snap.orders | length }})</summary>
   <div class="table-scroll">
