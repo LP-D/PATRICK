@@ -37,7 +37,9 @@ def test_backup_database_creates_timestamped_file_in_dest_dir(tmp_path):
     conn.close()
 
     dest_dir = tmp_path / "backups"
-    dest_path = backup.backup_database(source_path, str(dest_dir), timestamp="20260905_161500")
+    # retention_days=0 : ce test porte sur le nommage, pas sur la rétention (un horodatage fixe finit
+    # toujours par dépasser la rétention par défaut de 30 jours, cf. KNOWN_ISSUES.md).
+    dest_path = backup.backup_database(source_path, str(dest_dir), timestamp="20260905_161500", retention_days=0)
 
     assert dest_path.exists()
     assert dest_path.parent == dest_dir
