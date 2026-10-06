@@ -90,6 +90,18 @@ def alpha_level_series(asset: pd.Series, bench_asof: pd.Series, window: int = DE
     return 100.0 * (1.0 + daily.fillna(0.0)).cumprod()
 
 
+def alpha_pair_level(asset: pd.Series, bench_asof: pd.Series, window: int = DEFAULT_WINDOW,
+                     min_obs: int = DEFAULT_MIN_OBS, bench_lag: int = 0) -> tuple[pd.Series, pd.Series]:
+    """Niveau (base 100) d'un portefeuille long 1 actif / short `β_connu` benchmark, couverture réajustée chaque
+    jour, et `β_connu`. Le P&L du jour *t* utilise le rendement du VRAI jour *t* du benchmark (calendrier
+    reconstitué) : c'est ce que la position a réellement gagné. Tant que `β` est inconnu, la paire est à plat.
+    Sert de « prix » à la simulation d'un modèle d'alpha."""
+    a, b = _aligned(asset, bench_asof)
+    beta = known_beta(a, b, bench_lag, DEFAULT_WINDOW if window is None else window, min_obs)
+    daily = a.pct_change() - beta * b.shift(-bench_lag).pct_change()
+    return 100.0 * (1.0 + daily.fillna(0.0)).cumprod(), beta
+
+
 def build_alpha_target(asset: pd.Series, bench_asof: pd.Series, horizon: int, split_idx: int,
                        window: int = DEFAULT_WINDOW, min_obs: int = DEFAULT_MIN_OBS,
                        flat_thr: float = 0.003, bench_lag: int = 0) -> tuple[pd.Series, pd.Series, dict]:

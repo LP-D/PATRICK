@@ -309,6 +309,25 @@ def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
     return c_star * 10000.0
 
 
+def _alpha_pair(run: dict, raw: pd.DataFrame) -> tuple[pd.Series, dict, float]:
+    """(niveau de la paire couverte, description de la couverture, multiplicateur de coûts) d'un run alpha.
+    Les coûts (écart, commission) s'appliquent aux deux jambes : `1 + |β|` par unité d'exposition, avec le
+    |β| médian de la fenêtre -- une approximation, signalée dans le résultat."""
+    from patrick.config.schema import RunConfig
+    from patrick.config.target_label import split_run_label
+    from patrick.features import alpha_target
+
+    config = RunConfig.model_validate_json(run["config_json"])
+    symbol, _, benchmark = split_run_label(run["target"])
+    asset, bench_asof = raw[clean_symbol(symbol)], raw[clean_symbol(benchmark)]
+    level, beta = alpha_target.alpha_pair_level(asset, bench_asof, bench_lag=alpha_target.bench_lag(config.objective))
+    median_abs_beta = float(beta.abs().median()) if beta.notna().any() else 0.0
+    description = {"asset": symbol, "benchmark": benchmark, "cost_multiplier": 1.0 + median_abs_beta,
+                   "note": "portefeuille long actif / short β × benchmark, couverture réajustée chaque jour; "
+                           "coûts appliqués aux deux jambes (1 + |β| médian), financement non modélisé"}
+    return level.ffill().dropna(), description, 1.0 + median_abs_beta
+
+
 def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
              store_root: str | None = None, segment: str | None = None) -> dict:
     """`segment` (F06): `"holdout"`, `"test"` or `"live"` -- simulated alone,
@@ -326,9 +345,6 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         run = trackdb.get_run(conn, trial_row[0])
         if run is None:
             raise ValueError(f"Run not found for trial {trial_id}")
-        if is_alpha_label(run["target"]):
-            raise ValueError("Cible alpha : ce modèle prédit une surperformance face à un benchmark ; simuler une "
-                             "position sur le seul prix de l'actif serait faux (portefeuille long/short hedgé : à venir).")
 
         kelly_ok, kelly_message = (True, None)
         if params.position_mode == "heuristic_leverage":
@@ -348,8 +364,15 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
 
         store = DataStore(root=store_root) if store_root else DataStore()
         raw = store.load(f"raw_{run['target']}", snapshot_id=run["snapshot_id"])
-        target_col = clean_symbol(run["target"])
-        underlying = raw[target_col].ffill().dropna()
+        hedge = None
+        cost_multiplier = 1.0
+        if is_alpha_label(run["target"]):
+            # Modèle d'alpha : il prédit une surperformance face au benchmark. On le simule sur le portefeuille
+            # long actif / short β × benchmark, jamais sur le seul prix de l'actif (ce serait faux).
+            underlying, hedge, cost_multiplier = _alpha_pair(run, raw)
+        else:
+            target_col = clean_symbol(run["target"])
+            underlying = raw[target_col].ffill().dropna()
 
         # The simulated window ends when the last signal's position expires
         # (entry = last signal + lag, held `horizon` bars) -- not at the end
@@ -367,7 +390,7 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         exposure = _build_exposure(pred_df["ts"], target_pos, daily_index, run["horizon"], params)
 
         turnover = exposure.diff().abs().fillna(exposure.abs())
-        trading_cost = turnover * (params.spread_bps + params.commission_bps) / 10000.0
+        trading_cost = turnover * (params.spread_bps + params.commission_bps) * cost_multiplier / 10000.0
         carry_cost = exposure.abs() * (params.carry_bps_per_year / 10000.0) / simmetrics.TRADING_DAYS_PER_YEAR
         strategy_returns = exposure * underlying_ret - trading_cost - carry_cost
         gross_returns = exposure * underlying_ret - carry_cost
@@ -418,6 +441,9 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
             "drawdown_curve": _series_to_points(equity / equity.cummax() - 1),
             "trade_returns": [round(float(r), 6) for r in trade_returns],
         }
+        if hedge is not None:
+            hedge["median_abs_beta"] = float(cost_multiplier - 1.0)
+            result["hedge"] = hedge
         return _to_json_safe(result)
     finally:
         conn.close()

@@ -207,12 +207,13 @@
       <tr class="fund-rule">
         <td>{{ r.name }}</td>
         <td class="pk-mono">
-          {% if r.model %}{{ r.model.target }} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}—{% endif %}
+          {% if r.model %}{% if r.model.kind == 'alpha' %}{{ r.model.target.split('__alpha_')[0] }} <span class="tag">α vs {{ r.model.benchmark }}</span>{% else %}{{ r.model.target }}{% endif %} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}—{% endif %}
           <span class="tag">{{ c.segment }}</span>
           {% if c.segment == 'test' %}<span class="tag" title="{{ t('fund_rule_test_warning') }}">!</span>{% endif %}
         </td>
         <td class="pk-mono">{{ t('fund_rule_enter') }} {{ c.enter }} · {{ t('fund_rule_exit') }} {{ c.exit }}{% if c.allow_short %} · {{ t('fund_rule_short_on') }}{% endif %}</td>
-        <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol or c.instrument.spec.root }}</span></td>
+        <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol or c.instrument.spec.root }}</span>
+          {% if c.hedge %}<br><span class="hint">{{ t('fund_rule_hedged_vs', symbol=(c.hedge.symbol or c.hedge.spec.root)) }}</span>{% endif %}</td>
         <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>
         <td class="num pk-mono">{{ r.n_orders }}</td>
         <td class="fund-actions">
@@ -238,7 +239,7 @@
       <label>{{ t('fund_rule_model') }}
         <select name="trial_id">
           {% for m in models %}
-          <option value="{{ m.trial_id }}" data-segments='{{ m.segments | tojson }}'>{{ m.target }} h{{ m.horizon }} · {{ m.algo }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %} · {{ m.started_at[:10] }}</option>
+          <option value="{{ m.trial_id }}" data-segments='{{ m.segments | tojson }}' data-kind="{{ m.kind }}" data-asset="{{ m.asset }}" data-benchmark="{{ m.benchmark or '' }}">{% if m.kind == 'alpha' %}{{ m.asset }} α vs {{ m.benchmark }}{% else %}{{ m.target }}{% endif %} h{{ m.horizon }} · {{ m.algo }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %} · {{ m.started_at[:10] }}</option>
           {% endfor %}
         </select>
       </label>
@@ -264,7 +265,10 @@
       <label data-kinds="equity etf">{{ t('fund_rule_amount') }} <input type="number" name="amount" min="1" step="any"></label>
       <label data-kinds="cfd future">{{ t('fund_rule_quantity') }} <input type="number" name="quantity" min="1" step="1"></label>
       <label data-kinds="cfd future" class="fund-check"><input type="checkbox" name="allow_short"> {{ t('fund_rule_allow_short') }}</label>
+      <label data-alpha-only hidden>{{ t('fund_rule_hedge_symbol') }} <input type="text" name="hedge_symbol" maxlength="30"></label>
+      <label data-alpha-only hidden>{{ t('fund_rule_hedge_leverage') }} <input type="number" name="hedge_leverage" min="1" step="any"></label>
     </div>
+    <p class="hint" data-alpha-only hidden>{{ t('fund_rule_alpha_hint') }}</p>
     <p class="fund-form-error banner banner-error" hidden></p>
     <div class="row"><button type="submit" class="btn">{{ t('fund_rule_create') }}</button></div>
   </form>

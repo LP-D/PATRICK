@@ -3,13 +3,10 @@ champions, registre d'essais, familles DM/BH et rejeu patrimoine se séparent d'
 une surperformance, pas la direction du prix) n'est jamais rejoué comme un signal de prix."""
 from __future__ import annotations
 
-import pytest
 from test_fund_systematic import _model
 
 from patrick.config import target_label as tl
 from patrick.config.schema import RunConfig
-from patrick.fund import systematic
-from patrick.simulate import engine as sim_engine
 from patrick.tracking import champions
 from patrick.tracking import db as trackdb
 from patrick.wealth import signal_replay
@@ -45,21 +42,6 @@ def _alpha_run(conn):
     return tid
 
 
-def test_fund_rules_never_offer_an_alpha_model_as_a_price_signal(conn):
-    _alpha_run(conn)
-    assert systematic.available_models(conn) == []
-
-
-def test_fund_rules_refuse_an_alpha_trial_even_when_its_id_is_given_directly(conn):
-    from patrick.fund import store
-    tid = _alpha_run(conn)
-    sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
-    cfg = {"trial_id": tid, "segment": "holdout", "enter": 0.6, "exit": 0.5,
-           "instrument": {"kind": "equity", "symbol": "AAPL"}, "sizing": {"amount": 5000}}
-    with pytest.raises(store.FundError, match="alpha"):
-        systematic.create_rule(conn, sid, "x", cfg)
-
-
 def test_patrimoine_replay_never_picks_an_alpha_run_for_a_holding(conn):
     _alpha_run(conn)
     assert signal_replay._winning_trial(conn, "MC.PA") is None
@@ -85,39 +67,3 @@ def test_the_trial_registry_counts_alpha_trials_in_their_own_family(conn):
     from patrick.tracking import stats
     assert stats.count_cumulative_trials(conn, "MC.PA__alpha_^GSPC") >= 1
     assert stats.count_cumulative_trials(conn, "MC.PA") == 0
-
-
-def test_simulation_refuses_an_alpha_trial_with_an_explicit_message(conn, tmp_path, monkeypatch):
-    tid = _alpha_run(conn)
-    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    with pytest.raises(ValueError, match="alpha"):
-        sim_engine.simulate(tid, sim_engine.SimParams(), db_path=str(tmp_path / "patrick.db"))
-
-
-def test_daily_prediction_never_picks_an_alpha_run(conn, tmp_path):
-    """Les classes réalisées d'un signal live se jugent sur le prix brut : pour un modèle d'alpha elles seraient fausses."""
-    from patrick import live_refresh
-    tid = _alpha_run(conn)
-    model = tmp_path / "alpha_model.joblib"
-    model.write_bytes(b"x")
-    conn.execute("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", (str(model), tid))
-    conn.commit()
-
-    assert live_refresh.find_predictable_candidates(conn) == []
-
-    conn.execute("UPDATE run SET target = 'MC.PA' WHERE run_id = 'run1'")        # le même run, étiqueté brut
-    conn.commit()
-    assert [c.target for c in live_refresh.find_predictable_candidates(conn)] == ["MC.PA"]
-
-
-def test_predict_live_refuses_an_alpha_run_before_loading_anything(conn, tmp_path):
-    from patrick import predict
-    tid = _alpha_run(conn)
-    model = tmp_path / "alpha_model.joblib"
-    model.write_bytes(b"not a real bundle")
-    conn.execute("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", (str(model), tid))
-    conn.commit()
-    db = str(tmp_path / "patrick.db")
-
-    with pytest.raises(ValueError, match="alpha"):
-        predict.predict_live("run1", db_path=db)

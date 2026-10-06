@@ -1,0 +1,60 @@
+# Exemple de cible ALPHA : le modèle prédit si LVMH fait mieux ou moins bien que son benchmark
+# (rendement - β × benchmark, β estimé sans regarder le futur), pas la direction de son prix.
+# `benchmark` absent = déterminé automatiquement d'après la classe d'actif et la région
+# (action cotée à Paris -> ^STOXX50E) ; pour le choisir à la main : `benchmark: "^FCHI"`.
+# Le benchmark retenu et sa provenance sont écrits dans la config du run (reproductibilité).
+name: mc_pa_alpha
+
+objective:
+  target_symbol: "MC.PA"
+  target_source: yfinance
+  target_kind: alpha
+  horizons: [5, 20]
+  flat_thr: 0.003
+  regimes: ["GLOBAL"]
+
+universe:
+  start_date: "2008-01-01"
+  yf_coverage: 0.85
+  yf_tickers:
+    - "^GSPC"
+    - "^FCHI"
+    - "^VIX"
+    - "EURUSD=X"
+    - "TLT"
+    - "CL=F"
+    - "GC=F"
+  fred_series:
+    NFCI: "NFCI"
+    T10Y2Y: "T10Y2Y"
+
+features:
+  families: ["technical", "interactions", "spike", "vol_models", "macro"]
+  pool_prefilter: 200
+
+validation:
+  n_wf_folds: 4
+  min_train_frac: 0.40
+  purge: true
+
+selection:
+  method: shap
+  n_features_grid: [8, 15]
+  shap_sample: 400
+
+sampler:
+  candidates: ["SMOTE"]
+
+models:
+  algos: ["XGBoost", "LightGBM", "RandomForest"]
+
+tuning:
+  enabled: true
+  top_k: 2
+  n_trials: 20
+  cv_splits: 3
+  optuna_select_top_k_per_horizon: true
+
+output:
+  dir: "runs/mc_pa_alpha"
+  seed: 42
