@@ -29,6 +29,8 @@ research_app = typer.Typer(help="Études de recherche -- lecture/mesure, n'entra
 app.add_typer(research_app, name="research")
 champions_app = typer.Typer(help="Modèles en titre (champion/challenger) : un seul modèle par cible et horizon.")
 app.add_typer(champions_app, name="champions")
+fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres générés par un modèle à seuils).")
+app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
 
@@ -553,6 +555,81 @@ def sync_pull_cmd(
         typer.echo(f"Ancienne base sauvegardée : {result['backup']}")
     if result["personal_tables_kept"]:
         typer.echo("Patrimoine/fonds locaux conservés (" + ", ".join(result["personal_tables_kept"]) + ").")
+
+
+@fund_app.command(name="rule-create")
+def fund_rule_create_cmd(
+    strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)"),
+    name: str = typer.Option(..., "--name", help="Nom de la règle"),
+    config: str = typer.Option(..., "--config", help="Fichier JSON : trial_id, segment, enter, exit, allow_short, "
+                                                     "instrument, sizing"),
+) -> None:
+    """Crée une règle « modèle ML avec seuils ». Les seuils comptent comme une configuration essayée (DSR)."""
+    import json
+
+    from patrick.fund import store as fund_store
+    from patrick.fund import systematic
+
+    with open(config, encoding="utf-8") as f:
+        cfg = json.load(f)
+    conn = trackdb.connect()
+    try:
+        rule_id = systematic.create_rule(conn, strategy, name, cfg)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(f"Règle créée : {rule_id}")
+
+
+@fund_app.command(name="rule-list")
+def fund_rule_list_cmd(strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie")) -> None:
+    """Les règles d'une stratégie."""
+    from patrick.fund import systematic
+
+    conn = trackdb.connect()
+    try:
+        rules = systematic.list_rules(conn, strategy)
+        if not rules:
+            typer.echo("Aucune règle.")
+        for r in rules:
+            c = r["config"]
+            typer.echo(f"{r['rule_id']}  {r['name']:<24} essai {c['trial_id']} ({c['segment']})  "
+                       f"entrée {c['enter']:g} / sortie {c['exit']:g}  {c['instrument']['kind']} "
+                       f"{c['instrument']['symbol'] or c['instrument']['spec'].get('root', '')}")
+    finally:
+        conn.close()
+
+
+@fund_app.command(name="rule-apply")
+def fund_rule_apply_cmd(
+    rule_id: str = typer.Argument(..., help="Identifiant de la règle (rule_...)"),
+    today: str = typer.Option(None, "--today", help="Date d'exécution AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Place les ordres de la règle qui n'existent pas encore (relancer ne duplique jamais)."""
+    import datetime as dt
+
+    from patrick.fund import store as fund_store
+    from patrick.fund import systematic
+
+    day = dt.date.fromisoformat(today) if today else None
+    conn = trackdb.connect()
+    try:
+        res = systematic.apply(conn, rule_id, day)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(f"{len(res['placed'])} ordre(s) placé(s), {res['already']} déjà présent(s), "
+               f"{len(res['pending'])} en attente, {len(res['refused'])} refusé(s), {len(res['skipped'])} sauté(s).")
+    if res["segment_warning"]:
+        typer.echo(f"Attention : {res['segment_warning']}")
+    for r in res["refused"]:
+        typer.echo(f"  refusé {r['signal']} {r['action']} {r['side']} : {' ; '.join(r['reasons'])}")
+    if res["drift"]:
+        typer.echo(f"  {len(res['drift'])} ordre(s) automatique(s) existant(s) hors du plan actuel (conservés).")
 
 
 if __name__ == "__main__":
