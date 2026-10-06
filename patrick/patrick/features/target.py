@@ -11,12 +11,17 @@ TARGET_COL = "target_class"
 
 
 def build_target(series: pd.Series, horizon: int, split_idx: int,
-                  flat_thr: float = 0.003) -> tuple[pd.Series, pd.Series, dict]:
+                  flat_thr: float = 0.003, ret: pd.Series | None = None) -> tuple[pd.Series, pd.Series, dict]:
     """Returns (target, regime_by_date, thresholds_by_regime). Regime
     thresholds (CALM/NORMAL/STRESS, 33%/67% quantiles of the level) and
     classification thresholds (25%/75% quantiles of the return, per regime)
     are fitted solely on `series[:split_idx]` (the fold's train set) -- no
     future leak.
+
+    `ret` (optional): forward return over `horizon` already computed by the
+    caller and indexed like `series` (e.g. the excess return over a benchmark,
+    `features/alpha_target.py`); by default the raw return of `series`. The
+    regime and the purge of the last `horizon` points are unchanged.
 
     Phase 0 (correctness): classification thresholds used to be fitted on
     `ret.loc[ret.index < cut_date]`, but `ret[d] = s[d+horizon]/s[d] - 1` --
@@ -37,7 +42,7 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     regime[s < calm_thr] = "CALM"
     regime[s >= stress_thr] = "STRESS"
 
-    ret = (s.shift(-horizon) / s) - 1
+    ret = (s.shift(-horizon) / s) - 1 if ret is None else ret.reindex(s.index)
     flat = ret.abs() < flat_thr
     ret = ret.loc[~flat].dropna()
     reg_r = regime.reindex(ret.index)
