@@ -46,7 +46,7 @@ monde (`URTH`), reste → monde. Jamais la cible elle-même (repli sur le monde)
 un indice de volatilité, une série macro ou bitcoin lui-même : l'erreur le dit et propose le choix manuel. Le résultat
 porte sa raison et sa provenance (`auto` | `manual`), à enregistrer avec le run (reproductibilité si la table évolue).
 
-## 5 bis. Jalon 2b : branchement au pipeline (livré, sauf prédiction live et page « Lancer »)
+## 5 bis. Jalon 2b : branchement au pipeline (livré)
 
 **Étiquette de cible distincte.** `run.target` est lu par ~68 requêtes SQL (champions, registre d'essais, familles DM/BH,
 rejeu du patrimoine, historique). Plutôt qu'une colonne à filtrer partout, un run alpha a une étiquette propre :
@@ -72,11 +72,18 @@ est donc « tel que connu à la décision » : les labels utilisent son vrai cal
 (momentum, marche aléatoire, HAR-RV) lisent le niveau d'alpha (`alpha_level_series`), pas le prix. Les baselines de classe
 (majorité, persistance) lisent déjà les classes alpha.
 
+**Page « Lancer ».** Sélecteur « Rendement brut | Alpha » et champ benchmark (vide = automatique, sinon ticker saisi, valable
+pour toutes les cibles sélectionnées). Un cas sans benchmark naturel (VIX, change, bitcoin, macro) est refusé avec la sortie
+« choisir un benchmark manuellement ». Relancer un run alpha restaure le choix (un benchmark automatique se redétermine).
+
+**Prédiction live.** Refusée explicitement pour un run alpha (`predict_live`) et écartée de la sélection quotidienne
+(`find_predictable_candidates`) : les classes réalisées d'un signal live se jugent sur le prix brut, fausses pour l'alpha.
+
 **Reste à faire.**
 
-- Prédiction quotidienne live (`predict.py`) et classes réalisées des signaux live : seuils et classes d'alpha à calculer;
-- sélecteur « Cible brute | Alpha » et benchmark (automatique, modifiable) dans la page « Lancer »;
-- simulation d'un portefeuille long/short couvert (actif contre β × benchmark) pour juger un modèle d'alpha en rendement.
+- Prédiction live d'un modèle d'alpha : seuils et classes réalisées sur le rendement excédentaire;
+- simulation d'un portefeuille long/short couvert (actif contre β × benchmark) pour juger un modèle d'alpha en rendement;
+- règles du fonds pilotées par un modèle d'alpha (positions couvertes) : refusées tant que cette simulation n'existe pas.
 
 ## 6. Points ouverts
 
