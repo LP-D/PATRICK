@@ -1048,8 +1048,14 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
     return {"asset_class": asset_class, "sample": sample, **dms}
 
 
+_ALPHA_FIELDS = {"objective": {"target_kind", "benchmark", "benchmark_source"}}
+
+
 def _config_hash(config: RunConfig) -> str:
-    return hashlib.sha256(config.model_dump_json().encode()).hexdigest()[:16]
+    # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
+    # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
+    exclude = _ALPHA_FIELDS if config.objective.target_kind == "raw" else None
+    return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
 
 def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None, list]:

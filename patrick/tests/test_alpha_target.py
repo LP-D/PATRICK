@@ -122,3 +122,108 @@ def test_build_target_is_unchanged_without_an_explicit_return_series():
     pd.testing.assert_series_equal(default, same)
     pd.testing.assert_series_equal(regime, regime2)
     assert thr == thr2
+
+
+# --------------------------------------------------------------------------- jalon 2b : décalage de séance du benchmark
+
+LAG = 1                    # le benchmark clôture après la cible (ex. ^GSPC pour une action européenne) : décalé d'une barre
+
+
+def test_with_a_session_lag_beta_and_labels_follow_the_true_calendar():
+    asset, bench = _levels()
+    h, t = 20, 700
+    labels = at.alpha_labels(asset, bench.shift(LAG), h, bench_lag=LAG)
+    beta_true = at.point_in_time_beta(asset, bench)
+
+    # β connu en t = β estimé jusqu'à la veille (le rendement du jour du benchmark n'est pas connu à la décision)
+    expected = (asset.iloc[t + h] / asset.iloc[t] - 1) - beta_true.iloc[t - 1] * (bench.iloc[t + h] / bench.iloc[t] - 1)
+    assert labels.iloc[t] == pytest.approx(expected)
+
+
+def test_known_beta_ignores_what_the_lagged_benchmark_shows_after_t():
+    asset, bench = _levels()
+    asof, t = bench.shift(LAG), 800
+    clean = at.known_beta(asset, asof, LAG)
+    rng = np.random.default_rng(5)
+    corrupted_asof = asof.copy()
+    corrupted_asof.iloc[t + 1:] *= rng.uniform(0.4, 2.5, N - t - 1)
+
+    corrupted = at.known_beta(asset, corrupted_asof, LAG)
+
+    pd.testing.assert_series_equal(clean.iloc[: t + 1], corrupted.iloc[: t + 1])
+
+
+def test_known_beta_does_use_the_information_available_at_t():
+    asset, bench = _levels()
+    asof, t = bench.shift(LAG), 800
+    clean = at.known_beta(asset, asof, LAG)
+    changed = asof.copy()
+    changed.iloc[t] *= 1.2                         # = le cours du benchmark de la veille, connu à la décision de t
+
+    assert at.known_beta(asset, changed, LAG).iloc[t] != clean.iloc[t]
+
+
+def test_alpha_level_series_compounds_the_daily_alpha():
+    asset, bench = _levels()
+    asof = bench.shift(LAG)
+    level = at.alpha_level_series(asset, asof, bench_lag=LAG)
+    beta = at.known_beta(asset, asof, LAG)
+    t = 600
+    daily = asset.pct_change().iloc[t] - beta.iloc[t] * asof.pct_change().iloc[t]
+
+    assert level.iloc[0] == pytest.approx(100.0)
+    assert level.iloc[t] / level.iloc[t - 1] - 1 == pytest.approx(daily)
+
+
+def test_persistence_signal_with_a_lag_only_uses_the_past():
+    asset, bench = _levels()
+    asof, h, t = bench.shift(LAG), 20, 900
+    signal = at.alpha_persistence_signal(asset, asof, h, bench_lag=LAG)
+    corrupted = asof.copy()
+    corrupted.iloc[t + 1:] *= 1.9
+    a2 = asset.copy()
+    a2.iloc[t + 1:] *= 0.5
+
+    pd.testing.assert_series_equal(signal.iloc[: t + 1], at.alpha_persistence_signal(a2, corrupted, h, bench_lag=LAG).iloc[: t + 1])
+
+
+def _config(symbol, **objective):
+    from patrick.config.schema import RunConfig
+    return RunConfig.model_validate({
+        "objective": {"target_symbol": symbol, "horizons": [5], **objective},
+        "universe": {"yf_tickers": ["SPX_LIKE"], "start_date": "2015-01-01"}})
+
+
+def test_run_target_is_the_historical_target_for_a_raw_config():
+    from patrick.data.sources.yfinance_source import clean_symbol
+    asset, _ = _levels()
+    col = clean_symbol("AAPL")
+    pool = pd.DataFrame({col: asset})
+
+    got = at.run_target(pool, _config("AAPL"), col, 20, 1000)
+    want = build_target(asset, 20, 1000, 0.003)
+
+    pd.testing.assert_series_equal(got[0], want[0])
+    assert got[2] == want[2]
+    pd.testing.assert_series_equal(at.baseline_price_series(pool, _config("AAPL"), col), asset, check_names=False)
+
+
+def test_run_target_for_alpha_uses_the_benchmark_column_and_the_session_lag():
+    from patrick.data.sources.yfinance_source import clean_symbol
+    asset, bench = _levels()
+    col, bcol = clean_symbol("MC.PA"), clean_symbol("^GSPC")
+    cfg = _config("MC.PA", target_kind="alpha", benchmark="^GSPC")           # clôture US après la clôture européenne
+    pool = pd.DataFrame({col: asset, bcol: bench.shift(1)})                   # comme l'ingestion le décale
+
+    assert at.bench_lag(cfg.objective) == 1
+    got = at.run_target(pool, cfg, col, 20, 1000)
+    want = at.build_alpha_target(asset, bench.shift(1), 20, 1000, bench_lag=1)
+
+    pd.testing.assert_series_equal(got[0], want[0])
+    level = at.baseline_price_series(pool, cfg, col)
+    pd.testing.assert_series_equal(level, at.alpha_level_series(asset, bench.shift(1), bench_lag=1))
+
+
+def test_bench_lag_is_zero_when_the_session_lag_is_disabled_or_the_closes_align():
+    assert at.bench_lag(_config("MC.PA", target_kind="alpha", benchmark="^GSPC", disable_session_lag=True).objective) == 0
+    assert at.bench_lag(_config("MC.PA", target_kind="alpha").objective) == 0            # ^STOXX50E : même séance

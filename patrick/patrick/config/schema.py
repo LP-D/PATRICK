@@ -23,6 +23,13 @@ class ObjectiveConfig(BaseModel):
     # disable it and measure its impact. False (default) = unchanged production
     # behavior (fix always applied) for every existing run.
     disable_session_lag: bool = False
+    # Cible alpha (docs/superpowers/specs/2026-10-06-cible-alpha-beta-point-in-time-design.md) : "raw" = rendement
+    # brut de la cible (défaut, comportement historique); "alpha" = rendement excédentaire `actif - β * benchmark`.
+    # `benchmark` vide = déterminé automatiquement (features/benchmark.py), sinon choix manuel; le validateur de
+    # `RunConfig` y écrit le benchmark retenu et sa provenance pour que le run reste reproductible.
+    target_kind: Literal["raw", "alpha"] = "raw"
+    benchmark: str | None = None
+    benchmark_source: Literal["auto", "manual"] | None = None
 
 
 class UniverseConfig(BaseModel):
@@ -295,6 +302,29 @@ class RunConfig(BaseModel):
                 slug = target_name.replace("^", "IDX_").replace("-", "_").replace("/", "_").replace(" ", "_")
                 data["name"] = f"{slug}_run"
         return data
+
+    @model_validator(mode="after")
+    def _resolve_alpha_benchmark(self):
+        from patrick.features.benchmark import resolve_benchmark
+
+        obj = self.objective
+        if obj.target_kind != "alpha":
+            if obj.benchmark or obj.benchmark_source:
+                raise ValueError("benchmark n'a de sens que pour target_kind='alpha'")
+            return self
+        if obj.target_source != "yfinance":
+            raise ValueError("cible alpha : seules les cibles yfinance sont prises en charge (cible FRED refusée)")
+        if obj.benchmark_source:                       # config déjà résolue (run relancé, repris) : on ne la réinterprète pas
+            if not obj.benchmark or obj.benchmark.strip().upper() == obj.target_symbol.strip().upper():
+                raise ValueError("benchmark enregistré invalide")
+            choice_symbol, choice_source = obj.benchmark, obj.benchmark_source
+        else:
+            choice = resolve_benchmark(obj.target_symbol, obj.benchmark, obj.target_source)
+            choice_symbol, choice_source = choice.symbol, choice.source
+        obj.benchmark, obj.benchmark_source = choice_symbol, choice_source
+        if choice_symbol not in self.universe.yf_tickers:     # téléchargé, décalé et nettoyé comme tout l'univers
+            self.universe.yf_tickers = [*self.universe.yf_tickers, choice_symbol]
+        return self
 
     @classmethod
     def from_yaml(cls, path: str) -> RunConfig:
