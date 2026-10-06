@@ -36,13 +36,30 @@ Pour un actif *a*, un benchmark *b*, un horizon *h* (jours de séance) et une da
 - Tests : β retrouvé sur données synthétiques, test de fuite par corruption du futur (β et seuils), alignement des
   calendriers, taux de base de l'alpha contre celui de la cible brute.
 
-## 5. Hors périmètre (jalon 2)
+## 5. Jalon 2a : benchmark automatique ou choisi (livré)
 
-- Option de configuration `objective` (cible brute | alpha) et nom du benchmark par actif dans `RunConfig`.
-- Famille de tests et registre d'essais séparés pour les cibles alpha.
-- Mapping par défaut actif → benchmark. `wealth.ledger.DEFAULT_BENCHMARK` est **par type de compte** (PEA, CTO...), pas
-  par actif : il ne sert pas ici. À décider : mapping explicite saisi, ou règle par classe d'actif.
-- Affichage dans l'application.
+`features/benchmark.py` : `auto_benchmark(symbole)` et `resolve_benchmark(symbole, override)`. Le choix manuel l'emporte
+toujours; sans choix, le benchmark vient de la classe d'actif et de la région (classification du pipeline,
+`data.session_calendar.classify_asset_class`) : action US → `^GSPC`, zone euro → `^STOXX50E`, Royaume-Uni → `^FTSE`,
+Japon → `^N225`, Hong Kong → `^HSI`, crypto → `BTC-USD`, matière première → `DBC`, indice → l'indice régional puis le
+monde (`URTH`), reste → monde. Jamais la cible elle-même (repli sur le monde). Aucun benchmark n'a de sens pour un change,
+un indice de volatilité, une série macro ou bitcoin lui-même : l'erreur le dit et propose le choix manuel. Le résultat
+porte sa raison et sa provenance (`auto` | `manual`), à enregistrer avec le run (reproductibilité si la table évolue).
+
+## 5 bis. Jalon 2b : branchement au pipeline (à faire)
+
+Décision de conception à ne pas prendre à la légère : `run.target` est lu à ~127 endroits (historique, prédictions,
+simulation, rejeu patrimoine, champions). Un run alpha ne doit **jamais** se mélanger silencieusement aux runs bruts :
+
+- un champion « implicite » (dernier run terminé) serait un modèle d'alpha à la place d'un modèle de direction;
+- un modèle d'alpha prédit une surperformance, pas la direction du prix : le rejouer comme signal de prix serait faux.
+
+Approche retenue : colonnes `run.target_kind` (`raw` par défaut) et `run.benchmark` (migration), `run.target` inchangé;
+toutes les lectures « signal de direction » (champions, rejeu patrimoine, règles du fonds, simulation) filtrent
+`target_kind = 'raw'`; le registre d'essais et les familles DM/BH utilisent la clé `symbole|alpha:benchmark`.
+Ensuite : champs `objective.target_kind` et `objective.benchmark` (vide = automatique, valeur enregistrée dans le run),
+ajout du benchmark à l'univers d'ingestion, constructeur de cible unique remplaçant les appels `build_target` du moteur,
+de l'export et du suivi live, sélecteur dans la page « Lancer ».
 
 ## 6. Points ouverts
 
