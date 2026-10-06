@@ -84,32 +84,3 @@ def test_the_trial_registry_counts_alpha_trials_in_their_own_family(conn):
     from patrick.tracking import stats
     assert stats.count_cumulative_trials(conn, "MC.PA__alpha_^GSPC") >= 1
     assert stats.count_cumulative_trials(conn, "MC.PA") == 0
-
-
-def test_daily_prediction_never_picks_an_alpha_run(conn, tmp_path):
-    """Les classes réalisées d'un signal live se jugent sur le prix brut : pour un modèle d'alpha elles seraient fausses."""
-    from patrick import live_refresh
-    tid = _alpha_run(conn)
-    model = tmp_path / "alpha_model.joblib"
-    model.write_bytes(b"x")
-    conn.execute("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", (str(model), tid))
-    conn.commit()
-
-    assert live_refresh.find_predictable_candidates(conn) == []
-
-    conn.execute("UPDATE run SET target = 'MC.PA' WHERE run_id = 'run1'")        # le même run, étiqueté brut
-    conn.commit()
-    assert [c.target for c in live_refresh.find_predictable_candidates(conn)] == ["MC.PA"]
-
-
-def test_predict_live_refuses_an_alpha_run_before_loading_anything(conn, tmp_path):
-    from patrick import predict
-    tid = _alpha_run(conn)
-    model = tmp_path / "alpha_model.joblib"
-    model.write_bytes(b"not a real bundle")
-    conn.execute("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", (str(model), tid))
-    conn.commit()
-    db = str(tmp_path / "patrick.db")
-
-    with pytest.raises(ValueError, match="alpha"):
-        predict.predict_live("run1", db_path=db)

@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from functools import partial
 
 from patrick import predict as predict_module
-from patrick.config.target_label import is_alpha_label
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.live_refresh")
@@ -83,8 +82,6 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
 
     latest_per_pair: dict[tuple[str, int], PredictCandidate] = {}
     for run_id, target, horizon, trial_id, artifact_path in rows:
-        if is_alpha_label(target):
-            continue  # classes réalisées jugées sur le prix brut : fausses pour un modèle d'alpha (pas encore pris en charge)
         key = (target, horizon)
         if key in latest_per_pair:
             continue  # déjà gardé le plus récent (lignes triées DESC par finished_at)

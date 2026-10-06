@@ -35,9 +35,10 @@ import numpy as np
 import pandas as pd
 
 from patrick.config.schema import RunConfig
-from patrick.config.target_label import is_alpha_label
 from patrick.data.ingest import ingest
+from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
+from patrick.features import alpha_target
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import classify_return, live_class_thresholds
 from patrick.models import calibration as calibration_lib
@@ -63,8 +64,31 @@ def _finite_or_none(v) -> float | None:
     return float(v) if v is not None and np.isfinite(v) else None
 
 
+def _alpha_forward_returns(raw: pd.DataFrame, config: RunConfig, target_col: str, horizon: int) -> pd.Series | None:
+    """Rendement excédentaire réalisé à `horizon` barres, par date de signal (NaN tant que l'horizon n'est pas
+    écoulé) pour une cible alpha ; `None` pour une cible brute (le prix suffit)."""
+    obj = config.objective
+    if obj.target_kind != "alpha":
+        return None
+    return alpha_target.alpha_labels(raw[target_col], raw[clean_symbol(obj.benchmark)], horizon,
+                                     bench_lag=alpha_target.bench_lag(obj))
+
+
+def _alpha_live_thresholds(raw: pd.DataFrame, config: RunConfig, target_col: str, t: pd.Timestamp,
+                           horizon: int) -> tuple[float, float]:
+    """Seuils (q25, q75) du rendement excédentaire au jour du signal *t*, ajustés sur ce qui est connu à *t*."""
+    obj = config.objective
+    asset_t = raw[target_col].loc[:t].dropna()
+    bench_t = raw[clean_symbol(obj.benchmark)].loc[:t]
+    ret = alpha_target.alpha_labels(asset_t, bench_t, horizon, bench_lag=alpha_target.bench_lag(obj))
+    return live_class_thresholds(asset_t, horizon, obj.flat_thr, ret=ret)
+
+
 def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
-                           raw: pd.DataFrame, target_col: str) -> int:
+                           raw: pd.DataFrame, target_col: str,
+                           forward_returns: pd.Series | None = None) -> int:
+    """`forward_returns` (cible alpha) : rendement excédentaire réalisé par date de signal ; sans lui, rendement
+    brut du prix de la cible (comportement historique)."""
     pending = trackdb.list_pending_live_predictions(conn, trial_id)
     if not pending:
         return 0
@@ -78,13 +102,18 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
         future_idx = pos + horizon
         if future_idx >= len(series.index):
             continue  # horizon not yet elapsed
-        price_at_signal = series.iloc[pos]
-        if price_at_signal == 0:
-            logger.warning(
-                "_update_live_outcomes: zero price for %s at %s (trial %s) -- "
-                "return undefined, outcome left pending.", target_col, row["ts"], trial_id)
-            continue  # degenerate price, cannot compute a return (would be ZeroDivisionError/inf)
-        ret = series.iloc[future_idx] / price_at_signal - 1
+        if forward_returns is not None:
+            ret = forward_returns.get(ts, np.nan)
+            if not np.isfinite(ret):
+                continue  # excess return not yet defined (horizon not elapsed, or beta unknown)
+        else:
+            price_at_signal = series.iloc[pos]
+            if price_at_signal == 0:
+                logger.warning(
+                    "_update_live_outcomes: zero price for %s at %s (trial %s) -- "
+                    "return undefined, outcome left pending.", target_col, row["ts"], trial_id)
+                continue  # degenerate price, cannot compute a return (would be ZeroDivisionError/inf)
+            ret = series.iloc[future_idx] / price_at_signal - 1
         y_true_binary = 1.0 if ret > 0 else 0.0
         lo, hi = _finite_or_none(row.get("thr_lo")), _finite_or_none(row.get("thr_hi"))
         y_class = (classify_return(ret, "LIVE", {"LIVE": (lo, hi)})
@@ -134,9 +163,6 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         run = trackdb.get_run(conn, run_id)
         if run is None:
             raise ValueError(f"Run not found: {run_id}")
-        if is_alpha_label(run["target"]):
-            raise ValueError(f"Cible alpha ({run['target']}) : la prédiction live d'un modèle d'alpha n'est pas encore "
-                             "prise en charge (seuils et classes réalisées à calculer sur le rendement excédentaire).")
         best = _find_best_trial(conn, run_id)
         if best is None:
             raise ValueError(f"No exported model (winning trial) for run {run_id}.")
@@ -176,6 +202,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         sel_idx = [feature_pool.index(n) for n in feature_names]
         classes = list(getattr(model, "classes_", []))
         series = raw[target_col]
+        alpha_forward = _alpha_forward_returns(raw, config, target_col, horizon)   # None pour une cible brute
         n_written = 0
         new_signal = False
         for t, is_backfill in _bars_to_record(full_pool, already, model_date, max_backfill):
@@ -200,7 +227,10 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                                      ts=[str(t)], y_true=[None], y_pred=[pred_class],
                                      y_proba=[confidence], p_up=[p_up])
             try:
-                lo, hi = live_class_thresholds(series.loc[:t].dropna(), horizon, config.objective.flat_thr)
+                if alpha_forward is not None:
+                    lo, hi = _alpha_live_thresholds(raw, config, target_col, t, horizon)
+                else:
+                    lo, hi = live_class_thresholds(series.loc[:t].dropna(), horizon, config.objective.flat_thr)
             except Exception:
                 logger.exception("live thresholds failed for %s at %s", target_col, t)
                 lo = hi = None
@@ -209,7 +239,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             n_written += 1
             new_signal = new_signal or not is_backfill
 
-        n_updated = _update_live_outcomes(conn, best["trial_id"], horizon, raw, target_col)
+        n_updated = _update_live_outcomes(conn, best["trial_id"], horizon, raw, target_col,
+                                          forward_returns=alpha_forward)
         row = conn.execute(
             "SELECT y_pred, y_proba, p_up FROM prediction "
             "WHERE trial_id = ? AND ts = ? AND split = 'live'", (best["trial_id"], str(last_ts))).fetchone()
