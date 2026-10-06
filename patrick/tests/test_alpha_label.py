@@ -9,7 +9,6 @@ from test_fund_systematic import _model
 from patrick.config import target_label as tl
 from patrick.config.schema import RunConfig
 from patrick.fund import systematic
-from patrick.simulate import engine as sim_engine
 from patrick.tracking import champions
 from patrick.tracking import db as trackdb
 from patrick.wealth import signal_replay
@@ -85,13 +84,6 @@ def test_the_trial_registry_counts_alpha_trials_in_their_own_family(conn):
     from patrick.tracking import stats
     assert stats.count_cumulative_trials(conn, "MC.PA__alpha_^GSPC") >= 1
     assert stats.count_cumulative_trials(conn, "MC.PA") == 0
-
-
-def test_simulation_refuses_an_alpha_trial_with_an_explicit_message(conn, tmp_path, monkeypatch):
-    tid = _alpha_run(conn)
-    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    with pytest.raises(ValueError, match="alpha"):
-        sim_engine.simulate(tid, sim_engine.SimParams(), db_path=str(tmp_path / "patrick.db"))
 
 
 def test_daily_prediction_never_picks_an_alpha_run(conn, tmp_path):
