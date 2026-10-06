@@ -35,6 +35,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.config.schema import RunConfig
+from patrick.config.target_label import is_alpha_label
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
 from patrick.features.sanitize import finite_features, finite_scaled
@@ -133,6 +134,9 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         run = trackdb.get_run(conn, run_id)
         if run is None:
             raise ValueError(f"Run not found: {run_id}")
+        if is_alpha_label(run["target"]):
+            raise ValueError(f"Cible alpha ({run['target']}) : la prédiction live d'un modèle d'alpha n'est pas encore "
+                             "prise en charge (seuils et classes réalisées à calculer sur le rendement excédentaire).")
         best = _find_best_trial(conn, run_id)
         if best is None:
             raise ValueError(f"No exported model (winning trial) for run {run_id}.")

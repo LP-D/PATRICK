@@ -126,9 +126,9 @@ def load_snapshot(objective: ObjectiveConfig, universe: UniverseConfig, snapshot
     would train the resumed run on a different FRED vintage / Yahoo
     revision than the trials already persisted for it."""
     store = store or DataStore()
-    df = store.load(f"raw_{objective.target_symbol}", snapshot_id=snapshot_id)
+    df = store.load(objective.raw_cache_key(), snapshot_id=snapshot_id)
     _attach_snapshot_context(df, universe)
-    print(f"[REPLAY] raw_{objective.target_symbol}: snapshot {snapshot_id} {df.shape}.")
+    print(f"[REPLAY] {objective.raw_cache_key()}: snapshot {snapshot_id} {df.shape}.")
     return df
 
 
@@ -145,7 +145,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     active by default, never a silently disabled default)."""
     dq = data_quality if data_quality is not None else DataQualityConfig()
     store = store or DataStore()
-    cache_key = f"raw_{objective.target_symbol}"
+    cache_key = objective.raw_cache_key()
     local_cache = LocalCache()
     cached_local = local_cache.load_dataframe(f"{cache_key}_local", max_age_days=30)
     # F01: a cached frame built under another point-in-time rule (or before

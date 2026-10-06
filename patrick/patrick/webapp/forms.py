@@ -15,6 +15,7 @@ from pathlib import Path
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config import universe_extension as UX
+from patrick.features.benchmark import BenchmarkError, resolve_benchmark
 from patrick.validation import feasibility, history_length
 
 # CHANTIER (feature/equity-asset-class): equities are selectable as a run's
@@ -406,6 +407,21 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         universe_scope = "default"
     yf_tickers, fred_series = universe_excluding(target_symbol, universe_scope)
 
+    # Cible alpha : rendement excédentaire face à un benchmark (champ vide = déterminé automatiquement).
+    target_kind = (form.get("target_kind") or "raw").strip()
+    typed_benchmark = (form.get("benchmark") or "").strip() or None
+    if target_kind not in ("raw", "alpha"):
+        errors.append("« Type de cible » : choix invalide.")
+        target_kind = "raw"
+    if target_kind == "alpha":
+        if target_source != "yfinance":
+            errors.append("« Type de cible » : l'alpha n'est pas disponible pour une cible FRED (série macro).")
+        else:
+            try:
+                resolve_benchmark(target_symbol, typed_benchmark, target_source)
+            except BenchmarkError as exc:
+                errors.append(f"« Benchmark » : {exc}")
+
     # Per-fold correlation-clustering reduction (selection/universe_reduction.py):
     # empty = disabled (the default, never a silent filter); aggressive values
     # are accepted -- the pipeline warns, the form does not refuse.
@@ -583,6 +599,8 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "horizons": horizons,
             "flat_thr": flat_thr,
             "regimes": regimes,
+            **({"target_kind": "alpha", **({"benchmark": typed_benchmark} if typed_benchmark else {})}
+               if target_kind == "alpha" else {}),
         },
         "universe": {
             "yf_tickers": yf_tickers,
@@ -664,6 +682,9 @@ def to_view(cfg: dict) -> dict:
     return {
         "name": cfg.get("name", ""),
         "target_symbol": obj.get("target_symbol", ""),
+        "target_kind": obj.get("target_kind", "raw"),
+        # benchmark saisi à la main seulement : un benchmark déterminé automatiquement se redétermine au relancement
+        "benchmark": (obj.get("benchmark") or "") if obj.get("benchmark_source") == "manual" else "",
         # A list of ints, not the old joined string: the form field is now a
         # `<select multiple>` (index.html), pre-selected via `h in view.horizons`.
         "horizons": [int(h) for h in obj.get("horizons", [])],

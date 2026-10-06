@@ -79,7 +79,7 @@ def _describe(side_run_id: str, trial_id: int, cfg: dict, evaluation: dict | Non
 
 
 def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | None) -> dict:
-    target = st.config.objective.target_symbol
+    target = st.config.objective.run_label()
     run_id = st.run_ids[horizon]
     champion = champions.current(st.conn, target, horizon, exclude_run_ids=list(st.run_ids.values()))
     if not (st.is_walkforward and st.has_holdout):

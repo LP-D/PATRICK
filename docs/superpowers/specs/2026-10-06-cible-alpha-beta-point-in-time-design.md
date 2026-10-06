@@ -36,13 +36,54 @@ Pour un actif *a*, un benchmark *b*, un horizon *h* (jours de séance) et une da
 - Tests : β retrouvé sur données synthétiques, test de fuite par corruption du futur (β et seuils), alignement des
   calendriers, taux de base de l'alpha contre celui de la cible brute.
 
-## 5. Hors périmètre (jalon 2)
+## 5. Jalon 2a : benchmark automatique ou choisi (livré)
 
-- Option de configuration `objective` (cible brute | alpha) et nom du benchmark par actif dans `RunConfig`.
-- Famille de tests et registre d'essais séparés pour les cibles alpha.
-- Mapping par défaut actif → benchmark. `wealth.ledger.DEFAULT_BENCHMARK` est **par type de compte** (PEA, CTO...), pas
-  par actif : il ne sert pas ici. À décider : mapping explicite saisi, ou règle par classe d'actif.
-- Affichage dans l'application.
+`features/benchmark.py` : `auto_benchmark(symbole)` et `resolve_benchmark(symbole, override)`. Le choix manuel l'emporte
+toujours; sans choix, le benchmark vient de la classe d'actif et de la région (classification du pipeline,
+`data.session_calendar.classify_asset_class`) : action US → `^GSPC`, zone euro → `^STOXX50E`, Royaume-Uni → `^FTSE`,
+Japon → `^N225`, Hong Kong → `^HSI`, crypto → `BTC-USD`, matière première → `DBC`, indice → l'indice régional puis le
+monde (`URTH`), reste → monde. Jamais la cible elle-même (repli sur le monde). Aucun benchmark n'a de sens pour un change,
+un indice de volatilité, une série macro ou bitcoin lui-même : l'erreur le dit et propose le choix manuel. Le résultat
+porte sa raison et sa provenance (`auto` | `manual`), à enregistrer avec le run (reproductibilité si la table évolue).
+
+## 5 bis. Jalon 2b : branchement au pipeline (livré)
+
+**Étiquette de cible distincte.** `run.target` est lu par ~68 requêtes SQL (champions, registre d'essais, familles DM/BH,
+rejeu du patrimoine, historique). Plutôt qu'une colonne à filtrer partout, un run alpha a une étiquette propre :
+`MC.PA__alpha_^GSPC` (`config/target_label.py`), qui est aussi la clé de son snapshot (`raw_<étiquette>`). Conséquences :
+
+- champions, registre d'essais (DSR) et familles DM/BH se séparent d'eux-mêmes; un run alpha plus récent ne devient jamais
+  le champion « implicite » du symbole brut;
+- le rejeu du patrimoine ne le retient jamais (il cherche le symbole exact), les règles du fonds le refusent
+  (`available_models`, `create_rule`), la simulation le refuse avec un message explicite : un modèle d'alpha prédit une
+  surperformance, pas la direction du prix;
+- tout consommateur qui attend un symbole échoue franchement au lieu de mélanger. Aucune migration.
+
+**Configuration.** `objective.target_kind` (`raw` | `alpha`), `objective.benchmark` (vide = automatique, sinon choix
+manuel) et `objective.benchmark_source`. Le validateur de `RunConfig` résout le benchmark, l'écrit avec sa provenance
+(une config relue n'est jamais réinterprétée) et l'ajoute à l'univers pour qu'il soit téléchargé, nettoyé et décalé comme
+le reste. Cible FRED refusée. Le hachage d'un run brut est **inchangé** (test de régression sur la valeur d'avant).
+
+**Décalage de séance.** L'ingestion décale d'une barre les séries qui clôturent après la cible. Le benchmark du pipeline
+est donc « tel que connu à la décision » : les labels utilisent son vrai calendrier (`shift(-bench_lag)`), le β connu en
+*t* est décalé de `bench_lag` barres (le rendement du jour d'un benchmark qui clôture après la décision n'est pas connu).
+
+**Moteur.** `run_target` remplace les cinq `build_target(pool[cible], ...)` du moteur et de l'export; les baselines de prix
+(momentum, marche aléatoire, HAR-RV) lisent le niveau d'alpha (`alpha_level_series`), pas le prix. Les baselines de classe
+(majorité, persistance) lisent déjà les classes alpha.
+
+**Page « Lancer ».** Sélecteur « Rendement brut | Alpha » et champ benchmark (vide = automatique, sinon ticker saisi, valable
+pour toutes les cibles sélectionnées). Un cas sans benchmark naturel (VIX, change, bitcoin, macro) est refusé avec la sortie
+« choisir un benchmark manuellement ». Relancer un run alpha restaure le choix (un benchmark automatique se redétermine).
+
+**Prédiction live.** Refusée explicitement pour un run alpha (`predict_live`) et écartée de la sélection quotidienne
+(`find_predictable_candidates`) : les classes réalisées d'un signal live se jugent sur le prix brut, fausses pour l'alpha.
+
+**Reste à faire.**
+
+- Prédiction live d'un modèle d'alpha : seuils et classes réalisées sur le rendement excédentaire;
+- simulation d'un portefeuille long/short couvert (actif contre β × benchmark) pour juger un modèle d'alpha en rendement;
+- règles du fonds pilotées par un modèle d'alpha (positions couvertes) : refusées tant que cette simulation n'existe pas.
 
 ## 6. Points ouverts
 

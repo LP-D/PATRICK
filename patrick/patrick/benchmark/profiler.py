@@ -357,7 +357,7 @@ def install(profiler: Profiler):
         comp(parallel, "run_ordered", "parallel.run_ordered",
              on_call=lambda p, a, k: (p.count("parallel.batches"), p.count("parallel.tasks", len(a[0]))))
         comp(E, "tune_config", "optuna.tune_config", on_call=lambda p, a, k: p.count("optuna.studies"))
-        comp(E, "build_target", "build_target")
+        comp(E, "run_target", "build_target")   # le moteur appelle run_target (cible brute = build_target) ; nom de mesure inchangé
         comp(E, "compute_baselines", "compute_baselines")
         comp(E, "build_indicator_matrix", "uniqueness.indicator_matrix")
         comp(E, "average_uniqueness", "uniqueness.average")

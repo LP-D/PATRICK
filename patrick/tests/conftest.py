@@ -34,6 +34,14 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_local_cache(tmp_path, monkeypatch):
+    """The local download cache (`patrick/cache_manager.py`, `~/.patrick/cache`) is per test: `ingest()` and the
+    downloaders write there, so a test's synthetic frame for a REAL symbol (e.g. `MC.PA`) would otherwise sit in the
+    user's cache and be served to a real run for the next 30 days."""
+    monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "local_cache"))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_machine_settings(tmp_path, monkeypatch):
     """Machine settings and shell-level worker overrides must not affect tests.
 

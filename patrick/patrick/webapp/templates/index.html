@@ -86,6 +86,19 @@
                 <p class="hint">{{ t('target_multiselect_hint') }}</p>
             </label>
 
+            <label>{{ t('field_target_kind') }}
+                <select name="target_kind" id="target_kind">
+                    <option value="raw" {% if view.target_kind != 'alpha' %}selected{% endif %}>{{ t('target_kind_raw') }}</option>
+                    <option value="alpha" {% if view.target_kind == 'alpha' %}selected{% endif %}>{{ t('target_kind_alpha') }}</option>
+                </select>
+                <p class="hint">{{ t('target_kind_hint') }}</p>
+            </label>
+            <label id="benchmark-field"{% if view.target_kind != 'alpha' %} hidden{% endif %}>{{ t('field_benchmark') }}
+                <input type="text" name="benchmark" value="{{ view.benchmark }}" maxlength="30"
+                       placeholder="{{ t('benchmark_auto_placeholder') }}">
+                <p class="hint">{{ t('benchmark_hint') }}</p>
+            </label>
+
             <label>{{ t('field_horizons') }}
                 {# Phase 1 (feature/expanded-horizons) : la liste propose
                    toujours TOUTES les valeurs (courtes + moderees 15/20/30j +

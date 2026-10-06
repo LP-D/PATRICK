@@ -2110,3 +2110,4 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 }
 .fund-ticker { display: grid; gap: var(--space-sm); }
 .fund-ticker[hidden], .fund-ticker label[hidden] { display: none; }
+#benchmark-field[hidden] { display: none; }

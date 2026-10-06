@@ -65,13 +65,13 @@ from patrick.features import (
     vol_models,
 )
 from patrick.features import macro as feat_macro
+from patrick.features.alpha_target import baseline_price_series, run_target
 from patrick.features.interactions import (
     INTERACTION_TYPES,
     apply_interaction,
     discover_interactions,
 )
 from patrick.features.sanitize import finite_features, finite_scaled
-from patrick.features.target import build_target
 from patrick.models import calibration as calibration_lib
 from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
@@ -291,8 +291,7 @@ def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
     reusable as-is by `_apply_interaction_formulas` on the pool (base +
     parametric) of any fold."""
     pilot_horizon = config.objective.horizons[len(config.objective.horizons) // 2]
-    pilot_target, _, _ = build_target(pool[target_col], pilot_horizon, pilot_split_idx,
-                                       config.objective.flat_thr)
+    pilot_target, _, _ = run_target(pool, config, target_col, pilot_horizon, pilot_split_idx)
     pilot_idx = pilot_target.index
     pilot_cut_date = pool.index[pilot_split_idx]
     pilot_train_mask = np.asarray(pilot_idx < pilot_cut_date)
@@ -549,8 +548,7 @@ class _FoldContext:
         cut_date, nxt_date = self.all_dates[cut], self.all_dates[nxt - 1]
         pool = self.pool_builder.get(cut)
 
-        target_series, reg_r, thr = build_target(
-            pool[self.target_col], horizon, cut, cfg.objective.flat_thr)
+        target_series, reg_r, thr = run_target(pool, cfg, self.target_col, horizon, cut)
         idx = target_series.index
         tr_mask = np.asarray(idx < cut_date)
         te_mask = np.asarray((idx >= cut_date) & (idx <= nxt_date))
@@ -624,7 +622,7 @@ class _FoldContext:
             # metrics (leaderboard) AND the raw predictions (Diebold-Mariano,
             # Phase 2.5) come from the same pass, no redundant second call.
             baseline_predictions = compute_baselines(
-                pool[self.target_col], target_series, idx, tr_mask, te_mask,
+                baseline_price_series(pool, cfg, self.target_col), target_series, idx, tr_mask, te_mask,
                 y_tr, y_te, horizon, thr, reg_r, return_predictions=True)
             baselines = {name: metrics(y_te, pred) for name, pred in baseline_predictions.items()}
 
@@ -899,7 +897,7 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     best_params = _parse_params(best_cfg.get("best_params"))
 
     pool = pool_builder.get(n_wf)
-    target_series, reg_r, _thr = build_target(pool[target_col], horizon, n_wf, config.objective.flat_thr)
+    target_series, reg_r, _thr = run_target(pool, config, target_col, horizon, n_wf)
     idx = target_series.index
     holdout_start_date = all_dates_full[n_wf]
     tr_mask = np.asarray(idx < holdout_start_date)
@@ -932,7 +930,8 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     # F08: the baselines predicted on the SAME holdout rows, so the final
     # Diebold-Mariano test runs on data that never took part in a choice.
     baseline_predictions = compute_baselines(
-        pool[target_col], target_series, idx, tr_mask, te_mask, y_tr, y_te, horizon, _thr, reg_r,
+        baseline_price_series(pool, config, target_col), target_series, idx, tr_mask, te_mask, y_tr, y_te, horizon,
+        _thr, reg_r,
         return_predictions=True)
     return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te, "p_up": p_up,
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te),
@@ -1048,8 +1047,14 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
     return {"asset_class": asset_class, "sample": sample, **dms}
 
 
+_ALPHA_FIELDS = {"objective": {"target_kind", "benchmark", "benchmark_source"}}
+
+
 def _config_hash(config: RunConfig) -> str:
-    return hashlib.sha256(config.model_dump_json().encode()).hexdigest()[:16]
+    # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
+    # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
+    exclude = _ALPHA_FIELDS if config.objective.target_kind == "raw" else None
+    return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
 
 def _snapshot_context(raw: pd.DataFrame) -> tuple[str, str, int | None, int | None, str | None, list]:
@@ -1149,8 +1154,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
 
     for horizon in config.objective.horizons:
         run_id = run_ids[horizon]
-        target_series, reg_r, _thr = build_target(full_pool[target_col], horizon,
-                                                    groups[0][1] + 1, config.objective.flat_thr)
+        target_series, reg_r, _thr = run_target(full_pool, config, target_col, horizon, groups[0][1] + 1)
         idx = target_series.index
         date_group = group_of_date.reindex(idx)
         reg_al = reg_r.reindex(idx).fillna("NORMAL").values
@@ -1363,7 +1367,7 @@ def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id
     run_ids: dict[int, str] = {}
     for horizon in config.objective.horizons:
         run_id = f"{config.name}_h{horizon}_{uuid.uuid4().hex[:8]}"
-        trackdb.create_run(conn, run_id, target=config.objective.target_symbol, horizon=horizon,
+        trackdb.create_run(conn, run_id, target=config.objective.run_label(), horizon=horizon,
                             snapshot_id=snapshot_id, config_json=config_json,
                             config_hash=config_hash, git_sha=git_sha, seed=seed, job_id=job_id)
         run_ids[horizon] = run_id
@@ -1720,7 +1724,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
             study_name=study_name, bounds=config.tuning.optuna_bounds, horizon=horizon,
             embargo_bars=config.validation.embargo_bars, purge=config.validation.purge,
             embargo_enabled=config.validation.embargo_enabled,
-            registry=trackdb.TrialRecorder(st.conn, config.objective.target_symbol, horizon,
+            registry=trackdb.TrialRecorder(st.conn, config.objective.run_label(), horizon,
                                            run_id=run_id, detail=study_name))
     except InnerCVInfeasible as exc:
         print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: Optuna skipped -- {exc}")
@@ -2012,7 +2016,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
             # the whole history of this target/horizon (CPCV paths when that
             # scheme is active).
-            target = config.objective.target_symbol
+            target = config.objective.run_label()
             cumulative_trials = trackstats.count_cumulative_trials(conn, target, final_horizon)
             pbo_fn = trackstats.pbo_for_target if st.is_walkforward else trackstats.pbo_for_target_cpcv
             pbo_result = pbo_fn(conn, target, final_horizon, final_best["regime"])

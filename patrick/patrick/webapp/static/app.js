@@ -1373,3 +1373,13 @@
     runStatePoll();
     setInterval(runStatePoll, 4000);
 })();
+
+/* Page « Lancer » : le benchmark n'a de sens que pour une cible alpha. */
+(function () {
+    "use strict";
+    var kind = document.getElementById("target_kind"), field = document.getElementById("benchmark-field");
+    if (!kind || !field) return;
+    function sync() { field.hidden = kind.value !== "alpha"; }
+    kind.addEventListener("change", sync);
+    sync();
+})();
