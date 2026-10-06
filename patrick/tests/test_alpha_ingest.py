@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 from test_data_quality import _OLD_ENOUGH_START, _make_yf_fake
 
 from patrick.config.schema import ObjectiveConfig, RunConfig
@@ -78,3 +79,14 @@ def test_replay_loads_the_alpha_snapshot_key(tmp_path, monkeypatch):
     replay = ingest_module.load_snapshot(cfg.objective, cfg.universe, snapshot_id, store=store)
 
     assert list(replay.columns) == list(first.columns)
+
+
+def test_a_benchmark_dropped_by_the_quality_gate_fails_with_a_clear_message(tmp_path, monkeypatch):
+    """Le contrôle qualité peut écarter le benchmark : message explicite, pas une KeyError plus loin."""
+    from patrick.pipeline import engine as engine_module
+    cfg = _alpha_config()
+    frame = pd.DataFrame({"MC.PA": range(10), "GOOD1": range(10)})          # pas de colonne benchmark
+    monkeypatch.setattr(engine_module, "ingest", lambda *a, **k: frame)
+
+    with pytest.raises(ValueError, match="benchmark .* écarté par le contrôle qualité"):
+        engine_module.run_pipeline(cfg, store=DataStore(root=str(tmp_path / "store")), db_path=str(tmp_path / "p.db"))

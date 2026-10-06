@@ -1050,6 +1050,21 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
 _ALPHA_FIELDS = {"objective": {"target_kind", "benchmark", "benchmark_source"}}
 
 
+def _require_alpha_columns(raw: pd.DataFrame, config: RunConfig) -> None:
+    """Une cible alpha a besoin de son benchmark dans les données : si le contrôle qualité de l'ingestion l'a écarté
+    (cours figés, trou de cotation, rendement aberrant), on le dit clairement plutôt que de planter plus loin."""
+    obj = config.objective
+    if obj.target_kind != "alpha":
+        return
+    missing = [c for c in (clean_symbol(obj.target_symbol), clean_symbol(obj.benchmark)) if c not in raw.columns]
+    if missing:
+        raise ValueError(
+            f"Cible alpha : colonne(s) {', '.join(missing)} absente(s) des données ingérées (le benchmark "
+            f"{obj.benchmark} a probablement été écarté par le contrôle qualité : voir le message [QUALITY]). "
+            "Choisis un autre benchmark (champ « Benchmark » de la page Lancer ou `objective.benchmark`) "
+            "ou repasse en cible brute.")
+
+
 def _config_hash(config: RunConfig) -> str:
     # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
     # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
@@ -1963,6 +1978,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         raw = ingest(config.objective, config.universe, store, force=force_ingest,
                      data_quality=config.data_quality)
     t_ingest_end = time.time()
+    _require_alpha_columns(raw, config)
 
     conn = trackdb.connect(db_path)
     try:
