@@ -6,11 +6,11 @@
     }
 
     const PHASE_LABELS = {
-        ingestion: tr("phase_ingestion", "Ingesting data…"),
-        features: tr("phase_features", "Building features…"),
-        scan: tr("phase_scan", "Selection × sampler × algo grid…"),
-        tuning: tr("phase_tuning", "Optuna tuning of the best configs…"),
-        export: tr("phase_export", "Exporting final model…"),
+        ingestion: tr("phase_ingestion", "Downloading data"),
+        features: tr("phase_features", "Building explanatory variables"),
+        scan: tr("phase_scan", "Testing combinations (variables × rebalancing × algorithm)"),
+        tuning: tr("phase_tuning", "Fine-tuning the best configurations"),
+        export: tr("phase_export", "Saving the final model"),
         done: tr("phase_done", "Done."),
     };
 
@@ -225,6 +225,7 @@
     const fill = document.getElementById("progress-fill");
     const statusLine = document.getElementById("status-line");
     const logTail = document.getElementById("log-tail");
+    const stepsList = document.getElementById("steps-list");
     const resultsPanel = document.getElementById("results-panel");
     const queuePanel = document.getElementById("queue-panel");
     const queueSummary = document.getElementById("queue-summary");
@@ -306,10 +307,37 @@
         resultsPanel.innerHTML = "";
         setProgress(0, false);
         logTail.textContent = "";
+        renderSteps([], false);
         statusLine.textContent = "…";
         if (detailPollTimer) clearInterval(detailPollTimer);
         detailPoll();
         detailPollTimer = setInterval(detailPoll, 1500);
+    }
+
+    // 95 -> « 1 min 35 s » : des secondes brutes ne se lisent pas au-delà d'une minute.
+    function fmtDuration(totalSeconds) {
+        const sec = Math.max(0, Math.round(totalSeconds));
+        if (sec < 60) return fmtStr(tr("duration_s", "{s}s"), { s: sec });
+        if (sec < 3600) {
+            return fmtStr(tr("duration_min", "{m} min {s}s"), { m: Math.floor(sec / 60), s: sec % 60 });
+        }
+        return fmtStr(tr("duration_h", "{h} h {m} min"), { h: Math.floor(sec / 3600), m: Math.floor((sec % 3600) / 60) });
+    }
+
+    // Étapes lisibles envoyées par le serveur (`steps`: [{text, level}]). La
+    // dernière est « en cours » tant que le run tourne ; les précédentes sont
+    // faites. Le texte passe par `textContent` : jamais interprété comme HTML.
+    function renderSteps(steps, running) {
+        if (!stepsList) return;
+        stepsList.innerHTML = "";
+        (steps || []).forEach(function (step, i) {
+            const li = document.createElement("li");
+            const isLast = i === steps.length - 1;
+            li.className = "step step-" + (step.level || "info") + (isLast && running ? " step-current" : "");
+            li.textContent = step.text;
+            stepsList.appendChild(li);
+        });
+        stepsList.scrollTop = stepsList.scrollHeight;
     }
 
     const progressStallThresholdMs = 10 * 60 * 1000;
@@ -331,6 +359,7 @@
         if (data.status === "queued") {
             setProgress(0, false);
             logTail.textContent = "";
+            renderSteps([], false);
             statusLine.textContent = fmtStr(tr("run_queued_confirm", "Run “{name}” queued (position {position})."),
                 { name: data.name || trackedRunId, position: data.queue_position ?? "?" });
             return;
@@ -351,23 +380,24 @@
         setProgress(pct, data.status === "running" && done === 0);
         logTail.textContent = data.log_tail.join("\n");
         logTail.scrollTop = logTail.scrollHeight;
+        renderSteps(data.steps, data.status === "running");
 
         if (data.status === "running") {
             const progressText = total > 0
-                ? fmtStr(tr("status_progress_units", "{done}/{total} scan units"), { done: done, total: total })
+                ? fmtStr(tr("status_progress_units", "{done} of {total} evaluations"), { done: done, total: total })
                 : "";
-            const elapsed = Math.max(0, Math.round(data.elapsed_s));
+            const elapsed = fmtDuration(data.elapsed_s);
             const remaining = Number.isFinite(data.estimated_remaining_s)
-                ? Math.round(data.estimated_remaining_s)
+                ? fmtDuration(data.estimated_remaining_s)
                 : null;
             const confidence = data.eta_confidence === "moderate" ? "moderate" : "low";
             const statusText = remaining !== null
-                ? tr("status_running_eta", "{phase} ({pct}%, {progress}, {elapsed}s elapsed, {confidence} estimate: {remaining}s remaining)")
+                ? tr("status_running_eta", "{phase} — {pct}% ({progress}) · elapsed: {elapsed} · about {remaining} left ({confidence} estimate)")
                 : total > 0
-                    ? tr("status_running_progress", "{phase} ({pct}%, {progress}, {elapsed}s elapsed)")
-                    : tr("status_running", "{phase} ({pct}%, {elapsed}s elapsed)");
+                    ? tr("status_running_progress", "{phase} — {pct}% ({progress}) · elapsed: {elapsed}")
+                    : tr("status_running", "{phase} — {pct}% · elapsed: {elapsed}");
             const params = {
-                phase: PHASE_LABELS[data.phase] || data.phase,
+                phase: PHASE_LABELS[data.phase] || tr("phase_other", "Computing"),
                 pct: pct,
                 progress: progressText,
                 elapsed: elapsed,
@@ -380,7 +410,7 @@
                 Date.now() - progressWatch.since >= progressStallThresholdMs) {
                 renderedStatus += " " + tr(
                     "status_progress_stalled",
-                    "No new scan unit for 10 minutes; check the log. Long individual fits may be normal.",
+                    "No new evaluation for 10 minutes; check the technical log. A long computation may be normal.",
                 );
                 progressWatch.warned = true;
             }
@@ -391,7 +421,7 @@
             statusLine.innerHTML = `<span class="error-text">${escapeHtml(fmtStr(tr("status_error", "Error: {error}"), { error: data.error }))}</span>`;
             clearInterval(detailPollTimer);
         } else if (data.status === "done") {
-            statusLine.textContent = fmtStr(tr("status_done", "Done in {elapsed}s."), { elapsed: Math.round(data.elapsed_s) });
+            statusLine.textContent = fmtStr(tr("status_done", "Done in {elapsed}."), { elapsed: fmtDuration(data.elapsed_s) });
             setProgress(100, false);
             clearInterval(detailPollTimer);
             if (!resultsLoaded) {

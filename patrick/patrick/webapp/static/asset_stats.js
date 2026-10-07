@@ -185,6 +185,19 @@
             });
     }
 
+    // /macro lists ~100 series: fetch each panel only when it is about to
+    // scroll into view (one request per panel, not 100 at page load).
     var panels = document.querySelectorAll(".asset-panel[data-symbol]");
-    panels.forEach(function (panel) { loadPanel(panel); });
+    if ("IntersectionObserver" in window) {
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                observer.unobserve(entry.target);
+                loadPanel(entry.target);
+            });
+        }, { rootMargin: "400px 0px" });
+        panels.forEach(function (panel) { observer.observe(panel); });
+    } else {
+        panels.forEach(function (panel) { loadPanel(panel); });
+    }
 })();

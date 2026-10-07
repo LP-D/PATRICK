@@ -247,7 +247,14 @@
         }
         el.innerHTML = "";
         rows.forEach(function (row) {
+            // Même balisage que le gabarit serveur : un bouton `.movers-pick`
+            // (le clic est délégué sur `#movers-columns`, voir app.js) — sans
+            // lui, la liste devenait inerte dès le premier rafraîchissement.
             var li = document.createElement("li");
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "movers-pick";
+            btn.setAttribute("data-symbol", row.symbol);
             var symSpan = document.createElement("span");
             symSpan.className = "movers-symbol";
             symSpan.textContent = row.symbol;
@@ -257,9 +264,10 @@
             var pctSpan = document.createElement("span");
             pctSpan.className = "movers-pct " + (sign > 0 ? "movers-up" : "movers-down");
             pctSpan.textContent = (sign > 0 ? "+" : "") + row.pct + "%";
-            li.appendChild(symSpan);
-            li.appendChild(labelSpan);
-            li.appendChild(pctSpan);
+            btn.appendChild(symSpan);
+            btn.appendChild(labelSpan);
+            btn.appendChild(pctSpan);
+            li.appendChild(btn);
             el.appendChild(li);
         });
     }
@@ -271,6 +279,10 @@
             if (moversUpdated) {
                 moversUpdated.textContent = data.updated_at
                     ? fmtStr(tr("movers_updated_at", "Updated at {time}"), { time: data.updated_at })
+                        + (data.n_requested
+                            ? " · " + fmtStr(tr("movers_coverage", "{n} of {total} tickers ranked"),
+                                { n: data.n_ranked, total: data.n_requested })
+                            : "")
                     : tr("movers_computing", "Computing (every 30 min)…");
             }
         }).catch(function () {});

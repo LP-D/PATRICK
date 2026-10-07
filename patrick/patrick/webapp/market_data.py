@@ -6,25 +6,47 @@ universe for a full run -- here we want a fast response for a single symbol.
 from __future__ import annotations
 
 import datetime as dt
+import os
+import time
 
 import pandas_datareader.data as web
 import yfinance as yf
 
 from patrick.clock import utc_today
+from patrick.data.sources import fred_source
+from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 
 PERIOD_DAYS = {"1mo": 30, "3mo": 90, "6mo": 182, "1y": 365, "5y": 365 * 5, "max": None}
 VALID_PERIODS = tuple(PERIOD_DAYS)
+
+
+# /macro shows ~100 FRED series, each fetched on its own: a short-lived cache
+# keeps a page reload from re-requesting them all (the FRED API is limited to
+# 120 requests/minute). Successful answers only.
+_FRED_CACHE_TTL_S = 1800
+_fred_cache: dict[tuple[str, str], tuple[float, dict]] = {}
 
 
 def price_history(symbol: str, source: str, period: str = "1y") -> dict:
     period = period if period in PERIOD_DAYS else "1y"
 
     if source == "fred":
+        cached = _fred_cache.get((symbol, period))
+        if cached is not None and time.monotonic() - cached[0] < _FRED_CACHE_TTL_S:
+            return cached[1]
         end = utc_today()
         days = PERIOD_DAYS[period]
         start = end - dt.timedelta(days=days) if days else dt.date(1970, 1, 1)
         try:
-            s = web.DataReader(symbol, "fred", start, end).squeeze().dropna()
+            if os.environ.get(FRED_API_KEY_ENV):
+                # Official API when a key is set: the public CSV scrape is
+                # the fragile path (see data/sources/fred_source.py).
+                s = fred_source.download_series(symbol, symbol, start.isoformat())
+                if s is None:
+                    return {"dates": [], "closes": [], "error": f"FRED {symbol}: fetch failed"}
+                s = s.dropna()
+            else:
+                s = web.DataReader(symbol, "fred", start, end).squeeze().dropna()
         except Exception as e:  # noqa: BLE001 -- provider boundary: the panel shows the error, the page stays up
             return {"dates": [], "closes": [], "error": str(e)[:200]}
     else:
@@ -36,10 +58,13 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
             return {"dates": [], "closes": []}
         s = hist["Close"].dropna()
 
-    return {
+    out = {
         "dates": [d.strftime("%Y-%m-%d") for d in s.index],
         "closes": [round(float(v), 4) for v in s.values],
     }
+    if source == "fred" and len(s):
+        _fred_cache[(symbol, period)] = (time.monotonic(), out)
+    return out
 
 
 def _as_mapping(value):

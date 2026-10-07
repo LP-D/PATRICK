@@ -12,10 +12,22 @@
     {{ help_icon('asset_statistics', t('assetpanel_help_label'), t('glossary_open_aria', term=t('assetpanel_help_label'))) }}
     {{ help_icon('asset_bar_windows', t('assetpanel_bars_help_label'), t('glossary_open_aria', term=t('assetpanel_bars_help_label'))) }}
 </h1>
+<p class="page-subtitle">{{ t('macro_sections_hint') }}</p>
 
-<div class="group-block asset-panel-grid">
-{% for a in assets %}
-{{ asset_panel(a.symbol, a.label, a.slug) }}
+<nav class="macro-toc" aria-label="{{ t('nav_macro') }}">
+{% for s in macro_sections %}
+    <a class="tag" href="#macro-{{ s.key }}">{{ s.title }}</a>
 {% endfor %}
-</div>
+</nav>
+
+{% for s in macro_sections %}
+<section class="group-block" id="macro-{{ s.key }}">
+    <h2 class="group-title">{{ s.title }} <span class="hint">{{ s.assets | length }}</span></h2>
+    <div class="asset-panel-grid">
+    {% for a in s.assets %}
+    {{ asset_panel(a.symbol, a.label, a.slug, t('macro_training_only') if a.training_only else '') }}
+    {% endfor %}
+    </div>
+</section>
+{% endfor %}
 {% endblock %}

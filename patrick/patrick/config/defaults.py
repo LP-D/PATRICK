@@ -454,7 +454,136 @@ DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src 
 # (`features/guida.py::eurusd_carry_features`). FRED dates it on the EFFECTIVE
 # date, after the announcement: a lag, never a look-ahead.
 FEATURE_ONLY_FRED_SERIES = {"EUR_DFR_Rate": "ECBDFR"}
+
+# Extended FRED data (2026-10-07): series used for TRAINING ONLY -- never a
+# target (the target dropdown only shows `DEFAULT_TARGET_GROUPS`). They are
+# displayed on the /macro page, grouped by domain (`MACRO_PAGE_SECTIONS`
+# below). Each id was checked against the FRED API
+# (exists, still published, history back to 2008 at the latest) and its
+# publication delay is in `data/publication_lag.py` (point-in-time alignment,
+# no look-ahead); `tests/test_extended_fred_series.py` keeps the three tables
+# (this one, `data/freshness.py`, `data/publication_lag.py`) in sync.
+# Rejected on purpose: ICE BofA sub-indices (FRED serves 3 years of history
+# only), EVZCLS (discontinued 2025-03), and anything already covered by a
+# yfinance ticker (copper, natural gas, DXY, VIX itself).
+#
+# These columns go through the "macro" feature family only (level, return,
+# vol, lags). The per-column families (technical, spike, vol_models,
+# long_cycle) skip them -- `MACRO_ONLY_COLUMNS` -- since EGARCH/Kalman on a
+# monthly step series is meaningless and ~50 more columns would otherwise
+# double the parametric build time.
+MACRO_ONLY_FRED_SERIES = {
+    # Labor
+    "Participation_Rate": "CIVPART",
+    "Employment_Population_Ratio": "EMRATIO",
+    "U6_Unemployment": "U6RATE",
+    "Avg_Hourly_Earnings": "AHETPI",
+    "Avg_Weekly_Hours_Manufacturing": "AWHMAN",
+    "Avg_Unemployment_Duration": "UEMPMEAN",
+    "Job_Openings": "JTSJOL",
+    "Initial_Jobless_Claims": "ICSA",
+    "Continued_Jobless_Claims": "CCSA",
+    # Prices and inflation expectations
+    "CPI_Energy": "CPIENGSL",
+    "CPI_Food": "CPIUFDSL",
+    "CPI_Medical": "CPIMEDSL",
+    "CPI_Shelter": "CUSR0000SAH1",
+    "Sticky_CPI": "STICKCPIM159SFRBATL",
+    "PPI_All_Commodities": "PPIACO",
+    "PCE_Price_Index": "PCEPI",
+    "Michigan_Inflation_Expectation": "MICH",
+    "US_Gasoline_Price": "GASREGW",
+    # Income, activity, housing
+    "Saving_Rate": "PSAVERT",
+    "Real_Disposable_Income": "DSPIC96",
+    "Real_GDP": "GDPC1",
+    "Real_GDP_Growth": "A191RL1Q225SBEA",
+    "Housing_Starts": "HOUST",
+    "Building_Permits": "PERMIT",
+    "Durable_Goods_Orders": "DGORDER",
+    "Mfg_New_Orders": "AMTMNO",
+    "Capacity_Utilization": "TCU",
+    "Industrial_Production_Mfg": "IPMAN",
+    "Vehicle_Sales": "TOTALSA",
+    "Case_Shiller_Home_Prices": "CSUSHPINSA",
+    "Chicago_Fed_Activity": "CFNAI",
+    # Money and liquidity
+    "M2_Money_Supply": "M2SL",
+    "Fed_Total_Assets": "WALCL",
+    "Treasury_General_Account": "WTREGEN",
+    "Bank_Reserves": "WRESBAL",
+    "Commercial_Industrial_Loans": "TOTCI",
+    # Rates and credit
+    "US10Y_Real_Rate": "DFII10",
+    "US5Y_Real_Rate": "DFII5",
+    "Moodys_Aaa_Yield": "DAAA",
+    "Moodys_Baa_Yield": "DBAA",
+    "Aaa_10Y_Spread": "AAA10Y",
+    "Baa_10Y_Spread": "BAA10Y",
+    "T10Y_FedFunds_Spread": "T10YFF",
+    "T5Y_FedFunds_Spread": "T5YFF",
+    "Prime_Rate": "DPRIME",
+    "Mortgage_30Y_Rate": "MORTGAGE30US",
+    "Mortgage_15Y_Rate": "MORTGAGE15US",
+    "Germany_10Y_Yield": "IRLTLT01DEM156N",
+    "Japan_10Y_Yield": "IRLTLT01JPM156N",
+    "UK_10Y_Yield": "IRLTLT01GBM156N",
+    # Financial conditions and volatility indices
+    "NFCI_Risk": "NFCIRISK",
+    "NFCI_Credit": "NFCICREDIT",
+    "NFCI_Leverage": "NFCILEVERAGE",
+    "Nasdaq_Vol_VXN": "VXNCLS",
+    "Russell2000_Vol_RVX": "RVXCLS",
+    "Oil_Vol_OVX": "OVXCLS",
+    "Gold_Vol_GVZ": "GVZCLS",
+    # Exchange rates (Fed H.10)
+    "USD_JPY": "DEXJPUS",
+    "GBP_USD": "DEXUSUK",
+    "USD_CNY": "DEXCHUS",
+    "USD_CHF": "DEXSZUS",
+    "USD_CAD": "DEXCAUS",
+}
+MACRO_ONLY_COLUMNS = frozenset(MACRO_ONLY_FRED_SERIES)
+
+# /macro page layout: sections by domain, most important first (the headline
+# indicators open the page, then each domain in decreasing order of weight;
+# inside a section, series are ordered the same way). Every FRED series of the
+# universe -- targetable ("Macro (FRED)" group), feature-only or macro-only --
+# appears in exactly one section, listed by FRED id
+# (`tests/test_extended_fred_series.py` enforces it). Display only: being
+# listed here never makes a series a target.
+MACRO_PAGE_SECTIONS: list[tuple[str, list[str]]] = [
+    ("key", ["GDP", "A191RL1Q225SBEA", "UNRATE", "PAYEMS", "CPIAUCSL", "PCEPILFE",
+             "FEDFUNDS", "DGS10", "T10Y2Y", "VIXCLS"]),
+    ("growth", ["GDPC1", "INDPRO", "IPMAN", "TCU", "CFNAI", "DGORDER", "AMTMNO"]),
+    ("labor", ["ICSA", "U6RATE", "JTSJOL", "EMRATIO", "CIVPART", "AHETPI", "CCSA", "AWHMAN", "UEMPMEAN"]),
+    ("inflation", ["CPILFESL", "PCEPI", "PPIACO", "CPIENGSL", "CPIUFDSL", "CUSR0000SAH1", "CPIMEDSL",
+                   "STICKCPIM159SFRBATL", "MICH", "T10YIE", "T5YIE", "T5YIFR"]),
+    ("policy", ["DFF", "EFFR", "SOFR", "DPRIME", "ECBDFR", "DTB4WK", "DTB3", "DTB6"]),
+    ("curve", ["DGS2", "DGS5", "DGS30", "T10Y3M", "DGS1", "DGS3", "DGS7", "DGS20", "T10YFF", "T5YFF",
+               "DFII10", "DFII5"]),
+    ("credit", ["BAMLH0A0HYM2", "BAMLC0A0CM", "BAMLC0A4CBBB", "NFCI", "STLFSI4", "BAA10Y", "AAA10Y",
+                "DBAA", "DAAA", "NFCIRISK", "NFCICREDIT", "NFCILEVERAGE", "TEDRATE"]),
+    ("consumption", ["RSAFS", "PCE", "UMCSENT", "PSAVERT", "DSPIC96", "TOTALSA"]),
+    ("housing", ["HOUST", "PERMIT", "CSUSHPINSA", "MORTGAGE30US", "MORTGAGE15US"]),
+    ("liquidity", ["M2SL", "WALCL", "WRESBAL", "WTREGEN", "TOTCI"]),
+    ("markets", ["SP500", "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS"]),
+    ("commodities", ["DCOILWTICO", "DCOILBRENTEU", "GASREGW"]),
+    ("international", ["DEXJPUS", "DEXUSUK", "DEXCHUS", "DEXSZUS", "DEXCAUS",
+                       "IRLTLT01DEM156N", "IRLTLT01JPM156N", "IRLTLT01GBM156N"]),
+]
+MACRO_DISPLAY_IDS = frozenset(sid for _, ids in MACRO_PAGE_SECTIONS for sid in ids)
+
+
+def macro_page_sections() -> list[tuple[str, list[tuple[str, str]]]]:
+    """`MACRO_PAGE_SECTIONS` with each FRED id paired with its column label:
+    `[(section_key, [(fred_id, label), ...]), ...]`."""
+    labels = {sym: label for sym, label in DEFAULT_TARGET_GROUPS[FRED_TARGET_GROUP]}
+    labels.update({sid: label for label, sid in {**FEATURE_ONLY_FRED_SERIES, **MACRO_ONLY_FRED_SERIES}.items()})
+    return [(key, [(sid, labels[sid]) for sid in ids]) for key, ids in MACRO_PAGE_SECTIONS]
+
 DEFAULT_UNIVERSE_FRED_SERIES = {
     **{label: s for s, label, src in DEFAULT_TARGET_CHOICES if src == "fred"},
     **FEATURE_ONLY_FRED_SERIES,
+    **MACRO_ONLY_FRED_SERIES,
 }

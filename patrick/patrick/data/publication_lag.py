@@ -40,12 +40,22 @@ PIT_VERSION = "pit-publication-lag-v1"
 # availability. Market-derived rates/spreads (H.15, ICE BofA, breakevens,
 # SOFR/EFFR published the next morning): 1. EIA spot oil prices are
 # published weekly (Wednesday, through the previous week): up to 7.
-DAILY_LAG_BDAYS: dict[str, int] = {"DCOILWTICO": 7, "DCOILBRENTEU": 7}
+DAILY_LAG_BDAYS: dict[str, int] = {
+    "DCOILWTICO": 7, "DCOILBRENTEU": 7,
+    # Fed H.10 exchange rates: the daily fixings are released in one batch
+    # every Monday for the previous week (Friday's rate waits 1 business day,
+    # Monday's waits 5 -- the late end is used).
+    "DEXJPUS": 5, "DEXUSUK": 5, "DEXCHUS": 5, "DEXSZUS": 5, "DEXCAUS": 5,
+}
 DEFAULT_DAILY_LAG_BDAYS = 1
 
 # Weekly series are dated on the week's last day (NFCI/STLFSI4: Friday) and
 # released the following Wednesday/Thursday: +7 calendar days.
 DEFAULT_WEEKLY_LAG_DAYS = 7
+WEEKLY_LAG_DAYS: dict[str, int] = {
+    "CCSA": 14,     # continued claims: released 12 days after the week ending Saturday
+    "TOTCI": 10,    # H.8: Friday release for the week ending the Wednesday before
+}
 
 # Monthly/quarterly: calendar days after the END of the reference period.
 PERIOD_END_LAG_DAYS: dict[str, int] = {
@@ -58,14 +68,39 @@ PERIOD_END_LAG_DAYS: dict[str, int] = {
     "UMCSENT": 3,                     # UMich final: last Friday of the same month
     "OILPRICE": 5,
     "GDP": 30,                        # BEA advance estimate: ~30 days after quarter end
+    # Extended FRED data (config/defaults.py::MACRO_ONLY_FRED_SERIES)
+    "GDPC1": 30, "A191RL1Q225SBEA": 30,   # same BEA advance release as GDP
+    "CIVPART": 10, "EMRATIO": 10, "U6RATE": 10, "AHETPI": 10, "AWHMAN": 10,
+    "UEMPMEAN": 10,                   # BLS Employment Situation, like PAYEMS/UNRATE
+    "JTSJOL": 45,                     # JOLTS: ~5-6 weeks after month end
+    "CPIENGSL": 20, "CPIUFDSL": 20, "CPIMEDSL": 20, "CUSR0000SAH1": 20,   # BLS CPI detail
+    "STICKCPIM159SFRBATL": 25,        # Atlanta Fed, computed once the CPI is out
+    "PPIACO": 20,                     # BLS PPI: ~13th-15th of the following month
+    "PCEPI": 35, "PSAVERT": 35, "DSPIC96": 35,   # BEA Personal Income and Outlays
+    "MICH": 3,                        # UMich final, like UMCSENT
+    "HOUST": 20, "PERMIT": 20,        # Census new residential construction
+    "DGORDER": 30,                    # Census advance durable goods: ~26th
+    "AMTMNO": 40,                     # Census full manufacturers' shipments/orders
+    "TCU": 20, "IPMAN": 20,           # Fed G.17, like INDPRO
+    "TOTALSA": 10,                    # BEA unit vehicle sales: first days of M+1
+    "CSUSHPINSA": 60,                 # S&P Case-Shiller: last Tuesday of M+2
+    "CFNAI": 30,                      # Chicago Fed: ~4th week of M+1
+    "M2SL": 30,                       # Fed H.6
+    "IRLTLT01DEM156N": 45, "IRLTLT01JPM156N": 45, "IRLTLT01GBM156N": 45,   # OECD monthly yields
 }
 DEFAULT_MONTHLY_LAG_DAYS = 45
 DEFAULT_QUARTERLY_LAG_DAYS = 95
 
-_KNOWN_IDS = set(DAILY_LAG_BDAYS) | set(PERIOD_END_LAG_DAYS) | {
+_KNOWN_IDS = set(DAILY_LAG_BDAYS) | set(PERIOD_END_LAG_DAYS) | set(WEEKLY_LAG_DAYS) | {
     "NFCI", "STLFSI4", "DGS1", "DGS2", "DGS3", "DGS5", "DGS7", "DGS10", "DGS20", "DGS30",
     "DTB1", "DTB4WK", "DTB3", "DTB6", "DFF", "EFFR", "SOFR", "SP500", "VIXCLS", "TEDRATE",
     "T10Y2Y", "T10Y3M", "T10YIE", "T5YIE", "T5YIFR", "BAMLC0A0CM", "BAMLC0A4CBBB", "BAMLH0A0HYM2",
+    # Extended FRED data: weekly (ICSA, WALCL, WTREGEN, WRESBAL, GASREGW, mortgage rates,
+    # NFCI sub-indices) and daily (real yields, Moody's, spreads, prime, Cboe indices)
+    "ICSA", "WALCL", "WTREGEN", "WRESBAL", "GASREGW", "MORTGAGE30US", "MORTGAGE15US",
+    "NFCIRISK", "NFCICREDIT", "NFCILEVERAGE",
+    "DFII10", "DFII5", "DAAA", "DBAA", "AAA10Y", "BAA10Y", "T10YFF", "T5YFF", "DPRIME",
+    "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS",
 }
 
 
@@ -99,7 +134,7 @@ def availability_dates(index: pd.DatetimeIndex, series_id: str) -> pd.DatetimeIn
     if freq == "daily":
         return idx + pd.offsets.BDay(DAILY_LAG_BDAYS.get(series_id, DEFAULT_DAILY_LAG_BDAYS))
     if freq == "weekly":
-        return idx + pd.Timedelta(days=DEFAULT_WEEKLY_LAG_DAYS)
+        return idx + pd.Timedelta(days=WEEKLY_LAG_DAYS.get(series_id, DEFAULT_WEEKLY_LAG_DAYS))
     if freq == "monthly":
         lag = PERIOD_END_LAG_DAYS.get(series_id, DEFAULT_MONTHLY_LAG_DAYS)
         return idx + pd.offsets.MonthEnd(0) + pd.Timedelta(days=lag)
