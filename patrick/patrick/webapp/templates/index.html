@@ -573,7 +573,13 @@
         <p id="run-control-error" class="banner banner-error hidden" role="alert"></p>
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
         <p id="status-line">…</p>
-        <pre id="log-tail" class="log-tail"></pre>
+        {# Étapes en clair, déduites du journal du pipeline (`progress_steps.py`).
+           Le journal brut reste disponible, replié, pour qui veut le détail. #}
+        <ol id="steps-list" class="steps-list" aria-live="polite"></ol>
+        <details class="log-raw">
+            <summary>{{ t('log_raw_title') }}</summary>
+            <pre id="log-tail" class="log-tail"></pre>
+        </details>
     </div>
     <div id="results-panel" class="hidden"></div>
     </div>
@@ -613,7 +619,7 @@
     <div class="movers-header">
         <h2 id="movers-title" class="dash-panel-title">{{ t('movers_title') }}</h2>
         <span class="hint" id="movers-updated">
-            {% if movers.updated_at %}{{ t('movers_updated_at', time=movers.updated_at) }}{% else %}{{ t('movers_computing') }}{% endif %}
+            {% if movers.updated_at %}{{ t('movers_updated_at', time=movers.updated_at) }}{% if movers.n_requested %} · {{ t('movers_coverage', n=movers.n_ranked, total=movers.n_requested) }}{% endif %}{% else %}{{ t('movers_computing') }}{% endif %}
         </span>
     </div>
     <div class="dash-panel-body">

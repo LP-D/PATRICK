@@ -1,9 +1,17 @@
-"""Alert list (largest recent moves) over the ticker universe — computed in
-the background every 30 minutes and cached: downloading it on every page
-load would be too slow on ~300 tickers (per user decision). Independent from
+"""Alert list (largest recent moves) over EVERY yfinance symbol selectable as
+a launch target (reduced default universe + individual equities + verified
+extension, i.e. `forms.TARGET_CHOICES`) — computed in the background every
+30 minutes and cached: downloading it on every page load would be too slow
+on this many tickers (per user decision). Independent from
 `patrick.data.ingest` (which caches a full run): here we just want a quick,
 regularly refreshed snapshot. Error/status strings in `_cache` are
 user-facing and stay in French, matching the rest of the web interface.
+
+The ranked pool is the launch form's target list, NOT the default feature
+pool (`D.DEFAULT_UNIVERSE_YF_TICKERS`): a mover is a candidate target, so
+every ticker the user can click must be ranked — equities and extended
+symbols included. `n_ranked`/`n_requested` in the cache expose the actual
+coverage so a silent provider gap is visible in the UI.
 """
 from __future__ import annotations
 
@@ -15,13 +23,15 @@ from patrick.clock import local_now, utc_today
 from patrick.config import defaults as D
 from patrick.data.sources.yfinance_source import clean_symbol, download_batch
 from patrick.tracking import db as trackdb
+from patrick.webapp import forms
 
 REFRESH_SECONDS = 30 * 60
 LOOKBACK_DAYS = 5
 TOP_N = 8
 
 _lock = threading.Lock()
-_cache: dict = {"gainers": [], "losers": [], "updated_at": None, "error": None}
+_cache: dict = {"gainers": [], "losers": [], "updated_at": None, "error": None,
+                "n_ranked": 0, "n_requested": 0}
 _started = False
 
 
@@ -30,24 +40,34 @@ def get_cached() -> dict:
         return dict(_cache)
 
 
+def _yf_target_symbols() -> list[str]:
+    """Every yfinance symbol offered as a launch target, in display order,
+    deduplicated, minus the known-bad blocklist."""
+    seen: dict[str, None] = {}
+    for sym, _label, src in forms.TARGET_CHOICES:
+        if src == "yfinance" and sym not in D.BAD_TICKERS:
+            seen.setdefault(sym)
+    return list(seen)
+
+
 def _label_for(symbol: str) -> str:
-    for sym, label, src in D.DEFAULT_TARGET_CHOICES:
+    for sym, label, src in forms.TARGET_CHOICES:
         if sym == symbol and src == "yfinance":
             return label
     return symbol
 
 
 def _active_tickers() -> list[str]:
-    """`D.DEFAULT_UNIVERSE_YF_TICKERS` minus symbols persisted as confirmed
-    unavailable (M1, migration 0013) -- a symbol that fails identically at
-    every startup (delisted/invalid) must be excluded once, not retried on
-    every refresh forever."""
+    """All selectable yfinance targets (`_yf_target_symbols`) minus symbols
+    persisted as confirmed unavailable (M1, migration 0013) -- a symbol that
+    fails identically at every startup (delisted/invalid) must be excluded
+    once, not retried on every refresh forever."""
     conn = trackdb.connect()
     try:
         excluded = {row["symbol"] for row in trackdb.list_excluded_symbols(conn)}
     finally:
         conn.close()
-    return [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t not in excluded]
+    return [t for t in _yf_target_symbols() if t not in excluded]
 
 
 def _compute_once() -> None:
@@ -68,9 +88,10 @@ def _compute_once() -> None:
         return
 
     # yfinance can return a fully empty last row (day still in progress, not
-    # yet closed) — it is dropped after filling one-off gaps (local holidays
-    # differing by exchange) via a forward-fill.
-    df = df.ffill().dropna(axis=0, how="all").dropna(axis=1, how="all")
+    # yet closed): it is dropped BEFORE the forward-fill (which would
+    # otherwise copy the previous row into it and shorten the lookback), then
+    # one-off gaps (local holidays differing by exchange) are filled.
+    df = df.dropna(axis=0, how="all").ffill().dropna(axis=1, how="all")
     if len(df) < 2:
         with _lock:
             _cache["error"] = "Pas assez de données téléchargées."
@@ -94,6 +115,8 @@ def _compute_once() -> None:
         _cache["losers"] = _rows(ranked.tail(TOP_N)[::-1])
         _cache["updated_at"] = local_now().strftime("%Y-%m-%d %H:%M")
         _cache["error"] = None
+        _cache["n_ranked"] = int(len(ranked))
+        _cache["n_requested"] = len(tickers)
 
 
 def _loop() -> None:

@@ -1469,6 +1469,43 @@ legend {
   white-space: pre-wrap;
 }
 
+/* Avancement : étapes en clair (progress_steps.py) + journal brut replié. */
+.steps-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0 0 var(--space-md, 12px);
+  padding: 0;
+  list-style: none;
+}
+.steps-list:empty { display: none; }
+.step {
+  position: relative;
+  padding: 5px 0 5px 22px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.step::before {
+  content: "✓";
+  position: absolute;
+  left: 2px;
+  color: var(--text-3);
+}
+.step-warn { color: var(--warn); }
+.step-warn::before { content: "!"; color: var(--warn); font-weight: 700; }
+.step-error { color: var(--neg); }
+.step-error::before { content: "✕"; color: var(--neg); }
+.step-current { color: var(--text); font-weight: 600; }
+.step-current::before { content: "▸"; color: var(--brand); }
+.log-raw { margin: 0; }
+.log-raw > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.log-raw[open] > summary { margin-bottom: 6px; }
+
 .recent-runs { margin: 8px 0 0; }
 .recent-runs-list { margin: 0; padding: 0; list-style: none; }
 .recent-runs-list li {
@@ -1717,6 +1754,10 @@ pre { max-width: 100%; overflow-x: auto; }
 
 .asset-panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--space-md); }
 .asset-panel-grid > .card { margin-bottom: 0; }
+.macro-toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--space-lg); }
+.macro-toc .tag { height: 24px; text-decoration: none; font-family: inherit; font-size: 12px; }
+.macro-toc .tag:hover { border-color: var(--line-strong); color: var(--text); }
+.group-block[id^="macro-"] { scroll-margin-top: 16px; }
 .asset-panel h2 { flex-wrap: wrap; align-items: baseline; }
 .asset-panel-symbol { margin: 0; font-family: var(--mono); font-size: 12px; font-weight: 500; }
 .asset-panel-body .chart-wrap { margin-bottom: 8px; }

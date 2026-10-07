@@ -176,6 +176,8 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
     ohlc_vol_windows = _sanitize_lookback_windows(lb.ohlc_vol_windows, 2, "ohlc_vol_windows")
 
     for col in raw.columns:
+        if col in D.MACRO_ONLY_COLUMNS:
+            continue    # extended FRED data: "macro" family only, built below
         s = raw[col]
         if "technical" in families:
             parts.append(technical.build_technical_features(
@@ -257,6 +259,11 @@ def _build_parametric_pool(raw: pd.DataFrame, config: RunConfig, fit_end_idx: in
                            test_end_idx: int | None, conn, snapshot_id: str | None) -> pd.DataFrame:
     families = config.features.families
     parts: list[pd.DataFrame] = []
+    # Extended FRED data (`D.MACRO_ONLY_FRED_SERIES`) feeds the macro family
+    # only: no EGARCH/Kalman/particle filter on those columns.
+    macro_only = [c for c in raw.columns if c in D.MACRO_ONLY_COLUMNS]
+    if macro_only:
+        raw = raw.drop(columns=macro_only)
 
     n_jobs = parametric_parallel.resolve_jobs(
         len(raw.columns), int(raw.memory_usage(deep=True).sum()))

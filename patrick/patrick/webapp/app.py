@@ -46,6 +46,7 @@ from patrick.webapp import (
     market_data,
     market_regime,
     nav_registry,
+    progress_steps,
     run_manager,
     shap_chart,
     wealth_routes,
@@ -667,8 +668,11 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
 
 
 @app.get("/runs/{run_id}/status")
-def run_status(run_id: str):
-    return _get_run_or_404(run_id)
+def run_status(run_id: str, request: Request):
+    job = _get_run_or_404(run_id)
+    # `log_tail` stays the raw pipeline output ("Journal technique"); `steps` is
+    # the same log rewritten as readable sentences for the Avancement panel.
+    return {**job, "steps": progress_steps.humanize_log(job.get("log_tail") or [], i18n.get_lang(request))}
 
 
 @app.get("/runs/{run_id}/results")
@@ -1229,12 +1233,28 @@ def commodities_page(request: Request):
     )
 
 
+def _macro_sections_view(t) -> list[dict]:
+    """/macro: every FRED series of the universe, one panel skeleton each,
+    grouped by domain with the headline indicators first
+    (`D.MACRO_PAGE_SECTIONS`). `training_only` flags the series that feed
+    the models but are not offered as targets."""
+    targets = {sym for sym, _ in D.DEFAULT_TARGET_GROUPS[D.FRED_TARGET_GROUP]}
+    return [
+        {"key": key, "title": t(f"macro_section_{key}"),
+         "assets": [{"symbol": sid, "label": label, "slug": forms.slug_target(sid),
+                     "training_only": sid not in targets} for sid, label in series]}
+        for key, series in D.macro_page_sections()
+    ]
+
+
 @app.get("/macro")
 def macro_page(request: Request):
-    """feature/ticker-stats-panel: same panel, for the Macro (FRED) group."""
+    """feature/ticker-stats-panel: same panel, for every FRED series of the
+    universe, sectioned by domain (key indicators first)."""
+    t = i18n.translator(i18n.get_lang(request))
     return templates.TemplateResponse(
         request, "macro.html",
-        {"assets": _asset_group_view(D.FRED_TARGET_GROUP), **_i18n_context(request)},
+        {"macro_sections": _macro_sections_view(t), **_i18n_context(request)},
     )
 
 
@@ -1318,6 +1338,8 @@ def asset_stats_api(
     only 400 (every other error path here is a 404 on an unknown
     symbol)."""
     source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
+    if source is None and symbol in D.MACRO_DISPLAY_IDS:
+        source = "fred"     # shown on /macro, but not a target
     if source is None:
         raise HTTPException(status_code=404, detail="Symbole inconnu")
     try:
@@ -1330,6 +1352,12 @@ def asset_stats_api(
         )
     except asset_stats.InvalidWindowError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if source == "fred" and period == "5y":
+        # 5 years of a quarterly series is 19 points, under the stats
+        # minimum: slow series get their whole (still small) history.
+        from patrick.data.freshness import fred_periodicity
+        if fred_periodicity(symbol) in ("monthly", "quarterly"):
+            period = "max"
     series = market_data.price_history(symbol, source, period)
     return asset_stats.compute_stats(
         series,

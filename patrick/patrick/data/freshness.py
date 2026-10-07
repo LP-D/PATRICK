@@ -53,7 +53,12 @@ from patrick.data.store import DataStore
 #: Préfixes reconnus -> quotidien. DGS*/DTB* (taux du Trésor), T10Y*/T5Y*
 #: (spreads/breakevens d'inflation), BAML* (spreads de crédit ICE BofA),
 #: DCOIL* (WTI/Brent FRED, publiés chaque jour ouvré), VIXCLS/VIXDVOL (VIX).
-FRED_DAILY_PREFIXES = ("DGS", "DTB", "T10Y", "T5Y", "BAML", "DCOIL", "VIXCLS", "VIXDVOL")
+#: Extended FRED data (config/defaults.py::MACRO_ONLY_FRED_SERIES): DFII*
+#: (TIPS real yields), DAAA/DBAA/AAA10Y/BAA10Y (Moody's), DPRIME, DEX* (Fed
+#: H.10 exchange rates), VXNCLS/RVXCLS/OVXCLS/GVZCLS (Cboe volatility indices).
+FRED_DAILY_PREFIXES = ("DGS", "DTB", "T10Y", "T5Y", "BAML", "DCOIL", "VIXCLS", "VIXDVOL",
+                       "DFII", "DAAA", "DBAA", "AAA10Y", "BAA10Y", "DPRIME", "DEX",
+                       "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS")
 #: Codes exacts -> quotidien (taux/indices publiés chaque jour ouvré, pas de
 #: préfixe commun pratique). SP500/WILL5000IND : indices de marché FRED,
 #: mise à jour quotidienne. TEDRATE : spread de taux quotidien (série
@@ -65,14 +70,26 @@ FRED_DAILY_EXACT = {"DFF", "EFFR", "SOFR", "SP500", "WILL5000IND", "TEDRATE"}
 #: Préfixes reconnus -> mensuel. CPI* (CPIAUCSL/CPILFESL), PCE* (PCE/PCEPILFE).
 FRED_MONTHLY_PREFIXES = ("CPI", "PCE")
 #: Codes exacts -> mensuel (indications produit explicites).
-FRED_MONTHLY_EXACT = {"UNRATE", "PAYEMS", "RSAFS", "INDPRO", "FEDFUNDS", "UMCSENT"}
+FRED_MONTHLY_EXACT = {
+    "UNRATE", "PAYEMS", "RSAFS", "INDPRO", "FEDFUNDS", "UMCSENT",
+    # Extended FRED data (CPI*/PCE* ids are caught by the prefixes above)
+    "CIVPART", "EMRATIO", "U6RATE", "AHETPI", "AWHMAN", "UEMPMEAN", "JTSJOL",
+    "CUSR0000SAH1", "STICKCPIM159SFRBATL", "PPIACO", "MICH", "PSAVERT", "DSPIC96",
+    "HOUST", "PERMIT", "DGORDER", "AMTMNO", "TCU", "IPMAN", "TOTALSA", "CSUSHPINSA",
+    "CFNAI", "M2SL", "IRLTLT01DEM156N", "IRLTLT01JPM156N", "IRLTLT01GBM156N",
+}
 
 #: Codes exacts -> trimestriel.
-FRED_QUARTERLY_EXACT = {"GDP"}
+FRED_QUARTERLY_EXACT = {"GDP", "GDPC1", "A191RL1Q225SBEA"}
 
 #: Codes exacts -> hebdomadaire (NFCI/STLFSI4, publiées le jeudi par la Fed
-#: de Chicago/St. Louis).
-FRED_WEEKLY_EXACT = {"NFCI", "STLFSI4"}
+#: de Chicago/St. Louis). Données FRED étendues: allocations chômage, bilan de
+#: la Fed (H.4.1), crédit bancaire (H.8), taux hypothécaires Freddie Mac,
+#: prix de l'essence EIA, sous-indices NFCI.
+FRED_WEEKLY_EXACT = {
+    "NFCI", "STLFSI4", "ICSA", "CCSA", "WALCL", "WTREGEN", "WRESBAL", "TOTCI",
+    "MORTGAGE30US", "MORTGAGE15US", "GASREGW", "NFCIRISK", "NFCICREDIT", "NFCILEVERAGE",
+}
 
 #: Fréquence par défaut pour toute série FRED absente de la table ci-dessus
 #: (ex. "OILPRICE", libellé maison sans code FRED standard identifiable avec
