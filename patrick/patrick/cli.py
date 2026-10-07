@@ -556,10 +556,18 @@ def sync_push_cmd(
     include_personal: bool = typer.Option(False, "--include-personal", help="Dossier privé uniquement : "
                                           "inclut aussi le patrimoine et les fonds (jamais vers GitHub)"),
     repo: str = typer.Option(None, "--repo", help="Dépôt GitHub (défaut : celui du dossier courant)"),
+    force: bool = typer.Option(False, "--force", help="Écraser un partage dont ce PC n'a pas fusionné le contenu"),
 ) -> None:
     """Publie la base (sans patrimoine ni fonds perso), les modèles et le magasin de données."""
     from patrick import sync
 
+    if to != "github" and not force:
+        stamp = sync.remote_stamp(to)
+        if stamp is not None and stamp["sha"] != sync.load_state().get("remote_sha"):
+            typer.echo(f"Refusé : le partage ({stamp['runs']} run(s), publié le {stamp['created_at']}) contient des "
+                       "données que ce PC n'a pas fusionnées, elles seraient écrasées. Lance `patrick sync auto` "
+                       "(fusion puis publication), ou --force pour écraser quand même.")
+            raise typer.Exit(code=1)
     try:
         manifest = sync.push(to, include_personal=include_personal, repo=repo)
     except sync.SyncError as exc:
@@ -607,6 +615,127 @@ def sync_pull_cmd(
         typer.echo(f"Ancienne base sauvegardée : {result['backup']}")
     if result["personal_tables_kept"]:
         typer.echo("Patrimoine/fonds locaux conservés (" + ", ".join(result["personal_tables_kept"]) + ").")
+
+
+def _sync_folder(folder: str | None) -> str:
+    from patrick import sync
+
+    folder = folder or sync.configured_folder()
+    if not folder:
+        typer.echo("Aucun dossier de partage : lance d'abord `patrick sync setup --folder <dossier>`.")
+        raise typer.Exit(code=1)
+    return folder
+
+
+@sync_app.command(name="setup")
+def sync_setup_cmd(
+    folder: str = typer.Option(..., "--folder", help="Dossier partagé entre tes PC (ex. un dossier OneDrive)"),
+    schedule: bool = typer.Option(False, "--schedule", help="Windows : crée aussi la tâche planifiée « PATRICK-Sync » "
+                                                            "(publie ce PC toutes les heures s'il y a du neuf)"),
+    wealth_reference: bool = typer.Option(None, "--wealth-reference/--no-wealth-reference",
+                                          help="Ce PC est la RÉFÉRENCE du patrimoine et des fonds : il les publie, "
+                                               "les autres PC adoptent les siens (en remplaçant les leurs). "
+                                               "Défaut : inchangé (aucun PC n'est référence)"),
+) -> None:
+    """Enregistre le dossier de partage de CE PC (à faire une fois par PC) : `sync auto` s'en sert."""
+    from patrick import settings, sync
+
+    if not os.path.isdir(folder):
+        typer.echo(f"Dossier introuvable : {folder}")
+        raise typer.Exit(code=1)
+    updates: dict = {sync.KEY_SYNC_FOLDER: folder}
+    if wealth_reference is not None:
+        updates[sync.KEY_WEALTH_REFERENCE] = wealth_reference
+    settings.save(updates)
+    typer.echo(f"Dossier de partage enregistré : {folder}")
+    if wealth_reference is not None:
+        typer.echo("Ce PC est la référence du patrimoine : il le publie." if wealth_reference
+                   else "Ce PC adopte le patrimoine publié par le PC de référence.")
+    if schedule:
+        try:
+            typer.echo(f"Tâche planifiée {sync.SYNC_TASK} créée : {sync.register_task()}")
+        except sync.SyncError as exc:
+            typer.echo(f"Tâche planifiée non créée : {exc}")
+            raise typer.Exit(code=1) from exc
+    typer.echo("Étape suivante : ferme PATRICK puis lance `patrick sync auto`.")
+
+
+@sync_app.command(name="status")
+def sync_status_cmd(folder: str = typer.Option(None, "--folder", help="Défaut : le dossier de `sync setup`")) -> None:
+    """Dit ce que `sync auto` ferait, sans rien modifier."""
+    from patrick import sync
+
+    folder = _sync_folder(folder)
+    try:
+        st = sync.status(folder)
+    except sync.SyncError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    remote = st["remote"]
+    typer.echo(f"Partage : {folder}")
+    typer.echo("  " + (f"{remote['runs']} run(s), publié le {remote['created_at']}" if remote else "vide"))
+    typer.echo(f"Ce PC : {st['local_runs']} run(s); dernier échange : {st['last_exchange'] or 'jamais'}")
+    typer.echo("Patrimoine : ce PC est la référence (il le publie)." if st["wealth_reference"]
+               else "Patrimoine : adopté du PC de référence s'il en publie un, sinon local.")
+    todo = [label for flag, label in ((st["need_pull"], "fusionner le partage"),
+                                       (st["need_push"], "publier ce PC")) if flag]
+    typer.echo("À faire : " + (" puis ".join(todo) if todo else "rien, tout est à jour"))
+
+
+@sync_app.command(name="auto")
+def sync_auto_cmd(
+    folder: str = typer.Option(None, "--folder", help="Défaut : le dossier de `sync setup`"),
+    only: str = typer.Option(None, "--only", help="'pull' (fusionner seulement) ou 'push' (publier seulement)"),
+    log_file: str = typer.Option(None, "--log-file", help="Ajoute le compte rendu à ce fichier (tâche planifiée)"),
+) -> None:
+    """Met ce PC et le partage à niveau : fusionne ce que l'autre PC a publié, publie ce que ce PC a de neuf.
+    Sûr : n'écrase jamais un run, attend la fin d'un entraînement, demande que PATRICK soit fermé."""
+    from patrick import sync
+
+    folder = _sync_folder(folder)
+    lines: list[str] = []
+    try:
+        out = sync.auto(folder, only=only)
+    except sync.SyncError as exc:
+        lines.append(f"Refusé : {exc}")
+        code = 1
+    else:
+        code = 0
+        lines += out["actions"] + [f"Reporté : {line}" for line in out["skipped"]]
+        if not lines:
+            lines.append("Rien à faire : tout est à jour.")
+    for line in lines:
+        typer.echo(line)
+    if log_file:
+        from datetime import datetime
+
+        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            for line in lines:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} sync auto {only or ''}: {line}\n")
+    if code:
+        raise typer.Exit(code=code)
+
+
+@sync_app.command(name="merge")
+def sync_merge_cmd(
+    source: str = typer.Option(..., "--from", help="Dossier de partage"),
+    dry_run_to: str = typer.Option(None, "--dry-run-to", help="Écrit la base fusionnée dans ce fichier "
+                                                              "sans toucher à la base locale"),
+) -> None:
+    """Importe la recherche du partage dans la base locale (union : aucun run local n'est perdu)."""
+    from patrick import sync
+
+    try:
+        res = sync.merge(source, dry_run_to=dry_run_to)
+    except sync.SyncError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Fusion{' à blanc' if dry_run_to else ''} (partage du {res['created_at']}) : {res['new_runs']} run(s) "
+               f"importé(s), {res['runs_before']} -> {res['runs_after']}, {res['models']} modèle(s), "
+               f"{res['store_files']} fichier(s) de données.")
+    if res["backup"]:
+        typer.echo(f"Ancienne base sauvegardée : {res['backup']}")
 
 
 @fund_app.command(name="rule-create")
