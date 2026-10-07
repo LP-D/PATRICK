@@ -54,6 +54,7 @@
           <th class="num pk-mono">{{ t('fund_col_leverage') }}</th>
           <th class="num pk-mono">{{ t('fund_col_margin') }}</th>
           <th class="num pk-mono">{{ t('fund_col_positions') }}</th>
+          <th><span class="visually-hidden">{{ t('fund_col_actions') }}</span></th>
         </tr>
       </thead>
       <tbody>
@@ -68,6 +69,11 @@
           <td class="num pk-mono">{{ k.leverage | qty }}×</td>
           <td class="num pk-mono">{{ k.margin_used | eur(0) }}</td>
           <td class="num pk-mono">{{ k.n_open_positions }}</td>
+          <td class="fund-actions">
+            <button type="button" class="btn-ghost" data-act="delete-strategy" data-strategy-id="{{ s.strategy.strategy_id }}"
+                    data-confirm="{{ t('fund_confirm_delete_strategy') }}"
+                    aria-label="{{ t('fund_act_delete_strategy') }} : {{ s.strategy.name }}">{{ icon('trash') }} {{ t('fund_act_delete') }}</button>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

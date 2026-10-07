@@ -50,26 +50,32 @@ def test_the_default_family_is_the_raw_one(conn):
     assert after["results"] == before["results"]
 
 
-def test_a_two_sided_p_value_rewards_a_significantly_worse_model_unless_one_sided(conn):
-    """dm_stat > 0 = le modèle fait MOINS BIEN que sa baseline : jamais une découverte."""
-    _target(conn, "WORSE__alpha_X", 3.5, 0.0007)         # significativement pire
-    _target(conn, "BETTER__alpha_X", -3.5, 0.0007)       # significativement meilleur
+def test_a_significantly_worse_model_is_never_a_discovery_by_default(conn):
+    """dm_stat > 0 = le modèle fait MOINS BIEN que sa baseline. Avant la correction, la p-value bilatérale
+    transformait ce cas en « découverte » ; vrai pour la famille alpha comme pour la famille brute."""
+    for family, worse, better in (("alpha", "WORSE__alpha_X", "BETTER__alpha_X"), ("raw", "WORSE", "BETTER")):
+        _target(conn, worse, 3.5, 0.0007)                    # significativement pire
+        _target(conn, better, -3.5, 0.0007)                  # significativement meilleur
+        result = stats.fdr_across_targets(conn, family=family)["results"]
 
-    two_sided = stats.fdr_across_targets(conn, family="alpha")["results"]
-    one_sided = stats.fdr_across_targets(conn, family="alpha", one_sided=True)["results"]
+        assert result[worse]["significant"] is False and result[better]["significant"] is True
+        assert result[better]["best_run_p_value"] == pytest.approx(0.00035)
+        assert result[worse]["best_run_p_value"] == pytest.approx(1 - 0.00035)
 
-    assert two_sided["WORSE__alpha_X"]["significant"] is True        # le défaut historique : bilatéral, sans le signe
-    assert one_sided["WORSE__alpha_X"]["significant"] is False
-    assert one_sided["BETTER__alpha_X"]["significant"] is True
-    assert one_sided["BETTER__alpha_X"]["best_run_p_value"] == pytest.approx(0.00035)
-    assert one_sided["WORSE__alpha_X"]["best_run_p_value"] == pytest.approx(1 - 0.00035)
+
+def test_the_two_sided_behaviour_is_still_available_explicitly(conn):
+    _target(conn, "WORSE", 3.5, 0.0007)
+
+    legacy = stats.fdr_across_targets(conn, one_sided=False)["results"]["WORSE"]
+
+    assert legacy["significant"] is True and legacy["best_run_p_value"] == pytest.approx(0.0007)
 
 
 def test_one_sided_keeps_the_sidak_adjustment_over_several_horizons(conn):
     _target(conn, "A__alpha_X", -2.0, 0.05, horizon=5)
     _target(conn, "A__alpha_X", -1.0, 0.30, horizon=20)
 
-    result = stats.fdr_across_targets(conn, family="alpha", one_sided=True)["results"]["A__alpha_X"]
+    result = stats.fdr_across_targets(conn, family="alpha")["results"]["A__alpha_X"]
 
     assert result["n_runs_with_p_value"] == 2 and result["best_run_p_value"] == pytest.approx(0.025)
 

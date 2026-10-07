@@ -71,7 +71,7 @@ def test_bh_family_ignores_selection_fold_p_values(conn):
     assert fdr["n_selection_biased"] == 1
     b = fdr["results"]["^B"]
     assert b["untestable"] and b["selection_biased"] and not b["significant"]
-    assert fdr["results"]["^A"]["adjusted_p_value"] == pytest.approx(0.02)
+    assert fdr["results"]["^A"]["adjusted_p_value"] == pytest.approx(0.01)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0 (0,005), x m = 2
 
 
 def test_holdout_dm_is_computed_on_the_holdout_predictions():

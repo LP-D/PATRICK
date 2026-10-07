@@ -46,7 +46,7 @@ def test_cpcv_only_targets_count_in_the_bh_family(conn):
     fdr = trackstats.fdr_across_targets(conn, alpha=0.10)
     assert fdr["n_tested"] == 5
     assert fdr["n_untestable"] == 4
-    assert fdr["results"]["^A"]["adjusted_p_value"] == pytest.approx(0.10)
+    assert fdr["results"]["^A"]["adjusted_p_value"] == pytest.approx(0.05)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0 (0,01), x m = 5
     for i in range(4):
         r = fdr["results"][f"^C{i}"]
         assert r["untestable"] and not r["significant"]
@@ -65,9 +65,9 @@ def test_repeated_runs_of_a_target_are_sidak_adjusted_not_min_picked(conn):
         _run(conn, f"r{i}", "^A", p_value=p)
     fdr = trackstats.fdr_across_targets(conn, alpha=0.10)
     r = fdr["results"]["^A"]
-    assert r["best_run_p_value"] == pytest.approx(0.03)
+    assert r["best_run_p_value"] == pytest.approx(0.015)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0
     assert r["n_runs_with_p_value"] == 3
-    assert r["p_value"] == pytest.approx(1 - (1 - 0.03) ** 3)
+    assert r["p_value"] == pytest.approx(1 - (1 - 0.015) ** 3)
 
 
 def test_no_p_value_anywhere_is_reported_as_not_computable(conn):

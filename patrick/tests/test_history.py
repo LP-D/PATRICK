@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from patrick.tracking import db
 from patrick.tracking import history as trackhistory
 
@@ -55,7 +57,7 @@ def test_list_runs_reports_best_trial_f1_and_dm_p_value(tmp_path):
     db.mark_best_trial(conn, trial_id)
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.62})
     db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.58})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
 
     runs = trackhistory.list_runs(conn)
     assert runs[0]["best_f1_dir"] == 0.60
@@ -89,7 +91,7 @@ def test_run_detail_walkforward_structure(tmp_path):
     for fold in (1, 2):
         db.add_fold_metrics(conn, trial_id, fold, "test", {"F1_dir": 0.6})
     db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.55})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
 
     detail = trackhistory.run_detail(conn, "run1")
     assert detail["scheme"] == "walkforward"
@@ -100,7 +102,7 @@ def test_run_detail_walkforward_structure(tmp_path):
     assert detail["holdout_f1_dir"] == 0.55
     assert detail["dm_result"]["p_value"] == 0.03
     assert detail["target_fdr"] is not None
-    assert detail["target_fdr"]["p_value"] == 0.03
+    assert detail["target_fdr"]["p_value"] == pytest.approx(0.015)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0
     conn.close()
 
 
@@ -305,7 +307,7 @@ def test_direction_metrics_by_target_and_horizon_partitions_by_horizon(tmp_path)
     db.mark_best_trial(conn, trial_h5)
     db.add_predictions(conn, trial_h5, fold_index=1, split="test",
                         ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0], y_proba=[0.7, 0.7])
-    db.save_dm_result(conn, "run_h5", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run_h5", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
 
     _make_run(conn, "run_h10", "^VIX", 10, status="done")
     trial_h10 = db.create_trial(conn, "run_h10", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")

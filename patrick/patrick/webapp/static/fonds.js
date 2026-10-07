@@ -135,9 +135,31 @@
 
     rows.forEach(function (r) {
         function go() { open(r.getAttribute("data-strategy-id")); }
-        r.addEventListener("click", go);
-        r.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+        /* un bouton de la ligne (Supprimer) agit seul : il n'ouvre pas le panneau */
+        r.addEventListener("click", function (e) { if (!e.target.closest("[data-act]")) go(); });
+        r.addEventListener("keydown", function (e) {
+            if (e.target.closest("[data-act]")) return;
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+        });
     });
+
+    /* ---- supprimer une stratégie depuis le tableau, sans ouvrir son panneau ---- */
+    var strategyTable = document.querySelector(".fund-table");
+    if (strategyTable) {
+        strategyTable.addEventListener("click", async function (e) {
+            var btn = e.target.closest('[data-act="delete-strategy"]');
+            if (!btn || btn.disabled) return;
+            try {
+                if (!(await confirmAction(btn.getAttribute("data-confirm"), btn.textContent.trim(), true))) return;
+                setBusy(btn, true);
+                await call("/api/fund/strategies/" + encodeURIComponent(btn.getAttribute("data-strategy-id")), "DELETE");
+                reload(null);
+            } catch (err) {
+                say((err.blocking || [err.message]).join(" · "), "error");
+                setBusy(btn, false);
+            }
+        });
+    }
 
     /* ---- formulaires en ligne : champs visibles selon l'action choisie ---- */
     function syncActions(form) {
