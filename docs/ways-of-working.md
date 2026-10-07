@@ -21,8 +21,10 @@ sur celle-ci). Mise à jour : 2026-09-25.
   interne d'Optuna (F02) et les découpes méta (stacking).
 - Données point-in-time : séries FRED à leur date de publication (F01).
 - Sélection sur la moyenne walk-forward, jamais sur le meilleur fold (F07).
-- Diebold-Mariano avec correction HLN (F04) ; famille Benjamini-Hochberg =
-  toutes les cibles testées (F05) ; DSR déflaté par le registre d'essais
+- Diebold-Mariano avec correction HLN (F04), **unilatéral** : seul « le modèle fait mieux que sa baseline »
+  compte (un modèle significativement moins bon n'est jamais une découverte, corrigé le 2026-10-07) ;
+  famille Benjamini-Hochberg = toutes les cibles testées d'un même type, **brutes et alpha en familles
+  séparées** (F05) ; DSR déflaté par le registre d'essais
   persistant (F03) ; holdout terminal jamais utilisé pour choisir.
 - Simulations par segment statistique, jamais poolées (F06).
 

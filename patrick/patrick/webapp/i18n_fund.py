@@ -121,6 +121,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_panel_meta": _s("Ouverte le {start} · capital de départ {capital}", "Opened on {start} · starting capital {capital}"),
     "fund_act_rename": _s("Renommer", "Rename"),
     "fund_act_archive": _s("Archiver", "Archive"),
+    "fund_col_actions": _s("Actions", "Actions"),
     "fund_act_delete_strategy": _s("Supprimer la stratégie", "Delete strategy"),
     "fund_confirm_delete_strategy": _s("Supprimer cette stratégie, toutes ses positions et tous ses ordres ?",
                                        "Delete this strategy with all its positions and orders?"),

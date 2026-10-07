@@ -59,7 +59,7 @@ def test_bh_family_ignores_descriptive_horizons(conn):
     _dm(conn, "b504", 0.00001)                 # must not rescue ^B
     fdr = trackstats.fdr_across_targets(conn, alpha=0.10)
     assert set(fdr["results"]) == {"^B"} and fdr["n_tested"] == 1
-    assert fdr["results"]["^B"]["p_value"] == pytest.approx(0.5)
+    assert fdr["results"]["^B"]["p_value"] == pytest.approx(0.25)     # p unilatéral (corrigé le 2026-10-07) : p bilatéral / 2 quand dm_stat < 0
     assert fdr["n_descriptive_runs"] == 2
 
 

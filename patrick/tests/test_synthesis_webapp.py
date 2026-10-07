@@ -37,7 +37,7 @@ def _seed_run_with_predictions(conn, up_correct=8, up_wrong=2, down_correct=9, d
     trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
     db.mark_best_trial(conn, trial_id)
     db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6, "AUC_ovr_4cls": 0.58})
-    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
+    db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": -2.1, "p_value": 0.03}, sample="holdout")
     db.finish_run(conn, "run1", status="done", n_trials=1)
 
     ts, y_true, y_pred = [], [], []
@@ -66,7 +66,7 @@ def test_synthesis_page_renders_with_real_data(tmp_path, monkeypatch):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "^VIX" in resp.text
-    assert "0.0300" in resp.text  # p-value DM, real value from dm_result
+    assert "0.0150" in resp.text  # p-value DM unilatérale (0,03 bilatérale stockée / 2), valeur réelle de dm_result
     assert "UP" in resp.text or "hausse" in resp.text.lower()
     assert "2024-05-01" in resp.text  # latest (live) prediction timestamp
     # 10 UP (8+2) and 10 DOWN (9+1) rows -- both clear the >=10 threshold,
@@ -81,14 +81,14 @@ def test_synthesis_page_no_page_cache_reflects_new_run(tmp_path, monkeypatch):
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
     first = client.get("/")
-    assert "0.0300" not in first.text
+    assert "0.0150" not in first.text
 
     conn = db.connect(str(tmp_path / "patrick.db"))
     _seed_run_with_predictions(conn)
     conn.close()
 
     second = client.get("/")
-    assert "0.0300" in second.text
+    assert "0.0150" in second.text
 
 
 # flexibility-gaps Gap 4: ?fdr_alpha= on "/" was previously fixed at 0.10

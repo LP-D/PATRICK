@@ -206,3 +206,21 @@ def test_the_fonds_page_ships_an_in_page_rename_dialog_and_uses_the_shared_confi
     assert '<dialog id="confirm-dialog" class="modal"' in html                      # boîte partagée de base_v2.html
     assert "New strategy name" in client.get("/fonds?lang=en").text
     assert "fund-rename-dialog" not in client.get("/api/fund/strategies/str_x/panel").text    # jamais dans le fragment rechargé
+
+
+def test_each_strategy_row_has_its_own_delete_button_with_a_confirmation(client):
+    a = fs.make_strategy(client, "Macro CTO")
+    b = fs.make_strategy(client, "Actions PEA", wrapper="PEA", initial_capital=50_000)
+
+    html = client.get("/fonds").text
+
+    for sid in (a, b):
+        assert f'data-act="delete-strategy" data-strategy-id="{sid}"' in html
+    assert html.count('data-act="delete-strategy"') == 2 and "data-confirm=" in html
+    assert 'class="fund-row' in html                      # le bouton est dans la ligne, sans ouvrir le panneau
+
+
+def test_the_row_delete_button_is_translated(client):
+    fs.make_strategy(client)
+    assert "Supprimer" in client.get("/fonds").text
+    assert "Delete" in client.get("/fonds?lang=en").text

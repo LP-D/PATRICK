@@ -63,7 +63,7 @@
 ]) %}
 {% endif %}
 {% endfor %}
-{{ data_table(["Cible", "p-value DM", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ "." ~ ((" " ~ overview.fdr_n_descriptive_runs ~ " run(s) à 504/756 j hors famille (horizons descriptifs).") if overview.fdr_n_descriptive_runs else "") ~ " Détail du calcul sur la fiche de chaque cible.") }}
+{{ data_table(["Cible", "p-value DM (unilatérale)", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ "." ~ ((" " ~ overview.fdr_n_descriptive_runs ~ " run(s) à 504/756 j hors famille (horizons descriptifs).") if overview.fdr_n_descriptive_runs else "") ~ " Détail du calcul sur la fiche de chaque cible.") }}
 {% endif %}
 </section>
 

@@ -124,7 +124,7 @@ def family_of(target: str) -> str:
 
 
 def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
-                        kind: str = "class_specific", family: str = "raw", one_sided: bool = False) -> dict:
+                        kind: str = "class_specific", family: str = "raw", one_sided: bool = True) -> dict:
     """Phase 6.4 (P6.4) -- FDR correction (Benjamini-Hochberg) across ALL
     targets tested in the run history. Trying several targets and keeping
     the significant one raises the same multiple-testing problem as trying
@@ -151,9 +151,10 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     ne modifie donc pas), `"alpha"` (cibles `actif__alpha_benchmark`, qui prédisent une surperformance et non une
     direction de prix : une famille à part, F05) ou `"all"`.
 
-    `one_sided` (défaut `False` = comportement historique) : la p-value du test de Diebold-Mariano est bilatérale,
-    donc un modèle SIGNIFICATIVEMENT MOINS BON que sa baseline passerait pour une découverte. Avec `one_sided=True`
-    seule la direction « le modèle fait mieux » compte (`dm_stat < 0` : p/2, sinon 1 - p/2).
+    `one_sided` (défaut `True`, corrigé le 2026-10-07) : la p-value stockée du test de Diebold-Mariano est bilatérale ;
+    prise telle quelle, un modèle SIGNIFICATIVEMENT MOINS BON que sa baseline passait pour une découverte. Seule la
+    direction « le modèle fait mieux » compte (`dm_stat < 0` : p/2, sinon 1 - p/2). `one_sided=False` redonne l'ancien
+    calcul bilatéral (comparaison historique uniquement). La p-value de `dm_result` reste bilatérale, comme stockée.
 
     `kind` (Phase X5, migration 0010): `"class_specific"` (default -- each
     target's own asset-class-specific comparison, the MAIN result) or
