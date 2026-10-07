@@ -37,6 +37,8 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from patrick import settings as settings_mod
+from patrick import sync_merge
 from patrick.tracking import backup as backup_mod
 from patrick.tracking import db as trackdb
 
@@ -480,6 +482,24 @@ def _restore_models(archive: Path, models_dir: str, db_path: str) -> int:
     return len(index)
 
 
+def _download_verified(transport, workdir: Path) -> tuple[dict[str, Path], dict]:
+    """Télécharge le partage, vérifie les sha256 et la version de schéma."""
+    files = transport.download(workdir)
+    if MANIFEST not in files or DB_ASSET not in files:
+        raise SyncError("Partage incomplet : manifest ou base manquants.")
+    manifest = json.loads(files[MANIFEST].read_text(encoding="utf-8"))
+    for name, meta in manifest["files"].items():
+        if name not in files:
+            raise SyncError(f"Fichier annoncé mais absent : {name}")
+        if _sha256(files[name]) != meta["sha256"]:
+            raise SyncError(f"Fichier corrompu (sha256 différent) : {name}")
+    latest = _latest_code_version()
+    if manifest["schema_version"] > latest:
+        raise SyncError(f"Le partage est en version de schéma {manifest['schema_version']}, ce code ne connaît "
+                        f"que jusqu'à {latest} : mets le code à jour (git pull) avant de restaurer.")
+    return files, manifest
+
+
 def pull(source: str, *, db_path: str | None = None, store_root: str | None = None,
          models_dir: str | None = None, backup_dir: str | None = None, force: bool = False,
          repo: str | None = None) -> dict:
@@ -488,19 +508,7 @@ def pull(source: str, *, db_path: str | None = None, store_root: str | None = No
     db_path = db_path or trackdb.default_db_path()
     with tempfile.TemporaryDirectory() as tmp_s:
         tmp = Path(tmp_s)
-        files = transport.download(tmp)
-        if MANIFEST not in files or DB_ASSET not in files:
-            raise SyncError("Partage incomplet : manifest ou base manquants.")
-        manifest = json.loads(files[MANIFEST].read_text(encoding="utf-8"))
-        for name, meta in manifest["files"].items():
-            if name not in files:
-                raise SyncError(f"Fichier annoncé mais absent : {name}")
-            if _sha256(files[name]) != meta["sha256"]:
-                raise SyncError(f"Fichier corrompu (sha256 différent) : {name}")
-        latest = _latest_code_version()
-        if manifest["schema_version"] > latest:
-            raise SyncError(f"Le partage est en version de schéma {manifest['schema_version']}, ce code ne connaît "
-                            f"que jusqu'à {latest} : mets le code à jour (git pull) avant de restaurer.")
+        files, manifest = _download_verified(transport, tmp)
 
         new_db = tmp / "incoming.db"
         _gunzip_file(files[DB_ASSET], new_db)
@@ -511,3 +519,327 @@ def pull(source: str, *, db_path: str | None = None, store_root: str | None = No
                                  if STORE_ASSET in files else 0)
         result["created_at"] = manifest["created_at"]
     return result
+
+
+# --------------------------------------------------------------------------
+# Synchronisation automatique entre deux PC (dossier partagé, p. ex. OneDrive)
+# --------------------------------------------------------------------------
+#
+# `merge` importe dans la base locale ce que le partage a en plus (union, voir
+# `sync_merge`); `push` publie l'état local. `auto` enchaîne les deux quand il le
+# faut, d'après un petit état local (`~/.patrick/sync_state.json`) :
+#   remote_sha : empreinte de la base du partage telle que ce PC l'a déjà fusionnée/publiée;
+#   local_fp   : empreinte de la recherche locale au dernier échange.
+# Partage différent de remote_sha  -> un autre PC a publié : on fusionne.
+# Recherche locale différente de local_fp -> ce PC a du neuf : on publie (après fusion).
+# Jamais de remplacement de la base locale par le partage : aucun run n'est perdu.
+
+STATE_NAME = "sync_state.json"
+KEY_SYNC_FOLDER = "sync_folder"
+KEY_WEALTH_REFERENCE = "sync_wealth_reference"
+# Tables recopiées/volatiles : un changement n'y compte pas comme « du neuf à publier ».
+_VOLATILE_TABLES = ("job", "worker_heartbeat", "vol_model_cache", "shap_selection_cache")
+
+
+def state_path() -> Path:
+    return settings_mod.settings_path().with_name(STATE_NAME)
+
+
+def load_state() -> dict:
+    try:
+        data = json.loads(state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_state(**fields) -> dict:
+    data = {**load_state(), **fields, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    path = state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+    return data
+
+
+def configured_folder() -> str | None:
+    return settings_mod.load().get(KEY_SYNC_FOLDER) or None
+
+
+def is_wealth_reference() -> bool:
+    """Ce PC est-il la référence du patrimoine ? Seul lui le publie; les autres adoptent celui du partage."""
+    return bool(settings_mod.load().get(KEY_WEALTH_REFERENCE))
+
+
+def fingerprint(db_path: str, *, personal: bool = False) -> str:
+    """Empreinte du contenu de recherche d'une base (nombre de lignes et plus grand rowid de chaque table
+    hors patrimoine/fonds, caches et état d'exécution). Lecture seule. Un changement fait en place (p. ex.
+    un `y_true` rempli après coup) n'est pas vu : il partira avec le prochain run. `personal` : y ajoute le
+    contenu du patrimoine et des fonds (PC de référence : une modification doit déclencher une publication)."""
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        parts = []
+        if personal:
+            for table in sync_merge.ADOPTED_PERSONAL_TABLES:
+                rows = conn.execute(f'SELECT * FROM "{table}"').fetchall()
+                parts.append([table, hashlib.sha256(repr(rows).encode()).hexdigest()])
+        for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
+                                    "AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall():
+            if name.startswith(PERSONAL_PREFIXES) or name in PERSONAL_EXACT or name in _VOLATILE_TABLES:
+                continue
+            try:
+                n, top = conn.execute(f'SELECT COUNT(*), MAX(rowid) FROM "{name}"').fetchone()
+            except sqlite3.OperationalError:          # table WITHOUT ROWID
+                n, top = conn.execute(f'SELECT COUNT(*), NULL FROM "{name}"').fetchone()
+            parts.append([name, n, top])
+        return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
+    finally:
+        conn.close()
+
+
+def remote_stamp(folder: str) -> dict | None:
+    """Empreinte du partage (sha256 de sa base, date de publication), ou None s'il n'y a rien."""
+    path = Path(folder) / MANIFEST
+    if not path.exists():
+        return None
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    return {"sha": manifest["files"][DB_ASSET]["sha256"], "created_at": manifest["created_at"],
+            "runs": manifest.get("runs")}
+
+
+def _job_running(db_path: str) -> bool:
+    from patrick.tracking import jobs as jobs_db
+
+    if not os.path.exists(db_path):
+        return False
+    conn = trackdb.connect(db_path)
+    try:
+        return bool(conn.execute("SELECT COUNT(*) FROM job WHERE status = 'running'").fetchone()[0]
+                    or jobs_db.worker_is_alive(conn))
+    finally:
+        conn.close()
+
+
+def _db_in_use(db_path: str) -> bool:
+    """Windows : un fichier SQLite ouvert par un autre processus ne peut pas être renommé. Sert à savoir si
+    PATRICK (serveur) tourne avant de remplacer la base. Ailleurs : jamais bloquant."""
+    if os.name != "nt" or not os.path.exists(db_path):
+        return False
+    probe = db_path + ".probe"
+    try:
+        os.rename(db_path, probe)
+    except PermissionError:
+        return True
+    os.rename(probe, db_path)
+    return False
+
+
+def _restore_models_merged(archive: Path, models_dir: str, work_db: str, offset: int,
+                           new_src_ids: set[int]) -> int:
+    """Extrait les modèles des essais importés vers `<models_dir>/<nouvel id>/` (l'identifiant d'essai
+    a été décalé par la fusion) et y pointe `trial.artifact_path`."""
+    root = Path(models_dir)
+    restored = 0
+    with zipfile.ZipFile(archive) as zf:
+        index = json.loads(zf.read("index.json").decode("utf-8"))
+        by_trial: dict[int, list[str]] = {}
+        for name in zf.namelist():
+            parts = name.split("/")
+            if parts[0] == "models" and len(parts) == 3 and parts[1].isdigit():
+                by_trial.setdefault(int(parts[1]), []).append(name)
+        conn = sqlite3.connect(work_db)
+        try:
+            for key, arc in index.items():
+                src_id = int(key)
+                if src_id not in new_src_ids:
+                    continue
+                new_id = src_id + offset
+                for name in by_trial.get(src_id, []):
+                    target = _safe_extract(zf, name, root, f"{new_id}/{name.split('/')[2]}")
+                    if name == arc:
+                        conn.execute("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", (str(target), new_id))
+                        restored += 1
+            conn.commit()
+        finally:
+            conn.close()
+    return restored
+
+
+def _count_runs(path: str) -> int:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM run").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _quick_check(path: str) -> str:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute("PRAGMA quick_check").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def merge(source: str, *, db_path: str | None = None, store_root: str | None = None,
+          models_dir: str | None = None, backup_dir: str | None = None, dry_run_to: str | None = None,
+          adopt_personal: bool = False, repo: str | None = None) -> dict:
+    """Importe dans la base locale la recherche du partage `source` (union, voir `sync_merge`).
+
+    Le travail se fait sur une COPIE de la base locale, vérifiée avant de la substituer à l'original
+    (qui est sauvegardé d'abord) : un échec ne touche pas la base locale. Le serveur PATRICK doit être
+    fermé pour la substitution (Windows). `dry_run_to` : écrit le résultat dans ce fichier et s'arrête
+    (la base locale, le magasin et les modèles ne sont pas touchés). `adopt_personal` : remplace aussi le
+    patrimoine et les fonds locaux par ceux du partage, s'il en contient (PC qui n'est pas la référence)."""
+    transport = resolve_transport(source, repo)
+    db_path = db_path or trackdb.default_db_path()
+    if dry_run_to is None and _db_in_use(db_path):
+        raise SyncError("PATRICK est ouvert (la base est utilisée) : ferme-le, puis relance la synchronisation.")
+    with tempfile.TemporaryDirectory() as tmp_s:
+        tmp = Path(tmp_s)
+        files, manifest = _download_verified(transport, tmp)
+        incoming = tmp / "incoming.db"
+        _gunzip_file(files[DB_ASSET], incoming)
+        trackdb.connect(str(incoming)).close()               # migre le partage jusqu'à la version du code
+
+        work = Path(dry_run_to) if dry_run_to else Path(db_path + ".merging")
+        work.parent.mkdir(parents=True, exist_ok=True)
+        work.unlink(missing_ok=True)
+        if os.path.exists(db_path):
+            source_conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+            target_conn = sqlite3.connect(work)
+            try:
+                source_conn.backup(target_conn)               # copie cohérente même si la base est ouverte
+            finally:
+                source_conn.close()
+                target_conn.close()
+        trackdb.connect(str(work)).close()                    # crée/migre la copie de travail
+        try:
+            runs_before = _count_runs(str(work))
+            report = sync_merge.merge_databases(str(work), str(incoming), fast=True)
+            personal = (sync_merge.adopt_personal_tables(str(work), str(incoming))
+                        if adopt_personal and manifest.get("personal_included") else {})
+            models = (_restore_models_merged(files[MODELS_ASSET], models_dir or os.path.expanduser("~/.patrick/models"),
+                                             str(work), report["trial_offset"], set(report["new_trial_ids"]))
+                      if MODELS_ASSET in files and dry_run_to is None else 0)
+            check = _quick_check(str(work))
+            if check != "ok":
+                raise SyncError(f"Base fusionnée invalide (quick_check : {check}) : base locale inchangée.")
+            result = {"runs_before": runs_before, "runs_after": _count_runs(str(work)),
+                      "new_runs": report["new_runs"], "local_only_runs": report["local_only_runs"],
+                      "models": models, "store_files": 0, "backup": None, "created_at": manifest["created_at"],
+                      "remote_sha": manifest["files"][DB_ASSET]["sha256"], "added": report["added"],
+                      "personal": personal}
+            if dry_run_to is not None:
+                return result
+            if os.path.exists(db_path):
+                result["backup"] = str(backup_mod.backup_database(db_path, backup_dir, pages=-1, sleep_s=0.0))
+            for suffix in ("-wal", "-shm"):
+                try:
+                    os.remove(db_path + suffix)
+                except FileNotFoundError:
+                    pass
+            try:
+                os.replace(work, db_path)
+            except PermissionError as exc:
+                raise SyncError("PATRICK est ouvert (la base est utilisée) : ferme-le, puis relance la "
+                                "synchronisation.") from exc
+        except BaseException:
+            Path(work).unlink(missing_ok=True)               # copie de travail abîmée ou refusée : on la jette
+            raise
+        if STORE_ASSET in files:
+            result["store_files"] = _restore_store(files[STORE_ASSET], store_root or _default_store_root())
+    return result
+
+
+def status(folder: str, *, db_path: str | None = None) -> dict:
+    """Ce que `auto` ferait : fusionner le partage (`need_pull`), publier (`need_push`), les deux, ou rien."""
+    db_path = db_path or trackdb.default_db_path()
+    state, stamp = load_state(), remote_stamp(folder)
+    exists = os.path.exists(db_path)
+    reference = is_wealth_reference()
+    local_fp = fingerprint(db_path, personal=reference) if exists else None
+    need_pull = stamp is not None and stamp["sha"] != state.get("remote_sha")
+    local_changed = exists and local_fp != state.get("local_fp")
+    return {"folder": folder, "remote": stamp, "last_exchange": state.get("at"), "wealth_reference": reference,
+            "local_runs": _count_runs(db_path) if exists else 0,
+            "need_pull": need_pull, "local_changed": local_changed,
+            "need_push": exists and (stamp is None or local_changed or need_pull)}
+
+
+def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None = None, db_path: str | None = None,
+         store_root: str | None = None, models_dir: str | None = None, models_roots: list[str] | None = None,
+         backup_dir: str | None = None) -> dict:
+    """Met ce PC et le partage à niveau : fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de
+    neuf. `only="pull"` / `"push"` limite à une moitié. Rien de risqué : pas de fusion tant qu'un entraînement
+    tourne ou que PATRICK est ouvert, pas de publication tant qu'un entraînement tourne ni si le partage a
+    bougé sans avoir été fusionné. `wealth_reference` (défaut : réglage de ce PC) : ce PC publie son
+    patrimoine et ses fonds, sinon il adopte ceux du partage. Renvoie `{"actions": [...], "skipped": [...]}`."""
+    if only not in (None, "pull", "push"):
+        raise SyncError("only doit être 'pull', 'push' ou omis.")
+    db_path = db_path or trackdb.default_db_path()
+    reference = is_wealth_reference() if wealth_reference is None else wealth_reference
+    out: dict = {"actions": [], "skipped": []}
+    state, stamp = load_state(), remote_stamp(folder)
+
+    if only in (None, "pull") and stamp is not None and stamp["sha"] != state.get("remote_sha"):
+        if _job_running(db_path):
+            out["skipped"].append("fusion reportée : un entraînement est en cours")
+        else:
+            fp_before = fingerprint(db_path, personal=reference) if os.path.exists(db_path) else None
+            try:
+                res = merge(folder, db_path=db_path, store_root=store_root, models_dir=models_dir,
+                            backup_dir=backup_dir, adopt_personal=not reference)
+            except SyncError as exc:
+                out["skipped"].append(f"fusion reportée : {exc}")
+            else:
+                # Rien à publier si ce PC n'avait rien de neuf et que le partage contenait déjà tout son contenu.
+                clean = state.get("local_fp") == fp_before and res["local_only_runs"] == 0
+                save_state(remote_sha=res["remote_sha"],
+                           local_fp=fingerprint(db_path, personal=reference) if clean else state.get("local_fp"))
+                note = " + patrimoine du PC de référence adopté" if res["personal"] else ""
+                out["actions"].append(f"fusion : {res['new_runs']} run(s) importé(s) du partage "
+                                      f"({res['runs_before']} -> {res['runs_after']}){note}")
+                out["merge"] = res
+
+    if only in (None, "push") and os.path.exists(db_path):
+        state, stamp = load_state(), remote_stamp(folder)
+        fp = fingerprint(db_path, personal=reference)
+        if stamp is None or fp != state.get("local_fp"):
+            if stamp is not None and stamp["sha"] != state.get("remote_sha"):
+                out["skipped"].append("publication reportée : le partage contient des données pas encore "
+                                      "fusionnées (lance la synchronisation avec PATRICK fermé)")
+            elif _job_running(db_path):
+                out["skipped"].append("publication reportée : un entraînement est en cours")
+            else:
+                manifest = push(folder, db_path=db_path, store_root=store_root, models_roots=models_roots,
+                                include_personal=reference)
+                save_state(remote_sha=manifest["files"][DB_ASSET]["sha256"], local_fp=fp)
+                out["actions"].append(f"publication : {manifest['runs']} run(s), "
+                                      f"{manifest['models']['included']} modèle(s)"
+                                      + (", patrimoine inclus" if reference else ""))
+    return out
+
+
+SYNC_TASK = "PATRICK-Sync"
+
+
+def register_task(minutes: int = 60) -> str:
+    """Windows : tâche planifiée (session ouverte, sans fenêtre) qui publie ce PC dès qu'il a du neuf
+    (`sync auto --only push`). Elle utilise l'interpréteur qui exécute cette commande : lance donc
+    `sync setup --schedule` depuis la version stable pour que la tâche vise la version stable."""
+    if os.name != "nt":
+        raise SyncError("La tâche planifiée n'est gérée que sous Windows.")
+    import sys
+
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    log = os.path.normpath(os.path.expanduser("~/.patrick/logs/sync.log"))
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    command = f'"{pythonw if pythonw.exists() else exe}" -m patrick.cli sync auto --only push --log-file "{log}"'
+    proc = subprocess.run(["schtasks", "/Create", "/TN", SYNC_TASK, "/TR", command, "/SC", "MINUTE",
+                           "/MO", str(minutes), "/F"], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise SyncError(f"schtasks : {(proc.stderr or proc.stdout).strip()}")
+    return command
