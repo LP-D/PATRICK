@@ -406,7 +406,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
     holdout_metrics = None if is_cpcv else (best_trial["holdout_f1_dir"] if best_trial else None)
     holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
 
-    fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
+    fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(run["target"]))
     target_fdr = fdr_result["results"].get(run["target"])
 
     quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
@@ -488,7 +488,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
         })
 
-    fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha)
+    fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(target))
     target_fdr = fdr_result["results"].get(target)
 
     pbo_by_horizon = {}

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.config.defaults import DESCRIPTIVE_HORIZONS
+from patrick.config.target_label import is_alpha_label
 from patrick.numeric import is_nan
 from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
@@ -117,8 +118,13 @@ def pbo_for_target_cpcv(conn: sqlite3.Connection, target: str, horizon: int, reg
     return result
 
 
+def family_of(target: str) -> str:
+    """`"alpha"` pour une cible alpha (`actif__alpha_benchmark`), `"raw"` sinon."""
+    return "alpha" if is_alpha_label(target) else "raw"
+
+
 def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
-                        kind: str = "class_specific") -> dict:
+                        kind: str = "class_specific", family: str = "raw", one_sided: bool = False) -> dict:
     """Phase 6.4 (P6.4) -- FDR correction (Benjamini-Hochberg) across ALL
     targets tested in the run history. Trying several targets and keeping
     the significant one raises the same multiple-testing problem as trying
@@ -141,6 +147,14 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     came out significant. `best_run_p_value` keeps the raw minimum for
     display.
 
+    `family` (jalon alpha): `"raw"` (défaut : la famille d'avant l'existence des cibles alpha, que leur présence
+    ne modifie donc pas), `"alpha"` (cibles `actif__alpha_benchmark`, qui prédisent une surperformance et non une
+    direction de prix : une famille à part, F05) ou `"all"`.
+
+    `one_sided` (défaut `False` = comportement historique) : la p-value du test de Diebold-Mariano est bilatérale,
+    donc un modèle SIGNIFICATIVEMENT MOINS BON que sa baseline passerait pour une découverte. Avec `one_sided=True`
+    seule la direction « le modèle fait mieux » compte (`dm_stat < 0` : p/2, sinon 1 - p/2).
+
     `kind` (Phase X5, migration 0010): `"class_specific"` (default -- each
     target's own asset-class-specific comparison, the MAIN result) or
     `"common"` (class-agnostic persistence) -- never both mixed.
@@ -159,30 +173,43 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
     Returned counts: `n_tested` = family size m, `n_with_p_value`,
     `n_untestable` (= m - n_with_p_value), `n_selection_biased`,
     `n_descriptive_runs`."""
+    if family not in ("raw", "alpha", "all"):
+        raise ValueError(f"famille inconnue : {family!r} (raw, alpha, all)")
+
+    def in_family(target: str) -> bool:
+        return family == "all" or family_of(target) == family
+
     descriptive = sorted(DESCRIPTIVE_HORIZONS)
     not_descriptive = f"run.horizon NOT IN ({','.join('?' for _ in descriptive)})"
-    family = [t for (t,) in conn.execute(
+    targets = [t for (t,) in conn.execute(
         f"SELECT DISTINCT target FROM run WHERE status = 'done' AND {not_descriptive} ORDER BY target",
-        descriptive)]
+        descriptive) if in_family(t)]
     rows = conn.execute(
-        "SELECT run.target, MIN(dm_result.p_value), COUNT(dm_result.p_value) FROM dm_result "
+        "SELECT run.target, dm_result.dm_stat, dm_result.p_value FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
         "WHERE dm_result.kind = ? AND dm_result.p_value IS NOT NULL AND run.status = 'done' "
-        f"AND dm_result.sample = 'holdout' AND {not_descriptive} "
-        "GROUP BY run.target",
+        f"AND dm_result.sample = 'holdout' AND {not_descriptive}",
         (kind, *descriptive),
     ).fetchall()
-    observed = {target: (float(p_min), int(k)) for target, p_min, k in rows if not is_nan(p_min)}
+    per_target: dict[str, list[float]] = {}
+    for target, dm_stat, p_value in rows:
+        if not in_family(target) or is_nan(p_value):
+            continue
+        p = float(p_value)
+        if one_sided:
+            p = p / 2 if (dm_stat is not None and not is_nan(dm_stat) and dm_stat < 0) else 1 - p / 2
+        per_target.setdefault(target, []).append(p)
+    observed = {target: (min(ps), len(ps)) for target, ps in per_target.items()}
     biased = {t for (t,) in conn.execute(
         "SELECT DISTINCT run.target FROM dm_result JOIN run ON dm_result.run_id = run.run_id "
         f"WHERE dm_result.kind = ? AND dm_result.sample = 'last_wf_fold' AND run.status = 'done' "
         f"AND {not_descriptive}",
-        (kind, *descriptive))} - set(observed)
+        (kind, *descriptive)) if in_family(t)} - set(observed)
     n_descriptive_runs = conn.execute(
         f"SELECT COUNT(*) FROM run WHERE status = 'done' AND NOT ({not_descriptive})", descriptive).fetchone()[0]
 
     p_values: dict[str, float] = {}
-    for target in family:
+    for target in targets:
         if target in observed:
             p_min, k = observed[target]
             p_values[target] = p_min if k == 1 else float(-np.expm1(k * np.log1p(-p_min)))
@@ -201,7 +228,7 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
             r["significant"] = False
     result["n_with_p_value"] = len(observed)
     result["n_untestable"] = result["n_tested"] - len(observed)
-    result["n_selection_biased"] = len(biased & set(family))
+    result["n_selection_biased"] = len(biased & set(targets))
     result["n_bh_significant"] = sum(1 for r in result["results"].values() if r["significant"])
     result["n_descriptive_runs"] = int(n_descriptive_runs)
     return result
