@@ -104,6 +104,15 @@ couverte −0,58 sans coûts, DSR 0,001 pour 93 essais de la famille. La cible a
 surperformance réalisée en validation, contre ~0,70 pour une cible brute en tendance) : le protocole fonctionne, c'est le
 signal qui manque sur cet actif très suivi.
 
+Second run, Sopra Steria (`SOP.PA` contre `^STOXX50E`, même protocole, 10 minutes) : un signal modeste en validation croisée
+(RandomForest 0,521 à 5 j et 0,530 à 20 j, contre 0,479 et 0,487 pour la meilleure baseline), qui **ne survit pas au holdout** :
+score directionnel 0,47 à 20 j, Sharpe de la paire couverte −0,28 sans coûts (−0,33 avec 10 points de base par jambe, la paire
+« acheter-garder » fait −0,39), DSR 0,002 pour 93 essais, Diebold-Mariano +1,85 (p = 0,066 ; un statistique **négatif** favorise
+le modèle : ici il fait un peu moins bien que la persistance de l'alpha). Schéma classique d'optimisme de la sélection : le
+meilleur de 12 candidats sur 4 plis (écart-type ~0,03) dépasse de 1,5 écart-type des baselines sans que cela se confirme hors
+échantillon. Les deux runs convergent : aucun signal exploitable à ce stade. Pour conclure sur l'approche (et non sur un actif),
+il faut une campagne sur plusieurs actifs avec correction de multiplicité (famille Benjamini-Hochberg « alpha »).
+
 ## 6. Points ouverts
 
 - β brut ou ajusté (Blume : 0,67 β + 0,33) : brut ici, l'option est triviale à ajouter si le holdout le justifie.
