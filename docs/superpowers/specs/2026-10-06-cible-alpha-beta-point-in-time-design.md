@@ -54,9 +54,9 @@ rejeu du patrimoine, historique). Plutôt qu'une colonne à filtrer partout, un 
 
 - champions, registre d'essais (DSR) et familles DM/BH se séparent d'eux-mêmes; un run alpha plus récent ne devient jamais
   le champion « implicite » du symbole brut;
-- le rejeu du patrimoine ne le retient jamais (il cherche le symbole exact), les règles du fonds le refusent
-  (`available_models`, `create_rule`), la simulation le refuse avec un message explicite : un modèle d'alpha prédit une
-  surperformance, pas la direction du prix;
+- le rejeu du patrimoine ne le retient jamais (il cherche le symbole exact) ; un modèle d'alpha prédit une surperformance,
+  pas la direction du prix, donc il n'est jamais traité comme un signal de prix : la simulation le joue sur la paire
+  couverte et les règles du fonds ne l'acceptent qu'en paire couverte (voir plus bas);
 - tout consommateur qui attend un symbole échoue franchement au lieu de mélanger. Aucune migration.
 
 **Configuration.** `objective.target_kind` (`raw` | `alpha`), `objective.benchmark` (vide = automatique, sinon choix
@@ -94,6 +94,15 @@ ou refusées ensemble ; si la seconde échoue après la première, la première 
 - règles du fonds : jambe benchmark en future depuis la page (l'API la gère déjà), couverture proportionnelle réajustée
   pendant la vie de la position (aujourd'hui : β figé à l'ouverture);
 - financement des positions courtes (CFD) dans la simulation couverte.
+
+## 5 ter. Premier run réel (MC.PA contre ^STOXX50E, 5 et 20 jours)
+
+Aucun avantage mesuré. Validation croisée : score directionnel 0,496 (5 j) et 0,473 (20 j) pour le meilleur modèle, contre
+0,496 et 0,482 pour la baseline « persistance de l'alpha » : le modèle ne bat pas une règle triviale. Holdout à 5 jours :
+précision 0,58 sur ~60 observations indépendantes (1,3 écart-type au-dessus du hasard, non significatif), Sharpe de la paire
+couverte −0,58 sans coûts, DSR 0,001 pour 93 essais de la famille. La cible alpha est bien équilibrée (0,54 de
+surperformance réalisée en validation, contre ~0,70 pour une cible brute en tendance) : le protocole fonctionne, c'est le
+signal qui manque sur cet actif très suivi.
 
 ## 6. Points ouverts
 
