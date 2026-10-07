@@ -842,4 +842,14 @@ def register_task(minutes: int = 60) -> str:
                            "/MO", str(minutes), "/F"], capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         raise SyncError(f"schtasks : {(proc.stderr or proc.stdout).strip()}")
+    # Par défaut Windows ne lance pas (et arrête) une tâche sur batterie : sur un portable elle n'aurait
+    # jamais lieu. On l'autorise, et on rattrape un passage manqué (PC éteint à l'heure prévue).
+    settings = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         f"Set-ScheduledTask -TaskName '{SYNC_TASK}' -Settings (New-ScheduledTaskSettingsSet "
+         "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable "
+         "-ExecutionTimeLimit (New-TimeSpan -Hours 6)) | Out-Null"],
+        capture_output=True, text=True, check=False)
+    if settings.returncode != 0:
+        raise SyncError(f"réglages de la tâche (batterie) : {(settings.stderr or settings.stdout).strip()}")
     return command
