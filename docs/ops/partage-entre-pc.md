@@ -12,13 +12,24 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 | `patrick sync auto [--only pull\|push]` | fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de neuf |
 | `patrick sync merge --from <dossier> [--dry-run-to f.db]` | fusion explicite (à blanc : écrit dans `f.db`, la base locale n'est pas touchée) |
 
-Avec le lanceur `PATRICK.lnk` : la fusion se fait au démarrage (avant le serveur, écran « Synchronisation... »),
-la publication en arrière-plan à la fermeture de la fenêtre. Journal : `~/.patrick/logs/sync.log`.
+Avec le lanceur `PATRICK.lnk` (mode application, voir plus bas) : la fusion se fait au démarrage (avant le
+serveur, écran « Synchronisation... »), la publication en arrière-plan à la fermeture de la fenêtre.
+Journal : `~/.patrick/logs/sync.log`.
 
-**Mise en place sur un nouveau PC** : mettre le code à jour (le lanceur le fait), copier le dossier
-`PATRICK-app` (lanceur mis à jour), puis `patrick sync setup --folder "<dossier OneDrive>" --schedule` depuis
-la version stable, PATRICK fermé (sans `--wealth-reference` : ce PC adopte le patrimoine de la référence).
-La première fusion peut durer plusieurs minutes.
+**Mise en place sur un nouveau PC** : `git pull`, puis (PowerShell, depuis `patrick/`)
+`powershell -ExecutionPolicy Bypass -File scripts\app\install-app.ps1` (crée `PATRICK.lnk` sur le Bureau et dans le
+menu Démarrer), puis `patrick sync setup --folder "<dossier OneDrive / Drive>" --schedule`, PATRICK fermé (sans
+`--wealth-reference` : ce PC adopte le patrimoine de la référence). La première fusion peut durer plusieurs minutes.
+
+### Lanceur « mode app » (`patrick/scripts/app/`)
+
+- `PATRICK-app.ps1` : (1) fusion du partage si `sync setup` a été fait, (2) `patrick serve` en arrière-plan,
+  (3) fenêtre Chrome (à défaut Edge) en `--app`, profil dédié `%LOCALAPPDATA%\PATRICK\app-profile`;
+  à la fermeture de la fenêtre : arrêt du serveur puis publication en arrière-plan. Un entraînement en cours n'est
+  pas interrompu (le worker est indépendant) et la publication attend sa fin.
+- Si un serveur tourne déjà sur le port (`-Port`, défaut 8000), le lanceur s'y connecte sans synchroniser.
+  `-NoSync` saute la synchronisation. Journaux : `~/.patrick/logs/app-serve.{out,err}.log`.
+- `install-app.ps1` : crée les raccourcis (à relancer si le dépôt est déplacé).
 
 ### Règles de la fusion
 
