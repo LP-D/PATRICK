@@ -417,6 +417,58 @@ def research_event_study_cmd(
         typer.echo(report)
 
 
+@research_app.command(name="alpha-campaign-run")
+def research_alpha_campaign_run_cmd(
+    symbols: str = typer.Option(..., "--symbols", help="Valeurs séparées par des virgules (ex. NEX.PA,RXL.PA)"),
+    template: str = typer.Option("configs/examples/mc_pa_alpha.yaml", "--template", help="Configuration alpha servant de modèle"),
+    config_dir: str = typer.Option("runs/alpha_campaign/configs", "--config-dir", help="Dossier des configurations générées"),
+    log_dir: str = typer.Option("runs/alpha_campaign/logs", "--log-dir", help="Dossier des journaux (un par valeur)"),
+    rerun: bool = typer.Option(False, "--rerun", help="Relancer aussi les valeurs déjà terminées (défaut : les sauter)"),
+) -> None:
+    """Campagne alpha : un run par valeur, l'un après l'autre (protocole : docs/research/alpha-campagne-*.md).
+    Un run qui échoue n'arrête pas la campagne ; relancer la commande saute ce qui est déjà terminé."""
+    from pathlib import Path
+
+    import yaml
+
+    from patrick.research import alpha_campaign as ac
+
+    names = [s.strip() for s in symbols.split(",") if s.strip()]
+    with open(template, encoding="utf-8") as f:
+        base = yaml.safe_load(f)
+    paths = ac.write_configs(base, names, Path(config_dir))
+    typer.echo(f"{len(paths)} configuration(s) écrite(s) dans {config_dir}")
+    for out in ac.run_campaign(paths, Path(log_dir), skip_done=not rerun):
+        state = "déjà terminé" if out["skipped"] else ("ok" if out["returncode"] == 0 else f"ÉCHEC (code {out['returncode']})")
+        typer.echo(f"  {Path(out['config']).stem:<20} {state}")
+
+
+@research_app.command(name="alpha-campaign-report")
+def research_alpha_campaign_report_cmd(
+    symbols: str = typer.Option(..., "--symbols", help="Toute la famille, y compris les valeurs déjà exécutées avant la campagne"),
+    q: float = typer.Option(0.10, "--q", help="Seuil Benjamini-Hochberg"),
+    cost_bps: float = typer.Option(10.0, "--cost-bps", help="Coût par jambe en points de base"),
+    title: str = typer.Option("Campagne alpha", "--title"),
+    output: str = typer.Option(None, "--output", help="Fichier markdown (défaut : stdout)"),
+) -> None:
+    """Rapport de campagne : applique à la lettre le critère de découverte du protocole."""
+    from patrick.research import alpha_campaign as ac
+
+    names = [s.strip() for s in symbols.split(",") if s.strip()]
+    conn = trackdb.connect()
+    try:
+        report = ac.evaluate_campaign(conn, names, q=q, cost_bps=cost_bps)
+    finally:
+        conn.close()
+    text = ac.render_markdown(report, title=title)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+        typer.echo(f"Rapport écrit : {output} ({report['n_discoveries']} découverte(s) sur m = {report['m']})")
+    else:
+        typer.echo(text)
+
+
 @champions_app.command(name="list")
 def champions_list_cmd() -> None:
     """Le modèle en titre de chaque (cible, horizon) déjà départagé."""
