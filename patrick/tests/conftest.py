@@ -75,6 +75,13 @@ class FakeScheduledTask:
 
 
 @pytest.fixture(autouse=True)
+def _testclient_host(monkeypatch):
+    """Le `TestClient` de Starlette envoie `Host: testserver` : on l'autorise comme hôte local (comme le ferait un
+    reverse proxy déclaré dans PATRICK_EXTRA_HOSTS). Les tests de la garde le retirent pour vérifier le refus."""
+    monkeypatch.setenv("PATRICK_EXTRA_HOSTS", "testserver")
+
+
+@pytest.fixture(autouse=True)
 def fake_task(monkeypatch):
     from patrick import sync
 

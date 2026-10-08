@@ -48,6 +48,7 @@ from patrick.webapp import (
     nav_registry,
     progress_steps,
     run_manager,
+    security,
     settings_routes,
     shap_chart,
     wealth_routes,
@@ -93,6 +94,8 @@ def _validate_alpha(value: float, name: str) -> float:
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="PATRICK")
+# Toutes les routes (présentes et futures) : hôte local obligatoire, pas de requête venue d'un autre site.
+app.add_middleware(security.LocalGuardMiddleware)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only

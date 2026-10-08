@@ -37,8 +37,13 @@ Les boutons « Synchroniser maintenant » et « Mettre à jour maintenant » lan
 (`python -m patrick.desktop relaunch`) : il arrête le serveur, met à jour / fusionne, relance le serveur, et la page
 (qui reste ouverte) se recharge toute seule. Refusé tant qu'un entraînement tourne.
 
-Sécurité : les routes `/api/app/*` refusent toute requête dont l'`Host` n'est pas local ou dont l'`Origin` /
-`Sec-Fetch-Site` désigne un autre site (une page web ouverte dans le navigateur ne peut pas les piloter).
+Sécurité : TOUTES les routes de l'application passent par `webapp/security.LocalGuardMiddleware` : l'en-tête `Host`
+doit être local (contre le « DNS rebinding » : un site hostile ne peut pas lire les réponses, patrimoine inclus), et
+toute écriture (ou lecture d'API `/api/`) dont l'`Origin` / `Sec-Fetch-Site` désigne un autre site est refusée en 403
+(contre le CSRF : une page web ouverte dans le navigateur ne peut ni lancer un run, ni passer un ordre, ni changer un
+réglage). `curl` et les scripts, qui n'envoient pas ces en-têtes, passent. `PATRICK_EXTRA_HOSTS` déclare d'autres noms
+d'hôte (reverse proxy). Tests : `tests/test_webapp_csrf.py` (chaque route d'écriture de l'application y est essayée
+depuis un autre site : une route ajoutée demain est couverte sans y penser).
 
 ## Installer sur un autre PC
 
