@@ -13,6 +13,19 @@ Ressources principales
 - Code et CLI : ./patrick/
 - Notebooks reproductibles : ./notebooks/
 
+Application de bureau (Windows)
+
+PATRICK s'utilise comme une application : une icône sur le bureau, un double-clic. Elle se met à jour toute
+seule depuis GitHub, démarre le serveur, ouvre la fenêtre, et partage tes résultats entre plusieurs PC via un
+dossier OneDrive que tu choisis au premier démarrage (modifiable à tout moment : engrenage > Réglages).
+
+Installer sur un PC (Git et Python sont installés au besoin) : double-clic sur `app\Installer.bat` après avoir
+téléchargé le dépôt, ou, dans PowerShell :
+
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/LP-D/PATRICK/main/app/Installer.ps1 | iex"
+
+Mode d'emploi : [`app/LISEZMOI.txt`](app/LISEZMOI.txt). Fonctionnement et réglages : [`docs/ops/application-bureau.md`](docs/ops/application-bureau.md).
+
 Démarrage rapide
 
 1. Lire patrick/README.md pour installer les dépendances et la CLI.

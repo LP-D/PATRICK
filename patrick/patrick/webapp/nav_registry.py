@@ -74,6 +74,12 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("mouvements", "Mouvements", "/mouvements", "patrimoine", 20, "nav_mouvements"),
 )
 
+# Pages d'USAGE de l'application (pas des classes d'analyse) : hors des 4 categories, elles ont leur propre
+# bouton en pied de barre laterale (engrenage) et figurent dans la palette de commandes.
+UTILITY_ENTRIES: tuple[NavEntry, ...] = (
+    NavEntry("settings", "Réglages", "/reglages", "utility", 10, "nav_settings"),
+)
+
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).
 NON_PAGE_PREFIXES: tuple[str, ...] = ("/api/", "/static", "/set-lang/")
 NON_PAGE_ROUTES: frozenset[str] = frozenset({
@@ -91,7 +97,7 @@ def entries_for(category: str) -> list[NavEntry]:
 
 def registered_routes() -> list[str]:
     """Toutes les routes de page connues du registre (entrees + enfants)."""
-    return [r for e in NAV_ENTRIES for r in (e.url, *e.child_routes)]
+    return [r for e in (*NAV_ENTRIES, *UTILITY_ENTRIES) for r in (e.url, *e.child_routes)]
 
 
 def is_non_page_route(path: str) -> bool:
@@ -104,6 +110,12 @@ def is_active(entry: NavEntry, path: str) -> bool:
     if entry.url == "/":
         return path == "/"
     return path == entry.url or path.startswith(entry.url + "/")
+
+
+def utility_links(path: str) -> list[dict]:
+    """Pages d'usage (Réglages) pour le pied de barre laterale : meme forme que les entrees de `nav_sections`."""
+    return [{"slug": e.slug, "url": e.url, "label": e.label, "label_key": e.label_key,
+             "active": is_active(e, path)} for e in sorted(UTILITY_ENTRIES, key=lambda e: e.order)]
 
 
 def nav_sections(path: str) -> list[dict]:

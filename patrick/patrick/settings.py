@@ -29,10 +29,10 @@ def load() -> dict:
 
 
 def save(updates: dict) -> dict:
-    """Fusionne `updates` dans le fichier (écriture atomique)."""
+    """Fusionne `updates` dans le fichier (écriture atomique). Une valeur `None` SUPPRIME la clé."""
     path = settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = {**load(), **updates}
+    data = {k: v for k, v in {**load(), **updates}.items() if v is not None}
     fd, tmp = tempfile.mkstemp(prefix=".settings.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

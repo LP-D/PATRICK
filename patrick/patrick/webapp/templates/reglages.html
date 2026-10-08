@@ -1,0 +1,135 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('app_title') }}{% endblock %}
+
+{# Application de bureau : réglages utilisateur (webapp/settings_routes.py, logique dans patrick/desktop/).
+   Tout est rempli par static/reglages.js depuis /api/app/overview : la page ne dépend d'aucun calcul lent. #}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ t('app_title') }}</h1>
+    <p class="page-subtitle">{{ t('app_subtitle') }}</p>
+  </div>
+</div>
+
+<div id="app-flash" class="banner hidden" role="status" aria-live="polite"></div>
+
+{# ------------------------------------------------------------------ partage entre PC #}
+<section class="card" id="card-share">
+  <div class="card-head"><h2>{{ icon('shield') }} {{ t('app_share_title') }}</h2></div>
+  <p class="hint">{{ t('app_share_intro') }}</p>
+  <p id="share-current" class="set-current"></p>
+
+  <label for="share-folder">{{ t('app_share_folder_label') }}</label>
+  <div class="set-row">
+    <input type="text" id="share-folder" list="share-suggestions" autocomplete="off" spellcheck="false"
+           placeholder="C:\Users\…\OneDrive\PATRICK">
+    <datalist id="share-suggestions"></datalist>
+    <button type="button" id="share-browse" class="btn-secondary">{{ t('app_share_browse') }}</button>
+  </div>
+  <p id="share-note" class="hint" aria-live="polite"></p>
+
+  <label class="set-check"><input type="checkbox" id="share-reference"> {{ t('app_share_reference') }}</label>
+  <p class="hint">{{ t('app_share_reference_hint') }}</p>
+  {% if windows %}
+  <label class="set-check"><input type="checkbox" id="share-schedule"> {{ t('app_share_schedule') }}</label>
+  <p class="hint" id="share-task"></p>
+  {% endif %}
+
+  <div class="set-row set-actions">
+    <button type="button" id="share-save" class="btn">{{ t('app_share_save') }}</button>
+    <button type="button" id="share-clear" class="btn-secondary">{{ t('app_share_clear') }}</button>
+    <button type="button" id="share-open" class="btn-ghost">{{ icon('external', 14) }} {{ t('app_share_open') }}</button>
+  </div>
+
+  <h3>{{ t('app_status_title') }}</h3>
+  <ul class="set-status" id="share-status"><li class="hint">{{ t('app_status_loading') }}</li></ul>
+  <div id="share-sync-actions" class="set-row set-actions hidden">
+    <button type="button" id="share-sync-now" class="btn">{{ icon('movements', 14) }} {{ t('app_share_sync_now') }}</button>
+  </div>
+  <p class="hint hidden" id="share-sync-hint">{{ t('app_share_sync_now_hint') }}</p>
+
+  <h3>{{ t('app_share_auto_title') }}</h3>
+  <label class="set-check"><input type="checkbox" id="pref-sync_on_start"> {{ t('app_share_sync_start') }}</label>
+  <label class="set-check"><input type="checkbox" id="pref-sync_on_close"> {{ t('app_share_sync_close') }}</label>
+  <div id="last-launch" class="hint"></div>
+</section>
+
+{# ------------------------------------------------------------------ mises à jour #}
+<section class="card" id="card-update">
+  <div class="card-head"><h2>{{ icon('upload') }} {{ t('app_update_title') }}</h2></div>
+  <p id="update-version" class="set-current"></p>
+  <label class="set-check"><input type="checkbox" id="pref-auto_update"> {{ t('app_update_auto') }}</label>
+  <div class="set-row set-actions">
+    <button type="button" id="update-check" class="btn-secondary">{{ t('app_update_check') }}</button>
+    <button type="button" id="update-apply" class="btn hidden">{{ t('app_update_apply') }}</button>
+  </div>
+  <p id="update-result" class="hint" aria-live="polite"></p>
+  <ul id="update-news" class="set-news"></ul>
+  <p class="hint">{{ t('app_update_hint') }}</p>
+</section>
+
+{# ------------------------------------------------------------------ fenêtre et démarrage #}
+<section class="card" id="card-window">
+  <div class="card-head"><h2>{{ icon('sidebar') }} {{ t('app_window_title') }}</h2></div>
+  <label class="set-check"><input type="checkbox" id="pref-app_window"> {{ t('app_window_dedicated') }}</label>
+  <p class="hint">{{ t('app_window_hint') }}</p>
+  <label for="pref-port">{{ t('app_port_label') }}</label>
+  <div class="set-row">
+    <input type="number" id="pref-port" min="1024" max="65535" step="1" class="set-narrow">
+    <button type="button" id="port-save" class="btn-secondary">{{ t('btn_save_setting') }}</button>
+  </div>
+  <p class="hint">{{ t('app_port_hint') }}</p>
+  {% if windows %}
+  <div class="set-row set-actions">
+    <button type="button" id="shortcuts-make" class="btn-secondary">{{ t('app_shortcuts') }}</button>
+  </div>
+  <p class="hint">{{ t('app_shortcuts_hint') }}</p>
+  {% endif %}
+</section>
+
+{# ------------------------------------------------------------------ performance #}
+<section class="card" id="card-performance">
+  <div class="card-head"><h2>{{ icon('gauge') }} {{ t('section_performance') }}</h2></div>
+  <label for="setting-parametric-jobs">{{ t('field_parametric_jobs') }}</label>
+  <input type="number" id="setting-parametric-jobs" min="1" step="1" value="1" class="set-narrow">
+  <p class="hint">{{ t('hint_parametric_jobs') }}</p>
+  <label for="setting-scan-jobs">{{ t('field_scan_jobs') }}</label>
+  <input type="number" id="setting-scan-jobs" min="1" step="1" value="1" class="set-narrow">
+  <p class="hint">{{ t('hint_scan_jobs') }}</p>
+  <p class="hint hidden" id="setting-env-note">{{ t('setting_env_override') }}</p>
+  <div class="set-row set-actions">
+    <button type="button" id="perf-save" class="btn-secondary">{{ t('btn_save_setting') }}</button>
+    <span id="perf-status" aria-live="polite"></span>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ données et sauvegardes #}
+<section class="card" id="card-data">
+  <div class="card-head"><h2>{{ icon('file') }} {{ t('app_data_title') }}</h2></div>
+  <table class="set-paths">
+    {% for key, label in (('data', 'app_data_dir'), ('logs', 'app_data_logs'), ('backups', 'app_data_backups'), ('install', 'app_data_install')) %}
+    <tr>
+      <th scope="row">{{ t(label) }}</th>
+      <td><code id="path-{{ key }}"></code></td>
+      <td><button type="button" class="btn-ghost" data-open="{{ key }}">{{ icon('external', 14) }} {{ t('app_open') }}</button></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p id="backup-info" class="hint"></p>
+  <div class="set-row set-actions">
+    <button type="button" id="backup-now" class="btn-secondary">{{ t('app_backup_now') }}</button>
+  </div>
+</section>
+
+<div id="relaunch-overlay" class="set-overlay hidden" role="alertdialog" aria-modal="true" aria-live="assertive">
+  <div class="set-overlay-box">
+    <h2>{{ t('app_relaunch_title') }}</h2>
+    <p id="relaunch-message"></p>
+    <div class="skeleton-line"></div>
+    <p class="hint">{{ t('app_relaunch_hint') }}</p>
+  </div>
+</div>
+
+<script src="/static/reglages.js"></script>
+{% endblock %}

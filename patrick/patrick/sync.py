@@ -846,10 +846,53 @@ def register_task(minutes: int = 60) -> str:
     # jamais lieu. On l'autorise, et on rattrape un passage manqué (PC éteint à l'heure prévue).
     settings = subprocess.run(
         ["powershell", "-NoProfile", "-Command",
-         f"Set-ScheduledTask -TaskName '{SYNC_TASK}' -Settings (New-ScheduledTaskSettingsSet "
-         "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable "
-         "-ExecutionTimeLimit (New-TimeSpan -Hours 6)) | Out-Null"],
+         (f"Set-ScheduledTask -TaskName '{SYNC_TASK}' -Settings (New-ScheduledTaskSettingsSet "
+          "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable "
+          "-ExecutionTimeLimit (New-TimeSpan -Hours 6)) | Out-Null")],
         capture_output=True, text=True, check=False)
     if settings.returncode != 0:
         raise SyncError(f"réglages de la tâche (batterie) : {(settings.stderr or settings.stdout).strip()}")
     return command
+
+
+def unregister_task() -> bool:
+    """Supprime la tâche planifiée `PATRICK-Sync`. Renvoie False si elle n'existait pas."""
+    if os.name != "nt":
+        raise SyncError("La tâche planifiée n'est gérée que sous Windows.")
+    if task_status()["registered"] is False:
+        return False
+    proc = subprocess.run(["schtasks", "/Delete", "/TN", SYNC_TASK, "/F"], capture_output=True, text=True,
+                          check=False)
+    if proc.returncode != 0:
+        raise SyncError(f"schtasks : {(proc.stderr or proc.stdout).strip()}")
+    return True
+
+
+def task_status() -> dict:
+    """État de la tâche planifiée `PATRICK-Sync` : `{"supported", "registered", "next_run"}` (lecture seule)."""
+    if os.name != "nt":
+        return {"supported": False, "registered": False, "next_run": None}
+    proc = subprocess.run(["schtasks", "/Query", "/TN", SYNC_TASK, "/FO", "LIST", "/V"], capture_output=True,
+                          text=True, check=False)
+    if proc.returncode != 0:
+        return {"supported": True, "registered": False, "next_run": None}
+    next_run = None
+    for line in proc.stdout.splitlines():
+        key, _, value = line.partition(":")
+        # Le libellé dépend de la langue de Windows (« Prochaine exécution » / « Next Run Time »).
+        if key.strip().lower() in ("prochaine exécution", "prochaine execution", "next run time"):
+            next_run = value.strip() or None
+    return {"supported": True, "registered": True, "next_run": next_run}
+
+
+def forget_exchange() -> None:
+    """Oublie l'état d'échange avec le partage (empreintes de la dernière synchronisation). À appeler quand
+    le dossier de partage CHANGE : l'ancien état ne dit rien du nouveau dossier."""
+    state = load_state()
+    for key in ("remote_sha", "local_fp", "at"):
+        state.pop(key, None)
+    path = state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)

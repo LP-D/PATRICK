@@ -20,14 +20,14 @@ class PC:
         self.dir = tmp_path / name
         self.dir.mkdir()
         self.db = str(self.dir / "patrick.db")
-        self.kw = dict(db_path=self.db, store_root=str(self.dir / "store"), models_dir=str(self.dir / "models"),
-                       models_roots=[], backup_dir=str(self.dir / "backups"))
+        self.kw = {"db_path": self.db, "store_root": str(self.dir / "store"), "models_dir": str(self.dir / "models"),
+                   "models_roots": [], "backup_dir": str(self.dir / "backups")}
 
-    def use(self) -> "PC":
+    def use(self) -> PC:
         self.monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(self.dir / "settings.json"))
         return self
 
-    def seed(self, runs, **kw) -> "PC":
+    def seed(self, runs, **kw) -> PC:
         _seed(Path(self.db), runs, snapshot=f"snap_{self.name}", **kw)
         return self
 
@@ -232,7 +232,7 @@ def test_auto_rejects_an_unknown_half(pcs):
         pc1.auto(share, only="both")
 
 
-def _wealth(pc: "PC") -> list[tuple]:
+def _wealth(pc: PC) -> list[tuple]:
     conn = sqlite3.connect(pc.db)
     try:
         return conn.execute("SELECT account_id FROM wealth_account ORDER BY 1").fetchall()

@@ -1,5 +1,10 @@
 # Partage de la base, des modèles et des données entre deux PC
 
+> **Au quotidien, tout passe par l'application de bureau** : le dossier partagé se choisit au premier démarrage
+> (ou dans Réglages), la fusion se fait au démarrage, la publication à la fermeture et toutes les heures, sans
+> commande à taper. Voir [application-bureau.md](application-bureau.md). Les commandes ci-dessous restent
+> disponibles pour dépanner ou scripter.
+
 ## Synchronisation automatique (dossier OneDrive / Drive)
 
 Deux PC qui lancent des runs chacun de leur côté ont des bases **disjointes**. `patrick sync auto` les met à
@@ -12,24 +17,14 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 | `patrick sync auto [--only pull\|push]` | fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de neuf |
 | `patrick sync merge --from <dossier> [--dry-run-to f.db]` | fusion explicite (à blanc : écrit dans `f.db`, la base locale n'est pas touchée) |
 
-Avec le lanceur `PATRICK.lnk` (mode application, voir plus bas) : la fusion se fait au démarrage (avant le
+Avec le lanceur `PATRICK.lnk` : la fusion se fait au démarrage (avant le
 serveur, écran « Synchronisation... »), la publication en arrière-plan à la fermeture de la fenêtre.
 Journal : `~/.patrick/logs/sync.log`.
 
-**Mise en place sur un nouveau PC** : `git pull`, puis (PowerShell, depuis `patrick/`)
-`powershell -ExecutionPolicy Bypass -File scripts\app\install-app.ps1` (crée `PATRICK.lnk` sur le Bureau et dans le
-menu Démarrer), puis `patrick sync setup --folder "<dossier OneDrive / Drive>" --schedule`, PATRICK fermé (sans
-`--wealth-reference` : ce PC adopte le patrimoine de la référence). La première fusion peut durer plusieurs minutes.
-
-### Lanceur « mode app » (`patrick/scripts/app/`)
-
-- `PATRICK-app.ps1` : (1) fusion du partage si `sync setup` a été fait, (2) `patrick serve` en arrière-plan,
-  (3) fenêtre Chrome (à défaut Edge) en `--app`, profil dédié `%LOCALAPPDATA%\PATRICK\app-profile`;
-  à la fermeture de la fenêtre : arrêt du serveur puis publication en arrière-plan. Un entraînement en cours n'est
-  pas interrompu (le worker est indépendant) et la publication attend sa fin.
-- Si un serveur tourne déjà sur le port (`-Port`, défaut 8000), le lanceur s'y connecte sans synchroniser.
-  `-NoSync` saute la synchronisation. Journaux : `~/.patrick/logs/app-serve.{out,err}.log`.
-- `install-app.ps1` : crée les raccourcis (à relancer si le dépôt est déplacé).
+**Mise en place sur un nouveau PC** : `app\Installer.bat` (installe tout), puis au premier démarrage choisir le
+**même** dossier OneDrive que sur le premier PC, sans cocher « référence du patrimoine » (ce PC adopte le
+patrimoine de la référence). La première fusion peut durer plusieurs minutes. (À la main, depuis la version
+stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --schedule`.)
 
 ### Règles de la fusion
 

@@ -48,6 +48,7 @@ from patrick.webapp import (
     nav_registry,
     progress_steps,
     run_manager,
+    settings_routes,
     shap_chart,
     wealth_routes,
 )
@@ -97,6 +98,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only
 # (base_v2.html iterates `nav_sections(request.url.path)`).
 templates.env.globals["nav_sections"] = nav_registry.nav_sections
+templates.env.globals["utility_links"] = nav_registry.utility_links
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
 templates.env.globals["nav_icon"] = icons.nav_icon
@@ -137,6 +139,12 @@ FORM_OPTIONS = {
 
 @app.on_event("startup")
 def _on_startup() -> None:
+    # Première installation : crée / migre la base AVANT de lancer les fils d'arrière-plan, sinon ils se disputent
+    # la création du fichier (« database is locked » dans le journal).
+    try:
+        trackdb.connect().close()
+    except (sqlite3.Error, OSError):
+        pass
     alerts.start_background_refresh()
     live_refresh.start_background_refresh()
     market_regime.start_background_refresh()
@@ -1213,6 +1221,9 @@ def api_measure_drift(target: str, horizon: int):
 
 # Roadmap bloc 4 -- PATRIMOINE (pages /patrimoine, /mouvements + /api/wealth/*).
 wealth_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Application de bureau : page Réglages (/reglages) et API /api/app/* (dossier partagé, mises à jour, fenêtre).
+settings_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Refonte Simulation + Fonds (chantier 1) : pages /simulate, /fonds et API /api/fund/*.
 fund_routes.register(app, templates, lambda request: _i18n_context(request))

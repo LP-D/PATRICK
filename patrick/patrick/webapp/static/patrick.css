@@ -2152,3 +2152,23 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .fund-ticker { display: grid; gap: var(--space-sm); }
 .fund-ticker[hidden], .fund-ticker label[hidden] { display: none; }
 #benchmark-field[hidden] { display: none; }
+
+/* ============ Réglages (/reglages) ============ */
+
+.set-row { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+.set-row > input[type="text"] { flex: 1 1 320px; min-width: 0; }
+.set-actions { margin-top: var(--space-md); }
+.set-current { margin: 0 0 var(--space-md); font-weight: 550; word-break: break-all; }
+#card-share > label:not(.set-check), #card-window > label:not(.set-check), #card-performance > label { display: block; margin: var(--space-md) 0 6px; font-weight: 550; }
+.set-check { display: flex; align-items: center; gap: 8px; margin: var(--space-sm) 0 0; font-weight: 500; }
+.set-narrow { width: 120px; }
+.set-status, .set-news { margin: 0 0 var(--space-sm); padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--text-2); }
+.set-paths { width: 100%; border-collapse: collapse; font-size: 13px; }
+.set-paths th { width: 190px; padding: 6px 12px 6px 0; text-align: left; font-weight: 550; color: var(--text-2); }
+.set-paths td { padding: 6px 8px 6px 0; word-break: break-all; }
+.set-paths td:last-child { width: 1%; white-space: nowrap; }
+.set-overlay { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg, #000) 70%, transparent); backdrop-filter: blur(3px); }
+.set-overlay.hidden { display: none; }
+.set-overlay-box { width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
+.set-overlay-box h2 { margin: 0 0 8px; font-size: 16px; }
+.set-overlay-box p { margin: 0 0 14px; }
