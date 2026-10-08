@@ -1,10 +1,9 @@
 """Page `/reglages` et API `/api/app/*` : tout ce qu'un utilisateur règle sans toucher à un fichier —
 dossier partagé entre PC, mises à jour, fenêtre, sauvegardes.
 
-SÉCURITÉ : ces routes modifient des réglages locaux et peuvent lancer des processus. Le serveur n'écoute que
-sur 127.0.0.1, mais une page web quelconque ouverte dans le navigateur peut tout de même lui envoyer des
-requêtes (CSRF, ou « DNS rebinding »). Chaque route passe donc par `_guard` : l'en-tête `Host` doit être local,
-et `Origin` / `Sec-Fetch-Site` ne doivent pas désigner un autre site.
+SÉCURITÉ : ces routes modifient des réglages locaux et peuvent lancer des processus. Elles sont protégées, comme
+toutes les routes de l'application, par `webapp/security.LocalGuardMiddleware` (hôte local, pas de requête
+venue d'un autre site : CSRF et « DNS rebinding »).
 """
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -27,19 +25,6 @@ from patrick.desktop import launcher, prefs, runtime, share, shortcuts, update
 BOOT_ID = uuid.uuid4().hex                      # change à chaque démarrage du serveur : la page sait qu'il a redémarré
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
 OPEN_TARGETS = ("data", "logs", "backups", "shared", "install")
-
-
-def _guard(request: Request) -> None:
-    """Refuse toute requête qui ne vient pas de la page PATRICK locale."""
-    host = request.headers.get("host", "")
-    hostname = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
-    if hostname.lower() not in LOCAL_HOSTS:
-        raise HTTPException(status_code=403, detail="Hôte non autorisé.")
-    origin = request.headers.get("origin")
-    if origin and origin != "null" and urlparse(origin).netloc != host:
-        raise HTTPException(status_code=403, detail="Requête d'un autre site refusée.")
-    if origin == "null" or request.headers.get("sec-fetch-site", "same-origin") not in ("same-origin", "none"):
-        raise HTTPException(status_code=403, detail="Requête d'un autre site refusée.")
 
 
 async def _json(request: Request) -> dict:
@@ -106,12 +91,10 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.get("/api/app/boot")
     def boot(request: Request):
-        _guard(request)
         return {"boot_id": BOOT_ID}
 
     @app.get("/api/app/overview")
     def overview(request: Request):
-        _guard(request)
         return {
             "boot_id": BOOT_ID,
             "prefs": prefs.all_prefs(),
@@ -126,7 +109,6 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/prefs")
     async def set_prefs(request: Request):
-        _guard(request)
         try:
             return prefs.update(await _json(request))
         except prefs.PrefError as exc:
@@ -135,19 +117,16 @@ def register(app: FastAPI, templates, context) -> None:
     # --- dossier partagé -------------------------------------------------------------------------------------------
     @app.get("/api/app/share/suggestions")
     async def share_suggestions(request: Request):
-        _guard(request)
         return {"suggestions": await run_in_threadpool(share.suggest_folders)}
 
     @app.post("/api/app/share/inspect")
     async def share_inspect(request: Request):
-        _guard(request)
         body = await _json(request)
         info = await run_in_threadpool(share.inspect_folder, str(body.get("folder") or ""))
         return {**info, "default_wealth_reference": share.default_wealth_reference(info)}
 
     @app.post("/api/app/share/browse")
     async def share_browse(request: Request):
-        _guard(request)
         body = await _json(request)
 
         def pick() -> str | None:
@@ -164,7 +143,6 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/share/apply")
     async def share_apply(request: Request):
-        _guard(request)
         body = await _json(request)
         folder = body.get("folder") or None
         try:
@@ -176,7 +154,6 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.get("/api/app/share/status")
     async def share_status(request: Request):
-        _guard(request)
         folder = sync.configured_folder()
         if not folder:
             return {"folder": None}
@@ -188,7 +165,6 @@ def register(app: FastAPI, templates, context) -> None:
     # --- relance / mise à jour -------------------------------------------------------------------------------------
     @app.post("/api/app/sync-now")
     async def sync_now(request: Request):
-        _guard(request)
         if not sync.configured_folder():
             return JSONResponse({"error": "Aucun dossier partagé."}, status_code=400)
         if await run_in_threadpool(lambda: runtime.worker_running()):
@@ -198,12 +174,10 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/update/check")
     async def update_check(request: Request):
-        _guard(request)
         return await run_in_threadpool(update.check)
 
     @app.post("/api/app/update/apply")
     async def update_apply(request: Request):
-        _guard(request)
         if await run_in_threadpool(lambda: runtime.worker_running()):
             return JSONResponse({"error": "busy"}, status_code=409)
         spawn_relaunch(do_update=True)
@@ -211,13 +185,11 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.get("/api/app/relaunch")
     def relaunch_state(request: Request):
-        _guard(request)
         return {"boot_id": BOOT_ID, **launcher.read_json(launcher.RELAUNCH_STATE)}
 
     # --- divers ----------------------------------------------------------------------------------------------------
     @app.post("/api/app/open")
     async def open_folder(request: Request):
-        _guard(request)
         what = (await _json(request)).get("what")
         if what not in OPEN_TARGETS:
             raise HTTPException(status_code=400, detail="Dossier inconnu.")
@@ -229,13 +201,11 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.post("/api/app/shortcuts")
     async def make_shortcuts(request: Request):
-        _guard(request)
         code = await run_in_threadpool(shortcuts.create)
         return JSONResponse({"ok": code == 0}, status_code=200 if code == 0 else 500)
 
     @app.post("/api/app/backup-now")
     async def backup_now(request: Request):
-        _guard(request)
         if not os.path.exists(_db_path()):
             return JSONResponse({"error": "Pas de base à sauvegarder."}, status_code=400)
         spawn_backup()
