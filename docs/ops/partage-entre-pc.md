@@ -1,5 +1,10 @@
 # Partage de la base, des modèles et des données entre deux PC
 
+> **Au quotidien, tout passe par l'application de bureau** : le dossier partagé se choisit au premier démarrage
+> (ou dans Réglages), la fusion se fait au démarrage, la publication à la fermeture et toutes les heures, sans
+> commande à taper. Voir [application-bureau.md](application-bureau.md). Les commandes ci-dessous restent
+> disponibles pour dépanner ou scripter.
+
 ## Synchronisation automatique (dossier OneDrive / Drive)
 
 Deux PC qui lancent des runs chacun de leur côté ont des bases **disjointes**. `patrick sync auto` les met à
@@ -15,10 +20,10 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 Avec le lanceur `PATRICK.lnk` : la fusion se fait au démarrage (avant le serveur, écran « Synchronisation... »),
 la publication en arrière-plan à la fermeture de la fenêtre. Journal : `~/.patrick/logs/sync.log`.
 
-**Mise en place sur un nouveau PC** : mettre le code à jour (le lanceur le fait), copier le dossier
-`PATRICK-app` (lanceur mis à jour), puis `patrick sync setup --folder "<dossier OneDrive>" --schedule` depuis
-la version stable, PATRICK fermé (sans `--wealth-reference` : ce PC adopte le patrimoine de la référence).
-La première fusion peut durer plusieurs minutes.
+**Mise en place sur un nouveau PC** : `app\Installer.bat` (installe tout), puis au premier démarrage choisir le
+**même** dossier OneDrive que sur le premier PC, sans cocher « référence du patrimoine » (ce PC adopte le
+patrimoine de la référence). La première fusion peut durer plusieurs minutes. (À la main, depuis la version
+stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --schedule`.)
 
 ### Règles de la fusion
 

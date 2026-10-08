@@ -712,7 +712,8 @@ def sync_auto_cmd(
         os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
             for line in lines:
-                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} sync auto {only or ''}: {line}\n")
+                # heure locale voulue : c'est celle que l'utilisateur lira dans le journal
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} sync auto {only or ''}: {line}\n")  # noqa: DTZ005
     if code:
         raise typer.Exit(code=code)
 

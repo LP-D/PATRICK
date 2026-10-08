@@ -97,6 +97,7 @@ def test_macro_page_tags_training_only_series():
 
 def test_asset_stats_api_serves_display_only_macro_series(monkeypatch):
     import pandas as pd
+
     from patrick.webapp import market_data
 
     def fake(symbol, source, period="5y"):
@@ -114,6 +115,7 @@ def test_asset_stats_api_serves_display_only_macro_series(monkeypatch):
 
 def test_slow_fred_series_are_fetched_over_their_whole_history(monkeypatch):
     import pandas as pd
+
     from patrick.webapp import market_data
 
     periods = {}
@@ -132,6 +134,7 @@ def test_slow_fred_series_are_fetched_over_their_whole_history(monkeypatch):
 
 def test_fred_price_history_is_cached_between_page_loads(monkeypatch):
     import pandas as pd
+
     from patrick.webapp import market_data
 
     calls = []

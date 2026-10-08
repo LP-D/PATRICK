@@ -115,7 +115,7 @@ def _compute_once() -> None:
         _cache["losers"] = _rows(ranked.tail(TOP_N)[::-1])
         _cache["updated_at"] = local_now().strftime("%Y-%m-%d %H:%M")
         _cache["error"] = None
-        _cache["n_ranked"] = int(len(ranked))
+        _cache["n_ranked"] = len(ranked)
         _cache["n_requested"] = len(tickers)
 
 

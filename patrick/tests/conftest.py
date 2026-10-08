@@ -51,3 +51,35 @@ def _isolated_machine_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.delenv("PATRICK_PARAMETRIC_JOBS", raising=False)
     monkeypatch.delenv("PATRICK_SCAN_JOBS", raising=False)
+
+
+class FakeScheduledTask:
+    """Remplace la tâche Windows `PATRICK-Sync` : un test ne doit JAMAIS créer ni supprimer la vraie tâche de la machine."""
+
+    def __init__(self) -> None:
+        self.registered = False
+        self.calls: list[str] = []
+
+    def register(self, minutes: int = 60) -> str:
+        self.registered = True
+        self.calls.append("register")
+        return "commande factice"
+
+    def unregister(self) -> bool:
+        was, self.registered = self.registered, False
+        self.calls.append("unregister")
+        return was
+
+    def status(self) -> dict:
+        return {"supported": True, "registered": self.registered, "next_run": None}
+
+
+@pytest.fixture(autouse=True)
+def fake_task(monkeypatch):
+    from patrick import sync
+
+    fake = FakeScheduledTask()
+    monkeypatch.setattr(sync, "register_task", fake.register)
+    monkeypatch.setattr(sync, "unregister_task", fake.unregister)
+    monkeypatch.setattr(sync, "task_status", fake.status)
+    return fake

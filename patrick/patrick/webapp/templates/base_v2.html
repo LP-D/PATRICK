@@ -92,6 +92,10 @@ script below (no flash), otherwise the OS preference applies.
                     <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
                         {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') if t else 'Rechercher une page…' }}</span><span class="kbd">Ctrl K</span>
                     </button>
+                    {% for u in utility_links(request.url.path) %}
+                    {% set u_label = t(u.label_key) if (t and u.label_key) else u.label %}
+                    <a class="icon-btn" href="{{ u.url }}" id="nav-{{ u.slug }}" title="{{ u_label }}" aria-label="{{ u_label }}" {% if u.active %}aria-current="page"{% endif %}>{{ nav_icon(u.slug) }}</a>
+                    {% endfor %}
                     <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}" title="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}">
                         <span class="icon-moon">{{ icon('moon') }}</span><span class="icon-sun">{{ icon('sun') }}</span>
                     </button>
@@ -125,6 +129,9 @@ script below (no flash), otherwise the OS preference applies.
     {% for section in sections %}{% for item in section.entries %}
     {% set _ = cmdk_items.append({"url": item.url, "label": t(item.label_key) if (t and item.label_key) else item.label, "group": t(section.label_key) if t else section.label, "icon": nav_icon(item.slug) | string}) %}
     {% endfor %}{% endfor %}
+    {% for u in utility_links(request.url.path) %}
+    {% set _ = cmdk_items.append({"url": u.url, "label": t(u.label_key) if (t and u.label_key) else u.label, "group": "PATRICK", "icon": nav_icon(u.slug) | string}) %}
+    {% endfor %}
     <script id="cmdk-data" type="application/json">{{ cmdk_items | tojson }}</script>
 
     <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="false">

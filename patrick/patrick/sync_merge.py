@@ -215,7 +215,7 @@ def _merge_champions(conn: sqlite3.Connection, off: int) -> int:
     run est importé sont repris : leur `trial_id` est connu (décalé), alors que celui d'un run déjà
     présent localement n'a pas de correspondance sûre entre les deux bases."""
     cols = _shared_columns(conn, "champion")
-    exprs = ["s.trial_id + %d" % off if c == "trial_id" else f's."{c}"' for c in cols]
+    exprs = [f"s.trial_id + {off}" if c == "trial_id" else f's."{c}"' for c in cols]
     before = conn.total_changes
     conn.execute(
         f'INSERT OR REPLACE INTO main.champion ({", ".join(chr(34) + c + chr(34) for c in cols)}) '

@@ -1,0 +1,53 @@
+PATRICK - mode d'emploi
+=======================
+
+OUVRIR PATRICK
+  Double-clique sur l'icône "PATRICK" (bleue) du bureau, ou tape "PATRICK" dans le menu Démarrer.
+  Une petite fenêtre "démarre..." apparaît quelques secondes, puis PATRICK s'ouvre comme une application.
+  Aucune ligne de commande à taper.
+
+PREMIER DÉMARRAGE : LE DOSSIER PARTAGÉ
+  Une fenêtre te demande si tu utilises PATRICK sur plusieurs PC.
+  - "Oui" : choisis un dossier synchronisé par OneDrive (PATRICK propose celui qu'il trouve déjà).
+    Tes PC y échangent leurs résultats ; rien n'est jamais écrasé, les résultats de chaque PC s'additionnent.
+  - "Non" : ce PC travaille seul. Tu pourras changer d'avis à tout moment.
+  - "Plus tard" : la question sera reposée au prochain démarrage.
+  Pour modifier ce choix plus tard : bouton engrenage (en haut à droite de PATRICK) > Réglages.
+
+RÉGLAGES (engrenage en haut à droite)
+  - Partage entre PC : changer de dossier, ne plus partager, désigner le PC "référence du patrimoine",
+    publication automatique toutes les heures, "Synchroniser maintenant".
+  - Mises à jour : version installée, recherche et installation d'une nouvelle version.
+  - Fenêtre et démarrage : fenêtre dédiée ou navigateur habituel, port, recréer les raccourcis.
+  - Performance : nombre de workers de calcul.
+  - Données et sauvegardes : ouvrir les dossiers, sauvegarder la base à la demande.
+
+FERMER PATRICK
+  Ferme simplement la fenêtre (croix). Le serveur s'arrête tout seul quelques secondes après et, si un dossier
+  partagé est réglé, ce PC y publie ses nouveaux résultats en arrière-plan.
+  Un entraînement déjà lancé continue en arrière-plan et sera visible à la prochaine ouverture.
+
+MISE À JOUR AUTOMATIQUE
+  À chaque ouverture, PATRICK regarde s'il y a une nouvelle version sur GitHub (branche main).
+  Si oui : sauvegarde de la base de données, mise à jour, puis ouverture. Rien à faire.
+  - Pas d'internet : PATRICK s'ouvre quand même avec la version actuelle.
+  - Entraînement en cours : la mise à jour est reportée à une prochaine ouverture.
+  - Si la mise à jour échoue, PATRICK revient à la version précédente.
+  Se désactive dans Réglages. Journal : ~\.patrick\logs\launcher.log
+
+INSTALLER PATRICK SUR UN AUTRE PC
+  1. Télécharge ce dossier (ou tout le dépôt) depuis https://github.com/LP-D/PATRICK
+  2. Double-clique sur app\Installer.bat. Il installe Git et Python si besoin, télécharge PATRICK,
+     prépare tout (quelques minutes) et crée l'icône.
+  3. À l'ouverture, choisis le MÊME dossier OneDrive que sur le premier PC.
+  Les données (~\.patrick) ne sont jamais touchées par une réinstallation.
+
+SAUVEGARDE AUTOMATIQUE
+  Chaque jour à 23h30 (ou au prochain démarrage du PC s'il était éteint), la base de données est
+  copiée dans ~\.patrick\backups (30 jours conservés). Une sauvegarde est aussi faite avant chaque mise à jour.
+
+EN CAS DE PROBLÈME
+  Journaux : ~\.patrick\logs (launcher.log, serve-stable.log.err, sync.log). Réglages > Données : bouton "Ouvrir".
+  Menu Démarrer > PATRICK > "Arrêter PATRICK" coupe le serveur de force si besoin.
+  Pour recréer les raccourcis : Réglages > Fenêtre et démarrage > "Recréer les raccourcis".
+  Sinon, demande à Claude.
