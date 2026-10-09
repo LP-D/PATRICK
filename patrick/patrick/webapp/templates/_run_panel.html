@@ -16,8 +16,8 @@
 <dl class="rp-grid">
     <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status }}</dd></div>
     <div><dt>{{ t('rp_scheme') }}</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>
-    <div><dt>{{ t('rp_persistence') }}</dt><dd class="pk-mono">{{ '%.3f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '—' }}</dd></div>
-    <div><dt>{{ t('hist_gap') }}</dt><dd class="pk-mono {{ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') if has_gap else '' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) if has_gap else '—' }}</dd></div>
+    <div><dt>{{ t('rp_persistence') }}</dt><dd class="pk-mono">{{ '%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '—' }}</dd></div>
+    <div><dt>{{ t('hist_gap') }}</dt><dd class="pk-mono {{ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') if has_gap else '' }}">{{ '%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir) if has_gap else '—' }}</dd></div>
     <div><dt>{{ t('rp_dm') }}</dt><dd class="pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}{% if r.dm_sample == 'last_wf_fold' and r.dm_p_value is not none %} <span class="tag" title="{{ t('rp_dm_biased') }}">{{ t('rp_dm_biased_tag') }}</span>{% endif %}</dd></div>
     <div><dt>{{ t('rp_trials') }}</dt><dd class="pk-mono">{{ r.n_trials if r.n_trials is not none else '—' }}</dd></div>
     <div><dt>{{ t('rp_duration') }}</dt><dd class="pk-mono">{{ '%d min %02d s' | format(duration_s // 60, duration_s % 60) if duration_s is not none else '—' }}</dd></div>
