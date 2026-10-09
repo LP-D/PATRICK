@@ -104,7 +104,7 @@ def _hardcoded_french(source: str) -> int:
                 count += 1
     # attributs lus à l'écran ou par un lecteur d'écran (info-bulles, libellés d'accessibilité, confirmations)
     for value in re.findall(r'(?:aria-label|title|placeholder|data-tip|data-confirm|alt)="([^"]*)"', text):
-        if re.search(r"[àâçéèêëîïôùûœÀÉÈ]", value) and not re.search(r"_?t\(", value):
+        if re.search(r"[àâçéèêëîïôùûœÀÉÈ]", value) and not re.search(r"\b_?t\(", value):
             count += 1
     return count
 
