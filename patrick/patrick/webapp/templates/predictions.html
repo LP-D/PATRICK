@@ -7,7 +7,7 @@
 {% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
 
 {# Une case = la prédiction seule ; tout le détail est dans le popover au survol. #}
-{% macro pred_cell(c, name, alpha, warn_thr) %}
+{% macro pred_cell(c, name, alpha, warn_thr, _t) %}
 {% set s = c.signal %}
 <span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0">
 {% if s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ s[0] }}</span>{% else %}<span class="na">—</span>{% endif %}
@@ -47,19 +47,35 @@
 {% endif %}
 </dd>
 </dl>
-{# Suivi depuis le lancement du modèle : combien de fois chaque mouvement prédit s'est réalisé. #}
+{# Suivi depuis le lancement du modèle : où se situent les erreurs, direction ou intensité. #}
 {% set t = c.tally %}
 <div class="pop-track">
-<span class="pop-track-title">Réussites par mouvement prédit{% if t %} · depuis le {{ t.since }}{% endif %}</span>
-{% if t %}
-<table class="pop-track-table">
+<span class="pop-track-title">{{ _t('pred_track_title') }}{% if t %} · {{ _t('pred_since', d=t.since) }}{% endif %}</span>
+{% if t and t.n_four %}
+<table class="pop-track-table pop-track-4">
+<thead><tr><th>{{ _t('pred_col_move') }}</th><th class="n">{{ _t('pred_col_n') }}</th><th class="n">{{ _t('pred_col_exact') }}</th><th class="n" title="{{ _t('pred_intensity_help') }}">{{ _t('pred_col_intensity') }}</th><th class="n" title="{{ _t('pred_wrongway_help') }}">{{ _t('pred_col_wrongway') }}</th></tr></thead>
 {% for k in t.classes %}
-<tr><td>{{ k.label }}</td><td class="n">{% if k.n %}{{ k.hits }}/{{ k.n }} · {{ '%.0f' | format(k.hits * 100 / k.n) }} %{% else %}—{% endif %}</td></tr>
+<tr><td>{{ k.label }}</td><td class="n">{{ k.n if k.n else '—' }}</td>
+<td class="n">{% if k.n %}{{ k.exact }} <span class="pct">{{ '%.0f' | format(k.exact * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
+<td class="n">{% if k.n %}{{ k.intensity }} <span class="pct">{{ '%.0f' | format(k.intensity * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
+<td class="n err">{% if k.n %}{{ k.wrong_way }} <span class="pct">{{ '%.0f' | format(k.wrong_way * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
 </table>
-<span class="hint">Bon sens (hausse/baisse) : {{ t.direction_hits }}/{{ t.direction_n }}{% if t.pending %} · {{ t.pending }} signal(aux) en attente du résultat{% endif %}</span>
+{% endif %}
+{% if t %}
+<span class="pop-track-title pop-track-sub">{{ _t('pred_dir_title') }}</span>
+<table class="pop-track-table">
+<thead><tr><th>{{ _t('pred_col_move') }}</th><th class="n">{{ _t('pred_col_n') }}</th><th class="n">{{ _t('pred_col_right') }}</th><th class="n err">{{ _t('pred_col_wrong') }}</th></tr></thead>
+{% for k in t.direction %}
+<tr><td>{{ k.label }}</td><td class="n">{{ k.n if k.n else '—' }}</td>
+<td class="n">{% if k.n %}{{ k.hits }} <span class="pct">{{ '%.0f' | format(k.hits * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
+<td class="n err">{% if k.n %}{{ k.wrong }} <span class="pct">{{ '%.0f' | format(k.wrong * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
+{% endfor %}
+</table>
+<span class="hint">{{ _t('pred_dir_total', hits=t.direction_hits, n=t.direction_n) }}{% if t.pending %} · {{ _t('pred_pending', n=t.pending) }}{% endif %}</span>
+<span class="hint">{{ _t('pred_reading_help') }}</span>
 {% else %}
-<span class="hint">Pas encore de signal suivi : le suivi démarre au premier lancement de l'app après l'entraînement.</span>
+<span class="hint">{{ _t('pred_no_track') }}</span>
 {% endif %}
 </div>
 {% endif %}
@@ -119,7 +135,7 @@
         {% for a in g.assets %}
         <tr>
             <td><a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.label }}</a></td>
-            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.label, dm_significance_alpha, live_hit_rate_warning_threshold) }}</td>{% endfor %}
+            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.label, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}</td>{% endfor %}
         </tr>
         {% endfor %}
         </tbody>

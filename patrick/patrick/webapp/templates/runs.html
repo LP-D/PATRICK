@@ -9,7 +9,16 @@
 </nav>
 
 <h1 class="page-title">{{ t('nav_runs') or 'Historique des runs' }}</h1>
-<p class="page-subtitle">Runs persistés en base. Filtre-les, compare jusqu'à quatre runs ou duplique leur configuration depuis le détail.</p>
+<p class="page-subtitle">{{ t('hist_subtitle') }}</p>
+
+{# Deux familles qui ne se mélangent jamais : le modèle DIRECTIONNEL prédit le sens et l'intensité du mouvement du prix ;
+   le modèle ALPHA prédit la surperformance de l'actif sur son benchmark (`actif__alpha_benchmark`). #}
+<nav class="kind-tabs" aria-label="{{ t('kind_tabs_label') }}">
+    <a href="/runs" class="kind-tab{% if not filter_kind %} active{% endif %}">{{ t('kind_all') }} <span class="kind-count">{{ n_all_runs }}</span></a>
+    <a href="/runs?kind=directional" class="kind-tab{% if filter_kind == 'directional' %} active{% endif %}">{{ t('kind_directional') }} <span class="kind-count">{{ kind_counts.directional }}</span></a>
+    <a href="/runs?kind=alpha" class="kind-tab{% if filter_kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ kind_counts.alpha }}</span></a>
+</nav>
+{% if filter_kind == 'alpha' %}<p class="hint kind-hint">{{ t('kind_alpha_hint') }}</p>{% elif filter_kind == 'directional' %}<p class="hint kind-hint">{{ t('kind_directional_hint') }}</p>{% endif %}
 
 {# Portée LOCALE, même règle que sur `/universe` : le bandeau porte le verdict
    global, cette ligne répond à la question de CETTE page — parmi les runs
@@ -24,8 +33,9 @@
 </p>
 
 <form class="filter-bar history-filters" method="get" action="/runs">
-    <label>Recherche
-        <input type="search" name="q" value="{{ filter_query }}" placeholder="Nom, cible ou ID">
+    {% if filter_kind %}<input type="hidden" name="kind" value="{{ filter_kind }}">{% endif %}
+    <label>{{ t('hist_search') }}
+        <input type="search" name="q" value="{{ filter_query }}" placeholder="{{ t('hist_search_ph') }}">
     </label>
     <label>Cible
         <select name="target" onchange="this.form.submit()">
@@ -87,15 +97,17 @@
 <div class="table-scroll history-table-wrap">
 <table class="data-table history-table">
     <thead><tr>
-        <th class="hc-check"><span class="visually-hidden">Comparer</span></th>
-        <th>Run</th>
-        <th>Cible</th>
-        <th>Horizon</th>
-        <th>Statut</th>
-        <th class="num">F1_dir</th>
-        <th class="num">Écart</th>
+        <th class="hc-check"><span class="visually-hidden">{{ t('hist_compare') }}</span></th>
+        <th>{{ t('dq_col_run') }}</th>
+        <th>{{ t('kind_col') }}</th>
+        <th>{{ t('dq_col_target') }}</th>
+        <th>{{ t('dq_col_horizon') }}</th>
+        <th>{{ t('dq_col_status') }}</th>
+        <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th>
+        <th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
+        <th class="num">{{ t('hist_gap') }}</th>
         <th class="num">DM p</th>
-        <th>Démarré</th>
+        <th>{{ t('hist_started') }}</th>
         <th class="hc-actions"><span class="visually-hidden">Actions</span></th>
     </tr></thead>
     <tbody>
@@ -104,13 +116,15 @@
     {% set locked = r.status in ('running', 'queued') %}
     <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
         <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="Sélectionner {{ r.run_id }} pour comparaison">{% endif %}</td>
-        <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}</td>
+        <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+        <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
         <td>{{ r.target | safe }}</td>
         <td>{{ r.horizon | hlabel }}</td>
         <td>{{ status_badge(r.status, state) }}</td>
-        <td class="num pk-mono">{{ '%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
-        <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
-        <td class="num pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
+        <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>
+        <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
+        <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
+        <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
         <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
         <td class="hc-actions">{% if not locked %}
             <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="Renommer {{ r.run_id }}" title="Renommer">{{ icon('pencil', 14) }}</button>

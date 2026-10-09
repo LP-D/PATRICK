@@ -52,9 +52,12 @@ from patrick.webapp import (
     security,
     settings_routes,
     shap_chart,
+    stats_help,
     wealth_routes,
 )
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
+from patrick.webapp.glossary_extra import CATEGORIES as GLOSSARY_CATEGORIES
+from patrick.webapp.glossary_extra import TERM_CATEGORY
 
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
 # `/commodities` and `/macro` -- named once here rather than re-typed at
@@ -181,10 +184,26 @@ def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
         conn.close()
 
 
+_METRIC_LABEL_KEYS = (
+    "split_test", "split_test_path", "split_holdout", "split_valid", "fold", "folds_word", "mean", "test", "holdout",
+    "more", "less",
+)
+_METRIC_NAMES = ("AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir", "BalAcc_4cls", "MCC_4cls", "F1_DOWN_FORT", "F1_UP_FORT",
+                 "Brier_up", "ECE_up")
+
+
+def _metric_labels(t) -> dict:
+    """Traductions passées aux macros `fold_metrics_table` / `headline_metrics` (un macro importé ne voit pas `t()`)."""
+    out = {k: t(f"m_{k}") if k not in ("more", "less") else t(f"rows_{k}") for k in _METRIC_LABEL_KEYS}
+    out.update({f"metric_{m}": t(f"metric_{m}") for m in _METRIC_NAMES})
+    return out
+
+
 def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
     lang = i18n.get_lang(request)
     t = i18n.translator(lang)
     return {
+        "m_labels": _metric_labels(t),
         "lang": lang,
         "t": t,
         "glossary": {k: t_entry.get(lang) or t_entry.get(i18n.DEFAULT_LANG) for k, t_entry in GLOSSARY.items()},
@@ -678,7 +697,8 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
         raise HTTPException(status_code=404, detail="Run introuvable (ni en mémoire, ni en base)")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+         **_i18n_context(request)},
     )
 
 
@@ -727,6 +747,7 @@ def download_artifact(run_id: str, artifact: str):
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
                    scheme: str | None = None, q: str | None = None, algo: str | None = None,
+                   kind: str | None = None,
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0)):
@@ -741,8 +762,14 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     finally:
         conn.close()
 
+    # Directional (price-direction) and alpha (excess return vs a benchmark) models are never mixed: a tab each.
+    kind_counts = {"directional": sum(1 for r in all_runs if r.get("kind") == "directional"),
+                   "alpha": sum(1 for r in all_runs if r.get("kind") == "alpha")}
+    kind = kind if kind in kind_counts else None
     # Server-side filtering (scheme) and client-side (target/status) — see P2 critique
     runs = all_runs
+    if kind:
+        runs = [r for r in runs if r.get("kind") == kind]
     if target:
         runs = [r for r in runs if r.get("target") == target]
     if status:
@@ -798,6 +825,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
          "filter_status": html.escape(status) if status else "",
          "filter_scheme": html.escape(scheme) if scheme else "",
          "filter_query": q or "",
+         "filter_kind": kind or "", "kind_counts": kind_counts, "n_all_runs": len(all_runs),
          "filter_algo": algo or "",
          "filter_started_after": started_after.isoformat() if started_after else "",
          "filter_started_before": started_before.isoformat() if started_before else "",
@@ -928,9 +956,17 @@ def run_side_panel(request: Request, run_id: str):
     objective = config.get("objective") if isinstance(config.get("objective"), dict) else {}
     sampler = config.get("sampler") if isinstance(config.get("sampler"), dict) else {}
     samplers = sampler.get("candidates", [])
+    conn = trackdb.connect()
+    try:
+        best = trackhistory._best_trial_id(conn, run_id)
+        folds = trackhistory.fold_metrics(conn, best) if best else []
+        headline = trackhistory._headline_for_trial(conn, best) if best else {}
+    finally:
+        conn.close()
     return templates.TemplateResponse(
         request, "_run_panel.html",
-        {"r": run, "algorithms": _extract_algorithms(run.get("config_json")),
+        {"r": run, "fold_blocks": folds, "headline": headline,
+         "algorithms": _extract_algorithms(run.get("config_json")),
          "samplers": [s for s in samplers if isinstance(s, str)] if isinstance(samplers, list) else [],
          "horizons": objective.get("horizons") or [run.get("horizon")],
          "duration_s": _run_duration_seconds(run), **_i18n_context(request)},
@@ -1018,6 +1054,27 @@ def data_quality_page(request: Request, min_history_years: int = D.DEFAULT_MIN_H
     return templates.TemplateResponse(
         request, "data_quality.html",
         {"o": overview, "bounds": bounds, **_i18n_context(request)},
+    )
+
+
+@app.get("/vocabulary")
+def vocabulary_page(request: Request):
+    """Vocabulaire complet de l'application, par rubrique : les mêmes définitions que les bulles « ? », lisibles d'un
+    bloc et filtrables. Aucun appel base ni réseau."""
+    lang = i18n.get_lang(request)
+    t = i18n.translator(lang)
+    by_cat: dict[str, list[dict]] = {key: [] for key, _, _ in GLOSSARY_CATEGORIES}
+    for term, entry in GLOSSARY.items():
+        label_key = TERM_LABEL_KEYS.get(term)
+        by_cat[TERM_CATEGORY.get(term, "app")].append({
+            "key": term, "label": t(label_key) if label_key else term,
+            "text": entry.get(lang) or entry.get(i18n.DEFAULT_LANG) or ""})
+    categories = [{"key": key, "label": fr if lang == "fr" else en,
+                   "terms": sorted(by_cat[key], key=lambda x: x["label"].casefold())}
+                  for key, fr, en in GLOSSARY_CATEGORIES if by_cat[key]]
+    return templates.TemplateResponse(
+        request, "vocabulary.html",
+        {"categories": categories, "n_terms": sum(len(c["terms"]) for c in categories), **_i18n_context(request)},
     )
 
 
@@ -1127,18 +1184,37 @@ _LIVE_CLASS_LABELS = {3: "Hausse forte", 2: "Hausse faible", 1: "Baisse faible",
 
 
 def _tally_view(tally: dict | None) -> dict | None:
-    """Suivi live par mouvement, pret a afficher : « bonnes / jugees » par classe predite."""
+    """Suivi live prêt à afficher, pour séparer l'erreur de DIRECTION de l'erreur d'INTENSITÉ.
+
+    Par mouvement prédit : `n` signaux jugés, `exact` (bon mouvement), `intensity` (bon sens mais mauvaise intensité :
+    hausse forte prédite, hausse faible réalisée) et `wrong_way` (mauvais sens). `exact + intensity + wrong_way = n`.
+    `direction` : la même chose réduite à HAUSSE / BAISSE (inclut les signaux sans classe réalisée)."""
     if not tally:
         return None
+    classes = []
+    for c in _LIVE_CLASS_ORDER:
+        row = (tally.get("matrix") or {}).get(c, {})
+        n = sum(row.values())
+        up = c >= 2
+        exact = row.get(c, 0)
+        same_side = sum(v for a, v in row.items() if (a >= 2) == up)
+        classes.append({"label": _LIVE_CLASS_LABELS[c], "n": n, "hits": exact, "exact": exact,
+                        "intensity": same_side - exact, "wrong_way": n - same_side,
+                        "share": {_LIVE_CLASS_LABELS[a]: row.get(a, 0) for a in _LIVE_CLASS_ORDER}})
+    d = tally.get("direction") or {"up": {"up": 0, "down": 0}, "down": {"up": 0, "down": 0}}
+    direction = []
+    for side, label in (("up", "Hausse prédite"), ("down", "Baisse prédite")):
+        n = d[side]["up"] + d[side]["down"]
+        hits = d[side][side]
+        direction.append({"label": label, "n": n, "hits": hits, "wrong": n - hits})
     return {
         "since": str(tally["since"])[:10],
         "pending": tally["pending"],
         "direction_n": tally["direction_n"],
         "direction_hits": tally["direction_hits"],
-        "classes": [
-            {"label": _LIVE_CLASS_LABELS[c], "n": tally["classes"][c]["n"], "hits": tally["classes"][c]["hits"]}
-            for c in _LIVE_CLASS_ORDER
-        ],
+        "classes": classes,
+        "direction": direction,
+        "n_four": sum(c["n"] for c in classes),
     }
 
 
@@ -1499,7 +1575,52 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+         **_i18n_context(request)},
+    )
+
+
+@app.get("/api/stats-help/runs")
+def stats_help_runs():
+    """Runs proposés comme référence du bandeau d'aide statistique : les terminés, les plus récents d'abord."""
+    conn = trackdb.connect()
+    try:
+        runs = trackdb.list_done_runs(conn, limit=60)
+    finally:
+        conn.close()
+    return {"runs": [{"run_id": r["run_id"], "label": f"{r['name'] or r['run_id']} · {r['target']} · {r['horizon']}j"}
+                     for r in runs]}
+
+
+@app.get("/api/stats-help")
+def stats_help_fragment(request: Request, run_id: str | None = None, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
+                        fdr_alpha: float = 0.10):
+    """Fragment HTML du bandeau d'aide statistique : les p-values et la procédure du run de référence (`run_id`), ou
+    l'explication générale sans run."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
+    detail = None
+    if run_id:
+        conn = trackdb.connect()
+        try:
+            detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
+        finally:
+            conn.close()
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+    if detail is not None:
+        run = {"name": detail["config"].get("name") or run_id, "target": detail["run"]["target"],
+               "horizon": detail["run"]["horizon"]}
+        items = stats_help.pvalue_items(detail, dm_alpha, fdr_alpha)
+        steps = stats_help.procedure_steps(detail, dm_alpha, fdr_alpha)
+    else:
+        run, steps = None, []
+        items = [{"key": k, "state": "neutral", "value": None, "reading": "", "args": {}}
+                 for k in ("dm", "bh", "spearman", "pbo", "trials")]
+    return templates.TemplateResponse(
+        request, "_stats_help.html",
+        {"run": run, "items": items, "steps": steps, "dm_alpha": f"{dm_alpha:g}", "fdr_alpha": f"{fdr_alpha:g}",
+         **_i18n_context(request)},
     )
 
 

@@ -52,23 +52,73 @@
    `tracking/history.py::_run_name`/`list_runs`/`synthesis_overview`
    (`target`/`name`/`label`), qui le font déjà à la source pour cette
    raison, et `webapp/app.py::runs_explorer` pour `footer` lui-même. #}
-{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none, num_cols=none, footer=none) %}
+{# `collapse_after` : au-delà de N lignes, le reste est replié derrière une flèche (« ▾ 7 de plus »), jamais un grand
+   tableau d'emblée. `more_label` / `less_label` portent la traduction : un macro importé ne voit pas `t()`. `{n}` est
+   remplacé par le nombre de lignes repliées. `static/rows.js` gère le clic. #}
+{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none, num_cols=none, footer=none, collapse_after=none, more_label='{n} de plus', less_label='Replier') %}
 {% if rows %}
 {% set nc = num_cols or [] %}
+{% set limit = collapse_after if (collapse_after and rows | length > collapse_after + 1) else none %}
 <div class="table-scroll">
-<table class="data-table">
+<table class="data-table{% if limit %} has-collapsible-rows{% endif %}">
 <thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% for row in rows %}
-<tr class="{{ row_classes[loop.index0] if row_classes else '' }}">{% for cell in row %}<td{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}"{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}>{% for cell in row %}<td{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
+{% if limit %}
+<button type="button" class="rows-toggle" data-rows-toggle aria-expanded="false" data-more="{{ more_label | replace('{n}', (rows | length - limit) | string) }}" data-less="{{ less_label }}">
+  <span class="rows-toggle-caret" aria-hidden="true">▾</span><span class="rows-toggle-label">{{ more_label | replace('{n}', (rows | length - limit) | string) }}</span>
+</button>
+{% endif %}
 {% if footer %}<p class="table-footer">{{ footer | safe }}</p>{% endif %}
 {% else %}
 <p class="hint">{{ empty_message }}</p>
 {% endif %}
+{% endmacro %}
+
+{# Métriques d'un modèle, fold par fold : une section par jeu d'évaluation, l'AUC puis le F1 en tête de colonnes, la
+   moyenne en première ligne, les 5 premiers folds visibles et le reste derrière une flèche. `block` vient de
+   `tracking/history.py::fold_metrics`. `labels` = traductions { split_xxx, fold, mean, ... } (un macro importé ne voit pas t()). #}
+{% macro fold_metrics_table(block, labels, collapse_after=5) %}
+{% set names = block.metrics %}
+<div class="fold-block">
+<h4 class="fold-block-title">{{ labels['split_' ~ block.split] or block.split }} <span class="hint">· {{ block.folds | length }} {{ labels.folds_word }}</span></h4>
+<div class="table-scroll">
+<table class="data-table fold-table{% if block.folds | length > collapse_after + 1 %} has-collapsible-rows{% endif %}">
+<thead><tr><th>{{ labels.fold }}</th>{% for m in names %}<th class="num pk-mono{% if loop.index0 < 2 %} headline{% endif %}" title="{{ labels.get('metric_' ~ m, m) }}">{{ m }}</th>{% endfor %}</tr></thead>
+<tbody>
+<tr class="fold-mean"><th scope="row">{{ labels.mean }}</th>{% for m in names %}<td class="num pk-mono{% if loop.index0 < 2 %} headline{% endif %}">{{ '%.4f' | format(block.mean[m]) if block.mean[m] is not none else '—' }}</td>{% endfor %}</tr>
+{% set limit = collapse_after if block.folds | length > collapse_after + 1 else none %}
+{% for f in block.folds %}
+<tr{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}><th scope="row">{{ f.fold }}</th>{% for m in names %}<td class="num pk-mono{% if loop.index0 < 2 %} headline{% endif %}">{{ '%.4f' | format(f.vals[m]) if f.vals.get(m) is not none else '—' }}</td>{% endfor %}</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% if limit %}
+{% set more = labels.more | replace('{n}', (block.folds | length - limit) | string) %}
+<button type="button" class="rows-toggle" data-rows-toggle aria-expanded="false" data-more="{{ more }}" data-less="{{ labels.less }}">
+  <span class="rows-toggle-caret" aria-hidden="true">▾</span><span class="rows-toggle-label">{{ more }}</span>
+</button>
+{% endif %}
+</div>
+{% endmacro %}
+
+{# Deux mesures d'en-tête, toujours dans cet ordre : AUC puis F1. `headline` vient de `tracking/history.py`. #}
+{% macro headline_metrics(headline, labels) %}
+<div class="headline-metrics">
+  {% for key, name in (('AUC_ovr_4cls', 'AUC'), ('F1_dir', 'F1')) %}
+  <div class="headline-metric">
+    <span class="headline-name">{{ name }}</span>
+    <span class="headline-value pk-mono">{{ '%.3f' | format(headline.test[key]) if headline and headline.test and headline.test.get(key) is not none else '—' }}</span>
+    <span class="headline-sub hint">{{ labels.test }}{% if headline and headline.holdout and headline.holdout.get(key) is not none %} · {{ labels.holdout }} <span class="pk-mono">{{ '%.3f' | format(headline.holdout[key]) }}</span>{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
 {% endmacro %}
 
 {% macro sparkline(values, width=120, height=28, color='var(--accent)') %}

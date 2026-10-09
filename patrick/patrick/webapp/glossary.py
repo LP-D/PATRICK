@@ -760,3 +760,9 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "with no market risk (zero variance and covariances)."),
     },
 }
+
+
+# Vocabulaire ajouté à la refonte du 2026-10-09 (métriques, p-values, cibles, qualité des données, classes d'actifs).
+from patrick.webapp.glossary_extra import EXTRA_GLOSSARY
+
+GLOSSARY.update(EXTRA_GLOSSARY)

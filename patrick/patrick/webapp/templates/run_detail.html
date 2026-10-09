@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, fold_metrics_table, headline_metrics %}
 {% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
 
 {% block session_context %}
@@ -35,6 +35,11 @@
 </form>
 <a class="btn-secondary" href="/launch?run_id={{ run.run_id | urlencode }}">Dupliquer et modifier la configuration</a>
 
+{% if detail.suspect %}
+<p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('suspect_banner_body', reason=detail.suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>
+{% endif %}
+{{ headline_metrics(detail.headline, m_labels) }}
+
 {# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
    page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement
    d'actif) faisait mentir le style sur le comportement — aucun état n'aurait
@@ -43,6 +48,7 @@
 <nav class="section-index" aria-label="Sections de la page">
     <span class="section-index-label">Sections</span>
     <a href="#resume">Résumé</a>
+    {% if detail.fold_metrics %}<a href="#folds">{{ t('m_section_title') }}</a>{% endif %}
     {% if kpi and kpi.n_candidates %}<a href="#kpi">KPI</a>{% endif %}
     <a href="#durees">Durées</a>
     <a href="#essais">Essais</a>
@@ -122,6 +128,21 @@
 {% endif %}
 </section>
 
+{% if detail.fold_metrics %}
+<section id="folds" class="card">
+<h2>{{ t('m_section_title') }}</h2>
+<p class="hint">{{ t('m_section_intro') }}</p>
+{% for block in detail.fold_metrics if block.split != 'valid' %}
+{{ fold_metrics_table(block, m_labels) }}
+{% endfor %}
+{% for block in detail.fold_metrics if block.split == 'valid' %}
+<details class="fold-more"><summary>{{ m_labels.split_valid }}</summary>
+{{ fold_metrics_table(block, m_labels) }}
+</details>
+{% endfor %}
+</section>
+{% endif %}
+
 {% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
 {% if kpi and kpi.n_candidates %}
 <section id="kpi" class="card">
@@ -150,7 +171,7 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
 {% set _ = rank_rows.append([r.rank, r.algo, r.n_features, r.sampler, r.n_horizons, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls)]) %}
 {% endfor %}
 {{ data_table(["Rang", "Algorithme", "Variables (N)", "Sampler", "Horizons", "F1_dir", "Acc_dir", "MCC_4cls"], rank_rows,
-              num_cols=[0, 2, 4, 5, 6, 7],
+              num_cols=[0, 2, 4, 5, 6, 7], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
               footer=("15 meilleures sur " ~ kpi.ranking | length ~ " configurations." if kpi.ranking | length > 15 else none)) }}
 
 <h3>Par horizon : meilleure configuration, modèle final et holdout</h3>
@@ -192,7 +213,7 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
     c.reason]) %}
 {% endfor %}
 {{ data_table(["Régime", "N", "Sampler", "Algo", "F1_dir fold 1", "Rang", "Décision", "Motif"],
-              screening_rows, num_cols=[1, 4, 5]) }}
+              screening_rows, num_cols=[1, 4, 5], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less')) }}
 {% endif %}
 </section>
 
@@ -273,7 +294,7 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
 {% set _ = row_classes.append('best' if t.is_best else '') %}
 {% endfor %}
 {{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows,
-              row_classes=row_classes, num_cols=[0, 4, 6],
+              row_classes=row_classes, num_cols=[0, 4, 6], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
               footer=(detail.trials | length) ~ " essai(s) pour CE run · " ~ detail.cumulative_trials
                      ~ " cumulés sur la cible/horizon — c'est le second nombre qui doit servir à lire la ligne « meilleur », "
                      ~ ("médiane et intervalle inter-chemins donnés par ligne (CPCV)." if detail.is_cpcv
@@ -284,7 +305,7 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
 {% for b in detail.baselines %}
 {% set _ = brows.append([b.baseline, b.metrics.items() | map('join', '=') | join(', ')]) %}
 {% endfor %}
-{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.",
+{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.", collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
               footer=(detail.baselines | length) ~ " baseline(s) · même découpage, mêmes folds que les essais ci-dessus — un modèle qui ne les bat pas n'a rien démontré.") }}
 </section>
 

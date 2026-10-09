@@ -134,10 +134,33 @@ script below (no flash), otherwise the OS preference applies.
     {% endfor %}
     <script id="cmdk-data" type="application/json">{{ cmdk_items | tojson }}</script>
 
+    {# Bandeau d'aide statistique (p-values, procédure du run affiché) : replié en bas de page, déplié à la demande. Pas sur
+       /launch, qui porte déjà sa propre barre d'action collée en bas. #}
+    {% if request.url.path != '/launch' %}
+    <aside class="stats-bar" id="stats-bar" data-open="false" data-run-id="{{ stats_run_id | default('') }}" aria-label="{{ t('sb_label') if t else 'Statistics help' }}">
+        <button type="button" class="stats-bar-toggle" id="stats-bar-toggle" aria-expanded="false" aria-controls="stats-bar-panel">
+            {{ icon('info', 15) }}<span class="stats-bar-label">{{ t('sb_label') if t else 'Understand p-values' }}</span>
+            <span class="stats-bar-hint">{{ t('sb_hint') if t else '' }}</span>
+            <span class="stats-bar-caret" aria-hidden="true">▴</span>
+        </button>
+        <div class="stats-bar-panel" id="stats-bar-panel" hidden>
+            <div class="stats-bar-tools">
+                <label class="stats-bar-pick">{{ t('sb_pick') if t else 'Pick another run' }}
+                    <select id="stats-bar-run"><option value="">—</option></select>
+                </label>
+                <button type="button" class="icon-btn" id="stats-bar-close" aria-label="{{ t('sb_close') if t else 'Close' }}">{{ icon('close', 14) }}</button>
+            </div>
+            <div class="stats-bar-body" id="stats-bar-body" data-loading="{{ t('sb_loading') if t else '…' }}" data-error="{{ t('sb_error') if t else 'Unavailable' }}"></div>
+        </div>
+    </aside>
+    <script src="/static/stats_bar.js" defer></script>
+    {% endif %}
+
     <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="false">
         <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
         <div id="glossary-popover-title" class="glossary-popover-title"></div>
         <div id="glossary-popover-body" class="glossary-popover-body"></div>
+        <a id="glossary-popover-link" class="glossary-more" href="/vocabulary">{{ t('vocab_open_page') if t else 'Voir tout le vocabulaire' }} →</a>
         <div class="glossary-search">
             <label for="glossary-search-input">{{ t('glossary_search_label') if t else 'Search glossary' }}</label>
             <input id="glossary-search-input" type="search" autocomplete="off"
@@ -161,6 +184,7 @@ script below (no flash), otherwise the OS preference applies.
     <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
     <script src="/static/confirm.js"></script>
     <script src="/static/shell.js"></script>
+    <script src="/static/rows.js"></script>
     <script src="/static/glossary.js"></script>
     <script src="/static/market.js"></script>
     {# No-op sauf sur /commodities et /macro (garde `.asset-panel[data-symbol]`). #}

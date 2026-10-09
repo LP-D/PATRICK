@@ -26,6 +26,7 @@ from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
+from patrick.validation import suspicion
 from patrick.validation.cpcv import n_paths as cpcv_n_paths
 from patrick.validation.cpcv import path_performance_distribution
 
@@ -108,6 +109,46 @@ def _avg_metric(conn: sqlite3.Connection, trial_id: int, splits: tuple[str, ...]
         (trial_id, *splits, metric),
     ).fetchone()
     return row[0] if row and row[0] is not None else None
+
+
+# Display order of the fold-level metrics: the two headline ones first (AUC, then F1), then the rest by family.
+METRIC_ORDER = ("AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir", "BalAcc_4cls", "MCC_4cls", "F1_DOWN_FORT", "F1_UP_FORT",
+                "Brier_up", "ECE_up")
+SPLIT_ORDER = ("test", "test_path", "holdout", "valid")
+
+
+def _headline_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict:
+    """`{"test": {AUC, F1_dir}, "holdout": {AUC, F1_dir}}` of one trial -- what every list and card shows first."""
+    out: dict[str, dict[str, float]] = {}
+    for split in ("test", "test_path", "holdout"):
+        for metric in trackdb.HEADLINE_METRICS:
+            value = _avg_metric(conn, trial_id, (split,), metric)
+            if value is not None:
+                out.setdefault("holdout" if split == "holdout" else "test", {})[metric] = value
+    return out
+
+
+def fold_metrics(conn: sqlite3.Connection, trial_id: int) -> list[dict]:
+    """Every metric of one trial, fold by fold, one block per evaluation split (`test` walk-forward folds or `test_path`
+    CPCV paths, then the terminal `holdout`, then the inner `valid` folds):
+    `[{split, metrics: [names, AUC then F1 first], folds: [{fold, vals: {metric: v}}], mean: {metric: v}}]`."""
+    by_split: dict[str, dict[int, dict[str, float]]] = {}
+    for split, fold, metric, value in conn.execute(
+            "SELECT split, fold_index, metric, value FROM fold_metric WHERE trial_id = ? "
+            "AND split IN ('test', 'test_path', 'holdout', 'valid')", (trial_id,)):
+        by_split.setdefault(split, {}).setdefault(int(fold), {})[metric] = value
+    blocks = []
+    for split in SPLIT_ORDER:
+        folds = by_split.get(split)
+        if not folds:
+            continue
+        names = sorted({m for v in folds.values() for m in v},
+                       key=lambda m: (METRIC_ORDER.index(m) if m in METRIC_ORDER else len(METRIC_ORDER), m))
+        mean = {m: sum(v[m] for v in folds.values() if m in v) / max(1, sum(1 for v in folds.values() if m in v))
+                for m in names}
+        blocks.append({"split": split, "metrics": names, "mean": mean,
+                       "folds": [{"fold": k, "vals": folds[k]} for k in sorted(folds)]})
+    return blocks
 
 
 def _dm_result_for_run(conn: sqlite3.Connection, run_id: str, kind: str = "class_specific") -> dict | None:
@@ -422,6 +463,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "AND source IN ('optuna', 'backfill_optuna')", (run_id,)
     ).fetchone()[0]
 
+    headline = _headline_for_trial(conn, best_trial["trial_id"]) if best_trial else {}
     return {
         "run": run,
         "config": config,
@@ -445,6 +487,9 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "stability_enabled": config.get("selection", {}).get("track_stability", True),
         "feature_stability": feature_stability,
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
+        "fold_metrics": fold_metrics(conn, best_trial["trial_id"]) if best_trial else [],
+        "headline": headline,
+        "suspect": (suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test"))),
         "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
         "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
                           if best_trial else None),
@@ -1111,6 +1156,10 @@ def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: li
         if not rows:
             continue
         classes = {c: {"n": 0, "hits": 0} for c in (3, 2, 1, 0)}
+        # matrix[predicted][realised] over the 4 moves; direction[predicted side][realised side] over UP / DOWN only
+        # (the latter also counts rows older than migration 0028, which have no 4-class outcome).
+        matrix = {p: {a: 0 for a in (3, 2, 1, 0)} for p in (3, 2, 1, 0)}
+        direction = {"up": {"up": 0, "down": 0}, "down": {"up": 0, "down": 0}}
         pending = direction_n = direction_hits = 0
         for _ts, y_true, y_pred, y_class in rows:
             if y_true is None:
@@ -1119,12 +1168,16 @@ def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: li
             pred = round(y_pred)
             direction_n += 1
             direction_hits += int((pred >= 2) == bool(y_true))
+            direction["up" if pred >= 2 else "down"]["up" if y_true else "down"] += 1
             if y_class is not None and pred in classes:
                 classes[pred]["n"] += 1
                 classes[pred]["hits"] += int(int(y_class) == pred)
+                if int(y_class) in matrix[pred]:
+                    matrix[pred][int(y_class)] += 1
         stamps = sorted(r[0] for r in rows)
-        out[key] = {"classes": classes, "pending": pending, "direction_n": direction_n,
-                    "direction_hits": direction_hits, "since": stamps[0], "latest_ts": stamps[-1]}
+        out[key] = {"classes": classes, "matrix": matrix, "direction": direction, "pending": pending,
+                    "direction_n": direction_n, "direction_hits": direction_hits,
+                    "since": stamps[0], "latest_ts": stamps[-1]}
     return out
 
 

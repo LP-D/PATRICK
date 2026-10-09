@@ -130,7 +130,9 @@ def test_predictions_page_shows_the_tally_in_the_hover_detail(tmp_path, monkeypa
     html = TestClient(app).get("/predictions").text
 
     assert "Réussites par mouvement prédit" in html and "depuis le 2026-09-01" in html
-    assert "Baisse forte" in html and "1/3 · 33 %" in html  # hausse forte predite 3x, 1 bonne
+    assert "Baisse forte" in html
+    # hausse forte prédite 3 fois : 1 exacte, 1 bon sens / mauvaise intensité (hausse faible), 1 mauvais sens
+    assert "Direction seule (hausse / baisse)" in html and "pop-track-4" in html
     assert html.count("<th>") >= 7  # Actif + une colonne par horizon, pas une ligne par paire
 
 
@@ -148,3 +150,31 @@ def test_backfilled_bar_is_simulated_as_of_its_own_date(monkeypatch):
     t = raw.index[12]
     pool = predict_module._pool_as_of(raw, None, "X", [], t)
     assert seen == [t] and pool.index.max() == t
+
+
+def test_tally_separates_the_direction_error_from_the_intensity_error(tmp_path):
+    """Hausse forte prédite 4 fois : 1 exacte, 2 hausse faible (bonne direction, mauvaise intensité), 1 baisse (direction)."""
+    from patrick.webapp.app import _tally_view
+
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn)
+    outcomes = [(1.0, 3), (1.0, 2), (1.0, 2), (0.0, 1)]
+    for i, (yt, yc) in enumerate(outcomes):
+        ts = f"2026-09-0{i + 1}"
+        db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+        db.update_prediction_outcome(conn, tid, ts, yt, yc)
+    # une hausse faible prédite, baisse réalisée sans classe (ligne ancienne) : ne compte que pour la direction
+    db.add_predictions(conn, tid, 0, "live", ["2026-09-09"], [None], [2])
+    db.update_prediction_outcome(conn, tid, "2026-09-09", 0.0, None)
+
+    tally = trackhistory.live_class_tally_by_target_and_horizon(conn, ["^VIX"], [5])[("^VIX", 5)]
+    assert tally["matrix"][3] == {3: 1, 2: 2, 1: 1, 0: 0}
+    assert tally["direction"] == {"up": {"up": 3, "down": 2}, "down": {"up": 0, "down": 0}}
+
+    view = _tally_view(tally)
+    strong_up = next(c for c in view["classes"] if c["label"] == "Hausse forte")
+    assert (strong_up["n"], strong_up["exact"], strong_up["intensity"], strong_up["wrong_way"]) == (4, 1, 2, 1)
+    assert strong_up["exact"] + strong_up["intensity"] + strong_up["wrong_way"] == strong_up["n"]
+    up = next(d for d in view["direction"] if d["label"] == "Hausse prédite")
+    assert (up["n"], up["hits"], up["wrong"]) == (5, 3, 2)
+    assert view["n_four"] == 4          # la ligne sans classe n'entre pas dans les 4 mouvements

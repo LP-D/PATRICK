@@ -43,6 +43,8 @@
         titleEl.textContent = label || termLabel(term);
         bodyEl.textContent = text;
         popover.dataset.openTerm = term;
+        var more = document.getElementById("glossary-popover-link");
+        if (more) more.href = "/vocabulary#term-" + encodeURIComponent(term);
     }
 
     function normalized(value) {

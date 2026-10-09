@@ -21,6 +21,10 @@
             body.appendChild(section);
         });
         panel.hidden = selected.length === 0;
+        // le bandeau d'aide statistique explique le dernier run ouvert
+        if (selected.length) {
+            document.dispatchEvent(new CustomEvent("patrick:run-context", { detail: { runId: selected[selected.length - 1] } }));
+        }
         document.body.classList.toggle("has-run-panel", selected.length > 0);
         Object.keys(rows).forEach(function (id) {
             rows[id].classList.toggle("is-selected", selected.indexOf(id) !== -1);

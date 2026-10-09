@@ -1,0 +1,33 @@
+{# Fragment du bandeau d'aide statistique (`/api/stats-help`) : la valeur de chaque résultat sur le run de référence, sa
+   lecture, puis la procédure réellement appliquée. Les clés viennent de `webapp/stats_help.py`. #}
+<div class="sh-wrap">
+{% if run %}
+<p class="sh-ref"><b>{{ t('sb_ref') }} :</b> {{ run.name }} <span class="hint">· {{ run.target }} · {{ run.horizon }}j</span></p>
+{% else %}
+<p class="hint">{{ t('sb_none') }}</p>
+{% endif %}
+<p class="hint">{{ t('sb_thresholds', dm=dm_alpha, fdr=fdr_alpha) }}</p>
+<p class="sh-rule">{{ t('sb_rule') }}</p>
+<div class="sh-cols">
+<section>
+    <h3>{{ t('sb_pvalues') }}</h3>
+    <ul class="sh-list">
+    {% for it in items %}
+        <li class="sh-item sh-{{ it.state }}">
+            <div class="sh-item-head"><strong>{{ t('sh_title_' ~ it.key) }}</strong>{% if it.value is not none %} <span class="sh-value pk-mono">{{ it.value }}</span>{% endif %}</div>
+            <p class="sh-what">{{ t('sh_what_' ~ it.key) }}</p>
+            {% if run %}<p class="sh-read">{{ t(it.reading, **it.args) }}</p>{% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+</section>
+{% if steps %}
+<section>
+    <h3>{{ t('sb_procedure') }}</h3>
+    <ol class="sh-steps">
+    {% for st in steps %}<li>{{ t('sp_' ~ st.key, **st.args) }}</li>{% endfor %}
+    </ol>
+</section>
+{% endif %}
+</div>
+</div>

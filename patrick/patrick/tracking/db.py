@@ -21,7 +21,9 @@ import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
+from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
+from patrick.validation import suspicion
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
@@ -837,6 +839,34 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str,
     return {run_id: best_f1_by_trial.get(trial_id) for run_id, trial_id in best_trial_by_run.items()}
 
 
+HEADLINE_METRICS = ("AUC_ovr_4cls", "F1_dir")
+
+
+def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str],
+                       metrics: tuple[str, ...] = HEADLINE_METRICS) -> dict[str, dict[str, dict[str, float]]]:
+    """Headline metrics (AUC first, then F1) of each run's best trial, in TWO fixed queries whatever `len(run_ids)`:
+    `{run_id: {"test": {metric: mean over the walk-forward test folds / CPCV paths}, "holdout": {metric: value}}}`.
+    A run without a best trial, or a best trial without these rows, is simply absent / has an empty dict."""
+    if not run_ids:
+        return {}
+    placeholders = ",".join("?" for _ in run_ids)
+    best_trial_by_run: dict[str, int] = dict(conn.execute(
+        f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({placeholders}) AND is_best = 1", run_ids))
+    if not best_trial_by_run:
+        return {}
+    trial_ids = list(best_trial_by_run.values())
+    t_ph = ",".join("?" for _ in trial_ids)
+    m_ph = ",".join("?" for _ in metrics)
+    by_trial: dict[int, dict[str, dict[str, float]]] = {}
+    for trial_id, split, metric, value in conn.execute(
+            f"SELECT trial_id, split, metric, AVG(value) FROM fold_metric WHERE trial_id IN ({t_ph}) "
+            f"AND split IN ('test', 'test_path', 'holdout') AND metric IN ({m_ph}) GROUP BY trial_id, split, metric",
+            [*trial_ids, *metrics]):
+        key = "holdout" if split == "holdout" else "test"
+        by_trial.setdefault(trial_id, {}).setdefault(key, {})[metric] = value
+    return {run_id: by_trial.get(trial_id, {}) for run_id, trial_id in best_trial_by_run.items()}
+
+
 BENCHMARK_BASELINE = "BASELINE_persistence"
 
 
@@ -918,6 +948,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     best_f1_by_run = batch_best_f1_dir(conn, run_ids)
     dm_by_run = batch_dm_results(conn, run_ids)
     benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
+    headline_by_run = batch_best_metrics(conn, run_ids)
 
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
@@ -929,8 +960,14 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
         except (TypeError, ValueError, AttributeError):
             pass
         dm_result = dm_by_run.get(run_id)
+        headline = headline_by_run.get(run_id, {})
+        test_m, holdout_m = headline.get("test", {}), headline.get("holdout", {})
         out.append({
             "run_id": run_id, "target": html.escape(target) if isinstance(target, str) else target,
+            "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
+            "suspect": suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m),
+            "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
+            "holdout_f1_dir": holdout_m.get("F1_dir"),
             "horizon": horizon,
             "status": status, "started_at": started_at, "finished_at": finished_at,
             "n_trials": n_trials, "name": html.escape(name) if isinstance(name, str) else name,

@@ -1,0 +1,33 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('vocab_title') }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ t('vocab_title') }}</h1>
+<p class="page-subtitle">{{ t('vocab_subtitle') }}</p>
+
+<div class="vocab-tools">
+    <input type="search" id="vocab-search" class="vocab-search" placeholder="{{ t('vocab_search') }}" autocomplete="off" aria-controls="vocab-body">
+    <span class="hint" id="vocab-count" role="status" aria-live="polite" data-template="{{ t('vocab_count') }}" data-total="{{ n_terms }}">{{ t('vocab_count', n=n_terms, total=n_terms) }}</span>
+</div>
+<nav class="vocab-chips" aria-label="{{ t('vocab_title') }}">
+    {% for c in categories %}<a class="vocab-chip" href="#cat-{{ c.key }}" data-cat-chip="{{ c.key }}">{{ c.label }} <span class="kind-count">{{ c.terms | length }}</span></a>{% endfor %}
+</nav>
+
+<div id="vocab-body">
+{% for c in categories %}
+<section class="card vocab-cat" id="cat-{{ c.key }}" data-cat="{{ c.key }}">
+    <h2>{{ c.label }}</h2>
+    <dl class="vocab-list">
+    {% for term in c.terms %}
+        <div class="vocab-term" id="term-{{ term.key }}" data-search="{{ (term.label ~ ' ' ~ term.key ~ ' ' ~ term.text) | lower }}">
+            <dt>{{ term.label }} <a class="vocab-link" href="#term-{{ term.key }}" aria-label="{{ t('vocab_permalink') }}" title="{{ t('vocab_permalink') }}">#</a></dt>
+            <dd>{{ term.text }}</dd>
+        </div>
+    {% endfor %}
+    </dl>
+</section>
+{% endfor %}
+<p class="hint hidden" id="vocab-none">{{ t('vocab_none') }}</p>
+</div>
+<script src="/static/vocabulary.js" defer></script>
+{% endblock %}

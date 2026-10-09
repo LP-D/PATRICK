@@ -1,28 +1,39 @@
 {# Fragment (sans base) : une section du panneau latéral de /runs. `name` et
    `target` sont déjà échappés à la source (`tracking/db.py::list_all_runs`),
    d'où `| safe` -- sinon double échappement. #}
+{% from "_components.html" import fold_metrics_table, headline_metrics %}
 {% set has_gap = r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}
 <header class="rp-head">
     <div class="rp-title">
         <strong>{{ (r.name or r.run_id) | safe }}</strong>
-        <span class="rp-sub">{{ r.target | safe }} · {{ r.horizon | hlabel }}</span>
+        <span class="rp-sub">{{ r.target | safe }} · {{ r.horizon | hlabel }}
+            · <span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></span>
     </div>
-    <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ r.run_id }}" aria-label="Retirer ce run du panneau" title="Retirer">{{ icon('close', 14) }}</button>
+    <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ r.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>
 </header>
+{% if r.suspect %}<p class="banner banner-error rp-banner">{{ t('suspect_banner_title') }} {{ t('suspect_banner_body', reason=r.suspect) }}</p>{% endif %}
+{{ headline_metrics(headline, m_labels) }}
 <dl class="rp-grid">
-    <div><dt>Statut</dt><dd>{{ r.status }}</dd></div>
-    <div><dt>Schéma</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>
-    <div><dt>F1_dir (meilleur essai)</dt><dd class="pk-mono">{{ '%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</dd></div>
-    <div><dt>Persistance (F1_dir)</dt><dd class="pk-mono">{{ '%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '—' }}</dd></div>
-    <div><dt>Écart</dt><dd class="pk-mono {{ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') if has_gap else '' }}">{{ '%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir) if has_gap else '—' }}</dd></div>
-    <div><dt>DM p-value</dt><dd class="pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}{% if r.dm_sample == 'last_wf_fold' and r.dm_p_value is not none %} <span class="tag" title="calculé sur le fold de sélection : biaisé, exclu de la correction entre cibles">fold de sélection</span>{% endif %}</dd></div>
-    <div><dt>Essais</dt><dd class="pk-mono">{{ r.n_trials if r.n_trials is not none else '—' }}</dd></div>
-    <div><dt>Durée</dt><dd class="pk-mono">{{ '%d min %02d s' | format(duration_s // 60, duration_s % 60) if duration_s is not none else '—' }}</dd></div>
-    <div><dt>Démarré</dt><dd>{{ r.started_at or '—' }}</dd></div>
-    <div><dt>Horizons</dt><dd>{{ horizons | map('hlabel') | join(', ') }}</dd></div>
-    <div class="rp-wide"><dt>Algorithmes</dt><dd>{{ algorithms | join(', ') or '—' }}</dd></div>
-    <div class="rp-wide"><dt>Rééchantillonnage</dt><dd>{{ samplers | join(', ') or '—' }}</dd></div>
+    <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status }}</dd></div>
+    <div><dt>{{ t('rp_scheme') }}</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>
+    <div><dt>{{ t('rp_persistence') }}</dt><dd class="pk-mono">{{ '%.3f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '—' }}</dd></div>
+    <div><dt>{{ t('hist_gap') }}</dt><dd class="pk-mono {{ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') if has_gap else '' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) if has_gap else '—' }}</dd></div>
+    <div><dt>{{ t('rp_dm') }}</dt><dd class="pk-mono">{{ '%.4f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}{% if r.dm_sample == 'last_wf_fold' and r.dm_p_value is not none %} <span class="tag" title="{{ t('rp_dm_biased') }}">{{ t('rp_dm_biased_tag') }}</span>{% endif %}</dd></div>
+    <div><dt>{{ t('rp_trials') }}</dt><dd class="pk-mono">{{ r.n_trials if r.n_trials is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rp_duration') }}</dt><dd class="pk-mono">{{ '%d min %02d s' | format(duration_s // 60, duration_s % 60) if duration_s is not none else '—' }}</dd></div>
+    <div><dt>{{ t('hist_started') }}</dt><dd>{{ r.started_at or '—' }}</dd></div>
+    <div><dt>{{ t('rp_horizons') }}</dt><dd>{{ horizons | map('hlabel') | join(', ') }}</dd></div>
+    <div class="rp-wide"><dt>{{ t('rp_algos') }}</dt><dd>{{ algorithms | join(', ') or '—' }}</dd></div>
+    <div class="rp-wide"><dt>{{ t('rp_samplers') }}</dt><dd>{{ samplers | join(', ') or '—' }}</dd></div>
 </dl>
+{% if fold_blocks %}
+<details class="fold-more rp-folds">
+    <summary>{{ t('m_section_title') }}</summary>
+    {% for block in fold_blocks if block.split != 'valid' %}
+    {{ fold_metrics_table(block, m_labels) }}
+    {% endfor %}
+</details>
+{% endif %}
 <footer class="rp-foot">
-    <a class="btn-secondary" href="/runs/{{ r.run_id }}/detail">Détail complet {{ icon('external', 13) }}</a>
+    <a class="btn-secondary" href="/runs/{{ r.run_id }}/detail">{{ t('rp_full_detail') }} {{ icon('external', 13) }}</a>
 </footer>

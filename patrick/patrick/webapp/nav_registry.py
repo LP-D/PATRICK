@@ -78,6 +78,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
 # Pages d'USAGE de l'application (pas des classes d'analyse) : hors des 4 categories, elles ont leur propre
 # bouton en pied de barre laterale (engrenage) et figurent dans la palette de commandes.
 UTILITY_ENTRIES: tuple[NavEntry, ...] = (
+    NavEntry("vocabulary", "Vocabulaire", "/vocabulary", "utility", 5, "nav_vocabulary"),
     NavEntry("settings", "Réglages", "/reglages", "utility", 10, "nav_settings"),
 )
 
