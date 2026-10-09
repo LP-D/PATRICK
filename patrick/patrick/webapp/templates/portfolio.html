@@ -116,7 +116,7 @@
 {{ data_table([t('mv_col_asset'), t('pf_hrp_w')], hrp_rows, num_cols=[1],
               footer=t('pf_hrp_footer', n=hrp.n_assets) ~ (t('pf_hrp_skipped', n=(hrp.skipped | length)) if hrp.skipped else ".")) }}
 {% if hrp.covariance == 'ledoit_wolf' and hrp.shrinkage is not none %}
-<p class="hint">Covariance <span class="tip" tabindex="0" data-tip="Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une cible diagonale (variance moyenne, corrélations nulles). L'intensité δ est estimée pour minimiser l'erreur quadratique attendue ; δ proche de 1 signale une covariance empirique très bruitée (peu d'observations par actif). HRP en tire ses variances inverses et ses distances de corrélation.">Ledoit-Wolf</span>
+<p class="hint">{{ t('pf_cov_word') }} <span class="tip" tabindex="0" data-tip="{{ t('pf_lw_tip') }}">Ledoit-Wolf</span>
    {{ t('pf_hrp_shrink', d='%.2f' | format(hrp.shrinkage), n=hrp.n_obs) }}</p>
 {% endif %}
 {% endif %}

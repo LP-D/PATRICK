@@ -115,7 +115,7 @@
     {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
     {% set locked = r.status in ('running', 'queued') %}
     <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
-        <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="Sélectionner {{ r.run_id }} pour comparaison">{% endif %}</td>
+        <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
         <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
         <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
         <td>{{ r.target | safe }}</td>

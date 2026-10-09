@@ -107,7 +107,20 @@ app = FastAPI(title="PATRICK")
 app.add_middleware(security.LocalGuardMiddleware)
 # Pages de 100 à 700 Ko de HTML : compressées (le navigateur décompresse en quelques ms).
 app.add_middleware(GZipMiddleware, minimum_size=2000)
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+class _RevalidatedStaticFiles(StaticFiles):
+    """Fichiers statiques servis avec `Cache-Control: no-cache` : le navigateur les garde mais revalide (réponse 304, quelques ms)
+    avant chaque usage. Sans cet en-tête il les réutilise de façon heuristique, et un script modifié par une mise à jour de
+    l'application reste ancien dans le navigateur pendant des heures (vu le 2026-10-09 sur `lazy.js`)."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", _RevalidatedStaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only
 # (base_v2.html iterates `nav_sections(request.url.path)`).

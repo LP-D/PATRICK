@@ -6,6 +6,9 @@
     function load(el) {
         var url = el.dataset.lazyUrl;
         if (!url) return;
+        // `?lang=en` sur la page (sans cookie de langue) doit aussi valoir pour le fragment.
+        var lang = new URLSearchParams(window.location.search).get("lang");
+        if (lang && url.indexOf("lang=") === -1) url += (url.indexOf("?") === -1 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
         el.setAttribute("aria-busy", "true");
         fetch(url, { headers: { "Accept": "text/html" }, credentials: "same-origin" })
             .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })

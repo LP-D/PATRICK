@@ -214,3 +214,12 @@ def test_a_perfect_score_hides_the_signal_on_the_predictions_page(seeded):
     conn.close()
     html = TestClient(app).get("/predictions").text
     assert 'status-error">suspect' in html
+
+
+def test_static_files_are_revalidated_not_heuristically_cached(tmp_path, monkeypatch):
+    """Un script modifié par une mise à jour ne doit pas rester ancien dans le navigateur."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
+    client = TestClient(app, base_url="http://127.0.0.1:8000")
+    response = client.get("/static/lazy.js")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"

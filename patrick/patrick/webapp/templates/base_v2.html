@@ -71,7 +71,7 @@ script below (no flash), otherwise the OS preference applies.
                     <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>
                     <a href="/set-lang/en?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'en' else '' }}">en</a>
                 </nav>
-                <button type="button" class="icon-btn desktop-only" id="sidebar-toggle" aria-controls="sidebar" aria-label="{{ t('sidebar_toggle') if t else 'Réduire / déplier la navigation' }}" title="{{ t('sidebar_toggle') if t else 'Réduire / déplier la navigation' }}">{{ icon('sidebar') }}</button>
+                <button type="button" class="icon-btn desktop-only" id="sidebar-toggle" aria-controls="sidebar" aria-label="{{ t('sidebar_toggle') }}" title="{{ t('sidebar_toggle') }}">{{ icon('sidebar') }}</button>
             </div>
         </aside>
         <div class="nav-scrim" id="nav-scrim" hidden></div>
@@ -96,7 +96,7 @@ script below (no flash), otherwise the OS preference applies.
                     {% set u_label = t(u.label_key) if (t and u.label_key) else u.label %}
                     <a class="icon-btn" href="{{ u.url }}" id="nav-{{ u.slug }}" title="{{ u_label }}" aria-label="{{ u_label }}" {% if u.active %}aria-current="page"{% endif %}>{{ nav_icon(u.slug) }}</a>
                     {% endfor %}
-                    <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}" title="{{ t('theme_toggle') if t else 'Basculer thème clair / sombre' }}">
+                    <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') }}" title="{{ t('theme_toggle') }}">
                         <span class="icon-moon">{{ icon('moon') }}</span><span class="icon-sun">{{ icon('sun') }}</span>
                     </button>
                 </div>

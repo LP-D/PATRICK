@@ -407,4 +407,9 @@ LEGACY_STRINGS: dict[str, dict[str, str]] = {
     'nav_portfolio_title': _s('Portefeuille', 'Portfolio'),
     'pf_kind_note': _s('Cette page agrège les signaux des modèles directionnels (hausse ou baisse brute). Les modèles alpha (rendement relatif à un benchmark) sont dans Prédictions › Alpha.', 'This page aggregates the signals of the directional models (raw up or down). Alpha models (return relative to a benchmark) are under Predictions › Alpha.'),
     'pf_suspect': _s("{n} signal(s) écarté(s) de l'agrégation : modèle au score impossible (probable fuite de données).", '{n} signal(s) left out of the aggregation: model with an impossible score (probable data leak).'),
+    'pf_cov_word': _s('Covariance', 'Covariance'),
+    'pf_lw_tip': _s("Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une cible diagonale (variance moyenne, corrélations nulles). L'intensité δ est estimée pour minimiser l'erreur quadratique attendue ; δ proche de 1 signale une covariance empirique très bruitée (peu d'observations par actif). HRP en tire ses variances inverses et ses distances de corrélation.", 'Ledoit-Wolf: weighted average of the empirical covariance and a diagonal target (mean variance, zero correlations). The intensity δ is estimated to minimise the expected squared error; δ close to 1 signals a very noisy empirical covariance (few observations per asset). HRP takes its inverse variances and correlation distances from it.'),
+    'rn_select_aria': _s('Sélectionner {r} pour comparaison', 'Select {r} for comparison'),
+    'rd_conf_term': _s('Prédiction conforme', 'Conformal prediction'),
+    'home_regime_term': _s('Régime de marché', 'Market regime'),
 }

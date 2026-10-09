@@ -77,7 +77,7 @@
 {{ lazy_block('/fragments/home?fdr_alpha=' ~ fdr_alpha, 8, t('sb_loading'), t('lazy_retry')) }}
 
 <section class="card">
-<h2>{{ t('home_regime') }} <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
+<h2>{{ t('home_regime') }} <button type="button" class="info-icon" data-term="regime" data-term-label="{{ t('home_regime_term') }}" aria-label="{{ t('glossary_open_aria', term=t('home_regime_term')) }}">i</button></h2>
 <div id="market-state" class="market-state">
 <p class="hint">{{ t('home_regime_loading') }}</p>
 </div>

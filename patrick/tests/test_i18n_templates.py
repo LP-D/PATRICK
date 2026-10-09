@@ -102,6 +102,10 @@ def _hardcoded_french(source: str) -> int:
             lit = a or b
             if _FR.search(lit) and not lit.startswith(("/", "#")) and not re.fullmatch(r"[\w\-./ ]+", lit):
                 count += 1
+    # attributs lus à l'écran ou par un lecteur d'écran (info-bulles, libellés d'accessibilité, confirmations)
+    for value in re.findall(r'(?:aria-label|title|placeholder|data-tip|data-confirm|alt)="([^"]*)"', text):
+        if re.search(r"[àâçéèêëîïôùûœÀÉÈ]", value) and not re.search(r"_?t\(", value):
+            count += 1
     return count
 
 

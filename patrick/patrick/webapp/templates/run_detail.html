@@ -219,7 +219,7 @@
    que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}
 {% if detail.conformal %}
 <section id="conforme" class="card">
-<h2>{{ t('rd_conf_h') }} <button type="button" class="info-icon" data-term="conformal" data-term-label="Prédiction conforme" aria-label="{{ t('glossary_open_aria', term='Prédiction conforme') }}">i</button></h2>
+<h2>{{ t('rd_conf_h') }} <button type="button" class="info-icon" data-term="conformal" data-term-label="{{ t('rd_conf_term') }}" aria-label="{{ t('glossary_open_aria', term=t('rd_conf_term')) }}">i</button></h2>
 {% set c = detail.conformal %}
 {% if not c.available %}
 {{ empty_state(t('rd_conf_none'), c.reason) }}
