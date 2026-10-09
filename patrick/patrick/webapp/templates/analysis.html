@@ -1,0 +1,116 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, metric, data_table %}
+{% block title %}PATRICK — {{ t('nav_analysis') }}{% endblock %}
+
+{% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
+{% set more = t('rows_more') %}{% set less = t('rows_less') %}
+
+{% block content %}
+<h1 class="page-title">{{ t('an_title') }}</h1>
+<p class="page-subtitle">{{ t('an_subtitle') }}</p>
+
+<div class="metric-grid">
+{{ metric(t('an_kpi_models'), a.n_sane, t('an_kpi_models_rel', champions=a.n_champions, suspect=a.n_suspect), "ok") }}
+{{ metric(t('an_kpi_auc'), f3(a.auc_median), t('an_kpi_auc_rel'), "neutral") }}
+{{ metric(t('an_kpi_f1'), f3(a.f1_median), t('an_kpi_f1_rel'), "neutral") }}
+{{ metric(t('an_kpi_features'), a.n_features_distinct, t('an_kpi_features_rel', n=a.n_with_features), "neutral") }}
+{{ metric(t('an_kpi_series'), a.series | length, t('an_kpi_series_rel', unused=a.unused_series | length), "neutral") }}
+</div>
+{% if a.n_with_features < a.n_sane %}
+<p class="banner banner-info">{{ t('an_partial', n=a.n_sane - a.n_with_features) }}</p>
+{% endif %}
+{% if a.n_suspect %}<p class="banner banner-error">{{ t('an_suspect_note', n=a.n_suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>{% endif %}
+
+<nav class="section-index" aria-label="{{ t('an_title') }}">
+    <span class="section-index-label">Sections</span>
+    <a href="#modeles">{{ t('an_models') }}</a><a href="#features">{{ t('an_features') }}</a>
+    <a href="#series">{{ t('an_series') }}</a><a href="#familles">{{ t('an_families') }}</a>
+</nav>
+
+<section class="card" id="modeles">
+<h2>{{ t('an_models') }}</h2>
+<p class="hint">{{ t('an_models_hint') }}</p>
+<div class="an-grid">
+{% for title, rows, keytitle in (
+    (t('an_by_algo'), a.by_algo, t('an_col_algo')), (t('an_by_kind'), a.by_kind, t('kind_col')),
+    (t('an_by_horizon'), a.by_horizon, t('dq_col_horizon')), (t('an_by_n'), a.by_n_features, t('an_col_n')),
+    (t('an_by_sampler'), a.by_sampler, t('an_col_sampler')), (t('an_by_regime'), a.by_regime, t('an_col_regime'))) %}
+<div>
+<h3>{{ title }}</h3>
+{% set body = [] %}
+{% for r in rows %}
+{% set label = (t('kind_alpha') if r.key == 'alpha' else (t('kind_directional') if r.key in ('directional', 'raw') else (r.key ~ ' j' if title == t('an_by_horizon') else r.key))) %}
+{% set _ = body.append([label, r.n, f3(r.auc), f3(r.f1), f3(r.best_f1), r.champions]) %}
+{% endfor %}
+{{ data_table([keytitle, t('an_col_n_models'), 'AUC', 'F1', t('an_col_best_f1'), t('an_col_champ')], body, num_cols=[1, 2, 3, 4, 5], collapse_after=5, more_label=more, less_label=less) }}
+</div>
+{% endfor %}
+</div>
+</section>
+
+<section class="card" id="features">
+<h2>{{ t('an_features') }}</h2>
+<p class="hint">{{ t('an_features_hint', own=a.n_own_features) }}</p>
+<h3>{{ t('an_most_used') }}</h3>
+{% set top = [] %}
+{% for f in a.features[:30] %}
+{% set _ = top.append(['<span class="pk-mono">' ~ (f.feature | e) ~ '</span>', t('an_fam_' ~ f.family), (f.series | join(', ') | e), f.n_models, f.n_targets,
+    ('%.0f' | format(f.mean_freq * 100) ~ ' %') if f.mean_freq is not none else '—',
+    ((f3(f.best_auc) ~ ' / ' ~ f3(f.best_f1)) if f.best_f1 is not none else '—')]) %}
+{% endfor %}
+{{ data_table([t('an_col_feature'), t('an_col_family'), t('an_col_series'), t('an_col_n_models'), t('an_col_targets'), t('an_col_freq'), t('an_col_best')],
+              top, num_cols=[3, 4, 5], collapse_after=5, more_label=more, less_label=less,
+              footer=t('an_freq_help')) }}
+<h3>{{ t('an_least_used') }}</h3>
+{% set low = [] %}
+{% for f in a.least_used %}
+{% set _ = low.append(['<span class="pk-mono">' ~ (f.feature | e) ~ '</span>', t('an_fam_' ~ f.family), (f.series | join(', ') | e), f.n_models, f.n_targets,
+    ('%.0f' | format(f.mean_freq * 100) ~ ' %') if f.mean_freq is not none else '—',
+    ((f3(f.best_auc) ~ ' / ' ~ f3(f.best_f1)) if f.best_f1 is not none else '—')]) %}
+{% endfor %}
+{{ data_table([t('an_col_feature'), t('an_col_family'), t('an_col_series'), t('an_col_n_models'), t('an_col_targets'), t('an_col_freq'), t('an_col_best')],
+              low, num_cols=[3, 4, 5], collapse_after=5, more_label=more, less_label=less,
+              footer=t('an_least_help', n=a.n_single)) }}
+</section>
+
+<section class="card" id="series">
+<h2>{{ t('an_series') }}</h2>
+<p class="hint">{{ t('an_series_hint') }}</p>
+{% set srows = [] %}
+{% for s in a.series[:40] %}
+{% set _ = srows.append(['<span class="pk-mono">' ~ (s.series | e) ~ '</span>', s.n_models, s.n_features, s.n_targets, f3(s.best_f1)]) %}
+{% endfor %}
+{{ data_table([t('dq_col_series'), t('an_col_n_models'), t('an_col_n_features'), t('an_col_targets'), t('an_col_best_f1')], srows,
+              num_cols=[1, 2, 3, 4], collapse_after=5, more_label=more, less_label=less) }}
+<h3>{{ t('an_unused') }} <span class="hint">({{ a.unused_series | length }})</span></h3>
+<p class="hint">{{ t('an_unused_hint') }}</p>
+<details class="fold-more"><summary>{{ t('an_unused_show') }}</summary>
+<p class="an-chips">{% for u in a.unused_series[:400] %}<span class="tag">{{ u }}</span> {% endfor %}{% if a.unused_series | length > 400 %}<span class="hint">… +{{ a.unused_series | length - 400 }}</span>{% endif %}</p>
+</details>
+</section>
+
+<section class="card" id="familles">
+<h2>{{ t('an_families') }}</h2>
+<p class="hint">{{ t('an_families_hint') }}</p>
+{% set total = a.families | sum(attribute=1) %}
+<ul class="an-bars">
+{% for fam, n in a.families %}
+<li><span class="an-bar-label">{{ t('an_fam_' ~ fam) }}</span>
+    <span class="an-bar"><span class="an-bar-fill" style="width: {{ (n * 100 / total) | round(1) }}%"></span></span>
+    <span class="pk-mono an-bar-n">{{ n }} · {{ (n * 100 / total) | round(0) | int }} %</span></li>
+{% endfor %}
+</ul>
+</section>
+
+<section class="card" id="liste">
+<h2>{{ t('an_model_list') }}</h2>
+{% set mrows = [] %}
+{% for m in a.models %}
+{% set _ = mrows.append(['<a href="/runs/' ~ m.run_id ~ '/detail">' ~ m.run_id ~ '</a>',
+    ('<span class="kind-badge kind-' ~ ('alpha' if m.kind == 'alpha' else 'directional') ~ '">' ~ (t('kind_alpha') if m.kind == 'alpha' else t('kind_directional')) ~ '</span>'),
+    (m.asset | e), m.horizon ~ ' j', m.algo, m.n_features, f3(m.auc), f3(m.f1), ('★' if m.champion else '')]) %}
+{% endfor %}
+{{ data_table([t('dq_col_run'), t('kind_col'), t('dq_col_target'), t('dq_col_horizon'), t('an_col_algo'), t('an_col_n'), 'AUC', 'F1', t('an_col_champ')], mrows,
+              num_cols=[5, 6, 7], collapse_after=5, more_label=more, less_label=less) }}
+</section>
+{% endblock %}

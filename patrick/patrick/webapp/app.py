@@ -36,6 +36,7 @@ from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import kpi_summary as trackkpi
+from patrick.tracking import usage as trackusage
 from patrick.tracking import portfolio as trackportfolio
 from patrick.validation import equity_sufficiency, feasibility, suspicion
 from patrick.webapp import (
@@ -1081,6 +1082,19 @@ def vocabulary_page(request: Request):
         request, "vocabulary.html",
         {"categories": categories, "n_terms": sum(len(c["terms"]) for c in categories), **_i18n_context(request)},
     )
+
+
+@app.get("/analysis")
+def analysis_page(request: Request):
+    """Séries, features et modèles, vus de haut : lesquels reviennent le plus dans les modèles finaux, lesquels ne servent
+    jamais, leur meilleure contribution, et les caractéristiques des modèles (algorithme, nombre de features, horizon, type).
+    Lecture seule : base de suivi et fichiers méta des modèles exportés (`tracking/usage.py`)."""
+    conn = trackdb.connect()
+    try:
+        analysis = trackusage.analyse(conn)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "analysis.html", {"a": analysis, **_i18n_context(request)})
 
 
 def _asset_group_view(group_key: str) -> list[dict]:

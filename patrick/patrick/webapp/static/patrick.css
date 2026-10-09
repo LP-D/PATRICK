@@ -2303,3 +2303,13 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .cls-row[hidden] { display: none; }
 .cls-prices > summary { cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
 .cls-prices > summary h2 { margin: 0; }
+
+/* ---- Séries, features et modèles (/analysis) ---------------------------------------------------------------------- */
+.an-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px 24px; }
+.an-grid h3 { margin: 6px 0; font-size: .92rem; }
+.an-bars { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.an-bars li { display: grid; grid-template-columns: 200px 1fr 110px; gap: 12px; align-items: center; font-size: .88rem; }
+.an-bar { height: 10px; border-radius: 6px; background: var(--surface-3); overflow: hidden; }
+.an-bar-fill { display: block; height: 100%; background: var(--brand); border-radius: 6px; }
+.an-bar-n { text-align: right; color: var(--text-2); }
+.an-chips .tag { margin: 2px 2px 0 0; }
