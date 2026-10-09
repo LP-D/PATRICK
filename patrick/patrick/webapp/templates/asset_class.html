@@ -1,0 +1,86 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, metric, asset_panel, help_icon %}
+{% block title %}PATRICK — {{ t('nav_' ~ cls.key) }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ t('nav_' ~ cls.key) }}
+    {{ help_icon(cls.glossary_term, t('nav_' ~ cls.key), t('glossary_open_aria', term=t('nav_' ~ cls.key))) }}
+    {% if panels %}
+    {{ help_icon('asset_statistics', t('assetpanel_help_label'), t('glossary_open_aria', term=t('assetpanel_help_label'))) }}
+    {{ help_icon('asset_bar_windows', t('assetpanel_bars_help_label'), t('glossary_open_aria', term=t('assetpanel_bars_help_label'))) }}
+    {% endif %}
+</h1>
+<p class="page-subtitle">{{ t('cls_desc_' ~ cls.key) }}</p>
+
+<div class="metric-grid">
+{{ metric(t('cls_kpi_targets'), kpi.n_targets, t('cls_kpi_groups', n=groups | length), "neutral") }}
+{{ metric(t('cls_kpi_trained'), kpi.n_trained ~ ' / ' ~ kpi.n_targets, t('cls_kpi_trained_rel'), "ok" if kpi.n_trained else "neutral") }}
+{{ metric(t('cls_kpi_alpha'), kpi.n_alpha, t('cls_kpi_alpha_rel'), "neutral") }}
+{{ metric(t('cls_kpi_champions'), kpi.n_champions, t('cls_kpi_champions_rel'), "neutral") }}
+{{ metric(t('cls_kpi_short'), kpi.n_short, t('cls_kpi_short_rel', y=min_years), "warning" if kpi.n_short else "ok") }}
+{% if kpi.n_suspect %}{{ metric(t('dq_kpi_suspect'), kpi.n_suspect, t('dq_kpi_suspect_rel'), "error") }}{% endif %}
+</div>
+
+{% if cls.key in ('crypto', 'fx', 'rates', 'indices') %}
+<p class="banner banner-info">{{ t('cls_note_' ~ cls.key) }}</p>
+{% endif %}
+
+<div class="cls-tools">
+    <input type="search" id="cls-search" class="vocab-search" placeholder="{{ t('cls_search') }}" autocomplete="off">
+    <div class="cls-chips" role="group" aria-label="{{ t('cls_filter') }}">
+        <button type="button" class="vocab-chip active" data-filter="all">{{ t('cls_f_all') }}</button>
+        <button type="button" class="vocab-chip" data-filter="trained">{{ t('cls_f_trained') }}</button>
+        <button type="button" class="vocab-chip" data-filter="never">{{ t('cls_f_never') }}</button>
+        <button type="button" class="vocab-chip" data-filter="alpha">{{ t('cls_f_alpha') }}</button>
+        <button type="button" class="vocab-chip" data-filter="short">{{ t('cls_f_short') }}</button>
+    </div>
+    <span class="hint" id="cls-count" aria-live="polite"></span>
+</div>
+
+{% for g in groups %}
+<details class="card cls-group" open data-group>
+    <summary><h2>{{ group_labels.get(g.group, g.group) }}</h2> {{ status_badge(g.rows | length, 'neutral') }}
+        {% set n_tr = g.rows | selectattr('n_dir', 'gt', 0) | list | length %}{% if n_tr %}{{ status_badge(t('cls_f_trained') ~ ' · ' ~ n_tr, 'ok') }}{% endif %}</summary>
+    <div class="table-scroll cls-scroll">
+    <table class="data-table cls-table">
+        <thead><tr>
+            <th>{{ t('dq_col_target') }}</th><th>{{ t('cls_col_history') }}</th>
+            <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th><th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
+            <th class="num">{{ t('kind_directional') }}</th><th class="num">{{ t('kind_alpha') }}</th>
+            <th>{{ t('cls_col_champion') }}</th><th>{{ t('cls_col_last') }}</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for r in g.rows %}
+        <tr class="cls-row" data-symbol="{{ r.symbol }}" data-search="{{ (r.symbol ~ ' ' ~ r.label) | lower }}"
+            data-trained="{{ 1 if r.n_dir else 0 }}" data-alpha="{{ 1 if r.n_alpha else 0 }}" data-short="{{ 1 if r.history == 'short' else 0 }}">
+            <td><a href="/targets/{{ r.symbol }}" class="pk-mono">{{ r.symbol }}</a> <span class="hint">{{ r.label }}</span>{% if r.suspects %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason='F1 ≥ 0,80') }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+            <td>{% if r.first %}<span class="pk-mono">{{ r.first }}</span> <span class="hint">· {{ r.years }} {{ t('cls_years') }}</span>
+                {% if r.history == 'short' %}{{ status_badge(t('dq_status_short'), 'warning') }}{% endif %}{% else %}—{% endif %}</td>
+            <td class="num pk-mono headline">{{ '%.3f' | format(r.auc) if r.auc is not none else '—' }}</td>
+            <td class="num pk-mono headline">{{ '%.3f' | format(r.f1) if r.f1 is not none else '—' }}</td>
+            <td class="num pk-mono">{{ r.n_dir if r.n_dir else '—' }}{% if r.n_dir_running %} <span class="hint" title="{{ t('cls_running') }}">+{{ r.n_dir_running }}</span>{% endif %}</td>
+            <td class="num pk-mono">{% if r.n_alpha %}{{ r.n_alpha }}{% if r.alpha_auc is not none %} <span class="hint">· {{ '%.3f' | format(r.alpha_auc) }}</span>{% endif %}{% else %}—{% endif %}</td>
+            <td class="pk-mono">{% if r.champions %}{% for h in r.champions %}{{ h }}j{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+            <td class="hint">{{ r.last[:10] if r.last else t('cls_never') }}</td>
+            <td><a class="btn-ghost" href="/launch?target={{ r.symbol | urlencode }}">{{ t('cls_launch') }}</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</details>
+{% endfor %}
+<p class="hint hidden" id="cls-none">{{ t('vocab_none') }}</p>
+
+{% if panels %}
+<details class="card cls-prices">
+    <summary><h2>{{ t('cls_prices_title') }}</h2> <span class="hint">{{ t('cls_prices_hint') }}</span></summary>
+    <div class="group-block asset-panel-grid">
+    {% for a in panels %}{{ asset_panel(a.symbol, a.label, a.slug) }}{% endfor %}
+    </div>
+</details>
+{% endif %}
+
+{% block class_extra %}{% endblock %}
+<script src="/static/asset_class.js" defer></script>
+{% endblock %}

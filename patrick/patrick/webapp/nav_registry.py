@@ -57,9 +57,14 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
     NavEntry("universe", "Univers", "/universe", "classes_actifs", 10, "nav_universe",
              child_routes=("/targets/{ticker}",)),
-    NavEntry("commodities", "Matières premières", "/commodities", "classes_actifs", 20, "nav_commodities"),
-    NavEntry("macro", "Macro (FRED)", "/macro", "classes_actifs", 30, "nav_macro"),
-    NavEntry("equities", "Actions individuelles", "/equities", "classes_actifs", 40, "nav_equities"),
+    NavEntry("equity", "Equity", "/equity", "classes_actifs", 20, "nav_equity"),
+    NavEntry("indices", "Indices", "/indices", "classes_actifs", 22, "nav_indices"),
+    NavEntry("crypto", "Cryptos", "/crypto", "classes_actifs", 24, "nav_crypto"),
+    NavEntry("fx", "Devises", "/fx", "classes_actifs", 26, "nav_fx"),
+    NavEntry("rates", "Taux & crédit", "/rates", "classes_actifs", 28, "nav_rates"),
+    NavEntry("commodities", "Matières premières", "/commodities", "classes_actifs", 30, "nav_commodities"),
+    NavEntry("etfs", "ETF", "/etfs", "classes_actifs", 32, "nav_etfs"),
+    NavEntry("macro", "Macro (FRED)", "/macro", "classes_actifs", 40, "nav_macro"),
     # /portfolio = agregation de signaux par classe d'actifs + allocation HRP
     # sur l'univers PATRICK : vue cross-actifs, pas gestion patrimoniale.
     NavEntry("portfolio", "Portefeuille", "/portfolio", "classes_actifs", 50, "nav_portfolio"),
@@ -90,6 +95,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
+    "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)
 })
 
 

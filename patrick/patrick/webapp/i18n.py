@@ -523,6 +523,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "macro_section_international": {"fr": "International : devises et taux étrangers",
                                     "en": "International: currencies and foreign yields"},
     "nav_equities": {"fr": "Actions individuelles", "en": "Individual stocks"},
+    "group_fred_training": {"fr": "Séries FRED d'entraînement", "en": "FRED training series"},
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
     # Phase 8 (feature/portfolio-view)
     "nav_portfolio": {"fr": "Portefeuille", "en": "Portfolio"},
@@ -971,6 +972,7 @@ TARGET_GROUP_LABEL_KEYS = {
     "International (ETFs pays)": "group_international_etfs",
     "Actions individuelles": "group_stocks",
     "Macro (FRED)": "group_fred_macro",
+    "Séries FRED d'entraînement": "group_fred_training",
     # Roadmap bloc 4 -- groupes de l'univers etendu (config/universe_extension.py)
     "Indices mondiaux": "group_world_indices",
     "Actions US (méga-capitalisations)": "group_us_megacaps",

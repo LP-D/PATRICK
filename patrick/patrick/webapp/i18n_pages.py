@@ -14,12 +14,6 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "nav_vocabulary": _s("Vocabulaire", "Vocabulary"),
     "nav_analysis": _s("Séries & modèles", "Series & models"),
     "nav_cat_models": _s("MODÈLES", "MODELS"),
-    "nav_equity": _s("Equity", "Equity"),
-    "nav_indices": _s("Indices", "Indices"),
-    "nav_crypto": _s("Cryptos", "Cryptos"),
-    "nav_fx": _s("Devises", "FX"),
-    "nav_rates": _s("Taux & crédit", "Rates & credit"),
-    "nav_etfs": _s("ETF", "ETFs"),
 
     # ------------------------------------------------------------------ qualité des données
     "dq_title": _s("Qualité des données", "Data quality"),
@@ -284,6 +278,85 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
         "après la synchronisation.",
         "Launch a run with \"Target: alpha vs benchmark\" from the Launch page. Alpha models trained on another PC show up "
         "after synchronisation."),
+    # ------------------------------------------------------------------ classes d'actifs
+    "nav_equity": _s("Equity", "Equity"),
+    "nav_indices": _s("Indices", "Indices"),
+    "nav_crypto": _s("Cryptos", "Cryptos"),
+    "nav_fx": _s("Devises", "FX"),
+    "nav_rates": _s("Taux & crédit", "Rates & credit"),
+    "nav_etfs": _s("ETF", "ETFs"),
+    "cls_desc_equity": _s(
+        "Toutes les actions de l'univers (États-Unis, France, Allemagne, Royaume-Uni, Europe, Asie) : historique disponible, modèles "
+        "directionnels et alpha déjà entraînés. Une action se modélise en direction de son prix ou en alpha face à l'indice de sa place.",
+        "Every stock of the universe (United States, France, Germany, United Kingdom, Europe, Asia): available history, directional and "
+        "alpha models already trained. A stock is modelled on its price direction or as alpha against its venue's index."),
+    "cls_desc_indices": _s(
+        "Indices boursiers américains et mondiaux, et indices de volatilité (VIX et assimilés).",
+        "US and world equity indices, and volatility indices (VIX and the like)."),
+    "cls_desc_crypto": _s("Bitcoin et cryptomonnaies majeures, cotées 24 h sur 24.", "Bitcoin and major cryptocurrencies, quoted 24/7."),
+    "cls_desc_fx": _s("Taux de change entre devises majeures et indice du dollar.", "Exchange rates between major currencies and the dollar index."),
+    "cls_desc_rates": _s(
+        "Rendements des bons et obligations du Trésor américain (indices CBOE) et ETF obligataires. Les séries de taux et de spreads de "
+        "crédit publiées par la Fed sont dans la page Macro.",
+        "US Treasury bill and bond yields (CBOE indices) and bond ETFs. The rate and credit-spread series published by the Fed are on "
+        "the Macro page."),
+    "cls_desc_commodities": _s("Futures de matières premières : énergie, métaux, céréales, élevage, cultures de rente.",
+                               "Commodity futures: energy, metals, grains, livestock, soft commodities."),
+    "cls_desc_etfs": _s("ETF sectoriels, thématiques et par pays.", "Sector, thematic and country ETFs."),
+    "cls_note_crypto": _s(
+        "Historique court (bitcoin depuis 2014, les autres depuis 2017 à 2020) : au seuil de 10 ans, seule la première est éligible. BTC et ETH "
+        "sont aussi écartées des features de tous les runs par la règle de couverture (voir Qualité des données).",
+        "Short history (bitcoin since 2014, the others since 2017 to 2020): at the 10-year threshold only the first is eligible. BTC and ETH "
+        "are also dropped from the features of every run by the coverage rule (see Data quality)."),
+    "cls_note_fx": _s(
+        "Les devises sont horodatées différemment selon le fournisseur : DX-Y.NYB daté J contient le mouvement d'EUR/USD daté J+1. La "
+        "garde anti-fuite le détecte et retarde la série d'une barre.",
+        "Currencies are timestamped differently depending on the provider: DX-Y.NYB dated D contains EUR/USD's move dated D+1. The "
+        "anti-leak guard detects it and delays the series by one bar."),
+    "cls_note_rates": _s(
+        "Un taux qui monte, c'est un prix d'obligation qui baisse. Pour une cible FRED publiée avec retard (DGS10…), les séries cotées sont "
+        "décalées de ce retard pour que le label ne soit pas déjà connu : c'est la cause des F1 de 1,00 corrigés le 2026-10-09.",
+        "A rising rate is a falling bond price. For a late-published FRED target (DGS10…), market series are delayed by that lag so the label "
+        "is not already known: the cause of the F1 = 1.00 results fixed on 2026-10-09."),
+    "cls_note_indices": _s(
+        "Les indices de volatilité mesurent l'inquiétude attendue plutôt qu'un prix : un modèle de direction sur le VIX prédit si la peur monte.",
+        "Volatility indices measure expected anxiety rather than a price: a direction model on the VIX predicts whether fear rises."),
+    "cls_kpi_targets": _s("Cibles", "Targets"),
+    "cls_kpi_groups": _s("{n} groupe(s)", "{n} group(s)"),
+    "cls_kpi_trained": _s("Entraînées", "Trained"),
+    "cls_kpi_trained_rel": _s("avec au moins un modèle directionnel terminé", "with at least one finished directional model"),
+    "cls_kpi_alpha": _s("Avec modèle alpha", "With alpha model"),
+    "cls_kpi_alpha_rel": _s("cibles ayant un run alpha terminé", "targets with a finished alpha run"),
+    "cls_kpi_champions": _s("Champions", "Champions"),
+    "cls_kpi_champions_rel": _s("cibles avec un modèle en titre", "targets with a model in title"),
+    "cls_kpi_short": _s("Historique court", "Short history"),
+    "cls_kpi_short_rel": _s("sous le seuil de {y} ans", "under the {y}-year threshold"),
+    "cls_search": _s("Chercher une cible (symbole ou nom)", "Search a target (symbol or name)"),
+    "cls_filter": _s("Filtrer", "Filter"),
+    "cls_f_all": _s("Toutes", "All"),
+    "cls_f_trained": _s("Entraînées", "Trained"),
+    "cls_f_never": _s("Jamais lancées", "Never launched"),
+    "cls_f_alpha": _s("Avec alpha", "With alpha"),
+    "cls_f_short": _s("Historique court", "Short history"),
+    "cls_col_history": _s("Historique", "History"),
+    "cls_col_champion": _s("Champion", "Champion"),
+    "cls_col_last": _s("Dernier run", "Last run"),
+    "cls_years": _s("ans", "years"),
+    "cls_running": _s("run(s) en cours ou en échec", "run(s) in progress or failed"),
+    "cls_never": _s("jamais", "never"),
+    "cls_launch": _s("Lancer", "Launch"),
+    "cls_prices_title": _s("Cours et statistiques", "Prices and statistics"),
+    "cls_prices_hint": _s("Chargés à l'ouverture.", "Loaded when opened."),
+    "eq_followed_title": _s("Actions suivies en détail", "Stocks followed in detail"),
+    "eq_followed_hint": _s("Prix et statistiques, disponibilité des données et fondamentaux des actions que PATRICK suit de près.",
+                           "Prices and statistics, data availability and fundamentals of the stocks PATRICK follows closely."),
+    "eq_availability": _s("Disponibilité des données", "Data availability"),
+    "eq_threshold": _s("Seuil d'historique", "History threshold"),
+    "eq_first_listed": _s("première cotation disponible", "first listing available"),
+    "eq_exclusions": _s("Features non applicables", "Features not applicable"),
+    "eq_fundamentals": _s("Fondamentaux", "Fundamentals"),
+    "eq_no_fundamentals": _s("Aucun fondamental disponible pour {symbol} (titre trop récent ou non couvert par yfinance).",
+                             "No fundamentals available for {symbol} (too recent or not covered by yfinance)."),
     "m_section_title": _s("Métriques par fold", "Metrics per fold"),
     "m_section_intro": _s(
         "L'AUC puis le F1 d'abord. Chaque ligne est un fold de test (une période jamais vue à l'entraînement) ; la moyenne "

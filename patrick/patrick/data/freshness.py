@@ -256,17 +256,24 @@ def compute_freshness(symbol: str, label: str, source: str,
                             date_max=date_max, business_days_late=late, state=state)
 
 
+FRED_TRAINING_GROUP = "Séries FRED d'entraînement"
+
+
 def freshness_overview(store: DataStore | None = None, as_of=None) -> list[dict]:
-    """Fraîcheur de tout `DEFAULT_TARGET_GROUPS`, groupée comme le formulaire
-    de lancement / `/universe` (même source, `config/defaults.py`) --
-    `[{"group": str, "results": [FreshnessResult, ...]}, ...]`."""
+    """Fraîcheur de TOUT l'univers de données : chaque groupe de cibles du formulaire de lancement (`/universe`, y compris
+    actions et extension vérifiée : 474 cibles, et non plus les seules 66 de `DEFAULT_TARGET_GROUPS`), puis les séries FRED
+    d'entraînement (jamais des cibles) -- `[{"group": str, "results": [FreshnessResult, ...]}, ...]`."""
     from patrick.config import defaults as D
+    from patrick.config.universe_extension import all_target_groups
 
     store = store or DataStore()
     out = []
-    for group, items in D.DEFAULT_TARGET_GROUPS.items():
+    for group, items in all_target_groups().items():
         source = "fred" if group == D.FRED_TARGET_GROUP else "yfinance"
         results = [compute_freshness(sym, label, source, store=store, as_of=as_of)
                    for sym, label in items]
         out.append({"group": group, "results": results})
+    training = [(sid, label) for label, sid in {**D.FEATURE_ONLY_FRED_SERIES, **D.MACRO_ONLY_FRED_SERIES}.items()]
+    out.append({"group": FRED_TRAINING_GROUP,
+                "results": [compute_freshness(sid, label, "fred", store=store, as_of=as_of) for sid, label in training]})
     return out

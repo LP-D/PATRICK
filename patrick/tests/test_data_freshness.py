@@ -236,16 +236,32 @@ def test_compute_freshness_never_makes_a_network_call(tmp_path, monkeypatch):
 # freshness_overview() : vue groupée (DEFAULT_TARGET_GROUPS) pour la page web.
 # ---------------------------------------------------------------------------
 
-def test_freshness_overview_covers_every_group_and_every_symbol(tmp_path):
+def test_freshness_overview_covers_the_whole_data_universe(tmp_path):
+    """Les 474 cibles du sélecteur (actions et extension comprises) PLUS les séries FRED d'entraînement : la page ne s'arrête
+    plus aux 66 symboles de DEFAULT_TARGET_GROUPS."""
     from patrick.config import defaults as D
+    from patrick.config.universe_extension import all_target_groups
 
     store = DataStore(root=str(tmp_path))
     overview = freshness.freshness_overview(store=store, as_of=date(2024, 1, 31))
 
-    assert {g["group"] for g in overview} == set(D.DEFAULT_TARGET_GROUPS.keys())
-    total_symbols = sum(len(v) for v in D.DEFAULT_TARGET_GROUPS.values())
-    total_results = sum(len(g["results"]) for g in overview)
-    assert total_results == total_symbols
+    groups = all_target_groups()
+    assert {g["group"] for g in overview} == set(groups) | {freshness.FRED_TRAINING_GROUP}
+    assert set(D.DEFAULT_TARGET_GROUPS) <= {g["group"] for g in overview}
+    total_symbols = sum(len(v) for v in groups.values()) + len(D.MACRO_ONLY_FRED_SERIES) + len(D.FEATURE_ONLY_FRED_SERIES)
+    assert sum(len(g["results"]) for g in overview) == total_symbols
+
+
+def test_training_only_fred_series_are_followed_but_never_offered_as_targets(tmp_path):
+    from patrick.config import defaults as D
+    from patrick.webapp import forms
+
+    store = DataStore(root=str(tmp_path))
+    overview = freshness.freshness_overview(store=store, as_of=date(2024, 1, 31))
+    training = next(g for g in overview if g["group"] == freshness.FRED_TRAINING_GROUP)
+    assert {r.symbol for r in training["results"]} == set(D.MACRO_ONLY_FRED_SERIES.values()) | set(D.FEATURE_ONLY_FRED_SERIES.values())
+    assert all(r.source == "fred" for r in training["results"])
+    assert not {r.symbol for r in training["results"]} & set(forms.TARGET_SOURCE_BY_SYMBOL)
 
 
 def test_freshness_overview_marks_fred_group_results_as_fred_source(tmp_path):

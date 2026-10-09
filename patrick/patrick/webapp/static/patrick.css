@@ -2289,3 +2289,17 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .fund-ml select[name="trial_id"] { min-width: min(100%, 520px); }
 .fund-ml .ml-model-field { grid-column: 1 / -1; }
 .fund-rule-new .ml-model-field { grid-column: 1 / -1; }
+
+/* ---- Classes d'actifs --------------------------------------------------------------------------------------------- */
+.cls-tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.cls-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cls-chips .vocab-chip { background: transparent; cursor: pointer; font: inherit; font-size: .84rem; }
+.cls-chips .vocab-chip.active { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.cls-group > summary { cursor: pointer; display: flex; gap: 10px; align-items: center; list-style: none; }
+.cls-group > summary h2 { margin: 0; font-size: 1.02rem; }
+.cls-group > summary::-webkit-details-marker { display: none; }
+.cls-scroll { max-height: 560px; overflow: auto; margin-top: 10px; }
+.cls-table th.headline, .cls-table td.headline { font-weight: 600; }
+.cls-row[hidden] { display: none; }
+.cls-prices > summary { cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+.cls-prices > summary h2 { margin: 0; }

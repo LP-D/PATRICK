@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from patrick import explain, live_refresh
 from patrick import settings as settings_store
 from patrick.clock import utc_today
+from patrick.config import asset_classes
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
@@ -30,7 +31,7 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
 from patrick.tracking import champions as trackchampions
-from patrick.tracking import data_health
+from patrick.tracking import class_overview, data_health
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
@@ -313,12 +314,16 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
 
 
 @app.get("/launch")
-def launch_page(request: Request, run_id: str | None = None):
+def launch_page(request: Request, run_id: str | None = None, target: str | None = None):
     """P8 (synthesis dashboard chantier): moved from `/` to free that route
     for the new synthesis page. Same handler, same template
     (`index.html`), only the route changed -- nav/breadcrumb links updated
     accordingly (see `base.html`, `i18n.py::nav_launch`)."""
     cfg = forms.default_config_dict()
+    if target and target in forms.TARGET_SOURCE_BY_SYMBOL:
+        # lien « Lancer » des pages de classes d'actifs : la cible est présélectionnée
+        cfg["objective"]["target_symbol"] = target
+        cfg["objective"]["target_source"] = forms.TARGET_SOURCE_BY_SYMBOL[target]
     if run_id:
         config = run_manager.get_run_config(run_id)
         if config is None:
@@ -1373,19 +1378,41 @@ settings_routes.register(app, templates, lambda request: _i18n_context(request))
 fund_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
-@app.get("/commodities")
-def commodities_page(request: Request):
-    """feature/ticker-stats-panel: one display-stats panel per commodity
-    future in the reduced universe (returns/z-score/MA/vol -- never the ML
-    pipeline). The page itself renders only panel skeletons (no
-    yfinance/FRED fetch here, see `asset_stats.py` module docstring) --
-    `static/asset_stats.js` fills each one via `/api/asset-stats/{symbol}`
-    once loaded, same client-fetch split as the market preview
-    (`market.js` / `/api/preview/{symbol}`)."""
-    return templates.TemplateResponse(
-        request, "commodities.html",
-        {"assets": _asset_group_view(COMMODITIES_TARGET_GROUP), **_i18n_context(request)},
-    )
+def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:
+    """Contexte commun des pages de classes d'actifs (`templates/asset_class.html`) : une ligne par cible avec son historique et
+    ses modèles directionnels / alpha, les compteurs d'en-tête, et la grille de cours (si la classe est assez petite)."""
+    bounds = D.MIN_HISTORY_YEARS_BOUNDS
+    if not bounds["min_allowed"] <= min_history_years <= bounds["max_allowed"]:
+        raise HTTPException(status_code=400, detail=f"min_history_years doit être compris entre "
+                                                    f"{bounds['min_allowed']} et {bounds['max_allowed']}.")
+    conn = trackdb.connect()
+    try:
+        page = class_overview.class_page(conn, class_key, forms.TARGET_GROUPS, min_history_years)
+    finally:
+        conn.close()
+    total = page["kpi"]["n_targets"]
+    panels = ([{"symbol": r["symbol"], "label": r["label"], "slug": forms.slug_target(r["symbol"])}
+               for g in page["groups"] for r in g["rows"]] if total <= 40 else [])
+    return {"cls": page["class"], "groups": page["groups"], "kpi": page["kpi"], "panels": panels,
+            "min_years": min_history_years,
+            **_i18n_context(request)}
+
+
+def _register_asset_class_pages() -> None:
+    """Une page par classe d'actifs (hors Equity et Macro, qui ont leur propre gabarit) : mêmes colonnes, mêmes filtres."""
+    def make(class_key: str):
+        def page(request: Request, min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS):
+            return templates.TemplateResponse(request, "asset_class.html",
+                                              _asset_class_context(request, class_key, min_history_years))
+        page.__name__ = f"{class_key}_page"
+        return page
+
+    for cls in asset_classes.ASSET_CLASSES:
+        if cls.key not in ("equity", "macro"):
+            app.add_api_route(cls.url, make(cls.key), methods=["GET"], name=f"{cls.key}_page")
+
+
+_register_asset_class_pages()
 
 
 def _macro_sections_view(t) -> list[dict]:
@@ -1435,29 +1462,26 @@ def _equity_asset_group_view() -> list[dict]:
 
 
 @app.get("/equities")
-def equities_page(request: Request):
-    """CHANTIER (feature/equity-asset-class): "toute page listant des
-    tickers actions" (spec) -- prix/stats (memes panneaux que `/commodities`
-    /`/macro`, `asset_stats.js` contre `/api/asset-stats/{symbol}`) PLUS le
-    badge d'insuffisance de donnees et les fondamentaux, restant tous deux
-    visibles meme sous le seuil (seul le LANCEMENT d'un entrainement est
-    bloque, jamais l'affichage -- voir `validation/equity_sufficiency.py`).
-    Fondamentaux rendus cote serveur (4 tickers seulement, deja mis en cache
-    7 jours par `fundamentals_source.fetch_fundamentals`) plutot qu'un
-    nouvel aller-retour AJAX dedie."""
+def equities_legacy_redirect():
+    """Ancienne page « Actions individuelles » : devenue le module Equity (`/equity`)."""
+    return RedirectResponse("/equity", status_code=308)
+
+
+@app.get("/equity")
+def equity_page(request: Request, min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS):
+    """Module Equity : toutes les actions de l'univers (US, France, Allemagne, Royaume-Uni, Europe, Asie), avec pour chacune
+    son historique et ses modèles directionnels / alpha ; puis le détail des actions suivies en profondeur (prix et
+    statistiques, disponibilité des données, fondamentaux). Fondamentaux rendus côté serveur (4 tickers seulement, déjà
+    mis en cache 7 jours par `fundamentals_source.fetch_fundamentals`)."""
+    ctx = _asset_class_context(request, "equity", min_history_years)
     assets = _equity_asset_group_view()
     fundamentals = {
         a["symbol"]: fundamentals_source.fetch_fundamentals(a["symbol"]).tail(12).to_dict("records")
         for a in assets
     }
     return templates.TemplateResponse(
-        request, "equities.html",
-        {
-            "assets": assets,
-            "fundamentals": fundamentals,
-            "exclusions": guida.equity_feature_exclusions(),
-            **_i18n_context(request),
-        },
+        request, "equity.html",
+        {**ctx, "assets": assets, "fundamentals": fundamentals, "exclusions": guida.equity_feature_exclusions()},
     )
 
 
