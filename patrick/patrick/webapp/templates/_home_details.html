@@ -1,0 +1,85 @@
+{# Fragment de la synthèse (`/fragments/home`) : les tableaux qui lisent les prédictions. Mêmes données et mêmes macros que la
+   page ; chargé après l'affichage du cadre. #}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
+{% set more = t('rows_more') %}{% set less = t('rows_less') %}
+{# ---- Détail ---- #}
+<section class="card">
+<h2>{{ t('home_quality_by_target') }} <button type="button" class="info-icon" data-term="diebold_mariano" data-term-label="Diebold-Mariano" aria-label="{{ t('glossary_open_aria', term='Diebold-Mariano') }}">i</button></h2>
+{% if overview.fdr_n_tested == 0 %}
+{{ empty_state(t('home_no_dm'), t('home_no_dm_hint')) }}
+{% else %}
+{% if overview.fdr_n_tested == 1 %}<p class="hint">{{ t('home_bh_single') }}</p>{% endif %}
+{% set quality_rows_fmt = [] %}
+{% for r in overview.quality_rows %}
+{% if r.testable %}
+{% set _ = quality_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', "%.4f" | format(r.p_value), "%.4f" | format(r.adjusted_p_value),
+    status_badge(t('stat_dm_significant'), "ok") if r.significant else status_badge(t('stat_dm_not_significant'), "neutral"),
+]) %}
+{% else %}
+{% set _ = quality_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', '<span class="na">—</span>', '<span class="na">—</span>',
+    status_badge(t('home_selection_fold'), "warning") if r.selection_biased else status_badge(t('home_not_testable'), "disabled"),
+]) %}
+{% endif %}
+{% endfor %}
+{{ data_table([t('dq_col_target'), t('home_col_pdm'), t('home_col_padj'), t('dq_col_status')], quality_rows_fmt, num_cols=[1, 2], collapse_after=5, more_label=more, less_label=less,
+              footer=t('home_bh_footer', n=overview.fdr_n_tested, alpha=overview.fdr_alpha)) }}
+{% endif %}
+</section>
+
+<section class="card">
+<h2>{{ t('home_last_pred') }}</h2>
+{% set pred_rows = [] %}
+{% for r in overview.prediction_rows if r.prediction %}
+{% set p = r.prediction %}
+{% set _ = pred_rows.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', p.horizon | hlabel, p.direction ~ " (" ~ p.amplitude ~ ")",
+    ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
+    '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>', p.split,
+]) %}
+{% endfor %}
+{{ data_table([t('dq_col_target'), t('dq_col_horizon'), t('home_col_direction'), t('home_col_conf'), t('home_col_when'), t('home_col_source')], pred_rows,
+              t('home_no_pred'), num_cols=[3], collapse_after=5, more_label=more, less_label=less) }}
+</section>
+
+<section class="card">
+<h2>{{ t('home_dir_metrics') }}</h2>
+{% set metric_rows_present = overview.metric_rows | selectattr("metrics") | list %}
+{% if not metric_rows_present %}
+{{ empty_state(t('home_no_metrics'), t('home_no_metrics_hint')) }}
+{% else %}
+{% set metric_rows_fmt = [] %}
+{% for r in metric_rows_present %}
+{% set m = r.metrics %}
+{% set down = m.by_direction.DOWN %}
+{% set up = m.by_direction.UP %}
+{% set _ = metric_rows_fmt.append([
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
+    ("%.4f" | format(m.auc_overall)) if m.auc_overall is not none else '<span class="na">—</span>',
+    (down.n ~ " · P " ~ ("%.2f"|format(down.precision)) ~ " · R " ~ ("%.2f"|format(down.recall)) ~ " · F1 " ~ ("%.2f"|format(down.f1))) if down else ('<span class="na">—</span> (' ~ m.n_down ~ ' obs., min 10)'),
+    (up.n ~ " · P " ~ ("%.2f"|format(up.precision)) ~ " · R " ~ ("%.2f"|format(up.recall)) ~ " · F1 " ~ ("%.2f"|format(up.f1))) if up else ('<span class="na">—</span> (' ~ m.n_up ~ ' obs., min 10)'),
+    '<a href="/runs/' ~ r.metrics.run_id ~ '">' ~ r.metrics.split_used ~ ', n=' ~ r.metrics.n ~ '</a>',
+]) %}
+{% endfor %}
+{{ data_table([t('dq_col_target'), t('home_col_auc_global'), t('home_col_down'), t('home_col_up'), t('home_col_source')], metric_rows_fmt, collapse_after=5, more_label=more, less_label=less) }}
+<p class="hint">{{ t('home_auc_note') }}</p>
+{% endif %}
+</section>
+
+
+
+<section class="card">
+<h2>{{ t('section_recent') }}</h2>
+{% set recent_rows = [] %}
+{% for r in overview.recent_runs %}
+{% set _ = recent_rows.append([
+    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>', r.target, r.horizon | hlabel,
+    status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
+    ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>', r.started_at,
+]) %}
+{% endfor %}
+{{ data_table([t('dq_col_run'), t('dq_col_target'), t('dq_col_horizon'), t('dq_col_status'), 'F1', t('hist_started')], recent_rows, t('home_no_runs'), num_cols=[4],
+              collapse_after=5, more_label=more, less_label=less, footer='<a href="/runs">' ~ t('home_full_history') ~ ' →</a>') }}
+</section>

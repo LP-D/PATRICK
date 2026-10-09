@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi.testclient import TestClient
+from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db
 from patrick.webapp.app import app
@@ -106,13 +106,13 @@ def test_synthesis_page_fdr_alpha_query_param_changes_verdict_and_quality_table(
     assert resp_default.status_code == 200
     # Single target, p=0.03 < default alpha (0.10) -> significant -> survivor.
     assert "α=0.1)" in resp_default.text
-    assert "alpha=0.1." in resp_default.text  # quality-table footer (overview.fdr_alpha)
+    assert "α = 0.1." in resp_default.text  # quality-table footer (overview.fdr_alpha)
 
     resp_strict = client.get("/", params={"fdr_alpha": "0.01"})
     assert resp_strict.status_code == 200
     # Same p-value, stricter alpha -> no more survivors.
     assert "α=0.01)" in resp_strict.text
-    assert "alpha=0.01." in resp_strict.text
+    assert "α = 0.01." in resp_strict.text
 
 
 def test_synthesis_page_rejects_non_positive_fdr_alpha(tmp_path, monkeypatch):

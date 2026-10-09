@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from fastapi.testclient import TestClient
+from page_support import FullPageClient as TestClient
 
 from patrick import predict as predict_module
 from patrick.features.target import classify_return, live_class_thresholds

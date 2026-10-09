@@ -5,7 +5,7 @@ templates through a real FastAPI route, DB seeded directly via
 `PATRICK_DB_PATH`, no pipeline run, no network."""
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from page_support import FullPageClient as TestClient
 
 from patrick.config import defaults as D
 from patrick.tracking import db

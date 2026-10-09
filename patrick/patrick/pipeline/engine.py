@@ -48,6 +48,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
+from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data import alignment
@@ -1079,7 +1080,8 @@ def _config_hash(config: RunConfig) -> str:
     obj_exclude: set[str] = set(_ALPHA_FIELDS["objective"]) if config.objective.target_kind == "raw" else set()
     # Idem pour la garde anti-fuite (`data/alignment.py`) : un run dont les entrées n'ont reçu aucun décalage (runs
     # antérieurs, ou audit sans rien à corriger) garde son hachage d'avant.
-    if not (config.objective.alignment.column_lags or config.objective.alignment.dropped):
+    align = config.objective.alignment
+    if not (align.column_lags or align.dropped or align.drop_future):
         obj_exclude |= {"leak_guard", "alignment"}
     exclude = {"objective": obj_exclude} if obj_exclude else None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
@@ -1390,9 +1392,10 @@ def _align_raw(raw: pd.DataFrame, config: RunConfig, resumed: bool) -> pd.DataFr
     if not resumed and obj.leak_guard:
         obj.alignment = alignment.decide(raw, obj, config.universe, config.validation.holdout_months)
     spec = obj.alignment
-    if spec.version and (spec.column_lags or spec.dropped):
-        print(f"[ALIGNMENT] {len(spec.column_lags)} series delayed, {len(spec.dropped)} dropped "
-              f"(look-ahead guard, target {obj.target_symbol}).")
+    if spec.version and (spec.column_lags or spec.dropped or spec.drop_future):
+        n_future = int((raw.index > pd.Timestamp(utc_today())).sum()) if spec.drop_future else 0
+        print(f"[ALIGNMENT] {len(spec.column_lags)} series delayed, {len(spec.dropped)} dropped, {n_future} future-dated "
+              f"row(s) removed (look-ahead guard, target {obj.target_symbol}).")
     return alignment.apply_spec(raw, spec)
 
 

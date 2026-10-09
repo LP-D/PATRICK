@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
 
-from patrick import predict as predict_module
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.live_refresh")
@@ -107,6 +106,10 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
     entre les runs de même objectif/univers. `on_item(outcome)` : rappel de
     progression (affichage de l'avancement dans l'app)."""
     if predict_live_fn is None:
+        from patrick import (
+            predict as predict_module,  # chargé ici : tire sklearn / xgboost / le pipeline (~1 s)
+        )
+
         predict_live_fn = partial(predict_module.predict_live, raw_cache={})
 
     summary = RunSummary()

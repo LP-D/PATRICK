@@ -259,6 +259,21 @@ def compute_freshness(symbol: str, label: str, source: str,
 FRED_TRAINING_GROUP = "Séries FRED d'entraînement"
 
 
+class _SnapshotIndex:
+    """Lecture unique des deux index du data lake (`_index.json`, `_series_observations.json`) pour tout un survol de
+    537 séries : chaque `store.list_snapshots` relisait et re-décodait le fichier entier (0,9 s au lieu de 0,1 s)."""
+
+    def __init__(self, store: DataStore):
+        self._info = store.info()
+        self._series = store._read_series_index()
+
+    def list_snapshots(self, key: str | None = None) -> list[dict]:
+        return list((self._info.get(key) or {}).get("snapshots", [])) if key else []
+
+    def series_observation(self, symbol: str) -> dict | None:
+        return self._series.get(symbol)
+
+
 def freshness_overview(store: DataStore | None = None, as_of=None) -> list[dict]:
     """Fraîcheur de TOUT l'univers de données : chaque groupe de cibles du formulaire de lancement (`/universe`, y compris
     actions et extension vérifiée : 474 cibles, et non plus les seules 66 de `DEFAULT_TARGET_GROUPS`), puis les séries FRED
@@ -266,7 +281,7 @@ def freshness_overview(store: DataStore | None = None, as_of=None) -> list[dict]
     from patrick.config import defaults as D
     from patrick.config.universe_extension import all_target_groups
 
-    store = store or DataStore()
+    store = _SnapshotIndex(store or DataStore())
     out = []
     for group, items in all_target_groups().items():
         source = "fred" if group == D.FRED_TARGET_GROUP else "yfinance"

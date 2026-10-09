@@ -19,7 +19,6 @@ import json
 import sqlite3
 
 import numpy as np
-from sklearn.metrics import precision_recall_fscore_support
 
 from patrick.config import defaults as D
 from patrick.selection import stability as stability_module
@@ -62,6 +61,13 @@ LIVE_HIT_RATE_WARNING_THRESHOLD = 0.5
 # rate across many targets tested at once, this one is the per-(target,
 # horizon) DM test's own uncorrected significance cutoff.
 DM_SIGNIFICANCE_ALPHA = 0.05
+
+
+def precision_recall_fscore_support(*args, **kwargs):
+    """`sklearn.metrics.precision_recall_fscore_support`, importé à la première utilisation : sklearn coûte ~1 s à l'import
+    et le serveur web ne s'en sert qu'à l'affichage des métriques par direction (démarrage de l'application)."""
+    from sklearn.metrics import precision_recall_fscore_support as impl
+    return impl(*args, **kwargs)
 
 
 def _config_field(config_json: str | None, *path, default=None):
@@ -633,10 +639,13 @@ def universe_coverage(conn: sqlite3.Connection) -> dict:
 
 
 def last_inference_at(conn: sqlite3.Connection) -> str | None:
-    """P8.1 -- most recent `prediction.ts` across ALL targets/splits, the
-    single "as of" freshness marker for the coverage banner. `None` on an
-    empty `prediction` table (nominal state of a young database, not an
-    error)."""
+    """P8.1 -- date of the most recent LIVE signal (`prediction.split = 'live'`), the "as of" marker of the coverage banner.
+    Read on `idx_pred_split (split, ts)`: instantaneous, where `MAX(ts)` over the whole table scans ~24 million rows (1.3 s on
+    the real database) and also picked up future-dated holdout rows of FRED targets. Falls back to every split on a database
+    that has no live signal yet (young database or backtest only). `None` on an empty `prediction` table."""
+    row = conn.execute("SELECT MAX(ts) FROM prediction WHERE split = 'live'").fetchone()
+    if row and row[0] is not None:
+        return row[0]
     row = conn.execute("SELECT MAX(ts) FROM prediction").fetchone()
     return row[0] if row else None
 

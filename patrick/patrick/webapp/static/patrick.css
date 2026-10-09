@@ -2313,3 +2313,17 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .an-bar-fill { display: block; height: 100%; background: var(--brand); border-radius: 6px; }
 .an-bar-n { text-align: right; color: var(--text-2); }
 .an-chips .tag { margin: 2px 2px 0 0; }
+
+/* ---- Synthèse ----------------------------------------------------------------------------------------------------- */
+.home-trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 16px 0; }
+.home-card h2 { margin-top: 0; font-size: 1rem; }
+.home-card p { margin: 6px 0; }
+.home-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: .88rem; }
+.home-mini { width: 100%; }
+
+/* ---- Blocs chargés après l'affichage ---------------------------------------------------------------------------- */
+.lazy-block { min-height: 120px; }
+.lazy-skeleton { padding: 8px 0; }
+.lazy-ready { animation: lazy-in .18s ease-out; }
+@keyframes lazy-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .lazy-ready { animation: none; } }

@@ -156,3 +156,31 @@ def test_describe_lists_one_data_quality_row_per_touched_column():
 ])
 def test_suspicion_thresholds(metrics, expected):
     assert bool(suspicion.suspect_reason(metrics)) is expected
+
+
+# --------------------------------------------------------------------------- lignes datées dans le futur
+
+def test_a_fred_target_on_its_publication_dates_creates_future_rows_that_the_guard_removes():
+    """DCOILWTICO : dernier relevé daté +7 jours ouvrés, donc après aujourd'hui. Aucune information n'existe à ces dates."""
+    idx = pd.bdate_range("2026-09-01", "2026-10-16")
+    df = pd.DataFrame({"T": np.arange(len(idx), dtype=float), "M": np.arange(len(idx), dtype=float)}, index=idx)
+    today = pd.Timestamp("2026-10-09")
+    out = alignment.drop_future_rows(df, today)
+    assert out.index.max() == today and len(out) == len(df.loc[:today])
+    assert alignment.drop_future_rows(df.loc[:today], today) is not None
+    assert alignment.drop_future_rows(df.loc[:today], today).index.max() == today
+
+
+def test_the_spec_removes_future_rows_only_for_new_runs():
+    idx = pd.bdate_range("2026-09-01", "2036-01-01")                    # toujours au-delà d'aujourd'hui
+    df = pd.DataFrame({"T": 1.0}, index=idx)
+    legacy = alignment.apply_spec(df, AlignmentSpec())
+    assert legacy is df                                                   # un ancien run garde exactement ses entrées
+    current = alignment.apply_spec(df, AlignmentSpec(version=1, drop_future=True))
+    assert current.index.max() <= pd.Timestamp.today().normalize() < df.index.max()
+
+
+def test_decide_marks_new_runs_to_drop_future_rows():
+    df = _frame_fred_target()
+    spec = alignment.decide(df, _objective("SP500", "fred"), UniverseConfig(yf_tickers=["^GSPC"]), 15)
+    assert spec.drop_future is True

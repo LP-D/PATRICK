@@ -171,3 +171,15 @@
   </div>
 </div>
 {% endmacro %}
+
+
+{# Bloc chargé après l'affichage de la page : `static/lazy.js` récupère le fragment HTML à `url` et le pose ici. Le cadre de
+   la page (titre, onglets, chiffres d'en-tête) apparaît tout de suite ; seul le gros tableau attend. `lines` = nombre de barres
+   d'attente. #}
+{% macro lazy_block(url, lines=6, label='Chargement…', retry='Réessayer') %}
+<div class="lazy-block" data-lazy-url="{{ url }}" data-label-error="{{ label }}" data-label-retry="{{ retry }}" aria-busy="true" aria-live="polite">
+  <div class="lazy-skeleton" role="status" aria-label="{{ label }}">
+    {% for i in range(lines) %}<div class="skeleton-line" style="width: {{ [100, 86, 94, 72, 90, 80][i % 6] }}%; margin-bottom: 10px"></div>{% endfor %}
+  </div>
+</div>
+{% endmacro %}

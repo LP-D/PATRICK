@@ -1,133 +1,87 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, lazy_block %}
 {% block title %}PATRICK — {{ t('nav_home') }}{% endblock %}
 
-{# P8 -- synthesis dashboard replacing the old "/". Every number here is
-   read live from the database on each request (no page cache, B4) via
-   `tracking.history.synthesis_overview` -- no hardcoded literal anywhere
-   on this page. Full
-   precision (exact p-value, cumulative trial count, BH detail) is not
-   duplicated inline: click through to /targets/{ticker} or /runs/{id}
-   (B4). See DASHBOARD_B1-B2.md for the data-sourcing decisions.
+{# Synthèse : l'état de l'application d'un coup d'œil, puis le détail repliable. Le haut répond à trois questions -- les
+   données sont-elles saines, que valent les modèles (directionnels et alpha, séparés), que disent les signaux -- chacune
+   avec le lien vers la page qui détaille. Les nombres sont lus à chaque chargement (aucun cache). `home` vient de
+   `tracking/home.py`, `overview` de `tracking/history.py::synthesis_overview`. #}
 
-   DESIGN SYSTEM v2: reconstructed on Internal Cockpit (MASTER.md). The
-   station-chrome verdict banner (survivors / cumulative trials) that used
-   to live in every page's header (base.html) has no equivalent in the new
-   layout -- it's data, not chrome, so it moved here as two more KPI tiles
-   in the top row instead of a separate site-wide banner. Same macros,
-   same data contract as before (_components.html untouched) -- only the
-   layout/CSS changed, plus this one structural move. #}
+{% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
+{% set more = t('rows_more') %}{% set less = t('rows_less') %}
 
 {% block content %}
 <h1 class="page-title">{{ t('nav_home') }}</h1>
-<p class="page-subtitle">Vue d'ensemble de tout l'historique de runs, recalculée à chaque chargement — aucune valeur mise en cache. <a href="/launch">{{ t('index_title') }} →</a></p>
+<p class="page-subtitle">{{ t('home_subtitle') }} <a href="/launch">{{ t('index_title') }} →</a></p>
 
-{# ---- Top row: KPI grid (Pattern: Internal Cockpit) ---- #}
+{# ---- Ligne 1 : six chiffres ---- #}
 <div class="metric-grid">
-{{ metric("Cibles entraînées", overview.coverage.touched ~ " / " ~ overview.coverage.total, (overview.coverage.done ~ " avec un run complètement exécuté") | string, "neutral") }}
-{{ metric("Dernière inférence", overview.coverage.last_inference_at or "—", "Horodatage de la prédiction la plus récente, toutes cibles confondues (table prediction).", "neutral" if overview.coverage.last_inference_at else "pending") }}
+{{ metric(t('home_kpi_models'), home.n_sane, t('home_kpi_models_rel', d=home.kinds.directional.n, a=home.kinds.alpha.n), "ok" if home.n_sane else "neutral") }}
+{{ metric(t('home_kpi_champions'), home.n_champions, t('home_kpi_champions_rel', total=coverage.total), "neutral") }}
+{{ metric(t('home_kpi_auc'), f3(home.auc_median), t('home_kpi_auc_rel', f1=f3(home.f1_median)), "neutral") }}
+{{ metric(t('home_kpi_data'), (home.n_recent_failures + home.n_suspect), t('home_kpi_data_rel', f=home.n_recent_failures, s=home.n_suspect, d=home.recent_days), "error" if home.n_suspect else ("warning" if home.n_recent_failures else "ok")) }}
+{{ metric(t('home_kpi_short'), home.n_short, t('home_kpi_short_rel', y=home.min_years, n=home.n_targets), "warning" if home.n_short else "ok") }}
+{{ metric(t('home_kpi_inference'), coverage.last_inference_at or "—", t('home_kpi_inference_rel'), "neutral" if coverage.last_inference_at else "pending") }}
 {% if verdict and verdict.n_runs %}
 {% if verdict.survivors is none %}
 {{ metric(t('verdict_survivors'), "—", t('verdict_not_computable'), "pending") }}
 {% else %}
 {{ metric(t('verdict_survivors'), verdict.survivors ~ " / " ~ verdict.n_tested, t('verdict_survivors_rel', alpha=verdict.alpha), "ok" if verdict.survivors > 0 else "neutral") }}
 {% endif %}
-{{ metric(t('verdict_cost'), "{:,}".format(verdict.cumulative_trials).replace(",", " "), t('verdict_cost_rel', runs=verdict.n_runs, targets=verdict.n_targets), "neutral") }}
+{{ metric(t('verdict_cost'), "{:,}".format(verdict.cumulative_trials).replace(",", " "), t('verdict_cost_rel', runs=verdict.n_runs, targets=verdict.n_targets), "neutral") }}
 {% endif %}
 </div>
 
-{# ---- Dense content zones below ---- #}
+{% if home.n_suspect %}
+<p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('home_suspect', n=home.n_suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>
+{% endif %}
 
-<section class="card" style="--enter-delay:60ms">
-<h2>Qualité par cible <button type="button" class="info-icon" data-term="diebold_mariano" data-term-label="Diebold-Mariano" aria-label="{{ t('glossary_open_aria', term='Diebold-Mariano') }}">i</button></h2>
-{% if overview.fdr_n_tested == 0 %}
-{{ empty_state("Aucun résultat Diebold-Mariano en base.", "Nécessite au moins un run complet (walk-forward, hors CPCV) pour produire une p-value testable.") }}
-{% else %}
-{% if overview.fdr_n_tested == 1 %}
-<p class="hint">Correction Benjamini-Hochberg non significative avec un seul signal testé — nécessite plusieurs cibles entraînées pour être interprétable (un seul test n'a rien à corriger).</p>
-{% endif %}
-{% set quality_rows_fmt = [] %}
-{% for r in overview.quality_rows %}
-{% if r.testable %}
-{% set _ = quality_rows_fmt.append([
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    "%.4f" | format(r.p_value),
-    "%.4f" | format(r.adjusted_p_value),
-    status_badge("Significatif", "ok") if r.significant else status_badge("Non significatif", "neutral"),
-]) %}
-{% else %}
-{% set _ = quality_rows_fmt.append([
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    '<span class="na">—</span>', '<span class="na">—</span>',
-    status_badge("Fold de sélection (biaisé)", "warning") if r.selection_biased else status_badge("Non testable", "disabled"),
-]) %}
-{% endif %}
+{# ---- Trois questions ---- #}
+<div class="home-trio">
+<section class="card home-card">
+    <h2>{{ t('home_q_data') }}</h2>
+    <p>{{ t('home_q_data_body', f=home.n_recent_failures, d=home.recent_days, s=home.n_short, y=home.min_years) }}</p>
+    <p class="home-links"><a href="/data-quality">{{ t('nav_data_quality') }} →</a> <a href="/data-freshness">{{ t('nav_data_freshness') }} →</a></p>
+</section>
+<section class="card home-card">
+    <h2>{{ t('home_q_models') }}</h2>
+    <table class="data-table home-mini">
+        <thead><tr><th>{{ t('kind_col') }}</th><th class="num">{{ t('an_col_n_models') }}</th><th class="num">AUC</th><th class="num">F1</th></tr></thead>
+        <tbody>
+        <tr><td><span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></td><td class="num pk-mono">{{ home.kinds.directional.n }}</td><td class="num pk-mono">{{ f3(home.kinds.directional.auc) }}</td><td class="num pk-mono">{{ f3(home.kinds.directional.f1) }}</td></tr>
+        <tr><td><span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span></td><td class="num pk-mono">{{ home.kinds.alpha.n }}</td><td class="num pk-mono">{{ f3(home.kinds.alpha.auc) }}</td><td class="num pk-mono">{{ f3(home.kinds.alpha.f1) }}</td></tr>
+        </tbody>
+    </table>
+    <p class="hint">{{ t('home_q_models_hint') }}</p>
+    <p class="home-links"><a href="/runs">{{ t('nav_runs') }} →</a> <a href="/analysis">{{ t('nav_analysis') }} →</a></p>
+</section>
+<section class="card home-card">
+    <h2>{{ t('home_q_signals') }}</h2>
+    <p>{{ t('home_q_signals_body') }}</p>
+    <p class="home-links"><a href="/predictions">{{ t('kind_directional') }} →</a> <a href="/predictions?kind=alpha">{{ t('kind_alpha') }} →</a> <a href="/simulate#ml">{{ t('home_q_signals_sim') }} →</a></p>
+</section>
+</div>
+
+{# ---- Classes d'actifs ---- #}
+<section class="card">
+<h2>{{ t('home_classes') }}</h2>
+{% set crows = [] %}
+{% for c in home.classes %}
+{% set _ = crows.append(['<a href="' ~ c.url ~ '">' ~ t('nav_' ~ c.key) ~ '</a>', c.n_targets, c.n_trained, c.n_alpha, c.n_champions,
+    (status_badge(c.n_short, 'warning') if c.n_short else '—')]) %}
 {% endfor %}
-{{ data_table(["Cible", "p-value DM (unilatérale)", "p-value ajustée (BH)", "Statut"], quality_rows_fmt, num_cols=[1, 2], footer="p-value ajustée = correction Benjamini-Hochberg sur " ~ overview.fdr_n_tested ~ " cible(s) testée(s) à alpha=" ~ overview.fdr_alpha ~ "." ~ ((" " ~ overview.fdr_n_descriptive_runs ~ " run(s) à 504/756 j hors famille (horizons descriptifs).") if overview.fdr_n_descriptive_runs else "") ~ " Détail du calcul sur la fiche de chaque cible.") }}
-{% endif %}
+{{ data_table([t('home_col_class'), t('cls_kpi_targets'), t('cls_kpi_trained'), t('cls_kpi_alpha'), t('cls_kpi_champions'), t('cls_kpi_short')], crows, num_cols=[1, 2, 3, 4]) }}
 </section>
 
-<section class="card" style="--enter-delay:100ms">
-<h2>Dernière prédiction par cible</h2>
-{% set pred_rows = [] %}
-{% for r in overview.prediction_rows if r.prediction %}
-{% set p = r.prediction %}
-{% set _ = pred_rows.append([
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    p.horizon | hlabel,
-    p.direction ~ " (" ~ p.amplitude ~ ")",
-    ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
-    '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>',
-    p.split,
-]) %}
-{% endfor %}
-{{ data_table(["Cible", "Horizon", "Direction", "Confiance", "Quand", "Source"], pred_rows, "Aucune prédiction enregistrée pour l'instant — nécessite au moins un run avec un split test/holdout/live.", num_cols=[3]) }}
-</section>
+{# ---- Détail : chargé après l'affichage (6 s sur la vraie base) ---- #}
+{{ lazy_block('/fragments/home?fdr_alpha=' ~ fdr_alpha, 8, t('sb_loading'), t('lazy_retry')) }}
 
-<section class="card" style="--enter-delay:140ms">
-<h2>Métriques du modèle gagnant, par direction</h2>
-{% set metric_rows_present = overview.metric_rows | selectattr("metrics") | list %}
-{% if not metric_rows_present %}
-{{ empty_state("Aucune métrique par direction disponible.", "Nécessite au moins un run complet avec des prédictions test/holdout enregistrées.") }}
-{% else %}
-{% set metric_rows_fmt = [] %}
-{% for r in metric_rows_present %}
-{% set m = r.metrics %}
-{% set down = m.by_direction.DOWN %}
-{% set up = m.by_direction.UP %}
-{% set _ = metric_rows_fmt.append([
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>',
-    ("%.4f" | format(m.auc_overall)) if m.auc_overall is not none else '<span class="na">—</span>',
-    (down.n ~ " · P " ~ ("%.2f"|format(down.precision)) ~ " · R " ~ ("%.2f"|format(down.recall)) ~ " · F1 " ~ ("%.2f"|format(down.f1))) if down else ('<span class="na">—</span> (' ~ m.n_down ~ ' obs., min 10)'),
-    (up.n ~ " · P " ~ ("%.2f"|format(up.precision)) ~ " · R " ~ ("%.2f"|format(up.recall)) ~ " · F1 " ~ ("%.2f"|format(up.f1))) if up else ('<span class="na">—</span> (' ~ m.n_up ~ ' obs., min 10)'),
-    '<a href="/runs/' ~ r.metrics.run_id ~ '">' ~ r.metrics.split_used ~ ', n=' ~ r.metrics.n ~ '</a>',
-]) %}
-{% endfor %}
-{{ data_table(["Cible", "AUC (global, non ventilé)", "Baisse — n · précision · rappel · F1", "Hausse — n · précision · rappel · F1", "Source"], metric_rows_fmt) }}
-<p class="hint">AUC non calculable par direction : la probabilité stockée est celle de la classe prédite, pas P(hausse) — pas une valeur de classement valide pour un AUC par direction (seul l'AUC global, calculé correctement à l'entraînement, est affiché).</p>
-{% endif %}
-</section>
-
-<section class="card" style="--enter-delay:180ms">
-<h2>Classification de régime <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
+<section class="card">
+<h2>{{ t('home_regime') }} <button type="button" class="info-icon" data-term="regime" data-term-label="Régime de marché" aria-label="{{ t('glossary_open_aria', term='Régime de marché') }}">i</button></h2>
 <div id="market-state" class="market-state">
-<p class="hint">Calcul de l'état du marché (HMM)…</p>
+<p class="hint">{{ t('home_regime_loading') }}</p>
 </div>
-<p class="hint">Lecture descriptive, pas un signal testé : HMM gaussien à deux états (calme / stress) sur les rendements logarithmiques quotidiens, paramètres ajustés sur tout l'historique, probabilité filtrée (sans regarder le futur). Stress = P(état le plus volatil) &gt; 0,5. Recalculé toutes les 6 h.</p>
+<p class="hint">{{ t('home_regime_note') }}</p>
 </section>
 <script src="/static/market_state.js"></script>
-
-<section class="card" style="--enter-delay:220ms">
-<h2>{{ t('section_recent') }}</h2>
-{% set recent_rows = [] %}
-{% for r in overview.recent_runs %}
-{% set _ = recent_rows.append([
-    '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>',
-    r.target, r.horizon | hlabel, status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
-    ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>',
-    r.started_at,
-]) %}
-{% endfor %}
-{{ data_table(["Run", "Cible", "Horizon", "Statut", "F1_dir (meilleur essai)", "Lancé"], recent_rows, "Aucun run pour l'instant.", num_cols=[4], footer='<a href="/runs">Historique complet →</a>') }}
-</section>
 {% endblock %}

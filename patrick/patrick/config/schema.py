@@ -18,6 +18,7 @@ class AlignmentSpec(BaseModel):
     version: int = 0
     column_lags: dict[str, int] = Field(default_factory=dict)   # colonne -> nombre de barres de retard
     dropped: list[str] = Field(default_factory=list)            # colonnes retirées (fuite non corrigeable par un retard)
+    drop_future: bool = False   # retire les lignes datées après aujourd'hui (une cible FRED publiée en différé en crée)
     reasons: dict[str, str] = Field(default_factory=dict)       # colonne -> motif lisible
 
 

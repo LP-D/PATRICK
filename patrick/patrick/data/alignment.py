@@ -26,6 +26,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from patrick.clock import utc_today
 from patrick.config.schema import AlignmentSpec, ObjectiveConfig, UniverseConfig
 from patrick.data import publication_lag
 from patrick.data.sources.yfinance_source import clean_symbol
@@ -37,9 +38,24 @@ AUDIT_MIN_DISTINCT = 20
 MAX_EXTRA_LAG = 2
 
 
+def drop_future_rows(raw: pd.DataFrame, today: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Sans les lignes datées après `today`. Une cible FRED placée à sa date de PUBLICATION (F01) crée des lignes dans le
+    futur : le dernier relevé de DCOILWTICO, publié avec 7 jours ouvrés de retard, est daté 10 jours après la dernière
+    cotation. Aucune information n'existe à ces dates : le holdout et la prédiction « du jour » s'y calaient (prédictions
+    datées 2026-10-12 et 2026-10-13 pour une base lue le 2026-10-09)."""
+    if not isinstance(raw.index, pd.DatetimeIndex) or not len(raw):
+        return raw
+    limit = (pd.Timestamp(today) if today is not None else pd.Timestamp(utc_today())).normalize()
+    if raw.index.max() <= limit:
+        return raw
+    out = raw.loc[raw.index <= limit]
+    out.attrs = dict(raw.attrs)
+    return out
+
+
 def apply_spec(raw: pd.DataFrame, spec: AlignmentSpec | None) -> pd.DataFrame:
     """`raw` avec les retards et retraits de `spec` ; `raw` lui-même si `spec` est vide (version 0)."""
-    if spec is None or (not spec.column_lags and not spec.dropped):
+    if spec is None or (not spec.column_lags and not spec.dropped and not spec.drop_future):
         return raw
     out = raw.copy()
     for col, k in spec.column_lags.items():
@@ -47,7 +63,7 @@ def apply_spec(raw: pd.DataFrame, spec: AlignmentSpec | None) -> pd.DataFrame:
             out[col] = out[col].shift(int(k))
     out = out.drop(columns=[c for c in spec.dropped if c in out.columns])
     out.attrs = dict(raw.attrs)
-    return out
+    return drop_future_rows(out) if spec.drop_future else out
 
 
 def _forward_change(s: pd.Series) -> pd.Series:
@@ -91,7 +107,7 @@ def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConf
     """Décalages à appliquer à `raw` pour ce run (voir le docstring du module). `raw` est la table jointe de l'ingestion."""
     target_col = clean_symbol(objective.target_symbol)
     if not isinstance(raw.index, pd.DatetimeIndex):
-        return AlignmentSpec(version=ALIGNMENT_VERSION)      # pas de calendrier : rien à aligner
+        return AlignmentSpec(version=ALIGNMENT_VERSION)      # pas de calendrier : rien à aligner (ni à rogner)
     protected = {target_col}
     if objective.target_kind == "alpha" and objective.benchmark:
         protected.add(clean_symbol(objective.benchmark))   # le benchmark garde son calendrier : `features/alpha_target.py`
@@ -128,7 +144,7 @@ def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConf
                     f"audit : corrélation de rang {corr:+.2f} avec le rendement futur de la cible")
     lags = {c: base.get(c, 0) + extra.get(c, 0) for c in set(base) | set(extra)}
     lags = {c: k for c, k in lags.items() if k and c not in dropped}
-    return AlignmentSpec(version=ALIGNMENT_VERSION, column_lags=lags, dropped=dropped,
+    return AlignmentSpec(version=ALIGNMENT_VERSION, column_lags=lags, dropped=dropped, drop_future=True,
                          reasons={c: " ; ".join(r) for c, r in reasons.items()})
 
 

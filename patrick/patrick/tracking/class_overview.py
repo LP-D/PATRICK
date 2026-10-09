@@ -46,12 +46,14 @@ def model_stats_by_asset(conn: sqlite3.Connection) -> dict[str, dict]:
 
 
 def class_page(conn: sqlite3.Connection, class_key: str, all_groups: dict[str, list[tuple[str, str]]],
-               min_years: int, store: DataStore | None = None, today: date | None = None) -> dict:
-    """Données de la page d'une classe : un bloc par groupe, une ligne par cible, et les compteurs d'en-tête."""
+               min_years: int, store: DataStore | None = None, today: date | None = None,
+               stats: dict[str, dict] | None = None) -> dict:
+    """Données de la page d'une classe : un bloc par groupe, une ligne par cible, et les compteurs d'en-tête.
+    `stats` : `model_stats_by_asset` déjà calculé (la synthèse l'agrège une seule fois pour toutes les classes)."""
     cls = asset_classes.BY_KEY[class_key]
     wanted = {g: all_groups[g] for g in cls.groups if g in all_groups}
     history = {r["symbol"]: r for r in data_health.history_table(wanted, min_years, store, today)}
-    stats = model_stats_by_asset(conn)
+    stats = model_stats_by_asset(conn) if stats is None else stats
     groups = []
     kpi = {"n_targets": 0, "n_trained": 0, "n_alpha": 0, "n_champions": 0, "n_short": 0, "n_suspect": 0}
     for group, items in wanted.items():
@@ -77,3 +79,14 @@ def class_page(conn: sqlite3.Connection, class_key: str, all_groups: dict[str, l
             kpi["n_suspect"] += int(row["suspects"] > 0)
         groups.append({"group": group, "rows": rows})
     return {"class": cls, "groups": groups, "kpi": kpi}
+
+
+def all_classes_summary(conn: sqlite3.Connection, all_groups: dict[str, list[tuple[str, str]]], min_years: int,
+                        store: DataStore | None = None) -> list[dict]:
+    """Une ligne par classe d'actifs (compteurs de `class_page`) : le tableau « par classe » de la synthèse."""
+    stats = model_stats_by_asset(conn)
+    out = []
+    for cls in asset_classes.ASSET_CLASSES:
+        page = class_page(conn, cls.key, all_groups, min_years, store, stats=stats)
+        out.append({"key": cls.key, "url": cls.url, **page["kpi"]})
+    return out

@@ -10,17 +10,19 @@ import html
 import json
 import os
 import sqlite3
+import threading
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
-from patrick import explain, live_refresh
+from patrick import live_refresh
 from patrick import settings as settings_store
 from patrick.clock import utc_today
 from patrick.config import asset_classes
@@ -31,13 +33,14 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
 from patrick.tracking import champions as trackchampions
-from patrick.tracking import class_overview, data_health
+from patrick.tracking import class_overview, data_health, memo
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.tracking import home as trackhome
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import kpi_summary as trackkpi
-from patrick.tracking import usage as trackusage
 from patrick.tracking import portfolio as trackportfolio
+from patrick.tracking import usage as trackusage
 from patrick.validation import equity_sufficiency, feasibility, suspicion
 from patrick.webapp import (
     alerts,
@@ -102,6 +105,8 @@ BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="PATRICK")
 # Toutes les routes (présentes et futures) : hôte local obligatoire, pas de requête venue d'un autre site.
 app.add_middleware(security.LocalGuardMiddleware)
+# Pages de 100 à 700 Ko de HTML : compressées (le navigateur décompresse en quelques ms).
+app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # feature/nav-categories-registry: sidebar built from the registry only
@@ -154,9 +159,25 @@ def _on_startup() -> None:
         trackdb.connect().close()
     except (sqlite3.Error, OSError):
         pass
-    alerts.start_background_refresh()
-    live_refresh.start_background_refresh()
-    market_regime.start_background_refresh()
+    # Les trois rafraîchissements d'arrière-plan (cours des « plus fortes variations », signaux live, état du marché)
+    # occupent le processeur pendant des dizaines de secondes : lancés tout de suite, ils ralentiraient précisément les
+    # premières pages. Ils démarrent après un court délai (PATRICK_BACKGROUND_DELAY_S, 20 s par défaut, 0 = aussitôt).
+    try:
+        delay = max(0.0, float(os.environ.get("PATRICK_BACKGROUND_DELAY_S", "20")))
+    except ValueError:
+        delay = 20.0
+
+    def start_background_jobs() -> None:
+        alerts.start_background_refresh()
+        live_refresh.start_background_refresh()
+        market_regime.start_background_refresh()
+
+    if delay == 0:
+        start_background_jobs()
+    else:
+        timer = threading.Timer(delay, start_background_jobs)
+        timer.daemon = True
+        timer.start()
 
 
 def _station_verdict(fdr_alpha: float = 0.10) -> dict | None:
@@ -371,12 +392,27 @@ def synthesis_page(request: Request, fdr_alpha: float = 0.10):
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
     try:
-        overview = trackhistory.synthesis_overview(conn, alpha=fdr_alpha)
+        coverage = {**trackhistory.universe_coverage(conn), "last_inference_at": trackhistory.last_inference_at(conn)}
+        home = trackhome.home_summary(conn, forms.TARGET_GROUPS)
     finally:
         conn.close()
     return templates.TemplateResponse(
         request, "synthesis.html",
-        {"overview": overview, **_i18n_context(request, fdr_alpha=fdr_alpha)},
+        {"coverage": coverage, "home": home, "fdr_alpha": fdr_alpha, **_i18n_context(request, fdr_alpha=fdr_alpha)},
+    )
+
+
+@app.get("/fragments/home")
+def home_fragment(request: Request, fdr_alpha: float = 0.10):
+    """Fragment de la synthèse : les tableaux qui lisent les prédictions (6 s sur la vraie base), chargés après le cadre."""
+    fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
+    conn = trackdb.connect()
+    try:
+        overview = memo.memoize(conn, ("home-overview", fdr_alpha), lambda: trackhistory.synthesis_overview(conn, alpha=fdr_alpha))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "_home_details.html", {"overview": overview, **_i18n_context(request, fdr_alpha=fdr_alpha)},
     )
 
 
@@ -1276,34 +1312,44 @@ def _tally_view(tally: dict | None) -> dict | None:
 @app.get("/predictions")
 def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
                      kind: str = "directional"):
-    """feature/predictions-overview: dense universe-wide table (every
-    target x every horizon), direction + Diebold-Mariano significance
-    badge (same "ok" if p<dm_alpha semantics as `run_detail.html`) -- V1, no
-    interactive filter (acceptable per the phase's own scope, a static
-    dense table over ~400 rows renders and scrolls fine within
-    `data_table`'s own scroll container).
+    """feature/predictions-overview: tableau universel (cible x horizon) -- signal, significativité Diebold-Mariano, fiabilité
+    live. La page n'envoie que son cadre (titre, onglets, légende) ; le tableau, qui lit ~24 millions de prédictions
+    (3 s sur la vraie base), arrive par `/fragments/predictions` après l'affichage et est mémorisé tant que la base ne change pas.
 
-    `live_hit_rate_window`/`live_hit_rate_warning_threshold` (Phase 3):
-    passed through so the template can name the window/threshold it applies
-    rather than hardcoding a number that could silently drift from
-    `tracking/history.py`'s actual constants.
+    `live_hit_rate_window`/`live_hit_rate_warning_threshold` (Phase 3): passés au fragment pour nommer la fenêtre et le seuil
+    plutôt que de coder un nombre qui pourrait diverger de `tracking/history.py`.
 
-    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`, default
-    `tracking.history.DM_SIGNIFICANCE_ALPHA` = 0.05) -- was a literal
-    `0.05` hardcoded independently in both this template and
-    `run_detail.html`; both now read the same request-scoped value from a
-    single named constant, same pattern as the live-hit-rate pair above."""
+    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`, défaut `tracking.history.DM_SIGNIFICANCE_ALPHA` = 0.05)."""
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    kind = "alpha" if kind == "alpha" else "directional"
+    conn = trackdb.connect()
+    try:
+        n_alpha = len(_alpha_run_labels(conn))
+    finally:
+        conn.close()
     return templates.TemplateResponse(
         request, "predictions.html",
-        {
-            **_predictions_overview("alpha" if kind == "alpha" else "directional"),
-            "live_refresh": live_refresh.refresh_status(),
-            "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
-            "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
-            "dm_significance_alpha": dm_alpha,
-            **_i18n_context(request),
-        },
+        {"kind": kind, "n_alpha": n_alpha, "live_refresh": live_refresh.refresh_status(),
+         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+    )
+
+
+@app.get("/fragments/predictions")
+def predictions_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
+                         kind: str = "directional"):
+    """Fragment HTML du tableau des prédictions (chargé par `static/lazy.js`)."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    kind = "alpha" if kind == "alpha" else "directional"
+    conn = trackdb.connect()
+    try:
+        overview = memo.memoize(conn, ("predictions", kind, utc_today().isoformat()), lambda: _predictions_overview(kind))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "_predictions_body.html",
+        {**overview, "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
+         "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
+         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
 
@@ -1609,6 +1655,10 @@ def target_shap_waterfall(ticker: str, horizon: int):
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
     try:
+        from patrick import (
+            explain,  # chargé à la demande : shap + pipeline coûtent ~3,5 s à l'import (démarrage de l'app)
+        )
+
         result = explain.explain_last_prediction(ticker, horizon)
     except Exception as exc:  # noqa: BLE001 -- never let an explanation failure break the page
         return JSONResponse({"ok": False, "message": f"Erreur de calcul SHAP : {exc}"})

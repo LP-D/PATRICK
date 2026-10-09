@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from jinja2 import DictLoader, Environment
+from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
