@@ -204,3 +204,31 @@ def test_the_challengers_known_holdout_evaluation_is_reused(setup):
     d = champion_duel.duel_and_promote(setup.st, {H: setup.best_h}, {H: setup.chal_tid}, {H: known})[H]
     assert d["challenger_f1_dir"] == pytest.approx(0.70)
     assert [c["algo"] for c in setup.calls] == ["ChampAlgo"]
+
+
+def test_a_suspect_challenger_never_takes_the_title(setup):
+    """F1_dir 0.99 = fuite de données (data/alignment.py), pas une performance."""
+    setup.scores["ChalAlgo"] = 0.99
+    d = _duel(setup)
+    assert d["decision"] == "suspect_not_promoted"
+    assert champions.list_champions(setup.conn) == []
+    assert champions.list_archive(setup.conn) == []
+    assert _run_exists(setup.conn, "chal_run") and _run_exists(setup.conn, "champ_run")
+
+
+def test_a_suspect_champion_is_replaced_by_a_sane_challenger_even_if_it_scores_lower(setup):
+    setup.scores["ChampAlgo"] = 0.97       # le titulaire « parfait » est une fuite
+    setup.scores["ChalAlgo"] = 0.52
+    d = _duel(setup)
+    assert d["decision"] == "challenger_wins" and d["why"] == "suspect champion"
+    cur = champions.current(setup.conn, "^TEST", H)
+    assert (cur["run_id"], cur["reason"]) == ("chal_run", "replaced_suspect_champion")
+    assert [(a["run_id"], a["role"]) for a in champions.list_archive(setup.conn)] == [("champ_run", "replaced_champion")]
+
+
+def test_an_explicit_suspect_champion_is_replaced_without_re_evaluating_it(setup):
+    champions.promote(setup.conn, "^TEST", H, "champ_run", setup.champ_tid, reason="first", holdout_f1_dir=0.99)
+    setup.scores["ChalAlgo"] = 0.51
+    d = _duel(setup)
+    assert d["decision"] == "challenger_wins"
+    assert not [c for c in setup.calls if c["algo"] == "ChampAlgo"], "le titulaire suspect n'est pas rejoué"

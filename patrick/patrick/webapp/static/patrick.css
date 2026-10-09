@@ -2172,3 +2172,20 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .set-overlay-box { width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
 .set-overlay-box h2 { margin: 0 0 8px; font-size: 16px; }
 .set-overlay-box p { margin: 0 0 14px; }
+
+/* ---- Qualité des données (/data-quality) ---------------------------------------------------------------------- */
+.dq-item { padding: 12px 0; border-top: 1px solid var(--border, rgba(127,127,127,.2)); }
+.dq-item:first-of-type { border-top: 0; }
+.dq-item-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 4px; }
+.dq-item p { margin: 4px 0; }
+.dq-status { color: var(--text-muted, inherit); }
+.dq-reason { border-top: 1px solid var(--border, rgba(127,127,127,.2)); padding: 8px 0; }
+.dq-reason > summary { cursor: pointer; display: flex; gap: 10px; align-items: center; padding: 4px 0; }
+.dq-scroll { max-height: 340px; overflow: auto; }
+.dq-row-short td { opacity: .92; }
+.dq-row-short .pk-mono { color: var(--warning, #E0A33C); }
+.dq-counts { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+
+/* Cibles grisées (historique plus court que le seuil du formulaire de lancement). */
+select option.target-short { color: var(--text-muted, #7a8190); opacity: .55; font-style: italic; }
+.target-greyed-note:empty { display: none; }

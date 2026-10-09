@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
+from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 
 LANG_COOKIE = "patrick_lang"
@@ -872,6 +873,8 @@ STRINGS: dict[str, dict[str, str]] = {
 STRINGS.update(FUND_STRINGS)
 # Page Réglages (webapp/i18n_settings.py).
 STRINGS.update(SETTINGS_STRINGS)
+# Pages de la refonte du 2026-10-09 (webapp/i18n_pages.py).
+STRINGS.update(PAGES_STRINGS)
 
 
 def get_lang(request: Request) -> str:
@@ -893,7 +896,7 @@ def js_strings(lang: str) -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", *FUND_JS_KEYS, *SETTINGS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done", "phase_other",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",

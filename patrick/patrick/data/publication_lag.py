@@ -142,6 +142,29 @@ def availability_dates(index: pd.DatetimeIndex, series_id: str) -> pd.DatetimeIn
     return idx + pd.offsets.QuarterEnd(0) + pd.Timedelta(days=lag)
 
 
+def publication_delay_bars(series_id: str, index: pd.DatetimeIndex) -> int:
+    """Publication delay of a FRED series in BUSINESS-DAY bars: how long after the end of the
+    period an observation describes it becomes public (1 for a daily H.15 rate, 5 for a weekly
+    NFCI, ~14 for a monthly CPI...). Same tables as `availability_dates`, expressed in the
+    daily bars of the feature frame.
+
+    Used by `data/alignment.py`: a FRED target sits on its availability dates (F01), so its next
+    label covers the period that ends one delay before the row's date. Market data observed on
+    that row's date already contains that period -- the label would be a nowcast of numbers the
+    features have seen (SP500 vs ^GSPC: correlation 1.0)."""
+    idx = pd.DatetimeIndex(index)
+    freq = frequency_of(series_id, idx)
+    if freq == "daily":
+        return DAILY_LAG_BDAYS.get(series_id, DEFAULT_DAILY_LAG_BDAYS)
+    if freq == "weekly":
+        days = WEEKLY_LAG_DAYS.get(series_id, DEFAULT_WEEKLY_LAG_DAYS)
+    elif freq == "monthly":
+        days = PERIOD_END_LAG_DAYS.get(series_id, DEFAULT_MONTHLY_LAG_DAYS)
+    else:
+        days = PERIOD_END_LAG_DAYS.get(series_id, DEFAULT_QUARTERLY_LAG_DAYS)
+    return max(1, round(days * 5 / 7))
+
+
 def to_availability_index(s: pd.Series, series_id: str) -> pd.Series:
     """`s` re-indexed on its availability dates (sorted; when two
     observations become available the same day, the later reference period

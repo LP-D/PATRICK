@@ -50,6 +50,7 @@ from sklearn.preprocessing import RobustScaler
 
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
+from patrick.data import alignment
 from patrick.data.ingest import ingest, load_snapshot
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
@@ -1075,7 +1076,12 @@ def _require_alpha_columns(raw: pd.DataFrame, config: RunConfig) -> None:
 def _config_hash(config: RunConfig) -> str:
     # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
     # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
-    exclude = _ALPHA_FIELDS if config.objective.target_kind == "raw" else None
+    obj_exclude: set[str] = set(_ALPHA_FIELDS["objective"]) if config.objective.target_kind == "raw" else set()
+    # Idem pour la garde anti-fuite (`data/alignment.py`) : un run dont les entrées n'ont reçu aucun décalage (runs
+    # antérieurs, ou audit sans rien à corriger) garde son hachage d'avant.
+    if not (config.objective.alignment.column_lags or config.objective.alignment.dropped):
+        obj_exclude |= {"leak_guard", "alignment"}
+    exclude = {"objective": obj_exclude} if obj_exclude else None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
 
@@ -1376,6 +1382,20 @@ class _RunState:
             trackdb.record_phase_timing(self.conn, run_id, phase, start, end)
 
 
+def _align_raw(raw: pd.DataFrame, config: RunConfig, resumed: bool) -> pd.DataFrame:
+    """Garde anti-fuite (`data/alignment.py`) : décide (run neuf) ou rejoue (reprise) les décalages de séries de marché,
+    les écrit dans `config.objective.alignment` -- relu par la prédiction live et l'explication -- et les consigne parmi
+    les problèmes de données du snapshot."""
+    obj = config.objective
+    if not resumed and obj.leak_guard:
+        obj.alignment = alignment.decide(raw, obj, config.universe, config.validation.holdout_months)
+    spec = obj.alignment
+    if spec.version and (spec.column_lags or spec.dropped):
+        print(f"[ALIGNMENT] {len(spec.column_lags)} series delayed, {len(spec.dropped)} dropped "
+              f"(look-ahead guard, target {obj.target_symbol}).")
+    return alignment.apply_spec(raw, spec)
+
+
 def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id: str | None,
                    ) -> tuple[str, str, dict[int, str]]:
     """Snapshot context (Phase 1.6) + one `run` row per horizon, sharing the
@@ -1383,6 +1403,7 @@ def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id
     snapshot_id, data_hash, n_tickers, n_fred_series, fred_src, quality_issues = _snapshot_context(raw)
     trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
     trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
+    trackdb.add_alignment_issues(conn, snapshot_id, alignment.describe(config.objective.alignment))
     config_json = config.model_dump_json()
     config_hash = _config_hash(config)
     git_sha = trackdb.current_git_sha()
@@ -1984,8 +2005,9 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     else:
         raw = ingest(config.objective, config.universe, store, force=force_ingest,
                      data_quality=config.data_quality)
-    t_ingest_end = time.time()
     _require_alpha_columns(raw, config)
+    raw = _align_raw(raw, config, resumed=snapshot_id is not None)
+    t_ingest_end = time.time()
 
     conn = trackdb.connect(db_path)
     try:

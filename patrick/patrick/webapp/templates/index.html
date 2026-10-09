@@ -78,12 +78,13 @@
                     {% for group, items in target_groups.items() %}
                     <optgroup label="{{ group_labels.get(group, group) }}">
                         {% for sym, sym_label in items %}
-                        <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
+                        <option value="{{ sym }}" data-first="{{ depth_first.get(sym, '') }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
                         {% endfor %}
                     </optgroup>
                     {% endfor %}
                 </select>
                 <p class="hint">{{ t('target_multiselect_hint') }}</p>
+                <p class="hint target-greyed-note" id="target-greyed-note" aria-live="polite"></p>
             </label>
 
             <label>{{ t('field_target_kind') }}
@@ -155,6 +156,10 @@
             <label class="checkbox">
                 <input type="checkbox" name="data_quality_enabled" {% if view.data_quality_enabled %}checked{% endif %}>
                 {{ t('field_data_quality_enabled') }}{{ info('data_quality_enabled') }}
+            </label>
+            <label>{{ t('field_min_history_years') }}
+                <input type="number" name="min_history_years" min="{{ min_history_bounds.min_allowed }}" max="{{ min_history_bounds.max_allowed }}" step="1" value="{{ view.min_history_years }}">
+                <p class="hint">{{ t('min_history_hint', n=min_history_default) }}</p>
             </label>
             <div class="subgrid">
                 <label>{{ t('field_max_frozen_run') }}

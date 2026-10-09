@@ -1413,3 +1413,45 @@
     kind.addEventListener("change", sync);
     sync();
 })();
+
+/* Page « Lancer » : grise les cibles dont l'historique est plus court que « Historique minimum (années) ». La première
+   date connue de chaque cible est posée par le serveur (`data-first`) : aucun appel réseau, et le grisé suit la valeur
+   saisie en direct. La validation qui fait foi reste côté serveur (`forms.build_config_dict`). */
+(function () {
+    "use strict";
+    var select = document.getElementById("target_symbols");
+    var input = document.querySelector("input[name=min_history_years]");
+    var note = document.getElementById("target-greyed-note");
+    if (!select || !input) return;
+    function fmt(text, vars) {
+        return String(text).replace(/\{(\w+)\}/g, function (_, k) { return vars[k] !== undefined ? vars[k] : "{" + k + "}"; });
+    }
+    function refresh() {
+        var years = parseFloat(input.value);
+        if (!isFinite(years) || years <= 0) return;
+        var threshold = Date.now() - years * 365.25 * 86400000;
+        var greyed = 0, deselected = false;
+        Array.prototype.forEach.call(select.options, function (opt) {
+            var first = opt.dataset.first;
+            if (!first) return;
+            var tooShort = Date.parse(first) > threshold;
+            opt.classList.toggle("target-short", tooShort);
+            opt.disabled = tooShort;
+            if (tooShort) {
+                greyed += 1;
+                opt.title = fmt((window.I18N || {}).target_short_history || "insufficient history: since {first}, {years} years required",
+                                { first: first, years: years });
+                if (opt.selected) { opt.selected = false; deselected = true; }
+            } else {
+                opt.removeAttribute("title");
+            }
+        });
+        if (note) {
+            note.textContent = greyed ? fmt((window.I18N || {}).target_greyed_count || "{n} target(s) greyed out: history under {years} years",
+                                            { n: greyed, years: years }) : "";
+        }
+        if (deselected) select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    input.addEventListener("input", refresh);
+    refresh();
+})();

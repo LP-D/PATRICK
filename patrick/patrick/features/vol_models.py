@@ -260,6 +260,9 @@ def vrp_proxy(series: pd.Series, short_window: int = 10, long_window: int = 60,
     return vrp.clip(*clip).rename("vrp_proxy_truncated")
 
 
+RESID_EXPLOSION_FACTOR = 20.0
+
+
 def _arima_family_resid(series: pd.Series, order: tuple[int, int, int], name: str,
                          fit_end_idx: int | None = None) -> pd.Series:
     """Residual (surprise) of an AR/MA/ARMA/ARIMA(p,d,q) model — statsmodels'
@@ -281,9 +284,16 @@ def _arima_family_resid(series: pd.Series, order: tuple[int, int, int], name: st
         res = ARIMA(fit_ret.values, order=order).fit()
         if cutoff is None:
             resid = pd.Series(res.resid, index=ret.index, name=name)
-            return resid.reindex(series.index)
-        full_res = res.apply(ret.values)
-        resid = pd.Series(full_res.resid, index=ret.index, name=name)
+        else:
+            full_res = res.apply(ret.values)
+            resid = pd.Series(full_res.resid, index=ret.index, name=name)
+        # A non-stationary / non-invertible fit (typical of ARIMA(1,1,1) on a short fold) produces residuals that
+        # explode (1.7e297 measured on XLV): XGBoost then refuses the whole matrix. A one-step residual of a returns
+        # series cannot sit 20 times beyond the largest return it models -- anything else is a diverged fit.
+        bound = RESID_EXPLOSION_FACTOR * max(float(np.nanmax(np.abs(ret.values))), 1e-6)
+        if not np.isfinite(resid.values).all() or float(np.nanmax(np.abs(resid.values))) > bound:
+            print(f"  [WARN] {name}: diverged fit (residual beyond {bound:.3g}) -- feature set to missing.")
+            return pd.Series(np.nan, index=series.index, name=name)
         return resid.reindex(series.index)
     except Exception as e:  # noqa: BLE001 -- statsmodels raises arbitrary numerical errors on degenerate series; feature -> NaN
         print(f"  [WARN] {name}: {str(e)[:100]}")

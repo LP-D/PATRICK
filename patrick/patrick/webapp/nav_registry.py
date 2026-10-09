@@ -53,6 +53,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
+    NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 55, "nav_data_quality"),
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
     NavEntry("universe", "Univers", "/universe", "classes_actifs", 10, "nav_universe",
              child_routes=("/targets/{ticker}",)),

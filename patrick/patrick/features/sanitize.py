@@ -14,6 +14,11 @@ from __future__ import annotations
 
 import numpy as np
 
+# XGBoost (et LightGBM/CatBoost via leurs conversions) travaille en float32 : une valeur finie en float64 mais au-delà de
+# 3.4e38 y devient `inf` et la matrice est refusée (« Input data contains `inf` or a value too large »). Marge de 8
+# ordres de grandeur : aucune feature réelle (rendement, z-score, ratio borné) n'approche cette échelle.
+FLOAT32_SAFE_MAX = 1e30
+
 
 def finite_features(values: np.ndarray, where: str) -> np.ndarray:
     """Correction report, N2 -- replaces `np.nan_to_num(...)` at the three
@@ -41,6 +46,13 @@ def finite_features(values: np.ndarray, where: str) -> np.ndarray:
         print(f"  [WARN] {where}: {n_inf} infinite value(s) in the feature pool "
               f"(degenerate computation: denominator ~0, log of a value <= 0) — "
               f"treated as missing.")
+    with np.errstate(invalid="ignore"):
+        too_big = np.isfinite(values) & (np.abs(values) > FLOAT32_SAFE_MAX)
+    n_big = int(too_big.sum())
+    if n_big:
+        print(f"  [WARN] {where}: {n_big} value(s) out of float32 range (> {FLOAT32_SAFE_MAX:g}: ratio on a ~0 "
+              f"denominator, diverged fit) — treated as missing.")
+        values = np.where(too_big, np.nan, values)
     return np.nan_to_num(np.where(np.isfinite(values), values, np.nan))
 
 
@@ -51,10 +63,12 @@ def finite_scaled(scaled: np.ndarray, where: str) -> np.ndarray:
     (never an inf, hence invisible upstream) can still overflow when divided
     by a tiny IQR. A safety net on the way out, not a replacement for the
     upstream cleanup -- both are necessary."""
-    if not np.isfinite(scaled).all():
-        n_bad = int((~np.isfinite(scaled)).sum())
-        print(f"  [WARN] {where}: {n_bad} non-finite value(s) AFTER scaling "
+    with np.errstate(invalid="ignore"):
+        bad = ~np.isfinite(scaled) | (np.abs(scaled) > FLOAT32_SAFE_MAX)
+    if bad.any():
+        n_bad = int(bad.sum())
+        print(f"  [WARN] {where}: {n_bad} non-finite or float32-overflowing value(s) AFTER scaling "
               f"(overflow from an extreme value divided by a tiny IQR) — "
               f"reset to the median (0 after RobustScaler).")
-        scaled = np.nan_to_num(np.where(np.isfinite(scaled), scaled, np.nan))
+        scaled = np.nan_to_num(np.where(bad, np.nan, scaled))
     return scaled

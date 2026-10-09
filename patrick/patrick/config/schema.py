@@ -11,6 +11,16 @@ from patrick.config import defaults as D
 from patrick.config.target_label import run_label
 
 
+class AlignmentSpec(BaseModel):
+    """Décalages temporels décidés pour UN run (`data/alignment.py`) et rejoués à l'identique par la prédiction live,
+    l'explication et la reprise. `version == 0` (défaut, et valeur de tous les runs antérieurs) : aucun décalage ajouté,
+    donc un ancien modèle reçoit exactement les entrées de son entraînement."""
+    version: int = 0
+    column_lags: dict[str, int] = Field(default_factory=dict)   # colonne -> nombre de barres de retard
+    dropped: list[str] = Field(default_factory=list)            # colonnes retirées (fuite non corrigeable par un retard)
+    reasons: dict[str, str] = Field(default_factory=dict)       # colonne -> motif lisible
+
+
 class ObjectiveConfig(BaseModel):
     """The asset/indicator to predict and the target definition."""
     target_symbol: str
@@ -24,6 +34,11 @@ class ObjectiveConfig(BaseModel):
     # disable it and measure its impact. False (default) = unchanged production
     # behavior (fix always applied) for every existing run.
     disable_session_lag: bool = False
+    # Garde anti-fuite (`data/alignment.py`) : décale les séries de marché dont la date recouvre déjà la fenêtre du label
+    # (cible FRED publiée avec retard, séries cotées dans un autre fuseau). `False` = comportement antérieur, réservé aux
+    # audits de dégradation. La décision prise est écrite dans `alignment` pour que le run reste reproductible.
+    leak_guard: bool = True
+    alignment: AlignmentSpec = Field(default_factory=AlignmentSpec)
     # Cible alpha (docs/superpowers/specs/2026-10-06-cible-alpha-beta-point-in-time-design.md) : "raw" = rendement
     # brut de la cible (défaut, comportement historique); "alpha" = rendement excédentaire `actif - β * benchmark`.
     # `benchmark` vide = déterminé automatiquement (features/benchmark.py), sinon choix manuel; le validateur de

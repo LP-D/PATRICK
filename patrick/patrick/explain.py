@@ -66,6 +66,7 @@ import pandas as pd
 import shap
 
 from patrick.config.schema import RunConfig
+from patrick.data import alignment
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
 from patrick.features.pool_cache import FEATURE_CODE_HASH
@@ -202,6 +203,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         if raw is None:
             return None
         data_snapshot_id = raw.attrs.get("snapshot_id")
+        raw = alignment.apply_spec(raw, config.objective.alignment)
         # SHAP cache (ported from feature/replay-cache-universe): same trial,
         # same prediction date, same data snapshot, same code -> the payload
         # computed on a previous page open, without rebuilding the pool.
@@ -316,6 +318,7 @@ def compute_drift_for_ticker_horizon(target: str, horizon: int, db_path: str | N
         config = RunConfig.model_validate_json(run["config_json"])
         store = store or DataStore()
         raw = ingest(config.objective, config.universe, store, data_quality=config.data_quality)
+        raw = alignment.apply_spec(raw, config.objective.alignment)
 
         model_raw = restrict_to_required_series(raw, feature_names, target_col)
         full_pool = build_full_feature_pool(model_raw, config, target_col, interaction_formulas)

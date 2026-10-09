@@ -106,9 +106,10 @@ def test_real_shocks_do_not_exclude_an_extended_series():
     end = pd.Timestamp("2026-10-05")
     spiky = _weekly_series(spike=True)
     assert quality.check_fred_series(spiky, "ICSA", end) is None
-    # Any other FRED series keeps the aberrant-return gate.
-    issue = quality.check_fred_series(spiky, "UNRATE_X", end)
-    assert issue is not None and issue.reason == "rendement_aberrant"
+    # Since 2026-10-09 the base series are exempt too: UNRATE (+236 % in April 2020), PAYEMS, PCE, SOFR... were dropped
+    # from every run's feature pool by a gate calibrated on price ticks.
+    assert quality.check_fred_series(spiky, "UNRATE", end) is None
+    assert quality.check_fred_series(spiky, "UNRATE_X", end) is None
 
 
 def _config(families, fred_series) -> RunConfig:

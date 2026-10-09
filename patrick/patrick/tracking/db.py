@@ -411,6 +411,24 @@ def add_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str, issues: 
         )
 
 
+ALIGNMENT_REASON = "alignement_temporel"
+
+
+def add_alignment_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
+    """Décalages décidés par la garde anti-fuite (`data/alignment.py`), rattachés au snapshot du run. Séparé de
+    `add_data_quality_issues` : celui-ci ne réécrit rien dès qu'un snapshot a déjà des lignes, alors que ces décisions
+    sont propres à une cible. Idempotent : une colonne déjà consignée pour ce snapshot n'est pas dupliquée."""
+    if not issues:
+        return
+    with conn:
+        known = {r[0] for r in conn.execute(
+            "SELECT series FROM data_quality_issue WHERE snapshot_id = ? AND reason = ?",
+            (snapshot_id, ALIGNMENT_REASON))}
+        conn.executemany(
+            "INSERT INTO data_quality_issue (snapshot_id, series, reason, detail) VALUES (?, ?, ?, ?)",
+            [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues if i["series"] not in known])
+
+
 def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list[dict]:
     rows = conn.execute(
         "SELECT series, reason, detail FROM data_quality_issue WHERE snapshot_id = ? ORDER BY id",

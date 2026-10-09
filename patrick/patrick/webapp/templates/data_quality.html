@@ -1,0 +1,130 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, metric, empty_state %}
+{% block title %}PATRICK — {{ t('dq_title') }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ t('dq_title') }}</h1>
+<p class="page-subtitle">{{ t('dq_subtitle') }}</p>
+
+<form class="filter-bar" method="get" action="/data-quality">
+    <label>{{ t('dq_threshold_label') }}
+        <input type="number" name="min_history_years" min="{{ bounds.min_allowed }}" max="{{ bounds.max_allowed }}" step="1" value="{{ o.min_history_years }}">
+    </label>
+    <button type="submit">{{ t('dq_threshold_apply') }}</button>
+    <span class="hint">{{ t('dq_generated', at=o.generated_at) }}</span>
+</form>
+
+<div class="metric-grid">
+{{ metric(t('dq_kpi_runs'), o.runs.done, t('dq_kpi_runs_rel', failed=o.runs.failed, total=o.runs.total), "ok") }}
+{{ metric(t('dq_kpi_failures'), o.failure_summary | length, t('dq_kpi_failures_rel', n=o.failures | length), "warning" if o.failure_summary else "neutral") }}
+{{ metric(t('dq_kpi_series'), o.n_issue_series, t('dq_kpi_series_rel'), "warning" if o.n_issue_series else "neutral") }}
+{{ metric(t('dq_kpi_history'), o.history_counts.short, t('dq_kpi_history_rel', y=o.min_history_years, total=o.history | length), "warning" if o.history_counts.short else "ok") }}
+{{ metric(t('dq_kpi_suspect'), o.suspects | length, t('dq_kpi_suspect_rel'), "error" if o.suspects else "ok") }}
+</div>
+
+<section class="card">
+<h2>{{ t('dq_failures_title') }}</h2>
+{% if not o.failure_summary %}
+<p class="hint">{{ t('dq_failures_empty') }}</p>
+{% endif %}
+{% for g in o.failure_summary %}
+<div class="dq-item">
+    <div class="dq-item-head">
+        <strong>{{ g.title }}</strong>
+        {{ status_badge(t('dq_failures_n', n=g.n), 'warning') }}
+        <span class="hint">{{ t('dq_failures_last', at=g.last) }}</span>
+    </div>
+    <p>{{ g.meaning }}</p>
+    {% if g.targets %}<p class="hint">{{ t('dq_failures_targets', targets=g.targets[:14] | join(', ')) }}{% if g.targets | length > 14 %} …{% endif %}</p>{% endif %}
+    <p class="dq-status"><b>{{ t('dq_failures_fix') }} :</b> {{ g.status }}</p>
+</div>
+{% endfor %}
+</section>
+
+<section class="card">
+<h2>{{ t('dq_issues_title') }}</h2>
+<p class="hint">{{ t('dq_issues_intro') }}</p>
+{% for g in o.issues %}
+<details class="dq-reason"{% if loop.index <= 2 %} open{% endif %}>
+    <summary><strong>{{ g.title }}</strong> {{ status_badge(g.series | length, 'neutral') }}</summary>
+    <p>{{ g.meaning }}</p>
+    {% if g.effect %}<p class="dq-status"><b>{{ t('dq_effect') }} :</b> {{ g.effect }}</p>{% endif %}
+    <div class="table-scroll dq-scroll">
+    <table class="data-table">
+        <thead><tr><th>{{ t('dq_col_series') }}</th><th>{{ t('dq_col_detail') }}</th><th class="num">{{ t('dq_col_seen') }}</th><th>{{ t('dq_col_last') }}</th></tr></thead>
+        <tbody>
+        {% for i in g.series[:60] %}
+        <tr><td class="pk-mono">{{ i.series }}</td><td>{{ i.detail }}</td><td class="num pk-mono">{{ t('dq_snapshots', n=i.n_snapshots) }}</td><td>{{ i.last_seen }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if g.series | length > 60 %}<p class="hint">… {{ g.series | length - 60 }}</p>{% endif %}
+</details>
+{% endfor %}
+{% if o.excluded %}
+<h3>{{ t('dq_excluded_title') }}</h3>
+<p class="hint">{{ t('dq_excluded_hint') }}</p>
+<p>{% for e in o.excluded %}<span class="tag" title="{{ e.reason }}">{{ e.symbol }}</span> {% endfor %}</p>
+{% endif %}
+</section>
+
+<section class="card">
+<h2>{{ t('dq_suspect_title') }}</h2>
+<p class="hint">{{ t('dq_suspect_intro') }}</p>
+{% if not o.suspects %}
+<p class="hint">{{ t('dq_suspect_empty') }}</p>
+{% else %}
+<div class="table-scroll">
+<table class="data-table">
+    <thead><tr><th>{{ t('dq_col_run') }}</th><th>{{ t('dq_col_target') }}</th><th>{{ t('dq_col_horizon') }}</th><th class="num">F1_dir</th><th class="num">AUC</th><th>{{ t('dq_col_cause') }}</th></tr></thead>
+    <tbody>
+    {% for s in o.suspects %}
+    <tr><td class="pk-mono"><a href="/runs/{{ s.run_id }}/detail">{{ s.run_id }}</a></td><td>{{ s.target }}</td><td>{{ s.horizon | hlabel }}</td>
+        <td class="num pk-mono">{{ '%.3f' | format(s.F1_dir) if s.F1_dir is not none else '—' }}</td>
+        <td class="num pk-mono">{{ '%.3f' | format(s.AUC) if s.AUC is not none else '—' }}</td>
+        <td>{{ s.cause }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+</section>
+
+<section class="card">
+<h2>{{ t('dq_history_title') }}</h2>
+<p class="hint">{{ t('dq_history_intro') }}</p>
+<p class="dq-counts">
+    {{ status_badge(t('dq_status_ok') ~ ' · ' ~ o.history_counts.ok, 'ok') }}
+    {{ status_badge(t('dq_status_short') ~ ' · ' ~ o.history_counts.short, 'warning') }}
+    {{ status_badge(t('dq_status_unknown') ~ ' · ' ~ o.history_counts.unknown, 'neutral') }}
+</p>
+{% set ns = namespace(group=None) %}
+{% for g in o.history | groupby('group_label') %}
+<details class="dq-reason"{% if g.list | selectattr('status', 'equalto', 'short') | list | length %} open{% endif %}>
+    <summary><strong>{{ g.grouper }}</strong>
+        {{ status_badge(g.list | length, 'neutral') }}
+        {% set n_short = g.list | selectattr('status', 'equalto', 'short') | list | length %}
+        {% if n_short %}{{ status_badge(t('dq_status_short') ~ ' · ' ~ n_short, 'warning') }}{% endif %}
+    </summary>
+    <div class="table-scroll dq-scroll">
+    <table class="data-table">
+        <thead><tr><th>{{ t('dq_col_target') }}</th><th>{{ t('dq_col_first') }}</th><th class="num">{{ t('dq_col_years') }}</th><th class="num">{{ t('dq_col_obs') }}</th><th>{{ t('dq_col_status') }}</th><th>{{ t('dq_col_source') }}</th></tr></thead>
+        <tbody>
+        {% for r in g.list %}
+        <tr class="{{ 'dq-row-short' if r.status == 'short' else '' }}">
+            <td><span class="pk-mono">{{ r.symbol }}</span> <span class="hint">{{ r.label }}</span></td>
+            <td>{{ r.first or '—' }}</td>
+            <td class="num pk-mono">{{ r.years if r.years is not none else '—' }}</td>
+            <td class="num pk-mono">{{ r.n_obs if r.n_obs is not none else '—' }}</td>
+            <td>{{ status_badge(t('dq_status_' ~ r.status), {'ok': 'ok', 'short': 'warning', 'unknown': 'neutral'}[r.status]) }}</td>
+            <td class="hint">{{ t('dq_source_' ~ r.source) if r.source else '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</details>
+{% endfor %}
+</section>
+{% endblock %}

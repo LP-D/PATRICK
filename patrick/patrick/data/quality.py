@@ -185,16 +185,17 @@ def check_fred_series(s: pd.Series, series_id: str, requested_end: pd.Timestamp,
     at 0.12 for years of zero-interest-rate policy, yields quoted to 0.01),
     far from the ~100-priced, 1.5%-vol quotes that gate was calibrated on.
 
-    Extended FRED data (`config/defaults.py::MACRO_ONLY_FRED_SERIES`) also
-    skips the aberrant-return gate: official statistics jump for real
-    (initial claims +967 % in March 2020, U6 +160 % in April 2020, Fed
-    assets +24 % in October 2008) and the robust-z threshold, calibrated on
-    price returns, would silently drop 9 of them. Gap and stale-tail gates
-    still apply."""
-    from patrick.config import defaults as D
+    EVERY FRED series skips the aberrant-return gate (extended data since
+    2026-10-07, the base series since 2026-10-09): official statistics jump
+    for real (initial claims +967 % in March 2020, unemployment +236 % in
+    April 2020, payrolls -13.6 %, Fed assets +24 % in October 2008, the repo
+    spike of September 2019 on SOFR, a breakeven near zero in March 2020) and
+    the robust-z threshold, calibrated on price returns to catch bad ticks,
+    silently dropped ten series from the feature pool of EVERY run (measured
+    on the snapshots of 2026-10-07/08). A bad tick does not exist in an
+    official release. Gap and stale-tail gates still apply."""
     from patrick.data import publication_lag
 
-    macro_only_ids = set(D.MACRO_ONLY_FRED_SERIES.values())
     clean = s.dropna()
     freq = publication_lag.frequency_of(series_id, clean.index)
     spacing = EXPECTED_SPACING_BDAYS[freq]
@@ -208,8 +209,6 @@ def check_fred_series(s: pd.Series, series_id: str, requested_end: pd.Timestamp,
         (check_stale_tail, {"requested_end": requested_end, "max_gap_bdays": max_gap_bdays,
                             "allowed_extra_bdays": (2 * spacing + lag_bdays) if spacing > 1 else lag_bdays}),
     ]
-    if series_id not in macro_only_ids:
-        checks.append((check_aberrant_returns, {"max_robust_z": max_robust_z}))
     for check, kwargs in checks:
         issue = check(s, **kwargs)
         if issue is not None:

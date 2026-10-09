@@ -35,6 +35,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.config.schema import RunConfig
+from patrick.data import alignment
 from patrick.data.ingest import ingest
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
@@ -184,6 +185,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             if raw_cache is not None:
                 raw_cache[cache_key] = raw
 
+        # Same look-ahead alignment as at training time (`data/alignment.py`); empty for runs that predate it.
+        raw = alignment.apply_spec(raw, config.objective.alignment)
         model_raw = restrict_to_required_series(raw, feature_names, target_col)
         full_pool = build_full_feature_pool(model_raw, config, target_col, interaction_formulas)
 

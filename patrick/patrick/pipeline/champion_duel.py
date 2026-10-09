@@ -28,6 +28,7 @@ import traceback
 from patrick.config.schema import RunConfig
 from patrick.pipeline import engine
 from patrick.tracking import champions
+from patrick.validation import suspicion
 
 RULE = ("F1_dir strictly greater on the same holdout, both configurations retrained on the "
         "same pre-holdout data; tie -> the champion stays")
@@ -78,6 +79,23 @@ def _describe(side_run_id: str, trial_id: int, cfg: dict, evaluation: dict | Non
             "metrics": (evaluation or {}).get("metrics")}
 
 
+def _replace_suspect_champion(st, target: str, horizon: int, run_id: str, trial_id: int, champion: dict,
+                              chal_f1: float | None, champ_f1: float | None) -> dict:
+    """Le titulaire affiche un score impossible (fuite de données) : il ne peut pas servir de référence, le challenger sain
+    lui succède sans duel."""
+    duel = {"rule": "champion suspect (score au-delà du plausible, voir validation/suspicion.py) : remplacé sans duel",
+            "challenger": {"run_id": run_id, "trial_id": trial_id, "f1_dir": chal_f1},
+            "champion": {"run_id": champion["run_id"], "trial_id": champion["trial_id"],
+                         "f1_dir": champ_f1},
+            "winner": "challenger"}
+    champions.promote(st.conn, target, horizon, run_id, trial_id, reason="replaced_suspect_champion",
+                      holdout_f1_dir=chal_f1)
+    champions.archive(st.conn, champion["run_id"], role="replaced_champion", duel=duel)
+    champions.prune_run(st.conn, champion["run_id"])
+    return {"decision": "challenger_wins", "why": "suspect champion", "challenger_f1_dir": chal_f1,
+            "champion_f1_dir": champ_f1, "pruned_run": champion["run_id"]}
+
+
 def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | None) -> dict:
     target = st.config.objective.run_label()
     run_id = st.run_ids[horizon]
@@ -92,9 +110,16 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool, st.config,
         st.all_dates_full, st.n_wf, best_h, st.seed, universe=st.universe)
     chal_f1 = _f1(chal_eval)
+    chal_reason = suspicion.suspect_reason((chal_eval or {}).get("metrics"))
+    if chal_reason:
+        # Un score pareil est une fuite de données, pas une performance : jamais de titre (data/alignment.py).
+        return {"decision": "suspect_not_promoted", "why": chal_reason, "challenger_f1_dir": chal_f1}
     if champion is None:
         champions.promote(st.conn, target, horizon, run_id, trial_id, reason="first", holdout_f1_dir=chal_f1)
         return {"decision": "promoted_first", "run_id": run_id, "challenger_f1_dir": chal_f1}
+    if suspicion.f1_suspect(champion.get("holdout_f1_dir")):
+        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1,
+                                         float(champion["holdout_f1_dir"]))
     if chal_f1 is None:
         return {"decision": "not_compared", "why": "challenger not evaluable on the holdout",
                 "champion": champion["run_id"]}
@@ -107,6 +132,8 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     if champ_f1 is None:
         return {"decision": "not_compared", "why": "champion configuration not evaluable on this holdout",
                 "champion": champion["run_id"]}
+    if suspicion.f1_suspect(champ_f1):
+        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1)
 
     challenger_wins = chal_f1 > champ_f1
     duel = {

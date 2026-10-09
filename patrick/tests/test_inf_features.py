@@ -59,19 +59,18 @@ def test_finite_features_reports_and_never_stays_silent(capsys):
 
 
 def test_finite_scaled_catches_overflow_from_large_but_finite_values(capsys):
-    """`_finite_features` ne suffit pas seul : une valeur simplement TRÈS
-    GRANDE mais finie (donc invisible en amont) peut encore déborder en étant
-    divisée par un IQR minuscule."""
-    # Calibré par mesure : le débordement exige valeur/IQR > 1.8e308 — ici
-    # 1e305 / 2e-6. Une valeur "seulement" grande (1e300 / 2e-3) reste finie.
-    huge = np.array([[1e305], [1e-6], [2e-6], [3e-6], [4e-6]])
+    """`_finite_features` ne suffit pas seul : une valeur simplement GRANDE mais dans la plage acceptée en entrée (donc
+    invisible en amont) devient astronomique une fois divisée par un IQR minuscule -- au-delà de la plage float32 de
+    XGBoost, voire du float64."""
+    # IQR 3e-15 : juste au-dessus du seuil sous lequel sklearn remplace l'échelle par 1 (10 * eps).
+    huge = np.array([[1e29], [1e-15], [4e-15], [7e-15], [1.0e-14]])
     assert np.isfinite(huge).all(), "l'entrée est bien finie — rien à nettoyer en amont"
 
     scaled = RobustScaler().fit_transform(_finite_features(huge, "test"))
-    assert not np.isfinite(scaled).all(), "le débordement doit bien se produire ici"
+    assert np.abs(scaled).max() > 3.4e38, "le débordement doit bien se produire ici"
 
     repaired = _finite_scaled(scaled, "holdout (h=5j)")
-    assert np.isfinite(repaired).all()
+    assert np.isfinite(repaired).all() and np.abs(repaired).max() <= 1e30
     assert "AFTER scaling" in capsys.readouterr().out
 
 

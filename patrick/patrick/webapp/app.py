@@ -30,6 +30,7 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
 from patrick.tracking import champions as trackchampions
+from patrick.tracking import data_health
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
@@ -281,6 +282,11 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
             "target_groups": _target_groups_with_equity_badges(),
+            # Première date connue de chaque cible (données ingérées, sinon première cotation vérifiée) : la page grise
+            # les cibles plus récentes que « Historique minimum (années) » sans appel réseau.
+            "depth_first": data_health.depth_by_symbol_for_form(),
+            "min_history_bounds": D.MIN_HISTORY_YEARS_BOUNDS,
+            "min_history_default": D.DEFAULT_MIN_HISTORY_YEARS,
             **_i18n_context(request),
         },
         status_code=status_code,
@@ -990,6 +996,28 @@ def data_freshness_page(request: Request):
     return templates.TemplateResponse(
         request, "data_freshness.html",
         {"groups": groups, **_i18n_context(request)},
+    )
+
+
+@app.get("/data-quality")
+def data_quality_page(request: Request, min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS):
+    """Qualité des données telle que les entraînements l'ont vécue (`tracking/data_health.py`) : échecs et leur cause,
+    séries écartées à l'ingestion, historique par cible comparé au seuil, résultats suspects. Lecture seule, sans réseau."""
+    bounds = D.MIN_HISTORY_YEARS_BOUNDS
+    if not bounds["min_allowed"] <= min_history_years <= bounds["max_allowed"]:
+        raise HTTPException(status_code=400, detail=f"min_history_years doit être compris entre "
+                                                    f"{bounds['min_allowed']} et {bounds['max_allowed']}.")
+    t = i18n.translator(i18n.get_lang(request))
+    conn = trackdb.connect()
+    try:
+        overview = data_health.overview(conn, forms.TARGET_GROUPS, min_history_years)
+    finally:
+        conn.close()
+    for row in overview["history"]:
+        row["group_label"] = t(i18n.TARGET_GROUP_LABEL_KEYS.get(row["group"], f"group_{row['group']}"))
+    return templates.TemplateResponse(
+        request, "data_quality.html",
+        {"o": overview, "bounds": bounds, **_i18n_context(request)},
     )
 
 
