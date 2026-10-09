@@ -64,8 +64,9 @@ def test_settings_button_is_in_the_topbar_of_every_page_and_in_the_palette(clien
 
 def test_settings_page_is_registered_in_the_navigation_registry():
     assert "/reglages" in nav_registry.registered_routes()
-    assert nav_registry.utility_links("/reglages")[0]["active"] is True
-    assert nav_registry.utility_links("/")[0]["active"] is False
+    on_settings = {u["url"]: u["active"] for u in nav_registry.utility_links("/reglages")}
+    on_home = {u["url"]: u["active"] for u in nav_registry.utility_links("/")}
+    assert on_settings["/reglages"] is True and on_home["/reglages"] is False
 
 
 def test_every_string_used_by_the_page_exists_in_both_languages():

@@ -3,7 +3,7 @@ and the on-demand PSI measurement route."""
 from __future__ import annotations
 
 import pandas as pd
-from fastapi.testclient import TestClient
+from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db, history
 from patrick.webapp.app import app

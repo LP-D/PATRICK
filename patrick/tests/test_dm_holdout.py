@@ -134,7 +134,7 @@ def _seed_biased_run(tmp_path, monkeypatch):
 
 
 def test_pages_never_call_a_selection_fold_p_value_significant(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
+    from page_support import FullPageClient as TestClient
 
     from patrick.webapp.app import app
     _seed_biased_run(tmp_path, monkeypatch)
@@ -152,7 +152,7 @@ def test_pages_never_call_a_selection_fold_p_value_significant(tmp_path, monkeyp
 
 
 def test_synthesis_flags_a_target_whose_only_dm_is_selection_biased(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
+    from page_support import FullPageClient as TestClient
 
     from patrick.webapp.app import app
     _seed_biased_run(tmp_path, monkeypatch)

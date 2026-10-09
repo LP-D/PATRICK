@@ -25,7 +25,7 @@
 {% endif %}
 {% endfor %}
 {{ data_table([t('dq_col_target'), t('home_col_pdm'), t('home_col_padj'), t('dq_col_status')], quality_rows_fmt, num_cols=[1, 2], collapse_after=5, more_label=more, less_label=less,
-              footer=t('home_bh_footer', n=overview.fdr_n_tested, alpha=overview.fdr_alpha)) }}
+              footer=t('home_bh_footer', n=overview.fdr_n_tested, alpha=overview.fdr_alpha) ~ ((' ' ~ t('home_bh_descriptive', n=overview.fdr_n_descriptive_runs)) if overview.fdr_n_descriptive_runs else '')) }}
 {% endif %}
 </section>
 

@@ -456,6 +456,8 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "home_not_testable": _s("Non testable", "Not testable"),
     "home_bh_footer": _s("p-value ajustée = correction Benjamini-Hochberg sur {n} cible(s) testée(s) à α = {alpha}. Le détail du calcul est dans le bandeau « Comprendre les p-values », en bas de page.",
                          "adjusted p-value = Benjamini-Hochberg correction over {n} tested target(s) at α = {alpha}. The calculation is explained in the \"Understand p-values\" bar at the bottom of the page."),
+    "home_bh_descriptive": _s("{n} run(s) à 504/756 j hors famille (horizons descriptifs).",
+                              "{n} run(s) at 504/756 d outside the family (descriptive horizons)."),
     "home_last_pred": _s("Dernière prédiction par cible", "Latest prediction per target"),
     "home_col_direction": _s("Direction", "Direction"), "home_col_conf": _s("Confiance", "Confidence"),
     "home_col_when": _s("Quand", "When"), "home_col_source": _s("Source", "Source"),

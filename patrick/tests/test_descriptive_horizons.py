@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from fastapi.testclient import TestClient
+from page_support import FullPageClient as TestClient
 
 from patrick.config import defaults as D
 from patrick.tracking import db as trackdb
