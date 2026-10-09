@@ -242,3 +242,50 @@ def test_service_is_the_only_way_orders_are_written(conn, monkeypatch):
     systematic.apply(conn, rule_id, TODAY)
 
     assert len(calls) == 5
+
+
+# --------------------------------------------------------------------------- choix du modèle : AUC / F1, suspects
+
+def _score_the_best_trial(conn, trial_id: int, f1_dir: float, auc: float) -> None:
+    trackdb.mark_best_trial(conn, trial_id, artifact_path=None)
+    conn.execute("UPDATE run SET status = 'done' WHERE run_id = 'run1'")
+    for metric, value in (("F1_dir", f1_dir), ("AUC_ovr_4cls", auc)):
+        conn.execute("INSERT INTO fold_metric (trial_id, fold_index, split, metric, value) VALUES (?, 0, 'holdout', ?, ?)",
+                     (trial_id, metric, value))
+    conn.commit()
+
+
+def test_available_models_carry_auc_and_f1_for_the_selector(conn):
+    tid = _model(conn)
+    _score_the_best_trial(conn, tid, f1_dir=0.54, auc=0.58)
+    (model,) = systematic.available_models(conn)
+    assert (model["auc"], model["f1_dir"], model["suspect"]) == (0.58, 0.54, None)
+    assert model["kind"] == "raw"
+
+
+def test_a_suspect_model_is_flagged_in_the_list_and_refused_at_creation(conn):
+    """F1_dir 0,99 = fuite de données : visible dans le sélecteur, jamais tradable."""
+    sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
+    tid = _model(conn)
+    _score_the_best_trial(conn, tid, f1_dir=0.99, auc=0.60)
+    (model,) = systematic.available_models(conn)
+    assert model["suspect"] and "0.99" in model["suspect"]
+    with pytest.raises(store.FundError, match="suspect"):
+        systematic.create_rule(conn, sid, "x", _config(tid))
+
+
+def test_the_simulation_page_offers_ml_models_split_by_family(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from patrick.webapp.app import app
+
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
+    conn = trackdb.connect(str(tmp_path / "p.db"))
+    store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
+    tid = _model(conn)
+    _score_the_best_trial(conn, tid, f1_dir=0.52, auc=0.55)
+    conn.close()
+    html = TestClient(app).get("/simulate").text
+    assert 'id="ml-rule-form"' in html and "Piloter avec un modèle ML entraîné" in html
+    assert '<optgroup label="Directionnels' in html and "AUC 0.550" in html and "F1 0.520" in html
+    assert 'src="/static/ml_rule.js"' in html

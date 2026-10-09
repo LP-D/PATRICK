@@ -36,7 +36,7 @@ from patrick.tracking import history as trackhistory
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import portfolio as trackportfolio
-from patrick.validation import equity_sufficiency, feasibility
+from patrick.validation import equity_sufficiency, feasibility, suspicion
 from patrick.webapp import (
     alerts,
     asset_stats,
@@ -1091,7 +1091,18 @@ def _asset_group_view(group_key: str) -> list[dict]:
     ]
 
 
-def _predictions_overview() -> dict:
+def _alpha_run_labels(conn) -> list[tuple[str, str, str | None]]:
+    """(étiquette de run, actif, benchmark) de chaque modèle alpha en base."""
+    from patrick.config.target_label import split_run_label
+    out = []
+    for (label,) in conn.execute("SELECT DISTINCT target FROM run WHERE target LIKE ? ESCAPE '\\' ORDER BY target",
+                                 ("%\\_\\_alpha\\_%",)):
+        asset, _, benchmark = split_run_label(label)
+        out.append((label, asset, benchmark))
+    return out
+
+
+def _predictions_overview(kind: str = "directional") -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
     grouping `/universe` already uses). Server-rendered live from the DB on
@@ -1118,23 +1129,37 @@ def _predictions_overview() -> dict:
     ok/warning state and badge label are computed in the template, same
     convention as `universe.html`'s own inline `{% set state = ... %}`, not
     precomputed here as HTML strings."""
-    all_symbols = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
+    alpha = kind == "alpha"
     conn = trackdb.connect()
     try:
-        # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
-        trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
-        horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
+        if alpha:
+            alpha_labels = _alpha_run_labels(conn)
+            all_symbols = [label for label, _, _ in alpha_labels]
+            item_groups = {"Modèles alpha": [(label, f"{asset} α vs {bench}") for label, asset, bench in alpha_labels]}
+            trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run WHERE target LIKE ? ESCAPE '\\'",
+                                                       ("%\\_\\_alpha\\_%",))}
+            horizons = sorted(trained & set(D.SELECTABLE_HORIZONS)) or list(D.DEFAULT_HORIZONS)
+        else:
+            all_symbols = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
+            item_groups = D.DEFAULT_TARGET_GROUPS
+            # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
+            trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
+            horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
         tallies = trackhistory.live_class_tally_by_target_and_horizon(conn, all_symbols, horizons)
         drift = trackhistory.drift_badges(conn, all_symbols, horizons)
+        # Un modèle au score impossible (fuite de données) n'affiche pas de signal : `validation/suspicion.py`.
+        shown = trackdb.batch_best_metrics(conn, sorted({p["run_id"] for p in preds.values()}))
+        n_alpha = len(_alpha_run_labels(conn)) if not alpha else len(all_symbols)
     finally:
         conn.close()
 
     today = utc_today()
+    signals = _PREDICTION_SIGNALS_ALPHA if alpha else _PREDICTION_SIGNALS
     groups = []
-    for group_name, items in D.DEFAULT_TARGET_GROUPS.items():
+    for group_name, items in item_groups.items():
         assets = []
         for sym, label in items:
             cells = {}
@@ -1145,8 +1170,11 @@ def _predictions_overview() -> dict:
                 tally = tallies.get((sym, h))
                 signal = None
                 market_closed = False
+                suspect = None
                 if pred:
-                    signal = _PREDICTION_SIGNALS.get((pred["direction"], pred["amplitude"]))
+                    scores = shown.get(pred["run_id"], {})
+                    suspect = suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
+                    signal = None if suspect else signals.get((pred["direction"], pred["amplitude"]))
                     try:
                         market_closed = date.fromisoformat(str(pred["ts"])[:10]) < today
                     except ValueError:
@@ -1160,6 +1188,7 @@ def _predictions_overview() -> dict:
                     "split": pred["split"] if pred else None,
                     "market_closed": market_closed,
                     "run_id": pred["run_id"] if pred else None,
+                    "suspect": suspect,
                     "dm_p_value": dm["p_value"] if dm else None,
                     "dm_sample": dm.get("sample") if dm else None,
                     "drift": drift.get((sym, h)),
@@ -1169,7 +1198,7 @@ def _predictions_overview() -> dict:
                 }
             assets.append({"symbol": sym, "label": label, "cells": cells})
         groups.append({"group": group_name, "assets": assets})
-    return {"groups": groups, "horizons": horizons}
+    return {"groups": groups, "horizons": horizons, "kind": kind, "n_alpha": n_alpha}
 
 
 # (direction, amplitude) -> (libelle, fleches, etat du badge) : les 4 mouvements du modele.
@@ -1178,6 +1207,13 @@ _PREDICTION_SIGNALS = {
     ("UP", "FAIBLE"): ("Hausse faible", "▲", "ok"),
     ("DOWN", "FAIBLE"): ("Baisse faible", "▼", "warning"),
     ("DOWN", "FORT"): ("Baisse forte", "▼▼", "warning"),
+}
+# Idem pour un modèle alpha : il prédit l'écart de rendement face au benchmark, pas le sens du prix.
+_PREDICTION_SIGNALS_ALPHA = {
+    ("UP", "FORT"): ("Surperformance forte", "▲▲", "ok"),
+    ("UP", "FAIBLE"): ("Surperformance faible", "▲", "ok"),
+    ("DOWN", "FAIBLE"): ("Sous-performance faible", "▼", "warning"),
+    ("DOWN", "FORT"): ("Sous-performance forte", "▼▼", "warning"),
 }
 _LIVE_CLASS_ORDER = (3, 2, 1, 0)  # indices de classe : 3 hausse forte ... 0 baisse forte
 _LIVE_CLASS_LABELS = {3: "Hausse forte", 2: "Hausse faible", 1: "Baisse faible", 0: "Baisse forte"}
@@ -1219,7 +1255,8 @@ def _tally_view(tally: dict | None) -> dict | None:
 
 
 @app.get("/predictions")
-def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
+                     kind: str = "directional"):
     """feature/predictions-overview: dense universe-wide table (every
     target x every horizon), direction + Diebold-Mariano significance
     badge (same "ok" if p<dm_alpha semantics as `run_detail.html`) -- V1, no
@@ -1241,7 +1278,7 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     return templates.TemplateResponse(
         request, "predictions.html",
         {
-            **_predictions_overview(),
+            **_predictions_overview("alpha" if kind == "alpha" else "directional"),
             "live_refresh": live_refresh.refresh_status(),
             "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
             "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,

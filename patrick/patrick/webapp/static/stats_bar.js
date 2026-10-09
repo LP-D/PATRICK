@@ -20,7 +20,6 @@
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
         panel.hidden = !open;
         document.body.classList.toggle("has-stats-bar-open", open);
-        try { sessionStorage.setItem("patrick-stats-bar", open ? "1" : "0"); } catch (e) { /* stockage bloqué */ }
         if (open) load();
     }
 
@@ -67,5 +66,4 @@
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && bar.dataset.open === "true" && !document.querySelector("dialog[open]")) setOpen(false);
     });
-    try { if (sessionStorage.getItem("patrick-stats-bar") === "1") setOpen(true); } catch (e) { /* idem */ }
 })();

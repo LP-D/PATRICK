@@ -258,6 +258,32 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                        "Diebold-Mariano test against {baseline} on the selection fold ({n} observations): biased, not kept in the correction."),
     "sp_bh": _s("Correction de Benjamini-Hochberg à α = {alpha} sur {n} cible(s) testée(s), par famille d'actifs.",
                 "Benjamini-Hochberg correction at α = {alpha} over {n} target(s) tested, per asset family."),
+    # ------------------------------------------------------------------ simulation / fonds : modèles ML
+    "ml_card_title": _s("Piloter avec un modèle ML entraîné", "Drive with a trained ML model"),
+    "ml_card_intro": _s(
+        "Choisis un modèle déjà entraîné, des seuils d'entrée et de sortie et un instrument : le fonds passe les ordres que le "
+        "modèle aurait donnés, avec les mêmes frais et les mêmes règles d'enveloppe que tes ordres manuels. Les modèles "
+        "directionnels prédisent le sens du prix ; les modèles alpha prédisent la surperformance sur un benchmark et se tradent "
+        "en paire couverte.",
+        "Pick an already-trained model, entry and exit thresholds and an instrument: the fund places the orders the model would "
+        "have given, with the same fees and wrapper rules as your manual orders. Directional models predict the price direction; "
+        "alpha models predict outperformance against a benchmark and are traded as a hedged pair."),
+    "ml_kind_directional_short": _s("sens du prix", "price direction"),
+    "ml_kind_alpha_short": _s("surperformance vs benchmark", "outperformance vs benchmark"),
+    "ml_models_available": _s("{n} modèle(s)", "{n} model(s)"),
+    "ml_suspect_excluded": _s("{n} modèle(s) suspect(s) non sélectionnables", "{n} suspect model(s) not selectable"),
+    "ml_rule_honesty": _s(
+        "Chaque règle créée est comptée comme un essai de plus sur la cible : essayer des seuils jusqu'à trouver les meilleurs "
+        "gonfle le résultat, c'est pourquoi aucun aperçu n'est proposé avant la création.",
+        "Every rule created counts as one more trial on the target: trying thresholds until the best ones show up inflates the "
+        "result, which is why no preview is offered before creation."),
+    "ml_rule_apply_hint": _s("La règle est appliquée tout de suite, puis le fonds s'ouvre.", "The rule is applied right away, then the fund opens."),
+    "pred_alpha_empty": _s("Aucun modèle alpha entraîné pour l'instant.", "No alpha model trained yet."),
+    "pred_alpha_empty_hint": _s(
+        "Lance un run avec « Cible : alpha vs benchmark » depuis la page Lancer. Les modèles alpha d'un autre PC apparaissent "
+        "après la synchronisation.",
+        "Launch a run with \"Target: alpha vs benchmark\" from the Launch page. Alpha models trained on another PC show up "
+        "after synchronisation."),
     "m_section_title": _s("Métriques par fold", "Metrics per fold"),
     "m_section_intro": _s(
         "L'AUC puis le F1 d'abord. Chaque ligne est un fold de test (une période jamais vue à l'entraînement) ; la moyenne "

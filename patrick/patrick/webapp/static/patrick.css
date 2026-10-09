@@ -2283,3 +2283,9 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .sh-value { font-size: 1.05rem; font-weight: 600; }
 .sh-what { margin: 4px 0 2px; font-size: .84rem; color: var(--text-2); }
 .sh-read { margin: 4px 0 0; font-size: .86rem; }
+
+/* ---- Simulation : carte « modèle ML » ---------------------------------------------------------------------------- */
+.fund-ml .ml-kinds { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.fund-ml select[name="trial_id"] { min-width: min(100%, 520px); }
+.fund-ml .ml-model-field { grid-column: 1 / -1; }
+.fund-rule-new .ml-model-field { grid-column: 1 / -1; }

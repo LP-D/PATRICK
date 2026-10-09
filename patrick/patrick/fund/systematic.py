@@ -31,6 +31,8 @@ from patrick.config.target_label import split_run_label
 from patrick.features import alpha_target
 from patrick.fund import prices, service, store
 from patrick.simulate import engine as sim_engine
+from patrick.tracking import db as trackdb
+from patrick.validation import suspicion
 
 EQUITY_KINDS = ("equity", "etf")
 NOTE_PREFIX = "auto"
@@ -205,6 +207,9 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
     cfg = validate_config(config)
     if model is None:
         raise store.FundError(f"essai {cfg['trial_id']} introuvable")
+    reason = _suspect_reason(conn, cfg["trial_id"])
+    if reason:
+        raise store.FundError(f"modèle suspect ({reason}) : un score pareil est une fuite de données, il ne se trade pas")
     if model["kind"] == "alpha":
         _check_alpha_rule(cfg, model)
     elif "hedge" in cfg:
@@ -221,6 +226,15 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
         sim_engine.SimParams(position_mode="threshold", threshold=cfg["enter"], short_allowed=cfg["allow_short"]),
         {"ok": True, "kind": "fund_rule", "rule_id": rule_id, "enter": cfg["enter"], "exit": cfg["exit"]})
     return rule_id
+
+
+def _suspect_reason(conn: sqlite3.Connection, trial_id: int) -> str | None:
+    """Motif si le modèle de cet essai affiche un score au-delà du plausible (`validation/suspicion.py`)."""
+    run = conn.execute("SELECT run_id FROM trial WHERE trial_id = ?", (trial_id,)).fetchone()
+    if run is None:
+        return None
+    scores = trackdb.batch_best_metrics(conn, [run[0]]).get(run[0], {})
+    return suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
 
 
 def _check_alpha_rule(cfg: dict, model: dict) -> None:
@@ -271,14 +285,21 @@ def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
         "LEFT JOIN champion ON champion.trial_id = trial.trial_id "
         f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
         "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC LIMIT ?", (*descriptive, limit)).fetchall()
+    headline = trackdb.batch_best_metrics(conn, [r[1] for r in rows])
     out = []
     for trial_id, run_id, algo, target, horizon, started_at, is_champion in rows:
         segments = sim_engine.available_segments(conn, trial_id)
         if segments:
             asset, kind, benchmark = split_run_label(target)
+            scores = headline.get(run_id, {})
+            hold, test = scores.get("holdout", {}), scores.get("test", {})
             out.append({"trial_id": trial_id, "run_id": run_id, "algo": algo, "target": target, "horizon": horizon,
                         "started_at": started_at, "champion": bool(is_champion), "segments": segments,
-                        "kind": kind, "asset": asset, "benchmark": benchmark})
+                        "kind": kind, "asset": asset, "benchmark": benchmark,
+                        "auc": hold.get("AUC_ovr_4cls", test.get("AUC_ovr_4cls")),
+                        "f1_dir": hold.get("F1_dir", test.get("F1_dir")),
+                        # un score impossible = fuite de données : un modèle suspect ne se trade jamais
+                        "suspect": suspicion.suspect_reason(hold) or suspicion.suspect_reason(test)})
     return out
 
 

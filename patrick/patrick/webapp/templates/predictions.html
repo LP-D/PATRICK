@@ -10,10 +10,14 @@
 {% macro pred_cell(c, name, alpha, warn_thr, _t) %}
 {% set s = c.signal %}
 <span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0">
-{% if s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ s[0] }}</span>{% else %}<span class="na">—</span>{% endif %}
+{% if c.suspect %}<span class="status-badge status-error">{{ _t('suspect_tag') }}</span>
+{% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ s[0] }}</span>{% else %}<span class="na">—</span>{% endif %}
 <span class="pop-content">
 <strong class="pop-title">{{ name }} · {{ c.horizon | hlabel }}</strong>
-{% if not (s or c.drift or c.live_hit_rate is not none or c.tally) %}
+{% if c.suspect %}
+<span class="pop-line">{{ status_badge(_t('suspect_banner_title'), 'error') }}</span>
+<span class="hint">{{ _t('suspect_banner_body', reason=c.suspect) }}</span>
+{% elif not (s or c.drift or c.live_hit_rate is not none or c.tally) %}
 <span class="pop-line">{{ status_badge('aucune prédiction', 'disabled') }}</span>
 {% else %}
 <dl class="pop-grid">
@@ -93,6 +97,11 @@
     {{ help_icon('prediction_overview', 'Dernier signal', t('glossary_open_aria', term='Dernier signal')) }}
     {{ help_icon('live_reliability', 'Fiabilité live', t('glossary_open_aria', term='Fiabilité live')) }}
 </h1>
+<nav class="kind-tabs" aria-label="{{ t('kind_tabs_label') }}">
+    <a href="/predictions" class="kind-tab{% if kind != 'alpha' %} active{% endif %}">{{ t('kind_directional') }}</a>
+    <a href="/predictions?kind=alpha" class="kind-tab{% if kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ n_alpha }}</span></a>
+</nav>
+<p class="hint kind-hint">{{ t('kind_alpha_hint') if kind == 'alpha' else t('kind_directional_hint') }}</p>
 <p class="page-subtitle">Signal du jour par actif et par horizon · survole une case pour le détail · seuil de significativité p &lt; {{ ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') }}.</p>
 
 {% set ns = namespace(total=0, with_pred=0) %}
@@ -113,13 +122,20 @@
 {% endif %}
 
 <p class="pred-legend">
+    {% if kind == 'alpha' %}
+    {{ status_badge('▲▲ Surperformance forte', 'ok') }} {{ status_badge('▲ Surperformance faible', 'ok') }}
+    {{ status_badge('▼ Sous-performance faible', 'warning') }} {{ status_badge('▼▼ Sous-performance forte', 'warning') }}
+    {{ q("Écart de rendement face au benchmark, après retrait du β : fort / faible = au-delà ou en deçà des 25 % / 75 % des écarts habituels.") }}
+    {% else %}
     {{ status_badge('▲▲ Hausse forte', 'ok') }} {{ status_badge('▲ Hausse faible', 'ok') }}
     {{ status_badge('▼ Baisse faible', 'warning') }} {{ status_badge('▼▼ Baisse forte', 'warning') }}
     {{ q("Fort / faible : amplitude au-delà ou en deçà des 25 % / 75 % de rendements habituels de l'actif.") }}
+    {% endif %}
 </p>
 
 {% if ns.total == 0 %}
-{{ empty_state("Aucune cible configurée.", "Vérifie config/defaults.py::DEFAULT_TARGET_GROUPS.") }}
+{% if kind == 'alpha' %}{{ empty_state(t('pred_alpha_empty'), t('pred_alpha_empty_hint')) }}
+{% else %}{{ empty_state("Aucune cible configurée.", "Vérifie config/defaults.py::DEFAULT_TARGET_GROUPS.") }}{% endif %}
 {% endif %}
 
 {% for g in groups %}
@@ -134,7 +150,7 @@
         <tbody>
         {% for a in g.assets %}
         <tr>
-            <td><a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.label }}</a></td>
+            <td>{% if kind == 'alpha' %}<span title="{{ a.symbol }}">{{ a.label }}</span>{% else %}<a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.label }}</a>{% endif %}</td>
             {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.label, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}</td>{% endfor %}
         </tr>
         {% endfor %}

@@ -182,3 +182,35 @@ def test_a_perfect_score_is_flagged_in_the_history(seeded):
     conn.close()
     html = TestClient(app).get("/runs").text
     assert "tag-suspect" in html
+
+
+def _live_signal(conn, trial_id, y_pred=3, proba=0.7):
+    conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, '2026-10-08', 'live', NULL, ?, ?)",
+                 (trial_id, y_pred, proba))
+    conn.commit()
+
+
+def test_the_predictions_page_has_a_separate_alpha_view(seeded):
+    conn = trackdb.connect()
+    _live_signal(conn, seeded["MC_1_h1_b"], y_pred=3)
+    _live_signal(conn, seeded["XLI_1_h1_a"], y_pred=0)
+    with conn:
+        conn.execute("UPDATE run SET target = 'GC=F' WHERE run_id = 'XLI_1_h1_a'")      # une cible du tableau par défaut
+    conn.close()
+    client = TestClient(app)
+    alpha = client.get("/predictions?kind=alpha").text
+    assert "MC.PA α vs ^STOXX50E" in alpha and "Surperformance forte" in alpha and "Baisse forte" not in alpha
+    directional = client.get("/predictions").text
+    assert "Baisse forte" in directional and "Surperformance" not in directional
+    assert "kind-tab active" in directional
+
+
+def test_a_perfect_score_hides_the_signal_on_the_predictions_page(seeded):
+    conn = trackdb.connect()
+    _live_signal(conn, seeded["XLI_1_h1_a"], y_pred=3)
+    with conn:
+        conn.execute("UPDATE run SET target = 'GC=F' WHERE run_id = 'XLI_1_h1_a'")      # une cible du tableau par défaut
+        conn.execute("UPDATE fold_metric SET value = 0.99 WHERE metric = 'F1_dir' AND split = 'holdout'")
+    conn.close()
+    html = TestClient(app).get("/predictions").text
+    assert 'status-error">suspect' in html

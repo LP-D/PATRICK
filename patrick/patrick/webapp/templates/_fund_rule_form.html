@@ -1,0 +1,64 @@
+{# Formulaire « modèle ML » partagé par /fonds (dans le panneau d'une stratégie) et /simulate (carte « Piloter avec un modèle »).
+   Variables : `models` (fund/systematic.available_models), `today`, `strategy_id` (fixe) ou `strategies` (liste à choisir),
+   `form_id`. Les noms de champs sont ceux que lisent `fonds.js` et `ml_rule.js`. Directionnels et alpha sont deux groupes
+   distincts : un modèle alpha prédit la surperformance sur son benchmark et se trade en paire couverte. #}
+{% set directional = models | selectattr('kind', 'equalto', 'raw') | list %}
+{% set alphas = models | selectattr('kind', 'equalto', 'alpha') | list %}
+<form class="form fund-inline-form" id="{{ form_id }}" data-form="rule"{% if strategy_id %} data-strategy-id="{{ strategy_id }}"{% endif %}>
+  <div class="subgrid">
+    {% if strategies %}
+    <label>{{ t('fund_field_strategy') }}
+      <select name="strategy_id" required>
+        {% for s in strategies %}<option value="{{ s.strategy.strategy_id }}"{% if s.strategy.strategy_id == selected_id %} selected{% endif %}>{{ s.strategy.name }} · {{ s.strategy.wrapper }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>{{ t('fund_rule_name') }} <input type="text" name="name" required maxlength="120"></label>
+    <label class="ml-model-field">{{ t('fund_rule_model') }}
+      <select name="trial_id">
+        {% if directional %}
+        <optgroup label="{{ t('kind_directional') }} — {{ t('ml_kind_directional_short') }}">
+          {% for m in directional %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-kind="raw" data-asset="{{ m.asset }}" data-benchmark="">{{ m.target }} h{{ m.horizon }} · {{ m.algo }} · AUC {{ '%.3f' | format(m.auc) if m.auc is not none else '—' }} · F1 {{ '%.3f' | format(m.f1_dir) if m.f1_dir is not none else '—' }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+        {% if alphas %}
+        <optgroup label="{{ t('kind_alpha') }} — {{ t('ml_kind_alpha_short') }}">
+          {% for m in alphas %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-kind="alpha" data-asset="{{ m.asset }}" data-benchmark="{{ m.benchmark or '' }}">{{ m.asset }} α vs {{ m.benchmark }} h{{ m.horizon }} · {{ m.algo }} · AUC {{ '%.3f' | format(m.auc) if m.auc is not none else '—' }} · F1 {{ '%.3f' | format(m.f1_dir) if m.f1_dir is not none else '—' }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+      </select>
+    </label>
+    <label>{{ t('fund_rule_segment') }}
+      <select name="segment">
+        <option value="holdout">{{ t('fund_rule_segment_holdout') }}</option>
+        <option value="live">{{ t('fund_rule_segment_live') }}</option>
+        <option value="test">{{ t('fund_rule_segment_test') }}</option>
+      </select>
+    </label>
+    <label>{{ t('fund_rule_enter') }} <input type="number" name="enter" min="0.51" max="0.99" step="0.01" value="0.60" required></label>
+    <label>{{ t('fund_rule_exit') }} <input type="number" name="exit" min="0.5" max="0.99" step="0.01" value="0.50" required></label>
+    <label>{{ t('fund_rule_instrument') }}
+      <select name="kind">
+        {% for kind in ('equity', 'etf', 'cfd', 'future') %}<option value="{{ kind }}">{{ t('fund_kind_' ~ kind) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label data-kinds="equity etf cfd">{{ t('fund_rule_symbol') }} <input type="text" name="symbol" maxlength="30" placeholder="AAPL"></label>
+    <label data-kinds="future">{{ t('fund_rule_root') }} <input type="text" name="root" maxlength="10" placeholder="ES"></label>
+    <label data-kinds="future">{{ t('fund_rule_year') }} <input type="number" name="year" min="2000" max="2100" step="1" value="{{ today[:4] }}"></label>
+    <label data-kinds="future">{{ t('fund_rule_month') }} <input type="number" name="month" min="1" max="12" step="1"></label>
+    <label data-kinds="cfd">{{ t('fund_rule_leverage') }} <input type="number" name="leverage" min="1" step="any"></label>
+    <label data-kinds="equity etf">{{ t('fund_rule_amount') }} <input type="number" name="amount" min="1" step="any"></label>
+    <label data-kinds="cfd future">{{ t('fund_rule_quantity') }} <input type="number" name="quantity" min="1" step="1"></label>
+    <label data-kinds="cfd future" class="fund-check"><input type="checkbox" name="allow_short"> {{ t('fund_rule_allow_short') }}</label>
+    <label data-alpha-only hidden>{{ t('fund_rule_hedge_symbol') }} <input type="text" name="hedge_symbol" maxlength="30"></label>
+    <label data-alpha-only hidden>{{ t('fund_rule_hedge_leverage') }} <input type="number" name="hedge_leverage" min="1" step="any"></label>
+  </div>
+  <p class="hint" data-alpha-only hidden>{{ t('fund_rule_alpha_hint') }}</p>
+  <p class="hint">{{ t('ml_rule_honesty') }}</p>
+  <p class="fund-form-error banner banner-error" hidden></p>
+  <div class="row"><button type="submit" class="btn">{{ t('fund_rule_create') }}</button>{% if apply_after %} <span class="hint">{{ t('ml_rule_apply_hint') }}</span>{% endif %}</div>
+</form>

@@ -122,6 +122,7 @@ def register(app: FastAPI, templates, context) -> None:
         data = _call(service.overview, today)
         ctx = context(request)
         return templates.TemplateResponse(request, "simulate.html", {
+            "models": _call(systematic.available_models),
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today),
             "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),

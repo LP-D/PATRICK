@@ -106,6 +106,27 @@
 {{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
 {% endif %}
 
+{# Même moteur que les règles de /fonds : un modèle entraîné (directionnel ou alpha) génère les ordres. #}
+{% if strategies %}
+<section class="card fund-ml" id="ml" aria-labelledby="ml-title">
+  <h2 id="ml-title">{{ icon('predictions') }} {{ t('ml_card_title') }}</h2>
+  <p class="hint">{{ t('ml_card_intro') }}</p>
+  {% if models %}
+  <p class="ml-kinds">
+    <span class="kind-badge kind-directional">{{ t('kind_directional') }} · {{ models | selectattr('kind', 'equalto', 'raw') | list | length }}</span>
+    <span class="kind-badge kind-alpha">{{ t('kind_alpha') }} · {{ models | selectattr('kind', 'equalto', 'alpha') | list | length }}</span>
+    {% set n_susp = models | selectattr('suspect') | list | length %}
+    {% if n_susp %}<span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason='F1 ≥ 0,80') }}">{{ t('ml_suspect_excluded', n=n_susp) }}</span>{% endif %}
+  </p>
+  {% with strategy_id=none, form_id='ml-rule-form', apply_after=true %}
+  {% include "_fund_rule_form.html" %}
+  {% endwith %}
+  {% else %}
+  <p class="hint">{{ t('fund_rule_no_model') }}</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card" aria-labelledby="portfolios-title">
   <div class="card-head"><h2 id="portfolios-title">{{ t('fund_portfolios_title') }}</h2></div>
   {% if strategies %}
@@ -158,4 +179,5 @@
 <script id="cfd-classes" type="application/json">{{ cfd_names | tojson }}</script>
 <script id="ticker-bank" type="application/json">{{ ticker_bank | tojson }}</script>
 <script src="/static/simulate.js"></script>
+<script src="/static/ml_rule.js" defer></script>
 {% endblock %}
