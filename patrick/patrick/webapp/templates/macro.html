@@ -3,7 +3,7 @@
 {% block title %}PATRICK — Macro (FRED){% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_macro') or 'Macro (FRED)' }}</span>
 </nav>

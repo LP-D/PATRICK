@@ -5,7 +5,7 @@
 {% block session_context %}
 {% set r = detail.run %}
 <div class="session-context">
-    <span><b>cible</b> <a href="/targets/{{ r.target }}">{{ r.target }}</a>/{{ r.horizon }}j</span>
+    <span><b>{{ t('rd_ctx_target') }}</b> <a href="/targets/{{ r.target }}">{{ r.target }}</a>/{{ t('h_horizon_unit', h=r.horizon) }}</span>
     <span><b>snapshot</b> {{ r.snapshot_id or '—' }}</span>
     <span><b>config</b> {{ r.config_hash or '—' }}</span>
     <span><b>git</b> {{ r.git_sha or '—' }}</span>
@@ -14,7 +14,7 @@
 {% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
     <a href="/targets/{{ detail.run.target }}">{{ detail.run.target }}</a>
@@ -25,15 +25,15 @@
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
 <p class="page-subtitle">
-    <a href="/targets/{{ run.target }}">{{ run.target }}</a> · horizon {{ run.horizon }}j ·
+    <a href="/targets/{{ run.target }}">{{ run.target }}</a> · {{ t('rd_horizon') }} {{ t('h_horizon_unit', h=run.horizon) }} ·
     {{ status_badge('CPCV' if detail.is_cpcv else 'walk-forward', 'neutral') }}
     {{ status_badge(run.status, state) }} ·
-    lancé le {{ run.started_at or '—' }}{% if run.finished_at %}, terminé le {{ run.finished_at }}{% endif %}
+    {{ t('rd_started_on') }} {{ run.started_at or '—' }}{% if run.finished_at %}, {{ t('rd_finished_on') }} {{ run.finished_at }}{% endif %}
 </p>
 <form method="post" action="/runs/{{ run.run_id }}/relaunch" class="inline-form">
-    <button type="submit" class="primary">Relancer (config complète, tous horizons)</button>
+    <button type="submit" class="primary">{{ t('rd_relaunch') }}</button>
 </form>
-<a class="btn-secondary" href="/launch?run_id={{ run.run_id | urlencode }}">Dupliquer et modifier la configuration</a>
+<a class="btn-secondary" href="/launch?run_id={{ run.run_id | urlencode }}">{{ t('rd_duplicate') }}</a>
 
 {% if detail.suspect %}
 <p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('suspect_banner_body', reason=detail.suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>
@@ -45,22 +45,22 @@
    d'actif) faisait mentir le style sur le comportement — aucun état n'aurait
    jamais posé l'onglet actif. C'est un index de sections, il s'écrit comme
    tel, comme la table des matières en tête d'un listing. #}
-<nav class="section-index" aria-label="Sections de la page">
-    <span class="section-index-label">Sections</span>
-    <a href="#resume">Résumé</a>
+<nav class="section-index" aria-label="{{ t('rd_sections_aria') }}">
+    <span class="section-index-label">{{ t('rd_sections') }}</span>
+    <a href="#resume">{{ t('rd_section_summary') }}</a>
     {% if detail.fold_metrics %}<a href="#folds">{{ t('m_section_title') }}</a>{% endif %}
     {% if kpi and kpi.n_candidates %}<a href="#kpi">KPI</a>{% endif %}
-    <a href="#durees">Durées</a>
-    <a href="#essais">Essais</a>
-    <a href="#config">Configuration</a>
+    <a href="#durees">{{ t('rd_section_durations') }}</a>
+    <a href="#essais">{{ t('rd_section_trials') }}</a>
+    <a href="#config">{{ t('rd_section_config') }}</a>
 </nav>
 
 <section id="resume" class="card">
-<h2 style="margin-top: 0">Résumé</h2>
+<h2 style="margin-top: 0">{{ t('rd_section_summary') }}</h2>
 
 <div class="metric-grid" style="margin-bottom: 2rem;">
-{{ metric("Essais cumulés (tout historique)", detail.cumulative_trials,
-          "Toutes les configurations testées sur cette cible/horizon, tout run confondu.", "neutral") }}
+{{ metric(t('tg_cum_title'), detail.cumulative_trials,
+          t('rd_cum_rel'), "neutral") }}
 
 {# Le point PBO n'est affiché QUE si le diagnostic de fiabilité l'accepte
    (C5) : sous MIN_BLOCKS, `pbo_reliability` refuse explicitement, et son
@@ -70,57 +70,56 @@
 {% set rel = detail.pbo.reliability %}
 {% if rel and rel.ok %}
 {{ metric("PBO (" ~ detail.pbo_label ~ ")", "%.3f" | format(detail.pbo.pbo),
-          "IC 90% [%.3f, %.3f] (bootstrap, %d combinaisons)" | format(rel.ci_low, rel.ci_high, rel.n_combinations),
+          t('rd_pbo_ci', lo='%.3f' | format(rel.ci_low), hi='%.3f' | format(rel.ci_high), n=rel.n_combinations),
           "ok") }}
 {% else %}
 {# La justification complète du refus (C5) fait ~500 caractères : dans une
    colonne de mesure elle écrase toute la rangée. Elle part donc en NOTE sous
    le bloc, comme une note de table économétrique -- rien n'est masqué, tout
    est déplacé là où ça se lit. #}
-{% set refus = (rel.message if (rel and rel.message) else "Pas assez d'essais avec folds/chemins complets sur cette cible/horizon/régime.") %}
+{% set refus = (rel.message if (rel and rel.message) else t('rd_pbo_none')) %}
 {% set refus_head = refus.split('. ')[0] %}
 {% set refus_rest = refus[refus_head|length + 2:] if '. ' in refus else '' %}
 {{ metric("PBO (" ~ detail.pbo_label ~ ")", "—", refus_head ~ (" †" if refus_rest else ""), "disabled") }}
 {% endif %}
 
 {% if detail.is_cpcv %}
-{{ metric("Diebold-Mariano", "non calculé", "Sans objet en mode CPCV (repose sur la topologie « train=préfixe » du walk-forward).", "disabled") }}
+{{ metric(t('rd_dm'), t('rd_not_computed'), t('rd_dm_cpcv'), "disabled") }}
 {% elif detail.dm_result and detail.dm_result.sample == 'last_wf_fold' %}
-{{ metric("Diebold-Mariano (vs " ~ detail.dm_result.baseline ~ ")", "p = %.4f" | format(detail.dm_result.p_value),
-          "calculé sur le fold de sélection (dernier fold walk-forward, qui a servi à choisir le modèle) : biaisé vers le significatif, exclu de la correction entre cibles — relancer pour le test sur le holdout.",
+{{ metric(t('rd_dm_vs', b=detail.dm_result.baseline), "p = %.4f" | format(detail.dm_result.p_value),
+          t('rd_dm_selfold'),
           "warning") }}
 {% elif detail.dm_result %}
-{% set dm_alpha_str = ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') %}
-{{ metric("Diebold-Mariano (vs " ~ detail.dm_result.baseline ~ ")", "p = %.4f" | format(detail.dm_result.p_value),
-          (("significatif (p < " ~ dm_alpha_str ~ ")") if detail.dm_result.p_value < dm_significance_alpha else ("non significatif (p ≥ " ~ dm_alpha_str ~ ")")) ~ " — holdout terminal" ~ ((", n = " ~ detail.dm_result.n_obs) if detail.dm_result.n_obs else ""),
+{% set dm_alpha_str = ('%.2f' | format(dm_significance_alpha)) | replace('.', t('dec_sep')) %}
+{{ metric(t('rd_dm_vs', b=detail.dm_result.baseline), "p = %.4f" | format(detail.dm_result.p_value),
+          ((t('rd_signif', a=dm_alpha_str) if detail.dm_result.p_value < dm_significance_alpha else t('rd_not_signif', a=dm_alpha_str)) ~ t('rd_holdout_term_sfx') ~ ((", n = " ~ detail.dm_result.n_obs) if detail.dm_result.n_obs else "")),
           "ok" if detail.dm_result.p_value < dm_significance_alpha else "warning") }}
 {% else %}
-{{ metric("Diebold-Mariano", "—", "Non calculé (aucun trial gagnant n'a produit ce résultat pour ce run).", "disabled") }}
+{{ metric(t('rd_dm'), "—", t('rd_dm_none'), "disabled") }}
 {% endif %}
 
 {% if detail.is_cpcv %}
-{{ metric("Holdout terminal", "non calculé", "Sans objet en mode CPCV (toutes les combinaisons participent au scan).", "disabled") }}
+{{ metric(t('rd_holdout'), t('rd_not_computed'), t('rd_holdout_cpcv'), "disabled") }}
 {% elif detail.holdout_f1_dir is not none %}
-{{ metric("Holdout terminal (F1_dir)", "%.4f" | format(detail.holdout_f1_dir), "Essai gagnant, jamais vu pendant la sélection.", "ok") }}
+{{ metric(t('rd_holdout_f1'), "%.4f" | format(detail.holdout_f1_dir), t('rd_holdout_f1_rel'), "ok") }}
 {% else %}
-{{ metric("Holdout terminal", "—", "Non calculé pour ce run.", "disabled") }}
+{{ metric(t('rd_holdout'), "—", t('rd_not_computed_run'), "disabled") }}
 {% endif %}
 
 {% if detail.target_fdr %}
-{{ metric("Correction FDR (cette cible)", "p ajustée = %.4f" | format(detail.target_fdr.adjusted_p_value),
-          "rang " ~ detail.target_fdr.rank ~ "/" ~ detail.fdr_result.n_tested ~ " cibles testées (BH, α=" ~ detail.fdr_result.alpha ~ ") — " ~
-          ("significatif" if detail.target_fdr.significant else "non significatif"),
+{{ metric(t('rd_fdr'), t('rd_adj_p', p='%.4f' | format(detail.target_fdr.adjusted_p_value)),
+          t('rd_fdr_rel', r=detail.target_fdr.rank, n=detail.fdr_result.n_tested, a=detail.fdr_result.alpha, s=(t('h_significant_short') if detail.target_fdr.significant else t('h_not_significant_short'))),
           "ok" if detail.target_fdr.significant else "warning") }}
 {% else %}
-{{ metric("Correction FDR (cette cible)", "—", "Pas de résultat Diebold-Mariano à situer parmi les autres cibles.", "disabled") }}
+{{ metric(t('rd_fdr'), "—", t('rd_fdr_none'), "disabled") }}
 {% endif %}
 
 {% if detail.holdout_diag.n_trials >= 3 %}
-{{ metric("Corrélation test/holdout (Spearman, grille complète)", "ρ = %.3f" | format(detail.holdout_diag.rho),
-          "p = %.4f, n = %d essais — diagnostic lecture seule (n'influence jamais une sélection)." | format(detail.holdout_diag.p_value, detail.holdout_diag.n_trials),
+{{ metric(t('rd_corr'), "ρ = %.3f" | format(detail.holdout_diag.rho),
+          t('rd_corr_rel', p='%.4f' | format(detail.holdout_diag.p_value), n=detail.holdout_diag.n_trials),
           "neutral") }}
 {% else %}
-{{ metric("Corrélation test/holdout", "—", "Non calculable (n = " ~ detail.holdout_diag.n_trials ~ " essais avec test+holdout, minimum 3).", "disabled") }}
+{{ metric(t('rd_corr_short'), "—", t('rd_corr_none', n=detail.holdout_diag.n_trials), "disabled") }}
 {% endif %}
 </div>
 {% if refus_rest is defined and refus_rest %}
@@ -146,73 +145,72 @@
 {% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
 {% if kpi and kpi.n_candidates %}
 <section id="kpi" class="card">
-<h2>Synthèse des modèles (KPI)</h2>
-<p>Cible <strong>{{ kpi.target }}</strong> · horizons {{ kpi.horizons | join(', ') }} · {{ kpi.n_candidates }} candidats testés.
-{{ kpi.window.note }} Le F1_dir est la qualité de la prédiction de la direction (hausse ou baisse) ; l'Acc_dir, la part de directions justes.
-Moyennes sur les horizons de ce lancement, pour décider quelle configuration relancer.</p>
+<h2>{{ t('rd_kpi_h') }}</h2>
+<p>{{ t('rd_kpi_target') }} <strong>{{ kpi.target }}</strong> · {{ t('rd_kpi_horizons') }} {{ kpi.horizons | join(', ') }} · {{ t('rd_kpi_cands', n=kpi.n_candidates) }}
+{{ kpi.window.note }} {{ t('rd_kpi_def') }}</p>
 
-<h3>Par algorithme</h3>
+<h3>{{ t('rd_by_algo') }}</h3>
 {% set algo_rows = [] %}
 {% for r in kpi.by_algo %}
 {% set _ = algo_rows.append([r.rank, r.algo, r.n, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls), f3(r.BalAcc_4cls)]) %}
 {% endfor %}
-{{ data_table(["Rang", "Algorithme", "Candidats", "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
+{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_cand'), "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], algo_rows, num_cols=[0, 2, 3, 4, 5, 6]) }}
 
-<h3>Par nombre de variables</h3>
+<h3>{{ t('rd_by_n') }}</h3>
 {% set n_rows = [] %}
 {% for r in kpi.by_n_features %}
 {% set _ = n_rows.append([r.rank, r.n_features, r.n, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls), f3(r.BalAcc_4cls)]) %}
 {% endfor %}
-{{ data_table(["Rang", "Variables (N)", "Candidats", "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], n_rows, num_cols=[0, 1, 2, 3, 4, 5, 6]) }}
+{{ data_table([t('rd_c_rank'), t('rd_c_vars'), t('rd_c_cand'), "F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls"], n_rows, num_cols=[0, 1, 2, 3, 4, 5, 6]) }}
 
-<h3>Classement des configurations (algorithme × nombre de variables)</h3>
+<h3>{{ t('rd_rank_h') }}</h3>
 {% set rank_rows = [] %}
 {% for r in kpi.ranking[:15] %}
 {% set _ = rank_rows.append([r.rank, r.algo, r.n_features, r.sampler, r.n_horizons, f3(r.F1_dir), f3(r.Acc_dir), f3(r.MCC_4cls)]) %}
 {% endfor %}
-{{ data_table(["Rang", "Algorithme", "Variables (N)", "Sampler", "Horizons", "F1_dir", "Acc_dir", "MCC_4cls"], rank_rows,
+{{ data_table([t('rd_c_rank'), t('rd_c_algo'), t('rd_c_vars'), "Sampler", t('rd_kpi_horizons2'), "F1_dir", "Acc_dir", "MCC_4cls"], rank_rows,
               num_cols=[0, 2, 4, 5, 6, 7], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
-              footer=("15 meilleures sur " ~ kpi.ranking | length ~ " configurations." if kpi.ranking | length > 15 else none)) }}
+              footer=(t('rd_top15', n=kpi.ranking | length) if kpi.ranking | length > 15 else none)) }}
 
-<h3>Par horizon : meilleure configuration, modèle final et holdout</h3>
+<h3>{{ t('rd_by_h') }}</h3>
 {% set h_rows = [] %}
 {% for r in kpi.by_horizon %}
 {% set _ = h_rows.append([r.horizon, r.algo ~ ' · N=' ~ r.n_features, f3(r.window_F1_dir),
-    f3(r.full_F1_dir) ~ ' (' ~ r.full_folds ~ ' fold' ~ ('s' if r.full_folds > 1 else '') ~ ')', f3(r.full_Acc_dir),
+    f3(r.full_F1_dir) ~ ' (' ~ r.full_folds ~ ' ' ~ t('rd_fold_word') ~ ('s' if r.full_folds > 1 else '') ~ ')', f3(r.full_Acc_dir),
     f3(r.diag_F1_dir), f3(r.diag_Acc_dir),
     (r.final_algo ~ ' · N=' ~ r.final_n_features) if r.final_algo else '—', f3(r.holdout_F1_dir)]) %}
 {% endfor %}
-{{ data_table(["Horizon (j)", "Meilleure configuration", "F1_dir (fenêtre commune)", "F1_dir (toute sa période)", "Acc_dir (toute sa période)",
-               "F1_dir holdout", "Acc_dir holdout", "Modèle final (Optuna)", "F1_dir holdout du modèle final"], h_rows,
+{{ data_table([t('rd_h_hday'), t('rd_h_best'), t('rd_h_f1win'), t('rd_h_f1full'), t('rd_h_accfull'),
+               t('rd_h_f1ho'), t('rd_h_accho'), t('rd_h_final'), t('rd_h_f1final')], h_rows,
               num_cols=[0, 2, 3, 4, 5, 6, 8],
-              footer="Holdout : les derniers mois, jamais utilisés pour choisir. Il est mesuré pour la meilleure configuration de chaque horizon (avant Optuna) ; le modèle final n'est évalué sur le holdout que pour le meilleur horizon du lancement.") }}
+              footer=t('rd_h_foot')) }}
 </section>
 {% endif %}
 
 <section id="durees" class="card">
-<h2>Temps de calcul et budget exploration</h2>
+<h2>{{ t('rd_time_h') }}</h2>
 {% set phase_rows = [] %}
 {% for p in detail.phase_breakdown.phases %}
 {% set _ = phase_rows.append([p.phase, p.duration_s ~ ' s', p.occurrences]) %}
 {% endfor %}
-{{ data_table(["Phase", "Durée cumulée", "Occurrences"], phase_rows,
-              "Aucune durée instrumentée pour ce run.",
-              footer=("Temps total run : " ~ (detail.phase_breakdown.run_total_s ~ " s" if detail.phase_breakdown.run_total_s is not none else "en cours/inconnu")
-                     ~ " · non attribué aux phases instrumentées : "
+{{ data_table([t('rd_ph_phase'), t('rd_ph_dur'), t('rd_ph_occ')], phase_rows,
+              t('rd_ph_none'),
+              footer=(t('rd_ph_total') ~ (detail.phase_breakdown.run_total_s ~ " s" if detail.phase_breakdown.run_total_s is not none else t('rd_ph_running'))
+                     ~ t('rd_ph_unacc')
                      ~ (detail.phase_breakdown.unaccounted_s ~ " s" if detail.phase_breakdown.unaccounted_s is not none else "—")
-                     ~ " · fits de scan : " ~ detail.phase_breakdown.scan_model_fits
-                     ~ " · essais Optuna : " ~ detail.phase_breakdown.optuna_trials)) }}
+                     ~ t('rd_ph_fits') ~ detail.phase_breakdown.scan_model_fits
+                     ~ t('rd_ph_optuna') ~ detail.phase_breakdown.optuna_trials)) }}
 {% if detail.screening_decisions %}
-<h3>Décisions de présélection (premier fold)</h3>
+<h3>{{ t('rd_scr_h') }}</h3>
 {% set screening_rows = [] %}
 {% for c in detail.screening_decisions %}
 {% set _ = screening_rows.append([c.regime, c.n_features, c.sampler, c.algo,
     ('%.4f' | format(c.score)) if c.score is not none else '—',
     c.rank if c.rank is not none else '—',
-    ('finaliste' if c.decision == 'finalist' else 'écarté'),
+    (t('rd_scr_finalist') if c.decision == 'finalist' else t('rd_scr_dropped')),
     c.reason]) %}
 {% endfor %}
-{{ data_table(["Régime", "N", "Sampler", "Algo", "F1_dir fold 1", "Rang", "Décision", "Motif"],
+{{ data_table([t('rd_scr_regime'), "N", "Sampler", "Algo", t('rd_scr_f1'), t('rd_c_rank'), t('rd_scr_decision'), t('rd_scr_reason')],
               screening_rows, num_cols=[1, 4, 5], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less')) }}
 {% endif %}
 </section>
@@ -221,29 +219,29 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
    que le filet qu'il remplace, et brouille la hiérarchie du plan de travail. #}
 {% if detail.conformal %}
 <section id="conforme" class="card">
-<h2>Prédiction conforme (direction) <button type="button" class="info-icon" data-term="conformal" data-term-label="Prédiction conforme" aria-label="{{ t('glossary_open_aria', term='Prédiction conforme') }}">i</button></h2>
+<h2>{{ t('rd_conf_h') }} <button type="button" class="info-icon" data-term="conformal" data-term-label="Prédiction conforme" aria-label="{{ t('glossary_open_aria', term='Prédiction conforme') }}">i</button></h2>
 {% set c = detail.conformal %}
 {% if not c.available %}
-{{ empty_state("Non calculable pour ce run.", c.reason) }}
+{{ empty_state(t('rd_conf_none'), c.reason) }}
 {% else %}
-<p class="hint">Ensembles de prédiction sur la direction à α = {{ c.alpha }} (couverture visée {{ "%.0f" | format((1 - c.alpha) * 100) }} %), calculés sur les {{ c.n }} P(hausse) hors échantillon du meilleur essai ({{ c.splits.test }} test walk-forward, {{ c.splits.holdout }} holdout, {{ c.splits.live }} live), chacune calibrée sur les prédictions antérieures seulement. « Pas d'avis » = l'ensemble contient les deux directions. Base : {{ "%.0f" | format(c.base_rate_up * 100) }} % de hausses.</p>
+<p class="hint">{{ t('rd_conf_hint', a=c.alpha, cov="%.0f" | format((1 - c.alpha) * 100), n=c.n, te=c.splits.test, ho=c.splits.holdout, li=c.splits.live, base="%.0f" | format(c.base_rate_up * 100)) }}</p>
 <div class="metric-grid">
-{{ metric("Couverture (split)", "%.1f %%" | format(c.split.coverage * 100), "Visée " ~ ("%.0f" | format(c.split.nominal * 100)) ~ " % — garantie seulement si les données sont échangeables, ce qu'une série financière n'est pas.", "ok" if c.split.coverage >= c.split.nominal - 0.03 else "warning") }}
-{{ metric("Couverture (ACI)", "%.1f %%" | format(c.aci.coverage * 100), "Conformal adaptatif (Gibbs & Candès 2021) : erreur de couverture à long terme → 0 même sous dérive.", "ok" if c.aci.coverage >= c.aci.nominal - 0.03 else "warning") }}
-{{ metric("Pas d'avis (ACI)", "%.0f %%" | format(c.aci.no_call_rate * 100), c.aci.n_called ~ " prédiction(s) avec une seule direction retenue.", "neutral") }}
-{{ metric("Justesse quand avis (ACI)", ("%.1f %%" | format(c.aci.called_accuracy * 100)) if c.aci.n_called else "—", "Direction exacte parmi les appels conformes — à comparer au taux de hausses de base.", "neutral" if c.aci.n_called else "pending") }}
+{{ metric(t('rd_cv_split'), "%.1f %%" | format(c.split.coverage * 100), t('rd_cv_split_rel', n="%.0f" | format(c.split.nominal * 100)), "ok" if c.split.coverage >= c.split.nominal - 0.03 else "warning") }}
+{{ metric(t('rd_cv_aci'), "%.1f %%" | format(c.aci.coverage * 100), t('rd_cv_aci_rel'), "ok" if c.aci.coverage >= c.aci.nominal - 0.03 else "warning") }}
+{{ metric(t('rd_cv_nocall'), "%.0f %%" | format(c.aci.no_call_rate * 100), t('rd_cv_nocall_rel', n=c.aci.n_called), "neutral") }}
+{{ metric(t('rd_cv_acc'), ("%.1f %%" | format(c.aci.called_accuracy * 100)) if c.aci.n_called else "—", t('rd_cv_acc_rel'), "neutral" if c.aci.n_called else "pending") }}
 </div>
 {% endif %}
 {% set m = detail.meta_labeling %}
 {% if m %}
-<h3>Meta-labeling</h3>
+<h3>{{ t('rd_meta_h') }}</h3>
 {% if not m.available %}
-<p class="hint">Non calculable : {{ m.reason }}.</p>
+<p class="hint">{{ t('rd_ml_none', r=m.reason) }}</p>
 {% else %}
-<p class="hint">Un méta-modèle (régression logistique) apprend, sur les appels déjà résolus uniquement, si le modèle principal va avoir raison — à partir de la force de sa P(hausse), de sa confiance et de son taux de réussite récent. Un appel est retenu quand sa probabilité de succès dépasse le taux de réussite historique du modèle.</p>
+<p class="hint">{{ t('rd_ml_hint') }}</p>
 <div class="metric-grid">
-{{ metric("Justesse, tous les appels", "%.1f %%" | format(m.accuracy_all * 100), m.n_evaluated ~ " appels évalués.", "neutral") }}
-{{ metric("Justesse, appels retenus", ("%.1f %%" | format(m.accuracy_kept * 100)) if m.n_kept else "—", m.n_kept ~ " appels retenus (" ~ ("%.0f" | format(m.kept_share * 100)) ~ " %).", ("ok" if m.accuracy_kept > m.accuracy_all else "warning") if m.n_kept else "pending") }}
+{{ metric(t('rd_ml_all'), "%.1f %%" | format(m.accuracy_all * 100), t('rd_ml_all_rel', n=m.n_evaluated), "neutral") }}
+{{ metric(t('rd_ml_kept'), ("%.1f %%" | format(m.accuracy_kept * 100)) if m.n_kept else "—", t('rd_ml_kept_rel', n=m.n_kept, s="%.0f" | format(m.kept_share * 100)), ("ok" if m.accuracy_kept > m.accuracy_all else "warning") if m.n_kept else "pending") }}
 </div>
 {% endif %}
 {% endif %}
@@ -251,71 +249,68 @@ Moyennes sur les horizons de ce lancement, pour décider quelle configuration re
 {% endif %}
 
 <section class="card">
-<h2>Corrections phase 6 (rigueur d'échantillonnage)</h2>
+<h2>{{ t('rd_p6_h') }}</h2>
 {% if detail.data_quality_enabled %}
-<p><strong>Portes de qualité de données</strong> : {{ status_badge('actives', 'ok') }}
-   {% if detail.quality_issues %} — {{ detail.quality_issues | length }} série(s) exclue(s) de l'univers de ce snapshot.{% else %} — aucune exclusion sur ce snapshot.{% endif %}</p>
+<p><strong>{{ t('rd_p6_gates') }}</strong> : {{ status_badge(t('rd_p6_active'), 'ok') }}
+   {% if detail.quality_issues %} — {{ t('rd_p6_excl', n=detail.quality_issues | length) }}{% else %} — {{ t('rd_p6_noexcl') }}{% endif %}</p>
 {% else %}
-<p><strong>Portes de qualité de données</strong> : {{ status_badge('désactivées pour ce run', 'disabled') }}</p>
+<p><strong>{{ t('rd_p6_gates') }}</strong> : {{ status_badge(t('rd_p6_off_pl'), 'disabled') }}</p>
 {% endif %}
 
 {% if not detail.stability_enabled %}
-<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('désactivée pour ce run', 'disabled') }}</p>
+<p><strong>{{ t('rd_p6_stab') }}</strong> : {{ status_badge(t('rd_p6_off'), 'disabled') }}</p>
 {% elif detail.feature_stability is none %}
-<p><strong>Stabilité de la sélection de features</strong> : {{ status_badge('non calculée', 'disabled') }} (aucune config évaluée sur ≥ 2 folds pour cet horizon).</p>
+<p><strong>{{ t('rd_p6_stab') }}</strong> : {{ status_badge(t('rd_p6_nc'), 'disabled') }} {{ t('rd_p6_nc_hint') }}</p>
 {% else %}
 {% set mj = detail.feature_stability.mean_jaccard %}
-<p><strong>Stabilité de la sélection de features</strong> (Jaccard moyen, {{ detail.feature_stability.n_folds }} folds) :
+<p><strong>{{ t('rd_p6_stab') }}</strong> {{ t('rd_p6_jacc', n=detail.feature_stability.n_folds) }}
    {% if mj == mj %}
    {{ status_badge('%.3f' | format(mj), 'ok' if mj >= detail.min_mean_jaccard_warning else 'warning') }}
-   {% if mj < detail.min_mean_jaccard_warning %}<br><span class="hint">Sous le seuil ({{ detail.min_mean_jaccard_warning }}) — sélection instable, signal non démontré reproductible.</span>{% endif %}
+   {% if mj < detail.min_mean_jaccard_warning %}<br><span class="hint">{{ t('rd_p6_below', s=detail.min_mean_jaccard_warning) }}</span>{% endif %}
    {% else %}
-   {{ status_badge('non calculable (< 2 folds)', 'disabled') }}
+   {{ status_badge(t('rd_p6_ncb'), 'disabled') }}
    {% endif %}
 </p>
 {% endif %}
 </section>
 
 <section id="essais" class="card">
-<h2>Essais (table <code>trial</code>)</h2>
+<h2>{{ t('rd_tr_h') }} (<code>trial</code>)</h2>
 {% set rows = [] %}
 {% set row_classes = [] %}
-{% for t in detail.trials %}
+{% for tr in detail.trials %}
 {% if detail.is_cpcv %}
-{% set dist = detail.path_distributions.get(t.trial_id) %}
-{% set perf = ("médiane=%.4f [%.4f, %.4f] (std=%.4f, %d chemins)" | format(dist.median, dist.q05, dist.q95, dist.std, dist.n_paths)) if dist and dist.n_paths else '—' %}
+{% set dist = detail.path_distributions.get(tr.trial_id) %}
+{% set perf = (t('rd_tr_median', m='%.4f' | format(dist.median), lo='%.4f' | format(dist.q05), hi='%.4f' | format(dist.q95), s='%.4f' | format(dist.std), n=dist.n_paths)) if dist and dist.n_paths else '—' %}
 {% else %}
-{% set perf = ("%.4f" | format(t.test_f1_dir)) if t.test_f1_dir is not none else '<span class="na">—</span>' %}
+{% set perf = ("%.4f" | format(tr.test_f1_dir)) if tr.test_f1_dir is not none else '<span class="na">—</span>' %}
 {% endif %}
 {% set _ = rows.append([
-    t.trial_id, t.regime, t.algo, t.sampler, t.n_features, t.selector, perf,
-    ('meilleur' if t.is_best else ''),
+    tr.trial_id, tr.regime, tr.algo, tr.sampler, tr.n_features, tr.selector, perf,
+    (t('rd_tr_best') if tr.is_best else ''),
 ]) %}
-{% set _ = row_classes.append('best' if t.is_best else '') %}
+{% set _ = row_classes.append('best' if tr.is_best else '') %}
 {% endfor %}
-{{ data_table(["#", "Régime", "Algo", "Sampler", "N", "Sélecteur", "Performance (test)", ""], rows,
+{{ data_table(["#", t('rd_scr_regime'), "Algo", "Sampler", "N", t('rd_tr_selector'), t('rd_tr_perf'), ""], rows,
               row_classes=row_classes, num_cols=[0, 4, 6], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
-              footer=(detail.trials | length) ~ " essai(s) pour CE run · " ~ detail.cumulative_trials
-                     ~ " cumulés sur la cible/horizon — c'est le second nombre qui doit servir à lire la ligne « meilleur », "
-                     ~ ("médiane et intervalle inter-chemins donnés par ligne (CPCV)." if detail.is_cpcv
-                        else "la performance affichée est une moyenne de folds sans intervalle (walk-forward).")) }}
+              footer=t('rd_tr_foot', n=detail.trials | length, c=detail.cumulative_trials, x=(t('rd_tr_cpcv') if detail.is_cpcv else t('rd_tr_wf')))) }}
 
-<h2>Baselines systématiques</h2>
+<h2>{{ t('rd_bl_h') }}</h2>
 {% set brows = [] %}
 {% for b in detail.baselines %}
 {% set _ = brows.append([b.baseline, b.metrics.items() | map('join', '=') | join(', ')]) %}
 {% endfor %}
-{{ data_table(["Baseline", "Métriques (test)"], brows, "Aucune baseline enregistrée.", collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
-              footer=(detail.baselines | length) ~ " baseline(s) · même découpage, mêmes folds que les essais ci-dessus — un modèle qui ne les bat pas n'a rien démontré.") }}
+{{ data_table([t('rd_bl_col'), t('rd_bl_metrics')], brows, t('rd_bl_none'), collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
+              footer=t('rd_bl_foot', n=detail.baselines | length)) }}
 </section>
 
 <section id="config" class="card">
-<h2>Configuration</h2>
+<h2>{{ t('rd_section_config') }}</h2>
 {# La config complète fait plusieurs milliers de lignes (l'univers de tickers
    y est développé) : laissée libre, elle occupait 12 000 px et devenait
    l'essentiel de la page. Elle reste ENTIÈRE et copiable -- rien n'est
    tronqué -- mais défile dans son propre conteneur, comme les tables. #}
 <pre class="config-dump">{{ detail.config | tojson(indent=1) }}</pre>
-<p class="hint">Le quadruplet de reproductibilité (snapshot, hash de config, git SHA, seed) est en tête de page, dans le bandeau de session.</p>
+<p class="hint">{{ t('rd_repro') }}</p>
 </section>
 {% endblock %}

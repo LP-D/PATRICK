@@ -13,7 +13,7 @@
     <h1 class="page-title">{{ t('wealth_title') }}
       {{ help_icon('wealth_summary', t('wealth_title'), t('glossary_open_aria', term=t('wealth_title'))) }}
     </h1>
-    <p class="page-subtitle">Comptes réels et fictifs, positions calculées depuis les mouvements.</p>
+    <p class="page-subtitle">{{ t('pat_subtitle') }}</p>
   </div>
   <div class="page-actions">
     <a class="btn-secondary" href="/mouvements">{{ icon('movements') }} {{ t('nav_mouvements') }}</a>
@@ -25,7 +25,7 @@
 
 {% if data.warnings %}
 <div class="banner banner-warning">
-  <strong>À vérifier</strong>
+  <strong>{{ t('pat_check') }}</strong>
   <ul>{% for w in data.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
@@ -33,20 +33,20 @@
 {% set n_real = data.accounts | selectattr('mode', 'equalto', 'real') | list | length %}
 {% set n_fictive = data.accounts | length - n_real %}
 <div class="metric-grid">
-{{ metric("Patrimoine réel", data.totals.real | eur, "Somme des " ~ n_real ~ " compte(s) réel(s), dont " ~ (data.real_cash | eur) ~ " de liquidités.", "neutral") }}
-{{ metric("Comptes fictifs", data.totals.fictive | eur, (n_fictive ~ " compte(s) bac à sable — jamais additionné(s) au réel."), "neutral") }}
+{{ metric(t('pat_real'), data.totals.real | eur, t('pat_real_rel', n=n_real, c=(data.real_cash | eur)), "neutral") }}
+{{ metric(t('pat_fict'), data.totals.fictive | eur, t('pat_fict_rel', n=n_fictive), "neutral") }}
 {% set proxied = [] %}
-{% for p in data.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " via " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (a priori)" if p.scale_source == "prior" else " (estimé)")) %}{% endfor %}
+{% for p in data.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " " ~ t('pat_via') ~ " " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (" ~ t('pat_prior') ~ ")" if p.scale_source == "prior" else " (" ~ t('pat_estimated') ~ ")")) %}{% endfor %}
 {% if data.risk.volatility is not none %}
-{{ metric("Volatilité ex-ante (réel)", data.risk.volatility | pct, "Annualisée, covariance Ledoit-Wolf" ~ ((" (δ = " ~ ("%.2f" | format(data.risk.shrinkage)) ~ ")") if data.risk.shrinkage is not none else "") ~ " ; liquidités et DAT à variance nulle ; " ~ (data.risk.covered_weight | pct(0)) ~ " du patrimoine couvert" ~ ((", sans historique : " ~ (data.risk.excluded | join(', '))) if data.risk.excluded else "") ~ ((" ; sans historique propre, estimé(s) par proxy : " ~ (proxied | join(', '))) if proxied else "") ~ ".", "warning" if proxied else "neutral") }}
+{{ metric(t('pat_vol'), data.risk.volatility | pct, t('pat_vol_a') ~ ((" (δ = " ~ ("%.2f" | format(data.risk.shrinkage)) ~ ")") if data.risk.shrinkage is not none else "") ~ t('pat_vol_b') ~ (data.risk.covered_weight | pct(0)) ~ t('pat_vol_c') ~ ((", " ~ t('pat_vol_d') ~ (data.risk.excluded | join(', '))) if data.risk.excluded else "") ~ ((" ; " ~ t('pat_vol_e') ~ (proxied | join(', '))) if proxied else "") ~ ".", "warning" if proxied else "neutral") }}
 {% else %}
-{{ metric("Volatilité ex-ante (réel)", "—", "Aucune position cotée avec assez d'historique (≥ 60 séances).", "pending") }}
+{{ metric(t('pat_vol'), "—", t('pat_vol_none'), "pending") }}
 {% endif %}
-{{ metric("Positions (réel)", data.holdings | length, "Lignes consolidées sur l'ensemble des comptes réels.", "neutral") }}
+{{ metric(t('pat_pos'), data.holdings | length, t('pat_pos_rel'), "neutral") }}
 </div>
 
 <section class="card">
-  <div class="card-head"><h2>Comptes</h2></div>
+  <div class="card-head"><h2>{{ t('pat_accounts_h') }}</h2></div>
   {% if data.accounts %}
   <div class="account-grid">
     {% for a in data.accounts %}
@@ -61,19 +61,19 @@
       <div class="account-value">{{ a.value | eur }}</div>
       <div class="hint">
         {% if a.twr is not none %}TWR {{ a.twr | pct(1, true) }}{% else %}TWR —{% endif %}
-        {% if a.benchmark %} · <span class="tip" data-tip="Écart entre le TWR du compte et le rendement de {{ a.benchmark }} sur la même période.">vs {{ a.benchmark }} {{ a.excess | pct(1, true) }}</span>{% endif %}
-        · {{ a.n_movements }} mouvement(s)
+        {% if a.benchmark %} · <span class="tip" data-tip="{{ t('pat_excess_tip', b=a.benchmark) }}">vs {{ a.benchmark }} {{ a.excess | pct(1, true) }}</span>{% endif %}
+        · {{ t('pat_n_mv', n=a.n_movements) }}
       </div>
     </a>
     {% endfor %}
   </div>
   {% else %}
-  {{ empty_state("Aucun compte.", "Crée un compte réel (PEA, CTO, assurance-vie, livret, dépôt à terme) ou un compte fictif pour tester une allocation.") }}
+  {{ empty_state(t('mv_no_account'), t('pat_empty_hint')) }}
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>Positions consolidées (comptes réels)</h2>
+  <h2>{{ t('pat_cons_h') }}</h2>
   {% set rows = [] %}
   {% for r in data.holdings %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
@@ -87,33 +87,33 @@
       '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ '</span>',
   ]) %}
   {% endfor %}
-  {{ data_table(["Actif", "Quantité", "Valeur", "Poids", "Plus-value latente"], rows,
-                "Aucune position sur les comptes réels.", num_cols=[1, 2, 3, 4],
-                footer="Poids sur le patrimoine réel total (liquidités incluses). Valorisation au dernier cours de clôture Yahoo Finance (non ajusté des dividendes, rafraîchi toutes les 6 h ; data lake local si hors ligne) ; à défaut, au dernier prix de transaction.") }}
+  {{ data_table([t('mv_col_asset'), t('pat_c_qty'), t('pat_c_value'), t('pat_c_weight'), t('pat_c_pnl')], rows,
+                t('pat_c_none'), num_cols=[1, 2, 3, 4],
+                footer=t('pat_c_foot')) }}
 </section>
 
 <dialog id="new-account-dialog" class="modal">
   <form class="form" data-api="/api/wealth/accounts" data-method="POST" data-redirect-account>
     <h2>{{ t('wealth_new_account') }}</h2>
-    <label>Nom <input type="text" name="name" required maxlength="120" placeholder="PEA Boursorama"></label>
+    <label>{{ t('pat_f_name') }} <input type="text" name="name" required maxlength="120" placeholder="PEA Boursorama"></label>
     <div class="subgrid">
-      <label>Enveloppe
+      <label>{{ t('pat_f_kind') }}
         <select name="kind">{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
       </label>
-      <label>Mode
+      <label>{{ t('pat_f_mode') }}
         <select name="mode"><option value="real">{{ t('wealth_mode_real') }}</option><option value="fictive">{{ t('wealth_mode_fictive') }}</option></select>
       </label>
     </div>
     <div class="subgrid">
-      <label>Ouvert le <input type="date" name="opened_on"></label>
-      <label>Indice de référence
-        {{ help_icon('wealth_account_rules', 'Règles par enveloppe', t('glossary_open_aria', term='Règles par enveloppe')) }}
-        <input type="text" name="benchmark" placeholder="défaut selon l'enveloppe">
+      <label>{{ t('pat_f_opened') }} <input type="date" name="opened_on"></label>
+      <label>{{ t('pat_f_bench') }}
+        {{ help_icon('wealth_account_rules', t('pat_rules'), t('glossary_open_aria', term=t('pat_rules'))) }}
+        <input type="text" name="benchmark" placeholder="{{ t('pat_f_bench_ph') }}">
       </label>
     </div>
     <div class="row" style="justify-content:flex-end">
-      <button type="button" class="btn-secondary" data-close-dialog>Annuler</button>
-      <button type="submit" class="btn">Créer</button>
+      <button type="button" class="btn-secondary" data-close-dialog>{{ t('pat_cancel') }}</button>
+      <button type="submit" class="btn">{{ t('pat_create') }}</button>
     </div>
   </form>
 </dialog>

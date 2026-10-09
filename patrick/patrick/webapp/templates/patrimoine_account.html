@@ -8,7 +8,7 @@
 {% macro info(term, label) %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ label }}" aria-label="{{ t('glossary_open_aria', term=label) }}">i</button>{% endmacro %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Fil d'Ariane">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
   <a href="/patrimoine">{{ t('wealth_title') }}</a>
   <span aria-current="page">{{ a.name }}</span>
 </nav>
@@ -20,73 +20,73 @@
       {{ status_badge(a.kind, 'neutral') }}
       {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       {% if a.kind in ('PEA', 'CTO', 'DAT') %}{{ info(a.kind | lower, a.kind) }}{% endif %}
-      {% if a.opened_on %} · ouvert le {{ a.opened_on }}{% endif %}
-      {% if a.benchmark %} · indice de référence <span class="pk-mono">{{ a.benchmark }}</span>{% endif %}
-      {% if a.source_account_id %} · <a href="/patrimoine/comptes/{{ a.source_account_id }}">compte source</a>{% endif %}
+      {% if a.opened_on %} · {{ t('pat_opened_lc') }} {{ a.opened_on }}{% endif %}
+      {% if a.benchmark %} · {{ t('pat_bench_lc') }} <span class="pk-mono">{{ a.benchmark }}</span>{% endif %}
+      {% if a.source_account_id %} · <a href="/patrimoine/comptes/{{ a.source_account_id }}">{{ t('pat_source_acc') }}</a>{% endif %}
     </p>
   </div>
   <div class="page-actions">
     {% if a.mode == 'real' %}
-    <button type="button" class="btn-secondary" data-api="/api/wealth/accounts/{{ a.account_id }}/clone" data-method="POST" data-redirect-account>{{ icon('layers') }} Cloner en fictif</button>
+    <button type="button" class="btn-secondary" data-api="/api/wealth/accounts/{{ a.account_id }}/clone" data-method="POST" data-redirect-account>{{ icon('layers') }} {{ t('pat_clone') }}</button>
     {% endif %}
     <button type="button" class="btn-ghost" data-api="/api/wealth/accounts/{{ a.account_id }}" data-method="DELETE"
-            data-confirm="Supprimer « {{ a.name }} » et ses {{ detail.movements | length }} mouvement(s) ?" data-redirect="/patrimoine">{{ icon('trash') }} Supprimer</button>
+            data-confirm="{{ t('pat_del_confirm', a=a.name, n=detail.movements | length) }}" data-redirect="/patrimoine">{{ icon('trash') }} {{ t('pat_delete') }}</button>
   </div>
 </div>
 
 <div id="wealth-flash" class="banner hidden" role="status"></div>
 
 {% if h.warnings %}
-<div class="banner banner-warning"><strong>À vérifier</strong><ul>{% for w in h.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+<div class="banner banner-warning"><strong>{{ t('pat_check') }}</strong><ul>{% for w in h.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
 {% endif %}
 
 <div class="metric-grid">
-{{ metric("Valeur", h.total | eur, "Dont " ~ (h.cash | eur) ~ " de liquidités ; apports nets " ~ ((h.deposits - h.withdrawals) | eur) ~ ".", "neutral") }}
+{{ metric(t('pat_c_value'), h.total | eur, t('pat_acc_value_rel', c=(h.cash | eur), d=((h.deposits - h.withdrawals) | eur)), "neutral") }}
 {% if perf.twr is not none %}
-{{ metric("Performance (TWR)", perf.twr | pct(2, true), "Neutre aux apports/retraits, du " ~ perf.start ~ " au " ~ perf.end ~ ((" ; annualisée " ~ (perf.twr_annualized | pct(2, true))) if perf.twr_annualized is not none else "") ~ ".", "ok" if perf.twr >= 0 else "error") }}
+{{ metric(t('pat_twr'), perf.twr | pct(2, true), t('pat_twr_a') ~ perf.start ~ t('pat_twr_b') ~ perf.end ~ ((" ; " ~ t('pat_twr_c') ~ (perf.twr_annualized | pct(2, true))) if perf.twr_annualized is not none else "") ~ ".", "ok" if perf.twr >= 0 else "error") }}
 {% else %}
-{{ metric("Performance (TWR)", "—", "Pas encore de capital investi sur au moins deux séances.", "pending") }}
+{{ metric(t('pat_twr'), "—", t('pat_twr_none'), "pending") }}
 {% endif %}
-{{ metric("TRI (XIRR)", perf.xirr | pct(2, true) if perf.xirr is not none else "—", "Taux annuel pondéré par les capitaux : inclut le calendrier de tes apports.", "neutral" if perf.xirr is not none else "pending") }}
+{{ metric(t('pat_xirr_l'), perf.xirr | pct(2, true) if perf.xirr is not none else "—", t('pat_xirr'), "neutral" if perf.xirr is not none else "pending") }}
 {% if a.benchmark and perf.benchmark_return is not none %}
 {{ metric("vs " ~ a.benchmark, perf.excess_vs_benchmark | pct(2, true) if perf.excess_vs_benchmark is not none else "—",
-          "Indice : " ~ (perf.benchmark_return | pct(2, true)) ~ " sur la période. Mêmes flux investis dans l'indice : " ~ (perf.benchmark_replica_value | eur) ~ "." ~ (" Indice de cours (dividendes non réinvestis) : comparaison flatteuse pour le compte." if a.benchmark.startswith('^') else ""),
+          t('pat_bench_rel', r=(perf.benchmark_return | pct(2, true)), v=(perf.benchmark_replica_value | eur)) ~ ((' ' ~ t('pat_bench_price')) if a.benchmark.startswith('^') else ""),
           ("ok" if perf.excess_vs_benchmark >= 0 else "warning") if perf.excess_vs_benchmark is not none else "neutral") }}
 {% elif a.benchmark %}
-{{ metric("vs " ~ a.benchmark, "—", "Cours de l'indice indisponibles (data lake local et Yahoo Finance).", "pending") }}
+{{ metric("vs " ~ a.benchmark, "—", t('pat_bench_na'), "pending") }}
 {% endif %}
 {% set proxied = [] %}
-{% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " via " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (a priori)" if p.scale_source == "prior" else " (estimé)")) %}{% endfor %}
-{{ metric("Risque", (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
-          "Volatilité ex-ante annualisée (Ledoit-Wolf, liquidités et DAT à variance nulle)" ~ ((" ; réalisée " ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; drawdown max " ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; sans historique propre, estimé(s) par proxy : " ~ (proxied | join(', ')) ~ " — corrélations du proxy, diversification sous-estimée") if proxied else "") ~ ".",
+{% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " " ~ t('pat_via') ~ " " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (" ~ t('pat_prior') ~ ")" if p.scale_source == "prior" else " (" ~ t('pat_estimated') ~ ")")) %}{% endfor %}
+{{ metric(t('pat_risk'), (detail.risk.volatility | pct) if detail.risk.volatility is not none else "—",
+          t('pat_risk_a') ~ ((" ; " ~ t('pat_risk_b') ~ (perf.volatility | pct)) if perf.volatility is not none else "") ~ ((" ; " ~ t('pat_risk_c') ~ (perf.max_drawdown | pct)) if perf.max_drawdown is not none else "") ~ ((" ; " ~ t('pat_vol_e') ~ (proxied | join(', ')) ~ " — " ~ t('pat_risk_d')) if proxied else "") ~ ".",
           ("warning" if proxied else "neutral") if detail.risk.volatility is not none else "pending") }}
 </div>
 
 <section class="card">
   <div class="card-head">
-    <h2>Évolution {{ info('twr', 'TWR') }}</h2>
+    <h2>{{ t('pat_evo') }} {{ info('twr', 'TWR') }}</h2>
     <div class="drift-legend" id="wealth-legend">
-      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>Valeur du compte</span>
-      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>Apports nets cumulés</span>
-      {% if chart.benchmark_replica %}<span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--warn)"></span>Mêmes flux dans {{ a.benchmark }}</span>{% endif %}
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>{{ t('pat_leg_value') }}</span>
+      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>{{ t('pat_leg_net') }}</span>
+      {% if chart.benchmark_replica %}<span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--warn)"></span>{{ t('pat_leg_bench', b=a.benchmark) }}</span>{% endif %}
     </div>
   </div>
   {% if chart.value | length > 1 %}
-  <div class="chart-wrap"><canvas id="wealth-chart" class="chart-canvas" role="img" aria-label="Valeur du compte au cours du temps"></canvas></div>
+  <div class="chart-wrap"><canvas id="wealth-chart" class="chart-canvas" role="img" aria-label="{{ t('pat_chart_aria') }}"></canvas></div>
   <script id="wealth-chart-data" type="application/json">{{ chart | tojson }}</script>
   {% else %}
-  {{ empty_state("Pas assez d'historique pour tracer une courbe.", "Ajoute des mouvements datés (apports, achats).") }}
+  {{ empty_state(t('pat_chart_none'), t('pat_chart_none_hint')) }}
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>Positions</h2>
+  <h2>{{ t('pat_positions') }}</h2>
   {% set rows = [] %}
   {% for r in h.rows %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
      Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
   {% set symbol_cell %}<span class="pk-mono">{{ r.symbol }}</span>{% endset %}
-  {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">transaction</span>{% endif %}{% endset %}
+  {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">{{ t('pat_tx_tag') }}</span>{% endif %}{% endset %}
   {% set _ = rows.append([
       symbol_cell,
       r.quantity | qty,
@@ -97,61 +97,61 @@
       '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ '</span>',
   ]) %}
   {% endfor %}
-  {{ data_table(["Actif", "Qté", "PRU", "Cours", "Valeur", "Poids", "PV latente"], rows, "Aucune position ouverte.",
+  {{ data_table([t('mv_col_asset'), t('mv_col_qty'), "PRU", t('pat_c_price'), t('pat_c_value'), t('pat_c_weight'), t('pat_c_pnl_short')], rows, t('pat_acc_none'),
                 num_cols=[1, 2, 3, 4, 5, 6],
-                footer="PRU = prix de revient unitaire, frais d'achat inclus. Revenus perçus : " ~ (h.income | eur) ~ " ; frais : " ~ (h.fees | eur) ~ ".") }}
+                footer=t('pat_acc_foot', i=(h.income | eur), f=(h.fees | eur))) }}
 </section>
 
 
 <section class="card">
-  <h2>Importer un relevé</h2>
+  <h2>{{ t('pat_import') }}</h2>
   <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
     {{ icon('upload') }}
     <span>{{ t('wealth_drop_csv') }}</span>
-    <span class="hint">{{ info('wealth_csv_import', 'Détails de l’import CSV') }} Aucun mouvement n'est enregistré avant l'aperçu.</span>
+    <span class="hint">{{ info('wealth_csv_import', t('pat_csv_details')) }} {{ t('pat_csv_note') }}</span>
     <input type="file" accept=".csv,text/csv" hidden>
   </div>
   <div class="import-preview" data-import-preview="{{ a.account_id }}"></div>
 </section>
 
 <section class="card">
-  <div class="card-head"><h2>Mouvements</h2></div>
+  <div class="card-head"><h2>{{ t('mv_h') }}</h2></div>
   <form class="form add-movement" data-api="/api/wealth/accounts/{{ a.account_id }}/movements" data-method="POST" data-reload>
     <div class="subgrid">
-      <label>Type
+      <label>{{ t('kind_col') }}
         <select name="kind">
           {% for k in movement_kinds %}<option value="{{ k }}">{{ k | mvkind }}</option>{% endfor %}
         </select>
       </label>
-      <label>Date <input type="date" name="ts" required></label>
-      <label>Actif
+      <label>{{ t('mv_col_date') }} <input type="date" name="ts" required></label>
+      <label>{{ t('mv_col_asset') }}
         <select name="symbol" data-symbol-select>
-          <option value="">— sans actif</option>
+          <option value="">— {{ t('pat_no_asset') }}</option>
           {% for group, items in symbol_groups %}
           <optgroup label="{{ group_labels.get(group, group) }}">
             {% for sym, sym_label in items %}<option value="{{ sym }}">{{ sym_label }} — {{ sym }}</option>{% endfor %}
           </optgroup>
           {% endfor %}
-          <option value="__other__">Autre symbole Yahoo…</option>
+          <option value="__other__">{{ t('pat_other_sym') }}</option>
         </select>
       </label>
-      <label data-symbol-other hidden>Symbole Yahoo <input type="text" name="symbol" placeholder="CW8.PA" disabled></label>
-      <label>Quantité <input type="text" inputmode="decimal" name="quantity"></label>
-      <label>Prix <input type="text" inputmode="decimal" name="price"></label>
-      <label>Montant <input type="text" inputmode="decimal" name="amount"></label>
-      <label>Frais <input type="text" inputmode="decimal" name="fees"></label>
-      <label>Taux (DAT) <input type="text" inputmode="decimal" name="rate" placeholder="0.03"></label>
-      <label>Échéance (DAT) <input type="date" name="maturity"></label>
+      <label data-symbol-other hidden>{{ t('pat_yahoo_sym') }} <input type="text" name="symbol" placeholder="CW8.PA" disabled></label>
+      <label>{{ t('pat_c_qty') }} <input type="text" inputmode="decimal" name="quantity"></label>
+      <label>{{ t('mv_col_price') }} <input type="text" inputmode="decimal" name="price"></label>
+      <label>{{ t('mv_col_amount') }} <input type="text" inputmode="decimal" name="amount"></label>
+      <label>{{ t('pat_fees') }} <input type="text" inputmode="decimal" name="fees"></label>
+      <label>{{ t('pat_rate') }} <input type="text" inputmode="decimal" name="rate" placeholder="0.03"></label>
+      <label>{{ t('pat_maturity') }} <input type="date" name="maturity"></label>
     </div>
-    <div class="row"><input type="text" name="note" placeholder="Note (facultatif)" class="input" style="flex:1; margin-top:0"><button type="submit" class="btn">{{ icon('plus') }} Ajouter</button></div>
-    <p class="hint">Actif : choisi dans la banque de tickers (symbole Yahoo, donc valorisé au dernier cours) ; « Autre symbole Yahoo » pour un titre absent de la banque. Achat/vente : quantité et prix (le montant se déduit, frais inclus). Versement, retrait, dividende, intérêts, frais : montant. Dépôt à terme : montant, taux annuel et échéance.</p>
+    <div class="row"><input type="text" name="note" placeholder="{{ t('pat_note_ph') }}" class="input" style="flex:1; margin-top:0"><button type="submit" class="btn">{{ icon('plus') }} {{ t('pat_add') }}</button></div>
+    <p class="hint">{{ t('pat_form_hint') }}</p>
   </form>
 
   {% set mv_rows = [] %}
   {% for m in detail.movements | reverse %}
   {% set symbol_cell %}<span class="pk-mono">{{ m.symbol or '' }}</span>{% endset %}
   {% set note_cell %}{{ m.note or '' }}{% endset %}
-  {% set delete_cell %}<button type="button" class="btn-ghost" data-api="/api/wealth/movements/{{ m.movement_id }}" data-method="DELETE" data-confirm="Supprimer ce mouvement ?" data-reload aria-label="Supprimer">{{ icon('trash', 14) }}</button>{% endset %}
+  {% set delete_cell %}<button type="button" class="btn-ghost" data-api="/api/wealth/movements/{{ m.movement_id }}" data-method="DELETE" data-confirm="{{ t('pat_del_mv') }}" data-reload aria-label="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>{% endset %}
   {% set _ = mv_rows.append([
       m.ts,
       m.kind | mvkind,
@@ -163,8 +163,8 @@
       delete_cell,
   ]) %}
   {% endfor %}
-  {{ data_table(["Date", "Type", "Actif", "Qté", "Prix", "Montant", "Note", ""], mv_rows, "Aucun mouvement.", num_cols=[3, 4, 5],
-                footer=(detail.movements | length) ~ " mouvement(s). Pour déplacer ou copier un mouvement vers un autre compte : page Mouvements (glisser-déposer).") }}
+  {{ data_table([t('mv_col_date'), t('kind_col'), t('mv_col_asset'), t('mv_col_qty'), t('mv_col_price'), t('mv_col_amount'), t('mv_col_note'), ""], mv_rows, t('mv_empty'), num_cols=[3, 4, 5],
+                footer=t('pat_mv_foot', n=detail.movements | length)) }}
 </section>
 <script src="/static/wealth.js"></script>
 {% endblock %}

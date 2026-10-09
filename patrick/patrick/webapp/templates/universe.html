@@ -1,15 +1,15 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, data_table %}
-{% block title %}PATRICK — Univers de cibles{% endblock %}
+{% block title %}PATRICK — {{ t('un_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_universe') or 'Univers' }}</span>
 </nav>
 
 <h1 class="page-title">{{ t('nav_universe') or 'Univers de cibles' }}</h1>
-<p class="page-subtitle">Toutes les cibles configurables (mêmes groupes que le formulaire de lancement, <code>config/defaults.py::DEFAULT_TARGET_GROUPS</code>), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.</p>
+<p class="page-subtitle">{{ t('un_sub2') }}</p>
 
 {# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici
    serait la redondance que la passe `distill` vient d'enlever. Cette ligne
@@ -34,7 +34,7 @@
     {% set rows = [] %}
     {% for s in g.symbols %}
     {% set state = 'ok' if s.n_done > 0 else ('neutral' if s.n_runs > 0 else 'disabled') %}
-    {% set label = (s.n_done ~ ' run(s) terminé(s)') if s.n_done > 0 else (s.n_runs ~ ' run(s) en cours' if s.n_runs > 0 else 'jamais lancée') %}
+    {% set label = t('un_state_done', n=s.n_done) if s.n_done > 0 else (t('un_state_running', n=s.n_runs) if s.n_runs > 0 else t('un_state_never')) %}
     {% set _ = rows.append([
         '<a href="/targets/' ~ s.symbol ~ '">' ~ s.symbol ~ '</a>',
         s.label,
@@ -45,9 +45,8 @@
     {% endfor %}
     {% set n_done = g.symbols | selectattr('n_done', 'gt', 0) | list | length %}
     {% set n_never = g.symbols | selectattr('n_runs', 'eq', 0) | list | length %}
-    {{ data_table(["Symbole", "Libellé", "Source", "Historique", "Dernier run"], rows,
-                  footer=(g.symbols | length) ~ " cible(s) · " ~ n_done ~ " avec au moins un run terminé · "
-                         ~ n_never ~ " jamais lancée(s)") }}
+    {{ data_table([t('un_col_symbol'), t('un_col_label'), t('un_col_source'), t('un_col_history'), t('un_col_last_run')], rows,
+                  footer=t('un_footer', n=(g.symbols | length), d=n_done, v=n_never)) }}
 </div>
 {% endfor %}
 {% endblock %}

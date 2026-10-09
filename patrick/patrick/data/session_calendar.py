@@ -44,14 +44,14 @@ _AMERICAS_OTHER_SUFFIXES = (".SA", ".MX", ".TO", ".BA")
 # Indices ("^"-prefixed) classified individually (the suffix alone isn't
 # enough to distinguish their region) — not exhaustive: any absent index
 # falls back to "other" (conservative handling, see CLOSE_UTC_HOUR["other"]).
-_VOLATILITY_INDICES = ("^VIX", "^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^EVZ")
+_VOLATILITY_INDICES = ("^VIX", "^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^EVZ", "^VIX9D", "^VXD", "^MOVE", "^SKEW")
 
 _INDEX_REGION = {
     "^GSPC": "equities_us", "^DJI": "equities_us", "^IXIC": "equities_us",
-    "^RUT": "equities_us", "^NYA": "equities_us", "^XAX": "equities_us",
+    "^RUT": "equities_us", "^NYA": "equities_us", "^XAX": "equities_us", "^SOX": "equities_us", "^DJT": "equities_us",
     "^FCHI": "equities_europe", "^GDAXI": "equities_europe", "^FTSE": "equities_europe",
     "^STOXX50E": "equities_europe", "^IBEX": "equities_europe", "^N100": "equities_europe",
-    "^BFX": "equities_europe",
+    "^BFX": "equities_europe", "^AEX": "equities_europe", "^SSMI": "equities_europe",
     "^HSI": "equities_asia_pacific", "^N225": "equities_asia_pacific",
     "^AXJO": "equities_asia_pacific", "^AORD": "equities_asia_pacific",
     "^BSESN": "equities_asia_pacific", "^NSEI": "equities_asia_pacific",

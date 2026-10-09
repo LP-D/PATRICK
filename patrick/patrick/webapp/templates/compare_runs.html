@@ -1,33 +1,39 @@
 {% extends "base_v2.html" %}
-{% block title %}PATRICK — Comparaison de runs{% endblock %}
+{% block title %}PATRICK — {{ t('cmp_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
-    <span aria-current="page">Comparaison</span>
+    <span aria-current="page">{{ t('cmp_crumb') }}</span>
 </nav>
-<h1 class="page-title">Comparer les runs</h1>
-<p class="page-subtitle">Comparaison descriptive des résultats enregistrés; les runs peuvent différer par leurs cibles, horizons ou schémas de validation.</p>
+<h1 class="page-title">{{ t('cmp_h1') }}</h1>
+<p class="page-subtitle">{{ t('cmp_subtitle') }}</p>
+{% set cmp_kinds = [] %}{% for run in runs %}{% set _ = cmp_kinds.append('alpha' if '__alpha_' in (run.target or '') else 'directional') %}{% endfor %}
+{% if cmp_kinds | unique | list | length > 1 %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed') }}</p>{% endif %}
+{% set cmp_kinds = [] %}{% for run in runs %}{% set _ = cmp_kinds.append('alpha' if '__alpha_' in (run.target or '') else 'directional') %}{% endfor %}
+{% if cmp_kinds | unique | list | length > 1 %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed') }}</p>{% endif %}
 <div class="compare-runs-table-wrap">
 <table class="data-table compare-runs-table">
     <thead>
-        <tr><th>Mesure</th>{% for run in runs %}<th><a href="/runs/{{ run.run_id }}/detail">{{ run.name }}</a></th>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_measure') }}</th>{% for run in runs %}<th><a href="/runs/{{ run.run_id }}/detail">{{ run.name }}</a></th>{% endfor %}</tr>
     </thead>
     <tbody>
-        <tr><th>Cible</th>{% for run in runs %}<td>{{ run.target }}</td>{% endfor %}</tr>
-        <tr><th>Horizons configurés</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} jours</td>{% endfor %}</tr>
-        <tr><th>Validation</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
-        <tr><th>Statut</th>{% for run in runs %}<td>{{ run.status }}</td>{% endfor %}</tr>
-        <tr><th>Durée</th>{% for run in runs %}<td>{{ '%.0f s' | format(run.duration_s) if run.duration_s is not none else 'En cours / indisponible' }}</td>{% endfor %}</tr>
-        <tr><th>Essais</th>{% for run in runs %}<td>{{ run.n_trials if run.n_trials is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>F1 direction (meilleur essai)</th>{% for run in runs %}<td>{{ '%.4f' | format(run.best_f1_dir) if run.best_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>Baseline F1 direction</th>{% for run in runs %}<td>{{ '%.4f' | format(run.benchmark_f1_dir) if run.benchmark_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>DM p-value</th>{% for run in runs %}<td>{{ '%.4f' | format(run.dm_p_value) if run.dm_p_value is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>Algorithmes configurés</th>{% for run in runs %}<td>{{ run.algorithms | join(', ') if run.algorithms else '—' }}</td>{% endfor %}</tr>
-        <tr><th>Samplers configurés</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>
-        <tr><th>Démarré le</th>{% for run in runs %}<td>{{ run.started_at or '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
+        <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_target') }}</th>{% for run in runs %}<td>{{ run.target }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_horizons') }}</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} {{ t('cmp_days') }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_validation') }}</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_status') }}</th>{% for run in runs %}<td>{{ run.status }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('rp_duration') }}</th>{% for run in runs %}<td>{{ '%.0f s' | format(run.duration_s) if run.duration_s is not none else t('cmp_running') }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_trials') }}</th>{% for run in runs %}<td>{{ run.n_trials if run.n_trials is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_f1') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.best_f1_dir) if run.best_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_f1_base') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.benchmark_f1_dir) if run.benchmark_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_dm_p') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.dm_p_value) if run.dm_p_value is not none else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_algos') }}</th>{% for run in runs %}<td>{{ run.algorithms | join(', ') if run.algorithms else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_samplers') }}</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_started') }}</th>{% for run in runs %}<td>{{ run.started_at or '—' }}</td>{% endfor %}</tr>
     </tbody>
 </table>
 </div>
-<p><a class="btn-secondary" href="/runs">Retour à l'historique</a></p>
+<p><a class="btn-secondary" href="/runs">{{ t('cmp_back') }}</a></p>
 {% endblock %}

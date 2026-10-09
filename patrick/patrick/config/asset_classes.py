@@ -28,10 +28,11 @@ ASSET_CLASSES: tuple[AssetClass, ...] = (
     AssetClass("indices", "/indices", ("Indices", "Indices mondiaux", "Volatilité"), 30, "asset_index"),
     AssetClass("crypto", "/crypto", ("Crypto", "Crypto (majeures)"), 40, "asset_crypto"),
     AssetClass("fx", "/fx", ("Devises", "Devises (majeures)"), 50, "asset_fx"),
-    AssetClass("rates", "/rates", ("Taux US (indices CBOE)", "Obligataire & taux (ETFs)"), 60, "asset_rates"),
+    AssetClass("rates", "/rates", ("Taux US (indices CBOE)", "Taux US (futures)", "Obligataire & taux (ETFs)"), 60, "asset_rates"),
     AssetClass("commodities", "/commodities", ("Matières premières (futures)", "Matières premières (compléments)"), 70,
                "asset_commodity"),
-    AssetClass("etfs", "/etfs", ("ETFs sectoriels & thématiques", "International (ETFs pays)", "ETFs larges & style"), 80,
+    AssetClass("etfs", "/etfs", ("ETFs sectoriels & thématiques", "International (ETFs pays)", "ETFs larges & style",
+               "Matières premières & devises (ETFs)"), 80,
                "asset_etf"),
     AssetClass("macro", "/macro", ("Macro (FRED)",), 90, "training_only"),
 )

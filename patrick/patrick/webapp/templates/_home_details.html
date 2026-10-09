@@ -15,7 +15,7 @@
 {% if r.testable %}
 {% set _ = quality_rows_fmt.append([
     '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', "%.4f" | format(r.p_value), "%.4f" | format(r.adjusted_p_value),
-    status_badge(t('stat_dm_significant'), "ok") if r.significant else status_badge(t('stat_dm_not_significant'), "neutral"),
+    status_badge(t('h_significant_short'), "ok") if r.significant else status_badge(t('h_not_significant_short'), "neutral"),
 ]) %}
 {% else %}
 {% set _ = quality_rows_fmt.append([

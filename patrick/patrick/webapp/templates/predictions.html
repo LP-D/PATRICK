@@ -2,10 +2,10 @@
 {% from "_components.html" import status_badge, empty_state, help_icon, lazy_block %}
 {# Petit « ? » : le texte s'affiche au survol (popover flottant, predictions_pop.js). #}
 {% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
-{% block title %}PATRICK — Prédictions{% endblock %}
+{% block title %}PATRICK — {{ t('pred_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_predictions') or 'Prédictions' }}</span>
 </nav>
@@ -19,23 +19,23 @@
     <a href="/predictions?kind=alpha" class="kind-tab{% if kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ n_alpha }}</span></a>
 </nav>
 <p class="hint kind-hint">{{ t('kind_alpha_hint') if kind == 'alpha' else t('kind_directional_hint') }}</p>
-<p class="page-subtitle">Signal du jour par actif et par horizon · survole une case pour le détail · seuil de significativité p &lt; {{ ('%.2f' | format(dm_significance_alpha)) | replace('.', ',') }}.</p>
+<p class="page-subtitle">{{ t('pred_subtitle', a=('%.2f' | format(dm_significance_alpha)) | replace('.', t('dec_sep'))) }}</p>
 
 {% if live_refresh.running %}
-<p class="hint refresh-line">Actualisation des signaux au lancement : {{ live_refresh.done }} / {{ live_refresh.total }} modèle(s) — recharge la page pour voir les mises à jour.</p>
+<p class="hint refresh-line">{{ t('pred_refreshing', d=live_refresh.done, n=live_refresh.total) }}</p>
 {% elif live_refresh.finished_at and live_refresh.total %}
-<p class="hint refresh-line">Signaux actualisés le {{ live_refresh.finished_at[:10] }} à {{ live_refresh.finished_at[11:16] }} UTC{% if live_refresh.failed %} · {{ live_refresh.failed }} échec(s) (voir les logs){% endif %}.</p>
+<p class="hint refresh-line">{{ t('pred_refreshed', d=live_refresh.finished_at[:10], h=live_refresh.finished_at[11:16]) }}{% if live_refresh.failed %} · {{ t('pred_refresh_failed', n=live_refresh.failed) }}{% endif %}.</p>
 {% endif %}
 
 <p class="pred-legend">
     {% if kind == 'alpha' %}
     {{ status_badge('▲▲ Surperformance forte', 'ok') }} {{ status_badge('▲ Surperformance faible', 'ok') }}
     {{ status_badge('▼ Sous-performance faible', 'warning') }} {{ status_badge('▼▼ Sous-performance forte', 'warning') }}
-    {{ q("Écart de rendement face au benchmark, après retrait du β : fort / faible = au-delà ou en deçà des 25 % / 75 % des écarts habituels.") }}
+    {{ q(t('pred_help_alpha')) }}
     {% else %}
     {{ status_badge('▲▲ Hausse forte', 'ok') }} {{ status_badge('▲ Hausse faible', 'ok') }}
     {{ status_badge('▼ Baisse faible', 'warning') }} {{ status_badge('▼▼ Baisse forte', 'warning') }}
-    {{ q("Fort / faible : amplitude au-delà ou en deçà des 25 % / 75 % de rendements habituels de l'actif.") }}
+    {{ q(t('pred_help_dir')) }}
     {% endif %}
 </p>
 

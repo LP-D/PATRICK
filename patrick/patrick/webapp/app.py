@@ -1626,6 +1626,7 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
         # `run_phase_timing` row for this target), and computing it inside
         # the same connection avoids a second `trackdb.connect()`.
         phase_drift = trackhistory.phase_timing_drift_for_target(conn, ticker)
+        alpha_runs = trackhistory.alpha_runs_for_asset(conn, ticker)
     finally:
         conn.close()
 
@@ -1638,7 +1639,7 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
 
     return templates.TemplateResponse(
         request, "target.html",
-        {"target": ticker, "detail": detail, "phase_drift": phase_drift,
+        {"target": ticker, "detail": detail, "phase_drift": phase_drift, "alpha_runs": alpha_runs,
          "phase_labels": PHASE_LABELS, "shap_horizons": done_horizons, **_i18n_context(request)},
     )
 

@@ -483,6 +483,85 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
     ],
 }
 
+# Ajouts du 2026-10-09 (données de marché / macro Yahoo Finance). Chaque symbole a été interrogé sur Yahoo ce jour-là (plus de 50 séances,
+# première date servie ci-dessous) ; sondés mais écartés : ^RVX, ^VXEEM et les VIX de titres (plus de données), UNI-USD, UX=F. Ils rejoignent
+# des groupes existants (mêmes pages, mêmes traductions) sauf les futures de taux, qui forment un groupe à part. Opt-in comme le reste de
+# l'univers étendu : rien ne change pour un run qui n'active pas « Univers candidat = étendu ».
+_ADDED_2026_10_09: dict[str, list[tuple[str, str, str]]] = {
+    "Volatilité": [
+        ("^MOVE", "MOVE_Bond_Volatility", "2002-11-12"),
+        ("^SKEW", "CBOE_SKEW_Tail_Risk", "1990-01-02"),
+        ("^VIX9D", "VIX_9Day", "2011-01-03"),
+        ("^VXD", "DowJones_Volatility", "2005-11-22"),
+    ],
+    "Indices mondiaux": [
+        ("^SOX", "PHLX_Semiconductor", "1994-05-04"),
+        ("^NYA", "NYSE_Composite", "1965-12-31"),
+        ("^DJT", "DowJones_Transports", "1992-01-02"),
+        ("^AEX", "AEX_Netherlands", "1992-10-12"),
+        ("^SSMI", "SMI_Switzerland", "1990-11-09"),
+        ("^TWII", "Taiwan_Weighted", "1997-07-02"),
+        ("^BSESN", "BSE_Sensex_India", "1997-07-01"),
+        ("000001.SS", "Shanghai_Composite", "1997-07-02"),
+        ("^MXX", "IPC_Mexico", "1991-11-08"),
+        ("^STI", "Straits_Times_Singapore", "1987-12-28"),
+    ],
+    "Devises (majeures)": [
+        ("CNY=X", "USD_CNY", "2001-06-25"),
+        ("INR=X", "USD_INR", "2003-12-01"),
+        ("MXN=X", "USD_MXN", "2003-12-01"),
+        ("BRL=X", "USD_BRL", "2003-12-01"),
+        ("ZAR=X", "USD_ZAR", "2003-12-01"),
+        ("KRW=X", "USD_KRW", "2003-12-01"),
+        ("SGD=X", "USD_SGD", "2003-12-01"),
+        ("GBPJPY=X", "GBP_JPY", "2003-12-01"),
+        ("AUDJPY=X", "AUD_JPY", "2003-12-01"),
+    ],
+    "Crypto (majeures)": [
+        ("LTC-USD", "Litecoin", "2014-09-17"),
+        ("DOGE-USD", "Dogecoin", "2017-11-09"),
+        ("LINK-USD", "Chainlink", "2017-11-09"),
+        ("TRX-USD", "Tron", "2017-11-09"),
+        ("XLM-USD", "Stellar", "2017-11-09"),
+        ("BCH-USD", "BitcoinCash", "2017-11-09"),
+        ("AVAX-USD", "Avalanche", "2020-07-13"),
+        ("DOT-USD", "Polkadot", "2020-08-20"),
+    ],
+    "Matières premières (compléments)": [
+        ("ZW=F", "Wheat_CBOT", "2000-07-17"),
+        ("ZL=F", "SoybeanOil", "2000-03-15"),
+        ("ZM=F", "SoybeanMeal", "2000-05-15"),
+        ("HRC=F", "HotRolledSteel", "2008-10-20"),
+        ("MTF=F", "Coal_Futures", "2010-12-17"),
+        ("ALI=F", "Aluminum", "2014-05-06"),
+        ("TTF=F", "DutchTTF_Gas", "2017-10-23"),
+    ],
+    "Taux US (futures)": [
+        ("ZT=F", "UST_2Y_Futures", "2000-06-02"),
+        ("ZF=F", "UST_5Y_Futures", "2000-09-21"),
+        ("ZN=F", "UST_10Y_Futures", "2000-09-21"),
+        ("ZB=F", "UST_30Y_Futures", "2000-09-21"),
+    ],
+    "Matières premières & devises (ETFs)": [
+        ("GLD", "Gold_ETF", "2004-11-18"),
+        ("SLV", "Silver_ETF", "2006-04-28"),
+        ("USO", "Oil_ETF", "2006-04-10"),
+        ("UNG", "NatGas_ETF", "2007-04-18"),
+        ("DBC", "Commodities_Broad_ETF", "2006-02-06"),
+        ("DBA", "Agriculture_ETF", "2007-01-05"),
+        ("GDX", "GoldMiners_ETF", "2006-05-22"),
+        ("URA", "Uranium_ETF", "2010-11-05"),
+        ("UUP", "USD_Bullish_ETF", "2007-03-01"),
+        ("FXE", "Euro_ETF", "2005-12-12"),
+        ("FXY", "Yen_ETF", "2007-02-13"),
+        ("VNQ", "USReit_ETF", "2004-09-29"),
+    ],
+}
+for _group, _items in _ADDED_2026_10_09.items():
+    EXTENDED_TARGET_GROUPS.setdefault(_group, []).extend(_items)
+
+ADDED_ON_2026_10_09 = tuple(sym for items in _ADDED_2026_10_09.values() for sym, _, _ in items)
+
 EXCLUDED_AT_VERIFICATION = ('^EVZ',)
 
 ADDED_ON_2026_09_27 = ("^IXIC", "^IRX", "^FVX", "^TNX", "^TYX", "PL=F", "PA=F", "HO=F", "RB=F")
@@ -510,6 +589,8 @@ EXTENDED_FEATURE_CANDIDATES: tuple[str, ...] = (
     "TLT", "IEF", "SHY", "LQD", "HYG",
     # Autres futures / crypto
     "PL=F", "PA=F", "HO=F", "RB=F", "ETH-USD",
+    # Risque de queue, volatilité obligataire, semi-conducteurs, matières premières et dollar (ajoutés le 2026-10-09)
+    "^MOVE", "^SKEW", "^VIX9D", "^SOX", "DBC", "GLD", "UUP",
 )
 
 

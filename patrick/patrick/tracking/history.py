@@ -504,6 +504,30 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
     }
 
 
+def alpha_runs_for_asset(conn: sqlite3.Connection, symbol: str) -> list[dict]:
+    """Runs alpha (rendement relatif à un benchmark) de `symbol`, du plus récent au plus ancien : la page d'un actif ne mélange pas
+    ces modèles avec les directionnels, mais les signale à part avec leurs chiffres d'en-tête (AUC puis F1) et le drapeau « suspect »."""
+    from patrick.config.target_label import ALPHA_SEP, split_run_label
+
+    prefix = symbol + ALPHA_SEP
+    rows = conn.execute(
+        "SELECT run_id, target, horizon, status, started_at, config_json FROM run WHERE substr(target, 1, ?) = ? "
+        "ORDER BY started_at DESC, rowid DESC", (len(prefix), prefix)).fetchall()
+    metrics = trackdb.batch_best_metrics(conn, [r[0] for r in rows])
+    out = []
+    for run_id, label, horizon, status_, started_at, config_json in rows:
+        headline = metrics.get(run_id, {})
+        test, holdout = headline.get("test") or {}, headline.get("holdout") or {}
+        out.append({
+            "run_id": run_id, "label": label, "benchmark": split_run_label(label)[2], "horizon": horizon, "status": status_,
+            "started_at": started_at, "name": _run_name(config_json),
+            "auc": test.get("AUC_ovr_4cls"), "f1": test.get("F1_dir"),
+            "holdout_auc": holdout.get("AUC_ovr_4cls"), "holdout_f1": holdout.get("F1_dir"),
+            "suspect": suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test")),
+        })
+    return out
+
+
 def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10) -> dict | None:
     """P7.3 -- `/targets/{ticker}` page: aggregated view of the entire run
     history for ONE target (across all horizons/schemes).

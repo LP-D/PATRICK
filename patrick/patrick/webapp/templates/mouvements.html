@@ -12,7 +12,7 @@
     <h1 class="page-title">{{ t('nav_mouvements') }}
       {{ help_icon('wealth_movements', t('nav_mouvements'), t('glossary_open_aria', term=t('nav_mouvements'))) }}
     </h1>
-    <p class="page-subtitle">Journal et import des mouvements.</p>
+    <p class="page-subtitle">{{ t('mv_subtitle') }}</p>
   </div>
 </div>
 
@@ -20,7 +20,7 @@
 
 {% if accounts %}
 <section class="card">
-  <h2>Comptes — cibles de dépôt</h2>
+  <h2>{{ t('mv_targets') }}</h2>
   <div class="account-grid">
     {% for a in accounts %}
     <div class="account-card drop-target" data-kind="{{ a.mode }}" data-account-id="{{ a.account_id }}"
@@ -41,11 +41,11 @@
 </section>
 
 <section class="card">
-  <h2>Journal</h2>
+  <h2>{{ t('mv_journal') }}</h2>
   {% if movements %}
   <div class="table-scroll">
   <table class="data-table">
-    <thead><tr><th aria-label="Glisser"></th><th>Date</th><th>Compte</th><th>Type</th><th>Actif</th><th class="num">Qté</th><th class="num">Prix</th><th class="num">Montant</th><th>Note</th></tr></thead>
+    <thead><tr><th aria-label="{{ t('mv_drag') }}"></th><th>{{ t('mv_col_date') }}</th><th>{{ t('mv_col_account') }}</th><th>{{ t('kind_col') }}</th><th>{{ t('mv_col_asset') }}</th><th class="num">{{ t('mv_col_qty') }}</th><th class="num">{{ t('mv_col_price') }}</th><th class="num">{{ t('mv_col_amount') }}</th><th>{{ t('mv_col_note') }}</th></tr></thead>
     <tbody>
     {% for m in movements %}
     {% set acc = by_id[m.account_id] %}
@@ -64,13 +64,13 @@
     </tbody>
   </table>
   </div>
-  <p class="table-footer">{{ movements | length }} mouvement(s) sur {{ accounts | length }} compte(s).</p>
+  <p class="table-footer">{{ t('mv_footer', m=(movements | length), a=(accounts | length)) }}</p>
   {% else %}
-  {{ empty_state("Aucun mouvement.", "Dépose un relevé CSV sur un compte ci-dessus, ou saisis un mouvement depuis la fiche d'un compte.") }}
+  {{ empty_state(t('mv_empty'), t('mv_empty_hint')) }}
   {% endif %}
 </section>
 {% else %}
-{{ empty_state("Aucun compte.", "Crée d'abord un compte depuis la page Comptes.") }}
+{{ empty_state(t('mv_no_account'), t('mv_no_account_hint')) }}
 {% endif %}
 <script src="/static/wealth.js"></script>
 {% endblock %}

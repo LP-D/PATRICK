@@ -23,7 +23,9 @@ from __future__ import annotations
 import sqlite3
 
 from patrick.config import defaults as D
+from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.validation import suspicion
 
 # ---------------------------------------------------------------------------
 # CORRELATED_PAIRS -- explicit, documented list of asset pairs considered for
@@ -302,6 +304,12 @@ def portfolio_overview(
     all_symbols = [sym for items in target_groups.values() for sym, _ in items]
 
     predictions = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
+    # Un modèle au score impossible (fuite de données, `validation/suspicion.py`) ne donne pas de signal agrégé.
+    scores = trackdb.batch_best_metrics(conn, sorted({p["run_id"] for p in predictions.values()}))
+    suspect_keys = {key for key, p in predictions.items()
+                    if suspicion.suspect_reason((scores.get(p["run_id"]) or {}).get("holdout"))
+                    or suspicion.suspect_reason((scores.get(p["run_id"]) or {}).get("test"))}
+    predictions = {key: p for key, p in predictions.items() if key not in suspect_keys}
     effective_pairs = CORRELATED_PAIRS if pairs is None else pairs
 
     return {
@@ -309,4 +317,5 @@ def portfolio_overview(
         "contradictions": detect_contradictions(predictions, pairs=effective_pairs),
         "horizons": horizons,
         "pairs_used": effective_pairs,
+        "n_suspect_excluded": len(suspect_keys),
     }

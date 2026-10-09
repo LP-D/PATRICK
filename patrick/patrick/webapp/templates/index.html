@@ -110,7 +110,7 @@
                    `title` (voir app.js::refreshHorizonFeasibility). #}
                 <select name="horizons" id="horizons" multiple required size="8">
                     {% for h in all_horizons %}
-                    <option value="{{ h }}" {% if h in view.horizons %}selected{% endif %}>{{ h }}{% if h in descriptive_horizons %} (descriptif){% endif %}</option>
+                    <option value="{{ h }}" {% if h in view.horizons %}selected{% endif %}>{{ h }}{% if h in descriptive_horizons %} ({{ t('lg_descriptive') }}){% endif %}</option>
                     {% endfor %}
                 </select>
                 <p class="hint">{{ t('horizons_multiselect_hint') }}</p>
@@ -565,7 +565,7 @@
             </li>
             {% endfor %}
         </ol>
-        <p class="recent-runs-foot"><a href="/runs">Historique complet →</a></p>
+        <p class="recent-runs-foot"><a href="/runs">{{ t('lg_full_history') }} →</a></p>
     </div>
     {% endif %}
 

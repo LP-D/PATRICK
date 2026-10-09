@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
+from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 
@@ -460,6 +461,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_fx_majors": {"fr": "Devises (majeures)", "en": "Currencies (majors)"},
     "group_crypto_majors": {"fr": "Crypto (majeures)", "en": "Crypto (majors)"},
     "group_us_rates_indices": {"fr": "Taux US (indices CBOE)", "en": "US rates (CBOE indices)"},
+    "group_us_rates_futures": {"fr": "Taux US (futures)", "en": "US rates (futures)"},
     "group_commodities_extra": {"fr": "Matières premières (compléments)", "en": "Commodities (additional)"},
     "group_us_largecaps": {"fr": "Actions US (grandes capitalisations)", "en": "US stocks (large caps)"},
     "group_fr_other": {"fr": "Actions France (autres valeurs)", "en": "French stocks (other)"},
@@ -876,6 +878,8 @@ STRINGS.update(FUND_STRINGS)
 STRINGS.update(SETTINGS_STRINGS)
 # Pages de la refonte du 2026-10-09 (webapp/i18n_pages.py).
 STRINGS.update(PAGES_STRINGS)
+# Gabarits historiques convertis (webapp/i18n_legacy.py).
+STRINGS.update(LEGACY_STRINGS)
 
 
 def get_lang(request: Request) -> str:
@@ -980,6 +984,7 @@ TARGET_GROUP_LABEL_KEYS = {
     "Devises (majeures)": "group_fx_majors",
     "Crypto (majeures)": "group_crypto_majors",
     "Taux US (indices CBOE)": "group_us_rates_indices",
+    "Taux US (futures)": "group_us_rates_futures",
     "Matières premières (compléments)": "group_commodities_extra",
     "Actions US (grandes capitalisations)": "group_us_largecaps",
     "Actions France (autres valeurs)": "group_fr_other",

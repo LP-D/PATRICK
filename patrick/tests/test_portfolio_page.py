@@ -134,3 +134,19 @@ def test_portfolio_page_rejects_unknown_correlation_sense():
     client = TestClient(app)
     resp = client.get("/portfolio", params={"pairs": "GC=F:SI=F:sideways"})
     assert resp.status_code == 400
+
+
+def test_portfolio_leaves_out_signals_of_a_model_with_an_impossible_score(tmp_path, monkeypatch):
+    """Un modèle au F1 de 0,99 (fuite de données) ne compte pas dans l'agrégation, et la page le dit."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    _seed_run_with_prediction(conn, "run_dxy", "DX-Y.NYB", 5, 3)
+    _seed_run_with_prediction(conn, "run_eurusd", "EURUSD=X", 5, 3)
+    for run_id, f1 in (("run_dxy", 0.55), ("run_eurusd", 0.99)):
+        trial_id = conn.execute("SELECT trial_id FROM trial WHERE run_id = ? AND is_best = 1", (run_id,)).fetchone()[0]
+        db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": f1})
+    conn.close()
+    html = TestClient(app, base_url="http://127.0.0.1:8000").get("/portfolio").text
+    assert "écarté(s) de l&#39;agrégation" in html
+    assert "1 signal(s) écarté(s)" in html

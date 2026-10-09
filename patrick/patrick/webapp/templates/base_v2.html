@@ -90,7 +90,7 @@ script below (no flash), otherwise the OS preference applies.
                 </div>
                 <div class="topbar-actions">
                     <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
-                        {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') if t else 'Rechercher une page…' }}</span><span class="kbd">Ctrl K</span>
+                        {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') }}</span><span class="kbd">Ctrl K</span>
                     </button>
                     {% for u in utility_links(request.url.path) %}
                     {% set u_label = t(u.label_key) if (t and u.label_key) else u.label %}
@@ -118,7 +118,7 @@ script below (no flash), otherwise the OS preference applies.
                 {{ icon('search', 18) }}
                 <input class="cmdk-input" id="cmdk-input" type="text" autocomplete="off" spellcheck="false"
                        role="combobox" aria-expanded="true" aria-controls="cmdk-list"
-                       placeholder="{{ t('cmdk_placeholder') if t else 'Rechercher une page…' }}">
+                       placeholder="{{ t('cmdk_placeholder') }}">
                 <span class="kbd">Esc</span>
             </div>
             <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>

@@ -1,9 +1,9 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, empty_state %}
-{% block title %}PATRICK — Historique des runs{% endblock %}
+{% block title %}PATRICK — {{ t('rl_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_runs') or 'Historique' }}</span>
 </nav>
@@ -37,52 +37,52 @@
     <label>{{ t('hist_search') }}
         <input type="search" name="q" value="{{ filter_query }}" placeholder="{{ t('hist_search_ph') }}">
     </label>
-    <label>Cible
+    <label>{{ t('col_target') }}
         <select name="target" onchange="this.form.submit()">
-            <option value="">— toutes —</option>
+            <option value="">— {{ t('rl_filter_all_f') }} —</option>
             {% for t in targets %}
             <option value="{{ t.target }}" {% if t.target == filter_target %}selected{% endif %}>{{ t.target }} ({{ t.n_runs }})</option>
             {% endfor %}
         </select>
     </label>
-    <label>Statut
+    <label>{{ t('col_status') }}
         <select name="status" onchange="this.form.submit()">
-            <option value="">— tous —</option>
+            <option value="">— {{ t('rl_filter_all_m') }} —</option>
             {% for s in ["done", "running", "queued", "failed"] %}
             <option value="{{ s }}" {% if s == filter_status %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
         </select>
     </label>
-    <label>Schéma
+    <label>{{ t('col_scheme') }}
         <select name="scheme" onchange="this.form.submit()">
-            <option value="">— tous —</option>
+            <option value="">— {{ t('rl_filter_all_m') }} —</option>
             <option value="walkforward" {% if filter_scheme == "walkforward" %}selected{% endif %}>walk-forward</option>
             <option value="cpcv" {% if filter_scheme == "cpcv" %}selected{% endif %}>CPCV</option>
         </select>
     </label>
-    <label>Algorithme
+    <label>{{ t('rd_c_algo') }}
         <select name="algo">
-            <option value="">— tous —</option>
+            <option value="">— {{ t('rl_filter_all_m') }} —</option>
             {% for model in algorithms %}
             <option value="{{ model }}" {% if model == filter_algo %}selected{% endif %}>{{ model }}</option>
             {% endfor %}
         </select>
     </label>
-    <button type="submit">Filtrer</button>
-    <a class="btn-secondary" href="/runs">Effacer</a>
+    <button type="submit">{{ t('rl_filter_submit') }}</button>
+    <a class="btn-secondary" href="/runs">{{ t('rn_clear') }}</a>
     <details class="filter-more"{% if filter_started_after or filter_started_before or filter_min_duration_s != '' or filter_max_duration_s != '' %} open{% endif %}>
-        <summary>Plus de filtres (dates, durée)</summary>
+        <summary>{{ t('rn_more_filters') }}</summary>
         <div class="filter-more-grid">
-            <label>Depuis
+            <label>{{ t('rn_since') }}
                 <input type="date" name="started_after" value="{{ filter_started_after }}">
             </label>
-            <label>Jusqu'au
+            <label>{{ t('rn_until') }}
                 <input type="date" name="started_before" value="{{ filter_started_before }}">
             </label>
-            <label>Durée min. (s)
+            <label>{{ t('rn_dur_min') }}
                 <input type="number" name="min_duration_s" min="0" step="1" value="{{ filter_min_duration_s }}">
             </label>
-            <label>Durée max. (s)
+            <label>{{ t('rn_dur_max') }}
                 <input type="number" name="max_duration_s" min="0" step="1" value="{{ filter_max_duration_s }}">
             </label>
         </div>
@@ -91,8 +91,8 @@
 
 {% if runs %}
 <form id="compare-runs-form" method="get" action="/compare-runs" class="compare-run-actions">
-    <button type="submit" id="compare-runs-submit" class="primary" disabled>Comparer 2 à 4 runs</button>
-    <span id="compare-runs-count" class="hint" aria-live="polite">Coche 2 à 4 runs terminés ; clique une ligne pour ouvrir son résumé (3 runs max).</span>
+    <button type="submit" id="compare-runs-submit" class="primary" disabled>{{ t('rn_compare_btn') }}</button>
+    <span id="compare-runs-count" class="hint" aria-live="polite">{{ t('rn_compare_hint') }}</span>
 </form>
 <div class="table-scroll history-table-wrap">
 <table class="data-table history-table">
@@ -108,7 +108,7 @@
         <th class="num">{{ t('hist_gap') }}</th>
         <th class="num">DM p</th>
         <th>{{ t('hist_started') }}</th>
-        <th class="hc-actions"><span class="visually-hidden">Actions</span></th>
+        <th class="hc-actions"><span class="visually-hidden">{{ t('rn_actions') }}</span></th>
     </tr></thead>
     <tbody>
     {% for r in runs %}
@@ -127,10 +127,10 @@
         <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
         <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
         <td class="hc-actions">{% if not locked %}
-            <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="Renommer {{ r.run_id }}" title="Renommer">{{ icon('pencil', 14) }}</button>
+            <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="{{ t('rn_rename_btn') }} {{ r.run_id }}" title="{{ t('rn_rename_btn') }}">{{ icon('pencil', 14) }}</button>
             <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
-                  data-confirm="Supprimer ce modèle et ses détails ? Son descriptif restera archivé." data-confirm-label="Supprimer" data-confirm-danger>
-                <button type="submit" class="icon-btn danger" aria-label="Supprimer {{ r.run_id }}" title="Supprimer">{{ icon('trash', 14) }}</button>
+                  data-confirm="{{ t('rn_del_confirm') }}" data-confirm-label="{{ t('pat_delete') }}" data-confirm-danger>
+                <button type="submit" class="icon-btn danger" aria-label="{{ t('pat_delete') }} {{ r.run_id }}" title="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>
             </form>
         {% endif %}</td>
     </tr>
@@ -139,32 +139,32 @@
 </table>
 </div>
 {# filter_* sont déjà échappés par la route (`runs_explorer`) : `| safe`, sinon double échappement. #}
-<p class="table-footer">{{ runs | length }} run(s) affiché(s)
-    {%- if filter_target %} · cible = {{ filter_target | safe }}{% endif %}
-    {%- if filter_status %} · statut = {{ filter_status | safe }}{% endif %}
-    {%- if filter_scheme %} · schéma = {{ filter_scheme | safe }}{% endif %}
-    · F1_dir = meilleur essai sur n, non déflaté du nombre d'essais · Écart = F1_dir moins la persistance (le prochain mouvement répète le dernier), mêmes folds de test
-    · p-value DM brute, non corrigée du test multiple (correction BH sur la page de la cible)</p>
+<p class="table-footer">{{ t('rn_shown', n=runs | length) }}
+    {%- if filter_target %} · {{ t('rn_f_target') }} = {{ filter_target | safe }}{% endif %}
+    {%- if filter_status %} · {{ t('rn_f_status') }} = {{ filter_status | safe }}{% endif %}
+    {%- if filter_scheme %} · {{ t('rn_f_scheme') }} = {{ filter_scheme | safe }}{% endif %}
+    · {{ t('rn_note1') }}
+    · {{ t('rn_note2') }}</p>
 
 <dialog id="rename-dialog" class="history-dialog">
     <form method="post" id="rename-form">
-        <label for="rename-input">Nouveau nom du run</label>
+        <label for="rename-input">{{ t('rn_rename') }}</label>
         <input id="rename-input" name="name" maxlength="120" required autocomplete="off">
         <div class="history-dialog-actions">
-            <button type="button" class="btn-secondary" id="rename-cancel">Annuler</button>
-            <button type="submit" class="primary">Renommer</button>
+            <button type="button" class="btn-secondary" id="rename-cancel">{{ t('pat_cancel') }}</button>
+            <button type="submit" class="primary">{{ t('rn_rename_btn') }}</button>
         </div>
     </form>
 </dialog>
 
-<aside class="run-panel" id="run-panel" aria-label="Résumé des runs sélectionnés" hidden>
-    <button type="button" class="icon-btn run-panel-close" id="run-panel-close" aria-label="Fermer le panneau" title="Fermer">{{ icon('close', 16) }}</button>
+<aside class="run-panel" id="run-panel" aria-label="{{ t('rn_panel_aria') }}" hidden>
+    <button type="button" class="icon-btn run-panel-close" id="run-panel-close" aria-label="{{ t('rn_close_panel') }}" title="{{ t('rn_close') }}">{{ icon('close', 16) }}</button>
     <div class="run-panel-body" id="run-panel-body"></div>
 </aside>
 <script src="/static/runs_panel.js" defer></script>
 {% else %}
 <div class="card">
-    <p class="empty-state-title">{{ t('empty_runs_title') or "Aucun run pour l'instant." }}</p>
+    <p class="empty-state-title">{{ t('rn_empty') }}</p>
     <p class="empty-state-hint">
         {{ t('empty_runs_hint') or "Configure et lance un run depuis le" }} <a href="/launch">{{ t('index_title') or "poste de lancement" }}</a>.
     </p>

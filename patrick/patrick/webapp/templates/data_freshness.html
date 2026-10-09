@@ -1,9 +1,9 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, data_table, help_icon %}
-{% block title %}PATRICK — Fraîcheur des données{% endblock %}
+{% block title %}PATRICK — {{ t('fr_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_data_freshness') or 'Fraîcheur' }}</span>
 </nav>
@@ -18,9 +18,9 @@
 {% if r.cached %}{% set ns.cached = ns.cached + 1 %}{% endif %}
 {% endfor %}{% endfor %}
 <p class="scope-line">
-    <b>Couverture du cache</b>
+    <b>{{ t('fr_cache_cov') }}</b>
     <span class="scope-value">{{ ns.cached }} / {{ ns.total }}</span>
-    <span class="scope-rel">ticker(s)/série(s) déjà mis en cache localement (ont servi de cible d'au moins un run)</span>
+    <span class="scope-rel">{{ t('fr_cache_rel') }}</span>
 </p>
 
 {% for g in groups %}
@@ -44,8 +44,8 @@
         ]) %}
     {% endfor %}
     {% set n_cached = g.results | selectattr('cached') | list | length %}
-    {{ data_table(["Symbole", "Libellé", "Périodicité", "Dernière donnée", "Fraîcheur"], rows,
-                  footer=(g.results | length) ~ " série(s) · " ~ n_cached ~ " en cache") }}
+    {{ data_table([t('un_col_symbol'), t('un_col_label'), t('fr_col_period'), t('fr_col_last'), t('fr_col_fresh')], rows,
+                  footer=t('fr_footer', n=(g.results | length), c=n_cached)) }}
 </div>
 {% endfor %}
 {% endblock %}

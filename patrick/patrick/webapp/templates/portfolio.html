@@ -1,6 +1,6 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, data_table, empty_state, help_icon %}
-{% block title %}PATRICK — Portefeuille{% endblock %}
+{% block title %}PATRICK — {{ t('nav_portfolio_title') }}{% endblock %}
 
 {# Phase 8 (feature/portfolio-view) -- cross-asset aggregated synthesis.
    `overview` = tracking.portfolio.portfolio_overview()'s return value:
@@ -12,13 +12,15 @@
    predictions.html/universe.html -- not re-translated here. #}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="Chemin de navigation">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Synthèse' }}</a>
     <span aria-current="page">{{ t('nav_portfolio') or 'Portefeuille' }}</span>
 </nav>
 
 <h1 class="page-title">{{ t('nav_portfolio') or 'Portefeuille' }}</h1>
-<p class="page-subtitle">Signaux agrégés, contradictions et répartition des risques.</p>
+<p class="page-subtitle">{{ t('pf_subtitle') }} <span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></p>
+<p class="hint">{{ t('pf_kind_note') }}</p>
+{% if overview.n_suspect_excluded %}<p class="banner banner-error" role="alert">{{ t('pf_suspect', n=overview.n_suspect_excluded) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>{% endif %}
 
 {% set ns = namespace(total=0, signals=0) %}
 {% for g in overview.groups %}
@@ -26,15 +28,15 @@
 {% set ns.signals = ns.signals + g.n_signals %}
 {% endfor %}
 <p class="scope-line">
-    <b>Couverture</b>
+    <b>{{ t('pf_coverage') }}</b>
     <span class="scope-value">{{ ns.signals }} / {{ ns.total }}</span>
-    <span class="scope-rel">paire(s) cible × horizon avec un signal résolu (haussier ou baissier)</span>
+    <span class="scope-rel">{{ t('pf_coverage_rel') }}</span>
 </p>
 
 <section class="card" style="--enter-delay:60ms">
 <h2>{{ t('portfolio_signals_title') }}</h2>
 {% if not overview.groups %}
-{{ empty_state("Aucune catégorie configurée.", "Vérifie config/defaults.py::DEFAULT_TARGET_GROUPS.") }}
+{{ empty_state(t('pf_no_group'), t('pf_no_group_hint')) }}
 {% else %}
 {% set group_rows = [] %}
 {% for g in overview.groups %}
@@ -46,9 +48,9 @@
     g.n_pairs,
 ]) %}
 {% endfor %}
-{{ data_table(["Catégorie", "Haussiers", "Baissiers", "Sans signal", "Total paires"], group_rows,
+{{ data_table([t('pf_col_cat'), t('pf_col_bull'), t('pf_col_bear'), t('pf_col_none'), t('pf_col_pairs')], group_rows,
               num_cols=[1, 2, 3, 4],
-              footer=(ns.signals) ~ " signal(s) résolu(s) sur " ~ (ns.total) ~ " paire(s) cible × horizon, toutes catégories confondues.") }}
+              footer=t('pf_footer', s=ns.signals, n=ns.total)) }}
 {% endif %}
 </section>
 
@@ -66,7 +68,7 @@
    what is currently active, never the 3 hardcoded defaults regardless of
    what was submitted. #}
 <form method="get" action="/portfolio" class="filter-bar">
-    <label>{{ t('portfolio_pairs_label') or 'Paires corrélées (une par ligne, symbol_a:symbol_b:sens)' }}
+    <label>{{ t('portfolio_pairs_label') }}
         {{ help_icon('portfolio_pairs', t('portfolio_pairs_label'), t('glossary_open_aria', term=t('portfolio_pairs_label'))) }}
         <textarea name="pairs" rows="4" cols="48" class="pk-mono">{{ pairs_text }}</textarea>
     </label>
@@ -86,8 +88,8 @@
     c.rationale,
 ]) %}
 {% endfor %}
-{{ data_table(["Paire", "Horizon", "Signal A", "Signal B", "Corrélation", "Pourquoi"], contradiction_rows,
-              footer=(overview.contradictions | length) ~ " contradiction(s) détectée(s) sur " ~ (overview.groups | length) ~ " catégorie(s) suivie(s).") }}
+{{ data_table([t('pf_c_pair'), t('col_horizon'), t('pf_c_sa'), t('pf_c_sb'), t('pf_c_corr'), t('pf_c_why')], contradiction_rows,
+              footer=t('pf_c_footer', c=(overview.contradictions | length), g=(overview.groups | length))) }}
 {% endif %}
 </section>
 
@@ -97,12 +99,12 @@
    localement (jamais de telechargement depuis cette page en lecture
    seule) -- tracking.hrp.hrp_overview(). #}
 <section class="card" style="--enter-delay:140ms">
-<h2>{{ t('portfolio_hrp_title') or 'Répartition HRP (Hierarchical Risk Parity)' }}
+<h2>{{ t('portfolio_hrp_title') }}
     {{ help_icon('hrp', 'HRP', t('glossary_open_aria', term='HRP')) }}
 </h2>
 
 {% if not hrp.weights is defined or hrp.weights is none or hrp.n_assets == 0 %}
-{{ empty_state("Historique de prix insuffisant en cache local pour calculer une répartition HRP.", "Lance au moins un run sur plusieurs tickers de l'univers pour peupler le cache.") }}
+{{ empty_state(t('pf_hrp_empty'), t('pf_hrp_empty_hint')) }}
 {% else %}
 {% set hrp_rows = [] %}
 {% for symbol, weight in hrp.weights.items() %}
@@ -111,11 +113,11 @@
     "%.1f%%" | format(weight * 100),
 ]) %}
 {% endfor %}
-{{ data_table(["Actif", "Poids HRP"], hrp_rows, num_cols=[1],
-              footer=(hrp.n_assets) ~ " actif(s) pris en compte" ~ (" ; " ~ (hrp.skipped | length) ~ " écarté(s) (historique insuffisant ou absent du cache)." if hrp.skipped else ".")) }}
+{{ data_table([t('mv_col_asset'), t('pf_hrp_w')], hrp_rows, num_cols=[1],
+              footer=t('pf_hrp_footer', n=hrp.n_assets) ~ (t('pf_hrp_skipped', n=(hrp.skipped | length)) if hrp.skipped else ".")) }}
 {% if hrp.covariance == 'ledoit_wolf' and hrp.shrinkage is not none %}
 <p class="hint">Covariance <span class="tip" tabindex="0" data-tip="Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une cible diagonale (variance moyenne, corrélations nulles). L'intensité δ est estimée pour minimiser l'erreur quadratique attendue ; δ proche de 1 signale une covariance empirique très bruitée (peu d'observations par actif). HRP en tire ses variances inverses et ses distances de corrélation.">Ledoit-Wolf</span>
-   — intensité de rétrécissement δ = {{ "%.2f" | format(hrp.shrinkage) }} sur {{ hrp.n_obs }} rendements communs.</p>
+   {{ t('pf_hrp_shrink', d='%.2f' | format(hrp.shrinkage), n=hrp.n_obs) }}</p>
 {% endif %}
 {% endif %}
 </section>
