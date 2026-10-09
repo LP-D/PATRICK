@@ -42,10 +42,10 @@ def test_launch_and_universe_pages_list_the_extension(tmp_path, monkeypatch):
 
 
 def test_extended_candidates_are_verified_extension_symbols_outside_the_default_pool():
-    """The branch's 39 candidates and main's verified extension, merged:
+    """The branch's 39 candidates (+7 added on 2026-10-09: tail risk, bond vol, semis, commodity & dollar proxies) and main's verified extension, merged:
     one source of truth. Still never part of the DEFAULT feature pool."""
     extension = {s for s, _, _ in UX.extended_target_choices()}
-    assert len(UX.EXTENDED_FEATURE_CANDIDATES) == 39 == len(set(UX.EXTENDED_FEATURE_CANDIDATES))
+    assert len(UX.EXTENDED_FEATURE_CANDIDATES) == 46 == len(set(UX.EXTENDED_FEATURE_CANDIDATES))
     assert set(UX.EXTENDED_FEATURE_CANDIDATES) <= extension
     assert set(UX.ADDED_ON_2026_09_27) <= extension
     assert not set(UX.EXTENDED_FEATURE_CANDIDATES) & set(D.DEFAULT_UNIVERSE_YF_TICKERS)
