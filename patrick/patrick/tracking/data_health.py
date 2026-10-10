@@ -73,7 +73,12 @@ REASON_INFO: dict[str, tuple[str, str, str]] = {
         ("Série retirée. Les séries FRED en sont dispensées depuis le 2026-10-09 : leurs chocs (COVID, repo 2019) sont "
          "réels.")),
     "trou_de_cotation": (
-        "Trou de cotation", "Plus de 10 jours ouvrés consécutifs sans cotation.", "Série retirée."),
+        "Trou de cotation",
+        ("Plus de 10 jours ouvrés consécutifs sans cotation. Pour une série FRED publiée moins d'une fois par jour "
+         "(hebdomadaire, mensuelle, trimestrielle), le seuil est d'au moins 130 jours ouvrés (~6 mois) : un retard de "
+         "publication, comme le shutdown américain de l'automne 2025, n'exclut plus la série, la dernière valeur publiée "
+         "est reportée."),
+        "Série retirée."),
     "fin_de_serie_precoce": (
         "Fin de série prématurée",
         ("La dernière observation est très antérieure à la date demandée : série probablement abandonnée (TED_Spread "

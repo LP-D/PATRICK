@@ -77,6 +77,24 @@ def test_zero_crossing_index_is_screened_on_differences_not_percent_changes():
     assert quality.check_fred_series(s, "STLFSI4", requested_end=idx[-1]) is None
 
 
+def test_monthly_series_delayed_by_the_2025_shutdown_is_not_excluded():
+    """Measured on the real first-release calendars (2026-10-10): PERMIT/HOUST show no release between 2025-09-17 and
+    2026-01-09 (~81 business days), CFNAI/TOTALSA ~65. The gap is a publication delay, not a broken series: the forward
+    fill that follows carries the last published value, exactly what was known at the time."""
+    idx = pd.DatetimeIndex(list(pd.date_range("2000-02-16", "2025-09-16", freq=pd.DateOffset(months=1)))
+                           + list(pd.date_range("2026-01-09", periods=9, freq=pd.DateOffset(months=1))))
+    s = pd.Series(np.linspace(1000, 1500, len(idx)), index=idx, name="PERMIT")
+    assert quality.check_fred_series(s, "PERMIT", requested_end=pd.Timestamp("2026-10-09")) is None
+
+
+def test_weekly_series_with_an_eight_week_publication_hole_is_not_excluded():
+    """ICSA/CCSA: no first release between 2025-09-25 and 2025-11-20 (8 weekly releases, ~40 business days)."""
+    idx = pd.DatetimeIndex(list(pd.date_range("2010-01-07", "2025-09-25", freq="W-THU"))
+                           + list(pd.date_range("2025-11-20", "2026-10-08", freq="W-THU")))
+    s = pd.Series(np.random.default_rng(2).normal(220000, 8000, len(idx)), index=idx, name="ICSA")
+    assert quality.check_fred_series(s, "ICSA", requested_end=pd.Timestamp("2026-10-09")) is None
+
+
 def test_a_really_discontinued_monthly_series_is_still_caught():
     s = _monthly(n=200).rename("OLD")
     issue = quality.check_fred_series(s, "OLD_MONTHLY", requested_end=pd.Timestamp("2026-09-25"))

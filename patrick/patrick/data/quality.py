@@ -48,6 +48,13 @@ DEFAULT_MAX_GAP_BDAYS = 10
 DEFAULT_MAX_ROBUST_Z = 40.0
 DEFAULT_MIN_COVERAGE = 0.85
 DEFAULT_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
+# Floor of the tolerated gap for a series published less often than daily (weekly/monthly/quarterly), in business days
+# (~6 months). MEASURED on the real first-release calendars (2026-10-10): the US federal shutdown of autumn 2025 left
+# PERMIT/HOUST without a release for ~81 business days, CFNAI/TOTALSA ~65, ICSA/CCSA ~40 (8 weekly releases) -- the
+# "2 periods + max_gap" rule (56 monthly, 20 weekly) excluded all six. A publication delay is not a broken series: the
+# forward fill that follows carries the last published value, exactly what was known at the time. 130 keeps a ~1.6x
+# margin over the worst measured delay and still catches an 8-month hole (~196 business days).
+LOW_FREQUENCY_MIN_GAP_BDAYS = 130
 
 
 @dataclass
@@ -97,11 +104,12 @@ def check_quote_gaps(s: pd.Series, max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
     caller (`s.index` must already be the expected business-day calendar).
 
     `expected_spacing_bdays` (> 1 for weekly/monthly/quarterly FRED series):
-    the tolerated gap becomes two publication periods + `max_gap_bdays` --
-    one missing release (e.g. the October 2025 CPI, never published during
-    the US government shutdown) is not a broken series."""
+    the tolerated gap becomes two publication periods + `max_gap_bdays`, never
+    less than `LOW_FREQUENCY_MIN_GAP_BDAYS` -- missing releases (the October
+    2025 CPI never published, PERMIT/HOUST delayed ~4 months, both during the
+    US government shutdown) are not a broken series."""
     if expected_spacing_bdays > 1:
-        max_gap_bdays = 2 * expected_spacing_bdays + max_gap_bdays
+        max_gap_bdays = max(2 * expected_spacing_bdays + max_gap_bdays, LOW_FREQUENCY_MIN_GAP_BDAYS)
     valid_dates = s.dropna().index
     if len(valid_dates) < 2:
         return None
