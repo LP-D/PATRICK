@@ -53,6 +53,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
+    NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
     NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 55, "nav_data_quality"),
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),

@@ -1,0 +1,195 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('exp_title') }}{% endblock %}
+
+{% macro asset_pair(prefix, with_b=True, b_label_key='exp_asset_b') %}
+<label>{{ t('exp_asset_a') }}
+    <select id="{{ prefix }}-a" class="exp-asset-select" data-role="a"></select>
+</label>
+{% if with_b %}
+<label>{{ t(b_label_key) }}
+    <select id="{{ prefix }}-b" class="exp-asset-select" data-role="b"></select>
+</label>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<h1 class="page-title">{{ t('exp_title') }}</h1>
+<p class="page-subtitle">{{ t('exp_subtitle') }}</p>
+
+<section class="card exp-select" aria-labelledby="exp-sel-title">
+    <h2 id="exp-sel-title">{{ t('exp_sel_title') }}</h2>
+    <p class="hint">{{ t('exp_sel_hint') }}</p>
+    <div class="exp-sel-grid">
+        <div class="exp-sel-list">
+            <input type="search" id="exp-filter" placeholder="{{ t('exp_filter') }}" aria-label="{{ t('exp_filter') }}" autocomplete="off">
+            <select id="exp-assets" multiple size="11" aria-label="{{ t('exp_sel_title') }}">
+                {% for g in catalog %}
+                <optgroup label="{{ g.label }}">
+                    {% for it in g['items'] %}
+                    <option value="{{ it.symbol }}" data-per="{{ it.periodicity }}" data-text="{{ (it.symbol ~ ' ' ~ it.label) | lower }}">{{ it.symbol }} — {{ it.label }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="exp-sel-side">
+            <div class="exp-presets" id="exp-presets">
+                {% for p in presets %}
+                <button type="button" class="queue-action" data-symbols="{{ p.symbols | join(',') }}">{{ t(p.label_key) }}</button>
+                {% endfor %}
+                <button type="button" class="queue-action danger" id="exp-clear">{{ t('exp_clear') }}</button>
+            </div>
+            <p class="exp-count" id="exp-count" aria-live="polite" data-keep>{{ t('exp_none_selected') }}</p>
+            <div class="exp-chips" id="exp-chips"></div>
+        </div>
+    </div>
+    <div class="exp-controls">
+        <div class="exp-period">
+            <label>{{ t('exp_period') }}
+                <input type="date" id="exp-start">
+            </label>
+            <div class="exp-period-btns" role="group" aria-label="{{ t('exp_period') }}">
+                <button type="button" class="range-btn" data-years="1">{{ t('exp_p_1y') }}</button>
+                <button type="button" class="range-btn" data-years="3">{{ t('exp_p_3y') }}</button>
+                <button type="button" class="range-btn active" data-years="5">{{ t('exp_p_5y') }}</button>
+                <button type="button" class="range-btn" data-years="10">{{ t('exp_p_10y') }}</button>
+                <button type="button" class="range-btn" data-years="0">{{ t('exp_p_max') }}</button>
+            </div>
+        </div>
+        <label>{{ t('exp_freq') }}
+            <select id="exp-freq">
+                <option value="D">{{ t('exp_freq_D') }}</option>
+                <option value="W">{{ t('exp_freq_W') }}</option>
+                <option value="M">{{ t('exp_freq_M') }}</option>
+            </select>
+        </label>
+        <label>{{ t('exp_transform') }}
+            <select id="exp-transform">
+                <option value="auto">{{ t('exp_tr_auto') }}</option>
+                <option value="log">{{ t('exp_tr_log') }}</option>
+                <option value="simple">{{ t('exp_tr_simple') }}</option>
+                <option value="diff">{{ t('exp_tr_diff') }}</option>
+            </select>
+            <p class="hint">{{ t('exp_transform_hint') }}</p>
+        </label>
+        <button type="button" class="primary" id="exp-run">{{ t('exp_run') }}</button>
+    </div>
+    <p class="exp-status" id="exp-status" role="status" aria-live="polite" data-keep></p>
+    <ul class="exp-warnings" id="exp-warnings" data-keep></ul>
+</section>
+
+<div class="exp-tabs" role="tablist" aria-label="{{ t('exp_title') }}">
+    <button type="button" role="tab" id="exp-tab-corr" aria-selected="true" aria-controls="exp-panel-corr" data-panel="corr">{{ t('exp_tab_corr') }}</button>
+    <button type="button" role="tab" id="exp-tab-dist" aria-selected="false" aria-controls="exp-panel-dist" data-panel="dist" tabindex="-1">{{ t('exp_tab_dist') }}</button>
+    <button type="button" role="tab" id="exp-tab-memory" aria-selected="false" aria-controls="exp-panel-memory" data-panel="memory" tabindex="-1">{{ t('exp_tab_memory') }}</button>
+    <button type="button" role="tab" id="exp-tab-link" aria-selected="false" aria-controls="exp-panel-link" data-panel="link" tabindex="-1">{{ t('exp_tab_link') }}</button>
+    <button type="button" role="tab" id="exp-tab-struct" aria-selected="false" aria-controls="exp-panel-struct" data-panel="struct" tabindex="-1">{{ t('exp_tab_struct') }}</button>
+    <button type="button" role="tab" id="exp-tab-season" aria-selected="false" aria-controls="exp-panel-season" data-panel="season" tabindex="-1">{{ t('exp_tab_season') }}</button>
+</div>
+
+{# ---- Corrélations ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-corr" aria-labelledby="exp-tab-corr" data-study="correlation">
+    <div class="exp-params">
+        <label>{{ t('exp_method') }}
+            <select id="exp-corr-method">
+                <option value="pearson">{{ t('exp_m_pearson') }}</option>
+                <option value="spearman">{{ t('exp_m_spearman') }}</option>
+                <option value="kendall">{{ t('exp_m_kendall') }}</option>
+            </select>
+        </label>
+    </div>
+    <p class="hint">{{ t('exp_corr_hint') }}</p>
+    <div class="exp-out" id="exp-corr-out"></div>
+
+    <h3>{{ t('exp_roll_title') }}</h3>
+    <p class="hint">{{ t('exp_roll_hint') }}</p>
+    <div class="exp-params">
+        {{ asset_pair('exp-roll') }}
+        <label>{{ t('exp_window') }}
+            <input type="number" id="exp-roll-window" min="10" max="500" step="5" value="60">
+        </label>
+        <button type="button" class="queue-action" id="exp-roll-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-roll-out"></div>
+</section>
+
+{# ---- Distribution ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-dist" aria-labelledby="exp-tab-dist" data-study="describe" hidden>
+    <p class="hint">{{ t('exp_dist_hint') }}</p>
+    <div class="exp-out" id="exp-dist-out"></div>
+</section>
+
+{# ---- Mémoire et stationnarité ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-memory" aria-labelledby="exp-tab-memory" data-study="stationarity" hidden>
+    <h3>{{ t('exp_stat_title') }}</h3>
+    <p class="hint">{{ t('exp_stat_hint') }}</p>
+    <div class="exp-out" id="exp-stat-out"></div>
+
+    <h3>{{ t('exp_mem_title') }}</h3>
+    <p class="hint">{{ t('exp_mem_hint') }}</p>
+    <div class="exp-params">
+        {{ asset_pair('exp-mem', with_b=False) }}
+        <label>{{ t('exp_lags') }}
+            <input type="number" id="exp-mem-lags" min="5" max="60" step="1" value="20">
+        </label>
+        <button type="button" class="queue-action" id="exp-mem-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-mem-out"></div>
+</section>
+
+{# ---- Lien entre deux actifs ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-link" aria-labelledby="exp-tab-link" hidden>
+    <p class="hint">{{ t('exp_link_hint') }}</p>
+    <div class="exp-params">
+        {{ asset_pair('exp-link') }}
+        <label>{{ t('exp_lags') }}
+            <input type="number" id="exp-link-lags" min="1" max="40" step="1" value="10">
+        </label>
+        <label>{{ t('exp_tail_q') }}
+            <input type="number" id="exp-link-q" min="0.01" max="0.2" step="0.01" value="0.05">
+        </label>
+        <button type="button" class="queue-action" id="exp-link-run">{{ t('exp_apply') }}</button>
+    </div>
+    <h3>{{ t('exp_xcorr_title') }}</h3>
+    <p class="hint">{{ t('exp_xcorr_hint') }}</p>
+    <div class="exp-out" id="exp-xcorr-out"></div>
+    <h3>{{ t('exp_granger_title') }}</h3>
+    <p class="hint">{{ t('exp_granger_hint') }}</p>
+    <div class="exp-out" id="exp-granger-out"></div>
+    <h3>{{ t('exp_coint_title') }}</h3>
+    <p class="hint">{{ t('exp_coint_hint') }}</p>
+    <div class="exp-out" id="exp-coint-out"></div>
+    <h3>{{ t('exp_tail_title') }}</h3>
+    <p class="hint">{{ t('exp_tail_hint') }}</p>
+    <div class="exp-out" id="exp-tail-out"></div>
+</section>
+
+{# ---- Structure ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-struct" aria-labelledby="exp-tab-struct" hidden>
+    <h3>{{ t('exp_pca_title') }}</h3>
+    <p class="hint">{{ t('exp_pca_hint') }}</p>
+    <div class="exp-out" id="exp-pca-out"></div>
+    <h3>{{ t('exp_beta_title') }}</h3>
+    <p class="hint">{{ t('exp_beta_hint') }}</p>
+    <div class="exp-params">
+        {{ asset_pair('exp-beta', b_label_key='exp_bench') }}
+        <label>{{ t('exp_window') }}
+            <input type="number" id="exp-beta-window" min="20" max="500" step="5" value="60">
+        </label>
+        <button type="button" class="queue-action" id="exp-beta-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-beta-out"></div>
+</section>
+
+{# ---- Saisonnalité ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-season" aria-labelledby="exp-tab-season" hidden>
+    <p class="hint">{{ t('exp_season_hint') }}</p>
+    <div class="exp-params">
+        {{ asset_pair('exp-season', with_b=False) }}
+        <button type="button" class="queue-action" id="exp-season-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-season-out"></div>
+</section>
+
+<script src="/static/exploration.js"></script>
+{% endblock %}

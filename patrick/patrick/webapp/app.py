@@ -45,6 +45,7 @@ from patrick.validation import equity_sufficiency, feasibility, suspicion
 from patrick.webapp import (
     alerts,
     asset_stats,
+    exploration_routes,
     forms,
     fund_routes,
     i18n,
@@ -1497,6 +1498,9 @@ settings_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Refonte Simulation + Fonds (chantier 1) : pages /simulate, /fonds et API /api/fund/*.
 fund_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Exploration (/exploration) et API /api/exploration/* : études statistiques entre actifs (patrick/exploration/).
+exploration_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:

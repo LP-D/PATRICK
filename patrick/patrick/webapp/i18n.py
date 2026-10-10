@@ -913,7 +913,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "profile_choose", "profile_name_required", "profile_saved_notice", "profile_loaded",
         "profile_deleted", "profile_read_error", "profile_save_error", "profile_delete_error", "profile_missing",
         "compare_runs_selection",
-        "glossary_search_count", "glossary_search_empty",
+        "glossary_search_count", "glossary_search_empty", "glossary_open_aria",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_models",
         "confirm_line_staged", "confirm_line_exhaustive", "confirm_line_topk",
         "confirm_line_tuning", "confirm_line_tuning_off", "confirm_line_large",

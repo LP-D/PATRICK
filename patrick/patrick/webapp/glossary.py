@@ -766,3 +766,12 @@ GLOSSARY: dict[str, dict[str, str]] = {
 from patrick.webapp.glossary_extra import EXTRA_GLOSSARY
 
 GLOSSARY.update(EXTRA_GLOSSARY)
+
+
+# Pages Exploration, Deep learning et Reinforcement learning (webapp/glossary_models.py).
+from patrick.webapp import glossary_extra as _glossary_extra  # noqa: E402
+from patrick.webapp import glossary_models as _glossary_models  # noqa: E402
+
+GLOSSARY.update(_glossary_models.GLOSSARY_MODELS)
+TERM_LABEL_KEYS.update(_glossary_models.LABELS)
+_glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY)

@@ -37,6 +37,7 @@ dependencies = [
     "optuna",
     "duckdb",
     "scipy",
+    "statsmodels",
     "psutil",
 ]
 
