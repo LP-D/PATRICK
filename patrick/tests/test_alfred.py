@@ -210,3 +210,31 @@ def test_a_smooth_series_is_never_flagged_as_rebased():
     assert alfred.level_break_ratio(rel, cur) < 2
     assert alfred.assemble("X", rel, cur, "2015-02-15").mode in ("alfred", "hybrid")
     assert alfred.level_break_ratio(rel.iloc[:10], cur.iloc[:10]) is None   # trop court pour conclure
+
+
+def test_relaunching_an_old_run_moves_it_to_alfred_but_never_touches_an_audit(tmp_path, monkeypatch):
+    """« Relancer » suit les règles d'aujourd'hui : un run enregistré avec `publication_lag` repart en ALFRED ; un audit
+    `reference_date` (qui mesure l'ancienne fuite) reste tel quel."""
+    from fastapi.testclient import TestClient
+
+    from patrick.tracking import db as trackdb
+    from patrick.webapp import forms, run_manager
+    from patrick.webapp.app import app
+
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
+    monkeypatch.setattr(run_manager, "ensure_worker_running", lambda: None)
+    conn = trackdb.connect(str(tmp_path / "p.db"))
+    trackdb.upsert_snapshot(conn, "snap", "h", None, None, None)
+    for run_id, mode in (("old", "publication_lag"), ("audit", "reference_date")):
+        cfg = forms.default_config_dict()
+        cfg["name"] = run_id
+        cfg["universe"]["fred_point_in_time"] = mode
+        trackdb.create_run(conn, run_id, "^VIX", 5, "snap", json.dumps(cfg), "c", "s", 42)
+    conn.close()
+    client = TestClient(app, base_url="http://127.0.0.1:8000")
+    for run_id in ("old", "audit"):
+        assert client.post(f"/runs/{run_id}/relaunch", follow_redirects=False).status_code == 303
+    conn = trackdb.connect(str(tmp_path / "p.db"))
+    modes = [json.loads(r[0])["universe"]["fred_point_in_time"] for r in conn.execute("SELECT config_json FROM job ORDER BY rowid")]
+    conn.close()
+    assert modes == ["alfred", "reference_date"]

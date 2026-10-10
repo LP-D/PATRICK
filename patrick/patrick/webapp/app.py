@@ -653,6 +653,10 @@ def relaunch_run(run_id: str):
     new_name = run_manager.next_run_name(config.objective.target_symbol)
     cfg_dict = config.model_dump()
     cfg_dict["name"] = new_name
+    # Une relance suit les règles d'aujourd'hui pour les séries FRED : première publication ALFRED (`data/alfred.py`), sauf
+    # pour un audit en `reference_date` qui mesure justement l'ancienne fuite.
+    if cfg_dict["universe"].get("fred_point_in_time") != "reference_date":
+        cfg_dict["universe"]["fred_point_in_time"] = D.DEFAULT_FRED_POINT_IN_TIME
     # The relaunch's output directory reuses the ROOT (parent) of the
     # original config's directory -- a batch submitted with an explicit
     # `output_dir`, or a CLI-launched run with its own root, must not get
