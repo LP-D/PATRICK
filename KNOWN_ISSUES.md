@@ -260,8 +260,9 @@ dans le remplacement de charte visuelle qui a introduit cette structure.
   déflaté compte les runs RL déjà lancés sur la cible comme autant d'essais, pas ceux qui ont été supprimés de la file. Un indice non
   investissable (`^VIX`) donne un rendement théorique.
 - **Exploration** : les séries sont rechargées via le cache local de 7 jours de `yfinance_source.download_one` (et l'API FRED pour les séries
-  FRED) ; sans cache et sans réseau, un actif est exclu et signalé plutôt que remplacé. Les séries FRED mensuelles ou trimestrielles
-  exigent la fréquence « Mois ». Les p-values corrigées (Benjamini-Hochberg) couvrent un tableau de tests à la fois, pas l'ensemble des
+  FRED) ; sans cache et sans réseau, un actif est exclu et signalé plutôt que remplacé. Une série FRED hebdomadaire, mensuelle ou trimestrielle
+  fait passer tout le panneau à sa fréquence (avertissement affiché ; les séries rapides sont ramenées à leur dernier niveau de la
+  période, jamais de valeur recopiée). Les p-values corrigées (Benjamini-Hochberg) couvrent un tableau de tests à la fois, pas l'ensemble des
   analyses lancées pendant une session.
 - **Extras optionnels** : sans `pip install -e ".[deep]"` / `".[rl]"`, les pages `/dl` et `/rl` s'affichent mais le lancement est
   désactivé avec le motif ; la CI n'installe pas PyTorch (les tests qui l'exigent sont ignorés, ceux de configuration et de mécanique

@@ -17,9 +17,13 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-FREQUENCIES = ("D", "W", "M")
+FREQUENCIES = ("D", "W", "M", "Q")
 TRANSFORMS = ("auto", "log", "simple", "diff")
-PERIODS_PER_YEAR = {"D": 252, "W": 52, "M": 12}
+PERIODS_PER_YEAR = {"D": 252, "W": 52, "M": 12, "Q": 4}
+FREQ_NAMES = {"D": "Jour", "W": "Semaine", "M": "Mois", "Q": "Trimestre"}
+FREQ_EVERY = {"W": "chaque semaine", "M": "chaque mois", "Q": "chaque trimestre"}
+FREQ_RANK = {"D": 0, "W": 1, "M": 2, "Q": 3}                                  # du plus fin au plus lent
+PERIODICITY_FREQ = {"daily": "D", "weekly": "W", "monthly": "M", "quarterly": "Q"}
 MIN_COMMON_OBS = 30
 MAX_ASSETS = 40
 LONG_START = "2000-01-01"          # même clé de cache que l'ingestion des runs (`yfinance_source.download_one`)
@@ -36,10 +40,18 @@ class PanelError(ValueError):
 class Panel:
     levels: pd.DataFrame               # niveaux alignés sur les dates communes, à la fréquence demandée
     returns: pd.DataFrame              # transformation appliquée colonne par colonne (une ligne de moins que `levels`)
-    freq: str
+    freq: str                          # fréquence réellement utilisée (peut être plus lente que celle demandée)
     transforms: dict[str, str]         # symbole -> "log" | "simple" | "diff" réellement appliqué
     warnings: list[str] = field(default_factory=list)
     dropped: dict[str, str] = field(default_factory=dict)   # symbole -> motif d'exclusion
+    requested_freq: str = ""           # fréquence demandée ; vide = identique à `freq`
+
+    def __post_init__(self) -> None:
+        self.requested_freq = self.requested_freq or self.freq
+
+    @property
+    def auto_freq(self) -> bool:
+        return self.requested_freq != self.freq
 
     @property
     def periods_per_year(self) -> int:
@@ -57,6 +69,8 @@ class Panel:
             "start": idx[0].strftime("%Y-%m-%d") if len(idx) else None,
             "end": idx[-1].strftime("%Y-%m-%d") if len(idx) else None,
             "freq": self.freq,
+            "requested_freq": self.requested_freq,
+            "auto_freq": self.auto_freq,
             "periods_per_year": self.periods_per_year,
             "transforms": self.transforms,
             "dropped": self.dropped,
@@ -81,7 +95,7 @@ def _clean_levels(s: pd.Series | None) -> pd.Series | None:
 def _resample(s: pd.Series, freq: str) -> pd.Series:
     if freq == "D":
         return s
-    rule = "W-FRI" if freq == "W" else "ME"
+    rule = {"W": "W-FRI", "M": "ME", "Q": "QE"}[freq]
     return s.resample(rule).last().dropna()
 
 
@@ -121,7 +135,9 @@ def build_panel(symbols: list[str], sources: dict[str, str], loader: Loader, *, 
                 periodicity: Callable[[str, str], str] | None = None, max_workers: int = 8, retries: int = 1) -> Panel:
     """Charge, aligne et transforme. `sources` : symbole -> "yfinance" | "fred". `periodicity(symbol, source)` renvoie
     "daily" | "weekly" | "monthly" | "quarterly" (heuristique locale, voir `data/freshness.fred_periodicity`) ; une série plus lente
-    que la fréquence demandée est exclue et signalée plutôt que gonflée par recopie (ce qui fabriquerait des corrélations)."""
+    que la fréquence demandée n'est ni exclue ni gonflée par recopie (ce qui fabriquerait des corrélations) : tout le panneau passe
+    à la fréquence de la série la plus lente, les séries rapides étant ramenées à leur dernier niveau de la période, et le
+    changement est signalé."""
     if freq not in FREQUENCIES:
         raise PanelError(f"fréquence inconnue : {freq}")
     symbols = list(dict.fromkeys(s for s in symbols if s))
@@ -147,17 +163,26 @@ def build_panel(symbols: list[str], sources: dict[str, str], loader: Loader, *, 
     dropped: dict[str, str] = {}
     warnings: list[str] = []
     cols: dict[str, pd.Series] = {}
-    slow_rank = {"daily": 0, "weekly": 1, "monthly": 2, "quarterly": 3}
-    need_rank = {"D": 0, "W": 1, "M": 2}[freq]
+    requested_freq = freq
+    slowest: dict[str, str] = {}                 # symbole -> fréquence native, pour les séries plus lentes que la demande
+    loaded: dict[str, pd.Series] = {}
     for sym, series, error in fetched:
         if series is None:
             dropped[sym] = error or "aucune donnée disponible"
             continue
+        loaded[sym] = series
         if periodicity is not None:
-            slow = slow_rank.get(periodicity(sym, sources.get(sym, "yfinance")), 0)
-            if slow > need_rank:
-                dropped[sym] = "série publiée moins souvent que la fréquence demandée"
-                continue
+            native = PERIODICITY_FREQ.get(periodicity(sym, sources.get(sym, "yfinance")), "D")
+            if FREQ_RANK[native] > FREQ_RANK[freq]:
+                slowest[sym] = native
+    if slowest:
+        freq = max(slowest.values(), key=FREQ_RANK.__getitem__)
+        names = sorted(s for s, f in slowest.items() if f == freq)
+        verb = "est publiée" if len(names) == 1 else "sont publiées"
+        warnings.append(f"Fréquence passée de {FREQ_NAMES[requested_freq]} à {FREQ_NAMES[freq]} : {', '.join(names)} {verb} "
+                        f"{FREQ_EVERY[freq]}. Recopier ses valeurs sur des périodes plus fines fabriquerait des corrélations ; "
+                        "les autres séries sont ramenées à leur dernier niveau de la période.")
+    for sym, series in loaded.items():
         cols[sym] = _resample(series, freq)
 
     if not cols:
@@ -174,7 +199,9 @@ def build_panel(symbols: list[str], sources: dict[str, str], loader: Loader, *, 
     returns, used = transform_returns(levels, transform)
     if len(returns) < MIN_COMMON_OBS:
         raise PanelError(f"Seulement {len(returns)} rendements exploitables : il en faut au moins {MIN_COMMON_OBS}.")
-    if start and common_start is not None and common_start > pd.Timestamp(start) + pd.Timedelta(days=30):
+    # une période se date de sa FIN : le premier point d'un panneau trimestriel tombe jusqu'à ~90 jours après la date demandée
+    slack = pd.Timedelta(days=30 + {"D": 0, "W": 7, "M": 31, "Q": 92}[freq])
+    if start and common_start is not None and common_start > pd.Timestamp(start) + slack:
         newest = max(cols, key=lambda k: cols[k].index.min())
         warnings.append(f"Période commune réduite : elle commence le {common_start:%Y-%m-%d}, date de la première cotation de {newest}.")
     if dropped:
@@ -182,4 +209,5 @@ def build_panel(symbols: list[str], sources: dict[str, str], loader: Loader, *, 
     if len({k for k in used.values()}) > 1:
         warnings.append("Transformations mélangées (rendement logarithmique et différence) : les niveaux négatifs ou nuls sont "
                         "traités en différences.")
-    return Panel(levels=levels, returns=returns, freq=freq, transforms=used, warnings=warnings, dropped=dropped)
+    return Panel(levels=levels, returns=returns, freq=freq, transforms=used, warnings=warnings, dropped=dropped,
+                 requested_freq=requested_freq)

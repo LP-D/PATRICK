@@ -23,6 +23,7 @@ from pathlib import Path
 
 from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
+from patrick.tracking import class_balance
 from patrick.validation import suspicion
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -949,6 +950,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     dm_by_run = batch_dm_results(conn, run_ids)
     benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
     headline_by_run = batch_best_metrics(conn, run_ids)
+    balance_by_run = class_balance.for_runs(conn, run_ids)
 
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
@@ -976,6 +978,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "dm_p_value": dm_result["p_value"] if dm_result else None,
             "dm_sample": dm_result["sample"] if dm_result else None,
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
+            "class_balance": balance_by_run.get(run_id),
         })
     return out
 

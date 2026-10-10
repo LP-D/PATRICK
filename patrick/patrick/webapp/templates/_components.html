@@ -183,3 +183,12 @@
   </div>
 </div>
 {% endmacro %}
+
+{# Répartition haut / bas d'un échantillon (`tracking/class_balance.py`) : « 60 / 40 » = 60 % de hausses, 40 % de baisses.
+   `which` = 'true' (mouvements réels) ou 'pred' (prédictions du modèle) ; une prédiction à plus de 70 % du même côté est signalée. #}
+{% macro up_down(summary, which) -%}
+{%- if summary -%}
+{%- set up = ((summary[which ~ '_up'] * 100) | round | int) -%}
+<span class="pk-mono{% if which == 'pred' and summary.pred_one_sided %} class-balance-warn{% endif %}">{{ up }} / {{ 100 - up }}</span>
+{%- else -%}<span class="na">—</span>{%- endif -%}
+{%- endmacro %}

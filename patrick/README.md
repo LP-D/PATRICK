@@ -129,7 +129,7 @@ Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement lear
 - `/exploration` — statistical studies between assets that exist nowhere else: correlations
   (Pearson/Spearman/Kendall, clustered, BH-corrected), distribution, stationarity (ADF, KPSS, Hurst),
   autocorrelation, lead-lag, Granger, cointegration, tail dependence, PCA, beta/alpha, seasonality.
-- `/runs`, `/runs/{id}` — searchable/filterable run history and detail pages;
+- `/runs`, `/runs/{id}` — searchable/filterable run history and detail pages (actual vs predicted up/down shares, flagged beyond 70% on one side);
   the history can compare 2–4 completed runs at `/compare-runs?run_ids=...`.
 - `/universe` — configured target universe crossed with run history.
 - `/targets/{ticker}` — aggregated run history for one target.

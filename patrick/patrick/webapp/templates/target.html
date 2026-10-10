@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down %}
 {% block title %}PATRICK — {{ target }}{% endblock %}
 
 {% block content %}
@@ -74,11 +74,13 @@
     ('%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '<span class="na">—</span>'),
     (('<span class="' ~ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') ~ '">' ~ ('%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir)) ~ '</span>') if (r.best_f1_dir is not none and r.benchmark_f1_dir is not none) else '<span class="na">—</span>'),
     dm_cell,
+    up_down(r.class_balance.test if r.class_balance else none, 'true'),
+    up_down(r.class_balance.test if r.class_balance else none, 'pred'),
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials'), t('tg_col_f1best'), t('tg_col_persist'), t('hist_gap'), t('col_dm_p'), t('tg_col_relaunch')],
-              rows, num_cols=[1, 5, 6, 7, 8, 9],
+{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials'), t('tg_col_f1best'), t('tg_col_persist'), t('hist_gap'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('tg_col_relaunch')],
+              rows, num_cols=[1, 5, 6, 7, 8, 9, 10, 11],
               footer=t('tg_runs_foot', n=detail.runs | length)) }}
 </section>
 

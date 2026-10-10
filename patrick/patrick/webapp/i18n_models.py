@@ -47,10 +47,10 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
         "covariance and HRP on Portfolio, market regime, data quality."),
     "exp_sel_title": _s("Actifs", "Assets"),
     "exp_sel_hint": _s(
-        "Choisis 2 à 40 actifs (Ctrl/Cmd + clic pour en ajouter). Les séries macro mensuelles ou trimestrielles exigent la fréquence "
-        "« Mois » ; en jour ou en semaine elles sont exclues plutôt que recopiées, ce qui fabriquerait des corrélations.",
-        "Pick 2 to 40 assets (Ctrl/Cmd + click to add). Monthly or quarterly macro series require the \"Month\" frequency; at day or "
-        "week frequency they are excluded rather than forward-filled, which would fabricate correlations."),
+        "Choisis 2 à 40 actifs (Ctrl/Cmd + clic pour en ajouter). Si une série macro est publiée chaque semaine, mois ou trimestre, "
+        "tout le panneau passe automatiquement à cette fréquence (jamais de valeurs recopiées, ce qui fabriquerait des corrélations).",
+        "Pick 2 to 40 assets (Ctrl/Cmd + click to add). If a macro series is published weekly, monthly or quarterly, the whole panel "
+        "switches to that frequency automatically (values are never forward-filled, which would fabricate correlations)."),
     "exp_filter": _s("Filtrer la liste", "Filter the list"),
     "exp_selected": _s("{n} sélectionné(s)", "{n} selected"),
     "exp_none_selected": _s("Aucun actif choisi", "No asset selected"),

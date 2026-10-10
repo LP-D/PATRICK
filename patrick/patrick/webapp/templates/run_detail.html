@@ -128,6 +128,30 @@
 {% endif %}
 </section>
 
+{% if detail.class_balance %}
+{% set cb = detail.class_balance %}
+{% set cb_test, cb_ho = cb.get('test'), cb.get('holdout') %}
+<section id="repartition" class="card">
+<h2>{{ t('cb_h') }}</h2>
+<p class="hint">{{ t('cb_intro') }}</p>
+{% for split_key, split in (('test', cb_test), ('holdout', cb_ho)) if split and split.pred_one_sided %}
+{% set side_up = split.pred_up >= 0.5 %}
+<p class="banner banner-warning class-balance-warn" role="status">{{ t('cb_warn', split=t('cb_split_test' if split_key == 'test' else 'cb_split_holdout'), pct=('%.0f' | format((split.pred_up if side_up else split.pred_down) * 100)), side=t('cb_side_up' if side_up else 'cb_side_down')) }}</p>
+{% endfor %}
+{% macro cb_cell(split, key, warn=false) %}{% if split %}<span{% if warn and split.pred_one_sided %} class="class-balance-warn"{% endif %}>{{ '%.1f %%' | format(split[key] * 100) }}</span>{% else %}—{% endif %}{% endmacro %}
+{% macro cb_class(split, kind, i) %}{% if split %}{{ '%.1f %%' | format(split[kind][i] * 100) }}{% else %}—{% endif %}{% endmacro %}
+{% set cb_names = [t('cb_c0'), t('cb_c1'), t('cb_c2'), t('cb_c3')] %}
+{% set cb_rows = [] %}
+{% for i in range(4) %}
+{% set _ = cb_rows.append([cb_names[i], cb_class(cb_test, 'true', i), cb_class(cb_test, 'pred', i), cb_class(cb_ho, 'true', i), cb_class(cb_ho, 'pred', i)]) %}
+{% endfor %}
+{% set _ = cb_rows.append([t('cb_down'), cb_cell(cb_test, 'true_down'), cb_cell(cb_test, 'pred_down', true), cb_cell(cb_ho, 'true_down'), cb_cell(cb_ho, 'pred_down', true)]) %}
+{% set _ = cb_rows.append([t('cb_up'), cb_cell(cb_test, 'true_up'), cb_cell(cb_test, 'pred_up', true), cb_cell(cb_ho, 'true_up'), cb_cell(cb_ho, 'pred_up', true)]) %}
+{{ data_table([t('cb_col_class'), t('cb_test_true'), t('cb_test_pred'), t('cb_ho_true'), t('cb_ho_pred')], cb_rows, num_cols=[1, 2, 3, 4],
+              footer=t('cb_foot', n_test=(cb_test.n if cb_test else '—'), n_holdout=(cb_ho.n if cb_ho else '—'))) }}
+</section>
+{% endif %}
+
 {% if detail.fold_metrics %}
 {% include "_retrain_advice.html" %}
 

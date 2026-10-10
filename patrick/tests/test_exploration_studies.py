@@ -66,17 +66,64 @@ def test_a_log_request_falls_back_to_difference_on_a_non_positive_level(rng):
     assert set(pan.transforms.values()) == {"diff"}
 
 
-def test_a_monthly_series_is_excluded_from_a_daily_panel_instead_of_being_forward_filled(rng):
+def _slow(periodicity_by_symbol):
+    return lambda s, src: periodicity_by_symbol.get(s, "daily")
+
+
+def test_a_monthly_series_switches_a_daily_panel_to_monthly_instead_of_being_dropped_or_forward_filled(rng):
     idx = _idx(1200)
     daily = pd.Series(100 + rng.normal(0, 1, 1200).cumsum() + 500, index=idx)
     monthly = daily.resample("ME").last()
     pan = P.build_panel(["D", "M"], {"M": "fred"}, _loader_from({"D": daily, "M": monthly}),
-                        periodicity=lambda s, src: "monthly" if s == "M" else "daily")
-    assert list(pan.returns.columns) == ["D"]
-    assert "M" in pan.dropped and any("Exclus" in w for w in pan.warnings)
-    pan_m = P.build_panel(["D", "M"], {"M": "fred"}, _loader_from({"D": daily, "M": monthly}), freq="M",
-                          periodicity=lambda s, src: "monthly" if s == "M" else "daily")
-    assert list(pan_m.returns.columns) == ["D", "M"]
+                        periodicity=_slow({"M": "monthly"}))
+    assert list(pan.returns.columns) == ["D", "M"] and not pan.dropped
+    assert pan.freq == "M" and pan.requested_freq == "D" and pan.periods_per_year == 12
+    assert len(pan.returns) < len(monthly)                       # une ligne par mois : rien n'a été recopié sur les jours
+    assert pan.levels.index.is_monotonic_increasing and (pan.levels.index.day >= 28).all()
+    assert any("Fréquence passée de Jour à Mois" in w and "M" in w for w in pan.warnings)
+    assert pan.meta()["auto_freq"] is True and pan.meta()["requested_freq"] == "D"
+
+
+def test_the_weekly_request_also_goes_monthly_and_a_weekly_series_pulls_a_daily_panel_to_weekly(rng):
+    idx = _idx(1200)
+    daily = pd.Series(100 + rng.normal(0, 1, 1200).cumsum() + 500, index=idx)
+    monthly = daily.resample("ME").last()
+    weekly = daily.resample("W-FRI").last().dropna()
+    months = P.build_panel(["D", "M"], {"M": "fred"}, _loader_from({"D": daily, "M": monthly}), freq="W",
+                           periodicity=_slow({"M": "monthly"}))
+    assert months.freq == "M" and months.requested_freq == "W"
+    weeks = P.build_panel(["D", "W"], {"W": "fred"}, _loader_from({"D": daily, "W": weekly}),
+                          periodicity=_slow({"W": "weekly"}))
+    assert weeks.freq == "W" and weeks.periods_per_year == 52 and not weeks.dropped
+
+
+def test_a_quarterly_series_switches_the_panel_to_quarterly(rng):
+    idx = pd.bdate_range("1995-01-02", periods=7000)
+    daily = pd.Series(100 + rng.normal(0, 1, 7000).cumsum() + 900, index=idx)
+    quarterly = daily.resample("QE").last()
+    pan = P.build_panel(["D", "Q"], {"Q": "fred"}, _loader_from({"D": daily, "Q": quarterly}),
+                        periodicity=_slow({"Q": "quarterly"}))
+    assert pan.freq == "Q" and pan.periods_per_year == 4 and list(pan.returns.columns) == ["D", "Q"]
+    assert any("Trimestre" in w for w in pan.warnings)
+
+
+def test_a_slow_panel_does_not_claim_a_late_listing_because_its_first_period_ends_after_the_start(rng):
+    idx = pd.bdate_range("2000-01-03", periods=7000)
+    daily = pd.Series(100 + rng.normal(0, 1, 7000).cumsum() + 900, index=idx)
+    quarterly = daily.resample("QE").last()
+    pan = P.build_panel(["D", "Q"], {"Q": "fred"}, _loader_from({"D": daily, "Q": quarterly}), start="2000-01-01",
+                        periodicity=_slow({"Q": "quarterly"}))
+    assert pan.freq == "Q" and not any("Période commune réduite" in w for w in pan.warnings)
+
+
+def test_no_switch_when_the_requested_frequency_is_already_slow_enough(rng):
+    idx = _idx(1200)
+    daily = pd.Series(100 + rng.normal(0, 1, 1200).cumsum() + 500, index=idx)
+    monthly = daily.resample("ME").last()
+    pan = P.build_panel(["D", "M"], {"M": "fred"}, _loader_from({"D": daily, "M": monthly}), freq="M",
+                        periodicity=_slow({"M": "monthly"}))
+    assert pan.freq == "M" and pan.requested_freq == "M" and pan.meta()["auto_freq"] is False
+    assert not any("Fréquence passée" in w for w in pan.warnings)
 
 
 def test_too_few_common_dates_is_a_readable_error():

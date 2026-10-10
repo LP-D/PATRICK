@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, empty_state %}
+{% from "_components.html" import status_badge, empty_state, up_down %}
 {% block title %}PATRICK — {{ t('rl_title') }}{% endblock %}
 
 {% block content %}
@@ -107,6 +107,8 @@
         <th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
         <th class="num">{{ t('hist_gap') }}</th>
         <th class="num">DM p</th>
+        <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_true') }}</th>
+        <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_pred') }}</th>
         <th>{{ t('hist_started') }}</th>
         <th class="hc-actions"><span class="visually-hidden">{{ t('rn_actions') }}</span></th>
     </tr></thead>
@@ -125,6 +127,8 @@
         <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
         <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
         <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
+        <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>
+        <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'pred') }}</td>
         <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
         <td class="hc-actions">{% if not locked %}
             <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="{{ t('rn_rename_btn') }} {{ r.run_id }}" title="{{ t('rn_rename_btn') }}">{{ icon('pencil', 14) }}</button>

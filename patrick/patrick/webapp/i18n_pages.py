@@ -501,6 +501,41 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                           "Brier score of the up probability: lower = better calibrated (0.25 = coin flip)."),
     "metric_ECE_up": _s("Erreur de calibration attendue : écart moyen entre probabilité annoncée et fréquence réelle.",
                         "Expected calibration error: mean gap between announced probability and actual frequency."),
+    # Répartition haut / bas des classes réelles et prédites (`tracking/class_balance.py`)
+    "cb_col_true": _s("Réel haut / bas (%)", "Actual up / down (%)"),
+    "cb_col_pred": _s("Prédit haut / bas (%)", "Predicted up / down (%)"),
+    "cb_col_tip": _s(
+        "Part de hausses puis de baisses parmi les mouvements réels du test, et parmi les prédictions du modèle. Au-delà de 70 % "
+        "du même côté, le modèle est signalé : il ne fait peut-être que suivre la tendance.",
+        "Share of up then down moves among the actual test moves, and among the model's predictions. Beyond 70% on one side the "
+        "model is flagged: it may just be following the trend."),
+    "cb_h": _s("Répartition haut / bas", "Up / down split"),
+    "cb_intro": _s(
+        "Part de chaque classe parmi les mouvements réels de l'échantillon (« réel ») et parmi les prédictions du meilleur modèle "
+        "(« prédit »). SMOTE rééquilibre l'entraînement, pas les prédictions : un modèle qui répond presque toujours du même côté "
+        "peut sembler bon sur un marché qui monte. Signalement au-delà de 70 % des prédictions du même côté.",
+        "Share of each class among the actual moves of the sample (\"actual\") and among the best model's predictions "
+        "(\"predicted\"). SMOTE rebalances training, not the predictions: a model that almost always answers the same side can "
+        "look good on a rising market. Flagged beyond 70% of predictions on one side."),
+    "cb_col_class": _s("Classe", "Class"),
+    "cb_c0": _s("Baisse forte", "Strong down"),
+    "cb_c1": _s("Baisse faible", "Slight down"),
+    "cb_c2": _s("Hausse faible", "Slight up"),
+    "cb_c3": _s("Hausse forte", "Strong up"),
+    "cb_down": _s("Bas (baisses)", "Down (falls)"),
+    "cb_up": _s("Haut (hausses)", "Up (rises)"),
+    "cb_test_true": _s("Test · réel", "Test · actual"),
+    "cb_test_pred": _s("Test · prédit", "Test · predicted"),
+    "cb_ho_true": _s("Holdout · réel", "Holdout · actual"),
+    "cb_ho_pred": _s("Holdout · prédit", "Holdout · predicted"),
+    "cb_foot": _s("Observations : test {n_test}, holdout {n_holdout}.", "Observations: test {n_test}, holdout {n_holdout}."),
+    "cb_warn": _s(
+        "Sur {split}, {pct} % des prédictions sont du côté « {side} » : le modèle ne fait peut-être que suivre la tendance.",
+        "On {split}, {pct}% of predictions are on the \"{side}\" side: the model may just be following the trend."),
+    "cb_side_up": _s("haut", "up"),
+    "cb_side_down": _s("bas", "down"),
+    "cb_split_test": _s("le test", "the test"),
+    "cb_split_holdout": _s("le holdout", "the holdout"),
 }
 
 PAGES_JS_KEYS: list[str] = ["target_short_history", "target_greyed_count"]

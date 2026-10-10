@@ -22,6 +22,7 @@ import numpy as np
 
 from patrick.config import defaults as D
 from patrick.selection import stability as stability_module
+from patrick.tracking import class_balance
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
@@ -495,6 +496,8 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
         "fold_metrics": fold_metrics(conn, best_trial["trial_id"]) if best_trial else [],
         "headline": headline,
+        "class_balance": (class_balance.for_trials(conn, [best_trial["trial_id"]]).get(best_trial["trial_id"])
+                          if best_trial else None),
         "suspect": (suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test"))),
         "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
         "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
@@ -549,6 +552,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, run_ids)
     dm_by_run = trackdb.batch_dm_results(conn, run_ids)
     benchmark_by_run = trackdb.batch_baseline_f1_dir(conn, run_ids)
+    balance_by_run = class_balance.for_runs(conn, run_ids)
 
     run_rows = []
     horizons = set()
@@ -561,6 +565,7 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "n_trials": n_trials,
             "best_f1_dir": best_f1_by_run.get(run_id), "dm_result": dm_by_run.get(run_id),
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
+            "class_balance": balance_by_run.get(run_id),
         })
 
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(target))

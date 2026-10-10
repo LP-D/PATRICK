@@ -183,7 +183,8 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   `worker._run_one_rl_job`), résultat dans `job.result_json` et
   `<sortie>/rl_result.json`. Extras optionnels : `pip install -e ".[rl]"`.
 - `/exploration` : `patrick/exploration/` (`panel.py` alignement des niveaux AVANT
-  les rendements, `studies.py` fonctions pures) servi par
+  les rendements, `studies.py` fonctions pures ; une série plus lente que la fréquence demandée fait passer tout le panneau à sa
+  fréquence, jamais de recopie) servi par
   `webapp/exploration_routes.py` (`/api/exploration/<étude>`) ; graphiques SVG
   communs dans `static/charts.js`.
 

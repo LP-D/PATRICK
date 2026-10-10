@@ -144,7 +144,7 @@ def test_an_asset_that_fails_to_load_is_reported_not_fatal(client, monkeypatch, 
     assert err.status_code == 400 and "n'a pas pu être chargé" in err.json()["error"]
 
 
-def test_a_monthly_macro_series_needs_the_monthly_frequency(client, monkeypatch, calls):
+def test_a_monthly_macro_series_switches_the_panel_to_monthly_automatically(client, monkeypatch, calls):
     monthly_idx = pd.date_range("2005-01-31", periods=240, freq="ME")
     base = E.loader
 
@@ -155,10 +155,11 @@ def test_a_monthly_macro_series_needs_the_monthly_frequency(client, monkeypatch,
 
     monkeypatch.setattr(E, "loader", with_macro)
     params = _q(symbols="^GSPC,CPIAUCSL", start="2018-01-01")
-    daily = client.get("/api/exploration/describe", params=params).json()
-    assert daily["meta"]["n_assets"] == 1 and "CPIAUCSL" in daily["meta"]["dropped"]
-    monthly = client.get("/api/exploration/describe", params={**params, "freq": "M"}).json()
-    assert monthly["meta"]["n_assets"] == 2 and monthly["meta"]["periods_per_year"] == 12
+    auto = client.get("/api/exploration/describe", params=params).json()["meta"]
+    assert auto["n_assets"] == 2 and not auto["dropped"] and auto["freq"] == "M" and auto["periods_per_year"] == 12
+    assert auto["requested_freq"] == "D" and auto["auto_freq"] is True
+    explicit = client.get("/api/exploration/describe", params={**params, "freq": "M"}).json()["meta"]
+    assert explicit["n_assets"] == 2 and explicit["auto_freq"] is False
 
 
 def test_simultaneous_studies_on_one_selection_download_each_series_once(client, monkeypatch):
