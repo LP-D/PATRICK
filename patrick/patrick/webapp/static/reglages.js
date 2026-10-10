@@ -116,6 +116,9 @@
             if (s.need_push) { todo.push(tr("app_status_push")); }
             add(tr("app_status_todo", {todo: todo.length ? todo.join(" → ") : tr("app_status_uptodate")}));
             add(s.wealth_reference ? tr("app_status_role_ref") : tr("app_status_role_follow"));
+            if (s.disk_free_gb !== undefined) {
+                add(tr(s.disk_free_gb < 10 ? "app_status_disk_low" : "app_status_disk", {free: s.disk_free_gb, db: s.db_gb}));
+            }
         });
     }
 

@@ -136,3 +136,11 @@ def test_the_publication_builds_a_lean_export_table_by_table(pcs, monkeypatch): 
     out = pc1.auto(share)
     assert out["actions"] and pc1.runs() == {"a1", "a2"}
     assert calls == [{"include_personal": False, "include_caches": False}]
+
+
+def test_the_status_reports_free_disk_space(pcs):  # noqa: F811
+    pc1, _pc2, share = pcs
+    pc1.seed(["a1"])
+    pc1.use()
+    st = sync.status(str(share), db_path=pc1.db)
+    assert st["disk_free_gb"] > 0 and st["db_gb"] >= 0

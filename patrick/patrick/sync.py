@@ -897,6 +897,7 @@ def status(folder: str, *, db_path: str | None = None) -> dict:
     local_changed = exists and local_fp != state.get("local_fp")
     return {"folder": folder, "remote": stamp, "last_exchange": state.get("at"), "wealth_reference": reference,
             "local_runs": _count_runs(db_path) if exists else 0,
+            "disk_free_gb": round(_free_bytes(db_path) / 1e9, 1), "db_gb": round(os.path.getsize(db_path) / 1e9, 1) if exists else 0.0,
             "need_pull": need_pull, "local_changed": local_changed,
             "need_push": exists and (stamp is None or local_changed or need_pull)}
 
