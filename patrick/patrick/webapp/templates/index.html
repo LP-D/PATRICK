@@ -36,6 +36,8 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
+    {% include "_profile_gallery.html" %}
+
     <form method="post" action="/runs" class="run-form" id="run-form" data-mode="simple">
         {% if duplicated_run_id %}
         <p class="banner" role="status">{{ t('duplicate_run_loaded', run_id=duplicated_run_id) }}</p>

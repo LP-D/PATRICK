@@ -25,7 +25,7 @@ from pydantic import ValidationError
 from patrick import live_refresh
 from patrick import settings as settings_store
 from patrick.clock import utc_today
-from patrick.config import asset_classes
+from patrick.config import asset_classes, training_profiles
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
@@ -33,7 +33,7 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.pipeline import parallel as scan_parallel
 from patrick.tracking import champions as trackchampions
-from patrick.tracking import class_overview, data_health, memo
+from patrick.tracking import class_overview, data_health, memo, retrain_advisor
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import home as trackhome
@@ -320,8 +320,19 @@ def _target_groups_with_equity_badges() -> dict:
     return groups
 
 
+def _profile_gallery() -> list[dict]:
+    """Profils d'entraînement fournis (`config/training_profiles.py`) avec le nombre de réglages qu'ils changent."""
+    base = forms.to_view(forms.default_config_dict())
+    out = []
+    for p in training_profiles.PROFILES:
+        patch = p.resolved_patch()
+        out.append({"key": p.key, "cost": p.cost, "needs": p.needs,
+                    "n_changes": sum(1 for k, v in patch.items() if base.get(k) != v)})
+    return out
+
+
 def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
-                   initial_run_id: str | None = None, duplicated_run_id: str | None = None):
+                   initial_run_id: str | None = None, duplicated_run_id: str | None = None, applied: dict | None = None):
     active = run_manager.active_run()
     return templates.TemplateResponse(
         request,
@@ -333,6 +344,8 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
             "queued_runs": run_manager.queued_runs(),
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
             "duplicated_run_id": duplicated_run_id,
+            "applied": applied,
+            "training_profiles": _profile_gallery(),
             "movers": alerts.get_cached(),
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
@@ -349,7 +362,8 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
 
 
 @app.get("/launch")
-def launch_page(request: Request, run_id: str | None = None, target: str | None = None):
+def launch_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None,
+                suggest: str | None = None):
     """P8 (synthesis dashboard chantier): moved from `/` to free that route
     for the new synthesis page. Same handler, same template
     (`index.html`), only the route changed -- nav/breadcrumb links updated
@@ -372,7 +386,26 @@ def launch_page(request: Request, run_id: str | None = None, target: str | None 
             config = RunConfig.model_validate_json(row["config_json"])
         cfg = config.model_dump()
         cfg["output"]["dir"] = ""
-    return _render_index(request, forms.to_view(cfg), [], duplicated_run_id=run_id)
+    view, applied = forms.to_view(cfg), None
+    if profile:
+        chosen = training_profiles.get(profile)
+        if chosen is None:
+            raise HTTPException(status_code=404, detail="Profil d'entraînement inconnu.")
+        view = training_profiles.apply_patch(view, chosen.resolved_patch())
+        applied = {"kind": "profile", "key": chosen.key,
+                   "warning": "prof_warn_equity" if chosen.needs == "equity" else None}
+    elif suggest and run_id:
+        conn = trackdb.connect()
+        try:
+            advice = retrain_advisor.advise_run(conn, run_id, limit=20)
+        finally:
+            conn.close()
+        found = next((s for s in (advice or {}).get("suggestions", []) if s.key == suggest), None)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Suggestion de réentraînement introuvable pour ce run.")
+        view = training_profiles.apply_patch(view, {k: v for k, v in found.patch.items() if k in view})
+        applied = {"kind": "suggest", "key": found.key, "run_id": run_id, "warning": None}
+    return _render_index(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied)
 
 
 @app.get("/")
@@ -1734,17 +1767,23 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
+    advice = None
     try:
         detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
         # KPI of the WHOLE launch (all the horizons that share this run's job)
         kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
+        if detail is not None:
+            try:
+                advice = retrain_advisor.advise_run(conn, run_id, detail=detail, history=data_health.history_depths())
+            except Exception:  # noqa: BLE001 -- le conseil est un plus : il ne doit jamais faire échouer la page du run
+                advice = None
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+        {"detail": detail, "kpi": kpi, "advice": advice, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
          **_i18n_context(request)},
     )
 

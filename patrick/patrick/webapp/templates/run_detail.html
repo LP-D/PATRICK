@@ -48,6 +48,7 @@
 <nav class="section-index" aria-label="{{ t('rd_sections_aria') }}">
     <span class="section-index-label">{{ t('rd_sections') }}</span>
     <a href="#resume">{{ t('rd_section_summary') }}</a>
+    {% if advice and advice.suggestions %}<a href="#avis">{{ t('adv_nav') }}</a>{% endif %}
     {% if detail.fold_metrics %}<a href="#folds">{{ t('m_section_title') }}</a>{% endif %}
     {% if kpi and kpi.n_candidates %}<a href="#kpi">KPI</a>{% endif %}
     <a href="#durees">{{ t('rd_section_durations') }}</a>
@@ -128,6 +129,8 @@
 </section>
 
 {% if detail.fold_metrics %}
+{% include "_retrain_advice.html" %}
+
 <section id="folds" class="card">
 <h2>{{ t('m_section_title') }}</h2>
 <p class="hint">{{ t('m_section_intro') }}</p>

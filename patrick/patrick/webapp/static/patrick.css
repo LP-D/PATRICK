@@ -2321,6 +2321,30 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .home-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: .88rem; }
 .home-mini { width: 100%; }
 
+/* ---- Conseiller de réentraînement et profils d'entraînement ------------------------------------------------- */
+.advisor .adv-diag { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 14px; font-size: .86rem; color: var(--text-2); }
+.adv-item { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0; background: var(--surface); }
+.adv-item.adv-top { border-color: var(--brand); background: var(--brand-soft); }
+.adv-item.adv-unavailable { opacity: .75; border-style: dashed; }
+.adv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.adv-head h3 { margin: 0; font-size: 1rem; flex: 1 1 260px; }
+.adv-score { font-size: .8rem; color: var(--text-2); }
+.adv-cost { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; background: var(--surface-3); color: var(--text-2); }
+.adv-cost-low { background: var(--pos-soft); color: var(--pos); }
+.adv-cost-high { background: var(--warn-soft); color: var(--warn); }
+.adv-changes { margin: 8px 0; font-size: .85rem; max-width: 640px; }
+.adv-actions { margin: 8px 0 0; }
+.profile-gallery { margin: 0 0 14px; }
+.profile-gallery > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.profile-card { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+                background: var(--surface); text-decoration: none; color: inherit; }
+.profile-card:hover, .profile-card:focus-visible { border-color: var(--brand); background: var(--brand-soft); }
+.profile-card.is-applied { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
+.profile-name { font-weight: 600; }
+.profile-desc { font-size: .82rem; color: var(--text-2); flex: 1; }
+.profile-meta { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+
 /* ---- Page Macro : FRED contre ALFRED -------------------------------------------------------------------------- */
 #alfred-vs-fred .actions { margin-top: 12px; }
 #alfred-vs-fred td strong { font-weight: 600; }

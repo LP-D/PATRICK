@@ -1,0 +1,47 @@
+{# Conseiller de réentraînement (`tracking/retrain_advisor.py`) : après ce run, quel réentraînement tester, d'après des règles sur ses
+   résultats. `advice` = {"diagnosis": Diagnosis, "suggestions": [Suggestion]} ; chaque proposition mène au formulaire de lancement
+   pré-rempli (`/launch?run_id=…&suggest=<clé>`), jamais à un lancement automatique. #}
+{% macro val(v, _t) %}{% if v is boolean %}{{ _t('adv_yes') if v else _t('adv_no') }}{% elif v is none or v == '' %}—{% elif v is iterable and v is not string %}{{ v | join(', ') }}{% else %}{{ v }}{% endif %}{% endmacro %}
+{% macro f3(x) %}{{ ('%.3f' | format(x)) if x is not none else '—' }}{% endmacro %}
+{% if advice and advice.suggestions %}
+{% set d = advice.diagnosis %}
+<section id="avis" class="card advisor">
+<h2>{{ t('adv_card_title') }}</h2>
+<p class="hint">{{ t('adv_card_sub') }}</p>
+<p class="adv-diag">
+    <span>AUC <b class="pk-mono">{{ f3(d.auc_test) }}</b> {{ t('adv_diag_test') }}</span>
+    <span>AUC <b class="pk-mono">{{ f3(d.auc_holdout) }}</b> {{ t('adv_diag_holdout') }}</span>
+    {% if d.gap_auc is not none %}<span>{{ t('adv_diag_gap') }} <b class="pk-mono">{{ '%+.3f' | format(d.gap_auc) }}</b></span>{% endif %}
+    {% if d.fold_std is not none %}<span>{{ t('adv_diag_std') }} <b class="pk-mono">{{ f3(d.fold_std) }}</b></span>{% endif %}
+    {% if d.jaccard is not none and d.jaccard == d.jaccard %}<span>Jaccard <b class="pk-mono">{{ f3(d.jaccard) }}</b></span>{% endif %}
+    {% if d.history_years is not none %}<span>{{ t('adv_diag_history') }} <b class="pk-mono">{{ '%.1f' | format(d.history_years) }} {{ t('adv_years') }}</b></span>{% endif %}
+</p>
+{% for s in advice.suggestions %}
+<article class="adv-item{% if loop.first %} adv-top{% endif %}{% if not s.available %} adv-unavailable{% endif %}">
+    <header class="adv-head">
+        {% if loop.first and s.available %}<span class="kind-badge kind-alpha">{{ t('adv_best') }}</span>{% endif %}
+        {% if not s.available %}<span class="kind-badge kind-directional">{{ t('adv_unavailable') }}</span>{% endif %}
+        <h3>{{ t('adv_' ~ s.key ~ '_title') }}</h3>
+        <span class="adv-score" title="{{ t('adv_score_help') }}">{{ t('adv_score') }} <b class="pk-mono">{{ '%.0f' | format(s.score) }}</b></span>
+        {% if s.patch %}<span class="adv-cost adv-cost-{{ s.cost }}">{{ t('adv_cost_' ~ s.cost) }}{% if s.cost_factor %} · {{ '%.1f' | format(s.cost_factor) }}×{% endif %}{% if s.est_minutes %} · ≈ {{ '%.0f' | format(s.est_minutes) }} min{% endif %}</span>{% endif %}
+    </header>
+    <p class="adv-why">{{ t('adv_' ~ s.key ~ '_why', **s.facts) }}</p>
+    <p class="hint adv-try">{{ t('adv_' ~ s.key ~ '_try', **s.facts) }}</p>
+    {% if s.changes %}
+    <table class="data-table adv-changes">
+        <thead><tr><th>{{ t('adv_changes') }}</th><th>{{ t('adv_before') }}</th><th>{{ t('adv_after') }}</th></tr></thead>
+        <tbody>
+        {% for c in s.changes %}
+        <tr><td>{{ t('advf_' ~ c.field) }}</td><td class="pk-mono">{{ val(c.before, t) }}</td><td class="pk-mono"><b>{{ val(c.after, t) }}</b></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    {% if s.available and (s.changes or not s.manual) %}
+    <p class="adv-actions"><a class="btn-secondary" href="/launch?run_id={{ d.run_id | urlencode }}&amp;suggest={{ s.key }}">{{ t('adv_prepare') }}</a></p>
+    {% endif %}
+</article>
+{% endfor %}
+<p class="hint">{{ t('adv_foot') }}</p>
+</section>
+{% endif %}
