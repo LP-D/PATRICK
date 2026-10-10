@@ -86,3 +86,16 @@ def test_a_machine_learning_config_serializes_exactly_as_before_and_a_deep_one_r
     back = RunConfig.model_validate_json(deep.model_dump_json())
     assert back.models.deep.epochs == 9 and back.family == "dl"
     assert RunConfig.model_validate_json(ml.model_dump_json()).models.deep is None
+
+
+def test_the_legacy_launch_template_name_still_renders_for_a_server_started_before_the_merge():
+    """Un serveur lancé avant la fusion rend encore `index.html` (relu à chaud) : le nom doit rester valide et rendre la page ML."""
+    from pathlib import Path
+
+    from jinja2 import Environment, FileSystemLoader
+
+    from patrick.webapp import app as web_app
+    templates_dir = Path(web_app.BASE_DIR) / "templates"
+    source = (templates_dir / "index.html").read_text(encoding="utf-8")
+    assert '{% extends "launch_base.html" %}' in source
+    assert (templates_dir / "launch_base.html").exists() and Environment(loader=FileSystemLoader(templates_dir)).get_template("index.html")

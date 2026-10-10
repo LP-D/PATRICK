@@ -85,3 +85,25 @@ Documentés pour un chantier suivant.
 Un lot de runs ML tourne pendant ce chantier : le développement se fait dans une branche/worktree séparée ; tout changement de
 schéma ou de registre est **additif** (valeurs par défaut identiques, imports de PyTorch/SB3 paresseux), de sorte qu'un processus
 déjà lancé ou un enfant `joblib` qui importerait le nouveau code se comporte comme avant.
+
+## 10. Livré (état au 2026-10-10)
+
+Écarts et précisions par rapport au plan ci-dessus :
+
+- **Gabarits** : `index.html` est renommé `launch_base.html` ; un `index.html` d'une ligne (`extends`) est conservé pour qu'un serveur démarré
+  avant la fusion (ancien Python, gabarits relus à chaud) continue de servir `/launch`.
+- **Configuration DL** : `ModelsConfig.deep` est ABSENT de la sérialisation d'un run ML (`model_serializer`), donc `config_json` et
+  `_config_hash` d'un run de machine learning sont identiques à ceux d'avant (reprise des runs, noms d'études Optuna).
+- **Optuna des réseaux** : structure et bornes dans `DL_OPTUNA_PARAM_SPECS` / `DL_DEFAULT_OPTUNA_BOUNDS` (pas dans les dictionnaires ML) ;
+  `suggest_params` lit les deux ; le formulaire n'écrit que les bornes des réseaux choisis.
+- **RL** : le formulaire est `webapp/forms_rl.py`, les routes `webapp/rl_routes.py` (`/rl`, `/api/rl/runs`) ; l'avancement, la pause, l'arrêt
+  et les fichiers passent par les routes génériques des jobs. `/runs/<id>` d'un job RL redirige vers `/rl?open=<id>`. Le Sharpe déflaté compte
+  les runs RL terminés sur la cible (le job courant exclu).
+- **Exploration** : `exploration_routes.get_panel` construit un panneau par sélection une seule fois même si plusieurs études le demandent
+  ensemble ; `LocalCache.save_dataframe` écrit désormais de façon atomique et `load_dataframe` traite un fichier illisible comme absent
+  (incident du 2026-10-10 : deux séries du cache réel tronquées par des écritures simultanées, supprimées puis retéléchargées).
+- **Texte minimal** : en plus de `.hint` et `.page-subtitle`, `help.js` replie `.profile-desc`, `.headline-sub`, les bandeaux d'information
+  (`.banner` sans variante erreur/alerte et sans `role`) et l'explication entre parenthèses d'un libellé (`Libellé (explication)`).
+- **Tests** : `test_help_minimal_text`, `test_exploration_studies` / `_routes`, `test_deep_models` / `_pipeline` / `_config` / `test_dl_page`,
+  `test_rl_core` / `_walkforward` / `_agents` / `_run` / `_page`, `test_worker_rl`, `test_cache_manager`. Les tests qui exigent PyTorch,
+  Gymnasium ou Stable-Baselines3 sont ignorés quand l'extra manque (CI) ; la configuration, la mécanique NumPy et les routes tournent partout.

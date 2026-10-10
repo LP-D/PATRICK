@@ -1,0 +1,4 @@
+{% extends "launch_base.html" %}
+{# Ancien nom du gabarit de lancement, gardé volontairement : un serveur démarré AVANT la fusion des pages ML / DL / RL rend encore
+   « index.html » (ancien code Python en mémoire, gabarits relus à chaud). Sans ce fichier, `/launch` y répondrait par une erreur 500
+   jusqu'au redémarrage. Les pages actuelles utilisent `ml.html` et `dl.html`. #}
