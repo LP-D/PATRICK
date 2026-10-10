@@ -219,8 +219,23 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             else:
                 row_values = full_pool.loc[[t], feature_names].values
             X_sel = finite_scaled(scale_selected(scaler, finite_features(row_values, "live"), sel_idx), "live")
-            pred_class = int(model.predict(X_sel)[0])
-            proba_row = model.predict_proba(X_sel)[0]
+            if getattr(model, "needs_history", False):
+                # Réseau à fenêtre : il lit les `lookback` dernières lignes réelles, pas une ligne isolée. Les barres de rattrapage
+                # (lignes reconstituées « à la date t ») n'ont pas d'historique reconstitué : elles sont sautées, jamais approximées.
+                if is_backfill:
+                    continue
+                history = full_pool.loc[:t, feature_names].tail(model.window)
+                if len(history) < model.window:
+                    continue
+                try:
+                    X_hist = finite_scaled(scale_selected(scaler, finite_features(history.values, "live"), sel_idx), "live")
+                except ValueError:
+                    continue
+                proba_row = model.predict_proba(X_hist, context="none")[-1]
+                pred_class = int(model.classes_[int(np.argmax(proba_row))])
+            else:
+                pred_class = int(model.predict(X_sel)[0])
+                proba_row = model.predict_proba(X_sel)[0]
             # Column of the predicted class by `classes_`, not by its value: a
             # class absent from the final fit shifts the columns.
             cls_list = classes or list(range(len(proba_row)))

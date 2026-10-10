@@ -8,7 +8,22 @@ from lightgbm import LGBMClassifier
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from xgboost import XGBClassifier
 
+from patrick.config import defaults as D
+
 ML_ALGOS = ("XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost")
+# Réseaux de neurones (`models/deep.py`, PyTorch importé seulement à l'usage) : MLP, GRU, LSTM, CNN1D, Transformer.
+DL_ALGOS = tuple(D.ALL_DL_ALGOS)
+
+# Réglages neuronaux du run en cours (`RunConfig.models.deep`), posés par `run_pipeline` : tous les appels de `get_classifier` d'un même
+# processus (scan, Optuna, holdout, export) les reçoivent sans changer leurs signatures. Les processus de calcul parallèle du scan
+# reçoivent les mêmes réglages explicitement (argument `deep`, voir `pipeline/engine.py`).
+_DEEP_ACTIVE: dict = {}
+
+
+def set_deep_defaults(settings: dict | None) -> None:
+    """Réglages neuronaux du run courant (`None` ou `{}` : les défauts de `config.defaults.DEFAULT_DEEP`)."""
+    _DEEP_ACTIVE.clear()
+    _DEEP_ACTIVE.update(settings or {})
 
 # Coordination point (fix/tuning-n-jobs-oversubscription): scan and Optuna
 # tuning are strictly sequential -- one config, one walk-forward fold, one
@@ -32,6 +47,10 @@ MODEL_N_JOBS = 1
 
 
 def get_classifier(algo: str, seed: int = 42, **overrides):
+    deep = overrides.pop("deep", None)          # réglages neuronaux explicites : ignorés des algorithmes à arbres
+    if algo in DL_ALGOS:
+        from patrick.models.deep import build_deep_classifier
+        return build_deep_classifier(algo, seed=seed, **{**_DEEP_ACTIVE, **(deep or {}), **overrides})
     if algo == "XGBoost":
         params = {"n_estimators": 200, "max_depth": 4, "learning_rate": 0.05, "subsample": 0.8,
                       "colsample_bytree": 0.8, "min_child_weight": 3, "eval_metric": "mlogloss",
@@ -60,4 +79,4 @@ def get_classifier(algo: str, seed: int = 42, **overrides):
                       "allow_writing_files": False, "thread_count": MODEL_N_JOBS}
         params.update(overrides)
         return CatBoostClassifier(**params)
-    raise ValueError(f"Unknown ML algo: '{algo}' (expected: {ML_ALGOS})")
+    raise ValueError(f"Unknown ML algo: '{algo}' (expected: {ML_ALGOS + DL_ALGOS})")

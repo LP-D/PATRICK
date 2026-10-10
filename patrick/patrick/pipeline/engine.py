@@ -75,6 +75,8 @@ from patrick.features.interactions import (
 )
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.models import calibration as calibration_lib
+from patrick.models import deep as deep_module
+from patrick.models import registry
 from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
 from patrick.models.uniqueness import (
@@ -1083,7 +1085,11 @@ def _config_hash(config: RunConfig) -> str:
     align = config.objective.alignment
     if not (align.column_lags or align.dropped or align.drop_future):
         obj_exclude |= {"leak_guard", "alignment"}
-    exclude = {"objective": obj_exclude} if obj_exclude else None
+    exclude: dict = {"objective": obj_exclude} if obj_exclude else {}
+    # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
+    if config.models.deep is None:
+        exclude["models"] = {"deep"}
+    exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
 
@@ -1512,6 +1518,8 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
     fit_kwargs = {"calibration": config.models.calibration, "calibration_method": config.models.calibration_method,
                   "calibration_gap": horizon, "sample_weight": fd.sample_weight, "ind_matrix": fd.ind_matrix,
                   "uniqueness_weights_enabled": config.sampling.uniqueness_weights}
+    if config.models.deep is not None and any(a in D.ALL_DL_ALGOS for a in config.models.algos):
+        fit_kwargs["deep"] = config.models.deep.model_dump()          # les processus de calcul parallèle ne partagent pas l'état du parent
     jobs = parallel.resolve_jobs(len(active_candidates), int(fd.X_tr.nbytes + fd.X_te.nbytes))
     fit_results = {}
     if jobs > 1:
@@ -1976,6 +1984,16 @@ def _finish_runs(st: _RunState) -> None:
         print(f"[EXPORT] phase timing log -> {timing_log_path}")
 
 
+def _prepare_deep_models(config: RunConfig) -> None:
+    """Réseaux de neurones : refus immédiat (avant tout téléchargement) si PyTorch manque, puis réglages du run posés pour tous les
+    appels de `get_classifier` du processus (scan, Optuna, holdout, export). Sans réseau dans `models.algos`, ne fait rien d'autre que
+    réinitialiser les réglages du run précédent."""
+    wanted = [a for a in config.models.algos if a in D.ALL_DL_ALGOS]
+    registry.set_deep_defaults(config.models.deep.model_dump() if (wanted and config.models.deep is not None) else None)
+    if wanted:
+        deep_module.require_torch()
+
+
 def run_pipeline(config: RunConfig, store: DataStore | None = None,
                   force_ingest: bool = False, db_path: str | None = None,
                   job_id: str | None = None, snapshot_id: str | None = None) -> dict:
@@ -1999,6 +2017,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     seed = config.output.seed
     t0 = time.time()
     _reset_calibration_skips()
+    _prepare_deep_models(config)
 
     # Ingestion runs before any run_id exists: timed here, written once the
     # run rows are created (same duplication as run.started_at).

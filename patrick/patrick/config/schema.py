@@ -267,8 +267,32 @@ class SamplingConfig(BaseModel):
     uniqueness_weights: bool = True
 
 
+class DeepConfig(BaseModel):
+    """Réglages communs des réseaux de neurones (`models/deep.py`) : MLP, GRU, LSTM, CNN1D, Transformer. Absent (`None`) pour tout run
+    de machine learning : un run qui n'en parle pas garde exactement son hachage de configuration d'avant (`pipeline/engine.py::
+    _config_hash`). Bornes : `config.defaults.DEEP_BOUNDS`."""
+    hidden_size: int = Field(D.DEFAULT_DEEP["hidden_size"], ge=4, le=512)       # largeur des couches / taille de l'état caché
+    n_layers: int = Field(D.DEFAULT_DEEP["n_layers"], ge=1, le=6)
+    dropout: float = Field(D.DEFAULT_DEEP["dropout"], ge=0.0, le=0.8)
+    lookback: int = Field(D.DEFAULT_DEEP["lookback"], ge=2, le=252)             # fenêtre des modèles séquentiels (barres)
+    epochs: int = Field(D.DEFAULT_DEEP["epochs"], ge=1, le=500)                 # plafond ; l'arrêt anticipé peut s'arrêter avant
+    batch_size: int = Field(D.DEFAULT_DEEP["batch_size"], ge=8, le=4096)
+    learning_rate: float = Field(D.DEFAULT_DEEP["learning_rate"], ge=1e-5, le=0.1)
+    weight_decay: float = Field(D.DEFAULT_DEEP["weight_decay"], ge=0.0, le=0.1)
+    patience: int = Field(D.DEFAULT_DEEP["patience"], ge=0, le=100)             # 0 = pas d'arrêt anticipé
+    val_fraction: float = Field(D.DEFAULT_DEEP["val_fraction"], ge=0.0, le=0.4) # fin (temporelle) de l'entraînement gardée en validation
+    grad_clip: float = Field(D.DEFAULT_DEEP["grad_clip"], ge=0.0, le=100.0)     # 0 = pas de coupure
+    class_weight: Literal["balanced", "none"] = D.DEFAULT_DEEP["class_weight"]
+    n_seeds: int = Field(D.DEFAULT_DEEP["n_seeds"], ge=1, le=10)                # réseaux moyennés (graines différentes)
+    device: Literal["auto", "cpu", "cuda"] = D.DEFAULT_DEEP["device"]
+    n_heads: int = Field(D.DEFAULT_DEEP["n_heads"], ge=1, le=16)                # Transformer
+    kernel_size: int = Field(D.DEFAULT_DEEP["kernel_size"], ge=2, le=9)         # CNN1D
+    threads: int = Field(D.DEFAULT_DEEP["threads"], ge=1, le=64)
+
+
 class ModelsConfig(BaseModel):
     algos: list[str] = Field(default_factory=lambda: list(D.DEFAULT_ML_ALGOS))
+    deep: DeepConfig | None = None
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
     # Roadmap bloc 3: isotonic (non-parametric, needs more rows) or sigmoid
     # (Platt, 2 parameters per class, stabler on the ~7% of a fold's train
@@ -357,6 +381,27 @@ class RunConfig(BaseModel):
         if choice_symbol not in self.universe.yf_tickers:     # téléchargé, décalé et nettoyé comme tout l'univers
             self.universe.yf_tickers = [*self.universe.yf_tickers, choice_symbol]
         return self
+
+    @model_validator(mode="after")
+    def _check_deep_models(self):
+        """Réseaux de neurones : le DL n'a ni sa propre validation ni ses propres échantillonneurs, il hérite de ceux du run, avec deux
+        incompatibilités explicites. Un modèle à fenêtre lit des lignes CONSÉCUTIVES : un échantillonneur qui réordonne ou synthétise
+        des lignes (SMOTE...) comme la validation CPCV (groupes non contigus) en détruiraient le sens."""
+        algos = set(self.models.algos)
+        sequence = algos & set(D.SEQUENCE_DL_ALGOS)
+        if sequence:
+            if any(name != "none" for name in self.sampler.candidates):
+                raise ValueError(f"les modèles à fenêtre ({', '.join(sorted(sequence))}) exigent le sampler « none » : un "
+                                 "sur-échantillonneur réordonne et synthétise des lignes")
+            if self.validation.scheme == "cpcv":
+                raise ValueError(f"les modèles à fenêtre ({', '.join(sorted(sequence))}) ne tournent pas en CPCV (lignes non contiguës)")
+        return self
+
+    @property
+    def family(self) -> str:
+        """« dl » si tous les algorithmes du run sont des réseaux de neurones, sinon « ml » (page de lancement d'origine)."""
+        algos = self.models.algos
+        return "dl" if algos and all(a in D.ALL_DL_ALGOS for a in algos) else "ml"
 
     @classmethod
     def from_yaml(cls, path: str) -> RunConfig:

@@ -39,8 +39,10 @@
         output.innerHTML =
             '<p class="hint shap-caption">' + caption + '</p>' +
             '<div class="shap-waterfall-svg">' + data.svg + '</div>' +
-            '<p class="hint shap-units-hint">' + tr("shap_units_hint",
-                "Bars are the model's raw per-class score (not a probability): SHAP's additive guarantee holds in that space for a multiclass tree ensemble, not after the softmax.") + '</p>';
+            '<p class="hint shap-units-hint">' + (data.units === "probability"
+                ? tr("shap_units_hint_probability", "Bars are contributions to the probability of the predicted class (network model): estimated Shapley values against the average training row.")
+                : tr("shap_units_hint",
+                "Bars are the model's raw per-class score (not a probability): SHAP's additive guarantee holds in that space for a multiclass tree ensemble, not after the softmax.")) + '</p>';
     }
 
     function loadWidget(widget) {

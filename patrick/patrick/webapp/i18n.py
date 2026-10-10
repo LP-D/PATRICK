@@ -866,6 +866,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": ("Bars are the model's raw per-class score (not a probability): SHAP's additive guarantee "
                "holds in that space for a multiclass tree ensemble, not after the softmax."),
     },
+    "shap_units_hint_probability": {
+        "fr": ("Les barres sont les contributions à la probabilité de la classe prédite (modèle neuronal) : valeurs de Shapley estimées, "
+               "par rapport à la ligne moyenne de l'entraînement."),
+        "en": ("Bars are contributions to the probability of the predicted class (neural model): estimated Shapley values against the "
+               "average training row."),
+    },
     "shap_class_0": {"fr": "Forte baisse", "en": "Strong down"},
     "shap_class_1": {"fr": "Légère baisse", "en": "Slight down"},
     "shap_class_2": {"fr": "Légère hausse", "en": "Slight up"},
@@ -957,7 +963,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "assetpanel_vol_current", "assetpanel_vol_long_run", "assetpanel_bars",
         # feature/shap-waterfall (shap_waterfall.js)
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
-        "shap_units_hint", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
+        "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
     t = translator(lang)
     return {k: t(k) for k in keys}

@@ -1765,6 +1765,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
         "ok": True, "svg": svg, "ts": result["ts"], "split": result["split"],
         "y_pred": result["y_pred"], "y_pred_label": result["y_pred_label"],
         "y_proba": result["y_proba"], "n_features_total": result["n_features_total"],
+        "units": result.get("units", "raw"),
     })
 
 

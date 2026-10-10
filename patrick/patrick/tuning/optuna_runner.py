@@ -49,13 +49,15 @@ def suggest_params(trial: optuna.Trial, algo: str, bounds: dict | None = None) -
     search itself (which params exist, int vs float, log-scale) is NOT
     overridable -- only its extent -- and stays declared in
     `D.OPTUNA_PARAM_SPECS`."""
-    specs = D.OPTUNA_PARAM_SPECS.get(algo)
+    # Réseaux de neurones : structure et bornes par défaut dans `DL_*` (hors `DEFAULT_OPTUNA_BOUNDS`, voir `config/defaults.py`).
+    specs = D.OPTUNA_PARAM_SPECS.get(algo) or D.DL_OPTUNA_PARAM_SPECS.get(algo)
     if specs is None:
         raise ValueError(f"Unknown algo for Optuna: '{algo}'")
+    default_bounds = D.DEFAULT_OPTUNA_BOUNDS.get(algo) or D.DL_DEFAULT_OPTUNA_BOUNDS[algo]
     algo_bounds = (bounds or {}).get(algo) or {}
     out = {}
     for name, spec in specs.items():
-        lo, hi = algo_bounds.get(name) or D.DEFAULT_OPTUNA_BOUNDS[algo][name]
+        lo, hi = algo_bounds.get(name) or default_bounds[name]
         if spec["type"] == "int":
             out[name] = trial.suggest_int(name, int(lo), int(hi))
         else:

@@ -220,6 +220,54 @@ DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
     },
 }
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Deep learning (patrick/models/deep.py) -- réseaux de neurones traités comme des ALGOS DE PLUS du pipeline (walk-forward, purge,
+# embargo, sélection, Optuna, calibration, duel de champions : rien de nouveau). Séparé de `ALL_ML_ALGOS` / `OPTUNA_PARAM_SPECS` /
+# `DEFAULT_OPTUNA_BOUNDS` à dessein : ces trois-là entrent dans la configuration par défaut de TOUT run (`TuningConfig.optuna_bounds`)
+# et dans le hachage de configuration ; y ajouter des réseaux changerait la reprise des runs existants.
+# ---------------------------------------------------------------------------------------------------------------------
+ALL_DL_ALGOS = ["MLP", "GRU", "LSTM", "CNN1D", "Transformer"]
+DEFAULT_DL_ALGOS = ["MLP", "GRU"]
+SEQUENCE_DL_ALGOS = ("GRU", "LSTM", "CNN1D", "Transformer")      # lisent une fenêtre de `lookback` lignes consécutives
+
+DEFAULT_DEEP: dict = {
+    "hidden_size": 64, "n_layers": 2, "dropout": 0.2, "lookback": 20,
+    "epochs": 30, "batch_size": 128, "learning_rate": 1e-3, "weight_decay": 1e-4,
+    "patience": 5, "val_fraction": 0.15, "grad_clip": 1.0, "class_weight": "balanced",
+    "n_seeds": 1, "device": "auto", "n_heads": 4, "kernel_size": 3, "threads": 1,
+}
+# (min, max) permis, appliqués par `DeepConfig` (schéma) et par le formulaire.
+DEEP_BOUNDS: dict[str, tuple[float, float]] = {
+    "hidden_size": (4, 512), "n_layers": (1, 6), "dropout": (0.0, 0.8), "lookback": (2, 252),
+    "epochs": (1, 500), "batch_size": (8, 4096), "learning_rate": (1e-5, 0.1), "weight_decay": (0.0, 0.1),
+    "patience": (0, 100), "val_fraction": (0.0, 0.4), "grad_clip": (0.0, 100.0),
+    "n_seeds": (1, 10), "n_heads": (1, 16), "kernel_size": (2, 9), "threads": (1, 64),
+}
+DEEP_DEVICES = ("auto", "cpu", "cuda")
+DEEP_CLASS_WEIGHTS = ("balanced", "none")
+
+# Structure de la recherche Optuna des réseaux (même forme que `OPTUNA_PARAM_SPECS`). Les autres réglages (époques, taille de lot,
+# patience...) restent ceux du run (`DEFAULT_DEEP` / `models.deep`) : seule la capacité du réseau et son pas d'apprentissage sont explorés.
+DL_OPTUNA_PARAM_SPECS: dict[str, dict[str, dict]] = {
+    algo: {
+        "hidden_size": {"type": "int", "min_allowed": 4, "max_allowed": 512},
+        "n_layers": {"type": "int", "min_allowed": 1, "max_allowed": 6},
+        "dropout": {"type": "float", "min_allowed": 0.0, "max_allowed": 0.8},
+        "learning_rate": {"type": "float", "log": True, "min_allowed": 1e-5, "max_allowed": 0.1},
+        "weight_decay": {"type": "float", "log": True, "min_allowed": 1e-8, "max_allowed": 0.1},
+        **({"lookback": {"type": "int", "min_allowed": 2, "max_allowed": 252}} if algo in SEQUENCE_DL_ALGOS else {}),
+    }
+    for algo in ALL_DL_ALGOS
+}
+DL_DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
+    algo: {
+        "hidden_size": [16, 128], "n_layers": [1, 3], "dropout": [0.0, 0.5],
+        "learning_rate": [3e-4, 5e-3], "weight_decay": [1e-6, 1e-2],
+        **({"lookback": [5, 40]} if algo in SEQUENCE_DL_ALGOS else {}),
+    }
+    for algo in ALL_DL_ALGOS
+}
+
 # Options disabled by default but wired into the pipeline (not an appendix):
 # purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
 # regime-conditional gain, hurts in STRESS). Stacking (VIX_STACKING_WF: lost

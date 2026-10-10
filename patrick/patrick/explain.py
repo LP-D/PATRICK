@@ -155,6 +155,25 @@ def _load_snapshot_for_prediction(store: DataStore, target: str, run_snapshot_id
     return raw if ts in raw.index else None
 
 
+def _deep_contributions(model, full_pool, feature_names, scaler, sel_idx, ts, pred_class):
+    """Réseau de neurones : contributions des variables à la probabilité de la classe prédite, par valeurs de Shapley estimées
+    (`shap.PermutationExplainer`, référence = ligne moyenne de l'entraînement, donc zéro après mise à l'échelle). Unités : PROBABILITÉ,
+    pas l'espace brut des arbres ; la somme des contributions donne exactement l'écart entre la probabilité finale et la référence."""
+    window = int(getattr(model, "window", 1))
+    hist_rows = full_pool.loc[:ts, feature_names].tail(window)
+    X_hist = finite_scaled(scale_selected(scaler, finite_features(hist_rows.values, "explain"), sel_idx), "explain")
+    classes = list(model.classes_)
+    cls_index = classes.index(pred_class) if pred_class in classes else 0
+    fn = model.proba_function(X_hist, cls_index)
+    nf = len(feature_names)
+    base_row = np.zeros((1, nf))
+    explainer = shap.PermutationExplainer(fn, base_row, max_evals=max(2 * nf + 1, 50))
+    values = explainer(X_hist[-1:])
+    contrib = np.asarray(values.values).reshape(-1)[:nf]
+    base_value = float(np.asarray(values.base_values).reshape(-1)[0])
+    return contrib, base_value, "probability"
+
+
 def explain_last_prediction(target: str, horizon: int, db_path: str | None = None,
                              store: DataStore | None = None) -> dict | None:
     """Returns per-feature SHAP contributions for the most recent recorded
@@ -231,10 +250,29 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
 
         pred_class = int(latest["y_pred"])
 
+        nf = len(feature_names)
+        if getattr(model, "is_deep", False):
+            contrib, base_value, units = _deep_contributions(model, full_pool, feature_names, scaler, sel_idx, ts, pred_class)
+            final_value = base_value + float(np.sum(contrib))
+            raw_values = row[feature_names].iloc[0]
+            contributions = sorted(
+                ({"name": name, "value": float(raw_values[name]), "shap": float(contrib[i])}
+                 for i, name in enumerate(feature_names)), key=lambda r: abs(r["shap"]), reverse=True)
+            result = {
+                "run_id": best["run_id"], "trial_id": best["trial_id"],
+                "ts": str(ts.date()), "split": latest["split"], "data_snapshot_id": data_snapshot_id,
+                "y_pred": pred_class, "y_pred_label": CLASS_NAMES[pred_class],
+                "y_proba": latest["y_proba"], "units": units,
+                "base_value": base_value, "final_value": final_value,
+                "contributions": contributions, "n_features_total": nf,
+            }
+            if data_snapshot_id is not None:
+                cache_tables.save_cached_shap(conn, *cache_key, result)
+            return result
+
         explainer = shap.TreeExplainer(model)
         sv = explainer.shap_values(X_sel)
         sv_arr = np.asarray(sv)
-        nf = len(feature_names)
         # Same axis-by-size fix as `selection/shap_select.py` -- multiclass
         # `shap_values` output layout varies by shap version. Empirically
         # verified on the real exported model this module was benchmarked
