@@ -60,7 +60,7 @@ def default_rl_config_dict() -> dict:
                          "min_history_years": D.DEFAULT_MIN_HISTORY_YEARS},
         "features": {"families": ["technical", "spike", "macro"]},
         "rl": dict(D.DEFAULT_RL),
-        "output": {"dir": "runs/mon_run_rl", "seed": D.DEFAULT_SEED},
+        "output": {"dir": "", "seed": D.DEFAULT_SEED},
     }
 
 

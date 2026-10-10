@@ -86,10 +86,13 @@ def test_prior_runs_on_the_same_target_count_as_trials(tmp_path):
     rl = '{"kind":"rl","objective":{"target_symbol":"^TEST","target_source":"yfinance"}}'
     ml = '{"objective":{"target_symbol":"^TEST","target_kind":"raw"}}'
     other = '{"kind":"rl","objective":{"target_symbol":"AAPL"}}'
-    conn.executemany("INSERT INTO job VALUES (?, ?, ?)", [("1", "done", rl), ("2", "error", rl), ("3", "queued", rl), ("4", "done", ml), ("5", "done", other)])
+    conn.executemany("INSERT INTO job VALUES (?, ?, ?)", [("1", "done", rl), ("2", "error", rl), ("3", "queued", rl), ("4", "done", ml),
+                                                         ("5", "done", other), ("6", "done", rl), ("7", "running", rl)])
     conn.commit()
     conn.close()
-    assert rl_run.count_prior_rl_runs(str(db), "^TEST") == 2                  # ni les runs ML, ni les autres cibles, ni les jobs en attente
+    # seuls les runs RL terminés de CETTE cible : ni les échecs, ni les jobs en attente ou en cours, ni les runs ML, ni les autres cibles
+    assert rl_run.count_prior_rl_runs(str(db), "^TEST") == 2
+    assert rl_run.count_prior_rl_runs(str(db), "^TEST", exclude_job="6") == 1                 # le job courant ne se compte pas lui-même
     assert rl_run.count_prior_rl_runs(str(tmp_path / "absent.db"), "^TEST") == 0 and rl_run.count_prior_rl_runs(None, "^TEST") == 0
 
 

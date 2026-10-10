@@ -160,7 +160,7 @@ def test_a_form_becomes_a_valid_rl_config():
     assert run.kind == "rl" and run.name == "g_rl_1" and run.rl.n_levels == 5 and run.rl.gamma == 0.95 and run.rl.allow_short is True
     assert run.feature_families() == ["technical", "spike"] and run.universe.start_date == "2010-01-01"
     assert run.objective.target_symbol == "^GSPC" and "^GSPC" not in run.universe.yf_tickers
-    assert run.output.dir == "runs/g_rl_1" and run.output.seed == 42
+    assert run.output.dir == "runs/g_rl_1" and run.output.seed == 42       # dossier de sortie vide -> runs/<nom>
 
 
 def test_without_the_macro_family_no_fred_series_is_downloaded():

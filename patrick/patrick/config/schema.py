@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from patrick.config import defaults as D
 from patrick.config.target_label import run_label
@@ -293,6 +293,15 @@ class DeepConfig(BaseModel):
 class ModelsConfig(BaseModel):
     algos: list[str] = Field(default_factory=lambda: list(D.DEFAULT_ML_ALGOS))
     deep: DeepConfig | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_deep(self, handler):
+        """Un run de machine learning garde EXACTEMENT sa configuration sérialisée d'avant (`config_json` en base, exports) : la clé
+        `deep` n'apparaît que lorsqu'elle porte des réglages de réseaux."""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("deep") is None:
+            data.pop("deep", None)
+        return data
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
     # Roadmap bloc 3: isotonic (non-parametric, needs more rows) or sigmoid
     # (Platt, 2 parameters per class, stabler on the ~7% of a fold's train

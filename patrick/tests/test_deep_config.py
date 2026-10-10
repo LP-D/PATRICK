@@ -76,3 +76,13 @@ def test_the_optuna_search_space_of_networks_lives_outside_the_tree_defaults():
     assert set(suggest_params(optuna.create_study().ask(), "MLP")) == {"hidden_size", "n_layers", "dropout", "learning_rate", "weight_decay"}
 
 
+
+
+def test_a_machine_learning_config_serializes_exactly_as_before_and_a_deep_one_round_trips():
+    ml = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}})
+    assert "deep" not in ml.model_dump()["models"] and '"deep"' not in ml.model_dump_json()
+    deep = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["GRU"], "deep": {"epochs": 9}},
+                                     "sampler": {"candidates": ["none"]}})
+    back = RunConfig.model_validate_json(deep.model_dump_json())
+    assert back.models.deep.epochs == 9 and back.family == "dl"
+    assert RunConfig.model_validate_json(ml.model_dump_json()).models.deep is None

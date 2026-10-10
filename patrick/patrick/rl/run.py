@@ -22,17 +22,18 @@ from patrick.rl import walkforward
 from patrick.rl.config import RLRunConfig
 
 
-def count_prior_rl_runs(db_path: str | None, target: str) -> int:
-    """Nombre de runs RL déjà lancés sur cette cible (terminés ou non) : ils comptent comme autant d'essais dans le Sharpe déflaté,
-    pour la même raison que les configurations Optuna comptent dans celui du ML (un Sharpe choisi parmi N tentatives est gonflé)."""
+def count_prior_rl_runs(db_path: str | None, target: str, exclude_job: str | None = None) -> int:
+    """Nombre de runs RL TERMINÉS sur cette cible (hors le job courant) : chacun est un essai de plus dans le Sharpe déflaté, pour la
+    même raison que les configurations Optuna comptent dans celui du ML (un Sharpe choisi parmi N tentatives est gonflé). Un run en
+    échec n'a produit aucun Sharpe : il ne compte pas."""
     if not db_path or not os.path.exists(db_path):
         return 0
     try:
         conn = sqlite3.connect(db_path)
         try:
-            row = conn.execute("SELECT COUNT(*) FROM job WHERE status IN ('done', 'running', 'error') "
+            row = conn.execute("SELECT COUNT(*) FROM job WHERE status = 'done' AND job_id != ? "
                                "AND config_json LIKE '%\"kind\":\"rl\"%' AND config_json LIKE ?",
-                               (f'%"target_symbol":"{target}"%',)).fetchone()
+                               (exclude_job or "", f'%"target_symbol":"{target}"%')).fetchone()
         finally:
             conn.close()
     except sqlite3.Error:
@@ -73,7 +74,7 @@ def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | N
     raw = _align_raw(raw, run_cfg, resumed=False)
     target_col = clean_symbol(config.objective.target_symbol)
     data = rl_data.build_rl_data(raw, config, target_col)
-    n_trials = count_prior_rl_runs(db_path, config.objective.target_symbol) + 1
+    n_trials = count_prior_rl_runs(db_path, config.objective.target_symbol, exclude_job=job_id) + 1
 
     out_dir = config.output.dir
     os.makedirs(out_dir, exist_ok=True)
