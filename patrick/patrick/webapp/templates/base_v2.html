@@ -135,8 +135,8 @@ script below (no flash), otherwise the OS preference applies.
     <script id="cmdk-data" type="application/json">{{ cmdk_items | tojson }}</script>
 
     {# Bandeau d'aide statistique (p-values, procédure du run affiché) : replié en bas de page, déplié à la demande. Pas sur
-       /launch, qui porte déjà sa propre barre d'action collée en bas. #}
-    {% if request.url.path != '/launch' %}
+       les pages de lancement (/ml, /dl, /rl), qui portent déjà leur propre barre d'action collée en bas. #}
+    {% if request.url.path not in ('/ml', '/dl', '/rl') %}
     <aside class="stats-bar" id="stats-bar" data-open="false" data-run-id="{{ stats_run_id | default('') }}" aria-label="{{ t('sb_label') if t else 'Statistics help' }}">
         <button type="button" class="stats-bar-toggle" id="stats-bar-toggle" aria-expanded="false" aria-controls="stats-bar-panel">
             {{ icon('info', 15) }}<span class="stats-bar-label">{{ t('sb_label') if t else 'Understand p-values' }}</span>

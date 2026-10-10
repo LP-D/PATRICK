@@ -127,7 +127,7 @@ def test_the_page_rejects_an_out_of_range_threshold(tmp_path, monkeypatch):
 
 def test_the_launch_page_greys_short_history_targets_without_any_network_call(tmp_path, monkeypatch):
     _store_with(tmp_path, monkeypatch, {"BAMLH0A0HYM2": "2023-10-10"})
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'name="min_history_years"' in html
     assert 'value="BAMLH0A0HYM2" data-first="2023-10-10"' in html
     assert 'id="target-greyed-note"' in html

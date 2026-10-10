@@ -16,7 +16,7 @@ def test_launch_page_renders_optuna_bounds_section(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
     # Un champ par borne (low/high) pour chaque hyperparametre de chaque
     # algo -- verifie ici sur un algo representatif de chaque famille.
@@ -29,7 +29,7 @@ def test_launch_page_prefills_optuna_bounds_with_defaults(tmp_path, monkeypatch)
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
     lo, hi = D.DEFAULT_OPTUNA_BOUNDS["RandomForest"]["n_estimators"]
     assert f'name="ob__RandomForest__n_estimators__low" value="{lo}"' in resp.text

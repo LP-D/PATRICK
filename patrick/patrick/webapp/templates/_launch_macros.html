@@ -1,0 +1,10 @@
+{# Appel de note du glossaire.
+
+   Le nom accessible dit ce que fait le bouton et sur QUOI il porte
+   (« Définition : Portes de qualité actives »), pas la clé de configuration
+   brute : un lecteur d'écran annonçait « data_quality_enabled, bouton », et
+   l'encart se titrait en MAJUSCULES_SNAKE_CASE. Ordre de résolution du nom :
+   l'étiquette explicite passée par l'appelant, sinon `glossary_labels`
+   (clé technique -> libellé traduit), sinon le terme lui-même — les termes
+   comme `technical` ou `XGBoost` SONT déjà leur propre libellé. #}
+{% macro info(term, label=None) %}{% set shown = label or (glossary_labels.get(term) if glossary_labels else none) or term %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ shown }}" aria-label="{{ t('glossary_open_aria', term=shown) if t else shown }}">i</button>{% endmacro %}

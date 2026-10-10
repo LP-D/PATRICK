@@ -19,7 +19,7 @@ def test_launch_page_checks_staged_screening_with_one_finalist(tmp_path, monkeyp
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
 
-    resp = TestClient(app).get("/launch")
+    resp = TestClient(app).get("/ml")
 
     assert resp.status_code == 200
     assert "checked" in _input_tag(resp.text, "staged_screening")

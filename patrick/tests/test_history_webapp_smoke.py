@@ -169,7 +169,7 @@ def test_run_comparison_requires_two_to_four_existing_runs(tmp_path, monkeypatch
 
 def test_launch_can_load_a_historical_config_for_editing(tmp_path, monkeypatch):
     _seed_db(tmp_path, monkeypatch)
-    response = TestClient(app).get("/launch", params={"run_id": "run1"})
+    response = TestClient(app).get("/ml", params={"run_id": "run1"})
     assert response.status_code == 200
     assert "chargée comme base" in response.text
     assert 'value="^VIX"' in response.text

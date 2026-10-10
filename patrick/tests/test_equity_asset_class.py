@@ -617,7 +617,7 @@ def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(mo
 
     monkeypatch.setattr(equity_sufficiency.yfinance_source, "download_one", fake_download_one)
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
 
     def _option_label(symbol: str) -> str:

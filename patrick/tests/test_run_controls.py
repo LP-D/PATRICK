@@ -80,7 +80,7 @@ def test_pause_and_resume_active_job(tmp_path, monkeypatch):
 
 def test_launch_dashboard_renders_queue_and_active_run_controls(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    response = TestClient(app).get("/launch")
+    response = TestClient(app).get("/ml")
     assert response.status_code == 200
     assert 'id="queue-list"' in response.text
     assert 'id="clear-queue-btn"' in response.text
@@ -109,7 +109,7 @@ def _queue_ids(client) -> list[str]:
 
 def test_launch_dashboard_queue_is_a_collapsible_list_without_confirm_dialog(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'id="queue-toggle"' in html
     assert 'aria-controls="queue-list"' in html
     # Le nombre et le prochain run sont résumés ; les noms ne sont pas répétés.

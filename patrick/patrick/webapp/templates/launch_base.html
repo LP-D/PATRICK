@@ -1,24 +1,17 @@
 {% extends "base_v2.html" %}
 {% block title %}PATRICK — {{ t('index_title') }}{% endblock %}
 
-{# Appel de note du glossaire.
-
-   Le nom accessible dit ce que fait le bouton et sur QUOI il porte
-   (« Définition : Portes de qualité actives »), pas la clé de configuration
-   brute : un lecteur d'écran annonçait « data_quality_enabled, bouton », et
-   l'encart se titrait en MAJUSCULES_SNAKE_CASE. Ordre de résolution du nom :
-   l'étiquette explicite passée par l'appelant, sinon `glossary_labels`
-   (clé technique -> libellé traduit), sinon le terme lui-même — les termes
-   comme `technical` ou `XGBoost` SONT déjà leur propre libellé. #}
-{% macro info(term, label=None) %}{% set shown = label or (glossary_labels.get(term) if glossary_labels else none) or term %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ shown }}" aria-label="{{ t('glossary_open_aria', term=shown) if t else shown }}">i</button>{% endmacro %}
+{% from "_launch_macros.html" import info with context %}
 
 {% block content %}
 
 {# Le titre de page manquait : `/` était la seule surface du produit sans
    `h1`, donc la seule où la navigation par titres d'un lecteur d'écran
    sautait directement aux `h2` sans jamais nommer la page. #}
+{% block page_head %}
 <h1 class="page-title">{{ t('index_title') }}</h1>
 <p class="page-subtitle">{{ t('index_subtitle') }}</p>
+{% endblock %}
 
 {# Grille ASYMÉTRIQUE, et c'est le geste central de cette passe. L'ancienne
    2×2 de panneaux égaux était un défaut de gabarit : elle donnait le même
@@ -358,6 +351,7 @@
             </div>
         </details>
 
+        {% block sec_sampler %}
         <details class="adv" data-adv="section_sampler">
             <summary class="adv-summary">
                 <span class="adv-title">{{ t('section_sampler') }}</span>
@@ -376,7 +370,9 @@
             </label>
             </div>
         </details>
+        {% endblock %}
 
+        {% block sec_models %}
         <details class="adv" data-adv="section_models">
             <summary class="adv-summary">
                 <span class="adv-title">{{ t('section_models') }}</span>
@@ -399,7 +395,9 @@
             </label>
             </div>
         </details>
+        {% endblock %}
 
+        {% block sec_tuning %}
         <details class="adv" data-adv="section_tuning">
             <summary class="adv-summary">
                 <span class="adv-title">{{ t('section_tuning') }}</span>
@@ -427,6 +425,7 @@
             </div>
             </div>
         </details>
+        {% endblock %}
 
         {# Phase 1 (feature/hyperparams-ui) : jusqu'ici, la plage [min, max]
            explorée par Optuna pour chaque hyperparamètre de chaque algo
@@ -436,6 +435,7 @@
            `<details>` par algo (même patron que `section_features` pour les
            modèles de volatilité) pour ne pas noyer les ~20 paires de champs
            dans une seule grille plate. #}
+        {% block sec_optuna_bounds %}
         <details class="adv" data-adv="section_optuna_bounds">
             <summary class="adv-summary">
                 <span class="adv-title">{{ t('section_optuna_bounds') }}</span>
@@ -463,6 +463,7 @@
             {% endfor %}
             </div>
         </details>
+        {% endblock %}
 
         <details class="adv" data-adv="section_output">
             <summary class="adv-summary">

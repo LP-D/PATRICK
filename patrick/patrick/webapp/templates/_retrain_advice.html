@@ -1,6 +1,6 @@
 {# Conseiller de réentraînement (`tracking/retrain_advisor.py`) : après ce run, quel réentraînement tester, d'après des règles sur ses
    résultats. `advice` = {"diagnosis": Diagnosis, "suggestions": [Suggestion]} ; chaque proposition mène au formulaire de lancement
-   pré-rempli (`/launch?run_id=…&suggest=<clé>`), jamais à un lancement automatique. #}
+   pré-rempli (`/ml?run_id=…&suggest=<clé>`), jamais à un lancement automatique. #}
 {% macro val(v, _t) %}{% if v is boolean %}{{ _t('adv_yes') if v else _t('adv_no') }}{% elif v is none or v == '' %}—{% elif v is iterable and v is not string %}{{ v | join(', ') }}{% else %}{{ v }}{% endif %}{% endmacro %}
 {% macro f3(x) %}{{ ('%.3f' | format(x)) if x is not none else '—' }}{% endmacro %}
 {% if advice and advice.suggestions %}
@@ -38,7 +38,7 @@
     </table>
     {% endif %}
     {% if s.available and (s.changes or not s.manual) %}
-    <p class="adv-actions"><a class="btn-secondary" href="/launch?run_id={{ d.run_id | urlencode }}&amp;suggest={{ s.key }}">{{ t('adv_prepare') }}</a></p>
+    <p class="adv-actions"><a class="btn-secondary" href="/ml?run_id={{ d.run_id | urlencode }}&amp;suggest={{ s.key }}">{{ t('adv_prepare') }}</a></p>
     {% endif %}
 </article>
 {% endfor %}

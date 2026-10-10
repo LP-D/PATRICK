@@ -18,7 +18,7 @@ def test_launch_page_renders_technical_lookbacks_section(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
     assert 'name="tl__returns_windows"' in resp.text
     assert 'name="tl__zscore_windows"' in resp.text
@@ -31,7 +31,7 @@ def test_launch_page_prefills_technical_lookbacks_with_defaults(tmp_path, monkey
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
     expected = ",".join(str(w) for w in D.DEFAULT_RETURNS_WINDOWS)
     assert f'name="tl__returns_windows" value="{expected}"' in resp.text

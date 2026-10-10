@@ -57,7 +57,7 @@ def test_the_shared_script_exposes_the_dialog_helpers_and_handles_data_confirm_f
 
 
 def test_the_launch_page_shows_run_control_errors_in_a_banner(client):
-    html = client.get("/launch").text
+    html = client.get("/ml").text
     assert re.search(r'<[^>]*id="run-control-error"[^>]*class="[^"]*banner-error[^"]*hidden', html) or \
         re.search(r'<[^>]*id="run-control-error"[^>]*class="[^"]*hidden[^"]*banner-error', html)
     assert 'role="alert"' in html.split('id="run-control-error"')[1].split(">")[0]

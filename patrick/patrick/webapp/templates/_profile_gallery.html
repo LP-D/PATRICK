@@ -13,7 +13,7 @@
     <div class="profile-grid">
     {% for p in training_profiles %}
         <a class="profile-card{% if applied and applied.kind == 'profile' and applied.key == p.key %} is-applied{% endif %}"
-           href="/launch?profile={{ p.key }}" data-profile="{{ p.key }}">
+           href="/ml?profile={{ p.key }}" data-profile="{{ p.key }}">
             <span class="profile-name">{{ t('prof_' ~ p.key ~ '_name') }}</span>
             <span class="profile-desc">{{ t('prof_' ~ p.key ~ '_desc') }}</span>
             <span class="profile-meta">
@@ -29,7 +29,7 @@
         a.addEventListener('click', function () {
             var sel = document.getElementById('target_symbols');
             var first = sel && Array.from(sel.selectedOptions).map(function (o) { return o.value; })[0];
-            if (first) a.href = '/launch?profile=' + encodeURIComponent(a.dataset.profile) + '&target=' + encodeURIComponent(first);
+            if (first) a.href = '/ml?profile=' + encodeURIComponent(a.dataset.profile) + '&target=' + encodeURIComponent(first);
         });
     });
     </script>

@@ -39,6 +39,7 @@ class NavEntry:
 # Ordre fixe, jamais trie : c'est l'ordre des sections dans la sidebar.
 CATEGORIES: tuple[NavCategory, ...] = (
     NavCategory("pilotage", "PILOTAGE", "nav_cat_pilotage"),
+    NavCategory("modeles", "MODÈLES", "nav_cat_models"),
     NavCategory("classes_actifs", "CLASSES D'ACTIFS", "nav_cat_classes_actifs"),
     NavCategory("simulation", "SIMULATION", "nav_cat_simulation"),
     NavCategory("patrimoine", "PATRIMOINE", "nav_cat_patrimoine"),
@@ -48,13 +49,15 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # PILOTAGE -- piloter la station : vue d'ensemble, lancement/suivi des
     # runs, sorties modeles, sante des donnees, journal de decision.
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
-    NavEntry("launch", "Lancer", "/launch", "pilotage", 20, "nav_launch"),
     NavEntry("runs", "Historique", "/runs", "pilotage", 30, "nav_runs",
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
     NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 55, "nav_data_quality"),
+    # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
+    # deep learning (reseaux de neurones, memes runs que le ML), reinforcement learning (agent qui apprend une position).
+    NavEntry("ml", "Machine learning", "/ml", "modeles", 10, "nav_ml"),
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
     NavEntry("universe", "Univers", "/universe", "classes_actifs", 10, "nav_universe",
              child_routes=("/targets/{ticker}",)),
@@ -95,6 +98,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
+    "/launch",                  # redirection permanente vers /ml (ancien poste de lancement, liens et marque-pages conserves)
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
     "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)
 })

@@ -36,7 +36,7 @@ def test_rejected_tickers_are_not_in_the_extension():
 def test_launch_and_universe_pages_list_the_extension(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
     client = TestClient(app)
-    assert 'value="MC.PA"' in client.get("/launch").text
+    assert 'value="MC.PA"' in client.get("/ml").text
     universe = client.get("/universe").text
     assert "XLK" in universe and "Actions France (CAC 40)" in universe
 

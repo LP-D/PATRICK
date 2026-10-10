@@ -24,7 +24,7 @@ def _attr(tag: str, name: str) -> str | None:
 def test_every_number_input_default_satisfies_its_step(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    resp = TestClient(app).get("/launch")
+    resp = TestClient(app).get("/ml")
     assert resp.status_code == 200
 
     invalid = []

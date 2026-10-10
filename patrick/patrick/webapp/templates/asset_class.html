@@ -62,7 +62,7 @@
             <td class="num pk-mono">{% if r.n_alpha %}{{ r.n_alpha }}{% if r.alpha_auc is not none %} <span class="hint">· {{ '%.3f' | format(r.alpha_auc) }}</span>{% endif %}{% else %}—{% endif %}</td>
             <td class="pk-mono">{% if r.champions %}{% for h in r.champions %}{{ h }}j{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
             <td class="hint">{{ r.last[:10] if r.last else t('cls_never') }}</td>
-            <td><a class="btn-ghost" href="/launch?target={{ r.symbol | urlencode }}">{{ t('cls_launch') }}</a></td>
+            <td><a class="btn-ghost" href="/ml?target={{ r.symbol | urlencode }}">{{ t('cls_launch') }}</a></td>
         </tr>
         {% endfor %}
         </tbody>

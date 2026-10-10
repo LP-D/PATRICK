@@ -466,7 +466,7 @@ def test_form_rejects_out_of_range_threshold_and_unknown_scope(_isolated):
 
 def test_launch_page_renders_the_new_fields(_isolated):
     from patrick.webapp.app import app
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'name="reduction_corr_threshold"' in html
     assert 'name="universe_scope"' in html
 

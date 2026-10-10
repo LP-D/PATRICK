@@ -73,13 +73,13 @@ def test_the_form_view_restores_the_choice_for_a_relaunch():
 
 
 def test_the_launch_page_offers_the_choice():
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'name="target_kind"' in html and 'name="benchmark"' in html
     assert 'value="alpha"' in html and "id=\"benchmark-field\"" in html
 
 
 def test_the_launch_page_is_available_in_english_and_leaks_no_key():
-    html = TestClient(app).get("/launch?lang=en").text
+    html = TestClient(app).get("/ml?lang=en").text
     assert "Excess return" in html or "excess return" in html
     assert "target_kind_alpha" not in html and "field_benchmark" not in html
 

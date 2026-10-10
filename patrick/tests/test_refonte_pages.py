@@ -132,7 +132,7 @@ def test_the_bar_is_on_every_page_except_the_launch_bar_page(seeded):
     client = TestClient(app)
     for path in ("/", "/runs", "/predictions", "/runs/XLI_1_h1_a/detail", "/vocabulary"):
         assert 'id="stats-bar"' in client.get(path).text, path
-    assert 'id="stats-bar"' not in client.get("/launch").text
+    assert 'id="stats-bar"' not in client.get("/ml").text
     assert 'data-run-id="XLI_1_h1_a"' in client.get("/runs/XLI_1_h1_a/detail").text
 
 

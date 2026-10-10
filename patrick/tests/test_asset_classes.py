@@ -117,6 +117,6 @@ def test_class_page_shows_short_history_against_the_threshold():
 
 
 def test_the_launch_link_of_a_class_page_preselects_the_target():
-    html = TestClient(app).get("/launch?target=ETH-USD").text
+    html = TestClient(app).get("/ml?target=ETH-USD").text
     assert '<option value="ETH-USD"' in html and 'data-first="' in html
     assert 'value="ETH-USD" data-first="2017-11-09" selected' in html

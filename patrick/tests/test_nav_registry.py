@@ -22,7 +22,7 @@ from patrick.webapp.app import app
 
 TEMPLATES_DIR = Path(nav_registry.__file__).resolve().parent / "templates"
 
-EXPECTED_CATEGORIES = ["pilotage", "classes_actifs", "simulation", "patrimoine"]
+EXPECTED_CATEGORIES = ["pilotage", "modeles", "classes_actifs", "simulation", "patrimoine"]
 
 
 @pytest.fixture(autouse=True)
@@ -50,10 +50,10 @@ def _app_get_paths() -> set[str]:
 # Structure du registre
 # ---------------------------------------------------------------------------
 
-def test_categories_are_the_four_fixed_ones_in_order():
+def test_categories_are_the_five_fixed_ones_in_order():
     assert [c.key for c in nav_registry.CATEGORIES] == EXPECTED_CATEGORIES
     assert [c.label for c in nav_registry.CATEGORIES] == [
-        "PILOTAGE", "CLASSES D'ACTIFS", "SIMULATION", "PATRIMOINE",
+        "PILOTAGE", "MODÈLES", "CLASSES D'ACTIFS", "SIMULATION", "PATRIMOINE",
     ]
 
 
@@ -95,6 +95,13 @@ def test_every_registry_route_is_declared_on_the_app():
         assert entry.url in paths, entry.url
         for child in entry.child_routes:
             assert child in paths, child
+
+
+def test_the_old_launch_page_redirects_to_ml_keeping_its_query():
+    resp = TestClient(app).get("/launch?target=ETH-USD&profile=quick", follow_redirects=False)
+    assert resp.status_code == 308
+    assert resp.headers["location"] == "/ml?target=ETH-USD&profile=quick"
+    assert TestClient(app).get("/launch", follow_redirects=False).headers["location"] == "/ml"
 
 
 def test_child_route_target_page_resolves():
@@ -190,7 +197,7 @@ def test_sidebar_links_all_registry_entries_exactly_once():
 
 @pytest.mark.parametrize("path, expected_current", [
     ("/", "/"),
-    ("/launch", "/launch"),
+    ("/ml", "/ml"),
     ("/runs", "/runs"),
     ("/commodities", "/commodities"),
     ("/simulate", "/simulate"),

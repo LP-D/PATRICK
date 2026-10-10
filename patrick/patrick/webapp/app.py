@@ -331,13 +331,18 @@ def _profile_gallery() -> list[dict]:
     return out
 
 
-def _render_index(request: Request, view: dict, errors: list[str], status_code: int = 200,
-                   initial_run_id: str | None = None, duplicated_run_id: str | None = None, applied: dict | None = None):
+LAUNCH_FAMILIES = ("ml", "dl")
+
+
+def _render_launch(request: Request, view: dict, errors: list[str], status_code: int = 200,
+                    initial_run_id: str | None = None, duplicated_run_id: str | None = None, applied: dict | None = None,
+                    family: str = "ml"):
+    """Poste de lancement d'une famille de modèles (`ml.html`, `dl.html`) : même gabarit de base, même `app.js`."""
     active = run_manager.active_run()
     return templates.TemplateResponse(
         request,
-        "index.html",
-        {
+        f"{family}.html",
+        {"family": family,
             "view": view,
             "errors": errors,
             "active_run": active,
@@ -362,12 +367,18 @@ def _render_index(request: Request, view: dict, errors: list[str], status_code: 
 
 
 @app.get("/launch")
-def launch_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None,
-                suggest: str | None = None):
-    """P8 (synthesis dashboard chantier): moved from `/` to free that route
-    for the new synthesis page. Same handler, same template
-    (`index.html`), only the route changed -- nav/breadcrumb links updated
-    accordingly (see `base.html`, `i18n.py::nav_launch`)."""
+def launch_legacy_redirect(request: Request):
+    """Ancien poste de lancement : devenu la page Machine learning (`/ml`). La requête (`?target=`, `?run_id=`,
+    `?profile=`, `?suggest=`) est conservée pour que les anciens liens et marque-pages continuent de fonctionner."""
+    query = request.url.query
+    return RedirectResponse("/ml" + (f"?{query}" if query else ""), status_code=308)
+
+
+@app.get("/ml")
+def ml_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None,
+            suggest: str | None = None):
+    """Poste de lancement du machine learning (arbres, forêts, boosting). P8 (synthesis dashboard chantier) l'avait
+    déplacé de `/` vers `/launch` ; il vit désormais sur `/ml`, `/dl` et `/rl` étant ses pages sœurs."""
     cfg = forms.default_config_dict()
     if target and target in forms.TARGET_SOURCE_BY_SYMBOL:
         # lien « Lancer » des pages de classes d'actifs : la cible est présélectionnée
@@ -405,7 +416,7 @@ def launch_page(request: Request, run_id: str | None = None, target: str | None 
             raise HTTPException(status_code=404, detail="Suggestion de réentraînement introuvable pour ce run.")
         view = training_profiles.apply_patch(view, {k: v for k, v in found.patch.items() if k in view})
         applied = {"kind": "suggest", "key": found.key, "run_id": run_id, "warning": None}
-    return _render_index(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied)
+    return _render_launch(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied)
 
 
 @app.get("/")
@@ -746,7 +757,7 @@ def _get_run_or_404(run_id: str) -> dict:
 @app.get("/runs/{run_id}")
 def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
              fdr_alpha: float = 0.10):
-    """Same dashboard as `index()` (a single template, `index.html`) — only
+    """Same dashboard as the launch page (`launch_base.html`) — only
     `initial_run_id` changes, forced to this specific run rather than the
     current active one. Allows reopening/sharing the link of a past or
     ongoing run without duplicating the template. The settings form is
@@ -775,7 +786,7 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
-        return _render_index(request, view, [], initial_run_id=run_id)
+        return _render_launch(request, view, [], initial_run_id=run_id)
 
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")

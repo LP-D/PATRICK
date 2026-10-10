@@ -82,7 +82,7 @@ def test_pages_label_descriptive_horizons(tmp_path, monkeypatch):
     conn.close()
     client = TestClient(app)
     assert "756j · descriptif" in client.get("/runs").text
-    assert "756 (descriptif)" in client.get("/launch").text
+    assert "756 (descriptif)" in client.get("/ml").text
 
 
 def test_synthesis_says_how_many_runs_are_outside_the_family(tmp_path, monkeypatch):

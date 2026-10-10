@@ -113,6 +113,6 @@ def test_status_route_returns_readable_steps_next_to_the_raw_log(tmp_path, monke
 
 def test_launch_page_hosts_the_steps_list_and_a_collapsed_raw_log(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'id="steps-list"' in html
     assert '<details class="log-raw">' in html and 'id="log-tail"' in html

@@ -51,6 +51,6 @@ def test_api_get_and_set():
 
 
 def test_launch_page_shows_the_setting_and_keeps_it_out_of_the_form():
-    html = TestClient(app).get("/launch").text
+    html = TestClient(app).get("/ml").text
     assert 'id="setting-parametric-jobs"' in html
     assert 'name="parametric' not in html

@@ -135,16 +135,16 @@ def test_launch_page_serves_the_run_launcher(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
-    assert "Poste de lancement" in resp.text
+    assert "Machine learning" in resp.text
     assert 'id="run-form"' in resp.text
 
 
 def test_launch_page_uses_clickable_notes_for_long_setup_explanations(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    resp = TestClient(app).get("/launch")
+    resp = TestClient(app).get("/ml")
     assert resp.status_code == 200
     for term in ("universe", "reduction", "data_quality_enabled", "staged_screening", "optuna_bounds"):
         assert f'class="info-icon" data-term="{term}"' in resp.text
@@ -155,7 +155,7 @@ def test_launch_page_uses_clickable_notes_for_long_setup_explanations(tmp_path, 
 def test_launch_page_renders_profiles_and_keeps_hidden_expert_fields_submittable(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    response = TestClient(app).get("/launch")
+    response = TestClient(app).get("/ml")
     assert response.status_code == 200
     assert 'id="save-launch-profile"' in response.text
     assert 'id="launch-profile-list"' in response.text
@@ -167,7 +167,7 @@ def test_launch_page_renders_profiles_and_keeps_hidden_expert_fields_submittable
 def test_launch_page_defaults_to_simple_mode_and_keeps_expert_controls(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    response = TestClient(app).get("/launch")
+    response = TestClient(app).get("/ml")
     assert response.status_code == 200
     assert 'id="run-form" data-mode="simple"' in response.text
     assert 'id="settings-mode-toggle"' in response.text
@@ -184,7 +184,7 @@ def test_launch_page_has_no_example_loader(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch")
+    resp = client.get("/ml")
     assert resp.status_code == 200
     assert 'id="example-form"' not in resp.text
     assert 'id="load"' not in resp.text
@@ -197,7 +197,7 @@ def test_launch_page_ignores_stale_load_query_param(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
     client = TestClient(app)
-    resp = client.get("/launch", params={"load": "some_example.yaml"})
+    resp = client.get("/ml", params={"load": "some_example.yaml"})
     assert resp.status_code == 200
     assert 'id="run-form"' in resp.text
 

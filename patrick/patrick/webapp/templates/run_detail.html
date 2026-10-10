@@ -33,7 +33,7 @@
 <form method="post" action="/runs/{{ run.run_id }}/relaunch" class="inline-form">
     <button type="submit" class="primary">{{ t('rd_relaunch') }}</button>
 </form>
-<a class="btn-secondary" href="/launch?run_id={{ run.run_id | urlencode }}">{{ t('rd_duplicate') }}</a>
+<a class="btn-secondary" href="/ml?run_id={{ run.run_id | urlencode }}">{{ t('rd_duplicate') }}</a>
 
 {% if detail.suspect %}
 <p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('suspect_banner_body', reason=detail.suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>

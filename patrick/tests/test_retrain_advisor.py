@@ -230,13 +230,13 @@ def client(tmp_path, monkeypatch):
 
 
 def test_the_launch_page_shows_the_profile_gallery(client):
-    html = client.get("/launch").text
+    html = client.get("/ml").text
     assert 'id="profile-gallery"' in html and html.count('class="profile-card') == len(profiles.PROFILES)
     assert "Exploration rapide" in html and "Recherche approfondie" in html
 
 
 def test_a_profile_prefills_the_form_and_says_so(client):
-    html = client.get("/launch?profile=quick").text
+    html = client.get("/ml?profile=quick").text
     assert "Profil « Exploration rapide » appliqué" in html
     assert 'name="tuning_enabled"' in html
     import re
@@ -245,26 +245,26 @@ def test_a_profile_prefills_the_form_and_says_so(client):
 
 
 def test_the_english_gallery_is_translated(client):
-    html = client.get("/launch?lang=en").text
+    html = client.get("/ml?lang=en").text
     assert "Ready-made training profiles" in html and "Quick exploration" in html
 
 
 def test_an_unknown_profile_is_a_404(client):
-    assert client.get("/launch?profile=nope").status_code == 404
+    assert client.get("/ml?profile=nope").status_code == 404
 
 
 def test_the_run_page_lists_the_advice_with_the_leak_first(client):
     html = client.get("/runs/r1/detail").text
     assert 'id="avis"' in html and "Relancer avec la garde anti-fuite et les données ALFRED" in html
-    assert "/launch?run_id=r1&amp;suggest=fix_leak" in html
+    assert "/ml?run_id=r1&amp;suggest=fix_leak" in html
     assert "Meilleur prochain essai" in html and "Contrôler la robustesse" not in html   # un score truqué : pas de contrôle de graine
 
 
 def test_a_suggestion_prefills_the_launch_form_from_the_run(client):
-    resp = client.get("/launch?run_id=r1&suggest=fix_leak")
+    resp = client.get("/ml?run_id=r1&suggest=fix_leak")
     assert resp.status_code == 200 and "Suggestion « Relancer avec la garde anti-fuite" in resp.text
-    assert client.get("/launch?run_id=r1&suggest=seed_check").status_code == 404      # run suspect : pas de contrôle de graine
+    assert client.get("/ml?run_id=r1&suggest=seed_check").status_code == 404      # run suspect : pas de contrôle de graine
 
 
 def test_a_missing_suggestion_is_a_404(client):
-    assert client.get("/launch?run_id=r1&suggest=calibrate").status_code == 404
+    assert client.get("/ml?run_id=r1&suggest=calibrate").status_code == 404
