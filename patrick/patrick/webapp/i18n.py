@@ -832,7 +832,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "scope_universe_rel": {"fr": "{done} avec un run complètement exécuté, {never} jamais lancée(s)", "en": "{done} with a completed run, {never} never launched"},
     # Phase 5: improved empty states for hardening
     "empty_runs_title": {"fr": "Aucun run pour l'instant.", "en": "No run yet."},
-    "empty_runs_hint": {"fr": "Configure et lance un run depuis le poste de lancement.", "en": "Configure and launch a run from the launch station."},
+    "empty_runs_hint": {"fr": "Configure et lance un run depuis la page", "en": "Configure and launch a run from the page"},
 
     # Phase 7 -- SHAP waterfall (feature/shap-waterfall), /targets/{ticker}
     "shap_section_title": {"fr": "Explication de la dernière prédiction (SHAP)",

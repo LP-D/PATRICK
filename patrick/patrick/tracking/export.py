@@ -17,6 +17,7 @@ import joblib
 import numpy as np
 from sklearn.preprocessing import RobustScaler
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.features.alpha_target import run_target
 from patrick.features.sanitize import finite_features, finite_scaled
@@ -86,6 +87,10 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     Xr, yr = safe_resample(sampler_name, seed, X_n, y)
     clf = get_classifier(algo, seed=seed, **best_params)
     clf.fit(Xr, yr)
+    if getattr(clf, "is_deep", False):
+        # Réseau : réglages complets consignés (ceux du run + ceux d'Optuna). Rejouer ce champion plus tard, depuis un autre run (duel de
+        # champions), reconstruit le MÊME réseau, pas celui qu'un autre jeu de réglages donnerait.
+        best_params = {**{k: v for k, v in clf.get_params().items() if k in D.DEFAULT_DEEP}, **best_params}
 
     if conn is not None and symbol is not None:
         from patrick.tracking import db as trackdb

@@ -69,6 +69,12 @@ def test_a_run_with_a_mlp_and_a_gru_goes_through_scan_tuning_holdout_and_export(
     assert algos <= {"MLP", "GRU"} and algos
     assert '"deep":{' in config_json and '"epochs":6' in config_json
     assert registry.get_classifier("MLP").epochs == 6                  # réglages du run restés actifs pour le processus
+    # le modèle exporté consigne ses réglages COMPLETS : le duel de champions d'un autre run le rejouera à l'identique
+    import json
+    from pathlib import Path
+    meta = json.loads(Path(result["model_path"][: -len(".joblib")] + "_meta.json").read_text(encoding="utf-8"))
+    assert meta["best_params"]["epochs"] == 6 and meta["best_params"]["lookback"] in range(4, 7)
+    assert {"hidden_size", "dropout", "learning_rate", "n_seeds", "device"} <= set(meta["best_params"])
 
 
 def test_a_run_without_torch_is_refused_before_any_download(tmp_path, monkeypatch):

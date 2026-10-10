@@ -1783,6 +1783,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
     except InnerCVInfeasible as exc:
         print(f"  [WARN] h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: Optuna skipped -- {exc}")
         return
+    best_params = _model_params(config, algo, best_params)
     print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
           f"cv_F1_dir={best_cv:.4f} params={best_params}")
 
@@ -1982,6 +1983,15 @@ def _finish_runs(st: _RunState) -> None:
         breakdown = trackhistory.phase_breakdown_for_run(st.conn, run_id)
         timing_log_path = phase_timing_log.write_phase_timing_log(st.config.output.dir, run_id, breakdown)
         print(f"[EXPORT] phase timing log -> {timing_log_path}")
+
+
+def _model_params(config: RunConfig, algo: str, tuned: dict | None = None) -> dict:
+    """Paramètres COMPLETS d'un modèle à rejouer (holdout, export, duel de champions) : ceux d'Optuna, plus, pour un réseau, les réglages du
+    run (`models.deep`) -- sinon rejouer ce modèle depuis un autre run lui donnerait les réglages de CE run-là."""
+    params = dict(tuned or {})
+    if algo in D.ALL_DL_ALGOS and config.models.deep is not None:
+        params = {**config.models.deep.model_dump(), **params}
+    return params
 
 
 def _prepare_deep_models(config: RunConfig) -> None:
