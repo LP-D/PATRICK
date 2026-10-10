@@ -1106,8 +1106,8 @@ legend {
 .adv-body { padding: 8px 6px 16px 22px; }
 .adv-body > .hint:first-child { margin-top: 0; margin-bottom: 12px; }
 
-/* Glossary trigger ("i" button, glossary.js). */
-.info-icon {
+/* Glossary trigger ("i" button, glossary.js) et « ? » d'aide (help.js) : même bouton. */
+.info-icon, .help-q {
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -1126,9 +1126,9 @@ legend {
   cursor: pointer;
   transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
-.info-icon::before { content: "?"; font-size: 10px; font-weight: 700; }
-.info-icon:hover, .info-icon:focus-visible { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
-.info-icon::after { content: ""; position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; transform: translate(-50%, -50%); }
+.info-icon::before, .help-q::before { content: "?"; font-size: 10px; font-weight: 700; }
+.info-icon:hover, .info-icon:focus-visible, .help-q:hover, .help-q:focus-visible, .help-q[aria-expanded="true"] { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
+.info-icon::after, .help-q::after { content: ""; position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; transform: translate(-50%, -50%); }
 
 .glossary-popover {
   position: absolute;
@@ -2337,11 +2337,16 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .profile-gallery { margin: 0 0 14px; }
 .profile-gallery > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
 .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.profile-card { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+.profile-card { position: relative; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
                 background: var(--surface); text-decoration: none; color: inherit; }
 .profile-card:hover, .profile-card:focus-visible { border-color: var(--brand); background: var(--brand-soft); }
 .profile-card.is-applied { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
 .profile-name { font-weight: 600; }
+.profile-main { color: inherit; text-decoration: none; }
+.profile-main::after { content: ""; position: absolute; inset: 0; border-radius: 10px; }
+.profile-main:focus-visible { outline: none; }
+.profile-main:focus-visible::after { outline: 2px solid var(--brand); outline-offset: 2px; }
+[data-help-host] > .help-q { position: absolute; top: 8px; right: 8px; z-index: 1; margin: 0; }
 .profile-desc { font-size: .82rem; color: var(--text-2); flex: 1; }
 .profile-meta { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
 
@@ -2355,3 +2360,28 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .lazy-ready { animation: lazy-in .18s ease-out; }
 @keyframes lazy-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lazy-ready { animation: none; } }
+
+
+/* ============ Texte minimal (help.js) ============ */
+.help-folded { display: none !important; }
+/* Avant le balayage de help.js : pas d'éclair de texte (les éléments avec id / aria-live / role restent visibles). */
+.help-pending :is(.hint, .page-subtitle, .table-footer, .scope-line, .block-note, .pred-legend, .profile-desc, .headline-sub, .banner:not(.banner-error):not(.banner-warning)):is([data-help="fold"], :not([id]):not([aria-live]):not([role])):not([data-keep]) { visibility: hidden; }
+.help-pop {
+  position: absolute;
+  z-index: 60;
+  box-sizing: border-box;
+  max-width: min(380px, calc(100vw - 24px));
+  padding: 12px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.help-pop.hidden { display: none; }
+.help-pop p { margin: 0; }
+.help-pop p + p { margin-top: 8px; }
+.help-pop a { color: var(--brand); }
+.help-pop:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

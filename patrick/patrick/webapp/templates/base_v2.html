@@ -23,6 +23,7 @@ script below (no flash), otherwise the OS preference applies.
                 if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
                 if (localStorage.getItem("patrick-sidebar") === "collapsed") root.setAttribute("data-sidebar", "collapsed");
             } catch (e) { /* storage blocked: OS theme, expanded sidebar */ }
+            document.documentElement.classList.add("help-pending");   /* levé par help.js une fois les aides repliées */
         })();
     </script>
     <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -187,6 +188,7 @@ script below (no flash), otherwise the OS preference applies.
     <script src="/static/rows.js"></script>
     <script src="/static/lazy.js" defer></script>
     <script src="/static/glossary.js"></script>
+    <script src="/static/help.js"></script>
     <script src="/static/market.js"></script>
     {# No-op sauf sur /commodities et /macro (garde `.asset-panel[data-symbol]`). #}
     <script src="/static/asset_stats.js"></script>

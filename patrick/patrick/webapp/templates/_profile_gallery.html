@@ -12,15 +12,16 @@
     <summary>{{ t('prof_gallery_title') }} <span class="hint">{{ t('prof_gallery_sub') }}</span></summary>
     <div class="profile-grid">
     {% for p in training_profiles %}
-        <a class="profile-card{% if applied and applied.kind == 'profile' and applied.key == p.key %} is-applied{% endif %}"
-           href="/ml?profile={{ p.key }}" data-profile="{{ p.key }}">
-            <span class="profile-name">{{ t('prof_' ~ p.key ~ '_name') }}</span>
+        <div class="profile-card{% if applied and applied.kind == 'profile' and applied.key == p.key %} is-applied{% endif %}" data-help-host>
+            <a class="profile-main" href="/ml?profile={{ p.key }}" data-profile="{{ p.key }}">
+                <span class="profile-name">{{ t('prof_' ~ p.key ~ '_name') }}</span>
+            </a>
             <span class="profile-desc">{{ t('prof_' ~ p.key ~ '_desc') }}</span>
             <span class="profile-meta">
                 <span class="adv-cost adv-cost-{{ p.cost }}">{{ t('adv_cost_' ~ p.cost) }}</span>
                 {% if p.n_changes %}<span class="hint">{{ t('prof_n_changes', n=p.n_changes) }}</span>{% else %}<span class="hint">{{ t('prof_defaults') }}</span>{% endif %}
             </span>
-        </a>
+        </div>
     {% endfor %}
     </div>
     <script>

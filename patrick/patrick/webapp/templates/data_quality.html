@@ -34,7 +34,7 @@
         {{ status_badge(t('dq_failures_n', n=g.n), 'warning') }}
         <span class="hint">{{ t('dq_failures_last', at=g.last) }}</span>
     </div>
-    <p>{{ g.meaning }}</p>
+    <p class="hint">{{ g.meaning }}</p>
     {% if g.targets %}<p class="hint">{{ t('dq_failures_targets', targets=g.targets[:14] | join(', ')) }}{% if g.targets | length > 14 %} …{% endif %}</p>{% endif %}
     <p class="dq-status"><b>{{ t('dq_failures_fix') }} :</b> {{ g.status }}</p>
 </div>
@@ -47,7 +47,7 @@
 {% for g in o.issues %}
 <details class="dq-reason"{% if loop.index <= 2 %} open{% endif %}>
     <summary><strong>{{ g.title }}</strong> {{ status_badge(g.series | length, 'neutral') }}</summary>
-    <p>{{ g.meaning }}</p>
+    <p class="hint">{{ g.meaning }}</p>
     {% if g.effect %}<p class="dq-status"><b>{{ t('dq_effect') }} :</b> {{ g.effect }}</p>{% endif %}
     <div class="table-scroll dq-scroll">
     <table class="data-table">

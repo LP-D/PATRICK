@@ -18,6 +18,9 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "nav_rl": _s("Reinforcement learning", "Reinforcement learning"),
     "nav_exploration": _s("Exploration", "Exploration"),
 
+    # --- aide « ? » (help.js)
+    "help_aria": _s("Aide", "Help"),
+
     # --- page ML
     "ml_title": _s("Machine learning", "Machine learning"),
     "ml_subtitle": _s(
@@ -27,4 +30,4 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
         "results; every rigor gate shows its state, ON or OFF, without opening it."),
 }
 
-MODELS_JS_KEYS: tuple[str, ...] = ()
+MODELS_JS_KEYS: tuple[str, ...] = ("help_aria",)
