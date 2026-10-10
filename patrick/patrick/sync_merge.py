@@ -123,9 +123,9 @@ def merge_databases(dst_path: str, src_path: str, *, fast: bool = False) -> dict
     `fast` : ni fsync ni journal, réservé à une COPIE de travail jetable (un échec ou une coupure en
     cours de route l'abîme : on la jette, jamais la base d'origine).
 
-    Renvoie : `new_runs`, `local_only_runs` (runs de `dst` absents de `src`), `trial_offset`,
+    Renvoie : `new_runs` (nombre) et `new_run_ids` (liste), `local_only_runs` (runs de `dst` absents de `src`), `trial_offset`,
     `new_trial_ids` (identifiants d'essai côté `src` des runs importés) et le détail des lignes ajoutées."""
-    conn = sqlite3.connect(dst_path, isolation_level=None)
+    conn = sqlite3.connect(dst_path, isolation_level=None, timeout=120)
     try:
         if fast:
             # Ni fsync ni journal : une fusion de plusieurs Go écrit ~10x plus vite, et en cas d'échec
@@ -141,7 +141,7 @@ def merge_databases(dst_path: str, src_path: str, *, fast: bool = False) -> dict
         dst_runs = {r[0] for r in conn.execute("SELECT run_id FROM main.run")}
         src_runs = {r[0] for r in conn.execute("SELECT run_id FROM src.run")}
         new_runs = sorted(src_runs - dst_runs)
-        report: dict = {"new_runs": len(new_runs), "local_only_runs": len(dst_runs - src_runs),
+        report: dict = {"new_runs": len(new_runs), "new_run_ids": new_runs, "local_only_runs": len(dst_runs - src_runs),
                         "trial_offset": 0, "new_trial_ids": [], "added": {}}
 
         conn.execute("CREATE TEMP TABLE _new_runs (run_id TEXT PRIMARY KEY)")

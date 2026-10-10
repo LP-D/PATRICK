@@ -1,7 +1,8 @@
 """`patrick sync` -- partage de la base, des modèles et du magasin de données
 entre deux PC.
 
-Ce qui est partagé : `patrick.db` (compressée), les fichiers modèles référencés
+Ce qui est partagé : `patrick.db` (la recherche seulement, compressée -- 15 s pour 5 Go à la lecture ; les caches de
+modèles de volatilité, qui font l'essentiel d'une grosse base, restent sur chaque PC), les fichiers modèles référencés
 par `trial.artifact_path`, et les parquet du magasin de données
 (`~/.patrick/store`). Un `manifest.json` (sha256, taille, version de schéma)
 accompagne les fichiers.
@@ -24,6 +25,7 @@ Destinations :
 """
 from __future__ import annotations
 
+import errno
 import gzip
 import hashlib
 import json
@@ -33,6 +35,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,9 +127,47 @@ def _gzip_file(src: Path, dest: Path) -> None:
         shutil.copyfileobj(fin, fout, 1024 * 1024)
 
 
+MIN_FREE_BYTES = 1 << 30                 # marge laissée libre sur le disque pendant une fusion
+_CHUNK = 16 * 1024 * 1024
+
+
+def _gb(n: float) -> str:
+    return f"{n / 1e9:.1f}".replace(".", ",")
+
+
+def _free_bytes(path: str | Path) -> int:
+    """Octets libres sur le disque qui porte `path` (ou son plus proche parent existant)."""
+    p = Path(path).resolve()
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return shutil.disk_usage(p).free
+
+
+def _disk_full_message(path: str | Path) -> str:
+    return (f"Disque presque plein ({_gb(_free_bytes(path))} Go libres) : la synchronisation s'arrête sans rien changer. "
+            "Libère de la place -- les plus gros candidats sont les caches (~/.patrick/feature_cache) et les anciennes "
+            "sauvegardes (~/.patrick/patrick.db.backup*) -- puis relance PATRICK.")
+
+
+def _require_space(path: str | Path, needed: int, what: str) -> None:
+    free = _free_bytes(path)
+    if free < needed + MIN_FREE_BYTES:
+        raise SyncError(f"Espace disque insuffisant pour {what} : il faut environ {_gb(needed + MIN_FREE_BYTES)} Go "
+                        f"libres, il en reste {_gb(free)}. " + _disk_full_message(path).split(": ", 1)[1])
+
+
 def _gunzip_file(src: Path, dest: Path) -> None:
+    """Décompresse `src` vers `dest` en vérifiant l'espace libre (un disque plein s'arrête proprement)."""
+    written = 0
     with gzip.open(src, "rb") as fin, open(dest, "wb") as fout:
-        shutil.copyfileobj(fin, fout, 1024 * 1024)
+        while True:
+            chunk = fin.read(_CHUNK)
+            if not chunk:
+                break
+            fout.write(chunk)
+            written += len(chunk)
+            if (written // _CHUNK) % 16 == 0 and _free_bytes(dest.parent) < MIN_FREE_BYTES // 2:
+                raise SyncError(_disk_full_message(dest.parent))
 
 
 def _sha256(path: Path) -> str:
@@ -277,15 +318,10 @@ class FolderTransport:
             os.replace(tmp, self.folder / name)
 
     def download(self, workdir: Path) -> dict[str, Path]:
+        """Chemins des fichiers du partage, LUS SUR PLACE : aucune copie temporaire de 2 Go (ils ne sont jamais écrits)."""
         if not (self.folder / MANIFEST).exists():
             raise SyncError(f"Aucun partage trouvé dans {self.folder} ({MANIFEST} absent).")
-        out = {}
-        for name in (MANIFEST, *_ASSETS):
-            src = self.folder / name
-            if src.exists():
-                shutil.copyfile(src, workdir / name)
-                out[name] = workdir / name
-        return out
+        return {name: self.folder / name for name in (MANIFEST, *_ASSETS) if (self.folder / name).exists()}
 
 
 class GithubTransport:
@@ -337,9 +373,54 @@ def _default_models_roots() -> list[str]:
     return [os.getcwd(), home, os.path.join(home, "runs")]
 
 
+# Caches dérivés (ré-ajustables) : jamais publiés par défaut. Sur la vraie base, `vol_model_cache` fait ~90 % de 27 Go.
+_CACHE_TABLES = ("vol_model_cache", "shap_selection_cache")
+
+
+def _export_research_copy(src: str, work: Path, *, include_personal: bool, include_caches: bool) -> None:
+    """Construit `work` (schéma neuf, migré) table par table depuis la base locale, au lieu de copier la base entière
+    (27 Go dont 25 de cache) : seuls la recherche (runs, essais, métriques, prédictions...) et, si demandé, les tables
+    personnelles sont recopiés. Lecture seule sur `src`."""
+    trackdb.connect(str(work)).close()                       # schéma à jour, vide
+    conn = sqlite3.connect(Path(work).resolve().as_uri(), uri=True, isolation_level=None)
+    try:
+        conn.execute("PRAGMA foreign_keys = OFF")            # ordre de recopie libre
+        conn.execute("PRAGMA journal_mode = DELETE")         # fichier jetable : ni WAL (double écriture) ni fsync
+        conn.execute("PRAGMA synchronous = OFF")
+        conn.execute("PRAGMA journal_mode = OFF")
+        conn.execute("PRAGMA cache_size = -400000")
+        conn.execute("ATTACH DATABASE ? AS src", (Path(src).resolve().as_uri() + "?mode=ro",))
+        src_tables = {n for (n,) in conn.execute("SELECT name FROM src.sqlite_master WHERE type = 'table'")}
+        conn.execute("BEGIN")
+        copied: list[str] = []
+        for (name,) in conn.execute("SELECT name FROM main.sqlite_master WHERE type = 'table' "
+                                    "AND name NOT LIKE 'sqlite_%' ORDER BY rowid").fetchall():
+            if name not in src_tables or name in ("schema_version", "worker_heartbeat"):
+                continue
+            if (name.startswith(PERSONAL_PREFIXES) or name in PERSONAL_EXACT) and not include_personal:
+                continue
+            if name in _CACHE_TABLES and not include_caches:
+                continue
+            main_cols = [r[1] for r in conn.execute(f'PRAGMA main.table_info("{name}")')]
+            src_cols = {r[1] for r in conn.execute(f'PRAGMA src.table_info("{name}")')}
+            cols = ", ".join(f'"{c}"' for c in main_cols if c in src_cols)
+            conn.execute(f'INSERT OR IGNORE INTO main."{name}" ({cols}) SELECT {cols} FROM src."{name}"')
+            copied.append(name)
+        if copied and "sqlite_sequence" in src_tables:       # compteurs d'auto-incrément : ne jamais reculer
+            for seq_name, seq in conn.execute("SELECT name, seq FROM src.sqlite_sequence").fetchall():
+                updated = conn.execute("UPDATE main.sqlite_sequence SET seq = MAX(seq, ?) WHERE name = ?",
+                                       (seq, seq_name)).rowcount if seq_name in copied else 1
+                if updated == 0:
+                    conn.execute("INSERT INTO main.sqlite_sequence (name, seq) VALUES (?, ?)", (seq_name, seq))
+        conn.execute("COMMIT")
+        conn.execute("DETACH DATABASE src")
+    finally:
+        conn.close()
+
+
 def push(dest: str, *, db_path: str | None = None, store_root: str | None = None,
          models_roots: list[str] | None = None, include_personal: bool = False,
-         repo: str | None = None) -> dict:
+         repo: str | None = None, include_caches: bool = False) -> dict:
     """Publie un état assaini vers `dest` (`"github"` ou un dossier). Retourne le manifeste."""
     transport = resolve_transport(dest, repo)
     if include_personal and not isinstance(transport, FolderTransport):
@@ -352,25 +433,16 @@ def push(dest: str, *, db_path: str | None = None, store_root: str | None = None
     with tempfile.TemporaryDirectory() as tmp_s:
         tmp = Path(tmp_s)
         work = tmp / "work.db"
-        source = sqlite3.connect(src)
+        _require_space(tmp, 4 << 30, "préparer la publication")
+        _export_research_copy(src, work, include_personal=include_personal, include_caches=include_caches)
         copy = sqlite3.connect(work)
-        try:
-            source.execute("PRAGMA query_only = ON")
-            source.backup(copy)
-        finally:
-            source.close()
         try:
             models_info = _build_models_bundle(
                 copy, models_roots if models_roots is not None else _default_models_roots(), tmp / MODELS_ASSET)
             _neutralise_runtime_state(copy)
             excluded: list[str] = []
             if not include_personal:
-                excluded = personal_tables(copy)
-                for table in excluded:
-                    copy.execute(f'DELETE FROM "{table}"')
-                if copy.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'").fetchone():
-                    copy.executemany("DELETE FROM sqlite_sequence WHERE name = ?", [(t,) for t in excluded])
-                copy.commit()
+                excluded = personal_tables(copy)            # non copiées dans l'export : on vérifie seulement la fuite
                 needle = Path.home().name
                 leaks = _username_leaks(copy, needle) if len(needle) >= 4 else {}
                 if leaks:
@@ -379,7 +451,6 @@ def push(dest: str, *, db_path: str | None = None, store_root: str | None = None
             version = copy.execute("SELECT COALESCE(MAX(version), 0) FROM schema_version").fetchone()[0]
             runs = copy.execute("SELECT COUNT(*) FROM run").fetchone()[0]
             copy.execute("PRAGMA journal_mode = DELETE")
-            copy.execute("VACUUM")
         finally:
             copy.close()
 
@@ -682,74 +753,136 @@ def _quick_check(path: str) -> str:
         conn.close()
 
 
+def _backup_affordable(db_path: str, backup_dir: str | None, incoming_bytes: int) -> tuple[bool, str]:
+    """Une sauvegarde complète avant fusion n'est faite que si le disque la permet (une base de 27 Go sur un disque presque
+    plein : jamais). La fusion reste atomique (une transaction) : sans sauvegarde, une coupure ne laisse pas de demi-fusion."""
+    size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    free = _free_bytes(backup_dir or backup_mod.DEFAULT_BACKUP_DIR)
+    if free >= size * 1.05 + incoming_bytes * 2 + (2 << 30):
+        return True, ""
+    return False, f"sauvegarde complète ignorée : {_gb(size)} Go à copier pour {_gb(free)} Go libres"
+
+
+def _save_champion_snapshot(db_path: str) -> str | None:
+    """La fusion peut remplacer un champion local par un plus récent du partage : on garde l'ancienne table (quelques Ko),
+    seule donnée locale qu'une fusion réécrit."""
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        cur = conn.execute("SELECT * FROM champion")
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        conn.close()
+    dest = Path(db_path).parent / "sync_undo"
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / f"champion-{datetime.now():%Y%m%d_%H%M%S}.json"  # noqa: DTZ005 -- heure locale lue par l'utilisateur
+    path.write_text(json.dumps(rows, indent=1, default=str), encoding="utf-8")
+    return str(path)
+
+
+def _merge_into_copy(files: dict, manifest: dict, incoming: Path, dry_run_to: str, *, db_path: str,
+                     adopt_personal: bool) -> dict:
+    """Essai à blanc : fusionne dans une COPIE (`dry_run_to`), sans toucher à la base locale, au magasin ni aux modèles."""
+    work = Path(dry_run_to)
+    work.parent.mkdir(parents=True, exist_ok=True)
+    work.unlink(missing_ok=True)
+    if os.path.exists(db_path):
+        source_conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+        target_conn = sqlite3.connect(work)
+        try:
+            source_conn.backup(target_conn)
+        finally:
+            source_conn.close()
+            target_conn.close()
+    trackdb.connect(str(work)).close()
+    try:
+        runs_before = _count_runs(str(work))
+        report = sync_merge.merge_databases(str(work), str(incoming), fast=True)
+        personal = (sync_merge.adopt_personal_tables(str(work), str(incoming))
+                    if adopt_personal and manifest.get("personal_included") else {})
+        check = _quick_check(str(work))
+        if check != "ok":
+            raise SyncError(f"Base fusionnée invalide (quick_check : {check}) : base locale inchangée.")
+        return {"runs_before": runs_before, "runs_after": _count_runs(str(work)), "new_runs": report["new_runs"],
+                "local_only_runs": report["local_only_runs"], "models": 0, "store_files": 0, "backup": None,
+                "created_at": manifest["created_at"], "remote_sha": manifest["files"][DB_ASSET]["sha256"],
+                "added": report["added"], "personal": personal}
+    except BaseException:
+        work.unlink(missing_ok=True)
+        raise
+
+
+def _merge_in_place(files: dict, manifest: dict, incoming: Path, *, db_path: str, models_dir: str | None,
+                    backup_dir: str | None, adopt_personal: bool) -> dict:
+    """Fusion DIRECTEMENT dans la base locale (une transaction : tout ou rien), sans copie de travail ni sauvegarde
+    systématique -- sur une base de 27 Go, ces deux copies (54 Go, ~14 min) saturaient le disque."""
+    incoming_bytes = incoming.stat().st_size
+    _require_space(db_path, incoming_bytes, "fusionner le partage")      # le journal d'une fusion ≲ ce qu'elle importe
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    trackdb.connect(db_path).close()                                        # crée/migre la base locale
+    backup, backup_skipped = None, None
+    ok, why = _backup_affordable(db_path, backup_dir, incoming_bytes)
+    if ok:
+        backup = str(backup_mod.backup_database(db_path, backup_dir, pages=-1, sleep_s=0.0))
+    else:
+        backup_skipped = why
+    champions = _save_champion_snapshot(db_path)
+    runs_before = _count_runs(db_path)
+    report = sync_merge.merge_databases(db_path, str(incoming), fast=False)
+    personal = (sync_merge.adopt_personal_tables(db_path, str(incoming))
+                if adopt_personal and manifest.get("personal_included") else {})
+    models = (_restore_models_merged(files[MODELS_ASSET], models_dir or os.path.expanduser("~/.patrick/models"),
+                                     db_path, report["trial_offset"], set(report["new_trial_ids"]))
+              if MODELS_ASSET in files else 0)
+    return {"runs_before": runs_before, "runs_after": _count_runs(db_path), "new_runs": report["new_runs"],
+            "new_run_ids": report["new_run_ids"], "local_only_runs": report["local_only_runs"], "models": models,
+            "store_files": 0, "backup": backup, "backup_skipped": backup_skipped, "champion_snapshot": champions,
+            "created_at": manifest["created_at"], "remote_sha": manifest["files"][DB_ASSET]["sha256"],
+            "added": report["added"], "personal": personal}
+
+
 def merge(source: str, *, db_path: str | None = None, store_root: str | None = None,
           models_dir: str | None = None, backup_dir: str | None = None, dry_run_to: str | None = None,
           adopt_personal: bool = False, repo: str | None = None) -> dict:
     """Importe dans la base locale la recherche du partage `source` (union, voir `sync_merge`).
 
-    Le travail se fait sur une COPIE de la base locale, vérifiée avant de la substituer à l'original
-    (qui est sauvegardé d'abord) : un échec ne touche pas la base locale. Le serveur PATRICK doit être
-    fermé pour la substitution (Windows). `dry_run_to` : écrit le résultat dans ce fichier et s'arrête
-    (la base locale, le magasin et les modèles ne sont pas touchés). `adopt_personal` : remplace aussi le
-    patrimoine et les fonds locaux par ceux du partage, s'il en contient (PC qui n'est pas la référence)."""
+    La fusion se fait EN PLACE dans la base locale, en une transaction (tout ou rien) : pas de copie de travail, et une
+    sauvegarde complète seulement si le disque la permet. Le partage est lu sur place (aucune copie temporaire) et sa base
+    n'est décompressée (~15 s pour 5 Go) que dans un dossier temporaire. Le serveur PATRICK doit être fermé.
+    `dry_run_to` : écrit le résultat d'une fusion dans ce fichier (copie complète de la base locale) et s'arrête (la base
+    locale, le magasin et les modèles ne sont pas touchés). `adopt_personal` : remplace aussi le patrimoine et les fonds
+    locaux par ceux du partage, s'il en contient (PC qui n'est pas la référence)."""
+    started = time.monotonic()
     transport = resolve_transport(source, repo)
     db_path = db_path or trackdb.default_db_path()
     if dry_run_to is None and _db_in_use(db_path):
         raise SyncError("PATRICK est ouvert (la base est utilisée) : ferme-le, puis relance la synchronisation.")
-    with tempfile.TemporaryDirectory() as tmp_s:
-        tmp = Path(tmp_s)
-        files, manifest = _download_verified(transport, tmp)
-        incoming = tmp / "incoming.db"
-        _gunzip_file(files[DB_ASSET], incoming)
-        trackdb.connect(str(incoming)).close()               # migre le partage jusqu'à la version du code
-
-        work = Path(dry_run_to) if dry_run_to else Path(db_path + ".merging")
-        work.parent.mkdir(parents=True, exist_ok=True)
-        work.unlink(missing_ok=True)
-        if os.path.exists(db_path):
-            source_conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
-            target_conn = sqlite3.connect(work)
-            try:
-                source_conn.backup(target_conn)               # copie cohérente même si la base est ouverte
-            finally:
-                source_conn.close()
-                target_conn.close()
-        trackdb.connect(str(work)).close()                    # crée/migre la copie de travail
-        try:
-            runs_before = _count_runs(str(work))
-            report = sync_merge.merge_databases(str(work), str(incoming), fast=True)
-            personal = (sync_merge.adopt_personal_tables(str(work), str(incoming))
-                        if adopt_personal and manifest.get("personal_included") else {})
-            models = (_restore_models_merged(files[MODELS_ASSET], models_dir or os.path.expanduser("~/.patrick/models"),
-                                             str(work), report["trial_offset"], set(report["new_trial_ids"]))
-                      if MODELS_ASSET in files and dry_run_to is None else 0)
-            check = _quick_check(str(work))
-            if check != "ok":
-                raise SyncError(f"Base fusionnée invalide (quick_check : {check}) : base locale inchangée.")
-            result = {"runs_before": runs_before, "runs_after": _count_runs(str(work)),
-                      "new_runs": report["new_runs"], "local_only_runs": report["local_only_runs"],
-                      "models": models, "store_files": 0, "backup": None, "created_at": manifest["created_at"],
-                      "remote_sha": manifest["files"][DB_ASSET]["sha256"], "added": report["added"],
-                      "personal": personal}
+    try:
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            files, manifest = _download_verified(transport, tmp)
+            incoming = tmp / "incoming.db"
+            _gunzip_file(files[DB_ASSET], incoming)
+            trackdb.connect(str(incoming)).close()               # migre le partage jusqu'à la version du code
             if dry_run_to is not None:
-                return result
-            if os.path.exists(db_path):
-                result["backup"] = str(backup_mod.backup_database(db_path, backup_dir, pages=-1, sleep_s=0.0))
-            for suffix in ("-wal", "-shm"):
-                try:
-                    os.remove(db_path + suffix)
-                except FileNotFoundError:
-                    pass
-            try:
-                os.replace(work, db_path)
-            except PermissionError as exc:
-                raise SyncError("PATRICK est ouvert (la base est utilisée) : ferme-le, puis relance la "
-                                "synchronisation.") from exc
-        except BaseException:
-            Path(work).unlink(missing_ok=True)               # copie de travail abîmée ou refusée : on la jette
-            raise
-        if STORE_ASSET in files:
-            result["store_files"] = _restore_store(files[STORE_ASSET], store_root or _default_store_root())
+                result = _merge_into_copy(files, manifest, incoming, dry_run_to, db_path=db_path,
+                                          adopt_personal=adopt_personal)
+            else:
+                result = _merge_in_place(files, manifest, incoming, db_path=db_path, models_dir=models_dir,
+                                         backup_dir=backup_dir, adopt_personal=adopt_personal)
+                if STORE_ASSET in files:
+                    result["store_files"] = _restore_store(files[STORE_ASSET], store_root or _default_store_root())
+    except sqlite3.OperationalError as exc:
+        if "disk is full" in str(exc):
+            raise SyncError(_disk_full_message(db_path)) from exc
+        raise
+    except OSError as exc:
+        if exc.errno == errno.ENOSPC:
+            raise SyncError(_disk_full_message(db_path)) from exc
+        raise
+    result["seconds"] = round(time.monotonic() - started, 1)
     return result
 
 
