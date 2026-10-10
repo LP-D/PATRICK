@@ -424,8 +424,8 @@ LEGACY_STRINGS: dict[str, dict[str, str]] = {
     'alf_k_revised_rel': _s("plus de 5 % de leurs observations changent après la première publication : l'entraînement sur la version actuelle voit le futur", 'more than 5% of their observations change after first release: training on the current version sees the future'),
     'alf_k_hybrid': _s('Historique complété', 'History completed'),
     'alf_k_hybrid_rel': _s("ALFRED n'archive ces séries qu'à partir d'une date ; avant, version actuelle de FRED datée par la table de délais", "ALFRED archives these series only from a given date; before it, today's FRED version dated by the lag table"),
-    'alf_k_absent': _s("Absentes d'ALFRED", 'Not in ALFRED'),
-    'alf_k_absent_rel': _s('FRED seul, daté par la table de délais (ex. SP500)', 'FRED only, dated by the lag table (e.g. SP500)'),
+    'alf_k_absent': _s('FRED seul', 'FRED only'),
+    'alf_k_absent_rel': _s("{a} absente(s) d'ALFRED · {r} au niveau rebasé (la première publication change de base d'une sortie à l'autre : sauts artificiels), gardées en version actuelle datée par la table de délais", "{a} not in ALFRED · {r} with a rebased level (the first release changes base from one release to the next: artificial jumps), kept in today's version dated by the lag table"),
     'alf_top': _s('Les plus révisées (révision / mouvement typique) :', 'Most revised (revision / typical move):'),
     'alf_c_series': _s('Série', 'Series'),
     'alf_c_mode': _s('Source utilisée', 'Source used'),
@@ -590,4 +590,5 @@ LEGACY_STRINGS: dict[str, dict[str, str]] = {
     'prof_seed_check_name': _s('Contrôle de graine', 'Seed check'),
     'prof_seed_check_desc': _s('Réglages par défaut avec une autre graine aléatoire : mesure ce qui tient à la chance.', 'Default settings with another random seed: measures what is down to luck.'),
     'advf_track_stability': _s('Suivi de la stabilité de sélection', 'Selection stability tracking'),
+    'alf_mode_rebased': _s('FRED seul (niveau rebasé)', 'FRED only (rebased level)'),
 }

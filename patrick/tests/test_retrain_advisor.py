@@ -120,6 +120,7 @@ def test_imbalanced_classes_suggest_more_samplers():
 def test_a_good_ranking_without_calibration_suggests_calibrating():
     assert "calibrate" in keys(diag(auc_test=0.60))
     assert "calibrate" not in keys(diag(auc_test=0.60, view={**VIEW, "calibration": True}))
+    assert "calibrate" not in keys(diag(auc_test=0.60, auc_holdout=0.50))     # le holdout dément le classement
 
 
 def test_a_solid_holdout_suggests_confirming_with_cpcv_only_for_walk_forward():

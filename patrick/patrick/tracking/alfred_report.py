@@ -25,7 +25,7 @@ def series_to_compare() -> list[tuple[str, str, str]]:
     return [(sid, label, section) for section, series in D.macro_page_sections() for sid, label in series]
 
 
-_ROW_FIELDS = ("first_vintage", "first_obs", "lost_years_if_alfred_only", "share_revised", "mean_abs_revision",
+_ROW_FIELDS = ("level_break", "first_vintage", "first_obs", "lost_years_if_alfred_only", "share_revised", "mean_abs_revision",
                "max_abs_revision", "revision_vs_move", "lag_real_days", "lag_assumed_days", "note")
 
 
@@ -57,7 +57,8 @@ def summarize(rows: list[dict]) -> dict:
         modes[r.get("mode", "fred")] = modes.get(r.get("mode", "fred"), 0) + 1
     revised = [r for r in rows if r.get("n_compared") and (r.get("share_revised") or 0) > 0.05]
     top = sorted((r for r in rows if r.get("revision_vs_move") is not None), key=lambda r: -r["revision_vs_move"])[:5]
-    return {"n": len(rows), "modes": modes, "n_revised": len(revised),
+    rebased = [r for r in rows if r.get("level_break")]
+    return {"n": len(rows), "modes": modes, "n_revised": len(revised), "n_rebased": len(rebased),
             "most_revised": [{"series": r["series"], "label": r.get("label"), "ratio": r["revision_vs_move"]} for r in top]}
 
 

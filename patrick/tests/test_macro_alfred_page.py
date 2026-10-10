@@ -93,3 +93,22 @@ def test_summary_counts_modes_and_ranks_the_most_revised():
     sm = alfred_report.summarize(ROWS)
     assert sm["n"] == 3 and sm["modes"] == {"alfred": 1, "hybrid": 1, "fred": 1} and sm["n_revised"] == 2
     assert [r["series"] for r in sm["most_revised"]] == ["NFCI", "GDP"]
+
+
+def test_the_macro_page_title_is_clean_and_the_script_is_in_the_body(client):
+    html = client.get("/macro").text
+    title = html.split("<title>")[1].split("</title>")[0]
+    assert "<script" not in title and "Macro (FRED)" in title
+    assert html.count("macro_alfred.js") == 1 and html.index("macro_alfred.js") > html.index("</main>") - 4000
+
+
+def test_a_rebased_series_is_labelled_and_counted(client, monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "k")
+    rows = [*ROWS, {"series": "PCEPI", "label": "PCE_Price_Index", "section": "inflation", "mode": "fred", "level_break": 8.2,
+                    "first_vintage": "1999-01-29", "n_compared": 314, "share_revised": 1.0, "mean_abs_revision": 12.0,
+                    "revision_vs_move": 81.0}]
+    LocalCache().save_json(alfred_report.CACHE_KEY, {"computed_at": "2026-10-10T08:00:00+00:00", "start": "2000-01-01",
+                                                       "rows": rows, "summary": alfred_report.summarize(rows)})
+    html = client.get("/fragments/macro-alfred").text
+    assert "FRED seul (niveau rebasé)" in html and "1 au niveau rebasé" in html
+    assert alfred_report.summarize(rows)["n_rebased"] == 1

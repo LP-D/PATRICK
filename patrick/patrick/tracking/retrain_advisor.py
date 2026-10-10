@@ -316,6 +316,8 @@ def _rule_class_balance(d: Diagnosis) -> Suggestion | None:
 def _rule_calibrate(d: Diagnosis) -> Suggestion | None:
     if d.suspect or d.auc_test is None or d.auc_test < 0.56 or d.view.get("calibration"):
         return None
+    if d.auc_holdout is not None and d.auc_holdout < CHANCE_AUC:       # le classement ne tient pas sur le holdout : rien à calibrer
+        return None
     return Suggestion("calibrate", 34, {"calibration": True}, {"auc": d.auc_test})
 
 

@@ -182,3 +182,31 @@ def test_payload_roundtrip_keeps_everything():
     cur = pd.Series([1.6], index=pd.to_datetime(["2020-01-01"]))
     rel2, cur2, fv = alfred._from_payload(json.loads(json.dumps(alfred._to_payload(rel, cur, "2020-01-01", "2000-01-01"))))
     assert rel2.equals(rel) and cur2.equals(cur) and fv == "2020-01-01"
+
+
+def _monthly(first_values, current_values):
+    idx = pd.date_range("2015-01-01", periods=len(first_values), freq="MS")
+    rel = pd.DataFrame({"obs_date": idx, "release_date": idx + pd.Timedelta(days=45), "value": first_values})
+    return rel, pd.Series(current_values, index=idx)
+
+
+def test_a_rebased_level_is_kept_in_its_current_version_not_chained_from_first_releases():
+    """PCEPI : chaque première publication est dans la base du moment (+10 points tous les 12 mois) -> sauts artificiels."""
+    n = 48
+    current = [100 + 0.2 * i for i in range(n)]
+    first = [100 + 0.2 * i + 10 * (i // 12) for i in range(n)]
+    rel, cur = _monthly(first, current)
+    assert alfred.level_break_ratio(rel, cur) > alfred.LEVEL_BREAK_RATIO
+    result = alfred.assemble("PCEPI", rel, cur, "2015-02-15")
+    assert result.mode == "fred" and result.info["level_break"] > 4
+    assert result.series.max() < 111                                  # niveau actuel, pas la chaîne à +30 points
+
+
+def test_a_smooth_series_is_never_flagged_as_rebased():
+    n = 48
+    current = [100 + 0.2 * i for i in range(n)]
+    first = [v + 0.05 * (i % 3) for i, v in enumerate(current)]       # petites révisions
+    rel, cur = _monthly(first, current)
+    assert alfred.level_break_ratio(rel, cur) < 2
+    assert alfred.assemble("X", rel, cur, "2015-02-15").mode in ("alfred", "hybrid")
+    assert alfred.level_break_ratio(rel.iloc[:10], cur.iloc[:10]) is None   # trop court pour conclure

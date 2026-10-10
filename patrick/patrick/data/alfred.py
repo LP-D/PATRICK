@@ -10,8 +10,11 @@ Trois cas, par série (`AlfredResult.mode`) :
 - `hybrid` : ALFRED n'archive la série qu'à partir d'une date (NFCI : 2011, ICE BofA : 2023) -> première publication
   depuis cette date, et AVANT elle la version actuelle de FRED indexée sur une date de publication estimée
   (`publication_lag`) : c'est la seule donnée qui existe, et elle vaut mieux qu'un historique raccourci ;
-- `fred` : la série n'existe pas dans ALFRED (SP500) ou ALFRED échoue -> FRED + date de publication estimée, jamais une série
-  perdue.
+- `fred` : la série n'existe pas dans ALFRED (SP500), ALFRED échoue, ou son NIVEAU est rebasé -> FRED + date de publication
+  estimée, jamais une série perdue. Rebasage : les indices de prix (PCEPI, Core PCE) sont publiés dans la base du moment (2005 = 100,
+  puis 2012, puis 2017...) ; enchaîner les premières publications mélange ces bases et crée des sauts artificiels de 5 à 10 % par
+  mois dans tout rendement calculé. Détecté par `level_break_ratio` (les plus gros sauts de la chaîne contre ceux de la série
+  actuelle) ; la série garde alors son niveau actuel, daté par la table de délais.
 
 Le téléchargement est découpé en fenêtres de vintages (l'API refuse plus de ~2000 dates de vintage par requête, ce qui exclut
 d'un coup toutes les séries quotidiennes : DGS10 en a 5126) et mis en cache 12 h.
@@ -34,6 +37,7 @@ OBSERVATIONS_URL = f"{API_BASE}/series/observations"
 VINTAGES_URL = f"{API_BASE}/series/vintagedates"
 API_KEY_ENV = "FRED_API_KEY"
 MAX_VINTAGES_PER_REQUEST = 1500       # l'API refuse au-delà d'environ 2000
+LEVEL_BREAK_RATIO = 4.0               # 99e centile des sauts de la chaîne de premières publications / de la série actuelle
 FAR_PAST, FAR_FUTURE = "1776-07-04", "9999-12-31"
 CACHE_TTL_HOURS = 12.0
 _CACHE_PREFIX = "alfred_"
@@ -116,11 +120,28 @@ def current_series(series_id: str, start: str, api_key: str, *, session=requests
 
 # ------------------------------------------------------------------------------------------------ assemblage
 
+def level_break_ratio(releases: pd.DataFrame, current: pd.Series) -> float | None:
+    """Rapport entre les plus gros sauts (99e centile de |différence|) de la chaîne des premières publications et ceux de la
+    série actuelle. Autour de 1 : mêmes mouvements. Au-delà de `LEVEL_BREAK_RATIO` : le niveau change de base d'une publication à
+    l'autre (PCEPI : 8, Core PCE : 12 ; toutes les autres séries du pool sont sous 4)."""
+    if len(releases) < 30 or len(current) < 30:
+        return None
+    chain = releases.set_index("release_date")["value"].sort_index().diff().abs().dropna()
+    now = current.diff().abs().dropna()
+    scale = now.quantile(0.99)
+    return float(chain.quantile(0.99) / scale) if scale > 0 else None
+
+
 def assemble(series_id: str, releases: pd.DataFrame, current: pd.Series, first_vintage: str | None) -> AlfredResult:
     """Première publication là où ALFRED en a, version actuelle datée par `publication_lag` avant (voir le module)."""
     mode = "fred"
     backfill = pd.Series(dtype="float64")
     alfred_part = pd.Series(dtype="float64")
+    ratio = level_break_ratio(releases, current)
+    if ratio is not None and ratio > LEVEL_BREAK_RATIO:
+        releases = releases.iloc[0:0]                  # niveau rebasé : on garde le niveau actuel (voir le module)
+    else:
+        ratio = None
     if not releases.empty:
         alfred_part = pd.Series(releases["value"].to_numpy(), index=pd.DatetimeIndex(releases["release_date"]))
         alfred_part = alfred_part[~alfred_part.index.duplicated(keep="last")]
@@ -135,7 +156,7 @@ def assemble(series_id: str, releases: pd.DataFrame, current: pd.Series, first_v
     series = pd.concat([backfill, alfred_part]).sort_index()
     series = series[~series.index.duplicated(keep="last")]
     series.name = series_id
-    info = {"mode": mode, "first_vintage": first_vintage, "n_alfred": len(alfred_part),
+    info = {"mode": mode, "first_vintage": first_vintage, "n_alfred": len(alfred_part), "level_break": ratio,
             "n_backfilled": len(backfill),
             "first_obs": None if releases.empty else str(releases["obs_date"].min().date()),
             "last_obs": str(max(current.index.max(), releases["obs_date"].max() if not releases.empty else current.index.max()).date())
@@ -220,11 +241,14 @@ def compare_with_fred(series_id: str, start: str, api_key: str | None = None, *,
                                                         refresh=refresh)
     out: dict = {"series": series_id, "first_vintage": first_vintage, "n_current": len(current),
                  "mode": "fred", "n_compared": 0}
+    ratio = level_break_ratio(releases, current)
+    if ratio is not None and ratio > LEVEL_BREAK_RATIO:
+        out["level_break"] = round(ratio, 1)
     if releases.empty:
         out["note"] = "absente d'ALFRED" if first_vintage is None else "aucune première publication"
         return out
     first_obs = releases["obs_date"].min()
-    out["mode"] = "hybrid" if (current.index < first_obs).any() else "alfred"
+    out["mode"] = "fred" if out.get("level_break") else ("hybrid" if (current.index < first_obs).any() else "alfred")
     out["first_obs"] = str(first_obs.date())
     out["lost_years_if_alfred_only"] = round(max(0.0, (first_obs - pd.Timestamp(start)).days / 365.25), 1)
     joined = releases.set_index("obs_date")["value"].to_frame("first").join(current.rename("now"), how="inner")

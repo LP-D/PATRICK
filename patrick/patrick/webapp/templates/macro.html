@@ -1,7 +1,6 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import asset_panel, help_icon, lazy_block %}
-{% block title %}PATRICK — Macro (FRED)<script src="/static/macro_alfred.js" defer></script>
-{% endblock %}
+{% block title %}PATRICK — Macro (FRED){% endblock %}
 
 {% block content %}
 <nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
@@ -34,4 +33,5 @@
     </div>
 </section>
 {% endfor %}
+<script src="/static/macro_alfred.js" defer></script>
 {% endblock %}
