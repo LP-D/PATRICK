@@ -67,8 +67,8 @@ def test_the_page_is_in_the_english_interface_without_leaking_keys(client):
     client.cookies.set("patrick_lang", "en")
     html = client.get("/exploration").text
     assert "Link between two assets" in html
-    visible = re.sub(r"<script.*?</script>", "", html, flags=re.S)
-    assert not re.search(r"exp_[a-z_]+", visible)
+    visible = re.sub(r"<script.*?</script>", "", html, flags=re.DOTALL)
+    assert not re.search(r"\bexp_[a-z_]+", visible)
 
 
 def test_every_preset_symbol_is_a_known_target():

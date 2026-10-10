@@ -24,6 +24,13 @@ cd patrick
 pip install -e .
 ```
 
+Optional extras (imported only when used; the pages show a clear message when missing):
+
+```bash
+pip install -e ".[deep]"   # PyTorch : page Deep learning (/dl)
+pip install -e ".[rl]"     # PyTorch + Gymnasium + Stable-Baselines3 : page Reinforcement learning (/rl)
+```
+
 ## Commands
 
 Verified against `patrick <command> --help` on the current codebase.
@@ -102,16 +109,26 @@ patrick serve --host 0.0.0.0 --port 9000
 patrick serve --reload                     # dev, hot reload
 ```
 
-Pages (nav: Synthèse · Lancer · Historique · Univers · Simulation · Fonds · Phase 9):
+Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement learning · Exploration · Historique · Univers · Simulation · Fonds):
 
 - `/` — synthesis dashboard: coverage, per-target DM/BH quality, latest
   prediction, winning-model metrics by direction, recent-run history. No page
   cache, recomputed on every load from the database.
-- `/launch` — the config form (essential settings by default, with every
+- `/ml` — the machine-learning config form (essential settings by default, with every
   advanced control available in Expert mode), browser-local launch profiles,
   run tracking with phase/scan progress and a confidence-qualified indicative
-  ETA, and the launch queue. `/launch?run_id=...` loads a previous run's
-  configuration for editing without reusing its output directory.
+  ETA, and the launch queue. `/ml?run_id=...` loads a previous run's
+  configuration for editing without reusing its output directory. `/launch` redirects here.
+- `/dl` — same station for neural networks (MLP, GRU, LSTM, CNN1D, Transformer): simple view
+  (pick networks and a profile) and expert view (architecture, training, compute, Optuna bounds).
+  Networks are extra algorithms of the same walk-forward pipeline.
+- `/rl` — reinforcement-learning station: an agent (PPO, A2C, DQN, SAC) learns a position on a
+  listed target in an environment that never shows the future, costs included; out-of-sample
+  walk-forward results against buy-and-hold, a momentum rule and staying flat, with bootstrap
+  interval, probabilistic and deflated Sharpe.
+- `/exploration` — statistical studies between assets that exist nowhere else: correlations
+  (Pearson/Spearman/Kendall, clustered, BH-corrected), distribution, stationarity (ADF, KPSS, Hurst),
+  autocorrelation, lead-lag, Granger, cointegration, tail dependence, PCA, beta/alpha, seasonality.
 - `/runs`, `/runs/{id}` — searchable/filterable run history and detail pages;
   the history can compare 2–4 completed runs at `/compare-runs?run_ids=...`.
 - `/universe` — configured target universe crossed with run history.

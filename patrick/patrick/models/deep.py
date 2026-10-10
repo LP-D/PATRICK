@@ -241,7 +241,7 @@ class DeepClassifier(BaseEstimator, ClassifierMixin):
         else:
             inputs = Xs
 
-        n_val = int(round(n * float(self.val_fraction))) if int(self.patience) > 0 else 0
+        n_val = round(n * float(self.val_fraction)) if int(self.patience) > 0 else 0
         if n_val < MIN_VAL_ROWS or n - n_val < MIN_FIT_ROWS:
             n_val = 0
         n_tr = n - n_val

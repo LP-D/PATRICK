@@ -161,13 +161,57 @@ def get_run(run_id: str) -> dict | None:
         conn.close()
 
 
+def get_job_config_dict(run_id: str) -> dict | None:
+    """Configuration brute d'un job (ML, DL ou RL : `kind`, `models.deep`...), `None` si le job n'existe pas."""
+    conn = _connect()
+    try:
+        job = jobs_db.get_job(conn, run_id)
+    finally:
+        conn.close()
+    if job is None:
+        return None
+    try:
+        return json.loads(job["config_json"])
+    except (TypeError, ValueError):
+        return None
+
+
+def get_run_kind(run_id: str) -> str | None:
+    """« rl » pour un job de reinforcement learning, « ml » sinon (arbres ou réseaux), `None` si le job n'existe pas."""
+    raw = get_job_config_dict(run_id)
+    return None if raw is None else ("rl" if raw.get("kind") == "rl" else "ml")
+
+
 def get_run_config(run_id: str) -> RunConfig | None:
+    """Configuration d'un job de classification (ML ou DL). Un job RL n'a pas de `RunConfig` : `None` (voir `get_job_config_dict`)."""
+    if get_run_kind(run_id) in (None, "rl"):
+        return None
     conn = _connect()
     try:
         job = jobs_db.get_job(conn, run_id)
         return RunConfig.model_validate_json(job["config_json"]) if job else None
     finally:
         conn.close()
+
+
+def next_rl_run_name(target_symbol: str) -> str:
+    """Nom d'un run RL : `<cible>_rl_<n>`, n = premier numéro libre parmi les jobs RL déjà créés (quel que soit leur état)."""
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT config_json FROM job WHERE config_json LIKE ?", ('%"kind":"rl"%',)).fetchall()
+    finally:
+        conn.close()
+    taken = set()
+    for (config_json,) in rows:
+        try:
+            taken.add(json.loads(config_json).get("name"))
+        except (TypeError, ValueError):
+            continue
+    slug = forms.slug_target(target_symbol)
+    n = 1
+    while f"{slug}_rl_{n}" in taken:
+        n += 1
+    return f"{slug}_rl_{n}"
 
 
 def get_run_result(run_id: str) -> dict | None:

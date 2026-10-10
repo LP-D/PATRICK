@@ -55,6 +55,7 @@ from patrick.webapp import (
     market_regime,
     nav_registry,
     progress_steps,
+    rl_routes,
     run_manager,
     security,
     settings_routes,
@@ -250,7 +251,7 @@ def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
         # their own name (`technical`, `XGBoost`…) are absent from it and
         # the template falls back to the term itself.
         "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
-        "i18n_js": i18n.js_strings(lang),
+        "i18n_js": i18n.js_strings(lang, request.url.path),
         "verdict": _station_verdict(fdr_alpha),
     }
 
@@ -646,8 +647,9 @@ async def create_run(request: Request):
     if not targets:
         return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
     if any(a in D.ALL_DL_ALGOS for a in form.getlist("algos")) and not deep_models.torch_available():
-        return JSONResponse({"errors": ["PyTorch n'est pas installé : les réseaux de neurones sont indisponibles. "
-                                        "Installe-le avec : pip install -e \".[deep]\" (ou pip install torch)."]}, status_code=400)
+        message = ("PyTorch n'est pas installé : les réseaux de neurones sont indisponibles. "
+                   "Installe-le avec : pip install -e \".[deep]\" (ou pip install torch).")
+        return JSONResponse({"errors": [message]}, status_code=400)
 
     raw_output_dir = (form.get("output_dir") or "").strip()
     errors: list[str] = []
@@ -834,6 +836,8 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     report --fdr-alpha`) but never reached this route -- every web visitor
     saw the FDR correction fixed at 0.10 no matter what. No new FDR
     calculation here, only the missing plumbing to the existing param."""
+    if run_manager.get_run_kind(run_id) == "rl":
+        return RedirectResponse(f"/rl?open={run_id}", status_code=303)
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
@@ -1551,6 +1555,9 @@ fund_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Exploration (/exploration) et API /api/exploration/* : études statistiques entre actifs (patrick/exploration/).
 exploration_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Reinforcement learning (/rl) et API /api/rl/* : cadrage, lancement et lecture des runs RL (patrick/rl/).
+rl_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:

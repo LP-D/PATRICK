@@ -14,10 +14,10 @@ for _module in ("torch", "gymnasium", "stable_baselines3"):
     if importlib.util.find_spec(_module) is None:
         pytest.skip(f"{_module} non installé (extra optionnel rl)", allow_module_level=True)
 
-from patrick.data.store import DataStore  # noqa: E402
-from patrick.rl import data as rl_data  # noqa: E402
-from patrick.rl import run as rl_run  # noqa: E402
-from patrick.rl.config import RLRunConfig  # noqa: E402
+from patrick.data.store import DataStore
+from patrick.rl import data as rl_data
+from patrick.rl import run as rl_run
+from patrick.rl.config import RLRunConfig
 
 
 def _raw(n=1500, seed=0) -> pd.DataFrame:

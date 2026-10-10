@@ -10,9 +10,9 @@ import pytest
 
 pytest.importorskip("torch")
 
-from patrick.config import defaults as D  # noqa: E402
-from patrick.models import registry  # noqa: E402
-from patrick.models.deep import (  # noqa: E402
+from patrick.config import defaults as D
+from patrick.models import registry
+from patrick.models.deep import (
     DL_ALGOS,
     SEQUENCE_ALGOS,
     DeepClassifier,

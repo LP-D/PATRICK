@@ -2434,3 +2434,11 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .data-table td.neg { color: var(--neg); }
 .data-table td.pos { color: var(--pos); }
 @media (max-width: 760px) { .exp-sel-grid { grid-template-columns: 1fr; } }
+
+
+/* ============ Reinforcement learning (/rl, rl.js) ============ */
+.rl-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 0; }
+.rl-results h3 { margin: 20px 0 6px; font-size: 14px; }
+.rl-results .data-table td.rl-agent-col { font-weight: 600; color: var(--text); }
+.rl-results .exp-presets { margin-top: 4px; }
+#rl-form [hidden] { display: none; }

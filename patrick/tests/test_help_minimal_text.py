@@ -51,7 +51,7 @@ def test_the_css_hides_help_before_the_script_runs_and_styles_the_question_mark(
 
 
 def test_the_selector_lists_of_the_script_and_the_css_agree():
-    js = re.search(r'var STATIC = "(.*?)";', JS, re.S).group(1)
+    js = re.search(r'var STATIC = "(.*?)";', JS, re.DOTALL).group(1)
     js = re.sub(r'"\s*\+\s*"', "", js)
     css = re.search(r"\.help-pending :is\((.*?)\):is\(", CSS).group(1)
     assert [s.strip() for s in js.split(", ") if s.strip()] == [s.strip() for s in css.split(", ") if s.strip()]

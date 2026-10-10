@@ -1,0 +1,226 @@
+{% extends "base_v2.html" %}
+{% from "_launch_macros.html" import info with context %}
+{% block title %}PATRICK — {{ t('rlp_title') }}{% endblock %}
+
+{# Un champ du formulaire `rl_<réglage>` d'après sa spécification (`rl_routes.field_groups`). `data-algos` : le réglage ne vaut que pour ces
+   algorithmes (rl.js masque les autres) ; `data-actions` : seulement pour cet espace d'actions. #}
+{% macro rl_field(f) %}
+{% set label = t('rlp_f_' ~ f.key) %}
+{% set algos = algo_fields.get(f.key) %}
+{% set only_discrete = f.key in ('n_levels',) %}
+{% if f.kind == 'bool' %}
+<label class="checkbox"{% if algos %} data-algos="{{ algos | join(',') }}"{% endif %}>
+    <input type="checkbox" name="rl_{{ f.key }}" {% if view['rl_' ~ f.key] %}checked{% endif %}>
+    {{ label }}{{ info(rl_terms.get(f.key, ''), label) if rl_terms.get(f.key) }}
+</label>
+{% else %}
+<label{% if algos %} data-algos="{{ algos | join(',') }}"{% endif %}{% if only_discrete %} data-actions="discrete"{% endif %}>{{ label }}{{ info(rl_terms.get(f.key, ''), label) if rl_terms.get(f.key) }}
+    {% if f.kind == 'choice' %}
+    <select name="rl_{{ f.key }}">
+        {% for opt in f.options %}
+        <option value="{{ opt }}" {% if view['rl_' ~ f.key] == opt %}selected{% endif %}>{{ t('rlp_o_' ~ f.key ~ '_' ~ opt) }}</option>
+        {% endfor %}
+    </select>
+    {% else %}
+    <input type="number" name="rl_{{ f.key }}" step="{{ f.step }}" min="{{ f.min }}" max="{{ f.max }}" value="{{ view['rl_' ~ f.key] }}">
+    {% endif %}
+</label>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<h1 class="page-title">{{ t('rlp_title') }}</h1>
+<p class="page-subtitle">{{ t('rlp_subtitle') }}</p>
+{% if deps_error %}
+<p class="banner banner-warning" role="alert">{{ t('rlp_no_deps', e=deps_error) }}</p>
+{% endif %}
+
+<div class="station-grid" id="rl-root" data-initial-run="{{ initial_run_id or '' }}">
+
+<section class="dash-panel dash-settings" aria-labelledby="rl-settings-title">
+    <h2 id="rl-settings-title" class="dash-panel-title">{{ t('section_settings') }}</h2>
+    <div class="dash-panel-body">
+
+    <div id="rl-errors" class="banner banner-error {% if not errors %}hidden{% endif %}" role="alert">
+        <strong>{{ t('banner_fix_errors') }}</strong>
+        <ul id="rl-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+
+    {% if applied %}
+    <p class="banner" role="status">{{ t('prof_applied', name=t('prof_' ~ applied.key ~ '_name')) }}</p>
+    {% endif %}
+
+    <details class="profile-gallery" id="profile-gallery" {% if not applied %}open{% endif %}>
+        <summary>{{ t('prof_gallery_title') }}</summary>
+        <div class="profile-grid">
+        {% for p in rl_profiles %}
+            <div class="profile-card{% if applied and applied.key == p.key %} is-applied{% endif %}" data-help-host>
+                <a class="profile-main" href="/rl?profile={{ p.key }}" data-profile="{{ p.key }}">
+                    <span class="profile-name">{{ t('prof_' ~ p.key ~ '_name') }}</span>
+                </a>
+                <span class="profile-desc">{{ t('prof_' ~ p.key ~ '_desc') }}</span>
+                <span class="profile-meta">
+                    <span class="adv-cost adv-cost-{{ p.cost }}">{{ t('adv_cost_' ~ p.cost) }}</span>
+                    {% if p.n_changes %}<span class="hint">{{ t('prof_n_changes', n=p.n_changes) }}</span>{% else %}<span class="hint">{{ t('prof_defaults') }}</span>{% endif %}
+                </span>
+            </div>
+        {% endfor %}
+        </div>
+    </details>
+
+    <form method="post" action="/api/rl/runs" class="run-form" id="rl-form" data-mode="simple">
+        <div class="settings-mode" id="settings-mode">
+            <div>
+                <strong>{{ t('settings_mode_simple_title') }}</strong>
+                <p class="hint" id="settings-mode-hint" data-help="fold">{{ t('settings_mode_simple_hint') }}</p>
+            </div>
+            <button type="button" class="queue-action" id="settings-mode-toggle" aria-pressed="false">{{ t('settings_mode_show_expert') }}</button>
+        </div>
+        <div class="launch-profiles">
+            <label for="rl-profile-name">{{ t('rlp_profile_name') }}
+                <input type="text" id="rl-profile-name" maxlength="60" autocomplete="off">
+            </label>
+            <button type="button" class="queue-action" id="rl-profile-save">{{ t('rlp_profile_save') }}</button>
+            <label for="rl-profile-list">{{ t('profile_saved') }}
+                <select id="rl-profile-list"><option value="">{{ t('profile_choose') }}</option></select>
+            </label>
+            <button type="button" class="queue-action" id="rl-profile-load" disabled>{{ t('profile_load') }}</button>
+            <button type="button" class="queue-action danger" id="rl-profile-delete" disabled>{{ t('profile_delete') }}</button>
+            <span id="rl-profile-status" class="hint" role="status" aria-live="polite"></span>
+        </div>
+
+        <fieldset>
+            <legend>{{ t('rlp_sec_target') }}</legend>
+            <label>{{ t('rlp_f_target') }}
+                <select name="target_symbols" id="rl-targets" multiple required size="7">
+                    {% for group, items in target_groups.items() %}
+                    <optgroup label="{{ group_labels.get(group, group) }}">
+                        {% for sym, sym_label in items %}
+                        <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <p class="hint">{{ t('rlp_target_hint') }}</p>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <legend>{{ t('rlp_sec_agent') }}{{ info('rl_agent', t('rlp_sec_agent')) }}</legend>
+            <div class="subgrid">
+                <label>{{ t('rlp_f_algo') }}{{ info(view.rl_algo, view.rl_algo) }}
+                    <select name="rl_algo" id="rl-algo">
+                        {% for a in rl_algos %}<option value="{{ a }}" {% if view.rl_algo == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label>{{ t('rlp_f_action_space') }}{{ info('rl_action_space', t('rlp_f_action_space')) }}
+                    <select name="rl_action_space" id="rl-action-space">
+                        {% for opt in ('discrete', 'continuous') %}
+                        <option value="{{ opt }}" {% if view.rl_action_space == opt %}selected{% endif %}>{{ t('rlp_o_action_space_' ~ opt) }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>{{ t('rlp_f_reward') }}{{ info('rl_reward', t('rlp_f_reward')) }}
+                    <select name="rl_reward">
+                        {% for opt in ('log', 'pnl', 'dsr') %}
+                        <option value="{{ opt }}" {% if view.rl_reward == opt %}selected{% endif %}>{{ t('rlp_o_reward_' ~ opt) }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>{{ t('rlp_f_cost_bps') }}{{ info('rl_cost', t('rlp_f_cost_bps')) }}
+                    <input type="number" name="rl_cost_bps" step="any" min="{{ bounds['cost_bps'][0] }}" max="{{ bounds['cost_bps'][1] }}" value="{{ view.rl_cost_bps }}">
+                </label>
+                <label>{{ t('rlp_f_total_timesteps') }}{{ info('rl_timesteps', t('rlp_f_total_timesteps')) }}
+                    <input type="number" name="rl_total_timesteps" step="1000" min="{{ bounds['total_timesteps'][0] }}" max="{{ bounds['total_timesteps'][1] }}" value="{{ view.rl_total_timesteps }}">
+                </label>
+                <label>{{ t('rlp_f_n_folds') }}{{ info('rl_walkforward', t('rlp_f_n_folds')) }}
+                    <input type="number" name="rl_n_folds" step="1" min="{{ bounds['n_folds'][0] }}" max="{{ bounds['n_folds'][1] }}" value="{{ view.rl_n_folds }}">
+                </label>
+            </div>
+            <label class="checkbox">
+                <input type="checkbox" name="rl_allow_short" {% if view.rl_allow_short %}checked{% endif %}>
+                {{ t('rlp_f_allow_short') }}
+            </label>
+        </fieldset>
+
+        {% for group in field_groups %}
+        <details class="adv" data-adv="rl_{{ group.key }}">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('rlp_sec_' ~ ('env' if group.key == 'env' else group.key)) }}</span>
+                <span class="adv-state" data-adv-state="rl_{{ group.key }}"></span>
+            </summary>
+            <div class="adv-body">
+            {% if group.key == 'features' %}
+            <div class="checkbox-row">
+                {% for fam in rl_families %}
+                <label class="checkbox">
+                    <input type="checkbox" name="families" value="{{ fam }}" {% if fam in view.families %}checked{% endif %}>
+                    {{ fam }}{{ info(fam) }}
+                </label>
+                {% endfor %}
+            </div>
+            <label>{{ t('rlp_f_start_date') }}
+                <input type="date" name="start_date" value="{{ view.start_date }}">
+            </label>
+            {% endif %}
+            <div class="subgrid">
+                {% for f in group.fields %}{{ rl_field(f) }}{% endfor %}
+            </div>
+            {% if group.key == 'compute' %}
+            <div class="subgrid">
+                <label>{{ t('rlp_f_seed') }}
+                    <input type="number" name="seed" step="1" value="{{ view.seed }}">
+                </label>
+                <label>{{ t('rlp_f_output_dir') }}
+                    <input type="text" name="output_dir" value="{{ view.output_dir }}">
+                </label>
+            </div>
+            {% endif %}
+            </div>
+        </details>
+        {% endfor %}
+
+        <div class="launch-bar">
+            <p class="launch-recap" id="rl-recap" aria-live="polite"></p>
+            <button type="submit" class="primary" id="rl-launch"{% if not rl_ready %} disabled aria-disabled="true"{% endif %}>{{ t('rlp_launch') }}</button>
+        </div>
+    </form>
+    </div>
+</section>
+
+<section class="dash-panel dash-progress" aria-labelledby="rl-progress-title">
+    <h2 id="rl-progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
+    <div class="dash-panel-body">
+        <p id="rl-idle" class="hint" data-keep>{{ t('no_run_yet') }}</p>
+        <div id="rl-status-panel" class="hidden">
+            <p id="rl-run-name" class="run-name-line"></p>
+            <div class="run-controls">
+                <button type="button" class="queue-action danger" id="rl-stop" hidden>{{ t('rlp_stop') }}</button>
+            </div>
+            <div class="progress-bar"><div id="rl-progress-fill" class="progress-fill"></div></div>
+            <p id="rl-status-line" role="status" aria-live="polite" data-keep>…</p>
+            <details class="log-raw">
+                <summary>{{ t('rlp_log_title') }}</summary>
+                <pre id="rl-log" class="log-tail"></pre>
+            </details>
+        </div>
+    </div>
+</section>
+
+<section class="dash-panel dash-progress" id="rl-results-panel" aria-labelledby="rl-results-title" hidden>
+    <h2 id="rl-results-title" class="dash-panel-title">{{ t('rlp_results_title') }}</h2>
+    <p class="hint">{{ t('rlp_oos_hint') }}</p>
+    <div class="dash-panel-body" id="rl-results"></div>
+</section>
+
+<section class="dash-panel dash-progress" aria-labelledby="rl-runs-title">
+    <h2 id="rl-runs-title" class="dash-panel-title">{{ t('rlp_runs_title') }}</h2>
+    <div class="dash-panel-body" id="rl-runs"></div>
+</section>
+
+</div>
+
+<script id="rl-initial-runs" type="application/json">{{ recent_runs | tojson }}</script>
+<script src="/static/charts.js"></script>
+<script src="/static/rl.js"></script>
+{% endblock %}

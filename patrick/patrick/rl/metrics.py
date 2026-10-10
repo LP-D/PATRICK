@@ -36,7 +36,7 @@ def summarize(net_returns: np.ndarray, positions: np.ndarray, costs: np.ndarray,
     changes = np.abs(np.diff(np.concatenate([[0.0], pos])))
     active = pos != 0
     return {
-        "n": int(len(r)),
+        "n": len(r),
         "total_return": float(eq.iloc[-1] - 1.0) if len(eq) else float("nan"),
         "cagr": sim_metrics.cagr(eq),
         "vol": sim_metrics.annualized_vol(r),

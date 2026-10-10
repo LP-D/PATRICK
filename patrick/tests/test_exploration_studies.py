@@ -158,7 +158,7 @@ def test_rolling_correlation_tracks_a_regime_change(rng):
     noise = rng.normal(size=N)
     y = np.where(np.arange(N) < N // 2, noise, x + 0.2 * noise)        # corrélés seulement en seconde moitié
     out = S.rolling_correlation(_rets(A=x, B=y), "A", "B", window=60)
-    assert out["first_half_mean"] < 0.2 < 0.7 < out["second_half_mean"]
+    assert out["first_half_mean"] < 0.2 and out["second_half_mean"] > 0.7
     assert out["noise_band"] == pytest.approx(1 / math.sqrt(60))
     with pytest.raises(ValueError):
         S.rolling_correlation(_rets(A=x, B=y), "A", "A")

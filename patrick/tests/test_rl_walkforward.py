@@ -3,6 +3,7 @@ sélection de variables, de la mise à l'échelle, du report de position et des 
 Chaque garde d'anti-fuite est testée en plantant un signal qui n'existe que dans l'avenir."""
 from __future__ import annotations
 
+import itertools
 import math
 
 import numpy as np
@@ -55,7 +56,7 @@ def _run(data, cfg, positions=1.0, spy=None):
 def test_folds_are_contiguous_non_overlapping_and_cover_the_end_of_the_sample():
     folds = wf.make_folds(1200, RLSettings(n_folds=4, min_train_frac=0.5))
     assert [f.test_lo for f in folds] == [600, 750, 900, 1050] and folds[-1].test_hi == 1200
-    for a, b in zip(folds, folds[1:], strict=False):
+    for a, b in itertools.pairwise(folds):
         assert a.test_hi == b.test_lo
     assert all(f.train_lo == 0 and f.train_hi == f.test_lo - 1 for f in folds)          # un jour d'écart avant le test
 

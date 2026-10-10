@@ -9,7 +9,7 @@ from __future__ import annotations
 from patrick.config import defaults as D
 from patrick.config.training_profiles import TrainingProfile, apply_patch
 
-__all__ = ["PROFILES", "BY_KEY", "get", "apply_patch"]
+__all__ = ["BY_KEY", "PROFILES", "apply_patch", "get"]
 
 _SEQ = ["GRU", "LSTM", "CNN1D"]
 

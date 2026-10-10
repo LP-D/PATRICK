@@ -109,7 +109,7 @@ def test_the_page_names_the_glossary_terms_of_every_network_and_setting(client):
 def test_english_page_leaks_no_translation_key(client):
     client.cookies.set(i18n.LANG_COOKIE, "en")
     html = client.get("/dl").text
-    visible = re.sub(r"<script.*?</script>", "", html, flags=re.S)
+    visible = re.sub(r"<script.*?</script>", "", html, flags=re.DOTALL)
     assert "Averaged networks" in visible and not re.search(r"\bdl_[a-z_]+\b(?!\")", re.sub(r'(name|data-term|data-adv|id|for|value)="[^"]*"', "", visible))
 
 
@@ -222,6 +222,7 @@ def test_launching_networks_enqueues_one_job_per_target_with_the_deep_block(clie
         seen.append(config)
         return {"id": f"job{len(seen)}", "status": "queued", "queue_position": len(seen)}
 
+    monkeypatch.setattr(deep_models, "torch_available", lambda: True)           # le lancement exige PyTorch ; ici seul l'aiguillage compte
     monkeypatch.setattr(run_manager, "start_run", fake_start)
     monkeypatch.setattr(run_manager, "next_run_name", lambda sym: f"{forms.slug_target(sym)}_1")
     resp = client.post("/runs", data=_form(target_symbols=["^VIX", "^GSPC"], dl_epochs="11"))
@@ -230,6 +231,7 @@ def test_launching_networks_enqueues_one_job_per_target_with_the_deep_block(clie
 
 
 def test_a_window_model_with_smote_is_a_readable_400_not_a_crash(client, monkeypatch):
+    monkeypatch.setattr(deep_models, "torch_available", lambda: True)
     monkeypatch.setattr(run_manager, "start_run", lambda cfg: pytest.fail("rien en file"))
     resp = client.post("/runs", data=_form(algos=["LSTM"], sampler_candidates=["SMOTE"]))
     assert resp.status_code == 400 and "sampler" in " ".join(resp.json()["errors"])

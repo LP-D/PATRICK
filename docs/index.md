@@ -11,7 +11,7 @@ Fichiers notables :
 - patrick/DESIGN.md — design de l'interface et architecture
 - KNOWN_ISSUES.md — limitations et problèmes connus
 - CONTRIBUTING.md — guide de contribution
-- docs/superpowers/* — spécifications et plans
+- docs/superpowers/* — spécifications et plans (dont `2026-10-10-pages-ml-dl-rl-exploration-design.md` : pages ML / DL / RL / Exploration, texte minimal)
 
 Ouvrir les notebooks depuis ./notebooks/ ou via les liens présents dans chaque document.
 

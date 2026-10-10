@@ -1,6 +1,5 @@
 """Chaînes FR/EN des pages Modèles (ML, DL, RL) et de la page Exploration. Fusionnées dans `i18n.STRINGS` ;
-`MODELS_JS_KEYS` complète `i18n.js_strings` (clés lues côté navigateur via `window.I18N` : tout ce qui commence par `exp_`, `dl_`,
-`rl_p_` et `pg_`).
+`MODELS_JS_KEYS` et `PAGE_JS_KEYS` complètent `i18n.js_strings` (clés lues côté navigateur via `window.I18N`).
 
 Convention : un texte explicatif est écrit une seule fois ici et affiché derrière un « ? » (`static/help.js`) ; seuls les titres,
 libellés, valeurs et boutons restent visibles à l'écran."""
@@ -8,6 +7,7 @@ from __future__ import annotations
 
 from patrick.webapp.glossary_models import LABEL_STRINGS
 from patrick.webapp.i18n_dl import DL_STRINGS
+from patrick.webapp.i18n_rl import RL_STRINGS
 
 
 def _s(fr: str, en: str) -> dict[str, str]:
@@ -317,8 +317,18 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
 
 MODELS_STRINGS.update(LABEL_STRINGS)
 MODELS_STRINGS.update(DL_STRINGS)
+MODELS_STRINGS.update(RL_STRINGS)
 
-# Clés lues par le navigateur (`window.I18N`).
-MODELS_JS_KEYS: tuple[str, ...] = tuple(
-    k for k in MODELS_STRINGS
-    if (k.startswith(("exp_", "dl_", "rl_p_", "pg_")) and not k.endswith(("_hint", "_subtitle"))) or k == "help_aria")
+# Clés lues par le navigateur (`window.I18N`) : `help_aria` partout ; les libellés des pages à graphiques seulement sur leur page (la charge
+# utile de chaque page reste petite). Les textes réservés au gabarit (`*_hint`, `*_subtitle`) ne sont jamais envoyés.
+MODELS_JS_KEYS: tuple[str, ...] = ("help_aria",)
+
+
+def _browser_keys(*prefixes: str) -> tuple[str, ...]:
+    return tuple(k for k in MODELS_STRINGS if k.startswith(prefixes) and not k.endswith(("_hint", "_subtitle")))
+
+
+PAGE_JS_KEYS: dict[str, tuple[str, ...]] = {
+    "/exploration": _browser_keys("exp_"),
+    "/rl": _browser_keys("rlp_"),
+}

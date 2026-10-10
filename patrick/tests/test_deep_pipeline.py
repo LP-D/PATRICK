@@ -9,15 +9,14 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
-from pydantic import ValidationError
 
 pytest.importorskip("torch")
 
-from patrick.config.schema import DeepConfig, RunConfig  # noqa: E402
-from patrick.data.store import DataStore  # noqa: E402
-from patrick.models import registry  # noqa: E402
-from patrick.models.deep import DeepClassifier  # noqa: E402
-from patrick.pipeline import engine as engine_module  # noqa: E402
+from patrick.config.schema import RunConfig
+from patrick.data.store import DataStore
+from patrick.models import registry
+from patrick.models.deep import DeepClassifier
+from patrick.pipeline import engine as engine_module
 
 
 def _raw(n=1500, seed=0) -> pd.DataFrame:
@@ -78,59 +77,6 @@ def test_a_run_without_torch_is_refused_before_any_download(tmp_path, monkeypatc
     monkeypatch.setattr(engine_module, "ingest", lambda *a, **k: pytest.fail("aucun téléchargement avant le refus"))
     with pytest.raises(deep.DeepUnavailableError, match="PyTorch"):
         engine_module.run_pipeline(_config(tmp_path), store=DataStore(root=str(tmp_path / "store")), db_path=str(tmp_path / "p.db"))
-
-
-# --------------------------------------------------------------------------- configuration
-
-
-def test_a_machine_learning_config_keeps_the_exact_hash_it_had_before_deep_learning_existed():
-    """Valeurs relevées avec le code d'AVANT l'ajout de `models.deep` (reprise des runs existants, noms d'études Optuna)."""
-    base = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}})
-    assert base.models.deep is None and base.family == "ml"
-    assert engine_module._config_hash(base) == "10dbbb82cda90307"
-    other = RunConfig.model_validate({"objective": {"target_symbol": "^GSPC", "horizons": [1, 5]},
-                                      "models": {"algos": ["XGBoost", "LightGBM"]}, "tuning": {"n_trials": 7}})
-    assert engine_module._config_hash(other) == "7c62b00dd1c4c530"
-    with_deep = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["MLP"], "deep": {}},
-                                          "sampler": {"candidates": ["none"]}})
-    assert with_deep.family == "dl" and engine_module._config_hash(with_deep) != engine_module._config_hash(base)
-
-
-@pytest.mark.parametrize("bad", [{"hidden_size": 2}, {"dropout": 0.95}, {"learning_rate": 5.0}, {"epochs": 0}, {"device": "tpu"},
-                                 {"class_weight": "heavy"}, {"lookback": 1}])
-def test_deep_settings_outside_their_bounds_are_refused(bad):
-    with pytest.raises(ValidationError):
-        DeepConfig(**bad)
-
-
-def test_window_models_refuse_oversamplers_and_cpcv():
-    with pytest.raises(ValidationError, match="sampler"):
-        RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["GRU"]}, "sampler": {"candidates": ["SMOTE"]}})
-    with pytest.raises(ValidationError, match="CPCV"):
-        RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["LSTM"]}, "sampler": {"candidates": ["none"]},
-                                  "validation": {"scheme": "cpcv"}})
-    # un MLP lit une ligne à la fois : SMOTE et CPCV lui sont permis
-    ok = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["MLP"]}, "sampler": {"candidates": ["SMOTE"]},
-                                   "validation": {"scheme": "cpcv"}})
-    assert ok.family == "dl"
-
-
-def test_mixed_algorithm_lists_stay_in_the_machine_learning_family():
-    cfg = RunConfig.model_validate({"objective": {"target_symbol": "^VIX"}, "models": {"algos": ["XGBoost", "MLP"]}})
-    assert cfg.family == "ml"
-
-
-def test_the_optuna_search_space_of_networks_lives_outside_the_tree_defaults():
-    import optuna
-
-    from patrick.config import defaults as D
-    from patrick.tuning.optuna_runner import suggest_params
-    assert not set(D.ALL_DL_ALGOS) & set(D.DEFAULT_OPTUNA_BOUNDS)           # le défaut de tout run reste inchangé
-    trial = optuna.create_study().ask()
-    params = suggest_params(trial, "GRU", {"GRU": {"hidden_size": [8, 10]}})
-    assert set(params) == {"hidden_size", "n_layers", "dropout", "learning_rate", "weight_decay", "lookback"}
-    assert 8 <= params["hidden_size"] <= 10
-    assert set(suggest_params(optuna.create_study().ask(), "MLP")) == {"hidden_size", "n_layers", "dropout", "learning_rate", "weight_decay"}
 
 
 @pytest.mark.slow

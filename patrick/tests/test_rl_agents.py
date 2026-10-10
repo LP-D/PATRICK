@@ -11,9 +11,9 @@ for _module in ("torch", "gymnasium", "stable_baselines3"):
     if importlib.util.find_spec(_module) is None:
         pytest.skip(f"{_module} non installé (extra optionnel rl)", allow_module_level=True)
 
-from patrick.rl import agents  # noqa: E402
-from patrick.rl.config import RLSettings  # noqa: E402
-from patrick.rl.core import TradingCore, rollout  # noqa: E402
+from patrick.rl import agents
+from patrick.rl.config import RLSettings
+from patrick.rl.core import TradingCore, rollout
 
 FAST = {"total_timesteps": 1500, "n_steps": 64, "batch_size": 32, "n_epochs": 2, "policy_units": 16, "policy_layers": 1,
         "buffer_size": 3000, "learning_starts": 100, "train_freq": 4, "target_update_interval": 100, "episode_length": 60}
@@ -72,7 +72,7 @@ def test_training_reports_progress_through_the_callback():
 def test_the_ensemble_position_is_the_mean_of_the_agents():
     pol = agents.ensemble_policy([lambda o: 1.0, lambda o: 0.0, lambda o: -1.0, lambda o: 1.0])
     assert pol(np.zeros(3)) == pytest.approx(0.25)
-    single = lambda o: 0.5  # noqa: E731
+    single = lambda o: 0.5
     assert agents.ensemble_policy([single]) is single
 
 

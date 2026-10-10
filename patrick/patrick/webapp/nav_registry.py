@@ -60,6 +60,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # deep learning (reseaux de neurones, memes runs que le ML), reinforcement learning (agent qui apprend une position).
     NavEntry("ml", "Machine learning", "/ml", "modeles", 10, "nav_ml"),
     NavEntry("dl", "Deep learning", "/dl", "modeles", 20, "nav_dl"),
+    NavEntry("rl", "Reinforcement learning", "/rl", "modeles", 30, "nav_rl"),
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
     NavEntry("universe", "Univers", "/universe", "classes_actifs", 10, "nav_universe",
              child_routes=("/targets/{ticker}",)),

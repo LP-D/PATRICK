@@ -147,15 +147,45 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   `data_table(...)`, `empty_state(...)`, `metric(...)`.
 - i18n dans `webapp/i18n.py` (`t()` dans les templates), français par défaut,
   anglais en second.
-- Pages principales : `/` (synthèse), `/launch` (config + lancement d'un
-  run), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
+- Pages principales : `/` (synthèse), `/ml`, `/dl` et `/rl` (cadrage et
+  lancement : machine learning, deep learning, reinforcement learning ;
+  `/launch` redirige vers `/ml`), `/exploration` (études statistiques entre
+  actifs), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
   `/commodities`, `/macro` (stats par actif, calcul côté client via
   `asset_stats.js`/`/api/asset-stats/{symbol}`), `/predictions` (vue
   d'ensemble cible×horizon), `/simulate` (ticket d'ordres) et `/fonds`. Le journal et les snapshots
   Phase 9 restent accessibles via API, sans page de navigation dédiée.
 - La file de jobs web (`tracking/jobs.py` + `worker.py`, lancé
   automatiquement par `run_manager.ensure_worker_running`) exécute les runs
-  soumis depuis `/launch` de façon asynchrone.
+  soumis depuis `/ml`, `/dl` et `/rl` de façon asynchrone.
+- **Texte minimal** : `static/help.js` replie derrière un « ? » tout texte
+  d'aide statique (`.hint`, sous-titres, notes, explications entre
+  parenthèses d'un libellé). Un message d'état dynamique reste visible s'il a
+  un `id`, un `aria-live`, un `role` ou `data-keep` (opt-in inverse :
+  `data-help="fold"`).
+
+### 6 bis. Pages Modèles et Exploration (spec : `docs/superpowers/specs/2026-10-10-pages-ml-dl-rl-exploration-design.md`)
+
+- `/ml` et `/dl` partagent `templates/launch_base.html` (blocs
+  `sec_sampler`, `sec_models`, `sec_tuning`, `sec_optuna_bounds`) et
+  `static/app.js` : le deep learning n'est PAS un second pipeline mais des
+  algos de plus (`models/deep.py`, `get_classifier`) : MLP, GRU, LSTM, CNN1D,
+  Transformer, avec walk-forward, purge, embargo, sélection, Optuna, duel de
+  champions du ML. Réglages communs dans `ModelsConfig.deep` (`None` pour un
+  run ML : hors du hachage de configuration, `pipeline/engine.py::
+  _config_hash`) ; modèles à fenêtre incompatibles avec SMOTE et CPCV
+  (`RunConfig._check_deep_models`). PyTorch est optionnel (`pip install -e
+  ".[deep]"`), importé à l'usage ; la page et le lancement le signalent.
+- `/rl` : moteur à part, `patrick/rl/` (`config.py` `RLRunConfig`,
+  `core.py` mécanique NumPy de l'environnement, `env.py` Gymnasium, `agents.py`
+  PPO/A2C/DQN/SAC via Stable-Baselines3, `data.py` états causaux, `walkforward.py`,
+  `metrics.py`, `run.py`). Même file de jobs (`config_json` avec `"kind": "rl"`,
+  `worker._run_one_rl_job`), résultat dans `job.result_json` et
+  `<sortie>/rl_result.json`. Extras optionnels : `pip install -e ".[rl]"`.
+- `/exploration` : `patrick/exploration/` (`panel.py` alignement des niveaux AVANT
+  les rendements, `studies.py` fonctions pures) servi par
+  `webapp/exploration_routes.py` (`/api/exploration/<étude>`) ; graphiques SVG
+  communs dans `static/charts.js`.
 
 ## 7. Conventions clés
 

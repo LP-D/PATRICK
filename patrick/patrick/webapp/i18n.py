@@ -11,7 +11,7 @@ from starlette.requests import Request
 
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
-from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS
+from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 
@@ -906,7 +906,7 @@ def translator(lang: str):
     return t
 
 
-def js_strings(lang: str) -> dict[str, str]:
+def js_strings(lang: str, path: str = "") -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
@@ -915,7 +915,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",
         "status_error", "status_done", "duration_s", "duration_min", "duration_h",
-        "settings_mode_show_expert", "settings_mode_hide_expert",
+        "settings_mode_show_expert", "settings_mode_hide_expert", "settings_mode_simple_hint", "settings_mode_expert_hint",
         "profile_choose", "profile_name_required", "profile_saved_notice", "profile_loaded",
         "profile_deleted", "profile_read_error", "profile_save_error", "profile_delete_error", "profile_missing",
         "compare_runs_selection",
@@ -965,6 +965,7 @@ def js_strings(lang: str) -> dict[str, str]:
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
+    keys = [*keys, *PAGE_JS_KEYS.get(path, ())]
     t = translator(lang)
     return {k: t(k) for k in keys}
 

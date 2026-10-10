@@ -241,3 +241,28 @@ nécessaire pour réactiver la bascule, seul `tokens.css` et le bouton dans
 `base.html` doivent être complétés. Chantier futur distinct, non traité
 dans le remplacement de charte visuelle qui a introduit cette structure.
 
+
+---
+
+## Pages ML / DL / RL / Exploration — limites assumées (2026-10-10)
+
+- **Deep learning, modèles à fenêtre** (GRU, LSTM, CNN1D, Transformer) : les lignes sont supposées triées par date. En walk-forward, les
+  `lookback − 1` premières lignes de chaque appel de prédiction utilisent comme contexte les dernières lignes d'ENTRAÎNEMENT (écart de
+  quelques barres si purge/embargo), approximation documentée dans `models/deep.py`. La prédiction du jour fournit la vraie fenêtre ;
+  les barres de rattrapage (reconstitution « à la date t ») sont sautées pour ces modèles, jamais approximées (`predict.py`).
+  SMOTE et CPCV sont refusés avec ces modèles (`RunConfig._check_deep_models`). L'explication d'un réseau
+  (`explain._deep_contributions`) est en unités de probabilité (valeurs de Shapley estimées), pas dans l'espace brut des arbres.
+- **Deep learning, coût** : un réseau coûte nettement plus qu'un arbre sur processeur seul ; les profils de `/dl` le tiennent compte,
+  pas la recherche exhaustive (grille de variables × réseaux × Optuna).
+- **Reinforcement learning** : une cible cotée à la fois (pas de portefeuille), positions au rendement de clôture à clôture (pas
+  d'exécution intra-journalière), coûts proportionnels (frais + glissement en points de base, pas de spread dépendant de la liquidité).
+  Les variables sont causales (fenêtres glissantes) : EGARCH, HMM et interactions sont exclus faute de réajustement pli par pli. Le Sharpe
+  déflaté compte les runs RL déjà lancés sur la cible comme autant d'essais, pas ceux qui ont été supprimés de la file. Un indice non
+  investissable (`^VIX`) donne un rendement théorique.
+- **Exploration** : les séries sont rechargées via le cache local de 7 jours de `yfinance_source.download_one` (et l'API FRED pour les séries
+  FRED) ; sans cache et sans réseau, un actif est exclu et signalé plutôt que remplacé. Les séries FRED mensuelles ou trimestrielles
+  exigent la fréquence « Mois ». Les p-values corrigées (Benjamini-Hochberg) couvrent un tableau de tests à la fois, pas l'ensemble des
+  analyses lancées pendant une session.
+- **Extras optionnels** : sans `pip install -e ".[deep]"` / `".[rl]"`, les pages `/dl` et `/rl` s'affichent mais le lancement est
+  désactivé avec le motif ; la CI n'installe pas PyTorch (les tests qui l'exigent sont ignorés, ceux de configuration et de mécanique
+  NumPy tournent partout).

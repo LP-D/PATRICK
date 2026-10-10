@@ -2,6 +2,7 @@
 La partie NumPy tourne sans PyTorch ; l'enveloppe Gymnasium est testée si Gymnasium est installé."""
 from __future__ import annotations
 
+import importlib.util
 import math
 
 import numpy as np
@@ -226,9 +227,10 @@ def test_the_policy_sees_the_position_it_actually_holds():
 # --------------------------------------------------------------------------- enveloppe Gymnasium
 
 
-gym = pytest.importorskip("gymnasium")
+needs_gym = pytest.mark.skipif(importlib.util.find_spec("gymnasium") is None, reason="gymnasium non installé (extra optionnel rl)")
 
 
+@needs_gym
 def test_the_gymnasium_env_follows_the_api_and_truncates_at_the_episode_end():
     from patrick.rl.env import TradingEnv
     core, s = _core(n=80, episode_length=20, random_start=False)
@@ -237,7 +239,7 @@ def test_the_gymnasium_env_follows_the_api_and_truncates_at_the_episode_end():
     assert obs.shape == env.observation_space.shape and info == {}
     done_at = None
     for i in range(1, 40):
-        obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+        obs, _reward, terminated, truncated, info = env.step(env.action_space.sample())
         assert terminated is False and obs.shape == env.observation_space.shape and "cost" in info
         if truncated:
             done_at = i
@@ -245,6 +247,7 @@ def test_the_gymnasium_env_follows_the_api_and_truncates_at_the_episode_end():
     assert done_at == 20
 
 
+@needs_gym
 def test_random_episode_starts_stay_inside_the_training_segment():
     from patrick.rl.env import TradingEnv
     core, s = _core(n=200, episode_length=30, random_start=True)
@@ -257,6 +260,7 @@ def test_random_episode_starts_stay_inside_the_training_segment():
     assert len(starts) > 10
 
 
+@needs_gym
 def test_actions_map_to_positions_for_both_action_spaces():
     from patrick.rl.env import action_to_position
     d = RLSettings(action_space="discrete", n_levels=3)
@@ -267,6 +271,7 @@ def test_actions_map_to_positions_for_both_action_spaces():
     assert action_to_position(np.array([-1.0]), c_long) == 0.0 and action_to_position(np.array([1.0]), c_long) == pytest.approx(2.0)
 
 
+@needs_gym
 def test_the_env_passes_the_gymnasium_checker_for_both_action_spaces():
     from gymnasium.utils.env_checker import check_env
 

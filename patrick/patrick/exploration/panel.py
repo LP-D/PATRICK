@@ -47,7 +47,7 @@ class Panel:
 
     @property
     def n_obs(self) -> int:
-        return int(len(self.returns))
+        return len(self.returns)
 
     def meta(self) -> dict:
         idx = self.returns.index

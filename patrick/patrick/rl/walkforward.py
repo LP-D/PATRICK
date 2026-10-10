@@ -154,7 +154,7 @@ def run_walkforward(data: rl_data.RLData, config: RLRunConfig, train_agent: Call
         fold_rows.append({
             "fold": fold.index + 1, "train_start": f"{data.dates[fold.train_lo]:%Y-%m-%d}", "train_end": f"{data.dates[fold.train_hi - 1]:%Y-%m-%d}",
             "test_start": f"{data.dates[fold.test_lo]:%Y-%m-%d}", "test_end": f"{data.dates[fold.test_hi - 1]:%Y-%m-%d}",
-            "n_train": int(len(rows_train)), "n_test": int(len(test_rows)), "features": cols,
+            "n_train": len(rows_train), "n_test": len(test_rows), "features": cols,
             "strategy": rl_metrics.summarize(ens["net_returns"], ens["positions"], ens["costs"], dates_fold),
             "buy_hold": rl_metrics.summarize(fwd_test, np.ones(len(fwd_test)), np.zeros(len(fwd_test)), dates_fold),
         })

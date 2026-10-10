@@ -22,7 +22,14 @@ from scipy import stats as sst
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
-from statsmodels.tsa.stattools import acf, adfuller, coint, grangercausalitytests, kpss, pacf
+from statsmodels.tsa.stattools import (
+    acf,
+    adfuller,
+    coint,
+    grangercausalitytests,
+    kpss,
+    pacf,
+)
 
 from patrick.validation.fdr import benjamini_hochberg
 
@@ -111,7 +118,7 @@ def correlation(returns: pd.DataFrame, method: str = "pearson", cluster: bool = 
     corr = corr.loc[order, order]
     cols = list(corr.columns)
     pairs = list(combinations(cols, 2))
-    out: dict = {"method": method, "labels": cols, "matrix": corr.to_numpy(), "n_obs": int(len(returns))}
+    out: dict = {"method": method, "labels": cols, "matrix": corr.to_numpy(), "n_obs": len(returns)}
     if 2 <= len(cols) and len(pairs) <= MAX_PAIR_TESTS:
         raw = {f"{a}|{b}": _pair_pvalue(returns[a].to_numpy(), returns[b].to_numpy(), method) for a, b in pairs}
         adj = _bh(raw)
@@ -153,7 +160,7 @@ def rolling_correlation(returns: pd.DataFrame, a: str, b: str, window: int = 60)
     noise = 1.0 / math.sqrt(window)
     half = len(roll) // 2
     return clean({
-        "a": a, "b": b, "window": window, "n_obs": int(len(returns)),
+        "a": a, "b": b, "window": window, "n_obs": len(returns),
         "dates": [d.strftime("%Y-%m-%d") for d in roll.index], "values": roll.to_numpy(),
         "full_sample": full, "min": float(roll.min()), "max": float(roll.max()), "last": float(roll.iloc[-1]),
         "std": float(roll.std()), "noise_band": noise,
@@ -180,7 +187,7 @@ def describe(returns: pd.DataFrame, levels: pd.DataFrame, periods_per_year: int,
         dd, dd_date = _drawdown(lv) if (len(lv) and bool((lv > 0).all()) and transforms.get(col) != "diff") else (None, None)
         lag1 = float(r.autocorr(lag=1)) if len(r) > 3 else float("nan")
         rows.append({
-            "symbol": col, "n": int(len(r)), "transform": transforms.get(col),
+            "symbol": col, "n": len(r), "transform": transforms.get(col),
             "mean_ann": float(r.mean() * periods_per_year), "vol_ann": float(r.std(ddof=1) * sq),
             "skew": float(sst.skew(r)), "excess_kurtosis": float(sst.kurtosis(r)),
             "jb_stat": float(jb.statistic), "jb_p": float(jb.pvalue), "normal_rejected": bool(jb.pvalue < ALPHA),
@@ -190,7 +197,7 @@ def describe(returns: pd.DataFrame, levels: pd.DataFrame, periods_per_year: int,
             "pct_positive": float((r > 0).mean()), "autocorr_1": lag1,
             "max_drawdown": dd, "max_drawdown_date": dd_date,
         })
-    return clean({"rows": rows, "n_obs": int(len(returns)), "periods_per_year": periods_per_year})
+    return clean({"rows": rows, "n_obs": len(returns), "periods_per_year": periods_per_year})
 
 
 # --------------------------------------------------------------------------- 3. mémoire et stationnarité
@@ -229,7 +236,7 @@ def stationarity(levels: pd.DataFrame, returns: pd.DataFrame) -> dict:
         lv = levels[col].dropna()
         lv_log = np.log(lv) if bool((lv > 0).all()) else lv
         r = returns[col].dropna()
-        entry = {"symbol": col, "n": int(len(r))}
+        entry = {"symbol": col, "n": len(r)}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
@@ -252,7 +259,7 @@ def stationarity(levels: pd.DataFrame, returns: pd.DataFrame) -> dict:
         entry["hurst"], entry["hurst_label"] = h, _hurst_label(h)
         adf_p[col], kpss_p[col] = float(a_lv[1]), float(k_lv[1])
         rows.append(entry)
-    return clean({"rows": rows, "n_obs": int(len(returns)),
+    return clean({"rows": rows, "n_obs": len(returns),
                   "note": "ADF : H0 = racine unitaire (p < 5 % => stationnaire). KPSS : H0 = stationnaire (p < 5 % => non stationnaire)."})
 
 
@@ -356,7 +363,7 @@ def cointegration(levels: pd.DataFrame, a: str, b: str, zwindow: int = 60) -> di
     zwindow = int(min(max(10, zwindow), len(spread) // 2))
     z = ((spread - spread.rolling(zwindow).mean()) / spread.rolling(zwindow).std()).dropna()
     return clean({
-        "a": a, "b": b, "n_obs": int(len(levels)), "test_stat": float(stat), "p_value": float(p),
+        "a": a, "b": b, "n_obs": len(levels), "test_stat": float(stat), "p_value": float(p),
         "critical_values": {"1%": float(crit[0]), "5%": float(crit[1]), "10%": float(crit[2])},
         "cointegrated": bool(p < ALPHA), "hedge_ratio": float(beta[1]), "intercept": float(beta[0]),
         "half_life_periods": half_life, "zwindow": zwindow,
@@ -392,7 +399,7 @@ def pca(returns: pd.DataFrame, n_components: int = 5) -> dict:
     cum = np.cumsum(ratio)
     # nombre de facteurs à garder pour 80 % de la variance
     n80 = int(np.searchsorted(cum, 0.80) + 1)
-    return clean({"n_obs": int(len(z)), "n_assets": int(z.shape[1]), "explained": ratio[:max(nc, 10)], "cumulative": cum[:max(nc, 10)],
+    return clean({"n_obs": len(z), "n_assets": int(z.shape[1]), "explained": ratio[:max(nc, 10)], "cumulative": cum[:max(nc, 10)],
                   "components": comps, "n_for_80pct": n80, "first_factor_share": float(ratio[0]),
                   "note": "Calculé sur les rendements centrés-réduits. Une première composante dominante = un facteur de marché commun "
                           "(les actifs bougent ensemble) : la diversification apparente est alors faible."})
@@ -444,7 +451,7 @@ def tail_dependence(returns: pd.DataFrame, a: str, b: str, q: float = 0.05) -> d
 
     lower, kl, nl = cond(lo_a, lo_b)
     upper, ku, nu = cond(hi_a, hi_b)
-    return clean({"a": a, "b": b, "q": q, "n_obs": int(len(returns)), "pearson": float(ra.corr(rb)),
+    return clean({"a": a, "b": b, "q": q, "n_obs": len(returns), "pearson": float(ra.corr(rb)),
                   "lower": lower, "lower_hits": kl, "lower_n": nl, "lower_ratio": (lower / q if lower is not None else None),
                   "upper": upper, "upper_hits": ku, "upper_n": nu, "upper_ratio": (upper / q if upper is not None else None),
                   "independence": q,
@@ -460,7 +467,7 @@ def seasonality(returns: pd.Series, freq: str = "D") -> dict:
         raise ValueError("Pas assez d'observations pour une saisonnalité (minimum 60).")
     overall = float(r.mean())
     groups: dict[str, pd.Series] = {}
-    out: dict = {"n_obs": int(len(r)), "mean_all": overall}
+    out: dict = {"n_obs": len(r), "mean_all": overall}
     month_names = ["Janv", "Févr", "Mars", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc"]
     weekday_names = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
     if freq == "D":
@@ -484,7 +491,7 @@ def seasonality(returns: pd.Series, freq: str = "D") -> dict:
             continue
         t = sst.ttest_ind(g.to_numpy(), rest.to_numpy(), equal_var=False)          # le groupe contre TOUT le reste (Welch)
         raw_p[key] = float(t.pvalue)
-        rows.append({"key": key, "group": key.split(":", 1)[1], "kind": key.split(":", 1)[0], "n": int(len(g)),
+        rows.append({"key": key, "group": key.split(":", 1)[1], "kind": key.split(":", 1)[0], "n": len(g),
                      "mean": float(g.mean()), "excess": float(g.mean() - rest.mean()), "t": float(t.statistic),
                      "p": float(t.pvalue), "hit_rate": float((g > 0).mean())})
     adj = _bh(raw_p)
@@ -501,7 +508,7 @@ def seasonality(returns: pd.Series, freq: str = "D") -> dict:
     out["rows"] = rows
     out["n_tests"] = len(rows)
     out["turn_of_month"] = ({"mean_turn": float(turn["turn"].mean()), "mean_rest": float(turn["rest"].mean()),
-                              "n_turn": int(len(turn["turn"]))} if turn is not None and len(turn["turn"]) > 5 else None)
+                              "n_turn": len(turn["turn"])} if turn is not None and len(turn["turn"]) > 5 else None)
     out["note"] = (f"{len(rows)} groupes testés, chacun contre tout le reste ; seule la p-value corrigée (Benjamini-Hochberg) "
                    "autorise à parler d'effet. Un groupe très atypique tire la moyenne du « reste » et fait paraître les autres "
                    "plus faibles : lire d'abord le test d'ensemble et le groupe le plus extrême.")

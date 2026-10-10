@@ -1,6 +1,8 @@
 """Enveloppe Gymnasium de `rl/core.TradingCore`. Importe Gymnasium : n'est chargée qu'à l'entraînement (`rl/agents.py`)."""
 from __future__ import annotations
 
+from typing import ClassVar
+
 import gymnasium as gym
 import numpy as np
 
@@ -22,7 +24,7 @@ class TradingEnv(gym.Env):
     tiré au hasard (diversité), ou tout le segment si `episode_length = 0` ; la fin d'un épisode est une TRONCATURE (limite de temps),
     pas une fin de partie : la valeur future est donc estimée, jamais forcée à zéro."""
 
-    metadata = {"render_modes": []}
+    metadata: ClassVar[dict] = {"render_modes": []}
 
     def __init__(self, core: TradingCore, settings: RLSettings, start: int = 0, end: int | None = None, seed: int | None = None):
         super().__init__()

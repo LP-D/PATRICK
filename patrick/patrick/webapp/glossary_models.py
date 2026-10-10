@@ -197,6 +197,190 @@ LABELS_DL: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Reinforcement learning (page /rl). Rubrique « models » ; les noms d'algorithmes sont leur propre libellé.
+# ---------------------------------------------------------------------------------------------------------------------------------
+GLOSSARY_RL: dict[str, dict[str, str]] = {
+    "rl_agent": _g(
+        "Reinforcement learning (apprentissage par renforcement) : un agent choisit une action (ici une POSITION : vendre à découvert, "
+        "rester à plat, acheter), reçoit une récompense (le gain ou la perte de la période, frais déduits) et ajuste sa façon de décider "
+        "pour en accumuler davantage. Contrairement à un modèle de classification, il n'apprend pas à prédire un mouvement mais à AGIR, "
+        "en tenant compte des coûts de ses propres décisions.",
+        "Reinforcement learning: an agent chooses an action (here a POSITION: short, flat, long), receives a reward (the period's gain or "
+        "loss, net of fees) and adjusts how it decides to accumulate more. Unlike a classification model it does not learn to predict a "
+        "move but to ACT, accounting for the cost of its own decisions."),
+    "PPO": _g(
+        "PPO (Proximal Policy Optimization) : l'algorithme de référence, stable et polyvalent. Il apprend une politique (probabilités "
+        "d'agir) par petites mises à jour bornées, sur des paquets d'expérience récente. Actions discrètes ou continues.",
+        "PPO (Proximal Policy Optimization): the reference algorithm, stable and versatile. It learns a policy (action probabilities) by "
+        "small bounded updates on batches of recent experience. Discrete or continuous actions."),
+    "A2C": _g(
+        "A2C (Advantage Actor-Critic) : un acteur (la politique) et un critique (l'estimation de valeur) mis à jour ensemble sur de "
+        "courts paquets d'expérience. Plus simple et plus rapide que PPO, plus bruité.",
+        "A2C (Advantage Actor-Critic): an actor (the policy) and a critic (the value estimate) updated together on short batches of "
+        "experience. Simpler and faster than PPO, noisier."),
+    "DQN": _g(
+        "DQN (Deep Q-Network) : apprend la valeur future attendue de chaque action discrète et prend la meilleure ; réutilise des "
+        "expériences passées (tampon). Actions discrètes seulement.",
+        "DQN (Deep Q-Network): learns the expected future value of each discrete action and takes the best; reuses past experience "
+        "(buffer). Discrete actions only."),
+    "SAC": _g(
+        "SAC (Soft Actor-Critic) : apprend une position CONTINUE (une fraction de capital) en maximisant récompense et entropie "
+        "(curiosité), avec un tampon d'expériences. Action continue seulement.",
+        "SAC (Soft Actor-Critic): learns a CONTINUOUS position (a fraction of capital) by maximizing reward and entropy (curiosity), "
+        "with an experience buffer. Continuous action only."),
+    "rl_reward": _g(
+        "Récompense : le signal qui guide l'apprentissage. « Croissance du capital (log) » : le logarithme du rendement net, ce qui compte "
+        "composé dans le temps. « P&L net » : le gain brut moins les frais. « Sharpe différentiel » : la variation instantanée du ratio de "
+        "Sharpe (Moody & Saffell), qui récompense la RÉGULARITÉ du rendement et pas seulement son niveau.",
+        "Reward: the signal that guides learning. \"Capital growth (log)\": the log of the net return, which is what compounds over time. "
+        "\"Net P&L\": gross gain minus fees. \"Differential Sharpe\": the instantaneous change of the Sharpe ratio (Moody & Saffell), "
+        "rewarding the REGULARITY of return rather than just its level."),
+    "rl_action_space": _g(
+        "Actions : « discrètes » = l'agent choisit parmi quelques niveaux de position (par exemple −1, 0, +1) ; « continue » = il choisit "
+        "n'importe quelle fraction de capital entre −1 et +1. DQN exige du discret, SAC du continu ; PPO et A2C font les deux.",
+        "Actions: \"discrete\" = the agent picks among a few position levels (e.g. −1, 0, +1); \"continuous\" = it picks any capital "
+        "fraction between −1 and +1. DQN needs discrete, SAC continuous; PPO and A2C do both."),
+    "rl_cost": _g(
+        "Frais et glissement : coût de chaque changement de position, en points de base (1 point de base = 0,01 %) du montant échangé. "
+        "Passer de long à vendeur coûte deux fois le coût unitaire. Sans coûts réalistes, un agent apprend à s'agiter.",
+        "Fees and slippage: cost of each position change, in basis points (1 basis point = 0.01%) of the amount traded. Going from long "
+        "to short costs twice the unit cost. Without realistic costs an agent learns to churn."),
+    "rl_leverage": _g(
+        "Levier maximal : plafond de la position, en multiple du capital. 1 = capital investi une fois ; 2 = on peut détenir deux fois le "
+        "capital (les gains, pertes et frais sont doublés aussi).",
+        "Max leverage: cap on the position, as a multiple of capital. 1 = capital invested once; 2 = one can hold twice the capital "
+        "(gains, losses and fees double too)."),
+    "rl_risk_aversion": _g(
+        "Aversion au risque : pénalité proportionnelle au carré du rendement de la période, retirée à la récompense. Plus elle est élevée, "
+        "plus l'agent préfère des positions qui limitent les grands mouvements.",
+        "Risk aversion: a penalty proportional to the square of the period's return, subtracted from the reward. The higher it is, the "
+        "more the agent prefers positions that limit large moves."),
+    "rl_dsr_eta": _g(
+        "Oubli du Sharpe différentiel : vitesse à laquelle la moyenne et la variance de référence oublient le passé. 0,01 = mémoire "
+        "d'environ 100 périodes. Utilisé seulement par la récompense « Sharpe différentiel ».",
+        "Differential Sharpe decay: speed at which the reference mean and variance forget the past. 0.01 = memory of about 100 periods. "
+        "Used only by the \"Differential Sharpe\" reward."),
+    "rl_obs_lookback": _g(
+        "Lignes empilées : nombre de dates de variables (la dernière et les précédentes) présentées à l'agent. 1 = seulement aujourd'hui ; "
+        "20 = les 20 dernières dates, pour qu'il perçoive une dynamique. Aucune ne dépasse la date de décision.",
+        "Stacked rows: number of feature dates (the latest and earlier ones) shown to the agent. 1 = today only; 20 = the last 20 dates, "
+        "so it can perceive a dynamic. None goes past the decision date."),
+    "rl_episode": _g(
+        "Épisode : un passage de l'agent sur un segment d'historique pendant l'entraînement. « Longueur d'épisode » = nombre de dates "
+        "par passage (0 = tout le segment) ; avec un départ aléatoire, l'agent rejoue des périodes variées plutôt que toujours la même.",
+        "Episode: one pass of the agent over a history segment during training. \"Episode length\" = number of dates per pass (0 = the "
+        "whole segment); with a random start the agent replays varied periods rather than always the same one."),
+    "rl_features": _g(
+        "Variables observées : les mêmes variables causales que les pages machine learning (techniques, pics, macro, long cycle), "
+        "calculées avec des fenêtres glissantes. EGARCH, HMM et interactions sont exclus : ajustés sur un échantillon, ils laisseraient "
+        "passer de l'avenir. Les variables retenues sont choisies par pli sur l'entraînement seul.",
+        "Observed features: the same causal features as the machine-learning pages (technical, spike, macro, long cycle), computed with "
+        "rolling windows. EGARCH, HMM and interactions are excluded: fitted on a sample, they would let the future through. The features "
+        "kept are chosen per fold on training data only."),
+    "rl_policy": _g(
+        "Réseau de l'agent : le petit réseau de neurones qui transforme l'observation en décision. Couches et neurones plus nombreux = "
+        "plus de capacité, mais davantage de risque de surapprendre le passé.",
+        "Agent network: the small neural network turning the observation into a decision. More layers and units = more capacity, but more "
+        "risk of overfitting the past."),
+    "rl_learning_rate": _g(
+        "Taux d'apprentissage : taille de chaque mise à jour du réseau. Trop grand, l'apprentissage diverge ; trop petit, il stagne. "
+        "Valeurs usuelles : 0,0001 à 0,001.",
+        "Learning rate: size of each network update. Too large, learning diverges; too small, it stalls. Usual values: 0.0001 to 0.001."),
+    "rl_gamma": _g(
+        "Gamma (facteur d'actualisation) : poids des récompenses futures par rapport aux immédiates. 0,99 = l'agent se soucie des "
+        "~100 prochaines périodes ; 0 = il ne regarde que la période suivante.",
+        "Gamma (discount factor): weight of future rewards relative to immediate ones. 0.99 = the agent cares about the next ~100 "
+        "periods; 0 = it only looks at the next period."),
+    "rl_timesteps": _g(
+        "Pas d'entraînement : nombre total de décisions simulées pendant l'entraînement d'UN agent sur UN pli. Plus il y en a, plus "
+        "l'agent a vu de situations (et plus le run est long) ; trop peu et il n'a pas appris.",
+        "Training steps: total number of simulated decisions while training ONE agent on ONE fold. The more there are, the more situations "
+        "the agent has seen (and the longer the run); too few and it has not learned."),
+    "rl_n_steps": _g(
+        "Pas par mise à jour (PPO, A2C) : nombre de décisions collectées avant chaque mise à jour du réseau. La taille de lot de PPO "
+        "ne peut pas la dépasser.",
+        "Steps per update (PPO, A2C): number of decisions collected before each network update. PPO's batch size cannot exceed it."),
+    "rl_ent_coef": _g(
+        "Coefficient d'entropie (PPO, A2C) : récompense la diversité des actions pour que l'agent continue d'explorer. 0 = aucune "
+        "incitation à explorer ; une valeur trop haute rend la politique aléatoire.",
+        "Entropy coefficient (PPO, A2C): rewards action diversity so the agent keeps exploring. 0 = no incentive to explore; too high "
+        "makes the policy random."),
+    "rl_clip_range": _g(
+        "Plage de coupure (PPO) : limite de combien la politique peut changer en une mise à jour. 0,2 = ±20 %. Garde l'apprentissage stable.",
+        "Clip range (PPO): limit on how much the policy may change in one update. 0.2 = ±20%. Keeps learning stable."),
+    "rl_gae_lambda": _g(
+        "Lambda GAE (PPO, A2C) : compromis entre biais et bruit dans l'estimation de l'avantage d'une action. 0,95 est le choix usuel.",
+        "GAE lambda (PPO, A2C): trade-off between bias and noise in estimating an action's advantage. 0.95 is the usual choice."),
+    "rl_buffer": _g(
+        "Tampon d'expériences (DQN, SAC) : mémoire des décisions passées, rejouées pour apprendre. « Pas avant apprentissage » = nombre "
+        "d'expériences accumulées avant la première mise à jour ; « fréquence d'entraînement » = une mise à jour toutes les N décisions.",
+        "Experience buffer (DQN, SAC): memory of past decisions, replayed to learn. \"Steps before learning\" = experiences gathered "
+        "before the first update; \"training frequency\" = one update every N decisions."),
+    "rl_exploration": _g(
+        "Part d'exploration (DQN) : fraction de l'entraînement pendant laquelle la probabilité d'essayer une action au hasard diminue "
+        "de 100 % à 5 %. Tau (SAC) : vitesse de recopie du réseau cible, 0,005 = très lente et stable.",
+        "Exploration fraction (DQN): share of training over which the probability of trying a random action falls from 100% to 5%. Tau "
+        "(SAC): speed of copying to the target network, 0.005 = very slow and stable."),
+    "rl_seeds": _g(
+        "Agents moyennés : nombre d'agents entraînés avec des graines différentes ; la position de l'ensemble est la MOYENNE de leurs "
+        "positions. Réduit la part de hasard de l'initialisation, au prix d'un coût multiplié.",
+        "Averaged agents: number of agents trained with different seeds; the ensemble's position is the MEAN of their positions. Reduces "
+        "initialization luck, at the cost of multiplying the run time."),
+    "rl_walkforward": _g(
+        "Validation walk-forward du RL : l'agent s'entraîne sur le passé, joue la période suivante sans jamais l'avoir vue, puis on "
+        "avance. Les périodes jouées sont recollées en une seule courbe hors échantillon. Un jour d'écart sépare l'entraînement du test, "
+        "et la position tenue en fin de pli est reportée au pli suivant.",
+        "RL walk-forward validation: the agent trains on the past, plays the next period without ever having seen it, then we move "
+        "forward. The periods played are stitched into one out-of-sample curve. One day separates training from test, and the position "
+        "held at the end of a fold is carried into the next."),
+    "rl_retrain": _g(
+        "Fenêtre d'entraînement : « élargie » = tout le passé disponible à chaque pli ; « glissante » = seulement les N dernières dates "
+        "(oublie le très ancien, s'adapte plus vite, voit moins de données).",
+        "Training window: \"expanding\" = all the available past at each fold; \"rolling\" = only the last N dates (forgets the very "
+        "old, adapts faster, sees less data)."),
+    "rl_bootstrap": _g(
+        "Bootstrap : on tire au hasard, par blocs de dates consécutives, de nombreuses versions de la période test et on recalcule l'écart "
+        "de Sharpe entre l'agent et la référence à chaque fois. La dispersion donne l'intervalle d'incertitude ; la part des tirages où "
+        "l'agent ne fait pas mieux est la p-value unilatérale.",
+        "Bootstrap: many versions of the test period are drawn at random, in blocks of consecutive dates, and the Sharpe gap between the "
+        "agent and the benchmark is recomputed each time. The spread gives the uncertainty interval; the share of draws where the agent "
+        "does not do better is the one-sided p-value."),
+    "rl_psr": _g(
+        "Probabilité que le Sharpe vrai soit positif (PSR, Bailey & López de Prado) : tient compte de la longueur de la période et de la "
+        "forme des rendements (asymétrie, queues épaisses). Le Sharpe déflaté la corrige en plus du nombre de configurations essayées "
+        "sur la cible.",
+        "Probability that the true Sharpe is positive (PSR, Bailey & López de Prado): accounts for the length of the period and the "
+        "shape of returns (skew, fat tails). The deflated Sharpe further corrects it for the number of configurations tried on the target."),
+    "rl_turnover": _g(
+        "Rotation : part du capital échangée par an (somme des changements de position, annualisée). Une rotation de 50 = l'agent "
+        "renouvelle 50 fois son capital par an : les frais comptent beaucoup.",
+        "Turnover: share of capital traded per year (sum of position changes, annualized). A turnover of 50 = the agent turns its capital "
+        "over 50 times a year: fees matter a lot."),
+    "rl_baselines": _g(
+        "Références : « acheter et garder » (position 1 en permanence, sans frais), « momentum 20 j » (long si l'actif a monté sur les 20 "
+        "derniers jours, vendeur sinon, mêmes frais que l'agent) et « à plat » (jamais investi). Un agent qui ne bat pas ces règles "
+        "simples n'apporte rien.",
+        "Baselines: \"buy and hold\" (position 1 permanently, no fees), \"20-day momentum\" (long if the asset rose over the last 20 "
+        "days, short otherwise, same fees as the agent) and \"flat\" (never invested). An agent that does not beat these simple rules "
+        "adds nothing."),
+}
+
+CATEGORY_RL: dict[str, str] = {k: "models" for k in GLOSSARY_RL}
+LABELS_RL: dict[str, str] = {
+    "rl_agent": "rlp_title", "PPO": "", "A2C": "", "DQN": "", "SAC": "",
+    "rl_reward": "rlp_f_reward", "rl_action_space": "rlp_f_action_space", "rl_cost": "rlp_f_cost_bps", "rl_leverage": "rlp_f_max_leverage",
+    "rl_risk_aversion": "rlp_f_risk_aversion", "rl_dsr_eta": "rlp_f_dsr_eta", "rl_obs_lookback": "rlp_f_obs_lookback",
+    "rl_episode": "rlp_f_episode_length", "rl_features": "rlp_sec_features", "rl_policy": "rlp_sec_policy",
+    "rl_learning_rate": "rlp_f_learning_rate", "rl_gamma": "rlp_f_gamma", "rl_timesteps": "rlp_f_total_timesteps",
+    "rl_n_steps": "rlp_f_n_steps", "rl_ent_coef": "rlp_f_ent_coef", "rl_clip_range": "rlp_f_clip_range", "rl_gae_lambda": "rlp_f_gae_lambda",
+    "rl_buffer": "rlp_f_buffer_size", "rl_exploration": "rlp_f_exploration_fraction", "rl_seeds": "rlp_f_n_seeds",
+    "rl_walkforward": "rlp_sec_validation", "rl_retrain": "rlp_f_retrain", "rl_bootstrap": "rlp_f_bootstrap_samples",
+    "rl_psr": "rlp_stat_psr", "rl_turnover": "rlp_k_turnover", "rl_baselines": "rlp_leg_buy_hold",
+}
+LABELS_RL = {k: v for k, v in LABELS_RL.items() if v}      # PPO, A2C, DQN, SAC : le terme est son propre libellé
+
+
 CATEGORY: dict[str, str] = {k: "stats" for k in GLOSSARY_MODELS}
 
 # Libellé affiché (page /vocabulary, titre des bulles) : clé i18n -> FR/EN.

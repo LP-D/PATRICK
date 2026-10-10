@@ -241,10 +241,7 @@ def _parse_deep(form, errors: list[str]) -> dict:
             errors.append(f"« {label} » : valeur numérique invalide.")
             out[key] = default
             continue
-        if key == "class_weight" and value not in D.DEEP_CLASS_WEIGHTS:
-            errors.append(f"« {label} » : choix invalide.")
-            value = default
-        elif key == "device" and value not in D.DEEP_DEVICES:
+        if key == "class_weight" and value not in D.DEEP_CLASS_WEIGHTS or key == "device" and value not in D.DEEP_DEVICES:
             errors.append(f"« {label} » : choix invalide.")
             value = default
         elif key in D.DEEP_BOUNDS:
