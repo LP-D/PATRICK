@@ -42,6 +42,15 @@ _PHASE_MARKERS = [
     ("[EXPORT]", "export"),
 ]
 
+# Reinforcement learning (`rl/run.py`) : mêmes mécanismes, autres marqueurs. `[RL-PROGRESS] fait/total` compte les entraînements terminés.
+_RL_PHASE_MARKERS = [
+    ("[RL-DATA]", "rl_data"),
+    ("[RL-TRAIN]", "rl_train"),
+    ("[RL-EVAL]", "rl_eval"),
+    ("[RL-SAVE]", "rl_save"),
+]
+_RL_PROGRESS_RE = re.compile(r"\[RL-PROGRESS\]\s*(\d+)/")
+
 # Throttled DB writes: `run_pipeline` prints far more than one line per
 # second (one per fold/trial), well beyond what's useful on the UI side, and
 # every write is a SQLite transaction.
@@ -155,16 +164,18 @@ class _ProgressCapture:
     the database. It also refreshes the heartbeat, but only when the
     pipeline prints: silent phases are covered by `_HeartbeatThread`."""
 
-    def __init__(self, conn, job_id: str, pid: int):
+    def __init__(self, conn, job_id: str, pid: int, phase_markers=None, progress_pattern=None, first_phase: str = "ingestion"):
         self._conn = conn
         self._job_id = job_id
         self._pid = pid
+        self._markers = phase_markers or _PHASE_MARKERS
+        self._progress_re = progress_pattern
         # The stream in place before the capture (the worker log's tee), not
         # `sys.__stdout__`, so that the pipeline output also reaches the log.
         self._out = sys.stdout
         self._buffer = ""
         self._log_lines: list[str] = []
-        self._phase = "ingestion"
+        self._phase = first_phase
         self._progress_done = 0
         self._last_flush = 0.0
 
@@ -184,11 +195,15 @@ class _ProgressCapture:
         while jobs_db.pause_requested(self._conn, self._job_id):
             time.sleep(0.5)
         self._log_lines.append(line)
-        for marker, phase in _PHASE_MARKERS:
+        for marker, phase in self._markers:
             if marker in line:
                 self._phase = phase
                 break
-        if _FOLD_LINE_RE.search(line):
+        if self._progress_re is not None:
+            m = self._progress_re.search(line)
+            if m:
+                self._progress_done = max(self._progress_done, int(m.group(1)))
+        elif _FOLD_LINE_RE.search(line):
             m = _FOLD_LINE_NUM_RE.search(line)
             if m:
                 self._progress_done = max(self._progress_done, int(m.group(1)))
@@ -294,9 +309,39 @@ def _summarize_result(config: RunConfig, result: dict) -> dict:
     })
 
 
+def _run_one_rl_job(conn, job: dict, pid: int, raw_config: dict) -> None:
+    """Job de reinforcement learning : même file, même suivi d'avancement, autre moteur (`rl/run.py`)."""
+    from patrick.rl.config import RLRunConfig
+    from patrick.rl.run import run_rl
+
+    job_id = job["job_id"]
+    config = RLRunConfig.model_validate(raw_config)
+    jobs_db.update_job_progress(conn, job_id, phase="rl_data", progress_done=0,
+                                progress_total=max(config.rl.n_folds * config.rl.n_seeds, 1), log_tail=[])
+    capture = _ProgressCapture(conn, job_id, pid, phase_markers=_RL_PHASE_MARKERS, progress_pattern=_RL_PROGRESS_RE, first_phase="rl_data")
+    old_stdout = sys.stdout
+    sys.stdout = capture
+    try:
+        with keep_awake():
+            result = run_rl(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
+    except Exception as exc:  # noqa: BLE001 -- job boundary: any failure is recorded on the job, the worker keeps running
+        sys.stdout = old_stdout
+        traceback.print_exc()
+        capture.final_flush()
+        jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")
+        return
+    sys.stdout = old_stdout
+    capture.final_flush()
+    jobs_db.finish_job(conn, job_id, "done", result_json=json.dumps(_to_native(result)))
+
+
 def _run_one_job(conn, job: dict, pid: int) -> None:
     job_id = job["job_id"]
-    config = RunConfig.model_validate(json.loads(job["config_json"]))
+    raw_config = json.loads(job["config_json"])
+    if raw_config.get("kind") == "rl":
+        _run_one_rl_job(conn, job, pid, raw_config)
+        return
+    config = RunConfig.model_validate(raw_config)
     jobs_db.update_job_progress(
         conn, job_id, phase="ingestion", progress_done=0,
         progress_total=_estimate_total(config), log_tail=[],

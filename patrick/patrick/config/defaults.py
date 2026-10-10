@@ -268,6 +268,54 @@ DL_DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
     for algo in ALL_DL_ALGOS
 }
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Reinforcement learning (patrick/rl/) : un agent apprend une POSITION (court / à plat / long, ou une fraction) sur la cible, par
+# essais et récompenses, dans un environnement qui rejoue l'historique SANS regard vers l'avenir (la décision en t ne voit que
+# l'information de t ; le rendement de t à t+1 n'est payé qu'après). Évalué en walk-forward hors échantillon, coûts compris, contre
+# « acheter et garder », « à plat » et un momentum simple. Séparé du pipeline de classification : autre objectif (un P&L, pas un F1),
+# autre configuration (`RLRunConfig`), même file d'attente et même worker (`job.config_json` avec `"kind": "rl"`).
+# ---------------------------------------------------------------------------------------------------------------------
+RL_ALGOS = ["PPO", "A2C", "DQN", "SAC"]
+RL_DISCRETE_ONLY = ("DQN",)                 # exigent des actions discrètes
+RL_CONTINUOUS_ONLY = ("SAC",)               # exigent une action continue
+RL_ACTION_SPACES = ("discrete", "continuous")
+RL_REWARDS = ("log", "pnl", "dsr")          # log-croissance, P&L net de coûts, ratio de Sharpe différentiel (Moody & Saffell)
+RL_FEATURE_SELECTION = ("correlation", "none")
+RL_ACTIVATIONS = ("tanh", "relu")
+RL_RETRAIN = ("expanding", "rolling")
+RL_FEATURE_FAMILIES = ("technical", "spike", "macro", "long_cycle")   # familles CAUSALES (fenêtres glissantes) ; pas d'EGARCH/HMM/interactions
+
+DEFAULT_RL: dict = {
+    # --- environnement
+    "action_space": "discrete", "n_levels": 3, "allow_short": True, "max_leverage": 1.0,
+    "cost_bps": 5.0, "slippage_bps": 2.0, "reward": "log", "risk_aversion": 0.0, "dsr_eta": 0.01,
+    "obs_lookback": 1, "include_position": True, "episode_length": 252, "random_start": True,
+    "max_features": 20, "feature_selection": "correlation",
+    # --- agent
+    "algo": "PPO", "policy_layers": 2, "policy_units": 64, "activation": "tanh",
+    "learning_rate": 3e-4, "gamma": 0.99, "total_timesteps": 30000,
+    "n_steps": 512, "batch_size": 64, "n_epochs": 10, "ent_coef": 0.01, "clip_range": 0.2, "gae_lambda": 0.95,
+    "buffer_size": 50000, "learning_starts": 1000, "train_freq": 4, "target_update_interval": 500,
+    "exploration_fraction": 0.3, "tau": 0.005,
+    "n_seeds": 1, "device": "auto", "threads": 1,
+    # --- validation
+    "n_folds": 4, "min_train_frac": 0.5, "retrain": "expanding", "rolling_bars": 1500, "bootstrap_samples": 1000,
+}
+# (min, max) permis : appliqués par `RLSettings` (schéma) et par le formulaire.
+RL_BOUNDS: dict[str, tuple[float, float]] = {
+    "n_levels": (2, 9), "max_leverage": (0.1, 5.0), "cost_bps": (0.0, 200.0), "slippage_bps": (0.0, 200.0),
+    "risk_aversion": (0.0, 1000.0), "dsr_eta": (0.0005, 0.2), "obs_lookback": (1, 60), "episode_length": (0, 5000),
+    "max_features": (1, 200), "policy_layers": (1, 5), "policy_units": (8, 512), "learning_rate": (1e-6, 0.1),
+    "gamma": (0.0, 0.9999), "total_timesteps": (1000, 5_000_000), "n_steps": (16, 8192), "batch_size": (8, 4096),
+    "n_epochs": (1, 50), "ent_coef": (0.0, 1.0), "clip_range": (0.01, 0.5), "gae_lambda": (0.0, 1.0),
+    "buffer_size": (1000, 2_000_000), "learning_starts": (0, 100_000), "train_freq": (1, 1000),
+    "target_update_interval": (1, 100_000), "exploration_fraction": (0.01, 1.0), "tau": (0.0001, 1.0),
+    "n_seeds": (1, 10), "threads": (1, 64), "n_folds": (1, 12), "min_train_frac": (0.2, 0.9), "rolling_bars": (200, 20000),
+    "bootstrap_samples": (200, 20000),
+}
+DEFAULT_RL_START_DATE = "2005-01-01"
+RL_MIN_ROWS = 600            # lignes minimales après les fenêtres de calcul des variables (sinon refus avant tout entraînement)
+
 # Options disabled by default but wired into the pipeline (not an appendix):
 # purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
 # regime-conditional gain, hurts in STRESS). Stacking (VIX_STACKING_WF: lost
