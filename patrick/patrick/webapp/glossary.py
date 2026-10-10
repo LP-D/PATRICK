@@ -773,5 +773,8 @@ from patrick.webapp import glossary_extra as _glossary_extra  # noqa: E402
 from patrick.webapp import glossary_models as _glossary_models  # noqa: E402
 
 GLOSSARY.update(_glossary_models.GLOSSARY_MODELS)
+GLOSSARY.update(_glossary_models.GLOSSARY_DL)
 TERM_LABEL_KEYS.update(_glossary_models.LABELS)
+TERM_LABEL_KEYS.update(_glossary_models.LABELS_DL)
 _glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY)
+_glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY_DL)

@@ -1,0 +1,71 @@
+{% extends "launch_base.html" %}
+{% from "_launch_macros.html" import info with context %}
+{% block title %}PATRICK — {{ t('dl_title') }}{% endblock %}
+
+{% block page_head %}
+<h1 class="page-title">{{ t('dl_title') }}</h1>
+<p class="page-subtitle">{{ t('dl_subtitle') }}</p>
+{% if not torch_ok %}
+<p class="banner banner-warning" role="alert">{{ t('dl_no_torch') }}</p>
+{% endif %}
+{% endblock %}
+
+{# Vue simplifiée : le choix des réseaux (toujours visible). Vue experte : l'architecture, l'entraînement et le calcul, champ par champ.
+   Les deux écrivent les mêmes champs `dl_<réglage>` ; un bloc replié garde ses valeurs et les envoie quand même au lancement. #}
+{% block sec_models %}
+        <fieldset class="dl-networks">
+            <legend>{{ t('dl_sec_networks') }}{{ info('dl_networks', t('dl_sec_networks')) }}</legend>
+            <div class="dl-algo-grid">
+            {% for a in all_algos %}
+            <label class="checkbox">
+                <input type="checkbox" name="algos" value="{{ a }}" {% if a in view.algos %}checked{% endif %}>
+                {{ a }}{{ info(a) }}
+            </label>
+            {% endfor %}
+            </div>
+            <p class="hint">{{ t('dl_window_hint') }}</p>
+        </fieldset>
+
+        {% for group in deep_groups %}
+        <details class="adv" data-adv="section_deep_{{ group.key }}">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('dl_sec_' ~ group.key) }}</span>
+                <span class="adv-state" data-adv-state="section_deep_{{ group.key }}"></span>
+            </summary>
+            <div class="adv-body">
+            <div class="subgrid">
+                {% for f in group.fields %}
+                <label>{{ t('dl_f_' ~ f.key) }}{{ info('dl_' ~ f.key, t('dl_f_' ~ f.key)) }}
+                    {% if f.kind == 'choice' %}
+                    <select name="dl_{{ f.key }}">
+                        {% for opt in f.options %}
+                        <option value="{{ opt }}" {% if view['dl_' ~ f.key] == opt %}selected{% endif %}>{{ t('dl_o_' ~ f.key ~ '_' ~ opt) }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="number" name="dl_{{ f.key }}" step="{{ f.step }}" min="{{ f.min }}" max="{{ f.max }}" value="{{ view['dl_' ~ f.key] }}">
+                    {% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            </div>
+        </details>
+        {% endfor %}
+
+        <details class="adv" data-adv="section_models">
+            <summary class="adv-summary">
+                <span class="adv-title">{{ t('dl_sec_extra') }}</span>
+                <span class="adv-state" data-adv-state="section_models"></span>
+            </summary>
+            <div class="adv-body">
+            <label class="checkbox">
+                <input type="checkbox" name="calibration" {% if view.calibration %}checked{% endif %}>
+                {{ t('field_calibration') }}{{ info('calibration') }}
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
+                {{ t('field_stacking') }}{{ info('stacking') }}
+            </label>
+            </div>
+        </details>
+{% endblock %}

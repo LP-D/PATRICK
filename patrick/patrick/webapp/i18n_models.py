@@ -7,6 +7,7 @@ libellés, valeurs et boutons restent visibles à l'écran."""
 from __future__ import annotations
 
 from patrick.webapp.glossary_models import LABEL_STRINGS
+from patrick.webapp.i18n_dl import DL_STRINGS
 
 
 def _s(fr: str, en: str) -> dict[str, str]:
@@ -315,6 +316,7 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
 }
 
 MODELS_STRINGS.update(LABEL_STRINGS)
+MODELS_STRINGS.update(DL_STRINGS)
 
 # Clés lues par le navigateur (`window.I18N`).
 MODELS_JS_KEYS: tuple[str, ...] = tuple(

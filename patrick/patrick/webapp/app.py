@@ -25,12 +25,13 @@ from pydantic import ValidationError
 from patrick import live_refresh
 from patrick import settings as settings_store
 from patrick.clock import utc_today
-from patrick.config import asset_classes, training_profiles
+from patrick.config import asset_classes, dl_profiles, training_profiles
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
 from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
+from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import class_overview, data_health, memo, retrain_advisor
@@ -321,14 +322,36 @@ def _target_groups_with_equity_badges() -> dict:
     return groups
 
 
-def _profile_gallery() -> list[dict]:
-    """Profils d'entraînement fournis (`config/training_profiles.py`) avec le nombre de réglages qu'ils changent."""
-    base = forms.to_view(forms.default_config_dict())
+def _profile_gallery(family: str = "ml") -> list[dict]:
+    """Profils d'entraînement fournis (`config/training_profiles.py` pour le ML, `config/dl_profiles.py` pour le DL) avec le nombre de
+    réglages qu'ils changent par rapport à la configuration de départ de la famille."""
+    base = forms.to_view(forms.default_config_dict(family))
     out = []
-    for p in training_profiles.PROFILES:
+    for p in (dl_profiles.PROFILES if family == "dl" else training_profiles.PROFILES):
         patch = p.resolved_patch()
         out.append({"key": p.key, "cost": p.cost, "needs": p.needs,
                     "n_changes": sum(1 for k, v in patch.items() if base.get(k) != v)})
+    return out
+
+
+def _deep_field_groups() -> list[dict]:
+    """Champs du réseau pour le formulaire DL, groupés (`dl_<réglage>`) : bornes issues de `config.defaults.DEEP_BOUNDS`."""
+    groups = (("arch", ("hidden_size", "n_layers", "dropout", "lookback", "n_heads", "kernel_size")),
+              ("train", ("epochs", "batch_size", "learning_rate", "weight_decay", "patience", "val_fraction", "grad_clip", "class_weight")),
+              ("compute", ("n_seeds", "device", "threads")))
+    out = []
+    for name, keys in groups:
+        fields = []
+        for key in keys:
+            if key == "class_weight":
+                fields.append({"key": key, "kind": "choice", "options": list(D.DEEP_CLASS_WEIGHTS)})
+            elif key == "device":
+                fields.append({"key": key, "kind": "choice", "options": list(D.DEEP_DEVICES)})
+            else:
+                lo, hi = D.DEEP_BOUNDS[key]
+                is_int = key in forms._DEEP_INT_KEYS
+                fields.append({"key": key, "kind": "int" if is_int else "float", "min": lo, "max": hi, "step": "1" if is_int else "any"})
+        out.append({"key": name, "fields": fields})
     return out
 
 
@@ -340,10 +363,16 @@ def _render_launch(request: Request, view: dict, errors: list[str], status_code:
                     family: str = "ml"):
     """Poste de lancement d'une famille de modèles (`ml.html`, `dl.html`) : même gabarit de base, même `app.js`."""
     active = run_manager.active_run()
+    family_options = {}
+    if family == "dl":
+        family_options = {"all_algos": forms.ALL_DL_ALGOS, "optuna_param_specs": D.DL_OPTUNA_PARAM_SPECS,
+                          "deep_groups": _deep_field_groups()}
+    torch_ok = family != "dl" or deep_models.torch_available()
     return templates.TemplateResponse(
         request,
         f"{family}.html",
         {"family": family,
+            "torch_ok": torch_ok,
             "view": view,
             "errors": errors,
             "active_run": active,
@@ -351,10 +380,11 @@ def _render_launch(request: Request, view: dict, errors: list[str], status_code:
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
             "duplicated_run_id": duplicated_run_id,
             "applied": applied,
-            "training_profiles": _profile_gallery(),
+            "training_profiles": _profile_gallery(family),
             "movers": alerts.get_cached(),
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
+            **family_options,
             "target_groups": _target_groups_with_equity_badges(),
             # Première date connue de chaque cible (données ingérées, sinon première cotation vérifiée) : la page grise
             # les cibles plus récentes que « Historique minimum (années) » sans appel réseau.
@@ -375,12 +405,9 @@ def launch_legacy_redirect(request: Request):
     return RedirectResponse("/ml" + (f"?{query}" if query else ""), status_code=308)
 
 
-@app.get("/ml")
-def ml_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None,
-            suggest: str | None = None):
-    """Poste de lancement du machine learning (arbres, forêts, boosting). P8 (synthesis dashboard chantier) l'avait
-    déplacé de `/` vers `/launch` ; il vit désormais sur `/ml`, `/dl` et `/rl` étant ses pages sœurs."""
-    cfg = forms.default_config_dict()
+def _launch_page(request: Request, family: str, run_id: str | None, target: str | None, profile: str | None,
+                 suggest: str | None):
+    cfg = forms.default_config_dict(family)
     if target and target in forms.TARGET_SOURCE_BY_SYMBOL:
         # lien « Lancer » des pages de classes d'actifs : la cible est présélectionnée
         cfg["objective"]["target_symbol"] = target
@@ -396,17 +423,22 @@ def ml_page(request: Request, run_id: str | None = None, target: str | None = No
             if row is None or not row.get("config_json"):
                 raise HTTPException(status_code=404, detail="Configuration de run introuvable.")
             config = RunConfig.model_validate_json(row["config_json"])
+        if config.family != family:
+            # un run de réseaux de neurones se rouvre sur /dl, un run d'arbres sur /ml : mêmes paramètres de requête
+            return RedirectResponse(f"/{config.family}" + (f"?{request.url.query}" if request.url.query else ""), status_code=303)
         cfg = config.model_dump()
         cfg["output"]["dir"] = ""
     view, applied = forms.to_view(cfg), None
     if profile:
-        chosen = training_profiles.get(profile)
+        chosen = (dl_profiles if family == "dl" else training_profiles).get(profile)
         if chosen is None:
             raise HTTPException(status_code=404, detail="Profil d'entraînement inconnu.")
         view = training_profiles.apply_patch(view, chosen.resolved_patch())
         applied = {"kind": "profile", "key": chosen.key,
                    "warning": "prof_warn_equity" if chosen.needs == "equity" else None}
     elif suggest and run_id:
+        if family != "ml":
+            raise HTTPException(status_code=404, detail="Suggestion de réentraînement indisponible pour cette famille.")
         conn = trackdb.connect()
         try:
             advice = retrain_advisor.advise_run(conn, run_id, limit=20)
@@ -417,7 +449,22 @@ def ml_page(request: Request, run_id: str | None = None, target: str | None = No
             raise HTTPException(status_code=404, detail="Suggestion de réentraînement introuvable pour ce run.")
         view = training_profiles.apply_patch(view, {k: v for k, v in found.patch.items() if k in view})
         applied = {"kind": "suggest", "key": found.key, "run_id": run_id, "warning": None}
-    return _render_launch(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied)
+    return _render_launch(request, view, [], duplicated_run_id=run_id if not applied else None, applied=applied, family=family)
+
+
+@app.get("/ml")
+def ml_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None,
+            suggest: str | None = None):
+    """Poste de lancement du machine learning (arbres, forêts, boosting). P8 (synthesis dashboard chantier) l'avait
+    déplacé de `/` vers `/launch` ; il vit désormais sur `/ml`, `/dl` et `/rl` étant ses pages sœurs."""
+    return _launch_page(request, "ml", run_id, target, profile, suggest)
+
+
+@app.get("/dl")
+def dl_page(request: Request, run_id: str | None = None, target: str | None = None, profile: str | None = None):
+    """Poste de lancement du deep learning (MLP, GRU, LSTM, CNN1D, Transformer) : mêmes cibles, horizons, validation, sélection et
+    tuning que le machine learning (les réseaux sont des algos de plus du même pipeline), avec un cadrage propre aux réseaux."""
+    return _launch_page(request, "dl", run_id, target, profile, None)
 
 
 @app.get("/")
@@ -598,6 +645,9 @@ async def create_run(request: Request):
     targets = list(dict.fromkeys(form.getlist("target_symbols")))
     if not targets:
         return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
+    if any(a in D.ALL_DL_ALGOS for a in form.getlist("algos")) and not deep_models.torch_available():
+        return JSONResponse({"errors": ["PyTorch n'est pas installé : les réseaux de neurones sont indisponibles. "
+                                        "Installe-le avec : pip install -e \".[deep]\" (ou pip install torch)."]}, status_code=400)
 
     raw_output_dir = (form.get("output_dir") or "").strip()
     errors: list[str] = []
@@ -787,7 +837,7 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     if run_manager.get_run(run_id) is not None:
         config = run_manager.get_run_config(run_id)
         view = forms.to_view(config.model_dump())
-        return _render_launch(request, view, [], initial_run_id=run_id)
+        return _render_launch(request, view, [], initial_run_id=run_id, family=config.family)
 
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")

@@ -59,6 +59,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
     # deep learning (reseaux de neurones, memes runs que le ML), reinforcement learning (agent qui apprend une position).
     NavEntry("ml", "Machine learning", "/ml", "modeles", 10, "nav_ml"),
+    NavEntry("dl", "Deep learning", "/dl", "modeles", 20, "nav_dl"),
     # CLASSES D'ACTIFS -- ce que PATRICK modelise, par famille de sous-jacents.
     NavEntry("universe", "Univers", "/universe", "classes_actifs", 10, "nav_universe",
              child_routes=("/targets/{ticker}",)),

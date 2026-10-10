@@ -44,6 +44,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "httpx", "ruff"]
 web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
+# Pages Deep learning (/dl) et Reinforcement learning (/rl) : PyTorch, Gymnasium et Stable-Baselines3 ne sont importés qu'à l'usage.
+deep = ["torch"]
+rl = ["torch", "gymnasium", "stable-baselines3"]
 
 [project.scripts]
 patrick = "patrick.cli:app"

@@ -11,8 +11,8 @@ des données, équilibre des classes, durée) et, si sa condition est vraie, pro
 - une estimation du coût (durée relative au run précédent).
 
 Les propositions sont classées ; la première est « le meilleur prochain essai ». Limites assumées : aucune règle ne promet une
-amélioration, elles désignent l'hypothèse la plus plausible à tester. Le deep learning n'existe pas dans PATRICK (boosting
-d'arbres, forêts et empilement) : il n'est cité que comme alternative indisponible.
+amélioration, elles désignent l'hypothèse la plus plausible à tester. Le deep learning (page /dl) n'est pas un patch du formulaire
+de machine learning : la proposition « réseaux de neurones » ouvre la page /dl sur la même cible (`manual`).
 """
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ class Suggestion:
     cost: str = "medium"
     cost_factor: float | None = None                # durée relative au run précédent
     est_minutes: float | None = None
-    available: bool = True                          # False : levier absent de PATRICK (deep learning)
+    available: bool = True                          # False : levier absent de PATRICK
     manual: bool = False                            # True : action hors formulaire (rien à pré-remplir)
     changes: list[dict] = field(default_factory=list)   # [{field, before, after}]
 
@@ -281,7 +281,7 @@ def _rule_deep_learning(d: Diagnosis) -> Suggestion | None:
     cap = _rule_more_capacity(d)
     if cap is None:
         return None
-    return Suggestion("deep_learning", 20, {}, {"auc": d.auc_test}, available=False, manual=True)
+    return Suggestion("deep_learning", 20, {}, {"auc": d.auc_test}, available=True, manual=True)
 
 
 def _rule_short_history(d: Diagnosis) -> Suggestion | None:

@@ -39,6 +39,8 @@
     {% endif %}
     {% if s.available and (s.changes or not s.manual) %}
     <p class="adv-actions"><a class="btn-secondary" href="/ml?run_id={{ d.run_id | urlencode }}&amp;suggest={{ s.key }}">{{ t('adv_prepare') }}</a></p>
+    {% elif s.available and s.key == 'deep_learning' %}
+    <p class="adv-actions"><a class="btn-secondary" href="/dl?target={{ d.view.target_symbol | urlencode }}">{{ t('adv_open_dl') }}</a></p>
     {% endif %}
 </article>
 {% endfor %}

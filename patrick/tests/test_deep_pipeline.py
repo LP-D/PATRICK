@@ -131,3 +131,20 @@ def test_the_optuna_search_space_of_networks_lives_outside_the_tree_defaults():
     assert set(params) == {"hidden_size", "n_layers", "dropout", "learning_rate", "weight_decay", "lookback"}
     assert 8 <= params["hidden_size"] <= 10
     assert set(suggest_params(optuna.create_study().ask(), "MLP")) == {"hidden_size", "n_layers", "dropout", "learning_rate", "weight_decay"}
+
+
+@pytest.mark.slow
+def test_parallel_workers_get_the_run_deep_settings_and_reproduce_the_sequential_result():
+    """Les processus de calcul parallèle du scan ne partagent pas l'état du parent : les réglages du run leur sont passés explicitement
+    (`deep=` dans `fit_kwargs`), et un réseau à graine fixe donne les mêmes métriques quel que soit le nombre de workers."""
+    from patrick.pipeline import parallel
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(500, 8))
+    y = np.where(X[:, 0] + 0.5 * X[:, 1] > 0.4, 3, np.where(X[:, 0] > 0, 2, np.where(X[:, 1] > 0, 1, 0)))
+    deep = {"epochs": 5, "hidden_size": 12, "n_layers": 1, "lookback": 4, "patience": 0, "batch_size": 64}
+    tasks = [("fit_eval", (X[:400], y[:400], X[400:], y[400:], "none", algo, 42), {"deep": deep}) for algo in ("MLP", "GRU", "XGBoost")]
+    seq = parallel.run_ordered(tasks, 1)
+    par = parallel.run_ordered(tasks, 2)
+    for (m_seq, p_seq, _c_seq), (m_par, p_par, _c_par) in zip(seq, par, strict=True):
+        assert np.array_equal(p_seq, p_par)
+        assert m_seq["F1_dir"] == pytest.approx(m_par["F1_dir"], abs=1e-9)

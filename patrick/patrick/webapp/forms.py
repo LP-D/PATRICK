@@ -57,7 +57,22 @@ def universe_excluding(target_symbol: str, scope: str = "default") -> tuple[list
     return yf_tickers, fred_series
 
 
-def default_config_dict() -> dict:
+def default_config_dict(family: str = "ml") -> dict:
+    """Configuration de départ du formulaire. `family="dl"` : réseaux de neurones (MLP + GRU), échantillonneur « none » (obligatoire pour
+    les modèles à fenêtre), grille de variables plus étroite et réglage Optuna allégé ; tout le reste est celui du machine learning."""
+    cfg = _default_ml_config_dict()
+    if family == "dl":
+        cfg["name"] = "mon_run_dl"
+        cfg["output"]["dir"] = "runs/mon_run_dl"
+        cfg["sampler"] = {"candidates": ["none"]}
+        cfg["selection"].update({"n_features_grid": [8, 12], "screening_mode": "total_window", "screening_finalists_per_group": 1})
+        cfg["models"] = {"algos": list(D.DEFAULT_DL_ALGOS), "deep": dict(D.DEFAULT_DEEP),
+                         "calibration": D.DEFAULT_CALIBRATION_ENABLED, "stacking": D.DEFAULT_STACKING_ENABLED}
+        cfg["tuning"].update({"enabled": True, "top_k": 1, "n_trials": 15, "cv_splits": 3})
+    return cfg
+
+
+def _default_ml_config_dict() -> dict:
     target_symbol = "^VIX"
     yf_tickers, fred_series = universe_excluding(target_symbol)
     return {
@@ -148,6 +163,7 @@ def default_config_dict() -> dict:
 ALL_FEATURE_FAMILIES = ["technical", "interactions", "spike", "vol_models", "macro", "long_cycle"]
 ALL_SAMPLERS = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "none"]
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
+ALL_DL_ALGOS = list(D.ALL_DL_ALGOS)
 ALL_VOL_MODELS = list(D.ALL_VOL_MODELS)
 # Phase 1 (feature/expanded-horizons): the multi-select in index.html now
 # offers every candidate horizon (`D.SELECTABLE_HORIZONS` = the original
@@ -189,6 +205,55 @@ VOL_MODEL_LABELS = {
     "arma": "ARMA",
     "arima": "ARIMA",
 }
+
+
+# (clé de `D.DEFAULT_DEEP`, libellé FR du formulaire) -- champs HTML `dl_<clé>`.
+DEEP_FIELD_LABELS: dict[str, str] = {
+    "hidden_size": "Taille cachée", "n_layers": "Couches", "dropout": "Dropout", "lookback": "Fenêtre (lookback)",
+    "epochs": "Époques maximum", "batch_size": "Taille de lot", "learning_rate": "Taux d'apprentissage",
+    "weight_decay": "Décroissance des poids", "patience": "Patience (arrêt anticipé)", "val_fraction": "Fraction de validation",
+    "grad_clip": "Coupure du gradient", "class_weight": "Pondération des classes", "n_seeds": "Réseaux moyennés (graines)",
+    "device": "Appareil de calcul", "n_heads": "Têtes d'attention", "kernel_size": "Taille du noyau (CNN1D)", "threads": "Fils de calcul",
+}
+_DEEP_INT_KEYS = ("hidden_size", "n_layers", "lookback", "epochs", "batch_size", "patience", "n_seeds", "n_heads", "kernel_size", "threads")
+_DEEP_FLOAT_KEYS = ("dropout", "learning_rate", "weight_decay", "val_fraction", "grad_clip")
+
+
+def _parse_deep(form, errors: list[str]) -> dict:
+    """Lit les champs `dl_<réglage>` en `models.deep`. Un champ absent prend son défaut (`D.DEFAULT_DEEP`) ; une valeur invalide ou hors
+    de `D.DEEP_BOUNDS` ajoute une erreur précise et retombe sur le défaut de CE champ seulement (même convention que le reste du formulaire)."""
+    out: dict = {}
+    for key, default in D.DEFAULT_DEEP.items():
+        label = DEEP_FIELD_LABELS[key]
+        raw = form.get(f"dl_{key}")
+        if raw is None or str(raw).strip() == "":
+            out[key] = default
+            continue
+        raw = str(raw).strip().replace(",", ".")
+        try:
+            if key in _DEEP_INT_KEYS:
+                value: object = int(raw)
+            elif key in _DEEP_FLOAT_KEYS:
+                value = float(raw)
+            else:
+                value = raw
+        except ValueError:
+            errors.append(f"« {label} » : valeur numérique invalide.")
+            out[key] = default
+            continue
+        if key == "class_weight" and value not in D.DEEP_CLASS_WEIGHTS:
+            errors.append(f"« {label} » : choix invalide.")
+            value = default
+        elif key == "device" and value not in D.DEEP_DEVICES:
+            errors.append(f"« {label} » : choix invalide.")
+            value = default
+        elif key in D.DEEP_BOUNDS:
+            lo, hi = D.DEEP_BOUNDS[key]
+            if not lo <= value <= hi:
+                errors.append(f"« {label} » doit être compris entre {lo:g} et {hi:g}.")
+                value = default
+        out[key] = value
+    return out
 
 
 def _split_list(raw: str) -> list[str]:
@@ -272,7 +337,7 @@ def _parse_numeric_fields(form, specs: list[tuple[str, str, object, type]],
     return out
 
 
-def _parse_optuna_bounds(form, errors: list[str]) -> dict:
+def _parse_optuna_bounds(form, errors: list[str], dl_algos: tuple[str, ...] | list[str] = ()) -> dict:
     """Phase 1 (feature/hyperparams-ui): reads the "Bornes Optuna" section
     (`index.html`, fields named `ob__{algo}__{param}__low`/`__high`) into
     `{algo: {param: [low, high]}}` (see `RunConfig.tuning.optuna_bounds`,
@@ -284,10 +349,13 @@ def _parse_optuna_bounds(form, errors: list[str]) -> dict:
     and falls back to the default for that single (algo, param) pair rather
     than failing the whole form."""
     out: dict[str, dict[str, list[float]]] = {}
-    for algo, params in D.OPTUNA_PARAM_SPECS.items():
+    # Réseaux de neurones : leurs bornes ne sont écrites que pour les algos choisis (jamais dans la config d'un run de machine learning).
+    specs = {**D.OPTUNA_PARAM_SPECS, **{a: D.DL_OPTUNA_PARAM_SPECS[a] for a in dl_algos if a in D.DL_OPTUNA_PARAM_SPECS}}
+    defaults = {**D.DEFAULT_OPTUNA_BOUNDS, **D.DL_DEFAULT_OPTUNA_BOUNDS}
+    for algo, params in specs.items():
         out[algo] = {}
         for param, spec in params.items():
-            default_lo, default_hi = D.DEFAULT_OPTUNA_BOUNDS[algo][param]
+            default_lo, default_hi = defaults[algo][param]
             raw_lo = form.get(f"ob__{algo}__{param}__low")
             raw_hi = form.get(f"ob__{algo}__{param}__high")
             if (raw_lo is None or str(raw_lo).strip() == "") and \
@@ -589,7 +657,9 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     if not (12 <= holdout_months <= 24):
         errors.append("« Holdout terminal (mois) » doit être compris entre 12 et 24.")
 
-    optuna_bounds = _parse_optuna_bounds(form, errors)
+    dl_selected = [a for a in algos if a in D.ALL_DL_ALGOS]
+    optuna_bounds = _parse_optuna_bounds(form, errors, dl_selected)
+    deep = _parse_deep(form, errors) if dl_selected else None
     technical_lookbacks = _parse_technical_lookbacks(form, errors)
 
     config_dict = {
@@ -656,6 +726,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         "sampling": {"uniqueness_weights": _checked(form, "uniqueness_weights")},
         "models": {
             "algos": algos,
+            **({"deep": deep} if deep is not None else {}),
             "calibration": _checked(form, "calibration"),
             "stacking": _checked(form, "stacking"),
         },
@@ -750,6 +821,7 @@ def to_view(cfg: dict) -> dict:
         "sampler_candidates": sam.get("candidates", []),
         "uniqueness_weights": bool(cfg.get("sampling", {}).get("uniqueness_weights", True)),
         "algos": mod.get("algos", []),
+        **{f"dl_{key}": (mod.get("deep") or {}).get(key, default) for key, default in D.DEFAULT_DEEP.items()},
         "calibration": bool(mod.get("calibration", False)),
         "stacking": bool(mod.get("stacking", False)),
         "tuning_enabled": bool(tun.get("enabled", True)),
@@ -758,7 +830,7 @@ def to_view(cfg: dict) -> dict:
         "cv_splits": tun.get("cv_splits", D.DEFAULT_TUNING_CV_SPLITS),
         "optuna_select_top_k_per_horizon": bool(
             tun.get("optuna_select_top_k_per_horizon", D.DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON)),
-        "optuna_bounds": tun.get("optuna_bounds") or D.DEFAULT_OPTUNA_BOUNDS,
+        "optuna_bounds": {**D.DL_DEFAULT_OPTUNA_BOUNDS, **(tun.get("optuna_bounds") or D.DEFAULT_OPTUNA_BOUNDS)},
         "output_dir": out.get("dir", "runs"),
         "seed": out.get("seed", D.DEFAULT_SEED),
     }

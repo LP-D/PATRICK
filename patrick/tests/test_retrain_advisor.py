@@ -90,12 +90,12 @@ def test_unstable_feature_selection_suggests_clustering_and_the_other_method():
     assert "unstable_features" not in keys(diag(jaccard=0.5)) and "unstable_features" not in keys(diag(jaccard=float("nan")))
 
 
-def test_a_weak_but_stable_model_is_offered_more_capacity_and_deep_learning_is_marked_unavailable():
+def test_a_weak_but_stable_model_is_offered_more_capacity_and_deep_learning_as_a_manual_hand_off():
     out = advise(diag(auc_test=0.555, auc_holdout=0.55, fold_auc=[0.55, 0.56, 0.555, 0.553, 0.557]))
     more = next(s for s in out if s.key == "more_capacity")
     assert more.patch["stacking"] is True and len(more.patch["algos"]) == 5 and more.cost == "high"
     dl = next(s for s in out if s.key == "deep_learning")
-    assert dl.available is False and dl.manual is True and dl.patch == {}
+    assert dl.available is True and dl.manual is True and dl.patch == {}      # pas un patch : ouvre la page /dl
     assert "more_capacity" not in keys(diag(auc_test=0.555, auc_holdout=0.50))   # écart test/holdout : pas plus de capacité
 
 

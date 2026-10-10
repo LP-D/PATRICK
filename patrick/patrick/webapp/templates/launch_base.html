@@ -32,6 +32,7 @@
     {% include "_profile_gallery.html" %}
 
     <form method="post" action="/runs" class="run-form" id="run-form" data-mode="simple">
+        <input type="hidden" name="family" value="{{ family | default('ml') }}">
         {% if duplicated_run_id %}
         <p class="banner" role="status">{{ t('duplicate_run_loaded', run_id=duplicated_run_id) }}</p>
         {% endif %}
@@ -508,7 +509,7 @@
            run, parce qu'ils sont 9 blocs plus haut au moment du clic. #}
         <div class="launch-bar">
             <p class="launch-recap" id="launch-recap" aria-live="polite"></p>
-            <button type="submit" class="primary" id="launch-btn">
+            <button type="submit" class="primary" id="launch-btn"{% if torch_ok is defined and not torch_ok %} disabled aria-disabled="true"{% endif %}>
                 {{ t('btn_launch_run') }}
             </button>
         </div>
