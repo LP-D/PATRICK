@@ -159,3 +159,31 @@ def test_a_monthly_macro_series_needs_the_monthly_frequency(client, monkeypatch,
     assert daily["meta"]["n_assets"] == 1 and "CPIAUCSL" in daily["meta"]["dropped"]
     monthly = client.get("/api/exploration/describe", params={**params, "freq": "M"}).json()
     assert monthly["meta"]["n_assets"] == 2 and monthly["meta"]["periods_per_year"] == 12
+
+
+def test_simultaneous_studies_on_one_selection_download_each_series_once(client, monkeypatch):
+    """Les onglets lancent plusieurs études à la fois : un seul chargement par série, jamais deux écritures de cache concurrentes."""
+    import threading
+    import time
+    seen: list[str] = []
+    rng = np.random.default_rng(3)
+    idx = pd.bdate_range("2018-01-01", periods=1200)
+
+    def slow(symbol, source):
+        seen.append(symbol)
+        time.sleep(0.25)
+        return pd.Series(100 * np.exp(np.cumsum(rng.normal(0, 0.01, 1200))), index=idx)
+
+    monkeypatch.setattr(E, "loader", slow)
+    results = []
+
+    def call(study):
+        results.append(client.get(f"/api/exploration/{study}", params=_q()).status_code)
+
+    threads = [threading.Thread(target=call, args=(s,)) for s in ("correlation", "describe", "stationarity", "pca")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results == [200] * 4
+    assert sorted(seen) == sorted(SYMS)                    # 4 séries, 4 chargements : pas 16

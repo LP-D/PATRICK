@@ -27,6 +27,8 @@ PANEL_TTL_S = 900
 PANEL_CACHE_MAX = 12
 _cache: OrderedDict[tuple, tuple[float, P.Panel]] = OrderedDict()
 _lock = threading.Lock()
+_build_locks: dict[tuple, threading.Lock] = {}
+_symbol_locks: dict[str, threading.Lock] = {}
 
 
 def loader(symbol: str, source: str) -> pd.Series | None:
@@ -37,7 +39,10 @@ def loader(symbol: str, source: str) -> pd.Series | None:
             return None
         return pd.Series(data["closes"], index=pd.to_datetime(data["dates"]))
     from patrick.data.sources import yfinance_source
-    return yfinance_source.download_one(symbol, P.LONG_START)
+    with _lock:
+        guard = _symbol_locks.setdefault(symbol, threading.Lock())
+    with guard:                                   # un seul téléchargement / écriture de cache à la fois pour un même symbole
+        return yfinance_source.download_one(symbol, P.LONG_START)
 
 
 # Sélections de départ (symboles absents de l'application ignorés) : clé de libellé i18n -> symboles.
@@ -84,7 +89,16 @@ def _parse_date(raw: str | None, name: str) -> str | None:
 
 
 def get_panel(symbols: list[str], start: str | None, end: str | None, freq: str, transform: str) -> P.Panel:
+    """Panneau aligné d'une sélection. Les onglets de la page lancent plusieurs études à la fois sur la MÊME sélection : la première
+    construit, les autres attendent son résultat au lieu de retélécharger les mêmes séries en parallèle."""
     key = (tuple(symbols), start, end, freq, transform)
+    with _lock:
+        build_lock = _build_locks.setdefault(key, threading.Lock())
+    with build_lock:
+        return _build_panel(key, symbols, start, end, freq, transform)
+
+
+def _build_panel(key: tuple, symbols: list[str], start: str | None, end: str | None, freq: str, transform: str) -> P.Panel:
     now = time.monotonic()
     with _lock:
         hit = _cache.get(key)
@@ -100,12 +114,15 @@ def get_panel(symbols: list[str], start: str | None, end: str | None, freq: str,
         _cache[key] = (now, pan)
         while len(_cache) > PANEL_CACHE_MAX:
             _cache.popitem(last=False)
+        if len(_build_locks) > 200:
+            _build_locks.clear()
     return pan
 
 
 def clear_cache() -> None:
     with _lock:
         _cache.clear()
+        _build_locks.clear()
 
 
 def _pick(name: str, value: str | None, valid: list[str], dropped: dict[str, str] | None = None) -> str:

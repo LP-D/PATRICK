@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 
 from patrick.clock import parse_utc, utc_now
 
@@ -54,7 +57,22 @@ class LocalCache:
     def save_dataframe(self, key: str, df: pd.DataFrame, *, max_age_days: int = 7,
                        extra_meta: dict | None = None) -> pd.DataFrame:
         path = self._file(key)
-        df.to_parquet(path)
+        # Écriture atomique : fichier temporaire propre à ce fil puis remplacement. Deux écritures simultanées de la même clé (deux
+        # requêtes web, un run et une page) ne produisent plus un fichier tronqué que le lecteur suivant ne saurait pas lire.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
+        try:
+            df.to_parquet(tmp)
+            for attempt in range(10):
+                try:
+                    os.replace(tmp, path)
+                    break
+                except PermissionError:          # Windows : le fichier cible est ouvert en lecture un instant
+                    if attempt == 9:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
         self._write_meta(key, {"updated_at": utc_now().isoformat(), "rows": len(df),
                                "cols": int(df.shape[1]), **(extra_meta or {})})
         return df
@@ -66,7 +84,10 @@ class LocalCache:
         path = self._file(key)
         if not path.exists() or not self._is_fresh(key, max_age_days=max_age_days):
             return None
-        return pd.read_parquet(path)
+        try:
+            return pd.read_parquet(path)
+        except (OSError, ValueError, pa.ArrowException):
+            return None                          # fichier tronqué ou corrompu : traité comme absent (il sera retéléchargé et réécrit)
 
     def save_json(self, key: str, payload: dict) -> None:
         path = self._file(key, suffix=".json")

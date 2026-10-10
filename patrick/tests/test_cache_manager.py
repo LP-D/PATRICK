@@ -105,3 +105,57 @@ def test_load_json_expires_after_max_age_days(cache, monkeypatch):
     _freeze_utcnow(monkeypatch, 10)
 
     assert cache.load_json("study", max_age_days=7) is None
+
+
+# --------------------------------------------------------------------------- écriture atomique et lecture tolérante
+
+
+def test_an_unreadable_cache_file_is_treated_as_missing_so_it_heals(cache):
+    cache.save_dataframe("series_X", _df())
+    path = cache._file("series_X")
+    path.write_bytes(path.read_bytes()[:40])                 # tronqué : l'état laissé par deux écritures simultanées
+    assert cache.load_dataframe("series_X") is None          # pas d'exception : l'appelant retélécharge
+    cache.save_dataframe("series_X", _df())
+    assert cache.load_dataframe("series_X").equals(_df())
+
+
+def test_saving_leaves_no_temporary_file_behind(cache):
+    cache.save_dataframe("series_Y", _df())
+    assert sorted(p.name for p in cache.root.iterdir()) == ["series_Y.meta.json", "series_Y.parquet"]
+
+
+def test_concurrent_saves_and_loads_of_the_same_key_never_expose_a_torn_file(cache):
+    import threading
+    import time
+    big = pd.DataFrame({"a": range(20000), "b": [float(i) for i in range(20000)]})
+    errors: list[Exception] = []
+    stop = threading.Event()
+
+    def writer():
+        try:
+            for _ in range(15):
+                cache.save_dataframe("series_Z", big)
+        except Exception as exc:  # noqa: BLE001 -- le test remonte toute erreur de fil
+            errors.append(exc)
+
+    def reader():
+        while not stop.is_set():
+            try:
+                got = cache.load_dataframe("series_Z")
+                assert got is None or len(got) == len(big)    # soit rien, soit TOUTES les lignes : jamais un fichier tronqué
+                time.sleep(0.003)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+                return
+
+    cache.save_dataframe("series_Z", big)
+    writers = [threading.Thread(target=writer) for _ in range(3)]
+    readers = [threading.Thread(target=reader) for _ in range(2)]
+    for t in (*writers, *readers):
+        t.start()
+    for t in writers:
+        t.join()
+    stop.set()
+    for t in readers:
+        t.join()
+    assert errors == []
