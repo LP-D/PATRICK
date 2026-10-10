@@ -199,10 +199,27 @@ EXTRA_GLOSSARY: dict[str, dict[str, str]] = {
     "vintage": _g(
         "Millésime (vintage) : les statistiques macro sont révisées après leur publication. NFCI, par exemple, réécrit tout son "
         "passé à chaque publication. Utiliser le dernier millésime donne au modèle des valeurs qui n'existaient pas encore ; "
-        "seule la voie ALFRED (clé API FRED) restitue les valeurs telles que publiées.",
+        "ALFRED, les archives de FRED, garde chaque millésime et restitue les valeurs telles que publiées (c'est maintenant "
+        "la source par défaut des nouveaux runs, avec la clé API FRED).",
         "Vintage: macro statistics are revised after release. NFCI, for instance, rewrites its whole past at every "
-        "release. Using the latest vintage gives the model values that did not exist yet; only the ALFRED route (FRED API "
-        "key) restores the values as first published."),
+        "release. Using the latest vintage gives the model values that did not exist yet; ALFRED, FRED's archive, keeps "
+        "every vintage and restores the values as first published (it is now the default source of new runs, with the FRED "
+        "API key)."),
+    "alfred": _g(
+        "ALFRED (ArchivaL FRED) : archives de FRED. Pour chaque observation, la valeur de sa première publication et sa date de "
+        "sortie réelle. PATRICK l'utilise par défaut : avant la date où ALFRED archive une série, il retombe sur la version "
+        "actuelle de FRED datée par une table de délais de publication ; si la série n'existe pas dans ALFRED (SP500), il "
+        "utilise FRED seul. Aucune série n'est perdue.",
+        "ALFRED (ArchivaL FRED): FRED's archive. For each observation, its first-published value and its real release "
+        "date. PATRICK uses it by default: before the date ALFRED archives a series, it falls back to today's FRED version "
+        "dated by a publication-lag table; if the series is not in ALFRED (SP500), it uses FRED alone. No series is lost."),
+    "revision_vs_move": _g(
+        "Révision / mouvement typique : écart moyen entre la première publication et la valeur révisée, divisé par la variation "
+        "habituelle de la série d'une période à l'autre. Au-delà de 1, la révision est plus grosse qu'un mouvement normal : "
+        "entraîner sur la valeur révisée donnerait au modèle un signal qui n'existait pas à l'époque.",
+        "Revision / typical move: average gap between the first release and the revised value, divided by the series' usual "
+        "period-to-period change. Above 1, the revision is larger than a normal move: training on the revised value would "
+        "give the model a signal that did not exist at the time."),
     "suspect_result": _g(
         "Résultat suspect : F1 directionnel ≥ 0,80 ou AUC ≥ 0,85. Aucun marché liquide ne se prédit à ce niveau : le score est "
         "traité comme une anomalie de données. Un tel modèle ne devient jamais champion.",
@@ -293,7 +310,7 @@ TERM_CATEGORY: dict[str, str] = {
                               "live_reliability", "calibration")},
     **{k: "stats" for k in ("p_value", "p_value_dm", "p_value_adjusted", "bh_fdr", "alpha_level", "spearman_holdout",
                             "n_trials", "diebold_mariano", "deflated_sharpe", "pbo", "conformal")},
-    **{k: "validation" for k in ("walk_forward", "fold", "data_leak", "alignment", "publication_lag", "vintage",
+    **{k: "validation" for k in ("walk_forward", "fold", "data_leak", "alignment", "publication_lag", "vintage", "alfred", "revision_vs_move",
                                  "suspect_result", "holdout", "purge", "embargo_enabled", "scheme", "n_groups",
                                  "k_test_groups", "uniqueness_weights", "track_stability")},
     **{k: "data" for k in ("history_depth", "coverage", "frozen_prices", "aberrant_return", "training_only",

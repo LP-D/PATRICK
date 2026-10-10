@@ -1,0 +1,59 @@
+{# Fragment `/fragments/macro-alfred` : FRED (version révisée d'aujourd'hui) contre ALFRED (première publication), série par série.
+   Lu dans le cache local (`tracking/alfred_report.py`) ; le calcul, qui interroge l'API, se lance par le bouton. #}
+{% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% macro n1(v) %}{{ ('%.1f' | format(v)) if v is not none else '—' }}{% endmacro %}
+{% set mode_label = {'alfred': t('alf_mode_alfred'), 'hybrid': t('alf_mode_hybrid'), 'fred': t('alf_mode_fred')} %}
+{% set mode_state = {'alfred': 'ok', 'hybrid': 'warning', 'fred': 'disabled'} %}
+<section class="card" id="alfred-vs-fred" data-running="{{ 1 if state.running else 0 }}">
+<h2>{{ t('alf_title') }} <button type="button" class="info-icon" data-term="vintage" data-term-label="{{ t('alf_term_vintage') }}" aria-label="{{ t('glossary_open_aria', term=t('alf_term_vintage')) }}">i</button></h2>
+<p class="hint">{{ t('alf_sub') }}</p>
+
+{% if not key_ok %}
+<p class="banner banner-warning" role="note">{{ t('alf_no_key') }}</p>
+{% endif %}
+
+{% if state.running %}
+<p class="hint" id="alfred-progress" role="status">{{ t('alf_running', d=state.done, n=state.total) }}</p>
+{% elif state.error %}
+<p class="banner banner-error" role="alert">{{ t('alf_error', e=state.error) }}</p>
+{% endif %}
+
+{% if report %}
+{% set sm = report.summary %}
+<div class="metric-grid">
+{{ metric(t('alf_k_series'), sm.n, t('alf_k_series_rel', a=sm.modes.alfred, h=sm.modes.hybrid, f=sm.modes.fred), "neutral") }}
+{{ metric(t('alf_k_revised'), sm.n_revised, t('alf_k_revised_rel'), "warning" if sm.n_revised else "ok") }}
+{{ metric(t('alf_k_hybrid'), sm.modes.hybrid, t('alf_k_hybrid_rel'), "neutral") }}
+{{ metric(t('alf_k_absent'), sm.modes.fred, t('alf_k_absent_rel'), "neutral") }}
+</div>
+{% if sm.most_revised %}
+<p class="hint"><strong>{{ t('alf_top') }}</strong>
+{% for r in sm.most_revised %}{{ r.label or r.series }} ({{ '%.1f' | format(r.ratio) }}×){% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
+
+{% set rows = [] %}
+{% for r in report.rows | sort(attribute='label') %}
+{% set _ = rows.append([
+    '<strong>' ~ (r.label | e) ~ '</strong> <span class="hint pk-mono">' ~ (r.series | e) ~ '</span>',
+    status_badge(mode_label[r.mode], mode_state[r.mode]),
+    (r.first_vintage or '—'),
+    ('%.1f' | format(r.lost_years_if_alfred_only)) if r.lost_years_if_alfred_only is not none else '—',
+    r.n_compared or '—',
+    ('%.0f %%' | format(r.share_revised * 100)) if r.share_revised is not none else (r.note | e if r.note else '—'),
+    ('%.4g' | format(r.mean_abs_revision)) if r.mean_abs_revision is not none else '—',
+    ('%.2f' | format(r.revision_vs_move)) if r.revision_vs_move is not none else '—',
+    (('%.0f' | format(r.lag_real_days)) ~ ' / ' ~ ('%.0f' | format(r.lag_assumed_days))) if r.lag_real_days is not none else '—',
+]) %}
+{% endfor %}
+{{ data_table([t('alf_c_series'), t('alf_c_mode'), t('alf_c_vintage'), t('alf_c_lost'), t('alf_c_n'), t('alf_c_share'), t('alf_c_mean'), t('alf_c_ratio'), t('alf_c_lag')],
+              rows, num_cols=[3, 4, 5, 6, 7, 8], collapse_after=12, more_label=t('rows_more'), less_label=t('rows_less'),
+              footer=t('alf_foot', d=report.computed_at[:16] | replace('T', ' '))) }}
+{% elif not state.running %}
+{{ empty_state(t('alf_empty'), t('alf_empty_hint')) }}
+{% endif %}
+
+<p class="actions">
+    <button type="button" class="btn-secondary" id="alfred-refresh" data-url="/api/macro/alfred-refresh"
+            data-label-running="{{ t('alf_btn_running') }}" {% if state.running or not key_ok %}disabled{% endif %}>{{ t('alf_btn') }}</button>
+</p>
+</section>

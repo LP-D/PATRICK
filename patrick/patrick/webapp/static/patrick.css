@@ -2321,6 +2321,10 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .home-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: .88rem; }
 .home-mini { width: 100%; }
 
+/* ---- Page Macro : FRED contre ALFRED -------------------------------------------------------------------------- */
+#alfred-vs-fred .actions { margin-top: 12px; }
+#alfred-vs-fred td strong { font-weight: 600; }
+
 /* ---- Blocs chargés après l'affichage ---------------------------------------------------------------------------- */
 .lazy-block { min-height: 120px; }
 .lazy-skeleton { padding: 8px 0; }

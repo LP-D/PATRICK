@@ -74,6 +74,7 @@ def default_config_dict() -> dict:
             "fred_series": fred_series,
             "start_date": "2000-01-01",
             "yf_coverage": 0.85,
+            "fred_point_in_time": D.DEFAULT_FRED_POINT_IN_TIME,
         },
         "data_quality": {
             "enabled": True,
@@ -608,6 +609,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "start_date": (form.get("start_date") or "2000-01-01").strip(),
             "yf_coverage": yf_coverage,
             "reduction_corr_threshold": reduction_corr_threshold,
+            "fred_point_in_time": D.DEFAULT_FRED_POINT_IN_TIME,
         },
         "data_quality": {
             "enabled": _checked(form, "data_quality_enabled"),

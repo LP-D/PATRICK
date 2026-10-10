@@ -455,6 +455,11 @@ DEFAULT_UNIVERSE_YF_TICKERS = [s for s, _, src in DEFAULT_TARGET_CHOICES if src 
 # date, after the announcement: a lag, never a look-ahead.
 FEATURE_ONLY_FRED_SERIES = {"EUR_DFR_Rate": "ECBDFR"}
 
+# Alignement des séries FRED pour tout NOUVEAU run : première publication d'ALFRED (`data/alfred.py`), repli sur FRED + date
+# de publication estimée quand ALFRED ne couvre pas la série ou que la clé FRED_API_KEY manque. Les configurations déjà
+# enregistrées ne sont pas concernées (voir `UniverseConfig.fred_point_in_time`).
+DEFAULT_FRED_POINT_IN_TIME = "alfred"
+
 # Extended FRED data (2026-10-07): series used for TRAINING ONLY -- never a
 # target (the target dropdown only shows `DEFAULT_TARGET_GROUPS`). They are
 # displayed on the /macro page, grouped by domain (`MACRO_PAGE_SECTIONS`

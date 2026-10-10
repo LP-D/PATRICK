@@ -1513,6 +1513,36 @@ def macro_page(request: Request):
     )
 
 
+@app.get("/fragments/macro-alfred")
+def macro_alfred_fragment(request: Request):
+    """Tableau FRED contre ALFRED de la page Macro, lu dans le cache local (jamais d'appel réseau ici)."""
+    from patrick.tracking import alfred_report
+
+    return templates.TemplateResponse(
+        request, "_macro_alfred.html",
+        {"report": alfred_report.load_report(), "state": alfred_report.status(), "key_ok": alfred_report.api_key_available(),
+         **_i18n_context(request)},
+    )
+
+
+@app.post("/api/macro/alfred-refresh")
+def macro_alfred_refresh():
+    """Lance (en arrière-plan) le calcul du rapport FRED contre ALFRED ; une seule exécution à la fois."""
+    from patrick.tracking import alfred_report
+
+    if not alfred_report.api_key_available():
+        raise HTTPException(status_code=409, detail="FRED_API_KEY absente : ALFRED est inaccessible.")
+    started = alfred_report.start_background(refresh=True)
+    return {"started": started, **alfred_report.status()}
+
+
+@app.get("/api/macro/alfred-status")
+def macro_alfred_status():
+    from patrick.tracking import alfred_report
+
+    return alfred_report.status()
+
+
 def _equity_asset_group_view() -> list[dict]:
     """CHANTIER (feature/equity-asset-class): same panel-skeleton shape as
     `_asset_group_view` (symbol/label/slug), plus the data-sufficiency badge

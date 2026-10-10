@@ -176,15 +176,27 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     if objective.target_source == "yfinance":
         target = yfinance_source.download_target(objective.target_symbol, universe.start_date)
     else:
-        target = fred_source.download_series(objective.target_symbol, objective.target_symbol,
-                                               universe.start_date)
+        target = None
+        if universe.fred_point_in_time == "alfred" and os.environ.get(fred_source.FRED_API_KEY_ENV):
+            # ALFRED par défaut (`data/alfred.py`) : la cible aussi est la première publication de chaque observation,
+            # sur sa date de sortie réelle (NFCI révisé après coup : le label ne voit plus les révisions).
+            from patrick.data import alfred
+
+            result = alfred.alfred_series(objective.target_symbol, universe.start_date, name=objective.target_symbol)
+            target = result.series if not result.series.empty else None
+            if target is not None:
+                print(f"  [ALFRED] target {objective.target_symbol}: {result.mode} "
+                      f"({result.info['n_alfred']} first releases, {result.info['n_backfilled']} dated by the lag table).")
         if target is None:
-            raise RuntimeError(f"Could not fetch FRED target '{objective.target_symbol}'.")
-        # F01: a FRED target is placed on its publication dates too -- the
-        # label then predicts the next PUBLISHED values, the only thing
-        # observable at each decision date.
-        if universe.fred_point_in_time != "reference_date":
-            target = publication_lag.to_availability_index(target, objective.target_symbol)
+            target = fred_source.download_series(objective.target_symbol, objective.target_symbol,
+                                                   universe.start_date)
+            if target is None:
+                raise RuntimeError(f"Could not fetch FRED target '{objective.target_symbol}'.")
+            # F01: a FRED target is placed on its publication dates too -- the
+            # label then predicts the next PUBLISHED values, the only thing
+            # observable at each decision date.
+            if universe.fred_point_in_time != "reference_date":
+                target = publication_lag.to_availability_index(target, objective.target_symbol)
 
     df = target.to_frame()
     store.record_series_observations({objective.target_symbol: _last_date(target)},
@@ -219,6 +231,11 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         if not already_pit:
             store.record_series_observations(
                 {universe.fred_series.get(c, c): _last_date(fred_df[c]) for c in fred_df.columns}, source="fred")
+        elif fred_df.attrs.get("last_obs"):
+            # ALFRED : les lignes sont datées par la publication ; la fraîcheur se lit sur la dernière OBSERVATION.
+            store.record_series_observations(
+                {universe.fred_series.get(c, c): pd.Timestamp(d) for c, d in fred_df.attrs["last_obs"].items() if d},
+                source="fred")
         if use_alfred and not already_pit:
             print("  [WARN] fred_point_in_time='alfred' requires FRED_API_KEY: falling back to the "
                   "publication-lag table (data/publication_lag.py).")

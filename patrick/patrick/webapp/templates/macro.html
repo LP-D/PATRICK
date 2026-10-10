@@ -1,6 +1,7 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import asset_panel, help_icon %}
-{% block title %}PATRICK — Macro (FRED){% endblock %}
+{% from "_components.html" import asset_panel, help_icon, lazy_block %}
+{% block title %}PATRICK — Macro (FRED)<script src="/static/macro_alfred.js" defer></script>
+{% endblock %}
 
 {% block content %}
 <nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
@@ -13,6 +14,9 @@
     {{ help_icon('asset_bar_windows', t('assetpanel_bars_help_label'), t('glossary_open_aria', term=t('assetpanel_bars_help_label'))) }}
 </h1>
 <p class="page-subtitle">{{ t('macro_sections_hint') }}</p>
+
+{# FRED contre ALFRED : ce que change la première publication (chargé après l'affichage ; le calcul se lance par le bouton). #}
+{{ lazy_block('/fragments/macro-alfred', 4, t('sb_loading'), t('lazy_retry')) }}
 
 <nav class="macro-toc" aria-label="{{ t('nav_macro') }}">
 {% for s in macro_sections %}

@@ -119,10 +119,18 @@ def download_fred_universe(series_map: dict[str, str], start: str,
 
     api_key = os.environ.get(FRED_API_KEY_ENV)
     if first_release and api_key:
-        cols = []
+        # ALFRED par défaut (`data/alfred.py`) : première publication quand ALFRED l'a, version actuelle de FRED datée
+        # par la table de retards avant, FRED seul si la série n'existe pas dans ALFRED -- jamais une série perdue
+        # parce qu'ALFRED refuse (séries quotidiennes : trop de dates de vintage pour une seule requête).
+        from patrick.data import alfred
+
+        cols, modes, last_obs = [], {}, {}
         for name, sid in series_map.items():
             try:
-                s = download_first_release(sid, start, api_key).rename(name)
+                result = alfred.alfred_series(sid, start, api_key, name=name)
+                s = result.series
+                modes[name] = result.mode
+                last_obs[name] = result.info.get("last_obs")
             except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
                 print(f"  [WARN] ALFRED {sid}: {str(e)[:100]}")
                 s = None
@@ -134,6 +142,8 @@ def download_fred_universe(series_map: dict[str, str], start: str,
                     issues.append(issue)
         frame = pd.concat(cols, axis=1) if cols else pd.DataFrame()
         frame.attrs["point_in_time"] = True
+        frame.attrs["alfred_modes"] = modes
+        frame.attrs["last_obs"] = last_obs
         return frame
     if not api_key:
         print("  [WARN] FRED_API_KEY not set: falling back to the public CSV scrape, which "

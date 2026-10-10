@@ -77,10 +77,15 @@ class UniverseConfig(BaseModel):
     # for C7: measure the impact of existing fixes, not build a finer new one).
     vintage_realtime_date: str | None = None
     # F01 -- how FRED observations are placed in time (`data/ingest.py`):
-    # "publication_lag" (default) re-indexes every observation on its
-    # estimated release date (`data/publication_lag.py`); "alfred" uses the
-    # ALFRED first releases indexed on their true publication date (needs
-    # FRED_API_KEY, falls back to "publication_lag" with a warning);
+    # "alfred" (`data/alfred.py`) uses the ALFRED first releases indexed on their true
+    # publication date, where ALFRED archives them (needs FRED_API_KEY, falls back to
+    # "publication_lag" with a warning). It is the default of every NEW run (web form,
+    # YAML, `D.DEFAULT_FRED_POINT_IN_TIME`); the schema default stays "publication_lag" so
+    # that a config stored before 2026-10-10 -- which has no such key, or an explicit
+    # "publication_lag" -- is reloaded by predict/explain/resume with the alignment it was
+    # trained with;
+    # "publication_lag" re-indexes every observation on its estimated release date
+    # (`data/publication_lag.py`, the series as revised today);
     # "reference_date" is the pre-F01, LEAKY behavior, kept only so that
     # `patrick audit degradation` can measure what F01 changes.
     fred_point_in_time: Literal["publication_lag", "alfred", "reference_date"] = "publication_lag"
@@ -357,6 +362,10 @@ class RunConfig(BaseModel):
     def from_yaml(cls, path: str) -> RunConfig:
         import yaml
 
+        from patrick.config import defaults as D
+
         with open(path) as f:
             raw = yaml.safe_load(f)
+        if isinstance(raw, dict):                   # un YAML neuf suit le défaut des nouveaux runs (ALFRED)
+            raw.setdefault("universe", {}).setdefault("fred_point_in_time", D.DEFAULT_FRED_POINT_IN_TIME)
         return cls.model_validate(raw)
