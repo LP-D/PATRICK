@@ -313,6 +313,9 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_legend_pos": _s("lien positif", "positive link"),
     "exp_legend_neg": _s("lien négatif", "negative link"),
     "exp_legend_faded": _s("non significatif", "not significant"),
+    # Carte « en cours et file d'attente » (identique sur /ml, /dl, /rl : c'est la même machine) et bandeau des variations.
+    "machine_title": _s("En cours et file d'attente", "Running and queue"),
+    "machine_idle": _s("Machine au repos.", "Machine idle."),
 }
 
 MODELS_STRINGS.update(LABEL_STRINGS)
@@ -321,7 +324,12 @@ MODELS_STRINGS.update(RL_STRINGS)
 
 # Clés lues par le navigateur (`window.I18N`) : `help_aria` partout ; les libellés des pages à graphiques seulement sur leur page (la charge
 # utile de chaque page reste petite). Les textes réservés au gabarit (`*_hint`, `*_subtitle`) ne sont jamais envoyés.
-MODELS_JS_KEYS: tuple[str, ...] = ("help_aria",)
+MODELS_JS_KEYS: tuple[str, ...] = (
+    "help_aria",
+    # carte file d'attente / en cours (machine.js) et bandeau (ticker.js), présents sur toutes les pages
+    "machine_idle", "movers_title",
+    "rlp_phase_rl_data", "rlp_phase_rl_train", "rlp_phase_rl_eval", "rlp_phase_rl_save",
+)
 
 
 def _browser_keys(*prefixes: str) -> tuple[str, ...]:

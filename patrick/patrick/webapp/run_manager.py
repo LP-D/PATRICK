@@ -18,6 +18,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -99,12 +100,29 @@ def _eta_confidence(progress_done: int, progress_total: int) -> str | None:
     return "moderate"
 
 
-def _job_view(job: dict, queue_position: int | None) -> dict:
-    name = None
+def _job_identity(config_json: str | None) -> tuple[str | None, str | None, str]:
+    """(nom, cible, famille) d'un job d'après sa configuration brute -- sans validation Pydantic : la file entière est relue toutes
+    les quelques secondes par la carte « en cours et file d'attente ». Famille : « rl » (`"kind": "rl"`), « dl » (tous les algorithmes
+    sont des réseaux, comme `RunConfig.family`) ou « ml »."""
     try:
-        name = json.loads(job["config_json"]).get("name")
-    except (TypeError, ValueError, AttributeError):
-        pass
+        cfg = json.loads(config_json)
+    except (TypeError, ValueError):
+        return None, None, "ml"
+    if not isinstance(cfg, dict):
+        return None, None, "ml"
+    objective = cfg.get("objective")
+    target = objective.get("target_symbol") if isinstance(objective, dict) else None
+    if cfg.get("kind") == "rl":
+        kind = "rl"
+    else:
+        models = cfg.get("models")
+        algos = models.get("algos") if isinstance(models, dict) else None
+        kind = "dl" if algos and all(a in D.ALL_DL_ALGOS for a in algos) else "ml"
+    return cfg.get("name"), target, kind
+
+
+def _job_view(job: dict, queue_position: int | None) -> dict:
+    name, target, kind = _job_identity(job["config_json"])
     paused = job["status"] == "running" and bool(job.get("pause_requested"))
     progress_total = max(0, int(job["progress_total"] or 0))
     progress_done = max(0, int(job["progress_done"] or 0))
@@ -114,6 +132,8 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
     return {
         "id": job["job_id"],
         "name": name,
+        "target": target,
+        "kind": kind,                                     # ml | dl | rl
         "status": "paused" if paused else job["status"],  # queued | running | paused | done | error
         "paused": paused,
         "phase": job["phase"],
@@ -322,6 +342,7 @@ def stop_active_run(job_id: str) -> bool:
         if not pid or pid <= 0:
             raise RuntimeError("Le PID du worker actif est indisponible.")
         _terminate_worker(pid)
+        jobs_db.clear_heartbeat(conn, pid)       # le worker est mort : son pouls ne doit plus empêcher d'en relancer un
         stopped = jobs_db.finish_user_stopped_job(conn, job_id)
     finally:
         conn.close()

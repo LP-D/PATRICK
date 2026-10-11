@@ -198,6 +198,53 @@ def test_stop_terminates_active_worker_and_marks_job_error(tmp_path, monkeypatch
     assert job["error"] == "Stopped by user."
 
 
+def test_stop_with_a_queue_relaunches_a_worker_even_though_the_killed_worker_heartbeat_is_fresh(tmp_path, monkeypatch):
+    """Régression : le worker tué laissait un pouls de moins de 30 s, `ensure_worker_running` le croyait vivant et ne relançait rien :
+    la file d'attente restait à l'arrêt après un « Stop »."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    _running_job(conn, "active", worker_pid=4321)
+    jobs.enqueue_job(conn, '{"name":"next"}')
+    jobs.write_heartbeat(conn, pid=4321)                  # le worker vivait encore à l'instant
+    conn.close()
+    monkeypatch.setattr(run_manager, "_terminate_worker", lambda pid: None)
+    spawned = []
+    monkeypatch.setattr(run_manager, "_spawn_worker", spawned.append)
+
+    assert TestClient(app).post("/api/jobs/active/stop").status_code == 200
+    assert len(spawned) == 1
+
+
+def test_stop_does_not_relaunch_a_worker_when_the_queue_is_empty(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    _running_job(conn, "active", worker_pid=4321)
+    jobs.write_heartbeat(conn, pid=4321)
+    conn.close()
+    monkeypatch.setattr(run_manager, "_terminate_worker", lambda pid: None)
+    spawned = []
+    monkeypatch.setattr(run_manager, "_spawn_worker", spawned.append)
+
+    assert TestClient(app).post("/api/jobs/active/stop").status_code == 200
+    assert spawned == []
+
+
+def test_stop_keeps_the_heartbeat_of_another_live_worker(tmp_path, monkeypatch):
+    """Le pouls n'est effacé que s'il est celui du worker tué : un autre worker vivant continue de passer pour tel."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect()
+    _running_job(conn, "active", worker_pid=4321)
+    jobs.enqueue_job(conn, '{"name":"next"}')
+    jobs.write_heartbeat(conn, pid=9999)
+    conn.close()
+    monkeypatch.setattr(run_manager, "_terminate_worker", lambda pid: None)
+    spawned = []
+    monkeypatch.setattr(run_manager, "_spawn_worker", spawned.append)
+
+    assert TestClient(app).post("/api/jobs/active/stop").status_code == 200
+    assert spawned == []
+
+
 def test_pause_is_observed_at_next_worker_log_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     conn = db.connect()

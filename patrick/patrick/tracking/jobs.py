@@ -297,6 +297,15 @@ def write_heartbeat(conn: sqlite3.Connection, pid: int) -> None:
         )
 
 
+def clear_heartbeat(conn: sqlite3.Connection, pid: int) -> bool:
+    """Efface le pouls laissé par un worker qu'on vient de tuer, s'il est bien le sien (le pouls est une ligne unique : celui d'un autre
+    worker vivant n'est pas touché). Sans cela il reste « frais » jusqu'à `HEARTBEAT_STALE_S` et `worker_is_alive` répond oui pour un
+    processus mort : personne ne relance alors la file d'attente."""
+    with conn:
+        cur = conn.execute("DELETE FROM worker_heartbeat WHERE id = 1 AND pid = ?", (pid,))
+    return cur.rowcount == 1
+
+
 def worker_is_alive(conn: sqlite3.Connection) -> bool:
     row = conn.execute(
         "SELECT (julianday('now') - julianday(updated_at)) * 86400 "

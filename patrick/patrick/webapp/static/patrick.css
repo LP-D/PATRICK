@@ -1264,7 +1264,7 @@ legend {
   align-items: start;
 }
 .dash-settings { grid-column: 1; grid-row: 1 / span 3; }
-.dash-progress, .dash-stock, .dash-movers { grid-column: 2; }
+.dash-machine, .dash-progress, .dash-stock { grid-column: 2; }
 
 .dash-panel {
   min-width: 0;
@@ -1459,6 +1459,24 @@ legend {
 }
 
 #status-line { margin: 8px 0; color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
+
+/* Carte « en cours et file d'attente » (_machine_card.html) : identique sur /ml, /dl et /rl. */
+.dash-machine .queue-panel { margin: 0; }
+.machine-run { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+.machine-run .run-name-line { margin: 0; }
+.machine-kind {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font: 600 10.5px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+.machine-target { color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
+.machine-status { margin: 8px 0; color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
+.machine-idle { margin: 0; color: var(--text-3); font-size: 13px; }
 .run-name-line { margin: 0 0 8px; font-family: var(--mono); font-size: 14px; font-weight: 600; }
 .log-tail {
   max-height: 320px;
@@ -1591,39 +1609,56 @@ legend {
 .news-list a:hover { color: var(--brand); }
 .news-publisher { color: var(--text-3); font-size: 11.5px; }
 
-/* Movers */
-.movers-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
-.movers-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--space-md); margin-top: var(--space-md); }
-.movers-col-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-2); }
-.movers-hint { margin: 0 0 8px; }
-.movers-list { margin: 0; padding: 0; list-style: none; }
-.movers-list li { border-bottom: 1px solid var(--line); }
-.movers-list li:last-child { border-bottom: 0; }
-.movers-pick {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms var(--ease-out);
-}
-.movers-pick:hover { background: var(--surface-2); }
-.movers-pick:hover .movers-symbol { color: var(--brand); }
-.movers-empty { margin: 8px 0 0; }
-.movers-symbol { min-width: 68px; font-family: var(--mono); font-weight: 600; }
-.movers-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-.movers-pct { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+/* Variations : couleurs partagées par le bandeau (voir « Bandeau des plus fortes variations ») */
 .movers-up { color: var(--pos); }
 .movers-down { color: var(--neg); }
+
+/* ============ Bandeau des plus fortes variations ============ */
+/* Au-dessus de la barre du haut, sur toutes les pages, comme un écran de cours. La liste est posée deux fois à la suite
+   (ticker.js) : la piste glisse d'exactement une liste, puis recommence, sans coupure. */
+.ticker {
+  --ticker-duration: 60s;
+  /* Sens du défilement : « reverse » = de gauche à droite ; « normal » = de droite à gauche (le sens des écrans de cours classiques). */
+  --ticker-dir: reverse;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.ticker[hidden] { display: none; }
+.ticker-viewport { overflow: hidden; }
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll var(--ticker-duration) linear infinite;
+  animation-direction: var(--ticker-dir);
+}
+.ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
+.ticker-group { display: flex; flex: none; margin: 0; padding: 0; list-style: none; }
+.ticker-group li { border-right: 1px solid var(--line); }
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 18px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ticker-item:hover, .ticker-item:focus-visible { background: var(--surface-2); }
+.ticker-item:hover .ticker-sym { color: var(--brand); }
+.ticker-sym { font-weight: 600; }
+.ticker-pct { font-variant-numeric: tabular-nums; font-weight: 600; }
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+  .ticker-viewport { overflow-x: auto; }
+  .ticker-group[aria-hidden="true"] { display: none; }
+}
 
 /* ============ Breadcrumb, scope line, filters ============ */
 
@@ -1957,7 +1992,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .search-trigger .search-label, .search-trigger .kbd { display: none; }
   .main-content { padding: 20px 16px 48px; }
   .station-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  .dash-settings, .dash-progress, .dash-stock, .dash-movers { grid-column: 1; grid-row: auto; }
+  .dash-settings, .dash-machine, .dash-progress, .dash-stock { grid-column: 1; grid-row: auto; }
   .adv-state { flex: 1 0 100%; margin-left: 0; text-align: left; }
   .asset-panel-grid { grid-template-columns: 1fr; }
 }
@@ -1976,12 +2011,12 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .run-form input[type="checkbox"] { width: 20px; height: 20px; }
   .run-form input[type="text"], .run-form input[type="number"], .run-form input[type="date"],
   .run-form select, .run-form textarea, .filter-bar select, .filter-bar input, .example-picker select,
-  .adv-summary, .movers-pick, .range-btn, button.primary, .btn, .btn-secondary, .icon-btn, .sidebar-nav a { min-height: 44px; }
+  .adv-summary, .range-btn, button.primary, .btn, .btn-secondary, .icon-btn, .sidebar-nav a { min-height: 44px; }
   .icon-btn { width: 44px; }
 }
 
 @media print {
-  .sidebar, .topbar, .cmdk, .launch-bar { display: none !important; }
+  .sidebar, .topbar, .ticker, .cmdk, .launch-bar { display: none !important; }
   .app-shell { display: block; }
   .card, .metric { box-shadow: none; animation: none; break-inside: avoid; }
 }

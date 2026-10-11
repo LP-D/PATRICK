@@ -517,6 +517,9 @@
     </div>
 </section>
 
+{# En cours + file d'attente : la même carte sur /ml, /dl et /rl (une seule machine). #}
+{% include "_machine_card.html" %}
+
 {# Le titre suit l'état du panneau. « Avancement » au-dessus d'une liste de
    runs passés décrivait une chose et en montrait une autre : au repos, ce
    panneau ne montre pas l'avancement de quoi que ce soit, il montre
@@ -527,23 +530,6 @@
         data-title-idle="{{ t('section_recent') }}"
         data-title-active="{{ t('section_progress') }}">{{ t('section_progress') if initial_run_id else t('section_recent') }}</h2>
     <div class="dash-panel-body">
-
-    {# File d'attente en liste déroulante, repliée par défaut : déployée en
-       permanence, une file de plusieurs dizaines de runs repoussait tout le
-       reste du panneau hors de l'écran. Le résumé (nombre + prochain run)
-       n'est affiché qu'une fois — il répétait auparavant tous les noms juste
-       au-dessus de la liste qui les contient déjà. #}
-    <div id="queue-panel" class="queue-panel {% if not queued_runs %}hidden{% endif %}">
-        <div class="queue-head">
-            <button type="button" id="queue-toggle" class="queue-toggle" aria-expanded="false"
-                    aria-controls="queue-list">
-                <span class="queue-caret" aria-hidden="true"></span>
-                <span id="queue-summary"></span>
-            </button>
-            <button type="button" id="clear-queue-btn" class="queue-action danger">{{ t('queue_clear') }}</button>
-        </div>
-        <ol id="queue-list" class="queue-list" hidden></ol>
-    </div>
 
     {# Ce message ne vaut que si la colonne est REELLEMENT vide. Avec la liste
        des derniers runs juste en dessous, « aucun run pour l'instant » etait
@@ -575,11 +561,6 @@
 
     <div id="status-panel" class="{% if not initial_run_id %}hidden{% endif %}">
         <p id="run-name-line" class="run-name-line"></p>
-        <div id="run-controls" class="run-controls hidden">
-            <button type="button" id="pause-run-btn" class="queue-action"></button>
-            <button type="button" id="stop-run-btn" class="queue-action danger">{{ t('run_stop') }}</button>
-        </div>
-        <p id="run-control-error" class="banner banner-error hidden" role="alert"></p>
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
         <p id="status-line">…</p>
         {# Étapes en clair, déduites du journal du pipeline (`progress_steps.py`).
@@ -620,53 +601,6 @@
     <div class="target-news" id="target-news">
         <p class="hint">{{ t('news_recent') }}</p>
         <ul id="news-list" class="news-list"></ul>
-    </div>
-    </div>
-</section>
-
-<section class="dash-panel dash-movers" aria-labelledby="movers-title">
-    <div class="movers-header">
-        <h2 id="movers-title" class="dash-panel-title">{{ t('movers_title') }}</h2>
-        <span class="hint" id="movers-updated">
-            {% if movers.updated_at %}{{ t('movers_updated_at', time=movers.updated_at) }}{% if movers.n_requested %} · {{ t('movers_coverage', n=movers.n_ranked, total=movers.n_requested) }}{% endif %}{% else %}{{ t('movers_computing') }}{% endif %}
-        </span>
-    </div>
-    <div class="dash-panel-body">
-    {# Une panne rendue en `.hint` gris était typographiquement identique à un
-       texte d'aide : on ne distinguait pas « voici comment ça marche » de
-       « ça ne marche pas ». #}
-    {% if movers.error %}
-    <p class="banner banner-warning">{{ movers.error }}</p>
-    {% endif %}
-    {# Chaque ligne est un BOUTON qui AJOUTE le symbole à la sélection du
-       `<select multiple id="target_symbols">` (sans désélectionner les
-       autres) et recharge l'aperçu. Avant, ce panneau était le bloc le plus
-       visible de la page et le seul relié à aucune tâche : un widget de
-       portail boursier posé dans un outil de recherche. Relié, il devient ce
-       qu'il aurait dû être — l'aide à composer la sélection de cibles, une
-       ou plusieurs. Les symboles absents de la liste des cibles ne sont pas
-       cliquables et le disent. #}
-    <p class="hint movers-hint {% if not movers.gainers and not movers.losers %}hidden{% endif %}"
-       id="movers-hint">{{ t('movers_pick_hint') }}</p>
-    <div class="movers-columns" id="movers-columns">
-        <div class="movers-col">
-            <h3 class="movers-col-title movers-up">{{ t('movers_gainers') }}</h3>
-            <ul id="movers-gainers" class="movers-list">
-                {% for row in movers.gainers %}
-                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-up">+{{ row.pct }}%</span></button></li>
-                {% endfor %}
-            </ul>
-            <p class="movers-empty hint {% if movers.gainers %}hidden{% endif %}" id="movers-gainers-empty">{{ t('movers_no_data') }}</p>
-        </div>
-        <div class="movers-col">
-            <h3 class="movers-col-title movers-down">{{ t('movers_losers') }}</h3>
-            <ul id="movers-losers" class="movers-list">
-                {% for row in movers.losers %}
-                <li><button type="button" class="movers-pick" data-symbol="{{ row.symbol }}"><span class="movers-symbol">{{ row.symbol }}</span><span class="movers-label">{{ row.label }}</span><span class="movers-pct movers-down">{{ row.pct }}%</span></button></li>
-                {% endfor %}
-            </ul>
-            <p class="movers-empty hint {% if movers.losers %}hidden{% endif %}" id="movers-losers-empty">{{ t('movers_no_data') }}</p>
-        </div>
     </div>
     </div>
 </section>

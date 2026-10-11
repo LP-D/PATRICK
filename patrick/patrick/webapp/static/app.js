@@ -207,14 +207,6 @@
     const logTail = document.getElementById("log-tail");
     const stepsList = document.getElementById("steps-list");
     const resultsPanel = document.getElementById("results-panel");
-    const queuePanel = document.getElementById("queue-panel");
-    const queueSummary = document.getElementById("queue-summary");
-    const queueList = document.getElementById("queue-list");
-    const queueToggle = document.getElementById("queue-toggle");
-    const clearQueueBtn = document.getElementById("clear-queue-btn");
-    const runControls = document.getElementById("run-controls");
-    const pauseRunBtn = document.getElementById("pause-run-btn");
-    const stopRunBtn = document.getElementById("stop-run-btn");
 
     let trackedRunId = null;
     let activeJobId = null;
@@ -617,260 +609,21 @@
         return div.innerHTML;
     }
 
-    // --- file d'attente : liste déroulante, réordonnable ---
+    // --- file d'attente et run en cours : la carte `machine.js` (commune à ML, DL et RL) les affiche et les pilote ; ici on ne garde que
+    // le suivi détaillé du run actif et le nombre de runs déjà en file (récapitulatif de lancement). ---
 
-    const QUEUE_OPEN_KEY = "patrick.queueOpen";
-    let queueData = [];          // dernier état connu, dans l'ordre d'exécution
-    let queueSignature = null;   // ne reconstruire la liste que si elle a changé : un poll toutes les 4 s qui la vide perdait défilement et focus
-    let queueDragging = null;    // <li> en cours de glisser-déposer
-    let queuePendingFocus = null;
-
-    function setQueueOpen(open) {
-        if (!queueToggle) return;
-        queueToggle.setAttribute("aria-expanded", open ? "true" : "false");
-        queueList.hidden = !open;
-        try { localStorage.setItem(QUEUE_OPEN_KEY, open ? "1" : "0"); } catch (e) { /* stockage indisponible */ }
+    function runStatePoll() {
+        return window.PatrickMachine ? window.PatrickMachine.refresh() : Promise.resolve();
     }
-    let queueStoredOpen = false;
-    try { queueStoredOpen = localStorage.getItem(QUEUE_OPEN_KEY) === "1"; } catch (e) { /* idem */ }
-    setQueueOpen(queueStoredOpen);
 
-    function buildQueueItem(job, index, total) {
-        const label = job.name || job.id;
-        const item = document.createElement("li");
-        item.className = "queue-item";
-        item.draggable = true;
-        item.dataset.jobId = job.id;
-        item.title = tr("queue_drag", "Drag to change the execution order");
-
-        const rank = document.createElement("span");
-        rank.className = "queue-rank";
-        rank.textContent = `${index + 1}.`;
-        const name = document.createElement("span");
-        name.className = "queue-name";
-        name.textContent = label;
-
-        const actions = document.createElement("span");
-        actions.className = "queue-item-actions";
-        [
-            ["top", "⤒", "queue_move_top", "Move to top", index === 0],
-            ["up", "↑", "queue_move_up", "Move up", index === 0],
-            ["down", "↓", "queue_move_down", "Move down", index === total - 1],
-            ["remove", "✕", "queue_remove", "Remove", false],
-        ].forEach(([action, glyph, key, fallback, disabled]) => {
-            const text = tr(key, fallback);
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "queue-action queue-icon" + (action === "remove" ? " danger" : "");
-            button.dataset.jobAction = action;
-            button.textContent = glyph;
-            button.disabled = disabled;
-            button.title = text;
-            button.setAttribute("aria-label", `${text} ${label}`);
-            actions.appendChild(button);
+    if (window.PatrickMachine) {
+        window.PatrickMachine.subscribe(function (state) {
+            queuedCount = state.queue.length;
+            activeJobId = state.active ? state.active.id : null;
+            // Le run actif côté serveur a changé (ex : la file a avancé toute seule) : le suivi bascule dessus sans recharger la page.
+            if (state.active && state.active.id !== trackedRunId) startTracking(state.active.id);
         });
-        item.append(rank, name, actions);
-        return item;
-    }
-
-    function renderQueue(queue) {
-        queueData = queue;
-        queuedCount = queue.length;
-        if (!queuePanel) return;
-        if (!queue.length) {
-            queuePanel.classList.add("hidden");
-            queueList.replaceChildren();
-            queueSignature = null;
-            return;
-        }
-        queuePanel.classList.remove("hidden");
-        queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued · next: {next}"),
-            { n: queue.length, next: queue[0].name || queue[0].id });
-
-        const signature = queue.map((q) => `${q.id}:${q.name}`).join("|");
-        if (signature === queueSignature || queueDragging) return;
-        queueSignature = signature;
-        const scrollTop = queueList.scrollTop;
-        queueList.replaceChildren(...queue.map((job, index) => buildQueueItem(job, index, queue.length)));
-        queueList.scrollTop = scrollTop;
-
-        if (queuePendingFocus) {
-            const row = queueList.querySelector(`li[data-job-id="${queuePendingFocus.jobId}"]`);
-            if (row) {
-                const preferred = row.querySelector(`button[data-job-action="${queuePendingFocus.action}"]`);
-                const target = preferred && !preferred.disabled ? preferred : row.querySelector("button:not(:disabled)");
-                if (target) target.focus();
-            }
-            queuePendingFocus = null;
-        }
-    }
-
-    // Pas de fenêtre de confirmation : retirer ou réordonner un run en attente
-    // est immédiat et sans conséquence durable (le run se relance depuis
-    // l'historique). La réponse du serveur est la vérité : si la requête
-    // échoue (élément déjà démarré, réseau), on resynchronise sans alerte.
-    async function queueRequest(url, options) {
-        let queue = null;
-        try {
-            const response = await fetch(url, options);
-            if (response.ok) queue = (await response.json().catch(() => ({}))).queue || null;
-        } catch (e) { /* réseau : resynchronisation ci-dessous */ }
-        if (queue) { renderQueue(queue); return; }
-        queueSignature = null;   // le DOM a pu être réordonné à la main
-        await runStatePoll();
-    }
-
-    function reorderQueue(ids) {
-        return queueRequest("/api/queue/reorder", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ order: ids }),
-        });
-    }
-
-    function moveQueueItem(jobId, action) {
-        const ids = queueData.map((q) => q.id);
-        const from = ids.indexOf(jobId);
-        const to = action === "top" ? 0 : action === "up" ? from - 1 : from + 1;
-        if (from < 0 || to < 0 || to >= ids.length || to === from) return;
-        ids.splice(to, 0, ids.splice(from, 1)[0]);
-        queuePendingFocus = { jobId: jobId, action: action };
-        reorderQueue(ids);
-    }
-
-    // --- état agrégé (file d'attente + détection du run actif courant) ---
-
-    async function runStatePoll() {
-        let data;
-        try {
-            const res = await fetch("/api/run-state");
-            data = await res.json();
-        } catch (e) {
-            return;
-        }
-
-        // Retenu pour le récapitulatif de confirmation : « suis-je 3e ? » est
-        // la seule question temporelle qui change le comportement avant de
-        // lancer, et elle n'était visible nulle part au moment du clic.
-        renderQueue(data.queue || []);
-
-        const active = data.active_run;
-        activeJobId = active ? active.id : null;
-        if (runControls) runControls.classList.toggle("hidden", !active);
-        if (pauseRunBtn) {
-            if (!active) {
-                delete pauseRunBtn.dataset.jobId;
-                delete pauseRunBtn.dataset.paused;
-                pauseRunBtn.disabled = true;
-                pauseRunBtn.textContent = tr("run_pause", "Pause");
-            } else {
-                pauseRunBtn.dataset.jobId = active.id;
-                pauseRunBtn.dataset.paused = active.status === "paused" ? "true" : "false";
-                pauseRunBtn.disabled = false;
-                pauseRunBtn.textContent = active.status === "paused"
-                    ? tr("run_resume", "Resume") : tr("run_pause", "Pause");
-            }
-        }
-
-        // Le run actif côté serveur a changé (ex: la file d'attente a avancé
-        // automatiquement) : on bascule le suivi dessus sans recharger la page.
-        if (active && active.id !== trackedRunId) {
-            startTracking(active.id);
-        }
-    }
-
-    // Erreur de contrôle (pause / reprise / arrêt) : bannière de la page, effacée à l'action suivante.
-    function showRunControlError(message) {
-        const box = document.getElementById("run-control-error");
-        if (!box) return;
-        box.textContent = message || "";
-        box.classList.toggle("hidden", !message);
-    }
-
-    async function sendJobControl(url, options) {
-        showRunControlError("");
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                const detail = await response.json().catch(() => ({}));
-                showRunControlError(typeof detail.detail === "string" && detail.detail
-                    ? detail.detail : tr("run_control_error", "Could not apply this action."));
-                return;
-            }
-            await runStatePoll();
-            if (trackedRunId) detailPoll();
-        } catch (e) {
-            showRunControlError(tr("run_control_error", "Could not apply this action."));
-        }
-    }
-
-    if (pauseRunBtn) {
-        pauseRunBtn.addEventListener("click", () => {
-            const paused = pauseRunBtn.dataset.paused === "true";
-            const action = paused ? "resume" : "pause";
-            sendJobControl(`/api/jobs/${pauseRunBtn.dataset.jobId}/${action}`, { method: "POST" });
-        });
-    }
-    if (stopRunBtn) {
-        stopRunBtn.addEventListener("click", () => {
-            sendJobControl(`/api/jobs/${activeJobId}/stop`, { method: "POST" });
-        });
-    }
-    if (queueToggle) {
-        queueToggle.addEventListener("click", () => {
-            setQueueOpen(queueToggle.getAttribute("aria-expanded") !== "true");
-        });
-    }
-    if (queueList) {
-        queueList.addEventListener("click", (event) => {
-            const button = event.target.closest("button[data-job-action]");
-            if (!button || button.disabled) return;
-            const jobId = button.closest("li").dataset.jobId;
-            if (button.dataset.jobAction === "remove") {
-                queueRequest(`/api/queue/${jobId}`, { method: "DELETE" });
-            } else {
-                moveQueueItem(jobId, button.dataset.jobAction);
-            }
-        });
-
-        // Glisser-déposer : le <li> est déplacé dans le DOM pendant le survol ;
-        // l'ordre résultant n'est envoyé qu'au dépôt. Déposer hors de la liste
-        // (ou Échap) annule : dropEffect vaut alors "none".
-        queueList.addEventListener("dragstart", (event) => {
-            const row = event.target.closest && event.target.closest("li.queue-item");
-            if (!row) return;
-            queueDragging = row;
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", row.dataset.jobId);   // Firefox l'exige
-            row.classList.add("dragging");
-        });
-        queueList.addEventListener("dragover", (event) => {
-            if (!queueDragging) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            const over = event.target.closest("li.queue-item");
-            if (!over || over === queueDragging) return;
-            const rect = over.getBoundingClientRect();
-            const reference = event.clientY > rect.top + rect.height / 2 ? over.nextSibling : over;
-            if (reference !== queueDragging.nextSibling) queueList.insertBefore(queueDragging, reference);
-        });
-        queueList.addEventListener("drop", (event) => event.preventDefault());
-        queueList.addEventListener("dragend", (event) => {
-            if (!queueDragging) return;
-            queueDragging.classList.remove("dragging");
-            queueDragging = null;
-            const ids = Array.from(queueList.children, (li) => li.dataset.jobId);
-            const moved = ids.some((id, i) => !queueData[i] || id !== queueData[i].id);
-            if (moved && event.dataTransfer.dropEffect !== "none") {
-                reorderQueue(ids);
-            } else {
-                queueSignature = null;
-                renderQueue(queueData);
-            }
-        });
-    }
-    if (clearQueueBtn) {
-        clearQueueBtn.addEventListener("click", () => queueRequest("/api/queue", { method: "DELETE" }));
+        window.PatrickMachine.onAction(function () { if (trackedRunId) detailPoll(); });
     }
 
     // --- soumission du formulaire settings, sans rechargement de page ---
@@ -1351,37 +1104,10 @@
         });
     }
 
-    const moversColumns = document.getElementById("movers-columns");
-    if (moversColumns) {
-        moversColumns.addEventListener("click", function (ev) {
-            const btn = ev.target.closest(".movers-pick");
-            if (!btn) return;
-            const select = document.getElementById("target_symbols");
-            if (!select) return;
-            const symbol = btn.dataset.symbol;
-            const option = Array.from(select.options).find((o) => o.value === symbol);
-            if (!option) {
-                btn.title = fmtStr(tr("movers_not_a_target", "{s} n'est pas une cible disponible."), { s: symbol });
-                return;
-            }
-            // Additif, pas remplacement : un clic sur une variation ajoute
-            // cette cible à la sélection en cours au lieu de l'écraser --
-            // c'est ainsi qu'on compose un batch depuis ce panneau.
-            option.selected = true;
-            // `change` déclenche le rechargement de l'aperçu marché (market.js)
-            // et le rafraîchissement du récapitulatif/de l'aperçu de nom : poser
-            // `.selected` seul ne notifie personne.
-            select.dispatchEvent(new Event("change", { bubbles: true }));
-            select.focus({ preventScroll: false });
-        });
-    }
-
     if (window.INITIAL_RUN_ID) {
         startTracking(window.INITIAL_RUN_ID);
     }
 
-    runStatePoll();
-    setInterval(runStatePoll, 4000);
 })();
 
 /* Page « Lancer » : le benchmark n'a de sens que pour une cible alpha. */
