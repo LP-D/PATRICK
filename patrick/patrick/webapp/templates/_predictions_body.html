@@ -22,7 +22,9 @@
 <dl class="pop-grid">
 {% if s %}
 <dt>{{ _t('pb_direction') }}</dt><dd>{{ s[0] }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}{% endif %}</dd>
-<dt>{{ _t('pb_last') }}</dt><dd>{{ c.ts }}{% if c.market_closed %}<br><span class="hint">{{ _t('pb_closed') }}</span>{% endif %}</dd>
+{# Date seule : l'heure `00:00:00` d'un signal de clôture n'apporte rien. #}
+{% set ts = c.ts | string %}
+<dt>{{ _t('pb_last') }}</dt><dd>{{ ts[:10] }}{% if ts[11:16] and ts[11:16] != '00:00' %} {{ ts[11:16] }}{% endif %}</dd>
 {% else %}
 <dt>{{ _t('pb_direction') }}</dt><dd>{{ status_badge(_t('pb_none'), 'disabled') }}</dd>
 {% endif %}
@@ -31,14 +33,13 @@
 {# F08 : p-value calculee sur le fold qui a servi a choisir le modele -- jamais "significative". #}
 {{ status_badge(_t('pb_sel_badge', p='%.4f' | format(c.dm_p_value)), 'warning') }}<br><span class="hint">{{ _t('pb_sel_hint') }}</span>
 {% elif c.dm_p_value is not none %}
-{{ status_badge('p=%.4f' | format(c.dm_p_value), 'ok' if c.dm_p_value < alpha else 'warning') }}<br><span class="hint">{{ _t('pb_dm_hint', a=('%.2f' | format(alpha)) | replace('.', _t('dec_sep'))) }}</span>
+{{ status_badge('p=%.4f' | format(c.dm_p_value), 'ok' if c.dm_p_value < alpha else 'warning') }}
 {% else %}{{ status_badge(_t('pb_pending'), 'neutral') }}{% endif %}
 </dd>
 <dt>{{ _t('pb_live') }}</dt><dd>
 {% if c.live_hit_rate is none %}{{ status_badge(_t('pb_no_live'), 'disabled') }}
 {% elif c.live_hit_rate_n < 10 %}{{ status_badge('%.0f' | format(c.live_hit_rate * 100) ~ '% (n=' ~ c.live_hit_rate_n ~ ', ' ~ _t('pb_few') ~ ')', 'neutral') }}
 {% else %}{{ status_badge('%.0f' | format(c.live_hit_rate * 100) ~ '% (n=' ~ c.live_hit_rate_n ~ ')', 'ok' if c.live_hit_rate >= warn_thr else 'warning') }}{% endif %}
-<br><span class="hint">{{ _t('pb_live_hint') }}</span>
 </dd>
 <dt>{{ _t('pb_drift') }}</dt><dd>
 {% set d = c.drift %}
@@ -46,7 +47,7 @@
 {% else %}
 {% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
 {{ status_badge(d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · ' ~ _t('pb_stale') if d.stale else ''), drift_state) }}<br>
-<span class="hint">{{ d.reason }}{% if d.psi is not none %} {{ _t('pb_psi', p='%.2f' | format(d.psi), w=d.worst_feature, d=d.measured_at) }}{% endif %} {{ _t('pb_psi_rule') }}</span>
+<span class="hint">{{ d.reason }}{% if d.psi is not none %} {{ _t('pb_psi', p='%.2f' | format(d.psi), w=d.worst_feature, d=d.measured_at) }}{% endif %}</span>
 {% endif %}
 </dd>
 </dl>
@@ -54,11 +55,15 @@
 {% set t = c.tally %}
 <div class="pop-track">
 <span class="pop-track-title">{{ _t('pred_track_title') }}{% if t %} · {{ _t('pred_since', d=t.since) }}{% endif %}</span>
+{# Le taux de réussite d'abord (une ligne), puis le détail par mouvement. #}
+{% if t and t.direction_n %}
+<span class="pop-line pop-hit">{{ _t('pred_dir_total', hits=t.direction_hits, n=t.direction_n, pct=t.direction_pct) }}{% if t.pending %} · <span class="hint">{{ _t('pred_pending', n=t.pending) }}</span>{% endif %}</span>
+{% endif %}
 {% if t and t.n_four %}
 <table class="pop-track-table pop-track-4">
 <thead><tr><th>{{ _t('pred_col_move') }}</th><th class="n">{{ _t('pred_col_n') }}</th><th class="n">{{ _t('pred_col_exact') }}</th><th class="n" title="{{ _t('pred_intensity_help') }}">{{ _t('pred_col_intensity') }}</th><th class="n" title="{{ _t('pred_wrongway_help') }}">{{ _t('pred_col_wrongway') }}</th></tr></thead>
-{% for k in t.classes %}
-<tr><td>{{ k.label }}</td><td class="n">{{ k.n if k.n else '—' }}</td>
+{% for k in t.classes if k.n %}
+<tr><td>{{ k.label }}</td><td class="n">{{ k.n }}</td>
 <td class="n">{% if k.n %}{{ k.exact }} <span class="pct">{{ '%.0f' | format(k.exact * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
 <td class="n">{% if k.n %}{{ k.intensity }} <span class="pct">{{ '%.0f' | format(k.intensity * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
 <td class="n err">{% if k.n %}{{ k.wrong_way }} <span class="pct">{{ '%.0f' | format(k.wrong_way * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
@@ -75,8 +80,7 @@
 <td class="n err">{% if k.n %}{{ k.wrong }} <span class="pct">{{ '%.0f' | format(k.wrong * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
 </table>
-<span class="hint">{{ _t('pred_dir_total', hits=t.direction_hits, n=t.direction_n) }}{% if t.pending %} · {{ _t('pred_pending', n=t.pending) }}{% endif %}</span>
-<span class="hint">{{ _t('pred_reading_help') }}</span>
+{% if not t.direction_n and t.pending %}<span class="hint">{{ _t('pred_pending', n=t.pending) }}</span>{% endif %}
 {% else %}
 <span class="hint">{{ _t('pred_no_track') }}</span>
 {% endif %}
@@ -109,7 +113,7 @@
     <table class="data-table pred-table">
         <thead><tr>
             <th>{{ t('mv_col_asset') }}</th>
-            {% for h in horizons %}<th>{{ h | hlabel }} {{ q(t('pb_horizon_help')) }}</th>{% endfor %}
+            {% for h in horizons %}<th>{{ h | hlabel }}</th>{% endfor %}
         </tr></thead>
         <tbody>
         {% for a in g.assets %}

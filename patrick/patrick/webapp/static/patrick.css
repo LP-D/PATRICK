@@ -1154,7 +1154,11 @@ legend {
 }
 @starting-style { .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-4px); } }
 .glossary-popover-title { margin-bottom: 6px; font-weight: 650; font-size: 13px; color: var(--text); }
-.glossary-popover-body { color: var(--text-2); line-height: 1.6; }
+.glossary-popover-body { color: var(--text-2); line-height: 1.6; max-height: min(55vh, 420px); overflow-y: auto; }
+/* « ? » fusionné (glossary.js, mergeIcons) : une définition par terme, le terme en gras. */
+.glossary-multi { margin: 0; }
+.glossary-multi + .glossary-multi { margin-top: 8px; }
+.glossary-multi strong { color: var(--text); font-weight: 650; }
 .glossary-search { margin-top: 12px; }
 .glossary-search label { display: block; margin-bottom: 5px; color: var(--text-3); font-size: 11px; font-weight: 600; }
 .glossary-search input {
@@ -2100,7 +2104,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .pop-content { display: none; }
 
 .pred-pop {
-  position: fixed; z-index: 100; width: max-content; max-width: 340px;
+  position: fixed; z-index: 100; width: max-content; max-width: 380px;
   padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px;
   background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text);
   font-family: var(--sans); font-size: 12px; font-weight: 400; line-height: 1.5;
@@ -2257,9 +2261,12 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 /* ---- Prédictions : suivi direction / intensité dans la bulle ----------------------------------------------------- */
 .pop-track-4 th, .pop-track-table thead th { font-weight: 500; font-size: .72rem; color: var(--text-3); text-align: left; padding-bottom: 2px; }
 .pop-track-table .n { text-align: right; white-space: nowrap; }
-.pop-track-table .pct { opacity: .65; font-size: .85em; }
+.pop-track-table .pct { opacity: .65; font-size: .85em; margin-left: 4px; }
 .pop-track-table .err { color: var(--neg); }
 .pop-track-sub { display: block; margin-top: 8px; }
+.pop-track-table { width: 100%; }
+.pred-pop .pop-hit { margin-bottom: 6px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pred-pop .pop-hit .hint { font-weight: 400; }
 
 /* ---- Vocabulaire (/vocabulary) ----------------------------------------------------------------------------------- */
 .vocab-tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0 12px; }
@@ -2409,6 +2416,8 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
   color: var(--text-2);
   font-size: 13px;
   line-height: 1.6;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
 }
 .help-pop.hidden { display: none; }
 .help-pop p { margin: 0; }

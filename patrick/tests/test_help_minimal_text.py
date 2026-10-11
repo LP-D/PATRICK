@@ -14,6 +14,7 @@ from patrick.webapp.app import app
 
 WEBAPP = Path(i18n.__file__).resolve().parent
 JS = (WEBAPP / "static" / "help.js").read_text(encoding="utf-8")
+GLOSSARY_JS = (WEBAPP / "static" / "glossary.js").read_text(encoding="utf-8")
 CSS = (WEBAPP / "static" / "patrick.css").read_text(encoding="utf-8")
 
 
@@ -41,7 +42,7 @@ def test_dynamic_status_messages_are_protected():
     for guard in ('hasAttribute("aria-live")', 'hasAttribute("role")', 'hasAttribute("data-keep")', "el.id"):
         assert guard in JS, guard
     # l'opt-in explicite pour un texte d'aide réécrit par un script
-    assert 'data-help") !== "fold"' in JS
+    assert 'data-help") === "fold"' in JS
 
 
 def test_the_css_hides_help_before_the_script_runs_and_styles_the_question_mark():
@@ -61,3 +62,32 @@ def test_the_accessible_name_is_translated_in_the_browser_strings():
     assert i18n.js_strings("fr")["help_aria"] == "Aide"
     assert i18n.js_strings("en")["help_aria"] == "Help"
 
+
+
+def test_a_short_sentence_stays_visible_instead_of_hiding_behind_a_question_mark():
+    limit = int(re.search(r"var INLINE_MAX = (\d+);", JS).group(1))
+    assert 80 <= limit <= 160                       # une phrase courte, pas un paragraphe
+    assert "length > (el.closest(\"[data-help-host]\") ? INLINE_CARD_MAX : INLINE_MAX)" in JS   # `eligible` ne replie que le plus long
+    card = int(re.search(r"var INLINE_CARD_MAX = (\d+);", JS).group(1))
+    assert limit <= card <= 200                     # une carte de profil garde sa description, toutes ou aucune
+    assert "INLINE_PAREN_MAX" in JS                 # idem pour « Libellé (explication) »
+
+
+def test_data_and_hover_bubbles_are_never_folded():
+    skip = re.search(r'var SKIP_INSIDE = (.*?);', JS, re.DOTALL).group(1)
+    # `.pop-content` / `.pred-pop` : la bulle de survol des prédictions recopie son contenu (predictions_pop.js) ;
+    # `td, th, summary` : une cellule ou un résumé porte des données (durée d'historique, dates), jamais de l'aide.
+    for selector in (".pop-content", ".pred-pop", "td", "th", "summary"):
+        assert selector in skip, selector
+
+
+def test_help_outside_any_panel_joins_the_page_title_and_identical_texts_are_shown_once():
+    assert "function pageTitle" in JS and "return pageTitle(el)" in JS
+    assert "seen[key]" in JS
+
+
+def test_the_glossary_merges_its_icons_one_per_block_and_one_per_title():
+    assert "function mergeIcons" in GLOSSARY_JS
+    for needle in ("details.adv", ".adv-title", "#selection-method-info", "neighbourIcon", "glossary-multi"):
+        assert needle in GLOSSARY_JS, needle
+    assert ".glossary-multi" in CSS

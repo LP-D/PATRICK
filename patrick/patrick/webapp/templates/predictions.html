@@ -1,6 +1,8 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, empty_state, help_icon, lazy_block %}
 {# Petit « ? » : le texte s'affiche au survol (popover flottant, predictions_pop.js). #}
+{# Les règles de lecture (identiques dans chaque bulle de survol) sont dites une seule fois, derrière le « ? » de la légende. #}
+{% set legend_rules = [t('pb_horizon_help'), t('pb_closed'), t('pb_live_hint'), t('pb_dm_hint', a=('%.2f' | format(dm_significance_alpha)) | replace('.', t('dec_sep'))), t('pred_reading_help'), t('pb_psi_rule')] | join(' ') %}
 {% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
 {% block title %}PATRICK — {{ t('pred_title') }}{% endblock %}
 
@@ -27,15 +29,15 @@
 <p class="hint refresh-line">{{ t('pred_refreshed', d=live_refresh.finished_at[:10], h=live_refresh.finished_at[11:16]) }}{% if live_refresh.failed %} · {{ t('pred_refresh_failed', n=live_refresh.failed) }}{% endif %}.</p>
 {% endif %}
 
-<p class="pred-legend">
+<p class="pred-legend" data-keep>
     {% if kind == 'alpha' %}
     {{ status_badge('▲▲ Surperformance forte', 'ok') }} {{ status_badge('▲ Surperformance faible', 'ok') }}
     {{ status_badge('▼ Sous-performance faible', 'warning') }} {{ status_badge('▼▼ Sous-performance forte', 'warning') }}
-    {{ q(t('pred_help_alpha')) }}
+    {{ q(t('pred_help_alpha') ~ ' ' ~ legend_rules) }}
     {% else %}
     {{ status_badge('▲▲ Hausse forte', 'ok') }} {{ status_badge('▲ Hausse faible', 'ok') }}
     {{ status_badge('▼ Baisse faible', 'warning') }} {{ status_badge('▼▼ Baisse forte', 'warning') }}
-    {{ q(t('pred_help_dir')) }}
+    {{ q(t('pred_help_dir') ~ ' ' ~ legend_rules) }}
     {% endif %}
 </p>
 

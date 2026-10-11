@@ -151,3 +151,49 @@ def test_predictions_page_shows_no_live_track_record_state(tmp_path, monkeypatch
     resp = client.get("/predictions")
     assert resp.status_code == 200
     assert "pas de recul live" in resp.text
+
+
+def _seed_resolved_live(tmp_path, monkeypatch) -> None:
+    """10 prédictions live résolues (7 bonnes directions, 3 mauvaises) sur ^VIX à 5 jours."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfghash", "sha", 42)
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    for i in range(7):
+        db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                           ts=[f"2024-06-{i+1:02d}T00:00:00"], y_true=[1.0], y_pred=[3], y_proba=[0.6])
+    for i in range(3):
+        db.add_predictions(conn, trial_id, fold_index=None, split="live",
+                           ts=[f"2024-06-{i+8:02d}T00:00:00"], y_true=[0.0], y_pred=[3], y_proba=[0.6])
+    db.finish_run(conn, "run1", status="done", n_trials=1)
+    conn.close()
+
+
+def test_hover_bubble_leads_with_the_direction_hit_rate(tmp_path, monkeypatch):
+    _seed_resolved_live(tmp_path, monkeypatch)
+    html = TestClient(app).get("/predictions").text
+    # le taux de réussite en direction passe avant les tableaux, avec son pourcentage
+    assert 'class="pop-line pop-hit">Bon sens au total : 7/10 (70 %)' in html
+    # le dernier signal est une date, pas « 2024-06-10T00:00:00 »
+    assert "<dd>2024-06-10</dd>" in html
+
+
+def test_reading_rules_are_said_once_not_in_every_bubble(tmp_path, monkeypatch):
+    _seed_resolved_live(tmp_path, monkeypatch)
+    html = TestClient(app).get("/predictions").text
+    # un seul « ? » de survol (la légende) : plus un par colonne d'horizon
+    assert html.count('class="pop-trigger q-mark"') == 1
+    assert 'class="pred-legend" data-keep' in html
+    # la règle de lecture de la fiabilité live n'existe que dans ce « ? » (aria-label + contenu), pas dans les cases
+    assert html.count("Part de bonnes directions") == 2
+
+
+def test_tally_view_gives_the_direction_hit_rate_in_percent():
+    from patrick.webapp.app import _tally_view
+
+    tally = {"since": "2026-09-29T00:00:00", "pending": 3, "direction_n": 6, "direction_hits": 4, "matrix": {},
+             "direction": {"up": {"up": 2, "down": 2}, "down": {"up": 0, "down": 2}}}
+    assert _tally_view(tally)["direction_pct"] == 67
+    assert _tally_view({**tally, "direction_n": 0, "direction_hits": 0})["direction_pct"] is None

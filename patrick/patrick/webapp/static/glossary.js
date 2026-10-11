@@ -37,14 +37,104 @@
         return LABELS[term] || term;
     }
 
+    // Un appel de note fusionné porte plusieurs termes (`data-term="a b c"`) : voir `mergeIcons`.
+    function knownTerms(term) {
+        return String(term || "").split(" ").filter(function (key) { return key && GLOSSARY[key]; });
+    }
+
     function showTerm(term, label) {
-        var text = GLOSSARY[term];
-        if (!text) return;
-        titleEl.textContent = label || termLabel(term);
-        bodyEl.textContent = text;
-        popover.dataset.openTerm = term;
+        var terms = knownTerms(term);
+        if (!terms.length) return;
         var more = document.getElementById("glossary-popover-link");
-        if (more) more.href = "/vocabulary#term-" + encodeURIComponent(term);
+        popover.dataset.openTerm = term;
+        if (terms.length === 1) {
+            titleEl.textContent = label || termLabel(terms[0]);
+            bodyEl.textContent = GLOSSARY[terms[0]];
+            if (more) more.href = "/vocabulary#term-" + encodeURIComponent(terms[0]);
+            return;
+        }
+        titleEl.textContent = label || terms.map(termLabel).join(" · ");
+        bodyEl.replaceChildren();
+        terms.forEach(function (key) {
+            var para = document.createElement("p");
+            var name = document.createElement("strong");
+            para.className = "glossary-multi";
+            name.textContent = termLabel(key);
+            para.appendChild(name);
+            para.appendChild(document.createTextNode(" " + GLOSSARY[key]));
+            bodyEl.appendChild(para);
+        });
+        if (more) more.href = "/vocabulary";
+    }
+
+    /* Un seul « ? » par zone. Les définitions d'un bloc replié (`details.adv` du formulaire de lancement : algorithmes,
+       rééchantillonneurs, familles de variables...) passent derrière l'unique « ? » de son titre, et deux appels de note
+       côte à côte (titre d'une page) n'en font qu'un. Le « ? » de la méthode de sélection, réécrit par app.js selon la
+       méthode choisie, reste à sa place. */
+    function mergedIcon(terms, labels, label) {
+        var icon = document.createElement("button");
+        icon.type = "button";
+        icon.className = "info-icon";
+        icon.setAttribute("data-term", terms.join(" "));
+        icon.setAttribute("data-term-label", label);
+        icon.setAttribute("aria-label", (I18N.glossary_open_aria || "Définition : {term}").replace("{term}", labels.join(", ")));
+        icon.textContent = "i";
+        return icon;
+    }
+
+    // Ajoute les termes d'un appel de note à la liste, avec le libellé que la page lui a donné (sinon celui du glossaire).
+    function iconTerm(icon, terms, labels) {
+        var keys = knownTerms(icon.getAttribute("data-term"));
+        keys.forEach(function (key) {
+            if (terms.indexOf(key) !== -1) return;
+            terms.push(key);
+            labels.push(keys.length === 1 && icon.getAttribute("data-term-label") || termLabel(key));
+        });
+    }
+
+    // L'appel de note qui suit immédiatement (un simple espace entre les deux), sinon null.
+    function neighbourIcon(icon) {
+        var node = icon.nextSibling;
+        while (node && node.nodeType === 3 && !node.nodeValue.trim()) node = node.nextSibling;
+        return node && node.nodeType === 1 && node.classList.contains("info-icon") ? node : null;
+    }
+
+    function mergeBlock(block) {
+        var host = block.querySelector(".adv-title");
+        var icons = Array.prototype.filter.call(block.querySelectorAll(".adv-body .info-icon"), function (icon) {
+            return !icon.closest("#selection-method-info");
+        });
+        if (!host || icons.length < 2) return;
+        var terms = [], labels = [];
+        icons.forEach(function (icon) { iconTerm(icon, terms, labels); icon.remove(); });
+        if (terms.length < 2) return;
+        host.appendChild(mergedIcon(terms, labels, (host.textContent || "").replace(/\s+/g, " ").trim()));
+    }
+
+    function mergeNeighbours(scope) {
+        Array.prototype.forEach.call(scope.querySelectorAll(".info-icon"), function (icon) {
+            if (!icon.isConnected || icon.closest("#selection-method-info")) return;
+            var next = neighbourIcon(icon);
+            if (!next) return;
+            var terms = [], labels = [];
+            iconTerm(icon, terms, labels);
+            while (next) {
+                iconTerm(next, terms, labels);
+                var after = neighbourIcon(next);
+                next.remove();
+                next = after;
+            }
+            if (terms.length < 2) return;
+            icon.setAttribute("data-term", terms.join(" "));
+            icon.setAttribute("data-term-label", labels.join(" · "));
+            icon.setAttribute("aria-label", (I18N.glossary_open_aria || "Définition : {term}").replace("{term}", labels.join(", ")));
+        });
+    }
+
+    function mergeIcons(root) {
+        var scope = root && root.querySelectorAll ? root : document;
+        Array.prototype.forEach.call(scope.querySelectorAll("details.adv"), mergeBlock);
+        mergeNeighbours(scope);
     }
 
     function normalized(value) {
@@ -100,7 +190,7 @@
     }
 
     function showFor(anchorEl, term) {
-        if (!GLOSSARY[term]) return;
+        if (!knownTerms(term).length) return;
         if (searchInput) searchInput.value = "";
         renderResults();
         showTerm(term, anchorEl.getAttribute("data-term-label") || term);
@@ -182,8 +272,12 @@
         searchInput.focus();
     });
     window.addEventListener("resize", function () { hide(false); });
-    window.addEventListener("scroll", function () {
+    window.addEventListener("scroll", function (ev) {
         if (Date.now() - openedAt < 350) return;
+        if (ev.target instanceof Node && popover.contains(ev.target)) return;   // on fait défiler la définition elle-même
         hide(false);
     }, true);
+
+    document.addEventListener("patrick:content", function (ev) { mergeIcons(ev.target); });
+    mergeIcons(document);
 })();

@@ -18,7 +18,9 @@
         var w = pop.offsetWidth, h = pop.offsetHeight;
         var left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
         var top = r.bottom + 8;
-        if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+        if (top + h > window.innerHeight - 8) top = r.top - h - 8;
+        // Bulle haute (suivi par mouvement) : ni sous la case ni au-dessus ne suffit, elle reste entière à l'écran.
+        top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
         pop.style.left = left + "px";
         pop.style.top = top + "px";
     }

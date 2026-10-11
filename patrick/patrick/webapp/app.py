@@ -1495,6 +1495,8 @@ def _tally_view(tally: dict | None) -> dict | None:
         "pending": tally["pending"],
         "direction_n": tally["direction_n"],
         "direction_hits": tally["direction_hits"],
+        # Taux de réussite en direction (hit rate) : part des signaux jugés dont le sens (hausse / baisse) était le bon.
+        "direction_pct": round(100 * tally["direction_hits"] / tally["direction_n"]) if tally["direction_n"] else None,
         "classes": classes,
         "direction": direction,
         "n_four": sum(c["n"] for c in classes),

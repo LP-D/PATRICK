@@ -230,7 +230,7 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "pred_dir_title": _s("Direction seule (hausse / baisse)", "Direction only (up / down)"),
     "pred_col_right": _s("Juste", "Right"),
     "pred_col_wrong": _s("Faux", "Wrong"),
-    "pred_dir_total": _s("Bon sens au total : {hits}/{n}", "Right direction overall: {hits}/{n}"),
+    "pred_dir_total": _s("Bon sens au total : {hits}/{n} ({pct} %)", "Right direction overall: {hits}/{n} ({pct}%)"),
     "pred_pending": _s("{n} signal(aux) en attente du résultat", "{n} signal(s) waiting for the outcome"),
     "pred_reading_help": _s(
         "Exact + Intensité + Sens = signaux jugés. Une erreur d'intensité garde le bon sens ; une erreur de sens est la plus coûteuse.",
