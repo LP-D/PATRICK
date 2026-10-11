@@ -161,8 +161,19 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
     opened = pd.Timestamp(strategy["opened_on"])
     end_ts = pd.Timestamp(end if end is not None else utc_today())
     # Un ordre « du jour » est exécuté à la dernière clôture connue : un week-end ou le matin, c'est la séance
-    # qui précède l'ouverture de la stratégie. Il reste valide, et la grille démarre alors à cette séance.
-    early = [pd.Timestamp(o["ts"]) for o in orders if opened - pd.offsets.BDay(1) <= pd.Timestamp(o["ts"]) < opened]
+    # qui précède l'ouverture de la stratégie. Il reste valide, et la grille démarre alors à cette séance. Même chose
+    # quand le marché local est fermé (jour férié) : sa dernière clôture peut précéder l'ouverture de plusieurs jours
+    # ouvrés, tant qu'aucune séance de ce symbole ne tombe entre l'ordre et l'ouverture.
+    def last_session_before_opening(o: dict) -> bool:
+        d = pd.Timestamp(o["ts"])
+        if d >= opened:
+            return False
+        if d >= opened - pd.offsets.BDay(1):
+            return True
+        df = market.bars.get(o["symbol"])
+        return (d >= opened - pd.offsets.BDay(5) and df is not None and d in df.index
+                and not ((df.index > d) & (df.index < opened)).any())
+    early = [pd.Timestamp(o["ts"]) for o in orders if last_session_before_opening(o)]
     start = min(early) if early else opened
     days = _session_days(start, end_ts, market, orders)
     violations: list[dict] = []

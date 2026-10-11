@@ -390,3 +390,19 @@ def test_cfd_financing_uses_the_reference_rate_in_force_each_day():
     late = MarketData(bars={"IDX": bars([50.0] * 10)}, ref_rate_history={"EUR": pd.Series([0.05] * 3, index=DAYS[5:8])})
     before_first = simulate(STRAT, [o], late, END).daily["financing_cum"].diff()
     assert before_first.loc["2026-01-07"] == pytest.approx(5000 * (0.05 + 0.025) / 365)    # avant la série : 1re valeur connue
+
+
+def test_an_order_on_the_last_session_of_a_market_closed_just_before_the_opening_is_accepted():
+    """Stratégie ouverte un dimanche, marché local fermé le vendredi (jour férié) : sa dernière clôture connue est le jeudi,
+    deux jours ouvrés avant l'ouverture. L'ordre reste valide ; un ordre antérieur à une séance existante reste refusé."""
+    strat = {"initial_capital": 100_000.0, "opened_on": "2026-01-11"}
+    days = pd.DatetimeIndex(["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-12", "2026-01-13",
+                             "2026-01-14", "2026-01-15"])
+    frame = pd.DataFrame({"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1e6, "dividend": 0.0},
+                         index=days)
+    mkt = MarketData(bars={"AAA": frame})
+    ok = simulate(strat, [order(ts="2026-01-08")], mkt, "2026-01-14")
+    assert not ok.violations and ok.daily.index[0] == pd.Timestamp("2026-01-08")
+    assert pos_of(ok)["quantity"] == 10.0
+    early = simulate(strat, [order(ts="2026-01-07")], mkt, "2026-01-14")             # la séance du 8 existe entre-temps
+    assert any("antérieur" in v["message"] for v in early.violations)
