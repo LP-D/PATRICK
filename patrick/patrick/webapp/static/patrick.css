@@ -170,6 +170,10 @@
   --sidebar-width: 248px;
   --sidebar-collapsed: 64px;
   --topbar-h: 56px;
+  /* Bandeau des variations (collant, tout en haut) : sa hauteur ne compte que s'il est affiché ; tout ce qui se colle sous la barre du
+     haut utilise `--stick-top` (bandeau + barre) au lieu de `--topbar-h` seul. */
+  --ticker-h: 0px;
+  --stick-top: calc(var(--ticker-h) + var(--topbar-h));
   --content-max: 1480px;
 
   /* Legacy aliases -- read by the static JS (charts) and by inline styles
@@ -383,7 +387,7 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
 
 .topbar {
   position: sticky;
-  top: 0;
+  top: var(--ticker-h);
   z-index: 30;
   display: flex;
   align-items: center;
@@ -1614,9 +1618,15 @@ legend {
 .movers-down { color: var(--neg); }
 
 /* ============ Bandeau des plus fortes variations ============ */
-/* Au-dessus de la barre du haut, sur toutes les pages, comme un écran de cours. La liste est posée deux fois à la suite
-   (ticker.js) : la piste glisse d'exactement une liste, puis recommence, sans coupure. */
+/* Au-dessus de la barre du haut, sur toutes les pages, COLLÉ en haut de l'écran pendant le défilement de la page, comme un écran de
+   cours. La liste est posée deux fois à la suite (ticker.js) : la piste glisse d'exactement une liste, puis recommence, sans coupure. */
+:root:has(.ticker:not([hidden])) { --ticker-h: 33px; }
 .ticker {
+  position: sticky;
+  top: 0;
+  z-index: 31;                       /* au-dessus de la barre du haut (30) */
+  box-sizing: border-box;
+  height: var(--ticker-h);
   --ticker-duration: 60s;
   /* Sens du défilement : « reverse » = de gauche à droite ; « normal » = de droite à gauche (le sens des écrans de cours classiques). */
   --ticker-dir: reverse;
@@ -1737,7 +1747,7 @@ nav.breadcrumb a:not(:last-child)::after { content: "/"; margin-left: 6px; color
 
 .section-index {
   position: sticky;
-  top: calc(var(--topbar-h) + 8px);
+  top: calc(var(--stick-top) + 8px);
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
@@ -2080,7 +2090,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 
 .run-panel {
   position: fixed;
-  top: var(--topbar-h);
+  top: var(--stick-top);
   right: 0;
   bottom: 0;
   width: var(--run-panel-w, 360px);
@@ -2162,7 +2172,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 [data-kinds][hidden] { display: none; }
 .fund-ticket-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: var(--space-lg); align-items: start; }
 .fund-preview {
-  position: sticky; top: calc(var(--topbar-h) + var(--space-md));
+  position: sticky; top: calc(var(--stick-top) + var(--space-md));
   padding: var(--space-md); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
 }
 .fund-preview-list { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--space-md); margin: 0 0 var(--space-md); font-size: 13px; }

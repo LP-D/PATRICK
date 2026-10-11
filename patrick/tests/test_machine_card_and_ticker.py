@@ -146,6 +146,19 @@ def test_the_ticker_animation_stops_on_hover_and_for_reduced_motion(client):
     assert "--ticker-dir: reverse" in css                                         # gauche -> droite, inversable en une ligne
 
 
+def test_the_ticker_stays_on_screen_while_the_page_scrolls(client):
+    """Collé en haut, sur toutes les pages : la barre du haut et tout ce qui se colle dessous se décalent de sa hauteur."""
+    css = client.get("/static/patrick.css").text
+    ticker_rule = css[css.index("\n.ticker {"):css.index("\n.ticker[hidden]")]
+    assert "position: sticky" in ticker_rule and "top: 0" in ticker_rule
+    assert ":root:has(.ticker:not([hidden])) { --ticker-h: 33px; }" in css
+    topbar_rule = css[css.index("\n.topbar {"):css.index("\n.topbar-crumbs")]
+    assert "top: var(--ticker-h)" in topbar_rule
+    # plus aucun élément collé ne se cale sur la barre du haut seule : il passerait sous le bandeau
+    assert not re.findall(r"(?:^|[^-a-z])top:[^;}]*--topbar-h", css, re.MULTILINE)
+    assert len(re.findall(r"(?:^|[^-a-z])top:[^;}]*--stick-top", css, re.MULTILINE)) >= 3                 # section-index, run-panel, fund-preview
+
+
 # ---------------------------------------------------------------- textes
 
 @pytest.mark.parametrize("key", ["machine_title", "machine_idle", "movers_title", "movers_updated_at"])
