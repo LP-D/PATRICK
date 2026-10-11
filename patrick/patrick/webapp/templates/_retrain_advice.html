@@ -5,7 +5,7 @@
 {% macro f3(x) %}{{ ('%.3f' | format(x)) if x is not none else '—' }}{% endmacro %}
 {% if advice and advice.suggestions %}
 {% set d = advice.diagnosis %}
-<section id="avis" class="card advisor">
+<section class="card advisor">
 <h2>{{ t('adv_card_title') }}</h2>
 <p class="hint">{{ t('adv_card_sub') }}</p>
 <p class="adv-diag">

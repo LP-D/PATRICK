@@ -1,0 +1,14 @@
+{# Fragment du méta-étiquetage d'un run (`/fragments/run-meta/{run_id}`) : `m` = `tracking.history.meta_labeling_for_trial`. #}
+{% from "_components.html" import metric %}
+{% if m %}
+<h3>{{ t('rd_meta_h') }}</h3>
+{% if not m.available %}
+<p class="hint">{{ t('rd_ml_none', r=m.reason) }}</p>
+{% else %}
+<p class="hint">{{ t('rd_ml_hint') }}</p>
+<div class="metric-grid">
+{{ metric(t('rd_ml_all'), "%.1f %%" | format(m.accuracy_all * 100), t('rd_ml_all_rel', n=m.n_evaluated), "neutral") }}
+{{ metric(t('rd_ml_kept'), ("%.1f %%" | format(m.accuracy_kept * 100)) if m.n_kept else "—", t('rd_ml_kept_rel', n=m.n_kept, s="%.0f" | format(m.kept_share * 100)), ("ok" if m.accuracy_kept > m.accuracy_all else "warning") if m.n_kept else "pending") }}
+</div>
+{% endif %}
+{% endif %}

@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, fold_metrics_table, headline_metrics %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, fold_metrics_table, headline_metrics, lazy_block %}
 {% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
 
 {% block session_context %}
@@ -48,7 +48,7 @@
 <nav class="section-index" aria-label="{{ t('rd_sections_aria') }}">
     <span class="section-index-label">{{ t('rd_sections') }}</span>
     <a href="#resume">{{ t('rd_section_summary') }}</a>
-    {% if advice and advice.suggestions %}<a href="#avis">{{ t('adv_nav') }}</a>{% endif %}
+    {% if detail.fold_metrics %}<a href="#avis">{{ t('adv_nav') }}</a>{% endif %}
     {% if detail.fold_metrics %}<a href="#folds">{{ t('m_section_title') }}</a>{% endif %}
     {% if kpi and kpi.n_candidates %}<a href="#kpi">KPI</a>{% endif %}
     <a href="#durees">{{ t('rd_section_durations') }}</a>
@@ -153,7 +153,8 @@
 {% endif %}
 
 {% if detail.fold_metrics %}
-{% include "_retrain_advice.html" %}
+{# Le conseil et le méta-étiquetage se calculent à part (`/fragments/run-advice`, `/fragments/run-meta`) : la page s'ouvre sans les attendre. #}
+<div id="avis">{{ lazy_block('/fragments/run-advice/' ~ (detail.run.run_id | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}</div>
 
 <section id="folds" class="card">
 <h2>{{ t('m_section_title') }}</h2>
@@ -259,19 +260,7 @@
 {{ metric(t('rd_cv_acc'), ("%.1f %%" | format(c.aci.called_accuracy * 100)) if c.aci.n_called else "—", t('rd_cv_acc_rel'), "neutral" if c.aci.n_called else "pending") }}
 </div>
 {% endif %}
-{% set m = detail.meta_labeling %}
-{% if m %}
-<h3>{{ t('rd_meta_h') }}</h3>
-{% if not m.available %}
-<p class="hint">{{ t('rd_ml_none', r=m.reason) }}</p>
-{% else %}
-<p class="hint">{{ t('rd_ml_hint') }}</p>
-<div class="metric-grid">
-{{ metric(t('rd_ml_all'), "%.1f %%" | format(m.accuracy_all * 100), t('rd_ml_all_rel', n=m.n_evaluated), "neutral") }}
-{{ metric(t('rd_ml_kept'), ("%.1f %%" | format(m.accuracy_kept * 100)) if m.n_kept else "—", t('rd_ml_kept_rel', n=m.n_kept, s="%.0f" | format(m.kept_share * 100)), ("ok" if m.accuracy_kept > m.accuracy_all else "warning") if m.n_kept else "pending") }}
-</div>
-{% endif %}
-{% endif %}
+{% if detail.best_trial %}{{ lazy_block('/fragments/run-meta/' ~ (detail.run.run_id | urlencode), 2, t('sb_loading'), t('lazy_retry')) }}{% endif %}
 </section>
 {% endif %}
 

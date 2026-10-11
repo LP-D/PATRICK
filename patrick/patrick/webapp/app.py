@@ -1924,25 +1924,52 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
     conn = trackdb.connect()
-    advice = None
     try:
-        detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
+        # Sans le méta-étiquetage (2 à 4 s) ni le conseil de ré-entraînement : ils arrivent après l'affichage, par
+        # `/fragments/run-meta/{run_id}` et `/fragments/run-advice/{run_id}`.
+        detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha, with_meta_labeling=False)
         # KPI of the WHOLE launch (all the horizons that share this run's job)
         kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
-        if detail is not None:
-            try:
-                advice = retrain_advisor.advise_run(conn, run_id, detail=detail, history=data_health.history_depths())
-            except Exception:  # noqa: BLE001 -- le conseil est un plus : il ne doit jamais faire échouer la page du run
-                advice = None
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "advice": advice, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
          **_i18n_context(request)},
     )
+
+
+@app.get("/fragments/run-advice/{run_id}")
+def run_advice_fragment(request: Request, run_id: str):
+    """Fragment du conseil de ré-entraînement d'un run (chargé par `static/lazy.js` depuis `/runs/{id}/detail`). Vide si le run
+    n'a rien à proposer ; une erreur de calcul n'affiche rien plutôt qu'un échec : le conseil est un plus."""
+    conn = trackdb.connect()
+    try:
+        advice = retrain_advisor.advise_run(conn, run_id, history=data_health.history_depths())
+    except Exception:  # noqa: BLE001 -- le conseil ne doit jamais faire échouer la page du run
+        advice = None
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "_retrain_advice.html", {"advice": advice, **_i18n_context(request)})
+
+
+@app.get("/fragments/run-meta/{run_id}")
+def run_meta_fragment(request: Request, run_id: str):
+    """Fragment du méta-étiquetage d'un run (~170 régressions logistiques sur ses prédictions hors échantillon), mémorisé tant
+    que la base ne change pas."""
+    conn = trackdb.connect()
+    try:
+        run = trackdb.get_run(conn, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        trial_id = trackhistory._best_trial_id(conn, run_id)
+        meta = (memo.memoize(conn, ("run-meta", run_id), lambda: trackhistory.meta_labeling_for_trial(
+            conn, trial_id, int(run["horizon"]))) if trial_id is not None else None)
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "_run_meta_labeling.html", {"m": meta, **_i18n_context(request)})
 
 
 @app.get("/api/stats-help/runs")

@@ -253,11 +253,40 @@ def test_an_unknown_profile_is_a_404(client):
     assert client.get("/ml?profile=nope").status_code == 404
 
 
-def test_the_run_page_lists_the_advice_with_the_leak_first(client):
-    html = client.get("/runs/r1/detail").text
-    assert 'id="avis"' in html and "Relancer avec la garde anti-fuite et les données ALFRED" in html
+def test_the_run_page_opens_without_waiting_for_the_advice_which_arrives_as_a_fragment(client):
+    page = client.get("/runs/r1/detail").text
+    assert 'id="avis"' in page and 'data-lazy-url="/fragments/run-advice/r1"' in page
+    assert "Relancer avec la garde anti-fuite" not in page                  # le conseil n'est pas calculé pour afficher la page
+    html = client.get("/fragments/run-advice/r1").text
+    assert "Relancer avec la garde anti-fuite et les données ALFRED" in html
     assert "/ml?run_id=r1&amp;suggest=fix_leak" in html
     assert "Meilleur prochain essai" in html and "Contrôler la robustesse" not in html   # un score truqué : pas de contrôle de graine
+
+
+def test_the_advice_fragment_of_an_unknown_run_is_empty_not_an_error(client):
+    resp = client.get("/fragments/run-advice/nope")
+    assert resp.status_code == 200 and "advisor" not in resp.text
+
+
+def test_the_class_shares_query_reads_the_primary_key_not_the_split_index(tmp_path):
+    """Sans `INDEXED BY`, SQLite parcourt tous les `test` de la base (~180 s sur la vraie base, la page du run n'ouvrait plus)."""
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "snap", "h", None, None, None)
+    cfg = forms.default_config_dict()
+    db.create_run(conn, "r1", "^VIX", 5, "snap", json.dumps(cfg), "c", "s", 42)
+    tid = db.create_trial(conn, "r1", "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, tid)
+    n = 80
+    db.add_predictions(conn, tid, 1, "test", [f"2024-01-{d:02d}" if d <= 31 else f"2024-02-{d - 31:02d}" for d in range(1, n + 1)],
+                       y_true=[float(i % 4) for i in range(n)], y_pred=[float(i % 4) for i in range(n)], y_proba=[0.5] * n, p_up=[0.5] * n)
+    db.finish_run(conn, "r1", status="done", n_trials=1)
+    statements: list[str] = []
+    conn.set_trace_callback(statements.append)
+    retrain_advisor.diagnose_run(conn, "r1")
+    conn.set_trace_callback(None)
+    sql = next(s for s in statements if "GROUP BY y_true" in s)
+    plan = " ".join(str(r[3]) for r in conn.execute("EXPLAIN QUERY PLAN " + sql))
+    assert "sqlite_autoindex_prediction_1" in plan and "idx_pred_split" not in plan
 
 
 def test_a_suggestion_prefills_the_launch_form_from_the_run(client):

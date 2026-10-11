@@ -446,7 +446,11 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     shares = None
     best = detail.get("best_trial")
     if best:
-        rows = conn.execute("SELECT y_true, COUNT(*) FROM prediction WHERE trial_id = ? AND split = 'test' AND y_true IS NOT NULL "
+        # INDEXED BY : sans lui SQLite choisit idx_pred_split (split) et parcourt tous les `test` de la base (~180 s sur la vraie
+        # base, la page du run n'ouvrait plus) ; la clé primaire (trial_id, ts) lit les quelques milliers de lignes du run (voir
+        # `tracking/history.py`, mêmes requêtes sur `prediction`).
+        rows = conn.execute("SELECT y_true, COUNT(*) FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+                            "WHERE trial_id = ? AND split = 'test' AND y_true IS NOT NULL "
                             "GROUP BY y_true", (best["trial_id"],)).fetchall()
         total = sum(n for _, n in rows)
         if total >= 40:
