@@ -189,3 +189,20 @@ def test_a_database_migrated_by_a_preliminary_0029_gets_the_split_column(tmp_pat
     conn.close()
     assert [r[1] for r in trackdb.connect(str(tmp_path / "fresh.db")).execute("PRAGMA table_info(fund_price)")] \
         .count("split") == 1                                       # base neuve : la colonne n'est pas ajoutée deux fois
+
+
+def test_us_cent_quotes_of_commodity_futures_are_converted_to_dollars(conn):
+    """Maïs, soja, coton, sucre, porc, jus d'orange... : Yahoo les cote en cents (devise « USX »). Sans conversion les
+    cents passaient pour des dollars et le change cherchait une paire inexistante (« EURUSX=X »)."""
+    res = prices.ensure_bars(conn, "ZC=F")
+    assert res.currency == "USD" and res.df["close"].iloc[0] == pytest.approx(4.50)
+    assert prices.iso_currency("USX") == ("USD", 0.01) and prices.iso_currency("USc") == ("USD", 0.01)
+    from patrick.fund import service, store
+    sid = store.create_strategy(conn, "Matières", "CTO", 1_000_000, "2026-01-05")
+    q = service.quote(conn, {"strategy_id": sid, "instrument_kind": "cfd", "symbol": "ZC=F", "side": "long",
+                             "quantity": 1000, "date": "2026-01-07"}, dt.date(2026, 1, 16))
+    assert q["ok"], q["blocking"]
+    pv = q["preview"]
+    assert pv["currency"] == "USD" and pv["price"] == pytest.approx(fs.price_on("ZC=F", "2026-01-07") / 100)
+    assert pv["notional_base"] == pytest.approx(1000 * pv["price"] * fs.fx_on("2026-01-07"))
+    assert all(not symbol.startswith("EURUSX") for symbol, _ in fs.CALLS)

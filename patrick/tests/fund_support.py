@@ -20,6 +20,7 @@ FAKE = {
     "VOD.L": ("GBp", 70.0, 0.02), "EURUSD=X": ("USD", 1.10, 0.0004), "EURGBP=X": ("GBP", 0.85, 0.0),
     "ESZ26.CME": ("USD", 6000.0, 3.0), "^GSPC": ("USD", 6000.0, 3.0), "CLM26.NYM": ("USD", 70.0, 0.05),
     "CL=F": ("USD", 70.0, 0.05),
+    "ZC=F": ("USX", 450.0, 0.5),            # maïs : cotation en cents américains (devise Yahoo « USX »)
 }
 TODAY = dt.date(2026, 1, 16)
 CALLS: list[tuple[str, str | None]] = []

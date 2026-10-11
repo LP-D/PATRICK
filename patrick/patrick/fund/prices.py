@@ -25,13 +25,16 @@ RATE_CACHE_SECONDS = 3600.0       # taux de référence FRED conservés (succès
 RATE_HISTORY_START = "2015-01-01"
 _FAILED_UNTIL: dict[str, dt.datetime] = {}
 _RATE_CACHE: dict[str, tuple[float, pd.Series | None]] = {}
-PENCE = {"GBp": ("GBP", 0.01), "GBX": ("GBP", 0.01), "ZAc": ("ZAR", 0.01), "ILA": ("ILS", 0.01)}
+# Sous-unités cotées par Yahoo : pence, cents sud-africains, agorot, et cents américains (futures agricoles : maïs, soja,
+# coton, sucre, café, porc, jus d'orange... en devise « USX »).
+PENCE = {"GBp": ("GBP", 0.01), "GBX": ("GBP", 0.01), "ZAc": ("ZAR", 0.01), "ILA": ("ILS", 0.01),
+         "USX": ("USD", 0.01), "USc": ("USD", 0.01)}
 # Série FRED du taux court de chaque devise (si FRED_API_KEY est défini).
 FRED_RATE_SERIES = {"USD": "SOFR", "EUR": "ECBESTRVOLWGTTRMDMNRT", "GBP": "IUDSOIA"}
 
 
 def iso_currency(raw: str | None) -> tuple[str | None, float]:
-    """(devise ISO, facteur d'échelle) : les cours en pence deviennent des livres."""
+    """(devise ISO, facteur d'échelle) : les cours en pence ou en cents deviennent des livres ou des dollars."""
     if raw is None:
         return None, 1.0
     return PENCE.get(raw, (raw, 1.0))
