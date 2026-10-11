@@ -177,8 +177,6 @@
                 $("rl-progress-fill").style.width = (job.status === "done" ? 100 : (total ? Math.min(100, done / total * 100) : 3)) + "%";
                 var log = (job.log_tail || []).join("\n");
                 if (log !== lastLog) { $("rl-log").textContent = log; lastLog = log; }
-                var stop = $("rl-stop");
-                stop.hidden = job.status !== "running";
                 var line = $("rl-status-line");
                 if (job.status === "queued") line.textContent = fmtStr(tr("rlp_status_queued"), { n: job.queue_position || 1 });
                 else if (job.status === "running" || job.status === "paused") {
@@ -194,12 +192,8 @@
                 pollTimer = setTimeout(poll, 4000);
             });
     }
-    $("rl-stop").addEventListener("click", function () {
-        if (!currentRun) return;
-        var id = currentRun.id;
-        var ask = window.patrickDialog ? window.patrickDialog.confirm(tr("rlp_stop") + " ?", tr("rlp_stop"), true) : Promise.resolve(true);
-        ask.then(function (yes) { if (yes) fetch("/api/jobs/" + encodeURIComponent(id) + "/stop", { method: "POST" }).then(function () { setTimeout(poll, 800); }); });
-    });
+    // Pause et arrêt : sur la carte « en cours et file d'attente » (machine.js), la même que sur /ml et /dl. Après un arrêt, on relit tout de suite.
+    if (window.PatrickMachine) window.PatrickMachine.onAction(function () { if (currentRun) { clearTimeout(pollTimer); poll(); } });
 
     // ------------------------------------------------------------------ résultats
     function loadResult(runId) {

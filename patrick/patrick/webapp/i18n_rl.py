@@ -110,7 +110,6 @@ RL_STRINGS: dict[str, dict[str, str]] = {
     "rlp_status_done": _s("Terminé", "Done"),
     "rlp_status_error": _s("Échec : {e}", "Failed: {e}"),
     "rlp_status_lost": _s("Connexion perdue : nouvelle tentative…", "Connection lost: retrying…"),
-    "rlp_stop": _s("Arrêter", "Stop"),
     "rlp_launch": _s("Lancer le run", "Launch run"),
     "rlp_launching": _s("Mise en file…", "Queueing…"),
     "rlp_queued_ok": _s("{n} run(s) en file.", "{n} run(s) queued."),

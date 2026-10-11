@@ -1,0 +1,149 @@
+"""Carte « en cours et file d'attente » (identique sur /ml, /dl, /rl) et bandeau défilant des plus fortes variations (toutes les pages)."""
+from __future__ import annotations
+
+import json
+import re
+
+import pytest
+from fastapi.testclient import TestClient
+
+from patrick.tracking import db, jobs
+from patrick.webapp import alerts, i18n
+from patrick.webapp.app import app
+
+LAUNCH_PAGES = ("/ml", "/dl", "/rl")
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    return TestClient(app)
+
+
+def _machine_section(html: str) -> str:
+    start = html.index('<section class="dash-panel dash-machine"')
+    return html[start:html.index("</section>", start) + len("</section>")]
+
+
+def _section_with_class(html: str, css_class: str) -> str:
+    start = html.index(f'<section class="dash-panel {css_class}"')
+    return html[start:html.index("</section>", start)]
+
+
+# ---------------------------------------------------------------- carte en cours + file d'attente
+
+def test_the_machine_card_is_identical_on_the_three_launch_pages(client):
+    cards = {path: _machine_section(client.get(path).text) for path in LAUNCH_PAGES}
+    assert cards["/ml"] == cards["/dl"] == cards["/rl"]
+    for element in ('id="queue-panel"', 'id="queue-list"', 'id="clear-queue-btn"', 'id="pause-run-btn"', 'id="stop-run-btn"',
+                    'id="machine-current"', 'id="machine-progress-fill"'):
+        assert element in cards["/ml"]
+
+
+@pytest.mark.parametrize("path", LAUNCH_PAGES)
+def test_the_queue_is_no_longer_inside_the_last_run_panel(client, path):
+    html = client.get(path).text
+    progress = _section_with_class(html, "dash-progress")
+    assert 'id="queue-panel"' not in progress and 'id="stop-run-btn"' not in progress
+    assert html.count('id="queue-panel"') == 1                       # un seul exemplaire par page
+    assert html.index('class="dash-panel dash-machine"') < html.index('class="dash-panel dash-progress"')
+
+
+@pytest.mark.parametrize("path", LAUNCH_PAGES)
+def test_each_launch_page_loads_the_shared_machine_script(client, path):
+    html = client.get(path).text
+    assert '<script src="/static/machine.js">' in html
+    if path != "/rl":                                                 # app.js s'y abonne pour suivre le run actif (ML et DL)
+        assert html.index("/static/machine.js") < html.index("/static/app.js")
+    assert "window.PatrickMachine" in client.get("/static/machine.js").text
+
+
+def test_the_old_movers_panel_is_gone_from_the_launch_pages(client):
+    for path in LAUNCH_PAGES:
+        html = client.get(path).text
+        assert "movers-columns" not in html and "dash-movers" not in html
+
+
+def test_run_state_tells_the_family_and_the_target_of_each_job(client, tmp_path):
+    ml_cfg = {"name": "GSPC_1", "objective": {"target_symbol": "^GSPC"}, "models": {"algos": ["XGBoost", "RandomForest"]}}
+    dl_cfg = {"name": "GSPC_2", "objective": {"target_symbol": "^GSPC"}, "models": {"algos": ["MLP", "GRU"]}}
+    rl_cfg = {"name": "NDX_rl_1", "kind": "rl", "objective": {"target_symbol": "^NDX"}}
+    conn = db.connect()
+    running = jobs.enqueue_job(conn, json.dumps(ml_cfg))
+    jobs.claim_next_job(conn, 1234)
+    jobs.enqueue_job(conn, json.dumps(dl_cfg))
+    jobs.enqueue_job(conn, json.dumps(rl_cfg))
+    conn.close()
+
+    state = client.get("/api/run-state").json()
+    assert state["active_run"]["id"] == running
+    assert (state["active_run"]["kind"], state["active_run"]["target"]) == ("ml", "^GSPC")
+    assert [(q["name"], q["kind"], q["target"]) for q in state["queue"]] == [("GSPC_2", "dl", "^GSPC"), ("NDX_rl_1", "rl", "^NDX")]
+
+
+def test_a_job_with_an_unreadable_config_still_shows_up_in_the_queue(client):
+    conn = db.connect()
+    jobs.enqueue_job(conn, "pas du json")
+    conn.close()
+    queued = client.get("/api/run-state").json()["queue"]
+    assert len(queued) == 1 and queued[0]["kind"] == "ml" and queued[0]["target"] is None
+
+
+# ---------------------------------------------------------------- bandeau des plus fortes variations
+
+@pytest.fixture
+def movers_cache(monkeypatch):
+    snapshot = {
+        "gainers": [{"symbol": "NVDA", "label": "NVIDIA", "pct": 12.3456}, {"symbol": "^N225", "label": "Nikkei 225", "pct": 3.1}],
+        "losers": [{"symbol": "GC=F", "label": "Or (futures)", "pct": -4.5}],
+        "updated_at": "2026-10-11 09:30", "error": None, "n_ranked": 3, "n_requested": 3,
+    }
+    monkeypatch.setattr(alerts, "_cache", snapshot)
+    return snapshot
+
+
+@pytest.mark.parametrize("path", ["/", "/ml", "/dl", "/rl", "/exploration", "/runs", "/vocabulary", "/reglages"])
+def test_the_ticker_sits_at_the_top_of_every_page(client, movers_cache, path):
+    response = client.get(path)
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="market-ticker"' in html and "/static/ticker.js" in html
+    assert html.index('id="market-ticker"') < html.index('class="topbar"')       # au-dessus de la barre du haut
+
+
+def test_the_ticker_lists_gainers_then_losers_with_a_non_colour_cue(client, movers_cache):
+    html = client.get("/ml").text
+    ticker = html[html.index('id="market-ticker"'):html.index('class="topbar"')]
+    assert "hidden" not in ticker.split(">", 1)[0]
+    assert re.search(r'data-symbol="NVDA".*?▲ \+12\.35%', ticker, re.S)
+    assert re.search(r'data-symbol="GC=F".*?▼ -4\.50%', ticker, re.S)
+    assert ticker.index("NVDA") < ticker.index("^N225") < ticker.index("GC=F")
+    assert 'href="/targets/%5EN225"' in ticker                                   # lien vers la fiche de la cible
+    assert "2026-10-11 09:30" in ticker                                          # fraîcheur lisible au survol
+
+
+def test_the_ticker_is_hidden_until_the_ranking_exists(client, monkeypatch):
+    monkeypatch.setattr(alerts, "_cache", {"gainers": [], "losers": [], "updated_at": None, "error": None, "n_ranked": 0, "n_requested": 0})
+    html = client.get("/ml").text
+    assert re.search(r'<div class="ticker" id="market-ticker"[^>]*\bhidden\b', html)
+
+
+def test_the_ticker_animation_stops_on_hover_and_for_reduced_motion(client):
+    css = client.get("/static/patrick.css").text
+    assert "@keyframes ticker-scroll" in css and "animation-play-state: paused" in css
+    assert re.search(r"prefers-reduced-motion: reduce\)\s*\{\s*\.ticker-track\s*\{\s*animation:\s*none", css)
+    assert "--ticker-dir: reverse" in css                                         # gauche -> droite, inversable en une ligne
+
+
+# ---------------------------------------------------------------- textes
+
+@pytest.mark.parametrize("key", ["machine_title", "machine_idle", "movers_title", "movers_updated_at"])
+def test_new_strings_exist_in_both_languages(key):
+    assert i18n.translator("fr")(key) != key and i18n.translator("en")(key) != key
+    assert i18n.translator("fr")(key) != i18n.translator("en")(key)
+
+
+def test_browser_strings_for_the_card_reach_every_page():
+    for path in ("/ml", "/dl", "/rl", "/runs"):
+        keys = i18n.js_strings("fr", path)
+        assert keys["machine_idle"] and keys["rlp_phase_rl_train"] and keys["queue_summary"]

@@ -188,15 +188,15 @@
     </div>
 </section>
 
+{# En cours + file d'attente : la même carte que sur /ml et /dl (une seule machine). #}
+{% include "_machine_card.html" %}
+
 <section class="dash-panel dash-progress" aria-labelledby="rl-progress-title">
     <h2 id="rl-progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
     <div class="dash-panel-body">
         <p id="rl-idle" class="hint" data-keep>{{ t('no_run_yet') }}</p>
         <div id="rl-status-panel" class="hidden">
             <p id="rl-run-name" class="run-name-line"></p>
-            <div class="run-controls">
-                <button type="button" class="queue-action danger" id="rl-stop" hidden>{{ t('rlp_stop') }}</button>
-            </div>
             <div class="progress-bar"><div id="rl-progress-fill" class="progress-fill"></div></div>
             <p id="rl-status-line" role="status" aria-live="polite" data-keep>…</p>
             <details class="log-raw">

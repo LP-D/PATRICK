@@ -187,6 +187,14 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   fréquence, jamais de recopie) servi par
   `webapp/exploration_routes.py` (`/api/exploration/<étude>`) ; graphiques SVG
   communs dans `static/charts.js`.
+- **Une seule machine, une seule file** : `/ml`, `/dl` et `/rl` incluent la même carte « en cours et file d'attente »
+  (`templates/_machine_card.html` + `static/machine.js`, alimentée par `/api/run-state` ; `_job_view` y ajoute `kind` ml/dl/rl et
+  `target`). `app.js` (ML, DL) et `rl.js` s'y abonnent (`PatrickMachine.subscribe` / `onAction`) pour suivre le détail du run actif.
+  Un « Arrêter » efface le pouls du worker tué (`jobs.clear_heartbeat`) avant de relancer un worker : sans cela la file restait à
+  l'arrêt jusqu'à 30 s après l'arrêt (le pouls du mort passait pour vivant).
+- **Bandeau des plus fortes variations** : `templates/base_v2.html` (au-dessus de la barre du haut, toutes les pages) +
+  `static/ticker.js`, données de `alerts.get_cached()` / `/api/movers`. Sens du défilement : variable CSS `--ticker-dir` (`reverse` =
+  gauche → droite, `normal` = droite → gauche) ; arrêt au survol et sous `prefers-reduced-motion`.
 
 ## 7. Conventions clés
 

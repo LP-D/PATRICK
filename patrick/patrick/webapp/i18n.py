@@ -105,10 +105,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "validation_range": {"fr": "Valeur hors des bornes autorisées.", "en": "Value outside the allowed range."},
     "validation_type": {"fr": "Format attendu non respecté.", "en": "Expected format not matched."},
 
-    "movers_pick_hint": {"fr": "Clique un symbole pour en faire la cible du run.",
-                         "en": "Click a symbol to make it the run's target."},
-    "movers_not_a_target": {"fr": "{s} n'est pas une cible disponible.",
-                            "en": "{s} is not an available target."},
     "section_progress": {"fr": "Avancement", "en": "Progress"},
     "section_recent": {"fr": "Derniers runs", "en": "Recent runs"},
     "section_stock": {"fr": "Aperçu marché — cible choisie", "en": "Market overview — chosen target"},
@@ -133,11 +129,7 @@ STRINGS: dict[str, dict[str, str]] = {
 
     "movers_title": {"fr": "Plus fortes variations (5 jours)", "en": "Biggest movers (5 days)"},
     "movers_updated_at": {"fr": "Mis à jour à {time}", "en": "Updated at {time}"},
-    "movers_computing": {"fr": "Calcul en cours (toutes les 30 min)…", "en": "Computing (every 30 min)…"},
     "log_raw_title": {"fr": "Journal technique", "en": "Technical log"},
-    "movers_coverage": {"fr": "{n} valeurs classées sur {total}", "en": "{n} of {total} tickers ranked"},
-    "movers_gainers": {"fr": "▲ Hausses", "en": "▲ Gainers"},
-    "movers_losers": {"fr": "▼ Baisses", "en": "▼ Losers"},
 
     "section_run": {"fr": "Run", "en": "Run"},
     "settings_mode_simple_title": {"fr": "Réglages essentiels", "en": "Essential settings"},
@@ -441,7 +433,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "news_loading": {"fr": "Chargement…", "en": "Loading…"},
     "news_none": {"fr": "Pas d'actualité disponible pour cette cible.", "en": "No news available for this target."},
     "news_load_error": {"fr": "Erreur de chargement des actualités.", "en": "Error loading news."},
-    "movers_no_data": {"fr": "Pas encore de données.", "en": "No data yet."},
 
     # target group category names (optgroups)
     "group_indices": {"fr": "Indices", "en": "Indices"},
@@ -928,8 +919,8 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "artifact_tuned_csv", "artifact_best_model", "artifact_best_model_meta",
         "artifact_best_model_h", "artifact_best_model_meta_h",
         "preview_loading", "preview_no_data", "preview_unavailable", "preview_load_error",
-        "news_loading", "news_none", "news_load_error", "movers_no_data",
-        "movers_updated_at", "movers_computing", "movers_coverage",
+        "news_loading", "news_none", "news_load_error",
+        "movers_updated_at",
         "queue_summary", "run_queued_confirm", "run_launch_error", "banner_fix_errors",
         "queue_clear", "queue_remove", "queue_move_top", "queue_move_up", "queue_move_down", "queue_drag",
         "run_pause", "run_resume", "run_stop", "run_paused", "run_control_error",
@@ -955,7 +946,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "confirm_line_queue_free",
         "validation_required", "validation_range", "validation_type",
         "adv_state_fields", "adv_state_more", "adv_state_modified",
-        "recap_horizons", "recap_targets_count", "movers_not_a_target",
+        "recap_horizons", "recap_targets_count",
         # feature/ticker-stats-panel (asset_stats.js)
         "assetpanel_loading", "assetpanel_error", "assetpanel_insufficient",
         "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",

@@ -78,6 +78,19 @@ script below (no flash), otherwise the OS preference applies.
         <div class="nav-scrim" id="nav-scrim" hidden></div>
 
         <div class="main-column">
+            {# Bandeau défilant des plus fortes variations (5 jours), sur toutes les pages : ticker.js double la liste pour la boucle et la
+               rafraîchit ; la copie posée ici évite un bandeau vide au premier affichage. Masqué tant que le classement n'est pas calculé. #}
+            {% set ticker_data = movers_snapshot() %}
+            <div class="ticker" id="market-ticker" role="region" aria-label="{{ t('movers_title') }}"{% if not (ticker_data.gainers or ticker_data.losers) %} hidden{% endif %}>
+                <div class="ticker-viewport"{% if ticker_data.updated_at %} title="{{ t('movers_updated_at', time=ticker_data.updated_at) }}"{% endif %}>
+                    <div class="ticker-track" id="ticker-track">
+                        <ul class="ticker-group">
+                            {% for row in ticker_data.gainers %}<li><a class="ticker-item movers-pick" href="/targets/{{ row.symbol | urlencode }}" data-symbol="{{ row.symbol }}" title="{{ row.label }}"><span class="ticker-sym">{{ row.symbol }}</span><span class="ticker-pct movers-up">▲ +{{ "%.2f" | format(row.pct) }}%</span></a></li>{% endfor %}
+                            {% for row in ticker_data.losers %}<li><a class="ticker-item movers-pick" href="/targets/{{ row.symbol | urlencode }}" data-symbol="{{ row.symbol }}" title="{{ row.label }}"><span class="ticker-sym">{{ row.symbol }}</span><span class="ticker-pct movers-down">▼ {{ "%.2f" | format(row.pct) }}%</span></a></li>{% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
             <header class="topbar">
                 <button type="button" class="icon-btn mobile-only" id="nav-open" aria-controls="sidebar" aria-label="{{ t('nav_open') if t else 'Ouvrir la navigation' }}">{{ icon('menu') }}</button>
                 <div class="topbar-crumbs">
@@ -190,6 +203,7 @@ script below (no flash), otherwise the OS preference applies.
     <script src="/static/glossary.js"></script>
     <script src="/static/help.js"></script>
     <script src="/static/market.js"></script>
+    <script src="/static/ticker.js" defer></script>
     {# No-op sauf sur /commodities et /macro (garde `.asset-panel[data-symbol]`). #}
     <script src="/static/asset_stats.js"></script>
     {# No-op sauf sur /targets/{ticker} (garde `#shap-waterfall-widget[data-target]`). #}

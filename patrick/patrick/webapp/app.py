@@ -132,6 +132,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # (base_v2.html iterates `nav_sections(request.url.path)`).
 templates.env.globals["nav_sections"] = nav_registry.nav_sections
 templates.env.globals["utility_links"] = nav_registry.utility_links
+# Bandeau défilant des plus fortes variations (base_v2.html, sur toutes les pages) : lu dans le cache en mémoire de `alerts`,
+# jamais recalculé à l'affichage.
+templates.env.globals["movers_snapshot"] = alerts.get_cached
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
 templates.env.globals["nav_icon"] = icons.nav_icon
@@ -385,7 +388,6 @@ def _render_launch(request: Request, view: dict, errors: list[str], status_code:
             "duplicated_run_id": duplicated_run_id,
             "applied": applied,
             "training_profiles": _profile_gallery(family),
-            "movers": alerts.get_cached(),
             "recent_runs": _recent_runs(),
             **FORM_OPTIONS,
             **family_options,
