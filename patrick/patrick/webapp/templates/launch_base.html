@@ -29,6 +29,7 @@
         <ul id="run-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
+    {% include "_batch_gallery.html" %}
     {% include "_profile_gallery.html" %}
 
     <form method="post" action="/runs" class="run-form" id="run-form" data-mode="simple">

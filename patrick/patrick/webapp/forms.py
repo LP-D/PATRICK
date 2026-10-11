@@ -831,3 +831,42 @@ def to_view(cfg: dict) -> dict:
         "output_dir": out.get("dir", "runs"),
         "seed": out.get("seed", D.DEFAULT_SEED),
     }
+
+
+class FormFromView:
+    """Une vue du formulaire (`to_view`, éventuellement modifiée par un profil ou une suggestion) dite comme le navigateur la
+    soumettrait : même interface que `starlette.datastructures.FormData` (`get`, `getlist`) pour `build_config_dict`. Sert à
+    lancer côté serveur, sans page, ce qu'on lancerait en ouvrant le formulaire pré-rempli puis en appuyant sur « Lancer »
+    (lot « runs conseillés »). Règles du navigateur : une case décochée n'est pas envoyée, une liste est répétée sous le même nom."""
+
+    def __init__(self, view: dict):
+        self._values: dict[str, list[str]] = {}
+        for key, value in view.items():
+            if key == "technical_lookbacks":
+                for field, windows in value.items():
+                    self._set(f"tl__{field}", windows)
+            elif key == "optuna_bounds":
+                for algo, params in value.items():
+                    for param, (low, high) in params.items():
+                        self._set(f"ob__{algo}__{param}__low", low)
+                        self._set(f"ob__{algo}__{param}__high", high)
+            elif key == "regime_threshold_values":
+                self._set("regime_threshold_lo", value[0])
+                self._set("regime_threshold_hi", value[1])
+            elif isinstance(value, bool):
+                if value:
+                    self._values[key] = ["on"]
+            elif isinstance(value, (list, tuple)):
+                self._values[key] = [str(v) for v in value]
+            else:
+                self._set(key, value)
+
+    def _set(self, name: str, value) -> None:
+        self._values[name] = ["" if value is None else str(value)]
+
+    def get(self, name: str, default=None):
+        values = self._values.get(name)
+        return values[0] if values else default
+
+    def getlist(self, name: str) -> list[str]:
+        return list(self._values.get(name, []))

@@ -141,6 +141,29 @@ def test_the_best_horizon_of_a_multi_horizon_launch_is_singled_out():
     assert "best_horizon" not in keys(diag(horizon_auc={1: 0.55, 2: 0.56, 3: 0.55}))
 
 
+def test_every_suggestion_gives_its_texts_all_the_figures_they_name():
+    """Un texte « pourquoi / à essayer » qui cite une variable absente des chiffres de sa règle faisait échouer toute la page du run
+    (`KeyError: 'best_h'`, règle du meilleur horizon)."""
+    from patrick.webapp import i18n
+
+    t = i18n.translator("fr")
+    seen = set()
+    for kwargs in (
+        {"horizon_auc": {1: 0.50, 2: 0.52, 3: 0.55, 5: 0.60, 7: 0.57}},
+        {"suspect": "F1 trop beau", "guard_active": True},
+        {"suspect": "F1 trop beau", "guard_active": False},
+        {"auc_test": 0.51, "f1_test": 0.50, "auc_holdout": 0.50, "f1_holdout": 0.49, "history_years": 3.0, "n_excluded": 12, "n_universe": 30,
+         "fold_auc": [0.40, 0.45, 0.55, 0.60], "jaccard": 0.2, "class_shares": {"0": 0.7, "1": 0.1, "2": 0.1, "3": 0.1}},
+        {"auc_test": 0.70, "auc_holdout": 0.50, "f1_test": 0.70, "f1_holdout": 0.45, "pbo": 0.8, "pbo_reliable": True, "rho_test_holdout": -0.3},
+        {"auc_test": 0.58, "auc_holdout": 0.58, "duration_s": 9000, "asset_class": "equities_us", "scheme": "walkforward"},
+    ):
+        for s in advise(diag(**kwargs), limit=50):
+            seen.add(s.key)
+            for part in ("why", "try"):
+                t(f"adv_{s.key}_{part}", **s.facts)               # lève KeyError si une variable manque
+    assert {"best_horizon", "fix_leak", "short_history", "overfit"} <= seen
+
+
 def test_a_slow_run_with_a_weak_score_suggests_a_fast_iteration():
     assert next(s for s in advise(diag(duration_s=7200, auc_test=0.52, auc_holdout=0.52)) if s.key == "faster_iteration").patch["tuning_enabled"] is False
     assert "faster_iteration" not in keys(diag(duration_s=600, auc_test=0.52, auc_holdout=0.52))

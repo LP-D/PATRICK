@@ -347,7 +347,7 @@ def _rule_best_horizon(d: Diagnosis) -> Suggestion | None:
     i = ladder.index(best_h)
     around = ladder[max(0, i - 1): i + 2]
     return Suggestion("best_horizon", _clip(40 + (best - worst) * 400, 0, 70), {"horizons": around},
-                      {"best": best_h, "auc": best, "worst": worst, "horizons": ", ".join(str(h) for h in around),
+                      {"best": best, "best_h": best_h, "worst": worst, "horizons": ", ".join(str(h) for h in around),
                        "spread": best - worst})
 
 
@@ -417,7 +417,7 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     from patrick.tracking import history as trackhistory
     from patrick.webapp import forms
 
-    detail = detail or trackhistory.run_detail(conn, run_id)
+    detail = detail or trackhistory.run_detail(conn, run_id, with_meta_labeling=False)    # le diagnostic n'utilise pas le méta-étiquetage (2 à 4 s)
     if detail is None:
         return None
     run, cfg = detail["run"], detail.get("config") or {}

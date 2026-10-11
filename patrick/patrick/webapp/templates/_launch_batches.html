@@ -1,0 +1,29 @@
+{# Fragment des lots (`/fragments/launch-batches?family=ml|dl|rl`) : `never` = cibles sans run, `missing` = {cible: [horizons sans run]}.
+   Les cartes ressemblent à celles des profils ; le clic est géré par `static/launch_batches.js`. #}
+<div class="profile-grid batch-grid">
+    <div class="profile-card batch-card{% if not never %} is-empty{% endif %}" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="never" data-symbols='{{ never | tojson }}'{% if not never %} disabled{% endif %}>
+            <span class="profile-name">{{ t('batch_never_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_never_desc_' ~ family) }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_n_targets', n=never | length) if never else t('batch_nothing') }}</span></span>
+    </div>
+    {% if family != 'rl' %}
+    <div class="profile-card batch-card{% if not missing %} is-empty{% endif %}" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="missing" data-gaps='{{ missing | tojson }}'{% if not missing %} disabled{% endif %}>
+            <span class="profile-name">{{ t('batch_missing_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_missing_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_n_pairs', pairs=n_missing_pairs, n=missing | length) if missing else t('batch_nothing') }}</span></span>
+    </div>
+    {% endif %}
+    {% if family == 'ml' %}
+    <div class="profile-card batch-card" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="recommended">
+            <span class="profile-name">{{ t('batch_rec_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_rec_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_rec_meta') }}</span></span>
+    </div>
+    {% endif %}
+</div>

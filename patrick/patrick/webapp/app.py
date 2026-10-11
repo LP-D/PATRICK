@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from patrick import live_refresh
 from patrick import settings as settings_store
@@ -50,9 +51,11 @@ from patrick.webapp import (
     asset_stats,
     exploration_routes,
     forms,
+    forms_rl,
     fund_routes,
     i18n,
     icons,
+    launch_batches,
     market_data,
     market_regime,
     nav_registry,
@@ -411,6 +414,83 @@ def launch_legacy_redirect(request: Request):
     return RedirectResponse("/ml" + (f"?{query}" if query else ""), status_code=308)
 
 
+@app.get("/fragments/launch-batches")
+def launch_batches_fragment(request: Request, family: str = "ml"):
+    """Fragment des lots prêts à lancer d'une page Modèles (chargé par `static/lazy.js` après l'affichage de la page) :
+    cibles jamais lancées, horizons jamais lancés (ML/DL) et runs conseillés (ML). Lecture seule ; rien n'est lancé ici."""
+    if family not in ("ml", "dl", "rl"):
+        raise HTTPException(status_code=404, detail="Famille inconnue")
+    groups = forms_rl.rl_target_groups() if family == "rl" else forms.TARGET_GROUPS
+    conn = trackdb.connect()
+    try:
+        overview = launch_batches.overview(conn, family, [sym for items in groups.values() for sym, _ in items],
+                                           data_health.depth_by_symbol_for_form(), utc_today())
+    finally:
+        conn.close()
+    missing = overview["missing"]
+    return templates.TemplateResponse(
+        request, "_launch_batches.html",
+        {"family": family, "never": overview["never"], "missing": missing,
+         "missing_horizons": sorted({h for gaps in missing.values() for h in gaps}),
+         "n_missing_pairs": sum(len(gaps) for gaps in missing.values()), **_i18n_context(request)},
+    )
+
+
+@app.get("/api/launch-batches/recommended")
+async def launch_batches_recommended(request: Request):
+    """Lot « runs conseillés » : l'analyse (conseiller de réentraînement sur le dernier run terminé de chaque cible), à la demande.
+    `lines` et `costs` = la répartition, déjà traduite, que la page montre dans sa confirmation."""
+    t = i18n.translator(i18n.get_lang(request))
+
+    def analyse() -> dict:
+        conn = trackdb.connect()
+        try:
+            items = launch_batches.recommended(conn, data_health.history_depths())
+        finally:
+            conn.close()
+        summary = launch_batches.summarize(items)
+        return {"items": items, "n": summary["n"],
+                "lines": " ; ".join(f"{t(f'adv_{key}_title')} ({n})" for key, n in sorted(summary["by_key"].items(), key=lambda kv: -kv[1])),
+                "costs": ", ".join(f"{t(f'adv_cost_{cost}')} {n}" for cost, n in summary["by_cost"].items())}
+    return await run_in_threadpool(analyse)
+
+
+@app.post("/api/launch-batches/recommended")
+async def launch_batches_recommended_launch(request: Request):
+    """Met en file les runs conseillés confirmés : `{"items": [{"run_id", "key"}]}`. Chaque configuration est reconstruite comme le
+    formulaire pré-rempli par la suggestion (`/ml?run_id=…&suggest=…`) puis soumis ; une seule invalide et rien n'est mis en file,
+    comme pour `POST /runs`."""
+    body = await request.json()
+    pairs = [(str(i.get("run_id") or ""), str(i.get("key") or "")) for i in body.get("items") or [] if isinstance(i, dict)]
+    if not pairs:
+        return JSONResponse({"errors": ["Aucun run conseillé à lancer."]}, status_code=400)
+
+    def build() -> tuple[list[RunConfig], list[str]]:
+        configs: list[RunConfig] = []
+        errors: list[str] = []
+        history = data_health.history_depths()
+        conn = trackdb.connect()
+        try:
+            for run_id, key in pairs:
+                config, errs = launch_batches.build_recommended_config(conn, run_id, key, history)
+                errors.extend(errs)
+                if config is not None:
+                    configs.append(config)
+        finally:
+            conn.close()
+        return configs, errors
+
+    configs, errors = await run_in_threadpool(build)
+    if errors:
+        return JSONResponse({"errors": errors}, status_code=400)
+    runs = []
+    for config in configs:
+        job_view = run_manager.start_run(config)
+        runs.append({"run_id": job_view["id"], "status": job_view["status"], "queue_position": job_view["queue_position"],
+                     "target": config.objective.target_symbol})
+    return JSONResponse({"runs": runs})
+
+
 def _launch_page(request: Request, family: str, run_id: str | None, target: str | None, profile: str | None,
                  suggest: str | None):
     cfg = forms.default_config_dict(family)
@@ -665,10 +745,28 @@ async def create_run(request: Request):
         # independently re-validates the same raw form field and falls
         # back to its own `runs/{name}` default.
         raw_output_dir = ""
+    # Lot « horizons jamais lancés » : `only_missing=1` limite chaque cible aux horizons qu'elle n'a pas encore (fait, en cours ou en
+    # file) et saute celles qui n'en ont plus ; sans lui, la soumission reste exactement celle du formulaire.
+    only_missing = form.get("only_missing") == "1"
+    done_pairs: dict[str, set[int]] = {}
+    if only_missing:
+        conn = trackdb.connect()
+        try:
+            done_pairs = launch_batches.executed_pairs(conn, "dl" if form.get("family") == "dl" else "ml")
+        finally:
+            conn.close()
+    skipped: list[str] = []
     configs: list[RunConfig] = []
     for sym in targets:
+        sym_form = form
+        if only_missing:
+            gaps = [h for h in (int(h) for h in form.getlist("horizons") if str(h).strip()) if h not in done_pairs.get(sym, set())]
+            if not gaps:
+                skipped.append(sym)
+                continue
+            sym_form = launch_batches.FormOverride(form, horizons=gaps)
         name = run_manager.next_run_name(sym)
-        config_dict, errs = forms.build_config_dict(form, target_symbol=sym, name=name)
+        config_dict, errs = forms.build_config_dict(sym_form, target_symbol=sym, name=name)
         if errs:
             errors.extend(f"{sym} : {e}" for e in errs)
             continue
@@ -697,7 +795,7 @@ async def create_run(request: Request):
             "queue_position": job_view["queue_position"],
             "target": config.objective.target_symbol,
         })
-    return JSONResponse({"runs": runs})
+    return JSONResponse({"runs": runs, "skipped": skipped})
 
 
 @app.post("/runs/{run_id}/relaunch")
