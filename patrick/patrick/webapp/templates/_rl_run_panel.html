@@ -1,0 +1,46 @@
+{# Fragment (sans base) : une section du panneau latéral de /runs pour un run de reinforcement learning. Les valeurs viennent du
+   job (table `job`) et sont échappées automatiquement : pas de `| safe`. Tout est hors échantillon (walk-forward) ; `view` est préparé
+   par `rl_routes.get_rl_run` (toutes les clés présentes, `None` si la mesure manque). #}
+{% set secs = view.elapsed_s %}
+<header class="rp-head">
+    <div class="rp-title">
+        <strong>{{ row.name or row.run_id }}</strong>
+        <span class="rp-sub">{{ row.target or '—' }} · {{ row.algo or '—' }}
+            · <span class="kind-badge kind-rl">{{ t('nav_rl') }}</span></span>
+    </div>
+    <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ row.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>
+</header>
+{% if error %}<p class="banner banner-error rp-banner">{{ error }}</p>{% endif %}
+{% if view.done %}
+<table class="data-table rp-table">
+    <thead><tr>
+        <th></th><th class="num">{{ t('rlp_k_sharpe') }}</th><th class="num">{{ t('rlp_k_total') }}</th><th class="num">{{ t('rlp_k_maxdd') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for label_key, m in view.lines %}
+    <tr{% if loop.first %} class="rp-strong"{% endif %}>
+        <th scope="row">{{ t(label_key) }}</th>
+        <td class="num pk-mono">{{ '%.2f' | format(m.get('sharpe')) if m.get('sharpe') is not none else '—' }}</td>
+        <td class="num pk-mono">{{ '%+.1f %%' | format(m.get('total_return') * 100) if m.get('total_return') is not none else '—' }}</td>
+        <td class="num pk-mono">{{ '%.1f %%' | format(m.get('max_drawdown') * 100) if m.get('max_drawdown') is not none else '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+<dl class="rp-grid">
+    <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ row.status }}</dd></div>
+    <div><dt>{{ t('rlh_p_folds') }}</dt><dd class="pk-mono">{{ view.n_folds if view.n_folds is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rlh_p_seeds') }}</dt><dd class="pk-mono">{{ view.n_seeds if view.n_seeds is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rlp_stat_dsr') }}</dt><dd class="pk-mono">{{ '%.1f %%' | format(view.dsr * 100) if view.dsr is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rlh_p_trials') }}</dt><dd class="pk-mono">{{ view.n_trials if view.n_trials is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rp_duration') }}</dt><dd class="pk-mono">{{ '%d min %02d s' | format(secs // 60, secs % 60) if secs is not none else '—' }}</dd></div>
+    <div class="rp-wide"><dt>{{ t('rlp_stat_psr') }}</dt><dd class="pk-mono">{{ '%.1f %%' | format(view.psr * 100) if view.psr is not none else '—' }}</dd></div>
+    <div class="rp-wide"><dt>{{ t('rlp_stat_vs_bh') }}</dt><dd class="pk-mono">{% if view.gap is not none %}{{ '%+.2f' | format(view.gap) }}{% if view.gap_low is not none and view.gap_high is not none %} [{{ '%+.2f' | format(view.gap_low) }} ; {{ '%+.2f' | format(view.gap_high) }}]{% endif %}{% else %}—{% endif %}</dd></div>
+    <div class="rp-wide"><dt>{{ t('rlh_p_period') }}</dt><dd class="pk-mono">{% if view.start %}{{ view.start }} → {{ view.end }}{% else %}—{% endif %}</dd></div>
+    <div class="rp-wide"><dt>{{ t('hist_started') }}</dt><dd>{{ row.started_at or row.created_at or '—' }}</dd></div>
+</dl>
+{% if not view.done and not error %}<p class="hint rp-banner">{{ t('rlh_p_pending') }}</p>{% endif %}
+<footer class="rp-foot">
+    <a class="btn-secondary" href="/rl?open={{ row.run_id }}">{{ t('rp_full_detail') }} {{ icon('external', 13) }}</a>
+</footer>

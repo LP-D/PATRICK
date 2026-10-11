@@ -2010,10 +2010,18 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .history-table .hc-actions { width: 76px; text-align: right; }
 .history-table .hc-date { width: 118px; color: var(--text-2); }
 .history-table .hc-name { font-weight: 500; }
-.history-table th:nth-child(3) { width: 96px; }
-.history-table th:nth-child(4) { width: 76px; }
-.history-table th:nth-child(5) { width: 100px; }
-.history-table th:nth-child(6), .history-table th:nth-child(7), .history-table th:nth-child(8) { width: 74px; }
+.history-table-cls th:nth-child(3) { width: 96px; }
+.history-table-cls th:nth-child(4) { width: 76px; }
+.history-table-cls th:nth-child(5) { width: 100px; }
+.history-table-cls th:nth-child(6), .history-table-cls th:nth-child(7), .history-table-cls th:nth-child(8) { width: 74px; }
+/* tableau RL : nom, cible, algorithme, statut, Sharpe, Sharpe B&H, écart, rendement, perte max, DSR, date */
+.history-table-rl th:nth-child(2) { width: 84px; }
+.history-table-rl th:nth-child(3) { width: 66px; }
+.history-table-rl th:nth-child(4) { width: 90px; }
+.history-table-rl th:nth-child(n+5):nth-child(-n+10) { width: 72px; }
+.history-section-title { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 8px; font-size: 1.05rem; }
+.history-section:first-of-type .history-section-title { margin-top: 8px; }
+.history-empty { margin: 4px 0 8px; }
 .history-row { cursor: pointer; }
 .history-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .history-row.is-selected td { background: color-mix(in srgb, var(--brand) 9%, transparent); }
@@ -2021,8 +2029,9 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .history-table .inline-form { display: inline; }
 .history-table .icon-btn { width: 28px; height: 28px; }
 .history-table .icon-btn.danger:hover { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); }
-.has-run-panel .history-table th:nth-child(8), .has-run-panel .history-table td:nth-child(8),
-.has-run-panel .history-table th:nth-child(9), .has-run-panel .history-table td:nth-child(9) { display: none; }
+.has-run-panel .history-table-cls th:nth-child(8), .has-run-panel .history-table-cls td:nth-child(8),
+.has-run-panel .history-table-cls th:nth-child(9), .has-run-panel .history-table-cls td:nth-child(9),
+.has-run-panel .history-table-rl th:nth-child(n+9), .has-run-panel .history-table-rl td:nth-child(n+9) { display: none; }
 
 .history-dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 18px; width: min(420px, 92vw); }
 .history-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
@@ -2062,11 +2071,13 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .has-run-panel .main-column { margin-right: 0; }
 }
 @media (max-width: 1180px) {
-  .history-table th:nth-child(9), .history-table td:nth-child(9) { display: none; }
-  .history-table th:nth-child(3) { width: 78px; }
+  .history-table-cls th:nth-child(9), .history-table-cls td:nth-child(9) { display: none; }
+  .history-table-cls th:nth-child(3) { width: 78px; }
+  .history-table-rl th:nth-child(n+10), .history-table-rl td:nth-child(n+10) { display: none; }
 }
 @media (max-width: 960px) {
-  .history-table th:nth-child(8), .history-table td:nth-child(8) { display: none; }
+  .history-table-cls th:nth-child(8), .history-table-cls td:nth-child(8) { display: none; }
+  .history-table-rl th:nth-child(9), .history-table-rl td:nth-child(9) { display: none; }
 }
 
 /* ============ /predictions : une ligne par actif, une case par horizon ============ */
@@ -2222,6 +2233,13 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .kind-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; letter-spacing: .02em; }
 .kind-badge.kind-directional { background: var(--brand-soft); color: var(--brand); }
 .kind-badge.kind-alpha { background: var(--pos-soft); color: var(--pos); }
+.kind-badge.kind-rl { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); }
+.family-tabs { flex-wrap: wrap; }
+.rp-table { width: 100%; margin: 6px 0 10px; font-size: 12.5px; table-layout: fixed; }
+.rp-table th, .rp-table td { padding: 4px 6px; white-space: normal; overflow-wrap: anywhere; }
+.rp-table th:first-child { width: 34%; }
+.rp-table tbody th { text-align: left; font-weight: 500; color: var(--text-2); }
+.rp-table .rp-strong th, .rp-table .rp-strong td { font-weight: 650; color: var(--text); }
 .tag-suspect { background: var(--neg-soft); color: var(--neg); }
 .history-table th.headline, .history-table td.headline { font-weight: 600; }
 

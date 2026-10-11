@@ -62,19 +62,21 @@
         if (e.key === "Escape" && selected.length && !document.querySelector("dialog[open]")) close();
     });
 
-    var tbody = document.querySelector(".history-table tbody");
-    tbody.addEventListener("click", function (e) {
-        var rename = e.target.closest("[data-rename]");
-        if (rename) { openRename(rename); return; }
-        if (e.target.closest("a, button, input, form, label")) return;
-        var tr = e.target.closest(".history-row");
-        if (tr) toggle(tr.dataset.runId);
-    });
-    tbody.addEventListener("keydown", function (e) {
-        if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("history-row")) {
-            e.preventDefault();
-            toggle(e.target.dataset.runId);
-        }
+    // une section (donc un tableau) par famille : ML, DL, RL
+    document.querySelectorAll(".history-table tbody").forEach(function (tbody) {
+        tbody.addEventListener("click", function (e) {
+            var rename = e.target.closest("[data-rename]");
+            if (rename) { openRename(rename); return; }
+            if (e.target.closest("a, button, input, form, label")) return;
+            var tr = e.target.closest(".history-row");
+            if (tr) toggle(tr.dataset.runId);
+        });
+        tbody.addEventListener("keydown", function (e) {
+            if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("history-row")) {
+                e.preventDefault();
+                toggle(e.target.dataset.runId);
+            }
+        });
     });
 
     // Renommer

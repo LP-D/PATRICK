@@ -89,30 +89,76 @@ def _summary(job: dict) -> dict:
         config = {}
     row = {"run_id": job["job_id"], "name": config.get("name"), "target": (config.get("objective") or {}).get("target_symbol"),
            "algo": (config.get("rl") or {}).get("algo"), "status": job["status"], "created_at": job.get("created_at"),
-           "finished_at": job.get("finished_at")}
+           "started_at": job.get("started_at"), "finished_at": job.get("finished_at"),
+           "sharpe": None, "sharpe_buy_hold": None, "total_return": None, "max_drawdown": None, "dsr": None}
     if job["status"] == "done" and job.get("result_json"):
         try:
             result = json.loads(job["result_json"])
             row.update({"sharpe": (result.get("strategy") or {}).get("sharpe"),
                         "sharpe_buy_hold": ((result.get("baselines") or {}).get("buy_hold") or {}).get("sharpe"),
                         "total_return": (result.get("strategy") or {}).get("total_return"),
-                        "max_drawdown": (result.get("strategy") or {}).get("max_drawdown")})
+                        "max_drawdown": (result.get("strategy") or {}).get("max_drawdown"),
+                        "dsr": ((result.get("stats") or {}).get("dsr") or {}).get("dsr")})
         except ValueError:
             pass
     return row
 
 
-def list_rl_jobs(limit: int = LIST_LIMIT) -> list[dict]:
+def list_rl_jobs(limit: int | None = LIST_LIMIT) -> list[dict]:
+    """Les runs RL les plus récents d'abord ; `limit=None` = tous (page Historique)."""
     conn = trackdb.connect(trackdb.default_db_path())
     try:
         rows = conn.execute("SELECT * FROM job WHERE config_json LIKE ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
-                            (RL_JOB_FILTER, limit)).fetchall()
+                            (RL_JOB_FILTER, -1 if limit is None else limit)).fetchall()
         cols = [d[0] for d in conn.execute("SELECT * FROM job LIMIT 0").description]
     except sqlite3.Error:
         return []
     finally:
         conn.close()
     return [_summary(dict(zip(cols, r, strict=True))) for r in rows]
+
+
+def get_rl_run(run_id: str) -> dict | None:
+    """Un run RL pour le panneau de l'Historique : la ligne de liste (`_summary`), le résultat complet une fois terminé (`{}` sinon)
+    et l'erreur du job ; `None` si ce n'est pas un job RL."""
+    conn = trackdb.connect(trackdb.default_db_path())
+    try:
+        cur = conn.execute("SELECT * FROM job WHERE job_id = ? AND config_json LIKE ?", (run_id, RL_JOB_FILTER))
+        row = cur.fetchone()
+        cols = [d[0] for d in cur.description]
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    job = dict(zip(cols, row, strict=True))
+    try:
+        result = json.loads(job["result_json"]) if job["status"] == "done" and job.get("result_json") else {}
+    except ValueError:
+        result = {}
+    return {"row": _summary(job), "view": _panel_view(result if isinstance(result, dict) else {}), "error": job.get("error")}
+
+
+def _panel_view(result: dict) -> dict:
+    """Les chiffres du panneau de l'Historique, tous présents (`None` quand le run n'est pas terminé ou que la mesure manque) pour que le
+    gabarit n'ait aucune clé absente à gérer."""
+    def sub(d, *path):
+        for key in path:
+            d = d.get(key) if isinstance(d, dict) else None
+        return d
+
+    stats, dates = result.get("stats") or {}, sub(result, "curves", "dates") or []
+    baselines = result.get("baselines") or {}
+    return {
+        "done": bool(result.get("strategy")),
+        "lines": [("rlh_p_strategy", result.get("strategy") or {}), ("rlh_p_buyhold", baselines.get("buy_hold") or {}),
+                  ("rlh_p_momentum", baselines.get("momentum") or {}), ("rlh_p_flat", baselines.get("flat") or {})],
+        "dsr": sub(stats, "dsr", "dsr"), "psr": stats.get("psr"), "n_trials": stats.get("n_trials"),
+        "gap": sub(stats, "vs_buy_hold", "diff"), "gap_low": sub(stats, "vs_buy_hold", "ci_low"), "gap_high": sub(stats, "vs_buy_hold", "ci_high"),
+        "n_folds": result.get("n_folds"), "n_seeds": len(result.get("seeds") or []) or None, "elapsed_s": result.get("elapsed_s"),
+        "start": dates[0] if dates else None, "end": dates[-1] if dates else None,
+    }
 
 
 def register(app: FastAPI, templates, context) -> None:

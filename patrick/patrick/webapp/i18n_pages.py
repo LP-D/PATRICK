@@ -117,8 +117,8 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
         "Do not use it; the fix applies to new runs."),
     "suspect_banner_link": _s("Voir la cause", "See the cause"),
     # ------------------------------------------------------------------ historique : directionnel / alpha
-    "hist_subtitle": _s("Runs persistés en base : AUC puis F1 d'abord. Filtre-les, compare jusqu'à quatre runs ou duplique leur configuration depuis le détail.",
-                        "Runs persisted in the database: AUC then F1 first. Filter them, compare up to four runs or duplicate their configuration from the detail page."),
+    "hist_subtitle": _s("Runs persistés en base, séparés par famille : machine learning, deep learning, reinforcement learning. Filtre-les, compare jusqu'à quatre runs ML ou DL, ou ouvre un run dans le panneau.",
+                        "Runs persisted in the database, separated by family: machine learning, deep learning, reinforcement learning. Filter them, compare up to four ML or DL runs, or open a run in the panel."),
     "hist_search": _s("Recherche", "Search"),
     "hist_search_ph": _s("Nom, cible ou ID", "Name, target or ID"),
     "hist_compare": _s("Comparer", "Compare"),
@@ -135,6 +135,43 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "kind_alpha_hint": _s(
         "Modèles alpha : ils prédisent si l'actif fera mieux ou moins bien que son benchmark (rendement de l'actif moins β × rendement du benchmark), pas la direction de son prix.",
         "Alpha models: they predict whether the asset will beat or lag its benchmark (asset return minus β × benchmark return), not the direction of its price."),
+    # --- Historique : une famille à la fois (machine learning, deep learning, reinforcement learning)
+    "hist_family_aria": _s("Famille de modèles (ML, DL, RL)", "Model family (ML, DL, RL)"),
+    "hist_kind_aria": _s("Type de modèle : directionnel ou alpha", "Model type: directional or alpha"),
+    "hist_fam_ml_hint": _s(
+        "Arbres, forêts et boosting (XGBoost, LightGBM, RandomForest, GradientBoosting, CatBoost). Un run classe le mouvement futur du prix ; "
+        "il est jugé sur l'AUC (capacité à bien classer les cas, 0,5 = hasard) et le F1 (équilibre entre précision et rappel).",
+        "Trees, forests and boosting (XGBoost, LightGBM, RandomForest, GradientBoosting, CatBoost). A run classifies the future price move; "
+        "it is judged on AUC (ability to rank cases well, 0.5 = chance) and F1 (balance between precision and recall)."),
+    "hist_fam_dl_hint": _s(
+        "Réseaux de neurones (MLP, GRU, LSTM, CNN1D, Transformer). Mêmes cibles, même validation et mêmes mesures que le machine learning : "
+        "les runs sont comparables entre eux. Un run qui mêle arbres et réseaux est classé dans le machine learning.",
+        "Neural networks (MLP, GRU, LSTM, CNN1D, Transformer). Same targets, same validation and same measures as machine learning: "
+        "the runs are comparable with each other. A run mixing trees and networks is listed under machine learning."),
+    "hist_fam_rl_hint": _s(
+        "Agent de reinforcement learning : il apprend à tenir une position (long, court ou à plat) par essais et récompenses. Évalué hors "
+        "échantillon en walk-forward contre acheter et garder, momentum et à plat. Pas d'AUC ni de F1 ici : le Sharpe (rendement par unité de "
+        "risque), le rendement total et la perte maximale. Le DSR (Sharpe déflaté) retire l'avantage d'avoir essayé plusieurs runs.",
+        "Reinforcement learning agent: it learns to hold a position (long, short or flat) by trial and reward. Evaluated out of sample in "
+        "walk-forward against buy and hold, momentum and flat. No AUC or F1 here: the Sharpe (return per unit of risk), the total return "
+        "and the maximum drawdown. The DSR (deflated Sharpe) removes the advantage of having tried several runs."),
+    "hist_scope_rl": _s("RUNS RL AU-DESSUS D'ACHETER ET GARDER", "RL RUNS ABOVE BUY AND HOLD"),
+    "hist_scope_rl_rel": _s("runs terminés affichés dont le Sharpe hors échantillon dépasse celui d'acheter et garder",
+                            "displayed finished runs whose out-of-sample Sharpe beats buy and hold"),
+    "hist_no_match": _s("Aucun run ne correspond aux filtres.", "No run matches the filters."),
+    "rlh_col_bh": _s("Sharpe B&H", "Sharpe B&H"),
+    "rlh_col_bh_tip": _s("Sharpe d'acheter et garder (buy and hold) sur la même période hors échantillon",
+                         "Sharpe of buy and hold over the same out-of-sample period"),
+    "rlh_col_oos_tip": _s("Mesure hors échantillon (walk-forward), nette de coûts", "Out-of-sample measure (walk-forward), net of costs"),
+    "rlh_p_strategy": _s("Stratégie", "Strategy"),
+    "rlh_p_buyhold": _s("Acheter et garder", "Buy and hold"),
+    "rlh_p_momentum": _s("Momentum", "Momentum"),
+    "rlh_p_flat": _s("À plat", "Flat"),
+    "rlh_p_folds": _s("Plis", "Folds"),
+    "rlh_p_seeds": _s("Graines", "Seeds"),
+    "rlh_p_trials": _s("Essais cumulés", "Cumulative trials"),
+    "rlh_p_period": _s("Période hors échantillon", "Out-of-sample period"),
+    "rlh_p_pending": _s("Les résultats apparaissent à la fin du run.", "Results appear when the run ends."),
     "suspect_tag": _s("suspect", "suspect"),
     "rp_remove": _s("Retirer ce run du panneau", "Remove this run from the panel"),
     "rp_scheme": _s("Schéma", "Scheme"),

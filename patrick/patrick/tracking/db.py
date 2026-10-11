@@ -21,6 +21,7 @@ import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
+from patrick.config.defaults import ALL_DL_ALGOS
 from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
 from patrick.tracking import class_balance
@@ -911,6 +912,14 @@ def batch_dm_results(conn: sqlite3.Connection, run_ids: list[str],
     }
 
 
+def run_family(cfg: dict) -> str:
+    """« dl » si tous les algorithmes du run sont des réseaux de neurones, « ml » sinon -- même règle que `RunConfig.family`, lue
+    sur la configuration enregistrée (un run ancien sans `models.algos` reste « ml »)."""
+    models = cfg.get("models")
+    algos = models.get("algos") if isinstance(models, dict) else None
+    return "dl" if isinstance(algos, list) and algos and all(a in ALL_DL_ALGOS for a in algos) else "ml"
+
+
 def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
     """All runs, most recent first — for exploratory surfaces (Phase 5).
     Includes `scheme`/`best_f1_dir`/`dm_p_value` (same queries as
@@ -954,11 +963,12 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
 
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
-        name, scheme = None, "walkforward"
+        name, scheme, family = None, "walkforward", "ml"
         try:
             cfg = json.loads(config_json) if config_json else {}
             name = cfg.get("name")
             scheme = cfg.get("validation", {}).get("scheme", "walkforward")
+            family = run_family(cfg)
         except (TypeError, ValueError, AttributeError):
             pass
         dm_result = dm_by_run.get(run_id)
@@ -967,6 +977,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
         out.append({
             "run_id": run_id, "target": html.escape(target) if isinstance(target, str) else target,
             "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
+            "family": family,
             "suspect": suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m),
             "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
             "holdout_f1_dir": holdout_m.get("F1_dir"),

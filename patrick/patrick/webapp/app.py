@@ -905,11 +905,15 @@ def download_artifact(run_id: str, artifact: str):
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
                    scheme: str | None = None, q: str | None = None, algo: str | None = None,
-                   kind: str | None = None,
+                   kind: str | None = None, family: str | None = None,
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0)):
-    """Phase 7.1 — full run-history explorer."""
+    """Phase 7.1 — full run-history explorer.
+
+    Trois familles qui ne se mélangent jamais : machine learning (arbres), deep learning (réseaux de neurones : mêmes tables `run` et
+    mêmes mesures que le ML) et reinforcement learning (table `job` seule, mesures de performance de stratégie). `family` en choisit une ;
+    sans lui, une section par famille."""
     if started_after and started_before and started_after > started_before:
         raise HTTPException(status_code=400, detail="La date de début doit précéder la date de fin.")
     if min_duration_s is not None and max_duration_s is not None and min_duration_s > max_duration_s:
@@ -919,13 +923,87 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         all_runs = trackdb.list_all_runs(conn)
     finally:
         conn.close()
+    by_family = {"ml": [r for r in all_runs if r.get("family") != "dl"], "dl": [r for r in all_runs if r.get("family") == "dl"],
+                 "rl": _rl_history_rows()}
+    family_counts = {f: len(rows) for f, rows in by_family.items()}
+    family = family if family in by_family else None
+    scope = (family,) if family else tuple(by_family)
 
     # Directional (price-direction) and alpha (excess return vs a benchmark) models are never mixed: a tab each.
-    kind_counts = {"directional": sum(1 for r in all_runs if r.get("kind") == "directional"),
-                   "alpha": sum(1 for r in all_runs if r.get("kind") == "alpha")}
-    kind = kind if kind in kind_counts else None
-    # Server-side filtering (scheme) and client-side (target/status) — see P2 critique
-    runs = all_runs
+    # Ils n'existent que pour le ML et le DL (une stratégie RL n'a pas de cible directionnelle ou alpha).
+    classif_scope = [r for f in scope if f != "rl" for r in by_family[f]]
+    kind_counts = {"directional": sum(1 for r in classif_scope if r.get("kind") == "directional"),
+                   "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha")}
+    kind = kind if kind in kind_counts and family != "rl" else None
+    scope_runs = [r for f in scope for r in by_family[f]]
+    algorithm_options = sorted({model for run in scope_runs for model in _run_algorithms(run)})
+    sections = []
+    for fam in scope:
+        if fam == "rl" and kind:
+            continue                    # filtrer par type directionnel/alpha écarte la famille RL, qui n'en a pas
+        sections.append({"family": fam, "runs": _filter_history_runs(
+            by_family[fam], kind=kind, target=target, status=status, scheme=scheme, algo=algo, q=q,
+            started_after=started_after, started_before=started_before,
+            min_duration_s=min_duration_s, max_duration_s=max_duration_s)})
+    classif_listed = [r for s in sections if s["family"] != "rl" for r in s["runs"]]
+    rl_done = [r for s in sections if s["family"] == "rl" for r in s["runs"]
+               if r.get("sharpe") is not None and r.get("sharpe_buy_hold") is not None]
+    scope_dm = {"with": sum(1 for r in classif_listed if r.get("dm_p_value") is not None), "total": len(classif_listed)}
+    scope_rl = {"with": sum(1 for r in rl_done if r["sharpe"] > r["sharpe_buy_hold"]), "total": len(rl_done)}
+
+    # Count runs per target for the dropdown filter
+    target_counts = {}
+    for r in scope_runs:
+        tgt = r.get("target")
+        if tgt:
+            target_counts[tgt] = target_counts.get(tgt, 0) + 1
+    targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
+
+    # Security (reflected XSS) -- `runs.html`'s footer concatenates these
+    # three query-param-derived strings directly into an HTML string that
+    # is then rendered with `{{ footer | safe }}` (`_components.html::
+    # data_table`) -- escaped here, at the one place they enter the
+    # template context, rather than in the template (which legitimately
+    # needs `|safe` for the rest of the footer's own server-built markup).
+    # A no-op for every real filter value (ticker symbols, "done"/
+    # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
+    return templates.TemplateResponse(
+        request, "runs.html",
+        {"family_sections": sections, "n_listed": sum(len(s["runs"]) for s in sections), "targets": targets,
+         "filter_family": family or "", "family_counts": family_counts, "scope_dm": scope_dm, "scope_rl": scope_rl,
+         "filter_target": html.escape(target) if target else "",
+         "filter_status": html.escape(status) if status else "",
+         "filter_scheme": html.escape(scheme) if scheme else "",
+         "filter_query": q or "",
+         "filter_kind": kind or "", "kind_counts": kind_counts, "n_all_runs": sum(family_counts.values()),
+         "filter_algo": algo or "",
+         "filter_started_after": started_after.isoformat() if started_after else "",
+         "filter_started_before": started_before.isoformat() if started_before else "",
+         "filter_min_duration_s": min_duration_s if min_duration_s is not None else "",
+         "filter_max_duration_s": max_duration_s if max_duration_s is not None else "",
+         "algorithms": algorithm_options,
+         **_i18n_context(request)},
+    )
+
+
+def _rl_history_rows() -> list[dict]:
+    """Runs RL (table `job`, jamais dans `run`) au format de la liste Historique : un job en erreur s'affiche « failed » et un job encore
+    en file porte sa date de création comme date de départ."""
+    return [{**r, "family": "rl", "status": "failed" if r["status"] == "error" else r["status"],
+             "started_at": r.get("started_at") or r.get("created_at")} for r in rl_routes.list_rl_jobs(None)]
+
+
+def _run_algorithms(run: dict) -> list[str]:
+    """Algorithmes d'une ligne de l'Historique : celui de l'agent pour un run RL, ceux de la configuration sinon."""
+    if run.get("family") == "rl":
+        return [run["algo"]] if run.get("algo") else []
+    return _extract_algorithms(run.get("config_json"))
+
+
+def _filter_history_runs(runs: list[dict], *, kind: str | None, target: str | None, status: str | None, scheme: str | None,
+                         algo: str | None, q: str | None, started_after: date | None, started_before: date | None,
+                         min_duration_s: float | None, max_duration_s: float | None) -> list[dict]:
+    """Filtres de la page Historique, communs aux trois familles (un run RL évalue en walk-forward : son schéma est « walkforward »)."""
     if kind:
         runs = [r for r in runs if r.get("kind") == kind]
     if target:
@@ -935,11 +1013,8 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     if scheme:
         # Scheme stored in config_json — extracted on the Python side
         runs = [r for r in runs if _extract_scheme(r) == scheme]
-    algorithm_options = sorted({
-        model for run in all_runs for model in _extract_algorithms(run.get("config_json"))
-    })
     if algo:
-        runs = [r for r in runs if algo in _extract_algorithms(r.get("config_json"))]
+        runs = [r for r in runs if algo in _run_algorithms(r)]
     if q:
         needle = q.casefold()
         runs = [
@@ -959,39 +1034,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
             and (min_duration_s is None or duration >= min_duration_s)
             and (max_duration_s is None or duration <= max_duration_s)
         ]
-
-    # Count runs per target for the dropdown filter
-    target_counts = {}
-    for r in all_runs:
-        tgt = r.get("target")
-        if tgt:
-            target_counts[tgt] = target_counts.get(tgt, 0) + 1
-    targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
-
-    # Security (reflected XSS) -- `runs.html`'s footer concatenates these
-    # three query-param-derived strings directly into an HTML string that
-    # is then rendered with `{{ footer | safe }}` (`_components.html::
-    # data_table`) -- escaped here, at the one place they enter the
-    # template context, rather than in the template (which legitimately
-    # needs `|safe` for the rest of the footer's own server-built markup).
-    # A no-op for every real filter value (ticker symbols, "done"/
-    # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
-    return templates.TemplateResponse(
-        request, "runs.html",
-        {"runs": runs, "targets": targets,
-         "filter_target": html.escape(target) if target else "",
-         "filter_status": html.escape(status) if status else "",
-         "filter_scheme": html.escape(scheme) if scheme else "",
-         "filter_query": q or "",
-         "filter_kind": kind or "", "kind_counts": kind_counts, "n_all_runs": len(all_runs),
-         "filter_algo": algo or "",
-         "filter_started_after": started_after.isoformat() if started_after else "",
-         "filter_started_before": started_before.isoformat() if started_before else "",
-         "filter_min_duration_s": min_duration_s if min_duration_s is not None else "",
-         "filter_max_duration_s": max_duration_s if max_duration_s is not None else "",
-         "algorithms": algorithm_options,
-         **_i18n_context(request)},
-    )
+    return runs
 
 
 def _extract_algorithms(config_json: str | None) -> list[str]:
@@ -1099,6 +1142,9 @@ def delete_historical_run(run_id: str):
 def run_side_panel(request: Request, run_id: str):
     """HTML fragment for the history page's right-hand panel (one section per
     selected run, fetched by `static/runs_panel.js`)."""
+    rl_run = rl_routes.get_rl_run(run_id)
+    if rl_run is not None:
+        return templates.TemplateResponse(request, "_rl_run_panel.html", {**rl_run, **_i18n_context(request)})
     conn = trackdb.connect()
     try:
         run = next((r for r in trackdb.list_all_runs(conn) if r["run_id"] == run_id), None)

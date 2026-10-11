@@ -3,6 +3,8 @@
 {% block title %}PATRICK — {{ t('rl_title') }}{% endblock %}
 
 {% block content %}
+{% set fam_label = {'ml': t('nav_ml'), 'dl': t('nav_dl'), 'rl': t('nav_rl')} %}
+{% set fam_url = {'ml': '/ml', 'dl': '/dl', 'rl': '/rl'} %}
 <nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
     <a href="/">{{ t('nav_home') or 'Poste' }}</a>
     <span aria-current="page">{{ t('nav_runs') or 'Historique' }}</span>
@@ -11,37 +13,61 @@
 <h1 class="page-title">{{ t('nav_runs') or 'Historique des runs' }}</h1>
 <p class="page-subtitle">{{ t('hist_subtitle') }}</p>
 
-{# Deux familles qui ne se mélangent jamais : le modèle DIRECTIONNEL prédit le sens et l'intensité du mouvement du prix ;
-   le modèle ALPHA prédit la surperformance de l'actif sur son benchmark (`actif__alpha_benchmark`). #}
-<nav class="kind-tabs" aria-label="{{ t('kind_tabs_label') }}">
-    <a href="/runs" class="kind-tab{% if not filter_kind %} active{% endif %}">{{ t('kind_all') }} <span class="kind-count">{{ n_all_runs }}</span></a>
-    <a href="/runs?kind=directional" class="kind-tab{% if filter_kind == 'directional' %} active{% endif %}">{{ t('kind_directional') }} <span class="kind-count">{{ kind_counts.directional }}</span></a>
-    <a href="/runs?kind=alpha" class="kind-tab{% if filter_kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ kind_counts.alpha }}</span></a>
+{# Trois familles qui ne se mélangent jamais : le machine learning (arbres), le deep learning (réseaux de neurones, mêmes mesures que le
+   ML) et le reinforcement learning (un agent qui apprend une position, mesuré comme une stratégie). Sans onglet choisi, une section par
+   famille ; avec un onglet, cette famille seule. #}
+<nav class="kind-tabs family-tabs" aria-label="{{ t('hist_family_aria') }}">
+    <a href="/runs" class="kind-tab{% if not filter_family %} active{% endif %}">{{ t('kind_all') }} <span class="kind-count">{{ n_all_runs }}</span></a>
+    {% for fam in ['ml', 'dl', 'rl'] %}
+    <a href="/runs?family={{ fam }}" class="kind-tab{% if filter_family == fam %} active{% endif %}">{{ fam_label[fam] }} <span class="kind-count">{{ family_counts[fam] }}</span></a>
+    {% endfor %}
+</nav>
+{% if filter_family == 'ml' %}<p class="hint kind-hint">{{ t('hist_fam_ml_hint') }}</p>
+{% elif filter_family == 'dl' %}<p class="hint kind-hint">{{ t('hist_fam_dl_hint') }}</p>
+{% elif filter_family == 'rl' %}<p class="hint kind-hint">{{ t('hist_fam_rl_hint') }}</p>{% endif %}
+
+{# Directionnel / alpha : propre aux modèles de classification (ML et DL), sans objet pour une stratégie RL. #}
+{% if filter_family != 'rl' %}
+<nav class="kind-tabs" aria-label="{{ t('hist_kind_aria') }}">
+    <a href="/runs{{ '?family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if not filter_kind %} active{% endif %}">{{ t('kind_all') }}</a>
+    <a href="/runs?kind=directional{{ '&family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if filter_kind == 'directional' %} active{% endif %}">{{ t('kind_directional') }} <span class="kind-count">{{ kind_counts.directional }}</span></a>
+    <a href="/runs?kind=alpha{{ '&family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if filter_kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ kind_counts.alpha }}</span></a>
 </nav>
 {% if filter_kind == 'alpha' %}<p class="hint kind-hint">{{ t('kind_alpha_hint') }}</p>{% elif filter_kind == 'directional' %}<p class="hint kind-hint">{{ t('kind_directional_hint') }}</p>{% endif %}
+{% endif %}
 
 {# Portée LOCALE, même règle que sur `/universe` : le bandeau porte le verdict
    global, cette ligne répond à la question de CETTE page — parmi les runs
    listés, combien sont allés jusqu'à un résultat Diebold-Mariano, c'est-à-dire
    jusqu'à une comparaison contre les baselines. Sans ça, une colonne pleine de
-   tirets ne dit pas si c'est un défaut d'affichage ou l'état réel. #}
-{% set with_dm = runs | selectattr('dm_p_value', 'ne', none) | list | length %}
+   tirets ne dit pas si c'est un défaut d'affichage ou l'état réel. Pour le RL,
+   la comparaison équivalente est le Sharpe de la stratégie contre acheter et garder. #}
+{% if filter_family != 'rl' %}
 <p class="scope-line">
     <b>{{ t('scope_runs') }}</b>
-    <span class="scope-value">{{ with_dm }} / {{ runs | length }}</span>
+    <span class="scope-value">{{ scope_dm.with }} / {{ scope_dm.total }}</span>
     <span class="scope-rel">{{ t('scope_runs_rel') }}</span>
 </p>
+{% endif %}
+{% if filter_family in ('', 'rl') and scope_rl.total %}
+<p class="scope-line">
+    <b>{{ t('hist_scope_rl') }}</b>
+    <span class="scope-value">{{ scope_rl.with }} / {{ scope_rl.total }}</span>
+    <span class="scope-rel">{{ t('hist_scope_rl_rel') }}</span>
+</p>
+{% endif %}
 
 <form class="filter-bar history-filters" method="get" action="/runs">
     {% if filter_kind %}<input type="hidden" name="kind" value="{{ filter_kind }}">{% endif %}
+    {% if filter_family %}<input type="hidden" name="family" value="{{ filter_family }}">{% endif %}
     <label>{{ t('hist_search') }}
         <input type="search" name="q" value="{{ filter_query }}" placeholder="{{ t('hist_search_ph') }}">
     </label>
     <label>{{ t('col_target') }}
         <select name="target" onchange="this.form.submit()">
             <option value="">— {{ t('rl_filter_all_f') }} —</option>
-            {% for t in targets %}
-            <option value="{{ t.target }}" {% if t.target == filter_target %}selected{% endif %}>{{ t.target }} ({{ t.n_runs }})</option>
+            {% for tg in targets %}
+            <option value="{{ tg.target }}" {% if tg.target == filter_target %}selected{% endif %}>{{ tg.target }} ({{ tg.n_runs }})</option>
             {% endfor %}
         </select>
     </label>
@@ -69,7 +95,7 @@
         </select>
     </label>
     <button type="submit">{{ t('rl_filter_submit') }}</button>
-    <a class="btn-secondary" href="/runs">{{ t('rn_clear') }}</a>
+    <a class="btn-secondary" href="/runs{{ '?family=' ~ filter_family if filter_family else '' }}">{{ t('rn_clear') }}</a>
     <details class="filter-more"{% if filter_started_after or filter_started_before or filter_min_duration_s != '' or filter_max_duration_s != '' %} open{% endif %}>
         <summary>{{ t('rn_more_filters') }}</summary>
         <div class="filter-more-grid">
@@ -89,61 +115,116 @@
     </details>
 </form>
 
-{% if runs %}
+{% if n_listed %}
+{# La comparaison ne porte que sur les runs ML et DL (mêmes mesures, donc comparables entre eux) ; un run RL se lit dans son panneau. #}
+{% if scope_dm.total %}
 <form id="compare-runs-form" method="get" action="/compare-runs" class="compare-run-actions">
     <button type="submit" id="compare-runs-submit" class="primary" disabled>{{ t('rn_compare_btn') }}</button>
     <span id="compare-runs-count" class="hint" aria-live="polite">{{ t('rn_compare_hint') }}</span>
 </form>
-<div class="table-scroll history-table-wrap">
-<table class="data-table history-table">
-    <thead><tr>
-        <th class="hc-check"><span class="visually-hidden">{{ t('hist_compare') }}</span></th>
-        <th>{{ t('dq_col_run') }}</th>
-        <th>{{ t('kind_col') }}</th>
-        <th>{{ t('dq_col_target') }}</th>
-        <th>{{ t('dq_col_horizon') }}</th>
-        <th>{{ t('dq_col_status') }}</th>
-        <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th>
-        <th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
-        <th class="num">{{ t('hist_gap') }}</th>
-        <th class="num">DM p</th>
-        <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_true') }}</th>
-        <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_pred') }}</th>
-        <th>{{ t('hist_started') }}</th>
-        <th class="hc-actions"><span class="visually-hidden">{{ t('rn_actions') }}</span></th>
-    </tr></thead>
-    <tbody>
-    {% for r in runs %}
-    {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
-    {% set locked = r.status in ('running', 'queued') %}
-    <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
-        <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
-        <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
-        <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
-        <td>{{ r.target | safe }}</td>
-        <td>{{ r.horizon | hlabel }}</td>
-        <td>{{ status_badge(r.status, state) }}</td>
-        <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>
-        <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
-        <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
-        <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
-        <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>
-        <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'pred') }}</td>
-        <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
-        <td class="hc-actions">{% if not locked %}
-            <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="{{ t('rn_rename_btn') }} {{ r.run_id }}" title="{{ t('rn_rename_btn') }}">{{ icon('pencil', 14) }}</button>
-            <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
-                  data-confirm="{{ t('rn_del_confirm') }}" data-confirm-label="{{ t('pat_delete') }}" data-confirm-danger>
-                <button type="submit" class="icon-btn danger" aria-label="{{ t('pat_delete') }} {{ r.run_id }}" title="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>
-            </form>
-        {% endif %}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-</div>
+{% endif %}
+
+{% for section in family_sections %}
+{% set fam = section.family %}
+<section class="history-section" data-family="{{ fam }}">
+    {% if not filter_family %}
+    <h2 class="history-section-title">{{ fam_label[fam] }} <span class="kind-count">{{ section.runs | length }}</span></h2>
+    {% endif %}
+    {% if not section.runs %}
+    <p class="hint history-empty">
+        {% if family_counts[fam] %}{{ t('hist_no_match') }}{% else %}{{ t('rn_empty') }} <a href="{{ fam_url[fam] }}">{{ fam_label[fam] }}</a>{% endif %}
+    </p>
+    {% elif fam == 'rl' %}
+    <div class="table-scroll history-table-wrap">
+    <table class="data-table history-table history-table-rl">
+        <thead><tr>
+            <th>{{ t('dq_col_run') }}</th>
+            <th>{{ t('dq_col_target') }}</th>
+            <th>{{ t('rd_c_algo') }}</th>
+            <th>{{ t('dq_col_status') }}</th>
+            <th class="num headline" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_sharpe') }}</th>
+            <th class="num" title="{{ t('rlh_col_bh_tip') }}">{{ t('rlh_col_bh') }}</th>
+            <th class="num">{{ t('hist_gap') }}</th>
+            <th class="num" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_total') }}</th>
+            <th class="num" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_maxdd') }}</th>
+            <th class="num" title="{{ t('rlp_stat_dsr') }}">DSR</th>
+            <th>{{ t('hist_started') }}</th>
+        </tr></thead>
+        <tbody>
+        {% for r in section.runs %}
+        {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+        {% set has_gap = r.sharpe is not none and r.sharpe_buy_hold is not none %}
+        <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
+            <td class="hc-name" title="{{ r.run_id }}">{{ r.name or r.run_id }}</td>
+            <td>{{ r.target or '—' }}</td>
+            <td>{{ r.algo or '—' }}</td>
+            <td>{{ status_badge(r.status, state) }}</td>
+            <td class="num pk-mono headline">{{ '%.2f' | format(r.sharpe) if r.sharpe is not none else '—' }}</td>
+            <td class="num pk-mono">{{ '%.2f' | format(r.sharpe_buy_hold) if r.sharpe_buy_hold is not none else '—' }}</td>
+            <td class="num pk-mono">{% if has_gap %}<span class="{{ 'pos' if r.sharpe >= r.sharpe_buy_hold else 'neg' }}">{{ '%+.2f' | format(r.sharpe - r.sharpe_buy_hold) }}</span>{% else %}—{% endif %}</td>
+            <td class="num pk-mono">{{ '%+.1f %%' | format(r.total_return * 100) if r.total_return is not none else '—' }}</td>
+            <td class="num pk-mono">{{ '%.1f %%' | format(r.max_drawdown * 100) if r.max_drawdown is not none else '—' }}</td>
+            <td class="num pk-mono">{{ '%.1f %%' | format(r.dsr * 100) if r.dsr is not none else '—' }}</td>
+            <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="table-scroll history-table-wrap">
+    <table class="data-table history-table history-table-cls">
+        <thead><tr>
+            <th class="hc-check"><span class="visually-hidden">{{ t('hist_compare') }}</span></th>
+            <th>{{ t('dq_col_run') }}</th>
+            <th>{{ t('kind_col') }}</th>
+            <th>{{ t('dq_col_target') }}</th>
+            <th>{{ t('dq_col_horizon') }}</th>
+            <th>{{ t('dq_col_status') }}</th>
+            <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th>
+            <th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
+            <th class="num">{{ t('hist_gap') }}</th>
+            <th class="num">DM p</th>
+            <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_true') }}</th>
+            <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_pred') }}</th>
+            <th>{{ t('hist_started') }}</th>
+            <th class="hc-actions"><span class="visually-hidden">{{ t('rn_actions') }}</span></th>
+        </tr></thead>
+        <tbody>
+        {% for r in section.runs %}
+        {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+        {% set locked = r.status in ('running', 'queued') %}
+        <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
+            <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
+            <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+            <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
+            <td>{{ r.target | safe }}</td>
+            <td>{{ r.horizon | hlabel }}</td>
+            <td>{{ status_badge(r.status, state) }}</td>
+            <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>
+            <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
+            <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
+            <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
+            <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>
+            <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'pred') }}</td>
+            <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
+            <td class="hc-actions">{% if not locked %}
+                <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="{{ t('rn_rename_btn') }} {{ r.run_id }}" title="{{ t('rn_rename_btn') }}">{{ icon('pencil', 14) }}</button>
+                <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
+                      data-confirm="{{ t('rn_del_confirm') }}" data-confirm-label="{{ t('pat_delete') }}" data-confirm-danger>
+                    <button type="submit" class="icon-btn danger" aria-label="{{ t('pat_delete') }} {{ r.run_id }}" title="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>
+                </form>
+            {% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% endif %}
+</section>
+{% endfor %}
 {# filter_* sont déjà échappés par la route (`runs_explorer`) : `| safe`, sinon double échappement. #}
-<p class="table-footer">{{ t('rn_shown', n=runs | length) }}
+<p class="table-footer">{{ t('rn_shown', n=n_listed) }}
     {%- if filter_target %} · {{ t('rn_f_target') }} = {{ filter_target | safe }}{% endif %}
     {%- if filter_status %} · {{ t('rn_f_status') }} = {{ filter_status | safe }}{% endif %}
     {%- if filter_scheme %} · {{ t('rn_f_scheme') }} = {{ filter_scheme | safe }}{% endif %}
@@ -168,9 +249,10 @@
 <script src="/static/runs_panel.js" defer></script>
 {% else %}
 <div class="card">
-    <p class="empty-state-title">{{ t('rn_empty') }}</p>
+    <p class="empty-state-title">{{ t('rn_empty') if not n_all_runs else t('hist_no_match') }}</p>
     <p class="empty-state-hint">
-        {{ t('empty_runs_hint') or "Configure et lance un run depuis le" }} <a href="/ml">{{ t('nav_ml') }}</a>.
+        {{ t('empty_runs_hint') or "Configure et lance un run depuis le" }}
+        {% for fam in (['ml', 'dl', 'rl'] if not filter_family else [filter_family]) %}<a href="{{ fam_url[fam] }}">{{ fam_label[fam] }}</a>{{ ' · ' if not loop.last }}{% endfor %}.
     </p>
 </div>
 {% endif %}
