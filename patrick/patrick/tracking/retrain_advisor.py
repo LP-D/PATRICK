@@ -347,7 +347,7 @@ def _rule_best_horizon(d: Diagnosis) -> Suggestion | None:
     i = ladder.index(best_h)
     around = ladder[max(0, i - 1): i + 2]
     return Suggestion("best_horizon", _clip(40 + (best - worst) * 400, 0, 70), {"horizons": around},
-                      {"best": best_h, "auc": best, "worst": worst, "horizons": ", ".join(str(h) for h in around),
+                      {"best": best, "best_h": best_h, "worst": worst, "horizons": ", ".join(str(h) for h in around),
                        "spread": best - worst})
 
 
@@ -417,7 +417,7 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     from patrick.tracking import history as trackhistory
     from patrick.webapp import forms
 
-    detail = detail or trackhistory.run_detail(conn, run_id)
+    detail = detail or trackhistory.run_detail(conn, run_id, with_meta_labeling=False)    # le diagnostic n'utilise pas le méta-étiquetage (2 à 4 s)
     if detail is None:
         return None
     run, cfg = detail["run"], detail.get("config") or {}
@@ -446,7 +446,11 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     shares = None
     best = detail.get("best_trial")
     if best:
-        rows = conn.execute("SELECT y_true, COUNT(*) FROM prediction WHERE trial_id = ? AND split = 'test' AND y_true IS NOT NULL "
+        # INDEXED BY : sans lui SQLite choisit idx_pred_split (split) et parcourt tous les `test` de la base (~180 s sur la vraie
+        # base, la page du run n'ouvrait plus) ; la clé primaire (trial_id, ts) lit les quelques milliers de lignes du run (voir
+        # `tracking/history.py`, mêmes requêtes sur `prediction`).
+        rows = conn.execute("SELECT y_true, COUNT(*) FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+                            "WHERE trial_id = ? AND split = 'test' AND y_true IS NOT NULL "
                             "GROUP BY y_true", (best["trial_id"],)).fetchall()
         total = sum(n for _, n in rows)
         if total >= 40:

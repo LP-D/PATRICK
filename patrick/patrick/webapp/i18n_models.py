@@ -316,6 +316,42 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     # Carte « en cours et file d'attente » (identique sur /ml, /dl, /rl : c'est la même machine) et bandeau des variations.
     "machine_title": _s("En cours et file d'attente", "Running and queue"),
     "machine_idle": _s("Machine au repos.", "Machine idle."),
+    # Lots prêts à lancer (`launch_batches.py`, `_launch_batches.html`, `launch_batches.js`) : en plus des profils, sur /ml, /dl et /rl.
+    "batch_title": _s("Lots prêts à lancer", "Ready-made batches"),
+    "batch_loading": _s("Calcul des lots…", "Working out the batches…"),
+    "batch_never_name": _s("Cibles jamais lancées", "Never-run targets"),
+    "batch_never_desc_ml": _s("Toutes les cibles de l'univers sans aucun run de machine learning.",
+                              "Every universe target with no machine-learning run yet."),
+    "batch_never_desc_dl": _s("Toutes les cibles de l'univers sans aucun run de deep learning.",
+                              "Every universe target with no deep-learning run yet."),
+    "batch_never_desc_rl": _s("Toutes les cibles cotées sans aucun run de reinforcement learning.",
+                              "Every listed target with no reinforcement-learning run yet."),
+    "batch_missing_name": _s("Horizons jamais lancés", "Never-run horizons"),
+    "batch_missing_desc": _s("Pour les cibles déjà entraînées, seulement les horizons par défaut qui n'ont encore aucun run.",
+                             "For targets already trained, only the default horizons that have no run yet."),
+    "batch_rec_name": _s("Runs conseillés", "Recommended runs"),
+    "batch_rec_desc": _s("Le meilleur réentraînement proposé par le conseiller, pour chaque cible déjà entraînée.",
+                         "The best retraining the advisor proposes, for every target already trained."),
+    "batch_n_targets": _s("{n} cible(s)", "{n} target(s)"),
+    "batch_n_pairs": _s("{pairs} couple(s) cible × horizon · {n} cible(s)", "{pairs} target × horizon pair(s) · {n} target(s)"),
+    "batch_rec_meta": _s("Analyse à la demande", "Analysed on demand"),
+    "batch_nothing": _s("Rien à lancer", "Nothing to launch"),
+    "batch_js_selected": _s("{n} cible(s) sélectionnée(s) : vérifie les réglages puis lance.",
+                            "{n} target(s) selected: check the settings, then launch."),
+    "batch_js_selected_missing": _s("{n} cible(s), horizons {h} : seuls les couples jamais lancés seront créés.",
+                                    "{n} target(s), horizons {h}: only the never-run pairs will be created."),
+    "batch_js_none": _s("Rien à sélectionner : historique trop court ou déjà lancé.",
+                        "Nothing to select: history too short or already launched."),
+    "batch_js_analysing": _s("Analyse des runs terminés…", "Analysing the finished runs…"),
+    "batch_js_rec_none": _s("Aucun run conseillé pour le moment.", "No recommended run for now."),
+    "batch_js_rec_confirm": _s(
+        "Mettre en file {n} runs conseillés ? Chacun reprend la configuration du dernier run de sa cible avec le réentraînement proposé. "
+        "Durées : {costs}. Propositions : {lines}.",
+        "Queue {n} recommended runs? Each reuses its target's latest run configuration with the proposed retraining. "
+        "Durations: {costs}. Proposals: {lines}."),
+    "batch_js_rec_launch": _s("Lancer {n} runs", "Launch {n} runs"),
+    "batch_js_rec_done": _s("{n} runs conseillés mis en file.", "{n} recommended runs queued."),
+    "batch_js_error": _s("Échec du lot : {msg}", "Batch failed: {msg}"),
 }
 
 MODELS_STRINGS.update(LABEL_STRINGS)
@@ -338,6 +374,8 @@ def _browser_keys(*prefixes: str) -> tuple[str, ...]:
 
 PAGE_JS_KEYS: dict[str, tuple[str, ...]] = {
     "/exploration": _browser_keys("exp_"),
-    "/rl": _browser_keys("rlp_"),
+    "/ml": _browser_keys("batch_js_"),
+    "/dl": _browser_keys("batch_js_"),
+    "/rl": (*_browser_keys("rlp_"), *_browser_keys("batch_js_")),
     "/compare-runs": ("exp_chart_aria", "rlp_c_equity"),
 }

@@ -46,6 +46,9 @@
         <ul id="rl-errors-list">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
 
+    {% set family = 'rl' %}
+    {% include "_batch_gallery.html" %}
+
     {% if applied %}
     <p class="banner" role="status">{{ t('prof_applied', name=t('prof_' ~ applied.key ~ '_name')) }}</p>
     {% endif %}

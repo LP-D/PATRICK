@@ -1,0 +1,10 @@
+{# Lots prêts à lancer, sous les profils (`/ml`, `/dl`, `/rl`) : le cadre s'affiche tout de suite, les cartes (et leurs comptes, lus dans la
+   base) arrivent par `/fragments/launch-batches`. Un lot pré-remplit la sélection du formulaire ; rien n'est lancé tant qu'on n'appuie
+   pas sur « Lancer » (sauf « Runs conseillés », qui demande d'abord une confirmation). Comportement : `static/launch_batches.js`. #}
+{% from "_components.html" import lazy_block %}
+<section class="batch-gallery" id="batch-gallery" data-family="{{ family | default('ml') }}" aria-labelledby="batch-title">
+    <h3 id="batch-title" class="batch-title">{{ t('batch_title') }}</h3>
+    {{ lazy_block('/fragments/launch-batches?family=' ~ (family | default('ml')), 2, t('batch_loading'), t('lazy_retry')) }}
+    <p class="banner batch-status" id="batch-status" role="status" aria-live="polite" hidden></p>
+</section>
+<script src="/static/launch_batches.js" defer></script>

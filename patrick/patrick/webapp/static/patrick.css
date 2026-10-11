@@ -2432,6 +2432,16 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .profile-desc { font-size: .82rem; color: var(--text-2); flex: 1; }
 .profile-meta { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
 
+/* Lots prêts à lancer (sous les profils) : mêmes cartes, le titre de carte est un bouton. */
+.batch-gallery { margin: 0 0 14px; }
+.batch-gallery .lazy-block { min-height: 70px; }
+.batch-title { font-size: .95rem; margin: 0 0 8px; }
+.batch-main { background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; }
+.batch-main:disabled { cursor: not-allowed; }
+.batch-card.is-empty { opacity: .6; }
+.batch-status { margin: 10px 0 0; }
+.batch-status[hidden] { display: none; }
+
 /* ---- Page Macro : FRED contre ALFRED -------------------------------------------------------------------------- */
 #alfred-vs-fred .actions { margin-top: 12px; }
 #alfred-vs-fred td strong { font-weight: 600; }

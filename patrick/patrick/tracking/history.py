@@ -421,10 +421,13 @@ def meta_labeling_for_trial(conn: sqlite3.Connection, trial_id: int, horizon: in
             **{k: res[k] for k in ("n_evaluated", "n_kept", "accuracy_all", "accuracy_kept", "kept_share")}}
 
 
-def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -> dict | None:
+def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, with_meta_labeling: bool = True) -> dict | None:
     """P7.2 -- `/runs/{id}` detail page: same components as `report.py`
     (never recomputed differently), but returned as a Python structure for
-    a Jinja template rather than pre-formatted HTML."""
+    a Jinja template rather than pre-formatted HTML.
+
+    `with_meta_labeling=False` laisse `meta_labeling` à `None` : le méta-étiquetage ajuste ~170 régressions logistiques (2 à 4 s) ;
+    la page d'un run le demande à part (`/fragments/run-meta/{run_id}`) pour s'ouvrir sans l'attendre."""
     run = trackdb.get_run(conn, run_id)
     if run is None:
         return None
@@ -501,7 +504,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10) -
         "suspect": (suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test"))),
         "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
         "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
-                          if best_trial else None),
+                          if best_trial and with_meta_labeling else None),
         "phase_breakdown": phase_breakdown,
         "screening_decisions": trackdb.list_screening_decisions(conn, run_id),
     }

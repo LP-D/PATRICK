@@ -141,6 +141,29 @@ def test_the_best_horizon_of_a_multi_horizon_launch_is_singled_out():
     assert "best_horizon" not in keys(diag(horizon_auc={1: 0.55, 2: 0.56, 3: 0.55}))
 
 
+def test_every_suggestion_gives_its_texts_all_the_figures_they_name():
+    """Un texte « pourquoi / à essayer » qui cite une variable absente des chiffres de sa règle faisait échouer toute la page du run
+    (`KeyError: 'best_h'`, règle du meilleur horizon)."""
+    from patrick.webapp import i18n
+
+    t = i18n.translator("fr")
+    seen = set()
+    for kwargs in (
+        {"horizon_auc": {1: 0.50, 2: 0.52, 3: 0.55, 5: 0.60, 7: 0.57}},
+        {"suspect": "F1 trop beau", "guard_active": True},
+        {"suspect": "F1 trop beau", "guard_active": False},
+        {"auc_test": 0.51, "f1_test": 0.50, "auc_holdout": 0.50, "f1_holdout": 0.49, "history_years": 3.0, "n_excluded": 12, "n_universe": 30,
+         "fold_auc": [0.40, 0.45, 0.55, 0.60], "jaccard": 0.2, "class_shares": {"0": 0.7, "1": 0.1, "2": 0.1, "3": 0.1}},
+        {"auc_test": 0.70, "auc_holdout": 0.50, "f1_test": 0.70, "f1_holdout": 0.45, "pbo": 0.8, "pbo_reliable": True, "rho_test_holdout": -0.3},
+        {"auc_test": 0.58, "auc_holdout": 0.58, "duration_s": 9000, "asset_class": "equities_us", "scheme": "walkforward"},
+    ):
+        for s in advise(diag(**kwargs), limit=50):
+            seen.add(s.key)
+            for part in ("why", "try"):
+                t(f"adv_{s.key}_{part}", **s.facts)               # lève KeyError si une variable manque
+    assert {"best_horizon", "fix_leak", "short_history", "overfit"} <= seen
+
+
 def test_a_slow_run_with_a_weak_score_suggests_a_fast_iteration():
     assert next(s for s in advise(diag(duration_s=7200, auc_test=0.52, auc_holdout=0.52)) if s.key == "faster_iteration").patch["tuning_enabled"] is False
     assert "faster_iteration" not in keys(diag(duration_s=600, auc_test=0.52, auc_holdout=0.52))
@@ -253,11 +276,40 @@ def test_an_unknown_profile_is_a_404(client):
     assert client.get("/ml?profile=nope").status_code == 404
 
 
-def test_the_run_page_lists_the_advice_with_the_leak_first(client):
-    html = client.get("/runs/r1/detail").text
-    assert 'id="avis"' in html and "Relancer avec la garde anti-fuite et les données ALFRED" in html
+def test_the_run_page_opens_without_waiting_for_the_advice_which_arrives_as_a_fragment(client):
+    page = client.get("/runs/r1/detail").text
+    assert 'id="avis"' in page and 'data-lazy-url="/fragments/run-advice/r1"' in page
+    assert "Relancer avec la garde anti-fuite" not in page                  # le conseil n'est pas calculé pour afficher la page
+    html = client.get("/fragments/run-advice/r1").text
+    assert "Relancer avec la garde anti-fuite et les données ALFRED" in html
     assert "/ml?run_id=r1&amp;suggest=fix_leak" in html
     assert "Meilleur prochain essai" in html and "Contrôler la robustesse" not in html   # un score truqué : pas de contrôle de graine
+
+
+def test_the_advice_fragment_of_an_unknown_run_is_empty_not_an_error(client):
+    resp = client.get("/fragments/run-advice/nope")
+    assert resp.status_code == 200 and "advisor" not in resp.text
+
+
+def test_the_class_shares_query_reads_the_primary_key_not_the_split_index(tmp_path):
+    """Sans `INDEXED BY`, SQLite parcourt tous les `test` de la base (~180 s sur la vraie base, la page du run n'ouvrait plus)."""
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "snap", "h", None, None, None)
+    cfg = forms.default_config_dict()
+    db.create_run(conn, "r1", "^VIX", 5, "snap", json.dumps(cfg), "c", "s", 42)
+    tid = db.create_trial(conn, "r1", "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, tid)
+    n = 80
+    db.add_predictions(conn, tid, 1, "test", [f"2024-01-{d:02d}" if d <= 31 else f"2024-02-{d - 31:02d}" for d in range(1, n + 1)],
+                       y_true=[float(i % 4) for i in range(n)], y_pred=[float(i % 4) for i in range(n)], y_proba=[0.5] * n, p_up=[0.5] * n)
+    db.finish_run(conn, "r1", status="done", n_trials=1)
+    statements: list[str] = []
+    conn.set_trace_callback(statements.append)
+    retrain_advisor.diagnose_run(conn, "r1")
+    conn.set_trace_callback(None)
+    sql = next(s for s in statements if "GROUP BY y_true" in s)
+    plan = " ".join(str(r[3]) for r in conn.execute("EXPLAIN QUERY PLAN " + sql))
+    assert "sqlite_autoindex_prediction_1" in plan and "idx_pred_split" not in plan
 
 
 def test_a_suggestion_prefills_the_launch_form_from_the_run(client):

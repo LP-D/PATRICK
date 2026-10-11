@@ -64,4 +64,6 @@ def test_run_page_reports_meta_labeling(tmp_path, monkeypatch):
     db.finish_run(conn, "r", "done", n_trials=1)
     m = history.meta_labeling_for_trial(conn, tid, 5)
     assert m["available"] and m["n_kept"] > 0
-    assert "Meta-labeling" in TestClient(app).get("/runs/r/detail").text
+    client = TestClient(app)
+    assert 'data-lazy-url="/fragments/run-meta/r"' in client.get("/runs/r/detail").text      # la page n'attend pas le méta-modèle
+    assert "Meta-labeling" in client.get("/fragments/run-meta/r").text
