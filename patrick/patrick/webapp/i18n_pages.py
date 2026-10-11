@@ -163,6 +163,35 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "rlh_col_bh_tip": _s("Sharpe d'acheter et garder (buy and hold) sur la même période hors échantillon",
                          "Sharpe of buy and hold over the same out-of-sample period"),
     "rlh_col_oos_tip": _s("Mesure hors échantillon (walk-forward), nette de coûts", "Out-of-sample measure (walk-forward), net of costs"),
+    "rlh_del_confirm_done": _s(
+        "Supprimer ce run RL et ses fichiers de résultats ? Il restera compté dans le Sharpe déflaté des prochains runs sur cette cible.",
+        "Delete this RL run and its result files? It will still count in the deflated Sharpe of the next runs on this target."),
+    "rlh_del_confirm_error": _s("Supprimer ce run RL en échec ?", "Delete this failed RL run?"),
+    "cmp_rl_subtitle": _s(
+        "Comparaison de runs de reinforcement learning, tous mesurés hors échantillon (walk-forward : l'agent n'a jamais vu la période "
+        "qu'on lui fait jouer). La meilleure valeur de chaque mesure est en vert.",
+        "Comparison of reinforcement learning runs, all measured out of sample (walk-forward: the agent never saw the period it is made "
+        "to play). The best value of each measure is in green."),
+    "cmp_rl_warn_target": _s(
+        "Ces runs portent sur des cibles différentes : leurs Sharpe ne se comparent pas directement (chaque cible a son propre niveau de "
+        "rendement et de risque).",
+        "These runs are on different targets: their Sharpe ratios are not directly comparable (each target has its own level of return "
+        "and risk)."),
+    "cmp_rl_warn_period": _s(
+        "Les périodes hors échantillon diffèrent (nombre de plis ou part d'entraînement différents) : un écart peut venir de la période "
+        "autant que de l'agent.",
+        "The out-of-sample periods differ (different number of folds or training share): a gap may come from the period as much as from "
+        "the agent."),
+    "cmp_rl_diff_hint": _s("Une barre à gauche d'une ligne signale des valeurs différentes d'un run à l'autre.",
+                           "A bar at the left of a row flags values that differ from one run to the next."),
+    "rlh_g_result": _s("Résultats hors échantillon", "Out-of-sample results"),
+    "rlh_g_stats": _s("Fiabilité statistique", "Statistical reliability"),
+    "rlh_g_run": _s("Run", "Run"),
+    "rlh_g_settings": _s("Réglages", "Settings"),
+    "rlh_c_sharpe_bh": _s("Sharpe d'acheter et garder", "Buy-and-hold Sharpe"),
+    "rlh_c_gap_ci": _s("Intervalle de l'écart de Sharpe (90 %)", "Sharpe gap interval (90 %)"),
+    "rlh_c_turnover": _s("Rotation annuelle (× le capital)", "Annual turnover (× capital)"),
+    "rlh_c_trades": _s("Nombre de transactions", "Number of trades"),
     "rlh_p_strategy": _s("Stratégie", "Strategy"),
     "rlh_p_buyhold": _s("Acheter et garder", "Buy and hold"),
     "rlh_p_momentum": _s("Momentum", "Momentum"),

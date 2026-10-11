@@ -12,6 +12,7 @@ import os
 import sqlite3
 import threading
 from datetime import date, datetime, timezone
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Annotated
 
@@ -33,6 +34,7 @@ from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
+from patrick.rl import history as rl_history
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import class_overview, data_health, memo, retrain_advisor
 from patrick.tracking import db as trackdb
@@ -55,6 +57,7 @@ from patrick.webapp import (
     market_regime,
     nav_registry,
     progress_steps,
+    rl_compare,
     rl_routes,
     run_manager,
     security,
@@ -1069,9 +1072,20 @@ def compare_runs(request: Request, run_ids: Annotated[list[str] | None, Query()]
         raise HTTPException(status_code=400, detail="Sélectionne entre 2 et 4 runs à comparer.")
     conn = trackdb.connect()
     try:
-        runs_by_id = {run["run_id"]: run for run in trackdb.list_all_runs(conn)}
+        rl_ids = rl_history.live_rl_job_ids(conn, selected_ids)
+        runs_by_id = {run["run_id"]: run for run in trackdb.list_all_runs(conn)} if len(rl_ids) < len(selected_ids) else {}
     finally:
         conn.close()
+    if rl_ids:
+        # Les runs RL (mesures de stratégie) ne se comparent qu'entre eux : ni AUC ni F1 en commun avec le ML ou le DL.
+        if len(rl_ids) < len(selected_ids):
+            raise HTTPException(status_code=400, detail="Les runs de reinforcement learning se comparent entre eux, pas avec des runs ML ou DL.")
+        t = i18n.translator(i18n.get_lang(request))
+        loaded = [rl_routes.get_rl_run(run_id) for run_id in selected_ids]
+        if any(run is None for run in loaded):
+            raise HTTPException(status_code=404, detail="Un run sélectionné est introuvable.")
+        comparison = rl_compare.build(loaded, t)
+        return templates.TemplateResponse(request, "compare_rl.html", {"comparison": comparison, **_i18n_context(request)})
     if any(run_id not in runs_by_id for run_id in selected_ids):
         raise HTTPException(status_code=404, detail="Un run sélectionné est introuvable.")
     selected_runs = []
@@ -1123,10 +1137,26 @@ async def rename_historical_run(run_id: str, request: Request):
     return RedirectResponse("/runs", status_code=303)
 
 
+def _back_to_history(request: Request) -> RedirectResponse:
+    """Retour à la page Historique d'où part l'action, onglet et filtres compris (`?family=rl&status=done`) ; `/runs` si la page d'origine est
+    inconnue ou autre. Seuls le chemin et la requête du Referer sont repris : jamais d'adresse extérieure."""
+    referer = urlparse(request.headers.get("referer") or "")
+    target = f"/runs?{referer.query}" if referer.path == "/runs" and referer.query else "/runs"
+    return RedirectResponse(target, status_code=303)
+
+
 @app.post("/runs/{run_id}/delete")
-def delete_historical_run(run_id: str):
+def delete_historical_run(run_id: str, request: Request):
     conn = trackdb.connect()
     try:
+        if rl_history.is_live_rl_job(conn, run_id):
+            try:
+                rl_history.delete_rl_run(conn, run_id)
+            except LookupError as exc:
+                raise HTTPException(status_code=404, detail="Run introuvable") from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            return _back_to_history(request)
         if trackdb.get_run(conn, run_id) is None:
             raise HTTPException(status_code=404, detail="Run introuvable")
         try:
@@ -1135,7 +1165,7 @@ def delete_historical_run(run_id: str):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     finally:
         conn.close()
-    return RedirectResponse("/runs", status_code=303)
+    return _back_to_history(request)
 
 
 @app.get("/runs/{run_id}/panel")

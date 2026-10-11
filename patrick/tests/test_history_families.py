@@ -49,12 +49,14 @@ _RL_RESULT = {
     "stats": {"psr": 0.91, "dsr": {"dsr": 0.64, "p_value": 0.36}, "n_trials": 3,
               "vs_buy_hold": {"diff": 0.3, "ci_low": -0.1, "ci_high": 0.7, "p_one_sided": 0.2}},
     "seeds": [{"seed": 1, "sharpe": 0.7}, {"seed": 2, "sharpe": 0.9}],
-    "curves": {"dates": ["2021-01-04", "2024-06-28"]},
+    "curves": {"dates": ["2021-01-04", "2024-06-28"], "strategy": [1.0, 1.25]},
 }
 
 
-def _add_rl_job(conn, name: str, algo: str, status: str, target: str = "^GSPC", result: dict | None = None) -> str:
-    cfg = RLRunConfig.model_validate({"name": name, "objective": {"target_symbol": target}, "rl": {"algo": algo}})
+def _add_rl_job(conn, name: str, algo: str, status: str, target: str = "^GSPC", result: dict | None = None,
+                out_dir: str | None = None) -> str:
+    cfg = RLRunConfig.model_validate({"name": name, "objective": {"target_symbol": target}, "rl": {"algo": algo},
+                                      **({"output": {"dir": out_dir}} if out_dir else {})})
     job_id = jobs_db.enqueue_job(conn, cfg.model_dump_json())
     if status in ("done", "error"):
         jobs_db.claim_next_job(conn, 123)
@@ -135,13 +137,14 @@ def test_the_rl_table_has_strategy_columns_instead_of_classification_ones(client
     assert ">0.80<" in rl and ">0.50<" in rl and "+0.30" in rl     # Sharpe, Sharpe B&H, écart
     assert "+20.0 %" in rl and "-10.0 %" in rl and "64.0 %" in rl  # rendement, perte maximale, DSR
     assert ">AUC<" not in rl and "DM p" not in rl
-    assert 'name="run_ids"' not in rl and "compare-runs-form" not in rl      # pas de comparaison de runs RL
+    assert "compare-runs-form" not in rl and "compare-rl-form" in rl         # la comparaison RL a son propre formulaire
     assert "hint kind-hint" in rl and "kind=directional" not in rl           # pas de type directionnel/alpha pour le RL
 
 
 def test_ml_and_dl_tables_keep_compare_and_actions(client, seeded):
     page = client.get("/runs").text
-    assert page.count('name="run_ids"') == 3 and "compare-runs-form" in page
+    sections = _sections(page)
+    assert (sections["ml"] + sections["dl"]).count('name="run_ids"') == 3 and "compare-runs-form" in page
     assert "/runs/run_dl/delete" in page and 'data-rename="run_ml"' in page
 
 
@@ -212,3 +215,168 @@ def test_the_page_renders_in_english_too(client, seeded):
     assert "Model family (ML, DL, RL)" in page.text
     panel = client.get(f"/runs/{seeded['done']}/panel?lang=en").text
     assert "Out-of-sample period" in panel and "Cumulative trials" in panel
+
+# --------------------------------------------------------------------------- comparaison et suppression des runs RL
+
+
+def _job(job_id: str):
+    conn = db.connect(db.default_db_path())
+    try:
+        return conn.execute("SELECT status, phase, result_json, config_json FROM job WHERE job_id = ?", (job_id,)).fetchone()
+    finally:
+        conn.close()
+
+
+def test_rl_rows_get_a_checkbox_when_done_and_a_delete_button_unless_running(client, seeded):
+    rl = _sections(client.get("/runs").text)["rl"]
+    rows = {m.group(1): m.group(0) for m in re.finditer(r'<tr class="history-row" data-run-id="(\w+)".*?</tr>', rl, re.S)}
+    done, error, queued = rows[seeded["done"]], rows[seeded["error"]], rows[seeded["queued"]]
+    assert 'form="compare-rl-form"' in done and 'form="compare-rl-form"' not in error and 'form="compare-rl-form"' not in queued
+    assert f"/runs/{seeded['done']}/delete" in done and f"/runs/{seeded['error']}/delete" in error
+    assert "/delete" not in queued                                   # un run en file ne se supprime pas
+    assert "Sharpe déflaté" in done and "Delete" not in done
+
+
+def test_two_rl_runs_are_compared_side_by_side(client, seeded):
+    conn = db.connect(db.default_db_path())
+    other = _add_rl_job(conn, "agent_b", "PPO", "done", result={**_RL_RESULT, "strategy": {"sharpe": 1.4, "total_return": 0.31, "max_drawdown": -0.2}})
+    conn.close()
+    page = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={other}")
+    assert page.status_code == 200
+    text = page.text
+    assert "agent_ppo" in text and "agent_b" in text and f"/rl?open={other}" in text
+    assert ">0.80<" in text and ">1.40<" in text                       # le Sharpe de chacun
+    assert re.search(r'<td class="num pk-mono best">1\.40</td>', text) and not re.search(r'best">0\.80<', text)    # le meilleur est repéré
+    assert "+31.0 %" in text and "-20.0 %" in text and "[-0.10 ; +0.70]" in text
+    assert 'id="cmp-rl-data"' in text and "/static/rl_compare.js" in text and "compare-runs-table" in text
+    assert "cmp-group" in text and "Résultats hors échantillon" in text
+    assert "cmp-diff" in text                                          # le Sharpe diffère : ligne marquée
+    assert "banner-warning" not in text                               # même cible, même période : rien à signaler
+
+
+def test_the_rl_comparison_flags_different_targets_and_periods_and_draws_the_curves(client, seeded):
+    conn = db.connect(db.default_db_path())
+    other = _add_rl_job(conn, "agent_vix", "PPO", "done", target="^VIX", result={
+        **_RL_RESULT, "curves": {"dates": ["2022-01-03", "2025-01-02"], "strategy": [1.0, 1.4]}})
+    conn.close()
+    text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={other}").text
+    assert text.count('role="note"') == 2                              # cibles ET périodes différentes
+    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.S).group(1))
+    assert data["dates"] == ["2021-01-04", "2022-01-03", "2024-06-28", "2025-01-02"] and len(data["series"]) == 2
+    assert [s["values"] for s in data["series"]] == [[1.0, 1.0, 1.25, None], [None, 1.0, 1.0, 1.4]]
+
+
+def test_the_equity_curves_of_several_runs_share_one_date_grid(client, seeded):
+    conn = db.connect(db.default_db_path())
+    first = _add_rl_job(conn, "agent_c1", "PPO", "done", result={**_RL_RESULT, "curves": {"dates": ["2021-01-04", "2021-02-01"], "strategy": [1.0, 1.1]}})
+    second = _add_rl_job(conn, "agent_c2", "PPO", "done", result={**_RL_RESULT, "curves": {"dates": ["2021-01-18", "2021-03-01"], "strategy": [1.0, 1.3]}})
+    conn.close()
+    text = client.get(f"/compare-runs?run_ids={first}&run_ids={second}").text
+    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.S).group(1))
+    assert data["dates"] == ["2021-01-04", "2021-01-18", "2021-02-01", "2021-03-01"]
+    one, two = (s["values"] for s in data["series"])
+    assert one == [1.0, 1.0, 1.1, None]                                 # report de la dernière valeur, vide après la fin du run
+    assert two == [None, 1.0, 1.0, 1.3]                                 # vide avant le début du run
+
+
+def test_an_unfinished_rl_run_can_still_be_compared_with_dashes(client, seeded):
+    text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={seeded['queued']}").text
+    assert "agent_a2c" in text and "—" in text
+
+
+def test_rl_runs_are_never_compared_with_ml_or_dl_runs(client, seeded):
+    mixed = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids=run_ml")
+    assert mixed.status_code == 400 and "reinforcement learning" in mixed.json()["detail"]
+    assert client.get(f"/compare-runs?run_ids={seeded['done']}").status_code == 400            # 2 à 4 runs
+    assert client.get("/compare-runs?run_ids=run_ml&run_ids=run_dl").status_code == 200       # ML et DL se comparent toujours
+    assert client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids=inconnu").status_code == 400
+
+
+def test_the_rl_comparison_page_renders_in_english(client, seeded):
+    conn = db.connect(db.default_db_path())
+    other = _add_rl_job(conn, "agent_b", "PPO", "done", result=_RL_RESULT)
+    conn.close()
+    text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={other}&lang=en").text
+    assert "Out-of-sample results" in text and "Reward" in text and "Buy-and-hold Sharpe" in text
+
+
+def test_deleting_a_done_rl_run_hides_it_but_it_still_counts_as_a_trial(client, seeded):
+    from patrick.rl.run import count_prior_rl_runs
+    db_path = db.default_db_path()
+    before = count_prior_rl_runs(db_path, "^GSPC")
+    response = client.post(f"/runs/{seeded['done']}/delete", follow_redirects=False)
+    assert response.status_code == 303 and response.headers["location"] == "/runs"
+    status, phase, result_json, config_json = _job(seeded["done"])
+    assert (status, phase, result_json) == ("done", "deleted", None) and "GSPC" in config_json
+    assert count_prior_rl_runs(db_path, "^GSPC") == before == 1        # la tentative supprimée reste dans le Sharpe déflaté
+    assert "agent_ppo" not in client.get("/runs").text
+    assert [r for r in client.get("/api/rl/runs").json()["runs"] if r["name"] == "agent_ppo"] == []
+    assert client.get(f"/runs/{seeded['done']}/panel").status_code == 404
+    assert client.get(f"/rl?open={seeded['done']}").status_code == 404
+    assert client.post(f"/runs/{seeded['done']}/delete").status_code == 404                       # déjà supprimé
+    assert client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={seeded['error']}").status_code == 400
+
+
+def test_deleting_a_failed_rl_run_removes_its_row(client, seeded):
+    assert client.post(f"/runs/{seeded['error']}/delete").status_code == 200
+    assert _job(seeded["error"]) is None
+
+
+def test_a_running_or_queued_rl_run_cannot_be_deleted(client, seeded):
+    response = client.post(f"/runs/{seeded['queued']}/delete", follow_redirects=False)
+    assert response.status_code == 409 and _job(seeded["queued"]) is not None
+    assert client.post("/runs/inconnu/delete").status_code == 404
+
+
+def test_deleting_an_ml_run_still_works_next_to_rl_runs(client, seeded):
+    assert client.post("/runs/run_dl/delete").status_code == 200
+    page = client.get("/runs").text
+    assert "reseau_vix" not in page and "arbre_vix" in page and "agent_ppo" in page
+
+
+def test_deleting_an_rl_run_removes_only_its_own_result_files(client, tmp_path):
+    out = tmp_path / "runs" / "agent_files"
+    (out / "models").mkdir(parents=True)
+    result_file, csv_file, model = out / "rl_result.json", out / "rl_oos.csv", out / "models" / "m.zip"
+    for f in (result_file, csv_file, model):
+        f.write_text("x")
+    bystander = out / "notes.txt"                       # un fichier de l'utilisateur dans le même dossier : jamais touché
+    bystander.write_text("garde-moi")
+    outside = tmp_path / "ailleurs.csv"                 # un chemin hors du dossier de sortie dans les artefacts : jamais touché
+    outside.write_text("garde-moi aussi")
+    conn = db.connect(db.default_db_path())
+    job_id = _add_rl_job(conn, "agent_files", "PPO", "done", out_dir=str(out), result={
+        **_RL_RESULT, "artifacts": {"result_json": str(result_file), "oos_csv": str(csv_file), "model_seed1": str(model),
+                                    "stray": str(outside)}})
+    conn.close()
+    assert client.post(f"/runs/{job_id}/delete").status_code == 200
+    assert not result_file.exists() and not csv_file.exists() and not model.exists() and not (out / "models").exists()
+    assert bystander.exists() and outside.exists() and out.exists()            # le dossier non vide reste
+
+
+def test_the_output_folder_is_left_alone_when_another_run_uses_it(client, tmp_path):
+    out = tmp_path / "shared"
+    out.mkdir()
+    result_file = out / "rl_result.json"
+    result_file.write_text("x")
+    conn = db.connect(db.default_db_path())
+    first = _add_rl_job(conn, "agent_one", "PPO", "done", out_dir=str(out), result={**_RL_RESULT, "artifacts": {"result_json": str(result_file)}})
+    _add_rl_job(conn, "agent_two", "PPO", "done", out_dir=str(out), result=_RL_RESULT)
+    conn.close()
+    assert client.post(f"/runs/{first}/delete").status_code == 200
+    assert result_file.exists()                                         # l'autre run en a besoin
+
+
+def test_a_delete_comes_back_to_the_view_it_started_from(client, seeded):
+    back = client.post(f"/runs/{seeded['error']}/delete", headers={"referer": "http://localhost/runs?family=rl&status=failed"}, follow_redirects=False)
+    assert back.status_code == 303 and back.headers["location"] == "/runs?family=rl&status=failed"
+    other = client.post("/runs/run_dl/delete", headers={"referer": "http://elsewhere.example/predictions?x=1"}, follow_redirects=False)
+    assert other.headers["location"] == "/runs"                       # never an outside address or another page
+
+
+def test_equal_values_do_not_crown_a_best_run(client, seeded):
+    conn = db.connect(db.default_db_path())
+    twin = _add_rl_job(conn, "agent_twin", "PPO", "done", result=_RL_RESULT)
+    conn.close()
+    text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={twin}").text
+    assert not re.search(r'<td class="[^"]*best', text)

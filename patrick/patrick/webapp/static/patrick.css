@@ -2014,11 +2014,11 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .history-table-cls th:nth-child(4) { width: 76px; }
 .history-table-cls th:nth-child(5) { width: 100px; }
 .history-table-cls th:nth-child(6), .history-table-cls th:nth-child(7), .history-table-cls th:nth-child(8) { width: 74px; }
-/* tableau RL : nom, cible, algorithme, statut, Sharpe, Sharpe B&H, écart, rendement, perte max, DSR, date */
-.history-table-rl th:nth-child(2) { width: 84px; }
-.history-table-rl th:nth-child(3) { width: 66px; }
-.history-table-rl th:nth-child(4) { width: 90px; }
-.history-table-rl th:nth-child(n+5):nth-child(-n+10) { width: 72px; }
+/* tableau RL : case, nom, cible, algorithme, statut, Sharpe, Sharpe B&H, écart, rendement, perte max, DSR, date, actions */
+.history-table-rl th:nth-child(3) { width: 84px; }
+.history-table-rl th:nth-child(4) { width: 66px; }
+.history-table-rl th:nth-child(5) { width: 90px; }
+.history-table-rl th:nth-child(n+6):nth-child(-n+11) { width: 72px; }
 .history-section-title { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 8px; font-size: 1.05rem; }
 .history-section:first-of-type .history-section-title { margin-top: 8px; }
 .history-empty { margin: 4px 0 8px; }
@@ -2031,7 +2031,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 .history-table .icon-btn.danger:hover { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); }
 .has-run-panel .history-table-cls th:nth-child(8), .has-run-panel .history-table-cls td:nth-child(8),
 .has-run-panel .history-table-cls th:nth-child(9), .has-run-panel .history-table-cls td:nth-child(9),
-.has-run-panel .history-table-rl th:nth-child(n+9), .has-run-panel .history-table-rl td:nth-child(n+9) { display: none; }
+.has-run-panel .history-table-rl th:nth-child(n+10):nth-child(-n+12), .has-run-panel .history-table-rl td:nth-child(n+10):nth-child(-n+12) { display: none; }
 
 .history-dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 18px; width: min(420px, 92vw); }
 .history-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
@@ -2073,11 +2073,11 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
 @media (max-width: 1180px) {
   .history-table-cls th:nth-child(9), .history-table-cls td:nth-child(9) { display: none; }
   .history-table-cls th:nth-child(3) { width: 78px; }
-  .history-table-rl th:nth-child(n+10), .history-table-rl td:nth-child(n+10) { display: none; }
+  .history-table-rl th:nth-child(n+11):nth-child(-n+12), .history-table-rl td:nth-child(n+11):nth-child(-n+12) { display: none; }
 }
 @media (max-width: 960px) {
   .history-table-cls th:nth-child(8), .history-table-cls td:nth-child(8) { display: none; }
-  .history-table-rl th:nth-child(9), .history-table-rl td:nth-child(9) { display: none; }
+  .history-table-rl th:nth-child(10), .history-table-rl td:nth-child(10) { display: none; }
 }
 
 /* ============ /predictions : une ligne par actif, une case par horizon ============ */
@@ -2240,6 +2240,17 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .rp-table th:first-child { width: 34%; }
 .rp-table tbody th { text-align: left; font-weight: 500; color: var(--text-2); }
 .rp-table .rp-strong th, .rp-table .rp-strong td { font-weight: 650; color: var(--text); }
+
+/* ---- Comparaison de runs RL ------------------------------------------------------------------------------------------ */
+.cmp-rl-title { font-size: 1rem; margin: 18px 0 6px; }
+.cmp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 12.5px; color: var(--text-2); }
+.cmp-swatch { display: inline-block; width: 12px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+.cmp-s0 { background: var(--brand); } .cmp-s1 { background: var(--warn); } .cmp-s2 { background: var(--pos); } .cmp-s3 { background: var(--text-2); }
+.cmp-rl-chart { margin-bottom: 18px; }
+.compare-rl-table .cmp-group th { text-align: left; background: var(--surface-2); color: var(--text-3); font-size: 11px; font-weight: 650;
+    letter-spacing: 0.06em; text-transform: uppercase; }
+.compare-rl-table .cmp-diff > th:first-child { box-shadow: inset 3px 0 0 var(--brand); }
+.compare-rl-table td.best { color: var(--pos); font-weight: 650; }
 .tag-suspect { background: var(--neg-soft); color: var(--neg); }
 .history-table th.headline, .history-table td.headline { font-weight: 600; }
 

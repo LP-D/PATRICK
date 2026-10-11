@@ -17,10 +17,10 @@ from patrick.config import defaults as D
 from patrick.config import rl_profiles
 from patrick.rl import agents
 from patrick.rl.config import RLRunConfig
+from patrick.rl.history import DELETED_PHASE, RL_JOB_FILTER, is_deleted_rl_job
 from patrick.tracking import db as trackdb
 from patrick.webapp import forms, forms_rl, run_manager
 
-RL_JOB_FILTER = '%"kind":"rl"%'
 LIST_LIMIT = 30
 
 
@@ -108,8 +108,8 @@ def list_rl_jobs(limit: int | None = LIST_LIMIT) -> list[dict]:
     """Les runs RL les plus récents d'abord ; `limit=None` = tous (page Historique)."""
     conn = trackdb.connect(trackdb.default_db_path())
     try:
-        rows = conn.execute("SELECT * FROM job WHERE config_json LIKE ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
-                            (RL_JOB_FILTER, -1 if limit is None else limit)).fetchall()
+        rows = conn.execute("SELECT * FROM job WHERE config_json LIKE ? AND phase != ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                            (RL_JOB_FILTER, DELETED_PHASE, -1 if limit is None else limit)).fetchall()
         cols = [d[0] for d in conn.execute("SELECT * FROM job LIMIT 0").description]
     except sqlite3.Error:
         return []
@@ -118,12 +118,21 @@ def list_rl_jobs(limit: int | None = LIST_LIMIT) -> list[dict]:
     return [_summary(dict(zip(cols, r, strict=True))) for r in rows]
 
 
-def get_rl_run(run_id: str) -> dict | None:
-    """Un run RL pour le panneau de l'Historique : la ligne de liste (`_summary`), le résultat complet une fois terminé (`{}` sinon)
-    et l'erreur du job ; `None` si ce n'est pas un job RL."""
+def _is_deleted(job_id: str) -> bool:
     conn = trackdb.connect(trackdb.default_db_path())
     try:
-        cur = conn.execute("SELECT * FROM job WHERE job_id = ? AND config_json LIKE ?", (run_id, RL_JOB_FILTER))
+        return is_deleted_rl_job(conn, job_id)
+    finally:
+        conn.close()
+
+
+def get_rl_run(run_id: str) -> dict | None:
+    """Un run RL pour le panneau et la comparaison de l'Historique : la ligne de liste (`_summary`), les chiffres du panneau (`view`), le
+    résultat complet une fois terminé (`{}` sinon), la configuration et l'erreur du job ; `None` si ce n'est pas un run RL (ou s'il a été
+    supprimé)."""
+    conn = trackdb.connect(trackdb.default_db_path())
+    try:
+        cur = conn.execute("SELECT * FROM job WHERE job_id = ? AND config_json LIKE ? AND phase != ?", (run_id, RL_JOB_FILTER, DELETED_PHASE))
         row = cur.fetchone()
         cols = [d[0] for d in cur.description]
     except sqlite3.Error:
@@ -137,7 +146,12 @@ def get_rl_run(run_id: str) -> dict | None:
         result = json.loads(job["result_json"]) if job["status"] == "done" and job.get("result_json") else {}
     except ValueError:
         result = {}
-    return {"row": _summary(job), "view": _panel_view(result if isinstance(result, dict) else {}), "error": job.get("error")}
+    result = result if isinstance(result, dict) else {}
+    try:
+        config = json.loads(job["config_json"])
+    except (TypeError, ValueError):
+        config = {}
+    return {"row": _summary(job), "view": _panel_view(result), "error": job.get("error"), "result": result, "config": config}
 
 
 def _panel_view(result: dict) -> dict:
@@ -184,7 +198,7 @@ def register(app: FastAPI, templates, context) -> None:
         source = open or run_id
         if source:
             raw = run_manager.get_job_config_dict(source)
-            if raw is None:
+            if raw is None or _is_deleted(source):
                 raise HTTPException(status_code=404, detail="Run introuvable.")
             if raw.get("kind") != "rl":
                 algos = (raw.get("models") or {}).get("algos") or []

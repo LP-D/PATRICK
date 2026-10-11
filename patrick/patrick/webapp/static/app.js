@@ -26,26 +26,6 @@
     const loadProfileButton = document.getElementById("load-launch-profile");
     const deleteProfileButton = document.getElementById("delete-launch-profile");
 
-    const compareForm = document.getElementById("compare-runs-form");
-    if (compareForm) {
-        const compareButton = document.getElementById("compare-runs-submit");
-        const compareCount = document.getElementById("compare-runs-count");
-        const compareBoxes = Array.from(document.querySelectorAll(".compare-run-checkbox"));
-        function updateCompareRunSelection() {
-            const checked = compareBoxes.filter((checkbox) => checkbox.checked).length;
-            if (compareButton) compareButton.disabled = checked < 2 || checked > 4;
-            if (compareCount) compareCount.textContent = fmtStr(
-                tr("compare_runs_selection", "Selected: {count}. Choose 2 to 4 completed runs."),
-                { count: checked },
-            );
-            compareBoxes.forEach((checkbox) => {
-                checkbox.disabled = !checkbox.checked && checked >= 4;
-            });
-        }
-        compareBoxes.forEach((checkbox) => checkbox.addEventListener("change", updateCompareRunSelection));
-        updateCompareRunSelection();
-    }
-
     function setSettingsMode(mode, persist) {
         if (!form || !settingsModeToggle) return;
         const expert = mode === "expert";

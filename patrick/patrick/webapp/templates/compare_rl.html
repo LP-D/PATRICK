@@ -1,0 +1,52 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('cmp_title') }}{% endblock %}
+
+{% block content %}
+{# Comparaison de runs de reinforcement learning : toutes les mesures sont hors échantillon (walk-forward). `comparison` est préparé par
+   `rl_compare.build` ; les libellés de lignes sont des clés de traduction. #}
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
+    <a href="/runs?family=rl">{{ t('nav_runs') or 'Historique' }}</a>
+    <span aria-current="page">{{ t('cmp_crumb') }}</span>
+</nav>
+<h1 class="page-title">{{ t('cmp_h1') }} <span class="kind-badge kind-rl">{{ t('nav_rl') }}</span></h1>
+<p class="page-subtitle">{{ t('cmp_rl_subtitle') }}</p>
+{% if comparison.warn_target %}<p class="banner banner-warning" role="note">{{ t('cmp_rl_warn_target') }}</p>{% endif %}
+{% if comparison.warn_period %}<p class="banner banner-warning" role="note">{{ t('cmp_rl_warn_period') }}</p>{% endif %}
+
+{% if comparison.chart %}
+<section class="cmp-rl-chart">
+    <h2 class="cmp-rl-title">{{ t('rlp_c_equity') }}</h2>
+    <ul class="cmp-legend">
+        {% for r in comparison.runs %}<li><span class="cmp-swatch cmp-s{{ loop.index0 }}"></span>{{ r.name }}</li>{% endfor %}
+    </ul>
+    <div id="cmp-rl-chart"></div>
+    <script id="cmp-rl-data" type="application/json">{{ comparison.chart | tojson }}</script>
+</section>
+{% endif %}
+
+<div class="compare-runs-table-wrap">
+<table class="data-table compare-runs-table compare-rl-table">
+    <thead>
+        <tr><th>{{ t('cmp_measure') }}</th>{% for r in comparison.runs %}<th><span class="cmp-swatch cmp-s{{ loop.index0 }}"></span> <a href="/rl?open={{ r.run_id }}">{{ r.name }}</a></th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+    {% set ns = namespace(group='') %}
+    {% for row in comparison.rows %}
+        {% if row.group != ns.group %}{% set ns.group = row.group %}
+        <tr class="cmp-group"><th colspan="{{ comparison.runs | length + 1 }}">{{ t(row.group) }}</th></tr>
+        {% endif %}
+        <tr{% if row.differs %} class="cmp-diff"{% endif %}>
+            <th>{{ t(row.label) }}</th>
+            {% for cell in row.cells %}<td class="{{ 'num pk-mono' if cell.text[:1] in '+-0123456789[' else '' }}{{ ' best' if cell.best else '' }}">{{ cell.text }}</td>{% endfor %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="hint">{{ t('cmp_rl_diff_hint') }}</p>
+<p><a class="btn-secondary" href="/runs?family=rl">{{ t('cmp_back') }}</a></p>
+{% if comparison.chart %}
+<script src="/static/charts.js"></script>
+<script src="/static/rl_compare.js"></script>
+{% endif %}
+{% endblock %}

@@ -331,4 +331,5 @@ def _browser_keys(*prefixes: str) -> tuple[str, ...]:
 PAGE_JS_KEYS: dict[str, tuple[str, ...]] = {
     "/exploration": _browser_keys("exp_"),
     "/rl": _browser_keys("rlp_"),
+    "/compare-runs": ("exp_chart_aria", "rlp_c_equity"),
 }

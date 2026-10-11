@@ -91,3 +91,24 @@
     }
     document.getElementById("rename-cancel").addEventListener("click", function () { dialog.close(); });
 })();
+
+/* Comparaison de runs : un formulaire par famille (ML et DL ensemble, RL à part) ; son bouton s'active quand 2 à 4 cases qui lui sont
+   rattachées (`form=`) sont cochées, et une 5e case est bloquée. (Ce code vivait dans app.js, que la page /runs ne charge pas : le
+   bouton restait désactivé.) */
+(function () {
+    "use strict";
+    var I18N = window.I18N || {};
+    document.querySelectorAll("form.compare-run-actions").forEach(function (form) {
+        var button = form.querySelector("button[type=submit]"), hint = form.querySelector(".hint");
+        var boxes = Array.prototype.filter.call(document.querySelectorAll(".compare-run-checkbox"), function (box) { return box.form === form; });
+        var idle = hint ? hint.textContent : "";
+        function update() {
+            var checked = boxes.filter(function (box) { return box.checked; }).length;
+            if (button) button.disabled = checked < 2 || checked > 4;
+            if (hint) hint.textContent = checked ? (I18N.compare_runs_selection || "Selected: {count}.").replace("{count}", checked) : idle;
+            boxes.forEach(function (box) { box.disabled = !box.checked && checked >= 4; });
+        }
+        boxes.forEach(function (box) { box.addEventListener("change", update); });
+        update();
+    });
+})();
