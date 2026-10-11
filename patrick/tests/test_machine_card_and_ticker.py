@@ -115,8 +115,8 @@ def test_the_ticker_lists_gainers_then_losers_with_a_non_colour_cue(client, move
     html = client.get("/ml").text
     ticker = html[html.index('id="market-ticker"'):html.index('class="topbar"')]
     assert "hidden" not in ticker.split(">", 1)[0]
-    assert re.search(r'data-symbol="NVDA".*?▲ \+12\.35%', ticker, re.S)
-    assert re.search(r'data-symbol="GC=F".*?▼ -4\.50%', ticker, re.S)
+    assert re.search(r'data-symbol="NVDA".*?▲ \+12\.35%', ticker, re.DOTALL)
+    assert re.search(r'data-symbol="GC=F".*?▼ -4\.50%', ticker, re.DOTALL)
     assert ticker.index("NVDA") < ticker.index("^N225") < ticker.index("GC=F")
     assert 'href="/targets/%5EN225"' in ticker                                   # lien vers la fiche de la cible
     assert "2026-10-11 09:30" in ticker                                          # fraîcheur lisible au survol
@@ -126,6 +126,17 @@ def test_the_ticker_is_hidden_until_the_ranking_exists(client, monkeypatch):
     monkeypatch.setattr(alerts, "_cache", {"gainers": [], "losers": [], "updated_at": None, "error": None, "n_ranked": 0, "n_requested": 0})
     html = client.get("/ml").text
     assert re.search(r'<div class="ticker" id="market-ticker"[^>]*\bhidden\b', html)
+
+
+def test_pages_still_render_when_the_server_predates_the_ticker(client, monkeypatch):
+    """Un serveur lancé avant la fusion relit les gabarits à chaud mais garde son ancien Python : sans `movers_snapshot`, la page doit
+    s'afficher quand même (bandeau masqué), pas répondre 500."""
+    from patrick.webapp.app import templates
+    monkeypatch.delitem(templates.env.globals, "movers_snapshot")
+    for path in ("/ml", "/runs", "/exploration"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert re.search(r'<div class="ticker" id="market-ticker"[^>]*\bhidden\b', response.text)
 
 
 def test_the_ticker_animation_stops_on_hover_and_for_reduced_motion(client):
