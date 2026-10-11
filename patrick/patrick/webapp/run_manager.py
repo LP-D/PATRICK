@@ -322,6 +322,7 @@ def stop_active_run(job_id: str) -> bool:
         if not pid or pid <= 0:
             raise RuntimeError("Le PID du worker actif est indisponible.")
         _terminate_worker(pid)
+        jobs_db.clear_heartbeat(conn, pid)       # le worker est mort : son pouls ne doit plus empêcher d'en relancer un
         stopped = jobs_db.finish_user_stopped_job(conn, job_id)
     finally:
         conn.close()
