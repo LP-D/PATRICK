@@ -257,13 +257,14 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
   padding: 14px 12px;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
+  /* La barre latérale ne défile pas : seule la navigation défile (voir .sidebar-nav), la marque reste en haut et
+     le pied (langue + réduire/déplier) reste collé en bas de la fenêtre, quelle que soit la hauteur de l'écran. */
+  overflow: hidden;
   z-index: 40;
 }
 
 .brand {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -291,7 +292,16 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
 .brand-mark .mark-head { fill: #7CF0B8; }
 .brand-sub { display: block; font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em; color: var(--text-3); }
 
-.sidebar-nav { display: flex; flex-direction: column; gap: 18px; }
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
 
 .sidebar-nav-group { display: flex; flex-direction: column; gap: 1px; }
 .sidebar-nav-heading {
@@ -343,7 +353,7 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
 .nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 .sidebar-footer {
-  margin-top: auto;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
