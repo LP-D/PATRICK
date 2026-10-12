@@ -191,8 +191,8 @@
     </div>
 </section>
 
-{# En cours + file d'attente : la même carte que sur /ml et /dl (une seule machine). #}
-{% include "_machine_card.html" %}
+{# Colonne de droite : un conteneur à part, empilé du haut (voir launch_base.html). #}
+<div class="station-side">
 
 <section class="dash-panel dash-progress" aria-labelledby="rl-progress-title">
     <h2 id="rl-progress-title" class="dash-panel-title">{{ t('section_progress') }}</h2>
@@ -201,6 +201,7 @@
         <div id="rl-status-panel" class="hidden">
             <p id="rl-run-name" class="run-name-line"></p>
             <div class="progress-bar"><div id="rl-progress-fill" class="progress-fill"></div></div>
+            {% include "_run_controls.html" %}
             <p id="rl-status-line" role="status" aria-live="polite" data-keep>…</p>
             <details class="log-raw">
                 <summary>{{ t('rlp_log_title') }}</summary>
@@ -209,6 +210,9 @@
         </div>
     </div>
 </section>
+
+{# File d'attente : la même carte que sur /ml et /dl (une seule machine). #}
+{% include "_machine_card.html" %}
 
 <section class="dash-panel dash-progress" id="rl-results-panel" aria-labelledby="rl-results-title" hidden>
     <h2 id="rl-results-title" class="dash-panel-title">{{ t('rlp_results_title') }}</h2>
@@ -220,6 +224,8 @@
     <h2 id="rl-runs-title" class="dash-panel-title">{{ t('rlp_runs_title') }}</h2>
     <div class="dash-panel-body" id="rl-runs"></div>
 </section>
+
+</div>{# /station-side #}
 
 </div>
 
