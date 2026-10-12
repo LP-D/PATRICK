@@ -13,7 +13,7 @@ also split stratified, not in time. `tests/test_calibration_wf.py`.
 
 Also here: P(up) from class probabilities (classes 2 and 3 = slight and
 strong up), Brier score and expected calibration error of that P(up) --
-the calibrated probability Black-Litterman v2 needs instead of the
+the calibrated probability downstream consumers need instead of the
 predicted class's confidence.
 """
 from __future__ import annotations
