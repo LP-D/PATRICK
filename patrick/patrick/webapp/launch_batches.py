@@ -135,9 +135,9 @@ def best_suggestion(advice: dict | None, key: str | None = None):
 def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     """Lot « runs conseillés » (ML) : par cible, le meilleur réentraînement proposé pour son dernier run terminé. Une ligne par
     cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`. Les cibles déjà en
-    file sont écartées, comme celles qui ne sont plus dans l'univers lançable (ex. `^EVZ`, retiré faute de cotation : le formulaire
-    refuserait sa configuration et, un seul refus annulant tout le lot, plus aucun run conseillé ne partirait) ; le calcul
-    (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
+    file sont écartées, comme celles dont la configuration refaite serait refusée par le formulaire (cible retirée de l'univers,
+    ex. `^EVZ` ; historique devenu trop court…) : un seul refus annulant tout le lot à la mise en file, aucun run conseillé ne
+    partirait. Le calcul (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
     from patrick.tracking import retrain_advisor
     from patrick.webapp import forms
 
@@ -154,6 +154,9 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
             continue
         suggestion = best_suggestion(retrain_advisor.advise_run(conn, run_id, history=history, limit=20))
         if suggestion is None:
+            continue
+        config, _ = _ml_run_config(conn, run_id)
+        if config is None or _refit(config, suggestion)[0] is None:
             continue
         out.append({"run_id": run_id, "target": target, "horizon": horizon, "key": suggestion.key, "score": round(suggestion.score),
                     "cost": suggestion.cost, "est_minutes": suggestion.est_minutes})
@@ -173,12 +176,22 @@ def summarize(items: list[dict]) -> dict:
 def build_recommended_config(conn: sqlite3.Connection, run_id: str, key: str, history: dict):
     """`(RunConfig, [])` ou `(None, [erreurs])` : la configuration du run `run_id` avec la suggestion `key` du conseiller, telle
     qu'on la lancerait en ouvrant `/ml?run_id=…&suggest=…` puis « Lancer » (même vue du formulaire, mêmes validations)."""
-    from pydantic import ValidationError
+    from patrick.tracking import retrain_advisor
 
+    config, errors = _ml_run_config(conn, run_id)
+    if config is None:
+        return None, errors
+    suggestion = best_suggestion(retrain_advisor.advise_run(conn, run_id, history=history, limit=20), key)
+    if suggestion is None:
+        return None, [f"{run_id} : la suggestion « {key} » n'est plus proposée pour ce run."]
+    return _refit(config, suggestion)
+
+
+def _ml_run_config(conn: sqlite3.Connection, run_id: str):
+    """`(RunConfig, [])` du run `run_id`, ou `(None, [erreurs])` s'il est introuvable ou n'est pas un run de machine learning."""
     from patrick.config.schema import RunConfig
     from patrick.tracking import db as trackdb
-    from patrick.tracking import retrain_advisor
-    from patrick.webapp import forms, run_manager
+    from patrick.webapp import run_manager
 
     config = run_manager.get_run_config(run_id)
     if config is None:
@@ -188,9 +201,16 @@ def build_recommended_config(conn: sqlite3.Connection, run_id: str, key: str, hi
         config = RunConfig.model_validate_json(row["config_json"])
     if config.family != "ml":
         return None, [f"{run_id} : le conseiller ne s'applique qu'aux runs de machine learning."]
-    suggestion = best_suggestion(retrain_advisor.advise_run(conn, run_id, history=history, limit=20), key)
-    if suggestion is None:
-        return None, [f"{run_id} : la suggestion « {key} » n'est plus proposée pour ce run."]
+    return config, []
+
+
+def _refit(config, suggestion):
+    """`(RunConfig, [])` ou `(None, [erreurs])` : `config` refaite avec `suggestion`, par le chemin du formulaire."""
+    from pydantic import ValidationError
+
+    from patrick.config.schema import RunConfig
+    from patrick.webapp import forms, run_manager
+
     cfg = config.model_dump()
     cfg["output"]["dir"] = ""
     view = forms.to_view(cfg)

@@ -319,6 +319,21 @@ def test_a_target_no_longer_in_the_launchable_universe_is_not_recommended(conn):
         assert config is not None and not errs
 
 
+def test_a_target_the_form_would_refuse_is_not_recommended(conn, monkeypatch):
+    """Historique devenu trop court (ex. séries FRED à 2023) : sa config serait refusée, donc annulerait tout le lot."""
+    _suspect_run(conn, "r1", "^VIX")
+    _suspect_run(conn, "r2", "GC=F")
+    real = forms.history_length.check_min_history
+
+    def short_history(symbol, years, store=None):
+        result = real(symbol, years, store)
+        return result if symbol != "GC=F" else type(result)(symbol=symbol, feasible=False, min_history_years=years,
+                                                           earliest="2023-10-11", source="store", reason="Historique insuffisant")
+    monkeypatch.setattr(forms.history_length, "check_min_history", short_history)
+    items = launch_batches.recommended(conn, {})
+    assert [i["target"] for i in items] == ["^VIX"]
+
+
 def test_a_target_already_in_the_queue_is_not_recommended_again(conn):
     _suspect_run(conn)
     jobs_db.enqueue_job(conn, json.dumps(_cfg("^VIX")))
