@@ -1,9 +1,11 @@
 """Processus de l'application : ports, arrêt du serveur, détection de la fenêtre."""
 from __future__ import annotations
 
+import contextlib
 import socket
 import subprocess
 import sys
+import textwrap
 import time
 from types import SimpleNamespace
 
@@ -139,3 +141,50 @@ def test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant(tmp_pa
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def _alive(pid: int) -> bool:
+    try:
+        return psutil.Process(pid).is_running() and psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+
+
+def test_kill_process_tree_spares_the_training_worker_and_what_it_launched(tmp_path):
+    """Régression : le worker (`patrick.cli worker`) est un enfant du serveur ; arrêter le serveur le tuait avec son run en cours.
+    Le serveur et ses autres enfants (calcul web) sont arrêtés ; le worker et ses descendants continuent."""
+    pids = tmp_path / "pids.txt"
+    worker_py, server_py = tmp_path / "worker.py", tmp_path / "server.py"
+    worker_py.write_text(textwrap.dedent(f"""
+        import os, subprocess, sys, time
+        sub = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        with open({str(pids)!r}, "a") as f:
+            print("worker", os.getpid(), file=f)
+            print("sub", sub.pid, file=f)
+        time.sleep(120)
+    """), encoding="utf-8")
+    server_py.write_text(textwrap.dedent(f"""
+        import subprocess, sys, time
+        subprocess.Popen([sys.executable, {str(worker_py)!r}, "patrick.cli", "worker"])
+        other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        with open({str(pids)!r}, "a") as f:
+            print("other", other.pid, file=f)
+        time.sleep(120)
+    """), encoding="utf-8")
+    proc = subprocess.Popen([sys.executable, str(server_py)])
+    found: dict[str, int] = {}
+    try:
+        deadline = time.monotonic() + 20
+        while len(found) < 3 and time.monotonic() < deadline:
+            if pids.exists():
+                found = {k: int(v) for k, v in (line.split() for line in pids.read_text().splitlines() if line.strip())}
+            time.sleep(0.1)
+        assert set(found) == {"worker", "sub", "other"}
+        assert runtime.kill_process_tree(proc.pid) is True
+        assert proc.poll() is not None                              # le serveur est arrêté
+        assert not _alive(found["other"])                           # ses autres enfants aussi
+        assert _alive(found["worker"]) and _alive(found["sub"])     # le worker et son calcul parallèle continuent
+    finally:
+        for pid in (*found.values(), proc.pid):
+            with contextlib.suppress(psutil.NoSuchProcess):
+                psutil.Process(pid).kill()
