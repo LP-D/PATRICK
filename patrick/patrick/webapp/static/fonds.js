@@ -1,4 +1,5 @@
-/* Page /fonds : un clic sur une stratégie charge son panneau (fragment HTML rendu par
+/* Page /fonds : le total et le tableau des stratégies arrivent après l'affichage (`/fragments/fund-overview`, lazy.js) ; les clics
+   sont donc délégués sur #fund-overview. Un clic sur une stratégie charge son panneau (fragment HTML rendu par
    le serveur, échappé : GET /api/fund/strategies/{id}/panel), puis :
    - graphique de la valeur (canvas HiDPI, couleurs lues dans les jetons CSS au dessin) ;
    - règles automatiques : créer, appliquer, supprimer (/api/fund/.../rules, /api/fund/rules/{id}/apply) ;
@@ -10,7 +11,7 @@
     if (!panel) return;
 
     var flash = document.getElementById("fund-flash");
-    var rows = Array.prototype.slice.call(document.querySelectorAll(".fund-row"));
+    var overview = document.getElementById("fund-overview");
     var current = null;
     var MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono").trim() || "monospace";
 
@@ -108,8 +109,9 @@
     });
 
     /* ---- panneau ---- */
+    function rows() { return Array.prototype.slice.call(document.querySelectorAll(".fund-row")); }
     function mark() {
-        rows.forEach(function (r) { r.classList.toggle("is-selected", r.getAttribute("data-strategy-id") === current); });
+        rows().forEach(function (r) { r.classList.toggle("is-selected", r.getAttribute("data-strategy-id") === current); });
     }
     function open(id) {
         current = id;
@@ -133,20 +135,29 @@
     }
     function close() { current = null; mark(); panel.hidden = true; panel.textContent = ""; }
 
-    rows.forEach(function (r) {
-        function go() { open(r.getAttribute("data-strategy-id")); }
-        /* un bouton de la ligne (Supprimer) agit seul : il n'ouvre pas le panneau */
-        r.addEventListener("click", function (e) { if (!e.target.closest("[data-act]")) go(); });
-        r.addEventListener("keydown", function (e) {
-            if (e.target.closest("[data-act]")) return;
-            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+    /* Lignes du tableau : délégation (elles n'existent qu'une fois le fragment arrivé). Un bouton de la ligne (Supprimer)
+       agit seul : il n'ouvre pas le panneau. */
+    function rowOf(e) { return e.target.closest(".fund-row"); }
+    if (overview) {
+        overview.addEventListener("click", function (e) {
+            var r = rowOf(e);
+            if (r && !e.target.closest("[data-act]")) open(r.getAttribute("data-strategy-id"));
         });
-    });
+        overview.addEventListener("keydown", function (e) {
+            var r = rowOf(e);
+            if (!r || e.target.closest("[data-act]")) return;
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(r.getAttribute("data-strategy-id")); }
+        });
+        /* Le tableau vient d'arriver : la ligne ouverte est marquée ; une stratégie demandée par l'adresse mais absente ferme le panneau. */
+        overview.addEventListener("patrick:content", function () {
+            if (current && !rows().some(function (r) { return r.getAttribute("data-strategy-id") === current; })) close();
+            else mark();
+        });
+    }
 
     /* ---- supprimer une stratégie depuis le tableau, sans ouvrir son panneau ---- */
-    var strategyTable = document.querySelector(".fund-table");
-    if (strategyTable) {
-        strategyTable.addEventListener("click", async function (e) {
+    if (overview) {
+        overview.addEventListener("click", async function (e) {
             var btn = e.target.closest('[data-act="delete-strategy"]');
             if (!btn || btn.disabled) return;
             try {
@@ -360,5 +371,5 @@
 
     var pre = document.getElementById("fund-selected");
     var wanted = pre ? JSON.parse(pre.textContent) : null;
-    if (wanted && rows.some(function (r) { return r.getAttribute("data-strategy-id") === wanted; })) open(wanted);
+    if (wanted) open(wanted);        // sans attendre le tableau : le panneau et le tableau se chargent en même temps
 })();

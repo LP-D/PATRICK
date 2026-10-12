@@ -130,11 +130,19 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.get("/fonds")
     def fonds_page(request: Request, strategy: str | None = None):
-        data = _call(service.overview, service.current_date())
+        """Le cadre seul (titre, panneau, listes sans cotations) : la valeur de chaque stratégie se calcule en 3 à 5 s sur la vraie
+        base ; elle arrive par `/fragments/fund-overview` après l'affichage. Seules les stratégies archivées, une lecture de table,
+        se lisent ici."""
         archived = _call(lambda conn: [s for s in store.list_strategies(conn, include_archived=True) if s["archived"]])
         return templates.TemplateResponse(request, "fonds.html", {
-            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy, "archived": archived,
-            **context(request)})
+            "selected_id": strategy, "archived": archived, **context(request)})
+
+    @app.get("/fragments/fund-overview")
+    def fund_overview_fragment(request: Request, strategy: str | None = None):
+        """Total consolidé, répartition et tableau des stratégies de /fonds (chargé par `static/lazy.js`)."""
+        data = _call(service.overview, service.current_date())
+        return templates.TemplateResponse(request, "_fund_overview.html", {
+            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy, **context(request)})
 
     @app.get("/patrimoine-simulation")
     def legacy_wealth_simulation_page():
