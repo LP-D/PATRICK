@@ -47,8 +47,6 @@ def default_db_path() -> str:
     return os.environ.get("PATRICK_DB_PATH") or os.path.expanduser("~/.patrick/patrick.db")
 
 
-DEFAULT_DB_PATH = default_db_path()  # value at module load time, for display/CLI only
-
 _TRACKED_LIBS = (
     "numpy", "pandas", "scikit-learn", "xgboost", "lightgbm", "catboost",
     "imbalanced-learn", "shap", "optuna", "pydantic", "arch", "pykalman", "hmmlearn",

@@ -32,8 +32,6 @@ ecraserait le groupe existant).
 """
 from __future__ import annotations
 
-VERIFIED_ON = "2026-09-25"
-
 # {groupe: [(symbole, libelle, premiere date servie par Yahoo), ...]}
 EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
     "ETFs sectoriels & thématiques": [

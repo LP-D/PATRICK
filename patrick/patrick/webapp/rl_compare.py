@@ -7,6 +7,7 @@ commune. Rien n'est calculé ici qui ne soit déjà dans le résultat du run.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 COLORS = ("var(--brand)", "var(--warn)", "var(--pos)", "var(--text-2)")   # une couleur par colonne (4 runs au plus)
@@ -29,7 +30,7 @@ def _dig(d, *path):
 
 
 def _num(v):
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v else None
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and not math.isnan(v) else None
 
 
 def _minutes(v):

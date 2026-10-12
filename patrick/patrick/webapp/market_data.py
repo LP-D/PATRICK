@@ -17,7 +17,6 @@ from patrick.data.sources import fred_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 
 PERIOD_DAYS = {"1mo": 30, "3mo": 90, "6mo": 182, "1y": 365, "5y": 365 * 5, "max": None}
-VALID_PERIODS = tuple(PERIOD_DAYS)
 
 
 # /macro shows ~100 FRED series, each fetched on its own: a short-lived cache
@@ -65,10 +64,6 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
     if source == "fred" and len(s):
         _fred_cache[(symbol, period)] = (time.monotonic(), out)
     return out
-
-
-def _as_mapping(value):
-    return value if isinstance(value, dict) else {}
 
 
 def _url_from(candidate):

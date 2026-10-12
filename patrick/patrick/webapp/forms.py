@@ -271,18 +271,6 @@ def _int_list(raw: str) -> list[int]:
     return out
 
 
-def _kv_lines(raw: str) -> dict[str, str]:
-    out = {}
-    for line in (raw or "").splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        if k.strip():
-            out[k.strip()] = v.strip()
-    return out
-
-
 def _checked(form, name: str) -> bool:
     return form.get(name) in ("on", "true", "1")
 

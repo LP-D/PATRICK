@@ -58,7 +58,6 @@ from patrick.tracking import stats as trackstats
 from patrick.validation.dsr import deflated_sharpe_ratio
 
 _UP_CLASSES = (2, 3)
-_DOWN_CLASSES = (0, 1)
 
 # Coûts de friction par défaut (spread + commission combinés, en bps,
 # "round-turn" = aller-retour complet) par classe d'actif, prélevés

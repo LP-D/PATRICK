@@ -10,10 +10,6 @@ import pandas as pd
 
 from patrick.validation.metrics import metrics
 
-BASELINE_NAMES = ("BASELINE_majority", "BASELINE_persistence", "BASELINE_har_rv",
-                   "BASELINE_majority_by_regime", "BASELINE_momentum_20", "BASELINE_momentum_5",
-                   "BASELINE_random_walk_no_drift", "BASELINE_random_walk_drift")
-
 
 def majority_class_predictions(y_tr: np.ndarray, n: int) -> np.ndarray:
     """Predicts the train's most frequent class everywhere."""

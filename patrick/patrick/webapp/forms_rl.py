@@ -30,7 +30,6 @@ _BOOL_KEYS = ("allow_short", "include_position", "random_start")
 _CHOICES = {"action_space": D.RL_ACTION_SPACES, "reward": D.RL_REWARDS, "feature_selection": D.RL_FEATURE_SELECTION,
             "algo": D.RL_ALGOS, "activation": D.RL_ACTIVATIONS, "device": ("auto", "cpu", "cuda"), "retrain": D.RL_RETRAIN}
 _INT_KEYS = tuple(k for k, v in D.DEFAULT_RL.items() if isinstance(v, int) and not isinstance(v, bool))
-_FLOAT_KEYS = tuple(k for k, v in D.DEFAULT_RL.items() if isinstance(v, float))
 RL_TARGET_GROUPS_EXCLUDED = ("Macro (FRED)", "Séries FRED d'entraînement")      # pas de position tenable sur une série macro
 
 

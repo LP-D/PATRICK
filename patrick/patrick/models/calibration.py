@@ -75,14 +75,6 @@ def fit_prefit_calibrator(clf, X_cal: np.ndarray, y_cal: np.ndarray, method: str
     return CalibratedClassifierCV(FrozenEstimator(clf), method=method).fit(X_cal, y_cal)
 
 
-def calibrate_classifier(base_clf, X_tr: np.ndarray, y_tr: np.ndarray, cv: int = 3):
-    """Legacy k-fold calibration (kept for external callers; the pipeline
-    uses `calibration_split` + `fit_prefit_calibrator`)."""
-    cal = CalibratedClassifierCV(base_clf, method="isotonic", cv=cv)
-    cal.fit(X_tr, y_tr)
-    return cal
-
-
 def p_up_from_proba(proba: np.ndarray, classes) -> np.ndarray:
     """P(up) = sum of the probabilities of the up classes present in
     `classes` (a class absent from the fit contributes nothing)."""

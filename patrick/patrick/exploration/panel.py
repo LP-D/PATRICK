@@ -99,12 +99,6 @@ def _resample(s: pd.Series, freq: str) -> pd.Series:
     return s.resample(rule).last().dropna()
 
 
-def _median_gap_days(s: pd.Series) -> float:
-    if len(s) < 3:
-        return 0.0
-    return float(np.median(np.diff(s.index.values).astype("timedelta64[D]").astype(float)))
-
-
 def transform_returns(levels: pd.DataFrame, transform: str = "auto") -> tuple[pd.DataFrame, dict[str, str]]:
     """Rendements colonne par colonne. `auto` : logarithmique si le niveau est toujours > 0 (prix, indices), différence sinon
     (taux, écarts de crédit, séries pouvant changer de signe). Retourne aussi la transformation réellement appliquée."""

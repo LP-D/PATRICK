@@ -171,17 +171,6 @@ _DEFAULT_WINDOWS = {
 }
 
 
-def _merged_windows(name: str, guida_windows: list[int] | None) -> list[int]:
-    """Merges a function's own small default windows with the Guida 14-
-    lookback grid (deduplicated, sorted) when `guida_windows` is provided —
-    reuses the `windows=` parameter every function below already accepts,
-    rather than introducing a second, parallel window mechanism."""
-    base = _DEFAULT_WINDOWS[name]
-    if not guida_windows:
-        return list(base)
-    return sorted(set(base) | set(guida_windows))
-
-
 def build_technical_features(series: pd.Series, prefix: str = "px",
                               ohlc: pd.DataFrame | None = None,
                               guida_windows: list[int] | None = None,

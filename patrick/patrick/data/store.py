@@ -35,9 +35,6 @@ def _default_store_dir() -> str:
     return os.environ.get("PATRICK_STORE_ROOT") or os.path.expanduser("~/.patrick/store")
 
 
-DEFAULT_STORE_DIR = _default_store_dir()  # value at module load time, for display/CLI only
-
-
 def _content_hash(df: pd.DataFrame) -> str:
     """Deterministic hash of the CONTENT (values + index), not the write
     date -- two DataFrames with the same data produce the same hash

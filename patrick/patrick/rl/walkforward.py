@@ -67,13 +67,6 @@ def _net_from_positions(pos: np.ndarray, fwd: np.ndarray, fee: float, prev: floa
     return pos * fwd - costs, costs
 
 
-def downsample(values: np.ndarray, limit: int = MAX_CURVE_POINTS) -> np.ndarray:
-    if len(values) <= limit:
-        return values
-    idx = np.unique(np.linspace(0, len(values) - 1, limit).astype(int))
-    return values[idx]
-
-
 def run_walkforward(data: rl_data.RLData, config: RLRunConfig, train_agent: Callable, policy_from_model: Callable,
                     ensemble_policy: Callable, progress: Callable[[str], None] = print, n_trials: int = 1,
                     on_model: Callable[[int, int, object], None] | None = None) -> dict:

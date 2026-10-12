@@ -115,7 +115,7 @@ def test_without_a_tab_each_family_has_its_own_section(client, seeded):
 
 def test_the_family_tabs_carry_one_count_each(client, seeded):
     page = client.get("/runs").text
-    tabs = re.search(r'<nav class="kind-tabs family-tabs".*?</nav>', page, re.S).group(0)
+    tabs = re.search(r'<nav class="kind-tabs family-tabs".*?</nav>', page, re.DOTALL).group(0)
     counts = [int(c) for c in re.findall(r'class="kind-count">(\d+)<', tabs)]
     assert counts == [6, 2, 1, 3]                                   # tous, ML, DL, RL
     assert 'href="/runs?family=dl"' in tabs and 'href="/runs?family=rl"' in tabs
@@ -229,7 +229,7 @@ def _job(job_id: str):
 
 def test_rl_rows_get_a_checkbox_when_done_and_a_delete_button_unless_running(client, seeded):
     rl = _sections(client.get("/runs").text)["rl"]
-    rows = {m.group(1): m.group(0) for m in re.finditer(r'<tr class="history-row" data-run-id="(\w+)".*?</tr>', rl, re.S)}
+    rows = {m.group(1): m.group(0) for m in re.finditer(r'<tr class="history-row" data-run-id="(\w+)".*?</tr>', rl, re.DOTALL)}
     done, error, queued = rows[seeded["done"]], rows[seeded["error"]], rows[seeded["queued"]]
     assert 'form="compare-rl-form"' in done and 'form="compare-rl-form"' not in error and 'form="compare-rl-form"' not in queued
     assert f"/runs/{seeded['done']}/delete" in done and f"/runs/{seeded['error']}/delete" in error
@@ -261,7 +261,7 @@ def test_the_rl_comparison_flags_different_targets_and_periods_and_draws_the_cur
     conn.close()
     text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={other}").text
     assert text.count('role="note"') == 2                              # cibles ET périodes différentes
-    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.S).group(1))
+    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.DOTALL).group(1))
     assert data["dates"] == ["2021-01-04", "2022-01-03", "2024-06-28", "2025-01-02"] and len(data["series"]) == 2
     assert [s["values"] for s in data["series"]] == [[1.0, 1.0, 1.25, None], [None, 1.0, 1.0, 1.4]]
 
@@ -272,7 +272,7 @@ def test_the_equity_curves_of_several_runs_share_one_date_grid(client, seeded):
     second = _add_rl_job(conn, "agent_c2", "PPO", "done", result={**_RL_RESULT, "curves": {"dates": ["2021-01-18", "2021-03-01"], "strategy": [1.0, 1.3]}})
     conn.close()
     text = client.get(f"/compare-runs?run_ids={first}&run_ids={second}").text
-    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.S).group(1))
+    data = json.loads(re.search(r'<script id="cmp-rl-data" type="application/json">(.*?)</script>', text, re.DOTALL).group(1))
     assert data["dates"] == ["2021-01-04", "2021-01-18", "2021-02-01", "2021-03-01"]
     one, two = (s["values"] for s in data["series"])
     assert one == [1.0, 1.0, 1.1, None]                                 # report de la dernière valeur, vide après la fin du run
@@ -379,4 +379,4 @@ def test_equal_values_do_not_crown_a_best_run(client, seeded):
     twin = _add_rl_job(conn, "agent_twin", "PPO", "done", result=_RL_RESULT)
     conn.close()
     text = client.get(f"/compare-runs?run_ids={seeded['done']}&run_ids={twin}").text
-    assert not re.search(r'<td class="[^"]*best', text)
+    assert not re.search(r'<td class="[^"]*\bbest\b', text)
