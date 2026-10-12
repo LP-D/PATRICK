@@ -14,8 +14,8 @@ fait QUE mettre en forme et écrire sur disque le dict qu'elle retourne.
 
 Format retenu : un tableau texte à colonnes séparées par `|`
 (`phase | durée | % du total`) -- aucun format pré-existant de ce type n'a
-été trouvé dans les .md d'audit de ce dépôt (`AUDIT_ENVIRONNEMENT.md`,
-`AUDIT_REPO.md`, `AUDIT_RECONCILIATION_MAIN.md`, `KNOWN_ISSUES.md` :
+été trouvé dans les .md d'audit de ce dépôt (`docs/historique/audits-2026-09.md`,
+`KNOWN_ISSUES.md` :
 recherchés, aucun tableau phase/durée/pourcentage n'y figure) -- le seul
 précédent trouvé est la notation informelle "824s / 34%" utilisée dans le
 docstring de la migration 0017 et un commentaire de `test_db.py` pour

@@ -21,7 +21,6 @@ of the new category comparison.
 
 DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "CatBoost"]
 ALL_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost"]
-DEFAULT_SAMPLERS_ALL = ["SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN"]
 DEFAULT_SAMPLER = ["SMOTE"]
 DEFAULT_SELECTION_METHOD = "shap"
 DEFAULT_N_FEATURES_GRID = list(range(5, 16))
@@ -345,8 +344,6 @@ DEFAULT_EMBARGO_BARS = None  # None -> derived from the current horizon (e = hor
 # follow the dm_alpha/fdr_alpha pattern (exposed, validated query-param-style
 # defaults) rather than being hardcoded inside the detection module itself.
 DEFAULT_REGIME_DETECTION_ENABLED = False
-DEFAULT_REGIME_STATE_CANDIDATES = (2, 3, 4)
-DEFAULT_REGIME_CRITERION = "bic"
 DEFAULT_REGIME_THRESHOLD_MODE = "quantile"  # "quantile" | "fixed"
 DEFAULT_REGIME_THRESHOLD_VALUES = (1 / 3, 2 / 3)
 

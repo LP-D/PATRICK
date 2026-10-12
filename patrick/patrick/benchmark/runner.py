@@ -16,8 +16,6 @@ from patrick.benchmark import artifacts, profiler, reference
 from patrick.data.store import DataStore
 from patrick.pipeline import engine
 
-ISOLATED_ENV = ("PATRICK_DB_PATH", "PATRICK_STORE_ROOT", "PATRICK_CACHE_ROOT", "PATRICK_FEATURE_CACHE_ROOT")
-
 
 @contextmanager
 def _env(values: dict[str, str]):

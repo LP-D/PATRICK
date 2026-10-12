@@ -326,7 +326,7 @@ TERM_CATEGORY: dict[str, str] = {
                              "model_category_global", "model_category_per_regime", "model_category_stacking",
                              "regime_threshold_mode", "tuning_enabled", "optuna_select_top_k_per_horizon",
                              "technical_lookbacks", "staged_screening", "optuna_bounds")},
-    **{k: "portfolio" for k in ("hrp", "black_litterman", "ledoit_wolf", "portfolio_contradictions", "portfolio_pairs",
+    **{k: "portfolio" for k in ("hrp", "ledoit_wolf", "portfolio_contradictions", "portfolio_pairs",
                                 "wealth_summary", "wealth_account_rules", "wealth_movements", "wealth_csv_import",
                                 "wealth_simulation", "wealth_simulation_trials", "twr", "xirr", "pea", "cto", "dat")},
     **{k: "app" for k in ("champion", "live_tracking", "prediction_overview")},

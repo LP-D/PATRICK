@@ -135,7 +135,7 @@ def test_universe_matches_exactly_the_reduced_target_set():
     Associates), pas un simple renommage (recherche "Wilshire" sur l'API
     FRED : 0 résultat). LBS=F retiré le 2026-09-26 : Yahoo ne sert plus
     aucune cotation (contrat CME remplacé par LBR=F en 2022, trop court pour
-    le pool -- docs/audits/verification-tickers-2026-09-25.md). Le même jour,
+    le pool -- docs/audits/verification-tickers.md). Le même jour,
     deux séries FRED arrêtées sont retirées : DTB1 (dernière observation
     2001-08-24, remplacée par DTB4WK, bon du Trésor à 4 semaines) et OILPRICE
     (2013-07-01) -- vides pour tout run démarrant après leur fin."""

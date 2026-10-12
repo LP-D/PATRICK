@@ -15,7 +15,6 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
     "app_open": _s("Ouvrir", "Open"),
     "app_saved": _s("Enregistré.", "Saved."),
     "app_error": _s("Erreur : {error}", "Error: {error}"),
-    "app_working": _s("En cours…", "Working…"),
 
     # --- partage entre PC
     "app_share_title": _s("Partage entre PC", "Sharing between PCs"),
@@ -144,7 +143,7 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
 }
 
 SETTINGS_JS_KEYS: tuple[str, ...] = (
-    "app_saved", "app_error", "app_working", "app_share_none", "app_share_current", "app_inspect_share",
+    "app_saved", "app_error", "app_share_none", "app_share_current", "app_inspect_share",
     "app_inspect_empty", "app_inspect_create", "app_inspect_readonly", "app_inspect_missing", "app_inspect_other",
     "app_status_loading", "app_status_local", "app_status_remote", "app_status_remote_empty", "app_status_last",
     "app_status_never", "app_status_todo", "app_status_uptodate", "app_status_pull", "app_status_push",

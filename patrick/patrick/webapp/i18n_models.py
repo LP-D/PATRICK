@@ -84,7 +84,6 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_run": _s("Analyser", "Analyze"),
     "exp_running": _s("Calcul en cours…", "Computing…"),
     "exp_status": _s("{n} observations · {start} → {end} · {k} actifs", "{n} observations · {start} → {end} · {k} assets"),
-    "exp_pick_two": _s("Choisis au moins deux actifs.", "Pick at least two assets."),
     "exp_pick_one": _s("Choisis au moins un actif.", "Pick at least one asset."),
     "exp_error": _s("Analyse impossible : {e}", "Analysis failed: {e}"),
     "exp_load_error": _s("Erreur de chargement.", "Loading error."),
@@ -97,7 +96,6 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_tab_link": _s("Lien entre deux actifs", "Link between two assets"),
     "exp_tab_struct": _s("Structure", "Structure"),
     "exp_tab_season": _s("Saisonnalité", "Seasonality"),
-    "exp_asset": _s("Actif", "Asset"),
     "exp_asset_a": _s("Actif A", "Asset A"),
     "exp_asset_b": _s("Actif B", "Asset B"),
     "exp_bench": _s("Référence", "Benchmark"),
@@ -149,7 +147,6 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_col_dd": _s("Perte max.", "Max drawdown"),
     "exp_col_pos": _s("% positifs", "% positive"),
     "exp_col_ac1": _s("Autocorr. 1", "Autocorr. 1"),
-    "exp_col_transform": _s("Transformation", "Transform"),
     "exp_normal_rejected": _s("rejetée", "rejected"),
     "exp_normal_kept": _s("non rejetée", "not rejected"),
     "exp_dist_hint": _s(
@@ -267,7 +264,6 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
         "Decomposes common movements: component 1 is the factor explaining the most variance (often \"the market\"). If it dominates, "
         "apparent diversification is low. Loadings show which assets carry each factor."),
     "exp_pca_explained": _s("Variance expliquée", "Explained variance"),
-    "exp_pca_cum": _s("Cumulée", "Cumulative"),
     "exp_pca_n80": _s("Facteurs pour 80 %", "Factors for 80%"),
     "exp_pca_first": _s("Part du facteur 1", "Factor 1 share"),
     "exp_pca_loadings": _s("Charges", "Loadings"),

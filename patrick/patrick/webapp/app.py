@@ -12,9 +12,9 @@ import os
 import sqlite3
 import threading
 from datetime import date, datetime, timezone
-from urllib.parse import urlparse
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -76,7 +76,6 @@ from patrick.webapp.glossary_extra import TERM_CATEGORY
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
 # `/commodities` and `/macro` -- named once here rather than re-typed at
 # each call site (route + tests both need the exact same key).
-COMMODITIES_TARGET_GROUP = "Matières premières (futures)"
 
 # P9 -- French display labels for `run_phase_timing` phases (migration
 # 0016/0017), used by the `/targets/{ticker}` drift chart legend. Kept here
@@ -363,9 +362,6 @@ def _deep_field_groups() -> list[dict]:
                 fields.append({"key": key, "kind": "int" if is_int else "float", "min": lo, "max": hi, "step": "1" if is_int else "any"})
         out.append({"key": name, "fields": fields})
     return out
-
-
-LAUNCH_FAMILIES = ("ml", "dl")
 
 
 def _render_launch(request: Request, view: dict, errors: list[str], status_code: int = 200,
@@ -963,8 +959,6 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     )
 
 
-
-
 @app.get("/runs/{run_id}/status")
 def run_status(run_id: str, request: Request):
     job = _get_run_or_404(run_id)
@@ -982,15 +976,6 @@ def run_results(run_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Résultat introuvable")
     return result
-
-
-ARTIFACT_LABELS = {
-    "leaderboard_csv": "Leaderboard (CSV)",
-    "leaderboard_xlsx": "Leaderboard (Excel)",
-    "tuned_csv": "Configs affinées (CSV)",
-    "best_model": "Meilleur modèle (joblib)",
-    "best_model_meta": "Métadonnées du modèle (JSON)",
-}
 
 
 @app.get("/runs/{run_id}/download/{artifact}")
@@ -1980,7 +1965,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
     most recent RECORDED prediction for (ticker, horizon) -- see
     `patrick.explain.explain_last_prediction` for the feasibility rationale
     (cost measured on a real exported model, why the selection-time SHAP
-    cache is not reused) and `docs/PHASE7_SHAP_FEASIBILITY.md` for the
+    cache is not reused) and `docs/historique/rapports-de-chantier.md` for the
     numbers. Computed synchronously on request (button-triggered from
     `shap_waterfall.js`), never on page load."""
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:

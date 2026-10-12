@@ -243,24 +243,3 @@ def check_coverage(s: pd.Series, full_index: pd.DatetimeIndex,
     return None
 
 
-def evaluate_yfinance_series(name: str, s: pd.Series, full_index: pd.DatetimeIndex,
-                              requested_end: pd.Timestamp, *, max_frozen_run: int = DEFAULT_MAX_FROZEN_RUN,
-                              max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
-                              max_robust_z: float = DEFAULT_MAX_ROBUST_Z,
-                              min_coverage: float = DEFAULT_MIN_COVERAGE) -> QualityIssue | None:
-    """Returns the FIRST detected issue (an excluded series is excluded for
-    one reason, not cumulatively) -- order: coverage, quoting gap, early end,
-    frozen prices, aberrant return (from most "structural" to most fine-
-    grained)."""
-    s = s.rename(name) if s.name != name else s
-    for check, kwargs in (
-        (check_coverage, {"full_index": full_index, "min_coverage": min_coverage}),
-        (check_quote_gaps, {"max_gap_bdays": max_gap_bdays}),
-        (check_stale_tail, {"requested_end": requested_end, "max_gap_bdays": max_gap_bdays}),
-        (check_frozen_prices, {"max_run": max_frozen_run}),
-        (check_aberrant_returns, {"max_robust_z": max_robust_z}),
-    ):
-        issue = check(s, **kwargs)
-        if issue is not None:
-            return issue
-    return None

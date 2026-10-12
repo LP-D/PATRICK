@@ -1,6 +1,6 @@
 """Roadmap bloc 3 -- isotonic/Platt calibration in walk-forward, and a
-calibrated P(up) per prediction (prerequisite of Black-Litterman v2, which
-today uses the predicted class's confidence as a proxy).
+calibrated P(up) per prediction (instead of the predicted class's confidence
+used as a proxy).
 
 Defects of the Phase 5.3 calibration path, proven here:
 1. the isotonic map was fitted on the SMOTE-resampled train (balanced,

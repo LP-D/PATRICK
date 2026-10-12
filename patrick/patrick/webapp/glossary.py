@@ -654,15 +654,6 @@ GLOSSARY: dict[str, dict[str, str]] = {
         "en": ("Each simulated asset is recorded as a simulation and contributes to the deflated "
                "Sharpe ratio of future trials on that target."),
     },
-    "black_litterman": {
-        "fr": ("Black-Litterman : part des rendements implicites d'équilibre (ceux qui "
-               "justifient les poids de marché) et les ajuste par des vues (ici les signaux "
-               "des modèles), pondérées par leur incertitude. Une vue peu fiable déplace peu "
-               "l'allocation."),
-        "en": ("Black-Litterman: starts from equilibrium implied returns (those that justify "
-               "market weights) and tilts them with views (here, model signals) weighted by "
-               "their uncertainty. An unreliable view barely moves the allocation."),
-    },
     "ledoit_wolf": {
         "fr": ("Covariance Ledoit-Wolf : moyenne pondérée de la covariance empirique et d'une "
                "cible structurée ; l'intensité δ ∈ [0, 1] est estimée pour minimiser l'erreur "

@@ -1447,7 +1447,7 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
     in production (no caller anywhere outside `phase9.py`'s own tests, no
     table stores a regime label) -- the template renders its own explicit
     empty state rather than this function simulating a value that does not
-    exist. See DASHBOARD_B1-B2.md."""
+    exist. See docs/historique/rapports-de-chantier.md."""
     symbol_labels = {s["symbol"]: s["label"] for g in universe_overview(conn) for s in g["symbols"]}
 
     targets = list_distinct_targets(conn)

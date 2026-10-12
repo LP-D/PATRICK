@@ -102,8 +102,3 @@ class LocalCache:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    def known_symbols(self, prefix: str = "universe") -> list[str]:
-        out = []
-        for p in self.root.glob(f"{prefix}*.parquet"):
-            out.append(p.stem)
-        return out

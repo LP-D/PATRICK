@@ -1,20 +1,16 @@
 # Architecture PATRICK
 
-Vue d'ensemble technique du pipeline et du produit, à jour au 2026-09-05
-(HEAD `main` = `fbd354b`). Objectif : permettre à une future session de
-comprendre l'organisation du code sans refaire un audit complet depuis zéro.
-Pour le contexte produit/décisions historiques, voir `PRODUCT.md`,
-`METHODOLOGY.md`, `DESIGN.md` — ce document est structurel, pas narratif.
-
-> Note : `README.md` décrit un état ancien du projet (univers VIX/AAPL
-> uniquement, pas de webapp) et n'est plus à jour. Se fier à ce document et au
-> code pour l'état courant.
+Vue d'ensemble technique du pipeline et du produit. La rédaction initiale date du 2026-09-05 (HEAD `main` = `fbd354b`) ;
+les modules apparus depuis sont listés en §3 bis. Objectif : permettre à une future session de comprendre
+l'organisation du code sans refaire un audit complet depuis zéro.
+Pour le contexte produit/décisions, voir `PRODUCT.md`, `METHODOLOGY.md`, `design-system/patrick/MASTER.md` (design) et
+`docs/index.md` (toute la documentation) — ce document est structurel, pas narratif.
 
 ## Table des matières
 
 1. [Layout du dépôt](#1-layout-du-dépôt)
 2. [Flux de données de bout en bout](#2-flux-de-données-de-bout-en-bout)
-3. [Organisation du code](#3-organisation-du-code)
+3. [Organisation du code](#3-organisation-du-code) (et 3 bis : modules ajoutés depuis)
 4. [Le pipeline walk-forward en détail](#4-le-pipeline-walk-forward-en-détail)
 5. [Persistance (SQLite `patrick.db`)](#5-persistance-sqlite-patrickdb)
 6. [Application web](#6-application-web)
@@ -97,6 +93,19 @@ Sous `patrick/patrick/` :
 | `predict.py` | `predict_live()` : scoring en production sans ré-entraînement, écrit `prediction.split='live'`, backfille aussi les issues réelles des prédictions live passées dont l'horizon est désormais écoulé. |
 | `audit.py` | Audits ponctuels de validation (ex. `run_degradation_audit` : impact mesuré des correctifs anti-fuite Phase 0, PAS un moniteur de dérive continue). |
 | `worker.py` | Boucle de traitement de la file de jobs (runs soumis depuis le web). |
+
+## 3 bis. Modules ajoutés depuis la première rédaction
+
+| Module (sous `patrick/patrick/`) | Rôle |
+|---|---|
+| `desktop/` | Application de bureau : lanceur (`python -m patrick.desktop`), mise à jour depuis GitHub, assistant du dossier partagé, raccourcis — voir `docs/ops/application-bureau.md`. |
+| `sync.py`, `sync_merge.py` | Partage de la base, des modèles et du magasin entre PC (fusion par union des runs, PC de référence du patrimoine) — voir `docs/ops/partage-entre-pc.md`. |
+| `settings.py` | Réglages de la machine (`~/.patrick/settings.json`), relus à chaque appel. |
+| `wealth/` | Patrimoine : comptes réels et fictifs, mouvements, import CSV, valorisation et risque ex ante (pages `/patrimoine`, `/mouvements`). |
+| `rl/`, `exploration/`, `research/` | Reinforcement learning (page `/rl`), études statistiques entre actifs (page `/exploration`), études d'événements et campagne alpha. |
+| `benchmark/` | Mesure et non-régression des performances (`python -m patrick.benchmark`). |
+| `live_refresh.py`, `keep_awake.py`, `resource_budget.py` | Actualisation des prédictions live, veille Windows pendant un run, plafond CPU/RAM des étapes parallèles. |
+| `webapp/security.py` | Garde globale des requêtes : hôte local obligatoire, requêtes venues d'un autre site refusées (CSRF, DNS rebinding). |
 
 ## 4. Le pipeline walk-forward en détail
 

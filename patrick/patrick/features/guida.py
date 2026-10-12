@@ -180,7 +180,6 @@ def eurusd_carry_features(raw: pd.DataFrame, us_rate_col: str = EURUSD_US_RATE_C
 # 7. Cross-sectional momentum -- commodities only.
 # ---------------------------------------------------------------------------
 
-COMMODITY_GROUP_NAME = "Matieres premieres (futures)"
 _COMMODITY_GROUP_NAME_ACCENTED = "Matières premières (futures)"
 
 CROSS_SECTIONAL_MOMENTUM_WINDOWS: tuple[int, ...] = (22, 66, 252, 504, 756)  # ~1M/1Q/1Y/2Y/3Y horizons

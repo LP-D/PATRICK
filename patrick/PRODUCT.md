@@ -67,4 +67,4 @@ tout monogramme — cette consigne a été levée explicitement ; elle ne doit p
 être invoquée pour refuser une intégration.
 
 Le monde visuel courant s'appelle « Station d'observation » ; ses règles
-normatives sont dans `DESIGN.md` et `webapp/static/tokens.css`, pas ici.
+normatives sont dans `design-system/patrick/MASTER.md`, pas ici.

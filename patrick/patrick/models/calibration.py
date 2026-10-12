@@ -13,7 +13,7 @@ also split stratified, not in time. `tests/test_calibration_wf.py`.
 
 Also here: P(up) from class probabilities (classes 2 and 3 = slight and
 strong up), Brier score and expected calibration error of that P(up) --
-the calibrated probability Black-Litterman v2 needs instead of the
+the calibrated probability downstream consumers need instead of the
 predicted class's confidence.
 """
 from __future__ import annotations
@@ -73,14 +73,6 @@ def fit_prefit_calibrator(clf, X_cal: np.ndarray, y_cal: np.ndarray, method: str
     if method not in CALIBRATION_METHODS:
         raise ValueError(f"unknown calibration method {method!r} ({CALIBRATION_METHODS})")
     return CalibratedClassifierCV(FrozenEstimator(clf), method=method).fit(X_cal, y_cal)
-
-
-def calibrate_classifier(base_clf, X_tr: np.ndarray, y_tr: np.ndarray, cv: int = 3):
-    """Legacy k-fold calibration (kept for external callers; the pipeline
-    uses `calibration_split` + `fit_prefit_calibrator`)."""
-    cal = CalibratedClassifierCV(base_clf, method="isotonic", cv=cv)
-    cal.fit(X_tr, y_tr)
-    return cal
 
 
 def p_up_from_proba(proba: np.ndarray, classes) -> np.ndarray:
