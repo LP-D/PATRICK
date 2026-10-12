@@ -122,15 +122,38 @@ def listening_pids(port: int) -> list[int]:
     return sorted(pids)
 
 
+def is_worker_cmdline(cmd: list[str] | None) -> bool:
+    """Vrai pour la ligne de commande d'un entraînement (`python -m patrick.cli worker ...`)."""
+    cmd = cmd or []
+    return "patrick.cli" in cmd and "worker" in cmd
+
+
+def _worker_survivors(proc: psutil.Process) -> set[int]:
+    """Les entraînements descendants de `proc` (le worker est lancé par le serveur web, détaché mais encore son enfant pour le
+    système) et tout ce qu'ils ont lancé : calcul parallèle, suivi de ressources. Arrêter le serveur ne doit pas les emporter."""
+    spared: set[int] = set()
+    for child in proc.children(recursive=True):
+        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+            if child.pid not in spared and is_worker_cmdline(child.cmdline()):
+                spared.add(child.pid)
+                spared.update(p.pid for p in child.children(recursive=True))
+    return spared
+
+
 def kill_process_tree(pid: int, *, wait_s: float = 5.0) -> bool:
     """Arrête `pid` et ses descendants, SAUF le processus appelant : l'assistant de relance est lancé par le
-    serveur qu'il doit arrêter, donc il en est un descendant (il s'arrêterait lui-même avant le serveur)."""
+    serveur qu'il doit arrêter, donc il en est un descendant (il s'arrêterait lui-même avant le serveur).
+
+    Sont aussi épargnés les entraînements (`patrick.cli worker`) et leurs descendants : le serveur web les lance, détachés, pour
+    qu'un run survive à sa fermeture. Sans cette exception, fermer la fenêtre, relancer le serveur ou « Arrêter PATRICK » tuait le
+    run en cours (le job restait « running » puis passait en erreur « worker interrupted »)."""
     try:
         proc = psutil.Process(pid)
     except psutil.NoSuchProcess:
         return False
     me = os.getpid()
-    victims = [p for p in (*proc.children(recursive=True), proc) if p.pid != me]
+    spared = _worker_survivors(proc)
+    victims = [p for p in (*proc.children(recursive=True), proc) if p.pid != me and p.pid not in spared]
     for p in victims:
         with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
             p.terminate()
@@ -142,7 +165,7 @@ def kill_process_tree(pid: int, *, wait_s: float = 5.0) -> bool:
 
 
 def stop_server(port: int) -> int:
-    """Arrête ce qui écoute sur `port` (le serveur web; le « worker » d'entraînement continue). Renvoie le nombre
+    """Arrête ce qui écoute sur `port` (le serveur web ; le « worker » d'entraînement continue). Renvoie le nombre
     de processus arrêtés."""
     count = 0
     for pid in listening_pids(port):
@@ -170,8 +193,7 @@ def server_error_tail(lines: int = 8) -> str:
 def worker_running() -> bool:
     """Un entraînement (processus `patrick.cli worker`) est-il en cours ?"""
     for proc in psutil.process_iter(["cmdline"]):
-        cmd = proc.info.get("cmdline") or []
-        if "patrick.cli" in cmd and "worker" in cmd:
+        if is_worker_cmdline(proc.info.get("cmdline")):
             return True
     return False
 
