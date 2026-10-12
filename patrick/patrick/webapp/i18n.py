@@ -20,8 +20,6 @@ SUPPORTED_LANGS = ("fr", "en")
 DEFAULT_LANG = "fr"
 
 STRINGS: dict[str, dict[str, str]] = {
-    "tagline": {"fr": "walk-forward · SHAP · Optuna — sans YAML",
-                "en": "walk-forward · SHAP · Optuna — no YAML"},
     "banner_fix_errors": {"fr": "Corrige avant de lancer :", "en": "Fix before launching:"},
 
     "section_settings": {"fr": "Configuration du run", "en": "Run configuration"},
@@ -144,10 +142,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings_mode_show_expert": {"fr": "Afficher les réglages avancés", "en": "Show advanced settings"},
     "settings_mode_hide_expert": {"fr": "Masquer les réglages avancés", "en": "Hide advanced settings"},
     "field_run_name": {"fr": "Nom du run (généré automatiquement)", "en": "Run name (auto-generated)"},
-    "settings_mode_hint": {
-        "fr": "Les options avancées restent appliquées, même masquées.",
-        "en": "Advanced options remain active even when hidden.",
-    },
     "profile_name": {"fr": "Nom du profil", "en": "Profile name"},
     "profile_save": {"fr": "Enregistrer le profil", "en": "Save profile"},
     "profile_saved": {"fr": "Profils enregistrés", "en": "Saved profiles"},
@@ -202,10 +196,6 @@ STRINGS: dict[str, dict[str, str]] = {
                        "en": "Regimes (comma-separated, e.g. GLOBAL)"},
 
     "section_universe": {"fr": "Univers — features brutes", "en": "Universe — raw features"},
-    "universe_hint": {"fr": ("Toute la base disponible est utilisée automatiquement (tickers yfinance + "
-                             "séries FRED), à l'exclusion de la cible choisie ci-dessus."),
-                       "en": ("The whole available base is used automatically (yfinance tickers + FRED "
-                              "series), excluding the target chosen above.")},
     "field_start_date": {"fr": "Date de début", "en": "Start date"},
     "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
     "field_universe_scope": {"fr": "Univers candidat", "en": "Candidate universe"},
@@ -215,23 +205,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_reduction_corr_threshold": {
         "fr": "Seuil de réduction |corr| (vide = désactivé)",
         "en": "Reduction |corr| threshold (empty = disabled)"},
-    "reduction_hint": {
-        "fr": ("Regroupe les séries candidates par clustering hiérarchique sur 1-|corr| et n'en garde qu'une "
-               "par groupe. Décidé dans chaque fold, sur ses seules données d'entraînement (walk-forward, "
-               "holdout, CPCV, modèle final). En dessous de 0,8 : avertissement (réduction agressive)."),
-        "en": ("Groups candidate series by hierarchical clustering on 1-|corr| and keeps one per group. "
-               "Decided inside each fold, on its training data only (walk-forward, holdout, CPCV, final "
-               "model). Below 0.8: warning (aggressive reduction).")},
 
     "section_data_quality": {"fr": "Qualité de données (portes à l'ingestion)",
                               "en": "Data quality (ingestion gates)"},
-    "data_quality_hint": {"fr": ("Chaque série est contrôlée avant d'entrer dans l'univers de features "
-                                 "(prix figés, trous de cotation, rendements aberrants, fin de série "
-                                 "précoce, séries FRED absentes) — exclusion motivée et persistée, "
-                                 "jamais silencieuse."),
-                           "en": ("Every series is checked before entering the feature universe (frozen "
-                                  "prices, quote gaps, aberrant returns, early series end, missing FRED "
-                                  "series) — exclusions are explicit and persisted, never silent.")},
     "field_data_quality_enabled": {"fr": "Portes de qualité actives",
                                     "en": "Data quality gates active"},
     "field_max_frozen_run": {"fr": "Clôtures identiques consécutives max.",
@@ -256,14 +232,6 @@ STRINGS: dict[str, dict[str, str]] = {
     # configuration surface at all.
     "section_technical_lookbacks": {"fr": "Lookbacks technical (fenêtres roulantes)",
                                      "en": "Technical lookbacks (rolling windows)"},
-    "technical_lookbacks_hint": {
-        "fr": "Fenêtres roulantes (en barres) utilisées par les features technical (famille « technical »). "
-              "Liste d'entiers séparés par des virgules (ex. 10,20,60 ou 5-15). Valeurs par défaut = anciennes "
-              "valeurs codées en dur ; comportement inchangé si non modifié.",
-        "en": "Rolling windows (in bars) used by the technical features (\"technical\" family). "
-              "Comma-separated integer list (e.g. 10,20,60 or 5-15). Defaults = the former hardcoded values; "
-              "unmodified behavior if left as-is.",
-    },
 
     "section_validation": {"fr": "Validation (walk-forward ou CPCV)", "en": "Validation (walk-forward or CPCV)"},
     "field_scheme": {"fr": "Schéma", "en": "Scheme"},
@@ -302,10 +270,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "field_staged_screening": {"fr": "Présélection progressive (fenêtre totale, puis walk-forward du meilleur)",
                                "en": "Staged screening (total window, then walk-forward of the best)"},
     "field_screening_finalists": {"fr": "Finalistes par horizon et régime", "en": "Finalists per horizon and regime"},
-    "hint_staged_screening": {
-        "fr": "Chaque candidat est entraîné une seule fois et noté d'un coup sur toute la période hors-échantillon ; seuls les meilleurs par horizon/régime passent ensuite au walk-forward complet puis à Optuna. Beaucoup moins cher, mais le modèle n'est pas ré-entraîné au fil des années pendant le classement : ses scores sont plus sévères que ceux du walk-forward. Toute la grille et son score restent visibles. Décoché : mode exhaustif (chaque candidat sur tous les folds).",
-        "en": "Each candidate is fitted once and scored in one go on the whole out-of-sample period; only the best ones per horizon/regime then go through the full walk-forward and Optuna. Much cheaper, but the model is not retrained over the years during the ranking: its scores are harsher than walk-forward ones. The whole grid and its scores stay visible. Off means exhaustive mode (every candidate on all folds).",
-    },
 
     "section_sampler": {"fr": "Sampler (rééquilibrage des classes)", "en": "Sampler (class rebalancing)"},
     "field_uniqueness_weights": {"fr": "Poids d'unicité / bootstrap séquentiel (horizons chevauchants)",
@@ -325,10 +289,6 @@ STRINGS: dict[str, dict[str, str]] = {
     # Phase 1 (feature/hyperparams-ui): search-space bounds per algo/hyperparameter,
     # previously fixed in code with no configuration surface at all.
     "section_optuna_bounds": {"fr": "Bornes de recherche Optuna", "en": "Optuna search bounds"},
-    "optuna_bounds_hint": {
-        "fr": "Pour chaque algorithme, la plage explorée par Optuna pour chacun de ses hyperparamètres (min doit être < max). Valeurs par défaut = plage historique du projet VIX ; ne modifier que si nécessaire.",
-        "en": "For each algorithm, the range Optuna searches for each of its hyperparameters (min must be < max). Defaults = the VIX project's historical range; change only if needed.",
-    },
     "optuna_bound_low": {"fr": "min", "en": "min"},
     "optuna_bound_high": {"fr": "max", "en": "max"},
 
@@ -526,14 +486,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav_mouvements": {"fr": "Mouvements", "en": "Movements"},
     "nav_patrimoine_simulation": {"fr": "Simulateur patrimoine", "en": "Wealth simulator"},
     "wealth_title": {"fr": "Patrimoine", "en": "Wealth"},
-    "wealth_subtitle": {
-        "fr": "Comptes réels et fictifs, valorisés aux derniers cours connus. Les positions se déduisent des mouvements — rien n'est saisi deux fois. Glisse un mouvement sur un compte fictif pour le copier dans le bac à sable.",
-        "en": "Real and fictive accounts, valued at the latest known prices. Positions are derived from movements — nothing is entered twice. Drag a movement onto a fictive account to copy it into the sandbox.",
-    },
-    "wealth_movements_subtitle": {
-        "fr": "Tous les mouvements, du plus récent au plus ancien. Glisse une ligne sur un compte : réel → réel déplace, vers un compte fictif copie, fictif → réel est refusé. Dépose un relevé CSV sur la zone d'import d'un compte pour le prévisualiser puis l'enregistrer.",
-        "en": "Every movement, newest first. Drag a row onto an account: real → real moves it, onto a fictive account copies it, fictive → real is refused. Drop a CSV statement on an account's import zone to preview then record it.",
-    },
     "wealth_new_account": {"fr": "Nouveau compte", "en": "New account"},
     "wealth_mode_real": {"fr": "Réel", "en": "Real"},
     "wealth_mode_fictive": {"fr": "Fictif", "en": "Fictive"},
@@ -542,16 +494,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "wealth_import_done": {"fr": "{n} mouvement(s) enregistré(s).", "en": "{n} movement(s) saved."},
     "wealth_transfer_moved": {"fr": "Mouvement déplacé.", "en": "Movement moved."},
     "wealth_transfer_copied": {"fr": "Mouvement copié dans le compte fictif.", "en": "Movement copied into the fictive account."},
-    "portfolio_subtitle": {
-        "fr": "Synthèse cross-actifs de l'univers réduit : signaux haussiers/baissiers agrégés par catégorie (config/defaults.py::DEFAULT_TARGET_GROUPS), à partir du même dernier signal par (cible, horizon) que /predictions — aucune nouvelle requête, une agrégation en Python de la même donnée.",
-        "en": "Cross-asset synthesis of the reduced universe: bullish/bearish signal counts aggregated per category (config/defaults.py::DEFAULT_TARGET_GROUPS), from the same latest (target, horizon) signal as /predictions — no new query, a Python aggregation of the same data.",
-    },
     "portfolio_signals_title": {"fr": "Signaux par catégorie", "en": "Signals by category"},
     "portfolio_contradictions_title": {"fr": "Signaux contradictoires", "en": "Contradictory signals"},
-    "portfolio_contradictions_subtitle": {
-        "fr": "Paires d'actifs historiquement corrélés (voir tracking/portfolio.py::CORRELATED_PAIRS) dont les derniers signaux, au même horizon, contredisent le sens de corrélation attendu.",
-        "en": "Pairs of historically correlated assets (see tracking/portfolio.py::CORRELATED_PAIRS) whose latest signals, at the same horizon, contradict the expected correlation direction.",
-    },
     "portfolio_no_contradiction": {
         "fr": "Aucune contradiction détectée pour l'instant sur les paires suivies.",
         "en": "No contradiction detected so far on the tracked pairs.",
@@ -562,25 +506,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Correlated pairs (one per line, symbol_a:symbol_b:sens)",
     },
     "portfolio_pairs_apply": {"fr": "Appliquer", "en": "Apply"},
-    "portfolio_pairs_hint": {
-        "fr": "sens : positive ou negative. Champ vide = les 3 paires par défaut (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
-        "en": "sens: positive or negative. Empty field = the 3 default pairs (DXY/EUR-USD, WTI/Brent, S&P500/VIX).",
-    },
-    "assetpanel_subtitle": {
-        "fr": "Un panneau de statistiques par actif de ce groupe (config/defaults.py::DEFAULT_TARGET_GROUPS) : rendements sur les horizons du pipeline, vue longue période, z-score glissant, moyennes mobiles, volatilité — des lectures directes du cours, jamais une prédiction du modèle. Chargées ci-dessous une par une, par actif.",
-        "en": "One stats panel per asset in this group (config/defaults.py::DEFAULT_TARGET_GROUPS): returns over the pipeline's horizons, a longer-window view, rolling z-score, moving averages, volatility — direct reads of the price series, never a model prediction. Loaded below one asset at a time.",
-    },
     "assetpanel_help_label": {"fr": "Statistiques par actif", "en": "Per-asset statistics"},
     "assetpanel_bars_help_label": {"fr": "Fenêtres de calcul", "en": "Calculation windows"},
-    "assetpanel_bars_hint": {
-        "fr": "Fenêtres exprimées en barres de la série (jours de bourse pour ces futures), pas en durée calendaire.",
-        "en": "Windows are counted in bars of the series (trading days for these futures), not calendar time.",
-    },
-    "assetpanel_bars_hint_macro": {
-        "fr": "Fenêtres exprimées en barres de la série, pas en durée calendaire — plusieurs séries FRED de ce groupe sont mensuelles ou trimestrielles (CPI, GDP, PAYEMS, RSAFS, UMCSENT, UNRATE), une barre y couvre donc bien plus qu'un jour.",
-        "en": "Windows are counted in bars of the series, not calendar time — several FRED series in this group are monthly or quarterly (CPI, GDP, PAYEMS, RSAFS, UMCSENT, UNRATE), so one bar there spans much more than a day.",
-    },
-    "assetpanel_loading": {"fr": "Chargement…", "en": "Loading…"},
     "assetpanel_error": {"fr": "Indisponible : {error}", "en": "Unavailable: {error}"},
     "assetpanel_insufficient": {
         "fr": "Historique insuffisant pour calculer ces statistiques pour l'instant.",
@@ -591,25 +518,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "assetpanel_long_window": {"fr": "Vue longue période", "en": "Longer-window view"},
     "assetpanel_zscore": {"fr": "Z-score (60 barres)", "en": "Z-score (60 bars)"},
     "assetpanel_ma": {"fr": "Cours vs moyenne mobile", "en": "Price vs moving average"},
-    "assetpanel_vol": {"fr": "Volatilité (proxy Heston, réalisée annualisée)", "en": "Volatility (Heston proxy, annualized realized)"},
     "assetpanel_vol_current": {"fr": "courante (20 barres)", "en": "current (20 bars)"},
     "assetpanel_vol_long_run": {"fr": "long terme (~252 barres)", "en": "long-run (~252 bars)"},
-    "assetpanel_bars": {"fr": "{n} barres", "en": "{n} bars"},
 
     # "Observation station" world — chrome: theme toggle and activity
     # record strip. The theme button names the current STATE, not the
     # action (it's an indicator with a dot): "Day" = currently in light mode.
-    "theme_light": {"fr": "Jour", "en": "Day"},
-    "theme_dark": {"fr": "Nuit", "en": "Night"},
-    "record_aria": {"fr": "Activité des runs dans le temps",
-                    "en": "Run activity over time"},
-    "record_loading": {"fr": "Lecture de la bande…", "en": "Reading the record…"},
-    "record_unavailable": {"fr": "Bande illisible : la base de suivi n'a pas pu être ouverte.",
-                           "en": "Record unreadable: the tracking database could not be opened."},
-    "record_empty": {"fr": "Aucun run enregistré — la bande se remplira au premier run lancé.",
-                     "en": "No run recorded yet — the record fills from the first run launched."},
-    "record_runs": {"fr": "runs", "en": "runs"},
-    "record_span_range": {"fr": "du {from} au {to}", "en": "from {from} to {to}"},
     # The station's verdict. "What holds" is not colored --ok: the product's
     # stance is that a clearly established "no" is a successful result, so
     # zero survivors is not a bad state.
@@ -628,19 +542,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "scope_runs_rel": {"fr": "runs affichés ayant produit un résultat Diebold-Mariano",
                        "en": "listed runs that produced a Diebold-Mariano result"},
 
-    "record_span_day": {"fr": "le {d}", "en": "on {d}"},
-    "record_hidden": {"fr": "({n} hors champ)", "en": "({n} off-strip)"},
-    "record_kbd": {"fr": "Activité des runs — flèches pour parcourir, Entrée pour ouvrir",
-                   "en": "Run activity — arrows to browse, Enter to open"},
-    "record_scale": {"fr": "hauteur = essais (log, max {max})",
-                     "en": "height = trials (log, max {max})"},
-    "record_counts": {"fr": "{done} terminés · {running} en cours · {failed} échoués",
-                      "en": "{done} done · {running} running · {failed} failed"},
-    "record_unknown": {"fr": "{n} sans compte d'essais (hauteur plancher)",
-                       "en": "{n} with no trial count (floor height)"},
-    "record_trials": {"fr": "essais", "en": "trials"},
-    "record_no_trials": {"fr": "essais inconnus", "en": "trial count unknown"},
-    "record_tap_again": {"fr": "touche à nouveau pour ouvrir", "en": "tap again to open"},
 
     # Text equivalents for the canvases. A chart with no replacement text
     # does not exist for a screen reader; these labels are rewritten by
@@ -649,93 +550,14 @@ STRINGS: dict[str, dict[str, str]] = {
                            "en": "Target price history — nothing plotted yet."},
     "preview_aria": {"fr": "Cours de {symbol} sur {period} : {n} points, du plus bas {min} au plus haut {max}, dernier point {last}.",
                      "en": "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."},
-    "sim_aria_equity_empty": {"fr": "Courbe de capital — aucune simulation lancée.",
-                              "en": "Equity curve — no simulation run yet."},
-    "sim_aria_drawdown_empty": {"fr": "Drawdown — aucune simulation lancée.",
-                                "en": "Drawdown — no simulation run yet."},
-    "sim_aria_dist_empty": {"fr": "Distribution des rendements par trade — aucune simulation lancée.",
-                            "en": "Per-trade return distribution — no simulation run yet."},
-    "sim_aria_equity": {"fr": "Courbe de capital sur {n} points : de {first} à {last}, comparée au buy-and-hold qui finit à {bh}.",
-                        "en": "Equity curve over {n} points: {first} to {last}, against buy-and-hold ending at {bh}."},
-    "sim_aria_drawdown": {"fr": "Drawdown sur {n} points, creux maximal {max}.",
-                          "en": "Drawdown over {n} points, deepest {max}."},
-    "sim_aria_dist": {"fr": "Distribution de {n} trades : {pos} gagnants, {neg} perdants, du pire {min} au meilleur {max}.",
-                      "en": "Distribution of {n} trades: {pos} winning, {neg} losing, worst {min}, best {max}."},
 
     # Phase 4 — investment simulator
     "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
-    "sim_title": {"fr": "Simulateur d'investissement (mono-actif)", "en": "Investment simulator (single-asset)"},
-    "sim_section_config": {"fr": "Configuration de la stratégie", "en": "Strategy configuration"},
-    "sim_section_equity": {"fr": "Courbe de capital & drawdown", "en": "Equity curve & drawdown"},
-    "sim_section_metrics": {"fr": "Métriques vs buy-and-hold", "en": "Metrics vs buy-and-hold"},
-    "sim_section_distribution": {"fr": "Distribution des rendements par trade", "en": "Per-trade return distribution"},
-    "sim_section_trades": {"fr": "Journal des trades", "en": "Trade log"},
-    "sim_field_run": {"fr": "Run", "en": "Run"},
-    "sim_field_trial": {"fr": "Modèle (essai)", "en": "Model (trial)"},
-    "sim_field_mode": {"fr": "Mode signal → position", "en": "Signal → position mode"},
-    "sim_mode_threshold": {"fr": "Seuil binaire", "en": "Binary threshold"},
-    "sim_mode_proportional": {"fr": "Proportionnel", "en": "Proportional"},
     # Ex-"Kelly fractionnaire" : l'API n'accepte plus que `heuristic_leverage`
     # (ce n'est pas la formule de Kelly, cf. simulate/engine.py).
-    "sim_mode_heuristic": {"fr": "Levier heuristique (≠ Kelly)", "en": "Heuristic leverage (≠ Kelly)"},
-    "sim_subtitle": {
-        "fr": "Rejoue les signaux déjà enregistrés d'un modèle — aucun ré-entraînement. Chaque simulation est journalisée et comptée dans le Sharpe déflaté.",
-        "en": "Replays a model's recorded signals — no retraining. Every simulation is logged and counted in the deflated Sharpe.",
-    },
-    "sim_field_segment": {"fr": "Segment de prédictions", "en": "Prediction segment"},
-    "sim_segment_auto": {"fr": "Auto (holdout, sinon test, sinon live)", "en": "Auto (holdout, else test, else live)"},
-    "sim_segment_holdout": {"fr": "Holdout terminal (hors échantillon)", "en": "Terminal holdout (out of sample)"},
-    "sim_segment_test": {"fr": "Test walk-forward (biaisé : sert à la sélection)", "en": "Walk-forward test (biased: used for selection)"},
-    "sim_segment_live": {"fr": "Live (paper trading)", "en": "Live (paper trading)"},
-    "sim_segment_hint": {
-        "fr": "Un seul segment par simulation : les mélanger additionnerait des scores de sélection et des scores hors échantillon.",
-        "en": "One segment per simulation: pooling them would mix selection scores with out-of-sample scores.",
-    },
-    "sim_segment_used": {"fr": "Segment simulé : {segment} ({n} signaux). Disponibles : {available}.", "en": "Simulated segment: {segment} ({n} signals). Available: {available}."},
-    "sim_field_threshold": {"fr": "Seuil (proba)", "en": "Threshold (proba)"},
-    "sim_field_leverage_fraction": {"fr": "Fraction de levier", "en": "Leverage fraction"},
-    "sim_field_max_leverage": {"fr": "Levier max", "en": "Max leverage"},
-    "sim_field_max_position": {"fr": "Position max", "en": "Max position"},
-    "sim_field_short_allowed": {"fr": "Vente à découvert autorisée", "en": "Short selling allowed"},
-    "sim_field_overlap_mode": {"fr": "Horizons chevauchants", "en": "Overlapping horizons"},
-    "sim_overlap_tranches": {"fr": "Tranches (moyenne des signaux actifs)", "en": "Tranches (average of active signals)"},
-    "sim_overlap_renewed": {"fr": "Position unique renouvelée", "en": "Single renewed position"},
-    "sim_field_asset_class": {"fr": "Classe d'actif (frictions par défaut)", "en": "Asset class (default frictions)"},
-    "sim_field_spread_bps": {"fr": "Spread (bps, aller-retour)", "en": "Spread (bps, round-trip)"},
-    "sim_field_commission_bps": {"fr": "Commissions (bps, aller-retour)", "en": "Commissions (bps, round-trip)"},
-    "sim_field_carry_bps": {"fr": "Coût de portage (bps/an)", "en": "Carry cost (bps/year)"},
-    "sim_run_button": {"fr": "Lancer la simulation", "en": "Run simulation"},
-    "sim_no_run_selected": {"fr": "Choisis un run puis un modèle.", "en": "Choose a run then a model."},
-    "sim_loading": {"fr": "Simulation en cours…", "en": "Simulating…"},
-    "sim_error": {"fr": "Erreur : {error}", "en": "Error: {error}"},
-    "sim_kelly_disabled": {"fr": "{message}", "en": "{message}"},
-    "sim_overfitting_guard": {"fr": "⚠ {n} configuration(s) de simulation testée(s) sur cette cible — Sharpe déflaté = {dsr}",
-                               "en": "⚠ {n} simulation configuration(s) tested on this target — deflated Sharpe = {dsr}"},
-    "sim_metric_cagr": {"fr": "CAGR", "en": "CAGR"},
-    "sim_metric_vol": {"fr": "Vol. annualisée", "en": "Annualized vol"},
-    "sim_metric_sharpe": {"fr": "Sharpe (déflaté)", "en": "Sharpe (deflated)"},
-    "sim_metric_sortino": {"fr": "Sortino", "en": "Sortino"},
-    "sim_metric_max_dd": {"fr": "Max drawdown (durée)", "en": "Max drawdown (duration)"},
-    "sim_metric_turnover": {"fr": "Turnover annuel", "en": "Annual turnover"},
-    "sim_metric_hit_rate": {"fr": "Hit rate", "en": "Hit rate"},
-    "sim_metric_profit_factor": {"fr": "Profit factor", "en": "Profit factor"},
-    "sim_metric_avg_exposure": {"fr": "Exposition moyenne", "en": "Average exposure"},
-    "sim_metric_break_even": {"fr": "Coût de rentabilité (break-even)", "en": "Break-even cost"},
     # Simulator empty states at rest. Without them, `/simulate` opens on
     # three blank plotting panels and two header-only tables: the product's
     # least dense surface read as broken rather than waiting.
-    "sim_empty_curves": {"fr": "Aucune simulation lancée — choisis un run et un modèle, puis lance la simulation pour tracer la courbe de capital et le drawdown.",
-                         "en": "No simulation run yet — pick a run and a model, then launch to plot the equity curve and drawdown."},
-    "sim_empty_metrics": {"fr": "Les métriques apparaîtront ici, comparées au buy-and-hold, une fois la simulation lancée.",
-                          "en": "Metrics will appear here, compared against buy-and-hold, once the simulation runs."},
-    "sim_empty_distribution": {"fr": "La distribution des rendements par trade se calcule à partir des trades simulés — aucun pour l'instant.",
-                               "en": "The per-trade return distribution is computed from simulated trades — none yet."},
-    "sim_empty_trades": {"fr": "Aucun trade simulé. Le journal complet, exportable en CSV, s'affiche après le lancement.",
-                         "en": "No simulated trades. The full log, exportable as CSV, appears after launching."},
-    "sim_col_strategy": {"fr": "Stratégie", "en": "Strategy"},
-    "sim_col_buy_hold": {"fr": "Buy & hold", "en": "Buy & hold"},
-    "sim_trades_download": {"fr": "Exporter en CSV", "en": "Export as CSV"},
-    "sim_trades_none": {"fr": "Aucun trade.", "en": "No trades."},
 
     # Phase 5 — exploratory surfaces (explorer, history, details)
     # Shared columns
@@ -744,19 +566,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "col_horizon": {"fr": "Horizon", "en": "Horizon"},
     "col_scheme": {"fr": "Schéma", "en": "Scheme"},
     "col_status": {"fr": "Statut", "en": "Status"},
-    "col_started": {"fr": "Lancé", "en": "Started"},
     "col_trials": {"fr": "Essais", "en": "Trials"},
-    "col_best_f1": {"fr": "F1_dir", "en": "F1_dir"},
     "col_dm_p": {"fr": "p-value DM", "en": "DM p-value"},
 
     # Shared helpers
     "h_horizon_unit": {"fr": "{h}j", "en": "{h}d"},
-    "h_significant": {"fr": "significatif (p < 0.05)", "en": "significant (p < 0.05)"},
-    "h_not_significant": {"fr": "non significatif (p ≥ 0.05)", "en": "not significant (p ≥ 0.05)"},
-    "h_not_computed": {"fr": "non calculé", "en": "not computed"},
-    "h_not_computable": {"fr": "non calculable", "en": "not computable"},
-    "h_ci90": {"fr": "IC 90%", "en": "90% CI"},
-    "h_table_empty": {"fr": "Aucune donnée.", "en": "No data."},
 
     # Runs explorer (rl_*)
     "rl_title": {"fr": "Historique des runs", "en": "Runs history"},
@@ -774,7 +588,6 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # Universe explorer (un_*)
     "un_title": {"fr": "Univers de cibles", "en": "Targets universe"},
-    "un_subtitle": {"fr": "Toutes les cibles configurables (mêmes groupes que le formulaire de lancement), croisées avec l'historique réel de runs — aucune donnée nouvelle, juste la jointure des deux.", "en": "All configurable targets (same groups as the launch form), crossed with actual run history — no new data, just the join of the two."},
     "un_col_symbol": {"fr": "Symbole", "en": "Symbol"},
     "un_col_label": {"fr": "Libellé", "en": "Label"},
     "un_col_source": {"fr": "Source", "en": "Source"},
@@ -786,32 +599,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "un_footer": {"fr": "{n} cible(s) · {d} avec au moins un run terminé · {v} jamais lancée(s)", "en": "{n} target(s) · {d} with at least one completed run · {v} never launched"},
 
     # Targets explorer (tg_*)
-    "tg_subtitle": {"fr": "Agrégation sur cette cible : tous les runs, tous les horizons. Métriques cumulées et historique des runs.", "en": "Aggregation for this target: all runs, all horizons. Cumulative metrics and runs history."},
     "tg_empty": {"fr": "Aucun run pour cette cible.", "en": "No runs for this target."},
-    "tg_empty_hint": {"fr": "Aucun run n'a été exécuté sur cette cible — lance-en un depuis Configuration.", "en": "No run has been executed on this target — launch one from Configuration."},
-    "tg_metric_cumulative": {"fr": "Essais cumulés", "en": "Cumulative trials"},
-    "tg_rel_cumulative": {"fr": "Toutes les configurations testées sur cette cible, tout run confondu.", "en": "All configurations tested on this target, across all runs."},
-    "tg_metric_runs": {"fr": "Nombre de runs", "en": "Number of runs"},
-    "tg_rel_runs": {"fr": "Runs complètement exécutés sur cette cible.", "en": "Completed runs on this target."},
-    "tg_section_runs": {"fr": "Historique des runs", "en": "Runs history"},
-    "tg_runs_footer": {"fr": "run(s) complètement exécutés sur cette cible", "en": "run(s) completed on this target"},
-    "tg_section_pbo": {"fr": "Analyse PBO", "en": "PBO analysis"},
-    "tg_pbo_hint": {"fr": "Nombre de blocs satisfont le diagnostic de fiabilité pour PBO sur cette cible.", "en": "Number of blocks satisfy the reliability diagnostic for PBO on this target."},
-    "tg_col_nblocks": {"fr": "Blocs", "en": "Blocks"},
-    "tg_col_reliability": {"fr": "Fiabilité", "en": "Reliability"},
-    "tg_pbo_empty": {"fr": "Pas d'analyse PBO disponible.", "en": "No PBO analysis available."},
-    "tg_pbo_footer": {"fr": "Chaque ligne représente un horizon différent.", "en": "Each row represents a different horizon."},
 
     # Run detail (rd_*)
-    "rd_title": {"fr": "Détails du run", "en": "Run details"},
     "rd_ctx_target": {"fr": "cible", "en": "target"},
-    "rd_ctx_snapshot": {"fr": "snapshot", "en": "snapshot"},
-    "rd_ctx_config": {"fr": "config", "en": "config"},
-    "rd_ctx_git": {"fr": "git", "en": "git"},
-    "rd_ctx_seed": {"fr": "seed", "en": "seed"},
     "rd_horizon": {"fr": "horizon", "en": "horizon"},
-    "rd_started": {"fr": "lancé", "en": "started"},
-    "rd_finished": {"fr": "terminé", "en": "finished"},
     "rd_sections": {"fr": "Sections", "en": "Sections"},
     "rd_sections_aria": {"fr": "Sections de la page", "en": "Page sections"},
     "rd_section_summary": {"fr": "Résumé", "en": "Summary"},
@@ -822,7 +614,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "scope_universe": {"fr": "Portée de l'univers", "en": "Universe scope"},
     "scope_universe_rel": {"fr": "{done} avec un run complètement exécuté, {never} jamais lancée(s)", "en": "{done} with a completed run, {never} never launched"},
     # Phase 5: improved empty states for hardening
-    "empty_runs_title": {"fr": "Aucun run pour l'instant.", "en": "No run yet."},
     "empty_runs_hint": {"fr": "Configure et lance un run depuis la page", "en": "Configure and launch a run from the page"},
 
     # Phase 7 -- SHAP waterfall (feature/shap-waterfall), /targets/{ticker}
@@ -926,18 +717,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "run_pause", "run_resume", "run_stop", "run_paused", "run_control_error",
         "stat_holdout", "stat_dm_significant", "stat_dm_not_significant",
         "stat_cumulative_trials", "stat_pbo",
-        "sim_no_run_selected", "sim_loading", "sim_error", "sim_kelly_disabled", "sim_segment_used",
-        "sim_overfitting_guard", "sim_trades_none",
-        "sim_metric_cagr", "sim_metric_vol", "sim_metric_sharpe", "sim_metric_sortino",
-        "sim_metric_max_dd", "sim_metric_turnover", "sim_metric_hit_rate",
-        "sim_metric_profit_factor", "sim_metric_avg_exposure", "sim_metric_break_even",
-        "sim_col_strategy", "sim_col_buy_hold",
-        "record_unavailable", "record_empty", "record_runs", "record_span",
-        "record_scale", "record_counts", "record_unknown", "record_trials",
-        "record_no_trials", "record_tap_again", "record_span_range", "record_span_day", "record_hidden",
         "preview_aria_empty", "preview_aria",
-        "sim_aria_equity_empty", "sim_aria_drawdown_empty", "sim_aria_dist_empty",
-        "sim_aria_equity", "sim_aria_drawdown", "sim_aria_dist",
         "btn_confirm_launch", "btn_cancel", "confirm_line_target", "confirm_line_scheme",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_queue",
         "confirm_line_gates",
@@ -948,11 +728,9 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "adv_state_fields", "adv_state_more", "adv_state_modified",
         "recap_horizons", "recap_targets_count",
         # feature/ticker-stats-panel (asset_stats.js)
-        "assetpanel_loading", "assetpanel_error", "assetpanel_insufficient",
+        "assetpanel_error", "assetpanel_insufficient",
         "assetpanel_load_error", "assetpanel_returns", "assetpanel_long_window",
-        "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol",
-        "assetpanel_vol_current", "assetpanel_vol_long_run", "assetpanel_bars",
-        # feature/shap-waterfall (shap_waterfall.js)
+        "assetpanel_zscore", "assetpanel_ma", "assetpanel_vol_current", "assetpanel_vol_long_run", # feature/shap-waterfall (shap_waterfall.js)
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]

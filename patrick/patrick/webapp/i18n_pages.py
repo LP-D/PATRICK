@@ -71,7 +71,6 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "dq_col_source": _s("Source", "Source"),
     "dq_source_store": _s("données ingérées", "ingested data"),
     "dq_source_declared": _s("1re cotation vérifiée", "verified first listing"),
-    "dq_history_only_short": _s("Seulement les cibles insuffisantes", "Only insufficient targets"),
     "dq_suspect_title": _s("Résultats suspects : fuite de données probable", "Suspect results: probable data leak"),
     "dq_suspect_intro": _s(
         "Un F1 directionnel ou une AUC aussi hauts ne se voient sur aucun marché liquide. Cause identifiée : la fenêtre du "
@@ -85,7 +84,6 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "dq_col_horizon": _s("Horizon", "Horizon"),
     "dq_col_cause": _s("Cause", "Cause"),
     "dq_generated": _s("Calculé le {at}", "Computed on {at}"),
-    "dq_none": _s("Aucun.", "None."),
 
     # ------------------------------------------------------------------ lancement : cibles grisées
     "field_min_history_years": _s("Historique minimum (années)", "Minimum history (years)"),
