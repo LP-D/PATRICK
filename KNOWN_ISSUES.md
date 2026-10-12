@@ -220,27 +220,28 @@ réécrire plus tard.
 
 ---
 
-## Chantier futur distinct
+## Nettoyage du dépôt — 2026-10-12
 
-### 2. Mode clair non implémenté (monde visuel « Nocturne ») — identifié 2026-08-10
+Parcours complet du dépôt (références cherchées dans le code, les tests, les gabarits, le JavaScript et les documents) :
 
-`patrick/patrick/webapp/static/tokens.css` porte `:root` (Nocturne, sombre,
-actif) et `[data-theme="light"]` (bloc vide, `/* not yet implemented — see
-KNOWN_ISSUES.md */`) — l'architecture (jetons sémantiques, structure
-`:root` + `[data-theme]`) est prête à recevoir un mode clair sans
-réarchitecturer la feuille de jetons ni les composants qui la consomment
-(`metric()`, `data_table()`, `status_badge()`, `empty_state()`,
-`error_state()`), mais aucune valeur n'y est écrite. En conséquence, le
-bouton de bascule jour/nuit (`#theme-toggle`, `templates/base.html`) est
-masqué et le script de détection de thème (`localStorage`/
-`prefers-color-scheme`, posé avant le premier rendu) a été retiré du
-`<head>` — l'un et l'autre redeviendront nécessaires quand ce bloc sera
-écrit. `observatory.js` garde son code de bascule intact (guardé par
-`if (toggle)`, inerte sans bouton) : aucune modification JS ne sera
-nécessaire pour réactiver la bascule, seul `tokens.css` et le bouton dans
-`base.html` doivent être complétés. Chantier futur distinct, non traité
-dans le remplacement de charte visuelle qui a introduit cette structure.
-
+- **Supprimé** : 23 constantes/fonctions Python sans aucune référence (liste dans le commit `chore: 23 définitions Python jamais utilisées`),
+  138 clés de texte i18n jamais utilisées (restes de l'ancien simulateur `sim_*`, de l'ancien panneau `record_*`, d'anciens gabarits),
+  le module `tracking/black_litterman.py` (version « intérimaire » jamais branchée) avec son test et son terme de glossaire,
+  3 scripts de profilage/A-B ponctuels, des copies de notebooks identiques, un `requirements.txt` d'outils sans rapport avec PATRICK,
+  deux plans d'implémentation exécutés (les spécifications restent dans `docs/superpowers/specs/`).
+- **Fusionné** (`docs/historique/`) : les trois audits de septembre 2026, l'ancien système de design « Desk Amber » avec son rapport
+  d'extraction, trois rapports de chantier terminés ; deux vérifications de tickers en un seul fichier (`docs/audits/`).
+- **Corrigé** : une section obsolète de ce fichier (« mode clair non implémenté » : il l'est depuis `base_v2.html`), une regex de test
+  vide (caractères backspace au lieu de `\b`), l'idiome NaN `v == v`.
+- **Conservé volontairement** (voir aussi « Plomberie future volontaire » ci-dessus) :
+  - `phase9.py` (`StrategyEngine`…) : plomberie documentée pour la phase stratégie/exécution ;
+  - `pipeline/model_categories_training.py` et `tracking/model_categories.py` : catégories de modèles (global / par régime / stacking),
+    décrites dans `docs/ways-of-working.md`, non branchées sur le moteur à ce jour — à décider (brancher ou retirer) ;
+  - `features/event_features.py` : garde d'horodatage de publication pour les données textuelles (`docs/research/README.md`) ;
+  - `wealth/signal_replay.py` : rejeu des signaux sur un patrimoine, dont `_winning_trial` sert encore à des tests ;
+  - les fonctions d'accès aux données de `tracking/db.py` sans appelant (`exclude_symbol`, `list_drift_psi_history`,
+    `list_phase9_snapshots`) : elles forment avec leurs tables des fonctionnalités à moitié branchées ;
+  - les 33 termes de glossaire non rattachés à une icône d'aide : ils restent trouvables par la recherche du glossaire.
 
 ---
 

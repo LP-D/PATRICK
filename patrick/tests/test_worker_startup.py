@@ -1,6 +1,6 @@
 """L3 (garde-fou de robustesse, pas un nettoyage ponctuel) : un `run` laissé
 `running` par un worker mort (kill -9, crash, bascule de conteneur -- cf.
-AUDIT_ENVIRONNEMENT.md) ne doit plus jamais rester bloqué indéfiniment. Testé
+docs/historique/audits-2026-09.md) ne doit plus jamais rester bloqué indéfiniment. Testé
 en démarrant réellement `run_worker_loop` (pas en appelant
 `db.reap_orphaned_runs` isolément) -- sans file de job, donc rapide (pas de
 pipeline réel exécuté), contrairement à `test_worker.py` qui est marqué

@@ -4,7 +4,7 @@ whatever its split) of a (target, horizon) with SHAP values computed on the
 REAL exported model -- never on the throwaway pilot model used during
 feature selection (`selection/shap_select.py`), and never a freshly-forced
 live inference (that's `predict.py`'s job): see module docstring for the
-full rationale and `docs/PHASE7_SHAP_FEASIBILITY.md` for the measured cost
+full rationale and `docs/historique/rapports-de-chantier.md` for the measured cost
 that justifies computing this on demand rather than precomputing/caching.
 
 Structure mirrors `test_predict_live.py`: a real (tiny) `run_pipeline`,

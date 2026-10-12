@@ -629,7 +629,7 @@ def record_phase_timing(conn: sqlite3.Connection, run_id: str, phase: str,
 def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
     """Runs left 'running' beyond `max_age_s` -> their worker died before
     calling `finish_run` (kill -9, crash, a container-level swap -- see
-    AUDIT_ENVIRONNEMENT.md for a real example), or -- a distinct, more
+    docs/historique/audits-2026-09.md for a real example), or -- a distinct, more
     common gap this also closes -- `worker.py::_run_one_job` catches a
     normal pipeline exception and marks `job.status='error'`, but never
     touches the `run` row itself, so a plain caught exception mid-run also

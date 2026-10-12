@@ -1,21 +1,21 @@
 # PATRICK
 
-> This README is partially outdated (see `ARCHITECTURE.md`). For the
-> up-to-date state of the project, read
-> [`ARCHITECTURE.md`](./ARCHITECTURE.md) first.
-
-Multi-asset ML/DL walk-forward pipeline: ingest, engineer features, select
+Multi-asset ML/DL/RL walk-forward pipeline: ingest, engineer features, select
 via SHAP, grid-search sampler×algo, tune with Optuna, validate against
 leakage/overfitting, and track everything in SQLite — configurable per
-target via YAML, currently exercised on two targets (VIX, AAPL).
+target via YAML or from the web interface. Structure and current state:
+[`ARCHITECTURE.md`](./ARCHITECTURE.md); all documentation: [`../docs/index.md`](../docs/index.md).
+
+On Windows, PATRICK is used as a desktop application (icon, automatic updates, folder shared between PCs,
+Réglages page): see the [root README](../README.md) and `../docs/ops/application-bureau.md`. This file is the
+package and command-line reference.
 
 ## Current status
 
-**Universe covered: `^VIX` and `AAPL` only** (`configs/examples/vix_direction.yaml`,
-`configs/examples/aapl_direction.yaml`). There is no bulk-launch mechanism —
-`patrick run` trains one target per invocation, one YAML file per target.
-Scaling to a larger universe is a deliberate next step, not yet built (see
-Known limitations).
+The target universe spans several hundred symbols (`config/defaults.py::DEFAULT_TARGET_GROUPS`). Targets are
+launched from the web pages `/ml`, `/dl`, `/rl` (queue, ready-to-launch batches) or from the command line,
+`patrick run` training one target per invocation (one YAML file per target; examples in
+`configs/examples/`).
 
 ## Installation
 
@@ -155,8 +155,8 @@ patrick audit degradation
 patrick audit degradation --targets "^GSPC,BTC-USD" --seed 7 --output-dir runs/my_audit
 ```
 
-**Windows quick launch**: `PATRICK.bat` (repo root) activates `.venv` and
-runs `patrick serve` from a double-click.
+**Windows**: the desktop application (icon on the desktop, see the root README) is the normal way to open PATRICK.
+`PATRICK.bat` (this folder) remains a manual launcher for developers: it activates `.venv` and runs `patrick serve`.
 
 ## Configuration (YAML)
 
@@ -207,28 +207,13 @@ ingestion.
 
 ## Known limitations
 
-- **No bulk-launch mechanism.** `patrick run` trains one target per
-  invocation. Training a larger universe currently means running the CLI
-  once per target (or via the web form's multi-target queue, one job per
-  target) — no `--targets all` or equivalent.
-- **Universe currently limited to VIX and AAPL** — no broader coverage has
-  been validated end-to-end yet.
-- **Deflated Sharpe Ratio (`validation/dsr.py`)** is implemented and tested
-  but **not yet called from the pipeline** — it needs a P&L curve to
-  deflate, tied to the simulator (`patrick/simulate`), not wired in.
-- **FRED point-in-time vintages** (`data/sources/fred_source.py`,
-  `realtime_date`) are implemented and tested but **not yet wired per-fold**
-  into the walk-forward engine — the persisted snapshot reflects "today's"
-  data, not a per-fold vintage.
-- **Real-data verification is partial.** The full pipeline has been run
-  end-to-end on real yfinance/FRED data on a machine with network access at
-  least once (VIX), surfacing and fixing real bugs (FRED series crossing
-  zero, FRED scraping fragility). It has **not** been re-verified with real
-  data since the most recent leakage/statistical-validity fixes — the
-  original F1_dir≈0.610 reference is expected to move once re-validated.
-- **Test suite**: `pytest` (224 tests, fast, excludes `@pytest.mark.slow`)
-  during development; `pytest -m slow` (42 tests: full pipeline runs,
-  worker subprocess, EGARCH, webapp smoke) before a commit/push or in CI.
+The assumed limits of each part of the product (deep learning, reinforcement learning, exploration, optional
+extras) and the plumbing kept on purpose are documented in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md). The
+methodological guarantees and their measured effect are in [`METHODOLOGY.md`](./METHODOLOGY.md).
+
+- **Test suite**: `pytest` runs the fast suite (about 1,800 tests; `@pytest.mark.slow` tests are excluded)
+  during development; `pytest -m slow` (full pipeline runs, worker subprocess, EGARCH, webapp smoke) before a
+  commit/push or in CI.
   The `run_pipeline` golden master (`tests/test_run_pipeline_golden.py`) is
   bit-exact only in the pinned CI environment that generated it: on another
   machine it is skipped, use a local golden (`PATRICK_GOLDEN_DIR`, see the

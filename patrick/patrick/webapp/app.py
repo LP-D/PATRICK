@@ -1965,7 +1965,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
     most recent RECORDED prediction for (ticker, horizon) -- see
     `patrick.explain.explain_last_prediction` for the feasibility rationale
     (cost measured on a real exported model, why the selection-time SHAP
-    cache is not reused) and `docs/PHASE7_SHAP_FEASIBILITY.md` for the
+    cache is not reused) and `docs/historique/rapports-de-chantier.md` for the
     numbers. Computed synchronously on request (button-triggered from
     `shap_waterfall.js`), never on page load."""
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:

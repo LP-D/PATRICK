@@ -9,7 +9,7 @@ atteint.**
 ### Pourquoi ce seuil précis
 
 - **45 minutes** : plus court que la durée observée des incidents de
-  bascule silencieuse de conteneur déjà documentés (`AUDIT_ENVIRONNEMENT.md`,
+  bascule silencieuse de conteneur déjà documentés (`docs/historique/audits-2026-09.md`,
   `scripts/check_env_sync.sh`) — ces bascules ont eu lieu en plein milieu
   de sessions ayant accumulé plusieurs **heures** de travail non committé.
   Un seuil de 45 minutes borne la perte maximale possible à une fraction de
@@ -26,7 +26,7 @@ atteint.**
   session peut modifier peu de fichiers mais très longtemps (un seul
   fichier dense, ex. `pipeline/engine.py`), ou beaucoup de fichiers très
   vite (traduction mécanique répétitive, ex. le bloc D6 de
-  `AUDIT_ENVIRONNEMENT.md`).
+  `docs/historique/audits-2026-09.md`).
 
 ### Comment
 
