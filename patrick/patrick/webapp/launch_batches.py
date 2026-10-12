@@ -135,13 +135,17 @@ def best_suggestion(advice: dict | None, key: str | None = None):
 def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     """Lot « runs conseillés » (ML) : par cible, le meilleur réentraînement proposé pour son dernier run terminé. Une ligne par
     cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`. Les cibles déjà en
-    file sont écartées ; le calcul (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
+    file sont écartées, comme celles qui ne sont plus dans l'univers lançable (ex. `^EVZ`, retiré faute de cotation : le formulaire
+    refuserait sa configuration et, un seul refus annulant tout le lot, plus aucun run conseillé ne partirait) ; le calcul
+    (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
     from patrick.tracking import retrain_advisor
+    from patrick.webapp import forms
 
     latest: dict[str, tuple[str, int]] = {}
     for run_id, target, horizon, raw in conn.execute(
             "SELECT run_id, target, horizon, config_json FROM run WHERE status = 'done' ORDER BY started_at DESC, rowid DESC"):
-        if "__alpha_" not in target and target not in latest and config_family(_loads(raw)) == "ml":
+        if ("__alpha_" not in target and target not in latest and target in forms.TARGET_SOURCE_BY_SYMBOL
+                and config_family(_loads(raw)) == "ml"):
             latest[target] = (run_id, int(horizon))
     busy = pending_targets(conn, "ml")
     out = []

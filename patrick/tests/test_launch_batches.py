@@ -307,6 +307,18 @@ def test_the_recommended_lot_takes_the_best_proposal_for_each_target(conn):
     assert launch_batches.summarize(items)["by_key"] == {"fix_leak": 1}
 
 
+def test_a_target_no_longer_in_the_launchable_universe_is_not_recommended(conn):
+    """`^EVZ` a d'anciens runs terminés mais n'est plus lançable : le proposer ferait refuser tout le lot à la mise en file."""
+    assert "^EVZ" not in forms.TARGET_SOURCE_BY_SYMBOL
+    _suspect_run(conn, "old", "^EVZ")
+    _suspect_run(conn, "r1", "^VIX")
+    items = launch_batches.recommended(conn, {})
+    assert [i["target"] for i in items] == ["^VIX"]
+    for item in items:
+        config, errs = launch_batches.build_recommended_config(conn, item["run_id"], item["key"], {})
+        assert config is not None and not errs
+
+
 def test_a_target_already_in_the_queue_is_not_recommended_again(conn):
     _suspect_run(conn)
     jobs_db.enqueue_job(conn, json.dumps(_cfg("^VIX")))
