@@ -1,0 +1,7 @@
+{# Pause / arrêt du run actif, dans le cadre « Avancement » : identique sur /ml, /dl et /rl. Les boutons sont pilotés par `machine.js`
+   (carte « File d'attente ») depuis `/api/run-state` ; le bloc est masqué quand aucun run n'est actif. #}
+<div id="run-controls" class="run-controls hidden">
+    <button type="button" id="pause-run-btn" class="queue-action"></button>
+    <button type="button" id="stop-run-btn" class="queue-action danger">{{ t('run_stop') }}</button>
+</div>
+<p id="run-control-error" class="banner banner-error hidden" role="alert"></p>

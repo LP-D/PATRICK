@@ -518,8 +518,9 @@
     </div>
 </section>
 
-{# En cours + file d'attente : la même carte sur /ml, /dl et /rl (une seule machine). #}
-{% include "_machine_card.html" %}
+{# Colonne de droite : un conteneur à part, empilé du haut. Posés directement dans la grille, ces cadres partageaient les rangées de la
+   cellule de gauche (Configuration, très haute et dépliable) : plus elle grandissait, plus ils s'écartaient les uns des autres. #}
+<div class="station-side">
 
 {# Le titre suit l'état du panneau. « Avancement » au-dessus d'une liste de
    runs passés décrivait une chose et en montrait une autre : au repos, ce
@@ -563,6 +564,7 @@
     <div id="status-panel" class="{% if not initial_run_id %}hidden{% endif %}">
         <p id="run-name-line" class="run-name-line"></p>
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        {% include "_run_controls.html" %}
         <p id="status-line">…</p>
         {# Étapes en clair, déduites du journal du pipeline (`progress_steps.py`).
            Le journal brut reste disponible, replié, pour qui veut le détail. #}
@@ -575,6 +577,9 @@
     <div id="results-panel" class="hidden"></div>
     </div>
 </section>
+
+{# File d'attente : la même carte sur /ml, /dl et /rl (une seule machine). #}
+{% include "_machine_card.html" %}
 
 <section class="dash-panel dash-stock" aria-labelledby="stock-title">
     <h2 id="stock-title" class="dash-panel-title">{{ t('section_stock') }}</h2>
@@ -605,6 +610,8 @@
     </div>
     </div>
 </section>
+
+</div>{# /station-side #}
 
 </div>
 

@@ -314,8 +314,8 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_legend_neg": _s("lien négatif", "negative link"),
     "exp_legend_faded": _s("non significatif", "not significant"),
     # Carte « en cours et file d'attente » (identique sur /ml, /dl, /rl : c'est la même machine) et bandeau des variations.
-    "machine_title": _s("En cours et file d'attente", "Running and queue"),
-    "machine_idle": _s("Machine au repos.", "Machine idle."),
+    "machine_title": _s("File d'attente", "Queue"),
+    "machine_idle": _s("Aucun run en attente.", "No run queued."),
     # Lots prêts à lancer (`launch_batches.py`, `_launch_batches.html`, `launch_batches.js`) : en plus des profils, sur /ml, /dl et /rl.
     "batch_title": _s("Lots prêts à lancer", "Ready-made batches"),
     "batch_loading": _s("Calcul des lots…", "Working out the batches…"),
