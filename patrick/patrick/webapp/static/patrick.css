@@ -1267,8 +1267,10 @@ legend {
   gap: var(--space-md);
   align-items: start;
 }
-.dash-settings { grid-column: 1; grid-row: 1 / span 3; }
-.dash-machine, .dash-progress, .dash-stock { grid-column: 2; }
+.dash-settings { grid-column: 1; }
+/* Colonne de droite : un conteneur empilé du haut. Posés directement dans la grille, ses cadres partageaient les rangées de la cellule
+   de gauche (Configuration, très haute et dépliable) et s'écartaient d'autant qu'elle grandissait. */
+.station-side { grid-column: 2; display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
 
 .dash-panel {
   min-width: 0;
@@ -1464,10 +1466,8 @@ legend {
 
 #status-line { margin: 8px 0; color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
 
-/* Carte « en cours et file d'attente » (_machine_card.html) : identique sur /ml, /dl et /rl. */
+/* Carte « file d'attente » (_machine_card.html) : identique sur /ml, /dl et /rl. */
 .dash-machine .queue-panel { margin: 0; }
-.machine-run { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0 0 8px; }
-.machine-run .run-name-line { margin: 0; }
 .machine-kind {
   display: inline-block;
   padding: 1px 7px;
@@ -1478,8 +1478,6 @@ legend {
   letter-spacing: 0.04em;
   vertical-align: 1px;
 }
-.machine-target { color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
-.machine-status { margin: 8px 0; color: var(--text-2); font-family: var(--mono); font-size: 12.5px; }
 .machine-idle { margin: 0; color: var(--text-3); font-size: 13px; }
 .run-name-line { margin: 0 0 8px; font-family: var(--mono); font-size: 14px; font-weight: 600; }
 .log-tail {
@@ -2002,7 +2000,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 650; }
   .search-trigger .search-label, .search-trigger .kbd { display: none; }
   .main-content { padding: 20px 16px 48px; }
   .station-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  .dash-settings, .dash-machine, .dash-progress, .dash-stock { grid-column: 1; grid-row: auto; }
+  .dash-settings, .station-side { grid-column: 1; grid-row: auto; }
   .adv-state { flex: 1 0 100%; margin-left: 0; text-align: left; }
   .asset-panel-grid { grid-template-columns: 1fr; }
 }

@@ -194,6 +194,12 @@
     }
     // Pause et arrêt : sur la carte « en cours et file d'attente » (machine.js), la même que sur /ml et /dl. Après un arrêt, on relit tout de suite.
     if (window.PatrickMachine) window.PatrickMachine.onAction(function () { if (currentRun) { clearTimeout(pollTimer); poll(); } });
+    // Le run RL actif côté serveur (lancé d'ailleurs, ou la file qui avance toute seule) est suivi sans recharger la page : le cadre
+    // « Avancement » est désormais le seul endroit qui montre le run en cours.
+    if (window.PatrickMachine) window.PatrickMachine.subscribe(function (state) {
+        var active = state.active;
+        if (active && active.kind === "rl" && (!currentRun || currentRun.id !== active.id)) track(active.id);
+    });
 
     // ------------------------------------------------------------------ résultats
     function loadResult(runId) {

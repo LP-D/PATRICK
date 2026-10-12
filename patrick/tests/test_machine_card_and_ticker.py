@@ -35,18 +35,31 @@ def _section_with_class(html: str, css_class: str) -> str:
 def test_the_machine_card_is_identical_on_the_three_launch_pages(client):
     cards = {path: _machine_section(client.get(path).text) for path in LAUNCH_PAGES}
     assert cards["/ml"] == cards["/dl"] == cards["/rl"]
-    for element in ('id="queue-panel"', 'id="queue-list"', 'id="clear-queue-btn"', 'id="pause-run-btn"', 'id="stop-run-btn"',
-                    'id="machine-current"', 'id="machine-progress-fill"'):
+    for element in ('id="queue-panel"', 'id="queue-list"', 'id="clear-queue-btn"'):
         assert element in cards["/ml"]
+    for element in ('id="pause-run-btn"', 'id="stop-run-btn"', 'id="machine-current"', 'id="machine-progress-fill"'):
+        assert element not in cards["/ml"]                           # le run en cours se montre dans « Avancement », pas dans la file
 
 
 @pytest.mark.parametrize("path", LAUNCH_PAGES)
-def test_the_queue_is_no_longer_inside_the_last_run_panel(client, path):
+def test_the_queue_follows_the_progress_panel_and_the_run_controls_live_in_it(client, path):
     html = client.get(path).text
     progress = _section_with_class(html, "dash-progress")
-    assert 'id="queue-panel"' not in progress and 'id="stop-run-btn"' not in progress
-    assert html.count('id="queue-panel"') == 1                       # un seul exemplaire par page
-    assert html.index('class="dash-panel dash-machine"') < html.index('class="dash-panel dash-progress"')
+    assert 'id="queue-panel"' not in progress                        # la file est sa propre carte
+    assert 'id="pause-run-btn"' in progress and 'id="stop-run-btn"' in progress   # pause / arrêt : dans « Avancement »
+    assert html.count('id="queue-panel"') == 1 and html.count('id="stop-run-btn"') == 1   # un seul exemplaire par page
+    assert html.index('class="dash-panel dash-progress"') < html.index('class="dash-panel dash-machine"')
+
+
+@pytest.mark.parametrize("path", LAUNCH_PAGES)
+def test_the_right_column_is_its_own_stack_not_rows_shared_with_the_settings_cell(client, path):
+    """Posés dans la grille, les cadres de droite partageaient les rangées de la cellule de gauche (très haute) et s'écartaient."""
+    html = client.get(path).text
+    side = html.index('<div class="station-side">')
+    assert html.index('class="dash-panel dash-settings"') < side < html.index('class="dash-panel dash-progress"')
+    assert side < html.index('class="dash-panel dash-machine"')
+    css = client.get("/static/patrick.css").text
+    assert ".station-side { grid-column: 2; display: flex; flex-direction: column;" in css
 
 
 @pytest.mark.parametrize("path", LAUNCH_PAGES)

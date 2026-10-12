@@ -1,23 +1,10 @@
-{# Carte « en cours et file d'attente » : IDENTIQUE sur /ml, /dl et /rl, parce que c'est la même machine (une seule file, un seul worker).
-   Tout est rempli par `machine.js` depuis `/api/run-state` ; rien ne dépend du contexte de la page. Les identifiants (`queue-*`,
-   `pause-run-btn`, `stop-run-btn`, `run-controls`) sont ceux que les pages et leurs tests connaissaient déjà. #}
+{# Carte « file d'attente » : IDENTIQUE sur /ml, /dl et /rl, parce que c'est la même machine (une seule file, un seul worker). Le run en
+   cours, lui, s'affiche (avec pause / arrêt) dans le cadre « Avancement » de chaque page. Tout est rempli par `machine.js` depuis
+   `/api/run-state` ; rien ne dépend du contexte de la page. Les identifiants (`queue-*`) sont ceux que les pages et leurs tests
+   connaissaient déjà. #}
 <section class="dash-panel dash-machine" id="machine-card" aria-labelledby="machine-title">
     <h2 id="machine-title" class="dash-panel-title">{{ t('machine_title') }}</h2>
     <div class="dash-panel-body">
-        <div id="machine-current" class="machine-current hidden">
-            <p class="machine-run">
-                <span id="machine-run-name" class="run-name-line"></span>
-                <span id="machine-run-kind" class="machine-kind"></span>
-                <span id="machine-run-target" class="machine-target"></span>
-            </p>
-            <div class="progress-bar"><div id="machine-progress-fill" class="progress-fill"></div></div>
-            <p id="machine-status-line" class="machine-status" data-keep>…</p>
-            <div id="run-controls" class="run-controls">
-                <button type="button" id="pause-run-btn" class="queue-action"></button>
-                <button type="button" id="stop-run-btn" class="queue-action danger">{{ t('run_stop') }}</button>
-            </div>
-            <p id="run-control-error" class="banner banner-error hidden" role="alert"></p>
-        </div>
         <p id="machine-idle" class="machine-idle" data-keep>{{ t('machine_idle') }}</p>
 
         {# File d'attente en liste déroulante, repliée par défaut : déployée en permanence, une file de plusieurs dizaines de runs
