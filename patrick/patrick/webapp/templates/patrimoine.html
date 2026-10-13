@@ -84,7 +84,7 @@
       r.quantity | qty,
       r.value | eur,
       r.weight | pct,
-      '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ '</span>',
+      '<span class="' ~ ('pos' if r.latent_pnl >= 0 else 'neg') ~ '">' ~ (r.latent_pnl | eur) ~ ' · ' ~ (r.latent_pnl_pct | pct(1, true)) ~ '</span>',
   ]) %}
   {% endfor %}
   {{ data_table([t('mv_col_asset'), t('pat_c_qty'), t('pat_c_value'), t('pat_c_weight'), t('pat_c_pnl')], rows,

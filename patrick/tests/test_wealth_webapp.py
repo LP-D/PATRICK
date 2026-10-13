@@ -3,6 +3,8 @@
 dict price provider (no network)."""
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -49,6 +51,16 @@ def test_account_lifecycle_and_pages(client):
     assert "Performance (TWR)" in detail.text and "vs ^STOXX50E" in detail.text
     assert 'id="wealth-chart-data"' in detail.text
     assert client.get("/mouvements").status_code == 200
+
+
+def test_latent_pnl_is_shown_in_percent_next_to_euros(client):
+    acc = _account(client)
+    for mv in ({"kind": "deposit", "ts": "2024-01-02", "amount": "10000"},
+               {"kind": "buy", "ts": "2024-01-03", "symbol": "MC.PA", "quantity": "5", "price": "700"}):
+        assert client.post(f"/api/wealth/accounts/{acc}/movements", json=mv).status_code == 200
+    cell = re.compile(r'<span class="(?:pos|neg)">[^<]*€[^<]* · [+-]?[\d\s  .,]+ %</span>')
+    for url in ("/patrimoine", f"/patrimoine/comptes/{acc}"):
+        assert cell.search(client.get(url).text), url
 
 
 def test_invalid_input_is_a_400_with_the_reason(client):

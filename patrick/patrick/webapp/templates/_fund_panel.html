@@ -24,8 +24,8 @@
 <div class="metric-grid">
   {{ metric(t('fund_kpi_nav'), k.nav | eur, t('fund_hint_nav'), "neutral") }}
   {{ metric(t('fund_kpi_pnl'), (k.pnl | eur) ~ ' · ' ~ (k.pnl_pct | pct(1, true)), t('fund_hint_pnl'), "neutral") }}
-  {{ metric(t('fund_kpi_realized'), k.realized | eur, t('fund_hint_realized'), "neutral") }}
-  {{ metric(t('fund_kpi_latent'), k.latent | eur, t('fund_hint_latent'), "neutral") }}
+  {{ metric(t('fund_kpi_realized'), (k.realized | eur) ~ ' · ' ~ ((k.realized / k.capital) | pct(1, true) if k.capital else '—'), t('fund_hint_realized'), "neutral") }}
+  {{ metric(t('fund_kpi_latent'), (k.latent | eur) ~ ' · ' ~ ((k.latent / k.capital) | pct(1, true) if k.capital else '—'), t('fund_hint_latent'), "neutral") }}
   {{ metric(t('fund_kpi_fees'), k.fees | eur, t('fund_hint_fees'), "neutral") }}
   {{ metric(t('fund_kpi_dividends'), k.dividends | eur, t('fund_hint_dividends'), "neutral") }}
   {{ metric(t('fund_kpi_financing'), k.financing | eur, t('fund_hint_financing'), "neutral") }}
