@@ -25,6 +25,16 @@
 {# Date seule : l'heure `00:00:00` d'un signal de clôture n'apporte rien. #}
 {% set ts = c.ts | string %}
 <dt>{{ _t('pb_last') }}</dt><dd>{{ ts[:10] }}{% if ts[11:16] and ts[11:16] != '00:00' %} {{ ts[11:16] }}{% endif %}</dd>
+{# Sur quel marché on est, et par rapport à quoi le mouvement prédit est mesuré : la clôture de la séance, ou un cours en séance. #}
+{% set m = c.market %}
+{% if m %}
+<dt>{{ _t('pb_market') }}</dt><dd>{{ _t('mkt_' ~ m['class']) }} · {% if m.ended %}{{ _t('pb_session_ended', d=m.session) }}{% elif m.close_local %}{{ _t('pb_session_open', d=m.session, h=m.close_local) }}{% else %}{{ _t('pb_session_open_24', d=m.session) }}{% endif %}</dd>
+<dt>{{ _t('pb_reference') }}</dt><dd>
+{% if m.bar_final is none %}{{ status_badge(_t('pb_ref_unknown'), 'disabled') }}
+{% elif m.bar_final %}{{ _t('pb_ref_close', d=m.session) }}
+{% else %}{{ status_badge(_t('pb_ref_intraday', d=m.session), 'warning') }}{% endif %}<br>
+<span class="hint">{{ _t('pb_ref_move', h=c.horizon) }}{% if m.bar_final is sameas false %} {{ _t('pb_ref_intraday_hint') }}{% endif %}</span></dd>
+{% endif %}
 {% else %}
 <dt>{{ _t('pb_direction') }}</dt><dd>{{ status_badge(_t('pb_none'), 'disabled') }}</dd>
 {% endif %}

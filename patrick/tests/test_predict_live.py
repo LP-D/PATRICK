@@ -156,10 +156,12 @@ def test_predict_live_backfills_missed_bars_as_of_their_date(tmp_path, monkeypat
     assert all(t > model_day for t in backfill_bars)  # jamais une barre vue a l'entrainement
 
     conn = sqlite3.connect(db_path)
-    flags = [r[0] for r in conn.execute(
-        "SELECT live_backfill FROM prediction WHERE split = 'live' ORDER BY ts")]
+    rows = conn.execute(
+        "SELECT live_backfill, live_bar_final FROM prediction WHERE split = 'live' ORDER BY ts").fetchall()
     conn.close()
-    assert flags == [1, 1, 1, 0]
+    assert [r[0] for r in rows] == [1, 1, 1, 0]
+    # la valeur de référence est mémorisée à chaque signal : une barre reconstituée est une clôture, la dernière est connue aussi
+    assert [r[1] for r in rows[:3]] == [1, 1, 1] and rows[3][1] in (0, 1)
 
     again = predict_module.predict_live(run_id, db_path=db_path, store=store)
     assert again["n_written"] == 0 and again["new_signal"] is False  # marche ferme : rien de nouveau

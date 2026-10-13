@@ -26,11 +26,12 @@ from starlette.concurrency import run_in_threadpool
 
 from patrick import live_refresh
 from patrick import settings as settings_store
-from patrick.clock import utc_today
+from patrick.clock import utc_now, utc_today
 from patrick.config import asset_classes, dl_profiles, training_profiles
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
+from patrick.data import session_calendar
 from patrick.data.sources import fundamentals_source
 from patrick.features import guida, parametric_parallel
 from patrick.models import deep as deep_models
@@ -1435,6 +1436,21 @@ def _alpha_run_labels(conn) -> list[tuple[str, str, str | None]]:
 
 
 _OTHER_ASSETS_GROUP = "Autres actifs"
+# Marchés dont la « séance » est la journée UTC entière (pas d'heure de clôture à afficher).
+_ROUND_THE_CLOCK = ("crypto", "macro", "other")
+
+
+def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool | None) -> dict:
+    """Sur quel marché on est et par rapport à quoi le mouvement prédit est mesuré, pour la bulle de /predictions.
+
+    `ended` : la séance `session` est terminée MAINTENANT (clôture approximative par classe d'actifs,
+    `data/session_calendar.py`). `bar_final` : au moment où le signal a été calculé, la barre était-elle déjà la clôture
+    (True), un cours en séance (False) ou on ne sait pas (None, signal antérieur à la migration 0032). `close_local` : heure
+    de clôture en heure locale, ou None pour un marché 24 h/24 (journée UTC)."""
+    close = session_calendar.session_close_utc(asset_class, session)
+    return {"class": asset_class, "session": session.isoformat(),
+            "ended": session_calendar.bar_is_final(asset_class, session, now), "bar_final": bar_final,
+            "close_local": None if asset_class in _ROUND_THE_CLOCK else close.astimezone().strftime("%H:%M")}
 
 
 def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
@@ -1496,9 +1512,12 @@ def _predictions_overview(kind: str = "directional") -> dict:
             trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run WHERE target LIKE ? ESCAPE '\\'",
                                                        ("%\\_\\_alpha\\_%",))}
             horizons = sorted(trained & set(D.SELECTABLE_HORIZONS)) or list(D.DEFAULT_HORIZONS)
+            market_class = {label: session_calendar.classify_asset_class(asset) for label, asset, _ in alpha_labels}
         else:
             item_groups = _directional_prediction_groups(conn)
             all_symbols = [sym for items in item_groups.values() for sym, _ in items]
+            market_class = {sym: session_calendar.classify_asset_class(sym, forms.TARGET_SOURCE_BY_SYMBOL.get(sym, "yfinance"))
+                            for sym in all_symbols}
             # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
             trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
             horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
@@ -1513,7 +1532,8 @@ def _predictions_overview(kind: str = "directional") -> dict:
     finally:
         conn.close()
 
-    today = utc_today()
+    now = utc_now()
+    today = now.date()
     signals = _PREDICTION_SIGNALS_ALPHA if alpha else _PREDICTION_SIGNALS
     groups = []
     for group_name, items in item_groups.items():
@@ -1528,15 +1548,20 @@ def _predictions_overview(kind: str = "directional") -> dict:
                 signal = None
                 market_closed = False
                 suspect = None
+                market = None
                 if pred:
                     scores = shown.get(pred["run_id"], {})
                     suspect = suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
                     signal = None if suspect else signals.get((pred["direction"], pred["amplitude"]))
                     try:
-                        market_closed = date.fromisoformat(str(pred["ts"])[:10]) < today
+                        session = date.fromisoformat(str(pred["ts"])[:10])
+                        market_closed = session < today
+                        if pred["split"] == "live":
+                            market = _market_view(market_class.get(sym, "other"), session, now, pred.get("bar_final"))
                     except ValueError:
                         market_closed = False
                 cells[h] = {
+                    "market": market,
                     "horizon": h,
                     "direction": pred["direction"] if pred else None,
                     "signal": signal,

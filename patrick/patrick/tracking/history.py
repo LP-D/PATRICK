@@ -812,7 +812,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
         "  FROM target_horizon_list thl"
         ") "
         "SELECT winner.target, winner.horizon, prediction.ts, prediction.split, prediction.y_pred, "
-        "       prediction.y_proba, trial.trial_id, run.run_id "
+        "       prediction.y_proba, trial.trial_id, run.run_id, prediction.live_bar_final "
         "FROM winner "
         "JOIN prediction ON prediction.rowid = winner.pred_rowid "
         "JOIN trial ON trial.trial_id = prediction.trial_id "
@@ -820,13 +820,15 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
         tuple(targets) + tuple(horizons),
     ).fetchall()
     out: dict[tuple[str, int], dict] = {}
-    for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id in rows:
+    for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id, bar_final in rows:
         cls = round(y_pred)
         out[(target, horizon)] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
             "direction": _CLASS_DIRECTION.get(cls, "?"),
             "amplitude": _CLASS_AMPLITUDE.get(cls, "?"),
             "confidence": y_proba,
+            # 1 = signal calculé sur la clôture, 0 = sur un cours en séance, None = inconnu (migration 0032).
+            "bar_final": None if bar_final is None else bool(bar_final),
         }
     return out
 

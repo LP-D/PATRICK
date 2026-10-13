@@ -34,8 +34,9 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from patrick.clock import utc_now
 from patrick.config.schema import RunConfig
-from patrick.data import alignment
+from patrick.data import alignment, session_calendar
 from patrick.data.ingest import ingest
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
@@ -243,6 +244,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         model_date_raw = run.get("finished_at") or run.get("started_at")
         model_date = pd.Timestamp(model_date_raw).tz_localize(None).normalize() if model_date_raw else None
 
+        # Classe de marché de la cible : sert à dire, à l'instant du signal, si la barre du jour est la clôture ou un cours en séance.
+        asset_class = session_calendar.classify_asset_class(config.objective.target_symbol, config.objective.target_source)
         sel_idx = [feature_pool.index(n) for n in feature_names]
         classes = list(getattr(model, "classes_", []))
         series = raw[target_col]
@@ -294,7 +297,9 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                 logger.exception("live thresholds failed for %s at %s", target_col, t)
                 lo = hi = None
             trackdb.set_live_signal_context(conn, best["trial_id"], str(t), _finite_or_none(lo),
-                                            _finite_or_none(hi), is_backfill)
+                                            _finite_or_none(hi), is_backfill,
+                                            bar_final=True if is_backfill else session_calendar.bar_is_final(
+                                                asset_class, pd.Timestamp(t).date(), utc_now()))
             n_written += 1
             new_signal = new_signal or not is_backfill
 
