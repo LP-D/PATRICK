@@ -227,3 +227,78 @@ def test_update_live_outcomes_reports_whether_each_judged_signal_had_the_right_d
     n = predict_module._update_live_outcomes(conn, tid, horizon, pd.DataFrame({"X": s}), "X", verdicts=verdicts)
 
     assert n == 2 and sorted(verdicts) == sorted([bool(up_a), not up_b])
+
+
+def _frozen_then_fixed(horizon=2):
+    """Série où le cours est figé après la barre `pos` (source en panne, forward-fill), puis la version corrigée."""
+    s = _series(120)
+    pos = 60
+    frozen = s.copy()
+    frozen.iloc[pos + 1:] = frozen.iloc[pos]
+    return s, frozen, pos
+
+
+def test_a_frozen_price_judges_nothing_instead_of_counting_a_zero_return(tmp_path):
+    """Rendement exactement nul (cours figé) : ni hausse ni baisse -- le signal reste en attente, au lieu d'être
+    « pas de hausse » dans un tableau et « hausse faible » dans l'autre."""
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn, horizon=2)
+    s, frozen, pos = _frozen_then_fixed()
+    ts = str(s.index[pos])
+    db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+    db.set_live_signal_context(conn, tid, ts, -0.01, 0.012, backfill=False)
+
+    assert predict_module._update_live_outcomes(conn, tid, 2, pd.DataFrame({"X": frozen}), "X") == 0
+    assert conn.execute("SELECT y_true, y_class FROM prediction WHERE ts = ?", (ts,)).fetchone() == (None, None)
+
+
+def test_a_verdict_taken_on_bad_data_is_redone_once_the_source_is_corrected(tmp_path):
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn, horizon=2)
+    s, _frozen, pos = _frozen_then_fixed()
+    ts = str(s.index[pos])
+    db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+    db.set_live_signal_context(conn, tid, ts, -0.01, 0.012, backfill=False)
+    # jugé sur un mauvais cours : le verdict gravé (baisse forte) ne correspond pas au marché réel
+    db.update_prediction_outcome(conn, tid, ts, 0.0, 0)
+    real = s.iloc[pos + 2] / s.iloc[pos] - 1
+    raw = pd.DataFrame({"X": s})
+
+    # sans fenêtre de re-vérification : le verdict déjà pris n'est jamais revu (comportement historique)
+    assert predict_module._update_live_outcomes(conn, tid, 2, raw, "X") == 0
+    assert conn.execute("SELECT y_true, y_class FROM prediction WHERE ts = ?", (ts,)).fetchone() == (0.0, 0)
+
+    # avec la fenêtre : corrigé, mais pas compté comme « nouvellement jugé »
+    assert predict_module._update_live_outcomes(conn, tid, 2, raw, "X", recheck_since="2000-01-01") == 0
+    y_true, y_class = conn.execute("SELECT y_true, y_class FROM prediction WHERE ts = ?", (ts,)).fetchone()
+    assert y_true == (1.0 if real > 0 else 0.0) and y_class == classify_return(real, "L", {"L": (-0.01, 0.012)})
+
+
+def test_a_signal_judged_on_a_frozen_price_goes_back_to_waiting_when_the_price_is_still_frozen(tmp_path):
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn, horizon=2)
+    s, frozen, pos = _frozen_then_fixed()
+    ts = str(s.index[pos])
+    db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+    db.update_prediction_outcome(conn, tid, ts, 0.0, 2)   # le verdict contradictoire vu en vrai sur l'or
+
+    predict_module._update_live_outcomes(conn, tid, 2, pd.DataFrame({"X": frozen}), "X", recheck_since="2000-01-01")
+
+    assert conn.execute("SELECT y_true, y_class FROM prediction WHERE ts = ?", (ts,)).fetchone() == (None, None)
+
+
+def test_both_tables_agree_even_on_a_contradictory_legacy_verdict(tmp_path):
+    """Ligne ancienne « pas de hausse » + classe « hausse faible » : écartée des deux tableaux (en attente)."""
+    from patrick.webapp.app import _tally_view
+
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn)
+    for ts, yt, yc in [("2026-09-01", 1.0, 3), ("2026-09-02", 0.0, 2)]:
+        db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+        db.update_prediction_outcome(conn, tid, ts, yt, yc)
+
+    tally = trackhistory.live_class_tally_by_target_and_horizon(conn, ["^VIX"], [5])[("^VIX", 5)]
+    view = _tally_view(tally)
+
+    assert (view["direction_n"], view["n_four"], tally["pending"]) == (1, 1, 1)
+    assert [j["date"] for j in view["journal"]] == ["2026-09-01"]
