@@ -18,6 +18,8 @@ than no alignment at all, but not equivalent to a true intraday as-of join.
 """
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta, timezone
+
 # Approximate UTC close hour per asset class (0-24 scale, latest value of the
 # class — conservative: when in doubt, assume a late close, which delays MORE
 # features rather than fewer, at the cost of some freshness, never at the
@@ -111,3 +113,17 @@ def session_lag_days(feature_symbol: str, feature_source: str,
     feature_class = classify_asset_class(feature_symbol, feature_source)
     target_class = classify_asset_class(target_symbol, target_source)
     return 1 if CLOSE_UTC_HOUR[feature_class] > CLOSE_UTC_HOUR[target_class] else 0
+
+
+def session_close_utc(asset_class: str, session_date: date) -> datetime:
+    """Approximate close (UTC) of the session of `session_date` for an asset class -- `CLOSE_UTC_HOUR`, i.e. the late,
+    conservative end of the class (a crypto / macro daily bar ends at midnight UTC)."""
+    hours = CLOSE_UTC_HOUR.get(asset_class, CLOSE_UTC_HOUR["other"])
+    return datetime.combine(session_date, time.min, tzinfo=timezone.utc) + timedelta(hours=hours)
+
+
+def bar_is_final(asset_class: str, session_date: date, now: datetime) -> bool:
+    """True once the daily bar of `session_date` is the session's CLOSE and no longer a price in the making. Yahoo's
+    daily bar of a session still running carries the current price: a signal computed from it starts from that price,
+    not from the close. `now` must be timezone-aware."""
+    return now >= session_close_utc(asset_class, session_date)

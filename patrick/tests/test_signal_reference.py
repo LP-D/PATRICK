@@ -1,0 +1,86 @@
+"""Valeur de référence d'un signal live : la clôture de sa séance, ou un cours en séance (barre du jour encore partielle).
+Mémorisée à l'instant du signal (migration 0032) et dite dans la bulle de /predictions avec le marché concerné."""
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+
+import pytest
+from page_support import FullPageClient as TestClient
+
+from patrick.data import session_calendar as sc
+from patrick.tracking import db
+from patrick.tracking import history as trackhistory
+from patrick.webapp.app import _market_view, app
+
+
+def _utc(day: str, hour: int, minute: int = 0) -> datetime:
+    y, m, d = map(int, day.split("-"))
+    return datetime(y, m, d, hour, minute, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("asset_class, now, final", [
+    ("equities_us", _utc("2026-10-13", 19, 59), False),     # séance US en cours : la barre du jour est un cours en séance
+    ("equities_us", _utc("2026-10-13", 20, 0), True),       # clôture passée : la barre est la clôture
+    ("equities_europe", _utc("2026-10-13", 17, 0), True),
+    ("equities_asia_pacific", _utc("2026-10-13", 9, 0), True),
+    ("crypto", _utc("2026-10-13", 23, 59), False),           # journée UTC pas finie
+    ("crypto", _utc("2026-10-14", 0, 0), True),
+    ("equities_us", _utc("2026-10-14", 8, 0), True),         # séance de la veille
+])
+def test_bar_is_final_once_the_session_close_has_passed(asset_class, now, final):
+    assert sc.bar_is_final(asset_class, date(2026, 10, 13), now) is final
+
+
+def test_the_reference_of_a_signal_is_stored_when_it_is_written(tmp_path):
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "s", "h", None, None, None)
+    db.create_run(conn, "r", "^GSPC", 1, "s", "{}", "c", "g", 1)
+    tid = db.create_trial(conn, "r", "GLOBAL", "XGBoost", "none", 5, "shap")
+    db.mark_best_trial(conn, tid)
+    db.finish_run(conn, "r", "done", n_trials=1)
+    for ts, final in (("2026-10-12", True), ("2026-10-13", False), ("2026-10-09", None)):
+        db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
+        db.set_live_signal_context(conn, tid, ts, -0.01, 0.01, backfill=False, bar_final=final)
+
+    stored = dict(conn.execute("SELECT ts, live_bar_final FROM prediction WHERE split = 'live'").fetchall())
+    assert stored == {"2026-10-12": 1, "2026-10-13": 0, "2026-10-09": None}
+    latest = trackhistory.latest_predictions_by_target_and_horizon(conn, ["^GSPC"], [1])[("^GSPC", 1)]
+    assert latest["ts"] == "2026-10-13" and latest["bar_final"] is False
+
+
+def test_market_view_says_the_market_and_whether_the_session_is_over():
+    running = _market_view("equities_us", date(2026, 10, 13), _utc("2026-10-13", 15), False)
+    assert running["ended"] is False and running["bar_final"] is False and running["close_local"]
+    over = _market_view("equities_europe", date(2026, 10, 12), _utc("2026-10-13", 15), True)
+    assert over["ended"] is True and over["bar_final"] is True
+    crypto = _market_view("crypto", date(2026, 10, 13), _utc("2026-10-13", 15), None)
+    assert crypto["close_local"] is None and crypto["bar_final"] is None      # pas d'heure de clôture : journée UTC
+
+
+def _seed_signal(tmp_path, monkeypatch, bar_final):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    db.create_run(conn, "run1", "^VIX", 5, "snap1", "{}", "cfghash", "sha", 42)
+    trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, trial_id)
+    db.add_predictions(conn, trial_id, fold_index=None, split="live", ts=["2024-06-01T00:00:00"],
+                       y_true=[None], y_pred=[3], y_proba=[0.71])
+    db.set_live_signal_context(conn, trial_id, "2024-06-01T00:00:00", None, None, backfill=False, bar_final=bar_final)
+    db.finish_run(conn, "run1", status="done", n_trials=1)
+    conn.close()
+
+
+@pytest.mark.parametrize("bar_final, expected", [
+    (True, "clôture du 2024-06-01"),
+    (False, "cours en séance du 2024-06-01, pas la clôture"),
+    (None, "non enregistrée (signal antérieur)"),
+])
+def test_page_says_which_value_the_predicted_move_starts_from(tmp_path, monkeypatch, bar_final, expected):
+    _seed_signal(tmp_path, monkeypatch, bar_final)
+    html = TestClient(app).get("/predictions").text
+
+    assert "Volatilité US" in html and "séance du 2024-06-01 terminée" in html     # ^VIX : marché et état de la séance
+    assert expected in html
+    assert "Mouvement prédit : de cette valeur à la clôture 5 séance(s) plus tard." in html
+    assert ("Le signal sera jugé par rapport à la clôture." in html) is (bar_final is False)

@@ -2320,6 +2320,12 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .pop-track-table { width: 100%; }
 .pred-pop .pop-hit { margin-bottom: 6px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pred-pop .pop-hit .hint { font-weight: 400; }
+/* Bulle haute (infos + suivi) : sur écran large, deux colonnes -- les infos à gauche, le suivi à droite -- pour tenir à l'écran. */
+@media (min-width: 900px) {
+  .pred-pop:has(.pop-track) { display: grid; grid-template-columns: 290px 390px; column-gap: 14px; max-width: min(740px, 96vw); align-items: start; }
+  .pred-pop:has(.pop-track) .pop-title { grid-column: 1 / -1; }
+  .pred-pop:has(.pop-track) .pop-track { margin-top: 0; padding: 0 0 0 14px; border-top: 0; border-left: 1px solid var(--line); }
+}
 .pop-matrix td.diag { color: var(--pos); font-weight: 650; }
 .pop-matrix td.zero { color: var(--text-3); }
 .pop-matrix tr.total td { border-top: 1px solid var(--line); font-weight: 600; padding-top: 3px; }
