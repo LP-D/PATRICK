@@ -1149,11 +1149,11 @@ def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int) -> li
     elapsed. `thr_lo`/`thr_hi`: causal 4-class thresholds stored at signal
     time (migration 0028), `None` for rows written before it."""
     rows = conn.execute(
-        "SELECT ts, live_thr_lo, live_thr_hi FROM prediction "
+        "SELECT ts, live_thr_lo, live_thr_hi, y_pred FROM prediction "
         "WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
         (trial_id,),
     ).fetchall()
-    return [{"ts": r[0], "thr_lo": r[1], "thr_hi": r[2]} for r in rows]
+    return [{"ts": r[0], "thr_lo": r[1], "thr_hi": r[2], "y_pred": r[3]} for r in rows]
 
 
 def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: float,

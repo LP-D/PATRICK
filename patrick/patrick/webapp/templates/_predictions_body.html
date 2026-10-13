@@ -59,28 +59,41 @@
 {% if t and t.direction_n %}
 <span class="pop-line pop-hit">{{ _t('pred_dir_total', hits=t.direction_hits, n=t.direction_n, pct=t.direction_pct) }}{% if t.pending %} · <span class="hint">{{ _t('pred_pending', n=t.pending) }}</span>{% endif %}</span>
 {% endif %}
+{# 4 mouvements : une ligne = ce que le modèle a prédit, les colonnes = ce qui s'est réellement passé ; la diagonale = les bonnes
+   prédictions, d'où le % de réussite de chaque classe. #}
 {% if t and t.n_four %}
-<table class="pop-track-table pop-track-4">
-<thead><tr><th>{{ _t('pred_col_move') }}</th><th class="n">{{ _t('pred_col_n') }}</th><th class="n">{{ _t('pred_col_exact') }}</th><th class="n" title="{{ _t('pred_intensity_help') }}">{{ _t('pred_col_intensity') }}</th><th class="n" title="{{ _t('pred_wrongway_help') }}">{{ _t('pred_col_wrongway') }}</th></tr></thead>
-{% for k in t.classes if k.n %}
-<tr><td>{{ k.label }}</td><td class="n">{{ k.n }}</td>
-<td class="n">{% if k.n %}{{ k.exact }} <span class="pct">{{ '%.0f' | format(k.exact * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
-<td class="n">{% if k.n %}{{ k.intensity }} <span class="pct">{{ '%.0f' | format(k.intensity * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
-<td class="n err">{% if k.n %}{{ k.wrong_way }} <span class="pct">{{ '%.0f' | format(k.wrong_way * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
+<span class="pop-track-title pop-track-sub">{{ _t('pred_matrix_title') }}</span>
+<table class="pop-track-table pop-track-4 pop-matrix">
+<thead><tr><th>{{ _t('pred_col_guess') }}</th>{% for col in t.columns %}<th class="n" title="{{ _t('pred_col_real_help', m=col.label) }}">{{ col.arrow }}</th>{% endfor %}<th class="n">{{ _t('pred_col_success') }}</th></tr></thead>
+{% for k in t.classes %}{% set ki = loop.index0 %}
+<tr><td>{{ k.arrow }} {{ k.label }}</td>
+{% for v in k.cells %}<td class="n{% if loop.index0 == ki %} diag{% elif not v %} zero{% endif %}">{{ v }}</td>{% endfor %}
+<td class="n">{% if k.n %}{{ k.exact }}/{{ k.n }} <span class="pct">{{ k.pct }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
+<tr class="total"><td colspan="5">{{ _t('pred_total_four') }}</td><td class="n">{{ t.four_hits }}/{{ t.n_four }} <span class="pct">{{ t.four_pct }}%</span></td></tr>
 </table>
 {% endif %}
+{# Les deux directions seules : le même tableau, hausse contre baisse. #}
 {% if t %}
 <span class="pop-track-title pop-track-sub">{{ _t('pred_dir_title') }}</span>
-<table class="pop-track-table">
-<thead><tr><th>{{ _t('pred_col_move') }}</th><th class="n">{{ _t('pred_col_n') }}</th><th class="n">{{ _t('pred_col_right') }}</th><th class="n err">{{ _t('pred_col_wrong') }}</th></tr></thead>
-{% for k in t.direction %}
-<tr><td>{{ k.label }}</td><td class="n">{{ k.n if k.n else '—' }}</td>
-<td class="n">{% if k.n %}{{ k.hits }} <span class="pct">{{ '%.0f' | format(k.hits * 100 / k.n) }}%</span>{% else %}—{% endif %}</td>
-<td class="n err">{% if k.n %}{{ k.wrong }} <span class="pct">{{ '%.0f' | format(k.wrong * 100 / k.n) }}%</span>{% else %}—{% endif %}</td></tr>
+<table class="pop-track-table pop-matrix">
+<thead><tr><th>{{ _t('pred_col_guess') }}</th><th class="n" title="{{ _t('pred_col_real_help', m=_t('pred_up')) }}">▲</th><th class="n" title="{{ _t('pred_col_real_help', m=_t('pred_down')) }}">▼</th><th class="n">{{ _t('pred_col_success') }}</th></tr></thead>
+{% for k in t.direction %}{% set ki = loop.index0 %}
+<tr><td>{{ k.label }}</td>
+{% for v in k.cells %}<td class="n{% if loop.index0 == ki %} diag{% elif not v %} zero{% endif %}">{{ v }}</td>{% endfor %}
+<td class="n">{% if k.n %}{{ k.hits }}/{{ k.n }} <span class="pct">{{ k.pct }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
+{% if t.direction_n %}<tr class="total"><td colspan="3">{{ _t('pred_total_dir') }}</td><td class="n">{{ t.direction_hits }}/{{ t.direction_n }} <span class="pct">{{ t.direction_pct }}%</span></td></tr>{% endif %}
 </table>
 {% if not t.direction_n and t.pending %}<span class="hint">{{ _t('pred_pending', n=t.pending) }}</span>{% endif %}
+{# Journal : chaque signal arrivé à échéance, jugé jour par jour (✓ exact, ≈ bon sens mais mauvaise intensité, ✗ faux). #}
+{% if t.journal %}
+<span class="pop-track-title pop-track-sub">{{ _t('pred_journal_title') }}</span>
+<ul class="pop-journal">
+{% for j in t.journal %}<li class="jr-{{ j.verdict }}"><span class="jr-mark" title="{{ _t('pred_verdict_' ~ j.verdict) }}">{{ '✓' if j.verdict == 'exact' else ('≈' if j.verdict == 'direction' else '✗') }}</span> {{ j.date }} · {{ j.predicted }} → {{ j.real }}{% if j.verdict == 'direction' %} <span class="hint">({{ _t('pred_verdict_direction_short') }})</span>{% endif %}</li>
+{% endfor %}
+</ul>
+{% endif %}
 {% else %}
 <span class="hint">{{ _t('pred_no_track') }}</span>
 {% endif %}

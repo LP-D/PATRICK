@@ -49,6 +49,8 @@ _MIN_DIRECTION_SAMPLES = 10  # same threshold as metrics.py's own FORT/FAIBLE br
 # above) so a handful of unlucky calls does not trip the badge.
 LIVE_HIT_RATE_WINDOW = 30
 LIVE_HIT_RATE_WARNING_THRESHOLD = 0.5
+# Nombre de signaux jugés rappelés dans le journal de la bulle de /predictions (`live_class_tally_by_target_and_horizon`).
+LIVE_JOURNAL_SIZE = 5
 
 # flexibility-gaps Gap 2: single source for the Diebold-Mariano ok/warning
 # significance threshold shown on `/predictions` and
@@ -1216,8 +1218,12 @@ def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: li
                 if int(y_class) in matrix[pred]:
                     matrix[pred][int(y_class)] += 1
         stamps = sorted(r[0] for r in rows)
+        # Journal : les dernieres predictions jugees (la plus recente d'abord), pour dire jour par jour si c'etait juste.
+        judged = sorted((r for r in rows if r[1] is not None), key=lambda r: r[0], reverse=True)
+        recent = [{"ts": ts, "pred": round(yp), "up": bool(yt), "y_class": None if yc is None else int(yc)}
+                  for ts, yt, yp, yc in judged[:LIVE_JOURNAL_SIZE]]
         out[key] = {"classes": classes, "matrix": matrix, "direction": direction, "pending": pending,
-                    "direction_n": direction_n, "direction_hits": direction_hits,
+                    "direction_n": direction_n, "direction_hits": direction_hits, "recent": recent,
                     "since": stamps[0], "latest_ts": stamps[-1]}
     return out
 

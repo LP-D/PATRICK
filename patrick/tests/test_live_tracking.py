@@ -132,7 +132,10 @@ def test_predictions_page_shows_the_tally_in_the_hover_detail(tmp_path, monkeypa
     assert "Réussites par mouvement prédit" in html and "depuis le 2026-09-01" in html
     assert "Baisse forte" in html
     # hausse forte prédite 3 fois : 1 exacte, 1 bon sens / mauvaise intensité (hausse faible), 1 mauvais sens
-    assert "Direction seule (hausse / baisse)" in html and "pop-track-4" in html
+    assert "2 directions seules" in html and "pop-track-4" in html and "pop-matrix" in html
+    assert "Prédit ↓ · Réel →" in html and "Réussite" in html
+    # journal : chaque signal jugé, du plus récent au plus ancien, avec son verdict
+    assert "Derniers signaux jugés" in html and "2026-09-03 · Hausse forte → Baisse forte" in html
     assert html.count("<th>") >= 7  # Actif + une colonne par horizon, pas une ligne par paire
 
 
@@ -178,3 +181,49 @@ def test_tally_separates_the_direction_error_from_the_intensity_error(tmp_path):
     up = next(d for d in view["direction"] if d["label"] == "Hausse prédite")
     assert (up["n"], up["hits"], up["wrong"]) == (5, 3, 2)
     assert view["n_four"] == 4          # la ligne sans classe n'entre pas dans les 4 mouvements
+    # matrice prédit × réel : colonnes dans l'ordre hausse forte, hausse faible, baisse faible, baisse forte
+    assert strong_up["cells"] == [1, 2, 1, 0] and strong_up["pct"] == 25
+    assert (view["four_hits"], view["four_pct"]) == (1, 25)
+    # 2 directions seules : 5 hausses prédites dont 3 vraies ; la case diagonale est « hausse réalisée »
+    assert (up["cells"], up["pct"]) == ([3, 2], 60)
+    assert (view["direction_hits"], view["direction_n"], view["direction_pct"]) == (3, 5, 60)
+    down = next(d for d in view["direction"] if d["label"] == "Baisse prédite")
+    assert (down["n"], down["pct"]) == (0, None)
+
+
+def test_tally_view_journal_says_for_each_judged_signal_whether_it_was_right(tmp_path):
+    """Verdict : `exact` (bon mouvement), `direction` (bon sens, mauvaise intensité), `wrong` (mauvais sens) ; le plus récent d'abord."""
+    from patrick.webapp.app import _tally_view
+
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn)
+    for ts, y_pred, yt, yc in [("2026-09-01", 3, 1.0, 3), ("2026-09-02", 3, 1.0, 2), ("2026-09-03", 3, 0.0, 0),
+                               ("2026-09-04", 0, 0.0, None)]:   # dernière : ligne antérieure à la migration 0028
+        db.add_predictions(conn, tid, 0, "live", [ts], [None], [y_pred])
+        db.update_prediction_outcome(conn, tid, ts, yt, yc)
+    db.add_predictions(conn, tid, 0, "live", ["2026-09-05"], [None], [2])   # pas encore jugée : hors journal
+
+    tally = trackhistory.live_class_tally_by_target_and_horizon(conn, ["^VIX"], [5])[("^VIX", 5)]
+    journal = _tally_view(tally)["journal"]
+
+    assert [(j["date"], j["verdict"]) for j in journal] == [
+        ("2026-09-04", "direction"), ("2026-09-03", "wrong"), ("2026-09-02", "direction"), ("2026-09-01", "exact")]
+    assert journal[0]["real"] == "Baisse"            # classe réalisée inconnue : seul le sens est dit
+    assert (journal[2]["predicted"], journal[2]["real"]) == ("Hausse forte", "Hausse faible")
+
+
+def test_update_live_outcomes_reports_whether_each_judged_signal_had_the_right_direction(tmp_path):
+    conn = db.connect(str(tmp_path / "p.db"))
+    tid = _seed_trial(conn)
+    s = _series(120)
+    horizon = 5
+    pos_a, pos_b = 40, 50
+    for pos, y_pred in ((pos_a, 3), (pos_b, 0)):
+        db.add_predictions(conn, tid, 0, "live", [str(s.index[pos])], [None], [y_pred])
+    up_a = s.iloc[pos_a + horizon] > s.iloc[pos_a]
+    up_b = s.iloc[pos_b + horizon] > s.iloc[pos_b]
+    verdicts: list[bool] = []
+
+    n = predict_module._update_live_outcomes(conn, tid, horizon, pd.DataFrame({"X": s}), "X", verdicts=verdicts)
+
+    assert n == 2 and sorted(verdicts) == sorted([bool(up_a), not up_b])

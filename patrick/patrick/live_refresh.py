@@ -1,9 +1,12 @@
 """Actualisation des prédictions live (une par couple actif x horizon).
 
-Partagé par `scripts/daily_predict.py` (planificateur de tâches) et par le
-démarrage de l'app web : à chaque lancement, chaque modèle déjà entraîné
-rejoue `predict_live` sur les données du jour -- le tableau /predictions
-montre donc le signal du jour, pas celui de l'entraînement.
+Partagé par `scripts/daily_predict.py` (planificateur de tâches) et par
+l'app web : au lancement, puis chaque jour tant que l'app reste ouverte,
+chaque modèle déjà entraîné rejoue `predict_live` sur les données du jour --
+il fait sa nouvelle prédiction ET juge celles dont l'horizon est écoulé. Le
+tableau /predictions montre donc le signal du jour, pas celui de
+l'entraînement. Un jour où l'app était fermée est reconstitué au lancement
+suivant (`predict.py`, `live_backfill=1`).
 
 Jour de marché fermé : `predict_live` lit la dernière barre de la série de
 l'actif lui-même. Pas de nouvelle barre = pas de nouvelle ligne (rien n'est
@@ -15,9 +18,10 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from functools import partial
 
+from patrick.clock import utc_today
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.live_refresh")
@@ -140,15 +144,24 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
 # --- Actualisation au lancement de l'app --------------------------------
 
 _state_lock = threading.Lock()
-_state: dict = {"running": False, "done": 0, "total": 0, "failed": 0,
+_state: dict = {"running": False, "done": 0, "total": 0, "failed": 0, "judged": 0, "judged_right": 0,
                 "started_at": None, "finished_at": None}
 _started = False
+_stop = threading.Event()
+
+# Une app laissée ouverte plusieurs jours doit continuer à prédire et à juger : on regarde toutes les 30 min si le jour a changé.
+REFRESH_CHECK_SECONDS = 30 * 60
 
 
 def refresh_status() -> dict:
     """Copie de l'état d'avancement (affiché en tête de /predictions)."""
     with _state_lock:
         return dict(_state)
+
+
+def refresh_due(last_day: date | None, today: date) -> bool:
+    """Une actualisation par jour (UTC) : la première au lancement, puis dès que le jour a changé."""
+    return last_day is None or today > last_day
 
 
 def _refresh_once(db_path: str | None = None) -> None:
@@ -158,13 +171,16 @@ def _refresh_once(db_path: str | None = None) -> None:
     finally:
         conn.close()
     with _state_lock:
-        _state.update(running=True, done=0, failed=0, total=len(candidates),
+        _state.update(running=True, done=0, failed=0, judged=0, judged_right=0, total=len(candidates),
                       started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
 
     def _progress(outcome: PredictOutcome) -> None:
+        detail = outcome.detail or {}
         with _state_lock:
             _state["done"] += 1
             _state["failed"] += 0 if outcome.ok else 1
+            _state["judged"] += int(detail.get("n_outcomes_updated") or 0)
+            _state["judged_right"] += int(detail.get("n_outcomes_right") or 0)
 
     try:
         run_daily_predictions(candidates, db_path=db_path, on_item=_progress)
@@ -173,10 +189,27 @@ def _refresh_once(db_path: str | None = None) -> None:
             _state.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
 
 
+def _refresh_loop(db_path: str | None = None) -> None:
+    """Prédit et juge au lancement, puis une fois par jour tant que l'app reste ouverte. Une erreur est loggée, jamais
+    propagée : la boucle continue et retente au prochain tour."""
+    last_day: date | None = None
+    while True:
+        today = utc_today()
+        if refresh_due(last_day, today):
+            last_day = today
+            try:
+                _refresh_once(db_path)
+            except Exception:
+                logger.exception("live refresh failed")
+                with _state_lock:
+                    _state.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+        if _stop.wait(REFRESH_CHECK_SECONDS):
+            return
+
+
 def start_background_refresh(db_path: str | None = None) -> None:
-    """Lance UNE actualisation en tâche de fond au démarrage de l'app (jamais
-    deux ; désactivable par `PATRICK_LIVE_REFRESH=0`). Ne bloque ni le
-    démarrage ni les pages : une erreur est loggée, jamais propagée."""
+    """Lance en tâche de fond la boucle d'actualisation quotidienne (jamais deux ; désactivable par
+    `PATRICK_LIVE_REFRESH=0`). Ne bloque ni le démarrage ni les pages."""
     global _started
     if os.environ.get("PATRICK_LIVE_REFRESH", "1") == "0":
         return
@@ -184,13 +217,4 @@ def start_background_refresh(db_path: str | None = None) -> None:
         if _started:
             return
         _started = True
-
-    def _run() -> None:
-        try:
-            _refresh_once(db_path)
-        except Exception:
-            logger.exception("live refresh failed")
-            with _state_lock:
-                _state.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
-
-    threading.Thread(target=_run, name="live-refresh", daemon=True).start()
+    threading.Thread(target=_refresh_loop, args=(db_path,), name="live-refresh", daemon=True).start()
