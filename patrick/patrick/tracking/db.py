@@ -1143,17 +1143,30 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
         )
 
 
-def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int) -> list[dict]:
+def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int,
+                                  recheck_since: str | None = None) -> list[dict]:
     """`split='live'` predictions whose outcome is not yet known (Phase 4.6)
     -- candidates for `update_prediction_outcome` once their horizon has
     elapsed. `thr_lo`/`thr_hi`: causal 4-class thresholds stored at signal
-    time (migration 0028), `None` for rows written before it."""
+    time (migration 0028), `None` for rows written before it.
+
+    `recheck_since` (date `YYYY-MM-DD`): also returns the rows ALREADY judged whose signal date is on or after it, with
+    their stored `y_true`/`y_class` -- so a verdict taken on a bad quote (frozen price, partial last bar) can be
+    redone once the source has been corrected."""
     rows = conn.execute(
-        "SELECT ts, live_thr_lo, live_thr_hi, y_pred FROM prediction "
-        "WHERE trial_id = ? AND split = 'live' AND y_true IS NULL",
-        (trial_id,),
+        "SELECT ts, live_thr_lo, live_thr_hi, y_pred, y_true, y_class FROM prediction "
+        "WHERE trial_id = ? AND split = 'live' AND (y_true IS NULL OR ts >= ?)",
+        (trial_id, recheck_since if recheck_since is not None else "￿"),
     ).fetchall()
-    return [{"ts": r[0], "thr_lo": r[1], "thr_hi": r[2], "y_pred": r[3]} for r in rows]
+    return [{"ts": r[0], "thr_lo": r[1], "thr_hi": r[2], "y_pred": r[3], "y_true": r[4], "y_class": r[5]}
+            for r in rows]
+
+
+def clear_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str) -> None:
+    """Puts a judged `split='live'` prediction back to « waiting for the outcome » (`y_true`/`y_class` NULL)."""
+    with conn:
+        conn.execute("UPDATE prediction SET y_true = NULL, y_class = NULL "
+                     "WHERE trial_id = ? AND ts = ? AND split = 'live'", (trial_id, ts))
 
 
 def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: float,

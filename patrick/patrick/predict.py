@@ -50,6 +50,10 @@ from patrick.tracking.export import scale_selected
 
 logger = logging.getLogger(__name__)
 
+# Les signaux jugés depuis moins de 30 jours sont recalculés à chaque passage sur les données fraîches : un cours figé ou
+# une dernière barre partielle d'une mauvaise journée de la source ne doit pas rester gravé dans le suivi.
+RECHECK_DAYS = 30
+
 
 def _find_best_trial(conn: sqlite3.Connection, run_id: str) -> dict | None:
     row = conn.execute(
@@ -85,20 +89,40 @@ def _alpha_live_thresholds(raw: pd.DataFrame, config: RunConfig, target_col: str
     return live_class_thresholds(asset_t, horizon, obj.flat_thr, ret=ret)
 
 
+def _realised_outcome(ret: float, row: dict) -> tuple[float, int | None] | None:
+    """(`y_true` binaire, `y_class`) d'un rendement réalisé ; `None` si le cours n'a pas bougé du tout.
+
+    Un rendement EXACTEMENT nul à l'horizon est le signe d'un cours figé (source en panne, dernière valeur recopiée par
+    le forward-fill) bien plus qu'un vrai marché plat : il ne juge rien -- ni hausse ni baisse -- et le signal reste
+    en attente plutôt que d'être compté « pas de hausse » dans un tableau et « hausse faible » dans l'autre."""
+    if ret == 0:
+        return None
+    lo, hi = _finite_or_none(row.get("thr_lo")), _finite_or_none(row.get("thr_hi"))
+    y_class = (classify_return(ret, "LIVE", {"LIVE": (lo, hi)}) if lo is not None and hi is not None else None)
+    return (1.0 if ret > 0 else 0.0), y_class
+
+
 def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
                            raw: pd.DataFrame, target_col: str,
                            forward_returns: pd.Series | None = None,
-                           verdicts: list[bool] | None = None) -> int:
-    """`forward_returns` (cible alpha) : rendement excédentaire réalisé par date de signal ; sans lui, rendement
+                           verdicts: list[bool] | None = None,
+                           recheck_since: str | None = None) -> int:
+    """Juge les signaux dont l'horizon est écoulé ; renvoie le nombre de signaux NOUVELLEMENT jugés.
+
+    `forward_returns` (cible alpha) : rendement excédentaire réalisé par date de signal ; sans lui, rendement
     brut du prix de la cible (comportement historique).
 
     `verdicts` (optionnel) : reçoit, pour chaque signal jugé pendant cet appel, `True` si le sens prédit (hausse /
-    baisse) était le bon -- de quoi dire « combien de signaux jugés aujourd'hui, et combien justes »."""
-    pending = trackdb.list_pending_live_predictions(conn, trial_id)
+    baisse) était le bon -- de quoi dire « combien de signaux jugés aujourd'hui, et combien justes ».
+
+    `recheck_since` (date `YYYY-MM-DD`, optionnel) : les signaux déjà jugés depuis cette date sont recalculés sur les
+    données fraîches et corrigés si le verdict diffère (cours corrigé par la source, dernière barre partielle, cours
+    figé) ; un cours devenu inchangé les remet en attente. Ces corrections ne sont pas comptées dans le retour."""
+    pending = trackdb.list_pending_live_predictions(conn, trial_id, recheck_since)
     if not pending:
         return 0
     series = raw[target_col]
-    n_updated = 0
+    n_updated = n_corrected = 0
     for row in pending:
         ts = pd.Timestamp(row["ts"])
         pos = series.index.searchsorted(ts)
@@ -119,14 +143,25 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
                     "return undefined, outcome left pending.", target_col, row["ts"], trial_id)
                 continue  # degenerate price, cannot compute a return (would be ZeroDivisionError/inf)
             ret = series.iloc[future_idx] / price_at_signal - 1
-        y_true_binary = 1.0 if ret > 0 else 0.0
-        lo, hi = _finite_or_none(row.get("thr_lo")), _finite_or_none(row.get("thr_hi"))
-        y_class = (classify_return(ret, "LIVE", {"LIVE": (lo, hi)})
-                   if lo is not None and hi is not None else None)
+        known = row.get("y_true") is not None
+        outcome = _realised_outcome(ret, row)
+        if outcome is None:
+            if known:   # jugé à tort sur un cours figé : redevient en attente
+                trackdb.clear_prediction_outcome(conn, trial_id, row["ts"])
+                n_corrected += 1
+            continue
+        y_true_binary, y_class = outcome
+        if known:
+            if row["y_true"] != y_true_binary or row.get("y_class") != y_class:
+                trackdb.update_prediction_outcome(conn, trial_id, row["ts"], y_true_binary, y_class)
+                n_corrected += 1
+            continue
         trackdb.update_prediction_outcome(conn, trial_id, row["ts"], y_true_binary, y_class)
         n_updated += 1
         if verdicts is not None and row.get("y_pred") is not None:
             verdicts.append((round(row["y_pred"]) >= 2) == bool(y_true_binary))
+    if n_corrected:
+        logger.info("_update_live_outcomes: %d verdict(s) of trial %s redone on fresh data.", n_corrected, trial_id)
     return n_updated
 
 
@@ -264,8 +299,10 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             new_signal = new_signal or not is_backfill
 
         verdicts: list[bool] = []
+        recheck_since = str((pd.Timestamp(last_ts) - pd.Timedelta(days=RECHECK_DAYS)).date())
         n_updated = _update_live_outcomes(conn, best["trial_id"], horizon, raw, target_col,
-                                          forward_returns=alpha_forward, verdicts=verdicts)
+                                          forward_returns=alpha_forward, verdicts=verdicts,
+                                          recheck_since=recheck_since)
         row = conn.execute(
             "SELECT y_pred, y_proba, p_up FROM prediction "
             "WHERE trial_id = ? AND ts = ? AND split = 'live'", (best["trial_id"], str(last_ts))).fetchone()

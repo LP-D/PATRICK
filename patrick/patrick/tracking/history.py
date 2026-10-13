@@ -1198,6 +1198,10 @@ def live_class_tally_by_target_and_horizon(conn: sqlite3.Connection, targets: li
         rows = [r for tid in trial_ids for r in rows_by_trial.get(tid, [])]
         if not rows:
             continue
+        # Verdict contradictoire (« pas de hausse » mais classe réalisée haussière) : rendement nul jugé avant que
+        # `predict.py::_realised_outcome` ne les écarte. Compté en attente, pour que les deux tableaux disent la même chose.
+        rows = [(ts, None, yp, None) if yt is not None and yc is not None and (int(yc) >= 2) != bool(yt)
+                else (ts, yt, yp, yc) for ts, yt, yp, yc in rows]
         classes = {c: {"n": 0, "hits": 0} for c in (3, 2, 1, 0)}
         # matrix[predicted][realised] over the 4 moves; direction[predicted side][realised side] over UP / DOWN only
         # (the latter also counts rows older than migration 0028, which have no 4-class outcome).
