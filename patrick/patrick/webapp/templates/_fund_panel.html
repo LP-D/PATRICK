@@ -230,7 +230,7 @@
 <p class="hint">{{ t('fund_rules_none') }}</p>
 {% endif %}
 
-<details class="fund-rule-new" id="ml-rules"{% if models %} open{% endif %}>
+<details class="fund-rule-new" id="ml-rules">
   <summary>{{ t('fund_rule_new') }}{% if models %} <span class="tag">{{ t('ml_models_available', n=models | length) }}</span>{% endif %}</summary>
   {% if models %}
   {% with strategy_id=s.strategy_id, form_id='rule-form-' ~ s.strategy_id, strategies=none, apply_after=false %}

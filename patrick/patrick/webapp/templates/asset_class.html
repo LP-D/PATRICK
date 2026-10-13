@@ -38,7 +38,7 @@
 </div>
 
 {% for g in groups %}
-<details class="card cls-group" open data-group>
+<details class="card cls-group" data-group>
     <summary><h2>{{ group_labels.get(g.group, g.group) }}</h2> {{ status_badge(g.rows | length, 'neutral') }}
         {% set n_tr = g.rows | selectattr('n_dir', 'gt', 0) | list | length %}{% if n_tr %}{{ status_badge(t('cls_f_trained') ~ ' · ' ~ n_tr, 'ok') }}{% endif %}</summary>
     <div class="table-scroll cls-scroll">

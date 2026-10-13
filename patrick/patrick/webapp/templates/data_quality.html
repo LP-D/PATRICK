@@ -45,7 +45,7 @@
 <h2>{{ t('dq_issues_title') }}</h2>
 <p class="hint">{{ t('dq_issues_intro') }}</p>
 {% for g in o.issues %}
-<details class="dq-reason"{% if loop.index <= 2 %} open{% endif %}>
+<details class="dq-reason">
     <summary><strong>{{ g.title }}</strong> {{ status_badge(g.series | length, 'neutral') }}</summary>
     <p class="hint">{{ g.meaning }}</p>
     {% if g.effect %}<p class="dq-status"><b>{{ t('dq_effect') }} :</b> {{ g.effect }}</p>{% endif %}
@@ -101,7 +101,7 @@
 </p>
 {% set ns = namespace(group=None) %}
 {% for g in o.history | groupby('group_label') %}
-<details class="dq-reason"{% if g.list | selectattr('status', 'equalto', 'short') | list | length %} open{% endif %}>
+<details class="dq-reason">
     <summary><strong>{{ g.grouper }}</strong>
         {{ status_badge(g.list | length, 'neutral') }}
         {% set n_short = g.list | selectattr('status', 'equalto', 'short') | list | length %}
