@@ -197,3 +197,44 @@ def test_tally_view_gives_the_direction_hit_rate_in_percent():
              "direction": {"up": {"up": 2, "down": 2}, "down": {"up": 0, "down": 2}}}
     assert _tally_view(tally)["direction_pct"] == 67
     assert _tally_view({**tally, "direction_n": 0, "direction_hits": 0})["direction_pct"] is None
+
+
+def _seed_trained_outside_the_default_list(tmp_path, monkeypatch) -> None:
+    """Modèles entraînés hors de la liste par défaut : un ETF du catalogue (XLK), un symbole inconnu du catalogue, un alpha."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    for run_id, target in (("rx", "XLK"), ("ru", "ZZZ.UNKNOWN"), ("ra", "AAA__alpha_BBB")):
+        db.create_run(conn, run_id, target, 1, "snap1", "{}", "cfghash", "sha", 42)
+        trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+        db.mark_best_trial(conn, trial_id)
+        db.add_predictions(conn, trial_id, fold_index=None, split="live", ts=["2024-06-01T00:00:00"],
+                           y_true=[None], y_pred=[3], y_proba=[0.71])
+        db.finish_run(conn, run_id, status="done", n_trials=1)
+    conn.close()
+
+
+def test_directional_groups_add_every_trained_asset_to_the_default_list(tmp_path, monkeypatch):
+    from patrick.webapp.app import _directional_prediction_groups
+
+    _seed_trained_outside_the_default_list(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    groups = _directional_prediction_groups(conn)
+    conn.close()
+
+    defaults = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
+    shown = [sym for items in groups.values() for sym, _ in items]
+    assert shown[:len(defaults)] == defaults                      # les actifs par défaut, dans le même ordre
+    assert "XLK" in [sym for sym, _ in next(items for name, items in groups.items() if name.startswith("ETFs sectoriels"))]
+    assert groups["Autres actifs"] == [("ZZZ.UNKNOWN", "ZZZ.UNKNOWN")]
+    assert "XLF" not in shown and "AAA__alpha_BBB" not in shown   # sans modèle ou alpha : pas dans le tableau directionnel
+    assert len(shown) == len(set(shown))
+
+
+def test_predictions_page_shows_trained_assets_outside_the_default_list(tmp_path, monkeypatch):
+    _seed_trained_outside_the_default_list(tmp_path, monkeypatch)
+    html = TestClient(app).get("/predictions").text
+
+    assert 'href="/targets/XLK"' in html and "Autres actifs" in html and "ZZZ.UNKNOWN" in html
+    assert 'href="/targets/XLF"' not in html and "AAA__alpha_BBB" not in html
+    assert "VIX_Price" in html                                      # les actifs par défaut restent affichés
