@@ -1434,10 +1434,35 @@ def _alpha_run_labels(conn) -> list[tuple[str, str, str | None]]:
     return out
 
 
+_OTHER_ASSETS_GROUP = "Autres actifs"
+
+
+def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
+    """Lignes du tableau directionnel de `/predictions` : les actifs par défaut (`DEFAULT_TARGET_GROUPS`, toujours présents,
+    avec une case « aucune prédiction » tant qu'ils n'ont pas de modèle), PLUS tout autre actif du catalogue des cibles
+    (`forms.TARGET_GROUPS`) qui a un modèle entraîné (un run `done`), rangé dans son groupe du catalogue. Un actif entraîné
+    qui n'est dans aucun groupe du catalogue finit dans « Autres actifs ». Sans ça, les ETF, actions et indices entraînés
+    hors de la liste par défaut avaient bien des prédictions chaque jour mais n'apparaissaient nulle part."""
+    groups = {name: list(items) for name, items in D.DEFAULT_TARGET_GROUPS.items()}
+    shown = {sym for items in groups.values() for sym, _ in items}
+    trained = {r[0] for r in conn.execute("SELECT DISTINCT target FROM run WHERE status = 'done'")
+               if "__alpha_" not in r[0]}
+    for name, items in forms.TARGET_GROUPS.items():
+        extra = [(sym, label) for sym, label, *_ in items if sym in trained and sym not in shown]
+        if extra:
+            groups.setdefault(name, []).extend(extra)
+            shown.update(sym for sym, _ in extra)
+    others = sorted(trained - shown)
+    if others:
+        groups[_OTHER_ASSETS_GROUP] = [(sym, sym) for sym in others]
+    return groups
+
+
 def _predictions_overview(kind: str = "directional") -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
-    grouping `/universe` already uses). Server-rendered live from the DB on
+    grouping `/universe` already uses) plus every other trained asset of the
+    target catalog (`_directional_prediction_groups`). Server-rendered live from the DB on
     every request (no page cache, same philosophy as `/phase9`/`/universe`)
     via three small grouped queries (`trackhistory.
     latest_predictions_by_target_and_horizon`/
@@ -1472,8 +1497,8 @@ def _predictions_overview(kind: str = "directional") -> dict:
                                                        ("%\\_\\_alpha\\_%",))}
             horizons = sorted(trained & set(D.SELECTABLE_HORIZONS)) or list(D.DEFAULT_HORIZONS)
         else:
-            all_symbols = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
-            item_groups = D.DEFAULT_TARGET_GROUPS
+            item_groups = _directional_prediction_groups(conn)
+            all_symbols = [sym for items in item_groups.values() for sym, _ in items]
             # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
             trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
             horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
