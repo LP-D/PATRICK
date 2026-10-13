@@ -87,9 +87,13 @@ def _alpha_live_thresholds(raw: pd.DataFrame, config: RunConfig, target_col: str
 
 def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
                            raw: pd.DataFrame, target_col: str,
-                           forward_returns: pd.Series | None = None) -> int:
+                           forward_returns: pd.Series | None = None,
+                           verdicts: list[bool] | None = None) -> int:
     """`forward_returns` (cible alpha) : rendement excédentaire réalisé par date de signal ; sans lui, rendement
-    brut du prix de la cible (comportement historique)."""
+    brut du prix de la cible (comportement historique).
+
+    `verdicts` (optionnel) : reçoit, pour chaque signal jugé pendant cet appel, `True` si le sens prédit (hausse /
+    baisse) était le bon -- de quoi dire « combien de signaux jugés aujourd'hui, et combien justes »."""
     pending = trackdb.list_pending_live_predictions(conn, trial_id)
     if not pending:
         return 0
@@ -121,6 +125,8 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
                    if lo is not None and hi is not None else None)
         trackdb.update_prediction_outcome(conn, trial_id, row["ts"], y_true_binary, y_class)
         n_updated += 1
+        if verdicts is not None and row.get("y_pred") is not None:
+            verdicts.append((round(row["y_pred"]) >= 2) == bool(y_true_binary))
     return n_updated
 
 
@@ -257,14 +263,16 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             n_written += 1
             new_signal = new_signal or not is_backfill
 
+        verdicts: list[bool] = []
         n_updated = _update_live_outcomes(conn, best["trial_id"], horizon, raw, target_col,
-                                          forward_returns=alpha_forward)
+                                          forward_returns=alpha_forward, verdicts=verdicts)
         row = conn.execute(
             "SELECT y_pred, y_proba, p_up FROM prediction "
             "WHERE trial_id = ? AND ts = ? AND split = 'live'", (best["trial_id"], str(last_ts))).fetchone()
         y_pred, y_proba, p_up_now = (int(row[0]), row[1], row[2]) if row else (None, None, None)
         return {"run_id": run_id, "trial_id": best["trial_id"], "ts": str(last_ts),
                 "y_pred": y_pred, "y_proba": y_proba, "p_up": p_up_now,
-                "n_outcomes_updated": n_updated, "n_written": n_written, "new_signal": new_signal}
+                "n_outcomes_updated": n_updated, "n_outcomes_right": sum(verdicts),
+                "n_written": n_written, "new_signal": new_signal}
     finally:
         conn.close()

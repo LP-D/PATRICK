@@ -2320,6 +2320,15 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .pop-track-table { width: 100%; }
 .pred-pop .pop-hit { margin-bottom: 6px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pred-pop .pop-hit .hint { font-weight: 400; }
+.pop-matrix td.diag { color: var(--pos); font-weight: 650; }
+.pop-matrix td.zero { color: var(--text-3); }
+.pop-matrix tr.total td { border-top: 1px solid var(--line); font-weight: 600; padding-top: 3px; }
+.pop-journal { margin: 0; padding: 0; list-style: none; }
+.pop-journal li { font-variant-numeric: tabular-nums; }
+.pop-journal .jr-mark { display: inline-block; width: 1.1em; font-weight: 700; }
+.pop-journal .jr-exact .jr-mark { color: var(--pos); }
+.pop-journal .jr-direction .jr-mark { color: var(--warn); }
+.pop-journal .jr-wrong .jr-mark { color: var(--neg); }
 
 /* ---- Vocabulaire (/vocabulary) ----------------------------------------------------------------------------------- */
 .vocab-tools { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0 12px; }

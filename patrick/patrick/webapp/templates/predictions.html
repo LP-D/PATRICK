@@ -26,7 +26,9 @@
 {% if live_refresh.running %}
 <p class="hint refresh-line">{{ t('pred_refreshing', d=live_refresh.done, n=live_refresh.total) }}</p>
 {% elif live_refresh.finished_at and live_refresh.total %}
-<p class="hint refresh-line">{{ t('pred_refreshed', d=live_refresh.finished_at[:10], h=live_refresh.finished_at[11:16]) }}{% if live_refresh.failed %} · {{ t('pred_refresh_failed', n=live_refresh.failed) }}{% endif %}.</p>
+<p class="hint refresh-line">{{ t('pred_refreshed', d=live_refresh.finished_at[:10], h=live_refresh.finished_at[11:16]) }}{% if live_refresh.failed %} · {{ t('pred_refresh_failed', n=live_refresh.failed) }}{% endif %}.
+{# Chaque actualisation prédit puis juge : on dit ce qui vient d'être évalué, juste ou non. #}
+{% if live_refresh.judged %}{{ t('pred_judged_today', n=live_refresh.judged, r=live_refresh.judged_right, p=((100 * live_refresh.judged_right / live_refresh.judged) | round | int)) }}{% else %}{{ t('pred_judged_none') }}{% endif %}</p>
 {% endif %}
 
 <p class="pred-legend" data-keep>

@@ -1551,12 +1551,37 @@ _LIVE_CLASS_ORDER = (3, 2, 1, 0)  # indices de classe : 3 hausse forte ... 0 bai
 _LIVE_CLASS_LABELS = {3: "Hausse forte", 2: "Hausse faible", 1: "Baisse faible", 0: "Baisse forte"}
 
 
-def _tally_view(tally: dict | None) -> dict | None:
-    """Suivi live prêt à afficher, pour séparer l'erreur de DIRECTION de l'erreur d'INTENSITÉ.
+_LIVE_CLASS_ARROWS = {3: "▲▲", 2: "▲", 1: "▼", 0: "▼▼"}
 
-    Par mouvement prédit : `n` signaux jugés, `exact` (bon mouvement), `intensity` (bon sens mais mauvaise intensité :
-    hausse forte prédite, hausse faible réalisée) et `wrong_way` (mauvais sens). `exact + intensity + wrong_way = n`.
-    `direction` : la même chose réduite à HAUSSE / BAISSE (inclut les signaux sans classe réalisée)."""
+
+def _pct(hits: int, n: int) -> int | None:
+    return round(100 * hits / n) if n else None
+
+
+def _journal_entry(rec: dict) -> dict:
+    """Une ligne du journal : ce que le modèle avait prédit, ce qui s'est passé, et le verdict (`exact` : bon mouvement ;
+    `direction` : bon sens mais mauvaise intensité ; `wrong` : mauvais sens). Sans classe réalisée (ligne antérieure à la
+    migration 0028), seul le sens est connu."""
+    pred, up, y_class = rec["pred"], rec["up"], rec["y_class"]
+    if y_class is not None and y_class == pred:
+        verdict = "exact"
+    elif (pred >= 2) == up:
+        verdict = "direction"
+    else:
+        verdict = "wrong"
+    real = _LIVE_CLASS_LABELS.get(y_class, "Hausse" if up else "Baisse")
+    return {"date": str(rec["ts"])[:10], "predicted": _LIVE_CLASS_LABELS.get(pred, str(pred)), "real": real,
+            "verdict": verdict}
+
+
+def _tally_view(tally: dict | None) -> dict | None:
+    """Suivi live prêt à afficher : la matrice prédit × réel sur les 4 mouvements avec le % de réussite de chaque classe,
+    la même chose réduite aux 2 directions, et le journal des derniers signaux jugés.
+
+    `matrix` : une ligne par mouvement prédit ; `cells` = effectifs par mouvement réalisé (même ordre que `columns`),
+    `pct` = part de bonnes prédictions (case de la diagonale / jugés). `exact + intensity + wrong_way = n` : l'erreur
+    d'intensité (hausse forte prédite, hausse faible réalisée) garde le bon sens, l'erreur de sens est la plus coûteuse.
+    `direction` / `direction_matrix` : HAUSSE / BAISSE seules (inclut les signaux sans classe réalisée)."""
     if not tally:
         return None
     classes = []
@@ -1566,25 +1591,34 @@ def _tally_view(tally: dict | None) -> dict | None:
         up = c >= 2
         exact = row.get(c, 0)
         same_side = sum(v for a, v in row.items() if (a >= 2) == up)
-        classes.append({"label": _LIVE_CLASS_LABELS[c], "n": n, "hits": exact, "exact": exact,
+        classes.append({"label": _LIVE_CLASS_LABELS[c], "arrow": _LIVE_CLASS_ARROWS[c], "n": n, "hits": exact,
+                        "exact": exact, "pct": _pct(exact, n),
                         "intensity": same_side - exact, "wrong_way": n - same_side,
+                        "cells": [row.get(a, 0) for a in _LIVE_CLASS_ORDER],
                         "share": {_LIVE_CLASS_LABELS[a]: row.get(a, 0) for a in _LIVE_CLASS_ORDER}})
     d = tally.get("direction") or {"up": {"up": 0, "down": 0}, "down": {"up": 0, "down": 0}}
     direction = []
     for side, label in (("up", "Hausse prédite"), ("down", "Baisse prédite")):
         n = d[side]["up"] + d[side]["down"]
         hits = d[side][side]
-        direction.append({"label": label, "n": n, "hits": hits, "wrong": n - hits})
+        direction.append({"label": label, "n": n, "hits": hits, "wrong": n - hits, "pct": _pct(hits, n),
+                          "cells": [d[side]["up"], d[side]["down"]]})
+    n_four = sum(c["n"] for c in classes)
+    exact_four = sum(c["exact"] for c in classes)
     return {
         "since": str(tally["since"])[:10],
         "pending": tally["pending"],
         "direction_n": tally["direction_n"],
         "direction_hits": tally["direction_hits"],
         # Taux de réussite en direction (hit rate) : part des signaux jugés dont le sens (hausse / baisse) était le bon.
-        "direction_pct": round(100 * tally["direction_hits"] / tally["direction_n"]) if tally["direction_n"] else None,
+        "direction_pct": _pct(tally["direction_hits"], tally["direction_n"]),
         "classes": classes,
+        "columns": [{"label": _LIVE_CLASS_LABELS[a], "arrow": _LIVE_CLASS_ARROWS[a]} for a in _LIVE_CLASS_ORDER],
         "direction": direction,
-        "n_four": sum(c["n"] for c in classes),
+        "n_four": n_four,
+        "four_hits": exact_four,
+        "four_pct": _pct(exact_four, n_four),
+        "journal": [_journal_entry(r) for r in tally.get("recent") or []],
     }
 
 
