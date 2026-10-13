@@ -15,7 +15,7 @@ def test_no_template_opens_a_details_block_by_default():
     offenders = []
     for path in sorted(TEMPLATES.glob("*.html")):
         for tag in re.findall(r"<details\b[^>]*>", path.read_text(encoding="utf-8")):
-            if re.search(r"\sopen\b", tag) or re.search(r"\{%[^%]*\bopen\b", tag):
+            if re.search(r"\bopen\b", re.sub(r'"[^"]*"', '""', tag)):   # `open` hors valeurs d'attributs, Jinja compris
                 cls = re.search(r'class="([^"]*)"', tag)
                 if (path.name, (cls.group(1).split()[-1] if cls else "")) not in ALLOWED:
                     offenders.append(f"{path.name}: {tag}")
