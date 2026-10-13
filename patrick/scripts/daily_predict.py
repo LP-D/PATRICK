@@ -29,9 +29,9 @@ vers le checkout de déploiement réel) :
     python scripts/daily_predict.py --dry-run
     python scripts/daily_predict.py --limit 3 --log-file daily_predict.log
 
-Planification Windows : voir `scripts/schtasks_daily_predict.ps1` à côté de
-ce fichier (documente la commande `schtasks /create ...` -- ne l'exécute
-pas).
+Planification Windows : `scripts/schtasks_daily_predict.ps1` à côté de ce
+fichier crée la tâche « Patrick-DailyPredict » (`-Install` ; sans option, il
+affiche seulement ce qu'il ferait).
 """
 from __future__ import annotations
 
