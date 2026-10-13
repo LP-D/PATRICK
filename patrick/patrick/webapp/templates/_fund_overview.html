@@ -1,0 +1,70 @@
+{# Fragment de /fonds (`/fragments/fund-overview`, chargé par lazy.js après l'affichage de la page) : total consolidé, répartition et
+   tableau des stratégies. C'est la partie qui calcule la valeur de chaque stratégie (cotations, moteur de simulation : 3 à 5 s) ; le
+   cadre de la page, le panneau de détail et les listes qui ne dépendent pas des cotations restent dans fonds.html.
+   `strategies` / `fund` = `fund.service.overview`. Les clics sont gérés par `static/fonds.js` (délégation sur #fund-overview). #}
+{% from "_components.html" import metric, empty_state %}
+{% if strategies %}
+<div class="metric-grid">
+  {{ metric(t('fund_total_nav'), fund.nav | eur, t('fund_total_nav_hint', n=fund.n_strategies), "neutral") }}
+  {{ metric(t('fund_total_capital'), fund.capital | eur, t('fund_total_capital_hint'), "neutral") }}
+  {{ metric(t('fund_total_pnl'), fund.pnl | eur, fund.pnl_pct | pct(1, true), "neutral") }}
+</div>
+
+<section class="card" aria-labelledby="fund-share-title">
+  <div class="card-head"><h2 id="fund-share-title">{{ t('fund_breakdown_title') }}</h2></div>
+  <ul class="fund-breakdown">
+    {% for r in fund.breakdown %}
+    <li class="fund-share" data-strategy-id="{{ r.strategy_id }}">
+      <span class="fund-share-name">{{ r.name }} <span class="tag">{{ r.wrapper }}</span></span>
+      <span class="fund-share-bar" aria-hidden="true"><span style="width: {{ '%.1f' % ((r.share or 0) * 100) }}%"></span></span>
+      <span class="pk-mono">{{ r.nav | eur }} · {{ r.share | pct(1) }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card" aria-labelledby="fund-table-title">
+  <div class="card-head"><h2 id="fund-table-title">{{ t('fund_strategies_title') }}</h2></div>
+  <div class="table-scroll">
+    <table class="data-table fund-table">
+      <thead>
+        <tr>
+          <th>{{ t('fund_col_strategy') }}</th>
+          <th>{{ t('fund_col_wrapper') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_nav') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_pnl') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_exposure') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_leverage') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_margin') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_positions') }}</th>
+          <th><span class="visually-hidden">{{ t('fund_col_actions') }}</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in strategies %}{% set k = s.kpis %}
+        <tr class="fund-row{% if s.strategy.strategy_id == selected_id %} is-selected{% endif %}" data-strategy-id="{{ s.strategy.strategy_id }}"
+            tabindex="0" role="button" aria-controls="fund-panel">
+          <td>{{ s.strategy.name }}</td>
+          <td><span class="tag">{{ s.strategy.wrapper }}</span></td>
+          <td class="num pk-mono">{{ k.nav | eur }}</td>
+          <td class="num pk-mono"><span class="{{ 'pos' if k.pnl >= 0 else 'neg' }}">{{ k.pnl | eur }} · {{ k.pnl_pct | pct(1, true) }}</span></td>
+          <td class="num pk-mono">{{ k.gross_exposure_pct | pct(0) }}</td>
+          <td class="num pk-mono">{{ k.leverage | qty }}×</td>
+          <td class="num pk-mono">{{ k.margin_used | eur(0) }}</td>
+          <td class="num pk-mono">{{ k.n_open_positions }}</td>
+          <td class="fund-actions">
+            <button type="button" class="btn-ghost" data-act="delete-strategy" data-strategy-id="{{ s.strategy.strategy_id }}"
+                    data-confirm="{{ t('fund_confirm_delete_strategy') }}"
+                    aria-label="{{ t('fund_act_delete_strategy') }} : {{ s.strategy.name }}">{{ icon('trash') }} {{ t('fund_act_delete') }}</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-footer">{{ t('fund_table_footer') }}</p>
+</section>
+
+{% else %}
+{{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
+{% endif %}

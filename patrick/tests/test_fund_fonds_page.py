@@ -14,6 +14,16 @@ XSS = "<script>alert(1)</script>"
 XSS_ESCAPED = "&lt;script&gt;alert(1)&lt;/script&gt;"
 
 
+def fonds_html(client, url: str) -> str:
+    """La page /fonds et son tableau : la page n'envoie que son cadre, le tableau arrive par /fragments/fund-overview."""
+    query = url.partition("?")[2]
+    page = client.get(url).text
+    if not url.startswith("/fonds"):
+        return page
+    return page + client.get("/fragments/fund-overview" + ("?" + query if query else "")).text
+
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
@@ -23,21 +33,21 @@ def client(tmp_path, monkeypatch):
 
 
 def test_fonds_page_lists_strategies_and_totals(client):
-    assert "Aucune stratégie." in client.get("/fonds").text
+    assert "Aucune stratégie." in fonds_html(client, "/fonds")
     a = fs.make_strategy(client)
     fs.make_strategy(client, "Actions PEA", wrapper="PEA", initial_capital=50_000)
     fs.place(client, a)
-    html = client.get(f"/fonds?strategy={a}").text
+    html = fonds_html(client, f"/fonds?strategy={a}")
     assert html.count('class="fund-row') == 2 and f'data-strategy-id="{a}"' in html
     assert "Valeur du fonds" in html and "Capital total" in html and "150 000,00 €" in html
     assert 'id="fund-panel"' in html and '<script src="/static/fonds.js"></script>' in html
     assert fs.json_script(html, "fund-selected") == a and 'class="fund-row is-selected"' in html
-    assert fs.json_script(client.get("/fonds").text, "fund-selected") is None
+    assert fs.json_script(fonds_html(client, "/fonds"), "fund-selected") is None
 
 
 def test_fonds_page_is_available_in_english(client):
     fs.make_strategy(client)
-    fund = client.get("/fonds?lang=en").text
+    fund = fonds_html(client, "/fonds?lang=en")
     assert "LP Fund" in fund and "Fund value" in fund and "Valeur du fonds" not in fund
 
 
@@ -50,7 +60,7 @@ def test_the_old_wealth_simulator_url_redirects_to_the_fund_page(client):
 def test_navigation_lists_fonds_in_the_simulation_category_and_lights_it_up(client):
     entries = [e.slug for e in nav_registry.entries_for("simulation")]
     assert entries == ["simulate", "fonds"]
-    side = client.get("/fonds").text
+    side = fonds_html(client, "/fonds")
     assert 'href="/fonds"' in side and 'href="/patrimoine-simulation"' not in side
     current = re.findall(r'<a href="([^"]+)"[^>]*aria-current="page"', side)
     assert current == ["/fonds"]
@@ -62,7 +72,7 @@ def test_strategy_names_are_escaped_on_the_fund_page_and_in_the_panel(client):
     sid = fs.make_strategy(client, XSS)
     fs.place(client, sid)
     for url in ("/fonds", f"/api/fund/strategies/{sid}/panel"):
-        html = client.get(url).text
+        html = fonds_html(client, url)
         assert XSS_ESCAPED in html, url
         assert XSS not in html, url
 
@@ -150,14 +160,14 @@ def test_archived_strategies_are_listed_and_can_be_restored_and_archiving_asks_f
     archived = fs.make_strategy(client, "Ancienne")
     kept = fs.make_strategy(client, "Garde")
     client.patch(f"/api/fund/strategies/{archived}", json={"archived": True})
-    html = client.get("/fonds").text
+    html = fonds_html(client, "/fonds")
     assert 'class="fund-archived"' in html and "Stratégies archivées (1)" in html
     assert re.search(rf'data-act="unarchive"[^>]*data-strategy-id="{archived}"', html)
     assert f'data-strategy-id="{kept}"' in html and html.count('class="fund-row') == 1
     panel = client.get(f"/api/fund/strategies/{kept}/panel").text
     assert re.search(r'data-act="archive"[^>]*data-confirm="[^"]+"', panel)
     client.patch(f"/api/fund/strategies/{archived}", json={"archived": False})
-    again = client.get("/fonds").text
+    again = fonds_html(client, "/fonds")
     assert 'class="fund-archived"' not in again and again.count('class="fund-row') == 2
 
 
@@ -175,7 +185,7 @@ def test_the_correction_form_is_prefilled_with_the_manual_price_and_fees(client)
 def test_the_fund_header_breaks_the_total_down_by_strategy(client):
     fs.make_strategy(client, "Grande", initial_capital=75_000)
     fs.make_strategy(client, "Petite", wrapper="PEA", initial_capital=25_000)
-    html = client.get("/fonds").text
+    html = fonds_html(client, "/fonds")
     block = html.split('class="fund-breakdown"')[1].split("</ul>")[0]
     assert block.count('class="fund-share"') == 2 and "Grande" in block and "Petite" in block
     assert "width: 75.0%" in block and "width: 25.0%" in block
@@ -200,11 +210,11 @@ def test_the_fund_scripts_never_open_a_native_browser_dialog(client):
 
 def test_the_fonds_page_ships_an_in_page_rename_dialog_and_uses_the_shared_confirmation(client):
     fs.make_strategy(client)
-    html = client.get("/fonds").text
+    html = fonds_html(client, "/fonds")
     assert '<dialog id="fund-rename-dialog" class="modal"' in html and 'id="fund-rename-form"' in html
     assert "Nouveau nom de la stratégie" in html and "fund-confirm-dialog" not in html
     assert '<dialog id="confirm-dialog" class="modal"' in html                      # boîte partagée de base_v2.html
-    assert "New strategy name" in client.get("/fonds?lang=en").text
+    assert "New strategy name" in fonds_html(client, "/fonds?lang=en")
     assert "fund-rename-dialog" not in client.get("/api/fund/strategies/str_x/panel").text    # jamais dans le fragment rechargé
 
 
@@ -212,7 +222,7 @@ def test_each_strategy_row_has_its_own_delete_button_with_a_confirmation(client)
     a = fs.make_strategy(client, "Macro CTO")
     b = fs.make_strategy(client, "Actions PEA", wrapper="PEA", initial_capital=50_000)
 
-    html = client.get("/fonds").text
+    html = fonds_html(client, "/fonds")
 
     for sid in (a, b):
         assert f'data-act="delete-strategy" data-strategy-id="{sid}"' in html
@@ -222,5 +232,19 @@ def test_each_strategy_row_has_its_own_delete_button_with_a_confirmation(client)
 
 def test_the_row_delete_button_is_translated(client):
     fs.make_strategy(client)
-    assert "Supprimer" in client.get("/fonds").text
-    assert "Delete" in client.get("/fonds?lang=en").text
+    assert "Supprimer" in fonds_html(client, "/fonds")
+    assert "Delete" in fonds_html(client, "/fonds?lang=en")
+
+
+def test_the_page_opens_without_computing_the_strategies_which_arrive_as_a_fragment(client, monkeypatch):
+    """La valeur de chaque stratégie (cotations, moteur : 3 à 5 s sur la vraie base) ne bloque plus l'ouverture de /fonds."""
+    from patrick.fund import service
+
+    fs.make_strategy(client)
+    real = service.overview
+    monkeypatch.setattr(service, "overview", lambda *a, **k: (_ for _ in ()).throw(AssertionError("calcul avant l'affichage")))
+    page = client.get("/fonds").text
+    assert 'data-lazy-url="/fragments/fund-overview"' in page and 'class="fund-row' not in page
+    assert 'id="fund-panel"' in page and 'id="fund-rename-dialog"' in page
+    monkeypatch.setattr(service, "overview", real)
+    assert 'class="fund-row' in client.get("/fragments/fund-overview").text
