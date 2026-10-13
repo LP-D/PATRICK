@@ -72,6 +72,7 @@ def overview(conn: sqlite3.Connection, prices) -> dict:
     rows = sorted(consolidated.values(), key=lambda r: -r["value"])
     for r in rows:
         r["weight"] = r["value"] / real_total if real_total else None
+        r["latent_pnl_pct"] = r["latent_pnl"] / r["cost"] if r["cost"] > 0 else None
     real_cash = sum(a["cash"] for a in accounts if a["mode"] == "real")
     risk = performance.ex_ante_risk({"total": real_total, "rows": rows}, prices) if rows else \
         {"volatility": None, "covered_weight": 0.0, "excluded": [], "shrinkage": None}

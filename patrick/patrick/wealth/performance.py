@@ -232,7 +232,9 @@ def holdings_table(movements: list[dict], prices: PriceProvider, as_of=None, acc
             value = pos.quantity * (price or 0.0)
         rows.append({"symbol": sym, "quantity": pos.quantity, "pru": pos.pru, "price": price,
                      "price_source": source, "value": value, "cost": pos.cost,
-                     "latent_pnl": value - pos.cost, "realized_pnl": pos.realized,
+                     "latent_pnl": value - pos.cost,
+                     "latent_pnl_pct": (value - pos.cost) / pos.cost if pos.cost > 0 else None,
+                     "realized_pnl": pos.realized,
                      "is_term_deposit": pos.is_term_deposit})
     total = state.cash + sum(r["value"] for r in rows)
     for r in rows:
