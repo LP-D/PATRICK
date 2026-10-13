@@ -8,7 +8,7 @@
     {% if applied.warning %}<br><strong>{{ t(applied.warning) }}</strong>{% endif %}
 </p>
 {% endif %}
-<details class="profile-gallery" id="profile-gallery" {% if not applied %}open{% endif %}>
+<details class="profile-gallery" id="profile-gallery">
     <summary>{{ t('prof_gallery_title') }} <span class="hint">{{ t('prof_gallery_sub') }}</span></summary>
     <div class="profile-grid">
     {% for p in training_profiles %}

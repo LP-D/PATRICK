@@ -53,7 +53,7 @@
     <p class="banner" role="status">{{ t('prof_applied', name=t('prof_' ~ applied.key ~ '_name')) }}</p>
     {% endif %}
 
-    <details class="profile-gallery" id="profile-gallery" {% if not applied %}open{% endif %}>
+    <details class="profile-gallery" id="profile-gallery">
         <summary>{{ t('prof_gallery_title') }}</summary>
         <div class="profile-grid">
         {% for p in rl_profiles %}
