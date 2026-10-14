@@ -1458,7 +1458,7 @@ def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool
     `ended` : la séance `session` est terminée MAINTENANT (clôture approximative par classe d'actifs,
     `data/session_calendar.py`). `bar_final` : au moment où le signal a été calculé, la barre était-elle déjà la clôture
     (True), un cours en séance (False) ou on ne sait pas (None, signal antérieur à la migration 0032). `price` : le cours de
-    départ tel que le modèle l'a vu (None si non enregistré, migration 0033). `target` : séance d'arrivée du mouvement,
+    départ tel que le modèle l'a vu (None si non enregistré, migration 0034). `target` : séance d'arrivée du mouvement,
     environ. `close_local` : heure de clôture en heure locale, ou None pour un marché 24 h/24 (journée UTC)."""
     close = session_calendar.session_close_utc(asset_class, session)
     round_the_clock = asset_class in _ROUND_THE_CLOCK

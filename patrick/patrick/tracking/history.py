@@ -829,7 +829,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
             "confidence": y_proba,
             # 1 = signal calculé sur la clôture, 0 = sur un cours en séance, None = inconnu (migration 0032).
             "bar_final": None if bar_final is None else bool(bar_final),
-            # Cours de départ du signal tel que le modèle l'a vu (migration 0033), None = inconnu.
+            # Cours de départ du signal tel que le modèle l'a vu (migration 0034), None = inconnu.
             "ref_price": ref_price,
         }
     return out

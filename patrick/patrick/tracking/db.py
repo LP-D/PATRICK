@@ -1197,7 +1197,7 @@ def set_live_signal_context(conn: sqlite3.Connection, trial_id: int, ts: str,
 
     `bar_final` (migration 0032): the day's bar was already the session's close when the signal was computed (True) or
     still a price in the making (False) -- what the predicted move starts from; `None` = unknown.
-    `ref_price` (migration 0033): that price, as the model saw it; `None` = unknown."""
+    `ref_price` (migration 0034): that price, as the model saw it; `None` = unknown."""
     with conn:
         conn.execute(
             "UPDATE prediction SET live_thr_lo = ?, live_thr_hi = ?, live_backfill = ?, live_bar_final = ?, "
