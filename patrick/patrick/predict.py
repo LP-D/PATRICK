@@ -299,7 +299,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             trackdb.set_live_signal_context(conn, best["trial_id"], str(t), _finite_or_none(lo),
                                             _finite_or_none(hi), is_backfill,
                                             bar_final=True if is_backfill else session_calendar.bar_is_final(
-                                                asset_class, pd.Timestamp(t).date(), utc_now()))
+                                                asset_class, pd.Timestamp(t).date(), utc_now()),
+                                            ref_price=_finite_or_none(series.get(t)))
             n_written += 1
             new_signal = new_signal or not is_backfill
 

@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -1440,17 +1440,33 @@ _OTHER_ASSETS_GROUP = "Autres actifs"
 _ROUND_THE_CLOCK = ("crypto", "macro", "other")
 
 
-def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool | None) -> dict:
+def _approx_target_session(session: date, horizon: int, round_the_clock: bool) -> date:
+    """Date de la séance où le mouvement prédit se termine : `horizon` séances après `session`. Approximation : les week-ends
+    sont sautés (sauf marché 24 h/24), les jours fériés non."""
+    day = session
+    for _ in range(horizon):
+        day += timedelta(days=1)
+        while not round_the_clock and day.weekday() >= 5:
+            day += timedelta(days=1)
+    return day
+
+
+def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool | None,
+                 ref_price: float | None = None, horizon: int = 1) -> dict:
     """Sur quel marché on est et par rapport à quoi le mouvement prédit est mesuré, pour la bulle de /predictions.
 
     `ended` : la séance `session` est terminée MAINTENANT (clôture approximative par classe d'actifs,
     `data/session_calendar.py`). `bar_final` : au moment où le signal a été calculé, la barre était-elle déjà la clôture
-    (True), un cours en séance (False) ou on ne sait pas (None, signal antérieur à la migration 0032). `close_local` : heure
-    de clôture en heure locale, ou None pour un marché 24 h/24 (journée UTC)."""
+    (True), un cours en séance (False) ou on ne sait pas (None, signal antérieur à la migration 0032). `price` : le cours de
+    départ tel que le modèle l'a vu (None si non enregistré, migration 0033). `target` : séance d'arrivée du mouvement,
+    environ. `close_local` : heure de clôture en heure locale, ou None pour un marché 24 h/24 (journée UTC)."""
     close = session_calendar.session_close_utc(asset_class, session)
+    round_the_clock = asset_class in _ROUND_THE_CLOCK
     return {"class": asset_class, "session": session.isoformat(),
             "ended": session_calendar.bar_is_final(asset_class, session, now), "bar_final": bar_final,
-            "close_local": None if asset_class in _ROUND_THE_CLOCK else close.astimezone().strftime("%H:%M")}
+            "price": None if ref_price is None else f"{ref_price:.6g}",
+            "target": _approx_target_session(session, horizon, round_the_clock).isoformat(),
+            "close_local": None if round_the_clock else close.astimezone().strftime("%H:%M")}
 
 
 def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
@@ -1557,7 +1573,8 @@ def _predictions_overview(kind: str = "directional") -> dict:
                         session = date.fromisoformat(str(pred["ts"])[:10])
                         market_closed = session < today
                         if pred["split"] == "live":
-                            market = _market_view(market_class.get(sym, "other"), session, now, pred.get("bar_final"))
+                            market = _market_view(market_class.get(sym, "other"), session, now, pred.get("bar_final"),
+                                                  pred.get("ref_price"), h)
                     except ValueError:
                         market_closed = False
                 cells[h] = {

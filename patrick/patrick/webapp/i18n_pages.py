@@ -232,8 +232,11 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "pb_ref_close": _s("clôture du {d}", "close of {d}"),
     "pb_ref_intraday": _s("cours en séance du {d}, pas la clôture", "intraday price of {d}, not the close"),
     "pb_ref_unknown": _s("non enregistrée (signal antérieur)", "not recorded (earlier signal)"),
-    "pb_ref_move": _s("Mouvement prédit : de cette valeur à la clôture {h} séance(s) plus tard.",
-                      "Predicted move: from this value to the close {h} session(s) later."),
+    "pb_ref_move": _s("Mouvement prédit : de cette valeur à la clôture du ≈ {t} ({h} séance(s) plus tard).",
+                      "Predicted move: from this value to the close of ≈ {t} ({h} session(s) later)."),
+    "pb_ref_noprice": _s("Cours de départ non enregistré.", "Starting price not recorded."),
+    "pb_conf_help": _s("Confiance : probabilité que le modèle donne à ce mouvement (4 possibles : 0.25 = hasard).",
+                       "Confidence: probability the model gives this move (4 possible: 0.25 = chance)."),
     "pb_ref_intraday_hint": _s("Le signal sera jugé par rapport à la clôture.", "The signal will be judged against the close."),
     # ------------------------------------------------------------------ prédictions : direction ou intensité
     "pred_track_title": _s("Réussites par mouvement prédit", "Hits by predicted move"),

@@ -21,7 +21,7 @@
 {% else %}
 <dl class="pop-grid">
 {% if s %}
-<dt>{{ _t('pb_direction') }}</dt><dd>{{ s[0] }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}{% endif %}</dd>
+<dt>{{ _t('pb_direction') }}</dt><dd>{{ s[0] }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}<br><span class="hint">{{ _t('pb_conf_help') }}</span>{% endif %}</dd>
 {# Date seule : l'heure `00:00:00` d'un signal de clôture n'apporte rien. #}
 {% set ts = c.ts | string %}
 <dt>{{ _t('pb_last') }}</dt><dd>{{ ts[:10] }}{% if ts[11:16] and ts[11:16] != '00:00' %} {{ ts[11:16] }}{% endif %}</dd>
@@ -30,10 +30,12 @@
 {% if m %}
 <dt>{{ _t('pb_market') }}</dt><dd>{{ _t('mkt_' ~ m['class']) }} · {% if m.ended %}{{ _t('pb_session_ended', d=m.session) }}{% elif m.close_local %}{{ _t('pb_session_open', d=m.session, h=m.close_local) }}{% else %}{{ _t('pb_session_open_24', d=m.session) }}{% endif %}</dd>
 <dt>{{ _t('pb_reference') }}</dt><dd>
+{# La valeur de départ du mouvement : le cours que le modèle a vu à la date du signal, et ce qu'il représente. #}
+{% if m.price %}<strong>{{ m.price }}</strong> · {% endif %}
 {% if m.bar_final is none %}{{ status_badge(_t('pb_ref_unknown'), 'disabled') }}
 {% elif m.bar_final %}{{ _t('pb_ref_close', d=m.session) }}
 {% else %}{{ status_badge(_t('pb_ref_intraday', d=m.session), 'warning') }}{% endif %}<br>
-<span class="hint">{{ _t('pb_ref_move', h=c.horizon) }}{% if m.bar_final is sameas false %} {{ _t('pb_ref_intraday_hint') }}{% endif %}</span></dd>
+<span class="hint">{{ _t('pb_ref_move', t=m.target, h=c.horizon) }}{% if m.bar_final is sameas false %} {{ _t('pb_ref_intraday_hint') }}{% endif %}{% if m.bar_final is not none and not m.price %} {{ _t('pb_ref_noprice') }}{% endif %}</span></dd>
 {% endif %}
 {% else %}
 <dt>{{ _t('pb_direction') }}</dt><dd>{{ status_badge(_t('pb_none'), 'disabled') }}</dd>
