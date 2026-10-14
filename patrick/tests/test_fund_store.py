@@ -82,3 +82,50 @@ def test_deleting_a_strategy_removes_its_orders(conn):
     store.insert_order(conn, _order(sid))
     store.delete_strategy(conn, sid)
     assert conn.execute("SELECT COUNT(*) FROM fund_order").fetchone()[0] == 0
+
+
+# --- date de dernière modification (migration 0033) : sert au partage des fonds entre deux PC -------------------
+
+_OLD = "2000-01-01 00:00:00.000"
+
+
+def _stamp(conn, sid):
+    return conn.execute("SELECT updated_at FROM fund_strategy WHERE strategy_id = ?", (sid,)).fetchone()[0]
+
+
+def _aged(conn, sid):
+    conn.execute("UPDATE fund_strategy SET updated_at = ? WHERE strategy_id = ?", (_OLD, sid))
+    conn.commit()
+    return sid
+
+
+def test_a_new_strategy_carries_a_modification_stamp(conn):
+    sid = store.create_strategy(conn, "A", "CTO", 1000, "2026-01-05")
+    assert _stamp(conn, sid) > "2020-01-01"
+
+
+@pytest.mark.parametrize("change", [
+    lambda c, sid: store.update_strategy(c, sid, name="Renommée"),
+    lambda c, sid: store.update_strategy(c, sid, archived=1),
+    lambda c, sid: store.insert_order(c, _order(sid, position_id="pos_new")),
+    lambda c, sid: store.update_order(c, store.list_orders(c, sid)[0]["order_id"], _order(sid, quantity=9.0)),
+    lambda c, sid: store.delete_position(c, "pos_a"),
+], ids=["rename", "archive", "new order", "corrected order", "deleted position"])
+def test_every_change_of_a_strategy_refreshes_its_stamp(conn, change):
+    sid = store.create_strategy(conn, "A", "CTO", 100_000, "2026-01-05")
+    store.insert_order(conn, _order(sid))
+    other = store.create_strategy(conn, "B", "CTO", 100_000, "2026-01-05")
+    _aged(conn, sid)
+    _aged(conn, other)
+
+    change(conn, sid)
+
+    assert _stamp(conn, sid) > _OLD
+    assert _stamp(conn, other) == _OLD                    # les autres stratégies ne bougent pas
+
+
+def test_deleting_a_strategy_leaves_a_dated_tombstone(conn):
+    sid = store.create_strategy(conn, "A", "CTO", 1000, "2026-01-05")
+    store.delete_strategy(conn, sid)
+    row = conn.execute("SELECT strategy_id, deleted_at FROM fund_deleted").fetchall()
+    assert [r[0] for r in row] == [sid] and row[0][1] > "2020-01-01"

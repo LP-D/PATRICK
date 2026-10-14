@@ -17,11 +17,13 @@ Règles :
 - `champion` : le plus récent (`promoted_at`) gagne pour une même (cible, horizon);
 - `trial_registry` (compteur d'essais du DSR) : union dédoublonnée;
 - caches (`shap_selection_cache`, `vol_model_cache`) : union par clé;
-- jamais fusionnés par union : patrimoine (`wealth_*`), fonds (`fund_*`), `simulation`
-  (les deux PC avaient importé les mêmes comptes sous des identifiants différents, une
-  union créerait des doublons). Le patrimoine et les fonds ont un PC de RÉFÉRENCE qui les
-  publie; les autres les remplacent par les siens (`adopt_personal_tables`). `simulation`
-  et l'état d'exécution (`worker_heartbeat`; jobs importés mis en erreur) restent locaux.
+- jamais fusionnés par union : patrimoine (`wealth_*`), `simulation` (les deux PC avaient importé les
+  mêmes comptes sous des identifiants différents, une union créerait des doublons). Le patrimoine a un
+  PC de RÉFÉRENCE qui le publie; les autres le remplacent par le sien (`adopt_personal_tables`).
+  `simulation` et l'état d'exécution (`worker_heartbeat`; jobs importés mis en erreur) restent locaux.
+- les fonds (`fund_*`) ne passent PAS par ici : chaque PC publie les siens dans un petit fichier à lui
+  et fusionne ceux des autres, stratégie par stratégie (`patrick.fund.share`). Ils ne sont donc jamais
+  remplacés par ceux d'un autre PC.
 """
 from __future__ import annotations
 
@@ -37,11 +39,11 @@ _BY_KEY = ("snapshot", "excluded_symbol", "drift_feature_reference",
            "shap_selection_cache", "vol_model_cache")
 
 
-# Patrimoine et fonds : un PC « référence » les publie, les autres les REMPLACENT par ceux du partage
+# Patrimoine : un PC « référence » le publie, les autres le REMPLACENT par celui du partage
 # (`adopt_personal_tables`). Parents avant enfants. `simulation` en est exclue : elle renvoie à des
-# `trial_id` propres à chaque base.
-ADOPTED_PERSONAL_TABLES = ("wealth_account", "wealth_movement", "fund_strategy", "fund_rule", "fund_order",
-                           "fund_price", "fund_price_meta")
+# `trial_id` propres à chaque base. Les fonds n'en font plus partie (14/10/2026 : l'adoption effaçait les
+# portefeuilles créés sur un PC qui n'est pas la référence) : ils se fusionnent, voir `patrick.fund.share`.
+ADOPTED_PERSONAL_TABLES = ("wealth_account", "wealth_movement")
 
 
 class MergeError(RuntimeError):
@@ -49,7 +51,7 @@ class MergeError(RuntimeError):
 
 
 def adopt_personal_tables(dst_path: str, src_path: str) -> dict[str, int]:
-    """Remplace dans `dst_path` le patrimoine et les fonds par ceux de `src_path` (le PC de référence).
+    """Remplace dans `dst_path` le patrimoine par celui de `src_path` (le PC de référence).
     Une transaction : en cas d'erreur, rien n'est écrit. Renvoie le nombre de lignes par table."""
     conn = sqlite3.connect(dst_path, isolation_level=None)
     try:

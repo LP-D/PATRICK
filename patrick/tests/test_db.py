@@ -483,3 +483,13 @@ def test_add_column_migration_is_skipped_when_the_column_exists(tmp_path):
     cols = [r[1] for r in conn.execute("PRAGMA table_info(dm_result)")]
     assert cols.count("sample") == 1 and cols.count("n_obs") == 1
     assert 22 in {r[0] for r in conn.execute("SELECT version FROM schema_version")}
+
+
+def test_migration_numbers_are_unique():
+    """Deux sessions qui ajoutent chacune « la prochaine » migration produisent le même numéro : la base enregistre la
+    première, la seconde est sautée ou fait échouer toutes les connexions (arrivé le 14/10 entre 0032_live_bar_final et
+    le partage des fonds). On renumérote la dernière arrivée après `git pull --rebase`."""
+    by_number: dict[int, list[str]] = {}
+    for script in db.MIGRATIONS_DIR.glob("*.sql"):
+        by_number.setdefault(int(script.name.split("_", 1)[0]), []).append(script.name)
+    assert {n: names for n, names in by_number.items() if len(names) > 1} == {}

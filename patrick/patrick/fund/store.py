@@ -23,12 +23,22 @@ _ORDER_COLUMNS = ("order_id", "strategy_id", "position_id", "ts", "action", "ins
                   "spec_json", "note")
 
 
+_NOW = "strftime('%Y-%m-%d %H:%M:%f', 'now')"          # UTC, au millième : se compare comme du texte
+
+
 class FundError(ValueError):
     """Entrée invalide (400 à l'API)."""
 
 
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:10]}"
+
+
+def touch_strategy(conn: sqlite3.Connection, strategy_id: str) -> None:
+    """Date la dernière modification d'une stratégie (ses ordres et ses règles comptent) : c'est elle qui décide,
+    quand deux PC échangent leurs fonds, quelle version d'une stratégie est la plus récente. À appeler dans la
+    transaction qui change la stratégie, ses ordres ou ses règles."""
+    conn.execute(f"UPDATE fund_strategy SET updated_at = {_NOW} WHERE strategy_id = ?", (strategy_id,))
 
 
 def _iso(value) -> str:
@@ -69,7 +79,7 @@ def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_c
     strategy_id = new_id("str")
     with conn:
         conn.execute("INSERT INTO fund_strategy (strategy_id, name, wrapper, base_currency, initial_capital, "
-                     "opened_on) VALUES (?, ?, ?, ?, ?, ?)",
+                     f"opened_on, updated_at) VALUES (?, ?, ?, ?, ?, ?, {_NOW})",
                      (strategy_id, name[:120], wrapper, (base_currency or "EUR").upper()[:3], capital, opened))
     return strategy_id
 
@@ -103,11 +113,14 @@ def update_strategy(conn: sqlite3.Connection, strategy_id: str, **fields) -> Non
     sets = ", ".join(f"{k} = ?" for k in fields)
     with conn:
         conn.execute(f"UPDATE fund_strategy SET {sets} WHERE strategy_id = ?", (*fields.values(), strategy_id))
+        touch_strategy(conn, strategy_id)
 
 
 def delete_strategy(conn: sqlite3.Connection, strategy_id: str) -> None:
     with conn:
-        conn.execute("DELETE FROM fund_strategy WHERE strategy_id = ?", (strategy_id,))
+        if conn.execute("DELETE FROM fund_strategy WHERE strategy_id = ?", (strategy_id,)).rowcount:
+            conn.execute(f"INSERT OR REPLACE INTO fund_deleted (strategy_id, deleted_at) VALUES (?, {_NOW})",
+                         (strategy_id,))
 
 
 # ------------------------------------------------------------------ orders
@@ -130,6 +143,7 @@ def insert_order(conn: sqlite3.Connection, raw: dict) -> int:
     with conn:
         cur = conn.execute(f"INSERT INTO fund_order ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
                            tuple(r[c] for c in cols))
+        touch_strategy(conn, r["strategy_id"])
     return int(cur.lastrowid)
 
 
@@ -137,7 +151,10 @@ def update_order(conn: sqlite3.Connection, order_id: int, raw: dict) -> None:
     r = _order_row(raw)
     sets = ", ".join(f"{c} = ?" for c in r)
     with conn:
+        before = conn.execute("SELECT strategy_id FROM fund_order WHERE order_id = ?", (order_id,)).fetchone()
         conn.execute(f"UPDATE fund_order SET {sets} WHERE order_id = ?", (*r.values(), order_id))
+        for strategy_id in {r["strategy_id"], before[0] if before else None} - {None}:
+            touch_strategy(conn, strategy_id)
 
 
 def get_order(conn: sqlite3.Connection, order_id: int) -> dict | None:
@@ -154,5 +171,9 @@ def list_orders(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
 
 def delete_position(conn: sqlite3.Connection, position_id: str) -> int:
     with conn:
+        owners = [row[0] for row in conn.execute("SELECT DISTINCT strategy_id FROM fund_order WHERE position_id = ?",
+                                                 (position_id,))]
         cur = conn.execute("DELETE FROM fund_order WHERE position_id = ?", (position_id,))
+        for strategy_id in owners:
+            touch_strategy(conn, strategy_id)
     return cur.rowcount

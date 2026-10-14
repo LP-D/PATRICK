@@ -289,3 +289,18 @@ def test_the_simulation_page_offers_ml_models_split_by_family(tmp_path, monkeypa
     assert 'id="ml-rule-form"' in html and "Piloter avec un modèle ML entraîné" in html
     assert '<optgroup label="Directionnels' in html and "AUC 0.550" in html and "F1 0.520" in html
     assert 'src="/static/ml_rule.js"' in html
+
+
+def test_creating_or_deleting_a_rule_refreshes_the_strategy_stamp(conn):
+    sid, rule_id = _rule(conn)
+    old = "2000-01-01 00:00:00.000"
+    conn.execute("UPDATE fund_strategy SET updated_at = ?", (old,))
+    conn.commit()
+
+    assert systematic.delete_rule(conn, rule_id)
+
+    assert conn.execute("SELECT updated_at FROM fund_strategy WHERE strategy_id = ?", (sid,)).fetchone()[0] > old
+    conn.execute("UPDATE fund_strategy SET updated_at = ?", (old,))
+    conn.commit()
+    systematic.create_rule(conn, sid, "Encore", _config(conn.execute("SELECT trial_id FROM trial").fetchone()[0]))
+    assert conn.execute("SELECT updated_at FROM fund_strategy WHERE strategy_id = ?", (sid,)).fetchone()[0] > old

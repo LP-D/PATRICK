@@ -34,13 +34,22 @@ stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --sch
 - Champions : le plus récent (`promoted_at`) gagne pour une même (cible, horizon). Registre des essais (DSR) :
   union dédoublonnée. Caches SHAP/volatilité, snapshots, symboles exclus : union par clé.
 - Magasin de données (parquet) : on n'ajoute que les fichiers absents.
-- **Patrimoine et fonds (`wealth_*`, `fund_*`) : un PC de référence.** Les deux PC avaient importé les mêmes
-  comptes sous des identifiants différents : une union créerait des doublons. Le PC marqué `--wealth-reference`
-  (celui de Léon : `PC_de_LPD`) publie les siens avec la base; **les autres PC les REMPLACENT par ceux du
+- **Patrimoine (`wealth_*`) : un PC de référence.** Les deux PC avaient importé les mêmes comptes sous des
+  identifiants différents : une union créerait des doublons. Le PC marqué `--wealth-reference`
+  (celui de Léon : `PC_de_LPD`) publie le sien avec la base; **les autres PC le REMPLACENT par celui du
   partage à chaque fusion** (la base locale est sauvegardée avant). Le patrimoine se modifie donc sur le PC de
   référence; une modification faite ailleurs est perdue à la fusion suivante. Un PC non-référence publie sans
   patrimoine (il n'écrase jamais celui de la référence), et ne l'adopte que si le partage en contient.
   Sans PC de référence, chacun garde le sien. `simulation` (ancien simulateur) reste locale dans tous les cas.
+- **Fonds (`fund_*`) : fusionnés, jamais remplacés** (depuis le 14/10/2026; avant, un PC non-référence perdait
+  ses portefeuilles à la fusion). Chaque PC publie les siens dans `funds-<nom du PC>.db.gz` + `funds-<nom du PC>.json`
+  (le nom est celui de l'ordinateur, réglable par `sync_pc_name`) et fusionne ceux des autres, **stratégie par
+  stratégie** : une stratégie absente d'ici est importée avec ses ordres, ses règles et les cotations; présente des deux
+  côtés, la version modifiée en dernier l'emporte (l'autre est sauvegardée en JSON dans `~/.patrick/backups`);
+  supprimée quelque part, elle est supprimée partout, sauf si elle a été modifiée après la suppression. Cet
+  échange est **indépendant de la recherche** : il a lieu à chaque `sync auto` (ouverture de PATRICK, tâche horaire),
+  même pendant un entraînement. Une version de PATRICK trop ancienne sur l'un des PC l'empêche (message « mets
+  PATRICK à jour »).
 - Limite connue : un run reste « figé » à l'import; les prédictions *live* qu'un PC ajoute ensuite à un run
   déjà synchronisé restent sur ce PC.
 - Garde-fous : rien n'est fusionné ni publié tant qu'un entraînement tourne; la fusion demande que PATRICK

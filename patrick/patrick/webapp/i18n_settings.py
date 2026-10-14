@@ -29,8 +29,8 @@ SETTINGS_STRINGS: dict[str, dict[str, str]] = {
     "app_share_browse": _s("Parcourir…", "Browse…"),
     "app_share_save": _s("Enregistrer le dossier", "Save folder"),
     "app_share_clear": _s("Ne plus partager (ce PC seul)", "Stop sharing (this PC only)"),
-    "app_share_reference": _s("Ce PC est la référence du patrimoine (comptes, fonds)",
-                              "This PC is the reference for wealth (accounts, funds)"),
+    "app_share_reference": _s("Ce PC est la référence du patrimoine (comptes)",
+                              "This PC is the reference for wealth (accounts)"),
     "app_share_reference_hint": _s(
         "Il publie son patrimoine dans le dossier partagé ; les autres PC l'adoptent en remplaçant le leur. "
         "Choisis donc un dossier privé.",
