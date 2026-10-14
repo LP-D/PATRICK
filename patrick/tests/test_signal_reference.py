@@ -49,13 +49,13 @@ def test_the_reference_of_a_signal_is_stored_when_it_is_written(tmp_path):
     assert latest["ts"] == "2026-10-13" and latest["bar_final"] is False and latest["ref_price"] == 7798.46
 
 
-def test_market_view_says_the_market_and_whether_the_session_is_over():
+def test_market_view_says_the_market_and_whether_it_is_open():
     running = _market_view("equities_us", date(2026, 10, 13), _utc("2026-10-13", 15), False)
-    assert running["ended"] is False and running["bar_final"] is False and running["close_local"]
-    over = _market_view("equities_europe", date(2026, 10, 12), _utc("2026-10-13", 15), True)
-    assert over["ended"] is True and over["bar_final"] is True
+    assert running["open_now"] is True and running["bar_final"] is False       # mardi 15 h UTC : New York est ouvert
+    over = _market_view("equities_europe", date(2026, 10, 12), _utc("2026-10-13", 17), True)
+    assert over["open_now"] is False and over["bar_final"] is True             # Paris a fermé à 15:30 UTC
     crypto = _market_view("crypto", date(2026, 10, 13), _utc("2026-10-13", 15), None)
-    assert crypto["close_local"] is None and crypto["bar_final"] is None      # pas d'heure de clôture : journée UTC
+    assert crypto["open_now"] is True and crypto["bar_final"] is None          # 24 h/24
 
 
 def test_market_view_gives_the_starting_price_and_the_session_where_the_move_ends():
@@ -91,7 +91,7 @@ def test_page_says_which_value_the_predicted_move_starts_from(tmp_path, monkeypa
     _seed_signal(tmp_path, monkeypatch, bar_final)
     html = TestClient(app).get("/predictions").text
 
-    assert "Volatilité US" in html and "séance du 2024-06-01 terminée" in html     # ^VIX : marché et état de la séance
+    assert "Volatilité US" in html and ("Ouvert" in html or "Fermé" in html)       # ^VIX : le marché et son état
     assert expected in html
     # 2024-06-01 est un samedi : 5 séances plus tard = vendredi 2024-06-07
     assert "Mouvement prédit : de cette valeur à la clôture du ≈ 2024-06-07 (5 séance(s) plus tard)." in html

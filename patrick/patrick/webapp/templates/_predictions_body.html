@@ -28,7 +28,14 @@
 {# Sur quel marché on est, et par rapport à quoi le mouvement prédit est mesuré : la clôture de la séance, ou un cours en séance. #}
 {% set m = c.market %}
 {% if m %}
-<dt>{{ _t('pb_market') }}</dt><dd>{{ _t('mkt_' ~ m['class']) }} · {% if m.ended %}{{ _t('pb_session_ended', d=m.session) }}{% elif m.close_local %}{{ _t('pb_session_open', d=m.session, h=m.close_local) }}{% else %}{{ _t('pb_session_open_24', d=m.session) }}{% endif %}</dd>
+{# Marché ouvert maintenant (vert) ou fermé (rouge) : horaires approximatifs, week-ends et jours fériés compris. #}
+<dt>{{ _t('pb_market') }}</dt><dd>{{ _t('mkt_' ~ m['class']) }}
+{% if m.open_now is none %}{{ status_badge(_t('mkt_na'), 'neutral') }}{% elif m.open_now %}{{ status_badge(_t('mkt_open'), 'ok') }}{% else %}{{ status_badge(_t('mkt_closed'), 'error') }}{% endif %}</dd>
+{# Dernière valeur connue de l'actif, avec la séance à laquelle elle appartient et l'heure de la mise à jour. #}
+<dt>{{ _t('pb_lastvalue') }}</dt><dd>
+{% if m.last_value %}<strong>{{ m.last_value.price }}</strong> · {% if m.last_value.final %}{{ _t('pb_ref_close', d=m.last_value.date) }}{% else %}{{ _t('pb_last_intraday', d=m.last_value.date) }}{% endif %}<br>
+<span class="hint">{{ _t('pb_last_updated', u=m.last_value.updated) }}</span>
+{% else %}<span class="hint">{{ _t('pb_last_none') }}</span>{% endif %}</dd>
 <dt>{{ _t('pb_reference') }}</dt><dd>
 {# La valeur de départ du mouvement : le cours que le modèle a vu à la date du signal, et ce qu'il représente. #}
 {% if m.price %}<strong>{{ m.price }}</strong> · {% endif %}

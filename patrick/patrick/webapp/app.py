@@ -1452,21 +1452,30 @@ def _approx_target_session(session: date, horizon: int, round_the_clock: bool) -
 
 
 def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool | None,
-                 ref_price: float | None = None, horizon: int = 1) -> dict:
-    """Sur quel marché on est et par rapport à quoi le mouvement prédit est mesuré, pour la bulle de /predictions.
+                 ref_price: float | None = None, horizon: int = 1, last: dict | None = None) -> dict:
+    """Sur quel marché on est, s'il est ouvert, la dernière valeur de l'actif et par rapport à quoi le mouvement prédit est
+    mesuré, pour la bulle de /predictions.
 
-    `ended` : la séance `session` est terminée MAINTENANT (clôture approximative par classe d'actifs,
-    `data/session_calendar.py`). `bar_final` : au moment où le signal a été calculé, la barre était-elle déjà la clôture
-    (True), un cours en séance (False) ou on ne sait pas (None, signal antérieur à la migration 0032). `price` : le cours de
-    départ tel que le modèle l'a vu (None si non enregistré, migration 0034). `target` : séance d'arrivée du mouvement,
-    environ. `close_local` : heure de clôture en heure locale, ou None pour un marché 24 h/24 (journée UTC)."""
-    close = session_calendar.session_close_utc(asset_class, session)
+    `open_now` : le marché est ouvert MAINTENANT (True, vert) / fermé (False, rouge) / sans séance (None) -- horaires approximatifs
+    par classe d'actifs, week-ends compris, jours fériés détectés (`data/session_calendar.py::market_open_now`).
+    `last` : ligne `asset_last_value` de l'actif (migration 0035) -> `last_value` = dernier cours, sa séance, clôture ou cours en
+    séance, et l'heure de la mise à jour (None si pas encore enregistré). `bar_final` : au moment où le signal a été calculé, la
+    barre était-elle déjà la clôture (True), un cours en séance (False) ou on ne sait pas (None, avant la migration 0032). `price` :
+    le cours de départ tel que le modèle l'a vu (None si non enregistré, migration 0034). `target` : séance d'arrivée du mouvement,
+    environ."""
     round_the_clock = asset_class in _ROUND_THE_CLOCK
+    last_value = None
+    last_session = updated = None
+    if last:
+        last_session = date.fromisoformat(last["session_date"])
+        updated = datetime.fromisoformat(last["updated_at"])
+        last_value = {"price": f"{last['value']:.6g}", "date": last["session_date"], "final": last["bar_final"],
+                      "updated": updated.astimezone().strftime("%Y-%m-%d %H:%M")}
     return {"class": asset_class, "session": session.isoformat(),
-            "ended": session_calendar.bar_is_final(asset_class, session, now), "bar_final": bar_final,
+            "open_now": session_calendar.market_open_now(asset_class, now, last_session, updated),
+            "bar_final": bar_final, "last_value": last_value,
             "price": None if ref_price is None else f"{ref_price:.6g}",
-            "target": _approx_target_session(session, horizon, round_the_clock).isoformat(),
-            "close_local": None if round_the_clock else close.astimezone().strftime("%H:%M")}
+            "target": _approx_target_session(session, horizon, round_the_clock).isoformat()}
 
 
 def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
@@ -1541,6 +1550,7 @@ def _predictions_overview(kind: str = "directional") -> dict:
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
         tallies = trackhistory.live_class_tally_by_target_and_horizon(conn, all_symbols, horizons)
+        last_values = trackdb.asset_last_values(conn, all_symbols)
         drift = trackhistory.drift_badges(conn, all_symbols, horizons)
         # Un modèle au score impossible (fuite de données) n'affiche pas de signal : `validation/suspicion.py`.
         shown = trackdb.batch_best_metrics(conn, sorted({p["run_id"] for p in preds.values()}))
@@ -1574,7 +1584,7 @@ def _predictions_overview(kind: str = "directional") -> dict:
                         market_closed = session < today
                         if pred["split"] == "live":
                             market = _market_view(market_class.get(sym, "other"), session, now, pred.get("bar_final"),
-                                                  pred.get("ref_price"), h)
+                                                  pred.get("ref_price"), h, last_values.get(sym))
                     except ValueError:
                         market_closed = False
                 cells[h] = {

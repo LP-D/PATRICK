@@ -127,3 +127,61 @@ def bar_is_final(asset_class: str, session_date: date, now: datetime) -> bool:
     daily bar of a session still running carries the current price: a signal computed from it starts from that price,
     not from the close. `now` must be timezone-aware."""
     return now >= session_close_utc(asset_class, session_date)
+
+
+# --- Marché ouvert maintenant ? ------------------------------------------------------------------------------------
+# Horaires APPROXIMATIFS par classe d'actifs, en heure locale de la place (l'heure d'été est gérée par le fuseau) :
+# (fuseau, ouverture, fermeture), lundi au vendredi. Une classe regroupe plusieurs places (Tokyo, Hong Kong, Séoul pour
+# l'Asie ; Paris, Francfort, Londres pour l'Europe) : on prend la fenêtre qui les couvre à peu près.
+_EXCHANGE_HOURS = {
+    "equities_us": ("America/New_York", time(9, 30), time(16, 0)),
+    "volatility_index": ("America/New_York", time(9, 30), time(16, 15)),
+    "equities_americas_other": ("America/New_York", time(9, 0), time(16, 0)),
+    "equities_europe": ("Europe/Paris", time(9, 0), time(17, 30)),
+    "equities_asia_pacific": ("Asia/Tokyo", time(9, 0), time(17, 0)),
+}
+# Une actualisation faite au moins une heure après l'ouverture qui ne trouve toujours pas de barre du jour = séance fériée.
+_HOLIDAY_GRACE = timedelta(hours=1)
+
+
+def market_is_open(asset_class: str, now: datetime) -> bool | None:
+    """Le marché est-il ouvert à `now` (aware) d'après les horaires de sa classe ? `None` pour une série sans séance (macro
+    FRED, classe inconnue). Les jours fériés ne sont pas connus ici : voir `market_open_now`."""
+    from zoneinfo import ZoneInfo
+
+    if asset_class == "crypto":
+        return True
+    if asset_class in ("macro", "other"):
+        return None
+    if asset_class in ("fx", "futures"):
+        local = now.astimezone(ZoneInfo("America/New_York"))
+        weekday, at = local.weekday(), local.time()
+        if weekday == 5:                                       # samedi : fermé
+            return False
+        if weekday == 6:                                       # dimanche : ouverture le soir (17 h devises, 18 h futures)
+            return at >= (time(17, 0) if asset_class == "fx" else time(18, 0))
+        if weekday == 4:                                       # vendredi : fermeture à 17 h
+            return at < time(17, 0)
+        # Futures : pause quotidienne 17 h - 18 h (heure de New York)
+        return not (asset_class == "futures" and time(17, 0) <= at < time(18, 0))
+    zone, opens, closes = _EXCHANGE_HOURS.get(asset_class, _EXCHANGE_HOURS["equities_us"])
+    local = now.astimezone(ZoneInfo(zone))
+    return local.weekday() < 5 and opens <= local.time() < closes
+
+
+def market_open_now(asset_class: str, now: datetime, last_bar_date: date | None = None,
+                    updated_at: datetime | None = None) -> bool | None:
+    """`market_is_open` + jours fériés des places boursières, détectés plutôt que listés : si l'horaire dit « ouvert », que la
+    dernière actualisation des cours date d'au moins une heure après l'ouverture du jour et que la dernière barre est
+    antérieure à aujourd'hui, la place n'a pas ouvert (férié). Sans actualisation récente, on s'en tient à l'horaire."""
+    from zoneinfo import ZoneInfo
+
+    is_open = market_is_open(asset_class, now)
+    if not is_open or asset_class not in _EXCHANGE_HOURS or last_bar_date is None or updated_at is None:
+        return is_open
+    zone, opens, _ = _EXCHANGE_HOURS[asset_class]
+    local_now = now.astimezone(ZoneInfo(zone))
+    opened_at = datetime.combine(local_now.date(), opens, tzinfo=ZoneInfo(zone))
+    if updated_at >= opened_at + _HOLIDAY_GRACE and last_bar_date < local_now.date():
+        return False
+    return is_open

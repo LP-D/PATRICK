@@ -1207,6 +1207,31 @@ def set_live_signal_context(conn: sqlite3.Connection, trial_id: int, ts: str,
         )
 
 
+def upsert_asset_last_value(conn: sqlite3.Connection, target: str, session_date: str, value: float,
+                            bar_final: bool, updated_at: str) -> None:
+    """Last price seen for `target` (migration 0035). Never moves back to an older session: two models of the same asset
+    refresh in turn, the later of the two sessions wins."""
+    with conn:
+        conn.execute(
+            "INSERT INTO asset_last_value (target, session_date, value, bar_final, updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(target) DO UPDATE SET session_date = excluded.session_date, value = excluded.value, "
+            "bar_final = excluded.bar_final, updated_at = excluded.updated_at "
+            "WHERE excluded.session_date >= asset_last_value.session_date",
+            (target, session_date, float(value), int(bar_final), updated_at),
+        )
+
+
+def asset_last_values(conn: sqlite3.Connection, targets: list[str]) -> dict[str, dict]:
+    """`{target: {session_date, value, bar_final, updated_at}}` for the targets that have one."""
+    if not targets:
+        return {}
+    placeholders = ",".join("?" for _ in targets)
+    rows = conn.execute(
+        f"SELECT target, session_date, value, bar_final, updated_at FROM asset_last_value WHERE target IN ({placeholders})",
+        tuple(targets)).fetchall()
+    return {t: {"session_date": d, "value": v, "bar_final": bool(f), "updated_at": u} for t, d, v, f, u in rows}
+
+
 def latest_prediction_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict | None:
     """Phase 7 (SHAP waterfall) -- the most recent `prediction` row recorded
     for a trial, whatever its `split` (holdout/test/test_path/live). Used to

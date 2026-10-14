@@ -43,6 +43,14 @@
         var t = e.target.closest(".pop-trigger");
         if (t) { if (t !== current) show(t); } else if (current) { hide(); }
     });
+    /* Dès que le pointeur quitte la prédiction, la bulle disparaît -- y compris quand il sort de la fenêtre (aucun
+       `mouseover` ne part alors : `relatedTarget` est nul) ou qu'il passe sur une case voisine (elle affichera la sienne). */
+    document.addEventListener("mouseout", function (e) {
+        if (!current || e.target.closest(".pop-trigger") !== current) return;
+        if (!e.relatedTarget || !current.contains(e.relatedTarget)) hide();
+    });
+    document.documentElement.addEventListener("mouseleave", hide);
+    window.addEventListener("blur", hide);
     document.addEventListener("focusin", function (e) {
         var t = e.target.closest(".pop-trigger");
         if (t) show(t);
