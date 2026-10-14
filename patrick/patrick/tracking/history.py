@@ -812,7 +812,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
         "  FROM target_horizon_list thl"
         ") "
         "SELECT winner.target, winner.horizon, prediction.ts, prediction.split, prediction.y_pred, "
-        "       prediction.y_proba, trial.trial_id, run.run_id, prediction.live_bar_final "
+        "       prediction.y_proba, trial.trial_id, run.run_id, prediction.live_bar_final, prediction.live_ref_price "
         "FROM winner "
         "JOIN prediction ON prediction.rowid = winner.pred_rowid "
         "JOIN trial ON trial.trial_id = prediction.trial_id "
@@ -820,7 +820,7 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
         tuple(targets) + tuple(horizons),
     ).fetchall()
     out: dict[tuple[str, int], dict] = {}
-    for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id, bar_final in rows:
+    for target, horizon, ts, split, y_pred, y_proba, trial_id, run_id, bar_final, ref_price in rows:
         cls = round(y_pred)
         out[(target, horizon)] = {
             "ts": ts, "split": split, "trial_id": trial_id, "run_id": run_id, "horizon": horizon,
@@ -829,6 +829,8 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
             "confidence": y_proba,
             # 1 = signal calculé sur la clôture, 0 = sur un cours en séance, None = inconnu (migration 0032).
             "bar_final": None if bar_final is None else bool(bar_final),
+            # Cours de départ du signal tel que le modèle l'a vu (migration 0033), None = inconnu.
+            "ref_price": ref_price,
         }
     return out
 

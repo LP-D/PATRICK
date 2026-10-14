@@ -1190,18 +1190,20 @@ def live_prediction_timestamps(conn: sqlite3.Connection, trial_id: int) -> set[s
 
 def set_live_signal_context(conn: sqlite3.Connection, trial_id: int, ts: str,
                             thr_lo: float | None, thr_hi: float | None, backfill: bool,
-                            bar_final: bool | None = None) -> None:
+                            bar_final: bool | None = None, ref_price: float | None = None) -> None:
     """Stores, on an already-written live row, the causal 4-class thresholds
     of the signal day and whether it was reconstituted after the fact
     (`add_predictions` is `INSERT OR REPLACE` and does not carry these).
 
     `bar_final` (migration 0032): the day's bar was already the session's close when the signal was computed (True) or
-    still a price in the making (False) -- what the predicted move starts from; `None` = unknown."""
+    still a price in the making (False) -- what the predicted move starts from; `None` = unknown.
+    `ref_price` (migration 0033): that price, as the model saw it; `None` = unknown."""
     with conn:
         conn.execute(
-            "UPDATE prediction SET live_thr_lo = ?, live_thr_hi = ?, live_backfill = ?, live_bar_final = ? "
-            "WHERE trial_id = ? AND ts = ? AND split = 'live'",
-            (thr_lo, thr_hi, 1 if backfill else 0, None if bar_final is None else int(bar_final), trial_id, ts),
+            "UPDATE prediction SET live_thr_lo = ?, live_thr_hi = ?, live_backfill = ?, live_bar_final = ?, "
+            "live_ref_price = ? WHERE trial_id = ? AND ts = ? AND split = 'live'",
+            (thr_lo, thr_hi, 1 if backfill else 0, None if bar_final is None else int(bar_final), ref_price,
+             trial_id, ts),
         )
 
 

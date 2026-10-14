@@ -38,14 +38,15 @@ def test_the_reference_of_a_signal_is_stored_when_it_is_written(tmp_path):
     tid = db.create_trial(conn, "r", "GLOBAL", "XGBoost", "none", 5, "shap")
     db.mark_best_trial(conn, tid)
     db.finish_run(conn, "r", "done", n_trials=1)
-    for ts, final in (("2026-10-12", True), ("2026-10-13", False), ("2026-10-09", None)):
+    for ts, final, price in (("2026-10-12", True, 7807.24), ("2026-10-13", False, 7798.46), ("2026-10-09", None, None)):
         db.add_predictions(conn, tid, 0, "live", [ts], [None], [3])
-        db.set_live_signal_context(conn, tid, ts, -0.01, 0.01, backfill=False, bar_final=final)
+        db.set_live_signal_context(conn, tid, ts, -0.01, 0.01, backfill=False, bar_final=final, ref_price=price)
 
-    stored = dict(conn.execute("SELECT ts, live_bar_final FROM prediction WHERE split = 'live'").fetchall())
-    assert stored == {"2026-10-12": 1, "2026-10-13": 0, "2026-10-09": None}
+    stored = {r[0]: r[1:] for r in conn.execute(
+        "SELECT ts, live_bar_final, live_ref_price FROM prediction WHERE split = 'live'").fetchall()}
+    assert stored == {"2026-10-12": (1, 7807.24), "2026-10-13": (0, 7798.46), "2026-10-09": (None, None)}
     latest = trackhistory.latest_predictions_by_target_and_horizon(conn, ["^GSPC"], [1])[("^GSPC", 1)]
-    assert latest["ts"] == "2026-10-13" and latest["bar_final"] is False
+    assert latest["ts"] == "2026-10-13" and latest["bar_final"] is False and latest["ref_price"] == 7798.46
 
 
 def test_market_view_says_the_market_and_whether_the_session_is_over():
@@ -57,7 +58,16 @@ def test_market_view_says_the_market_and_whether_the_session_is_over():
     assert crypto["close_local"] is None and crypto["bar_final"] is None      # pas d'heure de clôture : journée UTC
 
 
-def _seed_signal(tmp_path, monkeypatch, bar_final):
+def test_market_view_gives_the_starting_price_and_the_session_where_the_move_ends():
+    friday = date(2026, 10, 9)
+    us = _market_view("equities_us", friday, _utc("2026-10-10", 9), True, 7811.54003906, 1)
+    assert us["price"] == "7811.54" and us["target"] == "2026-10-12"          # le week-end est sauté : lundi
+    assert _market_view("equities_us", friday, _utc("2026-10-10", 9), True, 0.0123456789, 5)["target"] == "2026-10-16"
+    assert _market_view("crypto", friday, _utc("2026-10-10", 9), True, 64000.0, 2)["target"] == "2026-10-11"  # 24 h/24
+    assert _market_view("equities_us", friday, _utc("2026-10-10", 9), True)["price"] is None                # non enregistré
+
+
+def _seed_signal(tmp_path, monkeypatch, bar_final, ref_price=None):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     conn = db.connect(str(tmp_path / "patrick.db"))
     db.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
@@ -66,7 +76,8 @@ def _seed_signal(tmp_path, monkeypatch, bar_final):
     db.mark_best_trial(conn, trial_id)
     db.add_predictions(conn, trial_id, fold_index=None, split="live", ts=["2024-06-01T00:00:00"],
                        y_true=[None], y_pred=[3], y_proba=[0.71])
-    db.set_live_signal_context(conn, trial_id, "2024-06-01T00:00:00", None, None, backfill=False, bar_final=bar_final)
+    db.set_live_signal_context(conn, trial_id, "2024-06-01T00:00:00", None, None, backfill=False, bar_final=bar_final,
+                               ref_price=ref_price)
     db.finish_run(conn, "run1", status="done", n_trials=1)
     conn.close()
 
@@ -82,5 +93,16 @@ def test_page_says_which_value_the_predicted_move_starts_from(tmp_path, monkeypa
 
     assert "Volatilité US" in html and "séance du 2024-06-01 terminée" in html     # ^VIX : marché et état de la séance
     assert expected in html
-    assert "Mouvement prédit : de cette valeur à la clôture 5 séance(s) plus tard." in html
+    # 2024-06-01 est un samedi : 5 séances plus tard = vendredi 2024-06-07
+    assert "Mouvement prédit : de cette valeur à la clôture du ≈ 2024-06-07 (5 séance(s) plus tard)." in html
     assert ("Le signal sera jugé par rapport à la clôture." in html) is (bar_final is False)
+    assert "Confiance : probabilité que le modèle donne à ce mouvement" in html     # ce qu'est l'indice de confiance
+    assert ("Cours de départ non enregistré." in html) is (bar_final is not None)    # connue sans cours : on le dit
+
+
+def test_page_shows_the_starting_price_with_its_date(tmp_path, monkeypatch):
+    _seed_signal(tmp_path, monkeypatch, False, ref_price=31.5234)
+    html = TestClient(app).get("/predictions").text
+
+    assert "<strong>31.5234</strong> ·" in html and "cours en séance du 2024-06-01, pas la clôture" in html
+    assert "Cours de départ non enregistré." not in html
