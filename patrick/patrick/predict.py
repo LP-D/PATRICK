@@ -166,6 +166,28 @@ def _update_live_outcomes(conn: sqlite3.Connection, trial_id: int, horizon: int,
     return n_updated
 
 
+def _record_last_value(conn: sqlite3.Connection, target: str, series: pd.Series, asset_class: str,
+                       store: DataStore, symbol: str) -> None:
+    """Retient le dernier cours de l'actif (affiché dans /predictions avec sa date). La série du modèle est forward-fillée :
+    la vraie date de dernière observation vient de l'index des séries du store, sinon de la dernière barre."""
+    try:
+        observed = series.dropna()
+        if observed.empty:
+            return
+        session_ts = observed.index[-1]
+        seen = store.series_observation(symbol)
+        if seen and seen.get("date_max"):
+            real = pd.Timestamp(seen["date_max"])
+            if real in observed.index:
+                session_ts = real
+        now = utc_now()
+        session = pd.Timestamp(session_ts).date()
+        trackdb.upsert_asset_last_value(conn, target, session.isoformat(), float(observed.loc[session_ts]),
+                                        session_calendar.bar_is_final(asset_class, session, now), now.isoformat())
+    except Exception:
+        logger.exception("last value not recorded for %s", target)
+
+
 def _bars_to_record(full_pool: pd.DataFrame, already: set[str], model_date: pd.Timestamp | None,
                     max_backfill: int) -> list[tuple[pd.Timestamp, bool]]:
     """(bar, is_backfill): every bar strictly AFTER the model's training date
@@ -309,6 +331,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
         n_updated = _update_live_outcomes(conn, best["trial_id"], horizon, raw, target_col,
                                           forward_returns=alpha_forward, verdicts=verdicts,
                                           recheck_since=recheck_since)
+        _record_last_value(conn, run["target"], series, asset_class, store, config.objective.target_symbol)
         row = conn.execute(
             "SELECT y_pred, y_proba, p_up FROM prediction "
             "WHERE trial_id = ? AND ts = ? AND split = 'live'", (best["trial_id"], str(last_ts))).fetchone()
