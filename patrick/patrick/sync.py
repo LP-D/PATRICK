@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sqlite3
 import subprocess
 import tempfile
@@ -42,6 +43,7 @@ from pathlib import Path
 
 from patrick import settings as settings_mod
 from patrick import sync_merge
+from patrick.fund import share as fund_share
 from patrick.tracking import backup as backup_mod
 from patrick.tracking import db as trackdb
 
@@ -608,6 +610,7 @@ def pull(source: str, *, db_path: str | None = None, store_root: str | None = No
 STATE_NAME = "sync_state.json"
 KEY_SYNC_FOLDER = "sync_folder"
 KEY_WEALTH_REFERENCE = "sync_wealth_reference"
+KEY_PC_NAME = "sync_pc_name"
 # Tables recopiées/volatiles : un changement n'y compte pas comme « du neuf à publier ».
 _VOLATILE_TABLES = ("job", "worker_heartbeat", "vol_model_cache", "shap_selection_cache")
 
@@ -953,7 +956,104 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
                 out["actions"].append(f"publication : {manifest['runs']} run(s), "
                                       f"{manifest['models']['included']} modèle(s)"
                                       + (", patrimoine inclus" if reference else ""))
+    if os.path.exists(db_path):
+        _funds_stage(folder, db_path, backup_dir, out)          # indépendant de la recherche et des entraînements
     return out
+
+
+# --------------------------------------------------------------------------
+# Fonds : un fichier par PC, fusion par union (voir `patrick.fund.share`)
+# --------------------------------------------------------------------------
+#
+# Indépendant de la recherche : il n'attend ni la fin d'un entraînement, ni la fusion du gros partage. Chaque PC
+# n'écrit que SON fichier (`funds-<pc>.db.gz` + `funds-<pc>.json` qui porte l'empreinte) : le dossier partagé n'a
+# donc jamais deux PC qui écrivent le même fichier. État local : `funds_seen` (empreinte de chaque fichier déjà
+# fusionné) et `funds_fp` (empreinte de nos fonds à la dernière publication).
+
+FUNDS_PREFIX = "funds-"
+
+
+def pc_name() -> str:
+    """Nom de ce PC dans les fichiers du partage (réglage `sync_pc_name`, sinon le nom d'hôte)."""
+    raw = settings_mod.load().get(KEY_PC_NAME) or socket.gethostname() or "pc"
+    return re.sub(r"[^A-Za-z0-9_-]+", "_", str(raw)).strip("_")[:40] or "pc"
+
+
+def _has_funds(db_path: str) -> bool:
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        return bool(conn.execute(
+            "SELECT (SELECT COUNT(*) FROM fund_strategy) + (SELECT COUNT(*) FROM fund_deleted)").fetchone()[0])
+    finally:
+        conn.close()
+
+
+def _funds_merge_others(folder: str, db_path: str, backup_dir: str | None, out: dict) -> None:
+    state = load_state()
+    seen = dict(state.get("funds_seen") or {})
+    own = f"{FUNDS_PREFIX}{pc_name()}.json"
+    for meta_path in sorted(Path(folder).glob(f"{FUNDS_PREFIX}*.json")):
+        if meta_path.name == own:
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            sha, who = meta["sha256"], meta.get("pc") or meta_path.stem[len(FUNDS_PREFIX):]
+        except (OSError, ValueError, KeyError, TypeError):
+            out["skipped"].append(f"fonds : {meta_path.name} illisible, réessayé au prochain passage")
+            continue
+        if seen.get(meta_path.name) == sha:
+            continue
+        gz = meta_path.with_name(meta_path.name[: -len(".json")] + ".db.gz")
+        try:
+            if not gz.exists() or _sha256(gz) != sha:
+                raise SyncError("fichier pas encore entièrement recopié par le dossier partagé")
+            with tempfile.TemporaryDirectory() as tmp_s:
+                incoming = Path(tmp_s) / "incoming.db"
+                _gunzip_file(gz, incoming)
+                res = fund_share.merge_funds(db_path, incoming, backup_dir=backup_dir)
+        except (SyncError, fund_share.FundShareError, sqlite3.Error, OSError, EOFError) as exc:
+            out["skipped"].append(f"fonds de {who} reportés : {exc}")
+            continue
+        seen[meta_path.name] = sha
+        parts = [f"{len(res[key])} stratégie(s) {label}" for key, label in
+                 (("imported", "importée(s)"), ("replaced", "remplacée(s) par une version plus récente"),
+                  ("deleted", "supprimée(s)")) if res[key]]
+        if parts:
+            out["actions"].append(f"fonds de {who} : " + ", ".join(parts))
+    if seen != (state.get("funds_seen") or {}):
+        save_state(funds_seen=seen)
+
+
+def _funds_publish(folder: str, db_path: str, out: dict) -> None:
+    fp = fund_share.fingerprint(db_path)
+    name = pc_name()
+    gz_name, json_name = f"{FUNDS_PREFIX}{name}.db.gz", f"{FUNDS_PREFIX}{name}.json"
+    published = (Path(folder) / json_name).exists()
+    if (fp == load_state().get("funds_fp") and published) or (not published and not _has_funds(db_path)):
+        if fp != load_state().get("funds_fp"):
+            save_state(funds_fp=fp)
+        return
+    with tempfile.TemporaryDirectory() as tmp_s:
+        tmp = Path(tmp_s)
+        info = fund_share.export_funds(db_path, tmp / "funds.db")
+        _gzip_file(tmp / "funds.db", tmp / gz_name)
+        meta = {"format": 1, "pc": name, "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "sha256": _sha256(tmp / gz_name), "size": (tmp / gz_name).stat().st_size, **info}
+        (tmp / json_name).write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        FolderTransport(folder).upload({gz_name: tmp / gz_name, json_name: tmp / json_name})   # le .json en dernier
+    save_state(funds_fp=fp)
+    out["actions"].append(f"fonds publiés : {info['strategies']} stratégie(s), {info['orders']} ordre(s)")
+
+
+def _funds_stage(folder: str, db_path: str, backup_dir: str | None, out: dict) -> None:
+    """Fusionne les fonds des autres PC puis publie les nôtres s'ils ont changé. Ne lève jamais : un échec (fichier
+    pas encore recopié, base occupée...) est noté dans `out["skipped"]` et réessayé au prochain passage."""
+    try:
+        trackdb.connect(db_path).close()          # migrations en attente (0033) : la tâche horaire peut passer avant PATRICK
+        _funds_merge_others(folder, db_path, backup_dir, out)
+        _funds_publish(folder, db_path, out)
+    except (SyncError, fund_share.FundShareError, sqlite3.Error, OSError) as exc:
+        out["skipped"].append(f"fonds : {exc}")
 
 
 SYNC_TASK = "PATRICK-Sync"

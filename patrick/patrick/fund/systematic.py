@@ -220,6 +220,7 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
     with conn:
         conn.execute("INSERT INTO fund_rule (rule_id, strategy_id, name, config_json) VALUES (?, ?, ?, ?)",
                      (rule_id, strategy_id, name[:120], json.dumps(cfg)))
+        store.touch_strategy(conn, strategy_id)
     # Les seuils saisis sont une configuration de plus essayée sur cette cible (F03).
     sim_engine.save_simulation(
         conn, cfg["trial_id"],
@@ -253,7 +254,10 @@ def _check_alpha_rule(cfg: dict, model: dict) -> None:
 def delete_rule(conn: sqlite3.Connection, rule_id: str) -> bool:
     """Supprime la règle (jamais les ordres déjà passés, qui restent des ordres du fonds). False si inconnue."""
     with conn:
+        owner = conn.execute("SELECT strategy_id FROM fund_rule WHERE rule_id = ?", (rule_id,)).fetchone()
         cur = conn.execute("DELETE FROM fund_rule WHERE rule_id = ?", (rule_id,))
+        if owner:
+            store.touch_strategy(conn, owner[0])
     return cur.rowcount > 0
 
 

@@ -213,17 +213,18 @@ def _add_wealth(path: Path, account_id: str, *, movements: int = 1, strategy: st
     conn.close()
 
 
-def test_adopt_personal_tables_replaces_wealth_and_funds_with_the_reference(tmp_path):
+def test_adopt_personal_tables_replaces_the_wealth_but_never_the_funds(tmp_path):
+    """Les fonds se fusionnent (`fund.share`) : adopter le patrimoine de la référence ne doit jamais les effacer."""
     local, remote = _pair(tmp_path, ["a1"], ["b1"])
     _add_wealth(local, "acc_local", movements=2, strategy="str_local")
     _add_wealth(remote, "acc_ref", movements=3, strategy="str_ref")
 
     counts = sync_merge.adopt_personal_tables(str(local), str(remote))
 
-    assert counts["wealth_account"] == 1 and counts["wealth_movement"] == 3 and counts["fund_strategy"] == 1
+    assert counts == {"wealth_account": 1, "wealth_movement": 3}
     assert _q(local, "SELECT account_id FROM wealth_account") == [("acc_ref",)]
     assert _q(local, "SELECT COUNT(*) FROM wealth_movement WHERE account_id = 'acc_ref'") == [(3,)]
-    assert _q(local, "SELECT strategy_id FROM fund_strategy") == [("str_ref",)]
+    assert _q(local, "SELECT strategy_id FROM fund_strategy") == [("str_local",)]
     assert _q(local, "SELECT COUNT(*) FROM run") == [(1,)]                  # la recherche n'est pas touchée
 
 

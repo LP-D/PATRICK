@@ -268,7 +268,7 @@ class SetupWizard:
         self.schedule = tk.BooleanVar(value=os.name == "nt")
         self.reference_box = ttk.Checkbutton(
             box, variable=self.reference, onvalue=True, offvalue=False,
-            text="Ce PC est la référence du patrimoine (comptes, fonds)")
+            text="Ce PC est la référence du patrimoine (comptes)")
         self.reference_box.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.reference_hint = ttk.Label(
             box, wraplength=520, justify="left", font=("Segoe UI", 9), foreground="#6b7280",
