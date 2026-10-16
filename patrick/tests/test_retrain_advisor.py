@@ -60,6 +60,7 @@ def test_a_test_to_holdout_gap_means_selection_overfitting():
     out = advise(diag(auc_test=0.62, auc_holdout=0.52, f1_test=0.60, f1_holdout=0.48))
     s = next(s for s in out if s.key == "overfit")
     assert s.patch["holdout_months"] >= 18 and s.patch["purge"] is True and s.patch["n_trials"] <= 50
+    assert "n_features_grid" not in s.patch            # moins de variables = moins bon holdout dans la base : on ne réduit plus la grille
     assert {"auc", "f1"} <= set(s.facts["signals"].replace(" ", "").split(","))
     assert advise(diag(auc_test=0.62, auc_holdout=0.52, f1_test=0.60, f1_holdout=0.48))[0].key == "overfit"
 
@@ -83,17 +84,26 @@ def test_unstable_folds_without_a_trend_suggest_regimes():
 
 
 def test_unstable_feature_selection_suggests_clustering_and_the_other_method():
-    s = next(s for s in advise(diag(jaccard=0.2)) if s.key == "unstable_features")
+    s = next(s for s in advise(diag(jaccard=0.08)) if s.key == "unstable_features")
     assert s.patch["reduction_corr_threshold"] == 0.85 and s.patch["selection_method"] == "lasso"
-    s2 = next(s for s in advise(diag(jaccard=0.2, view={**VIEW, "selection_method": "lasso"})) if s.key == "unstable_features")
+    s2 = next(s for s in advise(diag(jaccard=0.08, view={**VIEW, "selection_method": "lasso"})) if s.key == "unstable_features")
     assert s2.patch["selection_method"] == "shap"
     assert "unstable_features" not in keys(diag(jaccard=0.5)) and "unstable_features" not in keys(diag(jaccard=float("nan")))
+
+
+def test_a_typical_jaccard_is_not_flagged_unstable_and_the_rule_never_tops_a_clean_ranking():
+    """La médiane de la base est 0,20 : l'ancien seuil (0,40) écartait 94 % des runs et plaçait cette règle en tête de 73 % des classements."""
+    assert "unstable_features" not in keys(diag(jaccard=0.20))
+    assert "unstable_features" not in keys(diag(jaccard=0.13))
+    worst = next(s for s in advise(diag(jaccard=0.0)) if s.key == "unstable_features")
+    assert worst.score <= 62
 
 
 def test_a_weak_but_stable_model_is_offered_more_capacity_and_deep_learning_as_a_manual_hand_off():
     out = advise(diag(auc_test=0.555, auc_holdout=0.55, fold_auc=[0.55, 0.56, 0.555, 0.553, 0.557]))
     more = next(s for s in out if s.key == "more_capacity")
-    assert more.patch["stacking"] is True and len(more.patch["algos"]) == 5 and more.cost == "high"
+    assert more.patch["stacking"] is True and more.patch["algos"] == retrain_advisor.CAPACITY_ALGOS and more.cost == "high"
+    assert "LightGBM" not in more.patch["algos"] and more.patch["n_features_grid"] == retrain_advisor.CAPACITY_FEATURE_GRID
     dl = next(s for s in out if s.key == "deep_learning")
     assert dl.available is True and dl.manual is True and dl.patch == {}      # pas un patch : ouvre la page /dl
     assert "more_capacity" not in keys(diag(auc_test=0.555, auc_holdout=0.50))   # écart test/holdout : pas plus de capacité
@@ -106,9 +116,36 @@ def test_a_short_history_suggests_a_lighter_validation():
 
 
 def test_many_excluded_series_suggest_a_lower_coverage():
-    s = next(s for s in advise(diag(n_excluded=30, n_universe=100)) if s.key == "data_degraded")
-    assert s.patch == {"yf_coverage": 0.75} and s.facts["frac"] == "30 %"
+    s = next(s for s in advise(diag(n_excluded=35, n_universe=100)) if s.key == "data_degraded")
+    assert s.patch == {"yf_coverage": 0.75} and s.facts["frac"] == "35 %" and s.score <= 50
     assert "data_degraded" not in keys(diag(n_excluded=5, n_universe=100))
+    assert "data_degraded" not in keys(diag(n_excluded=25, n_universe=100))      # le seuil est celui de la porte de qualité (30 %)
+
+
+def test_the_excluded_count_is_series_not_issue_rows(tmp_path):
+    """Une série porte plusieurs problèmes (couverture, trou, prix figés) : compter les lignes donnait un rapport au-dessus de 1."""
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "snap", "h", None, None, None)
+    db.add_data_quality_issues(conn, "snap", [
+        {"series": "GC=F", "reason": "couverture_insuffisante", "detail": "x"}, {"series": "GC=F", "reason": "trou_de_cotation", "detail": "x"},
+        {"series": "GC=F", "reason": "prix_figes", "detail": "x"}, {"series": "SI=F", "reason": "prix_figes", "detail": "x"}])
+    db.create_run(conn, "r1", "^VIX", 5, "snap", json.dumps(forms.default_config_dict()), "c", "s", 42)
+    tid = db.create_trial(conn, "r1", "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
+    db.mark_best_trial(conn, tid)
+    db.finish_run(conn, "r1", status="done", n_trials=1)
+    assert retrain_advisor.diagnose_run(conn, "r1").n_excluded == 2
+
+
+def test_a_model_that_does_not_beat_persistence_is_told_so_unless_it_has_no_signal_at_all_or_a_clear_one():
+    out = advise(diag(auc_test=0.55, auc_holdout=0.54, f1_test=0.50, persistence_f1=0.53))
+    s = next(s for s in out if s.key == "no_edge")
+    assert s.patch["horizons"] == [5, 10] and s.facts["edge"] == "-0.030" and 44 < s.score <= 64
+    assert "signal_absent" not in [x.key for x in out]                                        # un seul des deux dit « pas de signal »
+    assert "no_edge" not in keys(diag(auc_test=0.55, f1_test=0.54, persistence_f1=0.50))      # il y a un gain
+    assert "no_edge" not in keys(diag(auc_test=0.55, f1_test=0.50, persistence_f1=None))      # persistance inconnue
+    assert "no_edge" not in keys(diag(auc_test=0.505, auc_holdout=0.50, f1_test=0.50, persistence_f1=0.53))   # « signal_absent » le dit déjà
+    assert "no_edge" not in keys(diag(auc_test=0.60, auc_holdout=0.60, f1_test=0.50, persistence_f1=0.53))    # signal net
+    assert "no_edge" not in keys(diag(suspect="x", auc_test=0.55, f1_test=0.50, persistence_f1=0.53))
 
 
 def test_imbalanced_classes_suggest_more_samplers():
@@ -131,6 +168,7 @@ def test_a_solid_holdout_suggests_confirming_with_cpcv_only_for_walk_forward():
 
 def test_a_weak_directional_equity_model_suggests_the_alpha_target():
     assert "try_alpha" in keys(diag(auc_test=0.55, auc_holdout=0.55))
+    assert next(s for s in advise(diag(auc_test=0.55, auc_holdout=0.55), limit=50) if s.key == "try_alpha").score <= 20   # aucun gain mesuré
     assert "try_alpha" not in keys(diag(auc_test=0.55, asset_class="fx"))
     assert "try_alpha" not in keys(diag(auc_test=0.55, kind="alpha"))
 
@@ -153,7 +191,8 @@ def test_every_suggestion_gives_its_texts_all_the_figures_they_name():
         {"suspect": "F1 trop beau", "guard_active": True},
         {"suspect": "F1 trop beau", "guard_active": False},
         {"auc_test": 0.51, "f1_test": 0.50, "auc_holdout": 0.50, "f1_holdout": 0.49, "history_years": 3.0, "n_excluded": 12, "n_universe": 30,
-         "fold_auc": [0.40, 0.45, 0.55, 0.60], "jaccard": 0.2, "class_shares": {"0": 0.7, "1": 0.1, "2": 0.1, "3": 0.1}},
+         "fold_auc": [0.40, 0.45, 0.55, 0.60], "jaccard": 0.08, "class_shares": {"0": 0.7, "1": 0.1, "2": 0.1, "3": 0.1}},
+        {"auc_test": 0.55, "auc_holdout": 0.54, "f1_test": 0.50, "persistence_f1": 0.53},
         {"auc_test": 0.70, "auc_holdout": 0.50, "f1_test": 0.70, "f1_holdout": 0.45, "pbo": 0.8, "pbo_reliable": True, "rho_test_holdout": -0.3},
         {"auc_test": 0.58, "auc_holdout": 0.58, "duration_s": 9000, "asset_class": "equities_us", "scheme": "walkforward"},
     ):
@@ -198,7 +237,7 @@ def test_every_suggestion_changes_only_fields_the_form_can_represent():
             diag(auc_test=0.555, auc_holdout=0.55, fold_auc=[.55, .56, .555, .553, .557]), diag(history_years=3),
             diag(n_excluded=40, n_universe=100), diag(class_shares={"0": .05, "1": .3, "2": .3, "3": .35}),
             diag(auc_test=0.6, auc_holdout=0.6), diag(horizon_auc={1: .5, 2: .52, 3: .55, 5: .6}),
-            diag(duration_s=7200, auc_test=0.52, auc_holdout=0.52)]
+            diag(duration_s=7200, auc_test=0.52, auc_holdout=0.52), diag(auc_test=0.55, auc_holdout=0.54, f1_test=0.50, persistence_f1=0.53)]
     seen = set()
     for d in many:
         for s in advise(d, limit=50):
