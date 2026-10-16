@@ -110,12 +110,13 @@ def test_validate_config_future_needs_root_year_and_month():
             systematic.validate_config({**base, "instrument": {"kind": "future", "spec": spec}})
 
 
-def test_validate_config_cfd_short_needs_a_whole_quantity():
+def test_validate_config_cfd_quantity_is_positive_and_may_be_fractional():
     cfg = _config(1, allow_short=True, instrument={"kind": "cfd", "symbol": "^GSPC", "spec": {"leverage": 2}},
                   sizing={"quantity": 3})
     assert systematic.validate_config(cfg)["sizing"] == {"quantity": 3}
+    assert systematic.validate_config({**cfg, "sizing": {"quantity": 1.5}})["sizing"] == {"quantity": 1.5}
     with pytest.raises(store.FundError, match="quantité"):
-        systematic.validate_config({**cfg, "sizing": {"quantity": 1.5}})
+        systematic.validate_config({**cfg, "sizing": {"quantity": 0}})
 
 
 def test_create_rule_needs_an_existing_model_with_signals(conn):

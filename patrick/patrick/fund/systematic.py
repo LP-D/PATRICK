@@ -23,6 +23,7 @@ import json
 import math
 import sqlite3
 
+import numpy as np
 import pandas as pd
 
 from patrick.config import defaults as D
@@ -36,6 +37,8 @@ from patrick.validation import suspicion
 
 EQUITY_KINDS = ("equity", "etf")
 NOTE_PREFIX = "auto"
+MIN_CFD_QUANTITY = 0.0001
+MAX_HOLD_SESSIONS = 250
 
 
 # --------------------------------------------------------------------------- configuration
@@ -60,12 +63,17 @@ def validate_config(config: dict) -> dict:
     segment = config.get("segment") or "holdout"
     if segment not in sim_engine.SEGMENTS:
         raise store.FundError(f"segment inconnu : {segment!r} ({', '.join(sim_engine.SEGMENTS)})")
-    enter = _float(config.get("enter"), "enter")
-    if not 0.5 < enter < 1.0:
-        raise store.FundError("enter doit être strictement entre 0,5 et 1")
-    exit_ = _float(config.get("exit", 0.5), "exit")
-    if not 0.5 <= exit_ <= enter:
-        raise store.FundError("exit doit être entre 0,5 et enter")
+    signal = _validate_signal(config)
+    hold = _validate_hold(config)
+    if signal["mode"] == "score":
+        enter = _float(config.get("enter"), "enter")
+        if not 0.5 < enter < 1.0:
+            raise store.FundError("enter doit être strictement entre 0,5 et 1")
+        exit_ = _float(config.get("exit", 0.5), "exit")
+        if not 0.5 <= exit_ <= enter:
+            raise store.FundError("exit doit être entre 0,5 et enter")
+    else:
+        enter = exit_ = 0.5                      # mode direction : aucun seuil, ces champs ne servent à rien
     allow_short = bool(config.get("allow_short", False))
 
     instrument = config.get("instrument")
@@ -92,15 +100,68 @@ def validate_config(config: dict) -> dict:
         norm_sizing = {"amount": _float(amount, "montant")}
     else:
         quantity = sizing.get("quantity")
-        if quantity is None or _float(quantity, "quantité") < 1 or _float(quantity, "quantité") != int(quantity):
-            raise store.FundError("quantité entière >= 1 requise (CFD/future) : sizing.quantity")
-        norm_sizing = {"quantity": int(quantity)}
+        if kind == "future":
+            if quantity is None or _float(quantity, "quantité") < 1 or _float(quantity, "quantité") != int(quantity):
+                raise store.FundError("quantité entière >= 1 requise (future) : sizing.quantity")
+            norm_sizing = {"quantity": int(quantity)}
+        else:
+            if quantity is None or _float(quantity, "quantité") < MIN_CFD_QUANTITY:
+                raise store.FundError(f"quantité >= {MIN_CFD_QUANTITY} requise (CFD) : sizing.quantity")
+            q = _float(quantity, "quantité")
+            norm_sizing = {"quantity": int(q) if q == int(q) else q}
 
     out = {"trial_id": trial_id, "segment": segment, "enter": enter, "exit": exit_, "allow_short": allow_short,
-           "instrument": {"kind": kind, "symbol": symbol, "spec": spec}, "sizing": norm_sizing}
+           "instrument": {"kind": kind, "symbol": symbol, "spec": spec}, "sizing": norm_sizing,
+           "signal": signal, "hold": hold}
     if config.get("hedge") is not None:
         out["hedge"] = _validate_hedge(config["hedge"])
+    for key in ("since", "retired_on"):
+        if config.get(key) is not None:
+            out[key] = _date(config[key], key)
+    if config.get("managed") is not None:
+        if not isinstance(config["managed"], dict):
+            raise store.FundError("managed invalide : objet attendu")
+        out["managed"] = config["managed"]
     return out
+
+
+def _date(value, name: str) -> str:
+    try:
+        return store._iso(value)
+    except store.FundError as exc:
+        raise store.FundError(f"{name} invalide : date attendue ({value!r})") from exc
+
+
+def _validate_signal(config: dict) -> dict:
+    """`score` (défaut) : l'ancien score à seuils. `direction` : le sens vient de la classe prédite, la confiance
+    (`y_proba` de cette classe) n'intervient que comme plancher `min_confidence`."""
+    signal = config.get("signal")
+    if signal is None:
+        return {"mode": "score"}
+    if not isinstance(signal, dict) or signal.get("mode") not in ("score", "direction"):
+        raise store.FundError("signal invalide : mode « score » ou « direction » attendu")
+    if signal["mode"] == "score":
+        return {"mode": "score"}
+    confidence = _float(signal.get("min_confidence", 0.0), "min_confidence")
+    if not 0.0 <= confidence < 1.0:
+        raise store.FundError("min_confidence doit être entre 0 (inclus) et 1 (exclu)")
+    return {"mode": "direction", "min_confidence": confidence}
+
+
+def _validate_hold(config: dict) -> dict:
+    """`signal` (défaut) : la position dure tant que le signal tient. `horizon` : fermée `sessions` séances après son
+    exécution, sauf renouvellement par un signal de même sens."""
+    hold = config.get("hold")
+    if hold is None:
+        return {"mode": "signal"}
+    if not isinstance(hold, dict) or hold.get("mode") not in ("signal", "horizon"):
+        raise store.FundError("hold invalide : mode « signal » ou « horizon » attendu")
+    if hold["mode"] == "signal":
+        return {"mode": "signal"}
+    sessions = hold.get("sessions")
+    if isinstance(sessions, bool) or not isinstance(sessions, int) or not 1 <= sessions <= MAX_HOLD_SESSIONS:
+        raise store.FundError(f"hold.sessions invalide : entier entre 1 et {MAX_HOLD_SESSIONS} attendu")
+    return {"mode": "horizon", "sessions": sessions}
 
 
 def _check_future_spec(spec: dict) -> None:
@@ -155,6 +216,78 @@ def decide(scores: pd.Series, enter: float, exit_: float, allow_short: bool) -> 
 
 NO_P_UP = ("ce modèle n'a pas de P(hausse) enregistrée (essai antérieur à la colonne `p_up`) : les seuils d'entrée et de sortie portent sur "
            "cette probabilité, la confiance de la classe prédite n'en tient pas lieu à 4 classes. Réentraîner le modèle.")
+
+
+def decide_directional(signals: pd.Series, allow_short: bool, sessions: int | None,
+                       retired_on: str | None = None) -> list[dict]:
+    """Machine à états sur des signaux +1 (long) / -1 (short) / 0 (neutre) indexés par jour de signal.
+
+    `sessions` : sortie à l'horizon. La position ouverte à l'exécution d'un signal (jour suivant) est fermée `sessions`
+    séances plus tard ; un signal de même sens avant l'échéance la renouvelle (aucun ordre) ; un signal opposé la ferme
+    et rouvre le même jour (sans vente à découvert, il ne fait que fermer) ; un signal neutre ne change rien. Sans
+    signal, elle se ferme à l'échéance. `sessions=None` : la position dure tant que le signal tient (un signal neutre
+    ou opposé la ferme). `retired_on` : les signaux postérieurs sont ignorés (les positions ouvertes s'éteignent à
+    leur échéance).
+
+    Chaque événement : `signal` (jour du signal, ou l'échéance pour une fermeture à l'horizon), `requested` (jour
+    d'exécution demandé), `action`, `side`, `reason` (`signal` | `horizon`), `score` (None)."""
+    retired = pd.Timestamp(retired_on) if retired_on else None
+    out: list[dict] = []
+    side: str | None = None
+    expiry: pd.Timestamp | None = None
+
+    def event(signal_day: pd.Timestamp, requested: pd.Timestamp, action: str, direction: str, reason: str) -> dict:
+        return {"signal": signal_day.date().isoformat(), "requested": requested.date().isoformat(), "action": action,
+                "side": direction, "reason": reason, "score": None}
+
+    def due(requested: pd.Timestamp) -> pd.Timestamp | None:
+        return None if sessions is None else requested + pd.offsets.BDay(sessions)
+
+    for ts, value in signals.sort_index().items():
+        if retired is not None and ts > retired:
+            continue
+        requested = ts + pd.Timedelta(days=1)
+        if side is not None and expiry is not None and expiry < requested:
+            out.append(event(expiry, expiry, "close", side, "horizon"))       # arrivé à l'échéance sans renouvellement
+            side, expiry = None, None
+        if value is None or math.isnan(value):
+            continue
+        want = "long" if value > 0 else "short" if value < 0 else None
+        if side is not None:
+            if want == side:
+                expiry = due(requested) if sessions is not None else None   # renouvellement
+                continue
+            if want is None and sessions is not None:
+                continue                                                   # neutre : l'échéance décide
+            out.append(event(ts, requested, "close", side, "signal"))
+            side, expiry = None, None
+        if side is None and want is not None and (want == "long" or allow_short):
+            out.append(event(ts, requested, "open", want, "signal"))
+            side, expiry = want, due(requested)
+    if side is not None and expiry is not None:
+        out.append(event(expiry, expiry, "close", side, "horizon"))
+    return out
+
+
+def load_signals(conn: sqlite3.Connection, config: dict) -> pd.Series:
+    """Signaux +1/-1/0 d'une règle (`signal.mode`) sur son segment, à partir de `since`. Mode `direction` : le sens
+    est celui de la classe prédite ; un signal dont la probabilité est sous `min_confidence` est neutre. Mode `score` :
+    +1 si la P(hausse) atteint `enter`, -1 si elle tombe sous `1 - enter`, sinon 0."""
+    if config["signal"]["mode"] == "score":
+        score = load_scores(conn, config)
+        sign = pd.Series(np.where(score >= config["enter"], 1.0, np.where(score <= 1 - config["enter"], -1.0, 0.0)),
+                         index=score.index)
+    else:
+        df = sim_engine._load_predictions(conn, config["trial_id"], config["segment"])
+        if df.empty:
+            raise store.FundError(f"aucun signal du segment {config['segment']!r} pour l'essai {config['trial_id']}")
+        if df["ts"].duplicated().any():
+            raise store.FundError("signaux dupliqués (essai CPCV) : choisir un essai walk-forward")
+        y_pred, y_proba = df["y_pred"].to_numpy(), df["y_proba"].to_numpy()
+        values = np.where(np.isin(y_pred, sim_engine._UP_CLASSES), 1.0, -1.0)
+        values[y_proba < config["signal"]["min_confidence"]] = 0.0
+        sign = pd.Series(values, index=pd.DatetimeIndex(df["ts"])).sort_index()
+    return sign[sign.index >= pd.Timestamp(config["since"])] if config.get("since") else sign
 
 
 def load_scores(conn: sqlite3.Connection, config: dict) -> pd.Series:
@@ -230,11 +363,13 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
         conn.execute("INSERT INTO fund_rule (rule_id, strategy_id, name, config_json) VALUES (?, ?, ?, ?)",
                      (rule_id, strategy_id, name[:120], json.dumps(cfg)))
         store.touch_strategy(conn, strategy_id)
-    # Les seuils saisis sont une configuration de plus essayée sur cette cible (F03).
-    sim_engine.save_simulation(
-        conn, cfg["trial_id"],
-        sim_engine.SimParams(position_mode="threshold", threshold=cfg["enter"], short_allowed=cfg["allow_short"]),
-        {"ok": True, "kind": "fund_rule", "rule_id": rule_id, "enter": cfg["enter"], "exit": cfg["exit"]})
+    if cfg["signal"]["mode"] == "score":
+        # Les seuils saisis sont une configuration de plus essayée sur cette cible (F03). Le mode direction n'a aucun
+        # seuil à chercher : rien à compter.
+        sim_engine.save_simulation(
+            conn, cfg["trial_id"],
+            sim_engine.SimParams(position_mode="threshold", threshold=cfg["enter"], short_allowed=cfg["allow_short"]),
+            {"ok": True, "kind": "fund_rule", "rule_id": rule_id, "enter": cfg["enter"], "exit": cfg["exit"]})
     return rule_id
 
 
@@ -341,9 +476,8 @@ def plan(conn: sqlite3.Connection, rule: dict) -> list[dict]:
     inst, sizing, hedged = cfg["instrument"], cfg["sizing"], "hedge" in cfg
     open_pid = open_hedge_pid = None
     out: list[dict] = []
-    for sig in decide(load_scores(conn, cfg), cfg["enter"], cfg["exit"], cfg["allow_short"]):
-        signal_day = sig["ts"].date().isoformat()
-        requested = (sig["ts"] + pd.Timedelta(days=1)).date().isoformat()
+    for sig in _events(conn, cfg):
+        signal_day, requested = sig["signal"], sig["requested"]
         note = f"{NOTE_PREFIX}:{rule_id}:{signal_day}:{sig['action']}"
         extra: dict = {}
         if sig["action"] == "open":
@@ -367,8 +501,20 @@ def plan(conn: sqlite3.Connection, rule: dict) -> list[dict]:
                                            "position_id": open_hedge_pid, "date": requested,
                                            "note": note + "_hedge"}}
         out.append({"signal": signal_day, "action": sig["action"], "side": sig["side"], "score": sig["score"],
-                    "requested": requested, "note": note, "request": request, **extra})
+                    "requested": requested, "note": note, "request": request, "reason": sig["reason"], **extra})
     return out
+
+
+def _events(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
+    """Événements d'une règle : `signal` / `requested` (ISO), `action`, `side`, `score`. Les règles à seuils et à tenue
+    « signal » gardent l'hystérésis d'origine ; toutes les autres passent par la machine directionnelle."""
+    if cfg["signal"]["mode"] == "score" and cfg["hold"]["mode"] == "signal":
+        return [{"signal": sig["ts"].date().isoformat(),
+                 "requested": (sig["ts"] + pd.Timedelta(days=1)).date().isoformat(), "action": sig["action"],
+                 "side": sig["side"], "score": sig["score"], "reason": "signal"}
+                for sig in decide(load_scores(conn, cfg), cfg["enter"], cfg["exit"], cfg["allow_short"])]
+    sessions = cfg["hold"]["sessions"] if cfg["hold"]["mode"] == "horizon" else None
+    return decide_directional(load_signals(conn, cfg), cfg["allow_short"], sessions, cfg.get("retired_on"))
 
 
 # --------------------------------------------------------------------------- paire couverte (modèle d'alpha)
