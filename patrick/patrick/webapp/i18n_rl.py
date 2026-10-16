@@ -26,6 +26,7 @@ RL_STRINGS: dict[str, dict[str, str]] = {
         "investissable : son rendement est théorique. Une cible = un run ; plusieurs cibles lancent un run chacune, dans la file.",
         "Listed targets only: RL holds a position, which a macro series (FRED) does not allow. An index such as ^VIX is not investable: its "
         "return is theoretical. One target = one run; several targets launch one run each, in the queue."),
+    "rlp_untradable_tag": _s("non négociable (le rendement simulé n'est pas réalisable)", "not tradable (the simulated return cannot be earned)"),
     "rlp_sec_target": _s("Cible", "Target"),
     "rlp_sec_agent": _s("Agent", "Agent"),
     "rlp_sec_env": _s("Environnement", "Environment"),

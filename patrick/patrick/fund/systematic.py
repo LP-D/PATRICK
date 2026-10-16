@@ -153,14 +153,21 @@ def decide(scores: pd.Series, enter: float, exit_: float, allow_short: bool) -> 
     return out
 
 
+NO_P_UP = ("ce modèle n'a pas de P(hausse) enregistrée (essai antérieur à la colonne `p_up`) : les seuils d'entrée et de sortie portent sur "
+           "cette probabilité, la confiance de la classe prédite n'en tient pas lieu à 4 classes. Réentraîner le modèle.")
+
+
 def load_scores(conn: sqlite3.Connection, config: dict) -> pd.Series:
+    """Scores haussiers (P(hausse) du modèle) du segment, un par jour de signal. Une ligne sans `p_up` refuse la règle : jamais de repli
+    sur la confiance de la classe prédite, qui à 4 classes donnait des scores haussiers aux signaux baissiers."""
     df = sim_engine._load_predictions(conn, config["trial_id"], config["segment"])
     if df.empty:
         raise store.FundError(f"aucun signal du segment {config['segment']!r} pour l'essai {config['trial_id']}")
     if df["ts"].duplicated().any():
         raise store.FundError("signaux dupliqués (essai CPCV) : choisir un essai walk-forward")
-    score = sim_engine._directional_score(df["y_pred"].to_numpy(), df["y_proba"].to_numpy())
-    return pd.Series(score, index=pd.DatetimeIndex(df["ts"])).sort_index()
+    if df["p_up"].isna().any():
+        raise store.FundError(NO_P_UP)
+    return pd.Series(df["p_up"].to_numpy(dtype=float), index=pd.DatetimeIndex(df["ts"])).sort_index()
 
 
 # --------------------------------------------------------------------------- règles
@@ -216,6 +223,8 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
         raise store.FundError("couverture : seulement pour un modèle d'alpha (un modèle de direction n'en a pas besoin)")
     if sim_engine.available_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
         raise store.FundError(f"aucun signal du segment {cfg['segment']!r} pour l'essai {cfg['trial_id']}")
+    if p_up_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
+        raise store.FundError(f"segment {cfg['segment']!r} : {NO_P_UP}")
     rule_id = store.new_id("rule")
     with conn:
         conn.execute("INSERT INTO fund_rule (rule_id, strategy_id, name, config_json) VALUES (?, ?, ?, ?)",
@@ -277,9 +286,19 @@ def rule_summaries(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     return out
 
 
+def p_up_segments(conn: sqlite3.Connection, trial_id: int) -> dict[str, int]:
+    """Segments d'un essai dont TOUTES les lignes portent une P(hausse) : les seuls qu'une règle peut rejouer."""
+    rows = conn.execute(
+        "SELECT split, COUNT(*), SUM(p_up IS NOT NULL) FROM prediction WHERE trial_id = ? AND y_proba IS NOT NULL "
+        "AND split IN ('test', 'holdout', 'live') GROUP BY split", (trial_id,)).fetchall()
+    complete = {split: int(n) for split, n, with_p in rows if n and n == with_p}
+    return {seg: complete[seg] for seg in ("test", "holdout", "live") if seg in complete}
+
+
 def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
     """Essais gagnants dont on peut rejouer les signaux : un run terminé, jamais un horizon descriptif (pas un
     signal de portefeuille), au moins un signal dans un segment. Les modèles en titre d'abord, puis les plus récents.
+    Seuls les essais qui enregistrent une P(hausse) (`prediction.p_up`) sont proposés : les seuils portent sur elle.
     Un modèle d'alpha (`kind == "alpha"`) se trade en paire couverte contre son benchmark."""
     descriptive = sorted(D.DESCRIPTIVE_HORIZONS)
     rows = conn.execute(
@@ -292,7 +311,7 @@ def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
     headline = trackdb.batch_best_metrics(conn, [r[1] for r in rows])
     out = []
     for trial_id, run_id, algo, target, horizon, started_at, is_champion in rows:
-        segments = sim_engine.available_segments(conn, trial_id)
+        segments = p_up_segments(conn, trial_id)
         if segments:
             asset, kind, benchmark = split_run_label(target)
             scores = headline.get(run_id, {})

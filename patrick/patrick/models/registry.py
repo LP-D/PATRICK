@@ -6,7 +6,7 @@ from __future__ import annotations
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from xgboost import XGBClassifier
+from patrick.models.xgb_labels import AnyLabelXGBClassifier
 
 from patrick.config import defaults as D
 
@@ -56,7 +56,7 @@ def get_classifier(algo: str, seed: int = 42, **overrides):
                       "colsample_bytree": 0.8, "min_child_weight": 3, "eval_metric": "mlogloss",
                       "objective": "multi:softprob", "random_state": seed, "n_jobs": MODEL_N_JOBS, "verbosity": 0}
         params.update(overrides)
-        return XGBClassifier(**params)
+        return AnyLabelXGBClassifier(**params)
     if algo == "LightGBM":
         params = {"n_estimators": 200, "max_depth": 5, "learning_rate": 0.05, "num_leaves": 31,
                       "min_child_samples": 10, "subsample": 0.8, "class_weight": "balanced",

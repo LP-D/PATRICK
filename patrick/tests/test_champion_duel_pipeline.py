@@ -50,20 +50,28 @@ def _config(tmp_path, name: str, families: list[str]) -> RunConfig:
     })
 
 
-def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch):
+FULL = ["technical", "interactions", "spike", "vol_models", "macro"]
+LIGHT = ["technical", "macro"]
+
+
+# Both orders: whichever side wins on the holdout, the table must end up describing the model in title.
+@pytest.mark.parametrize("first_families, second_families", [(FULL, LIGHT), (LIGHT, FULL)], ids=["full-then-light", "light-then-full"])
+def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch, first_families, second_families):
     db_path = str(tmp_path / "patrick.db")
     monkeypatch.setenv("PATRICK_DB_PATH", db_path)
     store = DataStore(root=str(tmp_path / "store"))
     store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
 
-    first = run_pipeline(_config(tmp_path, "first", ["technical", "interactions", "spike", "vol_models", "macro"]),
+    first = run_pipeline(_config(tmp_path, "first", first_families),
                          store=store, db_path=db_path)
     assert first["champions"][5]["decision"] == "promoted_first"
     conn = trackdb.connect(db_path)
     first_run = champions.current(conn, TARGET, 5)["run_id"]
+    drift_after_first = trackdb.get_drift_references(conn, TARGET, 5)
     conn.close()
+    assert drift_after_first
 
-    second = run_pipeline(_config(tmp_path, "second", ["technical", "macro"]), store=store, db_path=db_path)
+    second = run_pipeline(_config(tmp_path, "second", second_families), store=store, db_path=db_path)
 
     decision = second["champions"][5]
     assert decision["decision"] in ("challenger_wins", "champion_wins"), decision
@@ -84,5 +92,46 @@ def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch):
         assert duel["challenger"]["f1_dir"] == pytest.approx(decision["challenger_f1_dir"])
         assert duel["holdout_start"] < duel["holdout_end"]
         assert conn.execute("SELECT COUNT(*) FROM trial_registry WHERE run_id = ?", (loser,)).fetchone()[0] > 0
+
+        # The drift reference (one per symbol/horizon, replaced by every export) belongs to the model that
+        # stays in title, whichever run exported last.
+        drift_now = trackdb.get_drift_references(conn, TARGET, 5)
+        if loser == first_run:  # the challenger took the title: its export's reference stands
+            assert {row[0] for row in drift_now} >= set(
+                champions.model_meta(champions.best_trial(conn, in_title["run_id"])["artifact_path"])["feature_names"])
+        else:  # the challenger was rejected: its export left no trace
+            assert drift_now == drift_after_first
+    finally:
+        conn.close()
+
+
+def test_every_horizon_of_a_launch_keeps_its_own_holdout(tmp_path, monkeypatch):
+    """Avant, seul le gagnant global avait son holdout enregistré : sur un lancement de N horizons, N-1 runs n'en avaient aucun, alors
+    que le duel des champions évaluait chaque horizon."""
+    db_path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
+    store = DataStore(root=str(tmp_path / "store"))
+    store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
+    config = _config(tmp_path, "multi", LIGHT).model_copy(deep=True)
+    config.objective.horizons = [3, 5]
+
+    result = run_pipeline(config, store=store, db_path=db_path)
+
+    assert set(result["champions"]) == {3, 5}
+    conn = trackdb.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT run.horizon, COUNT(DISTINCT fold_metric.metric), "
+            "       (SELECT COUNT(*) FROM prediction p WHERE p.trial_id = trial.trial_id AND p.split = 'holdout') "
+            "FROM run JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1 "
+            "LEFT JOIN fold_metric ON fold_metric.trial_id = trial.trial_id AND fold_metric.split = 'holdout' "
+            "GROUP BY run.horizon, trial.trial_id").fetchall()
+        by_horizon = {h: (n_metrics, n_pred) for h, n_metrics, n_pred in rows}
+        assert set(by_horizon) == {3, 5}
+        assert all(n_metrics > 0 and n_pred > 0 for n_metrics, n_pred in by_horizon.values()), by_horizon
+        # une seule écriture par essai : pas de doublon de métriques
+        dup = conn.execute("SELECT trial_id, metric, COUNT(*) FROM fold_metric WHERE split = 'holdout' "
+                           "GROUP BY trial_id, metric HAVING COUNT(*) > 1").fetchall()
+        assert dup == []
     finally:
         conn.close()

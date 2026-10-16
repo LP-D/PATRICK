@@ -108,7 +108,7 @@ from patrick.validation import cpcv as cpcv_module
 from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
-from patrick.validation.metrics import metrics
+from patrick.validation.metrics import align_proba, metrics
 from patrick.validation.purge import purge_mask
 from patrick.validation.walkforward import build_fold_cuts, describe_folds
 
@@ -796,6 +796,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     split = calibration_lib.calibration_split(len(X_tr), gap=calibration_gap) if calibration else None
 
     p_up = None
+    classes = None
     calibrated = False
     if split is not None:
         Xf, yf = safe_resample(sampler_name, seed, X_tr[:split.fit_end], y_tr[:split.fit_end])
@@ -842,13 +843,15 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
         if hasattr(clf, "predict_proba"):
             try:
                 y_proba = clf.predict_proba(X_te)
-                confidence = y_proba[np.arange(len(y_pred)), y_pred.astype(int)]
-            except (AttributeError, IndexError, ValueError):
+            except (AttributeError, ValueError):
                 y_proba = None
             if y_proba is not None:
+                # Les colonnes de `predict_proba` suivent `classes_`, PAS les étiquettes : `y_proba[i, y_pred]` lisait la probabilité d'une
+                # autre classe (ou plantait, IndexError avalé, AUC perdue) dès qu'une classe manquait à l'entraînement.
                 classes = list(getattr(clf, "classes_", range(y_proba.shape[1])))
+                confidence = np.array([row[classes.index(p)] if p in classes else np.nan for row, p in zip(y_proba, y_pred)])
                 p_up = calibration_lib.p_up_from_proba(y_proba, classes)
-    met = metrics(y_te, y_pred, y_proba=y_proba)
+    met = metrics(y_te, y_pred, y_proba=align_proba(y_proba, classes))
     if p_up is not None and len(p_up) == len(y_te):
         y_up = np.isin(np.asarray(y_te), calibration_lib.UP_CLASSES).astype(float)
         met["Brier_up"] = calibration_lib.brier_score(p_up, y_up)
@@ -1373,6 +1376,9 @@ class _RunState:
     screen_ctx: _FoldContext | None = None  # total-window screening: ONE window = the whole out-of-sample span
     screen_rows: dict[tuple[int, str], list[dict]] = field(default_factory=dict)
     screening_finalists: dict[tuple[int, str], set[tuple[int, str, str]]] = field(default_factory=dict)
+    # Drift references of each horizon as they were just before this run's export replaced them: the
+    # champion duel puts them back if the challenger is rejected (`champion_duel.duel_and_promote`).
+    drift_reference_before: dict[int, list[tuple]] = field(default_factory=dict)
 
     @property
     def is_walkforward(self) -> bool:
@@ -1917,6 +1923,8 @@ def _export_models(st: _RunState, final_best_by_horizon: dict[int, dict]) -> tup
     trial_id_by_horizon: dict[int, int] = {}
     for horizon, best_h in final_best_by_horizon.items():
         t_start = time.time()
+        st.drift_reference_before[horizon] = trackdb.get_drift_references(
+            st.conn, st.config.objective.target_symbol, horizon)
         h_model_path = export_best_model(full_pool, st.target_col, export_features, st.config, best_h,
                                          st.config.output.dir, seed=st.seed,
                                          interaction_formulas=interaction_formulas,
@@ -1948,14 +1956,24 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
                                      universe=st.universe)
     if holdout_eval is None:
         return None
-    if best_trial_id is not None:
-        trackdb.add_fold_metrics(st.conn, best_trial_id, fold_index=0, split="holdout",
-                                 metrics=holdout_eval["metrics"])
-        trackdb.add_predictions(st.conn, best_trial_id, fold_index=0, split="holdout",
-                                ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
-                                y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"],
-                                p_up=holdout_eval.get("p_up"))
+    persist_holdout(st, best_trial_id, holdout_eval)
     return holdout_eval
+
+
+def persist_holdout(st: _RunState, trial_id: int | None, holdout_eval: dict) -> bool:
+    """Écrit le holdout d'un essai (métriques + prédictions) une seule fois. Avant, seul le gagnant GLOBAL d'un lancement l'avait : sur un
+    lancement de N horizons, N-1 runs n'avaient aucun holdout dans leur entête (0,85 horizon par lancement en moyenne), alors que le duel
+    des champions évaluait chaque horizon. Renvoie vrai si quelque chose a été écrit."""
+    if trial_id is None:
+        return False
+    if st.conn.execute("SELECT 1 FROM fold_metric WHERE trial_id = ? AND split = 'holdout' LIMIT 1", (trial_id,)).fetchone():
+        return False
+    trackdb.add_fold_metrics(st.conn, trial_id, fold_index=0, split="holdout", metrics=holdout_eval["metrics"])
+    trackdb.add_predictions(st.conn, trial_id, fold_index=0, split="holdout",
+                            ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
+                            y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"],
+                            p_up=holdout_eval.get("p_up"))
+    return True
 
 
 def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict | None) -> dict | None:

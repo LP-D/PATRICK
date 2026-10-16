@@ -17,7 +17,9 @@ When a duel cannot compare both on the same holdout (no holdout: CPCV or a
 history too short; one side below the minimum row counts), nothing changes:
 no promotion, nothing archived or pruned. A duel that fails keeps the status
 quo too -- it never fails the run. The loser is archived then pruned
-(`tracking/champions.py`).
+(`tracking/champions.py`). Its export had already replaced the drift
+reference of (symbol, horizon): a rejected challenger gives it back to the
+champion that stays in title.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ import traceback
 from patrick.config.schema import RunConfig
 from patrick.pipeline import engine
 from patrick.tracking import champions
+from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
 
 RULE = ("F1_dir strictly greater on the same holdout, both configurations retrained on the "
@@ -109,6 +112,15 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     chal_eval = known_eval if known_eval is not None else engine._evaluate_holdout(
         st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool, st.config,
         st.all_dates_full, st.n_wf, best_h, st.seed, universe=st.universe)
+    if chal_eval is not None and known_eval is None:
+        # Le holdout de CET horizon fait partie du run, qu'il gagne le duel ou non. `getattr` : un worker démarré avant la mise à jour garde
+        # l'ancien `engine` en mémoire (sans `persist_holdout`) mais charge ce module-ci à la fin du run ; le duel ne doit pas en échouer.
+        persist = getattr(engine, "persist_holdout", None)
+        if persist is not None:
+            try:
+                persist(st, trial_id, chal_eval)
+            except Exception:  # noqa: BLE001 -- enregistrer le holdout est de l'archivage : il ne doit jamais empêcher le duel
+                traceback.print_exc()
     chal_f1 = _f1(chal_eval)
     chal_reason = suspicion.suspect_reason((chal_eval or {}).get("metrics"))
     if chal_reason:
@@ -161,6 +173,18 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
             "pruned_run": loser}
 
 
+def _restore_drift_reference(st, horizon: int) -> None:
+    """A rejected challenger was pruned, but its export (before the duel) had replaced the drift reference of
+    (symbol, horizon), shared by every run of the pair: put back what the champion in title had. A challenger
+    still there (crowned, or not judged) keeps its own, the latest run being the one the app uses."""
+    before = getattr(st, "drift_reference_before", {}).get(horizon)
+    if before is None:
+        return
+    if st.conn.execute("SELECT 1 FROM run WHERE run_id = ?", (st.run_ids[horizon],)).fetchone() is not None:
+        return
+    trackdb.replace_drift_references(st.conn, st.config.objective.target_symbol, horizon, before)
+
+
 def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_horizon: dict[int, int],
                      holdout_evals: dict[int, dict] | None = None) -> dict[int, dict]:
     """One duel per exported horizon. `holdout_evals`: challenger holdout
@@ -177,6 +201,10 @@ def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_hor
         except Exception as exc:  # noqa: BLE001 -- a failed duel keeps the status quo, it never fails a finished run
             traceback.print_exc()
             decisions[horizon] = {"decision": "error", "error": f"{type(exc).__name__}: {exc}"}
+        try:
+            _restore_drift_reference(st, horizon)
+        except Exception:  # noqa: BLE001 -- same rule: housekeeping after a duel never fails a finished run
+            traceback.print_exc()
         d = decisions[horizon]
         scores = ""
         if "champion_f1_dir" in d:

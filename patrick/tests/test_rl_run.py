@@ -116,3 +116,13 @@ def test_raw_price_levels_are_never_part_of_the_state(tmp_path):
     assert not set(raw.columns) & set(data.features.columns)
     assert data.price.index[0] == data.dates[0] and len(data.price) == data.n + 1
     assert np.allclose(data.fwd_ret, (data.price.shift(-1) / data.price - 1).iloc[:-1].to_numpy())
+
+
+def test_a_ruined_strategy_is_flagged_in_the_warnings_and_a_healthy_one_is_not():
+    ruined = {"strategy": {"ruined": True, "ruin_date": "2018-02-05"}, "folds": [{"fold": 1, "strategy": {"ruined": False}},
+                                                                                  {"fold": 2, "strategy": {"ruined": True}}]}
+    text = rl_run.ruin_warning(ruined, 1.0)
+    assert "Capital épuisé le 2018-02-05" in text and "pli 2" in text and "plus de 100 %" in text
+    assert "baisse de plus de 50 %" in rl_run.ruin_warning(ruined, 2.0)                       # levier 2 : -50 % suffit
+    assert rl_run.ruin_warning({"strategy": {"ruined": False}, "folds": [{"fold": 1, "strategy": {"ruined": False}}]}, 1.0) is None
+    assert rl_run.ruin_warning({}, 1.0) is None

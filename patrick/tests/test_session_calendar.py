@@ -53,3 +53,14 @@ def test_apply_session_lag_shifts_later_closing_columns():
     # IDX_HSI (colonne nettoyée de "^HSI", même symbole que la cible) : même
     # classe d'actif que la cible -> pas de décalage, valeurs inchangées.
     pd.testing.assert_series_equal(out["IDX_HSI"], yf_df["IDX_HSI"])
+
+
+def test_volatility_and_yield_indices_are_not_tradable_as_prices():
+    from patrick.data.session_calendar import untradable_kind
+    for symbol in ("^VIX", "^VVIX", "^VIX3M", "^MOVE", "^SKEW", "^EVZ"):
+        assert untradable_kind(symbol) == "volatility"
+    for symbol in ("^IRX", "^FVX", "^TNX", "^TYX"):
+        assert untradable_kind(symbol) == "yield"
+    for symbol in ("^GSPC", "AAPL", "GC=F", "EURUSD=X", "BTC-USD", "DX-Y.NYB", "^FCHI"):
+        assert untradable_kind(symbol) is None
+    assert untradable_kind("^VIX", source="fred") is None                      # une série FRED n'est jamais classée ici

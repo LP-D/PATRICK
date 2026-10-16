@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -34,38 +35,57 @@ def _connect():
 
 
 def next_run_name(target_symbol: str) -> str:
-    """Generated run name = slug(target) + sequence number. The base counter
-    comes from the `run` table (1 + number of runs already recorded for this
-    target), but a job that is merely queued (`queued`) or running
-    (`running`) has no `run` row yet -- invisible to this count until the
-    pipeline has actually started. Without the check below, two jobs for the
-    same target submitted before the first one starts would receive the
-    same name, hence the same `output.dir`/Optuna `study_name`: silent
-    artifact overwrite and involuntary resumption of an Optuna study (see
-    pipeline/engine.py:1038, 1075 -- load_if_exists=True on a study_name
-    derived from the name). So this also steps back from any name already
-    held by a job still queued or running for this same target."""
+    """Generated run name = slug(target) + sequence number, which only ever goes UP.
+
+    The number is 1 + the largest of: the runs already recorded for this target (`run` table) and the highest `slug_N` ever carried by
+    a run OR a job (every status) of this target. The `job` table is what makes it monotonic: a challenger that loses its champion duel
+    is pruned (`tracking/champions.py::prune_run`), and a run deleted from the history disappears too, but their job stays. Counting
+    `run` rows alone made the number fall back and be handed out again (IRX_2 and MUB_2 each named four different jobs, all writing
+    to the same `output.dir` and Optuna `study_name` -- silent artifact overwrite and involuntary resumption of a study, see
+    pipeline/engine.py `load_if_exists=True`). A name held by a job still queued or running is covered by the same rule."""
+    slug = forms.slug_target(target_symbol)
+    numbered = re.compile(rf"^{re.escape(slug)}_(\d+)$")
+    used: set[str] = set()
+    highest = 0
+
+    def note(config_json: str | None) -> None:
+        nonlocal highest
+        try:
+            cfg = json.loads(config_json or "{}")
+        except (TypeError, ValueError):
+            return
+        if not isinstance(cfg, dict):
+            return
+        name = cfg.get("name")
+        if isinstance(name, str):
+            used.add(name)
+            match = numbered.match(name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+
     conn = _connect()
     try:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM run WHERE target = ?", (target_symbol,)
-        ).fetchone()[0]
-        claimed_names = set()
-        for (config_json,) in conn.execute(
-            "SELECT config_json FROM job WHERE status IN ('queued', 'running')"
-        ).fetchall():
-            cfg = json.loads(config_json)
-            if cfg.get("objective", {}).get("target_symbol") == target_symbol:
-                claimed_names.add(cfg.get("name"))
+        count = conn.execute("SELECT COUNT(*) FROM run WHERE target = ?", (target_symbol,)).fetchone()[0]
+        # Préfiltre SQL : seuls les jobs dont un nom commence par « slug_ » (tolère les espaces du JSON) ; le contrôle exact est refait en Python.
+        like = "%\"name\":%\"" + slug.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "\\_%"
+        for (config_json,) in conn.execute("SELECT config_json FROM job WHERE config_json LIKE ? ESCAPE '\\'", (like,)).fetchall():
+            try:
+                same_target = (json.loads(config_json).get("objective") or {}).get("target_symbol") == target_symbol
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if same_target:
+                note(config_json)
+        for (config_json,) in conn.execute("SELECT config_json FROM run WHERE target = ?", (target_symbol,)).fetchall():
+            note(config_json)
     finally:
         conn.close()
-    slug = forms.slug_target(target_symbol)
-    n = count + 1
+    n = max(count, highest) + 1
     name = f"{slug}_{n}"
-    while name in claimed_names:
+    while name in used:
         n += 1
         name = f"{slug}_{n}"
     return name
+
 
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:

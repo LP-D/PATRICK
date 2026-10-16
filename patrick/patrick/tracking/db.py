@@ -327,6 +327,27 @@ def get_drift_reference(conn: sqlite3.Connection, symbol: str, horizon: int,
     return json.loads(row[0]) if row else None
 
 
+def get_drift_references(conn: sqlite3.Connection, symbol: str, horizon: int) -> list[tuple]:
+    """Every stored reference of (symbol, horizon), verbatim:
+    (feature, reference_json, computed_at). What `replace_drift_references`
+    puts back."""
+    return conn.execute(
+        "SELECT feature, reference_json, computed_at FROM drift_feature_reference "
+        "WHERE symbol = ? AND horizon = ? ORDER BY feature", (symbol, horizon)).fetchall()
+
+
+def replace_drift_references(conn: sqlite3.Connection, symbol: str, horizon: int, rows: list[tuple]) -> None:
+    """Puts (symbol, horizon) back to exactly `rows` (from
+    `get_drift_references`): any other feature is dropped. One transaction.
+    The champion/challenger duel uses it when a challenger is rejected -- its
+    export had replaced the reference of the model that stays in title."""
+    with conn:
+        conn.execute("DELETE FROM drift_feature_reference WHERE symbol = ? AND horizon = ?", (symbol, horizon))
+        conn.executemany(
+            "INSERT INTO drift_feature_reference (symbol, horizon, feature, reference_json, computed_at) "
+            "VALUES (?, ?, ?, ?, ?)", [(symbol, horizon, *row) for row in rows])
+
+
 def record_drift_psi(conn: sqlite3.Connection, symbol: str, horizon: int, feature: str,
                       psi: float) -> None:
     """Appends one row to the PSI history -- the one legitimate

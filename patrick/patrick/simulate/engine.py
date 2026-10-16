@@ -123,10 +123,31 @@ class SimParams:
         return {k: getattr(self, k) for k in self.__dataclass_fields__}
 
 
-def _directional_score(y_pred: np.ndarray, y_proba: np.ndarray) -> np.ndarray:
-    up = np.isin(y_pred, _UP_CLASSES)
-    score = np.where(up, y_proba, 1.0 - y_proba)
-    return np.nan_to_num(score, nan=0.5)
+def _directional_score(y_pred: np.ndarray, y_proba: np.ndarray, p_up: np.ndarray | None = None) -> np.ndarray:
+    """Score haussier dans [0, 1] (0,5 = neutre) : P(hausse) du modèle (`prediction.p_up`) quand elle est enregistrée, sinon un score de
+    direction déduit de la confiance de la classe prédite, TOUJOURS du côté de la prédiction (0,5 + conf/2 si elle est haussière,
+    0,5 − conf/2 sinon).
+
+    L'ancien repli (« confiance si haussière, 1 − confiance sinon ») n'était juste qu'à 2 classes. À 4 classes la confiance médiane vaut
+    ~0,35 : une prédiction baissière à 0,35 devenait un score de 0,65, donc un LONG. Mesuré sur 17 174 prédictions holdout/live : 92 %
+    des signaux baissiers recevaient un score > 0,5, corrélation de −0,27 avec la vraie P(hausse). Le repli n'est pas une probabilité :
+    il garde le signe du signal, et les seuils n'y trient plus les signaux par conviction (voir `score_source` du résultat)."""
+    y_pred = np.asarray(y_pred)
+    conf = np.nan_to_num(np.asarray(y_proba, dtype=float), nan=0.0)
+    fallback = np.where(np.isin(y_pred, _UP_CLASSES), 0.5 + conf / 2.0, 0.5 - conf / 2.0)
+    if p_up is None:
+        return fallback
+    known = np.asarray(p_up, dtype=float)
+    return np.where(np.isfinite(known), known, fallback)
+
+
+def score_source(p_up: np.ndarray | pd.Series | None) -> str:
+    """D'où vient le score : `p_up` (probabilité de hausse enregistrée), `confidence` (repli sur la confiance de la classe prédite) ou
+    `mixed`."""
+    if p_up is None:
+        return "confidence"
+    finite = np.isfinite(np.asarray(p_up, dtype=float))
+    return "p_up" if finite.all() else ("confidence" if not finite.any() else "mixed")
 
 
 def _position_from_score(score: np.ndarray, params: SimParams) -> np.ndarray:
@@ -165,7 +186,7 @@ def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: i
     not a true Kelly formula (which is f*=edge/odds in discrete or f*=μ/σ² in continuous).
     It ignores the signal's volatility and can over/under-size relative to the real variance."""
     rows = conn.execute(
-        "SELECT y_pred, y_proba, y_true FROM prediction "
+        "SELECT y_pred, y_proba, y_true, p_up FROM prediction "
         "WHERE trial_id = ? AND split = 'test' AND y_proba IS NOT NULL AND y_true IS NOT NULL",
         (trial_id,),
     ).fetchall()
@@ -174,7 +195,7 @@ def check_leverage_available(conn: sqlite3.Connection, trial_id: int, min_obs: i
     y_pred = np.array([r[0] for r in rows])
     y_proba = np.array([r[1] for r in rows])
     y_true = np.array([r[2] for r in rows])
-    score = _directional_score(y_pred, y_proba)
+    score = _directional_score(y_pred, y_proba, np.array([np.nan if r[3] is None else r[3] for r in rows], dtype=float))
     y_true_binary = np.isin(y_true, _UP_CLASSES).astype(float)
     brier = _brier_score(y_true_binary, score)
     if brier >= 0.25:
@@ -197,6 +218,11 @@ SEGMENT_WARNINGS = {
 }
 
 
+SCORE_WARNING = ("Ce modèle n'a pas de P(hausse) enregistrée (essai antérieur à la colonne `p_up`) : le score est déduit de la confiance "
+                 "de la classe prédite, du côté de la prédiction. Ce n'est pas une probabilité : le seuil ne trie plus les signaux par "
+                 "conviction. Réentraîner le modèle pour obtenir une vraie P(hausse).")
+
+
 def available_segments(conn: sqlite3.Connection, trial_id: int) -> dict[str, int]:
     """Number of simulable predictions (with a confidence) per segment."""
     rows = conn.execute(
@@ -208,12 +234,13 @@ def available_segments(conn: sqlite3.Connection, trial_id: int) -> dict[str, int
 
 def _load_predictions(conn: sqlite3.Connection, trial_id: int, segment: str) -> pd.DataFrame:
     rows = conn.execute(
-        "SELECT ts, y_pred, y_proba FROM prediction "
+        "SELECT ts, y_pred, y_proba, p_up FROM prediction "
         "WHERE trial_id = ? AND split = ? AND y_proba IS NOT NULL "
         "ORDER BY ts",
         (trial_id, segment),
     ).fetchall()
-    df = pd.DataFrame(rows, columns=["ts", "y_pred", "y_proba"])
+    df = pd.DataFrame(rows, columns=["ts", "y_pred", "y_proba", "p_up"])
+    df["p_up"] = pd.to_numeric(df["p_up"], errors="coerce")
     df["ts"] = pd.to_datetime(df["ts"])
     return df
 
@@ -384,7 +411,8 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
         underlying = underlying.reindex(daily_index)
         underlying_ret = underlying.pct_change().fillna(0.0)
 
-        score = _directional_score(pred_df["y_pred"].values, pred_df["y_proba"].values)
+        source = score_source(pred_df["p_up"].values)
+        score = _directional_score(pred_df["y_pred"].values, pred_df["y_proba"].values, pred_df["p_up"].values)
         target_pos = _position_from_score(score, params)
         exposure = _build_exposure(pred_df["ts"], target_pos, daily_index, run["horizon"], params)
 
@@ -428,6 +456,8 @@ def simulate(trial_id: int, params: SimParams, db_path: str | None = None,
             "message": kelly_message,
             "segment": segment,
             "segment_warning": SEGMENT_WARNINGS.get(segment),
+            "score_source": source,
+            "score_warning": None if source == "p_up" else SCORE_WARNING,
             "available_segments": segments,
             "params": params.to_dict(),
             "n_days": len(daily_index),
