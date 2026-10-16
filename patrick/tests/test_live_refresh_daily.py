@@ -77,3 +77,42 @@ def _reset_state():
     yield
     live_refresh._state.clear()
     live_refresh._state.update(snapshot)
+
+
+# --- pilote automatique des fonds : un cycle par stratégie activée, après les prédictions du jour -------------------
+
+def test_autopilots_run_after_the_predictions_and_a_failure_never_breaks_the_refresh(monkeypatch, tmp_path):
+    from patrick.tracking import db
+
+    db_path = str(tmp_path / "p.db")
+    db.connect(db_path).close()
+    order: list[str] = []
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [])
+    monkeypatch.setattr(live_refresh, "run_daily_predictions",
+                        lambda candidates, db_path=None, on_item=None: order.append("predictions"))
+
+    def failing(path=None):
+        order.append("autopilot")
+        raise RuntimeError("base verrouillée")
+    monkeypatch.setattr(live_refresh, "run_autopilots", failing)
+
+    live_refresh._refresh_once(db_path)                      # ne doit rien lever
+
+    assert order == ["predictions", "autopilot"]
+    assert live_refresh.refresh_status()["running"] is False
+
+
+def test_run_autopilots_cycles_every_enabled_strategy(tmp_path):
+    from patrick.fund import store
+    from patrick.tracking import db
+
+    db_path = str(tmp_path / "p.db")
+    conn = db.connect(db_path)
+    on = store.create_strategy(conn, "Pilote", "CTO", 100_000, "2026-01-05")
+    store.create_strategy(conn, "Manuelle", "CTO", 100_000, "2026-01-05")
+    store.set_autopilot(conn, on, {"enabled": True, "settings": {}})
+    conn.close()
+
+    reports = live_refresh.run_autopilots(db_path)
+
+    assert [r["strategy_id"] for r in reports] == [on] and "error" not in reports[0] and reports[0]["selected"] == 0

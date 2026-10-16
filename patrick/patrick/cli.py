@@ -811,8 +811,10 @@ def fund_rule_list_cmd(strategy: str = typer.Option(..., "--strategy", help="Ide
             typer.echo("Aucune règle.")
         for r in rules:
             c = r["config"]
+            rule_mode = (f"direction · horizon {c['hold']['sessions']}" if c["signal"]["mode"] == "direction"
+                         and c["hold"]["mode"] == "horizon" else f"entrée {c['enter']:g} / sortie {c['exit']:g}")
             typer.echo(f"{r['rule_id']}  {r['name']:<24} essai {c['trial_id']} ({c['segment']})  "
-                       f"entrée {c['enter']:g} / sortie {c['exit']:g}  {c['instrument']['kind']} "
+                       f"{rule_mode}  {c['instrument']['kind']} "
                        f"{c['instrument']['symbol'] or c['instrument']['spec'].get('root', '')}")
     finally:
         conn.close()
@@ -1018,6 +1020,156 @@ def data_use_cmd(
     typer.echo(f"Racine de données : {out['data_root'] or 'aucune (dossier maison)'}.")
     if out["env_override"]:
         typer.echo("Attention : la variable d'environnement PATRICK_DATA_ROOT est posée et prime sur ce réglage.", err=True)
+
+
+def _fund_day(today: str | None):
+    import datetime as dt
+
+    return dt.date.fromisoformat(today) if today else None
+
+
+def _echo_selection(plan: dict) -> None:
+    """Modèles retenus (avec instrument et taille si la stratégie est connue) puis cellules écartées."""
+    typer.echo(f"{len(plan['selected'])} modèle(s) retenu(s) sur {plan['n_cells']} cellules.")
+    for m in plan["selected"]:
+        line = (f"  {m['target']} h{m['horizon']}  {m['algo']}  DM p={_fr(m['dm_p'])}  "
+                f"signal {m['last_signal']['ts']} {'hausse' if m['last_signal']['direction'] == 'UP' else 'baisse'}")
+        if "instrument" in m:
+            weight, amount = f"{m['weight'] * 100:.1f}".replace(".", ","), f"{m['notional']:,.0f}".replace(",", " ")
+            line += f"  {m['instrument']['kind'].upper()} {m['instrument']['symbol']}  poids {weight} %  montant {amount} €"
+        typer.echo(line)
+    excluded = plan["excluded"]
+    if excluded:
+        summary = " · ".join(f"{e['label']} {e['n']}" for e in plan["excluded_summary"])
+        typer.echo(f"Écartés ({len(excluded)}) : {summary}")
+        for e in excluded[:30]:
+            typer.echo(f"  {e['target']} h{e['horizon']} [{e['code']}] {e['detail']}")
+        if len(excluded) > 30:
+            typer.echo(f"  … et {len(excluded) - 30} autre(s).")
+
+
+def _fr(value) -> str:
+    return "n.d." if value is None else f"{value:.3f}".replace(".", ",")
+
+
+def _echo_report(report: dict) -> None:
+    typer.echo(f"Cycle du {report['day']} : {report['selected']} modèle(s) retenu(s), {len(report['created'])} règle(s) créée(s), "
+               f"{len(report['retired'])} retirée(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente, "
+               f"{len(report['refused'])} refusé(s).")
+    for r in report["refused"]:
+        typer.echo(f"  refusé {r['target']} h{r['horizon']} {r['signal']} {r['action']} {r['side']} : {' ; '.join(r['reasons'])}")
+    for f in report["failed"]:
+        typer.echo(f"  échec {f['target']} h{f['horizon']} : {f['reason']}")
+
+
+@fund_app.command(name="autopilot-select")
+def fund_autopilot_select_cmd(
+    strategy: str = typer.Option(None, "--strategy", help="Stratégie (str_...) : ajoute instruments et tailles"),
+    tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
+    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles"),
+    short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Aperçu : les modèles que le pilote automatique retiendrait (rien n'est écrit)."""
+    from patrick.fund import autopilot, selection
+    from patrick.fund import store as fund_store
+
+    day = _fund_day(today)
+    conn = trackdb.connect()
+    try:
+        raw = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": short}
+        if strategy:
+            plan = autopilot.preview(conn, strategy, day, autopilot.Settings.from_dict(raw))
+        else:
+            plan = selection.select_models(conn, selection.Policy.from_dict(raw), day)
+            plan["excluded"], plan["excluded_summary"] = plan.pop("excluded_cells"), plan.pop("excluded")
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    _echo_selection(plan)
+
+
+@fund_app.command(name="autopilot-enable")
+def fund_autopilot_enable_cmd(
+    strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)"),
+    tier: str = typer.Option("strict", "--tier", help="strict ou large"),
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
+    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles"),
+    short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
+) -> None:
+    """Active le pilote automatique d'une stratégie (le premier cycle se lance avec `autopilot-run`)."""
+    from patrick.fund import autopilot
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        stored = autopilot.configure(conn, strategy, {"tier": tier, "gross": gross, "max_models": max_models,
+                                                     "allow_short": short})
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    st = stored["settings"]
+    typer.echo(f"Pilote automatique activé sur {strategy} (niveau {st['tier']}, exposition brute {st['gross'] * 100:g} %, "
+               f"{st['max_models']} modèles au plus).")
+
+
+@fund_app.command(name="autopilot-run")
+def fund_autopilot_run_cmd(
+    strategy: str = typer.Option(None, "--strategy", help="Identifiant de la stratégie (str_...)"),
+    all_strategies: bool = typer.Option(False, "--all", help="Toutes les stratégies dont le pilote est activé"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Un cycle du pilote : sélectionne, ajuste les règles, place les ordres échus (relancer ne duplique jamais)."""
+    from patrick.fund import autopilot
+    from patrick.fund import store as fund_store
+
+    if not strategy and not all_strategies:
+        raise typer.BadParameter("--strategy ou --all requis")
+    day = _fund_day(today)
+    conn = trackdb.connect()
+    try:
+        if all_strategies:
+            failed = False
+            for report in autopilot.run_all(conn, day):
+                if "error" in report:
+                    failed = True
+                    typer.echo(f"{report['strategy_id']} : ERREUR {report['error']}")
+                else:
+                    typer.echo(f"{report['strategy_id']} :")
+                    _echo_report(report)
+            if failed:
+                raise typer.Exit(code=1)
+        else:
+            try:
+                report = autopilot.run(conn, strategy, day)
+            except fund_store.FundError as exc:
+                typer.echo(f"Refusé : {exc}")
+                raise typer.Exit(code=1) from exc
+            _echo_report(report)
+    finally:
+        conn.close()
+
+
+@fund_app.command(name="autopilot-off")
+def fund_autopilot_off_cmd(strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)")) -> None:
+    """Désactive le pilote : ses règles sont supprimées ; les ordres passés et les positions ouvertes restent."""
+    from patrick.fund import autopilot
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        out = autopilot.disable(conn, strategy)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(f"Pilote désactivé : {out['removed_rules']} règle(s) supprimée(s). Les positions ouvertes restent à fermer à la main.")
 
 
 if __name__ == "__main__":

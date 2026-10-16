@@ -186,6 +186,65 @@
 </div>
 {% endif %}
 
+{# Pilote automatique : réglages, aperçu à la demande (fragment `preview.html`), règles du pilote. `autopilot` = fund.autopilot.status. #}
+<section class="fund-auto" id="autopilot-{{ s.strategy_id }}" data-strategy-id="{{ s.strategy_id }}">
+  <h3>{{ t('fund_auto_title') }} <span class="tag">{{ t('fund_auto_on') if autopilot.enabled else t('fund_auto_off') }}</span></h3>
+  <p class="hint">{{ t('fund_auto_hint') }}</p>
+  <div class="form fund-inline-form">
+    <div class="subgrid">
+      <label>{{ t('fund_auto_tier') }}
+        <select name="tier" data-auto-field>
+          <option value="strict"{% if autopilot.settings.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
+          <option value="large"{% if autopilot.settings.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
+        </select>
+      </label>
+      <label>{{ t('fund_auto_gross') }}
+        <input type="number" name="gross" min="10" max="200" step="5" value="{{ (autopilot.settings.gross * 100) | round(0) | int }}" data-auto-field>
+      </label>
+      <label>{{ t('fund_auto_max') }}
+        <input type="number" name="max_models" min="1" max="500" step="1" value="{{ autopilot.settings.max_models }}" data-auto-field>
+      </label>
+      {% if s.wrapper != 'PEA' %}
+      <label class="check"><input type="checkbox" name="allow_short" data-auto-field{% if autopilot.settings.allow_short %} checked{% endif %}> {{ t('fund_auto_short') }}</label>
+      {% endif %}
+    </div>
+    <div class="fund-actions">
+      <button type="button" class="btn-ghost" data-act="auto-preview">{{ t('fund_auto_preview') }}</button>
+      <button type="button" class="btn" data-act="auto-save" data-done="{{ t('fund_auto_saved') }}">{{ t('fund_auto_update') if autopilot.enabled else t('fund_auto_enable') }}</button>
+      {% if autopilot.enabled %}
+      <button type="button" class="btn-ghost" data-act="auto-run" data-done="{{ t('fund_auto_done', placed='{placed}', created='{created}', retired='{retired}', pending='{pending}', refused='{refused}') }}">{{ t('fund_auto_run') }}</button>
+      <button type="button" class="btn-ghost" data-act="auto-off" data-confirm="{{ t('fund_auto_confirm_off') }}">{{ t('fund_auto_off_btn') }}</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="fund-auto-result" data-auto-result hidden aria-live="polite"></div>
+  {% if autopilot.last_run %}{% set lr = autopilot.last_run %}
+  <p class="hint">{{ t('fund_auto_last', day=lr.day, selected=lr.selected, placed=lr.placed, pending=lr.pending, refused=lr.refused) }}</p>
+  {% endif %}
+  {% if autopilot.rules %}
+  <h4>{{ t('fund_auto_rules_title') }} <span class="hint">({{ autopilot.rules | length }})</span></h4>
+  <div class="table-scroll">
+    <table class="data-table fund-auto-rules">
+      <thead>
+        <tr><th>{{ t('fund_auto_col_model') }}</th><th>{{ t('fund_auto_col_instr') }}</th>
+            <th class="num pk-mono">{{ t('fund_rule_col_size') }}</th><th class="num pk-mono">{{ t('fund_rule_col_orders') }}</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in autopilot.rules %}{% set c = r.config %}
+        <tr class="fund-auto-rule">
+          <td class="pk-mono">{% if r.model %}{{ r.model.target }} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}{{ r.name }}{% endif %}</td>
+          <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol }}</span></td>
+          <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>
+          <td class="num pk-mono">{{ r.n_orders }}</td>
+          <td>{% if c.retired_on %}<span class="tag">{{ t('fund_auto_retired', day=c.retired_on) }}</span>{% else %}<span class="tag">{{ t('fund_auto_active') }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
 <h3>{{ t('fund_rules_title') }} <span class="hint">({{ rules | length }})</span></h3>
 <p class="hint">{{ t('fund_rules_hint') }}</p>
 {% if rules %}

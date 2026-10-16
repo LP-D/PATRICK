@@ -21,7 +21,9 @@ class World:
         self.conn, self.bh = conn, {}
         trackdb.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
         monkeypatch.setattr(trackstats, "fdr_across_targets", lambda c, alpha=0.10, **kw: {
-            "results": {t: {"significant": v[0], "p_value": v[1]} for t, v in self.bh.items()}})
+            "results": {t: {"significant": v[0], "p_value": v[1]} for t, v in self.bh.items()},
+            "n_tested": len(self.bh), "n_with_p_value": len(self.bh), "n_untestable": 0, "alpha": alpha,
+            "n_bh_significant": sum(1 for v in self.bh.values() if v[0])})
 
     def cell(self, target: str, horizon: int = 5, *, live: tuple | list | None = ("2026-10-15", 3, 0.6), suffix: str = "", dm_p: float | None = 0.01,
              bh: tuple[bool, float] = (True, 0.02), f1: float | None = None, champion=True) -> int:

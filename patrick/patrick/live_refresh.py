@@ -153,6 +153,26 @@ _stop = threading.Event()
 REFRESH_CHECK_SECONDS = 30 * 60
 
 
+def run_autopilots(db_path: str | None = None) -> list[dict]:
+    """Un cycle du pilote automatique des fonds pour chaque stratégie activée : sélection des modèles, règles, ordres
+    échus. À lancer APRÈS les prédictions du jour (il lit leurs signaux). Une erreur sur une stratégie est dans son
+    compte rendu, jamais levée ; l'appelant protège le reste."""
+    from patrick.fund import autopilot
+
+    conn = trackdb.connect(db_path)
+    try:
+        reports = autopilot.run_all(conn)
+    finally:
+        conn.close()
+    for report in reports:
+        if "error" in report:
+            logger.error("autopilot %s : %s", report["strategy_id"], report["error"])
+        else:
+            logger.info("autopilot %s : %d modèle(s), %d ordre(s) placé(s), %d en attente", report["strategy_id"],
+                        report["selected"], report["placed"], report["pending"])
+    return reports
+
+
 def refresh_status() -> dict:
     """Copie de l'état d'avancement (affiché en tête de /predictions)."""
     with _state_lock:
@@ -187,6 +207,10 @@ def _refresh_once(db_path: str | None = None) -> None:
     finally:
         with _state_lock:
             _state.update(running=False, finished_at=datetime.now(UTC).isoformat())
+    try:
+        run_autopilots(db_path)                  # les signaux du jour sont écrits : les fonds en pilote automatique les traitent
+    except Exception:
+        logger.exception("autopilot cycle failed")
 
 
 def _refresh_loop(db_path: str | None = None) -> None:

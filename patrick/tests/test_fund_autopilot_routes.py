@@ -1,0 +1,156 @@
+"""Pilote automatique du fonds : API /api/fund/strategies/{id}/autopilot*, bloc du panneau /fonds. Aucun réseau."""
+from __future__ import annotations
+
+import fund_support as fs
+import pytest
+from fastapi.testclient import TestClient
+from test_fund_selection import World
+
+from patrick.fund import systematic
+from patrick.tracking import db as trackdb
+from patrick.webapp.app import app
+
+XSS = "<script>alert(1)</script>"
+UP, DOWN = 3, 0
+SIGNALS = [("2026-01-14", UP, 0.6), ("2026-01-15", DOWN, 0.6), ("2026-01-16", UP, 0.6)]
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    fs.install(monkeypatch)
+    fs.freeze_today(monkeypatch)
+    return TestClient(app)
+
+
+@pytest.fixture
+def world(client, monkeypatch):
+    conn = trackdb.connect()
+    yield World(conn, monkeypatch)
+    conn.close()
+
+
+def url(sid: str, tail: str = "") -> str:
+    return f"/api/fund/strategies/{sid}/autopilot{tail}"
+
+
+# --------------------------------------------------------------------------- état, réglages
+
+def test_status_of_a_strategy_without_autopilot_shows_the_defaults(client):
+    sid = fs.make_strategy(client)
+
+    body = client.get(url(sid)).json()
+
+    assert body["enabled"] is False and body["last_run"] is None and body["rules"] == []
+    assert body["settings"]["tier"] == "strict" and body["settings"]["gross"] == 1.0 and body["settings"]["allow_short"] is True
+
+
+def test_unknown_strategy_is_a_404(client):
+    assert client.get(url("str_inconnue")).status_code == 404
+    assert client.put(url("str_inconnue"), json={}).status_code == 400            # configure : erreur de saisie
+    assert client.delete(url("str_inconnue")).status_code == 404
+
+
+def test_put_enables_the_autopilot_with_validated_settings(client):
+    sid = fs.make_strategy(client)
+
+    ok = client.put(url(sid), json={"tier": "large", "gross": 0.5, "max_models": 12, "allow_short": False})
+
+    assert ok.status_code == 200 and ok.json()["enabled"] is True
+    status = client.get(url(sid)).json()
+    assert status["enabled"] is True and status["settings"]["tier"] == "large" and status["settings"]["gross"] == 0.5
+    bad = client.put(url(sid), json={"gross": 9})
+    assert bad.status_code == 400 and "gross" in bad.json()["detail"]
+
+
+def test_writes_require_a_json_content_type(client):
+    sid = fs.make_strategy(client)
+
+    for call in (client.put(url(sid), content="{}", headers={"Content-Type": "text/plain"}),
+                 client.post(url(sid, "/run"), content="{}", headers={"Content-Type": "text/plain"}),
+                 client.post(url(sid, "/preview"), content="{}", headers={"Content-Type": "text/plain"})):
+        assert call.status_code == 415
+
+
+# --------------------------------------------------------------------------- aperçu
+
+def test_preview_lists_the_selected_models_and_the_exclusions_without_saving(client, world):
+    world.cell("AAPL", 3, live=SIGNALS)
+    world.cell("ZZZ", 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+
+    body = client.post(url(sid, "/preview"), json={"gross": 0.5}).json()
+
+    assert [m["target"] for m in body["selected"]] == ["AAPL"]
+    assert body["selected"][0]["notional"] == pytest.approx(body["capital"] * 0.5, abs=0.05)
+    assert [(e["target"], e["code"]) for e in body["excluded"]] == [("ZZZ", "no_quotes")]
+    assert body["excluded_summary"] == [{"code": "no_quotes", "label": "cotation indisponible", "n": 1}]
+    assert client.get(url(sid)).json()["enabled"] is False                          # rien n'est enregistré
+    assert systematic.list_rules(trackdb.connect(), sid) == []
+
+
+def test_preview_html_is_escaped_and_follows_the_query_settings(client, world):
+    world.cell("AAPL", 3, live=SIGNALS, dm_p=0.9, bh=(False, 0.9))                  # écarté en strict, retenu en large
+    world.cell(XSS, 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+
+    strict = client.get(url(sid, "/preview.html")).text
+    large = client.get(url(sid, "/preview.html?tier=large&gross=0.5&max_models=5&allow_short=0")).text
+
+    assert 'data-model="AAPL 3"' not in strict and 'data-model="AAPL 3"' in large
+    assert XSS not in strict + large and "&lt;script&gt;" in strict + large       # la cible hostile est écrasée par Jinja
+    assert client.get(url(sid, "/preview.html?gross=beaucoup")).status_code == 400
+
+
+# --------------------------------------------------------------------------- cycle
+
+def test_run_creates_the_rules_and_the_status_reports_them(client, world):
+    world.cell("AAPL", 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+    client.put(url(sid), json={})
+
+    report = client.post(url(sid, "/run"), json={}).json()
+
+    assert report["selected"] == 1 and len(report["created"]) == 1 and report["rules"] == 1
+    status = client.get(url(sid)).json()
+    assert status["last_run"]["selected"] == 1 and status["last_run"]["day"] == "2026-01-16"
+    (rule,) = status["rules"]
+    assert rule["name"] == "Auto · AAPL h3" and rule["config"]["managed"]["by"] == "autopilot"
+
+
+def test_run_on_a_strategy_without_autopilot_is_a_400(client):
+    sid = fs.make_strategy(client)
+
+    res = client.post(url(sid, "/run"), json={})
+
+    assert res.status_code == 400 and "pilote" in res.json()["detail"]
+
+
+def test_delete_disables_the_autopilot_and_removes_its_rules(client, world):
+    world.cell("AAPL", 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+    client.put(url(sid), json={})
+    client.post(url(sid, "/run"), json={})
+
+    out = client.delete(url(sid))
+
+    assert out.status_code == 200 and out.json() == {"removed_rules": 1}
+    assert client.get(url(sid)).json()["enabled"] is False and client.get(url(sid)).json()["rules"] == []
+
+
+# --------------------------------------------------------------------------- panneau
+
+def test_the_panel_offers_the_autopilot_and_keeps_manual_rules_apart(client, world):
+    world.cell("AAPL", 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+
+    off = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert 'data-act="auto-preview"' in off and 'data-act="auto-save"' in off
+    assert 'data-act="auto-run"' not in off and 'data-act="auto-off"' not in off
+
+    client.put(url(sid), json={})
+    client.post(url(sid, "/run"), json={})
+    on = client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert 'data-act="auto-run"' in on and 'data-act="auto-off"' in on
+    assert 'class="fund-auto-rule"' in on and "AAPL h3 · XGBoost" in on     # listée dans le bloc du pilote
+    assert on.count('class="fund-rule"') == 0                              # et pas dans le tableau des règles manuelles

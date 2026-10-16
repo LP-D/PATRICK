@@ -48,6 +48,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     PredictOutcome,
     RunSummary,
     find_predictable_candidates,
+    run_autopilots,
     run_daily_predictions,
 )
 from patrick.tracking import db as trackdb
@@ -176,6 +177,13 @@ def main(argv: list[str] | None = None) -> int:
         drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
         print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "
               f"{drift_report['skipped_fresh']} à jour, {drift_report['deferred']} reportée(s) à demain.")
+    try:
+        for report in run_autopilots(args.db_path):
+            print(f"Pilote automatique {report['strategy_id']} : "
+                  + (f"ERREUR {report['error']}" if "error" in report else
+                     f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
+    except Exception:
+        logger.exception("AUTOPILOT FAIL")               # n'arrête rien et ne change pas le code de sortie
     return 1 if summary.failures else 0
 
 

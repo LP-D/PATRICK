@@ -3,6 +3,7 @@
    le serveur, échappé : GET /api/fund/strategies/{id}/panel), puis :
    - graphique de la valeur (canvas HiDPI, couleurs lues dans les jetons CSS au dessin) ;
    - règles automatiques : créer, appliquer, supprimer (/api/fund/.../rules, /api/fund/rules/{id}/apply) ;
+   - pilote automatique : prévisualiser (fragment HTML rendu serveur), activer, appliquer, désactiver (/api/fund/.../autopilot*) ;
    - Ajuster / Corriger / Supprimer une position, renommer / archiver / supprimer la stratégie,
      tous via /api/fund/* ; les refus de règle (422) s'affichent dans le formulaire. */
 (function () {
@@ -256,6 +257,56 @@
             setBusy(send, false);
         }
     });
+    /* ---- pilote automatique : réglages lus dans le bloc, aperçu = fragment HTML rendu serveur (échappé par Jinja) ---- */
+    function autoSettings(box) {
+        var out = {};
+        box.querySelectorAll("[data-auto-field]").forEach(function (el) {
+            if (el.type === "checkbox") out[el.name] = el.checked;
+            else if (el.name === "gross") out.gross = Number(el.value) / 100;
+            else if (el.name === "max_models") out.max_models = Number(el.value);
+            else out[el.name] = el.value;
+        });
+        return out;
+    }
+    function fill(template, values) {
+        return template.replace(/\{(\w+)\}/g, function (m, key) { return values[key] === undefined ? m : values[key]; });
+    }
+    async function autoAct(btn, act) {
+        var box = btn.closest(".fund-auto");
+        var base = "/api/fund/strategies/" + encodeURIComponent(box.getAttribute("data-strategy-id")) + "/autopilot";
+        if (act === "auto-preview") {
+            var query = new URLSearchParams(), settings = autoSettings(box);
+            Object.keys(settings).forEach(function (k) {
+                query.set(k, settings[k] === true ? "1" : settings[k] === false ? "0" : String(settings[k]));
+            });
+            var res = await fetch(base + "/preview.html?" + query.toString());
+            if (!res.ok) {
+                var data = {};
+                try { data = await res.json(); } catch (err) { data = {}; }
+                throw new Error(typeof data.detail === "string" ? data.detail : "HTTP " + res.status);
+            }
+            var out = box.querySelector("[data-auto-result]");
+            out.innerHTML = await res.text();            // fragment rendu serveur, échappé par Jinja
+            out.hidden = false;
+            setBusy(btn, false);
+        } else if (act === "auto-save") {
+            await call(base, "PUT", autoSettings(box));
+            say(btn.getAttribute("data-done"), "info");
+            setBusy(btn, false);
+            open(current);
+        } else if (act === "auto-run") {
+            var report = await call(base + "/run", "POST", {});
+            say(fill(btn.getAttribute("data-done"), {
+                placed: report.placed, created: report.created.length, retired: report.retired.length,
+                pending: report.pending, refused: report.refused.length }), report.refused.length ? "error" : "info");
+            setBusy(btn, false);
+            open(current);
+        } else {
+            await call(base, "DELETE");
+            open(current);
+        }
+    }
+
     panel.addEventListener("click", async function (e) {
         var btn = e.target.closest("[data-act]");
         if (!btn) return;
@@ -294,6 +345,8 @@
                 say(ruleResult(result), result.refused.length ? "error" : "info");
                 setBusy(btn, false);
                 open(current);
+            } else if (act.indexOf("auto-") === 0) {
+                await autoAct(btn, act);
             } else if (act === "delete-rule") {
                 await call("/api/fund/rules/" + encodeURIComponent(btn.getAttribute("data-rule-id")), "DELETE");
                 open(current);

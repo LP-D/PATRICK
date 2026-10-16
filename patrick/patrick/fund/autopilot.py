@@ -196,13 +196,29 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
                                  for code, n in counts.items()]}
 
 
-def preview(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None) -> dict:
-    """Ce que le pilote ferait aujourd'hui avec les réglages enregistrés (ou ceux par défaut) : rien n'est écrit."""
+def preview(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None,
+            settings: Settings | None = None) -> dict:
+    """Ce que le pilote ferait aujourd'hui avec `settings` (sinon les réglages enregistrés, sinon ceux par défaut) :
+    rien n'est écrit."""
     strategy = store.get_strategy(conn, strategy_id)
     if strategy is None:
         raise store.FundError("stratégie introuvable")
+    if settings is None:
+        settings = Settings.from_dict((store.get_autopilot(conn, strategy_id) or {}).get("settings"))
+    return build_plan(conn, strategy, settings, service._today(today))
+
+
+def status(conn: sqlite3.Connection, strategy_id: str, rules: list[dict] | None = None) -> dict:
+    """État du pilote d'une stratégie : activé ou non, réglages (par défaut si jamais configuré), dernier cycle, règles du
+    pilote (résumés de `systematic.rule_summaries`, passés par l'appelant s'il les a déjà)."""
+    if store.get_strategy(conn, strategy_id) is None:
+        raise store.FundError("stratégie introuvable")
     stored = store.get_autopilot(conn, strategy_id) or {}
-    return build_plan(conn, strategy, Settings.from_dict(stored.get("settings")), service._today(today))
+    if rules is None:
+        rules = systematic.rule_summaries(conn, strategy_id)
+    return {"enabled": bool(stored.get("enabled")), "settings": Settings.from_dict(stored.get("settings")).to_dict(),
+            "last_run": stored.get("last_run"),
+            "rules": [r for r in rules if (r["config"].get("managed") or {}).get("by") == MANAGER]}
 
 
 # --------------------------------------------------------------------------- cycle

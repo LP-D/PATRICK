@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from patrick.fund import instruments, service, store, systematic
+from patrick.fund import autopilot, instruments, service, store, systematic
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
 from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty, symbol_groups
@@ -156,10 +156,13 @@ def register(app: FastAPI, templates, context) -> None:
 
         def run(conn):
             snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
-            return snap, systematic.rule_summaries(conn, strategy_id), systematic.available_models(conn)
-        snap, rules, models = _call(run)
+            rules = systematic.rule_summaries(conn, strategy_id)
+            return snap, rules, systematic.available_models(conn), autopilot.status(conn, strategy_id, rules)
+        snap, rules, models, auto = _call(run)
+        manual = [r for r in rules if not (r["config"].get("managed") or {}).get("by")]     # celles du pilote : dans son bloc
         return templates.TemplateResponse(request, "_fund_panel.html", {
-            "snap": snap, "rules": rules, "models": models, "today": today.isoformat(), **context(request)})
+            "snap": snap, "rules": manual, "models": models, "autopilot": auto, "today": today.isoformat(),
+            **context(request)})
 
     # ---------------------------------------------------------------- API
 
@@ -269,3 +272,71 @@ def register(app: FastAPI, templates, context) -> None:
                 raise HTTPException(status_code=404, detail="Règle introuvable")
             return {"ok": True}
         return _call(run)
+
+    # ------------------------------------------------- pilote automatique (sélection des modèles + cycle quotidien)
+
+    def _query_settings(params) -> dict:
+        """Réglages passés dans l'adresse de l'aperçu (`?tier=large&gross=0.5&max_models=10&allow_short=0`)."""
+        raw: dict = {}
+        for key in ("gross", "min_confidence", "alpha_dm", "alpha_bh"):
+            if key in params:
+                try:
+                    raw[key] = float(params[key])
+                except ValueError as exc:
+                    raise store.FundError(f"{key} invalide : nombre attendu ({params[key]!r})") from exc
+        for key in ("fresh_days", "max_models"):
+            if key in params:
+                try:
+                    raw[key] = int(params[key])
+                except ValueError as exc:
+                    raise store.FundError(f"{key} invalide : entier attendu ({params[key]!r})") from exc
+        if "tier" in params:
+            raw["tier"] = params["tier"]
+        if "allow_short" in params:
+            raw["allow_short"] = params["allow_short"].strip().lower() in ("1", "true", "on", "oui")
+        return raw
+
+    @app.get("/api/fund/strategies/{strategy_id}/autopilot")
+    def api_autopilot_status(strategy_id: str):
+        def run(conn):
+            _require_strategy(conn, strategy_id)
+            return autopilot.status(conn, strategy_id)
+        return _call(run)
+
+    @app.put("/api/fund/strategies/{strategy_id}/autopilot")
+    async def api_autopilot_configure(request: Request, strategy_id: str):
+        """Active le pilote avec ces réglages (les absents prennent leur défaut)."""
+        return await run_in_threadpool(_call, autopilot.configure, strategy_id, await _json_body(request))
+
+    @app.delete("/api/fund/strategies/{strategy_id}/autopilot")
+    def api_autopilot_disable(strategy_id: str):
+        def run(conn):
+            _require_strategy(conn, strategy_id)
+            return autopilot.disable(conn, strategy_id)
+        return _call(run)
+
+    @app.post("/api/fund/strategies/{strategy_id}/autopilot/run")
+    async def api_autopilot_run(request: Request, strategy_id: str):
+        await _json_body(request)
+        return await run_in_threadpool(_call, autopilot.run, strategy_id, service.current_date())
+
+    @app.post("/api/fund/strategies/{strategy_id}/autopilot/preview")
+    async def api_autopilot_preview(request: Request, strategy_id: str):
+        """Sélection, instruments et tailles que le pilote appliquerait ; corps vide = réglages enregistrés."""
+        body = await _json_body(request)
+
+        def run(conn):
+            settings = autopilot.Settings.from_dict(body) if body else None
+            return autopilot.preview(conn, strategy_id, service.current_date(), settings)
+        return await run_in_threadpool(_call, run)
+
+    @app.get("/api/fund/strategies/{strategy_id}/autopilot/preview.html")
+    async def api_autopilot_preview_html(request: Request, strategy_id: str):
+        """Fragment HTML (rendu serveur, échappé) de l'aperçu, pour le panneau de /fonds."""
+        params = dict(request.query_params)
+
+        def run(conn):
+            settings = autopilot.Settings.from_dict(_query_settings(params)) if params else None
+            return autopilot.preview(conn, strategy_id, service.current_date(), settings)
+        plan = await run_in_threadpool(_call, run)
+        return templates.TemplateResponse(request, "_fund_autopilot_preview.html", {"plan": plan, **context(request)})

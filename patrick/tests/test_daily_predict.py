@@ -242,3 +242,34 @@ def test_nightly_drift_remeasures_only_stale_or_unmeasured_pairs(tmp_path):
     report = daily_predict.remeasure_stale_drift(cands, db_path=db_path, measure_fn=fake_measure,
                                                  today=dt.date(2026, 9, 26), limit=1)
     assert len(measured) == 1 and report["deferred"] == 2
+
+
+def test_main_runs_the_fund_autopilots_after_the_predictions(tmp_path, monkeypatch):
+    mod = daily_predict
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    calls: list[str] = []
+    cand = mod.PredictCandidate("^GSPC", 5, "run1", 1, "a.joblib")
+    monkeypatch.setattr(mod, "find_predictable_candidates", lambda conn: [cand])
+    monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: (
+        calls.append("predictions"), mod.RunSummary())[1])
+    monkeypatch.setattr(mod, "run_autopilots", lambda path=None: calls.append("autopilot") or [])
+
+    code = mod.main(["--db-path", db_path, "--no-drift"])
+
+    assert code == 0 and calls == ["predictions", "autopilot"]
+
+
+def test_main_survives_a_failing_autopilot(tmp_path, monkeypatch):
+    mod = daily_predict
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    cand = mod.PredictCandidate("^GSPC", 5, "run1", 1, "a.joblib")
+    monkeypatch.setattr(mod, "find_predictable_candidates", lambda conn: [cand])
+    monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: mod.RunSummary())
+
+    def failing(path=None):
+        raise RuntimeError("boum")
+    monkeypatch.setattr(mod, "run_autopilots", failing)
+
+    assert mod.main(["--db-path", db_path, "--no-drift"]) == 0              # le code de sortie reste celui des prédictions
