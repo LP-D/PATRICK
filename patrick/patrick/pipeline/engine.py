@@ -1956,14 +1956,24 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
                                      universe=st.universe)
     if holdout_eval is None:
         return None
-    if best_trial_id is not None:
-        trackdb.add_fold_metrics(st.conn, best_trial_id, fold_index=0, split="holdout",
-                                 metrics=holdout_eval["metrics"])
-        trackdb.add_predictions(st.conn, best_trial_id, fold_index=0, split="holdout",
-                                ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
-                                y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"],
-                                p_up=holdout_eval.get("p_up"))
+    persist_holdout(st, best_trial_id, holdout_eval)
     return holdout_eval
+
+
+def persist_holdout(st: _RunState, trial_id: int | None, holdout_eval: dict) -> bool:
+    """Écrit le holdout d'un essai (métriques + prédictions) une seule fois. Avant, seul le gagnant GLOBAL d'un lancement l'avait : sur un
+    lancement de N horizons, N-1 runs n'avaient aucun holdout dans leur entête (0,85 horizon par lancement en moyenne), alors que le duel
+    des champions évaluait chaque horizon. Renvoie vrai si quelque chose a été écrit."""
+    if trial_id is None:
+        return False
+    if st.conn.execute("SELECT 1 FROM fold_metric WHERE trial_id = ? AND split = 'holdout' LIMIT 1", (trial_id,)).fetchone():
+        return False
+    trackdb.add_fold_metrics(st.conn, trial_id, fold_index=0, split="holdout", metrics=holdout_eval["metrics"])
+    trackdb.add_predictions(st.conn, trial_id, fold_index=0, split="holdout",
+                            ts=holdout_eval["test_dates"], y_true=holdout_eval["y_true"],
+                            y_pred=holdout_eval["y_pred"], y_proba=holdout_eval["y_proba"],
+                            p_up=holdout_eval.get("p_up"))
+    return True
 
 
 def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict | None) -> dict | None:
