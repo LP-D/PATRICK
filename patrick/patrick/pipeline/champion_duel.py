@@ -113,7 +113,14 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool, st.config,
         st.all_dates_full, st.n_wf, best_h, st.seed, universe=st.universe)
     if chal_eval is not None and known_eval is None:
-        engine.persist_holdout(st, trial_id, chal_eval)    # le holdout de CET horizon fait partie du run, qu'il gagne le duel ou non
+        # Le holdout de CET horizon fait partie du run, qu'il gagne le duel ou non. `getattr` : un worker démarré avant la mise à jour garde
+        # l'ancien `engine` en mémoire (sans `persist_holdout`) mais charge ce module-ci à la fin du run ; le duel ne doit pas en échouer.
+        persist = getattr(engine, "persist_holdout", None)
+        if persist is not None:
+            try:
+                persist(st, trial_id, chal_eval)
+            except Exception:  # noqa: BLE001 -- enregistrer le holdout est de l'archivage : il ne doit jamais empêcher le duel
+                traceback.print_exc()
     chal_f1 = _f1(chal_eval)
     chal_reason = suspicion.suspect_reason((chal_eval or {}).get("metrics"))
     if chal_reason:
