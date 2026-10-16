@@ -64,6 +64,9 @@ include = ["patrick*"]
 # l'horodatage local voulu des sauvegardes). Plus aucune règle ignorée
 # globalement : toute nouvelle violation bloque la CI.
 ignore = []
+# DTZ (datetimes sans fuseau) est explicite : ruff 0.16 l'activait par défaut, pas ruff 0.17 -- sans cette ligne
+# les `noqa: DTZ00x` ci-dessus passaient en local et échouaient en CI (RUF100, règle non activée).
+extend-select = ["DTZ"]
 
 [tool.pytest.ini_options]
 # Rapport de correction, D1 : la suite complète (26 fichiers, ~130 tests)
