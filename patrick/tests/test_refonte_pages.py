@@ -148,7 +148,7 @@ def test_headline_metrics_come_first_and_folds_are_collapsed_after_five(seeded):
 
 
 def test_collapsible_rows_only_when_they_are_worth_hiding():
-    components = Path("patrick/webapp/templates/_components.html").read_text(encoding="utf-8")
+    components = Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates" / "_components.html".read_text(encoding="utf-8")
     env = Environment(loader=DictLoader({"c.html": components}))
     tpl = env.from_string('{% from "c.html" import data_table %}{{ data_table(h, rows, collapse_after=5) }}')
     few = tpl.render(h=["a"], rows=[[i] for i in range(6)])
