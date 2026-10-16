@@ -206,6 +206,57 @@ def test_the_challengers_known_holdout_evaluation_is_reused(setup):
     assert [c["algo"] for c in setup.calls] == ["ChampAlgo"]
 
 
+def _drift_rows(conn):
+    return conn.execute(
+        "SELECT feature, reference_json, computed_at FROM drift_feature_reference "
+        "WHERE symbol = '^TEST' AND horizon = ? ORDER BY feature", (H,)).fetchall()
+
+
+@pytest.fixture
+def drift(setup):
+    """The champion's drift reference (features a, b), then the challenger's export overwrites it
+    (a changed, c new) -- `export_best_model` does that BEFORE the duel. `st.drift_reference_before` is
+    what `engine._export_models` remembered right before that export."""
+    conn = setup.conn
+    trackdb.save_drift_reference(conn, "^TEST", H, "a", {"edges": [0, 1]})
+    trackdb.save_drift_reference(conn, "^TEST", H, "b", {"edges": [0, 2]})
+    before = _drift_rows(conn)
+    setup.st.drift_reference_before = {H: before}
+    trackdb.save_drift_reference(conn, "^TEST", H, "a", {"edges": [9, 9]})
+    trackdb.save_drift_reference(conn, "^TEST", H, "c", {"edges": [7, 7]})
+    return SimpleNamespace(before=before, after_export=_drift_rows(conn))
+
+
+def test_a_rejected_challenger_gives_the_drift_reference_back_to_the_champion(setup, drift):
+    setup.scores["ChalAlgo"] = 0.50
+
+    assert _duel(setup)["decision"] == "champion_wins"
+
+    assert _drift_rows(setup.conn) == drift.before  # a back to the champion's, c (challenger only) gone
+    assert not _run_exists(setup.conn, "chal_run")
+
+
+def test_a_winning_challenger_keeps_the_drift_reference_of_its_export(setup, drift):
+    assert _duel(setup)["decision"] == "challenger_wins"
+    assert _drift_rows(setup.conn) == drift.after_export
+
+
+def test_an_unjudged_challenger_keeps_the_drift_reference_of_its_export(setup, drift):
+    """Nothing is pruned when the duel cannot compare: the challenger is still the latest run, the one the
+    app uses -- its own reference is the right one."""
+    setup.scores["ChalAlgo"] = None
+    assert _duel(setup)["decision"] == "not_compared"
+    assert _drift_rows(setup.conn) == drift.after_export
+
+
+def test_a_run_without_a_remembered_reference_leaves_the_table_alone(setup, drift):
+    """No snapshot (a state built by hand, a run without export): nothing to put back."""
+    del setup.st.drift_reference_before
+    setup.scores["ChalAlgo"] = 0.50
+    assert _duel(setup)["decision"] == "champion_wins"
+    assert _drift_rows(setup.conn) == drift.after_export
+
+
 def test_a_suspect_challenger_never_takes_the_title(setup):
     """F1_dir 0.99 = fuite de données (data/alignment.py), pas une performance."""
     setup.scores["ChalAlgo"] = 0.99
