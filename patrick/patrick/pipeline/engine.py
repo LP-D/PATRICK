@@ -1373,6 +1373,9 @@ class _RunState:
     screen_ctx: _FoldContext | None = None  # total-window screening: ONE window = the whole out-of-sample span
     screen_rows: dict[tuple[int, str], list[dict]] = field(default_factory=dict)
     screening_finalists: dict[tuple[int, str], set[tuple[int, str, str]]] = field(default_factory=dict)
+    # Drift references of each horizon as they were just before this run's export replaced them: the
+    # champion duel puts them back if the challenger is rejected (`champion_duel.duel_and_promote`).
+    drift_reference_before: dict[int, list[tuple]] = field(default_factory=dict)
 
     @property
     def is_walkforward(self) -> bool:
@@ -1917,6 +1920,8 @@ def _export_models(st: _RunState, final_best_by_horizon: dict[int, dict]) -> tup
     trial_id_by_horizon: dict[int, int] = {}
     for horizon, best_h in final_best_by_horizon.items():
         t_start = time.time()
+        st.drift_reference_before[horizon] = trackdb.get_drift_references(
+            st.conn, st.config.objective.target_symbol, horizon)
         h_model_path = export_best_model(full_pool, st.target_col, export_features, st.config, best_h,
                                          st.config.output.dir, seed=st.seed,
                                          interaction_formulas=interaction_formulas,

@@ -50,20 +50,28 @@ def _config(tmp_path, name: str, families: list[str]) -> RunConfig:
     })
 
 
-def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch):
+FULL = ["technical", "interactions", "spike", "vol_models", "macro"]
+LIGHT = ["technical", "macro"]
+
+
+# Both orders: whichever side wins on the holdout, the table must end up describing the model in title.
+@pytest.mark.parametrize("first_families, second_families", [(FULL, LIGHT), (LIGHT, FULL)], ids=["full-then-light", "light-then-full"])
+def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch, first_families, second_families):
     db_path = str(tmp_path / "patrick.db")
     monkeypatch.setenv("PATRICK_DB_PATH", db_path)
     store = DataStore(root=str(tmp_path / "store"))
     store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
 
-    first = run_pipeline(_config(tmp_path, "first", ["technical", "interactions", "spike", "vol_models", "macro"]),
+    first = run_pipeline(_config(tmp_path, "first", first_families),
                          store=store, db_path=db_path)
     assert first["champions"][5]["decision"] == "promoted_first"
     conn = trackdb.connect(db_path)
     first_run = champions.current(conn, TARGET, 5)["run_id"]
+    drift_after_first = trackdb.get_drift_references(conn, TARGET, 5)
     conn.close()
+    assert drift_after_first
 
-    second = run_pipeline(_config(tmp_path, "second", ["technical", "macro"]), store=store, db_path=db_path)
+    second = run_pipeline(_config(tmp_path, "second", second_families), store=store, db_path=db_path)
 
     decision = second["champions"][5]
     assert decision["decision"] in ("challenger_wins", "champion_wins"), decision
@@ -84,5 +92,14 @@ def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch):
         assert duel["challenger"]["f1_dir"] == pytest.approx(decision["challenger_f1_dir"])
         assert duel["holdout_start"] < duel["holdout_end"]
         assert conn.execute("SELECT COUNT(*) FROM trial_registry WHERE run_id = ?", (loser,)).fetchone()[0] > 0
+
+        # The drift reference (one per symbol/horizon, replaced by every export) belongs to the model that
+        # stays in title, whichever run exported last.
+        drift_now = trackdb.get_drift_references(conn, TARGET, 5)
+        if loser == first_run:  # the challenger took the title: its export's reference stands
+            assert {row[0] for row in drift_now} >= set(
+                champions.model_meta(champions.best_trial(conn, in_title["run_id"])["artifact_path"])["feature_names"])
+        else:  # the challenger was rejected: its export left no trace
+            assert drift_now == drift_after_first
     finally:
         conn.close()
