@@ -7,7 +7,9 @@ import sys
 
 
 def _run(code: str) -> str:
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    # Le message d'erreur du sous-processus fait partie de l'échec : sans lui, la CI n'affichait que « code de sortie 1 ».
+    assert proc.returncode == 0, f"code de sortie {proc.returncode}\n--- stderr ---\n{proc.stderr}\n--- stdout ---\n{proc.stdout}"
     return proc.stdout.strip()
 
 

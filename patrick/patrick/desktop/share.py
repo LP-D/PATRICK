@@ -197,7 +197,9 @@ def apply(folder: str | None, *, wealth_reference: bool | None = None, schedule:
         schedule = False
     prefs.mark_setup_done()
 
-    if schedule is not None and not (schedule is False and os.name != "nt"):
+    # Supprimer la tâche n'a de sens que là où elle peut exister : `task_status()["supported"]` (faux hors Windows, vrai avec la fausse tâche des
+    # tests) plutôt que `os.name`, sinon la CI Linux ne la supprimait jamais et les tests de partage échouaient.
+    if schedule is not None and not (schedule is False and not sync.task_status().get("supported", True)):
         try:
             if schedule:
                 sync.register_task()
