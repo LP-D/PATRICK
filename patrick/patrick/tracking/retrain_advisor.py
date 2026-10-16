@@ -26,17 +26,31 @@ from patrick.config import defaults as D
 from patrick.config import training_profiles as profiles
 
 # Seuils (AUC multiclasse un-contre-tous sur 4 classes : le hasard vaut 0,50).
+#
+# Calibrés sur la base du 2026-10-16 (614 runs terminés, 6 222 essais de scan dont 4 763 avec diagnostic holdout) ; les écarts
+# « dans un même run » comparent les essais d'un run entre eux, donc à cible et à période égales :
+# - AUC de test : médiane 0,530 (p10 0,506, p90 0,591) ; AUC holdout : médiane 0,528 ; écart test - holdout : médiane +0,003, p90 +0,050 ;
+# - Jaccard de sélection : médiane 0,20 (p10 0,085, p90 0,355) : l'ancien seuil 0,40 écartait 94 % des runs ;
+# - l'écart de F1 à la persistance prédit le holdout bien mieux que la dispersion des folds (corrélation avec l'AUC holdout : +0,56
+#   contre +0,35, et la dispersion monte avec le signal, elle n'en mesure pas l'instabilité).
 CHANCE_AUC = 0.53          # en dessous : pas de signal
 GOOD_AUC = 0.58            # au-dessus : signal net
 GAP_AUC = 0.05             # écart test -> holdout au-delà duquel on soupçonne la sur-sélection
 GAP_F1 = 0.08
 FOLD_STD_AUC = 0.05        # dispersion des folds jugée instable
 TREND_AUC = 0.04           # différence première/seconde moitié des folds
-JACCARD_MIN = 0.40         # `selection.stability.MIN_MEAN_JACCARD_WARNING`
+JACCARD_MIN = 0.12         # ~ p20 : en dessous, AUC holdout moyenne 0,526 contre 0,545 au-dessus (`selection.stability` avertit à 0,40)
 SHORT_HISTORY_YEARS = 8.0
-EXCLUSION_FRAC = 0.20
+EXCLUSION_FRAC = 0.30      # = la porte de qualité des données (`DEFAULT_QUALITY_MAX_UNIVERSE_EXCLUSION_FRAC`) ; au-delà, pas de dégât mesuré avant
 IMBALANCE_RATIO = 2.2      # plus grosse classe / plus petite classe
 SLOW_RUN_S = 3600.0
+PERSISTENCE_EDGE_MIN = 0.0   # F1 directionnel moins F1 de la persistance : en dessous, le « signal » n'est que de l'inertie
+# Algorithmes à retenir pour donner plus de capacité : écart d'AUC holdout à la moyenne du run (essais de scan comparés dans un même
+# run) RandomForest +0,011, CatBoost +0,003, XGBoost -0,000, GradientBoosting -0,005, LightGBM -0,011 (F1 directionnel : aucun écart).
+CAPACITY_ALGOS = ["RandomForest", "CatBoost", "XGBoost"]
+# Grille du nombre de variables : plus de variables, meilleur holdout dans la plage observée (AUC holdout relative au run : -0,005 pour
+# 6 variables ou moins, +0,004 pour 12 à 16).
+CAPACITY_FEATURE_GRID = "10,12,14,16"
 
 COST_LABEL = {0: "low", 1: "medium", 2: "high"}
 
@@ -210,6 +224,22 @@ def _rule_signal_absent(d: Diagnosis) -> Suggestion | None:
                        "horizons": ", ".join(str(h) for h in _next_horizons(d.horizon))})
 
 
+def _rule_no_edge(d: Diagnosis) -> Suggestion | None:
+    """Le F1 directionnel ne bat pas la persistance (« le mouvement d'hier se répète ») alors que l'AUC n'est pas franchement bonne :
+    ce qui ressemble à un signal est de l'inertie. C'est le meilleur prédicteur du holdout de toute la base (corrélation +0,56 avec
+    l'AUC holdout) : parmi les runs d'AUC de test >= 0,53, l'AUC holdout moyenne vaut 0,539 sans gain contre 0,571 avec gain."""
+    edge = d.edge_vs_persistence
+    if d.suspect or edge is None or edge > PERSISTENCE_EDGE_MIN:
+        return None
+    if d.auc_test is not None and (d.auc_test < CHANCE_AUC or d.auc_test >= GOOD_AUC):       # < CHANCE : « signal_absent » le dit déjà
+        return None
+    if d.auc_holdout is not None and d.auc_holdout >= GOOD_AUC:
+        return None
+    return Suggestion("no_edge", _clip(44 - edge * 300, 0, 64), {"horizons": _next_horizons(d.horizon)},
+                      {"f1": d.f1_test, "persistence": d.persistence_f1, "edge": _signed(edge), "auc": d.auc_test,
+                       "horizons": ", ".join(str(h) for h in _next_horizons(d.horizon))})
+
+
 def _rule_overfit(d: Diagnosis) -> Suggestion | None:
     if d.suspect:
         return None
@@ -229,8 +259,11 @@ def _rule_overfit(d: Diagnosis) -> Suggestion | None:
     if not reasons:
         return None
     cur = d.view
+    # La grille du nombre de variables n'est PLUS réduite : dans un même run, les essais à 6 variables ou moins ont un AUC holdout
+    # inférieur de 0,005 à la moyenne du run, ceux à 12-16 variables supérieur de 0,004 ; l'écart test / holdout vient surtout du holdout
+    # lui-même (corrélation -0,71 avec l'AUC holdout, -0,03 avec l'AUC de test), pas d'un modèle trop riche.
     return Suggestion("overfit", _clip(50 + severity, 0, 92), {
-        "n_features_grid": "5,6,7,8,9,10", "n_trials": min(int(cur.get("n_trials") or 100), 50), "top_k": 1,
+        "n_trials": min(int(cur.get("n_trials") or 100), 50), "top_k": 1,
         "holdout_months": max(int(cur.get("holdout_months") or 15), 18), "embargo_enabled": True, "purge": True},
         {"gap_auc": _signed(d.gap_auc), "gap_f1": _signed(d.gap_f1), "rho": _signed(d.rho_test_holdout), "pbo": d.pbo,
          "signals": ", ".join(reasons)})
@@ -255,7 +288,7 @@ def _rule_unstable_features(d: Diagnosis) -> Suggestion | None:
     if d.suspect or d.jaccard is None or d.jaccard != d.jaccard or d.jaccard >= JACCARD_MIN:
         return None
     method = d.view.get("selection_method", "shap")
-    return Suggestion("unstable_features", _clip(45 + (JACCARD_MIN - d.jaccard) * 200, 0, 78), {
+    return Suggestion("unstable_features", _clip(40 + (JACCARD_MIN - d.jaccard) * 250, 0, 62), {
         "reduction_corr_threshold": 0.85, "selection_method": "lasso" if method == "shap" else "shap", "shap_sample": 1000},
         {"jaccard": d.jaccard, "threshold": f"{JACCARD_MIN:.2f}", "method": method})
 
@@ -269,12 +302,12 @@ def _rule_more_capacity(d: Diagnosis) -> Suggestion | None:
         return None
     cur = d.view
     small = (not cur.get("tuning_enabled", True) or int(cur.get("n_trials") or 100) < 150 or int(cur.get("top_k") or 1) < 2
-             or len(cur.get("algos") or []) < 4 or not cur.get("stacking"))
+             or not set(CAPACITY_ALGOS) <= set(cur.get("algos") or []) or not cur.get("stacking"))
     if not small:
         return None
     return Suggestion("more_capacity", 52, {
-        "algos": list(D.ALL_ML_ALGOS), "stacking": True, "tuning_enabled": True, "n_trials": max(150, int(cur.get("n_trials") or 100)),
-        "top_k": 3}, {"auc": d.auc_test, "gap": _signed(d.gap_auc), "std": d.fold_std})
+        "algos": list(CAPACITY_ALGOS), "n_features_grid": CAPACITY_FEATURE_GRID, "stacking": True, "tuning_enabled": True,
+        "n_trials": max(150, int(cur.get("n_trials") or 100)), "top_k": 3}, {"auc": d.auc_test, "gap": _signed(d.gap_auc), "std": d.fold_std})
 
 
 def _rule_deep_learning(d: Diagnosis) -> Suggestion | None:
@@ -297,7 +330,7 @@ def _rule_data_degraded(d: Diagnosis) -> Suggestion | None:
     if d.n_universe <= 0 or d.n_excluded / d.n_universe < EXCLUSION_FRAC:
         return None
     frac = d.n_excluded / d.n_universe
-    return Suggestion("data_degraded", _clip(48 + (frac - EXCLUSION_FRAC) * 120, 0, 75), {"yf_coverage": 0.75},
+    return Suggestion("data_degraded", _clip(40 + (frac - EXCLUSION_FRAC) * 60, 0, 50), {"yf_coverage": 0.75},
                       {"excluded": d.n_excluded, "universe": d.n_universe, "frac": _pct(frac)})
 
 
@@ -333,7 +366,9 @@ def _rule_confirm_cpcv(d: Diagnosis) -> Suggestion | None:
 def _rule_try_alpha(d: Diagnosis) -> Suggestion | None:
     if d.suspect or d.kind != "raw" or not d.is_equity_like or d.auc_test is None or d.auc_test >= 0.57:
         return None
-    return Suggestion("try_alpha", 41, {"target_kind": "alpha"}, {"auc": d.auc_test, "asset_class": d.asset_class})
+    # Rétrogradée (41 -> 18) : sur les actions, les runs alpha (24) font un AUC de test médian de 0,522 contre 0,533 pour les runs bruts
+    # (303), AUC holdout 0,509 contre 0,524, F1 holdout 0,483 contre 0,508 : aucun gain mesuré, à n'essayer que par curiosité.
+    return Suggestion("try_alpha", 18, {"target_kind": "alpha"}, {"auc": d.auc_test, "asset_class": d.asset_class})
 
 
 def _rule_best_horizon(d: Diagnosis) -> Suggestion | None:
@@ -365,7 +400,7 @@ def _rule_robustness_seed(d: Diagnosis) -> Suggestion | None:
     return Suggestion("seed_check", 25, {"seed": seed + 1}, {"seed": seed})
 
 
-RULES = (_rule_fix_leak, _rule_signal_absent, _rule_overfit, _rule_unstable_folds, _rule_unstable_features, _rule_more_capacity,
+RULES = (_rule_fix_leak, _rule_signal_absent, _rule_no_edge, _rule_overfit, _rule_unstable_folds, _rule_unstable_features, _rule_more_capacity,
          _rule_deep_learning, _rule_short_history, _rule_data_degraded, _rule_class_balance, _rule_calibrate, _rule_confirm_cpcv,
          _rule_try_alpha, _rule_best_horizon, _rule_faster_iteration, _rule_robustness_seed)
 
@@ -435,7 +470,9 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     pbo = detail.get("pbo") or {}
     stab = detail.get("feature_stability") or {}
     diag_ho = detail.get("holdout_diag") or {}
-    issues = [i for i in detail.get("quality_issues") or [] if i.get("reason") != trackdb.ALIGNMENT_REASON]
+    # Séries distinctes ayant un problème, pas lignes de problèmes : une série en porte plusieurs (couverture, trou, prix figés...), et
+    # le rapport lignes / univers dépassait 1 (p90 : 1,8) ; il vaut médiane 0,17 / p90 0,21 une fois compté en séries.
+    issues = {i.get("series") for i in detail.get("quality_issues") or [] if i.get("reason") != trackdb.ALIGNMENT_REASON}
     uni = cfg.get("universe", {})
 
     first = (history or {}).get(symbol, {}).get("first")
