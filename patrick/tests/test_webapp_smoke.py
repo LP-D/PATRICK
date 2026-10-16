@@ -24,6 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 
+from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
@@ -38,7 +39,10 @@ from patrick.webapp.app import app
 pytestmark = pytest.mark.slow
 
 TARGET_SYMBOL = "^VIX"
-PIT_META = {"pit_version": f"{PIT_VERSION}:publication_lag"}
+# Le formulaire web crée les runs avec `D.DEFAULT_FRED_POINT_IN_TIME` (ALFRED depuis 74e3ffe) : `ingest()` ne sert le
+# cache que si sa version point-in-time porte ce même mode. Figée à `publication_lag`, la donnée synthétique était
+# jugée périmée, le worker retéléchargeait le vrai marché et les tests dépassaient leur délai sur la CI.
+PIT_META = {"pit_version": f"{PIT_VERSION}:{D.DEFAULT_FRED_POINT_IN_TIME}"}
 
 
 def _synthetic_raw(n=1500, seed=0) -> pd.DataFrame:
