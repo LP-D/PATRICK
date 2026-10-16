@@ -6,9 +6,9 @@ from __future__ import annotations
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from patrick.models.xgb_labels import AnyLabelXGBClassifier
 
 from patrick.config import defaults as D
+from patrick.models.xgb_labels import AnyLabelXGBClassifier
 
 ML_ALGOS = ("XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost")
 # Réseaux de neurones (`models/deep.py`, PyTorch importé seulement à l'usage) : MLP, GRU, LSTM, CNN1D, Transformer.

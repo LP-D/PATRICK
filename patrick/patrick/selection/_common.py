@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from patrick.models.xgb_labels import AnyLabelXGBClassifier as XGBClassifier   # accepte une classe absente de l'entraînement
+from patrick.models.xgb_labels import AnyLabelXGBClassifier as XGBClassifier
 
 # Fixed, machine-independent thread count for the selection estimators. Any
 # fixed value is reproducible for a given library build; 2 keeps some
