@@ -18,8 +18,35 @@ from patrick.simulate import metrics as sim_metrics
 PERIODS = 252
 
 
+RUIN = -1.0          # rendement net d'une période qui efface tout le capital
+
+
 def equity_curve(net_returns: np.ndarray) -> np.ndarray:
-    return np.cumprod(1.0 + np.asarray(net_returns, dtype=float))
+    """Capital cumulé, jamais sous zéro : une période à -100 % ou pire (plafonnée à -100 %) met le capital à 0 et il y reste (le produit d'un facteur
+    nul). Sans ce plafond, deux pertes de plus de 100 % faisaient un gain et la courbe repartait de l'autre côté de zéro."""
+    return np.cumprod(1.0 + np.maximum(np.asarray(net_returns, dtype=float), RUIN))
+
+
+def ruin_index(net_returns: np.ndarray) -> int | None:
+    """Indice de la première période qui efface tout le capital, ou None."""
+    hits = np.flatnonzero(np.asarray(net_returns, dtype=float) <= RUIN + 1e-12)
+    return int(hits[0]) if hits.size else None
+
+
+def apply_ruin(net_returns, positions, costs) -> tuple[np.ndarray, np.ndarray, np.ndarray, int | None]:
+    """Copies où, à partir de la première ruine, le compte est vide : rendement plafonné à -100 % ce jour-là, puis position, rendement et coût nuls.
+    Renvoie (rendements, positions, coûts, indice de la ruine ou None) ; idempotent."""
+    net = np.array(net_returns, dtype=float)
+    pos = np.array(positions, dtype=float)
+    cost = np.array(costs, dtype=float)
+    idx = ruin_index(net)
+    if idx is None:
+        return net, pos, cost, None
+    net[idx] = RUIN
+    net[idx + 1:] = 0.0
+    pos[idx + 1:] = 0.0
+    cost[idx + 1:] = 0.0
+    return net, pos, cost, idx
 
 
 def _sharpe(r: np.ndarray) -> float:
@@ -28,10 +55,11 @@ def _sharpe(r: np.ndarray) -> float:
 
 
 def summarize(net_returns: np.ndarray, positions: np.ndarray, costs: np.ndarray, dates: pd.DatetimeIndex) -> dict:
-    """Résumé d'une trajectoire : rendement, risque, ratios, coûts, rotation, exposition."""
-    r = pd.Series(np.asarray(net_returns, dtype=float), index=dates)
-    pos = np.asarray(positions, dtype=float)
-    eq = pd.Series(equity_curve(r.to_numpy()), index=dates)
+    """Résumé d'une trajectoire : rendement, risque, ratios, coûts, rotation, exposition. Après une ruine (`ruined`, `ruin_date`) le compte est vide :
+    perte de 100 %, puis plus aucune position, aucun gain, aucun coût."""
+    net, pos, costs, ruin = apply_ruin(net_returns, positions, costs)
+    r = pd.Series(net, index=dates)
+    eq = pd.Series(equity_curve(net), index=dates)
     max_dd, dd_days = sim_metrics.max_drawdown(eq)
     changes = np.abs(np.diff(np.concatenate([[0.0], pos])))
     active = pos != 0
@@ -51,6 +79,8 @@ def summarize(net_returns: np.ndarray, positions: np.ndarray, costs: np.ndarray,
         "short_share": float((pos < 0).mean()) if len(pos) else float("nan"),
         "hit_rate": float((r[active] > 0).mean()) if active.any() else float("nan"),
         "n_trades": int((changes > 1e-9).sum()),
+        "ruined": ruin is not None,
+        "ruin_date": f"{dates[ruin]:%Y-%m-%d}" if ruin is not None else None,
     }
 
 

@@ -279,3 +279,64 @@ def test_probabilistic_sharpe_grows_with_the_evidence():
     weak = rl_metrics.probabilistic_sharpe(rng.normal(0.0001, 0.01, 200))
     strong = rl_metrics.probabilistic_sharpe(rng.normal(0.002, 0.01, 2000))
     assert strong > 0.99 > weak and math.isnan(rl_metrics.probabilistic_sharpe(np.zeros(100)))
+
+
+# --------------------------------------------------------------------------- ruine
+
+
+def _spiky(spikes: dict[int, float], n=1200) -> rl_data.RLData:
+    """Série dont le rendement du jour `i` est `spikes[i]` (ex. +1,5 = +150 %), le reste normal."""
+    rng = np.random.default_rng(0)
+    dates = pd.bdate_range("2015-01-01", periods=n + 1)
+    ret = rng.normal(0.0003, 0.01, n)
+    for i, value in spikes.items():
+        ret[i] = value
+    price = pd.Series(100 * np.cumprod(np.concatenate([[1.0], 1 + ret])), index=dates)
+    fwd = (price.shift(-1) / price - 1.0).iloc[:-1].to_numpy()
+    feats = pd.DataFrame(rng.normal(size=(n, 4)), index=dates[:-1], columns=[f"f{i}" for i in range(4)])
+    return rl_data.RLData(dates=dates[:-1], features=feats, fwd_ret=fwd, price=price, target_col="X")
+
+
+def test_the_equity_curve_never_goes_below_zero_and_two_losses_over_100_percent_are_not_a_gain():
+    """Avant, cumprod(1 + r) donnait (1 - 1,5)(1 - 1,5) = +0,25 : le compte ruiné renaissait."""
+    eq = rl_metrics.equity_curve(np.array([0.1, -1.5, -1.5, 0.3]))
+    assert eq.tolist() == pytest.approx([1.1, 0.0, 0.0, 0.0]) and (eq >= 0).all()
+
+
+def test_apply_ruin_empties_the_account_from_the_first_ruin_and_is_idempotent():
+    net, pos, costs, idx = rl_metrics.apply_ruin([0.01, -1.7, 0.4, -0.2], [1, -1, -1, 1], [0.0, 0.001, 0.0, 0.002])
+    assert idx == 1 and net.tolist() == [0.01, -1.0, 0.0, 0.0] and pos.tolist() == [1, -1, 0, 0] and costs.tolist() == [0.0, 0.001, 0.0, 0.0]
+    again = rl_metrics.apply_ruin(net, pos, costs)
+    assert again[3] == 1 and again[0].tolist() == net.tolist()
+    assert rl_metrics.apply_ruin([0.01, -0.5], [1, 1], [0, 0])[3] is None and rl_metrics.ruin_index([0.0, -0.99]) is None
+
+
+def test_the_summary_of_a_ruined_trajectory_says_so():
+    dates = pd.bdate_range("2020-01-01", periods=6)
+    out = rl_metrics.summarize(np.array([0.02, -1.4, 0.5, 0.5, -0.1, 0.0]), np.array([1, -1, -1, 1, 1, 1.0]), np.zeros(6), dates)
+    assert out["ruined"] is True and out["ruin_date"] == "2020-01-02"
+    assert out["total_return"] == pytest.approx(-1.0) and out["max_drawdown"] == pytest.approx(-1.0)
+    assert out["exposure"] == pytest.approx(2 / 6)                       # position tenue deux jours, puis compte vide
+    fine = rl_metrics.summarize(np.array([0.02, -0.4, 0.1]), np.array([1, 1, 1.0]), np.zeros(3), dates[:3])
+    assert fine["ruined"] is False and fine["ruin_date"] is None
+
+
+def test_a_short_through_a_150_percent_day_ruins_the_account_and_it_stays_empty_for_the_whole_oos_window():
+    data = _spiky({700: 1.5, 1000: 1.5})                            # deux hausses de 150 % : un short y perd tout, puis (avant) regagnait
+    result = _run(data, _cfg(), positions=-1.0)
+    oos = result["oos"]
+    ruin_at = int(np.flatnonzero(oos["net"] <= -1.0)[0])
+    assert oos["dates"][ruin_at] == data.dates[700] and oos["net"][ruin_at] == -1.0
+    assert (oos["net"][ruin_at + 1:] == 0.0).all() and (oos["position"][ruin_at + 1:] == 0.0).all() and (oos["cost"][ruin_at + 1:] == 0.0).all()
+    strategy = result["strategy"]
+    assert strategy["ruined"] is True and strategy["ruin_date"] == f"{data.dates[700]:%Y-%m-%d}" and strategy["total_return"] == pytest.approx(-1.0)
+    assert min(result["curves"]["strategy"]) == 0.0 and result["curves"]["strategy"][-1] == 0.0
+    assert min(result["curves"]["strategy"]) >= 0.0                    # jamais sous zéro, la seconde hausse ne ressuscite rien
+    assert result["seeds"][0]["ruined"] is True and result["seeds"][0]["total_return"] == pytest.approx(-1.0)
+    ruined_folds = [f["fold"] for f in result["folds"] if f["strategy"]["ruined"]]
+    assert ruined_folds[0] == 1 and result["baselines"]["buy_hold"]["ruined"] is False
+
+
+def test_a_long_only_agent_cannot_be_ruined_by_a_rise_and_the_buy_and_hold_never_is():
+    result = _run(_spiky({700: 1.5}), _cfg(), positions=1.0)
+    assert result["strategy"]["ruined"] is False and result["strategy"]["total_return"] > 0

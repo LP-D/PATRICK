@@ -160,17 +160,23 @@ def run_walkforward(data: rl_data.RLData, config: RLRunConfig, train_agent: Call
     mom = np.concatenate(mom_net)
     mpos = np.concatenate(mom_pos)
     flat = np.zeros(len(net))
+    # Ruine : le compte vide reste vide sur toute la fenêtre hors échantillon (les plis suivants repartent chacun d'un capital neuf dans leur
+    # propre résumé, mais la courbe recollée, le CSV et les tests statistiques voient une seule vie de compte).
+    net, pos, costs, _ruin = rl_metrics.apply_ruin(net, pos, costs)
+    mom_costs = np.abs(np.diff(np.concatenate([[0.0], mpos]))) * fee
+    mom, mpos, mom_costs, _ = rl_metrics.apply_ruin(mom, mpos, mom_costs)
     strategy = rl_metrics.summarize(net, pos, costs, dates)
     baselines = {
         "buy_hold": rl_metrics.summarize(bh, np.ones(len(bh)), np.zeros(len(bh)), dates),
-        "momentum": rl_metrics.summarize(mom, mpos, np.abs(np.diff(np.concatenate([[0.0], mpos]))) * fee, dates),
+        "momentum": rl_metrics.summarize(mom, mpos, mom_costs, dates),
         "flat": rl_metrics.summarize(flat, flat, flat, dates),
     }
     seeds = []
     for si in range(int(s.n_seeds)):
         sn = np.concatenate(seed_net[si])
+        sn, _, _, seed_ruin = rl_metrics.apply_ruin(sn, np.zeros(len(sn)), np.zeros(len(sn)))
         seeds.append({"seed": si + 1, "sharpe": sim_metrics.sharpe_ratio(pd.Series(sn, index=dates)),
-                      "total_return": float(rl_metrics.equity_curve(sn)[-1] - 1.0)})
+                      "total_return": float(rl_metrics.equity_curve(sn)[-1] - 1.0), "ruined": seed_ruin is not None})
     from patrick.validation.dsr import deflated_sharpe_ratio
     stats = {
         "vs_buy_hold": rl_metrics.bootstrap_sharpe_diff(net, bh, int(s.bootstrap_samples), seed=base_seed),
