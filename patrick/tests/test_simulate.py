@@ -309,3 +309,37 @@ def test_execution_lag_one_captures_return_from_signal_close_to_next_close():
     expected_t_plus_1_to_t_plus_2 = prices.iloc[t + 2] / prices.iloc[t + 1] - 1  # 110/103 - 1
     assert captured_return == pytest.approx(expected_t_to_t_plus_1)
     assert captured_return != pytest.approx(expected_t_plus_1_to_t_plus_2)
+
+
+# --------------------------------------------------------------------------- score directionnel (4 classes)
+
+def test_a_weak_bearish_prediction_never_scores_on_the_bullish_side():
+    """À 4 classes la confiance médiane vaut ~0,35 : l'ancien « 1 − confiance » faisait d'une baisse à 0,35 un score de 0,65 (un long)."""
+    y_pred = np.array([0, 1, 2, 3, 0, 3])
+    conf = np.array([0.35, 0.30, 0.30, 0.35, 0.90, 0.90])
+    score = sim._directional_score(y_pred, conf)
+    assert np.all(score[:2] < 0.5) and np.all(score[2:4] > 0.5)           # du côté de la prédiction, quelle que soit la confiance
+    assert score[4] < score[0] < 0.5 and 0.5 < score[3] < score[5]        # plus de confiance = plus loin de 0,5, dans le même sens
+    assert sim._directional_score(np.array([3]), np.array([float("nan")]))[0] == 0.5
+
+
+def test_the_recorded_probability_of_a_rise_wins_over_the_confidence_and_fills_in_row_by_row():
+    y_pred, conf = np.array([0, 3, 3]), np.array([0.35, 0.35, 0.35])
+    score = sim._directional_score(y_pred, conf, np.array([0.31, np.nan, 0.64]))
+    assert score[0] == pytest.approx(0.31) and score[2] == pytest.approx(0.64)
+    assert score[1] == pytest.approx(0.5 + 0.35 / 2)                      # ligne sans p_up : repli du côté de la prédiction
+    assert sim.score_source(np.array([0.3, 0.6])) == "p_up"
+    assert sim.score_source(np.array([np.nan, np.nan])) == "confidence" and sim.score_source(None) == "confidence"
+    assert sim.score_source(np.array([0.3, np.nan])) == "mixed"
+
+
+def test_a_simulation_says_where_its_score_comes_from(tmp_path):
+    db_path, store_root, trial_id, _ = _setup_run_with_predictions(tmp_path)
+    old = sim.simulate(trial_id, sim.SimParams(threshold=0.55), db_path=db_path, store_root=store_root, segment="test")
+    assert old["ok"] and old["score_source"] == "confidence" and "pas de P(hausse)" in old["score_warning"]
+    conn = trackdb.connect(db_path)
+    conn.execute("UPDATE prediction SET p_up = CASE WHEN y_pred >= 2 THEN 0.7 ELSE 0.3 END WHERE trial_id = ?", (trial_id,))
+    conn.commit()
+    conn.close()
+    new = sim.simulate(trial_id, sim.SimParams(threshold=0.55), db_path=db_path, store_root=store_root, segment="test")
+    assert new["ok"] and new["score_source"] == "p_up" and new["score_warning"] is None

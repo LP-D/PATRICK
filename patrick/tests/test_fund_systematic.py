@@ -23,15 +23,15 @@ def _quotes(monkeypatch):
     fs.install(monkeypatch)
 
 
-def _model(conn, scores=SCORES, segment="holdout") -> int:
+def _model(conn, scores=SCORES, segment="holdout", with_p_up=True) -> int:
     trackdb.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
     trackdb.create_run(conn, "run1", target="^GSPC", horizon=5, snapshot_id="snap1", config_json="{}",
                        config_hash="h", git_sha="sha", seed=42)
     trial_id = trackdb.create_trial(conn, "run1", "GLOBAL", "XGBoost", "SMOTE", 3, "shap")
     for ts, score in scores.items():
         y_pred, proba = (3, score) if score >= 0.5 else (0, 1 - score)    # classe 3 = hausse forte, 0 = baisse forte
-        conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, ?, ?, 3, ?, ?)",
-                     (trial_id, ts, segment, y_pred, proba))
+        conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba, p_up) VALUES (?, ?, ?, 3, ?, ?, ?)",
+                     (trial_id, ts, segment, y_pred, proba, score if with_p_up else None))
     conn.commit()
     return trial_id
 
@@ -304,3 +304,47 @@ def test_creating_or_deleting_a_rule_refreshes_the_strategy_stamp(conn):
     conn.commit()
     systematic.create_rule(conn, sid, "Encore", _config(conn.execute("SELECT trial_id FROM trial").fetchone()[0]))
     assert conn.execute("SELECT updated_at FROM fund_strategy WHERE strategy_id = ?", (sid,)).fetchone()[0] > old
+
+
+# --------------------------------------------------------------------------- P(hausse) obligatoire
+
+def test_a_rule_reads_the_recorded_probability_of_a_rise_not_the_confidence_of_the_predicted_class(conn):
+    """À 4 classes la confiance d'une prédiction baissière vaut ~0,35 : `1 − confiance` en faisait un score de 0,65, donc un LONG."""
+    trackdb.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    trackdb.create_run(conn, "run1", target="^GSPC", horizon=5, snapshot_id="snap1", config_json="{}",
+                       config_hash="h", git_sha="sha", seed=42)
+    tid = trackdb.create_trial(conn, "run1", "GLOBAL", "XGBoost", "SMOTE", 3, "shap")
+    # classe prédite 0 (baisse forte) à 0,35 de confiance, P(hausse) = 0,30 ; classe prédite 3 à 0,35, P(hausse) = 0,62
+    for ts, y_pred, conf, p_up in (("2026-01-05", 0, 0.35, 0.30), ("2026-01-06", 3, 0.35, 0.62)):
+        conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba, p_up) VALUES (?, ?, 'holdout', 3, ?, ?, ?)",
+                     (tid, ts, y_pred, conf, p_up))
+    conn.commit()
+    scores = systematic.load_scores(conn, {"trial_id": tid, "segment": "holdout"})
+    assert scores.round(2).tolist() == [0.30, 0.62]             # et non [0,65, 0,35]
+    assert systematic.decide(scores, enter=0.6, exit_=0.5, allow_short=True) == [
+        {"ts": pd.Timestamp("2026-01-05"), "action": "open", "side": "short", "score": 0.30},
+        {"ts": pd.Timestamp("2026-01-06"), "action": "close", "side": "short", "score": 0.62},
+        {"ts": pd.Timestamp("2026-01-06"), "action": "open", "side": "long", "score": 0.62}]
+
+
+def test_a_model_without_the_probability_of_a_rise_cannot_back_a_rule(conn):
+    sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
+    tid = _model(conn, with_p_up=False)
+    _finish(conn, tid)
+    with pytest.raises(store.FundError, match="P\(hausse\)"):
+        systematic.create_rule(conn, sid, "ML seuils", _config(tid))
+    assert systematic.available_models(conn) == []                                  # et il n'est pas proposé
+    with pytest.raises(store.FundError, match="P\(hausse\)"):
+        systematic.load_scores(conn, {"trial_id": tid, "segment": "holdout"})
+
+
+def _finish(conn, trial_id):
+    trackdb.mark_best_trial(conn, trial_id)
+    trackdb.finish_run(conn, "run1", status="done", n_trials=1)
+
+
+def test_a_model_with_the_probability_of_a_rise_is_offered(conn):
+    tid = _model(conn)
+    _finish(conn, tid)
+    assert [m["trial_id"] for m in systematic.available_models(conn)] == [tid]
+    assert systematic.p_up_segments(conn, tid) == {"holdout": len(SCORES)}
