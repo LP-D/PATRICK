@@ -300,7 +300,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                 proba_row = model.predict_proba(X_hist, context="none")[-1]
                 pred_class = int(model.classes_[int(np.argmax(proba_row))])
             else:
-                pred_class = int(model.predict(X_sel)[0])
+                # `ravel` : CatBoost renvoie (n, 1), et NumPy 2.x refuse int() sur un tableau de dimension 1.
+                pred_class = int(np.asarray(model.predict(X_sel)).ravel()[0])
                 proba_row = model.predict_proba(X_sel)[0]
             # Column of the predicted class by `classes_`, not by its value: a
             # class absent from the final fit shifts the columns.
