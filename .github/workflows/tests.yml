@@ -8,6 +8,8 @@ jobs:
   fast-suite:
     runs-on: ubuntu-latest
     strategy:
+      # Une version qui échoue n'annule plus les autres : le diagnostic voit les trois d'un coup.
+      fail-fast: false
       matrix:
         # `pyproject.toml` declares `requires-python = ">=3.10"` -- exercise
         # the full range it advertises (3.10/3.11/3.12), not just 3.11.
@@ -21,7 +23,8 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -e "./patrick[dev,web]"
+        # annotate-failures : chaque test en échec devient une annotation lisible sans ouvrir le journal.
+        run: pip install -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
 
       - name: Lint (ruff)
         # Bloquant depuis le lot 2 de l'audit (2026-09-22). Dette soldée le
