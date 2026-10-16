@@ -7,6 +7,7 @@ erreur nommée et retombe sur le défaut de CE champ seulement ; les bornes sont
 from __future__ import annotations
 
 from patrick.config import defaults as D
+from patrick.data.session_calendar import untradable_kind
 from patrick.webapp import forms
 
 RL_FIELD_LABELS: dict[str, str] = {
@@ -42,6 +43,18 @@ def rl_target_groups() -> dict[str, list]:
         kept = [(sym, label) for sym, label in items if forms.TARGET_SOURCE_BY_SYMBOL.get(sym) == "yfinance"]
         if kept:
             out[group] = kept
+    return out
+
+
+def untradable_targets() -> dict[str, str]:
+    """Cibles de la liste dont le rendement n'est pas réalisable (`volatility` : indice de volatilité ; `yield` : indice de taux), étiquetées dans
+    le formulaire et signalées avec les résultats (`rl/data.untradable_warning`)."""
+    out = {}
+    for items in rl_target_groups().values():
+        for sym, _label in items:
+            kind = untradable_kind(sym)
+            if kind:
+                out[sym] = kind
     return out
 
 

@@ -340,3 +340,33 @@ def test_a_short_through_a_150_percent_day_ruins_the_account_and_it_stays_empty_
 def test_a_long_only_agent_cannot_be_ruined_by_a_rise_and_the_buy_and_hold_never_is():
     result = _run(_spiky({700: 1.5}), _cfg(), positions=1.0)
     assert result["strategy"]["ruined"] is False and result["strategy"]["total_return"] > 0
+
+
+# --------------------------------------------------------------------------- cible non négociable
+
+
+def test_an_untradable_target_gets_a_specific_warning_and_a_tradable_one_gets_none():
+    vol = rl_data.untradable_warning("^VIX")
+    assert "^VIX" in vol and "indice de volatilité" in vol and "contango" in vol and "pas réalisable" in vol
+    rate = rl_data.untradable_warning("^TNX")
+    assert "^TNX" in rate and "taux" in rate and "durée" in rate
+    assert rl_data.untradable_warning("^GSPC") is None and rl_data.untradable_warning("AAPL") is None
+    assert rl_data.untradable_warning("^VIX", "fred") is None
+
+
+def test_the_warning_travels_with_the_data_of_the_run_but_never_refuses_it():
+    n = 800
+    idx = pd.bdate_range("2018-01-01", periods=n)
+    rng = np.random.default_rng(1)
+    raw = pd.DataFrame({"IDX_VIX": 15 * np.exp(np.cumsum(rng.normal(0, 0.03, n)))}, index=idx)
+
+    def pool(frame, run_config, target_col):
+        return pd.DataFrame({"f1": np.sin(np.arange(n) / 9.0), "f2": rng.normal(size=n)}, index=frame.index)
+
+    def config(symbol):
+        return RLRunConfig.model_validate({"objective": {"target_symbol": symbol}, "output": {"seed": 1}, "rl": {"max_features": 2}})
+
+    data = rl_data.build_rl_data(raw, config("^VIX"), "IDX_VIX", base_pool_builder=pool)
+    assert any("indice de volatilité" in w for w in data.warnings) and data.n > 700          # un avertissement, pas un refus
+    other = rl_data.build_rl_data(raw.rename(columns={"IDX_VIX": "IDX_GSPC"}), config("^GSPC"), "IDX_GSPC", base_pool_builder=pool)
+    assert not any("négociable" in w or "indice de volatilité" in w for w in other.warnings)

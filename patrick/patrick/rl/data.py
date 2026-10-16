@@ -16,6 +16,7 @@ from scipy.stats import rankdata
 from sklearn.preprocessing import RobustScaler
 
 from patrick.config import defaults as D
+from patrick.data.session_calendar import untradable_kind
 from patrick.rl.config import RLRunConfig
 
 MIN_COVERAGE = 0.6          # une variable doit être renseignée sur au moins 60 % des dates (sinon écartée)
@@ -25,6 +26,22 @@ DECORRELATE_ABOVE = 0.9     # à la sélection, une variable trop corrélée à 
 
 class RLDataError(ValueError):
     """Données inutilisables pour le RL : message affichable tel quel."""
+
+
+def untradable_warning(symbol: str, source: str = "yfinance") -> str | None:
+    """Avertissement affiché avec les résultats quand la cible n'est pas négociable telle quelle : le rendement que touche l'agent est celui de
+    l'indice, pas celui d'un instrument qu'on peut acheter. Un avertissement, pas un refus : étudier le signal d'un indice reste légitime."""
+    kind = untradable_kind(symbol, source)
+    if kind == "volatility":
+        return (f"{symbol} est un indice de volatilité : il ne se négocie pas directement, seulement par des contrats à terme ou des produits cotés qui "
+                "perdent un report négatif important quand la courbe est en contango (souvent plusieurs dizaines de % par an) et ne suivent pas "
+                "l'indice au jour le jour. Le rendement simulé sur l'indice lui-même n'est pas réalisable : lire ce run comme une étude du signal, "
+                "jamais comme un résultat de trading.")
+    if kind == "yield":
+        return (f"{symbol} est un taux (un rendement en %), pas un prix : la variation relative d'un taux n'est pas ce que gagne une position "
+                "obligataire (à peu près - durée × variation du taux, plus le coupon). Le rendement simulé n'est pas réalisable : lire ce run comme "
+                "une étude du signal, jamais comme un résultat de trading.")
+    return None
 
 
 @dataclass
@@ -55,6 +72,9 @@ def build_rl_data(raw: pd.DataFrame, config: RLRunConfig, target_col: str, base_
         from patrick.pipeline.engine import build_base_feature_pool as base_pool_builder
     pool = base_pool_builder(raw, config.to_run_config(), target_col)
     warnings: list[str] = []
+    untradable = untradable_warning(config.objective.target_symbol, config.objective.target_source)
+    if untradable:
+        warnings.append(untradable)
     stationary = [c for c in pool.columns if c not in raw.columns]            # sans les niveaux bruts
     feats = pool[stationary].reindex(price.index).replace([np.inf, -np.inf], np.nan)
     feats = feats.ffill(limit=5)                                              # comble d'éventuels trous de publication, jamais l'avenir

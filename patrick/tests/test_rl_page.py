@@ -272,3 +272,14 @@ def test_rl_names_never_collide_with_each_other_or_with_ml_names():
         jobs_db.enqueue_job(conn, RLRunConfig.model_validate({"name": f"GSPC_rl_{i}", "objective": {"target_symbol": "^GSPC"}}).model_dump_json())
     conn.close()
     assert run_manager.next_rl_run_name("^GSPC") == "GSPC_rl_3" and run_manager.next_rl_run_name("EURUSD=X") == "EURUSD_X_rl_1"
+
+
+def test_untradable_targets_are_tagged_in_the_target_list_in_both_languages(client):
+    """Un indice de volatilité ou de taux se choisit encore (étude du signal) mais le formulaire dit tout de suite que son rendement n'est pas réalisable."""
+    assert {"^VIX", "^TNX", "^IRX"} <= set(forms_rl.untradable_targets()) and "^GSPC" not in forms_rl.untradable_targets()
+    html = client.get("/rl").text
+    option = lambda page, sym: re.search(rf'<option value="{re.escape(sym)}"[^>]*>([^<]*)</option>', page).group(1)
+    assert "non négociable" in option(html, "^VIX") and "non négociable" in option(html, "^TNX")
+    assert "non négociable" not in option(html, "^GSPC") and "non négociable" not in option(html, "AAPL")
+    en = client.get("/rl?lang=en").text
+    assert "not tradable" in option(en, "^VIX") and "not tradable" not in option(en, "^GSPC")
