@@ -23,18 +23,18 @@ class World:
         monkeypatch.setattr(trackstats, "fdr_across_targets", lambda c, alpha=0.10, **kw: {
             "results": {t: {"significant": v[0], "p_value": v[1]} for t, v in self.bh.items()}})
 
-    def cell(self, target: str, horizon: int = 5, *, live=("2026-10-15", 3, 0.6), dm_p: float | None = 0.01,
+    def cell(self, target: str, horizon: int = 5, *, live: tuple | list | None = ("2026-10-15", 3, 0.6), suffix: str = "", dm_p: float | None = 0.01,
              bh: tuple[bool, float] = (True, 0.02), f1: float | None = None, champion=True) -> int:
         conn = self.conn
-        run_id = f"run_{target}_{horizon}".replace("^", "")
+        run_id = f"run_{target}_{horizon}{suffix}".replace("^", "")
         trackdb.create_run(conn, run_id, target=target, horizon=horizon, snapshot_id="snap1", config_json="{}",
                            config_hash="h", git_sha="sha", seed=42)
         trial_id = trackdb.create_trial(conn, run_id, "GLOBAL", "XGBoost", "SMOTE", 3, "shap")
         trackdb.mark_best_trial(conn, trial_id, artifact_path=None)
         trackdb.finish_run(conn, run_id, "done")
-        if live:
+        for row in ([live] if isinstance(live, tuple) else live or []):      # un signal, ou une liste de signaux
             conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, ?, 'live', NULL, ?, ?)",
-                         (trial_id, live[0], live[1], live[2]))
+                         (trial_id, row[0], row[1], row[2]))
         if dm_p is not None:
             conn.execute("INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value) VALUES (?, 'class_specific', 'persistence', 2.0, ?)",
                          (run_id, dm_p))
@@ -42,11 +42,18 @@ class World:
             conn.execute("INSERT INTO fold_metric (trial_id, fold_index, split, metric, value) VALUES (?, 0, 'holdout', 'F1_dir', ?)",
                          (trial_id, f1))
         if champion:
-            conn.execute("INSERT INTO champion (target, horizon, run_id, trial_id, reason) VALUES (?, ?, ?, ?, 'first')",
+            conn.execute("INSERT OR REPLACE INTO champion (target, horizon, run_id, trial_id, reason) VALUES (?, ?, ?, ?, 'first')",
                          (target, horizon, run_id, trial_id))
         self.bh.setdefault(target, bh)
         conn.commit()
         return trial_id
+
+
+    def signal(self, trial_id: int, day: str, y_pred: int, proba: float = 0.6) -> None:
+        """Un signal live de plus (le jour passe : on le voit arriver)."""
+        self.conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, ?, 'live', NULL, ?, ?)",
+                          (trial_id, day, y_pred, proba))
+        self.conn.commit()
 
 
 @pytest.fixture

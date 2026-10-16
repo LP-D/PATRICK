@@ -129,3 +129,25 @@ def test_deleting_a_strategy_leaves_a_dated_tombstone(conn):
     store.delete_strategy(conn, sid)
     row = conn.execute("SELECT strategy_id, deleted_at FROM fund_deleted").fetchall()
     assert [r[0] for r in row] == [sid] and row[0][1] > "2020-01-01"
+
+
+# --- réglages du pilote automatique (migration 0036) --------------------------------------------------------------
+
+def test_autopilot_settings_roundtrip_touch_the_strategy_and_can_be_cleared(conn):
+    sid = store.create_strategy(conn, "A", "CTO", 1000, "2026-01-05")
+    assert store.get_autopilot(conn, sid) is None
+    _aged(conn, sid)
+
+    store.set_autopilot(conn, sid, {"enabled": True, "settings": {"tier": "large"}})
+
+    assert store.get_autopilot(conn, sid) == {"enabled": True, "settings": {"tier": "large"}}
+    assert _stamp(conn, sid) > _OLD                                    # la politique voyage avec la stratégie : elle la date
+    assert "autopilot_json" not in store.get_strategy(conn, sid)       # jamais exposée dans la stratégie elle-même
+    store.set_autopilot(conn, sid, None)
+    assert store.get_autopilot(conn, sid) is None
+
+
+def test_autopilot_settings_of_an_unknown_strategy_are_refused(conn):
+    with pytest.raises(store.FundError, match="introuvable"):
+        store.set_autopilot(conn, "str_inconnue", {"enabled": True})
+    assert store.get_autopilot(conn, "str_inconnue") is None

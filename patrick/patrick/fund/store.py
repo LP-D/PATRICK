@@ -116,6 +116,22 @@ def update_strategy(conn: sqlite3.Connection, strategy_id: str, **fields) -> Non
         touch_strategy(conn, strategy_id)
 
 
+def get_autopilot(conn: sqlite3.Connection, strategy_id: str) -> dict | None:
+    """Réglages du pilote automatique d'une stratégie (`None` : jamais configuré)."""
+    row = conn.execute("SELECT autopilot_json FROM fund_strategy WHERE strategy_id = ?", (strategy_id,)).fetchone()
+    return json.loads(row[0]) if row and row[0] else None
+
+
+def set_autopilot(conn: sqlite3.Connection, strategy_id: str, config: dict | None) -> None:
+    """Enregistre (ou efface, avec `None`) les réglages du pilote automatique ; date la stratégie."""
+    if get_strategy(conn, strategy_id) is None:
+        raise FundError("stratégie introuvable")
+    with conn:
+        conn.execute("UPDATE fund_strategy SET autopilot_json = ? WHERE strategy_id = ?",
+                     (None if config is None else json.dumps(config, sort_keys=True), strategy_id))
+        touch_strategy(conn, strategy_id)
+
+
 def delete_strategy(conn: sqlite3.Connection, strategy_id: str) -> None:
     with conn:
         if conn.execute("DELETE FROM fund_strategy WHERE strategy_id = ?", (strategy_id,)).rowcount:

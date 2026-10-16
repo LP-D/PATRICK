@@ -395,6 +395,25 @@ def _check_alpha_rule(cfg: dict, model: dict) -> None:
         hedge["symbol"] = model["benchmark"].upper()          # par défaut : le benchmark du modèle
 
 
+def update_rule_config(conn: sqlite3.Connection, rule_id: str, config: dict) -> None:
+    """Remplace la configuration d'une règle (validée comme à la création). Les ordres déjà passés ne bougent pas."""
+    rule = get_rule(conn, rule_id)
+    if rule is None:
+        raise store.FundError("règle introuvable")
+    cfg = validate_config(config)
+    with conn:
+        conn.execute("UPDATE fund_rule SET config_json = ? WHERE rule_id = ?", (json.dumps(cfg), rule_id))
+        store.touch_strategy(conn, rule["strategy_id"])
+
+
+def retire_rule(conn: sqlite3.Connection, rule_id: str, on: str) -> None:
+    """Plus aucune ouverture ni renouvellement après la date `on` ; les positions ouvertes se ferment à leur échéance."""
+    rule = get_rule(conn, rule_id)
+    if rule is None:
+        raise store.FundError("règle introuvable")
+    update_rule_config(conn, rule_id, {**rule["config"], "retired_on": on})
+
+
 def delete_rule(conn: sqlite3.Connection, rule_id: str) -> bool:
     """Supprime la règle (jamais les ordres déjà passés, qui restent des ordres du fonds). False si inconnue."""
     with conn:

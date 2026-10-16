@@ -177,7 +177,7 @@ def _rule(conn, rows, *, capital=100_000, **kw):
 
 def test_the_signal_direction_comes_from_the_predicted_class_not_from_the_probability(conn):
     """Un haussier peu confiant (classe 3, probabilité 0,4) reste un long : l'ancien score à seuils en faisait un vendeur."""
-    _, rule_id, tid = _rule(conn, {"2026-01-05": (3, 0.40), "2026-01-06": (0, 0.45)}, allow_short=False)
+    _, rule_id, _tid = _rule(conn, {"2026-01-05": (3, 0.40), "2026-01-06": (0, 0.45)}, allow_short=False)
 
     series = systematic.load_signals(conn, systematic.get_rule(conn, rule_id)["config"])
 
