@@ -331,10 +331,10 @@ def test_a_model_without_the_probability_of_a_rise_cannot_back_a_rule(conn):
     sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
     tid = _model(conn, with_p_up=False)
     _finish(conn, tid)
-    with pytest.raises(store.FundError, match="P\(hausse\)"):
+    with pytest.raises(store.FundError, match=r"P\(hausse\)"):
         systematic.create_rule(conn, sid, "ML seuils", _config(tid))
     assert systematic.available_models(conn) == []                                  # et il n'est pas proposé
-    with pytest.raises(store.FundError, match="P\(hausse\)"):
+    with pytest.raises(store.FundError, match=r"P\(hausse\)"):
         systematic.load_scores(conn, {"trial_id": tid, "segment": "holdout"})
 
 
