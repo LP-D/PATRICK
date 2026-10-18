@@ -33,6 +33,8 @@ fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres gén�
 app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
+news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
+app.add_typer(news_app, name="news")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -816,3 +818,39 @@ def fund_rule_apply_cmd(
 
 if __name__ == "__main__":
     app()
+
+
+@news_app.command(name="refresh")
+def news_refresh_cmd(
+    gdelt: bool = typer.Option(False, "--gdelt", help="Ajoute GDELT (une requête toutes les ~5 s, environ 35 s au total)"),
+    yahoo: str = typer.Option("", "--yahoo", help="Symboles dont on lit les titres Yahoo, séparés par des virgules"),
+    no_score: bool = typer.Option(False, "--no-score", help="Collecte seulement, sans noter ni rattacher"),
+) -> None:
+    """Collecte les flux (RSS/Atom par défaut et ceux du réglage `news_extra_feeds`), puis note et rattache les nouvelles."""
+    from patrick.text import service
+
+    symbols = [s.strip() for s in yahoo.split(",") if s.strip()]
+    conn = trackdb.connect()
+    try:
+        report = service.refresh(conn, with_gdelt=gdelt, yahoo_symbols=symbols or None, score=not no_score)
+    finally:
+        conn.close()
+    typer.echo(f"{report['added']} nouvelle(s) ajoutée(s), {report['scored']} notée(s)"
+               f" ; {report['skipped_without_date']} écartée(s) faute de date.")
+    for name, error in report["errors"]:
+        typer.echo(f"Source en échec : {name} -- {error}")
+
+
+@news_app.command(name="summary")
+def news_summary_cmd() -> None:
+    """Chiffres du magasin de nouvelles."""
+    from patrick.text import service
+
+    conn = trackdb.connect()
+    try:
+        s = service.summary(conn)
+    finally:
+        conn.close()
+    typer.echo(f"Nouvelles en base : {s['n_items']} ({s['n_24h']} depuis 24 h, {s['n_stale']} anciennes écartées)")
+    typer.echo(f"Rattachées à un actif : {s['n_linked']} ({s['n_symbols']} actif(s)) ; sources : {s['n_sources']}")
+    typer.echo(f"Dernière nouvelle connue : {s['last_known_at'] or 'aucune'}")

@@ -16,7 +16,7 @@
 <p class="hint">{{ t('news_sub') }}</p>
 
 <div class="metric-grid">
-{{ metric(t('news_k_total'), summary.n_items, t('news_k_total_rel', n=summary.n_24h), "neutral") }}
+{{ metric(t('news_k_total'), summary.n_items, t('news_k_total_rel', n=summary.n_24h, s=summary.n_stale), "neutral") }}
 {{ metric(t('news_k_linked'), summary.n_linked, t('news_k_linked_rel', n=summary.n_symbols), "neutral") }}
 {{ metric(t('news_k_sources'), summary.n_sources, t('news_k_sources_rel', n=summary.n_sources), "neutral") }}
 {{ metric(t('news_k_last'), summary.last_known_at or t('news_k_last_none'), '', "neutral") }}

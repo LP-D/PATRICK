@@ -92,11 +92,14 @@ def add_items(conn: sqlite3.Connection, items) -> int:
 
 
 _COLUMNS = ("item_id", "source", "source_kind", "external_id", "published_at", "first_seen_at", "known_at", "date_only",
-            "title", "summary", "url", "language")
+            "title", "summary", "url", "language", "lag_hours")
+LAG_SQL = "(julianday(first_seen_at) - julianday(published_at)) * 24.0"
 
 
-def load_items(conn: sqlite3.Connection, start=None, end=None, kinds=None) -> pd.DataFrame:
-    """News utilisables entre `start` (inclus) et `end` (exclu), filtrées sur `known_at` (et non sur la date annoncée)."""
+def load_items(conn: sqlite3.Connection, start=None, end=None, kinds=None, max_lag_hours: float | None = None) -> pd.DataFrame:
+    """News utilisables entre `start` (inclus) et `end` (exclu), filtrées sur `known_at` (et non sur la date annoncée).
+    `lag_hours` = écart entre la première observation et la publication annoncée ; `max_lag_hours` écarte les news
+    « périmées » (un flux relu des mois plus tard n'est pas de l'actualité : elle ne doit pas peser dans le sentiment du jour)."""
     where, args = [], []
     if start is not None:
         where.append("MAX(published_at, first_seen_at) >= ?")
@@ -107,8 +110,12 @@ def load_items(conn: sqlite3.Connection, start=None, end=None, kinds=None) -> pd
     if kinds:
         where.append(f"source_kind IN ({','.join('?' for _ in kinds)})")
         args.extend(kinds)
+    if max_lag_hours is not None:
+        where.append(f"{LAG_SQL} <= ?")
+        args.append(float(max_lag_hours))
     sql = ("SELECT item_id, source, source_kind, external_id, published_at, first_seen_at, "
-           "MAX(published_at, first_seen_at) AS known_at, date_only, title, summary, url, language FROM news_item"
+           f"MAX(published_at, first_seen_at) AS known_at, date_only, title, summary, url, language, {LAG_SQL} AS lag_hours "
+           "FROM news_item"
            + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY known_at, item_id")
     df = pd.DataFrame(conn.execute(sql, args).fetchall(), columns=list(_COLUMNS))
     for col in ("published_at", "first_seen_at", "known_at"):

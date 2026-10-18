@@ -94,12 +94,16 @@ def sentiment_features(items: pd.DataFrame, trading_days, horizons=(1, 5, 20), p
     return pd.DataFrame(out, index=days)
 
 
+MAX_LAG_HOURS = 72.0
+
+
 def features_for_symbol(conn, symbol: str, trading_days, scorer: str, version: str, horizons=(1, 5, 20),
                         novelty_scorer: str | None = "novelty", novelty_version: str | None = None,
-                        **kwargs) -> pd.DataFrame:
-    """Variables d'un actif depuis le magasin : news rattachées à `symbol`, notées par (`scorer`, `version`)."""
+                        max_lag_hours: float | None = MAX_LAG_HOURS, **kwargs) -> pd.DataFrame:
+    """Variables d'un actif depuis le magasin : news rattachées à `symbol`, notées par (`scorer`, `version`). Les news vues plus
+    de `max_lag_hours` après leur publication sont écartées (flux relus des mois plus tard) ; `None` les garde."""
     days = pd.DatetimeIndex(trading_days).normalize()
-    items = store.load_items(conn)
+    items = store.load_items(conn, max_lag_hours=max_lag_hours)
     links = store.load_links(conn)
     ids = set(links.loc[links["symbol"] == symbol, "item_id"])
     items = items[items["item_id"].isin(ids)]

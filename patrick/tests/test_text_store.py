@@ -86,3 +86,15 @@ def test_scores_and_links_roundtrip(conn):
     store.save_links(conn, [(ids[0], "AAPL", "cashtag"), (ids[0], "AAPL", "alias")])
     links = store.load_links(conn)
     assert len(links) == 1 and links.loc[0, "symbol"] == "AAPL"
+
+
+def test_a_story_seen_long_after_its_publication_is_marked_stale_and_filterable(conn):
+    store.add_items(conn, [
+        _item("fresh", published="2024-03-04T15:00:00Z", first_seen_at="2024-03-04T15:20:00Z"),
+        _item("old", published="2023-01-02T09:00:00Z", first_seen_at="2024-03-04T15:20:00Z"),
+    ])
+    df = store.load_items(conn).set_index("external_id")
+    assert df.loc["fresh", "lag_hours"] == pytest.approx(1 / 3, abs=1e-3)
+    assert df.loc["old", "lag_hours"] > 24 * 365
+    assert list(store.load_items(conn, max_lag_hours=72)["external_id"]) == ["fresh"]
+    assert len(store.load_items(conn)) == 2                            # sans filtre, rien n'est perdu

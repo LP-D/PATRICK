@@ -143,11 +143,14 @@ def refresh(conn: sqlite3.Connection, feeds=None, fetch=None, now=None, linker: 
     return {"added": added, "scored": scored, "errors": errors, "skipped_without_date": skipped}
 
 
+MAX_LAG_HOURS = 72.0      # au-delà, une news n'est plus de l'actualité (flux relu après coup) : stockée mais écartée
+
+
 def asset_overview(conn: sqlite3.Connection, since, now=None) -> pd.DataFrame:
     """Par actif : nombre de news utilisables depuis `since`, note moyenne du lexique, part de notes positives, nouveauté
     moyenne, dernière parution connue."""
     now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
-    items = store.load_items(conn, start=since, end=(now + pd.Timedelta(days=1)))
+    items = store.load_items(conn, start=since, end=(now + pd.Timedelta(days=1)), max_lag_hours=MAX_LAG_HOURS)
     items = items[items["known_at"] <= now]
     links = store.load_links(conn)
     score = store.load_scores(conn, LEXICON, lexicon_version())[["item_id", "score"]]
@@ -164,9 +167,11 @@ def asset_overview(conn: sqlite3.Connection, since, now=None) -> pd.DataFrame:
     return out.sort_values(["n_items", "symbol"], ascending=[False, True]).reset_index(drop=True)[cols]
 
 
-def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 50, kinds=None) -> list[dict]:
-    """Les `limit` news les plus récentes (par `known_at`), avec notes, étiquettes d'événement et actifs rattachés."""
-    items = store.load_items(conn, kinds=kinds)
+def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 50, kinds=None,
+              include_stale: bool = False) -> list[dict]:
+    """Les `limit` news les plus récentes (par `known_at`), avec notes, étiquettes d'événement et actifs rattachés. Les news
+    périmées (vues plus de 72 h après leur publication) sont exclues sauf `include_stale`."""
+    items = store.load_items(conn, kinds=kinds, max_lag_hours=None if include_stale else MAX_LAG_HOURS)
     links = store.load_links(conn)
     by_item = links.groupby("item_id")["symbol"].apply(list).to_dict() if not links.empty else {}
     if symbol is not None:
@@ -210,13 +215,14 @@ def summary(conn: sqlite3.Connection, now=None) -> dict:
         "SELECT COUNT(*), COUNT(DISTINCT source), MAX(MAX(published_at, first_seen_at)) FROM news_item").fetchone()
     n_24h = conn.execute("SELECT COUNT(*) FROM news_item WHERE MAX(published_at, first_seen_at) >= ?", (day_ago,)).fetchone()[0]
     n_linked, n_symbols = conn.execute("SELECT COUNT(DISTINCT item_id), COUNT(DISTINCT symbol) FROM news_link").fetchone()
+    n_stale = conn.execute(f"SELECT COUNT(*) FROM news_item WHERE {store.LAG_SQL} > ?", (MAX_LAG_HOURS,)).fetchone()[0]
     return {"n_items": n_items, "n_24h": n_24h, "n_linked": n_linked, "n_symbols": n_symbols, "n_sources": n_sources,
-            "last_known_at": last}
+            "last_known_at": last, "n_stale": n_stale}
 
 
 def scored_items_for_symbol(conn: sqlite3.Connection, symbol: str) -> pd.DataFrame:
     """News rattachées à `symbol` avec leur note du lexique et leur nouveauté (colonnes `known_at`, `score`, `novelty`)."""
-    items = store.load_items(conn)
+    items = store.load_items(conn, max_lag_hours=MAX_LAG_HOURS)
     links = store.load_links(conn)
     ids = set(links.loc[links["symbol"] == symbol, "item_id"])
     items = items[items["item_id"].isin(ids)]

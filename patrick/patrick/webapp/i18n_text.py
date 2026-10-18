@@ -54,7 +54,7 @@ TEXT_STRINGS: dict[str, dict[str, str]] = {
     "news_refresh_errors": _s("Sources en échec : {names}", "Sources that failed: {names}"),
     "news_refresh_failed": _s("La collecte a échoué : {e}", "Collection failed: {e}"),
     "news_k_total": _s("Nouvelles en base", "Stored stories"),
-    "news_k_total_rel": _s("{n} depuis 24 h", "{n} in the last 24 h"),
+    "news_k_total_rel": _s("{n} depuis 24 h ; {s} anciennes écartées", "{n} in the last 24 h; {s} stale ones set aside"),
     "news_k_linked": _s("Rattachées à un actif", "Linked to an asset"),
     "news_k_linked_rel": _s("{n} actif(s) concerné(s)", "{n} asset(s) concerned"),
     "news_k_sources": _s("Sources", "Sources"),

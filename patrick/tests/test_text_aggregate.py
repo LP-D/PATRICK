@@ -106,7 +106,7 @@ def test_features_from_the_database_use_links_and_known_at(conn):
     ids = dict(conn.execute("SELECT external_id, item_id FROM news_item"))
     store.save_scores(conn, "lexicon", "v1", {ids["a"]: (0.8, None), ids["b"]: (-0.5, None), ids["c"]: (-0.9, None)})
     store.save_links(conn, [(ids["a"], "AAPL", "name"), (ids["b"], "GC=F", "theme"), (ids["c"], "AAPL", "name")])
-    f = aggregate.features_for_symbol(conn, "AAPL", DAYS, scorer="lexicon", version="v1", horizons=(1,))
+    f = aggregate.features_for_symbol(conn, "AAPL", DAYS, scorer="lexicon", version="v1", horizons=(1,), max_lag_hours=None)
     assert f.loc["2024-01-10", "news_sent_mean_1d"] == pytest.approx(0.8)
     assert f.loc["2024-01-22", "news_sent_mean_1d"] == pytest.approx(-0.9)
     assert np.isnan(f.loc["2024-01-09", "news_sent_mean_1d"])          # la news « c » n'existait pas encore
@@ -179,3 +179,16 @@ def test_textual_event_study_drops_weak_and_recycled_news():
     studies = aggregate.textual_event_study(prices, items, benchmark=prices * 1.0, model="market_adjusted",
                                             min_abs_score=0.5, min_novelty=0.3)
     assert studies == {}
+
+
+def test_features_from_the_database_skip_stories_seen_long_after_publication_by_default(conn):
+    now = "2024-01-10T15:00:00Z"
+    store.add_items(conn, [
+        store.NewsItem("rss:t", "news", "a", now, "Apple soars", first_seen_at=now),
+        store.NewsItem("rss:t", "news", "c", "2023-06-08T15:00:00Z", "Apple recalls", first_seen_at="2024-01-12T15:00:00Z"),
+    ])
+    ids = dict(conn.execute("SELECT external_id, item_id FROM news_item"))
+    store.save_scores(conn, "lexicon", "v1", {ids["a"]: (0.8, None), ids["c"]: (-0.9, None)})
+    store.save_links(conn, [(ids["a"], "AAPL", "name"), (ids["c"], "AAPL", "name")])
+    f = aggregate.features_for_symbol(conn, "AAPL", DAYS, scorer="lexicon", version="v1", horizons=(1,))
+    assert f["news_count_1d"].sum() == 1

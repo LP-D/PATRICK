@@ -113,3 +113,13 @@ def test_lm_dictionary_path_from_settings_changes_the_scorer_version(tmp_path):
     assert service.lexicon_version() .startswith("builtin")
     assert service.lexicon_from_settings({"news_lm_dictionary": str(path)}).name == "lm:lm.csv"
     assert service.lexicon_from_settings({"news_lm_dictionary": str(tmp_path / "absent.csv")}).name.startswith("builtin")
+
+
+def test_stories_republished_long_after_their_date_do_not_count_as_fresh_news(conn, linker):
+    old = _rss(("Apple shares surge as profit beats forecasts", "Strong demand", "Mon, 06 Jan 2025 14:00:00 GMT"))
+    service.refresh(conn, feeds=FEEDS[:1], fetch=lambda u: old, now=NOW, linker=linker, with_gdelt=False)
+    assert service.summary(conn, now=NOW)["n_stale"] == 1
+    assert service.asset_overview(conn, since=NOW - pd.Timedelta(days=30), now=NOW).empty
+    assert service.item_feed(conn, limit=10) == []
+    assert len(service.item_feed(conn, limit=10, include_stale=True)) == 1
+    assert service.scored_items_for_symbol(conn, "AAPL").empty
