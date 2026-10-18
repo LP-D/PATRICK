@@ -281,8 +281,9 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 - **P(hausse) du jour** : avant le 2026-10-18, le modèle exporté n'était pas calibré, la `p_up` des prédictions live était un score
   brut. Seuls les exports faits depuis (calibrateur dans le bundle, `prediction.p_up_calibrated = 1`) donnent une probabilité calibrée ;
   les 11 runs avec calibration déjà en base doivent être relancés pour l'obtenir. La classe prédite et sa confiance restent celles
-  du modèle refit sur tout l'historique ; seul `p_up` passe par le calibrateur (ajusté sur les ~15 % les plus récents de l'historique,
-  comme dans le walk-forward).
+  du modèle refit sur tout l'historique ; seul `p_up` passe par le calibrateur : son modèle sous-jacent est ajusté sur les ~85 % les plus anciens
+  de l'historique et sa carte isotonique/Platt sur les ~7,5 % suivants (même découpage que dans le walk-forward, un trou d'une longueur
+  d'horizon entre les deux) ; les lignes les plus récentes ne servent donc pas à cette probabilité.
 - **Black-Litterman** : conversion P(hausse) -> rendement attendu par une hypothèse gaussienne (tailles de hausse et de baisse égales) ;
   prior = portefeuille HRP faute de capitalisations ; aucune comparaison hors échantillon avec la pondération de référence.
 - `tests/test_desktop_runtime.py::test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant` échoue sur ce poste, lancé
