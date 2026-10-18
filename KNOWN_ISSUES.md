@@ -268,3 +268,23 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 - **Extras optionnels** : sans `pip install -e ".[deep]"` / `".[rl]"`, les pages `/dl` et `/rl` s'affichent mais le lancement est
   désactivé avec le motif ; la CI n'installe pas PyTorch (les tests qui l'exigent sont ignorés, ceux de configuration et de mécanique
   NumPy tournent partout).
+
+---
+
+## Analyse textuelle des news et Black-Litterman — limites assumées (2026-10-18)
+
+- **News** (`patrick/text/`, page `/news`) : aucune variable textuelle n'entre dans un entraînement ; l'historique commence à la
+  première collecte. Les flux relus après coup (publiés plus de 72 h avant d'être vus) sont stockés mais écartés des agrégats. Le
+  lexique intégré est réduit (anglais, français) ; la polarité d'un mot ne dépend pas de l'actif. Le rattachement privilégie la
+  précision (un lien manqué vaut mieux qu'un faux lien). GDELT n'a pas pu être vérifié en réel (HTTP 429 depuis ce poste) ; la BCE
+  (certificat refusé par Python ici), l'USDA et l'OPEP (403) ne sont pas dans les flux par défaut (réglage `news_extra_feeds`).
+- **P(hausse) du jour** : avant le 2026-10-18, le modèle exporté n'était pas calibré, la `p_up` des prédictions live était un score
+  brut. Seuls les exports faits depuis (calibrateur dans le bundle, `prediction.p_up_calibrated = 1`) donnent une probabilité calibrée ;
+  les 11 runs avec calibration déjà en base doivent être relancés pour l'obtenir. La classe prédite et sa confiance restent celles
+  du modèle refit sur tout l'historique ; seul `p_up` passe par le calibrateur (ajusté sur les ~15 % les plus récents de l'historique,
+  comme dans le walk-forward).
+- **Black-Litterman** : conversion P(hausse) -> rendement attendu par une hypothèse gaussienne (tailles de hausse et de baisse égales) ;
+  prior = portefeuille HRP faute de capitalisations ; aucune comparaison hors échantillon avec la pondération de référence.
+- `tests/test_desktop_runtime.py::test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant` échoue sur ce poste, lancé
+  depuis un shell de l'application Claude (cause probable : processus placés dans un objet de tâche Windows, non confirmée) ; le
+  code concerné (`desktop/`) n'est pas modifié par ces chantiers.

@@ -1,6 +1,7 @@
 # Cadrage — deep learning et modèles de diffusion
 
-Statut : cadrage (aucun modèle DL n'est câblé dans le pipeline). Date : 2026-09-25.
+Statut : cadrage du 2026-09-25. Mise à jour du 2026-10-18 : le DL séquentiel est câblé depuis (`models/deep.py`, page `/dl`, règles du §1
+appliquées) ; les modèles de diffusion (§2) ne le sont pas, voir `triage-feuille-de-route-2026-10-18.md`.
 
 ## 1. Le protocole actuel suffit-il pour du DL ?
 

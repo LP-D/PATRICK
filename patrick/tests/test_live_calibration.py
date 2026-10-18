@@ -9,6 +9,7 @@ trou | calibration sur des lignes réelles, jamais les lignes rééchantillonné
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -40,6 +41,10 @@ def _config(calibration: bool, method: str = "isotonic") -> RunConfig:
 BEST = {"horizon": 1, "regime": "GLOBAL", "N": 4, "sampler": "none", "algo": "XGBoost"}
 
 
+def _meta(path) -> dict:
+    return json.loads(Path(path.replace(".joblib", "_meta.json")).read_text(encoding="utf-8"))
+
+
 def _export(tmp_path, config, pool=None):
     pool = _pool() if pool is None else pool
     feature_pool = [c for c in pool.columns if c != "TGT"]
@@ -53,7 +58,7 @@ def test_export_stores_a_calibrator_when_the_run_calibrates(tmp_path):
     X = np.zeros((3, len(bundle["feature_names"])))
     proba = cal.predict_proba(X)
     assert proba.shape == (3, len(cal.classes_)) and np.allclose(proba.sum(axis=1), 1.0)
-    meta = json.loads(open(path.replace(".joblib", "_meta.json"), encoding="utf-8").read())
+    meta = _meta(path)
     assert meta["calibration"]["method"] == "isotonic" and meta["calibration"]["n_calibration_rows"] > 0
 
 
@@ -65,13 +70,13 @@ def test_the_raw_model_stays_in_the_bundle_for_explanations(tmp_path):
 def test_platt_scaling_is_honoured(tmp_path):
     path, bundle = _export(tmp_path, _config(True, "sigmoid"))
     assert "calibrator" in bundle
-    assert json.loads(open(path.replace(".joblib", "_meta.json"), encoding="utf-8").read())["calibration"]["method"] == "sigmoid"
+    assert _meta(path)["calibration"]["method"] == "sigmoid"
 
 
 def test_no_calibrator_when_the_run_does_not_calibrate(tmp_path):
     path, bundle = _export(tmp_path, _config(False))
     assert "calibrator" not in bundle
-    assert "calibration" not in json.loads(open(path.replace(".joblib", "_meta.json"), encoding="utf-8").read())
+    assert "calibration" not in _meta(path)
 
 
 def test_a_history_too_short_to_split_exports_without_a_calibrator(tmp_path):
