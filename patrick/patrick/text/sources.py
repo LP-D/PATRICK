@@ -31,7 +31,7 @@ from patrick.text.store import NewsItem
 USER_AGENT = "Mozilla/5.0 (PATRICK research reader)"
 MAX_BYTES = 5_000_000
 KINDS = ("news", "central_bank", "commodity_report")
-_TAG = re.compile(r"<[^>]+>")
+_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 _SPACE = re.compile(r"\s+")
 
 

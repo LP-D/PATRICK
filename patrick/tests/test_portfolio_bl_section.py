@@ -42,7 +42,7 @@ def _live_view(db_path, run_id, target, horizon, p_up):
     db.finish_run(conn, run_id, status="done", n_trials=1)
     trial = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
     ts = pd.Timestamp.now().strftime("%Y-%m-%d")
-    db.add_predictions(conn, trial, 1, "live", [ts], [None], [3], [0.6], p_up=[p_up])
+    db.add_predictions(conn, trial, 1, "live", [ts], [None], [3], [0.6], p_up=[p_up], p_up_calibrated=True)
     conn.close()
 
 

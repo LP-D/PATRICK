@@ -201,6 +201,7 @@ def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 
             "item_id": i, "title": r["title"], "source": r["source"], "kind": r["source_kind"], "url": r["url"],
             "known_at": r["known_at"].strftime("%Y-%m-%dT%H:%M:%SZ"),
             "published_at": r["published_at"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "lag_hours": float(r["lag_hours"]),
             "score": val(lex, i), "tone": val(tone, i), "novelty": val(nov, i),
             "events": json.loads(tags)["tags"] if tags else [], "symbols": by_item.get(i, []),
         })

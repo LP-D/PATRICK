@@ -113,7 +113,16 @@ def _run_with_p_up(conn, run_id, target, horizon, p_up, *, calibrated=True, spli
                   json.dumps({"name": run_id, "models": {"calibration": calibrated}}), "h", "sha", 1)
     db.finish_run(conn, run_id, status="done", n_trials=1)
     trial = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
-    db.add_predictions(conn, trial, 1, split, [ts], [None], [3], [0.6], p_up=[p_up])
+    db.add_predictions(conn, trial, 1, split, [ts], [None], [3], [0.6], p_up=[p_up], p_up_calibrated=calibrated or None)
+
+
+def test_a_run_that_enabled_calibration_but_whose_live_row_is_raw_is_not_read(conn):
+    """Le drapeau de configuration ne prouve rien : seule la ligne marquée `p_up_calibrated` est une probabilité calibrée."""
+    db.upsert_snapshot(conn, "snap_x", "hash_x", None, None, None)
+    db.create_run(conn, "rx", "A", 21, "snap_x", json.dumps({"models": {"calibration": True}}), "h", "sha", 1)
+    trial = db.create_trial(conn, "rx", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+    db.add_predictions(conn, trial, 1, "live", ["2026-10-16"], [None], [3], [0.6], p_up=[0.9])          # export ancien : brut
+    assert bl.latest_calibrated_p_up(conn, ["A"], 21) == {}
 
 
 def test_only_calibrated_probabilities_are_read(conn):

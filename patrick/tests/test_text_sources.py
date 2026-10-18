@@ -153,3 +153,11 @@ def test_gdelt_rate_limit_stops_the_series_without_hammering():
 
     result = sources.collect_gdelt(("a", "b", "c"), fetch=fetch, sleep=lambda s: None)
     assert len(calls) == 1 and result.errors == [("gdelt", "HTTP 429")]
+
+
+def test_comparison_signs_in_a_headline_are_not_mistaken_for_markup():
+    rss = ('<?xml version="1.0"?><rss version="2.0"><channel><item>'
+           "<title>Gold &lt; 2000 as S&amp;P &gt; 5000 &lt;b&gt;now&lt;/b&gt;</title><link>https://x.example/1</link>"
+           "<pubDate>Wed, 17 Sep 2025 18:00:00 GMT</pubDate></item></channel></rss>")
+    parsed = sources.parse_feed(rss, FEED, FETCHED)
+    assert parsed.items[0].title == "Gold < 2000 as S&P > 5000 now"

@@ -113,6 +113,7 @@ def register(app: FastAPI, templates, i18n_context) -> None:
             conn.close()
         for it in items:
             it["known_at_label"] = _fmt_ts(it["known_at"])
+            it["published_label"] = _fmt_ts(it["published_at"])
         return templates.TemplateResponse(request, "_news_feed.html", {"items": items, "symbol": symbol, **i18n_context(request)})
 
     @app.get("/fragments/news-central")

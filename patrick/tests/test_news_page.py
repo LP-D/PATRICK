@@ -170,3 +170,43 @@ def test_event_study_reports_the_reaction_when_there_are_enough_events(seeded, m
     text = TestClient(app).get("/fragments/news-event-study", params={"symbol": "AAPL"}).text
     assert "Nouvelles positives" in text and "Rendement anormal cumulé" in text
     assert "Moins de 30 événements" in text
+
+
+# --- rendu HTML : de vrais liens, et un titre venu d'un flux externe n'injecte jamais de balise ---------------------------
+
+def test_tables_render_real_links_not_escaped_markup(seeded):
+    client = TestClient(app)
+    assets = client.get("/fragments/news-assets", params={"window": 7}).text
+    assert '<a href="/news?symbol=AAPL&amp;window=7">AAPL</a>' in assets and "&lt;a" not in assets
+    feed = client.get("/fragments/news-feed").text
+    assert '<a href="https://x.example/0" target="_blank" rel="noopener noreferrer">Apple shares surge' in feed
+    assert '<a href="/news?symbol=AAPL">AAPL</a>' in feed and "&lt;a" not in feed
+    central = client.get("/fragments/news-central").text
+    assert '<a href="https://x.example/0"' in central and "&lt;a" not in central
+
+
+def test_a_hostile_headline_is_escaped(tmp_path, monkeypatch):
+    path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", path)
+    stamp = (NOW - pd.Timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    conn = db.connect(path)
+    store.add_items(conn, [store.NewsItem("evil", "news", "e1", stamp, "Gold <script>alert(1)</script> rallies",
+                                          url="https://evil.example/a?x=1&y=\"2\"", first_seen_at=stamp)])
+    conn.close()
+    text = TestClient(app).get("/fragments/news-feed").text
+    assert "<script>alert(1)</script>" not in text and "&lt;script&gt;alert(1)&lt;/script&gt;" in text
+    assert 'href="https://evil.example/a?x=1&amp;y=&#34;2&#34;"' in text
+
+
+def test_a_non_http_link_is_never_rendered_as_a_link(tmp_path, monkeypatch):
+    path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", path)
+    stamp = (NOW - pd.Timedelta(hours=1)).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    rss = ('<?xml version="1.0"?><rss version="2.0"><channel><title>x</title><item><title>Gold rallies</title>'
+           f"<link>javascript:alert(1)</link><pubDate>{stamp}</pubDate></item></channel></rss>")
+    conn = db.connect(path)
+    service.refresh(conn, feeds=[sources.Feed("evil", "https://evil.example/rss", "news")], fetch=lambda u: rss, now=NOW,
+                    with_gdelt=False)
+    conn.close()
+    text = TestClient(app).get("/fragments/news-feed").text
+    assert "javascript:" not in text and "Gold rallies" in text

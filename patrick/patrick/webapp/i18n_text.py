@@ -80,6 +80,7 @@ TEXT_STRINGS: dict[str, dict[str, str]] = {
     "news_feed_filter": _s("Actif : {s}", "Asset: {s}"),
     "news_feed_all": _s("Tout afficher", "Show all"),
     "news_feed_empty": _s("Aucune nouvelle.", "No story."),
+    "news_published": _s("publiée {d}", "published {d}"),
     "news_col_time": _s("Connue à", "Known at"),
     "news_col_title": _s("Titre", "Headline"),
     "news_col_source": _s("Source", "Source"),

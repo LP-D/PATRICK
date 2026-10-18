@@ -114,12 +114,13 @@ def black_litterman(cov_annual: pd.DataFrame, reference: pd.Series, p_up: pd.Ser
 def latest_calibrated_p_up(conn: sqlite3.Connection, targets: list[str], horizon: int, since: str | None = None,
                            require_calibrated: bool = True) -> dict[str, float]:
     """Dernière P(hausse) LIVE de chaque cible à l'horizon donné (une sous-requête corrélée par cible, comme les autres
-    lectures de `prediction` : pas de fonction de fenêtre sur 12 M de lignes). Par défaut, uniquement les runs qui ont
-    calibré leurs probabilités (`config.models.calibration`)."""
+    lectures de `prediction` : pas de fonction de fenêtre sur 12 M de lignes). Par défaut, uniquement les lignes dont la `p_up`
+    a réellement traversé le calibrateur d'export (`prediction.p_up_calibrated = 1`, migration 0037) : le drapeau de configuration
+    `models.calibration` ne suffit pas, il ne dit pas que la prédiction du jour a été calibrée."""
     if not targets:
         return {}
     marks = ",".join("?" for _ in targets)
-    calibrated = "AND json_extract(r2.config_json, '$.models.calibration') = 1 " if require_calibrated else ""
+    calibrated = "AND p.p_up_calibrated = 1 " if require_calibrated else ""
     recent = "AND p.ts >= ? " if since else ""
     sql = (
         "SELECT r.target, (SELECT p.p_up FROM prediction p JOIN trial t ON t.trial_id = p.trial_id "

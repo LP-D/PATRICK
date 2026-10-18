@@ -234,6 +234,7 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
 
         bundle = joblib.load(best["artifact_path"])
         model, scaler = bundle["model"], bundle["scaler"]
+        calibrator = bundle.get("calibrator")      # calibrateur de P(hausse) ajusté à l'export (absent : exports plus anciens)
         feature_pool, feature_names = bundle["feature_pool"], bundle["feature_names"]
         interaction_formulas = bundle.get("interaction_formulas", [])
         target_col = bundle["target_col"]
@@ -303,14 +304,22 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                 # `ravel` : CatBoost renvoie (n, 1), et NumPy 2.x refuse int() sur un tableau de dimension 1.
                 pred_class = int(np.asarray(model.predict(X_sel)).ravel()[0])
                 proba_row = model.predict_proba(X_sel)[0]
+                if calibrator is not None:
+                    cal_row = calibrator.predict_proba(X_sel)[0]
+                    cal_classes = [int(c) for c in calibrator.classes_]
             # Column of the predicted class by `classes_`, not by its value: a
             # class absent from the final fit shifts the columns.
             cls_list = classes or list(range(len(proba_row)))
             confidence = float(proba_row[cls_list.index(pred_class)]) if pred_class in cls_list else float("nan")
             p_up = float(calibration_lib.p_up_from_proba(proba_row[None, :], cls_list)[0])
+            p_up_calibrated = False
+            if calibrator is not None and not getattr(model, "needs_history", False):
+                # P(hausse) calibrée (export-time) ; la classe prédite et sa confiance restent celles du modèle exporté.
+                p_up = float(calibration_lib.p_up_from_proba(cal_row[None, :], cal_classes)[0])
+                p_up_calibrated = True
             trackdb.add_predictions(conn, best["trial_id"], fold_index=0, split="live",
                                      ts=[str(t)], y_true=[None], y_pred=[pred_class],
-                                     y_proba=[confidence], p_up=[p_up])
+                                     y_proba=[confidence], p_up=[p_up], p_up_calibrated=p_up_calibrated or None)
             try:
                 if alpha_forward is not None:
                     lo, hi = _alpha_live_thresholds(raw, config, target_col, t, horizon)

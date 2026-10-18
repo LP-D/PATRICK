@@ -1,5 +1,6 @@
 {# Fragment `/fragments/news-feed` : les dernières nouvelles utilisables (par heure de connaissance), avec leur note, leur nouveauté,
-   leurs étiquettes d'événement et les actifs rattachés. Les titres viennent de flux externes : toujours échappés. #}
+   leurs étiquettes d'événement et les actifs rattachés. Les titres viennent de flux externes : chaque variable passe par un bloc
+   `set` (échappement automatique), jamais par `~` avec du Markup. Seuls les liens http(s) deviennent des liens. #}
 {% from "_components.html" import data_table, empty_state %}
 {% if not items %}
 {{ empty_state(t('news_feed_empty'), t('news_assets_empty_hint')) }}
@@ -7,20 +8,20 @@
 {% set out = [] %}
 {% for it in items %}
 {% set cls = '' if it.score is none else ('exp-chip-pos' if it.score > 0.15 else ('exp-chip-neg' if it.score < -0.15 else '')) %}
-{% set title_html = ('<a href="' ~ (it.url | e) ~ '" target="_blank" rel="noopener noreferrer">' ~ (it.title | e) ~ '</a>') if (it.url and it.url.startswith('http')) else (it.title | e) %}
-{% set events_html = [] %}
-{% for tag in it.events %}{% set _ = events_html.append('<span class="exp-chip exp-chip-warn">' ~ t('news_ev_' ~ tag) ~ '</span>') %}{% endfor %}
-{% set symbols_html = [] %}
-{% for s in it.symbols %}{% set _ = symbols_html.append('<a href="/news?symbol=' ~ (s | urlencode) ~ '">' ~ (s | e) ~ '</a>') %}{% endfor %}
+{% set time_cell %}{{ it.known_at_label }}{% if it.published_label and it.lag_hours and it.lag_hours > 1 %}<br><small class="hint">{{ t('news_published', d=it.published_label) }}</small>{% endif %}{% endset %}
+{% set title_cell %}{% if it.url and it.url.startswith(('http://', 'https://')) %}<a href="{{ it.url }}" target="_blank" rel="noopener noreferrer">{{ it.title }}</a>{% else %}{{ it.title }}{% endif %}{% endset %}
+{% set score_cell %}{% if it.score is not none %}<span class="exp-chip {{ cls }}">{{ '%+.2f' | format(it.score) }}</span>{% else %}<span class="na">—</span>{% endif %}{% endset %}
+{% set events_cell %}{% for tag in it.events %}<span class="exp-chip exp-chip-warn">{{ t('news_ev_' ~ tag) }}</span> {% endfor %}{% endset %}
+{% set symbols_cell %}{% for s in it.symbols %}<a href="/news?symbol={{ s | urlencode }}">{{ s }}</a> {% endfor %}{% endset %}
 {% set _ = out.append([
-    it.known_at_label,
-    title_html,
+    time_cell,
+    title_cell,
     it.source | e,
-    ('<span class="exp-chip ' ~ cls ~ '">' ~ ('%+.2f' | format(it.score)) ~ '</span>') if it.score is not none else '<span class="na">—</span>',
-    ('%+.2f' | format(it.tone)) if it.tone is not none else '<span class="na">—</span>',
-    ('%.2f' | format(it.novelty)) if it.novelty is not none else '<span class="na">—</span>',
-    events_html | join(' '),
-    symbols_html | join(' '),
+    score_cell,
+    ('%+.2f' | format(it.tone)) if it.tone is not none else '—',
+    ('%.2f' | format(it.novelty)) if it.novelty is not none else '—',
+    events_cell,
+    symbols_cell,
 ]) %}
 {% endfor %}
 {{ data_table([t('news_col_time'), t('news_col_title'), t('news_col_source'), t('news_col_score'), t('news_col_tone'), t('news_col_novelty'),
