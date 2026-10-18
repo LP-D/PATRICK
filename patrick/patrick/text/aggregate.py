@@ -123,6 +123,14 @@ def _novelty_scores(conn, scorer: str, version: str | None) -> pd.DataFrame | No
     return pd.DataFrame(rows, columns=["item_id", "novelty"]) if rows else None
 
 
+def strong_events(items: pd.DataFrame, min_abs_score: float = 0.5, min_novelty: float = 0.3) -> pd.DataFrame:
+    """Les news qui peuvent servir d'événement : notées, |note| ≥ `min_abs_score`, nouveauté ≥ `min_novelty`."""
+    df = items.dropna(subset=["known_at", "score"]).copy()
+    if "novelty" in df.columns:
+        df = df[df["novelty"] >= min_novelty]
+    return df[df["score"].abs() >= min_abs_score]
+
+
 def textual_event_study(prices: pd.Series, items: pd.DataFrame, benchmark: pd.Series | None = None,
                         min_abs_score: float = 0.5, min_novelty: float = 0.3, model: str = "market",
                         event_window: tuple[int, int] = (-5, 20), **kwargs) -> dict[str, es.EventStudy]:
@@ -130,10 +138,7 @@ def textual_event_study(prices: pd.Series, items: pd.DataFrame, benchmark: pd.Se
     en deux groupes (`positive`, `negative`). J0 = première séance dont la clôture suit **strictement** la parution
     (`event_study.event_day_zero`). Un groupe sans événement est omis. Même réserve que toute étude d'événements : des
     news groupées dans le temps ne sont pas indépendantes (`overlapping_events`)."""
-    df = items.dropna(subset=["known_at", "score"]).copy()
-    if "novelty" in df.columns:
-        df = df[df["novelty"] >= min_novelty]
-    df = df[df["score"].abs() >= min_abs_score]
+    df = strong_events(items, min_abs_score, min_novelty)
     out: dict[str, es.EventStudy] = {}
     for label, part in (("positive", df[df["score"] > 0]), ("negative", df[df["score"] < 0])):
         if part.empty:

@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, empty_state, help_icon %}
+{% from "_components.html" import status_badge, data_table, empty_state, help_icon, lazy_block %}
 {% block title %}PATRICK — {{ t('nav_portfolio_title') }}{% endblock %}
 
 {# Phase 8 (feature/portfolio-view) -- cross-asset aggregated synthesis.
@@ -120,5 +120,18 @@
    {{ t('pf_hrp_shrink', d='%.2f' | format(hrp.shrinkage), n=hrp.n_obs) }}</p>
 {% endif %}
 {% endif %}
+</section>
+
+{# Black-Litterman v2 (`tracking/black_litterman.py`) : déplace le portefeuille HRP ci-dessus vers les probabilités de hausse
+   calibrées des modèles. Calcul lourd (covariance, optimisation) : il arrive par fragment, après l'affichage de la page. #}
+<section class="card" style="--enter-delay:180ms">
+<h2>{{ t('pf_bl_title') }}
+    {{ help_icon('black_litterman', t('pf_bl_term'), t('glossary_open_aria', term=t('pf_bl_term'))) }}
+</h2>
+<p class="hint">{{ t('pf_bl_sub') }}</p>
+<p class="hint">{{ t('pf_bl_horizon') }} :
+{% for h in bl_horizons %}{% if h == bl_horizon %}<strong>{{ t('pf_bl_days', h=h) }}</strong>{% else %}<a href="/portfolio?bl_horizon={{ h }}">{{ t('pf_bl_days', h=h) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+</p>
+{{ lazy_block('/fragments/portfolio-bl?horizon=' ~ bl_horizon, 5, t('sb_loading'), t('lazy_retry')) }}
 </section>
 {% endblock %}

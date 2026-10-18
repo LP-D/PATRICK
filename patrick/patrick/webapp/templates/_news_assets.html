@@ -1,0 +1,21 @@
+{# Fragment `/fragments/news-assets` : sentiment moyen par actif sur la fenêtre choisie (lexique, nouvelles utilisables seulement). #}
+{% from "_components.html" import data_table, empty_state %}
+{% if not rows %}
+{{ empty_state(t('news_assets_empty'), t('news_assets_empty_hint')) }}
+{% else %}
+{% set out = [] %}
+{% for r in rows %}
+{% set cls = '' if r.mean_score is none else ('exp-chip-pos' if r.mean_score > 0.15 else ('exp-chip-neg' if r.mean_score < -0.15 else '')) %}
+{% set _ = out.append([
+    '<a href="/news?symbol=' ~ (r.symbol | urlencode) ~ '&amp;window=' ~ window ~ '">' ~ (r.symbol | e) ~ '</a>',
+    r.n_items,
+    r.n_scored,
+    ('<span class="exp-chip ' ~ cls ~ '">' ~ ('%+.2f' | format(r.mean_score)) ~ '</span>') if r.mean_score is not none else '<span class="na">—</span>',
+    ('%.0f %%' | format(r.share_positive * 100)) if r.share_positive is not none else '<span class="na">—</span>',
+    ('%.2f' | format(r.mean_novelty)) if r.mean_novelty is not none else '<span class="na">—</span>',
+    r.last_known_at,
+]) %}
+{% endfor %}
+{{ data_table([t('news_col_asset'), t('news_col_n'), t('news_col_scored'), t('news_col_mean'), t('news_col_pos'), t('news_col_nov'), t('news_col_last')],
+              out, num_cols=[1, 2, 3, 4, 5]) }}
+{% endif %}

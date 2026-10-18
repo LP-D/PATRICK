@@ -1,0 +1,28 @@
+{# Fragment `/fragments/news-feed` : les dernières nouvelles utilisables (par heure de connaissance), avec leur note, leur nouveauté,
+   leurs étiquettes d'événement et les actifs rattachés. Les titres viennent de flux externes : toujours échappés. #}
+{% from "_components.html" import data_table, empty_state %}
+{% if not items %}
+{{ empty_state(t('news_feed_empty'), t('news_assets_empty_hint')) }}
+{% else %}
+{% set out = [] %}
+{% for it in items %}
+{% set cls = '' if it.score is none else ('exp-chip-pos' if it.score > 0.15 else ('exp-chip-neg' if it.score < -0.15 else '')) %}
+{% set title_html = ('<a href="' ~ (it.url | e) ~ '" target="_blank" rel="noopener noreferrer">' ~ (it.title | e) ~ '</a>') if (it.url and it.url.startswith('http')) else (it.title | e) %}
+{% set events_html = [] %}
+{% for tag in it.events %}{% set _ = events_html.append('<span class="exp-chip exp-chip-warn">' ~ t('news_ev_' ~ tag) ~ '</span>') %}{% endfor %}
+{% set symbols_html = [] %}
+{% for s in it.symbols %}{% set _ = symbols_html.append('<a href="/news?symbol=' ~ (s | urlencode) ~ '">' ~ (s | e) ~ '</a>') %}{% endfor %}
+{% set _ = out.append([
+    it.known_at_label,
+    title_html,
+    it.source | e,
+    ('<span class="exp-chip ' ~ cls ~ '">' ~ ('%+.2f' | format(it.score)) ~ '</span>') if it.score is not none else '<span class="na">—</span>',
+    ('%+.2f' | format(it.tone)) if it.tone is not none else '<span class="na">—</span>',
+    ('%.2f' | format(it.novelty)) if it.novelty is not none else '<span class="na">—</span>',
+    events_html | join(' '),
+    symbols_html | join(' '),
+]) %}
+{% endfor %}
+{{ data_table([t('news_col_time'), t('news_col_title'), t('news_col_source'), t('news_col_score'), t('news_col_tone'), t('news_col_novelty'),
+               t('news_col_events'), t('news_col_assets')], out, num_cols=[3, 4, 5], collapse_after=12) }}
+{% endif %}

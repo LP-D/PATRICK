@@ -200,3 +200,27 @@ def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 
             "events": json.loads(tags)["tags"] if tags else [], "symbols": by_item.get(i, []),
         })
     return out
+
+
+def summary(conn: sqlite3.Connection, now=None) -> dict:
+    """Chiffres de tête de /news (comptages SQL seulement : la page doit s'ouvrir tout de suite)."""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    day_ago = (now - pd.Timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    n_items, n_sources, last = conn.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT source), MAX(MAX(published_at, first_seen_at)) FROM news_item").fetchone()
+    n_24h = conn.execute("SELECT COUNT(*) FROM news_item WHERE MAX(published_at, first_seen_at) >= ?", (day_ago,)).fetchone()[0]
+    n_linked, n_symbols = conn.execute("SELECT COUNT(DISTINCT item_id), COUNT(DISTINCT symbol) FROM news_link").fetchone()
+    return {"n_items": n_items, "n_24h": n_24h, "n_linked": n_linked, "n_symbols": n_symbols, "n_sources": n_sources,
+            "last_known_at": last}
+
+
+def scored_items_for_symbol(conn: sqlite3.Connection, symbol: str) -> pd.DataFrame:
+    """News rattachées à `symbol` avec leur note du lexique et leur nouveauté (colonnes `known_at`, `score`, `novelty`)."""
+    items = store.load_items(conn)
+    links = store.load_links(conn)
+    ids = set(links.loc[links["symbol"] == symbol, "item_id"])
+    items = items[items["item_id"].isin(ids)]
+    score = store.load_scores(conn, LEXICON, lexicon_version())[["item_id", "score"]]
+    nov = store.load_scores(conn, NOVELTY, VERSION)[["item_id", "score"]].rename(columns={"score": "novelty"})
+    return items.merge(score, on="item_id", how="left").merge(nov, on="item_id", how="left")[
+        ["item_id", "title", "known_at", "score", "novelty"]]

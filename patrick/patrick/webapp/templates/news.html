@@ -1,0 +1,69 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import help_icon, metric, lazy_block %}
+{% block title %}PATRICK — {{ t('news_title') }}{% endblock %}
+
+{# Page /news : le cadre (titre, chiffres de tête, fenêtre, bouton) s'affiche tout de suite ; les tableaux arrivent par
+   fragments (`static/lazy.js`), l'étude d'événement seulement au clic. #}
+{% block content %}
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
+    <a href="/">{{ t('nav_home') }}</a>
+    <span aria-current="page">{{ t('nav_news') }}</span>
+</nav>
+
+<h1 class="page-title">{{ t('news_title') }}
+    {{ help_icon('news_point_in_time', t('gl_t_news_point_in_time'), t('glossary_open_aria', term=t('gl_t_news_point_in_time'))) }}
+</h1>
+<p class="hint">{{ t('news_sub') }}</p>
+
+<div class="metric-grid">
+{{ metric(t('news_k_total'), summary.n_items, t('news_k_total_rel', n=summary.n_24h), "neutral") }}
+{{ metric(t('news_k_linked'), summary.n_linked, t('news_k_linked_rel', n=summary.n_symbols), "neutral") }}
+{{ metric(t('news_k_sources'), summary.n_sources, t('news_k_sources_rel', n=summary.n_sources), "neutral") }}
+{{ metric(t('news_k_last'), summary.last_known_at or t('news_k_last_none'), '', "neutral") }}
+</div>
+
+<p class="news-toolbar">
+    {{ t('news_window') }} :
+    {% for w in windows %}{% if w == window %}<strong>{{ t('news_win_' ~ w) }}</strong>{% else %}<a href="/news?window={{ w }}{% if symbol %}&amp;symbol={{ symbol | urlencode }}{% endif %}">{{ t('news_win_' ~ w) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+    <button type="button" class="btn" id="news-refresh" data-url="/api/newsflow/refresh" data-status-url="/api/newsflow/status">{{ t('news_refresh') }}</button>
+    <span id="news-status" role="status" aria-live="polite"></span>
+</p>
+
+<section class="card">
+<h2>{{ t('news_assets_title') }}
+    {{ help_icon('news_sentiment', t('gl_t_news_sentiment'), t('glossary_open_aria', term=t('gl_t_news_sentiment'))) }}
+</h2>
+{{ lazy_block('/fragments/news-assets?window=' ~ window, 4, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section class="card">
+<h2>{{ t('news_feed_title') }}</h2>
+{% if symbol %}<p class="hint">{{ t('news_feed_filter', s=symbol) }} · <a href="/news?window={{ window }}">{{ t('news_feed_all') }}</a></p>{% endif %}
+{{ lazy_block('/fragments/news-feed' ~ ('?symbol=' ~ (symbol | urlencode) if symbol else ''), 6, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section class="card">
+<h2>{{ t('news_central_title') }}
+    {{ help_icon('news_tone', t('gl_t_news_tone'), t('glossary_open_aria', term=t('gl_t_news_tone'))) }}
+</h2>
+{{ lazy_block('/fragments/news-central', 3, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section class="card">
+<h2>{{ t('news_es_title') }}
+    {{ help_icon('news_event_study', t('gl_t_news_event_study'), t('glossary_open_aria', term=t('gl_t_news_event_study'))) }}
+</h2>
+{% if symbol %}
+<p><button type="button" class="btn" id="news-es-run" data-url="/fragments/news-event-study?symbol={{ symbol | urlencode }}">{{ t('news_es_button') }}</button></p>
+{% else %}
+<p class="hint">{{ t('news_es_need_symbol') }}</p>
+{% endif %}
+<div id="news-es" aria-live="polite"></div>
+</section>
+
+<section class="card">
+<h2>{{ t('news_method_title') }}</h2>
+<p class="hint">{{ t('news_method') }}</p>
+</section>
+<script src="/static/news.js" defer></script>
+{% endblock %}

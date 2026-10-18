@@ -18,6 +18,7 @@ CATEGORIES: list[tuple[str, str, str]] = [
     ("assets", "Classes d'actifs", "Asset classes"),
     ("models", "Modèles et features", "Models and features"),
     ("portfolio", "Portefeuille, fonds et patrimoine", "Portfolio, funds and wealth"),
+    ("text", "Texte et news", "Text and news"),
     ("app", "Suivi et application", "Tracking and application"),
 ]
 
