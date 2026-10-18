@@ -25,6 +25,7 @@ Ce dossier centralise la documentation du projet PATRICK. Les documents à jour 
 - [politique-derive.md](ops/politique-derive.md) — alerte de dérive.
 - [veille-windows-runs-de-reference.md](ops/veille-windows-runs-de-reference.md) — empêcher la veille pendant un run.
 - [taches-planifiees-agents.md](ops/taches-planifiees-agents.md) — tâche planifiée créée par un agent.
+- [collecte-news.md](ops/collecte-news.md) — collecte des nouvelles (commandes, réglages, flux par défaut, tâche planifiée).
 
 ## Modélisation et recherche
 
