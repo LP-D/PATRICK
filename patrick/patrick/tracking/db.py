@@ -1056,6 +1056,24 @@ def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, 
         )
 
 
+HOLDOUT_PURPOSES = ("final_eval", "diagnostic", "champion_duel_challenger", "champion_duel_champion")
+
+
+def record_holdout_access(conn: sqlite3.Connection, target: str, horizon: int, purpose: str, *,
+                          run_id: str | None = None, holdout_start: str | None = None,
+                          holdout_end: str | None = None, n_rows: int | None = None,
+                          detail: str | None = None) -> None:
+    """Appends one read of the terminal holdout to `holdout_access` (migration 0038). Append-only, never updated or
+    deleted -- see the migration header. `purpose` is one of `HOLDOUT_PURPOSES` (refused by the table otherwise)."""
+    with conn:
+        conn.execute(
+            "INSERT INTO holdout_access (target, horizon, purpose, run_id, holdout_start, holdout_end, n_rows, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (target, int(horizon), purpose, run_id, holdout_start, holdout_end,
+             None if n_rows is None else int(n_rows), detail),
+        )
+
+
 class TrialRecorder:
     """Optuna callback (`study.optimize(callbacks=[...])`) registering every
     finished Optuna trial -- complete, pruned or failed: each one is an

@@ -458,6 +458,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
     dm_result = None if is_cpcv else _dm_result_for_run(conn, run_id)
     holdout_metrics = None if is_cpcv else (best_trial["holdout_f1_dir"] if best_trial else None)
     holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
+    holdout_reads = trackstats.holdout_reads(conn, run["target"], run["horizon"])
 
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(run["target"]))
     target_fdr = fdr_result["results"].get(run["target"])
@@ -492,6 +493,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
         "dm_result": dm_result,
         "holdout_f1_dir": holdout_metrics,
         "holdout_diag": holdout_diag,
+        "holdout_reads": holdout_reads,
         "fdr_result": fdr_result,
         "target_fdr": target_fdr,
         "data_quality_enabled": config.get("data_quality", {}).get("enabled", True),

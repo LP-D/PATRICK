@@ -47,6 +47,35 @@ def count_cumulative_trials(conn: sqlite3.Connection, target: str, horizon: int 
     return count_registered_trials(conn, target, horizon)
 
 
+_SELECTING_PURPOSES = ("champion_duel_challenger", "champion_duel_champion")
+
+
+def holdout_reads(conn: sqlite3.Connection, target: str, horizon: int | None = None, *,
+                  overlapping: tuple[str, str] | None = None) -> dict:
+    """How many times the terminal holdout of `target` (optionally one horizon) was read, from the append-only
+    `holdout_access` registry (migration 0038): total, per purpose, distinct runs, first/last read, and `selecting`
+    = the reads that served to CHOOSE a model (the champion / challenger duel) rather than to report on one.
+    `overlapping=(start, end)`: only the reads whose window shares at least one day with it -- the holdout slides
+    with the data, a read of an unrelated window has not seen this one. The registry starts at its creation:
+    `first_at` says since when reads are known."""
+    where, params = ["target = ?"], [target]
+    if horizon is not None:
+        where.append("horizon = ?")
+        params.append(horizon)
+    if overlapping is not None:
+        where.append("holdout_start <= ? AND holdout_end >= ?")
+        params += [overlapping[1], overlapping[0]]
+    clause = " AND ".join(where)
+    rows = conn.execute(f"SELECT purpose, COUNT(*) FROM holdout_access WHERE {clause} GROUP BY purpose", params).fetchall()
+    n_runs, first_at, last_at = conn.execute(
+        f"SELECT COUNT(DISTINCT run_id), MIN(accessed_at), MAX(accessed_at) FROM holdout_access WHERE {clause}",
+        params).fetchone()
+    by_purpose = {purpose: n for purpose, n in rows}
+    return {"total": sum(by_purpose.values()), "by_purpose": by_purpose, "n_runs": n_runs,
+            "selecting": sum(n for purpose, n in by_purpose.items() if purpose in _SELECTING_PURPOSES),
+            "first_at": first_at, "last_at": last_at}
+
+
 def pbo_for_target(conn: sqlite3.Connection, target: str, horizon: int, regime: str,
                     metric: str = "F1_dir") -> dict:
     """PBO (see `validation.pbo.compute_pbo`) over all historical trials of a

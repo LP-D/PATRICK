@@ -107,6 +107,15 @@
 {{ metric(t('rd_holdout'), "—", t('rd_not_computed_run'), "disabled") }}
 {% endif %}
 
+{% set hr = detail.holdout_reads %}
+{% if hr.total %}
+{{ metric(t('rd_holdout_reads'), "%d" | format(hr.total),
+          t('rd_holdout_reads_rel', k=hr.selecting, r=hr.n_runs, d=hr.first_at[:10]),
+          "warning" if hr.selecting else "neutral") }}
+{% else %}
+{{ metric(t('rd_holdout_reads'), "—", t('rd_holdout_reads_none'), "disabled") }}
+{% endif %}
+
 {% if detail.target_fdr %}
 {{ metric(t('rd_fdr'), t('rd_adj_p', p='%.4f' | format(detail.target_fdr.adjusted_p_value)),
           t('rd_fdr_rel', r=detail.target_fdr.rank, n=detail.fdr_result.n_tested, a=detail.fdr_result.alpha, s=(t('h_significant_short') if detail.target_fdr.significant else t('h_not_significant_short'))),

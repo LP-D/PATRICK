@@ -922,7 +922,8 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
 def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, target_col: str,
                        feature_pool: list[str], config: RunConfig, all_dates_full: pd.DatetimeIndex,
                        n_wf: int, best_cfg: dict, seed: int,
-                       universe: _FoldUniverse | None = None) -> dict | None:
+                       universe: _FoldUniverse | None = None, *, purpose: str,
+                       run_id: str | None = None) -> dict | None:
     """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
     the model is retrained ONLY on data prior to the holdout
     (`pool_builder.get(n_wf)` -> parametric fit on `raw.iloc[:n_wf]`, same
@@ -932,7 +933,12 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     #1 of the original plan: never rank/select on the holdout).
 
     `universe`: the reduction is decided on the pre-holdout bars, like
-    every other training set."""
+    every other training set.
+
+    The ONLY function that reads the holdout: every read is written to
+    `holdout_access` (migration 0038) with its `purpose` (one of
+    `trackdb.HOLDOUT_PURPOSES`) and the `run_id` it serves -- the holdout is
+    otherwise protected by discipline only."""
     if universe is not None:
         feature_pool = universe.features(feature_pool, universe.prefix_mask(n_wf), "holdout")
     horizon = int(best_cfg["horizon"])
@@ -971,6 +977,9 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
         X_tr[:, cols], y_tr, X_te[:, cols], y_te, sampler_name, algo, seed,
         calibration=config.models.calibration, calibration_method=config.models.calibration_method,
         calibration_gap=horizon, **best_params)
+    trackdb.record_holdout_access(
+        conn, config.objective.run_label(), horizon, purpose, run_id=run_id,
+        holdout_start=str(holdout_start_date.date()), holdout_end=str(all_dates_full[-1].date()), n_rows=len(y_te))
     test_dates = [str(d.date()) for d in idx[te_mask]]
     # F08: the baselines predicted on the SAME holdout rows, so the final
     # Diebold-Mariano test runs on data that never took part in a choice.
@@ -1801,7 +1810,7 @@ def _holdout_diagnostic(st: _RunState) -> None:
                     "best_params": {}}
         diag_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
                                       st.config, st.all_dates_full, st.n_wf, diag_cfg, st.seed,
-                                      universe=st.universe)
+                                      universe=st.universe, purpose="diagnostic", run_id=st.run_ids[h])
         if diag_eval is not None:
             trackholdout.write_holdout_diagnostic(st.conn, tid, diag_eval["metrics"])
     st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
@@ -2009,7 +2018,8 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
         return None
     holdout_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
                                      st.config, st.all_dates_full, st.n_wf, final_best, st.seed,
-                                     universe=st.universe)
+                                     universe=st.universe, purpose="final_eval",
+                                     run_id=st.run_ids[int(final_best["horizon"])])
     if holdout_eval is None:
         return None
     persist_holdout(st, best_trial_id, holdout_eval)

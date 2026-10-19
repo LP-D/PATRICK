@@ -16,6 +16,7 @@ Règles :
   prédictions « live » restent donc sur le PC qui les a produites);
 - `champion` : le plus récent (`promoted_at`) gagne pour une même (cible, horizon);
 - `trial_registry` (compteur d'essais du DSR) : union dédoublonnée;
+- `holdout_access` (lectures du holdout terminal) : union dédoublonnée;
 - caches (`shap_selection_cache`, `vol_model_cache`) : union par clé;
 - jamais fusionnés par union : patrimoine (`wealth_*`), `simulation` (les deux PC avaient importé les
   mêmes comptes sous des identifiants différents, une union créerait des doublons). Le patrimoine a un
@@ -192,6 +193,13 @@ def merge_databases(dst_path: str, src_path: str, *, fast: bool = False) -> dict
             added["trial_registry"] = _insert(
                 conn, "trial_registry", skip=("registry_id",),
                 where=f"WHERE NOT EXISTS (SELECT 1 FROM main.trial_registry m WHERE {same})")
+
+            # Registre d'accès au holdout : même règle (union dédoublonnée sur tout le contenu).
+            acc = [c for c in _shared_columns(conn, "holdout_access") if c != "access_id"]
+            same = " AND ".join(f'm."{c}" IS s."{c}"' for c in acc)
+            added["holdout_access"] = _insert(
+                conn, "holdout_access", skip=("access_id",),
+                where=f"WHERE NOT EXISTS (SELECT 1 FROM main.holdout_access m WHERE {same})")
 
             added["champion"] = _merge_champions(conn, off)
 

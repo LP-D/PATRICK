@@ -17,6 +17,7 @@ from patrick.data.store import DataStore
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import champions
 from patrick.tracking import db as trackdb
+from patrick.tracking import stats as trackstats
 
 pytestmark = pytest.mark.slow
 
@@ -133,5 +134,64 @@ def test_every_horizon_of_a_launch_keeps_its_own_holdout(tmp_path, monkeypatch):
         dup = conn.execute("SELECT trial_id, metric, COUNT(*) FROM fold_metric WHERE split = 'holdout' "
                            "GROUP BY trial_id, metric HAVING COUNT(*) > 1").fetchall()
         assert dup == []
+    finally:
+        conn.close()
+
+
+def _reads_by_purpose(conn, run_id=None) -> dict[str, int]:
+    where, params = ("WHERE run_id = ?", (run_id,)) if run_id else ("", ())
+    return dict(conn.execute(f"SELECT purpose, COUNT(*) FROM holdout_access {where} GROUP BY purpose", params))
+
+
+def test_every_holdout_read_of_a_launch_is_registered_with_its_purpose_and_run(tmp_path, monkeypatch):
+    """Registre d'accès (migration 0038). Un lancement à deux horizons, premier run (aucun champion à affronter) :
+    - une évaluation finale, pour le gagnant global seulement ;
+    - le diagnostic note TOUS les essais de la grille : une lecture par essai ;
+    - le duel lit le holdout du challenger de l'AUTRE horizon (celui du gagnant global est réutilisé, pas relu)."""
+    db_path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
+    store = DataStore(root=str(tmp_path / "store"))
+    store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
+    config = _config(tmp_path, "reads", LIGHT).model_copy(deep=True)
+    config.objective.horizons = [3, 5]
+
+    run_pipeline(config, store=store, db_path=db_path)
+
+    conn = trackdb.connect(db_path)
+    try:
+        n_trials = conn.execute("SELECT COUNT(*) FROM trial").fetchone()[0]
+        assert _reads_by_purpose(conn) == {"final_eval": 1, "diagnostic": n_trials, "champion_duel_challenger": 1}
+        # Chaque lecture dit quel run elle sert et quelle fenêtre elle a lue.
+        rows = conn.execute("SELECT run_id, horizon, holdout_start, holdout_end, n_rows FROM holdout_access").fetchall()
+        run_horizon = dict(conn.execute("SELECT run_id, horizon FROM run").fetchall())
+        assert all(run_id in run_horizon and run_horizon[run_id] == horizon and start < end and n > 0
+                   for run_id, horizon, start, end, n in rows)
+    finally:
+        conn.close()
+
+
+def test_the_duel_registers_its_reads_of_the_champion_on_the_same_holdout(tmp_path, monkeypatch):
+    """Le duel SÉLECTIONNE sur le holdout : la relecture du champion par chaque challenger doit être comptée, par
+    cible et horizon, et rattachée au run du challenger."""
+    db_path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
+    store = DataStore(root=str(tmp_path / "store"))
+    store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
+
+    run_pipeline(_config(tmp_path, "first", FULL), store=store, db_path=db_path)
+    conn = trackdb.connect(db_path)
+    assert trackstats.holdout_reads(conn, TARGET, 5)["by_purpose"].get("champion_duel_champion", 0) == 0
+    conn.close()
+
+    run_pipeline(_config(tmp_path, "second", LIGHT), store=store, db_path=db_path)
+    conn = trackdb.connect(db_path)
+    try:
+        reads = trackstats.holdout_reads(conn, TARGET, 5)
+        assert reads["by_purpose"]["champion_duel_champion"] == 1
+        assert reads["selecting"] == 1           # le challenger, lui, a réutilisé sa lecture finale
+        assert reads["n_runs"] == 2
+        # La lecture du champion est portée par le run du challenger (le perdant peut être élagué ensuite : la ligne reste).
+        reader = conn.execute("SELECT run_id FROM holdout_access WHERE purpose = 'champion_duel_champion'").fetchone()[0]
+        assert reader.startswith("second_h5_")
     finally:
         conn.close()

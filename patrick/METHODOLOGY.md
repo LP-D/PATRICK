@@ -79,6 +79,22 @@ le tuning Optuna, ni le tri du leaderboard ne les voient jamais.
 holdout, jamais pour choisir entre plusieurs configs (anti-pattern #1
 ci-dessous).
 
+**Registre d'accès** (`holdout_access`, migration 0038). Le holdout est lu à
+plusieurs endroits, tous via `_evaluate_holdout` : l'évaluation finale d'un
+run (`final_eval`), le diagnostic qui note tous les essais de la grille, en
+lecture seule (`diagnostic`), et le duel champion / challenger
+(`champion_duel_challenger`, `champion_duel_champion`), qui, lui, **choisit**
+un modèle sur le holdout : la p-value DM d'un champion a donc été calculée
+avant ce choix, mais sa performance holdout affichée est celle d'un gagnant.
+Chaque lecture est consignée (cible, horizon, run, fenêtre lue, lignes,
+finalité), en ajout seul et sans clé étrangère (un run supprimé garde ses
+lectures), fusionnée entre PC par union. `trackstats.holdout_reads` en donne
+le compte (total, par finalité, lectures « qui choisissent », runs distincts ;
+option `overlapping` : seules les lectures dont la fenêtre chevauche la
+fenêtre donnée) et la page d'un run l'affiche. Le registre démarre à sa
+création : les lectures antérieures sont inconnues. Le simulateur, qui relit
+les prédictions holdout déjà stockées, n'y est pas encore comptabilisé.
+
 ### Réduction de l'univers candidat : décidée dans chaque fold
 
 `universe.reduction_corr_threshold` (désactivé par défaut) regroupe les séries
