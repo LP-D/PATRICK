@@ -48,6 +48,9 @@ _AMERICAS_OTHER_SUFFIXES = (".SA", ".MX", ".TO", ".BA")
 # falls back to "other" (conservative handling, see CLOSE_UTC_HOUR["other"]).
 _VOLATILITY_INDICES = ("^VIX", "^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^EVZ", "^VIX9D", "^VXD", "^MOVE", "^SKEW")
 
+# Indices de TAUX : la valeur est un rendement en % (^TNX = 10 ans), pas un prix.
+_YIELD_INDICES = ("^IRX", "^FVX", "^TNX", "^TYX")
+
 _INDEX_REGION = {
     "^GSPC": "equities_us", "^DJI": "equities_us", "^IXIC": "equities_us",
     "^RUT": "equities_us", "^NYA": "equities_us", "^XAX": "equities_us", "^SOX": "equities_us", "^DJT": "equities_us",
@@ -65,6 +68,19 @@ _INDEX_REGION = {
     "^MERV": "equities_americas_other", "^GSPTSE": "equities_americas_other",
     "DX-Y.NYB": "fx",
 }
+
+
+def untradable_kind(symbol: str, source: str = "yfinance") -> str | None:
+    """Pourquoi la série de `symbol` ne donne pas un P&L réalisable si on la traite comme un prix négociable, ou None.
+    `volatility` : indice de volatilité (^VIX, ^VVIX, ^MOVE, ^SKEW...), qui ne se négocie que par des contrats à terme ou des produits cotés
+    à report négatif, sans suivre l'indice ; `yield` : indice de taux (^TNX...), un rendement en %, pas un prix."""
+    if source != "yfinance":
+        return None
+    if symbol in _VOLATILITY_INDICES:
+        return "volatility"
+    if symbol in _YIELD_INDICES:
+        return "yield"
+    return None
 
 
 def classify_asset_class(symbol: str, source: str = "yfinance") -> str:

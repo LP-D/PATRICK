@@ -279,3 +279,65 @@ def test_the_env_passes_the_gymnasium_checker_for_both_action_spaces():
     for over in ({}, {"action_space": "continuous", "algo": "SAC"}):
         core, s = _core(n=100, episode_length=25, **over)
         check_env(TradingEnv(core, s, start=0, end=100, seed=0), skip_render_check=True)
+
+
+# --------------------------------------------------------------------------- ruine : on ne perd pas plus que son capital
+
+
+def test_a_loss_of_the_whole_capital_is_capped_and_ends_the_episode():
+    core, _ = _core(n=30, cost_bps=0.0, slippage_bps=0.0)
+    core.fwd_ret[:] = 0.001
+    core.fwd_ret[3] = 1.5                                      # l'actif gagne 150 % : un short y perd 150 % de son capital
+    core.reset(0, 20)
+    flags = []
+    for _ in range(5):
+        _reward, _cost, net, done = core.step(-1.0)
+        flags.append((round(net, 6), done, core.ruined))
+        if done:
+            break
+    assert flags[-1] == (-1.0, True, True) and len(flags) == 4          # plafonné à -100 %, l'épisode s'arrête là
+    assert all(not ruined for _, _, ruined in flags[:-1])
+    core.reset(0, 20)
+    assert core.ruined is False                                  # un nouvel épisode repart d'un capital neuf
+
+
+def test_leverage_makes_a_smaller_move_ruinous_and_a_flat_account_never_is():
+    core, _ = _core(n=30, cost_bps=0.0, slippage_bps=0.0, max_leverage=2.0)
+    core.fwd_ret[:] = 0.0
+    core.fwd_ret[1] = -0.6                                     # levier 2 : -120 %
+    core.reset(0, 10)
+    core.step(2.0)
+    assert core.step(2.0)[2:] == (-1.0, True) and core.ruined
+    core.reset(0, 10)
+    core.step(0.0)
+    assert core.step(0.0)[2:] == (0.0, False) and not core.ruined
+
+
+def test_a_rollout_leaves_the_account_flat_after_the_ruin_until_the_end_of_the_window():
+    core, _ = _core(n=40, cost_bps=0.0, slippage_bps=0.0)
+    core.fwd_ret[:] = 0.002
+    core.fwd_ret[12] = 2.0
+    out = rollout(core, lambda obs: -1.0, 10, 30)
+    assert len(out["positions"]) == len(out["net_returns"]) == len(out["costs"]) == 20      # la fenêtre garde sa longueur
+    assert out["ruined_at"] == 2 and out["net_returns"][2] == -1.0
+    assert (out["positions"][:3] == -1.0).all() and (out["positions"][3:] == 0.0).all()
+    assert (out["net_returns"][3:] == 0.0).all() and (out["costs"][3:] == 0.0).all()
+    assert rollout(core, lambda obs: 1.0, 10, 30)["ruined_at"] is None
+
+
+@needs_gym
+def test_the_gymnasium_env_terminates_on_ruin_and_truncates_only_at_the_time_limit():
+    from patrick.rl.env import TradingEnv
+    core, s = _core(n=80, episode_length=0, cost_bps=0.0, slippage_bps=0.0, allow_short=True)
+    core.fwd_ret[:] = 0.001
+    core.fwd_ret[4] = 1.2
+    env = TradingEnv(core, s, start=0, end=80, seed=1)
+    env.reset(seed=1)
+    short = list(s.positions()).index(-1.0)
+    steps = []
+    for _ in range(10):
+        _obs, _reward, terminated, truncated, info = env.step(short)
+        steps.append((terminated, truncated, info["ruined"]))
+        if terminated or truncated:
+            break
+    assert steps[-1] == (True, False, True) and len(steps) == 5          # fin de partie : la valeur future est nulle, pas estimée

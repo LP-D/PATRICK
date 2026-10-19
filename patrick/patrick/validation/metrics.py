@@ -25,6 +25,22 @@ _DIR_MAP = {0: "DOWN", 1: "DOWN", 2: "UP", 3: "UP"}
 _ALL_CLASSES = [0, 1, 2, 3]
 
 
+def align_proba(y_proba: np.ndarray | None, classes) -> np.ndarray | None:
+    """Probabilités (n, K) -> (n, 4) dans l'ordre des classes 0..3, avec 0 pour une classe que le modèle n'a jamais vue à l'entraînement.
+    Sans cela, un pli d'entraînement sans l'une des quatre classes donnait trois colonnes et `roc_auc_score(labels=[0, 1, 2, 3])` levait
+    une erreur : l'AUC disparaissait en silence. `classes` : étiquettes des colonnes, comme `clf.classes_`."""
+    if y_proba is None or classes is None:
+        return y_proba
+    y_proba = np.asarray(y_proba, dtype=float)
+    labels = [int(c) for c in classes]
+    if y_proba.ndim != 2 or y_proba.shape[1] != len(labels) or not set(labels) <= set(_ALL_CLASSES):
+        return y_proba
+    out = np.zeros((len(y_proba), len(_ALL_CLASSES)))
+    for column, label in enumerate(labels):
+        out[:, label] = y_proba[:, column]
+    return out
+
+
 def metrics(y_true, y_pred, y_proba: np.ndarray | None = None) -> dict:
     # [FIX] CatBoostClassifier.predict() returns a 2D array (n,1) for
     # multiclass -> iterating over it gives unhashable sub-arrays as dict

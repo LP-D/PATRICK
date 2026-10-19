@@ -103,3 +103,35 @@ def test_second_run_duels_the_first_on_the_same_holdout(tmp_path, monkeypatch, f
             assert drift_now == drift_after_first
     finally:
         conn.close()
+
+
+def test_every_horizon_of_a_launch_keeps_its_own_holdout(tmp_path, monkeypatch):
+    """Avant, seul le gagnant global avait son holdout enregistré : sur un lancement de N horizons, N-1 runs n'en avaient aucun, alors
+    que le duel des champions évaluait chaque horizon."""
+    db_path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db_path)
+    store = DataStore(root=str(tmp_path / "store"))
+    store.save(f"raw_{TARGET}", _raw(), meta={"pit_version": f"{PIT_VERSION}:publication_lag"})
+    config = _config(tmp_path, "multi", LIGHT).model_copy(deep=True)
+    config.objective.horizons = [3, 5]
+
+    result = run_pipeline(config, store=store, db_path=db_path)
+
+    assert set(result["champions"]) == {3, 5}
+    conn = trackdb.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT run.horizon, COUNT(DISTINCT fold_metric.metric), "
+            "       (SELECT COUNT(*) FROM prediction p WHERE p.trial_id = trial.trial_id AND p.split = 'holdout') "
+            "FROM run JOIN trial ON trial.run_id = run.run_id AND trial.is_best = 1 "
+            "LEFT JOIN fold_metric ON fold_metric.trial_id = trial.trial_id AND fold_metric.split = 'holdout' "
+            "GROUP BY run.horizon, trial.trial_id").fetchall()
+        by_horizon = {h: (n_metrics, n_pred) for h, n_metrics, n_pred in rows}
+        assert set(by_horizon) == {3, 5}
+        assert all(n_metrics > 0 and n_pred > 0 for n_metrics, n_pred in by_horizon.values()), by_horizon
+        # une seule écriture par essai : pas de doublon de métriques
+        dup = conn.execute("SELECT trial_id, metric, COUNT(*) FROM fold_metric WHERE split = 'holdout' "
+                           "GROUP BY trial_id, metric HAVING COUNT(*) > 1").fetchall()
+        assert dup == []
+    finally:
+        conn.close()

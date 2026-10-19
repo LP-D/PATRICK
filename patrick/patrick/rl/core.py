@@ -10,6 +10,11 @@ Récompenses (échelonnées par `reward_scale = 1 / écart-type des rendements d
 - `log` : log(1 + rendement net) · échelle (la croissance du capital) ;
 - `dsr` : ratio de Sharpe différentiel de Moody & Saffell (1998), la variation instantanée du Sharpe exponentiellement pondéré.
 Le terme `risk_aversion · (rendement net · échelle)²` est retiré aux récompenses `pnl` et `log`.
+
+Ruine : on ne peut pas perdre plus que son capital. Une période dont le rendement net atteint -100 % (un short pendant une hausse de plus de
+100 %, un levier de 2 pendant une baisse de 50 %...) est plafonnée à -100 %, fait passer `ruined` à vrai et TERMINE l'épisode (vraie fin de partie,
+pas une troncature : la valeur future est nulle) ; `rollout` laisse ensuite le compte à plat. Sans cela la courbe de capital passait sous zéro
+puis remontait, le produit de deux pertes de plus de 100 % faisant un gain.
 """
 from __future__ import annotations
 
@@ -40,6 +45,7 @@ class TradingCore:
         self.t = 0
         self.end = self.n
         self.pos = 0.0
+        self.ruined = False
         self._a = 0.0
         self._b = 0.0
 
@@ -50,6 +56,7 @@ class TradingCore:
         if not 0 <= self.t < self.end <= self.n:
             raise ValueError("intervalle d'épisode invalide")
         self.pos = float(prev_pos)
+        self.ruined = False
         self._a = 0.0
         self._b = 0.0
         return self.observation()
@@ -69,11 +76,15 @@ class TradingCore:
 
     # ------------------------------------------------------------------ une période
     def step(self, target_pos: float) -> tuple[float, float, float, bool]:
-        """Prend la position `target_pos` à la date t. Retourne (récompense, coût, rendement net, fin d'épisode)."""
+        """Prend la position `target_pos` à la date t. Retourne (récompense, coût, rendement net, fin d'épisode). Le rendement net est plafonné à
+        -100 % ; une perte totale (`self.ruined`) termine l'épisode."""
         lev = float(self.s.max_leverage)
         target = float(np.clip(target_pos, -lev if self.s.allow_short else 0.0, lev))
         cost = abs(target - self.pos) * self.fee
         net = target * self.fwd_ret[self.t] - cost
+        if net <= -1.0:
+            net = -1.0
+            self.ruined = True
         scaled = net * self.scale
         if self.s.reward == "dsr":
             reward = self._dsr(scaled)
@@ -83,7 +94,7 @@ class TradingCore:
             reward = scaled - self.s.risk_aversion * scaled * scaled
         self.pos = target
         self.t += 1
-        return float(np.clip(reward, -REWARD_CLIP, REWARD_CLIP)), float(cost), float(net), self.t >= self.end
+        return float(np.clip(reward, -REWARD_CLIP, REWARD_CLIP)), float(cost), float(net), self.t >= self.end or self.ruined
 
     def _dsr(self, r: float) -> float:
         eta = float(self.s.dsr_eta)
@@ -108,4 +119,10 @@ def rollout(core: TradingCore, policy, start: int, end: int, prev_pos: float = 0
         costs.append(cost)
         if not done:
             obs = core.observation()
-    return {"positions": np.asarray(positions), "net_returns": np.asarray(net), "costs": np.asarray(costs)}
+    ruined_at = len(net) - 1 if core.ruined else None
+    if core.ruined:                          # capital épuisé : à plat, sans gain ni perte, jusqu'à la fin de la fenêtre
+        remaining = (core.end - int(start)) - len(net)
+        positions += [0.0] * remaining
+        net += [0.0] * remaining
+        costs += [0.0] * remaining
+    return {"positions": np.asarray(positions), "net_returns": np.asarray(net), "costs": np.asarray(costs), "ruined_at": ruined_at}

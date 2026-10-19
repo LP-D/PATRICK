@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _run(code: str) -> str:
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    # Dossier du projet (celui qui contient `patrick/__init__.py`), jamais le dossier de lancement de pytest : en CI c'est la racine du dépôt,
+    # où le dossier `patrick/` (sans __init__) masque le vrai paquet, vu par le sous-processus comme un espace de noms (« unknown location »).
+    project_dir = Path(__file__).resolve().parents[1]
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False, cwd=project_dir)
+    # Le message d'erreur du sous-processus fait partie de l'échec : sans lui, la CI n'affichait que « code de sortie 1 ».
+    assert proc.returncode == 0, f"code de sortie {proc.returncode}\n--- stderr ---\n{proc.stderr}\n--- stdout ---\n{proc.stdout}"
     return proc.stdout.strip()
 
 

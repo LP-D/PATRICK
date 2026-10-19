@@ -10,8 +10,8 @@ import logging
 
 import numpy as np
 import pandas as pd
-from xgboost import XGBClassifier
 
+from patrick.models.xgb_labels import AnyLabelXGBClassifier as XGBClassifier
 from patrick.selection._common import SELECTION_N_JOBS, rank_top
 
 logger = logging.getLogger(__name__)

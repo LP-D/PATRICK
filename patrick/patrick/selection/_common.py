@@ -13,7 +13,8 @@ count and shifts importances at float precision)."""
 from __future__ import annotations
 
 import numpy as np
-from xgboost import XGBClassifier
+
+from patrick.models.xgb_labels import AnyLabelXGBClassifier as XGBClassifier
 
 # Fixed, machine-independent thread count for the selection estimators. Any
 # fixed value is reproducible for a given library build; 2 keeps some

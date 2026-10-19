@@ -182,7 +182,7 @@ def register(app: FastAPI, templates, context) -> None:
         ctx = context(request)
         return templates.TemplateResponse(request, "rl.html", {
             **ctx, "view": view, "errors": errors or [], "applied": applied, "initial_run_id": run_id,
-            "target_groups": forms_rl.rl_target_groups(), "rl_ready": agents.rl_available(), "deps_error": _deps_error(),
+            "target_groups": forms_rl.rl_target_groups(), "untradable": forms_rl.untradable_targets(), "rl_ready": agents.rl_available(), "deps_error": _deps_error(),
             "field_groups": field_groups(), "algo_fields": ALGO_FIELDS, "rl_terms": FIELD_TERMS, "rl_algos": D.RL_ALGOS, "rl_families": D.RL_FEATURE_FAMILIES,
             "rl_profiles": rl_profiles.gallery(forms_rl.to_view_rl(forms_rl.default_rl_config_dict())),
             "recent_runs": list_rl_jobs(), "bounds": D.RL_BOUNDS,

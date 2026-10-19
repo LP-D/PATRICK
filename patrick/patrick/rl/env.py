@@ -22,7 +22,8 @@ def action_to_position(action, settings: RLSettings) -> float:
 class TradingEnv(gym.Env):
     """Un épisode = un segment d'historique rejoué dans l'ordre. En entraînement, de longueur `episode_length` à un point de départ
     tiré au hasard (diversité), ou tout le segment si `episode_length = 0` ; la fin d'un épisode est une TRONCATURE (limite de temps),
-    pas une fin de partie : la valeur future est donc estimée, jamais forcée à zéro."""
+    pas une fin de partie : la valeur future est donc estimée, jamais forcée à zéro. Seule la RUINE (perte de 100 % du capital) termine
+    vraiment l'épisode (`terminated`)."""
 
     metadata: ClassVar[dict] = {"render_modes": []}
 
@@ -54,4 +55,5 @@ class TradingEnv(gym.Env):
 
     def step(self, action):
         reward, cost, net, done = self.core.step(action_to_position(action, self.s))
-        return self.core.observation(), reward, False, done, {"cost": cost, "net_return": net}
+        ruined = bool(self.core.ruined)          # perte totale : vraie fin de partie (valeur future nulle), pas une troncature
+        return self.core.observation(), reward, ruined, bool(done and not ruined), {"cost": cost, "net_return": net, "ruined": ruined}

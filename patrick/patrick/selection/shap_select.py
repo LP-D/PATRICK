@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import numpy as np
 import shap
-from xgboost import XGBClassifier
 
+from patrick.models.xgb_labels import AnyLabelXGBClassifier as XGBClassifier
 from patrick.selection._common import SELECTION_N_JOBS, prefilter_pool, rank_top
 
 

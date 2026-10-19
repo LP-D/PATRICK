@@ -83,7 +83,8 @@ def replay_account(holdings: dict, params: sim_engine.SimParams, segment: str | 
             bh_curves[sym] = _curve(res["buy_and_hold_curve"])
             covered.append({"symbol": sym, "weight": weight, "run_id": run_id, "trial_id": trial_id,
                             "horizon": horizon, "segment": res.get("segment"),
-                            "segment_warning": res.get("segment_warning"), "n_signals": res.get("n_signals"),
+                            "segment_warning": res.get("segment_warning"), "score_source": res.get("score_source"),
+                            "score_warning": res.get("score_warning"), "n_signals": res.get("n_signals"),
                             "strategy_return": float(curves[sym].iloc[-1] / curves[sym].iloc[0] - 1.0),
                             "buy_and_hold_return": float(bh_curves[sym].iloc[-1] / bh_curves[sym].iloc[0] - 1.0),
                             "deflated_sharpe": (res.get("strategy") or {}).get("deflated_sharpe")})

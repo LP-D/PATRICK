@@ -60,6 +60,20 @@ def _native(obj):
     return obj
 
 
+def ruin_warning(result: dict, max_leverage: float) -> str | None:
+    """Avertissement affiché avec les résultats quand la stratégie a perdu tout son capital (rendement d'une période à -100 % ou pire), ou quand
+    un pli l'a perdu : après la ruine le compte reste vide, les chiffres de risque ne se comparent plus à ceux d'une stratégie vivante."""
+    strategy = result.get("strategy") or {}
+    folds = [f["fold"] for f in result.get("folds") or [] if (f.get("strategy") or {}).get("ruined")]
+    if not strategy.get("ruined") and not folds:
+        return None
+    where = f" le {strategy['ruin_date']}" if strategy.get("ruin_date") else ""
+    in_folds = f" (pli {', '.join(str(f) for f in folds)})" if folds else ""
+    return (f"Capital épuisé{where}{in_folds} : une période à -100 % ou pire (position courte pendant une hausse de plus de 100 %, ou levier de "
+            f"{max_leverage:g} pendant une baisse de plus de {100 / max(max_leverage, 1e-9):.0f} %). Le compte reste vide ensuite : position et "
+            "rendement nuls. Une stratégie qui peut tout perdre en un jour n'est pas exploitable ; réduire le levier ou n'autoriser que les positions longues.")
+
+
 def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | None = None, job_id: str | None = None,
            force_ingest: bool = False, progress=print) -> dict:
     from patrick.pipeline.engine import _align_raw
@@ -102,7 +116,8 @@ def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | N
     payload = {
         "kind": "rl", "name": config.name, "target": config.objective.target_symbol, "algo": config.rl.algo,
         "start": f"{data.dates[0]:%Y-%m-%d}", "end": f"{data.dates[-1]:%Y-%m-%d}", "n_rows": data.n,
-        "n_features_pool": int(data.features.shape[1]), "warnings": data.warnings, **result,
+        "n_features_pool": int(data.features.shape[1]),
+        "warnings": [*data.warnings, *filter(None, [ruin_warning(result, float(config.rl.max_leverage))])], **result,
         "elapsed_s": time.time() - t0, "config": json.loads(config.model_dump_json()),
         "artifacts": {"result_json": os.path.join(out_dir, "rl_result.json"), "oos_csv": csv_path,
                       **{f"model_seed{i + 1}": p for i, p in enumerate(saved)}},
