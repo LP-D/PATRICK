@@ -535,6 +535,14 @@ réutilisés SANS MODIFICATION, seule la source de la matrice change.
   modules paramétriques (pensés pour un simple préfixe `fit_end_idx`) ne
   supportent pas aujourd'hui. Risque de fuite résiduel sur CES familles
   seulement, en mode CPCV seulement.
+- Formules d'interaction : découvertes **par combinaison**, sur ses seules
+  barres d'entraînement (purgées sur l'horizon le plus long du run, mises sous
+  embargo) — `_cpcv_interaction_formulas`. Elles l'étaient une fois sur le
+  groupe 0, groupe de test de 6 combinaisons sur 21 (audit du 2026-10-19). Le
+  modèle exporté reçoit les siennes, découvertes sur tout l'historique. Reste
+  partagé, par approximation : les seuils de classes et régimes de
+  `run_target`, ajustés sur le seul groupe 0 (effet d'échelle, pas de choix de
+  variables).
 - Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna, pas de
   Diebold-Mariano en mode CPCV : ces mécanismes reposent sur la topologie
   "une seule frontière, train=préfixe" du walk-forward (`_FoldContext`/

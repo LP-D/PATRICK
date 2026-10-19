@@ -303,25 +303,56 @@ def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
     parametric) of any fold."""
     pilot_horizon = config.objective.horizons[len(config.objective.horizons) // 2]
     pilot_target, _, _ = run_target(pool, config, target_col, pilot_horizon, pilot_split_idx)
-    pilot_idx = pilot_target.index
     pilot_cut_date = pool.index[pilot_split_idx]
-    pilot_train_mask = np.asarray(pilot_idx < pilot_cut_date)
-    y_pilot_tr = pilot_target.values[pilot_train_mask].astype(int)
-    if len(y_pilot_tr) < 100:
-        print("  [INTERACTIONS] not enough data on the pilot fold — step skipped.")
+    return _discover_formulas_on_rows(pool, pilot_target, np.asarray(pilot_target.index < pilot_cut_date),
+                                      config, target_col)
+
+
+def _discover_formulas_on_rows(pool: pd.DataFrame, y: pd.Series, rows: np.ndarray,
+                                config: RunConfig, target_col: str) -> list[str]:
+    """Interaction discovery (see `_discover_interaction_formulas`) from the
+    rows of `y` where `rows` is True -- features and labels of those rows and
+    nothing else: the caller decides which bars discovery may know about
+    (the first fold's train in walk-forward, one combination's purged train
+    complement in CPCV)."""
+    y_tr = y.values[rows].astype(int)
+    if len(y_tr) < 100:
+        print("  [INTERACTIONS] not enough training rows to discover formulas — step skipped.")
         return []
 
     feature_cols = [c for c in pool.columns if c != target_col]
-    X_pilot_tr = pool.loc[pilot_idx[pilot_train_mask], feature_cols].fillna(0.0)
+    X_tr = pool.loc[y.index[rows], feature_cols].fillna(0.0)
 
     inter_df = discover_interactions(
-        X_pilot_tr, y_pilot_tr,
+        X_tr, y_tr,
         top_base=config.features.interact_top_base,
         top_pairs=config.features.interact_top_pairs,
         final_n=config.features.interact_final_n,
         seed=config.output.seed,
     )
     return list(inter_df.columns)
+
+
+def _cpcv_interaction_formulas(pool: pd.DataFrame, y: pd.Series, config: RunConfig, target_col: str,
+                                groups: list[tuple[int, int]], combos: list[tuple[int, ...]],
+                                max_horizon: int, embargo_bars: int | None) -> dict[tuple[int, ...], list[str]]:
+    """One formula set per CPCV combination, discovered on that combination's
+    training bars only -- purged for `max_horizon` (the longest label window of
+    the run, so no horizon's labels reach a test group) and embargoed. The
+    pilot labels `y` are those of the median horizon; the formulas serve every
+    horizon, so the purge uses the longest one."""
+    formulas: dict[tuple[int, ...], list[str]] = {}
+    for combo in combos:
+        split = cpcv_module.build_split(groups, combo, max_horizon, embargo_bars)
+        rows = np.asarray(y.index.isin(pool.index[split.train_mask]))
+        formulas[combo] = _discover_formulas_on_rows(pool, y, rows, config, target_col)
+    return formulas
+
+
+def _combo_feature_pool(feature_pool: list[str], all_formulas: list[str], combo_formulas: list[str]) -> list[str]:
+    """`feature_pool` without the interaction columns of the other combinations' formula sets (order preserved)."""
+    foreign = set(all_formulas) - set(combo_formulas)
+    return [f for f in feature_pool if f not in foreign]
 
 
 def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) -> pd.DataFrame:
@@ -1149,6 +1180,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
       structurally exposes more boundaries, hence more potential leak
       surface to close by construction.
 
+    Interaction formulas (when the "interactions" family is on): discovered
+    per combination on its training bars (`_cpcv_interaction_formulas`) --
+    they used to be discovered once on group 0, a TEST group of 6 combinations
+    out of 21 (audit 2026-10-19). Still shared, as a documented approximation:
+    the class thresholds / regimes of `run_target`, fitted on group 0 only.
+
     Universe reduction (`universe`, when enabled): decided per combination
     on `split.train_mask` -- the non-contiguous train complement, purged
     and embargoed -- so no test group of that combination ever influences
@@ -1181,13 +1218,22 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     full_pool = pd.concat([base_pool, param_pool], axis=1)
     full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
 
+    # Interactions: one formula set per combination, discovered on that combination's training bars only; the
+    # exported model gets its own, discovered on the whole history (nothing is evaluated on it).
     interaction_formulas: list[str] = []
+    combo_formulas: dict[tuple[int, ...], list[str]] = {}
+    all_formulas: list[str] = []
     if "interactions" in config.features.families:
-        pilot_split_idx = groups[0][1] + 1
-        interaction_formulas = _discover_interaction_formulas(full_pool, config, target_col, pilot_split_idx)
-        print(f"  [INTERACTIONS] {len(interaction_formulas)} formulas discovered (pilot group).")
-        inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-        full_pool = pd.concat([full_pool, inter], axis=1)
+        horizons = config.objective.horizons
+        pilot_y, _, _ = run_target(full_pool, config, target_col, horizons[len(horizons) // 2], groups[0][1] + 1)
+        combo_formulas = _cpcv_interaction_formulas(full_pool, pilot_y, config, target_col, groups, combos,
+                                                    max(horizons), config.validation.embargo_bars)
+        interaction_formulas = _discover_formulas_on_rows(full_pool, pilot_y, np.ones(len(pilot_y), dtype=bool),
+                                                          config, target_col)
+        all_formulas = list(dict.fromkeys(f for fs in (*combo_formulas.values(), interaction_formulas) for f in fs))
+        print(f"  [INTERACTIONS] {len(all_formulas)} distinct formulas over {len(combos)} combinations "
+              f"(discovered per combination, training bars only).")
+        full_pool = pd.concat([full_pool, _apply_interaction_formulas(full_pool, all_formulas)], axis=1)
 
     feature_pool = [c for c in full_pool.columns if c != target_col]
     feature_position = {name: i for i, name in enumerate(feature_pool)}
@@ -1229,10 +1275,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                     return None
 
                 where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
-                X_combo = X_all
+                combo_feats = _combo_feature_pool(feature_pool, all_formulas, combo_formulas.get(combo, []))
                 if universe is not None and universe.enabled:
-                    combo_feats = universe.features(feature_pool, split.train_mask,
+                    combo_feats = universe.features(combo_feats, split.train_mask,
                                                     f"CPCV combo {combo} (h={horizon}d)")
+                X_combo = X_all
+                if len(combo_feats) != len(feature_pool):
                     X_combo = X_all[:, [feature_position[f] for f in combo_feats]]
                 sc = RobustScaler()
                 X_tr_full = _finite_scaled(sc.fit_transform(X_combo[tr_mask]), where)
@@ -1343,7 +1391,10 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                   # (`board.best(metric="F1_dir")`) without duplicating this logic.
                                   F1_dir=dist["median"])
 
-    return board, trial_ids, n_trials_per_run, full_pool, feature_pool, interaction_formulas
+    # The exported model sees base + parametric + ITS formulas, not the other combinations' (`predict` rebuilds
+    # exactly `interaction_formulas`).
+    export_feature_pool = _combo_feature_pool(feature_pool, all_formulas, interaction_formulas)
+    return board, trial_ids, n_trials_per_run, full_pool, export_feature_pool, interaction_formulas
 
 
 @dataclass
