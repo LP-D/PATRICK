@@ -21,6 +21,7 @@ from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.features.alpha_target import run_target
 from patrick.features.sanitize import finite_features, finite_scaled
+from patrick.models import calibration as calibration_lib
 from patrick.models.registry import get_classifier
 from patrick.selection.registry import select_features
 from patrick.tuning.optuna_runner import safe_resample
@@ -38,6 +39,31 @@ def scale_selected(scaler: RobustScaler, values: np.ndarray, columns: list[int])
     if scaler.with_scaling:
         out /= scaler.scale_[columns]
     return out
+
+
+def _fit_live_calibrator(config: RunConfig, X_n: np.ndarray, y: np.ndarray, sampler_name: str, seed: int, algo: str,
+                         best_params: dict, horizon: int, clf):
+    """Calibrateur de la P(hausse) du jour, ajusté comme dans le walk-forward (`pipeline/engine.py::_fit_eval_full`) : un modèle est
+    ajusté sur le début de l'historique (rééchantillonné si le sampler l'exige), puis la carte isotonique/Platt sur des lignes
+    RÉELLES postérieures, séparées par un trou d'une longueur d'horizon (chevauchement des étiquettes). Le modèle exporté reste le
+    refit sur tout l'historique (explications SHAP et classe prédite inchangées) ; seul `p_up` passe par ce calibrateur.
+    `(None, None)` : run sans calibration, réseau de neurones (fenêtres), historique trop court pour le découpage, ou classe du
+    modèle absente des lignes de calibration."""
+    if not config.models.calibration or getattr(clf, "is_deep", False):
+        return None, None
+    split = calibration_lib.calibration_split(len(y), gap=horizon)
+    if split is None:
+        return None, None
+    Xf, yf = safe_resample(sampler_name, seed, X_n[:split.fit_end], y[:split.fit_end])
+    fit_clf = get_classifier(algo, seed=seed, **best_params)
+    fit_clf.fit(Xf, yf)
+    y_cal = y[split.cal_start:split.thr_start]
+    if not calibration_lib.calibration_classes_match(fit_clf, y_cal):
+        return None, None
+    method = config.models.calibration_method
+    calibrator = calibration_lib.fit_prefit_calibrator(fit_clf, X_n[split.cal_start:split.thr_start], y_cal, method=method)
+    return calibrator, {"method": method, "n_fit_rows": int(split.fit_end),
+                        "n_calibration_rows": int(split.thr_start - split.cal_start), "gap": int(horizon)}
 
 
 def export_best_model(pool, target_col: str, feature_pool: list[str], config: RunConfig,
@@ -87,6 +113,7 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     Xr, yr = safe_resample(sampler_name, seed, X_n, y)
     clf = get_classifier(algo, seed=seed, **best_params)
     clf.fit(Xr, yr)
+    calibrator, calibration_meta = _fit_live_calibrator(config, X_n, y, sampler_name, seed, algo, best_params, horizon, clf)
     if getattr(clf, "is_deep", False):
         # Réseau : réglages complets consignés (ceux du run + ceux d'Optuna). Rejouer ce champion plus tard, depuis un autre run (duel de
         # champions), reconstruit le MÊME réseau, pas celui qu'un autre jeu de réglages donnerait.
@@ -127,6 +154,9 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
             "n_train_rows": len(y)}
     if universe_reduction is not None:
         bundle["universe_reduction"] = meta["universe_reduction"] = universe_reduction
+    if calibrator is not None:
+        bundle["calibrator"] = calibrator
+        meta["calibration"] = calibration_meta
     joblib.dump(bundle, model_path)
     # Derived from `model_path` (not a second independent f-string) so it
     # stays in sync with whatever convention is above -- `worker.py`'s

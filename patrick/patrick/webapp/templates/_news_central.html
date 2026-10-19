@@ -1,0 +1,15 @@
+{# Fragment `/fragments/news-central` : communiqués, minutes et discours de banques centrales, avec leur ton faucon / colombe.
+   Cellules à balises construites par des blocs `set` (échappement automatique des titres). #}
+{% from "_components.html" import data_table, empty_state %}
+{% if not items %}
+{{ empty_state(t('news_central_empty'), t('news_assets_empty_hint')) }}
+{% else %}
+{% set out = [] %}
+{% for it in items %}
+{% set cls = '' if it.tone is none else ('exp-chip-warn' if it.tone > 0.15 else ('exp-chip-ok' if it.tone < -0.15 else '')) %}
+{% set title_cell %}{% if it.url and it.url.startswith(('http://', 'https://')) %}<a href="{{ it.url }}" target="_blank" rel="noopener noreferrer">{{ it.title }}</a>{% else %}{{ it.title }}{% endif %}{% endset %}
+{% set tone_cell %}{% if it.tone is not none %}<span class="exp-chip {{ cls }}">{{ '%+.2f' | format(it.tone) }}</span>{% else %}<span class="na">—</span>{% endif %}{% endset %}
+{% set _ = out.append([it.known_at_label, it.source | e, title_cell, tone_cell]) %}
+{% endfor %}
+{{ data_table([t('news_col_time'), t('news_col_source'), t('news_col_title'), t('news_col_tone')], out, num_cols=[3], collapse_after=8) }}
+{% endif %}

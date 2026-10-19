@@ -1,0 +1,25 @@
+{# Fragment `/fragments/portfolio-bl` : portefeuille Black-Litterman (`tracking/black_litterman.py`), lu sur les prix déjà en cache
+   et sur les P(hausse) calibrées les plus récentes. Calculé après l'affichage de /portfolio. #}
+{% from "_components.html" import data_table, empty_state %}
+{% if bl.n_assets == 0 %}
+{{ empty_state(t('pf_bl_no_prices'), t('pf_hrp_empty_hint')) }}
+{% elif bl.n_views == 0 %}
+{{ empty_state(t('pf_bl_empty'), t('pf_bl_empty_hint')) }}
+{% else %}
+{% set bl_rows = [] %}
+{% for r in rows %}
+{% set _ = bl_rows.append([
+    '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
+    "%.1f %%" | format(r.reference * 100),
+    "%.1f %%" | format(r.weight * 100),
+    "%+.1f" | format(r.tilt_pts),
+    ("%.0f %%" | format(r.p_up * 100)) if r.p_up is not none else '—',
+    ("%+.1f %%" | format(r.view_return * 100)) if r.view_return is not none else '—',
+    ("%.0f %%" | format(r.confidence * 100)) if r.confidence is not none else '—',
+]) %}
+{% endfor %}
+{{ data_table([t('mv_col_asset'), t('pf_bl_col_ref'), t('pf_bl_col_bl'), t('pf_bl_col_tilt'), t('pf_bl_col_p'), t('pf_bl_col_view'), t('pf_bl_col_conf')],
+              bl_rows, num_cols=[1, 2, 3, 4, 5, 6],
+              footer=t('pf_bl_footer', n=bl.n_assets, v=bl.n_views, p=bl.n_probabilities, o=bl.n_obs, d=bl.as_of.strftime('%Y-%m-%d'))) }}
+<p class="hint">{{ t('pf_bl_caveat') }}</p>
+{% endif %}

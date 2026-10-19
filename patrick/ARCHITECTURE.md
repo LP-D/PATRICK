@@ -105,6 +105,8 @@ Sous `patrick/patrick/` :
 | `rl/`, `exploration/`, `research/` | Reinforcement learning (page `/rl`), études statistiques entre actifs (page `/exploration`), études d'événements et campagne alpha. |
 | `benchmark/` | Mesure et non-régression des performances (`python -m patrick.benchmark`). |
 | `live_refresh.py`, `keep_awake.py`, `resource_budget.py` | Actualisation des prédictions live, veille Windows pendant un run, plafond CPU/RAM des étapes parallèles. |
+| `text/` | Analyse textuelle des news : magasin point-in-time (`store.py`, migration 0036), sources RSS/GDELT/Yahoo (`sources.py`), lexique, ton des banques centrales, entités, nouveauté, événements, thèmes (`lexicon.py`…`topics.py`), agrégation par actif et horizon, garde-fou LLM (`aggregate.py`, `llm_guard.py`), orchestration (`service.py`) ; page `/news`, commande `patrick news`. Aucune variable textuelle n'entre encore dans l'entraînement. |
+| `tracking/black_litterman.py` | Black-Litterman v2 sur P(hausse) calibrées (`prediction.p_up_calibrated`, migration 0037) ; section de `/portfolio`. |
 | `webapp/security.py` | Garde globale des requêtes : hôte local obligatoire, requêtes venues d'un autre site refusées (CSRF, DNS rebinding). |
 
 ## 4. Le pipeline walk-forward en détail
@@ -160,7 +162,7 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   lancement : machine learning, deep learning, reinforcement learning ;
   `/launch` redirige vers `/ml`), `/exploration` (études statistiques entre
   actifs), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
-  `/commodities`, `/macro` (stats par actif, calcul côté client via
+  `/news` (flux de nouvelles point-in-time, sentiment par actif), `/commodities`, `/macro` (stats par actif, calcul côté client via
   `asset_stats.js`/`/api/asset-stats/{symbol}`), `/predictions` (vue
   d'ensemble cible×horizon), `/simulate` (ticket d'ordres) et `/fonds`. Le journal et les snapshots
   Phase 9 restent accessibles via API, sans page de navigation dédiée.

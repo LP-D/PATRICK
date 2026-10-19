@@ -1,0 +1,22 @@
+{# Fragment `/fragments/news-event-study` : réaction du prix aux nouvelles fortes et nouvelles d'un actif (`aggregate.textual_event_study`). #}
+{% from "_components.html" import data_table %}
+{% if state == 'need_symbol' %}
+<p class="hint">{{ t('news_es_need_symbol') }}</p>
+{% elif state == 'no_prices' %}
+<p class="banner banner-warning" role="note">{{ t('news_es_no_prices', s=symbol) }}</p>
+{% elif state == 'too_few' %}
+<p class="banner banner-warning" role="note">{{ t('news_es_too_few', n=n, s=symbol, m=min_events) }}</p>
+{% else %}
+{% set out = [] %}
+{% for g in groups %}
+{% set _ = out.append([
+    t('news_es_group_' ~ g.label),
+    t('news_es_n', n=g.n),
+    ('%+.2f %%' | format(g.caar * 100)) if g.caar is not none else '<span class="na">—</span>',
+    ('%.3f' | format(g.p_bmp)) if g.p_bmp is not none else '<span class="na">—</span>',
+]) %}
+{% endfor %}
+{{ data_table(['', t('news_col_n'), t('news_es_caar'), t('news_es_p')], out, num_cols=[1, 2, 3]) }}
+{% if groups | selectattr('few') | list %}<p class="hint">{{ t('news_es_warn_few') }}</p>{% endif %}
+{% for g in groups if g.overlaps %}<p class="hint">{{ t('news_es_warn_overlap', n=g.overlaps) }}</p>{% endfor %}
+{% endif %}

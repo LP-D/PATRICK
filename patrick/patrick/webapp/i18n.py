@@ -14,6 +14,7 @@ from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
+from patrick.webapp.i18n_text import TEXT_JS_KEYS, TEXT_STRINGS
 
 LANG_COOKIE = "patrick_lang"
 SUPPORTED_LANGS = ("fr", "en")
@@ -671,6 +672,8 @@ STRINGS.update(PAGES_STRINGS)
 STRINGS.update(LEGACY_STRINGS)
 # Pages Modèles (ML, DL, RL) et Exploration (webapp/i18n_models.py).
 STRINGS.update(MODELS_STRINGS)
+# Black-Litterman de /portfolio et page /news (webapp/i18n_text.py).
+STRINGS.update(TEXT_STRINGS)
 
 
 def get_lang(request: Request) -> str:
@@ -734,7 +737,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
-    keys = [*keys, *PAGE_JS_KEYS.get(path, ())]
+    keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ())]
     t = translator(lang)
     return {k: t(k) for k in keys}
 

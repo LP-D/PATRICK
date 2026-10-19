@@ -772,3 +772,10 @@ TERM_LABEL_KEYS.update(_glossary_models.LABELS_RL)
 _glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY)
 _glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY_DL)
 _glossary_extra.TERM_CATEGORY.update(_glossary_models.CATEGORY_RL)
+
+# Black-Litterman et analyse textuelle des news (webapp/glossary_text.py).
+from patrick.webapp import glossary_text as _glossary_text
+
+GLOSSARY.update(_glossary_text.GLOSSARY_TEXT)
+TERM_LABEL_KEYS.update(_glossary_text.LABELS)
+_glossary_extra.TERM_CATEGORY.update(_glossary_text.CATEGORY)

@@ -37,6 +37,7 @@ from patrick.features import guida, parametric_parallel
 from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
 from patrick.rl import history as rl_history
+from patrick.tracking import black_litterman as trackbl
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import class_overview, data_health, memo, retrain_advisor
 from patrick.tracking import db as trackdb
@@ -60,6 +61,7 @@ from patrick.webapp import (
     market_data,
     market_regime,
     nav_registry,
+    news_routes,
     progress_steps,
     rl_compare,
     rl_routes,
@@ -1743,8 +1745,32 @@ def predictions_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIG
     )
 
 
+BL_DEFAULT_HORIZON = 5
+
+
+def _bl_horizons() -> list[int]:
+    """Horizons proposés à Black-Litterman : les horizons sélectionnables hors horizons descriptifs (504/756 j)."""
+    return [h for h in D.SELECTABLE_HORIZONS if h not in D.DESCRIPTIVE_HORIZONS]
+
+
+@app.get("/fragments/portfolio-bl")
+def portfolio_bl_fragment(request: Request, horizon: int = BL_DEFAULT_HORIZON):
+    """Portefeuille Black-Litterman de /portfolio (prix déjà en cache, P(hausse) calibrées), chargé après la page."""
+    if horizon not in _bl_horizons():
+        raise HTTPException(status_code=400, detail=f"horizon inconnu : {horizon}")
+    conn = trackdb.connect()
+    try:
+        overview = trackbl.bl_overview(conn, horizon)
+    except Exception:  # noqa: BLE001 -- robustesse de page : un échec de calcul devient un panneau vide, jamais un 500
+        overview = {"n_assets": 0, "n_views": 0}
+    finally:
+        conn.close()
+    rows = trackbl.table_rows(overview) if overview.get("n_views") else []
+    return templates.TemplateResponse(request, "_portfolio_bl.html", {"bl": overview, "rows": rows, **_i18n_context(request)})
+
+
 @app.get("/portfolio")
-def portfolio_page(request: Request, pairs: str | None = None):
+def portfolio_page(request: Request, pairs: str | None = None, bl_horizon: int = BL_DEFAULT_HORIZON):
     """Phase 8 (feature/portfolio-view): cross-asset aggregated synthesis --
     bullish/bearish signal counts per `DEFAULT_TARGET_GROUPS` category, plus
     contradiction detection between historically correlated pairs (DXY/EUR-
@@ -1792,6 +1818,8 @@ def portfolio_page(request: Request, pairs: str | None = None):
             "overview": overview,
             "pairs_text": trackportfolio.format_correlated_pairs(overview["pairs_used"]),
             "hrp": hrp,
+            "bl_horizon": bl_horizon if bl_horizon in _bl_horizons() else BL_DEFAULT_HORIZON,
+            "bl_horizons": _bl_horizons(),
             **_i18n_context(request),
         },
     )
@@ -1829,6 +1857,9 @@ fund_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Exploration (/exploration) et API /api/exploration/* : études statistiques entre actifs (patrick/exploration/).
 exploration_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page News (/news) et API /api/news/* : flux de nouvelles point-in-time, sentiment par actif (patrick/text/).
+news_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Reinforcement learning (/rl) et API /api/rl/* : cadrage, lancement et lecture des runs RL (patrick/rl/).
 rl_routes.register(app, templates, lambda request: _i18n_context(request))
