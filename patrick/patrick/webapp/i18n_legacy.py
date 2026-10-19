@@ -182,7 +182,7 @@ LEGACY_STRINGS: dict[str, dict[str, str]] = {
     'rd_signif': _s('significatif (p < {a})', 'significant (p < {a})'),
     'rd_not_signif': _s('non significatif (p ≥ {a})', 'not significant (p ≥ {a})'),
     'rd_holdout_term_sfx': _s(' — holdout terminal', ' — terminal holdout'),
-    'rd_dm_none': _s("Non calculé (aucun trial gagnant n'a produit ce résultat pour ce run).", 'Not computed (no winning trial produced this result for this run).'),
+    'rd_dm_none': _s("Non calculé (pas de trial gagnant, ou horizon trop long pour l'échantillon du holdout : le test ne serait pas fiable).", 'Not computed (no winning trial, or horizon too long for the holdout sample: the test would not be reliable).'),
     'rd_holdout': _s('Holdout terminal', 'Terminal holdout'),
     'rd_holdout_cpcv': _s('Sans objet en mode CPCV (toutes les combinaisons participent au scan).', 'Not applicable in CPCV mode (all combinations take part in the scan).'),
     'rd_holdout_f1': _s('Holdout terminal (F1_dir)', 'Terminal holdout (F1_dir)'),

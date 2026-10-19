@@ -21,6 +21,7 @@ dans ce chantier), **Bloqué** (dépend d'une donnée ou d'une licence absente),
 | F02 purge/embargo dans la CV d'Optuna | Fait | `tests/test_optuna_inner_cv_purge.py`. |
 | F03 registre d'essais persistant (DSR) | Fait | `trial_registry`, `tests/test_trial_registry.py`. |
 | F04 correction HLN de Diebold-Mariano | Fait | `validation/diebold_mariano.py`, `docs/ways-of-working.md`. |
+| Diebold-Mariano aux horizons longs (audit externe, 19/10) | **Livré 19/10** | Mesuré par simulation : le test à 5 % rejetait H0 ~22 % du temps à h=120 et plus de 80 % à h=504 (holdout de 15 mois), HLN compris. Sous 15 blocs indépendants (n/h) le DM est non testable ; `validation/diebold_mariano.py`, `METHODOLOGY.md` §4, `tests/test_diebold_mariano.py`. |
 | F05 famille BH avec cibles CPCV | Fait | `tests/test_fdr_family.py::test_cpcv_only_targets_count_in_the_bh_family`. |
 | F06 test / holdout / live séparés dans `/simulate` | Fait | `tests/test_simulate_segments.py`. |
 | Reproductibilité de la sélection entre OS | Fait | `tests/test_selection_determinism.py` (tri stable, graine). |

@@ -127,7 +127,16 @@ via quatre garde-fous dans `patrick/validation/` :
 - **Diebold-Mariano** (`diebold_mariano.py`) : p-value du test de
   différence de perte entre le meilleur modèle et la meilleure baseline
   systématique — un modèle non significativement meilleur qu'une baseline
-  est signalé comme tel, pas caché.
+  est signalé comme tel, pas caché. À l'horizon h > 1, les pertes de lignes
+  voisines partagent h-1 barres : n lignes valent environ n/h observations
+  indépendantes. Mesuré par simulation sous H0 (test à 5 %), le test rejette
+  ~7 % du temps avec 15 blocs (n/h), ~10 % avec 10, ~22 % avec 2,6 (holdout de
+  15 mois à h=120) et plus de 80 % à h=504 : la correction HLN et la fenêtre
+  d'autocovariance ne suffisent pas. Sous 15 blocs (`MIN_BLOCKS_PER_HORIZON`),
+  le résultat est **non testable** (p-value absente, raison
+  `horizon_too_long`) : le moteur ne l'enregistre pas et la cible entre dans
+  la famille BH avec p = 1. Avec un holdout de 15 mois (~315 lignes), cela
+  rend le DM non testable dès h ≈ 21 (h=30 et au-delà, dont 252).
 
 Ces éléments apparaissent ensemble dans le leaderboard et dans
 `patrick report` : métrique de test, métrique de holdout, p-value DM vs

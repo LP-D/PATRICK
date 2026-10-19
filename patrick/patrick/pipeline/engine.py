@@ -1001,6 +1001,11 @@ def _dm_against_baselines(y_true, y_pred, baseline_predictions: dict | None,
         if pred is None:
             return None
         dm = diebold_mariano(loss_model, (np.asarray(pred).ravel() != y_true).astype(float), h=horizon)
+        if is_nan(dm["p_value"]):
+            # Untestable (horizon too long for the sample, too few rows, undefined variance): "not computed", like a
+            # missing baseline -- no `dm_result` row with an empty p-value, no NaN in the run summary.
+            print(f"  [DM] h={horizon}d vs {name}: untestable ({dm['untestable_reason']}, n={dm['n_obs']}) -- not computed.")
+            return None
         dm["baseline"] = name
         return dm
 
