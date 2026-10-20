@@ -1,0 +1,46 @@
+#!/bin/sh
+# Garde de sortie (audit externe du 2026-10-19, point 11) : ce hook refuse, avant l'envoi,
+#   - la suppression d'une branche ou d'une étiquette,
+#   - la réécriture d'un historique publié (push forcé, étiquette déplacée),
+# sauf sur les branches jetables (wip/, tmp/, golden-regen/).
+# Passage exprès : PATRICK_ALLOW_UNSAFE_PUSH=1 git push ...
+# Activation, une fois par copie du dépôt : git config core.hooksPath .githooks
+# (l'installeur de l'application le fait). Voir CONTRIBUTING.md et tests/test_pre_push_hook.py.
+
+ZERO=0000000000000000000000000000000000000000
+DISPOSABLE="wip/ tmp/ golden-regen/"
+
+if [ "$PATRICK_ALLOW_UNSAFE_PUSH" = "1" ]; then
+    echo "pre-push : PATRICK_ALLOW_UNSAFE_PUSH=1, contrôles de suppression et de réécriture ignorés." >&2
+    exit 0
+fi
+
+is_disposable() {
+    for prefix in $DISPOSABLE; do
+        case "$1" in
+            refs/heads/$prefix*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+refuse() {
+    echo "pre-push : refusé -- $1" >&2
+    echo "  Branches jetables autorisées : $DISPOSABLE. Sinon, en connaissance de cause : PATRICK_ALLOW_UNSAFE_PUSH=1 git push ..." >&2
+    status=1
+}
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_sha" = "$ZERO" ]; then
+        is_disposable "$remote_ref" || refuse "suppression de $remote_ref"
+    elif [ "$remote_sha" != "$ZERO" ]; then
+        case "$remote_ref" in
+            refs/tags/*) refuse "déplacement de l'étiquette $remote_ref (une étiquette publiée ne bouge pas)"; continue ;;
+        esac
+        if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+            is_disposable "$remote_ref" || refuse "réécriture de l'historique publié de $remote_ref (le distant n'est pas un ancêtre de $local_ref)"
+        fi
+    fi
+done
+exit $status

@@ -100,6 +100,8 @@ if (Test-Path (Join-Path $InstallDir '.git')) {
 } else {
     Invoke-Checked 'git clone' $git.Source @('clone', '--branch', $Branch, $Repo, $InstallDir)
 }
+# Garde de sortie (.githooks/pre-push) : ni suppression de branche, ni push forcé sur l'historique publié.
+& $git.Source -C $InstallDir config core.hooksPath .githooks
 $project = Join-Path $InstallDir 'patrick'
 if (-not (Test-Path (Join-Path $project 'pyproject.toml'))) { Stop-Install "pyproject.toml introuvable dans $project : dépôt inattendu." }
 Write-Ok 'Code à jour.'

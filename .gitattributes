@@ -1,3 +1,7 @@
 # Les scripts Windows gardent des fins de ligne CRLF quel que soit le réglage git de la machine.
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+
+# Les hooks et scripts shell restent en LF (un CR final casse le shebang et les commandes sous sh).
+.githooks/* text eol=lf
+*.sh text eol=lf

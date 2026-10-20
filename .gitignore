@@ -5,3 +5,18 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Dépôt public : ni secrets, ni bases de données, ni sorties de run, ni état local des outils d'agent.
+# (tests/test_repo_hygiene.py vérifie ce que git fait réellement de ces chemins)
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+runs/
+# `.claude/settings.json` est versionné exprès (outils de planification soumis à approbation, docs/ops/taches-planifiees-agents.md).
+.claude/*
+!.claude/settings.json

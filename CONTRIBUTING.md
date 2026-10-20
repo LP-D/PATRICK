@@ -53,3 +53,18 @@ conformément aux instructions explicites du moment. L'objectif est
 uniquement de limiter l'exposition à une perte totale de travail non
 committé en cas de bascule d'environnement, pas de changer le rythme de
 revue ou de publication.
+
+## Gardes git (dépôt public)
+
+- **`.gitignore`** : ni `.env`, ni bases SQLite (`*.db`, `-wal`, `-shm`), ni `runs/`, ni l'état local des outils
+  d'agent (`.claude/`, sauf `.claude/settings.json`, versionné exprès). `patrick/tests/test_repo_hygiene.py`
+  vérifie ce que git fait de ces chemins.
+- **Hook `pre-push`** (`.githooks/pre-push`) : refuse la suppression d'une branche ou d'une étiquette et la
+  réécriture d'un historique publié (push forcé, étiquette déplacée), sauf sur `wip/`, `tmp/`, `golden-regen/`.
+  À activer une fois par copie du dépôt (l'installeur de l'application le fait) :
+  `git config core.hooksPath .githooks`. Passage exprès : `PATRICK_ALLOW_UNSAFE_PUSH=1 git push ...`.
+- **Faits bruts** : `sh patrick/scripts/git_facts.sh` imprime branche, commit, avance/retard, sommet de la branche
+  lu sur le distant, fichiers modifiés — de quoi vérifier le compte rendu d'un agent (en complément du garde
+  d'entrée `patrick/scripts/check_env_sync.sh`).
+- **Historique** : une donnée personnelle déjà poussée reste dans l'historique public même après suppression du
+  fichier ; la retirer demande de réécrire l'historique (décision à prendre explicitement).
