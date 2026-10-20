@@ -60,7 +60,7 @@ revue ou de publication.
   d'agent (`.claude/`, sauf `.claude/settings.json`, versionné exprès). `patrick/tests/test_repo_hygiene.py`
   vérifie ce que git fait de ces chemins.
 - **Hook `pre-push`** (`.githooks/pre-push`) : refuse la suppression d'une branche ou d'une étiquette et la
-  réécriture d'un historique publié (push forcé, étiquette déplacée), sauf sur `wip/`, `tmp/`, `golden-regen/`.
+  réécriture d'un historique publié (push forcé, étiquette déplacée), sauf sur `wip/`, `tmp/`, `golden-regen/`, `mutation-check/`.
   À activer une fois par copie du dépôt (l'installeur de l'application le fait) :
   `git config core.hooksPath .githooks`. Passage exprès : `PATRICK_ALLOW_UNSAFE_PUSH=1 git push ...`.
 - **Faits bruts** : `sh patrick/scripts/git_facts.sh` imprime branche, commit, avance/retard, sommet de la branche

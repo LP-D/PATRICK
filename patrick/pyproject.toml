@@ -85,9 +85,11 @@ markers = [
 ]
 
 [tool.mutmut]
-# Test de mutation des modules statistiques (`.github/workflows/mutation.yml`, lancement manuel, Linux : mutmut ne tourne pas
-# sous Windows). Une mutation qui survit = un comportement que les tests ne protègent pas.
-paths_to_mutate = [
+# Test de mutation des modules statistiques (`.github/workflows/mutation.yml`, Linux : mutmut ne tourne pas sous Windows).
+# Une mutation qui survit = un comportement que les tests ne protègent pas. mutmut 3 copie `source_paths` dans `mutants/`
+# (le paquet entier, pour que les imports se résolvent) et ne mute que `only_mutate` ; les tests sont limités à ceux de ces modules.
+source_paths = ["patrick/"]
+only_mutate = [
     "patrick/validation/dsr.py",
     "patrick/validation/fdr.py",
     "patrick/validation/diebold_mariano.py",
@@ -96,4 +98,12 @@ paths_to_mutate = [
     "patrick/validation/purge.py",
     "patrick/validation/embargo.py",
 ]
-tests_dir = ["tests/"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_dsr.py",
+    "tests/test_fdr.py",
+    "tests/test_diebold_mariano.py",
+    "tests/test_pbo.py",
+    "tests/test_cpcv.py",
+    "tests/test_purge.py",
+    "tests/test_splitters_properties.py",
+]

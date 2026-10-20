@@ -20,3 +20,7 @@ runs/
 # `.claude/settings.json` est versionné exprès (outils de planification soumis à approbation, docs/ops/taches-planifiees-agents.md).
 .claude/*
 !.claude/settings.json
+
+# mutmut (tests de mutation, Linux/CI seulement)
+mutants/
+.mutmut-cache

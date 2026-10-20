@@ -3,7 +3,7 @@
 Le garde d'entrée (`scripts/check_env_sync.sh`) ne suffit pas : l'incident du 2026-08-07 a montré qu'un conteneur
 peut repartir d'un instantané ancien sans que rien ne le signale. On bloque aussi à la sortie : pas de suppression
 de branche ou d'étiquette, pas de réécriture d'historique publié (push forcé), sauf sur les branches jetables
-(`wip/`, `tmp/`, `golden-regen/`) ou en le demandant explicitement (`PATRICK_ALLOW_UNSAFE_PUSH=1`).
+(`wip/`, `tmp/`, `golden-regen/`, `mutation-check/`) ou en le demandant explicitement (`PATRICK_ALLOW_UNSAFE_PUSH=1`).
 
 Chaque test pousse pour de vrai vers un dépôt distant jetable : on vérifie ce que git a laissé passer.
 """
@@ -83,7 +83,7 @@ def test_rewriting_is_allowed_on_disposable_branches(repo):
 
 def test_deleting_a_branch_is_refused_except_disposable_ones(repo):
     work, remote = repo
-    for name in ("feature/y", "golden-regen/essai"):
+    for name in ("feature/y", "golden-regen/essai", "mutation-check/essai"):
         _git("branch", name, cwd=work)
         assert _git("push", "-q", "origin", name, cwd=work).returncode == 0
 
@@ -93,6 +93,8 @@ def test_deleting_a_branch_is_refused_except_disposable_ones(repo):
 
     assert _git("push", "origin", "--delete", "golden-regen/essai", cwd=work).returncode == 0
     assert "refs/heads/golden-regen/essai" not in _remote_branches(remote)
+    assert _git("push", "origin", "--delete", "mutation-check/essai", cwd=work).returncode == 0
+    assert "refs/heads/mutation-check/essai" not in _remote_branches(remote)
 
 
 def test_tags_can_be_created_but_neither_deleted_nor_moved(repo):

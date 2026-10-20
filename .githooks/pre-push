@@ -2,13 +2,13 @@
 # Garde de sortie (audit externe du 2026-10-19, point 11) : ce hook refuse, avant l'envoi,
 #   - la suppression d'une branche ou d'une étiquette,
 #   - la réécriture d'un historique publié (push forcé, étiquette déplacée),
-# sauf sur les branches jetables (wip/, tmp/, golden-regen/).
+# sauf sur les branches jetables (wip/, tmp/, golden-regen/, mutation-check/).
 # Passage exprès : PATRICK_ALLOW_UNSAFE_PUSH=1 git push ...
 # Activation, une fois par copie du dépôt : git config core.hooksPath .githooks
 # (l'installeur de l'application le fait). Voir CONTRIBUTING.md et tests/test_pre_push_hook.py.
 
 ZERO=0000000000000000000000000000000000000000
-DISPOSABLE="wip/ tmp/ golden-regen/"
+DISPOSABLE="wip/ tmp/ golden-regen/ mutation-check/"
 
 if [ "$PATRICK_ALLOW_UNSAFE_PUSH" = "1" ]; then
     echo "pre-push : PATRICK_ALLOW_UNSAFE_PUSH=1, contrôles de suppression et de réécriture ignorés." >&2
