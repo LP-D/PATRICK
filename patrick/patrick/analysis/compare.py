@@ -10,7 +10,6 @@ import json
 import sqlite3
 from itertools import combinations
 
-import numpy as np
 import pandas as pd
 
 from patrick.analysis import sec_meta, sec_perf, sec_predict
@@ -73,7 +72,7 @@ def dm_matrix(ctxs: list[Ctx], names: list[str]) -> dict:
     for i, j in combinations(range(n), 2):
         same = (ctxs[i].fr.run["target"] == ctxs[j].fr.run["target"]) and (ctxs[i].fr.horizon == ctxs[j].fr.horizon)
         idx = losses[i].index.intersection(losses[j].index)
-        cell = {"i": i, "j": j, "n": int(len(idx)), "p": None, "p_adj": None, "stat": None, "better": None, "reason": None}
+        cell = {"i": i, "j": j, "n": len(idx), "p": None, "p_adj": None, "stat": None, "better": None, "reason": None}
         if not same:
             cell["reason"] = "different_target_or_horizon"
         elif len(idx) < MIN_COMMON:

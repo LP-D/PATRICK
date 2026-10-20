@@ -91,14 +91,14 @@ def test_js_strings_ship_on_analysis_pages_only(client):
 
 
 def _used_keys(source: str) -> set[str]:
-    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac)_[A-Za-z0-9_]+)"', source)}
+    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag)_[A-Za-z0-9_]+)"', source)}
 
 
 def _dynamic_prefixes(source: str) -> set[str]:
-    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac)_[A-Za-z0-9_]*_)"\s*\+', source)}
+    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag)_[A-Za-z0-9_]*_)"\s*\+', source)}
 
 
-@pytest.mark.parametrize("script", ["analysis_loader.js", "run_analysis.js", "run_analysis_more.js", "analysis_kit.js", "rl_analysis.js", "analyses_hub.js", "analyses_compare.js"])
+@pytest.mark.parametrize("script", ["analysis_loader.js", "run_analysis.js", "run_analysis_more.js", "analysis_kit.js", "rl_analysis.js", "analyses_hub.js", "analyses_compare.js", "guardrails.js"])
 def test_every_text_key_used_by_scripts_exists_in_both_languages(script):
     source = (STATIC / script).read_text(encoding="utf-8")
     missing = [k for k in _used_keys(source) if k not in STRINGS and not k.endswith("_")]
@@ -167,9 +167,9 @@ def test_standalone_report_embeds_every_section_and_no_script_breakout(client):
     r = c.get(f"/runs/{info['run_id']}/analyse/export")
     assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
     html = r.text
-    m = re.search(r'<script id="ra-embed" type="application/json">(.*?)</script>', html, re.S)
+    m = re.search(r'<script id="ra-embed" type="application/json">(.*?)</script>', html, re.DOTALL)
     assert m
-    data = json.loads(m.group(1).replace("<\/", "</"))
+    data = json.loads(m.group(1).replace(r"<\/", "</"))
     assert {"overview", "timeline", "confusion", "equity", "guide"} <= set(data)
     assert "paths" not in data and data["overview"]["run"]["run_id"] == info["run_id"]
     assert "/static/" not in html.split("</head>")[1].replace("/static/analysis", "")        # rien à charger : styles et scripts sont inclus

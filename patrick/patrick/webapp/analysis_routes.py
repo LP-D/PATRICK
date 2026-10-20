@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from patrick.analysis import compare as compare_mod
-from patrick.analysis import exports, hub, registry, rl_sections
+from patrick.analysis import exports, guardrails, hub, registry, rl_sections
 from patrick.tracking import db as trackdb
 from patrick.webapp import i18n
 
@@ -185,6 +185,20 @@ def register(app: FastAPI, templates, context) -> None:
         if result is None:
             raise HTTPException(status_code=404, detail="Run introuvable")
         return JSONResponse(result)
+
+    @app.get("/garde-fous")
+    def guardrails_page(request: Request):
+        return templates.TemplateResponse(request, "garde_fous.html", context(request))
+
+    @app.get("/api/garde-fous/summary")
+    async def guardrails_summary():
+        def work():
+            conn = trackdb.connect()
+            try:
+                return guardrails.summary(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
 
     @app.get("/analyses")
     def analyses_page(request: Request):
