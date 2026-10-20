@@ -15,7 +15,7 @@ La page `/runs/{id}/detail` n'affiche que des **tableaux** : aucun graphique, au
 
 ## 2. Décisions
 
-- **Moteur d'analyse sans effet de bord** (`tracking/run_analysis.py`, `tracking/run_analysis_rl.py`) : fonctions pures sur des tableaux
+- **Moteur d'analyse sans effet de bord** (`patrick/analysis/` : `stats_core.py`, `frames.py`, `sec_*.py`, `rl_sections.py`, `registry.py`) : fonctions pures sur des tableaux
   numpy/pandas lus dans la base **en lecture seule**, testables sans base. Toute lecture de `prediction` passe par la clé primaire
   (`trial_id = ?`), jamais par `idx_pred_split` (180 s sur la vraie base, voir `launch-batches-run-page`).
 - **Vérité terrain en rendement** : la classe réelle ne dit pas de combien le marché a bougé. Le niveau de la cible est relu dans le
