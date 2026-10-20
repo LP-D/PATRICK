@@ -19,7 +19,7 @@ dependencies = [
     "lightgbm",
     "catboost",
     "imbalanced-learn",
-    "shap>=0.50",
+    "shap>=0.51.0",
     "yfinance",
     "pandas_datareader",
     "requests",
