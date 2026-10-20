@@ -5,12 +5,34 @@
     var PK = window.PK, root = document.getElementById("ah-root");
     if (!PK || !root) return;
     var T = PK.T, h = PK.h, num = PK.num, pct = PK.pct, int = PK.int, isNum = PK.isNum;
-    var st = { rows: [], q: "", kind: "", status: "done", horizon: "", noSuspect: false, sortKey: "started_at", sortDir: -1, page: 0, per: 100 };
+    var st = { sel: [], rows: [], q: "", kind: "", status: "done", horizon: "", noSuspect: false, sortKey: "started_at", sortDir: -1, page: 0, per: 100 };
 
     // ---------------------------------------------------------------- colonnes
     function badge(kind) { return h("span", { class: "ra-kind ra-kind-" + kind, text: kind.toUpperCase() }); }
     function dash(v, f) { return isNum(v) ? f(v) : "—"; }
+    function pickCell(r) {
+        if ((r.kind !== "ml" && r.kind !== "dl") || r.status !== "done") return "";
+        var cb = h("input", { type: "checkbox", "aria-label": T("ac_c_pick") });
+        cb.checked = st.sel.indexOf(r.id) >= 0;
+        cb.addEventListener("change", function () {
+            var i = st.sel.indexOf(r.id);
+            if (cb.checked && i < 0) { if (st.sel.length >= 4) { cb.checked = false; return; } st.sel.push(r.id); }
+            if (!cb.checked && i >= 0) st.sel.splice(i, 1);
+            updateCompare();
+        });
+        return cb;
+    }
+    function updateCompare() {
+        var a = document.getElementById("ah-compare");
+        if (!a) return;
+        var ok = st.sel.length >= 2;
+        a.textContent = T("ac_compare_selected", { n: st.sel.length });
+        a.setAttribute("aria-disabled", String(!ok));
+        a.classList.toggle("disabled", !ok);
+        a.href = ok ? "/analyses/comparer?" + st.sel.map(function (i) { return "run_ids=" + encodeURIComponent(i); }).join("&") : "#";
+    }
     var COLS = [
+        { key: "pick", label: "ac_c_pick", cell: pickCell, sort: function (r) { return st.sel.indexOf(r.id) >= 0 ? 0 : 1; } },
         { key: "kind", label: "ah_c_kind", cell: function (r) { return badge(r.kind); }, sort: function (r) { return r.kind; } },
         { key: "name", label: "ah_c_name", cell: function (r) { return h("a", { class: "ra-cell-link", href: r.url, text: r.name || r.id }); }, sort: function (r) { return (r.name || r.id || "").toLowerCase(); } },
         { key: "target", label: "ah_c_target", cell: function (r) { return r.target || "—"; }, sort: function (r) { return (r.target || "").toLowerCase(); } },
@@ -60,6 +82,8 @@
         cb.checked = st.noSuspect;
         cb.addEventListener("change", function () { st.noSuspect = cb.checked; st.page = 0; drawTable(); });
         box.appendChild(h("label", { class: "ra-control" }, [cb, h("span", { text: T("ah_hide_suspect") })]));
+        box.appendChild(h("a", { id: "ah-compare", class: "btn-secondary", href: "#", title: T("ac_pick_hint") }));
+        updateCompare();
     }
 
     // ---------------------------------------------------------------- tableau

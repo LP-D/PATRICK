@@ -97,5 +97,6 @@
 .ra-sortable th[aria-sort="ascending"]::after { content: " ▲"; font-size: 9px; }
 .ra-sortable th[aria-sort="descending"]::after { content: " ▼"; font-size: 9px; }
 .ra-cell-link { font-weight: 600; }
+#ah-compare.disabled { opacity: 0.5; pointer-events: none; }
 .ra-box { display: grid; grid-template-columns: minmax(110px, 18%) 1fr; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 6px; }
 @media (max-width: 760px) { .ra-grid-2, .ra-grid-3 { grid-template-columns: 1fr; } .ra-hbar { grid-template-columns: 1fr 1fr 48px; } }

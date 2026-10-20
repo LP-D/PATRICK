@@ -6,11 +6,13 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from patrick.analysis import compare as compare_mod
 from patrick.analysis import exports, hub, registry, rl_sections
 from patrick.tracking import db as trackdb
 from patrick.webapp import i18n
@@ -152,6 +154,37 @@ def register(app: FastAPI, templates, context) -> None:
             {"info": info, "t": ctx["t"], "lang": ctx["lang"], "css": css, "js": js.replace("</script", "<\\/script"), "embed_json": embed, "i18n_js": i18n_js,
              "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")})  # noqa: DTZ005 -- horodatage local voulu, comme les sauvegardes
         return HTMLResponse(page, headers={"Content-Disposition": f'attachment; filename="analyse_{_safe_name(run_id)}.html"'})
+
+    @app.get("/analyses/comparer")
+    def analyses_compare_page(request: Request, run_ids: Annotated[list[str] | None, Query()] = None):
+        ids = list(dict.fromkeys(run_ids or []))
+        if not 2 <= len(ids) <= compare_mod.MAX_RUNS:
+            raise HTTPException(status_code=400, detail="Sélectionne entre 2 et 4 runs à comparer.")
+        conn = trackdb.connect()
+        try:
+            known = [trackdb.get_run(conn, i) is not None for i in ids]
+        finally:
+            conn.close()
+        if not all(known):
+            raise HTTPException(status_code=404, detail="Un run sélectionné est introuvable (ou est un run RL : se comparent depuis l'Historique).")
+        return templates.TemplateResponse(request, "analyses_compare.html", {"run_ids": ids, **context(request)})
+
+    @app.get("/api/analyses/compare")
+    async def analyses_compare_api(run_ids: Annotated[list[str] | None, Query()] = None, cost_bps: float = 5.0, window: int = 120):
+        ids = list(dict.fromkeys(run_ids or []))
+        if not 2 <= len(ids) <= compare_mod.MAX_RUNS:
+            raise HTTPException(status_code=400, detail="Sélectionne entre 2 et 4 runs à comparer.")
+
+        def work():
+            conn = trackdb.connect()
+            try:
+                return compare_mod.compare(conn, ids, max(0.0, min(500.0, cost_bps)), max(10, min(2000, window)), trackdb.default_db_path())
+            finally:
+                conn.close()
+        result = await run_in_threadpool(work)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        return JSONResponse(result)
 
     @app.get("/analyses")
     def analyses_page(request: Request):

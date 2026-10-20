@@ -51,7 +51,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
     NavEntry("runs", "Historique", "/runs", "pilotage", 30, "nav_runs",
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
-    NavEntry("analyses", "Analyses", "/analyses", "pilotage", 35, "nav_analyses", child_routes=("/runs/{run_id}/analyse",)),
+    NavEntry("analyses", "Analyses", "/analyses", "pilotage", 35, "nav_analyses", child_routes=("/runs/{run_id}/analyse", "/analyses/comparer")),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
@@ -103,6 +103,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
+    "/runs/{run_id}/analyse/export",   # rapport HTML autonome (téléchargement)
     "/launch",                  # redirection permanente vers /ml (ancien poste de lancement, liens et marque-pages conserves)
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
     "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)

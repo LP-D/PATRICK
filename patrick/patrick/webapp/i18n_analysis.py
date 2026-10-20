@@ -5,6 +5,7 @@ Convention : un texte d'aide est écrit une fois ici ; `static/help.js` replie d
 constats chiffrés de la lecture guidée (`ra_g_*`) décrivent des faits de méthode, jamais une recommandation d'achat ou de vente."""
 from __future__ import annotations
 
+from patrick.webapp.i18n_analysis_cmp import CMP_ANALYSIS_STRINGS
 from patrick.webapp.i18n_analysis_rl import RL_ANALYSIS_STRINGS
 
 
@@ -538,10 +539,11 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
 
 
 ANALYSIS_STRINGS.update(RL_ANALYSIS_STRINGS)
+ANALYSIS_STRINGS.update(CMP_ANALYSIS_STRINGS)
 
 
 def _browser_keys() -> tuple[str, ...]:
-    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_")))
+    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_")))
 
 
 ANALYSIS_JS_KEYS: tuple[str, ...] = _browser_keys()
