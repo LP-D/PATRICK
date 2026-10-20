@@ -335,12 +335,13 @@ Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle 
   contrats individuels absente (`docs/modelisation/chantiers-lointains.md` §3).
 - **DM** : bilatéral à surveiller et peu puissant (section « Validité statistique mesurée », plus haut) ; un test sur score continu
   (Brier, log-loss) serait plus puissant.
-- **Règle « une erreur-type »** (`selection.one_se_rule`) : **activée par défaut depuis le 2026-10-20** (ADR 0006). Les runs déjà
-  faits ne sont pas réécrits (ils ont tourné sans elle) ; `patrick resume` les relit sous l'ancienne règle, une relance depuis la
-  page d'un run suit la règle d'aujourd'hui. Les deux golden masters sont restés identiques : la règle n'y change pas le gagnant, donc
-  elle n'est pas éprouvée dans un run complet (seulement par ses tests unitaires).
-- **Branche `stable`** : créée par le premier push de `main` dont toute la CI est verte après la fusion du job `promote`. Tant qu'elle
-  n'existe pas, l'application n'installe rien ; le job `promote` n'a pas pu être exécuté hors de GitHub, il est vérifié au premier push.
+- **Règle « une erreur-type »** (`selection.one_se_rule`) : **activée par défaut depuis le 2026-10-20** (ADR 0006), sur toute la chaîne
+  (scan, candidat réglé, choix parmi les réglés, stabilité). Les runs déjà faits ne sont pas réécrits (ils ont tourné sans elle) ;
+  `patrick resume` les relit sous l'ancienne règle, une relance depuis la page d'un run suit la règle d'aujourd'hui. Golden walk-forward
+  de la CI régénéré (à l'horizon 3 : 6 variables -> 4) ; en local, les deux golden restent identiques (le scan y choisit déjà le plus petit N).
+- **Branche `stable`** : existe depuis le 2026-10-20 (créée par le job `promote`, premier passage : a3d0103). Elle n'avance que si toute
+  la CI de `main` est verte ; le push 675f321, dont le golden était rouge, ne l'a pas déplacée (la protection a joué). L'application
+  suit `stable` : une CI rouge sur `main` retarde donc les mises à jour au lieu de les casser.
 - **Python 3.10 retiré** (`requires-python >= 3.11`) : un PC encore sous 3.10 ne pourra plus installer les composants d'une mise à jour
   (retour en arrière automatique). Vérifier la version de Python des deux PC avant de fusionner.
 - **Tests de mutation** (`.github/workflows/mutation.yml`) : exécutés sur GitHub (Linux) le 2026-10-20, car mutmut ne tourne pas sous

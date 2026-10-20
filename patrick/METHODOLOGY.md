@@ -95,10 +95,12 @@ fenêtre donnée) et la page d'un run l'affiche. Le registre démarre à sa
 création : les lectures antérieures sont inconnues. Le simulateur, qui relit
 les prédictions holdout déjà stockées, n'y est pas encore comptabilisé.
 
-**Règle « une erreur-type »** (`selection.one_se_rule`, activée par défaut depuis le 2026-10-20, ADR 0006). Le gagnant du leaderboard
-n'est plus la plus haute moyenne de F1_dir sur les plis : parmi les configurations dont la moyenne est à moins d'une erreur-type
-(écart-type des plis divisé par √plis) de la meilleure, on retient la plus simple (le moins de variables), puis la meilleure moyenne.
-Sans au moins deux plis, le maximum simple reste. Une config qui la désactive garde le hachage d'avant le champ.
+**Règle « une erreur-type »** (`selection.one_se_rule`, activée par défaut depuis le 2026-10-20, ADR 0006). Le gagnant n'est plus la plus
+haute moyenne de F1_dir sur les plis : parmi les configurations dont la moyenne est à moins d'une erreur-type (écart-type des plis divisé
+par √plis) de la meilleure, on retient la plus simple (le moins de variables), puis la meilleure moyenne. Sans au moins deux plis, le
+maximum simple reste. Elle s'applique à toute la chaîne : gagnant du scan, candidat réglé par Optuna (le choix de la règle en tête),
+choix parmi les configurations réglées (erreur-type des plis du réglage), stabilité mesurée sur ce gagnant ; l'appliquer au seul scan
+serait annulé par le réglage. Une config qui la désactive garde le hachage d'avant le champ.
 
 ### Réduction de l'univers candidat : décidée dans chaque fold
 
