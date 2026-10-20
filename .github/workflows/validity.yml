@@ -1,0 +1,27 @@
+name: validity
+
+# Le pipeline complet sur des marches aléatoires (patrick/tests/test_null_world_validity.py) : sur du bruit, la
+# correction BH ne doit rien rejeter, le PBO doit rester élevé, le Sharpe déflaté bas -- et un monde à signal doit
+# être vu (contrôle positif). ~1 min par monde, une quinzaine de mondes : hebdomadaire et à la demande, jamais à chaque push.
+on:
+  schedule:
+    - cron: "0 3 * * 1"      # lundi, 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  validity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (pinned)
+        run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
+
+      - name: Null worlds and signal worlds
+        run: pytest patrick/tests/test_null_world_validity.py -q -m validity

@@ -76,7 +76,8 @@ extend-select = ["DTZ"]
 # exécute le reste (entraînements de modèles/pipelines complets/EGARCH-HMM-
 # ARIMA/sous-processus worker réels). Les deux commandes sont documentées
 # dans le README.
-addopts = "-m 'not slow'"
+addopts = "-m 'not slow and not validity'"
 markers = [
     "slow: tests dépassant ~10s (entraînement de modèles, pipeline complet, sous-processus worker réel) -- exclus par défaut, lancer avec `pytest -m slow`.",
+    "validity: le pipeline complet sur des marches aléatoires (protocole statistique de bout en bout, ~1 min par monde) -- exclus par défaut et de la CI poussée, lancer avec `pytest -m validity`.",
 ]

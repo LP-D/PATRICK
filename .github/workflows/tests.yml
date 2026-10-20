@@ -43,12 +43,12 @@ jobs:
       # a bottleneck rather than a fast feedback loop, and several of the
       # slow tests spawn real subprocesses (`patrick.cli worker`) that are
       # a poor fit for a shared CI runner (extra flakiness, no benefit over
-      # local verification). `addopts = "-m 'not slow'"` already makes bare
-      # `pytest` fast-only locally; `-m "not slow"` here is the explicit,
+      # local verification). `addopts = "-m 'not slow and not validity'"` already makes bare
+      # `pytest` fast-only locally; `-m "not slow and not validity"` here is the explicit,
       # self-documenting equivalent for CI. Run `pytest -m slow` locally
       # before a release-sensitive merge to cover the excluded tests.
       - name: Run fast test suite
-        run: pytest patrick/tests/ -q -m "not slow"
+        run: pytest patrick/tests/ -q -m "not slow and not validity"
 
   slow-suite:
     # The ~42 tests marked `slow` (CPCV/DM/PBO, real model training, full

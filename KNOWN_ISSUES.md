@@ -289,3 +289,29 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 - `tests/test_desktop_runtime.py::test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant` échoue sur ce poste, lancé
   depuis un shell de l'application Claude (cause probable : processus placés dans un objet de tâche Windows, non confirmée) ; le
   code concerné (`desktop/`) n'est pas modifié par ces chantiers.
+
+---
+
+## Validité statistique mesurée sur des marches aléatoires — 2026-10-20
+
+`patrick/tests/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
+pipeline complet sur 12 marches aléatoires indépendantes (walk-forward 6 plis, holdout de 12 mois, horizon 5) et sur 3 mondes à
+signal (contrôle positif). Résultats du 2026-10-19 :
+
+- **Tient** : aucune p-value « le modèle fait mieux que sa baseline » < 5 % (min. 0,14) ; correction BH : 0 rejet sur 12 ; PBO moyen
+  0,59 (attendu ~0,5) ; aucun Sharpe déflaté >= 0,95 ; les 3 mondes à signal ont un Sharpe holdout de 1,9 à 9,2 (DSR >= 0,95 pour 2).
+  Le passage en p-value **unilatérale** du 2026-10-07 est confirmé empiriquement : avec l'ancien calcul bilatéral, BH aurait rejeté
+  3 marches aléatoires sur 12 comme « découvertes ».
+- **Ne tient pas : la taille bilatérale du test de Diebold-Mariano.** Sa p-value bilatérale est < 5 % dans 3 mondes nuls sur 12 (~0,6
+  attendu), toujours avec le modèle PIRE que sa baseline (statistique moyenne +0,75 ; Sharpe holdout moyen -0,36). Sur du bruit le
+  modèle sélectionné fait systématiquement moins bien qu'une baseline naïve, et la variance du test (fenêtre sur h-1 retards) ne
+  couvre pas la dérive propre au chemin du holdout. Conséquence : une p-value DM bilatérale affichée n'a pas sa taille nominale ;
+  la famille BH est protégée parce qu'elle ne lit que le sens « meilleur ». Non corrigé : il faudrait une variance robuste à la
+  dérive du chemin (bootstrap par blocs longs) ou un test apparié sur un score continu (Brier / log-loss) plutôt que la perte 0/1
+  à 4 classes.
+- **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240
+  lignes, perte 0/1 à 4 classes, baseline de persistance). Le DM seul ne reconnaîtrait pas un vrai signal modeste.
+- **Un signal par le rendement de la veille d'une autre série est écarté, à raison** : le garde anti-fuite d'alignement
+  (`data/alignment.py`, corrélation de rang > 0,30) retarde une telle série. Le monde à signal passe donc par un niveau lent.
+- **Effectif** : 12 mondes, un tirage chacun ; le PBO à 6 blocs a un écart-type élevé (~0,3 sur un tirage). Les bornes des tests
+  laissent la place au hasard (binomiale à 1 %, PBO moyen >= 0,40).

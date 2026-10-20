@@ -154,6 +154,10 @@ via quatre garde-fous dans `patrick/validation/` :
   la famille BH avec p = 1. Avec un holdout de 15 mois (~315 lignes), cela
   rend le DM non testable dès h ≈ 21 (h=30 et au-delà, dont 252).
 
+**Preuve empirique du protocole** : `tests/test_null_world_validity.py` fait tourner le pipeline complet sur des marches
+aléatoires (BH sans rejet, PBO élevé, DSR bas) et sur des mondes à signal (contrôle positif) ; limites mesurées dans
+`KNOWN_ISSUES.md` (taille bilatérale du DM, faible puissance).
+
 Ces éléments apparaissent ensemble dans le leaderboard et dans
 `patrick report` : métrique de test, métrique de holdout, p-value DM vs
 baseline, compteur d'essais cumulé. Le même principe s'applique au

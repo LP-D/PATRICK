@@ -38,9 +38,9 @@ checkout courant, avec le répertoire de travail sur `patrick/` (là où se
 trouve `pyproject.toml`) — sinon `import patrick` résout silencieusement le
 mauvais code.
 
-`pyproject.toml` fixe `addopts = "-m 'not slow'"` : un `pytest -q` nu exclut
+`pyproject.toml` fixe `addopts = "-m 'not slow and not validity'"` : un `pytest -q` nu exclut
 les tests lents (CPCV/holdout/Diebold-Mariano/PBO). Utiliser `-m ""` pour la
-suite complète, `-m "slow"` pour les tests lents seuls.
+suite complète (y compris `validity`, ~15 min), `-m "slow"` pour les tests lents seuls, `-m "validity"` pour le pipeline sur des marches aléatoires seul.
 
 La base de tracking SQLite est **partagée entre tous les worktrees**,
 `~/.patrick/patrick.db` (pas un fichier par checkout) — attention en testant

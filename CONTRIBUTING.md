@@ -68,3 +68,6 @@ revue ou de publication.
   d'entrée `patrick/scripts/check_env_sync.sh`).
 - **Historique** : une donnée personnelle déjà poussée reste dans l'historique public même après suppression du
   fichier ; la retirer demande de réécrire l'historique (décision à prendre explicitement).
+- **Test de validité statistique** : `pytest -m validity` (≈ 15 min) fait tourner le pipeline sur des marches aléatoires et des
+  mondes à signal (`patrick/tests/test_null_world_validity.py`) ; exclu de `pytest` et de la CI poussée, il tourne chaque
+  lundi (`.github/workflows/validity.yml`). `PATRICK_WORLD_CACHE_DIR=<dossier>` conserve les mondes calculés (reprise possible).
