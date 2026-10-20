@@ -4,6 +4,8 @@ API JSON. Le cadre des pages s'affiche tout de suite ; chaque section arrive apr
 from __future__ import annotations
 
 import json
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -38,6 +40,34 @@ _RL_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "rl_analysis.js")
 ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors", "regimes",
                "features", "trials", "robustness", "holdout_live", "paths", "notes")
 RL_SECTIONS = rl_sections.SECTIONS
+
+
+# Les vues d'ensemble parcourent toute la base (1 à 5 s sur 26 Go) : un résultat est gardé 60 s par base, pour qu'un rafraîchissement ou un
+# retour sur la page ne refasse pas le calcul. Une promotion de modèle vide la vue concernée ; un run qui se termine apparaît au plus 60 s plus tard.
+_CACHE_TTL_S = 60.0
+_cache: dict[tuple[str, str], tuple[float, object]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cached(name: str, fn):
+    key = (name, trackdb.default_db_path())
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < _CACHE_TTL_S:
+            return hit[1]
+    value = fn()
+    with _cache_lock:
+        if len(_cache) > 32:
+            _cache.clear()
+        _cache[key] = (time.monotonic(), value)
+    return value
+
+
+def _forget(name: str) -> None:
+    with _cache_lock:
+        for key in [k for k in _cache if k[0] == name]:
+            del _cache[key]
 
 
 class NoteBody(BaseModel):
@@ -185,7 +215,7 @@ def register(app: FastAPI, templates, context) -> None:
         scripts = _ML_SCRIPTS if info["mode"] == "ml" else _RL_SCRIPTS
         js = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in scripts)
         css = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in ("patrick.css", "analysis.css"))
-        embed = json.dumps(data or {}, ensure_ascii=False).replace("</", "<\\/")
+        embed = json.dumps(data or {}, ensure_ascii=False).replace("<", "\\u003c")        # jamais de « </script » ni de « <!-- » dans la page
         i18n_js = i18n.js_strings(ctx["lang"], f"/runs/{run_id}/analyse")
         page = templates.get_template("run_analysis_export.html").render(
             {"info": info, "t": ctx["t"], "lang": ctx["lang"], "css": css, "js": js.replace("</script", "<\\/script"), "embed_json": embed, "i18n_js": i18n_js,
@@ -235,7 +265,7 @@ def register(app: FastAPI, templates, context) -> None:
                 return guardrails.summary(conn)
             finally:
                 conn.close()
-        return JSONResponse(await run_in_threadpool(work))
+        return JSONResponse(await run_in_threadpool(_cached, "guardrails_summary", work))
 
     @app.get("/diagnostics")
     def diagnostics_page(request: Request):
@@ -346,7 +376,7 @@ def register(app: FastAPI, templates, context) -> None:
                 return model_registry.overview(conn)
             finally:
                 conn.close()
-        return JSONResponse(await run_in_threadpool(work))
+        return JSONResponse(await run_in_threadpool(_cached, "models_overview", work))
 
     @app.get("/api/modeles/card")
     async def models_card(target: str, horizon: int):
@@ -370,9 +400,11 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         try:
-            return JSONResponse(await run_in_threadpool(work))
+            result = await run_in_threadpool(work)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _forget("models_overview")
+        return JSONResponse(result)
 
     @app.get("/derive")
     def drift_page(request: Request):
@@ -437,7 +469,7 @@ def register(app: FastAPI, templates, context) -> None:
                 return hub.training_index(conn)
             finally:
                 conn.close()
-        return JSONResponse(await run_in_threadpool(work))
+        return JSONResponse(await run_in_threadpool(_cached, "analyses_index", work))
 
     @app.get("/api/analyses/maps")
     async def analyses_maps():
@@ -447,4 +479,4 @@ def register(app: FastAPI, templates, context) -> None:
                 return hub.maps(conn)
             finally:
                 conn.close()
-        return JSONResponse(await run_in_threadpool(work))
+        return JSONResponse(await run_in_threadpool(_cached, "analyses_maps", work))

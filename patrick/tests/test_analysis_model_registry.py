@@ -114,7 +114,8 @@ def test_pages_and_api(seeded):
     assert c.get("/modeles").status_code == 200 and 'href="/modeles"' in c.get("/").text
     page = c.get("/modeles/fiche?target=TST&horizon=2")
     assert page.status_code == 200 and 'data-target="TST"' in page.text
-    assert c.get("/api/modeles/overview").json()["counts"]["pairs"] == 1
+    before = c.get("/api/modeles/overview").json()
+    assert before["counts"]["pairs"] == 1
     card = c.get("/api/modeles/card?target=TST&horizon=2")
     assert card.status_code == 200 and card.json()["current"]["run_id"] == "nofile"
     assert c.get("/api/modeles/card?target=NOPE&horizon=2").status_code == 404
@@ -123,3 +124,5 @@ def test_pages_and_api(seeded):
     ok = c.post("/api/modeles/promote", json={"target": "TST", "horizon": 2, "run_id": "newer"})
     assert ok.status_code == 200 and ok.json()["run_id"] == "newer"
     assert c.get("/api/modeles/card?target=TST&horizon=2").json()["current"]["run_id"] == "newer"
+    after = c.get("/api/modeles/overview").json()                                                   # la promotion vide le cache de la vue d'ensemble
+    assert after["items"][0]["run_id"] == "newer" and after["items"][0]["implicit"] is False and before["items"][0]["implicit"] is True

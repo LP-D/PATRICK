@@ -174,3 +174,33 @@ def test_standalone_report_embeds_every_section_and_no_script_breakout(client):
     assert "paths" not in data and data["overview"]["run"]["run_id"] == info["run_id"]
     assert "/static/" not in html.split("</head>")[1].replace("/static/analysis", "")        # rien à charger : styles et scripts sont inclus
     assert html.count("</script>") == html.count("<script")                                    # aucun « </script » dans les données ou le code
+
+
+def test_standalone_report_survives_a_hostile_run_name(client):
+    from patrick.tracking import db as trackdb
+    hostile = "x</script><script>alert(1)</script><!-- &amp;"
+    conn = trackdb.connect()
+    with conn:
+        conn.execute("UPDATE run SET config_json = json_set(config_json, '$.name', ?) WHERE run_id = ?", (hostile, client[1]["run_id"]))
+    conn.close()
+    html = client[0].get(f"/runs/{client[1]['run_id']}/analyse/export").text
+    assert "<script>alert(1)" not in html and html.count("</script>") == html.count("<script")
+    m = re.search(r'<script id="ra-embed" type="application/json">(.*?)</script>', html, re.DOTALL)
+    assert "<!--" not in m.group(1) and json.loads(m.group(1))["overview"]["run"]["name"] == hostile
+
+
+def test_heavy_overviews_are_cached_for_a_minute_per_database(client, monkeypatch):
+    from patrick.analysis import guardrails
+    from patrick.webapp import analysis_routes
+    analysis_routes._cache.clear()
+    calls = []
+    real = guardrails.summary
+    monkeypatch.setattr(guardrails, "summary", lambda conn: calls.append(1) or real(conn))
+    c, _ = client
+    first = c.get("/api/garde-fous/summary").json()
+    assert c.get("/api/garde-fous/summary").json() == first and len(calls) == 1
+    key = next(iter(analysis_routes._cache))
+    analysis_routes._cache[key] = (analysis_routes._cache[key][0] - 61.0, analysis_routes._cache[key][1])        # entrée périmée
+    c.get("/api/garde-fous/summary")
+    assert len(calls) == 2
+    analysis_routes._cache.clear()
