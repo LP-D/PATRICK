@@ -10,6 +10,7 @@ from patrick.webapp.i18n_analysis_drift import DRIFT_STRINGS
 from patrick.webapp.i18n_analysis_guard import GUARD_STRINGS
 from patrick.webapp.i18n_analysis_journal import JOURNAL_STRINGS
 from patrick.webapp.i18n_analysis_models import MODELS_REGISTRY_STRINGS
+from patrick.webapp.i18n_analysis_notes import NOTES_STRINGS
 from patrick.webapp.i18n_analysis_rl import RL_ANALYSIS_STRINGS
 from patrick.webapp.i18n_analysis_vars import VARS_STRINGS
 
@@ -566,10 +567,11 @@ ANALYSIS_STRINGS.update(VARS_STRINGS)
 ANALYSIS_STRINGS.update(DRIFT_STRINGS)
 ANALYSIS_STRINGS.update(MODELS_REGISTRY_STRINGS)
 ANALYSIS_STRINGS.update(JOURNAL_STRINGS)
+ANALYSIS_STRINGS.update(NOTES_STRINGS)
 
 
 def _browser_keys() -> tuple[str, ...]:
-    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_", "av_", "ad_", "am_", "aj_")))
+    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_", "av_", "ad_", "am_", "aj_", "cn_")))
 
 
 ANALYSIS_JS_KEYS: tuple[str, ...] = _browser_keys()

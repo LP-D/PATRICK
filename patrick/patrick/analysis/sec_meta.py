@@ -287,3 +287,14 @@ def paths(ctx: Ctx) -> dict:
                           "q05": float(np.percentile(vals, 5)), "median": float(np.median(vals)), "q95": float(np.percentile(vals, 95)),
                           "min": float(vals.min()), "max": float(vals.max()), "n": len(vals)}
     return {"available": True, "paths": [{"path": p, **v} for p, v in sorted(by.items())], "summary": summary, "metrics": metrics}
+
+
+# ------------------------------------------------------------------------------------------------------------ carnet
+def notes(ctx: Ctx) -> dict:
+    """Notes du carnet de recherche liées à ce run, et celles de la même cible et du même horizon (sans doublon)."""
+    from patrick.tracking import research_notes
+    fr = ctx.fr
+    mine = research_notes.list_notes(ctx.conn, run_id=fr.run["run_id"], include_archived=True)
+    ids = {n["note_id"] for n in mine}
+    related = [n for n in research_notes.list_notes(ctx.conn, target=fr.run["target"], horizon=fr.horizon) if n["note_id"] not in ids]
+    return {"available": True, "run_id": fr.run["run_id"], "target": fr.run["target"], "horizon": fr.horizon, "notes": mine, "related": related[:50]}

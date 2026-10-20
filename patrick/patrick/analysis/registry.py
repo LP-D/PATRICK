@@ -43,6 +43,7 @@ SECTIONS: dict[str, Callable[[Ctx], dict]] = {
     "robustness": sec_robust.robustness,
     "holdout_live": sec_meta.holdout_live,
     "paths": sec_meta.paths,
+    "notes": sec_meta.notes,
     "guide": sec_robust.guide,
 }
 

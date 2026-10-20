@@ -1,0 +1,25 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('cn_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/analysis.css">
+<h1 class="page-title">{{ t('cn_title') }}</h1>
+<p class="page-subtitle">{{ t('cn_subtitle') }}</p>
+
+<div id="cn-root">
+    <div class="metric-grid ra-kpis" id="cn-kpis" aria-live="polite"></div>
+    <section class="card ra-section">
+        <h2>{{ t('cn_s_new') }}</h2>
+        <p class="hint">{{ t('cn_h_new') }}</p>
+        <div id="cn-form"></div>
+    </section>
+    <section class="card ra-section">
+        <h2>{{ t('cn_s_list') }}</h2>
+        <div class="ra-filters" id="cn-filters"></div>
+        <div id="cn-list"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div>
+    </section>
+</div>
+
+<script src="/static/analysis_kit.js"></script>
+<script src="/static/carnet.js"></script>
+{% endblock %}

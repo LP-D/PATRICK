@@ -27,6 +27,7 @@ from patrick.analysis import (
 )
 from patrick.tracking import db as trackdb
 from patrick.tracking import journal as journal_mod
+from patrick.tracking import research_notes
 from patrick.webapp import i18n
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -34,8 +35,25 @@ _ML_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "run_analysis.js", "run_
 _RL_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "rl_analysis.js")
 
 ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors", "regimes",
-               "features", "trials", "robustness", "holdout_live", "paths")
+               "features", "trials", "robustness", "holdout_live", "paths", "notes")
 RL_SECTIONS = rl_sections.SECTIONS
+
+
+class NoteBody(BaseModel):
+    kind: str
+    title: str
+    body: str = ""
+    tags: str | None = None
+    target: str | None = None
+    horizon: int | None = None
+    run_id: str | None = None
+
+
+class NoteUpdate(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    tags: str | None = None
+    status: str | None = None
 
 
 class PromoteBody(BaseModel):
@@ -217,6 +235,36 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/carnet")
+    def notebook_page(request: Request):
+        return templates.TemplateResponse(request, "carnet.html", context(request))
+
+    @app.get("/api/carnet/notes")
+    async def notebook_list(q: str | None = None, kind: str | None = None, status: str | None = None, tag: str | None = None, archived: int = 0,
+                            run_id: str | None = None, target: str | None = None, horizon: int | None = None):
+        return JSONResponse({"notes": await _journal(lambda c: research_notes.list_notes(
+            c, q=q, kind=kind, status=status, tag=tag, include_archived=bool(archived), run_id=run_id, target=target, horizon=horizon))})
+
+    @app.get("/api/carnet/stats")
+    async def notebook_stats():
+        return JSONResponse(await _journal(research_notes.stats))
+
+    @app.post("/api/carnet/notes")
+    async def notebook_create(body: NoteBody):
+        try:
+            nid = await _journal(lambda c: research_notes.create(c, body.kind, body.title, body.body, body.tags, body.target, body.horizon, body.run_id))
+        except research_notes.NoteError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse({"note_id": nid})
+
+    @app.post("/api/carnet/notes/{note_id}")
+    async def notebook_update(note_id: int, body: NoteUpdate):
+        try:
+            await _journal(lambda c: research_notes.update(c, note_id, title=body.title, body=body.body, tags=body.tags, status=body.status))
+        except research_notes.NoteError as exc:
+            raise HTTPException(status_code=400 if str(exc) != "not_found" else 404, detail=str(exc)) from exc
+        return JSONResponse({"ok": True})
 
     @app.get("/journal")
     def journal_page(request: Request):

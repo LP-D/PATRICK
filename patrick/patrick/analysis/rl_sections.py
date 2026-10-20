@@ -18,7 +18,7 @@ from patrick.analysis import stats_core as sc
 from patrick.analysis.context import iso
 
 APP_ROOT = Path(__file__).resolve().parents[2]
-SECTIONS = ("overview", "folds", "equity", "returns", "stats", "features")
+SECTIONS = ("overview", "folds", "equity", "returns", "stats", "features", "notes")
 MAX_POINTS = 1500
 
 
@@ -227,7 +227,7 @@ def features(run: RLRun) -> dict:
             "pool": res.get("n_features_pool")}
 
 
-_BUILDERS = {"overview": overview, "folds": folds, "equity": equity, "returns": returns, "stats": stats, "features": features}
+_BUILDERS = {"overview": overview, "folds": folds, "equity": equity, "returns": returns, "stats": stats, "features": features, "notes": None}
 
 
 def build(conn: sqlite3.Connection, job_id: str, section: str) -> dict | None:
@@ -236,6 +236,14 @@ def build(conn: sqlite3.Connection, job_id: str, section: str) -> dict | None:
     run = load_run(conn, job_id)
     if run is None:
         return None
+    if section == "notes":
+        from patrick.tracking import research_notes
+        obj = run.config.get("objective") or {}
+        target, horizon = obj.get("target_symbol"), (obj.get("horizons") or [1])[0]
+        mine = research_notes.list_notes(conn, run_id=job_id, include_archived=True)
+        ids = {n["note_id"] for n in mine}
+        related = [n for n in research_notes.list_notes(conn, target=target, horizon=horizon) if n["note_id"] not in ids]
+        return sc.jsonable({"available": True, "run_id": job_id, "target": target, "horizon": horizon, "notes": mine, "related": related[:50]})
     return sc.jsonable(_BUILDERS[section](run))
 
 
