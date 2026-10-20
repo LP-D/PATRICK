@@ -305,3 +305,8 @@ def test_ticker_check_validates_the_symbol_and_delegates(client, monkeypatch):
     monkeypatch.setattr(ticker_check, "check_ticker", lambda s: {"symbol": s, "status": "ok", "n_obs": 900, "first": "2020-01-01", "last": "2026-10-19", "stale_bdays": 1, "reason": None})
     r = client.post("/api/donnees/ticker-check", json={"symbol": "AAPL"})
     assert r.status_code == 200 and r.json()["status"] == "ok" and data_routes._SYMBOL.match("^GSPC")
+
+
+def test_import_refuses_an_oversized_body_before_reading_it_as_json(client):
+    r = client.post("/api/donnees/import", content=b"x" * (data_routes.MAX_BODY_BYTES + 1), headers={"Content-Type": "application/json"})
+    assert r.status_code == 413 and r.json()["detail"] == "too_large"

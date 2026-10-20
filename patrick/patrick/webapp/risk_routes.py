@@ -34,10 +34,25 @@ def _cached(key: tuple, fn) -> dict:
     return value
 
 
+PROVIDER_TTL_S = 300.0
+_provider: tuple[float, object] | None = None
+
+
+def _shared_provider():
+    """Un seul fournisseur de cours (donc une seule mémoire de séries) pour les trois appels que la page lance en parallèle, renouvelé toutes les 5 minutes :
+    sans cela chaque appel téléchargerait les mêmes séries."""
+    global _provider
+    now = time.monotonic()
+    with _lock:
+        if _provider is None or now - _provider[0] > PROVIDER_TTL_S:
+            _provider = (now, wealth_prices.make_provider())
+        return _provider[1]
+
+
 def _with_holdings(source: str, fn) -> dict:
     conn = trackdb.connect()
     try:
-        provider = wealth_prices.make_provider()
+        provider = _shared_provider()
         holdings = pr.resolve_holdings(conn, provider, source)
         return fn(holdings, provider)
     finally:

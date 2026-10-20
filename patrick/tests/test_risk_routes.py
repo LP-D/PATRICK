@@ -17,6 +17,7 @@ def client(tmp_path, monkeypatch):
     series = _prices()
     monkeypatch.setattr(risk_routes.wealth_prices, "make_provider", lambda *a, **k: (lambda s: series.get(s)))
     risk_routes._cache.clear()
+    risk_routes._provider = None
     conn = trackdb.connect()
     acc = ledger.create_account(conn, "PEA test", "PEA", "real")
     ledger.add_movement(conn, acc, {"ts": "2019-01-02", "kind": "deposit", "amount": 50_000})
@@ -25,6 +26,7 @@ def client(tmp_path, monkeypatch):
     conn.close()
     yield TestClient(app), acc
     risk_routes._cache.clear()
+    risk_routes._provider = None
 
 
 def _movement_count(acc: str) -> int:
@@ -86,3 +88,17 @@ def test_sources_lists_accounts_and_results_are_cached(client, monkeypatch):
     c.get("/api/risque/report?source=real&lookback=300")
     c.get("/api/risque/report?source=real&lookback=301")
     assert len(calls) == 2
+
+
+def test_the_three_calls_of_a_page_share_one_price_provider(client, monkeypatch):
+    c, _ = client
+    made = []
+    series = _prices()
+    monkeypatch.setattr(risk_routes.wealth_prices, "make_provider", lambda *a, **k: made.append(1) or (lambda s: series.get(s)))
+    risk_routes._provider = None
+    for url in ("/api/risque/report?source=real", "/api/risque/backtest?source=real", "/api/risque/rebalance?source=real&method=equal"):
+        assert c.get(url).status_code == 200
+    assert made == [1]
+    risk_routes._provider = (risk_routes._provider[0] - risk_routes.PROVIDER_TTL_S - 1, risk_routes._provider[1])
+    c.get("/api/risque/report?source=real&lookback=333")
+    assert made == [1, 1]

@@ -15,6 +15,7 @@ from patrick.tracking import db as trackdb
 from patrick.tracking import watchlists as wl
 
 _NOT_FOUND = {"unknown_key", "unknown_snapshot", "unknown_column"}
+MAX_BODY_BYTES = 12_000_000                      # 8 Mo de fichier une fois encodé en base64 (+ un tiers)
 _SYMBOL = re.compile(r"^[A-Za-z0-9^=.\-_]{1,24}$")
 
 
@@ -114,7 +115,12 @@ def register(app: FastAPI, templates, context) -> None:
     @app.post("/api/donnees/import")
     async def data_import(request: Request):
         """`{filename, csv | b64, date_column?, dayfirst?, name?, commit?}` → aperçu ; `commit: true` enregistre sous `user_<name>`."""
-        b = _json_body(await request.body())
+        if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="too_large")
+        raw = await request.body()
+        if len(raw) > MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="too_large")
+        b = _json_body(raw)
 
         def work():
             filename, data = _data_call(dx.decode_payload, b)
