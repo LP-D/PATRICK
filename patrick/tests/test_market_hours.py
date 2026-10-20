@@ -2,7 +2,7 @@
 (heure d'été comprise), week-ends, et jours fériés détectés par l'absence de barre du jour. Plus la dernière valeur de l'actif."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pandas as pd
 import pytest
@@ -15,7 +15,7 @@ from patrick.webapp.app import _market_view, app
 
 
 def utc(stamp: str) -> datetime:
-    return datetime.fromisoformat(stamp).replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(stamp).replace(tzinfo=UTC)
 
 
 @pytest.mark.parametrize("asset_class, now, expected", [

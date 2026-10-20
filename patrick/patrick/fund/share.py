@@ -21,7 +21,7 @@ import hashlib
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from patrick.tracking import db as trackdb
@@ -106,7 +106,7 @@ def _strategy_dump(conn: sqlite3.Connection, strategy_id: str) -> dict:
 
 def _backup(conn: sqlite3.Connection, strategy_id: str, backup_dir: str | Path, why: str) -> str:
     os.makedirs(backup_dir, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = Path(backup_dir) / f"fonds_{why}_{strategy_id}_{stamp}.json"
     path.write_text(json.dumps(_strategy_dump(conn, strategy_id), indent=1, ensure_ascii=False, default=str),
                     encoding="utf-8")

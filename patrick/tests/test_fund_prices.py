@@ -26,7 +26,7 @@ def test_pence_quotes_are_converted_to_pounds(conn):
 def test_prices_are_persisted_and_served_offline_after_expiry_of_the_cache(conn, monkeypatch):
     prices.ensure_bars(conn, "MC.PA")
     monkeypatch.setattr(prices, "download_bars", lambda s, start=None: (None, None))
-    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    later = dt.datetime.now(dt.UTC) + dt.timedelta(hours=7)
     res = prices.ensure_bars(conn, "MC.PA", now=later)
     assert res.status == "stored" and len(res.df) == len(fs.IDX) and res.currency == "EUR"
     assert prices.ensure_bars(conn, "UNKNOWN").status == "missing"
@@ -36,7 +36,7 @@ def test_a_fresh_cache_is_not_downloaded_again_and_a_stale_one_refreshes_increme
     prices.ensure_bars(conn, "MC.PA")
     prices.ensure_bars(conn, "MC.PA")
     assert fs.CALLS == [("MC.PA", None)]
-    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    later = dt.datetime.now(dt.UTC) + dt.timedelta(hours=7)
     prices.ensure_bars(conn, "MC.PA", now=later)
     assert fs.CALLS[1][0] == "MC.PA" and fs.CALLS[1][1] == "2026-09-25"     # dernier jour stocké - 7 jours
 
@@ -104,7 +104,7 @@ def test_a_failed_download_is_not_retried_for_fifteen_minutes(conn, monkeypatch)
         calls.append(symbol)
         return None, None
     monkeypatch.setattr(prices, "download_bars", offline)
-    t0 = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    t0 = dt.datetime.now(dt.UTC) + dt.timedelta(hours=7)
     assert prices.ensure_bars(conn, "MC.PA", now=t0).status == "stored"
     prices.ensure_bars(conn, "MC.PA", now=t0 + dt.timedelta(minutes=5))
     assert calls == ["MC.PA"]
@@ -144,7 +144,7 @@ def test_a_new_split_triggers_a_full_refetch_so_that_history_stays_consistent(co
         return (adjusted[adjusted.index >= start], "EUR") if start else (adjusted, "EUR")
     monkeypatch.setattr(prices, "download_bars", downloader)
     prices.ensure_bars(conn, "MC.PA")
-    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=7)
+    later = dt.datetime.now(dt.UTC) + dt.timedelta(hours=7)
     prices.ensure_bars(conn, "MC.PA", now=later)
     assert calls == [None, "2026-01-02", None]
     stored = prices.load_bars(conn, "MC.PA")

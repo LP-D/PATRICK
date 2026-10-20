@@ -20,7 +20,7 @@ import hashlib
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -154,7 +154,7 @@ class DataStore:
             "cols": int(df.shape[1]) if df.ndim == 2 else 1,
             "date_min": str(df.index.min()) if len(df) else None,
             "date_max": str(df.index.max()) if len(df) else None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             **(meta or {}),
         })
         self._write_index(idx)
@@ -187,7 +187,7 @@ class DataStore:
         if not last_dates:
             return
         idx = self._read_series_index()
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         for symbol, date_max in last_dates.items():
             if not date_max:
                 continue

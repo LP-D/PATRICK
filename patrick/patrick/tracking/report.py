@@ -14,7 +14,7 @@ import html
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from patrick.numeric import is_nan
 from patrick.selection import stability as stability_module
@@ -394,7 +394,7 @@ def generate_report_html(run_id: str, db_path: str | None = None, fdr_alpha: flo
                           "<span class='off'>non disponible</span> pour ce run.</p>")
     quality_html += sampling_html
 
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">

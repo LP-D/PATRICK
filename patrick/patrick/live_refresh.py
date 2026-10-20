@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from functools import partial
 
 from patrick.clock import utc_today
@@ -118,19 +118,19 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
 
     summary = RunSummary()
     for candidate in candidates:
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
         logger.info("START target=%s horizon=%s run_id=%s", candidate.target, candidate.horizon,
                     candidate.run_id)
         try:
             detail = predict_live_fn(candidate.run_id, db_path=db_path)
-            finished_at = datetime.now(timezone.utc).isoformat()
+            finished_at = datetime.now(UTC).isoformat()
             logger.info("OK    target=%s horizon=%s run_id=%s y_pred=%s y_proba=%s "
                         "n_outcomes_updated=%s", candidate.target, candidate.horizon, candidate.run_id,
                         detail.get("y_pred"), detail.get("y_proba"), detail.get("n_outcomes_updated"))
             outcome = PredictOutcome(candidate=candidate, ok=True, detail=detail,
                                      started_at=started_at, finished_at=finished_at)
         except Exception as exc:
-            finished_at = datetime.now(timezone.utc).isoformat()
+            finished_at = datetime.now(UTC).isoformat()
             logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
                              candidate.horizon, candidate.run_id)
             outcome = PredictOutcome(candidate=candidate, ok=False, error=str(exc),
@@ -172,7 +172,7 @@ def _refresh_once(db_path: str | None = None) -> None:
         conn.close()
     with _state_lock:
         _state.update(running=True, done=0, failed=0, judged=0, judged_right=0, total=len(candidates),
-                      started_at=datetime.now(timezone.utc).isoformat(), finished_at=None)
+                      started_at=datetime.now(UTC).isoformat(), finished_at=None)
 
     def _progress(outcome: PredictOutcome) -> None:
         detail = outcome.detail or {}
@@ -186,7 +186,7 @@ def _refresh_once(db_path: str | None = None) -> None:
         run_daily_predictions(candidates, db_path=db_path, on_item=_progress)
     finally:
         with _state_lock:
-            _state.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+            _state.update(running=False, finished_at=datetime.now(UTC).isoformat())
 
 
 def _refresh_loop(db_path: str | None = None) -> None:
@@ -202,7 +202,7 @@ def _refresh_loop(db_path: str | None = None) -> None:
             except Exception:
                 logger.exception("live refresh failed")
                 with _state_lock:
-                    _state.update(running=False, finished_at=datetime.now(timezone.utc).isoformat())
+                    _state.update(running=False, finished_at=datetime.now(UTC).isoformat())
         if _stop.wait(REFRESH_CHECK_SECONDS):
             return
 

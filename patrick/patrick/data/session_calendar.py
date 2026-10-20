@@ -18,7 +18,7 @@ than no alignment at all, but not equivalent to a true intraday as-of join.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
 # Approximate UTC close hour per asset class (0-24 scale, latest value of the
 # class — conservative: when in doubt, assume a late close, which delays MORE
@@ -135,7 +135,7 @@ def session_close_utc(asset_class: str, session_date: date) -> datetime:
     """Approximate close (UTC) of the session of `session_date` for an asset class -- `CLOSE_UTC_HOUR`, i.e. the late,
     conservative end of the class (a crypto / macro daily bar ends at midnight UTC)."""
     hours = CLOSE_UTC_HOUR.get(asset_class, CLOSE_UTC_HOUR["other"])
-    return datetime.combine(session_date, time.min, tzinfo=timezone.utc) + timedelta(hours=hours)
+    return datetime.combine(session_date, time.min, tzinfo=UTC) + timedelta(hours=hours)
 
 
 def bar_is_final(asset_class: str, session_date: date, now: datetime) -> bool:

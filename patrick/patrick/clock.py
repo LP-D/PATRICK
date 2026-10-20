@@ -10,11 +10,11 @@ Conventions:
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def utc_today() -> date:
@@ -29,4 +29,4 @@ def parse_utc(iso: str) -> datetime:
     """ISO timestamp -> aware UTC datetime. Naive strings (written before
     this module existed, by `datetime.utcnow().isoformat()`) are UTC."""
     parsed = datetime.fromisoformat(iso)
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)

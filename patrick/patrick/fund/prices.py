@@ -74,7 +74,7 @@ def save_bars(conn: sqlite3.Connection, symbol: str, df: pd.DataFrame, raw_curre
         rows.append((symbol, day.date().isoformat(), *px, float(r["volume"]) if not pd.isna(r["volume"]) else 0.0,
                      float(r["dividend"]) * scale if not pd.isna(r["dividend"]) else 0.0,
                      0.0 if pd.isna(split) else float(split)))
-    stamp = (now or dt.datetime.now(dt.timezone.utc)).strftime("%Y-%m-%d %H:%M:%S")
+    stamp = (now or dt.datetime.now(dt.UTC)).strftime("%Y-%m-%d %H:%M:%S")
     with conn:
         if replace:       # historique entier re-téléchargé (nouveau fractionnement) : on remplace tout
             conn.execute("DELETE FROM fund_price WHERE symbol = ?", (symbol,))
@@ -115,10 +115,10 @@ def ensure_bars(conn: sqlite3.Connection, symbol: str, *, max_age_hours: float =
                 now: dt.datetime | None = None) -> BarsResult:
     """Rafraîchit `symbol` si la dernière actualisation a plus de `max_age_hours`.
     Hors ligne ou symbole retiré : on sert ce qui est stocké."""
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     stored, meta = load_bars(conn, symbol), get_meta(conn, symbol)
     if stored is not None and meta and meta["refreshed_at"]:
-        age = now - dt.datetime.strptime(meta["refreshed_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.timezone.utc)
+        age = now - dt.datetime.strptime(meta["refreshed_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.UTC)
         if age < dt.timedelta(hours=max_age_hours):
             return BarsResult(stored, meta["currency"], "fresh")
     start = (stored.index[-1] - pd.Timedelta(days=7)).date().isoformat() if stored is not None else None

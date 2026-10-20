@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -1146,8 +1146,8 @@ def _run_duration_seconds(run: dict) -> float | None:
     if not run.get("started_at") or not run.get("finished_at"):
         return None
     try:
-        started = datetime.strptime(run["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        finished = datetime.strptime(run["finished_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        started = datetime.strptime(run["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+        finished = datetime.strptime(run["finished_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
     except (TypeError, ValueError):
         return None
     return max(0.0, (finished - started).total_seconds())

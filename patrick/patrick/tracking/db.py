@@ -367,7 +367,7 @@ def record_drift_psi_batch(conn: sqlite3.Connection, symbol: str, horizon: int,
     """
     if not feature_psi:
         return
-    computed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    computed_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     conn.execute("BEGIN IMMEDIATE")
     try:
         latest = conn.execute(

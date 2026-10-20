@@ -41,11 +41,11 @@ function Install-WithWinget([string]$id, [string]$label) {
     Update-Path
 }
 
-# Python >= 3.10 avec tkinter (assistant graphique) ; renvoie le chemin de python.exe ou $null.
+# Python >= 3.11 avec tkinter (assistant graphique) ; renvoie le chemin de python.exe ou $null.
 function Find-Python {
     $candidates = @()
     $launcher = Get-Command py -ErrorAction SilentlyContinue
-    if ($launcher) { foreach ($v in '3.12', '3.11', '3.10', '3.13') { $candidates += ,@($launcher.Source, "-$v") } }
+    if ($launcher) { foreach ($v in '3.12', '3.11', '3.13') { $candidates += ,@($launcher.Source, "-$v") } }
     foreach ($name in 'python', 'python3') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
         # le faux « python » du Windows Store (WindowsApps) ouvre le Store : on l'ignore
@@ -54,7 +54,7 @@ function Find-Python {
     foreach ($c in $candidates) {
         try {
             $exe = $c[0]; $extra = @($c | Select-Object -Skip 1)
-            $out = & $exe @extra -c "import sys, tkinter; print(sys.executable if sys.version_info >= (3, 10) else '')" 2>$null
+            $out = & $exe @extra -c "import sys, tkinter; print(sys.executable if sys.version_info >= (3, 11) else '')" 2>$null
             if ($LASTEXITCODE -eq 0 -and $out) { return ($out | Select-Object -Last 1).Trim() }
         } catch { continue }
     }
@@ -80,7 +80,7 @@ Write-Ok "Git : $($git.Source)"
 
 $python = Find-Python
 if (-not $python) { Install-WithWinget 'Python.Python.3.12' 'Python 3.12'; $python = Find-Python }
-if (-not $python) { Stop-Install "Python 3.10 ou plus (avec tkinter) reste introuvable. Installe Python 3.12 depuis python.org (option « tcl/tk » cochée) puis relance." }
+if (-not $python) { Stop-Install "Python 3.11 ou plus (avec tkinter) reste introuvable. Installe Python 3.12 depuis python.org (option « tcl/tk » cochée) puis relance." }
 Write-Ok "Python : $python"
 
 # --- 2. Code ------------------------------------------------------------------------------------------------------

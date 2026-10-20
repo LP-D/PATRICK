@@ -11,9 +11,9 @@ jobs:
       # Une version qui échoue n'annule plus les autres : le diagnostic voit les trois d'un coup.
       fail-fast: false
       matrix:
-        # `pyproject.toml` declares `requires-python = ">=3.10"` -- exercise
-        # the full range it advertises (3.10/3.11/3.12), not just 3.11.
-        python-version: ["3.10", "3.11", "3.12"]
+        # `pyproject.toml` declares `requires-python = ">=3.11"` (3.10 reaches end of life in
+        # October 2026) -- exercise the range it advertises (3.11/3.12), not just one.
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
