@@ -100,6 +100,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
 UTILITY_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("vocabulary", "Vocabulaire", "/vocabulary", "utility", 5, "nav_vocabulary"),
     NavEntry("settings", "Réglages", "/reglages", "utility", 10, "nav_settings"),
+    NavEntry("diagnostics", "Diagnostics", "/diagnostics", "utility", 20, "nav_diagnostics"),
 )
 
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).

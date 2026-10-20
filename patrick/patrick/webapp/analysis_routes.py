@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from patrick.analysis import compare as compare_mod
 from patrick.analysis import (
+    diagnostics,
     drift_monitor,
     exports,
     features_explorer,
@@ -235,6 +236,35 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/diagnostics")
+    def diagnostics_page(request: Request):
+        return templates.TemplateResponse(request, "diagnostics.html", context(request))
+
+    @app.get("/api/diagnostics/system")
+    async def diagnostics_system():
+        def work():
+            conn = trackdb.connect()
+            try:
+                return {"system": diagnostics.system(), "processes": diagnostics.processes(), "app": diagnostics.app_state(conn)}
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/api/diagnostics/storage")
+    async def diagnostics_storage():
+        return JSONResponse(await run_in_threadpool(diagnostics.storage))
+
+    @app.get("/api/diagnostics/logs")
+    async def diagnostics_logs():
+        return JSONResponse(await run_in_threadpool(diagnostics.list_logs))
+
+    @app.get("/api/diagnostics/log")
+    async def diagnostics_log(name: str, lines: int = 200):
+        res = await run_in_threadpool(diagnostics.tail_log, name, lines)
+        if res is None:
+            raise HTTPException(status_code=404, detail="Journal introuvable")
+        return JSONResponse(res)
 
     @app.get("/carnet")
     def notebook_page(request: Request):

@@ -741,7 +741,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
     keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ())]
-    if path.startswith(("/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet")) or (path.startswith("/runs/") and path.endswith("/analyse")):
+    if path.startswith(("/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet", "/diagnostics")) or (path.startswith("/runs/") and path.endswith("/analyse")):
         keys = [*keys, *ANALYSIS_JS_KEYS]
     t = translator(lang)
     return {k: t(k) for k in keys}
