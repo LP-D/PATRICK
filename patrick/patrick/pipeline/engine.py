@@ -1785,7 +1785,7 @@ def _track_stability(st: _RunState) -> None:
         return
     for horizon in st.config.objective.horizons:
         board_h = _board_for_horizon(st.board, horizon)
-        top_h = board_h.top_k(1, metric="F1_dir")
+        top_h = board_h.top_k(1, metric="F1_dir", one_se=st.config.selection.one_se_rule)
         if not top_h:
             continue
         winner = top_h[0]
@@ -1826,12 +1826,13 @@ def _tuning_candidates(st: _RunState) -> list[dict]:
     """Audit report, C3: top_k PER horizon by default -- a horizon whose best
     scan trial dominates must not capture the whole Optuna budget."""
     config = st.config
+    one_se = config.selection.one_se_rule          # le candidat réglé est le choix de la règle, pas le maximum simple
     if not config.tuning.optuna_select_top_k_per_horizon:
-        return st.board.top_k(config.tuning.top_k, metric="F1_dir")
+        return st.board.top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se)
     top_configs = []
     for horizon in config.objective.horizons:
         top_configs.extend(_board_for_horizon(st.board, horizon, models_only=False)
-                           .top_k(config.tuning.top_k, metric="F1_dir"))
+                           .top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se))
     return top_configs
 
 
@@ -1936,28 +1937,45 @@ def _export_tables(st: _RunState) -> pd.DataFrame:
     return tuned_df
 
 
+def _best_tuned(tuned_df: pd.DataFrame, group_cols: list[str], one_se: bool, horizon: int | None = None) -> dict | None:
+    """The best fold-averaged tuned configuration (of one horizon, or of all): the highest mean, or with `one_se` the
+    parsimony rule's choice over the folds (`Leaderboard.best`)."""
+    rows = tuned_df if horizon is None else tuned_df[tuned_df["horizon"] == horizon]
+    if not len(rows):
+        return None
+    cols = group_cols + ["best_params"]
+    if one_se:
+        board = Leaderboard()
+        board.rows = rows.to_dict("records")
+        return board.best(metric="F1_dir", group_cols=tuple(cols), one_se=True)
+    ranked = rank_configs(rows.groupby(cols)["F1_dir"].mean().reset_index(), "F1_dir", cols)
+    return ranked.iloc[0].to_dict()
+
+
 def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> tuple[dict | None, dict[int, dict]]:
     """Global winner and one winner per horizon, each the better of the
     fold-averaged scan and the fold-averaged tuned configs (F07: never a
     single fold). Per-horizon export: `predict --live` needs an exported
-    model for EVERY horizon's run_id, not only the global winner's."""
+    model for EVERY horizon's run_id, not only the global winner's.
+
+    With `selection.one_se_rule`, the scan's choice AND the tuned choice are each the parsimony rule's pick (the tuned
+    one is picked among the tuned configurations by the same rule): a plain maximum at this last step would undo the rule
+    whenever tuning is active -- the tuned version of a bigger model almost always beats the untuned simple one."""
     group_cols = ["horizon", "regime", "N", "sampler", "algo"]
+    one_se = st.config.selection.one_se_rule
     final_best = dict(best) if best else None
-    tuned_agg = None
     if len(tuned_df):
-        tuned_agg = rank_configs(
-            tuned_df.groupby(group_cols + ["best_params"])["F1_dir"].mean().reset_index(),
-            "F1_dir", group_cols + ["best_params"])
-        if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
-            final_best = tuned_agg.iloc[0].to_dict()
+        tuned_best = _best_tuned(tuned_df, group_cols, one_se)
+        if tuned_best is not None and (final_best is None or tuned_best["F1_dir"] > final_best["F1_dir"]):
+            final_best = tuned_best
 
     final_best_by_horizon: dict[int, dict] = {}
     for horizon in st.config.objective.horizons:
-        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir", one_se=st.config.selection.one_se_rule)
-        if tuned_agg is not None:
-            tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
-            if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
-                best_h = tuned_h.iloc[0].to_dict()
+        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir", one_se=one_se)
+        if len(tuned_df):
+            tuned_h = _best_tuned(tuned_df, group_cols, one_se, horizon)
+            if tuned_h is not None and (best_h is None or tuned_h["F1_dir"] > best_h["F1_dir"]):
+                best_h = tuned_h
         if best_h is not None:
             final_best_by_horizon[horizon] = best_h
     return final_best, final_best_by_horizon

@@ -101,3 +101,72 @@ def test_disabling_the_rule_keeps_the_historic_hash_and_the_default_changes_it(m
     assert b"one_se_rule" not in _hashed_payload(off, monkeypatch)
     assert b'"one_se_rule":true' in _hashed_payload(on, monkeypatch)
     assert engine._config_hash(off) != engine._config_hash(on)
+
+
+# --- La règle doit gouverner le gagnant FINAL, pas seulement le classement du scan -----------------------------------------
+# Constaté sur le golden de la CI (2026-10-20) : le candidat réglé par Optuna était le maximum simple du scan, puis
+# `_select_finals` comparait le candidat simple du scan à ce candidat réglé (qui gagne presque toujours) : la règle était
+# neutralisée sans bruit dès que le réglage est actif. Elle s'applique donc aussi au choix des candidats à régler, au choix
+# parmi les configurations réglées, et à la stabilité mesurée sur le gagnant.
+
+def _config(flag: bool, *, top_k: int = 1) -> RunConfig:
+    return RunConfig.model_validate({
+        "name": "t", "objective": {"target_symbol": "X", "horizons": [5]}, "output": {"dir": "out"},
+        "selection": {"one_se_rule": flag}, "tuning": {"top_k": top_k}})
+
+
+SCAN = {3: [0.50] * 4, 5: [0.60, 0.59, 0.60, 0.59], 12: [0.62, 0.58, 0.60, 0.60]}       # N=12 : maximum ; N=5 : à une erreur-type
+
+
+def test_the_configuration_sent_to_optuna_is_the_rules_choice():
+    for flag, expected_n in ((False, 12), (True, 5)):
+        candidates = engine._tuning_candidates(SimpleNamespace(config=_config(flag), board=_board(SCAN)))
+        assert [c["N"] for c in candidates] == [expected_n]
+
+
+def test_with_several_candidates_the_rules_choice_leads_and_the_rest_follow_by_mean():
+    candidates = engine._tuning_candidates(SimpleNamespace(config=_config(True, top_k=2), board=_board(SCAN)))
+    assert [c["N"] for c in candidates] == [5, 12]
+    off = engine._tuning_candidates(SimpleNamespace(config=_config(False, top_k=2), board=_board(SCAN)))
+    assert [c["N"] for c in off] == [12, 5]
+
+
+def _tuned(scores_by_n: dict[int, list[float]], horizon: int = 5):
+    import pandas as pd
+
+    return pd.DataFrame([{"horizon": horizon, "fold": fold, "regime": "GLOBAL", "N": n_feat, "sampler": "none",
+                          "algo": "XGBoost", "best_params": "{'depth': 3}", "F1_dir": value}
+                         for n_feat, scores in scores_by_n.items() for fold, value in enumerate(scores, start=1)])
+
+
+def test_the_final_model_is_chosen_among_tuned_configurations_by_the_rule_too():
+    tuned = _tuned({5: [0.65, 0.64, 0.65, 0.64], 12: [0.67, 0.63, 0.65, 0.65]})        # N=12 : 0,650 ; N=5 : 0,645 (dans l'erreur-type)
+    for flag, expected_n in ((False, 12), (True, 5)):
+        st = SimpleNamespace(config=_config(flag), board=_board(SCAN))
+        final, by_horizon = engine._select_finals(st, st.board.best(metric="F1_dir", one_se=flag), tuned)
+        assert by_horizon[5]["N"] == expected_n and final["N"] == expected_n
+        assert "best_params" in by_horizon[5]                                           # c'est bien la configuration RÉGLÉE
+
+
+def test_a_tuned_configuration_still_has_to_beat_the_scan_choice_to_replace_it():
+    tuned = _tuned({5: [0.50] * 4})                                                      # le réglage n'aide pas
+    st = SimpleNamespace(config=_config(True), board=_board(SCAN))
+    _final, by_horizon = engine._select_finals(st, st.board.best(metric="F1_dir", one_se=True), tuned)
+    assert by_horizon[5]["N"] == 5 and "best_params" not in by_horizon[5]               # le candidat du scan reste
+
+
+def test_feature_stability_is_measured_on_the_rules_winner(monkeypatch):
+    board = Leaderboard()
+    for n_feat, scores in ((5, [0.60, 0.59, 0.60, 0.59]), (12, [0.62, 0.58, 0.60, 0.60])):
+        for fold, value in enumerate(scores, start=1):
+            board.add(horizon=5, regime="GLOBAL", N=n_feat, sampler="none", algo="XGBoost", fold=fold, F1_dir=value,
+                      features="|".join(f"f{i}" for i in range(n_feat)))
+    seen = {}
+    monkeypatch.setattr(engine.trackdb, "save_feature_stability",
+                        lambda conn, run_id, mean_jaccard, n_folds, freq: seen.update(n_features=len(freq)))
+    monkeypatch.setattr(engine.trackdb, "record_phase_timing", lambda *args, **kwargs: None)
+    for flag, expected in ((False, 12), (True, 5)):
+        config = _config(flag)
+        st = SimpleNamespace(config=config, board=board, is_walkforward=True, run_ids={5: "r5"}, conn=None)
+        engine._track_stability(st)
+        assert seen["n_features"] == expected
