@@ -12,7 +12,14 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 
-from patrick.analysis import frames, sec_meta, sec_perf, sec_predict, sec_robust
+from patrick.analysis import (
+    frames,
+    sec_meta,
+    sec_perf,
+    sec_predict,
+    sec_regimes,
+    sec_robust,
+)
 from patrick.analysis import stats_core as sc
 from patrick.analysis.context import Ctx
 
@@ -30,6 +37,7 @@ SECTIONS: dict[str, Callable[[Ctx], dict]] = {
     "folds": sec_meta.folds,
     "equity": sec_perf.equity,
     "errors": sec_perf.errors,
+    "regimes": sec_regimes.regimes,
     "features": sec_meta.features,
     "trials": sec_meta.trials,
     "robustness": sec_robust.robustness,

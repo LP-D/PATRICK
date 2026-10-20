@@ -8,6 +8,7 @@ from __future__ import annotations
 from patrick.webapp.i18n_analysis_cmp import CMP_ANALYSIS_STRINGS
 from patrick.webapp.i18n_analysis_guard import GUARD_STRINGS
 from patrick.webapp.i18n_analysis_rl import RL_ANALYSIS_STRINGS
+from patrick.webapp.i18n_analysis_vars import VARS_STRINGS
 
 
 def _s(fr: str, en: str) -> dict[str, str]:
@@ -58,6 +59,8 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_h_equity": _s("Le signal appliqué mécaniquement aux rendements réalisés, coûts réglables. Un outil de lecture, pas une consigne.", "The signal applied mechanically to realised returns, adjustable costs. A reading tool, not an instruction."),
     "ra_s_errors": _s("Où le modèle se trompe", "Where the model is wrong"),
     "ra_h_errors": _s("Exactitude selon le régime de marché, le calendrier, le niveau de confiance et la classe.", "Accuracy by market regime, calendar, confidence level and class."),
+    "ra_s_regimes": _s("Régimes de marché (HMM)", "Market regimes (HMM)"),
+    "ra_h_regimes": _s("Régimes de volatilité détectés sans regarder l'avenir, et performance du modèle dans chacun.", "Volatility regimes detected without looking ahead, and the model's performance in each."),
     "ra_s_features": _s("Variables", "Features"),
     "ra_h_features": _s("Ce que le modèle retenu utilise, et la stabilité de la sélection d'un pli à l'autre.", "What the selected model uses, and how stable the selection is from fold to fold."),
     "ra_s_trials": _s("Essais du run", "Run trials"),
@@ -87,6 +90,7 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_reason_not_cpcv": _s("Ce run n'utilise pas la validation CPCV.", "This run does not use CPCV validation."),
     "ra_reason_no_paths": _s("Aucun chemin CPCV enregistré.", "No CPCV path stored."),
     "ra_reason_not_ready": _s("Le run n'est pas terminé : pas encore de résultat.", "The run is not finished: no result yet."),
+    "ra_reason_regime_failed": _s("Le modèle de régimes n'a pas pu être ajusté sur cette série.", "The regime model could not be fitted on this series."),
     "ra_reason_no_daily": _s("Aucun détail quotidien hors échantillon pour ce run.", "No daily out-of-sample detail for this run."),
     "ra_reason_no_folds": _s("Aucun pli enregistré.", "No fold stored."),
     # vocabulaire commun
@@ -367,6 +371,19 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_rg_dd_normal": _s("Marché normal", "Normal market"), "ra_rg_dd_stress": _s("Baisse > 10 % du plus haut", "Drawdown > 10 % from peak"),
     "ra_rg_mom_up": _s("Momentum positif", "Positive momentum"), "ra_rg_mom_down": _s("Momentum négatif", "Negative momentum"),
     # ------------------------------------------------------------------ variables
+    "ra_hm_calme": _s("Calme", "Calm"), "ra_hm_normal": _s("Normal", "Normal"), "ra_hm_stress": _s("Stress", "Stress"),
+    "ra_hm_states": _s("{n} états HMM", "{n} HMM states"),
+    "ra_hm_fit": _s("ajusté jusqu'au {d} (avant le test)", "fitted up to {d} (before the test)"),
+    "ra_hm_cut": _s("seuils {a} / {b}", "cut-offs {a} / {b}"),
+    "ra_hm_changes": _s("{n} changements de régime · séjour moyen {d} jours", "{n} regime changes · mean stay {d} days"),
+    "ra_hm_title": _s("Probabilité de stress filtrée", "Filtered stress probability"),
+    "ra_hm_h": _s("Régimes dans le temps", "Regimes over time"),
+    "ra_hm_hint": _s("La courbe est la probabilité, calculée jour après jour, que le marché soit dans l'état de plus forte variance. Les teintes sont les trois régimes obtenus en la coupant aux deux seuils en pointillé. Traits verticaux : début de chaque pli.", "The curve is the probability, computed day by day, that the market is in the highest-variance state. The tints are the three regimes obtained by cutting it at the two dotted thresholds. Vertical lines: start of each fold."),
+    "ra_hm_t": _s("P(stress) {p} · régime {r}", "P(stress) {p} · regime {r}"),
+    "ra_hm_perf": _s("Performance du modèle par régime", "Model performance by regime"),
+    "ra_hm_perf_hint": _s("Un modèle utile partout bat son côté majoritaire dans les trois régimes ; un écart concentré dans un seul régime est une information sur quand se fier à lui.", "A model useful everywhere beats its majority side in all three regimes; a gap concentrated in one regime says when to trust it."),
+    "ra_hm_regime": _s("Régime", "Regime"),
+    "ra_hm_longest": _s("Plus longs séjours", "Longest stays"),
     "ra_fe_jaccard": _s("Stabilité de la sélection (Jaccard) {j} sur {n} plis", "Selection stability (Jaccard) {j} over {n} folds"),
     "ra_fe_nfeat": _s("{n} variables dans le modèle final", "{n} features in the final model"),
     "ra_fe_imp": _s("Importance du modèle ({k})", "Model importance ({k})"),
@@ -542,10 +559,11 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
 ANALYSIS_STRINGS.update(RL_ANALYSIS_STRINGS)
 ANALYSIS_STRINGS.update(CMP_ANALYSIS_STRINGS)
 ANALYSIS_STRINGS.update(GUARD_STRINGS)
+ANALYSIS_STRINGS.update(VARS_STRINGS)
 
 
 def _browser_keys() -> tuple[str, ...]:
-    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_")))
+    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_", "av_")))
 
 
 ANALYSIS_JS_KEYS: tuple[str, ...] = _browser_keys()

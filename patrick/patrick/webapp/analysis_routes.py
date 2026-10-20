@@ -13,7 +13,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from patrick.analysis import compare as compare_mod
-from patrick.analysis import exports, guardrails, hub, registry, rl_sections
+from patrick.analysis import (
+    exports,
+    features_explorer,
+    guardrails,
+    hub,
+    registry,
+    rl_sections,
+)
 from patrick.tracking import db as trackdb
 from patrick.webapp import i18n
 
@@ -21,7 +28,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 _ML_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "run_analysis.js", "run_analysis_more.js")
 _RL_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "rl_analysis.js")
 
-ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors",
+ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors", "regimes",
                "features", "trials", "robustness", "holdout_live", "paths")
 RL_SECTIONS = rl_sections.SECTIONS
 
@@ -196,6 +203,33 @@ def register(app: FastAPI, templates, context) -> None:
             conn = trackdb.connect()
             try:
                 return guardrails.summary(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/variables")
+    def variables_page(request: Request):
+        return templates.TemplateResponse(request, "variables.html", context(request))
+
+    @app.get("/api/variables/overview")
+    async def variables_overview():
+        def work():
+            conn = trackdb.connect()
+            try:
+                return features_explorer.overview(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/api/variables/detail")
+    async def variables_detail(feature: str):
+        if not feature or len(feature) > 300:
+            raise HTTPException(status_code=400, detail="Variable invalide")
+
+        def work():
+            conn = trackdb.connect()
+            try:
+                return features_explorer.feature_detail(conn, feature)
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))

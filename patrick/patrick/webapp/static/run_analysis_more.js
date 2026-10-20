@@ -214,6 +214,36 @@
         }
     };
 
+    // ---------------------------------------------------------------- régimes HMM
+    var REGIME_BG = { calme: "var(--pos-soft)", normal: "var(--neutral-soft)", stress: "var(--neg-soft)" }, CODES = ["calme", "normal", "stress"];
+    RA.render.regimes = function (m, d) {
+        var ms = d.t.map(PK.dateMs), lo = ms[0], hi = ms[ms.length - 1], pad = (hi - lo) * 0.01;
+        var chips = h("div", { class: "ra-chips" }, [PK.chip(T("ra_hm_states", { n: d.n_states })), PK.chip(T("ra_hm_fit", { d: d.fit_end })), PK.chip(T("ra_hm_cut", { a: num(d.cutoffs[0], 2), b: num(d.cutoffs[1], 2) })),
+            PK.chip(T("ra_hm_changes", { n: d.n_changes, d: num(d.mean_stay, 0) }))]);
+        CODES.forEach(function (c) { chips.appendChild(PK.chip(T("ra_hm_" + c) + " " + pct(d.share[c], 0), c === "stress" ? "warn" : (c === "calme" ? "ok" : "neutral"))); });
+        m.appendChild(chips);
+        var P = PK.plot({ w: 780, h: 220, x: { type: "time", domain: [lo - pad, hi + pad] }, y: { domain: [0, 1], fmt: function (v) { return pct(v, 0); }, zero: false }, title: T("ra_hm_title") });
+        var start = 0;
+        for (var i = 1; i <= d.code.length; i++) {
+            if (i === d.code.length || d.code[i] !== d.code[start]) {
+                PK.xband(P, ms[start], ms[Math.min(i, ms.length - 1)], { color: REGIME_BG[CODES[d.code[start]]], opacity: 1 });
+                start = i;
+            }
+        }
+        (d.folds || []).forEach(function (f) { PK.vline(P, PK.dateMs(f.start), { color: "var(--line-strong)", dash: "2 3" }); });
+        PK.hline(P, d.cutoffs[0], { color: "var(--pos)", dash: "3 3" });
+        PK.hline(P, d.cutoffs[1], { color: "var(--neg)", dash: "3 3" });
+        PK.line(P, ms, d.stress, { color: "var(--text)", width: 1.2 });
+        PK.hover(P, function (xv) { var i = nearestIdx(ms, xv); return i < 0 ? null : [d.t[i], T("ra_hm_t", { p: pct(d.stress[i], 0), r: T("ra_hm_" + CODES[d.code[i]]) })]; }, function (xv) { return ms[nearestIdx(ms, xv)]; });
+        m.appendChild(titled(T("ra_hm_h"), P.node, T("ra_hm_hint")));
+        m.appendChild(PK.legend([{ color: "var(--pos)", label: T("ra_hm_calme") }, { color: "var(--neutral-soft)", label: T("ra_hm_normal") }, { color: "var(--neg)", label: T("ra_hm_stress") }]));
+        var rows = d.table.map(function (r) {
+            return [T("ra_hm_" + r.key), int(r.n), pct(r.acc, 1), pct(r.lo, 1) + " – " + pct(r.hi, 1), pct(r.base, 1), { cell: PK.spct(r.edge, 1), cls: r.edge > 0 ? "pos" : "neg" }, num(r.f1_dir, 3), pct(r.share_pred_up, 0), PK.spct(r.ret_if_up, 2), PK.spct(r.ret_if_down, 2)];
+        });
+        m.appendChild(titled(T("ra_hm_perf"), PK.table([T("ra_hm_regime"), T("ra_sc_t_n"), T("ra_m_acc"), T("ra_er_ci"), T("ra_er_base"), T("ra_er_edge"), T("ra_m_f1dir"), T("ra_m_predup"), T("ra_er_ret_up"), T("ra_er_ret_down")], rows, { num: [1, 2, 4, 5, 6, 7, 8, 9] }), T("ra_hm_perf_hint")));
+        if ((d.longest || []).length) m.appendChild(titled(T("ra_hm_longest"), PK.table([T("ra_hm_regime"), T("ra_er_s_from"), T("ra_er_s_to"), T("ra_er_s_len")], d.longest.map(function (r) { return [T("ra_hm_" + r.regime), r.start, r.end, int(r.days)]; }), { num: [3] })));
+    };
+
     // ---------------------------------------------------------------- variables
     RA.render.features = function (m, d) {
         var famCol = {}, i = 0;

@@ -53,6 +53,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
     NavEntry("analyses", "Analyses", "/analyses", "pilotage", 35, "nav_analyses", child_routes=("/runs/{run_id}/analyse", "/analyses/comparer")),
     NavEntry("guardrails", "Garde-fous", "/garde-fous", "pilotage", 37, "nav_guardrails"),
+    NavEntry("variables", "Variables", "/variables", "pilotage", 46, "nav_variables"),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),

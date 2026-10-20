@@ -241,3 +241,24 @@ def test_sc_clean_used_by_registry_replaces_nan(seeded):
     out = build(conn, info, "calibration")
     assert "NaN" not in json.dumps(out)
     assert sc.jsonable(float("nan")) is None
+
+
+def test_regimes_section_is_causal_and_partitions_the_sample(tmp_path, monkeypatch):
+    registry.clear_cache()
+    conn, info = seed_run(tmp_path, monkeypatch)
+    out = registry.build(conn, info["run_id"], "regimes", {"n_states": "2"}, db_key="hmm")
+    assert out["available"] and out["n_states"] == 2
+    assert set(out["share"]) == {"calme", "normal", "stress"} and abs(sum(out["share"].values()) - 1.0) < 1e-9
+    assert out["fit_end"] < out["t"][0]                                   # ajusté avant le premier jour évalué : pas de regard vers l'avenir
+    assert sum(r["n"] for r in out["table"]) <= 1000 + 400 and {r["key"] for r in out["table"]} <= {"calme", "normal", "stress"}
+    assert all(0.0 <= p <= 1.0 for p in out["stress"]) and set(out["code"]) <= {0, 1, 2}
+    assert out["n_changes"] >= 0 and out["longest"] == sorted(out["longest"], key=lambda r: -r["days"])
+    registry.clear_cache()
+
+
+def test_regimes_unavailable_without_levels(tmp_path, monkeypatch):
+    registry.clear_cache()
+    conn, info = seed_run(tmp_path, monkeypatch, with_store=False)
+    out = registry.build(conn, info["run_id"], "regimes", {}, db_key="hmm0")
+    assert out["available"] is False and out["reason"] == "no_returns"
+    registry.clear_cache()

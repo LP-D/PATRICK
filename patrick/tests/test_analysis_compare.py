@@ -99,7 +99,7 @@ def test_compare_page_and_api(tmp_path, monkeypatch):
     assert c.get("/analyses/comparer?run_ids=run_a").status_code == 400
     assert c.get("/analyses/comparer?run_ids=run_a&run_ids=nope").status_code == 404
     assert c.get("/api/analyses/compare?run_ids=run_a&run_ids=nope").status_code == 404
-    assert c.get("/api/analyses/compare?run_ids=" + "&run_ids=".join(["a", "b", "c", "d", "e"])).status_code in (404, 400)
+    assert c.get("/api/analyses/compare?run_ids=a&run_ids=b&run_ids=c&run_ids=d&run_ids=e").status_code in (404, 400)
 
 
 def test_old_comparison_page_links_to_detailed_one(tmp_path, monkeypatch):

@@ -2,6 +2,7 @@
 données de toutes les sections pour un rapport HTML autonome."""
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import sqlite3
@@ -75,8 +76,6 @@ def all_sections(conn: sqlite3.Connection, run_id: str, db_key: str = "") -> dic
     for name, fn in SECTIONS.items():
         if name == "paths" and not fr.is_cpcv:
             continue
-        try:
+        with contextlib.suppress(Exception):          # une section en échec ne doit pas empêcher l'export des autres
             out[name] = sc.jsonable(fn(Ctx(conn, fr, {})))
-        except Exception:  # noqa: BLE001 -- une section ne doit pas empêcher l'export des autres
-            continue
     return out
