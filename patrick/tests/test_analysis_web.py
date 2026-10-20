@@ -91,14 +91,14 @@ def test_js_strings_ship_on_analysis_pages_only(client):
 
 
 def _used_keys(source: str) -> set[str]:
-    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag|av|ad|am|aj|cn|dg|rk|dx)_[A-Za-z0-9_]+)"', source)}
+    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag|av|ad|am|aj|cn|dg|rk|dx|nt)_[A-Za-z0-9_]+)"', source)}
 
 
 def _dynamic_prefixes(source: str) -> set[str]:
-    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag|av|ad|am|aj|cn|dg|rk|dx)_[A-Za-z0-9_]*_)"\s*\+', source)}
+    return {m.group(1) for m in re.finditer(r'\bT\(\s*"((?:ra|ah|ac|ag|av|ad|am|aj|cn|dg|rk|dx|nt)_[A-Za-z0-9_]*_)"\s*\+', source)}
 
 
-@pytest.mark.parametrize("script", ["analysis_loader.js", "run_analysis.js", "run_analysis_more.js", "analysis_kit.js", "rl_analysis.js", "analyses_hub.js", "analyses_compare.js", "guardrails.js", "variables.js", "drift_monitor.js", "model_registry.js", "journal.js", "carnet.js", "diagnostics.js", "risque.js", "donnees.js"])
+@pytest.mark.parametrize("script", ["analysis_loader.js", "run_analysis.js", "run_analysis_more.js", "analysis_kit.js", "rl_analysis.js", "analyses_hub.js", "analyses_compare.js", "guardrails.js", "variables.js", "drift_monitor.js", "model_registry.js", "journal.js", "carnet.js", "diagnostics.js", "risque.js", "donnees.js", "run_notify.js"])
 def test_every_text_key_used_by_scripts_exists_in_both_languages(script):
     source = (STATIC / script).read_text(encoding="utf-8")
     missing = [k for k in _used_keys(source) if k not in STRINGS and not k.endswith("_")]

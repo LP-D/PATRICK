@@ -2561,3 +2561,15 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .rl-results .data-table td.rl-agent-col { font-weight: 600; color: var(--text); }
 .rl-results .exp-presets { margin-top: 4px; }
 #rl-form [hidden] { display: none; }
+
+/* Notification de fin de run : bouton cloche (barre supérieure) et bandeaux dans la page (run_notify.js). */
+.notify-toggle[aria-pressed="true"] { color: var(--brand); }
+.notify-toggle .icon-bell-on[hidden], .notify-toggle .icon-bell-off[hidden] { display: none; }
+.run-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.run-toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2, var(--surface)); color: var(--text); font-size: 13px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
+.run-toast span { flex: 1; }
+.run-toast a { color: var(--brand); font-weight: 600; white-space: nowrap; }
+.run-toast-ok { border-left: 3px solid var(--pos); }
+.run-toast-error { border-left: 3px solid var(--neg); }
+.run-toast-close { background: none; border: 0; color: var(--text-3); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.run-toast-close:hover { color: var(--text); }

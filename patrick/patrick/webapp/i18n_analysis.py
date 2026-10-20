@@ -16,6 +16,7 @@ from patrick.webapp.i18n_analysis_notes import NOTES_STRINGS
 from patrick.webapp.i18n_analysis_risk import RISK_STRINGS
 from patrick.webapp.i18n_analysis_rl import RL_ANALYSIS_STRINGS
 from patrick.webapp.i18n_analysis_vars import VARS_STRINGS
+from patrick.webapp.i18n_notify import NOTIFY_STRINGS
 
 
 def _s(fr: str, en: str) -> dict[str, str]:
@@ -574,6 +575,7 @@ ANALYSIS_STRINGS.update(NOTES_STRINGS)
 ANALYSIS_STRINGS.update(DIAG_STRINGS)
 ANALYSIS_STRINGS.update(DATA_STRINGS)
 ANALYSIS_STRINGS.update(RISK_STRINGS)
+ANALYSIS_STRINGS.update(NOTIFY_STRINGS)
 
 
 def _browser_keys() -> tuple[str, ...]:
@@ -581,3 +583,4 @@ def _browser_keys() -> tuple[str, ...]:
 
 
 ANALYSIS_JS_KEYS: tuple[str, ...] = _browser_keys()
+NOTIFY_JS_KEYS: tuple[str, ...] = tuple(NOTIFY_STRINGS)

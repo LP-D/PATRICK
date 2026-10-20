@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
-from patrick.webapp.i18n_analysis import ANALYSIS_JS_KEYS, ANALYSIS_STRINGS
+from patrick.webapp.i18n_analysis import (
+    ANALYSIS_JS_KEYS,
+    ANALYSIS_STRINGS,
+    NOTIFY_JS_KEYS,
+)
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
@@ -698,7 +702,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", *NOTIFY_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done", "phase_other",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",
