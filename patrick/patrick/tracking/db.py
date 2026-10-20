@@ -1199,6 +1199,13 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
             "y_pred, y_proba, path_id, p_up, p_up_calibrated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
+    if split == "live":
+        # Journal chaîné (migration 0040) : le signal est scellé AVANT son issue, le premier écrit gagne. Une erreur du journal n'empêche pas la prédiction.
+        from patrick.tracking import journal
+        journal.safe(journal.record_signals, conn, trial_id, list(ts), list(y_pred), None if p_up is None else list(p_up))
+        for t, yt in zip(ts, y_true, strict=True):
+            if yt is not None:
+                journal.safe(journal.record_outcome, conn, trial_id, str(t), yt)
 
 
 def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int,
@@ -1236,6 +1243,8 @@ def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, 
             "UPDATE prediction SET y_true = ?, y_class = ? WHERE trial_id = ? AND ts = ?",
             (float(y_true), None if y_class is None else int(y_class), trial_id, ts),
         )
+    from patrick.tracking import journal
+    journal.safe(journal.record_outcome, conn, trial_id, str(ts), float(y_true))
 
 
 def live_prediction_timestamps(conn: sqlite3.Connection, trial_id: int) -> set[str]:

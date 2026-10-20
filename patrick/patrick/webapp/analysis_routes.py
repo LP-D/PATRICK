@@ -20,11 +20,13 @@ from patrick.analysis import (
     features_explorer,
     guardrails,
     hub,
+    journal_view,
     model_registry,
     registry,
     rl_sections,
 )
 from patrick.tracking import db as trackdb
+from patrick.tracking import journal as journal_mod
 from patrick.webapp import i18n
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -215,6 +217,40 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/journal")
+    def journal_page(request: Request):
+        return templates.TemplateResponse(request, "journal.html", context(request))
+
+    def _journal(fn):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return fn(conn)
+            finally:
+                conn.close()
+        return run_in_threadpool(work)
+
+    @app.get("/api/journal/overview")
+    async def journal_overview():
+        return JSONResponse(await _journal(journal_view.overview))
+
+    @app.get("/api/journal/entries")
+    async def journal_entries(target: str | None = None, limit: int = 100, offset: int = 0):
+        return JSONResponse(await _journal(lambda c: journal_view.entries(c, target, limit, offset)))
+
+    @app.get("/api/journal/verify")
+    async def journal_verify():
+        return JSONResponse(await _journal(journal_view.verify))
+
+    @app.get("/api/journal/export.csv")
+    async def journal_export():
+        body = await _journal(journal_view.export_csv)
+        return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="journal_predictions.csv"'})
+
+    @app.post("/api/journal/seal")
+    async def journal_seal():
+        return JSONResponse(await _journal(journal_mod.seal_existing))
 
     @app.get("/modeles")
     def models_page(request: Request):

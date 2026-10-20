@@ -8,6 +8,7 @@ promu. La promotion manuelle ne ré-entraîne rien : elle désigne un modèle d�
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 from datetime import UTC, datetime
@@ -112,7 +113,7 @@ def limits(card_parts: dict) -> list[dict]:
     if age is not None and age > STALE_MODEL_DAYS:
         out.append({"level": "info", "key": "stale", "params": {"d": age}})
     stab = g.get("stability")
-    if stab is not None and stab == stab and stab < 0.5:
+    if stab is not None and not math.isnan(stab) and stab < 0.5:
         out.append({"level": "warn", "key": "unstable_selection", "params": {"j": stab}})
     if not g.get("artifact_exists", True):
         out.append({"level": "warn", "key": "no_file", "params": {}})

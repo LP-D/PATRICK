@@ -56,6 +56,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("variables", "Variables", "/variables", "pilotage", 46, "nav_variables"),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("drift", "Dérive", "/derive", "pilotage", 42, "nav_drift"),
+    NavEntry("journal", "Journal", "/journal", "pilotage", 43, "nav_journal"),
     NavEntry("models_registry", "Registre de modèles", "/modeles", "pilotage", 44, "nav_models_registry", child_routes=("/modeles/fiche",)),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
