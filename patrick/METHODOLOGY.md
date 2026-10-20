@@ -95,6 +95,11 @@ fenêtre donnée) et la page d'un run l'affiche. Le registre démarre à sa
 création : les lectures antérieures sont inconnues. Le simulateur, qui relit
 les prédictions holdout déjà stockées, n'y est pas encore comptabilisé.
 
+**Règle « une erreur-type »** (`selection.one_se_rule`, activée par défaut depuis le 2026-10-20, ADR 0006). Le gagnant du leaderboard
+n'est plus la plus haute moyenne de F1_dir sur les plis : parmi les configurations dont la moyenne est à moins d'une erreur-type
+(écart-type des plis divisé par √plis) de la meilleure, on retient la plus simple (le moins de variables), puis la meilleure moyenne.
+Sans au moins deux plis, le maximum simple reste. Une config qui la désactive garde le hachage d'avant le champ.
+
 ### Réduction de l'univers candidat : décidée dans chaque fold
 
 `universe.reduction_corr_threshold` (désactivé par défaut) regroupe les séries

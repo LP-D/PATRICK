@@ -174,7 +174,7 @@ def resume_cmd(
     if row is None:
         typer.echo(f"Run introuvable : {run_id}")
         raise typer.Exit(code=1)
-    config = RunConfig.model_validate_json(row["config_json"])
+    config = RunConfig.from_stored_json(row["config_json"])
     typer.echo(f"Reprise de '{config.name}' (run {run_id}, statut précédent={row['status']})...")
     with keep_awake():
         result = run_pipeline(config, snapshot_id=row["snapshot_id"])

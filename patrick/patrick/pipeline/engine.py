@@ -1138,7 +1138,8 @@ def _config_hash(config: RunConfig) -> str:
     # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
     if config.models.deep is None:
         exclude["models"] = {"deep"}
-    # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage tant qu'elle est désactivée (défaut).
+    # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage quand elle est désactivée, donc une config qui
+    # la désactive garde le hachage d'avant le champ ; activée (défaut), elle change le gagnant et entre dans le hachage.
     if not config.selection.one_se_rule:
         exclude["selection"] = {"one_se_rule"}
     exclude = exclude or None

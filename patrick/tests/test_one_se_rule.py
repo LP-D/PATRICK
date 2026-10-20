@@ -3,8 +3,8 @@
 `Leaderboard.best` prend la configuration de plus haute moyenne sur les plis ; avec des centaines de candidats aux
 scores presque égaux, ce maximum est du bruit (le départage actuel ne joue que sur des égalités EXACTES). La règle
 classique : parmi les configurations dont la moyenne est à moins d'une erreur-type de la meilleure, prendre la plus
-simple (le moins de variables). Optionnelle (`selection.one_se_rule`, désactivée par défaut : elle change le gagnant,
-donc les résultats de référence).
+simple (le moins de variables). Activée par défaut (`selection.one_se_rule`, décision du 2026-10-20) ; désactivable, et une
+configuration qui la désactive garde le hachage d'avant le champ.
 """
 from __future__ import annotations
 
@@ -78,16 +78,26 @@ def test_the_final_selection_follows_the_configuration_flag():
         assert by_horizon[5]["N"] == expected_n
 
 
-def test_the_rule_is_off_by_default():
+def test_the_rule_is_on_by_default():
     assert RunConfig.model_validate({"name": "t", "objective": {"target_symbol": "X"},
-                                     "output": {"dir": "out"}}).selection.one_se_rule is False
+                                     "output": {"dir": "out"}}).selection.one_se_rule is True
 
 
-def test_enabling_the_rule_changes_the_config_hash_and_disabling_it_keeps_the_historic_one():
-    """Une config dont la règle est désactivée garde le hachage d'avant le champ (reprise des runs, noms d'études Optuna) ;
-    l'activer change les résultats, donc le hachage."""
+def _hashed_payload(config, monkeypatch) -> bytes:
+    """Ce que `_config_hash` donne réellement à SHA-256 (capturé, pas recalculé)."""
+    seen: list[bytes] = []
+    real = engine.hashlib.sha256
+    monkeypatch.setattr(engine.hashlib, "sha256", lambda data=b"": (seen.append(data), real(data))[1])
+    engine._config_hash(config)
+    return seen[0]
+
+
+def test_disabling_the_rule_keeps_the_historic_hash_and_the_default_changes_it(monkeypatch):
+    """Une config dont la règle est désactivée garde la charge utile d'avant le champ (reprise des runs, noms d'études Optuna) ;
+    la règle active (défaut) change les résultats, donc le hachage."""
     base = {"name": "t", "objective": {"target_symbol": "X"}, "output": {"dir": "out"}}
     off = RunConfig.model_validate({**base, "selection": {"one_se_rule": False}})
-    on = RunConfig.model_validate({**base, "selection": {"one_se_rule": True}})
-    assert engine._config_hash(off) == engine._config_hash(RunConfig.model_validate(base))
+    on = RunConfig.model_validate(base)
+    assert b"one_se_rule" not in _hashed_payload(off, monkeypatch)
+    assert b'"one_se_rule":true' in _hashed_payload(on, monkeypatch)
     assert engine._config_hash(off) != engine._config_hash(on)

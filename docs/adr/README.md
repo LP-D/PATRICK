@@ -11,3 +11,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0003](0003-diebold-mariano-sens-unique-et-testabilite.md) | Diebold-Mariano : sens « meilleur » dans la famille BH, et refus sous 15 blocs | 2026-10-19 | Acceptée |
 | [0004](0004-cpcv-interactions-par-combinaison.md) | CPCV : formules d'interaction découvertes par combinaison | 2026-10-19 | Acceptée |
 | [0005](0005-registre-d-acces-au-holdout.md) | Registre d'accès au holdout terminal | 2026-10-19 | Acceptée |
+| [0006](0006-regle-une-erreur-type-par-defaut.md) | Règle de parcimonie « une erreur-type » activée par défaut | 2026-10-20 | Acceptée |

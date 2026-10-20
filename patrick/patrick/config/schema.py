@@ -3,6 +3,7 @@ validation + defaults, not for performance: a run loads its config only once.
 """
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
@@ -248,8 +249,9 @@ class SelectionConfig(BaseModel):
     # silently disabled default (cross-cutting constraint, phase 6).
     track_stability: bool = True
     # Parsimony rule: among the configurations within one standard error (over the folds) of the best mean, keep the
-    # simplest (fewest features). Off by default: it changes the winner, hence every reference result.
-    one_se_rule: bool = False
+    # simplest (fewest features). On by default since 2026-10-20: the plain maximum over hundreds of near-equal candidates
+    # is noise. A config that turns it off keeps the pre-field hash (`engine._config_hash`).
+    one_se_rule: bool = True
 
 
 class SamplerConfig(BaseModel):
@@ -359,6 +361,18 @@ class RunConfig(BaseModel):
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     tuning: TuningConfig = Field(default_factory=TuningConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    @classmethod
+    def from_stored_json(cls, text: str) -> RunConfig:
+        """Relit la configuration enregistrée d'un run. Un champ absent de l'enregistrement date d'avant son ajout : il prend la
+        valeur qui reproduit le run d'alors, pas le défaut d'aujourd'hui (`selection.one_se_rule` : activée par défaut, mais un run
+        lancé avant le champ a tourné sans elle ; le reprendre avec la règle changerait son hachage, donc ses études Optuna)."""
+        data = json.loads(text)
+        if isinstance(data, dict):
+            selection = data.setdefault("selection", {})
+            if isinstance(selection, dict):
+                selection.setdefault("one_se_rule", False)
+        return cls.model_validate(data)
 
     @model_validator(mode="before")
     @classmethod
