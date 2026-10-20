@@ -1137,6 +1137,9 @@ def _config_hash(config: RunConfig) -> str:
     # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
     if config.models.deep is None:
         exclude["models"] = {"deep"}
+    # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage tant qu'elle est désactivée (défaut).
+    if not config.selection.one_se_rule:
+        exclude["selection"] = {"one_se_rule"}
     exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
@@ -1947,7 +1950,7 @@ def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> 
 
     final_best_by_horizon: dict[int, dict] = {}
     for horizon in st.config.objective.horizons:
-        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir")
+        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir", one_se=st.config.selection.one_se_rule)
         if tuned_agg is not None:
             tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
             if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
@@ -2149,7 +2152,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         n_scan_fits = st.n_scan_evals or len(st.board.rows)  # CPCV does not count fits one by one
         print(f"\n[SCAN] {n_scan_fits} evaluations in {(time.time()-t0)/60:.1f}min")
         _report_calibration_skips(n_scan_fits)
-        best = st.board.best(metric="F1_dir")
+        best = st.board.best(metric="F1_dir", one_se=config.selection.one_se_rule)
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
                   f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")

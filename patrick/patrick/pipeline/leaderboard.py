@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
 import pandas as pd
 
 DEFAULT_GROUP_COLS: tuple[str, ...] = ("horizon", "regime", "N", "sampler", "algo")
@@ -41,10 +42,31 @@ class Leaderboard:
     def as_df(self) -> pd.DataFrame:
         return pd.DataFrame(self.rows)
 
-    def best(self, metric: str = "F1_dir",
-             group_cols: tuple[str, ...] = DEFAULT_GROUP_COLS) -> dict | None:
-        top = self.top_k(1, metric=metric, group_cols=group_cols)
-        return top[0] if top else None
+    def best(self, metric: str = "F1_dir", group_cols: tuple[str, ...] = DEFAULT_GROUP_COLS,
+             one_se: bool = False) -> dict | None:
+        """The configuration of highest walk-forward mean. `one_se`: among the configurations whose mean is within one
+        standard error of the best one, the SIMPLEST (fewest features, then the higher mean) -- with hundreds of
+        near-equal candidates the plain maximum is noise. Needs `N` among the grouping columns and at least two
+        folds for the best configuration (no standard error otherwise: the plain maximum)."""
+        if not one_se:
+            top = self.top_k(1, metric=metric, group_cols=group_cols)
+            return top[0] if top else None
+        df = self.as_df()
+        if df.empty or metric not in df.columns:
+            return None
+        cols = [c for c in group_cols if c in df.columns]
+        grouped = df.groupby(cols)[metric]
+        agg = grouped.mean().reset_index()
+        agg["n_folds"] = grouped.count().values
+        agg["_se"] = grouped.std(ddof=1).fillna(0.0).values / np.sqrt(np.maximum(agg["n_folds"].values, 1))
+        ranked = rank_configs(agg, metric, cols)
+        head = ranked.iloc[0]
+        if "N" in cols and head["n_folds"] >= 2:
+            near = ranked[ranked[metric] >= head[metric] - head["_se"] - 1e-12]
+            others = [c for c in _TIEBREAK_ORDER if c in cols and c != "N"]
+            ranked = near.sort_values(["N", metric] + others, ascending=[True, False] + [True] * len(others),
+                                      kind="mergesort")
+        return ranked.head(1).drop(columns="_se").to_dict("records")[0]
 
     def top_k(self, k: int, metric: str = "F1_dir",
               group_cols: tuple[str, ...] = DEFAULT_GROUP_COLS) -> list[dict]:

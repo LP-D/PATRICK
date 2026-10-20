@@ -247,6 +247,9 @@ class SelectionConfig(BaseModel):
     # selection frequency, `selection/stability.py`). True (default): never a
     # silently disabled default (cross-cutting constraint, phase 6).
     track_stability: bool = True
+    # Parsimony rule: among the configurations within one standard error (over the folds) of the best mean, keep the
+    # simplest (fewest features). Off by default: it changes the winner, hence every reference result.
+    one_se_rule: bool = False
 
 
 class SamplerConfig(BaseModel):
