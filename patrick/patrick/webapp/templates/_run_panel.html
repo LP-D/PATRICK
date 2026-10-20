@@ -35,5 +35,6 @@
 </details>
 {% endif %}
 <footer class="rp-foot">
+    <a class="btn-secondary" href="/runs/{{ r.run_id }}/analyse">{{ t('ra_open_analysis') }} {{ icon('external', 13) }}</a>
     <a class="btn-secondary" href="/runs/{{ r.run_id }}/detail">{{ t('rp_full_detail') }} {{ icon('external', 13) }}</a>
 </footer>

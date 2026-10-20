@@ -51,6 +51,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
     NavEntry("runs", "Historique", "/runs", "pilotage", 30, "nav_runs",
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
+    NavEntry("analyses", "Analyses", "/analyses", "pilotage", 35, "nav_analyses", child_routes=("/runs/{run_id}/analyse",)),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
@@ -124,6 +125,8 @@ def is_non_page_route(path: str) -> bool:
 def is_active(entry: NavEntry, path: str) -> bool:
     """Regle historique de base_v2.html conservee : `/` en egalite stricte,
     les autres par prefixe de segment (`/runs` allume `/runs/{id}/detail`)."""
+    if path.startswith("/runs/") and path.endswith("/analyse"):
+        return entry.slug == "analyses"          # l'analyse d'un run allume « Analyses », pas « Historique » (même préfixe /runs)
     if entry.url == "/":
         return path == "/"
     return path == entry.url or path.startswith(entry.url + "/")

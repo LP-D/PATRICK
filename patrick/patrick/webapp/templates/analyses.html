@@ -1,0 +1,46 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('ah_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/analysis.css">
+<h1 class="page-title">{{ t('ah_title') }}</h1>
+<p class="page-subtitle">{{ t('ah_subtitle') }}</p>
+
+<nav class="section-index" aria-label="{{ t('ra_sections') }}">
+    <span class="section-index-label">{{ t('ra_sections') }}</span>
+    <a href="#liste">{{ t('ah_s_list') }}</a><a href="#carte">{{ t('ah_s_map') }}</a><a href="#algos">{{ t('ah_s_algos') }}</a><a href="#rl">{{ t('ah_s_rl') }}</a>
+</nav>
+
+<div id="ah-root">
+    <div class="metric-grid ra-kpis" id="ah-kpis" aria-live="polite"></div>
+
+    <section id="liste" class="card ra-section">
+        <h2>{{ t('ah_s_list') }}</h2>
+        <p class="hint">{{ t('ah_h_list') }}</p>
+        <div class="ra-filters" id="ah-filters"></div>
+        <div id="ah-table" data-state="loading"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 72%"></div></div></div>
+        <div class="row" id="ah-pager"></div>
+    </section>
+
+    <section id="carte" class="card ra-section">
+        <h2>{{ t('ah_s_map') }}</h2>
+        <p class="hint">{{ t('ah_h_map') }}</p>
+        <div id="ah-map"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 85%"></div></div></div>
+    </section>
+
+    <section id="algos" class="card ra-section">
+        <h2>{{ t('ah_s_algos') }}</h2>
+        <p class="hint">{{ t('ah_h_algos') }}</p>
+        <div id="ah-algos"></div>
+    </section>
+
+    <section id="rl" class="card ra-section">
+        <h2>{{ t('ah_s_rl') }}</h2>
+        <p class="hint">{{ t('ah_h_rl') }}</p>
+        <div id="ah-rl"></div>
+    </section>
+</div>
+
+<script src="/static/analysis_kit.js"></script>
+<script src="/static/analyses_hub.js"></script>
+{% endblock %}

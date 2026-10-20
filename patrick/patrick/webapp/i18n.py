@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
+from patrick.webapp.i18n_analysis import ANALYSIS_JS_KEYS, ANALYSIS_STRINGS
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
@@ -674,6 +675,8 @@ STRINGS.update(LEGACY_STRINGS)
 STRINGS.update(MODELS_STRINGS)
 # Black-Litterman de /portfolio et page /news (webapp/i18n_text.py).
 STRINGS.update(TEXT_STRINGS)
+# Pages d'analyse des entraînements (webapp/i18n_analysis.py).
+STRINGS.update(ANALYSIS_STRINGS)
 
 
 def get_lang(request: Request) -> str:
@@ -738,6 +741,8 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
     keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ())]
+    if path.startswith("/analyses") or (path.startswith("/runs/") and path.endswith("/analyse")):
+        keys = [*keys, *ANALYSIS_JS_KEYS]
     t = translator(lang)
     return {k: t(k) for k in keys}
 

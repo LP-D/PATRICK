@@ -50,6 +50,7 @@ from patrick.tracking import usage as trackusage
 from patrick.validation import equity_sufficiency, feasibility, suspicion
 from patrick.webapp import (
     alerts,
+    analysis_routes,
     asset_stats,
     exploration_routes,
     forms,
@@ -1863,6 +1864,9 @@ news_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Reinforcement learning (/rl) et API /api/rl/* : cadrage, lancement et lecture des runs RL (patrick/rl/).
 rl_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Pages d'analyse des entraînements (/runs/{id}/analyse, /analyses) et API /api/runs/{id}/analysis/* (patrick/analysis/).
+analysis_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:

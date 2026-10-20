@@ -1,0 +1,63 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge %}
+{% block title %}PATRICK — {{ t('ra_title') }} · {{ info.name }}{% endblock %}
+
+{% block session_context %}
+<div class="session-context">
+    <span><b>{{ t('rd_ctx_target') }}</b> <a href="/targets/{{ info.target | urlencode }}">{{ info.target }}</a>/{{ t('h_horizon_unit', h=info.horizon) }}</span>
+    {% if info.snapshot_id %}<span><b>snapshot</b> {{ info.snapshot_id }}</span>{% endif %}
+    {% if info.config_hash %}<span><b>config</b> {{ info.config_hash }}</span>{% endif %}
+    {% if info.git_sha %}<span><b>git</b> {{ info.git_sha }}</span>{% endif %}
+    {% if info.seed is not none and info.seed is defined %}<span><b>seed</b> {{ info.seed }}</span>{% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/analysis.css">
+<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
+    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
+    <a href="/analyses">{{ t('nav_analyses') }}</a>
+    <a href="/targets/{{ info.target | urlencode }}">{{ info.target }}</a>
+    <span aria-current="page">{{ info.run_id | truncate(12, true) }}</span>
+</nav>
+
+{% set state = 'ok' if info.status == 'done' else ('pending' if info.status in ('running', 'queued') else ('error' if info.status in ('failed', 'error') else 'neutral')) %}
+<h1 class="page-title">{{ t('ra_title') }} · {{ info.name }}</h1>
+<p class="page-subtitle">
+    <a href="/targets/{{ info.target | urlencode }}">{{ info.target }}</a> · {{ t('rd_horizon') }} {{ t('h_horizon_unit', h=info.horizon) }} ·
+    <span class="kind-badge kind-{{ info.kind }}">{{ t('nav_' ~ info.kind) }}</span>
+    {{ status_badge('CPCV' if info.scheme == 'cpcv' else 'walk-forward', 'neutral') }}
+    {{ status_badge(info.status, state) }} ·
+    {{ t('ra_started_on') }} {{ info.started_at or '—' }}{% if info.finished_at %}, {{ t('ra_finished_on') }} {{ info.finished_at }}{% endif %}
+</p>
+<p class="row">
+    {% if info.mode == 'ml' %}<a class="btn-secondary" href="/runs/{{ info.run_id | urlencode }}/detail">{{ t('ra_open_detail') }}</a>
+    {% else %}<a class="btn-secondary" href="/rl?open={{ info.run_id | urlencode }}">{{ t('ra_open_rl') }}</a>{% endif %}
+    <a class="btn-secondary" href="/analyses">{{ t('ra_open_all') }}</a>
+</p>
+
+<nav class="section-index" aria-label="{{ t('ra_sections') }}">
+    <span class="section-index-label">{{ t('ra_sections') }}</span>
+    {% set pfx = 'ra_s_rl_' if info.mode == 'rl' else 'ra_s_' %}{% set hpfx = 'ra_h_rl_' if info.mode == 'rl' else 'ra_h_' %}
+    {% for name in info.sections %}<a href="#s-{{ name }}">{{ t(pfx ~ name) }}</a>{% endfor %}
+</nav>
+
+<div id="ra-root" data-run-id="{{ info.run_id }}" data-kind="{{ info.mode }}">
+{% for name in info.sections %}
+<section id="s-{{ name }}" class="card ra-section">
+    <h2>{{ t(pfx ~ name) }}</h2>
+    <p class="hint">{{ t(hpfx ~ name) }}</p>
+    <div data-ra-mount="{{ name }}"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 72%"></div></div></div>
+</section>
+{% endfor %}
+</div>
+
+<script src="/static/analysis_kit.js"></script>
+<script src="/static/analysis_loader.js"></script>
+{% if info.mode == 'ml' %}
+<script src="/static/run_analysis.js"></script>
+<script src="/static/run_analysis_more.js"></script>
+{% else %}
+<script src="/static/rl_analysis.js"></script>
+{% endif %}
+{% endblock %}
