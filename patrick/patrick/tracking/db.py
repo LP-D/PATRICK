@@ -453,6 +453,20 @@ def add_alignment_issues(conn: sqlite3.Connection, snapshot_id: str, issues: lis
             [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues if i["series"] not in known])
 
 
+def add_notice_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
+    """Avis rattachés au snapshot d'un run (série CONSERVÉE : contrat à terme continu non ajusté...), à côté des
+    exclusions de `add_data_quality_issues` qu'ils ne masquent jamais. Idempotent par (série, raison)."""
+    if not issues:
+        return
+    with conn:
+        known = {(r[0], r[1]) for r in conn.execute(
+            "SELECT series, reason FROM data_quality_issue WHERE snapshot_id = ?", (snapshot_id,))}
+        conn.executemany(
+            "INSERT INTO data_quality_issue (snapshot_id, series, reason, detail) VALUES (?, ?, ?, ?)",
+            [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues
+             if (i["series"], i["reason"]) not in known])
+
+
 def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list[dict]:
     rows = conn.execute(
         "SELECT series, reason, detail FROM data_quality_issue WHERE snapshot_id = ? ORDER BY id",

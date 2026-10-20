@@ -21,6 +21,7 @@ import sqlite3
 import numpy as np
 
 from patrick.config import defaults as D
+from patrick.data import quality as quality_module
 from patrick.selection import stability as stability_module
 from patrick.tracking import class_balance
 from patrick.tracking import db as trackdb
@@ -463,7 +464,9 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
     fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(run["target"]))
     target_fdr = fdr_result["results"].get(run["target"])
 
-    quality_issues = trackdb.list_data_quality_issues(conn, run["snapshot_id"])
+    # Les avis (série conservée : contrat à terme continu non ajusté) ne sont pas des exclusions.
+    quality_issues = [i for i in trackdb.list_data_quality_issues(conn, run["snapshot_id"])
+                      if i["reason"] != quality_module.CONTINUOUS_FUTURE_REASON]
     feature_stability = trackdb.get_feature_stability(conn, run_id)
     phase_breakdown = phase_breakdown_for_run(conn, run_id)
     phase_breakdown["scan_model_fits"] = conn.execute(

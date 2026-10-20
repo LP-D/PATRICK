@@ -52,6 +52,7 @@ from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data import alignment
+from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
@@ -1487,6 +1488,7 @@ def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id
     trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
     trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
     trackdb.add_alignment_issues(conn, snapshot_id, alignment.describe(config.objective.alignment))
+    trackdb.add_notice_issues(conn, snapshot_id, quality_module.continuous_future_notices(raw.columns))
     config_json = config.model_dump_json()
     config_hash = _config_hash(config)
     git_sha = trackdb.current_git_sha()

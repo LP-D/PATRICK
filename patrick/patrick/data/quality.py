@@ -57,6 +57,20 @@ DEFAULT_MAX_UNIVERSE_EXCLUSION_FRAC = 0.30
 LOW_FREQUENCY_MIN_GAP_BDAYS = 130
 
 
+CONTINUOUS_FUTURE_REASON = "contrat_continu_non_ajuste"
+
+
+def continuous_future_notices(columns) -> list[dict]:
+    """Avis (jamais une exclusion) pour les contrats à terme continus de Yahoo (`GC=F`, `CL=F`...) : raccordés sans
+    ajustement documenté, ils sautent à chaque échéance de l'écart entre deux contrats -- un faux rendement que ni la
+    qualité des cours (le saut est une vraie cotation) ni le garde d'alignement ne voient. Voir
+    `docs/modelisation/chantiers-lointains.md` §3 (règle de roll explicite, à venir)."""
+    detail = ("Contrat continu Yahoo (…=F) raccordé sans ajustement documenté : à chaque échéance, le prix saute de l'écart "
+              "entre deux contrats, ce qui crée un faux rendement. Série conservée.")
+    return [{"series": str(c), "reason": CONTINUOUS_FUTURE_REASON, "detail": detail}
+            for c in columns if str(c).endswith("=F")]
+
+
 @dataclass
 class QualityIssue:
     series: str

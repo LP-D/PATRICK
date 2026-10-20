@@ -14,7 +14,7 @@ import json
 import re
 import sqlite3
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from patrick.clock import utc_today
 from patrick.config import defaults as D
@@ -87,6 +87,11 @@ REASON_INFO: dict[str, tuple[str, str, str]] = {
         "Série FRED absente",
         "FRED n'a renvoyé aucune observation (série discontinuée, identifiant invalide ou échec réseau).",
         "Série absente du pool."),
+    "contrat_continu_non_ajuste": (
+        "Contrat à terme continu non ajusté",
+        ("Yahoo ne fournit que des contrats « continus » (GC=F, CL=F, NG=F...) raccordés sans ajustement documenté : à chaque "
+         "échéance le prix saute de l'écart entre deux contrats, un faux rendement."),
+        "Série conservée, avec ce défaut : prudence sur les signaux fondés sur ses rendements les jours de roll."),
     "alignement_temporel": (
         "Décalage anti-fuite",
         ("Série de marché retardée (ou retirée) pour que ses dates ne recouvrent pas la fenêtre du label "
@@ -266,7 +271,7 @@ def overview(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str]]],
     n_runs = conn.execute("SELECT COUNT(*) FROM run").fetchone()[0]
     n_done = conn.execute("SELECT COUNT(*) FROM run WHERE status = 'done'").fetchone()[0]
     return {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "min_history_years": min_years,
         "runs": {"total": n_runs, "done": n_done, "failed": n_runs - n_done},
         "failures": fails, "failure_summary": failure_summary(fails),
