@@ -140,3 +140,37 @@ def test_overview_json_has_no_nan(client):
     c, info = client
     body = c.get(f"/api/runs/{info['run_id']}/analysis/overview").text
     assert "NaN" not in body and json.loads(body)["run"]["name"] == "TST_test"
+
+
+def test_exports_predictions_and_equity_csv(client):
+    c, info = client
+    r = c.get(f"/api/runs/{info['run_id']}/export/predictions.csv")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    lines = r.text.strip().split("\n")
+    assert lines[0].startswith("date,split,fold,path,true_class")
+    from patrick.analysis import frames
+    from patrick.tracking import db as trackdb
+    conn = trackdb.connect()
+    n = len(frames.load_frame(conn, info["run_id"], with_levels=False).df)
+    conn.close()
+    assert len(lines) == n + 1
+    first = dict(zip(lines[0].split(","), lines[1].split(","), strict=True))
+    assert first["split"] == "test" and first["forward_return"] != "" and first["correct"] in ("0", "1")
+    eq = c.get(f"/api/runs/{info['run_id']}/export/equity.csv?cost_bps=10")
+    assert eq.status_code == 200 and eq.text.split("\n")[0].startswith("date,long_short_gross")
+    assert c.get("/api/runs/nope/export/predictions.csv").status_code == 404
+
+
+def test_standalone_report_embeds_every_section_and_no_script_breakout(client):
+    c, info = client
+    r = c.get(f"/runs/{info['run_id']}/analyse/export")
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    html = r.text
+    m = re.search(r'<script id="ra-embed" type="application/json">(.*?)</script>', html, re.S)
+    assert m
+    data = json.loads(m.group(1).replace("<\/", "</"))
+    assert {"overview", "timeline", "confusion", "equity", "guide"} <= set(data)
+    assert "paths" not in data and data["overview"]["run"]["run_id"] == info["run_id"]
+    assert "/static/" not in html.split("</head>")[1].replace("/static/analysis", "")        # rien à charger : styles et scripts sont inclus
+    assert html.count("</script>") == html.count("<script")                                    # aucun « </script » dans les données ou le code

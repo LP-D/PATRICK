@@ -4,17 +4,28 @@ API JSON. Le cadre des pages s'affiche tout de suite ; chaque section arrive apr
 from __future__ import annotations
 
 import json
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from patrick.analysis import hub, registry, rl_sections
+from patrick.analysis import exports, hub, registry, rl_sections
 from patrick.tracking import db as trackdb
+from patrick.webapp import i18n
+
+STATIC = Path(__file__).resolve().parent / "static"
+_ML_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "run_analysis.js", "run_analysis_more.js")
+_RL_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "rl_analysis.js")
 
 ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors",
                "features", "trials", "robustness", "holdout_live", "paths")
 RL_SECTIONS = rl_sections.SECTIONS
+
+
+def _safe_name(value: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in value)[:80]
 
 
 def ml_sections_for(is_cpcv: bool) -> list[str]:
@@ -84,6 +95,63 @@ def register(app: FastAPI, templates, context) -> None:
         if result == "unknown":
             raise HTTPException(status_code=404, detail="Section inconnue")
         return JSONResponse(result)
+
+    @app.get("/api/runs/{run_id}/export/predictions.csv")
+    async def export_predictions(run_id: str):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return exports.predictions_csv(conn, run_id)
+            finally:
+                conn.close()
+        body = await run_in_threadpool(work)
+        if body is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="predictions_{_safe_name(run_id)}.csv"'})
+
+    @app.get("/api/runs/{run_id}/export/equity.csv")
+    async def export_equity(run_id: str, cost_bps: float = 5.0):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return exports.equity_csv(conn, run_id, max(0.0, min(500.0, cost_bps)))
+            finally:
+                conn.close()
+        body = await run_in_threadpool(work)
+        if body is None:
+            raise HTTPException(status_code=404, detail="Courbes indisponibles pour ce run")
+        return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="equite_{_safe_name(run_id)}.csv"'})
+
+    @app.get("/runs/{run_id}/analyse/export")
+    async def analyse_export(request: Request, run_id: str):
+        """Rapport autonome : un seul fichier HTML (styles, scripts et données de toutes les sections), lisible hors ligne et imprimable en PDF."""
+        def work():
+            conn = trackdb.connect()
+            try:
+                info = _describe_run(conn, run_id)
+                if info is None:
+                    return None, None
+                if info["mode"] == "ml":
+                    return info, exports.all_sections(conn, run_id, trackdb.default_db_path())
+                data = {}
+                for name in RL_SECTIONS:
+                    data[name] = rl_sections.build(conn, run_id, name)
+                return info, data
+            finally:
+                conn.close()
+        info, data = await run_in_threadpool(work)
+        if info is None:
+            raise HTTPException(status_code=404, detail="Run introuvable")
+        ctx = context(request)
+        scripts = _ML_SCRIPTS if info["mode"] == "ml" else _RL_SCRIPTS
+        js = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in scripts)
+        css = "\n".join((STATIC / name).read_text(encoding="utf-8") for name in ("patrick.css", "analysis.css"))
+        embed = json.dumps(data or {}, ensure_ascii=False).replace("</", "<\\/")
+        i18n_js = i18n.js_strings(ctx["lang"], f"/runs/{run_id}/analyse")
+        page = templates.get_template("run_analysis_export.html").render(
+            {"info": info, "t": ctx["t"], "lang": ctx["lang"], "css": css, "js": js.replace("</script", "<\\/script"), "embed_json": embed, "i18n_js": i18n_js,
+             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")})  # noqa: DTZ005 -- horodatage local voulu, comme les sauvegardes
+        return HTMLResponse(page, headers={"Content-Disposition": f'attachment; filename="analyse_{_safe_name(run_id)}.html"'})
 
     @app.get("/analyses")
     def analyses_page(request: Request):

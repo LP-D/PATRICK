@@ -9,7 +9,16 @@
     var RUN = root.getAttribute("data-run-id");
     var RA = window.RA = { render: {}, data: {}, api: null, mount: null, reload: null, helpers: {} };
 
+    var EMBED = null;
+    (function () {
+        var el = document.getElementById("ra-embed");
+        if (el) { try { EMBED = JSON.parse(el.textContent); } catch (e) { EMBED = null; } }
+    })();
     RA.api = function (section, params) {
+        if (EMBED) {                                   // rapport exporté : les données de chaque section sont déjà dans la page
+            if (PK.qs(params || {})) return Promise.reject(new Error(T("ra_offline")));
+            return EMBED[section] ? Promise.resolve(EMBED[section]) : Promise.reject(new Error(T("ra_offline")));
+        }
         return PK.fetchJSON("/api/runs/" + encodeURIComponent(RUN) + "/analysis/" + section + (params && Object.keys(params).length ? "?" + PK.qs(params) : ""));
     };
     RA.mount = function (name) { return root.querySelector('[data-ra-mount="' + name + '"]'); };
@@ -96,6 +105,7 @@
         if (started) return;
         started = true;
         load("overview");
+        if (EMBED) { pending().forEach(load); return; }
         var timer = null;
         function soon() { if (timer) return; timer = setTimeout(function () { timer = null; check(); }, 80); }
         window.addEventListener("scroll", soon, { passive: true });

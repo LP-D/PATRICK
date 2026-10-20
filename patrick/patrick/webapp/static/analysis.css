@@ -34,7 +34,10 @@
 .ra-empty { padding: 14px 0; color: var(--text-3); }
 
 /* graphiques */
-.ra-chart-wrap { width: 100%; max-width: 100%; min-width: 0; }
+.ra-chart-wrap { position: relative; width: 100%; max-width: 100%; min-width: 0; }
+.ra-png { position: absolute; top: 6px; right: 8px; padding: 1px 7px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); color: var(--text-2); font: 600 10px var(--mono); cursor: pointer; opacity: 0; transition: opacity 120ms; }
+.ra-chart-wrap:hover .ra-png, .ra-png:focus-visible { opacity: 1; }
+@media print { .ra-png, .section-index, .ra-controls, .ra-export { display: none !important; } .card { break-inside: avoid; } }
 .ra-chart { display: block; width: 100%; height: auto; background: var(--chart-bg); border: 1px solid var(--line); border-radius: 8px; }
 .ra-axis { fill: var(--text-3); font: 10.5px var(--mono); }
 .ra-axis-label { fill: var(--text-2); }

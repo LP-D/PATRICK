@@ -34,6 +34,11 @@
     {% if info.mode == 'ml' %}<a class="btn-secondary" href="/runs/{{ info.run_id | urlencode }}/detail">{{ t('ra_open_detail') }}</a>
     {% else %}<a class="btn-secondary" href="/rl?open={{ info.run_id | urlencode }}">{{ t('ra_open_rl') }}</a>{% endif %}
     <a class="btn-secondary" href="/analyses">{{ t('ra_open_all') }}</a>
+    <span class="ra-export row">
+        <a class="btn-secondary" href="/runs/{{ info.run_id | urlencode }}/analyse/export" download>{{ t('ra_export_html') }}</a>
+        {% if info.mode == 'ml' %}<a class="btn-secondary" href="/api/runs/{{ info.run_id | urlencode }}/export/predictions.csv" download>{{ t('ra_export_pred') }}</a>
+        <a class="btn-secondary" href="/api/runs/{{ info.run_id | urlencode }}/export/equity.csv" download>{{ t('ra_export_eq') }}</a>{% endif %}
+    </span>
 </p>
 
 <nav class="section-index" aria-label="{{ t('ra_sections') }}">

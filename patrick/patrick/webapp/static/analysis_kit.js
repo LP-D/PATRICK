@@ -141,6 +141,45 @@
         return [lo - p, hi + p];
     }
 
+    // ------------------------------------------------------------------ export PNG
+    var INLINE_PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "fill-opacity", "stroke-opacity", "opacity", "font-family", "font-size", "font-weight", "text-anchor"];
+    /* Image PNG d'un graphique : les couleurs des variables CSS sont résolues (le fichier exporté n'a pas la feuille de style). */
+    function exportPng(svg, name) {
+        var vb = svg.viewBox.baseVal, w = vb.width, hgt = vb.height, clone = svg.cloneNode(true);
+        var src = svg.querySelectorAll("*"), dst = clone.querySelectorAll("*");
+        for (var i = 0; i < src.length; i++) {
+            var cs = window.getComputedStyle(src[i]), style = "";
+            INLINE_PROPS.forEach(function (p) { var v = cs.getPropertyValue(p); if (v) style += p + ":" + v + ";"; });
+            dst[i].setAttribute("style", style);
+        }
+        var bg = window.getComputedStyle(svg).backgroundColor || "#ffffff";
+        clone.setAttribute("xmlns", NS);
+        clone.setAttribute("width", w); clone.setAttribute("height", hgt);
+        clone.setAttribute("style", "background:" + bg);
+        var data = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+        var img = new Image();
+        img.onload = function () {
+            var k = 2, c = document.createElement("canvas");
+            c.width = w * k; c.height = hgt * k;
+            var ctx = c.getContext("2d");
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            c.toBlob(function (blob) {
+                var a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = (name || "graphique").replace(/[^\w.-]+/g, "_") + ".png";
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+            }, "image/png");
+        };
+        img.src = data;
+    }
+    function pngButton(svg) {
+        var b = h("button", { type: "button", class: "ra-png", title: T("ra_png"), "aria-label": T("ra_png"), text: "PNG" });
+        b.addEventListener("click", function () { exportPng(svg, (window.RA_FILE_PREFIX ? window.RA_FILE_PREFIX + "_" : "") + (svg.getAttribute("aria-label") || "graphique")); });
+        return b;
+    }
+
     // ------------------------------------------------------------------ cadre d'un graphique
     /* o : { w, h, m:{l,r,t,b}, x:{type:'time'|'linear'|'band', domain:[a,b], fmt, ticks, label, bands:[…]}, y:{domain:[a,b], fmt, ticks, label, zero}, title } */
     function plot(o) {
@@ -170,7 +209,7 @@
         svg.appendChild(layer);
         var P = { svg: svg, layer: layer, X: X, Y: Y, W: W, H: H, m: m, xDomain: xd, yDomain: yd };
         P.add = function (n) { if (n) layer.appendChild(n); return n; };
-        P.node = h("div", { class: "ra-chart-wrap" }, [svg]);
+        P.node = h("div", { class: "ra-chart-wrap" }, [svg, pngButton(svg)]);
         return P;
     }
 
@@ -401,6 +440,6 @@
         h: h, s: s, showTip: showTip, hideTip: hideTip, hoverTip: hoverTip, linear: linear, niceTicks: niceTicks, timeTicks: timeTicks, extent: extent,
         plot: plot, line: line, band: band, points: points, bars: bars, hline: hline, vline: vline, xband: xband, yband: yband, hover: hover, brush: brush,
         kpi: kpi, legend: legend, table: table, heat: heat, note: note, info: info, empty: empty, chip: chip, select: select, segmented: segmented,
-        fetchJSON: fetchJSON, qs: qs, clear: clear, noteText: noteText, CLASS_COLORS: CLASS_COLORS, CAT_COLORS: CAT_COLORS,
+        fetchJSON: fetchJSON, qs: qs, clear: clear, noteText: noteText, exportPng: exportPng, CLASS_COLORS: CLASS_COLORS, CAT_COLORS: CAT_COLORS,
     };
 })();
