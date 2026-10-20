@@ -343,7 +343,7 @@ Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle 
   (retour en arrière automatique). Vérifier la version de Python des deux PC avant de fusionner.
 - **Tests de mutation** (`.github/workflows/mutation.yml`, lancement manuel) : configuration non vérifiée, mutmut ne tourne pas
   sous Windows.
-- **Licence** : aucune choisie (tous droits réservés par défaut) ; choix à faire.
+- **Licence** : tous droits réservés, dite explicitement dans `LICENSE` (décision du 2026-10-20) ; aucune licence libre. À rouvrir si le projet doit être partagé ou réutilisé.
 - **Dépendances** : le seul verrou est `.github/constraints-py311.txt` (suite lente de la CI, Linux, Python 3.11) ; pas de verrou pour
   Windows / Python 3.12+. Dependabot propose des mises à jour d'actions et de dépendances, jamais fusionnées sans lecture.
 - **Causes non étudiées de la CI rouge d'octobre** : les causes du 8 au 16/10 (hors golden et test du diagnostic holdout,

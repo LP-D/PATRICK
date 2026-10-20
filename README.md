@@ -66,5 +66,5 @@ fusionnées dans `main`.
 
 ## Licence
 
-Aucune licence n'est encore choisie : en l'absence de licence, tous droits sont réservés. Voir [`docs/adr/`](docs/adr/README.md)
-pour les décisions déjà prises ; le choix d'une licence reste à faire.
+Tous droits réservés (copyright Léon, 2026) : voir [`LICENSE`](LICENSE). Le dépôt est public pour être consulté, pas pour être réutilisé :
+aucune licence libre n'est concédée. Les polices de l'interface gardent leurs licences propres.
