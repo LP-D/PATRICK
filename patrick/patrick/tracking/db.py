@@ -25,6 +25,7 @@ from patrick.config.defaults import ALL_DL_ALGOS
 from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
 from patrick.tracking import class_balance
+from patrick.tracking.manifest import launch_manifest
 from patrick.validation import suspicion
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -608,10 +609,10 @@ def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
     with conn:
         conn.execute(
             "INSERT INTO run (run_id, started_at, status, target, horizon, snapshot_id, "
-            "config_json, config_hash, git_sha, seed, lib_versions, job_id) "
-            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "config_json, config_hash, git_sha, seed, lib_versions, job_id, manifest_json) "
+            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, target, horizon, snapshot_id, config_json, config_hash,
-             git_sha, seed, library_versions(), job_id),
+             git_sha, seed, library_versions(), job_id, launch_manifest()),
         )
 
 

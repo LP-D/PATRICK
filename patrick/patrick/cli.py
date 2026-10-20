@@ -7,6 +7,7 @@ the rest of the French-language product surface (see the D4 translation
 scope note in `README.md`)."""
 from __future__ import annotations
 
+import json
 import os
 
 import typer
@@ -227,6 +228,24 @@ def predict_cmd(
     result = predict_module.predict_live(run_id)
     typer.echo(f"[LIVE] {result['ts']} -> classe prédite={result['y_pred']} "
                f"(confiance={result['y_proba']:.3f}) | {result['n_outcomes_updated']} résultat(s) live mis à jour")
+
+
+@app.command(name="manifest")
+def manifest_cmd(run_id: str = typer.Argument(..., help="Identifiant du run")) -> None:
+    """Manifeste d'un run (JSON) : SHA git, empreinte des données et de la configuration, graine, bibliothèques,
+    plateforme et empreinte de l'environnement -- de quoi refaire ou comparer un run."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import manifest as run_manifest
+
+    conn = trackdb.connect(trackdb.default_db_path())
+    try:
+        data = run_manifest.build_manifest(conn, run_id)
+    except KeyError:
+        typer.echo(f"Run introuvable : {run_id}", err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        conn.close()
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 @app.command(name="worker")
