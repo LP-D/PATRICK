@@ -61,7 +61,7 @@ jobs:
         run: |
           python scripts/mutation_summary.py --tail mutmut-run.log --title "mutmut run: fin du journal"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutation-results
