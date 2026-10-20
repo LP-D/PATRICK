@@ -14,6 +14,7 @@ Ce dossier centralise la documentation du projet PATRICK. Les documents à jour 
 - [patrick/METHODOLOGY.md](../patrick/METHODOLOGY.md) — méthodologie de recherche (anti-fuite, anti-surapprentissage).
 - [patrick/PRODUCT.md](../patrick/PRODUCT.md) — notes produit.
 - [design-system/patrick/MASTER.md](../design-system/patrick/MASTER.md) — système de design de l'interface (« Cockpit Pro »).
+- [docs/adr/](adr/README.md) — décisions d'architecture et de méthode (pourquoi, pas seulement quoi).
 - [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) — limitations, code mort traité, plomberie volontaire.
 - [CONTRIBUTING.md](../CONTRIBUTING.md) et [ways-of-working.md](ways-of-working.md) — contribuer, méthode de travail.
 - [patrick/NEXT_STEPS.md](../patrick/NEXT_STEPS.md) — suite de l'optimisation des runs (sprints de performance).

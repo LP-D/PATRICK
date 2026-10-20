@@ -83,3 +83,17 @@ markers = [
     "slow: tests dépassant ~10s (entraînement de modèles, pipeline complet, sous-processus worker réel) -- exclus par défaut, lancer avec `pytest -m slow`.",
     "validity: le pipeline complet sur des marches aléatoires (protocole statistique de bout en bout, ~1 min par monde) -- exclus par défaut et de la CI poussée, lancer avec `pytest -m validity`.",
 ]
+
+[tool.mutmut]
+# Test de mutation des modules statistiques (`.github/workflows/mutation.yml`, lancement manuel, Linux : mutmut ne tourne pas
+# sous Windows). Une mutation qui survit = un comportement que les tests ne protègent pas.
+paths_to_mutate = [
+    "patrick/validation/dsr.py",
+    "patrick/validation/fdr.py",
+    "patrick/validation/diebold_mariano.py",
+    "patrick/validation/pbo.py",
+    "patrick/validation/cpcv.py",
+    "patrick/validation/purge.py",
+    "patrick/validation/embargo.py",
+]
+tests_dir = ["tests/"]

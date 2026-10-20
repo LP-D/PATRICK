@@ -1,0 +1,34 @@
+name: mutation
+
+# Test de mutation des modules statistiques (patrick/validation/*, voir [tool.mutmut] dans patrick/pyproject.toml) :
+# mutmut modifie le code un opérateur à la fois et relance les tests ; une mutation qui SURVIT est un comportement que
+# aucun test ne protège. Lancement manuel (long). NON VÉRIFIÉ localement : mutmut ne tourne pas sous Windows ; si la
+# première exécution échoue sur la configuration, ajuster [tool.mutmut] (la syntaxe dépend de la version de mutmut).
+on:
+  workflow_dispatch:
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (pinned) and mutmut
+        run: |
+          pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]"
+          pip install mutmut
+
+      - name: Mutate the statistical modules
+        working-directory: patrick
+        run: mutmut run
+
+      - name: Surviving mutants
+        if: always()
+        working-directory: patrick
+        run: mutmut results

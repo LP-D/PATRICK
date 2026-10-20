@@ -13,10 +13,10 @@ le protocole serait aveugle, pas prudent. Le signal passe par le NIVEAU d'un fac
 
 Ce que la mesure a montré (12 mondes nuls, 3 mondes à signal, 2026-10-19), et que ces tests ne masquent pas :
 - aucune p-value « modèle meilleur » < 5 %, aucun rejet BH, PBO moyen 0,59, aucun DSR >= 0,95 sur le bruit ;
-- MAIS la p-value Diebold-Mariano BILATÉRALE est < 5 % dans 3 mondes nuls sur 12 (au lieu de ~0,6), toujours avec le
-  modèle PIRE que sa baseline (statistique moyenne +0,75) : sur du bruit le modèle sélectionné fait systématiquement moins
-  bien que la baseline, et la variance du test ne couvre pas la dérive propre au chemin du holdout. Le garde de la famille
-  BH ne regarde que le sens « le modèle fait mieux » : il est protégé, la taille bilatérale du test ne l'est pas ;
+- MAIS la p-value Diebold-Mariano BILATÉRALE est < 5 % dans 3 mondes nuls sur 12 (~0,6 attendu), toujours avec le modèle
+  PIRE que sa baseline (statistique moyenne +0,75, p ≈ 0,08) : soit le modèle sélectionné sur du bruit fait vraiment moins bien
+  qu'une baseline naïve, soit la variance du test ne couvre pas la dérive du chemin du holdout -- 12 mondes ne départagent pas.
+  Le garde de la famille BH ne regarde que le sens « le modèle fait mieux » : protégé dans les deux cas ;
 - le test DM a peu de puissance : sur 3 mondes à signal fort (Sharpe holdout 2 à 9) aucune p-value « meilleur » < 5 %.
 Voir `KNOWN_ISSUES.md`.
 

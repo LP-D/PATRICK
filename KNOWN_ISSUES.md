@@ -302,16 +302,49 @@ signal (contrôle positif). Résultats du 2026-10-19 :
   0,59 (attendu ~0,5) ; aucun Sharpe déflaté >= 0,95 ; les 3 mondes à signal ont un Sharpe holdout de 1,9 à 9,2 (DSR >= 0,95 pour 2).
   Le passage en p-value **unilatérale** du 2026-10-07 est confirmé empiriquement : avec l'ancien calcul bilatéral, BH aurait rejeté
   3 marches aléatoires sur 12 comme « découvertes ».
-- **Ne tient pas : la taille bilatérale du test de Diebold-Mariano.** Sa p-value bilatérale est < 5 % dans 3 mondes nuls sur 12 (~0,6
-  attendu), toujours avec le modèle PIRE que sa baseline (statistique moyenne +0,75 ; Sharpe holdout moyen -0,36). Sur du bruit le
-  modèle sélectionné fait systématiquement moins bien qu'une baseline naïve, et la variance du test (fenêtre sur h-1 retards) ne
-  couvre pas la dérive propre au chemin du holdout. Conséquence : une p-value DM bilatérale affichée n'a pas sa taille nominale ;
-  la famille BH est protégée parce qu'elle ne lit que le sens « meilleur ». Non corrigé : il faudrait une variance robuste à la
-  dérive du chemin (bootstrap par blocs longs) ou un test apparié sur un score continu (Brier / log-loss) plutôt que la perte 0/1
-  à 4 classes.
+- **À surveiller : la p-value Diebold-Mariano BILATÉRALE sort < 5 % dans 3 mondes nuls sur 12** (~0,6 attendu), toujours du côté « le
+  modèle fait PIRE que sa baseline » (aucune du côté « meilleur ») ; statistique moyenne +0,75, erreur-type 0,39 (t = 1,9, p ≈ 0,08),
+  écart-type 1,35 au lieu de ~1, Sharpe holdout moyen -0,36. Deux lectures que 12 mondes ne départagent pas : (a) le modèle
+  sélectionné sur du bruit fait réellement moins bien qu'une baseline naïve (coût de variance), et DM détecte alors une vraie
+  différence, pas une erreur de taille ; (b) la variance du test (fenêtre sur h-1 retards) ne couvre pas la dérive propre au chemin
+  du holdout et la taille est gonflée. La famille BH est protégée dans les deux cas : elle ne lit que le sens « meilleur ». Pour
+  trancher : un monde où modèle et baseline ont la même perte espérée par construction (deux prédicteurs indépendants du même
+  bruit), ou beaucoup plus de mondes.
 - **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240
   lignes, perte 0/1 à 4 classes, baseline de persistance). Le DM seul ne reconnaîtrait pas un vrai signal modeste.
 - **Un signal par le rendement de la veille d'une autre série est écarté, à raison** : le garde anti-fuite d'alignement
   (`data/alignment.py`, corrélation de rang > 0,30) retarde une telle série. Le monde à signal passe donc par un niveau lent.
 - **Effectif** : 12 mondes, un tirage chacun ; le PBO à 6 blocs a un écart-type élevé (~0,3 sur un tirage). Les bornes des tests
   laissent la place au hasard (binomiale à 1 %, PBO moyen >= 0,40).
+
+---
+
+## Points ouverts après l'audit externe du 2026-10-19 (mis à jour le 2026-10-20)
+
+Traités : horizons longs du DM (non testable sous 15 blocs), fuite CPCV des interactions, registre d'accès au holdout, garde-fous git,
+fixture du CSV de courtier, test de validité sur marches aléatoires, mise à jour sur une version validée par la CI, manifeste de run,
+Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle de parcimonie « une erreur-type » (disponible). Restent :
+
+- **Duel champion / challenger = sélection sur le holdout** (`pipeline/champion_duel.py`) : la performance holdout affichée d'un
+  champion est celle d'un gagnant. Le registre `holdout_access` le rend visible (page d'un run), il ne le supprime pas. Le simulateur,
+  qui relit des prédictions holdout déjà stockées, n'est pas encore compté dans ce registre.
+- **CPCV, deux approximations documentées** : variables paramétriques (EGARCH, Kalman, HMM) ajustées une fois sur tout l'historique ;
+  seuils de classes et régimes de `run_target` ajustés sur le seul groupe 0 (effet d'échelle, pas de choix de variables).
+- **Contrats à terme continus Yahoo** (`GC=F`, `CL=F`...) : sauts de roll non corrigés. Un avis est consigné avec le run
+  (`contrat_continu_non_ajuste`, page « Santé des données »), la série est conservée. Correction : règle de roll explicite, source de
+  contrats individuels absente (`docs/modelisation/chantiers-lointains.md` §3).
+- **DM** : bilatéral à surveiller et peu puissant (section « Validité statistique mesurée », plus haut) ; un test sur score continu
+  (Brier, log-loss) serait plus puissant.
+- **Règle « une erreur-type »** (`selection.one_se_rule`) : codée et testée, **désactivée par défaut** (elle change le gagnant donc
+  tous les résultats de référence) ; à activer par décision, avec un golden régénéré.
+- **Branche `stable`** : créée par le premier push de `main` dont toute la CI est verte après la fusion du job `promote`. Tant qu'elle
+  n'existe pas, l'application n'installe rien ; le job `promote` n'a pas pu être exécuté hors de GitHub, il est vérifié au premier push.
+- **Python 3.10 retiré** (`requires-python >= 3.11`) : un PC encore sous 3.10 ne pourra plus installer les composants d'une mise à jour
+  (retour en arrière automatique). Vérifier la version de Python des deux PC avant de fusionner.
+- **Tests de mutation** (`.github/workflows/mutation.yml`, lancement manuel) : configuration non vérifiée, mutmut ne tourne pas
+  sous Windows.
+- **Licence** : aucune choisie (tous droits réservés par défaut) ; choix à faire.
+- **Dépendances** : le seul verrou est `.github/constraints-py311.txt` (suite lente de la CI, Linux, Python 3.11) ; pas de verrou pour
+  Windows / Python 3.12+. Dependabot propose des mises à jour d'actions et de dépendances, jamais fusionnées sans lecture.
+- **Causes non étudiées de la CI rouge d'octobre** : les causes du 8 au 16/10 (hors golden et test du diagnostic holdout,
+  élucidés) n'ont pas toutes été étudiées (délais de tests web sous charge, suite rapide sous Python 3.10).

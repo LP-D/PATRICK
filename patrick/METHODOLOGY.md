@@ -156,7 +156,7 @@ via quatre garde-fous dans `patrick/validation/` :
 
 **Preuve empirique du protocole** : `tests/test_null_world_validity.py` fait tourner le pipeline complet sur des marches
 aléatoires (BH sans rejet, PBO élevé, DSR bas) et sur des mondes à signal (contrôle positif) ; limites mesurées dans
-`KNOWN_ISSUES.md` (taille bilatérale du DM, faible puissance).
+`KNOWN_ISSUES.md` (DM bilatéral à surveiller, faible puissance).
 
 Ces éléments apparaissent ensemble dans le leaderboard et dans
 `patrick report` : métrique de test, métrique de holdout, p-value DM vs
