@@ -71,3 +71,6 @@ revue ou de publication.
 - **Test de validité statistique** : `pytest -m validity` (≈ 15 min) fait tourner le pipeline sur des marches aléatoires et des
   mondes à signal (`patrick/tests/test_null_world_validity.py`) ; exclu de `pytest` et de la CI poussée, il tourne chaque
   lundi (`.github/workflows/validity.yml`). `PATRICK_WORLD_CACHE_DIR=<dossier>` conserve les mondes calculés (reprise possible).
+- **Test de mutation** : mutmut ne tourne pas sous Windows ; `.github/workflows/mutation.yml` l'exécute sur GitHub (Linux). Sans `gh` :
+  pousser une branche `mutation-check/<nom>` (tous les modules statistiques, quelques minutes), puis lire le résultat dans les annotations
+  de l'exécution. Une mutation qui survit = un comportement que les tests ne protègent pas (parfois un mutant équivalent).

@@ -323,7 +323,7 @@ signal (contrôle positif). Résultats du 2026-10-19 :
 
 Traités : horizons longs du DM (non testable sous 15 blocs), fuite CPCV des interactions, registre d'accès au holdout, garde-fous git,
 fixture du CSV de courtier, test de validité sur marches aléatoires, mise à jour sur une version validée par la CI, manifeste de run,
-Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle de parcimonie « une erreur-type » (disponible). Restent :
+Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle de parcimonie « une erreur-type » (activée par défaut), tests de mutation (exécutés sur GitHub). Restent :
 
 - **Duel champion / challenger = sélection sur le holdout** (`pipeline/champion_duel.py`) : la performance holdout affichée d'un
   champion est celle d'un gagnant. Le registre `holdout_access` le rend visible (page d'un run), il ne le supprime pas. Le simulateur,
@@ -335,14 +335,20 @@ Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle 
   contrats individuels absente (`docs/modelisation/chantiers-lointains.md` §3).
 - **DM** : bilatéral à surveiller et peu puissant (section « Validité statistique mesurée », plus haut) ; un test sur score continu
   (Brier, log-loss) serait plus puissant.
-- **Règle « une erreur-type »** (`selection.one_se_rule`) : codée et testée, **désactivée par défaut** (elle change le gagnant donc
-  tous les résultats de référence) ; à activer par décision, avec un golden régénéré.
+- **Règle « une erreur-type »** (`selection.one_se_rule`) : **activée par défaut depuis le 2026-10-20** (ADR 0006). Les runs déjà
+  faits ne sont pas réécrits (ils ont tourné sans elle) ; `patrick resume` les relit sous l'ancienne règle, une relance depuis la
+  page d'un run suit la règle d'aujourd'hui. Les deux golden masters sont restés identiques : la règle n'y change pas le gagnant, donc
+  elle n'est pas éprouvée dans un run complet (seulement par ses tests unitaires).
 - **Branche `stable`** : créée par le premier push de `main` dont toute la CI est verte après la fusion du job `promote`. Tant qu'elle
   n'existe pas, l'application n'installe rien ; le job `promote` n'a pas pu être exécuté hors de GitHub, il est vérifié au premier push.
 - **Python 3.10 retiré** (`requires-python >= 3.11`) : un PC encore sous 3.10 ne pourra plus installer les composants d'une mise à jour
   (retour en arrière automatique). Vérifier la version de Python des deux PC avant de fusionner.
-- **Tests de mutation** (`.github/workflows/mutation.yml`, lancement manuel) : configuration non vérifiée, mutmut ne tourne pas
-  sous Windows.
+- **Tests de mutation** (`.github/workflows/mutation.yml`) : exécutés sur GitHub (Linux) le 2026-10-20, car mutmut ne tourne pas sous
+  Windows. Sur les 7 modules statistiques : **711 mutants tués sur 978 (73 %)**, 267 survivants — cpcv 220/256, diebold_mariano
+  164/233, dsr 113/211, embargo 12/14, fdr 84/100, pbo 79/112, purge 39/52. Un survivant n'est pas toujours un défaut (message,
+  valeur par défaut, mutant équivalent), mais **dsr (54 %)** et **diebold_mariano (70 %)** sont les moins protégés. Rien n'a été
+  fait des survivants. Lancer : pousser une branche `mutation-check/<nom>` (quelques minutes), ou « Run workflow » dans l'onglet
+  Actions ; le résultat est dans les annotations et le résumé de l'exécution.
 - **Licence** : tous droits réservés, dite explicitement dans `LICENSE` (décision du 2026-10-20) ; aucune licence libre. À rouvrir si le projet doit être partagé ou réutilisé.
 - **Dépendances** : le seul verrou est `.github/constraints-py311.txt` (suite lente de la CI, Linux, Python 3.11) ; pas de verrou pour
   Windows / Python 3.12+. Dependabot propose des mises à jour d'actions et de dépendances, jamais fusionnées sans lecture.
