@@ -55,6 +55,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("guardrails", "Garde-fous", "/garde-fous", "pilotage", 37, "nav_guardrails"),
     NavEntry("variables", "Variables", "/variables", "pilotage", 46, "nav_variables"),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
+    NavEntry("drift", "Dérive", "/derive", "pilotage", 42, "nav_drift"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
     NavEntry("news", "News", "/news", "pilotage", 48, "nav_news"),

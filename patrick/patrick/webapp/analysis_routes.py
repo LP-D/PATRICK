@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from patrick.analysis import compare as compare_mod
 from patrick.analysis import (
+    drift_monitor,
     exports,
     features_explorer,
     guardrails,
@@ -203,6 +204,30 @@ def register(app: FastAPI, templates, context) -> None:
             conn = trackdb.connect()
             try:
                 return guardrails.summary(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/derive")
+    def drift_page(request: Request):
+        return templates.TemplateResponse(request, "derive.html", context(request))
+
+    @app.get("/api/derive/overview")
+    async def drift_overview():
+        def work():
+            conn = trackdb.connect()
+            try:
+                return drift_monitor.overview(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/api/derive/detail")
+    async def drift_detail(target: str, horizon: int):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return drift_monitor.pair_detail(conn, target, horizon)
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))
