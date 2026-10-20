@@ -52,6 +52,7 @@ from patrick.webapp import (
     alerts,
     analysis_routes,
     asset_stats,
+    data_routes,
     exploration_routes,
     forms,
     forms_rl,
@@ -1871,6 +1872,9 @@ analysis_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Risque (/risque) et API /api/risque/* : VaR/ES, contributions, crises, simulation marche avant, écarts à une cible (patrick/analysis/portfolio_risk.py).
 risk_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Données (/donnees) et API /api/donnees/* : data lake, vue point dans le temps, révisions, calendrier, listes de suivi, import (patrick/analysis/data_explorer.py).
+data_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:

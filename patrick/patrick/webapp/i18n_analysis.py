@@ -6,6 +6,7 @@ constats chiffrés de la lecture guidée (`ra_g_*`) décrivent des faits de mét
 from __future__ import annotations
 
 from patrick.webapp.i18n_analysis_cmp import CMP_ANALYSIS_STRINGS
+from patrick.webapp.i18n_analysis_data import DATA_STRINGS
 from patrick.webapp.i18n_analysis_diag import DIAG_STRINGS
 from patrick.webapp.i18n_analysis_drift import DRIFT_STRINGS
 from patrick.webapp.i18n_analysis_guard import GUARD_STRINGS
@@ -571,11 +572,12 @@ ANALYSIS_STRINGS.update(MODELS_REGISTRY_STRINGS)
 ANALYSIS_STRINGS.update(JOURNAL_STRINGS)
 ANALYSIS_STRINGS.update(NOTES_STRINGS)
 ANALYSIS_STRINGS.update(DIAG_STRINGS)
+ANALYSIS_STRINGS.update(DATA_STRINGS)
 ANALYSIS_STRINGS.update(RISK_STRINGS)
 
 
 def _browser_keys() -> tuple[str, ...]:
-    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_", "av_", "ad_", "am_", "aj_", "cn_", "dg_", "rk_")))
+    return tuple(k for k in ANALYSIS_STRINGS if k.startswith(("ra_", "ah_", "ac_", "ag_", "av_", "ad_", "am_", "aj_", "cn_", "dg_", "rk_", "dx_")))
 
 
 ANALYSIS_JS_KEYS: tuple[str, ...] = _browser_keys()

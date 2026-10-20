@@ -62,6 +62,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
     NavEntry("news", "News", "/news", "pilotage", 48, "nav_news"),
+    NavEntry("donnees", "Données", "/donnees", "pilotage", 51, "nav_donnees"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
     NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 55, "nav_data_quality"),
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
