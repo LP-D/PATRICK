@@ -64,6 +64,7 @@ from patrick.webapp import (
     nav_registry,
     news_routes,
     progress_steps,
+    risk_routes,
     rl_compare,
     rl_routes,
     run_manager,
@@ -1867,6 +1868,9 @@ rl_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Pages d'analyse des entraînements (/runs/{id}/analyse, /analyses) et API /api/runs/{id}/analysis/* (patrick/analysis/).
 analysis_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Risque (/risque) et API /api/risque/* : VaR/ES, contributions, crises, simulation marche avant, écarts à une cible (patrick/analysis/portfolio_risk.py).
+risk_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:

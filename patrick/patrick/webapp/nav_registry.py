@@ -93,6 +93,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("patrimoine", "Comptes", "/patrimoine", "patrimoine", 10, "nav_patrimoine",
              child_routes=("/patrimoine/comptes/{account_id}",)),
     NavEntry("mouvements", "Mouvements", "/mouvements", "patrimoine", 20, "nav_mouvements"),
+    NavEntry("risque", "Risque", "/risque", "patrimoine", 30, "nav_risque"),
 )
 
 # Pages d'USAGE de l'application (pas des classes d'analyse) : hors des 4 categories, elles ont leur propre
