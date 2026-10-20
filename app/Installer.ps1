@@ -99,6 +99,9 @@ if (Test-Path (Join-Path $InstallDir '.git')) {
     Stop-Install "Le dossier $InstallDir existe déjà et n'est pas une installation de PATRICK. Choisis un autre -InstallDir."
 } else {
     Invoke-Checked 'git clone' $git.Source @('clone', '--branch', $Branch, $Repo, $InstallDir)
+    # Installation neuve : on part de la dernière version validée par la CI (branche « stable ») si elle existe, pas de la pointe de main.
+    & $git.Source -C $InstallDir fetch origin stable 2>$null
+    if ($LASTEXITCODE -eq 0) { Invoke-Checked 'git reset' $git.Source @('-C', $InstallDir, 'reset', '--hard', 'origin/stable') }
 }
 # Garde de sortie (.githooks/pre-push) : ni suppression de branche, ni push forcé sur l'historique publié.
 & $git.Source -C $InstallDir config core.hooksPath .githooks

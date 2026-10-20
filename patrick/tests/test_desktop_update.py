@@ -1,5 +1,9 @@
 """Mise à jour depuis GitHub (`patrick.desktop.update`) sur de vrais dépôts git locaux : dépôt « GitHub » nu,
-copie de l'auteur, copie installée. Aucun réseau."""
+copie de l'auteur, copie installée. Aucun réseau.
+
+La copie installée suit la branche `stable`, que la CI avance sur un commit de `main` seulement quand toutes ses
+vérifications sont vertes (audit externe du 2026-10-19, point 9) : un `main` cassé ne casse plus les deux PC.
+`World.publish` pousse sur `main` ET fait avancer `stable` (commit validé) ; `release=False` : poussé mais pas encore validé."""
 from __future__ import annotations
 
 import os
@@ -39,12 +43,19 @@ class World:
         git(self.author, "checkout", "-q", "-B", "main")
         commit(self.author, "patrick/pyproject.toml", "deps = 1\n", "initial")
         git(self.author, "push", "-q", "origin", "main")
+        git(self.author, "push", "-q", "origin", "main:refs/heads/stable")
         self.stable = tmp_path / "stable"
         subprocess.run(["git", "clone", "-q", str(self.remote), str(self.stable)], check=True, env=_ENV)
 
-    def publish(self, name: str, content: str, message: str) -> None:
+    def publish(self, name: str, content: str, message: str, release: bool = True) -> None:
         commit(self.author, name, content, message)
         git(self.author, "push", "-q", "origin", "main")
+        if release:
+            self.release()
+
+    def release(self, ref: str = "main") -> None:
+        """Ce que fait la CI : `stable` avance sur un commit dont tout est vert."""
+        git(self.author, "push", "-q", "origin", f"{ref}:refs/heads/stable")
 
 
 @pytest.fixture
@@ -162,3 +173,48 @@ def test_not_a_git_checkout(tmp_path):
 def test_describe_reads_the_installed_version(world):
     info = update.describe(world.stable)
     assert info["git"] and info["branch"] == "main" and len(info["commit"]) >= 7
+
+
+# --- la copie installée ne suit que les versions validées par la CI ---------------------------------------------------
+
+def test_a_commit_pushed_to_main_but_not_yet_validated_is_not_installed(world):
+    world.publish("a.txt", "1", "feat: poussé, CI pas encore verte", release=False)
+    before = git(world.stable, "rev-parse", "HEAD")
+    assert update.check(world.stable)["state"] == "uptodate"
+    result, calls = _apply(world)
+    assert result["status"] == "uptodate" and calls["backup"] == 0
+    assert git(world.stable, "rev-parse", "HEAD") == before
+
+
+def test_the_update_stops_at_the_last_validated_commit(world):
+    world.publish("a.txt", "1", "feat: validé")
+    validated = git(world.author, "rev-parse", "HEAD")
+    world.publish("b.txt", "2", "feat: cassé, jamais validé", release=False)
+    result, _ = _apply(world)
+    assert result["status"] == "updated" and result["to"] == validated
+    assert git(world.stable, "rev-parse", "HEAD") == validated
+    assert not (world.stable / "b.txt").exists()
+
+
+def test_without_any_validated_version_nothing_is_installed(tmp_path):
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True, env=_ENV)
+    author, installed = tmp_path / "author", tmp_path / "installed"
+    subprocess.run(["git", "clone", "-q", str(remote), str(author)], check=True, env=_ENV)
+    git(author, "checkout", "-q", "-B", "main")
+    commit(author, "patrick/pyproject.toml", "deps = 1\n", "initial")
+    git(author, "push", "-q", "origin", "main")                      # pas de `stable`
+    subprocess.run(["git", "clone", "-q", str(remote), str(installed)], check=True, env=_ENV)
+    commit(author, "a.txt", "1", "feat: x")
+    git(author, "push", "-q", "origin", "main")
+
+    info = update.check(installed)
+    assert info["state"] == "skipped" and "stable" in info["message"]
+    result, calls = _apply(type("W", (), {"stable": installed})())
+    assert result["status"] == "skipped" and calls["backup"] == 0
+
+
+def test_being_offline_is_not_mistaken_for_a_missing_validated_version(world):
+    git(world.stable, "remote", "set-url", "origin", str(world.remote.parent / "nulle-part.git"))
+    info = update.check(world.stable)
+    assert info["state"] == "unavailable" and "stable" not in info["message"].split("injoignable")[0]

@@ -87,3 +87,26 @@ jobs:
 
       - name: Run slow test suite
         run: pytest patrick/tests/ -q -m "slow"
+
+  promote:
+    # Les PC installés suivent la branche `stable` (patrick/desktop/update.py), jamais `main` : elle avance sur le
+    # commit qui vient de passer TOUTES les vérifications (2 versions de Python pour la suite rapide + la suite lente).
+    # Avance rapide uniquement : si `stable` est déjà plus loin (une exécution plus ancienne qui finit plus tard), on ne la recule pas.
+    needs: [fast-suite, slow-suite]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move `stable` to the validated commit
+        run: |
+          git fetch origin stable:refs/remotes/origin/stable || true
+          if ! git rev-parse -q --verify refs/remotes/origin/stable >/dev/null              || git merge-base --is-ancestor refs/remotes/origin/stable "$GITHUB_SHA"; then
+            git push origin "$GITHUB_SHA:refs/heads/stable"
+          else
+            echo "stable is ahead of (or has diverged from) $GITHUB_SHA: not moved"
+          fi
