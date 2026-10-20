@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from patrick.analysis import compare as compare_mod
@@ -19,6 +20,7 @@ from patrick.analysis import (
     features_explorer,
     guardrails,
     hub,
+    model_registry,
     registry,
     rl_sections,
 )
@@ -32,6 +34,12 @@ _RL_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "rl_analysis.js")
 ML_SECTIONS = ("overview", "guide", "protocol", "timeline", "rolling", "scatter", "confusion", "calibration", "folds", "equity", "errors", "regimes",
                "features", "trials", "robustness", "holdout_live", "paths")
 RL_SECTIONS = rl_sections.SECTIONS
+
+
+class PromoteBody(BaseModel):
+    target: str
+    horizon: int
+    run_id: str
 
 
 def _safe_name(value: str) -> str:
@@ -207,6 +215,50 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/modeles")
+    def models_page(request: Request):
+        return templates.TemplateResponse(request, "modeles.html", {"card_mode": False, **context(request)})
+
+    @app.get("/modeles/fiche")
+    def model_card_page(request: Request, target: str, horizon: int):
+        return templates.TemplateResponse(request, "modeles.html", {"card_mode": True, "target": target, "horizon": horizon, **context(request)})
+
+    @app.get("/api/modeles/overview")
+    async def models_overview():
+        def work():
+            conn = trackdb.connect()
+            try:
+                return model_registry.overview(conn)
+            finally:
+                conn.close()
+        return JSONResponse(await run_in_threadpool(work))
+
+    @app.get("/api/modeles/card")
+    async def models_card(target: str, horizon: int):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return model_registry.model_card(conn, target, horizon, trackdb.default_db_path())
+            finally:
+                conn.close()
+        card = await run_in_threadpool(work)
+        if card is None:
+            raise HTTPException(status_code=404, detail="Aucun modèle exporté pour ce couple")
+        return JSONResponse(card)
+
+    @app.post("/api/modeles/promote")
+    async def models_promote(body: PromoteBody):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return model_registry.promote_version(conn, body.target, body.horizon, body.run_id, "manual")
+            finally:
+                conn.close()
+        try:
+            return JSONResponse(await run_in_threadpool(work))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/derive")
     def drift_page(request: Request):
