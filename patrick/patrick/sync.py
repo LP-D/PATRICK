@@ -145,10 +145,18 @@ def _free_bytes(path: str | Path) -> int:
     return shutil.disk_usage(p).free
 
 
+def _folder_hint(folder) -> str:
+    """Chemin d'un dossier de données pour un message d'erreur : ne lève jamais (le disque de données peut manquer)."""
+    try:
+        return str(folder())
+    except paths.DataRootUnavailable:
+        return "dossier de données absent"
+
+
 def _disk_full_message(path: str | Path) -> str:
     return (f"Disque presque plein ({_gb(_free_bytes(path))} Go libres) : la synchronisation s'arrête sans rien changer. "
-            "Libère de la place -- les plus gros candidats sont les caches (~/.patrick/feature_cache) et les anciennes "
-            "sauvegardes (~/.patrick/patrick.db.backup*) -- puis relance PATRICK.")
+            f"Libère de la place -- les plus gros candidats sont les caches ({_folder_hint(paths.feature_cache_dir)}) et "
+            f"les anciennes sauvegardes ({_folder_hint(paths.backups_dir)}) -- puis relance PATRICK.")
 
 
 def _require_space(path: str | Path, needed: int, what: str) -> None:
@@ -367,12 +375,17 @@ def resolve_transport(spec: str, repo: str | None = None):
 # --------------------------------------------------------------------------
 
 def _default_store_root() -> str:
-    return os.environ.get("PATRICK_STORE_ROOT") or os.path.expanduser("~/.patrick/store")
+    return str(paths.store_dir())
 
 
 def _default_models_roots() -> list[str]:
-    home = os.path.expanduser("~/.patrick")
-    return [os.getcwd(), home, os.path.join(home, "runs")]
+    home = str(paths.home_dir())
+    roots = [os.getcwd(), home, os.path.join(home, "runs")]
+    try:
+        roots.append(str(paths.models_dir()))
+    except paths.DataRootUnavailable:        # disque de données absent : ses modèles « ne sont pas sur ce PC »
+        pass
+    return roots
 
 
 # Caches dérivés (ré-ajustables) : jamais publiés par défaut. Sur la vraie base, `vol_model_cache` fait ~90 % de 27 Go.
@@ -586,7 +599,7 @@ def pull(source: str, *, db_path: str | None = None, store_root: str | None = No
         new_db = tmp / "incoming.db"
         _gunzip_file(files[DB_ASSET], new_db)
         result = _restore_db(new_db, db_path, force=force, backup_dir=backup_dir)
-        result["models"] = (_restore_models(files[MODELS_ASSET], models_dir or os.path.expanduser("~/.patrick/models"),
+        result["models"] = (_restore_models(files[MODELS_ASSET], models_dir or str(paths.models_dir()),
                                             db_path) if MODELS_ASSET in files else 0)
         result["store_files"] = (_restore_store(files[STORE_ASSET], store_root or _default_store_root())
                                  if STORE_ASSET in files else 0)
@@ -836,7 +849,7 @@ def _merge_in_place(files: dict, manifest: dict, incoming: Path, *, db_path: str
     report = sync_merge.merge_databases(db_path, str(incoming), fast=False)
     personal = (sync_merge.adopt_personal_tables(db_path, str(incoming))
                 if adopt_personal and manifest.get("personal_included") else {})
-    models = (_restore_models_merged(files[MODELS_ASSET], models_dir or os.path.expanduser("~/.patrick/models"),
+    models = (_restore_models_merged(files[MODELS_ASSET], models_dir or str(paths.models_dir()),
                                      db_path, report["trial_offset"], set(report["new_trial_ids"]))
               if MODELS_ASSET in files else 0)
     return {"runs_before": runs_before, "runs_after": _count_runs(db_path), "new_runs": report["new_runs"],
@@ -898,9 +911,13 @@ def status(folder: str, *, db_path: str | None = None) -> dict:
     local_fp = fingerprint(db_path, personal=reference) if exists else None
     need_pull = stamp is not None and stamp["sha"] != state.get("remote_sha")
     local_changed = exists and local_fp != state.get("local_fp")
+    data_root = paths.configured_data_root()
+    data_available = paths.data_root_missing() is None
     return {"folder": folder, "remote": stamp, "last_exchange": state.get("at"), "wealth_reference": reference,
             "local_runs": _count_runs(db_path) if exists else 0,
             "disk_free_gb": round(_free_bytes(db_path) / 1e9, 1), "db_gb": round(os.path.getsize(db_path) / 1e9, 1) if exists else 0.0,
+            "data_root": str(data_root) if data_root else None, "data_available": data_available,
+            "data_free_gb": round(_free_bytes(data_root) / 1e9, 1) if data_root and data_available else None,
             "need_pull": need_pull, "local_changed": local_changed,
             "need_push": exists and (stamp is None or local_changed or need_pull)}
 
@@ -918,6 +935,10 @@ def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None 
     db_path = db_path or trackdb.default_db_path()
     reference = is_wealth_reference() if wealth_reference is None else wealth_reference
     out: dict = {"actions": [], "skipped": []}
+    problem = paths.data_root_problem()
+    if problem:                  # sauvegardes, modèles et magasin vivent sur le disque de données : rien à faire sans lui
+        out["skipped"].append(f"synchronisation reportée : {problem}")
+        return out
     state, stamp = load_state(), remote_stamp(folder)
 
     if only in (None, "pull") and stamp is not None and stamp["sha"] != state.get("remote_sha"):
@@ -1069,7 +1090,7 @@ def register_task(minutes: int = 60) -> str:
 
     exe = Path(sys.executable)
     pythonw = exe.with_name("pythonw.exe")
-    log = os.path.normpath(os.path.expanduser("~/.patrick/logs/sync.log"))
+    log = os.path.normpath(str(paths.logs_dir() / "sync.log"))
     os.makedirs(os.path.dirname(log), exist_ok=True)
     command = f'"{pythonw if pythonw.exists() else exe}" -m patrick.cli sync auto --only push --log-file "{log}"'
     proc = subprocess.run(["schtasks", "/Create", "/TN", SYNC_TASK, "/TR", command, "/SC", "MINUTE",
