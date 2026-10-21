@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
+from patrick import paths
 from patrick.clock import utc_today
 
 
@@ -31,8 +32,9 @@ def _default_store_dir() -> str:
     """See `tracking.db.default_db_path`: read from the environment on EVERY
     call (not frozen at import time) so the worker (separate process) shares
     the same data lake as the web process that launched it, and for test
-    isolation (`PATRICK_STORE_ROOT` set before instantiating `DataStore()`)."""
-    return os.environ.get("PATRICK_STORE_ROOT") or os.path.expanduser("~/.patrick/store")
+    isolation (`PATRICK_STORE_ROOT` set before instantiating `DataStore()`).
+    Resolution (component variable, then the data root): `patrick.paths.store_dir`."""
+    return str(paths.store_dir())
 
 
 def _content_hash(df: pd.DataFrame) -> str:

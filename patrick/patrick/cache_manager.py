@@ -10,11 +10,12 @@ from pathlib import Path
 import pandas as pd
 import pyarrow as pa
 
+from patrick import paths
 from patrick.clock import parse_utc, utc_now
 
 
 def _cache_root() -> Path:
-    return Path(os.environ.get("PATRICK_CACHE_ROOT", Path.home() / ".patrick" / "cache"))
+    return paths.cache_dir()
 
 
 class LocalCache:
