@@ -920,3 +920,27 @@ def data_init_cmd(folder: str = typer.Argument(..., help="Racine de données à 
         typer.echo(f"Refusé : {exc}", err=True)
         raise typer.Exit(code=1) from None
     typer.echo(f"Racine de données prête : {root}")
+
+
+@data_app.command(name="move")
+def data_move_cmd(folder: str = typer.Argument(..., help="Nouvelle racine de données, par exemple \"D:\\PATRICK DATA\"")) -> None:
+    """Déplace les données de ce PC (magasin, modèles, caches, sauvegardes…) vers une nouvelle racine. La base reste où elle
+    est. À lancer PATRICK fermé, aucun entraînement en cours, dans ton propre terminal (la copie peut durer une heure)."""
+    from patrick import data_move
+
+    problems = data_move.check_preconditions(folder)
+    if problems:
+        for problem in problems:
+            typer.echo(f"Refusé : {problem}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Rappel : la tâche planifiée PATRICK-Sync doit être désactivée pendant le déplacement.")
+
+    def show(component: str, files: int, copied: int, total: int) -> None:
+        typer.echo(f"  {component or '...':<14} {files} fichier(s), {copied / 1e9:.1f} Go copiés sur {total / 1e9:.1f} Go")
+
+    try:
+        out = data_move.copy_components(folder, progress=show)
+    except data_move.MoveError as exc:
+        typer.echo(f"Échec de la copie : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Copie terminée : {out['files']} fichier(s) copié(s), {out['skipped']} déjà présent(s).")

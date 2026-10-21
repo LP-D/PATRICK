@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from patrick import data_move
+from patrick import data_move, settings
 from patrick.cli import app as cli_app
 from patrick.tracking import db as trackdb
 
@@ -101,3 +101,125 @@ def test_cli_status_and_init(pc):
     out = CliRunner().invoke(cli_app, ["data", "status"])
 
     assert out.exit_code == 0 and "Racine de données" in out.output and "Dossier maison" in out.output
+
+
+# --- phase 1 : préconditions et copie ----------------------------------------------------------------------------
+
+TREE = {"store/snapshot=2026-07-28/a__1.parquet": b"parquet", "store/_index.json": b"{}", "models/1/m.joblib": b"model",
+        "feature_cache/ab/k.parquet": b"fc", "cache/x.json": b"c", "backups/patrick_backup_1.db": b"db",
+        "archive/old.txt": b"o", "reports/r.html": b"<p>"}
+
+
+def make_tree(root: Path) -> None:
+    for rel, data in TREE.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def listing(root: Path) -> dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+@pytest.fixture
+def calm(monkeypatch):
+    """Ni serveur qui écoute ni manque de place : le terrain où `check_preconditions` ne dit rien."""
+    monkeypatch.setattr(data_move.runtime, "port_open", lambda port, *a, **k: False)
+    monkeypatch.setattr(data_move.sync, "_free_bytes", lambda path: 10**12)
+
+
+def test_preconditions_are_silent_on_a_calm_pc(pc, calm):
+    make_tree(pc.home)
+
+    assert data_move.check_preconditions(str(pc.tmp / "PATRICK DATA"), db_path=str(pc.home / "patrick.db"), port=8000) == []
+
+
+def test_preconditions_block_a_running_job_a_listening_server_and_a_lack_of_space(pc, calm, monkeypatch):
+    make_tree(pc.home)
+    db = make_db(pc.home / "patrick.db", [])
+    conn = trackdb.connect(db)
+    conn.execute("INSERT INTO job (job_id, config_json, status) VALUES ('j1', '{}', 'running')")
+    conn.commit()
+    conn.close()
+    target = str(pc.tmp / "PATRICK DATA")
+
+    assert any("entraînement" in m for m in data_move.check_preconditions(target, db_path=db, port=8000))
+
+    monkeypatch.setattr(data_move.runtime, "port_open", lambda port, *a, **k: True)
+    assert any("PATRICK est ouvert" in m for m in data_move.check_preconditions(target, db_path=str(pc.tmp / "none.db"), port=8000))
+
+    monkeypatch.setattr(data_move.runtime, "port_open", lambda port, *a, **k: False)
+    monkeypatch.setattr(data_move.sync, "_free_bytes", lambda path: 0)
+    assert any("espace" in m for m in data_move.check_preconditions(target, db_path=str(pc.tmp / "none.db"), port=8000))
+
+
+def test_preconditions_refuse_a_badly_chosen_target(pc, calm, monkeypatch):
+    active = pc.tmp / "R1"
+    active.mkdir()
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(active))
+    make_tree(active)
+    share = pc.tmp / "share"
+    share.mkdir()
+    settings.save({data_move.sync.KEY_SYNC_FOLDER: str(share)})
+    db = str(pc.tmp / "none.db")
+
+    def reasons(target: Path) -> str:
+        return " | ".join(data_move.check_preconditions(str(target), db_path=db, port=8000))
+
+    assert "déjà" in reasons(active)                              # la racine active elle-même
+    assert "dossier maison" in reasons(pc.home / "data")          # dans le dossier maison
+    assert "source" in reasons(active / "sous-dossier")           # dans la source
+    assert "contient" in reasons(pc.tmp)                          # contient la source
+    assert "partage" in reasons(share / "donnees")                # dans le dossier de partage
+    assert "partage" in reasons(pc.tmp)                           # contient le dossier de partage
+    assert "n'existe pas" in reasons(pc.tmp / "absent" / "PATRICK DATA")   # lecteur / dossier parent absent
+
+
+def test_copy_copies_every_component_to_a_folder_with_a_space_and_leaves_the_source_alone(pc):
+    make_tree(pc.home)
+    target = pc.tmp / "PATRICK DATA"
+
+    out = data_move.copy_components(str(target))
+
+    assert out["files"] == len(TREE) and out["skipped"] == 0 and out["bytes"] == sum(len(b) for b in TREE.values())
+    assert {k: v for k, v in listing(target).items() if k != "README.txt"} == TREE
+    assert {k: v for k, v in listing(pc.home).items() if k != data_move.STATE_NAME} == TREE     # la source ne bouge pas
+    assert data_move.status()["progress"]["phase"] == "copied"
+
+
+def test_copy_resumes_after_an_interruption_and_skips_what_is_already_there(pc):
+    make_tree(pc.home)
+    target = pc.tmp / "PATRICK DATA"
+    (target / "models" / "1").mkdir(parents=True)
+    (target / "models" / "1" / "m.joblib").write_bytes(b"mod")                  # copie tronquée
+    (target / "store").mkdir()
+    (target / "store" / "_index.json.part").write_bytes(b"orphelin")           # reste d'un envoi interrompu
+
+    first = data_move.copy_components(str(target))
+    second = data_move.copy_components(str(target))
+
+    assert (target / "models" / "1" / "m.joblib").read_bytes() == b"model"
+    assert not (target / "store" / "_index.json.part").exists()
+    assert first["files"] == len(TREE) and second["files"] == 0 and second["skipped"] == len(TREE)
+
+
+def test_copy_detects_a_corrupted_copy_of_the_models_or_the_store(pc, monkeypatch):
+    make_tree(pc.home)
+
+    def corrupting(src: Path, dst: Path) -> None:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(b"X" * src.stat().st_size)                              # même taille, autre contenu
+
+    monkeypatch.setattr(data_move, "_copy_file", corrupting)
+
+    with pytest.raises(data_move.MoveError, match="sha256"):
+        data_move.copy_components(str(pc.tmp / "PATRICK DATA"))
+
+
+def test_cli_move_stops_on_a_blocking_precondition(pc, monkeypatch):
+    monkeypatch.setattr(data_move.runtime, "port_open", lambda port, *a, **k: True)
+
+    out = CliRunner().invoke(cli_app, ["data", "move", str(pc.tmp / "PATRICK DATA")])
+
+    assert out.exit_code == 1 and "Refusé" in out.output and "PATRICK est ouvert" in out.output
+    assert not (pc.tmp / "PATRICK DATA").exists()
