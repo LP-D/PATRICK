@@ -48,7 +48,7 @@ def test_page_exposes_the_js_strings_in_both_languages_and_loads_its_script(clie
     html = client.get("/simulate").text
     strings = fs.json_script(html, "i18n-data")
     assert strings["fund_pv_day"] == "Jour d'exécution" and strings["fund_leverage_cap"] == "plafond {cap}:1"
-    assert '<script src="/static/simulate.js"></script>' in html
+    assert '<script src="/static/simulate.js?v=' in html
     english = client.get("/simulate?lang=en").text
     assert fs.json_script(english, "i18n-data")["fund_pv_day"] == "Execution day"
     assert "Order ticket" in english and "Portfolios by strategy" in english

@@ -17,7 +17,7 @@
 </div>
 <p class="hint">{{ t('fund_panel_meta', start=s.opened_on, capital=(k.capital | eur)) }}</p>
 
-{% for n in snap.notes %}<div class="banner banner-warning">{{ n }}</div>{% endfor %}
+{% for n in snap.notes %}<div class="banner banner-warning">{{ t.tx(n) }}</div>{% endfor %}
 {% for v in snap.violations %}<div class="banner banner-error">{{ v }}</div>{% endfor %}
 {% if snap.alert_days %}<div class="banner banner-warning">{{ t('fund_alert_margin', n=snap.alert_days | length, first=snap.alert_days[0]) }}</div>{% endif %}
 
@@ -41,12 +41,8 @@
 </div>
 
 <h3>{{ t('fund_chart_title') }}</h3>
-<div class="drift-legend">
-  <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>{{ t('fund_chart_nav') }}</span>
-  <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>{{ t('fund_chart_capital') }}</span>
-</div>
-<div class="chart-wrap"><canvas id="fund-chart" class="chart-canvas" role="img" aria-label="{{ t('fund_chart_title') }}"></canvas></div>
-<script id="fund-chart-data" type="application/json">{{ {"series": snap.series, "capital": k.capital} | tojson }}</script>
+<div id="fund-chart" class="chart-wrap" aria-label="{{ t('fund_chart_title') }}"></div>
+<script id="fund-chart-data" type="application/json">{{ {"series": snap.series, "capital": k.capital, "labels": {"nav": t('fund_chart_nav'), "capital": t('fund_chart_capital')}} | tojson }}</script>
 
 <h3>{{ t('fund_pos_title') }} <span class="hint">({{ open_positions | length }})</span></h3>
 {% if open_positions %}

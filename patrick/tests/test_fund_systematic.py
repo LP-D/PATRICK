@@ -288,7 +288,7 @@ def test_the_simulation_page_offers_ml_models_split_by_family(tmp_path, monkeypa
     html = TestClient(app).get("/simulate").text
     assert 'id="ml-rule-form"' in html and "Piloter avec un modèle ML entraîné" in html
     assert '<optgroup label="Directionnels' in html and "AUC 0.550" in html and "F1 0.520" in html
-    assert 'src="/static/ml_rule.js"' in html
+    assert 'src="/static/ml_rule.js?v=' in html
 
 
 def test_creating_or_deleting_a_rule_refreshes_the_strategy_stamp(conn):

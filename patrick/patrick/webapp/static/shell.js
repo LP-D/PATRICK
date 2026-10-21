@@ -73,6 +73,11 @@
     var trigger = document.getElementById("cmdk-open");
     var items = [];
     try { items = JSON.parse(document.getElementById("cmdk-data").textContent || "[]"); } catch (e) { items = []; }
+    // L'icône d'une entrée est copiée depuis la barre latérale (ou le bouton de la barre du haut) : elle n'est plus répétée dans les données de la page.
+    function iconFor(it) {
+        var src = document.querySelector('.sidebar-nav a[href="' + it.url + '"] svg') || document.querySelector("#nav-" + it.slug + " svg");
+        return src ? src.cloneNode(true) : null;
+    }
     var shown = [];
     var active = 0;
     var lastFocus = null;
@@ -123,7 +128,8 @@
             li.id = "cmdk-item-" + i;
             li.setAttribute("role", "option");
             li.setAttribute("aria-selected", i === active ? "true" : "false");
-            li.innerHTML = it.icon;  // server-rendered SVG (icons.py), not user data
+            var icon = iconFor(it);
+            if (icon) li.appendChild(icon);
             var label = document.createElement("span");
             label.textContent = it.label;
             var hint = document.createElement("span");

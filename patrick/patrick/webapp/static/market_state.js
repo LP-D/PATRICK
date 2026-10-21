@@ -5,10 +5,16 @@
     "use strict";
     var root = document.getElementById("market-state");
     if (!root) return;
+    var I18N = window.I18N || {};
+    var LANG = document.documentElement.lang || "fr";
+    function T(key, fallback, params) {
+        var text = I18N[key] || fallback || key;
+        return params ? text.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; }) : text;
+    }
     var STATE = { calme: "ok", stress: "error" };
-    var LABEL = { calme: "calme", stress: "stress" };
+    var LABEL = { calme: T("js_ms_calm", "calm"), stress: T("js_ms_stressed", "stress") };
 
-    function pct(x) { return (x * 100).toFixed(1).replace(".", ",") + " %"; }
+    function pct(x) { return (x * 100).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + (LANG === "fr" ? " %" : "%"); }
 
     function note(text) {
         root.innerHTML = "";
@@ -32,15 +38,15 @@
         wrap.className = "table-scroll";
         var table = document.createElement("table");
         table.className = "data-table";
-        table.innerHTML = "<thead><tr><th>Marché</th><th>Régime</th><th class='num'>P(stress)</th>" +
-            "<th>Depuis</th><th class='num'>Stress (63 s.)</th><th class='num'>Vol. 21 s.</th>" +
-            "<th class='num'>Vol. long terme</th><th class='num'>Vol. état calme / stress</th></tr></thead>";
+        table.innerHTML = "<thead><tr><th>" + T("js_ms_market", "Market") + "</th><th>" + T("js_ms_regime", "Regime") + "</th><th class='num'>" + T("js_ms_pstress", "P(stress)") + "</th>" +
+            "<th>" + T("js_ms_since", "Since") + "</th><th class='num'>" + T("js_ms_stress", "Stress (63 sess.)") + "</th><th class='num'>" + T("js_ms_vol21", "Vol. 21 sess.") + "</th>" +
+            "<th class='num'>" + T("js_ms_vol_long", "Long-term vol.") + "</th><th class='num'>" + T("js_ms_vol_states", "Vol. calm / stress state") + "</th></tr></thead>";
         var tbody = document.createElement("tbody");
         data.rows.forEach(function (r) {
             var tr = document.createElement("tr");
             cell(tr, r.label);
             if (r.status !== "ok") {
-                var msg = r.status === "insufficient" ? "historique insuffisant" : ("indisponible : " + (r.error || ""));
+                var msg = r.status === "insufficient" ? T("js_ms_insufficient", "insufficient history") : T("js_ms_row_unavailable", "unavailable: {error}", { error: r.error || "" });
                 var td = cell(tr, msg, "na");
                 td.colSpan = 7;
                 tbody.appendChild(tr);
@@ -51,7 +57,7 @@
             badge.textContent = LABEL[r.regime] || r.regime;
             cell(tr, badge);
             cell(tr, pct(r.stress_prob), "num pk-mono");
-            cell(tr, r.since + " (" + r.sessions_in_regime + " s.)", "pk-mono");
+            cell(tr, r.since + " (" + r.sessions_in_regime + " " + T("js_ms_sess", "sess.") + ")", "pk-mono");
             cell(tr, pct(r.share_stress_63), "num pk-mono");
             cell(tr, pct(r.vol_21d), "num pk-mono");
             cell(tr, pct(r.vol_long), "num pk-mono");
@@ -63,8 +69,8 @@
         root.appendChild(wrap);
         var foot = document.createElement("p");
         foot.className = "table-footer";
-        foot.textContent = "Mis à jour : " + data.updated_at + " · dernière séance par marché : " +
-            data.rows.filter(function (r) { return r.as_of; }).map(function (r) { return r.label + " " + r.as_of; }).join(", ");
+        foot.textContent = T("js_ms_updated", "Updated: {at} · last session per market: {sessions}", { at: data.updated_at,
+            sessions: data.rows.filter(function (r) { return r.as_of; }).map(function (r) { return r.label + " " + r.as_of; }).join(", ") });
         root.appendChild(foot);
     }
 
@@ -74,10 +80,10 @@
             var data = await res.json();
             if (data.rows && data.rows.length) { render(data); return; }
             if (data.error) { note(data.error); return; }
-            note("Calcul de l'état du marché (HMM) en cours…");
+            note(T("js_ms_computing", "Computing the market state (HMM)…"));
             if (attempt < 40) setTimeout(function () { load(attempt + 1); }, 5000);
         } catch (e) {
-            note("État du marché indisponible : " + e);
+            note(T("js_ms_unavailable", "Market state unavailable: {error}", { error: e }));
         }
     }
     load(0);

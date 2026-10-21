@@ -115,7 +115,7 @@
             <label>{{ t('field_flat_thr') }}
                 <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
             </label>
-            <label>{{ t('field_regimes') }}{{ info('regime', 'Régime de marché') }}
+            <label>{{ t('field_regimes') }}{{ info('regime', t('gl_label_regime')) }}
                 <input type="text" name="regimes" value="{{ view.regimes }}" required>
             </label>
         </fieldset>
@@ -132,7 +132,7 @@
             <label>{{ t('field_yf_coverage') }}
                 <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
             </label>
-            <label>{{ t('field_universe_scope') }}{{ info('universe', 'Univers de données') }}
+            <label>{{ t('field_universe_scope') }}{{ info('universe', t('gl_label_universe')) }}
                 <select name="universe_scope">
                     <option value="default" {% if view.universe_scope != 'extended' %}selected{% endif %}>{{ t('universe_scope_default') }}</option>
                     <option value="extended" {% if view.universe_scope == 'extended' %}selected{% endif %}>{{ t('universe_scope_extended') }}</option>
@@ -193,7 +193,7 @@
                 {% for m in all_vol_models %}
                 <label class="checkbox">
                     <input type="checkbox" name="vol_models" value="{{ m }}" {% if m in view.vol_models %}checked{% endif %}>
-                    {{ vol_model_labels.get(m, m) }}{{ info(m, vol_model_labels.get(m, m)) }}
+                    {{ t('volm_' ~ m) }}{{ info(m, t('volm_' ~ m)) }}
                 </label>
                 {% endfor %}
             </div>
@@ -232,7 +232,7 @@
             <div class="adv-body">
             <div class="subgrid">
             {% for field, label in technical_lookback_fields %}
-                <label>{{ label }}{% if loop.first %}{{ info('technical_lookbacks') }}{% endif %}
+                <label>{{ t('tl_' ~ field) }}{% if loop.first %}{{ info('technical_lookbacks') }}{% endif %}
                     <input type="text" name="tl__{{ field }}" value="{{ view.technical_lookbacks.get(field, '') }}">
                 </label>
             {% endfor %}
@@ -444,7 +444,7 @@
                 <span class="adv-state" data-adv-state="section_optuna_bounds"></span>
             </summary>
             <div class="adv-body">
-            <p class="hint">{{ t('section_optuna_bounds') }}{{ info('optuna_bounds', 'Bornes de recherche Optuna') }}</p>
+            <p class="hint">{{ t('section_optuna_bounds') }}{{ info('optuna_bounds') }}</p>
             {% for algo, params in optuna_param_specs.items() %}
             <div class="subfieldset">
                 <p class="hint"><strong>{{ algo }}</strong></p>
@@ -548,7 +548,7 @@
             {% for r in recent_runs %}
             <li>
                 <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
-                <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}j · {{ r.status }}</span>
+                <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}{{ t('day_suffix') }} · {{ r.status }}</span>
                 <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
                 {# « meilleur de 0 essai(s) » sur un run en cours était une
                    contrepartie de fiabilité qui affirmait une fausseté : il n'y
@@ -586,21 +586,15 @@
     <div class="dash-panel-body">
     <div class="target-preview" id="target-preview">
         <div class="preview-range-buttons" id="preview-ranges">
-            <button type="button" class="range-btn" data-period="1mo">1M</button>
-            <button type="button" class="range-btn" data-period="3mo">3M</button>
-            <button type="button" class="range-btn" data-period="6mo">6M</button>
-            <button type="button" class="range-btn active" data-period="1y">1Y</button>
-            <button type="button" class="range-btn" data-period="5y">5Y</button>
-            <button type="button" class="range-btn" data-period="max">Max</button>
+            <button type="button" class="range-btn" data-period="1mo">{{ t('chart_range_1m') }}</button>
+            <button type="button" class="range-btn" data-period="3mo">{{ t('chart_range_3m') }}</button>
+            <button type="button" class="range-btn" data-period="6mo">{{ t('chart_range_6m') }}</button>
+            <button type="button" class="range-btn active" data-period="1y">{{ t('chart_range_1y') }}</button>
+            <button type="button" class="range-btn" data-period="5y">{{ t('chart_range_5y') }}</button>
+            <button type="button" class="range-btn" data-period="max">{{ t('chart_range_max') }}</button>
         </div>
-        <div class="chart-wrap">
-            {# Une toile est un trou noir pour un lecteur d'écran : elle porte un rôle et
-               un libellé, et `market.js` réécrit ce libellé avec les vraies bornes
-               de la série une fois tracée. #}
-            <canvas id="preview-canvas" width="700" height="180" role="img"
-                    aria-label="{{ t('preview_aria_empty') }}"></canvas>
-            <div id="preview-tooltip" class="chart-tooltip hidden"></div>
-        </div>
+        {# Graphique zoomable monté par `market.js` (chart_kit.js) : la toile de surcouche porte le libellé d'accessibilité avec les vraies bornes. #}
+        <div id="preview-chart" class="chart-wrap" aria-label="{{ t('preview_aria_empty') }}"></div>
         <p class="hint" id="preview-status"></p>
     </div>
 
@@ -618,7 +612,7 @@
 <script>
     window.INITIAL_RUN_ID = {{ initial_run_id | tojson }};
 </script>
-<script src="/static/app.js"></script>
+<script src="{{ asset('app.js') }}"></script>
 <script>
 (function () {
     var pj = document.getElementById("setting-parametric-jobs");

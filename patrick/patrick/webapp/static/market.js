@@ -4,27 +4,19 @@
     var I18N = window.I18N || {};
     function tr(key, fallback) { return I18N[key] || fallback || key; }
 
-    // Lecture des jetons sans repli code en dur : voir la note identique
-    // dans simulate.js -- un repli survit au remplacement d'identite et
-    // repeint l'ancien monde sans que rien ne le signale.
-    function token(name) {
-        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
-    var MONO = token("--mono") || "monospace";
     function fmtStr(str, params) {
         return str.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; });
     }
 
     var targetSelect = document.getElementById("target_symbols");
-    var canvas = document.getElementById("preview-canvas");
-    var tooltip = document.getElementById("preview-tooltip");
+    var chartHost = document.getElementById("preview-chart");
     var statusEl = document.getElementById("preview-status");
     var rangesEl = document.getElementById("preview-ranges");
     var newsList = document.getElementById("news-list");
 
     var currentPeriod = "1y";
     var currentSymbol = null;
-    var currentSeries = null; // {dates, closes}
+    var chart = null;
 
     // Le panneau d'aperçu (un graphique, une liste d'actus) reste
     // mono-cible même si `#target_symbols` accepte désormais plusieurs
@@ -37,121 +29,28 @@
         return select.selectedOptions[0].value;
     }
 
-    function fmtNum(v) {
-        return v.toLocaleString(document.documentElement.lang || "fr", { maximumFractionDigits: 2 });
-    }
-
-    // Design system v3: redraw with the new palette on theme change.
-    window.addEventListener("patrick:themechange", function () { if (currentSeries) drawChart(currentSeries); });
-
+    // Tracé : moteur commun (chart_kit.js) — zoom par sélection, déplacement, échelle recalculée, infobulle, redessin au changement de thème.
     function drawChart(series) {
-        if (!canvas) return;
-        var ctx = canvas.getContext("2d");
-        var w = canvas.width, h = canvas.height;
-        var pad = 28;
-        ctx.clearRect(0, 0, w, h);
-
-        var closes = series.closes || [];
-        if (closes.length < 2) {
-            ctx.fillStyle = token("--ink-text-2");
-            ctx.font = "13px " + MONO;
-            ctx.fillText(tr("preview_no_data", "No data for this period."), pad, h / 2);
-            canvas.setAttribute("aria-label", tr("preview_aria_empty",
-                "Target price history — nothing plotted yet."));
-            return;
-        }
-
-        var min = Math.min.apply(null, closes);
-        var max = Math.max.apply(null, closes);
-        if (min === max) { min -= 1; max += 1; }
-        var xStep = (w - 2 * pad) / (closes.length - 1);
-        var accent = token("--accent-ink");
-        var muted = token("--ink-text-2");
-        var rule = token("--ink-2");
-
-        function xAt(i) { return pad + i * xStep; }
-        function yAt(v) { return h - pad + ((v - min) / (max - min)) * -(h - 2 * pad); }
-
-        // Grille de la plaque : sans elle, la toile est un aplat d'encre avec
-        // une courbe posee dessus. Une plaque d'instrument porte ses
-        // graduations -- c'est ce qui la fait lire comme une mesure et non
-        // comme une decoration. Quatre lignes, jamais plus : au-dela elles
-        // concurrencent la courbe.
-        ctx.strokeStyle = rule;
-        ctx.lineWidth = 1;
-        for (var gi = 0; gi <= 3; gi++) {
-            var gy = Math.round(pad + (gi / 3) * (h - 2 * pad)) + 0.5;
-            ctx.beginPath();
-            ctx.moveTo(pad, gy);
-            ctx.lineTo(w - pad, gy);
-            ctx.stroke();
-        }
-
-        // axis labels (min/max)
-        ctx.fillStyle = muted;
-        ctx.font = "11px " + MONO;
-        ctx.fillText(fmtNum(max), 2, yAt(max) + 4);
-        ctx.fillText(fmtNum(min), 2, yAt(min) + 4);
-
-        ctx.beginPath();
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 2;
-        for (var i = 0; i < closes.length; i++) {
-            var x = xAt(i), y = yAt(closes[i]);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        canvas._baseImage = ctx.getImageData(0, 0, w, h);
-
-        // Équivalent textuel : sans lui, la toile ne dit rien du tout à un
-        // lecteur d'écran. Réécrit à chaque tracé, avec les vraies bornes.
-        canvas.setAttribute("aria-label", fmtStr(
-            tr("preview_aria", "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."),
-            { symbol: currentSymbol || "?", period: currentPeriod, n: closes.length,
-              min: fmtNum(min), max: fmtNum(max), last: fmtNum(closes[closes.length - 1]) }));
-
-        canvas.onmousemove = function (ev) {
-            var rect = canvas.getBoundingClientRect();
-            var mx = (ev.clientX - rect.left) * (canvas.width / rect.width);
-            var idx = Math.round((mx - pad) / xStep);
-            if (idx < 0 || idx >= closes.length) { if (tooltip) tooltip.classList.add("hidden"); return; }
-            var x = xAt(idx), y = yAt(closes[idx]);
-
-            ctx.putImageData(canvas._baseImage, 0, 0);
-            ctx.beginPath();
-            ctx.strokeStyle = rule;
-            ctx.lineWidth = 1;
-            ctx.setLineDash([3, 3]);
-            ctx.moveTo(x, pad);
-            ctx.lineTo(x, h - pad);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.fillStyle = accent;
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
-            ctx.fill();
-
-            if (tooltip) {
-                tooltip.textContent = (series.dates[idx] || "") + " — " + fmtNum(closes[idx]);
-                tooltip.style.left = Math.min(x + 8, w - 140) + "px";
-                tooltip.style.top = Math.max(y - 24, 0) + "px";
-                tooltip.classList.remove("hidden");
-            }
-        };
-        canvas.onmouseleave = function () {
-            if (tooltip) tooltip.classList.add("hidden");
-            ctx.putImageData(canvas._baseImage, 0, 0);
-        };
+        if (!chartHost) return;
+        if (chart) chart.destroy();
+        var closes = series.closes || [], dates = series.dates || [];
+        var xs = dates.map(window.PatrickPlot.parseDate);
+        var timed = xs.length === closes.length && xs.every(function (x) { return isFinite(x); });
+        if (!timed) xs = closes.map(function (_, i) { return i; });
+        chart = window.PatrickPlot.create(chartHost, {
+            type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
+            series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 2 }],
+            title: currentSymbol || "", height: 190, empty: tr("preview_no_data", "No data for this period."),
+        });
     }
 
     function loadPreview(symbol, period) {
-        if (!canvas) return;
+        if (!chartHost) return;
         currentSymbol = symbol;
         if (statusEl) statusEl.textContent = tr("preview_loading", "Loading…");
         fetch("/api/preview/" + encodeURIComponent(symbol) + "?period=" + encodeURIComponent(period))
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                currentSeries = data;
                 drawChart(data);
                 if (statusEl) {
                     // La plaque écrit déjà « Pas de données pour cette période »

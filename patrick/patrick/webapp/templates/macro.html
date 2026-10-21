@@ -3,11 +3,6 @@
 {% block title %}PATRICK — Macro (FRED){% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <span aria-current="page">{{ t('nav_macro') or 'Macro (FRED)' }}</span>
-</nav>
-
 <h1 class="page-title">{{ t('nav_macro') or 'Macro (FRED)' }}
     {{ help_icon('asset_statistics', t('assetpanel_help_label'), t('glossary_open_aria', term=t('assetpanel_help_label'))) }}
     {{ help_icon('asset_bar_windows', t('assetpanel_bars_help_label'), t('glossary_open_aria', term=t('assetpanel_bars_help_label'))) }}
@@ -33,5 +28,5 @@
     </div>
 </section>
 {% endfor %}
-<script src="/static/macro_alfred.js" defer></script>
+<script src="{{ asset('macro_alfred.js') }}" defer></script>
 {% endblock %}

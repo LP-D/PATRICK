@@ -11,10 +11,10 @@ def _s(fr: str, en: str) -> dict[str, str]:
 FUND_STRINGS: dict[str, dict[str, str]] = {
     # navigation
     "nav_fonds": _s("Fonds", "LP Fund"),
-    "nav_simulate": _s("Simulation", "Simulation"),
+    "nav_simulate": _s("Ticket d'ordres", "Order ticket"),
 
     # /simulate : ticket
-    "fund_sim_title": _s("Simulation", "Simulation"),
+    "fund_sim_title": _s("Ticket d'ordres", "Order ticket"),
     "fund_sim_subtitle": _s(
         "Ouvre des positions long ou short sur des instruments classiques, rattachées à une stratégie. Prix de marché ; frais saisis ou estimés.",
         "Open long or short positions on classic instruments, attached to a strategy. Market prices; fees typed or estimated."),

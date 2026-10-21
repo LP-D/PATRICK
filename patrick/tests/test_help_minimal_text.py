@@ -27,7 +27,7 @@ def _isolated(tmp_path, monkeypatch):
 @pytest.mark.parametrize("path", ["/", "/ml", "/runs", "/reglages", "/portfolio"])
 def test_every_page_loads_the_help_script_and_the_pending_guard(path):
     html = TestClient(app).get(path).text
-    assert '<script src="/static/help.js"></script>' in html
+    assert '<script src="/static/help.js?v=' in html
     assert 'classList.add("help-pending")' in html
     # help.js doit passer après glossary.js (il ne capte que ses propres boutons `.help-q`, jamais `.info-icon`).
     assert html.index("/static/glossary.js") < html.index("/static/help.js")

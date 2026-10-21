@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import metric, data_table, empty_state, status_badge %}
+{% from "_components.html" import metric, data_table, empty_state, status_badge, crumb %}
 {% set a = detail.account %}
 {% set perf = detail.performance %}
 {% set h = detail.holdings %}
@@ -7,17 +7,13 @@
 
 {% macro info(term, label) %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ label }}" aria-label="{{ t('glossary_open_aria', term=label) }}">i</button>{% endmacro %}
 
+{% block crumb_trail %}{{ crumb(a.name) }}{% endblock %}
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-  <a href="/patrimoine">{{ t('wealth_title') }}</a>
-  <span aria-current="page">{{ a.name }}</span>
-</nav>
-
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ a.name }}</h1>
     <p class="page-subtitle">
-      {{ status_badge(a.kind, 'neutral') }}
+      {{ status_badge(t('acct_kind_' ~ a.kind), 'neutral') }}
       {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       {% if a.kind in ('PEA', 'CTO', 'DAT') %}{{ info(a.kind | lower, a.kind) }}{% endif %}
       {% if a.opened_on %} · {{ t('pat_opened_lc') }} {{ a.opened_on }}{% endif %}
@@ -65,15 +61,10 @@
 <section class="card">
   <div class="card-head">
     <h2>{{ t('pat_evo') }} {{ info('twr', 'TWR') }}</h2>
-    <div class="drift-legend" id="wealth-legend">
-      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--brand)"></span>{{ t('pat_leg_value') }}</span>
-      <span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--text-3)"></span>{{ t('pat_leg_net') }}</span>
-      {% if chart.benchmark_replica %}<span class="drift-legend-item"><span class="drift-legend-swatch" style="background: var(--warn)"></span>{{ t('pat_leg_bench', b=a.benchmark) }}</span>{% endif %}
-    </div>
   </div>
   {% if chart.value | length > 1 %}
-  <div class="chart-wrap"><canvas id="wealth-chart" class="chart-canvas" role="img" aria-label="{{ t('pat_chart_aria') }}"></canvas></div>
-  <script id="wealth-chart-data" type="application/json">{{ chart | tojson }}</script>
+  <div id="wealth-chart" class="chart-wrap" aria-label="{{ t('pat_chart_aria') }}"></div>
+  <script id="wealth-chart-data" type="application/json">{{ dict(chart, labels={"value": t('pat_leg_value'), "net": t('pat_leg_net'), "bench": t('pat_leg_bench', b=a.benchmark)}) | tojson }}</script>
   {% else %}
   {{ empty_state(t('pat_chart_none'), t('pat_chart_none_hint')) }}
   {% endif %}
@@ -166,5 +157,5 @@
   {{ data_table([t('mv_col_date'), t('kind_col'), t('mv_col_asset'), t('mv_col_qty'), t('mv_col_price'), t('mv_col_amount'), t('mv_col_note'), ""], mv_rows, t('mv_empty'), num_cols=[3, 4, 5],
                 footer=t('pat_mv_foot', n=detail.movements | length)) }}
 </section>
-<script src="/static/wealth.js"></script>
+<script src="{{ asset('wealth.js') }}"></script>
 {% endblock %}

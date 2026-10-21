@@ -12,11 +12,6 @@
    predictions.html/universe.html -- not re-translated here. #}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Synthèse' }}</a>
-    <span aria-current="page">{{ t('nav_portfolio') or 'Portefeuille' }}</span>
-</nav>
-
 <h1 class="page-title">{{ t('nav_portfolio') or 'Portefeuille' }}</h1>
 <p class="page-subtitle">{{ t('pf_subtitle') }} <span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></p>
 <p class="hint">{{ t('pf_kind_note') }}</p>
@@ -41,7 +36,7 @@
 {% set group_rows = [] %}
 {% for g in overview.groups %}
 {% set _ = group_rows.append([
-    g.group,
+    group_labels.get(g.group, g.group),
     status_badge(g.n_bullish, 'ok') if g.n_bullish else g.n_bullish,
     status_badge(g.n_bearish, 'warning') if g.n_bearish else g.n_bearish,
     g.n_no_signal,

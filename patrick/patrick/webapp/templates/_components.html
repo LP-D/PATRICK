@@ -11,6 +11,9 @@
 
 {% macro status_badge(label, state='neutral') %}<span class="status-badge status-{{ state }}">{{ label }}</span>{% endmacro %}
 
+{# Maillon du fil de localisation (barre du haut) pour une page enfant : à placer dans `{% block crumb_trail %}`. Sans `href`, c'est un texte. #}
+{% macro crumb(label, href=none) %}{{ icon('chevron-right', 14) }}{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}{% endmacro %}
+
 {% macro help_icon(term, label, aria_label) %}<button type="button" class="info-icon" data-term="{{ term }}" data-term-label="{{ label }}" aria-label="{{ aria_label }}">?</button>{% endmacro %}
 
 {% macro metric(label, value, reliability, state='neutral') %}
@@ -55,7 +58,10 @@
 {# `collapse_after` : au-delà de N lignes, le reste est replié derrière une flèche (« ▾ 7 de plus »), jamais un grand
    tableau d'emblée. `more_label` / `less_label` portent la traduction : un macro importé ne voit pas `t()`. `{n}` est
    remplacé par le nombre de lignes repliées. `static/rows.js` gère le clic. #}
-{% macro data_table(headers, rows, empty_message='Aucune donnée.', row_classes=none, num_cols=none, footer=none, collapse_after=none, more_label='{n} de plus', less_label='Replier') %}
+{% macro data_table(headers, rows, empty_message=none, row_classes=none, num_cols=none, footer=none, collapse_after=none, more_label=none, less_label=none) %}
+{# `ui_t` : traduction dans la langue de la requête (global de l'application) ; absent d'un environnement Jinja nu, d'où les replis anglais. #}
+{% set more_label = more_label if more_label is not none else (ui_t('rows_more') if ui_t is defined else '{n} more') %}
+{% set less_label = less_label if less_label is not none else (ui_t('rows_less') if ui_t is defined else 'Collapse') %}
 {% if rows %}
 {% set nc = num_cols or [] %}
 {% set limit = collapse_after if (collapse_after and rows | length > collapse_after + 1) else none %}
@@ -64,7 +70,7 @@
 <thead><tr>{% for h in headers %}<th{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
 <tbody>
 {% for row in rows %}
-<tr class="{{ row_classes[loop.index0] if row_classes else '' }}"{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}>{% for cell in row %}<td{% if loop.index0 in nc %} class="num pk-mono"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
+<tr class="{{ row_classes[loop.index0] if row_classes else '' }}"{% if limit and loop.index0 >= limit %} data-extra hidden{% endif %}>{% for cell in row %}{# une date (AAAA-MM-JJ[ HH:MM[:SS]]) ne se coupe jamais en deux lignes #}{% set is_date = cell is string and cell | length in (10, 16, 19) and cell[4:5] == '-' and cell[:4].isdigit() and cell[7:8] == '-' %}<td{% if loop.index0 in nc %} class="num pk-mono{% if is_date %} nowrap{% endif %}"{% elif is_date %} class="nowrap"{% endif %}>{{ cell | safe }}</td>{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table>
@@ -76,7 +82,7 @@
 {% endif %}
 {% if footer %}<p class="table-footer">{{ footer | safe }}</p>{% endif %}
 {% else %}
-<p class="hint">{{ empty_message }}</p>
+<p class="hint">{{ empty_message if empty_message is not none else (ui_t('dt_empty') if ui_t is defined else 'No data.') }}</p>
 {% endif %}
 {% endmacro %}
 
@@ -127,7 +133,7 @@
 {% set vmax = values|max %}
 {% set vrange = (vmax - vmin) if (vmax - vmin) > 0 else 1 %}
 {% set step = width / (values|length - 1) %}
-<svg class="sparkline" width="{{ width }}" height="{{ height }}" viewBox="0 0 {{ width }} {{ height }}" preserveAspectRatio="none" role="img" aria-label="tendance">
+<svg class="sparkline" width="{{ width }}" height="{{ height }}" viewBox="0 0 {{ width }} {{ height }}" preserveAspectRatio="none" role="img" aria-label="{{ ui_t('sparkline_aria') if ui_t is defined else 'trend' }}">
 <polyline points="{% for v in values %}{{ (loop.index0 * step) | round(1) }},{{ (height - ((v - vmin) / vrange) * height) | round(1) }}{% if not loop.last %} {% endif %}{% endfor %}" fill="none" stroke="{{ color }}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
 </svg>
 {% else %}
@@ -176,7 +182,9 @@
 {# Bloc chargé après l'affichage de la page : `static/lazy.js` récupère le fragment HTML à `url` et le pose ici. Le cadre de
    la page (titre, onglets, chiffres d'en-tête) apparaît tout de suite ; seul le gros tableau attend. `lines` = nombre de barres
    d'attente. #}
-{% macro lazy_block(url, lines=6, label='Chargement…', retry='Réessayer') %}
+{% macro lazy_block(url, lines=6, label=none, retry=none) %}
+{% set label = label if label is not none else (ui_t('sb_loading') if ui_t is defined else 'Loading…') %}
+{% set retry = retry if retry is not none else (ui_t('lazy_retry') if ui_t is defined else 'Retry') %}
 <div class="lazy-block" data-lazy-url="{{ url }}" data-label-error="{{ label }}" data-label-retry="{{ retry }}" aria-busy="true" aria-live="polite">
   <div class="lazy-skeleton" role="status" aria-label="{{ label }}">
     {% for i in range(lines) %}<div class="skeleton-line" style="width: {{ [100, 86, 94, 72, 90, 80][i % 6] }}%; margin-bottom: 10px"></div>{% endfor %}

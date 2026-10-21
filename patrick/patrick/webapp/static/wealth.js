@@ -17,7 +17,6 @@
         var s = I18N[key] || fallback || key;
         return params ? s.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; }) : s;
     }
-    function token(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
     var flash = document.getElementById("wealth-flash");
     function say(text, kind) {
         if (!flash) return;
@@ -156,8 +155,10 @@
     });
 
     /* ---- CSV import: drop -> preview -> confirm ---- */
-    var KIND_FR = { deposit: "Versement", withdrawal: "Retrait", buy: "Achat", sell: "Vente", dividend: "Dividende",
-                    fee: "Frais", interest: "Intérêts / bonus", term_deposit: "Dépôt à terme" };
+    var LANG = document.documentElement.lang || "fr";
+    var KIND_KEYS = { deposit: "js_w_kind_deposit", withdrawal: "js_w_kind_withdrawal", buy: "js_w_kind_buy", sell: "js_w_kind_sell",
+                      dividend: "js_w_kind_dividend", fee: "js_w_kind_fee", interest: "js_w_kind_interest", term_deposit: "js_w_kind_term_deposit" };
+    function kindLabel(kind) { return KIND_KEYS[kind] ? tr(KIND_KEYS[kind], kind) : kind; }
     function hintList(items) {
         var ul = document.createElement("ul");
         ul.className = "hint";
@@ -209,7 +210,7 @@
         p.className = "hint";
         var skipped = data.rows.length - data.to_write;
         p.textContent = tr("wealth_import_preview", "{n} valid, {e} errors.", { n: data.to_write, e: data.errors.length })
-            + (skipped ? " " + skipped + " ligne(s) écartée(s) : virements internes, doublons déjà enregistrés ou lignes ignorées." : "");
+            + (skipped ? " " + tr("js_w_skipped", "{n} row(s) skipped.", { n: skipped }) : "");
         box.appendChild(p);
         var controls = mappingControls(data, accountId, mapping, async function () {
             try {
@@ -222,26 +223,27 @@
         });
         if (controls) box.appendChild(controls);
         if (data.errors.length) {
-            box.appendChild(hintList(data.errors.map(function (err) { return "ligne " + err.line + " : " + err.error; })));
+            box.appendChild(hintList(data.errors.map(function (err) { return tr("js_w_line", "row {n}: {msg}", { n: err.line, msg: err.error }); })));
         }
         if ((data.warnings || []).length) {
-            box.appendChild(hintList(data.warnings.map(function (w) { return "ligne " + w.line + " : " + w.warning; })));
+            box.appendChild(hintList(data.warnings.map(function (w) { return tr("js_w_line", "row {n}: {msg}", { n: w.line, msg: w.warning }); })));
         }
         if (data.rows.length) {
             var wrap = document.createElement("div");
             wrap.className = "table-scroll";
             var table = document.createElement("table");
             table.className = "data-table";
-            table.innerHTML = "<thead><tr><th>Date</th><th>Type</th><th>Actif</th><th class='num'>Qté</th><th class='num'>Montant</th>"
-                + (multi ? "<th>Compte</th>" : "") + "<th>Statut</th></tr></thead>";
+            table.innerHTML = "<thead><tr><th>" + tr("js_w_col_date", "Date") + "</th><th>" + tr("js_w_col_type", "Type") + "</th><th>" + tr("js_w_col_asset", "Asset")
+                + "</th><th class='num'>" + tr("js_w_col_qty", "Qty") + "</th><th class='num'>" + tr("js_w_col_amount", "Amount") + "</th>"
+                + (multi ? "<th>" + tr("js_w_col_account", "Account") + "</th>" : "") + "<th>" + tr("js_w_col_status", "Status") + "</th></tr></thead>";
             var tbody = document.createElement("tbody");
             data.rows.slice(0, 200).forEach(function (r) {
                 var tr_ = document.createElement("tr");
-                var cells = [r.ts, KIND_FR[r.kind] || r.kind, r.symbol || "",
-                             r.quantity ? r.quantity.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "",
-                             (r.amount || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })];
+                var cells = [r.ts, kindLabel(r.kind), r.symbol || "",
+                             r.quantity ? r.quantity.toLocaleString(LANG, { maximumFractionDigits: 6 }) : "",
+                             (r.amount || 0).toLocaleString(LANG, { minimumFractionDigits: 2, maximumFractionDigits: 2 })];
                 if (multi) cells.push((r.source || "") + " → " + (r.target ? names[r.target] || r.target : "—"));
-                cells.push(r.status || "à enregistrer");
+                cells.push(r.status || tr("js_w_to_save", "to save"));
                 cells.forEach(function (v, i) {
                     var td = document.createElement("td");
                     td.textContent = v;
@@ -319,93 +321,31 @@
         });
     });
 
-    /* ---- charts (HiDPI canvas, colours from the CSS tokens at draw time) ---- */
-    var MONO = token("--mono") || "monospace";
-    function drawLines(canvas, series, fmtY) {
-        var ratio = window.devicePixelRatio || 1;
-        var w = Math.max(280, Math.round(canvas.getBoundingClientRect().width || 600));
-        var h = 280;
-        canvas.style.height = h + "px";
-        canvas.width = Math.round(w * ratio);
-        canvas.height = Math.round(h * ratio);
-        var ctx = canvas.getContext("2d");
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, w, h);
-        var all = [], ref = null;
-        series.forEach(function (s) {
-            s.pts.forEach(function (p) { all.push(p.v); });
-            if (!ref && s.pts.length > 1) ref = s.pts;
-        });
-        if (all.length < 2 || !ref) return;
-        var min = Math.min.apply(null, all), max = Math.max.apply(null, all);
-        if (min === max) { min -= 1; max += 1; }
-        var t0 = new Date(ref[0].t).getTime(), t1 = new Date(ref[ref.length - 1].t).getTime();
-        if (t1 === t0) t1 = t0 + 86400000;
-        var padL = 72, padR = 14, padT = 12, padB = 26;
-        function x(t) { return padL + (new Date(t).getTime() - t0) / (t1 - t0) * (w - padL - padR); }
-        function y(v) { return padT + (1 - (v - min) / (max - min)) * (h - padT - padB); }
-        ctx.font = "11px " + MONO;
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        for (var i = 0; i <= 4; i++) {
-            var v = min + (max - min) * i / 4, yy = Math.round(y(v)) + 0.5;
-            ctx.strokeStyle = token("--chart-grid");
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
-            ctx.fillStyle = token("--ink-text-2");
-            ctx.fillText(fmtY(v), padL - 8, yy);
-        }
-        ctx.textBaseline = "alphabetic";
-        ctx.textAlign = "left";
-        ctx.fillText(ref[0].t, padL, h - 7);
-        ctx.textAlign = "right";
-        ctx.fillText(ref[ref.length - 1].t, w - padR, h - 7);
-        series.forEach(function (s) {
-            if (s.pts.length < 2) return;
-            ctx.beginPath();
-            ctx.strokeStyle = token(s.color);
-            ctx.lineWidth = s.width || 1.5;
-            ctx.setLineDash(s.dash || []);
-            s.pts.forEach(function (p, k) { if (k === 0) ctx.moveTo(x(p.t), y(p.v)); else ctx.lineTo(x(p.t), y(p.v)); });
-            ctx.stroke();
-            ctx.setLineDash([]);
-        });
-    }
-    var redraws = [];
-    window.addEventListener("patrick:themechange", function () { redraws.forEach(function (f) { f(); }); });
-    var resizeTimer = null;
-    window.addEventListener("resize", function () {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(function () { redraws.forEach(function (f) { f(); }); }, 150);
-    });
-    function eur(v) { return Math.round(v).toLocaleString("fr-FR") + " €"; }
+    /* ---- graphiques : moteur commun (chart_kit.js) — zoom, périodes, infobulle, légende cliquable, thème ---- */
+    var EUR = new Intl.NumberFormat(LANG, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    function eur(v) { return EUR.format(v); }
     function pct(v, signed) {
         if (v === null || v === undefined || Number.isNaN(v)) return "—";
-        var s = (v * 100).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+        var s = (v * 100).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + (LANG === "fr" ? " %" : "%");
         return (signed && v > 0 ? "+" : "") + s;
     }
 
     /* ---- account chart ---- */
-    var canvas = document.getElementById("wealth-chart");
+    var host = document.getElementById("wealth-chart");
     var dataEl = document.getElementById("wealth-chart-data");
-    if (canvas && dataEl) {
+    if (host && dataEl) {
         var chart = null;
         try { chart = JSON.parse(dataEl.textContent); } catch (e) { chart = null; }
         if (chart) {
-            var drawAccount = function () {
-                drawLines(canvas, [
-                    { pts: chart.net_invested || [], color: "--text-3", width: 1.25, dash: [4, 4] },
-                    { pts: chart.benchmark_replica || [], color: "--warn", width: 1.25 },
-                    { pts: chart.value || [], color: "--brand", width: 2 },
-                ], eur);
-                var v = chart.value || [];
-                if (v.length) {
-                    canvas.setAttribute("aria-label", "Valeur du compte du " + v[0].t + " au " + v[v.length - 1].t +
-                        " : de " + eur(v[0].v) + " à " + eur(v[v.length - 1].v) + ".");
-                }
+            var P = window.PatrickPlot, labels = chart.labels || {};
+            var line = function (pts, name, color, width, dash) {
+                return { name: name, color: color, width: width, dash: dash,
+                         xs: (pts || []).map(function (p) { return P.parseDate(p.t); }), values: (pts || []).map(function (p) { return p.v; }) };
             };
-            drawAccount();
-            redraws.push(drawAccount);
+            var series = [line(chart.value, labels.value, "--brand", 2)];
+            if ((chart.net_invested || []).length > 1) series.push(line(chart.net_invested, labels.net, "--text-3", 1.25, [4, 4]));
+            if ((chart.benchmark_replica || []).length > 1) series.push(line(chart.benchmark_replica, labels.bench, "--warn", 1.25));
+            P.create(host, { type: "line", xKind: "time", series: series, yFmt: eur, ranges: true, legend: true, title: host.getAttribute("aria-label") || "", height: 280 });
         }
     }
 })();

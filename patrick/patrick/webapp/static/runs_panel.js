@@ -36,7 +36,7 @@
         fetch("/runs/" + encodeURIComponent(id) + "/panel")
             .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
             .then(function (html) { cache[id] = html; render(); })
-            .catch(function () { cache[id] = '<p class="hint">Résumé indisponible.</p>'; render(); });
+            .catch(function () { cache[id] = '<p class="hint">' + ((window.I18N || {}).js_summary_unavailable || "Summary unavailable.") + '</p>'; render(); });
     }
 
     function toggle(id) {

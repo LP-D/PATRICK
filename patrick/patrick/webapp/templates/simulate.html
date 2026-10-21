@@ -178,6 +178,6 @@
 <script id="futures-data" type="application/json">{{ futures | tojson }}</script>
 <script id="cfd-classes" type="application/json">{{ cfd_names | tojson }}</script>
 <script id="ticker-bank" type="application/json">{{ ticker_bank | tojson }}</script>
-<script src="/static/simulate.js"></script>
-<script src="/static/ml_rule.js" defer></script>
+<script src="{{ asset('simulate.js') }}"></script>
+<script src="{{ asset('ml_rule.js') }}" defer></script>
 {% endblock %}

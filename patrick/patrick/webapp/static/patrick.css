@@ -418,8 +418,11 @@ h1, h2, h3, h4 { letter-spacing: -0.011em; }
   color: var(--text-3);
   white-space: nowrap;
 }
-.topbar-crumbs .crumb-current { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.topbar-crumbs .icon { color: var(--text-3); }
+.topbar-crumbs .crumb-current, .topbar-crumbs > :last-child { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs a { color: var(--text-2); text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs a:hover { color: var(--text); text-decoration: underline; }
+.topbar-crumbs > a:last-child { pointer-events: none; }      /* la page courante n'est pas un lien */
+.topbar-crumbs .icon { flex: none; color: var(--text-3); }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
 .icon-btn {
@@ -1587,17 +1590,6 @@ legend {
 .range-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 
 .chart-wrap { position: relative; }
-#preview-canvas, .asset-chart, #drift-canvas,
-#sim-equity-canvas, #sim-drawdown-canvas, #sim-dist-canvas, .chart-canvas {
-  display: block;
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--chart-bg);
-}
-#preview-canvas { height: 190px; }
-.asset-chart { height: 150px; }
-#drift-canvas { height: 260px; }
 .chart-tooltip {
   position: absolute;
   z-index: 5;
@@ -1612,6 +1604,73 @@ legend {
   white-space: nowrap;
   pointer-events: none;
 }
+
+.nowrap { white-space: nowrap; }
+
+/* Moteur de graphiques commun (chart_kit.js) : deux toiles superposées (tracé, puis repère/sélection), barre de périodes, outils de zoom,
+   légende. Les outils n'apparaissent qu'au survol / au focus (toujours sur écran tactile, et dès qu'un zoom est actif). */
+.pp { position: relative; max-width: 100%; }
+.pp-ranges { margin-bottom: 8px; }
+.pp-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--chart-bg);
+}
+.pp-stage canvas { position: absolute; left: 0; top: 0; display: block; }
+.pp-over { cursor: crosshair; touch-action: pan-y; }
+.pp-over:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius); }
+.pp-stage[data-zoomed="true"] .pp-over { cursor: crosshair; }
+.pp-tip { top: 0; left: 0; display: grid; gap: 2px; }
+.pp-tip-head { font-weight: 600; }
+.pp-tip-row { display: flex; align-items: center; gap: 6px; }
+.pp-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.pp-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms var(--ease-out);
+}
+.pp-stage:hover .pp-tools, .pp-stage:focus-within .pp-tools, .pp-stage[data-zoomed="true"] .pp-tools { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .pp-tools { opacity: 1; pointer-events: auto; } }
+.pp-hint { padding: 0 6px; color: var(--text-3); font-size: 11px; white-space: nowrap; }
+.pp-stage[data-zoomed="true"] .pp-hint { display: none; }
+.pp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.pp-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.pp-btn:disabled { opacity: 0.35; cursor: default; }
+.pp-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.pp-compact .pp-hint { display: none; }
+.pp-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.pp-legend[hidden] { display: none; }
+.pp-legend-item { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pp-legend-item:hover { background: var(--surface-2); }
+.pp-legend-item[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
+.pp-legend-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.exp-chart-wrap.pp { max-width: 760px; }
 
 .target-news { margin-bottom: var(--space-md); }
 .news-list { margin: 0; padding: 0; list-style: none; }
@@ -1835,9 +1894,6 @@ pre { max-width: 100%; overflow-x: auto; }
 .shap-caption { font-weight: 550; color: var(--text); }
 .shap-units-hint { margin-top: 8px; }
 
-.drift-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12px; color: var(--text-2); }
-.drift-legend-item { display: inline-flex; align-items: center; gap: 6px; }
-.drift-legend-swatch { width: 10px; height: 10px; flex: none; border-radius: 3px; }
 
 /* ============ /simulate ============ */
 

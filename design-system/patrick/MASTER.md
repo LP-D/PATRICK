@@ -77,7 +77,13 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 
 ## Graphiques
 
-Canvas sans bibliothèque. Toute toile : (1) lit ses couleurs dans les jetons au moment du tracé, (2) se redessine sur `patrick:themechange` (émis par `shell.js`) et au redimensionnement, (3) dimensionne son buffer sur sa boîte CSS × `devicePixelRatio` (texte net, jamais étiré), (4) porte un `aria-label` décrivant les vraies séries.
+**Un seul moteur : `webapp/static/chart_kit.js` (`PatrickPlot.create(hôte, options)`)**, canvas sans bibliothèque. Aucune page ne dessine plus sa propre toile : aperçu de cible, statistiques par actif, dérive des phases, fonds, patrimoine, Exploration et RL (via `PatrickCharts.lineChart/barChart` de `charts.js`, enveloppes minces au même contrat qu'avant) passent tous par lui.
+
+- **Interactions** (souris, clavier, tactile) : glisser = sélection puis zoom ; Maj + glisser, un doigt (tactile) ou ← → = déplacer la fenêtre zoomée ; Ctrl/⌘ + molette ou pincement = zoom centré sur le curseur (la molette seule défile la page) ; double-clic, Échap, Origine ou « Tout » = vue initiale ; boutons zoom +/− / réinitialiser au survol (toujours visibles au tactile et quand un zoom est actif) ; périodes 1M…Tout sur les séries temporelles.
+- **Échelles** : l'axe Y est recalculé sur les points *visibles* à chaque zoom (graduations « rondes », décimales cohérentes, marge calculée sur la largeur réelle des étiquettes) ; les repères (`hlines`, `band`) ne comptent qu'à la vue initiale ou s'ils sont proches des données ; l'axe du temps choisit jours / semaines / mois / années selon la fenêtre.
+- **Lisibilité** : infobulle (date + valeur de chaque série, en nœuds texte), légende cliquable (masquer une série recalcule l'échelle), trous honnêtes (une valeur absente coupe le trait), décimation min/max par colonne de pixels au-delà de 2 points par pixel.
+- **Contrat de toile** inchangé : couleurs lues dans les jetons au tracé, redessin sur `patrick:themechange` et au redimensionnement (`ResizeObserver`), buffer = boîte CSS × `devicePixelRatio`, `aria-label` régénéré avec les vraies bornes de la fenêtre visible, libellés via `window.I18N` (clés `chart_*`).
+- **Nouveau graphique** : créer un hôte `<div>` (jamais une `<canvas>`) et appeler `PatrickPlot.create`. Fonctions pures testées sous Node : `tests/js/chart_kit.test.js` (lancé par `tests/test_chart_kit_js.py`).
 
 ---
 
@@ -95,22 +101,23 @@ Canvas sans bibliothèque. Toute toile : (1) lit ses couleurs dans les jetons au
 | `NavEntry` | `slug` (unique), `label` (repli FR), `url`, `category`, `order`, `label_key` (i18n, optionnel), `child_routes` | Un lien de nav. `child_routes` = pages paramétrées rattachées à l'entrée mais non listées (ex. `/runs/{run_id}/detail`, `/targets/{ticker}`). |
 | `NON_PAGE_PREFIXES` / `NON_PAGE_ROUTES` | — | Routes GET qui ne sont pas des pages (`/api/*`, `/static`, `/set-lang/*`, statut/résultats/téléchargements de run). |
 
-**Taxonomie — 4 catégories fixes, dans cet ordre :**
+**Taxonomie — 5 catégories fixes, dans cet ordre :**
 
 | Clé | En-tête | Règle d'appartenance |
 |-----|---------|----------------------|
-| `pilotage` | PILOTAGE | Piloter la station : vue d'ensemble, lancement et suivi des runs, sorties modèles transverses, santé des données, journal de décision. |
+| `pilotage` | PILOTAGE | Piloter la station : vue d'ensemble, suivi des runs, prédictions, analyses transverses, santé des données. |
+| `modeles` | MODÈLES | Cadrer et lancer un entraînement, une page par famille : machine learning, deep learning, reinforcement learning. |
 | `classes_actifs` | CLASSES D'ACTIFS | Ce que PATRICK modélise, présenté par famille de sous-jacents (univers, matières premières, macro, actions…), y compris les vues cross-actifs sur l'univers PATRICK (`/portfolio` : agrégation de signaux par classe + allocation HRP). |
 | `simulation` | SIMULATION | Ouvrir des positions fictives (ticket d'ordres) et suivre les stratégies du fonds. |
-| `patrimoine` | PATRIMOINE | Gestion patrimoniale réelle ou fictive (comptes, mouvements…). **Vide à ce jour** — non pré-peuplée, donc non rendue, tant que ces pages n'existent pas. |
+| `patrimoine` | PATRIMOINE | Gestion patrimoniale réelle ou fictive : comptes, mouvements. |
 
-Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
+Une page relève d'**une seule** catégorie (5 : `pilotage`, `modeles`, `classes_actifs`, `simulation`, `patrimoine`). En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
 
 **Rendu (v3) :**
 - En-tête de section `.sidebar-nav-heading` : Inter 10.5px, 600, uppercase, `letter-spacing: 0.08em`, `--text-3`.
 - Chaque lien porte l'icône de son slug (`webapp/icons.py::NAV_ICONS`, défaut `layers`) puis son libellé dans `.nav-label` ; `title` = libellé (info-bulle du rail replié).
 - Liens : état actif `aria-current="page"` (fond `--brand-soft`, icône `--brand`, filet gauche `--brand`).
-- État actif : `/` en égalité stricte, toute autre entrée par préfixe de segment (`/runs` s'allume sur `/runs/{id}/detail`). Règle historique de `base_v2.html` conservée.
+- État actif : `/` en égalité stricte, toute autre entrée par préfixe de segment (`/runs` s'allume sur `/runs/{id}/detail`) ; une page enfant déclarée dans `child_routes` allume aussi son entrée (`/targets/^VIX` → Univers, `/compare-runs` → Historique).
 - Rail replié (bouton en pied de sidebar, persisté `localStorage['patrick-sidebar']`) : icônes seules, en-têtes réduits à un filet.
 - < 1024px : tiroir hors-canevas ouvert par le bouton menu de la topbar, fermé par le voile ou Échap.
 
@@ -120,17 +127,27 @@ Une page relève d'**une seule** catégorie. En cas de doute, la catégorie est 
 3. Ajouter la clé i18n `nav_<slug>` (fr + en) dans `webapp/i18n.py` si le libellé doit être traduit.
 4. `pytest tests/test_nav_registry.py` doit rester vert : une route GET absente du registre et non déclarée non-page fait échouer `test_no_orphan_page_route`.
 
-❌ **Interdit :** tout lien de navigation latérale écrit en dur dans un template, toute seconde liste de nav, toute logique d'état actif hors `nav_registry.is_active`. Les fils d'Ariane (`.breadcrumb`) et liens contextuels dans le contenu des pages ne sont pas de la nav latérale et restent hors registre.
+❌ **Interdit :** tout lien de navigation latérale écrit en dur dans un template, toute seconde liste de nav, toute logique d'état actif hors `nav_registry.is_active`. Les liens contextuels dans le contenu des pages ne sont pas de la nav latérale et restent hors registre.
+
+**Fil de localisation (barre du haut) — seul fil d'Ariane de l'application :** `catégorie › entrée du registre`, déduit du chemin. Une page *enfant* (détail d'un run, fiche d'une cible, compte, comparaison) y ajoute ses maillons avec `{% block crumb_trail %}{{ crumb(libellé, lien) }}{% endblock %}` (macro `crumb` de `_components.html`) ; le dernier maillon est la page courante (non cliquable). ❌ Plus de `<nav class="breadcrumb">` dans le corps des pages : il doublait la barre du haut (et nommait encore « Poste » la synthèse).
 
 ---
 
 
 ---
+
+## Textes et traductions
+
+- **Aucun texte visible en dur** : gabarits `t('clé')` (FR + EN dans `webapp/i18n*.py`) ; scripts `window.I18N` (clés à lister dans `i18n.js_strings` ou dans le `*_JS_KEYS` du module) ; macros importées sans contexte (`_components.html`) `ui_t('clé')` (langue de la requête, posée par `LangMiddleware`).
+- **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n_server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/test_i18n_server.py`.
+- **Vocabulaire commun** (un terme = une traduction) : *Hausse forte / faible, Baisse forte / faible* (jamais « Forte baisse »), *Drawdown max*, *Tuning Optuna*, *Derniers runs*, *Stacking*, *Fonds / Fund*, *Ticket d'ordres / Order ticket*. Nombres, dates et devises suivent la langue de la page (`Intl`, pas de `fr-FR` en dur).
 
 ## Anti-Patterns (Do NOT Use)
 
 - ❌ Emojis comme icônes — icônes Lucide via `icon()` uniquement (un seul jeu, trait 2px)
 - ❌ Couleur littérale dans un gabarit ou un script (hors `patrick.css` jetons)
+- ❌ Une `<canvas>` dessinée à la main dans une page : tout graphique passe par `PatrickPlot` (`chart_kit.js`)
+- ❌ Un texte français en dur dans un gabarit, un script ou un libellé d'erreur affiché tel quel
 - ❌ Vert/rouge décoratifs (réservés au sens gain/perte)
 - ❌ Translation/zoom au survol de panneaux statiques (décale la mise en page)
 - ❌ Changement d'état instantané (transitions 100–200ms) ; animation ignorant `prefers-reduced-motion`

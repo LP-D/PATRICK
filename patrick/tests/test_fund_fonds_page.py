@@ -40,7 +40,7 @@ def test_fonds_page_lists_strategies_and_totals(client):
     html = fonds_html(client, f"/fonds?strategy={a}")
     assert html.count('class="fund-row') == 2 and f'data-strategy-id="{a}"' in html
     assert "Valeur du fonds" in html and "Capital total" in html and "150 000,00 €" in html
-    assert 'id="fund-panel"' in html and '<script src="/static/fonds.js"></script>' in html
+    assert 'id="fund-panel"' in html and '<script src="/static/fonds.js?v=' in html
     assert fs.json_script(html, "fund-selected") == a and 'class="fund-row is-selected"' in html
     assert fs.json_script(fonds_html(client, "/fonds"), "fund-selected") is None
 

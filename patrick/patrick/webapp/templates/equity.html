@@ -14,7 +14,7 @@
   <strong>{{ a.label }}</strong> <span class="hint pk-mono">{{ a.symbol }}</span>
   ({{ a.currency }}, {{ a.exchange }}, {{ t('eq_first_listed') }} : {{ a.first_listed }})
   {{ status_badge(t('dq_status_ok') if a.sufficient else t('dq_status_short'), 'ok' if a.sufficient else 'warning') }}
-  <br><span class="hint">{{ a.reason }}</span>
+  <br><span class="hint">{{ t.tx(a.reason) }}</span>
 </p>
 {% endfor %}
 </div>
@@ -25,7 +25,7 @@
 </h3>
 <ul>
 {% for family, reason in exclusions.items() %}
-<li><strong>{{ family }}</strong> — {{ reason }}</li>
+<li><strong>{{ family }}</strong> — {{ t.tx(reason) }}</li>
 {% endfor %}
 </ul>
 </div>

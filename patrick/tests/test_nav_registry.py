@@ -212,14 +212,16 @@ def test_sidebar_active_state_follows_current_route(path, expected_current):
 
 
 def test_active_state_rule_matches_legacy_prefix_behaviour():
-    """Regle historique de base_v2.html, conservee a l'identique : `/` exact,
-    les autres par prefixe (donc /runs/{id}/detail allume Historique,
-    /targets/{ticker} n'allume rien)."""
+    """Regle historique de base_v2.html : `/` exact, les autres par prefixe (donc /runs/{id}/detail allume Historique) ; depuis l'audit
+    d'interface, une page enfant declaree dans `child_routes` allume aussi son entree (/targets/{ticker} -> Univers)."""
     by_slug = {e.slug: e for e in nav_registry.NAV_ENTRIES}
     assert nav_registry.is_active(by_slug["synthese"], "/")
     assert not nav_registry.is_active(by_slug["synthese"], "/runs")
     assert nav_registry.is_active(by_slug["runs"], "/runs/abc/detail")
-    assert not any(nav_registry.is_active(e, "/targets/^VIX") for e in nav_registry.NAV_ENTRIES)
+    lit = [e.slug for e in nav_registry.NAV_ENTRIES if nav_registry.is_active(e, "/targets/^VIX")]
+    assert lit == ["universe"]
+    assert [e.slug for e in nav_registry.NAV_ENTRIES if nav_registry.is_active(e, "/compare-runs")] == ["runs"]
+    assert not any(nav_registry.is_active(e, "/targets") for e in nav_registry.NAV_ENTRIES)
 
 
 def test_base_template_has_no_hardcoded_nav_link():

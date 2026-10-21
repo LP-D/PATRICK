@@ -2,7 +2,7 @@
    lecture, puis la procédure réellement appliquée. Les clés viennent de `webapp/stats_help.py`. #}
 <div class="sh-wrap">
 {% if run %}
-<p class="sh-ref"><b>{{ t('sb_ref') }} :</b> {{ run.name }} <span class="hint">· {{ run.target }} · {{ run.horizon }}j</span></p>
+<p class="sh-ref"><b>{{ t('sb_ref') }} :</b> {{ run.name }} <span class="hint">· {{ run.target }} · {{ run.horizon }}{{ t('day_suffix') }}</span></p>
 {% else %}
 <p class="hint">{{ t('sb_none') }}</p>
 {% endif %}

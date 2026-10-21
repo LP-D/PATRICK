@@ -13,9 +13,7 @@
     var flash = document.getElementById("fund-flash");
     var overview = document.getElementById("fund-overview");
     var current = null;
-    var MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono").trim() || "monospace";
 
-    function token(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
     function say(text, kind) {
         if (!flash) return;
         flash.textContent = text;
@@ -50,63 +48,19 @@
     }
     function reload(id) { window.location.href = "/fonds" + (id ? "?strategy=" + encodeURIComponent(id) : ""); }
 
-    /* ---- graphique : valeur contre capital ---- */
+    /* ---- graphique : valeur contre capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
     function drawChart() {
-        var canvas = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
-        if (!canvas || !dataEl) return;
-        var data = JSON.parse(dataEl.textContent), pts = data.series || [];
-        var ratio = window.devicePixelRatio || 1;
-        var w = Math.max(280, Math.round(canvas.getBoundingClientRect().width || 600)), h = 260;
-        canvas.style.height = h + "px";
-        canvas.width = Math.round(w * ratio);
-        canvas.height = Math.round(h * ratio);
-        var ctx = canvas.getContext("2d");
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.clearRect(0, 0, w, h);
-        if (pts.length < 2) return;
-        var vals = pts.map(function (p) { return p.nav; }).concat([data.capital]);
-        var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
-        if (min === max) { min -= 1; max += 1; }
-        var t0 = new Date(pts[0].t).getTime(), t1 = new Date(pts[pts.length - 1].t).getTime();
-        if (t1 === t0) t1 = t0 + 86400000;
-        var padL = 78, padR = 14, padT = 12, padB = 26;
-        function x(t) { return padL + (new Date(t).getTime() - t0) / (t1 - t0) * (w - padL - padR); }
-        function y(v) { return padT + (1 - (v - min) / (max - min)) * (h - padT - padB); }
-        ctx.font = "11px " + MONO;
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        for (var i = 0; i <= 4; i++) {
-            var v = min + (max - min) * i / 4, yy = Math.round(y(v)) + 0.5;
-            ctx.strokeStyle = token("--chart-grid");
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
-            ctx.fillStyle = token("--ink-text-2");
-            ctx.fillText(Math.round(v).toLocaleString("fr-FR") + " €", padL - 8, yy);
-        }
-        ctx.textBaseline = "alphabetic";
-        ctx.textAlign = "left";
-        ctx.fillText(pts[0].t, padL, h - 7);
-        ctx.textAlign = "right";
-        ctx.fillText(pts[pts.length - 1].t, w - padR, h - 7);
-        ctx.strokeStyle = token("--text-3");
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath(); ctx.moveTo(padL, y(data.capital)); ctx.lineTo(w - padR, y(data.capital)); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.strokeStyle = token("--brand");
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        pts.forEach(function (p, k) { if (k === 0) ctx.moveTo(x(p.t), y(p.nav)); else ctx.lineTo(x(p.t), y(p.nav)); });
-        ctx.stroke();
-        canvas.setAttribute("aria-label", "Valeur de " + Math.round(pts[0].nav).toLocaleString("fr-FR") + " € le " + pts[0].t +
-            " à " + Math.round(pts[pts.length - 1].nav).toLocaleString("fr-FR") + " € le " + pts[pts.length - 1].t);
+        var host = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
+        if (!host || !dataEl) return;
+        var data = JSON.parse(dataEl.textContent), pts = data.series || [], labels = data.labels || {}, P = window.PatrickPlot;
+        var eur = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+        P.create(host, {
+            type: "line", xKind: "time", xs: pts.map(function (p) { return P.parseDate(p.t); }),
+            series: [{ name: labels.nav || "", values: pts.map(function (p) { return p.nav; }), color: "--brand", width: 2 }],
+            hlines: [{ y: data.capital, color: "--text-3", dash: [5, 4], label: labels.capital }],
+            yFmt: function (v) { return eur.format(v); }, ranges: true, title: host.getAttribute("aria-label") || "", height: 260,
+        });
     }
-    window.addEventListener("patrick:themechange", drawChart);
-    var resizeTimer = null;
-    window.addEventListener("resize", function () {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(drawChart, 150);
-    });
 
     /* ---- panneau ---- */
     function rows() { return Array.prototype.slice.call(document.querySelectorAll(".fund-row")); }

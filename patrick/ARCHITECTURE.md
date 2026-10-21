@@ -149,8 +149,12 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   CSS = `webapp/static/patrick.css`, comportements du shell =
   `webapp/static/shell.js`, icônes Lucide inline = `webapp/icons.py`
   (globals Jinja `icon()` / `nav_icon()`).
-- Les graphiques canvas lisent leurs couleurs dans les jetons CSS au moment
-  du tracé et se redessinent sur l'événement `patrick:themechange`.
+- Les graphiques passent tous par `static/chart_kit.js` (`PatrickPlot`, canvas HiDPI, zoom / déplacement / échelle recalculée /
+  infobulle / légende ; `charts.js` en est l'enveloppe pour Exploration et RL). Ils lisent leurs couleurs dans les jetons CSS au moment
+  du tracé et se redessinent sur l'événement `patrick:themechange`. Détail et contrat : `design-system/patrick/MASTER.md`, section Graphiques.
+- Traductions : `i18n*.py` (clés FR/EN), `i18n_server.py` (messages du domaine traduits à l'affichage, filtre `tx`), `ui_t()` pour les
+  macros, `LangMiddleware` pour la langue de la requête.
+- Fil de localisation : barre du haut seulement (`crumb_trail` pour les pages enfants) ; pas de fil d'Ariane dans le corps des pages.
 - Macros partagées `webapp/templates/_components.html` :
   `status_badge(label, state)` (états `ok`/`warning`/`neutral`/`disabled`),
   `data_table(...)`, `empty_state(...)`, `metric(...)`.

@@ -35,7 +35,7 @@
 {% for r in overview.prediction_rows if r.prediction %}
 {% set p = r.prediction %}
 {% set _ = pred_rows.append([
-    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', p.horizon | hlabel, p.direction ~ " (" ~ p.amplitude ~ ")",
+    '<a href="/targets/' ~ r.target ~ '">' ~ r.label ~ '</a>', p.horizon | hlabel, t(({'UP FORT': 'cb_c3', 'UP FAIBLE': 'cb_c2', 'DOWN FAIBLE': 'cb_c1', 'DOWN FORT': 'cb_c0'}).get(p.direction ~ ' ' ~ p.amplitude, 'pb_direction')) if (p.direction ~ ' ' ~ p.amplitude) in ('UP FORT', 'UP FAIBLE', 'DOWN FAIBLE', 'DOWN FORT') else p.direction,
     ("%.2f" | format(p.confidence)) if p.confidence is not none else '<span class="na">—</span>',
     '<a href="/runs/' ~ p.run_id ~ '">' ~ p.ts ~ '</a>', p.split,
 ]) %}

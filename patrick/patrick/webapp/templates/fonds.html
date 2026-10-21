@@ -53,5 +53,5 @@
 {% endif %}
 
 <script id="fund-selected" type="application/json">{{ selected_id | tojson }}</script>
-<script src="/static/fonds.js"></script>
+<script src="{{ asset('fonds.js') }}"></script>
 {% endblock %}

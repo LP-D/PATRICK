@@ -100,7 +100,8 @@ def _hardcoded_french(source: str) -> int:
         expr = re.sub(r"\b_?t\(\s*(['\"])[^'\"]*\1[^)]*\)", "", m.group(0))
         for a, b in re.findall(r"\"([^\"]{4,})\"|'([^']{4,})'", expr):
             lit = a or b
-            if _FR.search(lit) and not lit.startswith(("/", "#")) and not re.fullmatch(r"[\w\-./ ]+", lit):
+            # `\w` couvrait les lettres accentuées : « 'Fraîcheur' » passait pour un identifiant. Seuls les identifiants ASCII sont exemptés.
+            if _FR.search(lit) and not lit.startswith(("/", "#")) and not re.fullmatch(r"[A-Za-z0-9_\-./ ]+", lit):
                 count += 1
     # attributs lus à l'écran ou par un lecteur d'écran (info-bulles, libellés d'accessibilité, confirmations)
     for value in re.findall(r'(?:aria-label|title|placeholder|data-tip|data-confirm|alt)="([^"]*)"', text):

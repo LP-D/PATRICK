@@ -2,22 +2,12 @@
     "use strict";
 
     // feature/ticker-stats-panel: fills the per-asset skeleton cards on
-    // /commodities and /macro (`_components.html::asset_panel`). Same
-    // client-fetch-then-render split as `market.js`'s preview panel, same
-    // canvas technique (native 2D context, CSS custom properties read via
-    // getComputedStyle -- no charting library, see that file's own comment)
-    // -- deliberately NOT reusing `market.js::drawChart` directly since it
-    // is wired to a single global `#preview-canvas`/tooltip pair, while
-    // this page draws one chart per asset (potentially dozens); the
-    // drawing logic below is the same shape, trimmed of the single-canvas
-    // globals and the hover tooltip.
+    // /commodities and /macro (`_components.html::asset_panel`). Même découpage
+    // « récupérer côté client puis tracer » que l'aperçu de `market.js` ; le
+    // tracé passe par le moteur commun (chart_kit.js : zoom, infobulle, thème).
 
     var I18N = window.I18N || {};
     function tr(key, fallback) { return I18N[key] || fallback || key; }
-    function token(name) {
-        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
-    var MONO = token("--mono") || "monospace";
     function fmtStr(str, params) {
         return str.replace(/\{(\w+)\}/g, function (m, k) { return params[k] !== undefined ? params[k] : m; });
     }
@@ -35,57 +25,15 @@
         return (v > 0 ? "+" : "") + fmtNum(v, digits);
     }
 
-    // Design system v3: redraw every panel with the new palette on theme change.
-    window.addEventListener("patrick:themechange", function () {
-        document.querySelectorAll(".asset-chart").forEach(function (c) { if (c._closes) drawChart(c, c._closes); });
-    });
-
-    function drawChart(canvas, closes) {
-        if (!canvas) return;
-        var ctx = canvas.getContext("2d");
-        var w = canvas.width, h = canvas.height, pad = 30;
-        ctx.clearRect(0, 0, w, h);
-        closes = closes || [];
-        if (closes.length < 2) {
-            ctx.fillStyle = token("--ink-text-2");
-            ctx.font = "12px " + MONO;
-            ctx.fillText(tr("preview_no_data", "No data for this period."), pad, h / 2);
-            return;
-        }
-        var min = Math.min.apply(null, closes);
-        var max = Math.max.apply(null, closes);
-        if (min === max) { min -= 1; max += 1; }
-        var xStep = (w - 2 * pad) / (closes.length - 1);
-        var accent = token("--accent-ink");
-        var muted = token("--ink-text-2");
-        var rule = token("--ink-2");
-
-        function xAt(i) { return pad + i * xStep; }
-        function yAt(v) { return h - pad + ((v - min) / (max - min)) * -(h - 2 * pad); }
-
-        ctx.strokeStyle = rule;
-        ctx.lineWidth = 1;
-        for (var gi = 0; gi <= 3; gi++) {
-            var gy = Math.round(pad + (gi / 3) * (h - 2 * pad)) + 0.5;
-            ctx.beginPath();
-            ctx.moveTo(pad, gy);
-            ctx.lineTo(w - pad, gy);
-            ctx.stroke();
-        }
-
-        ctx.fillStyle = muted;
-        ctx.font = "10px " + MONO;
-        ctx.fillText(fmtNum(max, 2), 2, yAt(max) + 4);
-        ctx.fillText(fmtNum(min, 2), 2, yAt(min) + 4);
-
-        ctx.beginPath();
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 2;
-        for (var i = 0; i < closes.length; i++) {
-            var x = xAt(i), y = yAt(closes[i]);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
+    function drawChart(host, symbol, dates, closes) {
+        var P = window.PatrickPlot;
+        var xs = dates.map(P.parseDate), timed = xs.length === closes.length && xs.every(function (x) { return isFinite(x); });
+        if (!timed) xs = closes.map(function (_, i) { return i; });
+        P.create(host, {
+            type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
+            series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 1.8 }],
+            title: symbol, height: 170, compact: true, empty: tr("preview_no_data", "No data for this period."),
+        });
     }
 
     function emptyStateHtml(message, hint) {
@@ -98,7 +46,7 @@
         var longKeys = Object.keys(data.long_window_returns || {});
         if (!horizonKeys.length && !longKeys.length) return '';
         var head = '<tr>';
-        horizonKeys.forEach(function (h) { head += '<th class="num pk-mono">' + h + 'j</th>'; });
+        horizonKeys.forEach(function (h) { head += '<th class="num pk-mono">' + h + tr("day_suffix", "d") + '</th>'; });
         longKeys.forEach(function (w) { head += '<th class="num pk-mono">' + w + 'b</th>'; });
         head += '</tr>';
         var row = '<tr>';
@@ -153,21 +101,12 @@
 
         body.dataset.state = "ready";
         body.innerHTML =
-            '<div class="chart-wrap"><canvas class="asset-chart" width="560" height="150" role="img"></canvas></div>' +
+            '<div class="chart-wrap asset-chart"></div>' +
             renderReturnsTable(data) +
             renderMetricsGrid(data);
 
-        var canvas = body.querySelector(".asset-chart");
-        if (canvas) canvas._closes = data.closes;
-        drawChart(canvas, data.closes);
-        if (canvas && data.closes && data.closes.length) {
-            var closes = data.closes;
-            canvas.setAttribute("aria-label", fmtStr(
-                tr("preview_aria", "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."),
-                { symbol: symbol, period: "5y", n: closes.length,
-                  min: fmtNum(Math.min.apply(null, closes), 2), max: fmtNum(Math.max.apply(null, closes), 2),
-                  last: fmtNum(closes[closes.length - 1], 2) }));
-        }
+        var host = body.querySelector(".asset-chart");
+        if (host) drawChart(host, symbol, data.dates || [], data.closes || []);
     }
 
     function loadPanel(panel) {

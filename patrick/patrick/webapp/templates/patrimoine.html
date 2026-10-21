@@ -53,7 +53,7 @@
     <a class="account-card drop-target" href="/patrimoine/comptes/{{ a.account_id }}" data-kind="{{ a.mode }}"
        data-account-id="{{ a.account_id }}" data-account-mode="{{ a.mode }}" data-account-name="{{ a.name }}">
       <div class="row">
-        <span class="account-type">{{ a.kind }}</span>
+        <span class="account-type">{{ t('acct_kind_' ~ a.kind) }}</span>
         <span class="spacer"></span>
         {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       </div>
@@ -98,7 +98,7 @@
     <label>{{ t('pat_f_name') }} <input type="text" name="name" required maxlength="120" placeholder="PEA Boursorama"></label>
     <div class="subgrid">
       <label>{{ t('pat_f_kind') }}
-        <select name="kind">{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
+        <select name="kind">{% for k in kinds %}<option value="{{ k }}">{{ t('acct_kind_' ~ k) }}</option>{% endfor %}</select>
       </label>
       <label>{{ t('pat_f_mode') }}
         <select name="mode"><option value="real">{{ t('wealth_mode_real') }}</option><option value="fictive">{{ t('wealth_mode_fictive') }}</option></select>
@@ -117,5 +117,5 @@
     </div>
   </form>
 </dialog>
-<script src="/static/wealth.js"></script>
+<script src="{{ asset('wealth.js') }}"></script>
 {% endblock %}

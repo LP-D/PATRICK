@@ -9,7 +9,8 @@
     var select = widget.querySelector(".drift-horizon-select");
     var button = widget.querySelector(".drift-measure-btn");
     var out = widget.querySelector(".drift-output");
-    var LABEL = { stable: "stable", attention: "attention", significant: "dérive" };
+    var I18N = window.I18N || {};
+    var LABEL = { stable: I18N.js_drift_stable || "stable", attention: I18N.js_drift_attention || "watch", significant: I18N.js_drift_significant || "drift" };
     var STATE = { stable: "ok", attention: "warning", significant: "error" };
 
     function note(text, cls) {
@@ -56,7 +57,7 @@
             out.appendChild(wrap);
             var foot = document.createElement("p");
             foot.className = "table-footer";
-            foot.textContent = "PSI < 0,10 stable · 0,10–0,25 attention · > 0,25 dérive significative. Mesure enregistrée : le badge de la page Prédictions est à jour.";
+            foot.textContent = I18N.js_drift_footer || "PSI < 0.10 stable · 0.10–0.25 watch · > 0.25 significant drift.";
             out.appendChild(foot);
         } catch (e) {
             note(String(e), "hint sim-guard");

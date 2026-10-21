@@ -28,7 +28,9 @@ script below (no flash), otherwise the OS preference applies.
     </script>
     <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="/static/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/patrick.css">
+    <link rel="stylesheet" href="{{ asset('patrick.css') }}">
+    {# Moteur de graphiques : chargé dès l'en-tête, car les scripts des pages (dans le bloc content) tracent avant les scripts de pied de page. #}
+    <script src="{{ asset('chart_kit.js') }}"></script>
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
     <script>
         window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
@@ -52,7 +54,7 @@ script below (no flash), otherwise the OS preference applies.
                         <circle class="mark-head" cx="17" cy="7.5" r="2"/>
                     </svg>
                 </span>
-                <span class="brand-text">PATRICK<span class="brand-sub">{{ t('brand_tagline') if t else 'Station de recherche quantitative' }}</span></span>
+                <span class="brand-text">PATRICK<span class="brand-sub">{{ t('brand_tagline') }}</span></span>
             </a>
             {# Liens generes depuis webapp/nav_registry.py (seule source, cf.
                MASTER.md "Navigation Registry") -- jamais de <a> en dur ici. #}
@@ -93,12 +95,14 @@ script below (no flash), otherwise the OS preference applies.
                 </div>
             </div>
             <header class="topbar">
-                <button type="button" class="icon-btn mobile-only" id="nav-open" aria-controls="sidebar" aria-label="{{ t('nav_open') if t else 'Ouvrir la navigation' }}">{{ icon('menu') }}</button>
+                <button type="button" class="icon-btn mobile-only" id="nav-open" aria-controls="sidebar" aria-label="{{ t('nav_open') }}">{{ icon('menu') }}</button>
                 <div class="topbar-crumbs">
                     {% if ns.entry %}
                     <span>{{ (t(ns.cat.label_key) if t else ns.cat.label) | lower | capitalize }}</span>
                     {{ icon('chevron-right', 14) }}
-                    <span class="crumb-current">{{ t(ns.entry.label_key) if (t and ns.entry.label_key) else ns.entry.label }}</span>
+                    <a class="crumb-entry" href="{{ ns.entry.url }}">{{ t(ns.entry.label_key) if (t and ns.entry.label_key) else ns.entry.label }}</a>
+                    {# Pages enfants (détail d'un run, fiche d'une cible…) : le gabarit ajoute ses maillons avec la macro `crumb` ; le dernier est la page courante. #}
+                    {% block crumb_trail %}{% endblock %}
                     {% else %}
                     <span class="crumb-current">{{ self.title() | replace("PATRICK — ", "") | replace("PATRICK - ", "") }}</span>
                     {% endif %}
@@ -142,10 +146,10 @@ script below (no flash), otherwise the OS preference applies.
     </div>
     {% set cmdk_items = [] %}
     {% for section in sections %}{% for item in section.entries %}
-    {% set _ = cmdk_items.append({"url": item.url, "label": t(item.label_key) if (t and item.label_key) else item.label, "group": t(section.label_key) if t else section.label, "icon": nav_icon(item.slug) | string}) %}
+    {% set _ = cmdk_items.append({"url": item.url, "label": t(item.label_key) if (t and item.label_key) else item.label, "group": t(section.label_key) if t else section.label, "slug": item.slug}) %}
     {% endfor %}{% endfor %}
     {% for u in utility_links(request.url.path) %}
-    {% set _ = cmdk_items.append({"url": u.url, "label": t(u.label_key) if (t and u.label_key) else u.label, "group": "PATRICK", "icon": nav_icon(u.slug) | string}) %}
+    {% set _ = cmdk_items.append({"url": u.url, "label": t(u.label_key) if (t and u.label_key) else u.label, "group": "PATRICK", "slug": u.slug}) %}
     {% endfor %}
     <script id="cmdk-data" type="application/json">{{ cmdk_items | tojson }}</script>
 
@@ -168,14 +172,14 @@ script below (no flash), otherwise the OS preference applies.
             <div class="stats-bar-body" id="stats-bar-body" data-loading="{{ t('sb_loading') if t else '…' }}" data-error="{{ t('sb_error') if t else 'Unavailable' }}"></div>
         </div>
     </aside>
-    <script src="/static/stats_bar.js" defer></script>
+    <script src="{{ asset('stats_bar.js') }}" defer></script>
     {% endif %}
 
     <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="false">
         <button type="button" id="glossary-popover-close" class="glossary-popover-close" aria-label="Close">×</button>
         <div id="glossary-popover-title" class="glossary-popover-title"></div>
         <div id="glossary-popover-body" class="glossary-popover-body"></div>
-        <a id="glossary-popover-link" class="glossary-more" href="/vocabulary">{{ t('vocab_open_page') if t else 'Voir tout le vocabulaire' }} →</a>
+        <a id="glossary-popover-link" class="glossary-more" href="/vocabulary">{{ t('vocab_open_page') }} →</a>
         <div class="glossary-search">
             <label for="glossary-search-input">{{ t('glossary_search_label') if t else 'Search glossary' }}</label>
             <input id="glossary-search-input" type="search" autocomplete="off"
@@ -197,17 +201,17 @@ script below (no flash), otherwise the OS preference applies.
     </dialog>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
     <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
-    <script src="/static/confirm.js"></script>
-    <script src="/static/shell.js"></script>
-    <script src="/static/rows.js"></script>
-    <script src="/static/lazy.js" defer></script>
-    <script src="/static/glossary.js"></script>
-    <script src="/static/help.js"></script>
-    <script src="/static/market.js"></script>
-    <script src="/static/ticker.js" defer></script>
+    <script src="{{ asset('confirm.js') }}"></script>
+    <script src="{{ asset('shell.js') }}"></script>
+    <script src="{{ asset('rows.js') }}"></script>
+    <script src="{{ asset('lazy.js') }}" defer></script>
+    <script src="{{ asset('glossary.js') }}"></script>
+    <script src="{{ asset('help.js') }}"></script>
+    <script src="{{ asset('market.js') }}"></script>
+    <script src="{{ asset('ticker.js') }}" defer></script>
     {# No-op sauf sur /commodities et /macro (garde `.asset-panel[data-symbol]`). #}
-    <script src="/static/asset_stats.js"></script>
+    <script src="{{ asset('asset_stats.js') }}"></script>
     {# No-op sauf sur /targets/{ticker} (garde `#shap-waterfall-widget[data-target]`). #}
-    <script src="/static/shap_waterfall.js"></script>
+    <script src="{{ asset('shap_waterfall.js') }}"></script>
 </body>
 </html>

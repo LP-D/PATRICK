@@ -65,7 +65,7 @@ def test_the_right_column_is_its_own_stack_not_rows_shared_with_the_settings_cel
 @pytest.mark.parametrize("path", LAUNCH_PAGES)
 def test_each_launch_page_loads_the_shared_machine_script(client, path):
     html = client.get(path).text
-    assert '<script src="/static/machine.js">' in html
+    assert '<script src="/static/machine.js?v=' in html
     if path != "/rl":                                                 # app.js s'y abonne pour suivre le run actif (ML et DL)
         assert html.index("/static/machine.js") < html.index("/static/app.js")
     assert "window.PatrickMachine" in client.get("/static/machine.js").text

@@ -10,7 +10,7 @@
 {% set s = c.signal %}
 <span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0">
 {% if c.suspect %}<span class="status-badge status-error">{{ _t('suspect_tag') }}</span>
-{% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ s[0] }}</span>{% else %}<span class="na">—</span>{% endif %}
+{% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ _t.tx(s[0]) }}</span>{% else %}<span class="na">—</span>{% endif %}
 <span class="pop-content">
 <strong class="pop-title">{{ name }} · {{ c.horizon | hlabel }}</strong>
 {% if c.suspect %}
@@ -21,7 +21,7 @@
 {% else %}
 <dl class="pop-grid">
 {% if s %}
-<dt>{{ _t('pb_direction') }}</dt><dd>{{ s[0] }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}<br><span class="hint">{{ _t('pb_conf_help') }}</span>{% endif %}</dd>
+<dt>{{ _t('pb_direction') }}</dt><dd>{{ _t.tx(s[0]) }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}<br><span class="hint">{{ _t('pb_conf_help') }}</span>{% endif %}</dd>
 {# Date seule : l'heure `00:00:00` d'un signal de clôture n'apporte rien. #}
 {% set ts = c.ts | string %}
 <dt>{{ _t('pb_last') }}</dt><dd>{{ ts[:10] }}{% if ts[11:16] and ts[11:16] != '00:00' %} {{ ts[11:16] }}{% endif %}</dd>
@@ -66,7 +66,7 @@
 {% else %}
 {% set drift_state = {'retrain': 'error', 'watch': 'warning', 'ok': 'ok', 'unmeasured': 'disabled'}[d.action] %}
 {{ status_badge(d.action_label ~ ((' · ' ~ d.n_significant ~ '/' ~ d.n_features) if d.data_level in ('watch', 'drift') else '') ~ (' · ' ~ _t('pb_stale') if d.stale else ''), drift_state) }}<br>
-<span class="hint">{{ d.reason }}{% if d.psi is not none %} {{ _t('pb_psi', p='%.2f' | format(d.psi), w=d.worst_feature, d=d.measured_at) }}{% endif %}</span>
+<span class="hint">{{ _t.tx(d.reason) }}{% if d.psi is not none %} {{ _t('pb_psi', p='%.2f' | format(d.psi), w=d.worst_feature, d=d.measured_at) }}{% endif %}</span>
 {% endif %}
 </dd>
 </dl>
@@ -83,9 +83,9 @@
 {% if t and t.n_four %}
 <span class="pop-track-title pop-track-sub">{{ _t('pred_matrix_title') }}</span>
 <table class="pop-track-table pop-track-4 pop-matrix">
-<thead><tr><th>{{ _t('pred_col_guess') }}</th>{% for col in t.columns %}<th class="n" title="{{ _t('pred_col_real_help', m=col.label) }}">{{ col.arrow }}</th>{% endfor %}<th class="n">{{ _t('pred_col_success') }}</th></tr></thead>
+<thead><tr><th>{{ _t('pred_col_guess') }}</th>{% for col in t.columns %}<th class="n" title="{{ _t('pred_col_real_help', m=_t.tx(col.label)) }}">{{ col.arrow }}</th>{% endfor %}<th class="n">{{ _t('pred_col_success') }}</th></tr></thead>
 {% for k in t.classes %}{% set ki = loop.index0 %}
-<tr><td>{{ k.arrow }} {{ k.label }}</td>
+<tr><td>{{ k.arrow }} {{ _t.tx(k.label) }}</td>
 {% for v in k.cells %}<td class="n{% if loop.index0 == ki %} diag{% elif not v %} zero{% endif %}">{{ v }}</td>{% endfor %}
 <td class="n">{% if k.n %}{{ k.exact }}/{{ k.n }} <span class="pct">{{ k.pct }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
@@ -98,7 +98,7 @@
 <table class="pop-track-table pop-matrix">
 <thead><tr><th>{{ _t('pred_col_guess') }}</th><th class="n" title="{{ _t('pred_col_real_help', m=_t('pred_up')) }}">▲</th><th class="n" title="{{ _t('pred_col_real_help', m=_t('pred_down')) }}">▼</th><th class="n">{{ _t('pred_col_success') }}</th></tr></thead>
 {% for k in t.direction %}{% set ki = loop.index0 %}
-<tr><td>{{ k.label }}</td>
+<tr><td>{{ _t.tx(k.label) }}</td>
 {% for v in k.cells %}<td class="n{% if loop.index0 == ki %} diag{% elif not v %} zero{% endif %}">{{ v }}</td>{% endfor %}
 <td class="n">{% if k.n %}{{ k.hits }}/{{ k.n }} <span class="pct">{{ k.pct }}%</span>{% else %}—{% endif %}</td></tr>
 {% endfor %}
@@ -109,7 +109,7 @@
 {% if t.journal %}
 <span class="pop-track-title pop-track-sub">{{ _t('pred_journal_title') }}</span>
 <ul class="pop-journal">
-{% for j in t.journal %}<li class="jr-{{ j.verdict }}"><span class="jr-mark" title="{{ _t('pred_verdict_' ~ j.verdict) }}">{{ '✓' if j.verdict == 'exact' else ('≈' if j.verdict == 'direction' else '✗') }}</span> {{ j.date }} · {{ j.predicted }} → {{ j.real }}{% if j.verdict == 'direction' %} <span class="hint">({{ _t('pred_verdict_direction_short') }})</span>{% endif %}</li>
+{% for j in t.journal %}<li class="jr-{{ j.verdict }}"><span class="jr-mark" title="{{ _t('pred_verdict_' ~ j.verdict) }}">{{ '✓' if j.verdict == 'exact' else ('≈' if j.verdict == 'direction' else '✗') }}</span> {{ j.date }} · {{ _t.tx(j.predicted) }} → {{ _t.tx(j.real) }}{% if j.verdict == 'direction' %} <span class="hint">({{ _t('pred_verdict_direction_short') }})</span>{% endif %}</li>
 {% endfor %}
 </ul>
 {% endif %}
@@ -140,7 +140,7 @@
 
 {% for g in groups %}
 <div class="group-block">
-    <h2 class="group-title">{{ g.group }} <span class="hint">({{ t('pb_n_assets_paren', n=g.assets | length) }})</span></h2>
+    <h2 class="group-title">{{ group_labels.get(g.group, g.group) }} <span class="hint">({{ t('pb_n_assets_paren', n=g.assets | length) }})</span></h2>
     <div class="table-scroll">
     <table class="data-table pred-table">
         <thead><tr>

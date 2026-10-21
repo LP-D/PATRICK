@@ -7,4 +7,4 @@
     {{ lazy_block('/fragments/launch-batches?family=' ~ (family | default('ml')), 2, t('batch_loading'), t('lazy_retry')) }}
     <p class="banner batch-status" id="batch-status" role="status" aria-live="polite" hidden></p>
 </section>
-<script src="/static/launch_batches.js" defer></script>
+<script src="{{ asset('launch_batches.js') }}" defer></script>

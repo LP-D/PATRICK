@@ -43,7 +43,7 @@ def test_every_page_carries_the_shared_confirmation_dialog_and_its_script(client
     html = client.get(url).text
     assert '<dialog id="confirm-dialog" class="modal"' in html
     assert 'id="confirm-message"' in html and 'id="confirm-ok"' in html
-    assert '<script src="/static/confirm.js"></script>' in html
+    assert '<script src="/static/confirm.js?v=' in html
     assert "Confirmation" in html and "Annuler" in html and 'data-default-label="Confirmer"' in html
     english = client.get(f"{url}?lang=en").text
     assert "Cancel" in english and 'data-default-label="Confirm"' in english

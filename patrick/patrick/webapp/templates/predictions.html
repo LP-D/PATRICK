@@ -7,14 +7,9 @@
 {% block title %}PATRICK — {{ t('pred_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <span aria-current="page">{{ t('nav_predictions') or 'Prédictions' }}</span>
-</nav>
-
-<h1 class="page-title">{{ t('nav_predictions') or 'Prédictions' }}
-    {{ help_icon('prediction_overview', 'Dernier signal', t('glossary_open_aria', term='Dernier signal')) }}
-    {{ help_icon('live_reliability', 'Fiabilité live', t('glossary_open_aria', term='Fiabilité live')) }}
+<h1 class="page-title">{{ t('nav_predictions') }}
+    {{ help_icon('prediction_overview', t('pb_last'), t('glossary_open_aria', term=t('pb_last'))) }}
+    {{ help_icon('live_reliability', t('pred_live_reliability'), t('glossary_open_aria', term=t('pred_live_reliability'))) }}
 </h1>
 <nav class="kind-tabs" aria-label="{{ t('kind_tabs_label') }}">
     <a href="/predictions" class="kind-tab{% if kind != 'alpha' %} active{% endif %}">{{ t('kind_directional') }}</a>
@@ -33,16 +28,16 @@
 
 <p class="pred-legend" data-keep>
     {% if kind == 'alpha' %}
-    {{ status_badge('▲▲ Surperformance forte', 'ok') }} {{ status_badge('▲ Surperformance faible', 'ok') }}
-    {{ status_badge('▼ Sous-performance faible', 'warning') }} {{ status_badge('▼▼ Sous-performance forte', 'warning') }}
+    {{ status_badge('▲▲ ' ~ t.tx('Surperformance forte'), 'ok') }} {{ status_badge('▲ ' ~ t.tx('Surperformance faible'), 'ok') }}
+    {{ status_badge('▼ ' ~ t.tx('Sous-performance faible'), 'warning') }} {{ status_badge('▼▼ ' ~ t.tx('Sous-performance forte'), 'warning') }}
     {{ q(t('pred_help_alpha') ~ ' ' ~ legend_rules) }}
     {% else %}
-    {{ status_badge('▲▲ Hausse forte', 'ok') }} {{ status_badge('▲ Hausse faible', 'ok') }}
-    {{ status_badge('▼ Baisse faible', 'warning') }} {{ status_badge('▼▼ Baisse forte', 'warning') }}
+    {{ status_badge('▲▲ ' ~ t('cb_c3'), 'ok') }} {{ status_badge('▲ ' ~ t('cb_c2'), 'ok') }}
+    {{ status_badge('▼ ' ~ t('cb_c1'), 'warning') }} {{ status_badge('▼▼ ' ~ t('cb_c0'), 'warning') }}
     {{ q(t('pred_help_dir') ~ ' ' ~ legend_rules) }}
     {% endif %}
 </p>
 
 {{ lazy_block('/fragments/predictions?kind=' ~ kind ~ '&dm_alpha=' ~ dm_significance_alpha, 10, t('sb_loading'), t('lazy_retry')) }}
-<script src="/static/predictions_pop.js" defer></script>
+<script src="{{ asset('predictions_pop.js') }}" defer></script>
 {% endblock %}

@@ -230,6 +230,6 @@
 </div>
 
 <script id="rl-initial-runs" type="application/json">{{ recent_runs | tojson }}</script>
-<script src="/static/charts.js"></script>
-<script src="/static/rl.js"></script>
+<script src="{{ asset('charts.js') }}"></script>
+<script src="{{ asset('rl.js') }}"></script>
 {% endblock %}

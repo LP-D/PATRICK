@@ -5,12 +5,7 @@
 {% block content %}
 {% set fam_label = {'ml': t('nav_ml'), 'dl': t('nav_dl'), 'rl': t('nav_rl')} %}
 {% set fam_url = {'ml': '/ml', 'dl': '/dl', 'rl': '/rl'} %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <span aria-current="page">{{ t('nav_runs') or 'Historique' }}</span>
-</nav>
-
-<h1 class="page-title">{{ t('nav_runs') or 'Historique des runs' }}</h1>
+<h1 class="page-title">{{ t('nav_runs') }}</h1>
 <p class="page-subtitle">{{ t('hist_subtitle') }}</p>
 
 {# Trois familles qui ne se mélangent jamais : le machine learning (arbres), le deep learning (réseaux de neurones, mêmes mesures que le
@@ -261,12 +256,12 @@
     <button type="button" class="icon-btn run-panel-close" id="run-panel-close" aria-label="{{ t('rn_close_panel') }}" title="{{ t('rn_close') }}">{{ icon('close', 16) }}</button>
     <div class="run-panel-body" id="run-panel-body"></div>
 </aside>
-<script src="/static/runs_panel.js" defer></script>
+<script src="{{ asset('runs_panel.js') }}" defer></script>
 {% else %}
 <div class="card">
     <p class="empty-state-title">{{ t('rn_empty') if not n_all_runs else t('hist_no_match') }}</p>
     <p class="empty-state-hint">
-        {{ t('empty_runs_hint') or "Configure et lance un run depuis le" }}
+        {{ t('empty_runs_hint') }}
         {% for fam in (['ml', 'dl', 'rl'] if not filter_family else [filter_family]) %}<a href="{{ fam_url[fam] }}">{{ fam_label[fam] }}</a>{{ ' · ' if not loop.last }}{% endfor %}.
     </p>
 </div>

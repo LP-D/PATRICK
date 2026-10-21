@@ -3,12 +3,7 @@
 {% block title %}PATRICK — {{ t('un_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <span aria-current="page">{{ t('nav_universe') or 'Univers' }}</span>
-</nav>
-
-<h1 class="page-title">{{ t('nav_universe') or 'Univers de cibles' }}</h1>
+<h1 class="page-title">{{ t('nav_universe') }}</h1>
 <p class="page-subtitle">{{ t('un_sub2') }}</p>
 
 {# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici

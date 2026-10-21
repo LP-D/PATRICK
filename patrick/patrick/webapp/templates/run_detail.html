@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, fold_metrics_table, headline_metrics, lazy_block %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, fold_metrics_table, headline_metrics, lazy_block, crumb %}
 {% block title %}PATRICK — run {{ detail.run.run_id }}{% endblock %}
 
 {% block session_context %}
@@ -13,14 +13,8 @@
 </div>
 {% endblock %}
 
+{% block crumb_trail %}{{ crumb(detail.run.target, '/targets/' ~ (detail.run.target | urlencode)) }}{{ crumb(detail.run.run_id | truncate(12, true)) }}{% endblock %}
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
-    <a href="/targets/{{ detail.run.target }}">{{ detail.run.target }}</a>
-    <span aria-current="page">{{ detail.run.run_id | truncate(12, true) }}</span>
-</nav>
-
 {% set run = detail.run %}
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
@@ -70,7 +64,7 @@
    interprétable, c'est précisément ce que C5 a établi. #}
 {% set rel = detail.pbo.reliability %}
 {% if rel and rel.ok %}
-{{ metric("PBO (" ~ detail.pbo_label ~ ")", "%.3f" | format(detail.pbo.pbo),
+{{ metric("PBO (" ~ t.tx(detail.pbo_label) ~ ")", "%.3f" | format(detail.pbo.pbo),
           t('rd_pbo_ci', lo='%.3f' | format(rel.ci_low), hi='%.3f' | format(rel.ci_high), n=rel.n_combinations),
           "ok") }}
 {% else %}
@@ -78,10 +72,10 @@
    colonne de mesure elle écrase toute la rangée. Elle part donc en NOTE sous
    le bloc, comme une note de table économétrique -- rien n'est masqué, tout
    est déplacé là où ça se lit. #}
-{% set refus = (rel.message if (rel and rel.message) else t('rd_pbo_none')) %}
+{% set refus = (t.tx(rel.message) if (rel and rel.message) else t('rd_pbo_none')) %}
 {% set refus_head = refus.split('. ')[0] %}
 {% set refus_rest = refus[refus_head|length + 2:] if '. ' in refus else '' %}
-{{ metric("PBO (" ~ detail.pbo_label ~ ")", "—", refus_head ~ (" †" if refus_rest else ""), "disabled") }}
+{{ metric("PBO (" ~ t.tx(detail.pbo_label) ~ ")", "—", refus_head ~ (" †" if refus_rest else ""), "disabled") }}
 {% endif %}
 
 {% if detail.is_cpcv %}
@@ -175,7 +169,7 @@
 <section id="kpi" class="card">
 <h2>{{ t('rd_kpi_h') }}</h2>
 <p>{{ t('rd_kpi_target') }} <strong>{{ kpi.target }}</strong> · {{ t('rd_kpi_horizons') }} {{ kpi.horizons | join(', ') }} · {{ t('rd_kpi_cands', n=kpi.n_candidates) }}
-{{ kpi.window.note }} {{ t('rd_kpi_def') }}</p>
+{{ t.tx(kpi.window.note) }} {{ t('rd_kpi_def') }}</p>
 
 <h3>{{ t('rd_by_algo') }}</h3>
 {% set algo_rows = [] %}
@@ -236,7 +230,7 @@
     ('%.4f' | format(c.score)) if c.score is not none else '—',
     c.rank if c.rank is not none else '—',
     (t('rd_scr_finalist') if c.decision == 'finalist' else t('rd_scr_dropped')),
-    c.reason]) %}
+    t.tx(c.reason)]) %}
 {% endfor %}
 {{ data_table([t('rd_scr_regime'), "N", "Sampler", "Algo", t('rd_scr_f1'), t('rd_c_rank'), t('rd_scr_decision'), t('rd_scr_reason')],
               screening_rows, num_cols=[1, 4, 5], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less')) }}
@@ -250,7 +244,7 @@
 <h2>{{ t('rd_conf_h') }} <button type="button" class="info-icon" data-term="conformal" data-term-label="{{ t('rd_conf_term') }}" aria-label="{{ t('glossary_open_aria', term=t('rd_conf_term')) }}">i</button></h2>
 {% set c = detail.conformal %}
 {% if not c.available %}
-{{ empty_state(t('rd_conf_none'), c.reason) }}
+{{ empty_state(t('rd_conf_none'), t.tx(c.reason)) }}
 {% else %}
 <p class="hint">{{ t('rd_conf_hint', a=c.alpha, cov="%.0f" | format((1 - c.alpha) * 100), n=c.n, te=c.splits.test, ho=c.splits.holdout, li=c.splits.live, base="%.0f" | format(c.base_rate_up * 100)) }}</p>
 <div class="metric-grid">

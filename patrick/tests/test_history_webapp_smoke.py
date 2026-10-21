@@ -383,12 +383,12 @@ def test_target_page_renders_empty_drift_state_without_phase_timing(tmp_path, mo
     resp = client.get("/targets/^VIX")
     assert resp.status_code == 200
     assert "Aucune donnée de chronométrage de sous-phase" in resp.text
-    assert "drift-canvas" not in resp.text
+    assert "drift-chart" not in resp.text
 
 
 def test_target_page_renders_drift_chart_with_phase_timing(tmp_path, monkeypatch):
     """P9 -- once `run_phase_timing` rows exist for the target's run(s), the
-    canvas/legend must render and the raw points must reach the page as
+    chart host must render and the raw points must reach the page as
     JSON for drift.js to consume (window.DRIFT_POINTS)."""
     _seed_db(tmp_path, monkeypatch)
     conn = db.connect(str(tmp_path / "patrick.db"))
@@ -399,7 +399,7 @@ def test_target_page_renders_drift_chart_with_phase_timing(tmp_path, monkeypatch
     client = TestClient(app)
     resp = client.get("/targets/^VIX")
     assert resp.status_code == 200
-    assert 'id="drift-canvas"' in resp.text
+    assert 'id="drift-chart"' in resp.text
     assert '"phase": "scan"' in resp.text
     assert '"duration_s": 60' in resp.text
     assert "/static/drift.js" in resp.text

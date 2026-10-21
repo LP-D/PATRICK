@@ -31,6 +31,7 @@ import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from jinja2 import pass_context
 
 from patrick.config import defaults as D
 from patrick.config import universe_extension as UX
@@ -38,6 +39,7 @@ from patrick.numeric import is_nan
 from patrick.tracking import db as trackdb
 from patrick.wealth import importer, ledger, service, symbols
 from patrick.wealth import prices as wealth_prices
+from patrick.webapp import i18n_server
 
 
 def price_provider():
@@ -98,6 +100,10 @@ def _fmt_number(value, digits: int) -> str:
     return f"{value:,.{digits}f}".replace(",", "\u202f").replace(".", ",")
 
 
+def _en_number(value: float, digits: int) -> str:
+    return f"{value:,.{digits}f}"
+
+
 def fmt_eur(value, digits: int = 2) -> str:
     """French money format (narrow no-break space thousands, decimal comma)."""
     if value is None or is_nan(value):
@@ -122,10 +128,38 @@ def fmt_qty(value) -> str:
 
 def register(app: FastAPI, templates, context) -> None:
     """`context(request)` = the app's i18n/glossary context builder."""
-    templates.env.filters["eur"] = fmt_eur
-    templates.env.filters["pct"] = fmt_pct
-    templates.env.filters["qty"] = fmt_qty
-    templates.env.filters["mvkind"] = lambda kind: ledger.MOVEMENT_LABELS_FR.get(kind, kind)
+    # Filtres de gabarit : séparateurs et symbole selon la langue de la page (« 1 234,56 € » en français, « €1,234.56 » en anglais).
+    def _english(context) -> bool:
+        return context.get("lang") == "en"
+
+    @pass_context
+    def _eur(context, value, digits: int = 2) -> str:
+        text = fmt_eur(value, digits)
+        if not _english(context) or text == "—":
+            return text
+        return "€" + _en_number(float(value), digits)
+
+    @pass_context
+    def _pct(context, value, digits: int = 1, signed: bool = False) -> str:
+        text = fmt_pct(value, digits, signed)
+        if not _english(context) or text == "—":
+            return text
+        v = float(value) * 100
+        return ("+" if signed and v > 0 else "") + _en_number(v, digits) + "%"
+
+    @pass_context
+    def _qty(context, value) -> str:
+        text = fmt_qty(value)
+        if not _english(context) or text == "—":
+            return text
+        v = float(value)
+        return _en_number(v, 0 if abs(v - round(v)) < 1e-9 else 4)
+
+    templates.env.filters["eur"] = _eur
+    templates.env.filters["pct"] = _pct
+    templates.env.filters["qty"] = _qty
+    templates.env.filters["mvkind"] = pass_context(
+        lambda context, kind: i18n_server.translate(ledger.MOVEMENT_LABELS_FR.get(kind, kind), context.get("lang") or "fr"))
 
     @app.get("/patrimoine")
     def patrimoine_page(request: Request):

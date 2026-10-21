@@ -1,14 +1,9 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb %}
 {% block title %}PATRICK — {{ target }}{% endblock %}
 
+{% block crumb_trail %}{{ crumb(target) }}{% endblock %}
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <a href="/universe">{{ t('nav_universe') or 'Univers' }}</a>
-    <span aria-current="page">{{ target }}</span>
-</nav>
-
 <h1 class="page-title">{{ target }}</h1>
 <p class="page-subtitle">{{ t('tg_sub2') }} <a href="/runs?target={{ target }}">{{ t('tg_all_runs') }}</a></p>
 
@@ -44,7 +39,7 @@
    message disant qu'il n'a pas été calculé. #}
 {% if pbo.n_blocks > 0 %}
 {% set rel = pbo.reliability %}
-{% set rel_text = ("IC 90% [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (rel.message if (rel and rel.message) else "non calculable") %}
+{% set rel_text = (t('tg_ci90') ~ " [%.3f, %.3f]" | format(rel.ci_low, rel.ci_high)) if rel and rel.ok else (t.tx(rel.message) if (rel and rel.message) else t('tg_not_computable')) %}
 {% set pbo_text = ("%.3f" | format(pbo.pbo)) if (rel and rel.ok) else "—" %}
 {% set _ = pbo_rows.append([horizon | hlabel, scheme_name, pbo_text, pbo.n_blocks, rel_text]) %}
 {% endif %}
@@ -91,7 +86,7 @@
 <div class="shap-controls">
   <label for="shap-horizon-select">{{ t('shap_select_horizon') }}
     <select id="shap-horizon-select" class="shap-horizon-select">
-      {% for h in shap_horizons %}<option value="{{ h }}">{{ h }}j</option>{% endfor %}
+      {% for h in shap_horizons %}<option value="{{ h }}">{{ h }}{{ t('day_suffix') }}</option>{% endfor %}
     </select>
   </label>
   <button type="button" class="primary shap-generate-btn">{{ t('shap_btn_generate') }}</button>
@@ -112,13 +107,13 @@
 <p class="hint">{{ t('tg_psi_sub') }}</p>
 <div class="shap-controls">
   <label>Horizon
-    <select class="drift-horizon-select">{% for h in shap_horizons %}<option value="{{ h }}">{{ h }}j</option>{% endfor %}</select>
+    <select class="drift-horizon-select">{% for h in shap_horizons %}<option value="{{ h }}">{{ h }}{{ t('day_suffix') }}</option>{% endfor %}</select>
   </label>
   <button type="button" class="btn-secondary drift-measure-btn">{{ t('tg_psi_btn') }}</button>
 </div>
 <div class="drift-output"></div>
 </section>
-<script src="/static/feature_drift.js"></script>
+<script src="{{ asset('feature_drift.js') }}"></script>
 {% endif %}
 
 {% endif %}
@@ -153,12 +148,8 @@
 <h2>{{ t('tg_phase_h') }}</h2>
 <p class="hint">{{ t('tg_phase_sub') }}</p>
 {% if phase_drift %}
-<div id="drift-legend" class="drift-legend" aria-hidden="true"></div>
-<div class="chart-wrap">
-<canvas id="drift-canvas" width="900" height="260" role="img"
-        aria-label="{{ t('tg_drift_aria') }}"></canvas>
-<div id="drift-tooltip" class="chart-tooltip hidden"></div>
-</div>
+{# Graphique zoomable monté par `drift.js` (chart_kit.js) ; légende et libellé d'accessibilité viennent du moteur. #}
+<div id="drift-chart" class="chart-wrap" aria-label="{{ t('tg_drift_aria') }}"></div>
 {% else %}
 <p class="hint">{{ t('tg_phase_none') }}</p>
 {% endif %}
@@ -168,5 +159,5 @@
 window.DRIFT_POINTS = {{ phase_drift | default([]) | tojson }};
 window.DRIFT_PHASE_LABELS = {{ phase_labels | default({}) | tojson }};
 </script>
-<script src="/static/drift.js"></script>
+<script src="{{ asset('drift.js') }}"></script>
 {% endblock %}

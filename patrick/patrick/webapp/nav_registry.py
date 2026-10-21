@@ -15,7 +15,9 @@ Aucune logique de nav ailleurs : le template itere `nav_sections(path)`
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from functools import cache
 
 
 @dataclass(frozen=True)
@@ -120,12 +122,22 @@ def is_non_page_route(path: str) -> bool:
     return path in NON_PAGE_ROUTES or path.startswith(NON_PAGE_PREFIXES)
 
 
+_PARAM = re.compile(r"\{[^/}]+\}")
+
+
+@cache
+def _child_pattern(route: str) -> re.Pattern[str]:
+    """`/targets/{ticker}` -> motif qui reconnait `/targets/^VIX` (un segment par parametre)."""
+    return re.compile("[^/]+".join(re.escape(part) for part in _PARAM.split(route)))
+
+
 def is_active(entry: NavEntry, path: str) -> bool:
-    """Regle historique de base_v2.html conservee : `/` en egalite stricte,
-    les autres par prefixe de segment (`/runs` allume `/runs/{id}/detail`)."""
+    """`/` en egalite stricte, les autres par prefixe de segment (`/runs` allume `/runs/{id}/detail`) ; une page enfant declaree dans
+    `child_routes` allume aussi son entree (`/targets/^VIX` allume Univers, `/compare-runs` allume Historique)."""
     if entry.url == "/":
         return path == "/"
-    return path == entry.url or path.startswith(entry.url + "/")
+    return (path == entry.url or path.startswith(entry.url + "/")
+            or any(_child_pattern(route).fullmatch(path) for route in entry.child_routes))
 
 
 def utility_links(path: str) -> list[dict]:

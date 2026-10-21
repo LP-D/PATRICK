@@ -60,7 +60,7 @@
             <td class="num pk-mono headline">{{ '%.3f' | format(r.f1) if r.f1 is not none else '—' }}</td>
             <td class="num pk-mono">{{ r.n_dir if r.n_dir else '—' }}{% if r.n_dir_running %} <span class="hint" title="{{ t('cls_running') }}">+{{ r.n_dir_running }}</span>{% endif %}</td>
             <td class="num pk-mono">{% if r.n_alpha %}{{ r.n_alpha }}{% if r.alpha_auc is not none %} <span class="hint">· {{ '%.3f' | format(r.alpha_auc) }}</span>{% endif %}{% else %}—{% endif %}</td>
-            <td class="pk-mono">{% if r.champions %}{% for h in r.champions %}{{ h }}j{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+            <td class="pk-mono">{% if r.champions %}{% for h in r.champions %}{{ h }}{{ t('day_suffix') }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
             <td class="hint">{{ r.last[:10] if r.last else t('cls_never') }}</td>
             <td><a class="btn-ghost" href="/ml?target={{ r.symbol | urlencode }}">{{ t('cls_launch') }}</a></td>
         </tr>
@@ -82,5 +82,5 @@
 {% endif %}
 
 {% block class_extra %}{% endblock %}
-<script src="/static/asset_class.js" defer></script>
+<script src="{{ asset('asset_class.js') }}" defer></script>
 {% endblock %}

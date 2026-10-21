@@ -7,13 +7,18 @@ both languages.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 from starlette.requests import Request
 
+from patrick.webapp import i18n_server
+from patrick.webapp.i18n_charts import CHART_JS_KEYS, CHART_STRINGS
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
+from patrick.webapp.i18n_ui import UI_JS_KEYS, UI_STRINGS
 
 LANG_COOKIE = "patrick_lang"
 SUPPORTED_LANGS = ("fr", "en")
@@ -654,10 +659,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": ("Bars are contributions to the probability of the predicted class (neural model): estimated Shapley values against the "
                "average training row."),
     },
-    "shap_class_0": {"fr": "Forte baisse", "en": "Strong down"},
-    "shap_class_1": {"fr": "Légère baisse", "en": "Slight down"},
-    "shap_class_2": {"fr": "Légère hausse", "en": "Slight up"},
-    "shap_class_3": {"fr": "Forte hausse", "en": "Strong up"},
+    "shap_class_0": {"fr": "Baisse forte", "en": "Strong down"},
+    "shap_class_1": {"fr": "Baisse faible", "en": "Slight down"},
+    "shap_class_2": {"fr": "Hausse faible", "en": "Slight up"},
+    "shap_class_3": {"fr": "Hausse forte", "en": "Strong up"},
 }
 
 
@@ -671,6 +676,41 @@ STRINGS.update(PAGES_STRINGS)
 STRINGS.update(LEGACY_STRINGS)
 # Pages Modèles (ML, DL, RL) et Exploration (webapp/i18n_models.py).
 STRINGS.update(MODELS_STRINGS)
+# Moteur de graphiques commun (webapp/i18n_charts.py).
+STRINGS.update(CHART_STRINGS)
+# Audit d'interface du 2026-10-21 (webapp/i18n_ui.py).
+STRINGS.update(UI_STRINGS)
+
+
+# Langue de la requête en cours, posée par `LangMiddleware` : les macros importées sans contexte (`_components.html`) ne voient pas `t()`,
+# elles traduisent leurs libellés par défaut avec `ui_t()`.
+_REQUEST_LANG: ContextVar[str] = ContextVar("patrick_request_lang", default=DEFAULT_LANG)
+
+
+class LangMiddleware:
+    """Middleware ASGI : mémorise la langue du visiteur le temps de la requête (la variable suit les threads de rendu)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = _REQUEST_LANG.set(get_lang(Request(scope)))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _REQUEST_LANG.reset(token)
+
+
+def request_lang() -> str:
+    return _REQUEST_LANG.get()
+
+
+def ui_t(key: str, **kwargs) -> str:
+    """Traduction dans la langue de la requête en cours (pour les macros et filtres sans accès à `t`)."""
+    return translator(_REQUEST_LANG.get())(key, **kwargs)
 
 
 def get_lang(request: Request) -> str:
@@ -685,6 +725,9 @@ def translator(lang: str):
             return key
         text = entry.get(lang) or entry.get(DEFAULT_LANG) or key
         return text.format(**kwargs) if kwargs else text
+    # `t.tx(texte)` : traduit un message produit côté serveur (webapp/i18n_server.py) ; utilisable dans les macros, qui ne voient pas le contexte.
+    t.lang = lang
+    t.tx = lambda text: i18n_server.translate(text, lang)
     return t
 
 
@@ -692,7 +735,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", *CHART_JS_KEYS, *UI_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done", "phase_other",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",
@@ -716,7 +759,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "queue_clear", "queue_remove", "queue_move_top", "queue_move_up", "queue_move_down", "queue_drag",
         "run_pause", "run_resume", "run_stop", "run_paused", "run_control_error",
         "stat_holdout", "stat_dm_significant", "stat_dm_not_significant",
-        "stat_cumulative_trials", "stat_pbo",
+        "stat_cumulative_trials", "stat_pbo", "stat_pbo_reliability",
         "preview_aria_empty", "preview_aria",
         "btn_confirm_launch", "btn_cancel", "confirm_line_target", "confirm_line_scheme",
         "confirm_line_combos", "confirm_line_combos_unknown", "confirm_line_queue",

@@ -3,7 +3,7 @@
 {% if m %}
 <h3>{{ t('rd_meta_h') }}</h3>
 {% if not m.available %}
-<p class="hint">{{ t('rd_ml_none', r=m.reason) }}</p>
+<p class="hint">{{ t('rd_ml_none', r=t.tx(m.reason)) }}</p>
 {% else %}
 <p class="hint">{{ t('rd_ml_hint') }}</p>
 <div class="metric-grid">

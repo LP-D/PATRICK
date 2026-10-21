@@ -3,13 +3,8 @@
 {% block title %}PATRICK — {{ t('fr_title') }}{% endblock %}
 
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/">{{ t('nav_home') or 'Poste' }}</a>
-    <span aria-current="page">{{ t('nav_data_freshness') or 'Fraîcheur' }}</span>
-</nav>
-
-<h1 class="page-title">{{ t('nav_data_freshness') or 'Fraîcheur des données' }}
-    {{ help_icon('data_freshness', 'Fraîcheur des données', t('glossary_open_aria', term='Fraîcheur des données')) }}
+<h1 class="page-title">{{ t('nav_data_freshness') }}
+    {{ help_icon('data_freshness', t('fr_title'), t('glossary_open_aria', term=t('fr_title'))) }}
 </h1>
 
 {% set ns = namespace(total=0, cached=0) %}
@@ -29,14 +24,14 @@
     {% set rows = [] %}
     {% for r in g.results %}
         {% if r.cached %}
-            {% set fresh_cell = status_badge((r.business_days_late ~ "j de retard"), 'ok' if r.state == 'ok' else 'warning') %}
+            {% set fresh_cell = status_badge(t('fr_days_late', n=r.business_days_late), 'ok' if r.state == 'ok' else 'warning') %}
             {% set date_cell = r.date_max %}
         {% else %}
-            {% set fresh_cell = status_badge('jamais mis en cache', 'disabled') %}
+            {% set fresh_cell = status_badge(t('fr_never_cached'), 'disabled') %}
             {% set date_cell = '<span class="na">—</span>' %}
         {% endif %}
         {% set _ = rows.append([
-            '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
+            ('<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>') if r.symbol in known_targets else r.symbol,
             r.label,
             r.periodicity,
             date_cell,

@@ -26,7 +26,7 @@
     <div class="account-card drop-target" data-kind="{{ a.mode }}" data-account-id="{{ a.account_id }}"
          data-account-mode="{{ a.mode }}" data-account-name="{{ a.name }}">
       <div class="row">
-        <span class="account-type">{{ a.kind }}</span><span class="spacer"></span>
+        <span class="account-type">{{ t('acct_kind_' ~ a.kind) }}</span><span class="spacer"></span>
         {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       </div>
       <div class="account-name"><a href="/patrimoine/comptes/{{ a.account_id }}">{{ a.name }}</a></div>
@@ -72,5 +72,5 @@
 {% else %}
 {{ empty_state(t('mv_no_account'), t('mv_no_account_hint')) }}
 {% endif %}
-<script src="/static/wealth.js"></script>
+<script src="{{ asset('wealth.js') }}"></script>
 {% endblock %}

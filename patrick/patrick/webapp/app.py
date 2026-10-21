@@ -6,6 +6,7 @@ web interface.
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -17,12 +18,17 @@ from typing import Annotated
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exception_handlers import (
+    http_exception_handler as default_http_exception_handler,
+)
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from patrick import live_refresh
 from patrick import settings as settings_store
@@ -55,6 +61,7 @@ from patrick.webapp import (
     forms_rl,
     fund_routes,
     i18n,
+    i18n_server,
     icons,
     launch_batches,
     market_data,
@@ -114,19 +121,46 @@ BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="PATRICK")
 # Toutes les routes (présentes et futures) : hôte local obligatoire, pas de requête venue d'un autre site.
 app.add_middleware(security.LocalGuardMiddleware)
+app.add_middleware(i18n.LangMiddleware)
 # Pages de 100 à 700 Ko de HTML : compressées (le navigateur décompresse en quelques ms).
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 
 
 class _RevalidatedStaticFiles(StaticFiles):
-    """Fichiers statiques servis avec `Cache-Control: no-cache` : le navigateur les garde mais revalide (réponse 304, quelques ms)
-    avant chaque usage. Sans cet en-tête il les réutilise de façon heuristique, et un script modifié par une mise à jour de
-    l'application reste ancien dans le navigateur pendant des heures (vu le 2026-10-09 sur `lazy.js`)."""
+    """Fichiers statiques : trois régimes de cache.
+
+    - URL versionnée (`/static/app.js?v=3fa9c1d2`, voir `asset()`) : `immutable`, une semaine d'économie de requêtes par page — l'URL change
+      dès que le fichier change, donc jamais de script périmé ;
+    - polices (`/static/fonts/…`) : cache long, jamais modifiées sur place ;
+    - le reste (URL sans version, ancien marque-page, JS dynamique) : `no-cache`, le navigateur revalide (réponse 304) avant chaque usage.
+      Sans cet en-tête il réutilise le fichier de façon heuristique, et un script modifié par une mise à jour reste ancien pendant des
+      heures (vu le 2026-10-09 sur `lazy.js`)."""
 
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = "no-cache"
+        if response.status_code == 200 and (b"v=" in scope.get("query_string", b"") or path.replace("\\", "/").startswith("fonts/")):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
         return response
+
+
+_ASSET_VERSIONS: dict[str, tuple[tuple[int, int], str]] = {}
+
+
+def asset(path: str) -> str:
+    """URL d'un fichier statique avec sa version (`?v=…`, empreinte de la date et de la taille du fichier) : le navigateur le garde sans
+    jamais revalider tant qu'il ne change pas. Utilisé par les gabarits (`{{ asset('app.js') }}`)."""
+    try:
+        st = (BASE_DIR / "static" / path).stat()
+    except OSError:
+        return f"/static/{path}"
+    stamp = (st.st_mtime_ns, st.st_size)
+    known = _ASSET_VERSIONS.get(path)
+    if known is None or known[0] != stamp:
+        known = (stamp, hashlib.blake2s(repr(stamp).encode(), digest_size=4).hexdigest())
+        _ASSET_VERSIONS[path] = known
+    return f"/static/{path}?v={known[1]}"
 
 
 app.mount("/static", _RevalidatedStaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -140,19 +174,46 @@ templates.env.globals["utility_links"] = nav_registry.utility_links
 templates.env.globals["movers_snapshot"] = alerts.get_cached
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
+templates.env.globals["ui_t"] = i18n.ui_t
+templates.env.globals["asset"] = asset
 templates.env.globals["nav_icon"] = icons.nav_icon
 # 504/756-day horizons are descriptive (decision of 2026-09-26): labelled everywhere.
 templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
 
 
 def _horizon_label(h) -> str:
+    """« 5j » (FR) / « 5d » (EN), suivi de « descriptif » pour les horizons descriptifs."""
+    day = i18n.ui_t("day_suffix")
     try:
-        return f"{h}j · descriptif" if int(h) in D.DESCRIPTIVE_HORIZONS else f"{h}j"
+        return f"{h}{day} · {i18n.ui_t('lg_descriptive')}" if int(h) in D.DESCRIPTIVE_HORIZONS else f"{h}{day}"
     except (TypeError, ValueError):
-        return f"{h}j"
+        return f"{h}{day}"
 
 
 templates.env.filters["hlabel"] = _horizon_label
+
+
+@pass_context
+def _tx_filter(context, text):
+    """`{{ message | tx }}` : message produit côté serveur, traduit dans la langue de la page (voir `i18n_server.py`)."""
+    return i18n_server.translate(text, context.get("lang") or i18n.DEFAULT_LANG)
+
+
+templates.env.filters["tx"] = _tx_filter
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Même réponse que le gestionnaire par défaut de FastAPI ; seul le message texte est traduit selon la langue du visiteur."""
+    if isinstance(exc.detail, str):
+        exc = StarletteHTTPException(status_code=exc.status_code, headers=getattr(exc, "headers", None),
+                                     detail=i18n_server.translate(exc.detail, i18n.get_lang(request)))
+    return await default_http_exception_handler(request, exc)
+
+
+def _translated_errors(request: Request, errors: list[str]) -> list[str]:
+    lang = i18n.get_lang(request)
+    return [i18n_server.translate(e, lang) for e in errors]
 
 FORM_OPTIONS = {
     "all_families": forms.ALL_FEATURE_FAMILIES,
@@ -325,7 +386,8 @@ def _target_groups_with_equity_badges() -> dict:
     equity_items = []
     for sym, label in groups.get(EQ.EQUITY_TARGET_GROUP, []):
         result = equity_sufficiency.check_data_sufficiency(sym)
-        suffix = "" if result.sufficient else f" [données insuffisantes : {result.n_trading_days}j/{result.min_required}j]"
+        suffix = "" if result.sufficient else i18n_server.translate(
+            f" [données insuffisantes : {result.n_trading_days}j/{result.min_required}j]", i18n.request_lang())
         equity_items.append((sym, f"{label}{suffix}"))
     if EQ.EQUITY_TARGET_GROUP in groups:
         groups[EQ.EQUITY_TARGET_GROUP] = equity_items
@@ -381,7 +443,7 @@ def _render_launch(request: Request, view: dict, errors: list[str], status_code:
         {"family": family,
             "torch_ok": torch_ok,
             "view": view,
-            "errors": errors,
+            "errors": _translated_errors(request, errors),
             "active_run": active,
             "queued_runs": run_manager.queued_runs(),
             "initial_run_id": initial_run_id if initial_run_id is not None else (active["id"] if active else None),
@@ -460,7 +522,7 @@ async def launch_batches_recommended_launch(request: Request):
     body = await request.json()
     pairs = [(str(i.get("run_id") or ""), str(i.get("key") or "")) for i in body.get("items") or [] if isinstance(i, dict)]
     if not pairs:
-        return JSONResponse({"errors": ["Aucun run conseillé à lancer."]}, status_code=400)
+        return JSONResponse({"errors": _translated_errors(request, ["Aucun run conseillé à lancer."])}, status_code=400)
 
     def build() -> tuple[list[RunConfig], list[str]]:
         configs: list[RunConfig] = []
@@ -479,7 +541,7 @@ async def launch_batches_recommended_launch(request: Request):
 
     configs, errors = await run_in_threadpool(build)
     if errors:
-        return JSONResponse({"errors": errors}, status_code=400)
+        return JSONResponse({"errors": _translated_errors(request, errors)}, status_code=400)
     runs = []
     for config in configs:
         job_view = run_manager.start_run(config)
@@ -505,7 +567,11 @@ def _launch_page(request: Request, family: str, run_id: str | None, target: str 
                 conn.close()
             if row is None or not row.get("config_json"):
                 raise HTTPException(status_code=404, detail="Configuration de run introuvable.")
-            config = RunConfig.model_validate_json(row["config_json"])
+            try:
+                config = RunConfig.model_validate_json(row["config_json"])
+            except ValidationError as exc:      # configuration d'un run ancien, devenue incompatible avec le schéma actuel
+                fields = ", ".join(sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()}))
+                raise HTTPException(status_code=409, detail=f"Configuration du run illisible : {fields}") from exc
         if config.family != family:
             # un run de réseaux de neurones se rouvre sur /dl, un run d'arbres sur /ml : mêmes paramètres de requête
             return RedirectResponse(f"/{config.family}" + (f"?{request.url.query}" if request.url.query else ""), status_code=303)
@@ -727,11 +793,11 @@ async def create_run(request: Request):
     form = await request.form()
     targets = list(dict.fromkeys(form.getlist("target_symbols")))
     if not targets:
-        return JSONResponse({"errors": ["Sélectionne au moins une cible."]}, status_code=400)
+        return JSONResponse({"errors": _translated_errors(request, ["Sélectionne au moins une cible."])}, status_code=400)
     if any(a in D.ALL_DL_ALGOS for a in form.getlist("algos")) and not deep_models.torch_available():
         message = ("PyTorch n'est pas installé : les réseaux de neurones sont indisponibles. "
                    "Installe-le avec : pip install -e \".[deep]\" (ou pip install torch).")
-        return JSONResponse({"errors": [message]}, status_code=400)
+        return JSONResponse({"errors": _translated_errors(request, [message])}, status_code=400)
 
     raw_output_dir = (form.get("output_dir") or "").strip()
     errors: list[str] = []
@@ -781,7 +847,7 @@ async def create_run(request: Request):
             )
 
     if errors:
-        return JSONResponse({"errors": errors}, status_code=400)
+        return JSONResponse({"errors": _translated_errors(request, errors)}, status_code=400)
 
     runs = []
     for config in configs:
@@ -1351,7 +1417,7 @@ def data_freshness_page(request: Request):
     ]
     return templates.TemplateResponse(
         request, "data_freshness.html",
-        {"groups": groups, **_i18n_context(request)},
+        {"groups": groups, "known_targets": forms.TARGET_SOURCE_BY_SYMBOL, **_i18n_context(request)},
     )
 
 
@@ -2174,7 +2240,7 @@ def stats_help_runs():
         runs = trackdb.list_done_runs(conn, limit=60)
     finally:
         conn.close()
-    return {"runs": [{"run_id": r["run_id"], "label": f"{r['name'] or r['run_id']} · {r['target']} · {r['horizon']}j"}
+    return {"runs": [{"run_id": r["run_id"], "label": f"{r['name'] or r['run_id']} · {r['target']} · {r['horizon']}{i18n.ui_t('day_suffix')}"}
                      for r in runs]}
 
 

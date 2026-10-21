@@ -7,7 +7,7 @@
     var chart = JSON.parse(data.textContent);
     node.appendChild(C.lineChart({
         dates: chart.dates, title: C.tr("rlp_c_equity"),
-        series: chart.series.map(function (s) { return { values: s.values, color: s.color }; }),
+        series: chart.series.map(function (s) { return { name: s.name, values: s.values, color: s.color }; }),
         hlines: [{ y: 1, dash: "1 3" }],
     }));
 })();

@@ -144,7 +144,7 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_col_es": _s("ES 95 %", "ES 95%"),
     "exp_col_worst": _s("Pire", "Worst"),
     "exp_col_best": _s("Meilleur", "Best"),
-    "exp_col_dd": _s("Perte max.", "Max drawdown"),
+    "exp_col_dd": _s("Drawdown max", "Max drawdown"),
     "exp_col_pos": _s("% positifs", "% positive"),
     "exp_col_ac1": _s("Autocorr. 1", "Autocorr. 1"),
     "exp_normal_rejected": _s("rejetée", "rejected"),

@@ -1,11 +1,9 @@
 {% extends "base_v2.html" %}
+{% from "_components.html" import crumb %}
 {% block title %}PATRICK — {{ t('cmp_title') }}{% endblock %}
 
+{% block crumb_trail %}{{ crumb(t('cmp_crumb')) }}{% endblock %}
 {% block content %}
-<nav class="breadcrumb" aria-label="{{ t('breadcrumb_aria') }}">
-    <a href="/runs">{{ t('nav_runs') or 'Historique' }}</a>
-    <span aria-current="page">{{ t('cmp_crumb') }}</span>
-</nav>
 <h1 class="page-title">{{ t('cmp_h1') }}</h1>
 <p class="page-subtitle">{{ t('cmp_subtitle') }}</p>
 {% set cmp_kinds = [] %}{% for run in runs %}{% set _ = cmp_kinds.append('alpha' if '__alpha_' in (run.target or '') else 'directional') %}{% endfor %}
