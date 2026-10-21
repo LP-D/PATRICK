@@ -30,6 +30,29 @@ def test_system_has_cpu_memory_disks_and_data_disk_flag(home):
     assert any(d["holds_data"] for d in s["disks"])
 
 
+def test_home_and_data_folders_come_from_paths(home):
+    from patrick import paths
+
+    assert dg.home() == paths.home_dir() == home
+    by = {i["name"]: i["path"] for i in dg.storage()["items"]}
+    assert by["models"] == str(paths.models_dir()) and by["backups"] == str(paths.backups_dir())
+    assert by["archive"] == str(paths.archive_dir()) and by["logs"] == str(home / "logs")
+
+
+def test_both_volumes_hold_data_when_the_data_root_is_on_another_disk(home, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("PATRICK_DB_PATH", "C:\\Users\\x\\.patrick\\patrick.db")
+    monkeypatch.setenv("PATRICK_DATA_ROOT", "D:\\PATRICK DATA")
+    parts = [SimpleNamespace(opts="rw", fstype="NTFS", mountpoint=m) for m in ("C:\\", "D:\\", "E:\\")]
+    monkeypatch.setattr(dg.psutil, "disk_partitions", lambda all=False: parts)
+    monkeypatch.setattr(dg.psutil, "disk_usage", lambda mount: SimpleNamespace(total=10, used=5, free=5, percent=50.0))
+
+    holds = {d["mount"]: d["holds_data"] for d in dg.system()["disks"]}
+
+    assert holds == {"C:\\": True, "D:\\": True, "E:\\": False}
+
+
 def test_processes_finds_the_current_python_only_when_it_looks_like_patrick():
     out = dg.processes()
     assert isinstance(out, list) and all(p["role"] in ("worker", "server", "other") for p in out)

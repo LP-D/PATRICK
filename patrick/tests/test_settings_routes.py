@@ -179,6 +179,24 @@ def test_status_of_an_empty_share(client, tmp_path):
     assert body["remote"] is None and body["need_push"] is True and body["local_runs"] == 0
 
 
+def test_status_exposes_the_data_root_and_its_free_space(client, tmp_path):
+    client.post("/api/app/share/apply", json={"folder": folder_in(tmp_path)})
+    from patrick.tracking import db as trackdb
+
+    trackdb.connect().close()
+    body = client.get("/api/app/share/status").json()
+
+    assert body["data_available"] is True and body["data_root"] and body["data_free_gb"] > 0
+
+
+def test_the_data_disk_strings_exist_in_both_languages_and_reach_the_browser():
+    for key in ("app_status_data_disk", "app_status_data_missing", "app_status_disk_low"):
+        assert {"fr", "en"} <= set(i18n.STRINGS[key])
+    assert "~/.patrick" not in i18n.STRINGS["app_status_disk_low"]["fr"]
+    assert {"app_status_data_disk", "app_status_data_missing"} <= set(i18n.js_strings("fr", "/reglages"))
+    assert "app_status_data_disk" in (STATIC / "reglages.js").read_text(encoding="utf-8")
+
+
 def test_suggestions_endpoint(client, tmp_path, monkeypatch):
     onedrive = tmp_path / "OneDrive"
     onedrive.mkdir()
