@@ -56,3 +56,22 @@ def test_a_component_env_var_still_wins(root, monkeypatch, tmp_path):
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / "ailleurs"))
 
     assert DataStore().root == str(tmp_path / "ailleurs")
+
+
+def test_backup_database_defaults_to_the_data_root_backups(root, tmp_path):
+    from patrick.tracking import backup
+    from patrick.tracking import db as trackdb
+
+    source = tmp_path / "ssd" / "patrick.db"
+    source.parent.mkdir()
+    trackdb.connect(str(source)).close()
+
+    saved = backup.backup_database(str(source), pages=-1, sleep_s=0.0)
+
+    assert saved.parent == root / "backups" and saved.is_file()
+
+
+def test_default_reports_dir_follows_the_data_root(root):
+    from patrick.tracking import report
+
+    assert report.default_reports_dir() == str(root / "reports")

@@ -41,8 +41,8 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from patrick import paths, sync_merge
 from patrick import settings as settings_mod
-from patrick import sync_merge
 from patrick.fund import share as fund_share
 from patrick.tracking import backup as backup_mod
 from patrick.tracking import db as trackdb
@@ -760,7 +760,7 @@ def _backup_affordable(db_path: str, backup_dir: str | None, incoming_bytes: int
     """Une sauvegarde complète avant fusion n'est faite que si le disque la permet (une base de 27 Go sur un disque presque
     plein : jamais). La fusion reste atomique (une transaction) : sans sauvegarde, une coupure ne laisse pas de demi-fusion."""
     size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
-    free = _free_bytes(backup_dir or backup_mod.DEFAULT_BACKUP_DIR)
+    free = _free_bytes(backup_dir or paths.backups_dir())
     if free >= size * 1.05 + incoming_bytes * 2 + (2 << 30):
         return True, ""
     return False, f"sauvegarde complète ignorée : {_gb(size)} Go à copier pour {_gb(free)} Go libres"

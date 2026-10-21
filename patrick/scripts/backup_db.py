@@ -13,7 +13,7 @@ l'a écrite).
 Usage :
     python scripts/backup_db.py
     python scripts/backup_db.py --backup-dir D:\\backups\\patrick
-    python scripts/backup_db.py --log-file C:\\Users\\leonp\\.patrick\\backups\\backup.log
+    python scripts/backup_db.py --log-file C:\\Users\\leonp\\.patrick\\logs\\backup.log
 
 `--log-file` existe car le Planificateur de tâches Windows ne capture pas
 la sortie standard d'une tâche par défaut (même remarque déjà faite pour
@@ -30,7 +30,6 @@ import sys
 import time
 
 from patrick.tracking.backup import (
-    DEFAULT_BACKUP_DIR,
     DEFAULT_RETENTION_DAYS,
     backup_database,
 )
@@ -46,7 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--backup-dir", default=None,
-        help=f"Dossier de destination des sauvegardes (defaut : {DEFAULT_BACKUP_DIR}).",
+        help="Dossier de destination des sauvegardes (defaut : le dossier backups de la racine de donnees, "
+             "voir `patrick data status`).",
     )
     parser.add_argument(
         "--pages", type=int, default=100,

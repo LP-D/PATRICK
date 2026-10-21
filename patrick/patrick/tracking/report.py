@@ -16,6 +16,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime
 
+from patrick import paths
 from patrick.numeric import is_nan
 from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
@@ -25,7 +26,10 @@ from patrick.tracking import stats as trackstats
 from patrick.validation.cpcv import n_paths as cpcv_n_paths
 from patrick.validation.cpcv import path_performance_distribution
 
-DEFAULT_REPORTS_DIR = os.path.expanduser("~/.patrick/reports")
+
+def default_reports_dir() -> str:
+    """Dossier des rapports HTML : `reports` de la racine de données (relu à chaque appel)."""
+    return str(paths.reports_dir())
 
 
 def _fold_metrics_summary(conn: sqlite3.Connection, trial_id: int, split: str) -> dict[str, float]:
@@ -474,8 +478,9 @@ def save_report(run_id: str, output_path: str | None = None, db_path: str | None
                  fdr_alpha: float = 0.10) -> str:
     html_content = generate_report_html(run_id, db_path=db_path, fdr_alpha=fdr_alpha)
     if output_path is None:
-        os.makedirs(DEFAULT_REPORTS_DIR, exist_ok=True)
-        output_path = os.path.join(DEFAULT_REPORTS_DIR, f"{run_id}.html")
+        reports_dir = default_reports_dir()
+        os.makedirs(reports_dir, exist_ok=True)
+        output_path = os.path.join(reports_dir, f"{run_id}.html")
     else:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
