@@ -10,7 +10,7 @@ import os
 import time
 from pathlib import Path
 
-from patrick import settings, sync
+from patrick import paths, settings, sync
 from patrick.desktop import prefs
 
 MANIFEST = sync.MANIFEST
@@ -91,6 +91,10 @@ def validate_folder(path: str) -> str:
         raise ShareError("Le dossier doit être un chemin complet (par exemple C:\\Users\\toi\\OneDrive\\PATRICK).")
     if _is_inside(folder, data_dir()):
         raise ShareError("Choisis un dossier différent des données de PATRICK (le dossier .patrick de ce PC).")
+    root = paths.configured_data_root()
+    if root is not None and (_is_inside(folder, root) or _is_inside(str(root), Path(folder))):
+        raise ShareError(f"Choisis un dossier différent de la racine de données de PATRICK ({root}) : "
+                         "le partage ne peut ni y être, ni la contenir.")
     if os.path.splitdrive(folder)[1] in ("\\", "/", ""):
         raise ShareError("Choisis un sous-dossier (par exemple « PATRICK » dans OneDrive), pas la racine d'un disque.")
     info = inspect_folder(folder)

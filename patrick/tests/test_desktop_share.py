@@ -71,6 +71,22 @@ def test_validate_refuses_the_data_dir_and_its_subfolders():
         share.validate_folder(str(data / "store"))
 
 
+def test_validate_refuses_a_share_inside_the_data_root_or_containing_it(tmp_path, monkeypatch):
+    root = tmp_path / "PATRICK DATA"
+    root.mkdir()
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(root))
+    for bad in (root, root / "partage", tmp_path):
+        with pytest.raises(share.ShareError, match="racine de données"):
+            share.validate_folder(str(bad))
+    assert share.validate_folder(str(tmp_path / "ailleurs")) == str(tmp_path / "ailleurs")
+
+
+def test_validate_is_unchanged_without_a_configured_data_root(tmp_path, monkeypatch):
+    monkeypatch.delenv("PATRICK_DATA_ROOT", raising=False)
+
+    assert share.validate_folder(str(tmp_path / "PATRICK")) == str(tmp_path / "PATRICK")
+
+
 def test_validate_refuses_a_missing_parent(tmp_path):
     with pytest.raises(share.ShareError):
         share.validate_folder(str(tmp_path / "a" / "b" / "c"))
