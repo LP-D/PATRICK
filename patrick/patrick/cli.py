@@ -12,6 +12,7 @@ import os
 
 import typer
 
+from patrick import paths
 from patrick import predict as predict_module
 from patrick import worker as worker_module
 from patrick.config import defaults as D
@@ -248,6 +249,14 @@ def manifest_cmd(run_id: str = typer.Argument(..., help="Identifiant du run")) -
     typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _require_data_root() -> None:
+    """Le serveur et le worker n'ont pas de sens sans disque de données : on s'arrête avec un message clair."""
+    problem = paths.data_root_problem()
+    if problem:
+        typer.echo(problem, err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="worker")
 def worker_cmd(
     idle_timeout: float = typer.Option(
@@ -260,6 +269,7 @@ def worker_cmd(
     web server (`ensure_worker_running`, see `webapp/run_manager.py`) -- this
     command is for manual launch/debugging, or as a dedicated service if you
     prefer not to rely on auto-spawn."""
+    _require_data_root()
     worker_module.run_worker_loop(poll_interval=poll_interval, idle_timeout=idle_timeout)
 
 
@@ -272,6 +282,7 @@ def serve_cmd(
     """Launches the web interface (synthesis dashboard on `/`, config form +
     run tracking + leaderboard on `/launch`), replacing manual YAML editing.
     Requires the `web` extra (`pip install -e ".[web]"`)."""
+    _require_data_root()
     try:
         import uvicorn
     except ImportError:

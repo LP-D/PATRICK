@@ -104,6 +104,16 @@ def _own_data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "pc" / ".patrick" / "settings.json"))
 
 
+def test_a_missing_data_disk_stops_the_launcher_before_anything_starts(env, tmp_path, monkeypatch):
+    configure(tmp_path)
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path / "PATRICK DATA"))
+    rep = FakeReporter()
+
+    assert launcher.run(rep) == 1
+
+    assert env.events == [] and len(rep.errors) == 1 and "PATRICK DATA" in rep.errors[0]
+
+
 def test_normal_launch_runs_every_step_in_order(env, tmp_path):
     configure(tmp_path)
     rep = FakeReporter()

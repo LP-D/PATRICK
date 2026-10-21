@@ -128,6 +128,8 @@ script below (no flash), otherwise the OS preference applies.
                 {# Contexte de reproductibilite (run detail) : bloc imprime en
                    tete de contenu -- un enfant qui definit un bloc absent du
                    parent verrait son contenu disparaitre sans erreur Jinja. #}
+                {% set missing_data_root = data_root_missing() %}
+                {% if missing_data_root %}<p class="banner banner-error data-root-banner" role="alert">{{ t('app_status_data_missing', path=missing_data_root) }}</p>{% endif %}
                 {% block session_context %}{% endblock %}
                 {% block content %}{% endblock %}
             </main>
