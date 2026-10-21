@@ -35,7 +35,9 @@ fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres gén�
 app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
-news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
+data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, caches, sauvegardes) : état, création, déplacement.")
+app.add_typer(data_app, name="data")
+news_app =typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
 app.add_typer(news_app, name="news")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
@@ -884,3 +886,37 @@ def news_summary_cmd() -> None:
     typer.echo(f"Nouvelles en base : {s['n_items']} ({s['n_24h']} depuis 24 h, {s['n_stale']} anciennes écartées)")
     typer.echo(f"Rattachées à un actif : {s['n_linked']} ({s['n_symbols']} actif(s)) ; sources : {s['n_sources']}")
     typer.echo(f"Dernière nouvelle connue : {s['last_known_at'] or 'aucune'}")
+
+
+@data_app.command(name="status")
+def data_status_cmd() -> None:
+    """Où sont les données de ce PC (dossier maison, racine de données), l'espace libre et les chemins qui ne se résolvent plus."""
+    from patrick import data_move
+
+    s = data_move.status()
+    if s["data_root"] is None:
+        typer.echo("Racine de données : aucune réglée (tout est dans le dossier maison).")
+    else:
+        typer.echo(f"Racine de données : {s['data_root']} ({'disponible' if s['available'] else 'INTROUVABLE'})")
+    typer.echo(f"Dossier maison : {s['home']} ; base : {s['db']}")
+    for volume in s["volumes"]:
+        typer.echo(f"Volume de {volume['path']} : {volume['free_gb']} Go libres")
+    for c in s["components"]:
+        typer.echo(f"  {c['name']:<14} {c['path']}{'' if c['exists'] else '  (absent)'}")
+    u = s["unresolved"]
+    typer.echo(f"Chemins qui ne se résolvent pas : modèles {u['artifact_paths']}, index du magasin {u['store_index']}")
+    if s["progress"]:
+        typer.echo(f"Déplacement en cours ou interrompu : {s['progress']}")
+
+
+@data_app.command(name="init")
+def data_init_cmd(folder: str = typer.Argument(..., help="Racine de données à créer, par exemple \"D:\\PATRICK DATA\"")) -> None:
+    """Crée la racine de données et ses sous-dossiers (ne déplace rien et ne change aucun réglage)."""
+    from patrick import data_move
+
+    try:
+        root = data_move.init_root(folder)
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Racine de données prête : {root}")
