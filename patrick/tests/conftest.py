@@ -58,6 +58,15 @@ def _isolated_local_cache(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_data_root(tmp_path, monkeypatch):
+    """The data root (`patrick/paths.py`: store, models, backups, archive, reports) is per test: nothing a test writes may
+    land in the machine's real data folder. A test that wants an unconfigured PC removes `PATRICK_DATA_ROOT`."""
+    root = tmp_path / "data_root"
+    root.mkdir()
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(root))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_machine_settings(tmp_path, monkeypatch):
     """Machine settings and shell-level worker overrides must not affect tests.
 
