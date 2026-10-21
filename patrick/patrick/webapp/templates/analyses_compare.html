@@ -1,0 +1,23 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import crumb %}
+{% block title %}PATRICK — {{ t('ac_title') }}{% endblock %}
+
+{% block crumb_trail %}{{ crumb(t('ac_crumb')) }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('ac_title') }}</h1>
+<p class="page-subtitle">{{ t('ac_subtitle') }}</p>
+
+<div id="ac-root" data-run-ids="{{ run_ids | join(',') }}">
+    <div class="ra-controls" id="ac-controls"></div>
+    <div id="ac-runs" class="ra-chips"></div>
+    <section class="card ra-section"><h2>{{ t('ac_s_head') }}</h2><div id="ac-head"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div></section>
+    <section class="card ra-section"><h2>{{ t('ac_s_curves') }}</h2><div id="ac-curves"></div></section>
+    <section class="card ra-section"><h2>{{ t('ac_s_folds') }}</h2><div id="ac-folds"></div></section>
+    <section class="card ra-section"><h2>{{ t('ac_s_dm') }}</h2><p class="hint">{{ t('ac_h_dm') }}</p><div id="ac-dm"></div></section>
+    <section class="card ra-section"><h2>{{ t('ac_s_diff') }}</h2><p class="hint">{{ t('ac_h_diff') }}</p><div id="ac-diff"></div></section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('analyses_compare.js') }}"></script>
+{% endblock %}

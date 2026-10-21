@@ -1,0 +1,24 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('dx_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('dx_title') }}</h1>
+<p class="page-subtitle">{{ t('dx_subtitle') }}</p>
+
+<div id="dx-root">
+    <div class="ra-controls" id="dx-tabs"></div>
+    <section class="card ra-section" id="dx-p-lake" data-panel="lake"><h2>{{ t('dx_tab_lake') }}</h2><p class="hint">{{ t('dx_lake_hint') }}</p><div class="ra-controls" id="dx-lake-controls"></div><div id="dx-lake"></div></section>
+    <section class="card ra-section" id="dx-p-pit" data-panel="pit" hidden><h2>{{ t('dx_tab_pit') }}</h2><p class="hint">{{ t('dx_pit_hint') }}</p><div class="ra-controls" id="dx-pit-controls"></div><div id="dx-pit"></div><div id="dx-series"></div></section>
+    <section class="card ra-section" id="dx-p-rev" data-panel="rev" hidden><h2>{{ t('dx_tab_rev') }}</h2><p class="hint">{{ t('dx_rev_hint') }}</p><div class="ra-controls" id="dx-rev-controls"></div><div id="dx-rev"></div></section>
+    <section class="card ra-section" id="dx-p-cal" data-panel="cal" hidden><h2>{{ t('dx_tab_cal') }}</h2><p class="hint">{{ t('dx_cal_hint') }}</p><div id="dx-cal"></div></section>
+    <section class="card ra-section" id="dx-p-watch" data-panel="watch" hidden><h2>{{ t('dx_tab_watch') }}</h2><p class="hint">{{ t('dx_w_hint') }}</p><div class="ra-controls" id="dx-watch-controls"></div><div id="dx-watch-form"></div><div id="dx-watch"></div>
+        <h3>{{ t('dx_w_check') }}</h3><p class="hint">{{ t('dx_w_check_hint') }}</p><div class="ra-controls" id="dx-check-controls"></div><div id="dx-check"></div></section>
+    <section class="card ra-section" id="dx-p-import" data-panel="import" hidden><h2>{{ t('dx_tab_import') }}</h2><p class="hint">{{ t('dx_i_hint') }}</p><div class="ra-controls" id="dx-import-controls"></div><div id="dx-import"></div></section>
+    <datalist id="dx-keys"></datalist>
+    <datalist id="dx-symbols"></datalist>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('donnees.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('rk_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('rk_title') }}</h1>
+<p class="page-subtitle">{{ t('rk_subtitle') }}</p>
+
+<div id="rk-root">
+    <div class="ra-controls" id="rk-controls"></div>
+    <div id="rk-status" role="status" aria-live="polite"></div>
+    <div class="metric-grid ra-kpis" id="rk-kpis"></div>
+    <section class="card ra-section"><h2>{{ t('rk_s_var') }}</h2><p class="hint">{{ t('rk_h_var') }}</p><div id="rk-var"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_equity') }}</h2><p class="hint">{{ t('rk_h_equity') }}</p><div id="rk-equity"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_contrib') }}</h2><p class="hint">{{ t('rk_h_contrib') }}</p><div id="rk-contrib"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_corr') }}</h2><p class="hint">{{ t('rk_h_corr') }}</p><div id="rk-corr"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_stress') }}</h2><p class="hint">{{ t('rk_h_stress') }}</p><div id="rk-stress"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_shocks') }}</h2><p class="hint">{{ t('rk_h_shocks') }}</p><div id="rk-shocks"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_bt') }}</h2><p class="hint">{{ t('rk_h_bt') }}</p><div class="ra-controls" id="rk-bt-controls"></div><div id="rk-bt"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_attr') }}</h2><p class="hint">{{ t('rk_h_attr') }}</p><div id="rk-attr"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_gaps') }}</h2><p class="hint">{{ t('rk_h_gaps') }}</p><div class="ra-controls" id="rk-gap-controls"></div><div id="rk-gaps"></div></section>
+    <section class="card ra-section"><h2>{{ t('rk_s_lex') }}</h2>
+        <dl class="rp-grid">
+            <div><dd data-keep="1">{{ t('rk_lex_var') }}</dd></div><div><dd data-keep="1">{{ t('rk_lex_es') }}</dd></div><div><dd data-keep="1">{{ t('rk_lex_cf') }}</dd></div>
+            <div><dd data-keep="1">{{ t('rk_lex_dd') }}</dd></div><div><dd data-keep="1">{{ t('rk_lex_hrp') }}</dd></div><div><dd data-keep="1">{{ t('rk_lex_turn') }}</dd></div><div><dd data-keep="1">{{ t('rk_lex_sharpe') }}</dd></div>
+        </dl>
+        <p class="hint" data-keep="1">{{ t('rk_source_note') }}</p>
+    </section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('risque.js') }}"></script>
+{% endblock %}

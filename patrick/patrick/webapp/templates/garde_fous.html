@@ -1,0 +1,41 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('ag_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('ag_title') }}</h1>
+<p class="page-subtitle">{{ t('ag_subtitle') }}</p>
+
+<nav class="section-index" aria-label="{{ t('ra_sections') }}">
+    <span class="section-index-label">{{ t('ra_sections') }}</span>
+    <a href="#budget">{{ t('ag_s_budget') }}</a><a href="#paires">{{ t('ag_s_pairs') }}</a><a href="#holdout">{{ t('ag_s_holdout') }}</a>
+</nav>
+
+<div id="ag-root">
+    <div class="metric-grid ra-kpis" id="ag-kpis" aria-live="polite"></div>
+
+    <section id="budget" class="card ra-section">
+        <h2>{{ t('ag_s_budget') }}</h2>
+        <p class="hint">{{ t('ag_h_budget') }}</p>
+        <div id="ag-budget"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div>
+    </section>
+
+    <section id="paires" class="card ra-section">
+        <h2>{{ t('ag_s_pairs') }}</h2>
+        <p class="hint">{{ t('ag_h_pairs') }}</p>
+        <div id="ag-scatter"></div>
+        <div class="ra-filters" id="ag-filters"></div>
+        <div id="ag-table"></div>
+        <div class="row" id="ag-pager"></div>
+    </section>
+
+    <section id="holdout" class="card ra-section">
+        <h2>{{ t('ag_s_holdout') }}</h2>
+        <p class="hint">{{ t('ag_h_holdout') }}</p>
+        <div id="ag-holdout"></div>
+    </section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('guardrails.js') }}"></script>
+{% endblock %}

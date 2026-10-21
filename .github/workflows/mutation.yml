@@ -1,0 +1,72 @@
+name: mutation
+
+# Test de mutation des modules statistiques (patrick/validation/*, voir [tool.mutmut] dans patrick/pyproject.toml) :
+# mutmut modifie le code un opérateur à la fois et relance les tests ; une mutation qui SURVIT est un comportement que
+# aucun test ne protège. mutmut ne tourne pas sous Windows (ni WSL ici) : ce workflow est le seul endroit où il s'exécute.
+#
+# - À la demande (onglet Actions > mutation > Run workflow) : champ « scope » = motif de nom de mutants
+#   (ex. patrick.validation.fdr.*) ; vide = tous les modules statistiques (long).
+# - Sans `gh` ni interface : pousser une branche `mutation-check/<nom>` lance le tout (quelques minutes : les modules
+#   statistiques sont petits et leurs tests rapides).
+# Le résultat sort en annotation et dans le résumé de l'exécution (patrick/scripts/mutation_summary.py), pas seulement
+# dans le journal (illisible sans compte GitHub).
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Motif de nom de mutants (ex. patrick.validation.fdr.*) ; vide = tous les modules statistiques"
+        required: false
+        default: ""
+  push:
+    branches: ["mutation-check/**"]
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (pinned) and mutmut
+        run: |
+          pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]"
+          pip install "mutmut==3.8.0"
+
+      - name: Mutate the statistical modules
+        working-directory: patrick
+        env:
+          SCOPE: ${{ inputs.scope }}               # vide sur un push de branche : tous les modules
+        run: |
+          set -o pipefail
+          set -f                                   # le motif contient « * » : pas d'expansion par le shell
+          echo "scope: '${SCOPE}'"
+          mutmut run $SCOPE 2>&1 | tee mutmut-run.log
+
+      - name: Results
+        if: always()
+        working-directory: patrick
+        run: |
+          mutmut results --all true > mutmut-results.txt 2>&1 || true
+          python scripts/mutation_summary.py mutmut-results.txt >> "$GITHUB_STEP_SUMMARY"
+          python scripts/mutation_summary.py mutmut-results.txt --annotation --title "mutation: résultats"
+
+      - name: Run log (on failure)
+        if: failure()
+        working-directory: patrick
+        run: |
+          python scripts/mutation_summary.py --tail mutmut-run.log --title "mutmut run: fin du journal"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-results
+          path: |
+            patrick/mutmut-run.log
+            patrick/mutmut-results.txt
+            patrick/mutants/**/*.meta
+          if-no-files-found: ignore

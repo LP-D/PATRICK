@@ -53,9 +53,18 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
     NavEntry("runs", "Historique", "/runs", "pilotage", 30, "nav_runs",
              child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
+    NavEntry("analyses", "Analyses", "/analyses", "pilotage", 35, "nav_analyses", child_routes=("/runs/{run_id}/analyse", "/analyses/comparer")),
+    NavEntry("guardrails", "Garde-fous", "/garde-fous", "pilotage", 37, "nav_guardrails"),
+    NavEntry("variables", "Variables", "/variables", "pilotage", 46, "nav_variables"),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 40, "nav_predictions"),
+    NavEntry("drift", "Dérive", "/derive", "pilotage", 42, "nav_drift"),
+    NavEntry("journal", "Journal", "/journal", "pilotage", 43, "nav_journal"),
+    NavEntry("carnet", "Carnet", "/carnet", "pilotage", 49, "nav_carnet"),
+    NavEntry("models_registry", "Registre de modèles", "/modeles", "pilotage", 44, "nav_models_registry", child_routes=("/modeles/fiche",)),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 45, "nav_analysis"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 47, "nav_exploration"),
+    NavEntry("news", "News", "/news", "pilotage", 48, "nav_news"),
+    NavEntry("donnees", "Données", "/donnees", "pilotage", 51, "nav_donnees"),
     NavEntry("data_freshness", "Fraîcheur", "/data-freshness", "pilotage", 50, "nav_data_freshness"),
     NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 55, "nav_data_quality"),
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
@@ -87,6 +96,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("patrimoine", "Comptes", "/patrimoine", "patrimoine", 10, "nav_patrimoine",
              child_routes=("/patrimoine/comptes/{account_id}",)),
     NavEntry("mouvements", "Mouvements", "/mouvements", "patrimoine", 20, "nav_mouvements"),
+    NavEntry("risque", "Risque", "/risque", "patrimoine", 30, "nav_risque"),
 )
 
 # Pages d'USAGE de l'application (pas des classes d'analyse) : hors des 4 categories, elles ont leur propre
@@ -94,6 +104,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
 UTILITY_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("vocabulary", "Vocabulaire", "/vocabulary", "utility", 5, "nav_vocabulary"),
     NavEntry("settings", "Réglages", "/reglages", "utility", 10, "nav_settings"),
+    NavEntry("diagnostics", "Diagnostics", "/diagnostics", "utility", 20, "nav_diagnostics"),
 )
 
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).
@@ -103,6 +114,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/runs/{run_id}/panel",
     "/runs/{run_id}/results",
     "/runs/{run_id}/download/{artifact}",
+    "/runs/{run_id}/analyse/export",   # rapport HTML autonome (téléchargement)
     "/launch",                  # redirection permanente vers /ml (ancien poste de lancement, liens et marque-pages conserves)
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
     "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)
@@ -134,6 +146,8 @@ def _child_pattern(route: str) -> re.Pattern[str]:
 def is_active(entry: NavEntry, path: str) -> bool:
     """`/` en egalite stricte, les autres par prefixe de segment (`/runs` allume `/runs/{id}/detail`) ; une page enfant declaree dans
     `child_routes` allume aussi son entree (`/targets/^VIX` allume Univers, `/compare-runs` allume Historique)."""
+    if path.startswith("/runs/") and path.endswith("/analyse"):
+        return entry.slug == "analyses"          # l'analyse d'un run allume « Analyses », pas « Historique » (même préfixe /runs)
     if entry.url == "/":
         return path == "/"
     return (path == entry.url or path.startswith(entry.url + "/")

@@ -372,9 +372,11 @@ def test_holdout_diagnostic_covers_full_scan_grid_not_just_winner(tiny_config, m
     conn.close()
 
     assert n_diag_rows > 0, "holdout_diagnostic n'a reçu aucune ligne."
-    # C'est précisément l'écart que corrige C4 : fold_metric[holdout] = 1 seul
-    # trial (le gagnant), holdout_diagnostic doit en couvrir strictement plus.
-    assert n_holdout_fold_metric_trials == 1
+    # C'est précisément l'écart que corrige C4 : fold_metric[holdout] = les seuls
+    # gagnants (un par horizon depuis 1ed8fff « chaque horizon d'un lancement
+    # garde son holdout » ; `tiny_config` en a 2), holdout_diagnostic doit en
+    # couvrir strictement plus.
+    assert n_holdout_fold_metric_trials == len(tiny_config.objective.horizons)
     assert n_diag_trials > n_holdout_fold_metric_trials, (
         f"holdout_diagnostic ({n_diag_trials} trials) ne couvre pas plus que "
         f"fold_metric[holdout] ({n_holdout_fold_metric_trials}) -- la grille SCAN complète "

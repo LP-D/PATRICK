@@ -67,7 +67,7 @@ def test_dm_applies_the_harvey_leybourne_newbold_correction():
     h > 1 (HLN 1997, Table 1). DM is evaluated here on a SINGLE walk-forward
     fold (a few hundred rows at most), squarely in that regime."""
     rng = np.random.default_rng(3)
-    T, h = 60, 5
+    T, h = 150, 5   # >= 15 blocs indépendants (n/h) : sinon le test est refusé, voir plus bas
     loss_a = rng.binomial(1, 0.35, T).astype(float)
     loss_b = rng.binomial(1, 0.55, T).astype(float)
     out = diebold_mariano(loss_a, loss_b, h=h)
@@ -79,7 +79,7 @@ def test_dm_applies_the_harvey_leybourne_newbold_correction():
 
 def test_dm_hln_is_more_conservative_than_the_uncorrected_normal_test():
     rng = np.random.default_rng(4)
-    T, h = 50, 10
+    T, h = 200, 10   # >= 15 blocs indépendants (n/h) : sinon le test est refusé, voir plus bas
     loss_a = rng.binomial(1, 0.30, T).astype(float)
     loss_b = rng.binomial(1, 0.50, T).astype(float)
     d = loss_a - loss_b
@@ -110,3 +110,57 @@ def test_dm_negative_rectangular_variance_falls_back_to_bartlett_not_a_clamp():
     assert out["variance_kernel"] == "bartlett"
     assert np.isfinite(out["dm_stat"]) and abs(out["dm_stat"]) < 10
     assert out["p_value"] > 0.01
+
+
+# --- Testabilité selon l'horizon (audit du 2026-10-19) ---------------------------------------------------------------
+# Les pertes d'un modèle évalué à l'horizon h partagent h-1 barres avec leurs voisines : l'échantillon de n lignes ne
+# vaut que n/h observations indépendantes. Simulé sous H0 (différentiel de pertes = moyenne mobile de h erreurs
+# indépendantes), le test à 5 % rejette : ~7 % avec 15 blocs, ~10 % avec 10, ~22 % avec 2,6 (holdout de 15 mois,
+# h=120) et plus de 80 % à h=504. HLN et la fenêtre HAC ne suffisent pas : on refuse de conclure sous 15 blocs.
+
+def _overlapping_noise(rng: np.random.Generator, n: int, h: int) -> np.ndarray:
+    """Différentiel de pertes sous H0 pour un horizon h : moyenne mobile de h erreurs indépendantes."""
+    return np.convolve(rng.standard_normal(n + h - 1), np.ones(h) / h, mode="valid")
+
+
+def test_dm_refuses_a_verdict_when_the_horizon_leaves_too_few_independent_blocks():
+    """Holdout de 15 mois (~315 séances) à h=252 : 1,25 bloc indépendant. Même un écart très net (10 % d'erreurs
+    contre 50 %) n'est pas une preuve : le test doit être « non testable », pas p ≈ 0."""
+    rng = np.random.default_rng(0)
+    n, h = 315, 252
+    loss_a = rng.binomial(1, 0.1, n).astype(float)
+    loss_b = rng.binomial(1, 0.5, n).astype(float)
+    out = diebold_mariano(loss_a, loss_b, h=h)
+    assert np.isnan(out["dm_stat"]) and np.isnan(out["p_value"])
+    assert out["n_obs"] == n
+    assert out["untestable_reason"] == "horizon_too_long"
+
+
+@pytest.mark.parametrize("h", [5, 20, 60])
+def test_dm_horizon_rule_allows_exactly_fifteen_blocks_and_refuses_one_row_less(h):
+    rng = np.random.default_rng(h)
+    n_ok = 15 * h
+    loss_a, loss_b = rng.random(n_ok), rng.random(n_ok)
+    assert np.isfinite(diebold_mariano(loss_a, loss_b, h=h)["p_value"])
+    refused = diebold_mariano(loss_a[:-1], loss_b[:-1], h=h)
+    assert np.isnan(refused["p_value"]) and refused["untestable_reason"] == "horizon_too_long"
+
+
+def test_dm_without_overlap_keeps_its_small_sample_behaviour():
+    """h=1 : les pertes ne se chevauchent pas, la règle des blocs ne s'applique pas (seul le minimum de 10 lignes)."""
+    rng = np.random.default_rng(5)
+    out = diebold_mariano(rng.random(12), rng.random(12), h=1)
+    assert np.isfinite(out["p_value"])
+
+
+def test_dm_size_stays_near_nominal_at_the_smallest_allowed_sample():
+    """Ce qui justifie le seuil de 15 blocs : à la taille minimale autorisée (h=20, n=300) le test à 5 % rejette H0
+    moins de 11 % du temps sous H0 chevauchée (mesuré : ~8 %). Une dégradation de la variance ou de la correction
+    HLN casserait ce test ; l'abaissement du seuil lui-même est couvert par le test de frontière ci-dessus."""
+    rng = np.random.default_rng(11)
+    h, reps = 20, 1500
+    n = 15 * h
+    p_values = np.array([diebold_mariano(_overlapping_noise(rng, n, h), np.zeros(n), h=h)["p_value"]
+                         for _ in range(reps)])
+    assert np.isfinite(p_values).all()
+    assert (p_values < 0.05).mean() < 0.11

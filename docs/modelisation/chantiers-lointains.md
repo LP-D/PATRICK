@@ -1,6 +1,7 @@
 # Chantiers lointains — RL, cible alpha, futures
 
-Statut : cadrage, rien n'est implémenté. Date : 2026-09-26. Classement de la roadmap conservé :
+Statut : cadrage du 2026-09-26. Mise à jour du 2026-10-18 : le RL (§1, page `/rl`) et la cible alpha (§2, `features/alpha_target.py`) sont
+implémentés depuis ; seule l'extension futures (§3) reste hors périmètre, faute de courbe de contrats. Classement de la roadmap conservé :
 RL expérimental, cible alpha reportée, futures hors périmètre. Pour chacun : ce qui le rendrait défendable,
 le prérequis, et le critère d'entrée.
 

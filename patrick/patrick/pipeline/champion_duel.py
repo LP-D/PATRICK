@@ -23,6 +23,7 @@ champion that stays in title.
 """
 from __future__ import annotations
 
+import inspect
 import math
 import time
 import traceback
@@ -99,6 +100,17 @@ def _replace_suspect_champion(st, target: str, horizon: int, run_id: str, trial_
             "champion_f1_dir": champ_f1, "pruned_run": champion["run_id"]}
 
 
+def _read_holdout(purpose: str, run_id: str, *args, **kwargs):
+    """`engine._evaluate_holdout` -- the only function that reads the holdout -- with the registry's `purpose` and
+    `run_id` (`holdout_access`). A worker started before the update keeps the old `engine` in memory but loads this
+    module at the end of the run (same case as `persist_holdout` below): that old function has no registry, the
+    duel must still run."""
+    read = engine._evaluate_holdout
+    if "purpose" in inspect.signature(read).parameters:
+        kwargs.update(purpose=purpose, run_id=run_id)
+    return read(*args, **kwargs)
+
+
 def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | None) -> dict:
     target = st.config.objective.run_label()
     run_id = st.run_ids[horizon]
@@ -109,7 +121,8 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
             return {"decision": "promoted_first", "run_id": run_id}
         return {"decision": "not_compared", "why": "no holdout for this run", "champion": champion["run_id"]}
 
-    chal_eval = known_eval if known_eval is not None else engine._evaluate_holdout(
+    chal_eval = known_eval if known_eval is not None else _read_holdout(
+        "champion_duel_challenger", run_id,
         st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool, st.config,
         st.all_dates_full, st.n_wf, best_h, st.seed, universe=st.universe)
     if chal_eval is not None and known_eval is None:
@@ -137,7 +150,8 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
                 "champion": champion["run_id"]}
 
     champ_cfg, duel_config, pool_builder, feature_pool, universe, pool_mode = _champion_setup(st, champion, horizon)
-    champ_eval = engine._evaluate_holdout(
+    champ_eval = _read_holdout(
+        "champion_duel_champion", run_id,
         st.conn, st.snapshot_id, pool_builder, st.target_col, feature_pool, duel_config,
         st.all_dates_full, st.n_wf, champ_cfg, st.seed, universe=universe)
     champ_f1 = _f1(champ_eval)

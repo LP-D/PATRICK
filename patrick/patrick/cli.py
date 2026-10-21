@@ -7,6 +7,7 @@ the rest of the French-language product surface (see the D4 translation
 scope note in `README.md`)."""
 from __future__ import annotations
 
+import json
 import os
 
 import typer
@@ -33,6 +34,8 @@ fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres gén�
 app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
+news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
+app.add_typer(news_app, name="news")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
@@ -171,7 +174,7 @@ def resume_cmd(
     if row is None:
         typer.echo(f"Run introuvable : {run_id}")
         raise typer.Exit(code=1)
-    config = RunConfig.model_validate_json(row["config_json"])
+    config = RunConfig.from_stored_json(row["config_json"])
     typer.echo(f"Reprise de '{config.name}' (run {run_id}, statut précédent={row['status']})...")
     with keep_awake():
         result = run_pipeline(config, snapshot_id=row["snapshot_id"])
@@ -225,6 +228,24 @@ def predict_cmd(
     result = predict_module.predict_live(run_id)
     typer.echo(f"[LIVE] {result['ts']} -> classe prédite={result['y_pred']} "
                f"(confiance={result['y_proba']:.3f}) | {result['n_outcomes_updated']} résultat(s) live mis à jour")
+
+
+@app.command(name="manifest")
+def manifest_cmd(run_id: str = typer.Argument(..., help="Identifiant du run")) -> None:
+    """Manifeste d'un run (JSON) : SHA git, empreinte des données et de la configuration, graine, bibliothèques,
+    plateforme et empreinte de l'environnement -- de quoi refaire ou comparer un run."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import manifest as run_manifest
+
+    conn = trackdb.connect(trackdb.default_db_path())
+    try:
+        data = run_manifest.build_manifest(conn, run_id)
+    except KeyError:
+        typer.echo(f"Run introuvable : {run_id}", err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        conn.close()
+    typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
 @app.command(name="worker")
@@ -816,3 +837,39 @@ def fund_rule_apply_cmd(
 
 if __name__ == "__main__":
     app()
+
+
+@news_app.command(name="refresh")
+def news_refresh_cmd(
+    gdelt: bool = typer.Option(False, "--gdelt", help="Ajoute GDELT (une requête toutes les ~5 s, environ 35 s au total)"),
+    yahoo: str = typer.Option("", "--yahoo", help="Symboles dont on lit les titres Yahoo, séparés par des virgules"),
+    no_score: bool = typer.Option(False, "--no-score", help="Collecte seulement, sans noter ni rattacher"),
+) -> None:
+    """Collecte les flux (RSS/Atom par défaut et ceux du réglage `news_extra_feeds`), puis note et rattache les nouvelles."""
+    from patrick.text import service
+
+    symbols = [s.strip() for s in yahoo.split(",") if s.strip()]
+    conn = trackdb.connect()
+    try:
+        report = service.refresh(conn, with_gdelt=gdelt, yahoo_symbols=symbols or None, score=not no_score)
+    finally:
+        conn.close()
+    typer.echo(f"{report['added']} nouvelle(s) ajoutée(s), {report['scored']} notée(s)"
+               f" ; {report['skipped_without_date']} écartée(s) faute de date.")
+    for name, error in report["errors"]:
+        typer.echo(f"Source en échec : {name} -- {error}")
+
+
+@news_app.command(name="summary")
+def news_summary_cmd() -> None:
+    """Chiffres du magasin de nouvelles."""
+    from patrick.text import service
+
+    conn = trackdb.connect()
+    try:
+        s = service.summary(conn)
+    finally:
+        conn.close()
+    typer.echo(f"Nouvelles en base : {s['n_items']} ({s['n_24h']} depuis 24 h, {s['n_stale']} anciennes écartées)")
+    typer.echo(f"Rattachées à un actif : {s['n_linked']} ({s['n_symbols']} actif(s)) ; sources : {s['n_sources']}")
+    typer.echo(f"Dernière nouvelle connue : {s['last_known_at'] or 'aucune'}")

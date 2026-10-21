@@ -1,0 +1,33 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('aj_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('aj_title') }}</h1>
+<p class="page-subtitle">{{ t('aj_subtitle') }}</p>
+
+<div id="aj-root">
+    <div class="metric-grid ra-kpis" id="aj-kpis" aria-live="polite"></div>
+    <section class="card ra-section">
+        <h2>{{ t('aj_s_chain') }}</h2>
+        <p class="hint">{{ t('aj_h_chain') }}</p>
+        <div class="ra-controls" id="aj-actions"></div>
+        <div id="aj-chain"></div>
+    </section>
+    <section class="card ra-section">
+        <h2>{{ t('aj_s_pairs') }}</h2>
+        <p class="hint">{{ t('aj_h_pairs') }}</p>
+        <div id="aj-pairs"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div>
+    </section>
+    <section class="card ra-section">
+        <h2>{{ t('aj_s_entries') }}</h2>
+        <p class="hint">{{ t('aj_h_entries') }}</p>
+        <div class="ra-filters" id="aj-filters"></div>
+        <div id="aj-entries"></div>
+        <div class="row" id="aj-pager"></div>
+    </section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('journal.js') }}"></script>
+{% endblock %}

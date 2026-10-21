@@ -12,12 +12,18 @@ from contextvars import ContextVar
 from starlette.requests import Request
 
 from patrick.webapp import i18n_server
+from patrick.webapp.i18n_analysis import (
+    ANALYSIS_JS_KEYS,
+    ANALYSIS_STRINGS,
+    NOTIFY_JS_KEYS,
+)
 from patrick.webapp.i18n_charts import CHART_JS_KEYS, CHART_STRINGS
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
+from patrick.webapp.i18n_text import TEXT_JS_KEYS, TEXT_STRINGS
 from patrick.webapp.i18n_ui import UI_JS_KEYS, UI_STRINGS
 
 LANG_COOKIE = "patrick_lang"
@@ -680,6 +686,10 @@ STRINGS.update(MODELS_STRINGS)
 STRINGS.update(CHART_STRINGS)
 # Audit d'interface du 2026-10-21 (webapp/i18n_ui.py).
 STRINGS.update(UI_STRINGS)
+# Black-Litterman de /portfolio et page /news (webapp/i18n_text.py).
+STRINGS.update(TEXT_STRINGS)
+# Pages d'analyse des entraînements (webapp/i18n_analysis.py).
+STRINGS.update(ANALYSIS_STRINGS)
 
 
 # Langue de la requête en cours, posée par `LangMiddleware` : les macros importées sans contexte (`_components.html`) ne voient pas `t()`,
@@ -735,7 +745,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", *CHART_JS_KEYS, *UI_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", *NOTIFY_JS_KEYS, *CHART_JS_KEYS, *UI_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done", "phase_other",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",
@@ -777,7 +787,9 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
-    keys = [*keys, *PAGE_JS_KEYS.get(path, ())]
+    keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ())]
+    if path.startswith(("/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet", "/diagnostics", "/risque", "/donnees")) or (path.startswith("/runs/") and path.endswith("/analyse")):
+        keys = [*keys, *ANALYSIS_JS_KEYS]
     t = translator(lang)
     return {k: t(k) for k in keys}
 

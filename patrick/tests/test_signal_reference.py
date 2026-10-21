@@ -2,7 +2,7 @@
 Mémorisée à l'instant du signal (migration 0032) et dite dans la bulle de /predictions avec le marché concerné."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from page_support import FullPageClient as TestClient
@@ -15,7 +15,7 @@ from patrick.webapp.app import _market_view, app
 
 def _utc(day: str, hour: int, minute: int = 0) -> datetime:
     y, m, d = map(int, day.split("-"))
-    return datetime(y, m, d, hour, minute, tzinfo=timezone.utc)
+    return datetime(y, m, d, hour, minute, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("asset_class, now, final", [

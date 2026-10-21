@@ -1,0 +1,22 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('dg_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('dg_title') }}</h1>
+<p class="page-subtitle">{{ t('dg_subtitle') }}</p>
+
+<div id="dg-root">
+    <div class="ra-controls" id="dg-controls"></div>
+    <div class="metric-grid ra-kpis" id="dg-kpis" aria-live="polite"></div>
+    <section class="card ra-section"><h2>{{ t('dg_s_app') }}</h2><div id="dg-app"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 80%"></div></div></div></section>
+    <section class="card ra-section"><h2>{{ t('dg_s_proc') }}</h2><p class="hint">{{ t('dg_h_proc') }}</p><div id="dg-proc"></div></section>
+    <section class="card ra-section"><h2>{{ t('dg_s_cpu') }}</h2><div id="dg-cpu"></div></section>
+    <section class="card ra-section"><h2>{{ t('dg_s_disks') }}</h2><div id="dg-disks"></div></section>
+    <section class="card ra-section"><h2>{{ t('dg_s_storage') }}</h2><p class="hint">{{ t('dg_h_storage') }}</p><div id="dg-storage"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 70%"></div></div></div></section>
+    <section class="card ra-section"><h2>{{ t('dg_s_logs') }}</h2><p class="hint">{{ t('dg_h_logs') }}</p><div class="ra-controls" id="dg-log-controls"></div><pre id="dg-log" class="config-dump dg-log" tabindex="0"></pre></section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('diagnostics.js') }}"></script>
+{% endblock %}

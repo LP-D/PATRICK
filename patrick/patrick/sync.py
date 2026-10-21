@@ -38,7 +38,7 @@ import subprocess
 import tempfile
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from patrick import settings as settings_mod
@@ -467,7 +467,7 @@ def push(dest: str, *, db_path: str | None = None, store_root: str | None = None
 
         manifest = {
             "format": FORMAT_VERSION,
-            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "schema_version": version,
             "runs": runs,
             "personal_included": include_personal,
@@ -628,7 +628,7 @@ def load_state() -> dict:
 
 
 def save_state(**fields) -> dict:
-    data = {**load_state(), **fields, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    data = {**load_state(), **fields, "at": datetime.now(UTC).isoformat(timespec="seconds")}
     path = state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -1037,7 +1037,7 @@ def _funds_publish(folder: str, db_path: str, out: dict) -> None:
         tmp = Path(tmp_s)
         info = fund_share.export_funds(db_path, tmp / "funds.db")
         _gzip_file(tmp / "funds.db", tmp / gz_name)
-        meta = {"format": 1, "pc": name, "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        meta = {"format": 1, "pc": name, "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "sha256": _sha256(tmp / gz_name), "size": (tmp / gz_name).stat().st_size, **info}
         (tmp / json_name).write_text(json.dumps(meta, indent=1), encoding="utf-8")
         FolderTransport(folder).upload({gz_name: tmp / gz_name, json_name: tmp / json_name})   # le .json en dernier

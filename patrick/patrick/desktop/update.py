@@ -1,8 +1,12 @@
-"""Mise à jour de la version installée depuis GitHub (branche `main`), avec sauvegarde de la base avant et retour
-en arrière si l'installation des composants échoue.
+"""Mise à jour de la version installée depuis GitHub, avec sauvegarde de la base avant et retour en arrière si
+l'installation des composants échoue.
+
+On suit la branche `stable`, que la CI avance sur un commit de `main` seulement quand toutes ses vérifications sont vertes
+(`.github/workflows/tests.yml`, job `promote`) : un `main` cassé ne casse plus l'application des deux PC (audit externe du
+2026-10-19). Tant qu'aucune version n'est validée (`stable` absente), rien n'est installé.
 
 Règles de sécurité : on ne touche qu'à un dépôt PROPRE (aucune modification locale suivie) qui est sur `main`
-et dont la version locale est un ancêtre de `origin/main` (avance rapide uniquement, jamais de fusion ni
+et dont la version locale est un ancêtre de `origin/stable` (avance rapide uniquement, jamais de fusion ni
 d'écrasement); on ne met jamais à jour pendant un entraînement.
 """
 from __future__ import annotations
@@ -11,12 +15,13 @@ import json
 import os
 import shutil
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from patrick.desktop import runtime
 
-BRANCH = "main"
+BRANCH = "main"            # branche locale qui doit être extraite
+RELEASE_REF = "stable"     # branche distante suivie : le dernier commit dont la CI est verte
 STATE_NAME = "update_state.json"
 _GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_HTTP_LOW_SPEED_LIMIT": "1000", "GIT_HTTP_LOW_SPEED_TIME": "10"}
 
@@ -45,7 +50,7 @@ def _save_state(**fields) -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class _Git:
@@ -87,23 +92,29 @@ def check(repo: Path | None = None, *, fetch: bool = True) -> dict:
         return {"state": "skipped", "message": "Des modifications locales sont présentes : mise à jour ignorée.",
                 "branch": branch}
     if fetch:
-        fetched = git("fetch", "-q", "origin", BRANCH, timeout=40)
+        fetched = git("fetch", "-q", "origin", RELEASE_REF, timeout=40)
         if fetched.returncode != 0:
+            # `ls-remote --exit-code` : 2 = le dépôt répond mais n'a pas cette branche (aucune version validée) ;
+            # toute autre erreur = injoignable.
+            if git("ls-remote", "--exit-code", "--heads", "origin", RELEASE_REF, timeout=40).returncode == 2:
+                return {"state": "skipped", "branch": branch,
+                        "message": f"Aucune version validée n'est publiée (branche « {RELEASE_REF} » absente) : "
+                                   f"mise à jour ignorée."}
             return {"state": "unavailable", "message": f"GitHub est injoignable (hors ligne ?) : "
                                                        f"{(fetched.stderr or fetched.stdout).strip()}",
                     "branch": branch}
-    local, remote = git.out("rev-parse", "HEAD"), git.out("rev-parse", f"origin/{BRANCH}")
+    local, remote = git.out("rev-parse", "HEAD"), git.out("rev-parse", f"origin/{RELEASE_REF}")
     if not local or not remote:
         return {"state": "unavailable", "message": "Version introuvable.", "branch": branch}
     if local == remote:
         return {"state": "uptodate", "message": "PATRICK est à jour.", "behind": 0, "local": local, "remote": remote,
                 "branch": branch}
     if git("merge-base", "--is-ancestor", local, remote).returncode != 0:
-        return {"state": "skipped", "message": "La version locale n'est pas un ancêtre de origin/main : "
+        return {"state": "skipped", "message": f"La version locale n'est pas un ancêtre de origin/{RELEASE_REF} : "
                                               "mise à jour ignorée.", "local": local, "remote": remote,
                 "branch": branch}
-    behind = int(git.out("rev-list", "--count", f"HEAD..origin/{BRANCH}") or 0)
-    news = git.out("log", "-n", "8", "--format=%s", f"HEAD..origin/{BRANCH}").splitlines()
+    behind = int(git.out("rev-list", "--count", f"HEAD..origin/{RELEASE_REF}") or 0)
+    news = git.out("log", "-n", "8", "--format=%s", f"HEAD..origin/{RELEASE_REF}").splitlines()
     return {"state": "available", "message": f"{behind} nouveauté(s) disponible(s).", "behind": behind,
             "news": news, "local": local, "remote": remote, "branch": branch}
 
@@ -151,7 +162,7 @@ def apply(*, repo: Path | None = None, progress: Progress | None = None,
     code, detail = backup(project)
     if code != 0:
         return {"status": "skipped", "message": f"Mise à jour annulée : la sauvegarde de la base a échoué ({detail})."}
-    merged = git("merge", "--ff-only", f"origin/{BRANCH}", timeout=60)
+    merged = git("merge", "--ff-only", f"origin/{RELEASE_REF}", timeout=60)
     if merged.returncode != 0:
         return {"status": "failed", "message": f"Mise à jour annulée : {(merged.stderr or merged.stdout).strip()}"}
     deps = bool(git.out("diff", "--name-only", local, remote, "--", "patrick/pyproject.toml"))

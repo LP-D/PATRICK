@@ -1,0 +1,28 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import crumb %}
+{% block title %}PATRICK — {{ t('am_title') }}{% endblock %}
+
+{% block crumb_trail %}{% if card_mode %}{{ crumb(target ~ ' · ' ~ t('ad_h', h=horizon)) }}{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+{% if card_mode %}
+<h1 class="page-title">{{ t('am_card_title') }} · {{ target }} · {{ t('ad_h', h=horizon) }}</h1>
+<p class="page-subtitle">{{ t('am_card_subtitle') }}</p>
+<div id="am-card" data-target="{{ target }}" data-horizon="{{ horizon }}"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 72%"></div></div></div>
+{% else %}
+<h1 class="page-title">{{ t('am_title') }}</h1>
+<p class="page-subtitle">{{ t('am_subtitle') }}</p>
+<div id="am-root">
+    <div class="metric-grid ra-kpis" id="am-kpis" aria-live="polite"></div>
+    <section class="card ra-section">
+        <h2>{{ t('am_s_list') }}</h2>
+        <p class="hint">{{ t('am_h_list') }}</p>
+        <div class="ra-filters" id="am-filters"></div>
+        <div id="am-table"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div>
+        <div class="row" id="am-pager"></div>
+    </section>
+</div>
+{% endif %}
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('model_registry.js') }}"></script>
+{% endblock %}

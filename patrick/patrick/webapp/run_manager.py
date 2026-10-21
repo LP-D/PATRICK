@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
@@ -90,14 +90,14 @@ def next_run_name(target_symbol: str) -> str:
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:
         return None
-    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
 
 
 def _elapsed_s(job: dict) -> float:
     start = _parse_dt(job["started_at"]) or _parse_dt(job["created_at"])
     if start is None:
         return 0.0
-    end = _parse_dt(job["finished_at"]) or datetime.now(timezone.utc)
+    end = _parse_dt(job["finished_at"]) or datetime.now(UTC)
     return (end - start).total_seconds()
 
 

@@ -52,6 +52,7 @@ from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.data import alignment
+from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
 from patrick.data.session_calendar import classify_asset_class
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
@@ -303,25 +304,56 @@ def _discover_interaction_formulas(pool: pd.DataFrame, config: RunConfig,
     parametric) of any fold."""
     pilot_horizon = config.objective.horizons[len(config.objective.horizons) // 2]
     pilot_target, _, _ = run_target(pool, config, target_col, pilot_horizon, pilot_split_idx)
-    pilot_idx = pilot_target.index
     pilot_cut_date = pool.index[pilot_split_idx]
-    pilot_train_mask = np.asarray(pilot_idx < pilot_cut_date)
-    y_pilot_tr = pilot_target.values[pilot_train_mask].astype(int)
-    if len(y_pilot_tr) < 100:
-        print("  [INTERACTIONS] not enough data on the pilot fold — step skipped.")
+    return _discover_formulas_on_rows(pool, pilot_target, np.asarray(pilot_target.index < pilot_cut_date),
+                                      config, target_col)
+
+
+def _discover_formulas_on_rows(pool: pd.DataFrame, y: pd.Series, rows: np.ndarray,
+                                config: RunConfig, target_col: str) -> list[str]:
+    """Interaction discovery (see `_discover_interaction_formulas`) from the
+    rows of `y` where `rows` is True -- features and labels of those rows and
+    nothing else: the caller decides which bars discovery may know about
+    (the first fold's train in walk-forward, one combination's purged train
+    complement in CPCV)."""
+    y_tr = y.values[rows].astype(int)
+    if len(y_tr) < 100:
+        print("  [INTERACTIONS] not enough training rows to discover formulas — step skipped.")
         return []
 
     feature_cols = [c for c in pool.columns if c != target_col]
-    X_pilot_tr = pool.loc[pilot_idx[pilot_train_mask], feature_cols].fillna(0.0)
+    X_tr = pool.loc[y.index[rows], feature_cols].fillna(0.0)
 
     inter_df = discover_interactions(
-        X_pilot_tr, y_pilot_tr,
+        X_tr, y_tr,
         top_base=config.features.interact_top_base,
         top_pairs=config.features.interact_top_pairs,
         final_n=config.features.interact_final_n,
         seed=config.output.seed,
     )
     return list(inter_df.columns)
+
+
+def _cpcv_interaction_formulas(pool: pd.DataFrame, y: pd.Series, config: RunConfig, target_col: str,
+                                groups: list[tuple[int, int]], combos: list[tuple[int, ...]],
+                                max_horizon: int, embargo_bars: int | None) -> dict[tuple[int, ...], list[str]]:
+    """One formula set per CPCV combination, discovered on that combination's
+    training bars only -- purged for `max_horizon` (the longest label window of
+    the run, so no horizon's labels reach a test group) and embargoed. The
+    pilot labels `y` are those of the median horizon; the formulas serve every
+    horizon, so the purge uses the longest one."""
+    formulas: dict[tuple[int, ...], list[str]] = {}
+    for combo in combos:
+        split = cpcv_module.build_split(groups, combo, max_horizon, embargo_bars)
+        rows = np.asarray(y.index.isin(pool.index[split.train_mask]))
+        formulas[combo] = _discover_formulas_on_rows(pool, y, rows, config, target_col)
+    return formulas
+
+
+def _combo_feature_pool(feature_pool: list[str], all_formulas: list[str], combo_formulas: list[str]) -> list[str]:
+    """`feature_pool` without the interaction columns of the other combinations' formula sets (order preserved)."""
+    foreign = set(all_formulas) - set(combo_formulas)
+    return [f for f in feature_pool if f not in foreign]
 
 
 def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) -> pd.DataFrame:
@@ -891,7 +923,8 @@ def _walk_forward_span(all_dates: pd.DatetimeIndex, holdout_months: int, min_tra
 def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, target_col: str,
                        feature_pool: list[str], config: RunConfig, all_dates_full: pd.DatetimeIndex,
                        n_wf: int, best_cfg: dict, seed: int,
-                       universe: _FoldUniverse | None = None) -> dict | None:
+                       universe: _FoldUniverse | None = None, *, purpose: str,
+                       run_id: str | None = None) -> dict | None:
     """Re-evaluates the winning config (Phase 2.1) on the terminal holdout:
     the model is retrained ONLY on data prior to the holdout
     (`pool_builder.get(n_wf)` -> parametric fit on `raw.iloc[:n_wf]`, same
@@ -901,7 +934,12 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     #1 of the original plan: never rank/select on the holdout).
 
     `universe`: the reduction is decided on the pre-holdout bars, like
-    every other training set."""
+    every other training set.
+
+    The ONLY function that reads the holdout: every read is written to
+    `holdout_access` (migration 0038) with its `purpose` (one of
+    `trackdb.HOLDOUT_PURPOSES`) and the `run_id` it serves -- the holdout is
+    otherwise protected by discipline only."""
     if universe is not None:
         feature_pool = universe.features(feature_pool, universe.prefix_mask(n_wf), "holdout")
     horizon = int(best_cfg["horizon"])
@@ -940,6 +978,9 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
         X_tr[:, cols], y_tr, X_te[:, cols], y_te, sampler_name, algo, seed,
         calibration=config.models.calibration, calibration_method=config.models.calibration_method,
         calibration_gap=horizon, **best_params)
+    trackdb.record_holdout_access(
+        conn, config.objective.run_label(), horizon, purpose, run_id=run_id,
+        holdout_start=str(holdout_start_date.date()), holdout_end=str(all_dates_full[-1].date()), n_rows=len(y_te))
     test_dates = [str(d.date()) for d in idx[te_mask]]
     # F08: the baselines predicted on the SAME holdout rows, so the final
     # Diebold-Mariano test runs on data that never took part in a choice.
@@ -1001,6 +1042,11 @@ def _dm_against_baselines(y_true, y_pred, baseline_predictions: dict | None,
         if pred is None:
             return None
         dm = diebold_mariano(loss_model, (np.asarray(pred).ravel() != y_true).astype(float), h=horizon)
+        if is_nan(dm["p_value"]):
+            # Untestable (horizon too long for the sample, too few rows, undefined variance): "not computed", like a
+            # missing baseline -- no `dm_result` row with an empty p-value, no NaN in the run summary.
+            print(f"  [DM] h={horizon}d vs {name}: untestable ({dm['untestable_reason']}, n={dm['n_obs']}) -- not computed.")
+            return None
         dm["baseline"] = name
         return dm
 
@@ -1092,6 +1138,10 @@ def _config_hash(config: RunConfig) -> str:
     # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
     if config.models.deep is None:
         exclude["models"] = {"deep"}
+    # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage quand elle est désactivée, donc une config qui
+    # la désactive garde le hachage d'avant le champ ; activée (défaut), elle change le gagnant et entre dans le hachage.
+    if not config.selection.one_se_rule:
+        exclude["selection"] = {"one_se_rule"}
     exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
@@ -1144,6 +1194,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
       structurally exposes more boundaries, hence more potential leak
       surface to close by construction.
 
+    Interaction formulas (when the "interactions" family is on): discovered
+    per combination on its training bars (`_cpcv_interaction_formulas`) --
+    they used to be discovered once on group 0, a TEST group of 6 combinations
+    out of 21 (audit 2026-10-19). Still shared, as a documented approximation:
+    the class thresholds / regimes of `run_target`, fitted on group 0 only.
+
     Universe reduction (`universe`, when enabled): decided per combination
     on `split.train_mask` -- the non-contiguous train complement, purged
     and embargoed -- so no test group of that combination ever influences
@@ -1176,13 +1232,22 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     full_pool = pd.concat([base_pool, param_pool], axis=1)
     full_pool = full_pool.loc[:, ~full_pool.columns.duplicated()]
 
+    # Interactions: one formula set per combination, discovered on that combination's training bars only; the
+    # exported model gets its own, discovered on the whole history (nothing is evaluated on it).
     interaction_formulas: list[str] = []
+    combo_formulas: dict[tuple[int, ...], list[str]] = {}
+    all_formulas: list[str] = []
     if "interactions" in config.features.families:
-        pilot_split_idx = groups[0][1] + 1
-        interaction_formulas = _discover_interaction_formulas(full_pool, config, target_col, pilot_split_idx)
-        print(f"  [INTERACTIONS] {len(interaction_formulas)} formulas discovered (pilot group).")
-        inter = _apply_interaction_formulas(full_pool, interaction_formulas)
-        full_pool = pd.concat([full_pool, inter], axis=1)
+        horizons = config.objective.horizons
+        pilot_y, _, _ = run_target(full_pool, config, target_col, horizons[len(horizons) // 2], groups[0][1] + 1)
+        combo_formulas = _cpcv_interaction_formulas(full_pool, pilot_y, config, target_col, groups, combos,
+                                                    max(horizons), config.validation.embargo_bars)
+        interaction_formulas = _discover_formulas_on_rows(full_pool, pilot_y, np.ones(len(pilot_y), dtype=bool),
+                                                          config, target_col)
+        all_formulas = list(dict.fromkeys(f for fs in (*combo_formulas.values(), interaction_formulas) for f in fs))
+        print(f"  [INTERACTIONS] {len(all_formulas)} distinct formulas over {len(combos)} combinations "
+              f"(discovered per combination, training bars only).")
+        full_pool = pd.concat([full_pool, _apply_interaction_formulas(full_pool, all_formulas)], axis=1)
 
     feature_pool = [c for c in full_pool.columns if c != target_col]
     feature_position = {name: i for i, name in enumerate(feature_pool)}
@@ -1224,10 +1289,12 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                     return None
 
                 where = f"CPCV combo {combo} (h={horizon}d regime={regime})"
-                X_combo = X_all
+                combo_feats = _combo_feature_pool(feature_pool, all_formulas, combo_formulas.get(combo, []))
                 if universe is not None and universe.enabled:
-                    combo_feats = universe.features(feature_pool, split.train_mask,
+                    combo_feats = universe.features(combo_feats, split.train_mask,
                                                     f"CPCV combo {combo} (h={horizon}d)")
+                X_combo = X_all
+                if len(combo_feats) != len(feature_pool):
                     X_combo = X_all[:, [feature_position[f] for f in combo_feats]]
                 sc = RobustScaler()
                 X_tr_full = _finite_scaled(sc.fit_transform(X_combo[tr_mask]), where)
@@ -1338,7 +1405,10 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
                                   # (`board.best(metric="F1_dir")`) without duplicating this logic.
                                   F1_dir=dist["median"])
 
-    return board, trial_ids, n_trials_per_run, full_pool, feature_pool, interaction_formulas
+    # The exported model sees base + parametric + ITS formulas, not the other combinations' (`predict` rebuilds
+    # exactly `interaction_formulas`).
+    export_feature_pool = _combo_feature_pool(feature_pool, all_formulas, interaction_formulas)
+    return board, trial_ids, n_trials_per_run, full_pool, export_feature_pool, interaction_formulas
 
 
 @dataclass
@@ -1419,6 +1489,7 @@ def _register_runs(conn, config: RunConfig, raw: pd.DataFrame, seed: int, job_id
     trackdb.upsert_snapshot(conn, snapshot_id, data_hash, n_tickers, n_fred_series, fred_src)
     trackdb.add_data_quality_issues(conn, snapshot_id, quality_issues)
     trackdb.add_alignment_issues(conn, snapshot_id, alignment.describe(config.objective.alignment))
+    trackdb.add_notice_issues(conn, snapshot_id, quality_module.continuous_future_notices(raw.columns))
     config_json = config.model_dump_json()
     config_hash = _config_hash(config)
     git_sha = trackdb.current_git_sha()
@@ -1714,7 +1785,7 @@ def _track_stability(st: _RunState) -> None:
         return
     for horizon in st.config.objective.horizons:
         board_h = _board_for_horizon(st.board, horizon)
-        top_h = board_h.top_k(1, metric="F1_dir")
+        top_h = board_h.top_k(1, metric="F1_dir", one_se=st.config.selection.one_se_rule)
         if not top_h:
             continue
         winner = top_h[0]
@@ -1745,7 +1816,7 @@ def _holdout_diagnostic(st: _RunState) -> None:
                     "best_params": {}}
         diag_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
                                       st.config, st.all_dates_full, st.n_wf, diag_cfg, st.seed,
-                                      universe=st.universe)
+                                      universe=st.universe, purpose="diagnostic", run_id=st.run_ids[h])
         if diag_eval is not None:
             trackholdout.write_holdout_diagnostic(st.conn, tid, diag_eval["metrics"])
     st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
@@ -1755,12 +1826,13 @@ def _tuning_candidates(st: _RunState) -> list[dict]:
     """Audit report, C3: top_k PER horizon by default -- a horizon whose best
     scan trial dominates must not capture the whole Optuna budget."""
     config = st.config
+    one_se = config.selection.one_se_rule          # le candidat réglé est le choix de la règle, pas le maximum simple
     if not config.tuning.optuna_select_top_k_per_horizon:
-        return st.board.top_k(config.tuning.top_k, metric="F1_dir")
+        return st.board.top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se)
     top_configs = []
     for horizon in config.objective.horizons:
         top_configs.extend(_board_for_horizon(st.board, horizon, models_only=False)
-                           .top_k(config.tuning.top_k, metric="F1_dir"))
+                           .top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se))
     return top_configs
 
 
@@ -1865,28 +1937,45 @@ def _export_tables(st: _RunState) -> pd.DataFrame:
     return tuned_df
 
 
+def _best_tuned(tuned_df: pd.DataFrame, group_cols: list[str], one_se: bool, horizon: int | None = None) -> dict | None:
+    """The best fold-averaged tuned configuration (of one horizon, or of all): the highest mean, or with `one_se` the
+    parsimony rule's choice over the folds (`Leaderboard.best`)."""
+    rows = tuned_df if horizon is None else tuned_df[tuned_df["horizon"] == horizon]
+    if not len(rows):
+        return None
+    cols = group_cols + ["best_params"]
+    if one_se:
+        board = Leaderboard()
+        board.rows = rows.to_dict("records")
+        return board.best(metric="F1_dir", group_cols=tuple(cols), one_se=True)
+    ranked = rank_configs(rows.groupby(cols)["F1_dir"].mean().reset_index(), "F1_dir", cols)
+    return ranked.iloc[0].to_dict()
+
+
 def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> tuple[dict | None, dict[int, dict]]:
     """Global winner and one winner per horizon, each the better of the
     fold-averaged scan and the fold-averaged tuned configs (F07: never a
     single fold). Per-horizon export: `predict --live` needs an exported
-    model for EVERY horizon's run_id, not only the global winner's."""
+    model for EVERY horizon's run_id, not only the global winner's.
+
+    With `selection.one_se_rule`, the scan's choice AND the tuned choice are each the parsimony rule's pick (the tuned
+    one is picked among the tuned configurations by the same rule): a plain maximum at this last step would undo the rule
+    whenever tuning is active -- the tuned version of a bigger model almost always beats the untuned simple one."""
     group_cols = ["horizon", "regime", "N", "sampler", "algo"]
+    one_se = st.config.selection.one_se_rule
     final_best = dict(best) if best else None
-    tuned_agg = None
     if len(tuned_df):
-        tuned_agg = rank_configs(
-            tuned_df.groupby(group_cols + ["best_params"])["F1_dir"].mean().reset_index(),
-            "F1_dir", group_cols + ["best_params"])
-        if len(tuned_agg) and (final_best is None or tuned_agg.iloc[0]["F1_dir"] > final_best["F1_dir"]):
-            final_best = tuned_agg.iloc[0].to_dict()
+        tuned_best = _best_tuned(tuned_df, group_cols, one_se)
+        if tuned_best is not None and (final_best is None or tuned_best["F1_dir"] > final_best["F1_dir"]):
+            final_best = tuned_best
 
     final_best_by_horizon: dict[int, dict] = {}
     for horizon in st.config.objective.horizons:
-        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir")
-        if tuned_agg is not None:
-            tuned_h = tuned_agg[tuned_agg["horizon"] == horizon]
-            if len(tuned_h) and (best_h is None or tuned_h.iloc[0]["F1_dir"] > best_h["F1_dir"]):
-                best_h = tuned_h.iloc[0].to_dict()
+        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir", one_se=one_se)
+        if len(tuned_df):
+            tuned_h = _best_tuned(tuned_df, group_cols, one_se, horizon)
+            if tuned_h is not None and (best_h is None or tuned_h["F1_dir"] > best_h["F1_dir"]):
+                best_h = tuned_h
         if best_h is not None:
             final_best_by_horizon[horizon] = best_h
     return final_best, final_best_by_horizon
@@ -1953,7 +2042,8 @@ def _final_holdout(st: _RunState, final_best: dict, best_trial_id: int | None) -
         return None
     holdout_eval = _evaluate_holdout(st.conn, st.snapshot_id, st.pool_builder, st.target_col, st.feature_pool,
                                      st.config, st.all_dates_full, st.n_wf, final_best, st.seed,
-                                     universe=st.universe)
+                                     universe=st.universe, purpose="final_eval",
+                                     run_id=st.run_ids[int(final_best["horizon"])])
     if holdout_eval is None:
         return None
     persist_holdout(st, best_trial_id, holdout_eval)
@@ -2083,7 +2173,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         n_scan_fits = st.n_scan_evals or len(st.board.rows)  # CPCV does not count fits one by one
         print(f"\n[SCAN] {n_scan_fits} evaluations in {(time.time()-t0)/60:.1f}min")
         _report_calibration_skips(n_scan_fits)
-        best = st.board.best(metric="F1_dir")
+        best = st.board.best(metric="F1_dir", one_se=config.selection.one_se_rule)
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
                   f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")

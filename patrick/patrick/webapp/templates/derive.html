@@ -1,0 +1,26 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('ad_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('ad_title') }}</h1>
+<p class="page-subtitle">{{ t('ad_subtitle') }}</p>
+
+<div id="ad-root">
+    <div class="metric-grid ra-kpis" id="ad-kpis" aria-live="polite"></div>
+    <section class="card ra-section" id="suivi">
+        <h2>{{ t('ad_s_pairs') }}</h2>
+        <p class="hint">{{ t('ad_h_pairs') }}</p>
+        <div class="ra-filters" id="ad-filters"></div>
+        <div id="ad-table"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div>
+        <div class="row" id="ad-pager"></div>
+    </section>
+    <section class="card ra-section" id="detail" hidden>
+        <h2 id="ad-detail-title"></h2>
+        <div id="ad-detail"></div>
+    </section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('drift_monitor.js') }}"></script>
+{% endblock %}

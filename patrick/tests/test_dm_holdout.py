@@ -89,6 +89,19 @@ def test_holdout_dm_is_computed_on_the_holdout_predictions():
     assert out["common"]["baseline"] == "BASELINE_persistence"
 
 
+def test_holdout_dm_at_a_horizon_too_long_for_the_sample_is_not_computed():
+    """h=252 sur un holdout de ~15 mois (315 lignes) : le test est refusé (voir `validation/diebold_mariano.py`).
+    Le moteur doit le traiter comme « non calculé » (None) : ni ligne `dm_result` à p vide, ni NaN dans le résumé du
+    run, et la cible entre dans la famille BH comme non testable (p = 1)."""
+    rng = np.random.default_rng(0)
+    y_true = rng.integers(0, 4, 315)
+    y_pred = np.where(rng.random(315) < 0.9, y_true, rng.integers(0, 4, 315))
+    baselines = {"BASELINE_momentum_20": rng.integers(0, 4, 315),
+                 "BASELINE_persistence": rng.integers(0, 4, 315)}
+    out = engine._dm_against_baselines(y_true, y_pred, baselines, "BASELINE_momentum_20", horizon=252)
+    assert out == {"class_specific": None, "common": None}
+
+
 def test_holdout_dm_without_the_chosen_baseline_keeps_the_common_one():
     y = np.array([0, 1, 2, 3] * 20)
     out = engine._dm_against_baselines(y, y, {"BASELINE_persistence": y[::-1].copy()}, None, horizon=1)

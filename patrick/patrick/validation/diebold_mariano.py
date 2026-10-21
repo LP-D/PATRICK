@@ -12,6 +12,16 @@ and h > 1 (HLN 1997, Table 1) -- exactly this pipeline's regime: DM is
 evaluated on a SINGLE walk-forward fold (a few hundred rows) at horizons up
 to 756 days.
 
+Testability by horizon (audit 2026-10-19): at horizon h > 1 the losses of
+neighbouring rows share h-1 bars, so n rows are worth only about n/h
+independent observations. HLN and the autocovariance window do not repair
+that: simulated under H0 (loss differential = moving average of h independent
+errors), the 5 % test rejects ~7 % of the time with 15 blocks (n/h), ~10 % with
+10, ~22 % with 2.6 (15-month holdout, h=120) and more than 80 % at h=504. Below
+`MIN_BLOCKS_PER_HORIZON` blocks the result is untestable (NaN,
+`untestable_reason="horizon_too_long"`), never an optimistic p-value. h=1 has
+no overlap and keeps the plain 10-row minimum.
+
 Long-run variance: standard DM estimator (autocovariances around the full
 sample mean, divided by T, rectangular window up to lag h-1). That window
 can yield a NEGATIVE variance for h > 1; it then falls back to Bartlett
@@ -24,6 +34,9 @@ from __future__ import annotations
 
 import numpy as np
 from scipy import stats
+
+# Fewer than this many independent blocks (n / h) at h > 1: no verdict.
+MIN_BLOCKS_PER_HORIZON = 15
 
 
 def _autocovariances(d: np.ndarray, max_lag: int) -> np.ndarray:
@@ -57,7 +70,9 @@ def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
     nan_result = {"dm_stat": np.nan, "p_value": np.nan, "n_obs": n, "mean_loss_diff": np.nan,
                   "correction": "HLN", "variance_kernel": None}
     if n < 10:
-        return nan_result
+        return {**nan_result, "untestable_reason": "too_few_observations"}
+    if h > 1 and n < MIN_BLOCKS_PER_HORIZON * h:
+        return {**nan_result, "untestable_reason": "horizon_too_long"}
 
     d_mean = float(np.mean(d))
     if np.all(d == d[0]):
@@ -70,7 +85,8 @@ def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
 
     var_d, kernel = _long_run_variance(d, h)
     if not var_d > 0:
-        return {**nan_result, "mean_loss_diff": round(d_mean, 6), "variance_kernel": kernel}
+        return {**nan_result, "mean_loss_diff": round(d_mean, 6), "variance_kernel": kernel,
+                "untestable_reason": "undefined_variance"}
 
     dm = d_mean / np.sqrt(var_d / n)
     hln_factor = np.sqrt(max((n + 1 - 2 * h + h * (h - 1) / n) / n, 0.0))

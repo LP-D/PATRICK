@@ -295,3 +295,60 @@ def test_quality_issues_persisted_and_readable_via_run_pipeline(tmp_path, monkey
     issues = trackdb.list_data_quality_issues(conn, "snap_test_quality_001")
     conn.close()
     assert issues == [{"series": "IDX_BAD", "reason": "prix_figes", "detail": "5 clôtures identiques"}]
+
+
+# --- contrats à terme continus (audit externe du 2026-10-19, point 16) --------------------------------------------------
+
+def test_continuous_futures_are_flagged_as_unadjusted():
+    """Yahoo n'a que des contrats « continus » (`GC=F`, `CL=F`...) raccordés SANS ajustement documenté : à chaque
+    échéance, le prix saute de l'écart entre deux contrats, un faux rendement. Avis (la série reste utilisée)."""
+    notices = quality.continuous_future_notices(["GC=F", "IDX_GSPC", "EURUSD=X", "CL=F", "BTC-USD"])
+    assert [(n["series"], n["reason"]) for n in notices] == [("GC=F", "contrat_continu_non_ajuste"),
+                                                              ("CL=F", "contrat_continu_non_ajuste")]
+    assert "échéance" in notices[0]["detail"] and "rendement" in notices[0]["detail"]
+    assert quality.continuous_future_notices(["IDX_GSPC", "EURUSD=X"]) == []
+
+
+def test_the_notice_is_recorded_with_the_run_and_never_hides_other_issues(conn):
+    from patrick.config.schema import RunConfig
+    from patrick.pipeline import engine
+
+    raw = pd.DataFrame({"GC=F": [1.0, 2.0], "IDX_GSPC": [3.0, 4.0]}, index=pd.bdate_range("2024-01-01", periods=2))
+    config = RunConfig.model_validate({"name": "t", "objective": {"target_symbol": "GC=F", "horizons": [5]},
+                                       "output": {"dir": "out"}})
+    snapshot_id, _hash, _run_ids = engine._register_runs(conn, config, raw, seed=42, job_id=None)
+    issues = trackdb.list_data_quality_issues(conn, snapshot_id)
+    assert [(i["series"], i["reason"]) for i in issues] == [("GC=F", "contrat_continu_non_ajuste")]
+    engine._register_runs(conn, config, raw, seed=42, job_id=None)          # relancer le même snapshot : pas de doublon
+    assert len(trackdb.list_data_quality_issues(conn, snapshot_id)) == 1
+
+
+def test_the_data_health_page_explains_the_notice():
+    from patrick.tracking import data_health
+
+    title, meaning, effect = data_health.REASON_INFO["contrat_continu_non_ajuste"]
+    assert "continu" in title.lower() and "échéance" in meaning and "conservée" in effect.lower()
+
+
+def test_a_notice_is_not_counted_as_an_exclusion_on_the_run_page(tmp_path, monkeypatch):
+    import json
+
+    from page_support import FullPageClient as TestClient
+
+    from patrick.webapp.app import app
+
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = trackdb.connect(str(tmp_path / "patrick.db"))
+    trackdb.upsert_snapshot(conn, "snap1", "hash1", None, None, None)
+    trackdb.create_run(conn, "run1", "GC=F", 5, "snap1", json.dumps({"validation": {"scheme": "walkforward"}}),
+                       "cfghash", "sha", 42)
+    trial_id = trackdb.create_trial(conn, "run1", "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
+    trackdb.mark_best_trial(conn, trial_id)
+    trackdb.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6})
+    trackdb.finish_run(conn, "run1", status="done", n_trials=1)
+    trackdb.add_notice_issues(conn, "snap1", quality.continuous_future_notices(["GC=F"]))
+    conn.close()
+
+    html_ = TestClient(app).get("/runs/run1/detail").text
+    assert "aucune exclusion sur ce snapshot" in html_
+    assert "série(s) exclue(s)" not in html_

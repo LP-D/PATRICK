@@ -268,3 +268,90 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 - **Extras optionnels** : sans `pip install -e ".[deep]"` / `".[rl]"`, les pages `/dl` et `/rl` s'affichent mais le lancement est
   désactivé avec le motif ; la CI n'installe pas PyTorch (les tests qui l'exigent sont ignorés, ceux de configuration et de mécanique
   NumPy tournent partout).
+
+---
+
+## Analyse textuelle des news et Black-Litterman — limites assumées (2026-10-18)
+
+- **News** (`patrick/text/`, page `/news`) : aucune variable textuelle n'entre dans un entraînement ; l'historique commence à la
+  première collecte. Les flux relus après coup (publiés plus de 72 h avant d'être vus) sont stockés mais écartés des agrégats. Le
+  lexique intégré est réduit (anglais, français) ; la polarité d'un mot ne dépend pas de l'actif. Le rattachement privilégie la
+  précision (un lien manqué vaut mieux qu'un faux lien). GDELT n'a pas pu être vérifié en réel (HTTP 429 depuis ce poste) ; la BCE
+  (certificat refusé par Python ici), l'USDA et l'OPEP (403) ne sont pas dans les flux par défaut (réglage `news_extra_feeds`).
+- **P(hausse) du jour** : avant le 2026-10-18, le modèle exporté n'était pas calibré, la `p_up` des prédictions live était un score
+  brut. Seuls les exports faits depuis (calibrateur dans le bundle, `prediction.p_up_calibrated = 1`) donnent une probabilité calibrée ;
+  les 11 runs avec calibration déjà en base doivent être relancés pour l'obtenir. La classe prédite et sa confiance restent celles
+  du modèle refit sur tout l'historique ; seul `p_up` passe par le calibrateur : son modèle sous-jacent est ajusté sur les ~85 % les plus anciens
+  de l'historique et sa carte isotonique/Platt sur les ~7,5 % suivants (même découpage que dans le walk-forward, un trou d'une longueur
+  d'horizon entre les deux) ; les lignes les plus récentes ne servent donc pas à cette probabilité.
+- **Black-Litterman** : conversion P(hausse) -> rendement attendu par une hypothèse gaussienne (tailles de hausse et de baisse égales) ;
+  prior = portefeuille HRP faute de capitalisations ; aucune comparaison hors échantillon avec la pondération de référence.
+- `tests/test_desktop_runtime.py::test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant` échoue sur ce poste, lancé
+  depuis un shell de l'application Claude (cause probable : processus placés dans un objet de tâche Windows, non confirmée) ; le
+  code concerné (`desktop/`) n'est pas modifié par ces chantiers.
+
+---
+
+## Validité statistique mesurée sur des marches aléatoires — 2026-10-20
+
+`patrick/tests/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
+pipeline complet sur 12 marches aléatoires indépendantes (walk-forward 6 plis, holdout de 12 mois, horizon 5) et sur 3 mondes à
+signal (contrôle positif). Résultats du 2026-10-19 :
+
+- **Tient** : aucune p-value « le modèle fait mieux que sa baseline » < 5 % (min. 0,14) ; correction BH : 0 rejet sur 12 ; PBO moyen
+  0,59 (attendu ~0,5) ; aucun Sharpe déflaté >= 0,95 ; les 3 mondes à signal ont un Sharpe holdout de 1,9 à 9,2 (DSR >= 0,95 pour 2).
+  Le passage en p-value **unilatérale** du 2026-10-07 est confirmé empiriquement : avec l'ancien calcul bilatéral, BH aurait rejeté
+  3 marches aléatoires sur 12 comme « découvertes ».
+- **À surveiller : la p-value Diebold-Mariano BILATÉRALE sort < 5 % dans 3 mondes nuls sur 12** (~0,6 attendu), toujours du côté « le
+  modèle fait PIRE que sa baseline » (aucune du côté « meilleur ») ; statistique moyenne +0,75, erreur-type 0,39 (t = 1,9, p ≈ 0,08),
+  écart-type 1,35 au lieu de ~1, Sharpe holdout moyen -0,36. Deux lectures que 12 mondes ne départagent pas : (a) le modèle
+  sélectionné sur du bruit fait réellement moins bien qu'une baseline naïve (coût de variance), et DM détecte alors une vraie
+  différence, pas une erreur de taille ; (b) la variance du test (fenêtre sur h-1 retards) ne couvre pas la dérive propre au chemin
+  du holdout et la taille est gonflée. La famille BH est protégée dans les deux cas : elle ne lit que le sens « meilleur ». Pour
+  trancher : un monde où modèle et baseline ont la même perte espérée par construction (deux prédicteurs indépendants du même
+  bruit), ou beaucoup plus de mondes.
+- **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240
+  lignes, perte 0/1 à 4 classes, baseline de persistance). Le DM seul ne reconnaîtrait pas un vrai signal modeste.
+- **Un signal par le rendement de la veille d'une autre série est écarté, à raison** : le garde anti-fuite d'alignement
+  (`data/alignment.py`, corrélation de rang > 0,30) retarde une telle série. Le monde à signal passe donc par un niveau lent.
+- **Effectif** : 12 mondes, un tirage chacun ; le PBO à 6 blocs a un écart-type élevé (~0,3 sur un tirage). Les bornes des tests
+  laissent la place au hasard (binomiale à 1 %, PBO moyen >= 0,40).
+
+---
+
+## Points ouverts après l'audit externe du 2026-10-19 (mis à jour le 2026-10-20)
+
+Traités : horizons longs du DM (non testable sous 15 blocs), fuite CPCV des interactions, registre d'accès au holdout, garde-fous git,
+fixture du CSV de courtier, test de validité sur marches aléatoires, mise à jour sur une version validée par la CI, manifeste de run,
+Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle de parcimonie « une erreur-type » (activée par défaut), tests de mutation (exécutés sur GitHub). Restent :
+
+- **Duel champion / challenger = sélection sur le holdout** (`pipeline/champion_duel.py`) : la performance holdout affichée d'un
+  champion est celle d'un gagnant. Le registre `holdout_access` le rend visible (page d'un run), il ne le supprime pas. Le simulateur,
+  qui relit des prédictions holdout déjà stockées, n'est pas encore compté dans ce registre.
+- **CPCV, deux approximations documentées** : variables paramétriques (EGARCH, Kalman, HMM) ajustées une fois sur tout l'historique ;
+  seuils de classes et régimes de `run_target` ajustés sur le seul groupe 0 (effet d'échelle, pas de choix de variables).
+- **Contrats à terme continus Yahoo** (`GC=F`, `CL=F`...) : sauts de roll non corrigés. Un avis est consigné avec le run
+  (`contrat_continu_non_ajuste`, page « Santé des données »), la série est conservée. Correction : règle de roll explicite, source de
+  contrats individuels absente (`docs/modelisation/chantiers-lointains.md` §3).
+- **DM** : bilatéral à surveiller et peu puissant (section « Validité statistique mesurée », plus haut) ; un test sur score continu
+  (Brier, log-loss) serait plus puissant.
+- **Règle « une erreur-type »** (`selection.one_se_rule`) : **activée par défaut depuis le 2026-10-20** (ADR 0006), sur toute la chaîne
+  (scan, candidat réglé, choix parmi les réglés, stabilité). Les runs déjà faits ne sont pas réécrits (ils ont tourné sans elle) ;
+  `patrick resume` les relit sous l'ancienne règle, une relance depuis la page d'un run suit la règle d'aujourd'hui. Golden walk-forward
+  de la CI régénéré (à l'horizon 3 : 6 variables -> 4) ; en local, les deux golden restent identiques (le scan y choisit déjà le plus petit N).
+- **Branche `stable`** : existe depuis le 2026-10-20 (créée par le job `promote`, premier passage : a3d0103). Elle n'avance que si toute
+  la CI de `main` est verte ; le push 675f321, dont le golden était rouge, ne l'a pas déplacée (la protection a joué). L'application
+  suit `stable` : une CI rouge sur `main` retarde donc les mises à jour au lieu de les casser.
+- **Python 3.10 retiré** (`requires-python >= 3.11`) : un PC encore sous 3.10 ne pourra plus installer les composants d'une mise à jour
+  (retour en arrière automatique). Vérifier la version de Python des deux PC avant de fusionner.
+- **Tests de mutation** (`.github/workflows/mutation.yml`) : exécutés sur GitHub (Linux) le 2026-10-20, car mutmut ne tourne pas sous
+  Windows. Sur les 7 modules statistiques : **711 mutants tués sur 978 (73 %)**, 267 survivants — cpcv 220/256, diebold_mariano
+  164/233, dsr 113/211, embargo 12/14, fdr 84/100, pbo 79/112, purge 39/52. Un survivant n'est pas toujours un défaut (message,
+  valeur par défaut, mutant équivalent), mais **dsr (54 %)** et **diebold_mariano (70 %)** sont les moins protégés. Rien n'a été
+  fait des survivants. Lancer : pousser une branche `mutation-check/<nom>` (quelques minutes), ou « Run workflow » dans l'onglet
+  Actions ; le résultat est dans les annotations et le résumé de l'exécution.
+- **Licence** : tous droits réservés, dite explicitement dans `LICENSE` (décision du 2026-10-20) ; aucune licence libre. À rouvrir si le projet doit être partagé ou réutilisé.
+- **Dépendances** : le seul verrou est `.github/constraints-py311.txt` (suite lente de la CI, Linux, Python 3.11) ; pas de verrou pour
+  Windows / Python 3.12+. Dependabot propose des mises à jour d'actions et de dépendances, jamais fusionnées sans lecture.
+- **Causes non étudiées de la CI rouge d'octobre** : les causes du 8 au 16/10 (hors golden et test du diagnostic holdout,
+  élucidés) n'ont pas toutes été étudiées (délais de tests web sous charge, suite rapide sous Python 3.10).

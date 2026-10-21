@@ -33,5 +33,6 @@
     </tbody>
 </table>
 </div>
-<p><a class="btn-secondary" href="/runs">{{ t('cmp_back') }}</a></p>
+<p><a class="btn-secondary" href="/analyses/comparer?{% for run in runs %}run_ids={{ run.run_id | urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}">{{ t('ac_compare') }}</a>
+<a class="btn-secondary" href="/runs">{{ t('cmp_back') }}</a></p>
 {% endblock %}

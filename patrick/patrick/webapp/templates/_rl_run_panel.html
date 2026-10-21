@@ -42,5 +42,6 @@
 </dl>
 {% if not view.done and not error %}<p class="hint rp-banner">{{ t('rlh_p_pending') }}</p>{% endif %}
 <footer class="rp-foot">
+    <a class="btn-secondary" href="/runs/{{ row.run_id }}/analyse">{{ t('ra_open_analysis') }} {{ icon('external', 13) }}</a>
     <a class="btn-secondary" href="/rl?open={{ row.run_id }}">{{ t('rp_full_detail') }} {{ icon('external', 13) }}</a>
 </footer>

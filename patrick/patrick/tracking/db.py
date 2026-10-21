@@ -25,6 +25,7 @@ from patrick.config.defaults import ALL_DL_ALGOS
 from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
 from patrick.tracking import class_balance
+from patrick.tracking.manifest import launch_manifest
 from patrick.validation import suspicion
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
@@ -367,7 +368,7 @@ def record_drift_psi_batch(conn: sqlite3.Connection, symbol: str, horizon: int,
     """
     if not feature_psi:
         return
-    computed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    computed_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     conn.execute("BEGIN IMMEDIATE")
     try:
         latest = conn.execute(
@@ -450,6 +451,20 @@ def add_alignment_issues(conn: sqlite3.Connection, snapshot_id: str, issues: lis
         conn.executemany(
             "INSERT INTO data_quality_issue (snapshot_id, series, reason, detail) VALUES (?, ?, ?, ?)",
             [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues if i["series"] not in known])
+
+
+def add_notice_issues(conn: sqlite3.Connection, snapshot_id: str, issues: list[dict]) -> None:
+    """Avis rattachés au snapshot d'un run (série CONSERVÉE : contrat à terme continu non ajusté...), à côté des
+    exclusions de `add_data_quality_issues` qu'ils ne masquent jamais. Idempotent par (série, raison)."""
+    if not issues:
+        return
+    with conn:
+        known = {(r[0], r[1]) for r in conn.execute(
+            "SELECT series, reason FROM data_quality_issue WHERE snapshot_id = ?", (snapshot_id,))}
+        conn.executemany(
+            "INSERT INTO data_quality_issue (snapshot_id, series, reason, detail) VALUES (?, ?, ?, ?)",
+            [(snapshot_id, i["series"], i["reason"], i["detail"]) for i in issues
+             if (i["series"], i["reason"]) not in known])
 
 
 def list_data_quality_issues(conn: sqlite3.Connection, snapshot_id: str) -> list[dict]:
@@ -608,10 +623,10 @@ def create_run(conn: sqlite3.Connection, run_id: str, target: str, horizon: int,
     with conn:
         conn.execute(
             "INSERT INTO run (run_id, started_at, status, target, horizon, snapshot_id, "
-            "config_json, config_hash, git_sha, seed, lib_versions, job_id) "
-            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "config_json, config_hash, git_sha, seed, lib_versions, job_id, manifest_json) "
+            "VALUES (?, datetime('now'), 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (run_id, target, horizon, snapshot_id, config_json, config_hash,
-             git_sha, seed, library_versions(), job_id),
+             git_sha, seed, library_versions(), job_id, launch_manifest()),
         )
 
 
@@ -1056,6 +1071,24 @@ def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, 
         )
 
 
+HOLDOUT_PURPOSES = ("final_eval", "diagnostic", "champion_duel_challenger", "champion_duel_champion")
+
+
+def record_holdout_access(conn: sqlite3.Connection, target: str, horizon: int, purpose: str, *,
+                          run_id: str | None = None, holdout_start: str | None = None,
+                          holdout_end: str | None = None, n_rows: int | None = None,
+                          detail: str | None = None) -> None:
+    """Appends one read of the terminal holdout to `holdout_access` (migration 0038). Append-only, never updated or
+    deleted -- see the migration header. `purpose` is one of `HOLDOUT_PURPOSES` (refused by the table otherwise)."""
+    with conn:
+        conn.execute(
+            "INSERT INTO holdout_access (target, horizon, purpose, run_id, holdout_start, holdout_end, n_rows, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (target, int(horizon), purpose, run_id, holdout_start, holdout_end,
+             None if n_rows is None else int(n_rows), detail),
+        )
+
+
 class TrialRecorder:
     """Optuna callback (`study.optimize(callbacks=[...])`) registering every
     finished Optuna trial -- complete, pruned or failed: each one is an
@@ -1133,7 +1166,8 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
-                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1, p_up=None) -> None:
+                     ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1, p_up=None,
+                     p_up_calibrated: bool | None = None) -> None:
     """`y_true` can contain `None` (Phase 4.6, `split='live'`: the prediction
     is written BEFORE the outcome is known) -- stored as NULL rather than
     crashing on `float(None)`, backfilled later by
@@ -1146,22 +1180,32 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
     (trial_id, ts, path_id) distinguishes them.
 
     `p_up` (roadmap bloc 3, migration 0024): P(slight up) + P(strong up),
-    calibrated when the run calibrates -- optional, NULL otherwise."""
+    calibrated when the run calibrates -- optional, NULL otherwise.
+    `p_up_calibrated` (migration 0037): True only for a live row whose `p_up` went through the export-time calibrator;
+    None (NULL) everywhere else -- a raw score must never pass for a calibrated probability."""
     proba = y_proba if y_proba is not None else [None] * len(ts)
     ups = p_up if p_up is not None else [None] * len(ts)
 
     def _f(v):
         return float(v) if v is not None and not is_nan(v) else None
 
+    flag = None if p_up_calibrated is None else int(bool(p_up_calibrated))
     rows = [(trial_id, str(t), fold_index, split, float(yt) if yt is not None else None, float(yp),
-              _f(yp_proba), path_id, _f(up))
+              _f(yp_proba), path_id, _f(up), flag)
             for t, yt, yp, yp_proba, up in zip(ts, y_true, y_pred, proba, ups)]
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO prediction (trial_id, ts, fold_index, split, y_true, "
-            "y_pred, y_proba, path_id, p_up) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "y_pred, y_proba, path_id, p_up, p_up_calibrated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
+    if split == "live":
+        # Journal chaîné (migration 0040) : le signal est scellé AVANT son issue, le premier écrit gagne. Une erreur du journal n'empêche pas la prédiction.
+        from patrick.tracking import journal
+        journal.safe(journal.record_signals, conn, trial_id, list(ts), list(y_pred), None if p_up is None else list(p_up))
+        for t, yt in zip(ts, y_true, strict=True):
+            if yt is not None:
+                journal.safe(journal.record_outcome, conn, trial_id, str(t), yt)
 
 
 def list_pending_live_predictions(conn: sqlite3.Connection, trial_id: int,
@@ -1199,6 +1243,8 @@ def update_prediction_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, 
             "UPDATE prediction SET y_true = ?, y_class = ? WHERE trial_id = ? AND ts = ?",
             (float(y_true), None if y_class is None else int(y_class), trial_id, ts),
         )
+    from patrick.tracking import journal
+    journal.safe(journal.record_outcome, conn, trial_id, str(ts), float(y_true))
 
 
 def live_prediction_timestamps(conn: sqlite3.Connection, trial_id: int) -> set[str]:

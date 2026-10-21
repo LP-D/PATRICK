@@ -51,6 +51,7 @@ positives et négatives s'annulent dans le CAAR.
   un z² réduit — conservateur, pas biaisé en sens inverse.
 - Un seul actif par étude : les événements ne sont pas en coupe transversale indépendante (volatilité groupée) ;
   le portefeuille en temps calendaire n'est pas implémenté.
-- Aucune source NLP n'est branchée : les actualités yfinance ne renvoient que les derniers articles (pas
-  d'historique d'entraînement). Une archive licenciée avec horodatage de **première diffusion** est le
-  prérequis ; elle devra passer par `event_features.align_items` (refus explicite d'un `published_at` manquant).
+- Mise à jour du 2026-10-18 : une source de nouvelles est branchée (`patrick/text/`, page `/news`) et passe par
+  `event_features.align_items`, mais **aucune variable textuelle n'entre dans un entraînement** : l'historique commence à la
+  première collecte. Les actualités yfinance ne renvoient que les derniers articles ; une archive avec horodatage de **première
+  diffusion** (GDELT remonte de quelques mois, une archive licenciée plus loin) reste le prérequis pour entraîner.

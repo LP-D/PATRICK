@@ -1,0 +1,55 @@
+"""Chaînes FR/EN du moniteur de dérive (`/derive`, `static/drift_monitor.js`). Fusionnées dans `ANALYSIS_STRINGS`."""
+from __future__ import annotations
+
+
+def _s(fr: str, en: str) -> dict[str, str]:
+    return {"fr": fr, "en": en}
+
+
+DRIFT_STRINGS: dict[str, dict[str, str]] = {
+    "nav_drift": _s("Dérive", "Drift"),
+    "ad_title": _s("Moniteur de dérive des modèles", "Model drift monitor"),
+    "ad_subtitle": _s("Les modèles déjà exportés face aux données et aux issues qui arrivent après eux : dérive des données (PSI) et dérive de concept (Page-Hinkley sur les appels live).", "Already exported models against the data and outcomes that arrive after them: data drift (PSI) and concept drift (Page-Hinkley on live calls)."),
+    "ad_s_pairs": _s("Couples cible × horizon suivis", "Tracked target × horizon pairs"),
+    "ad_h_pairs": _s("Cliquer sur une ligne pour le détail. Un PSI élevé seul ne justifie jamais un ré-entraînement : seule une rupture de la réussite live le propose.", "Click a row for detail. A high PSI alone never justifies a retrain: only a break in the live hit rate proposes one."),
+    "ad_a_retrain": _s("À ré-entraîner", "Retrain"), "ad_a_retrain_sub": _s("rupture de la réussite live détectée", "break in the live hit rate detected"),
+    "ad_a_watch": _s("À surveiller", "Watch"), "ad_a_watch_sub": _s("au moins 10 % des variables ont un PSI > 0,25", "at least 10 % of features have a PSI > 0.25"),
+    "ad_a_ok": _s("Stable", "Stable"), "ad_a_ok_sub": _s("PSI mesuré, aucun signal", "PSI measured, no signal"),
+    "ad_a_unmeasured": _s("Non mesurée", "Unmeasured"), "ad_a_unmeasured_sub": _s("pas encore de PSI", "no PSI yet"),
+    "ad_c_action": _s("Action", "Action"),
+    "ad_c_psi": _s("PSI max", "Max PSI"),
+    "ad_c_share": _s("Variables PSI > 0,25", "Features PSI > 0.25"),
+    "ad_c_age": _s("Mesure", "Measure"),
+    "ad_c_calls": _s("Appels live jugés / indépendants", "Live calls judged / independent"),
+    "ad_c_hit": _s("Réussite live", "Live hit rate"),
+    "ad_c_concept": _s("Dérive de concept", "Concept drift"),
+    "ad_days": _s("il y a {n} j", "{n} d ago"),
+    "ad_not_testable": _s("non testable", "not testable"),
+    "ad_break": _s("rupture", "break"),
+    "ad_no_break": _s("pas de rupture", "no break"),
+    "ad_rows": _s("{n} couples affichés sur {total}.", "{n} pairs shown out of {total}."),
+    "ad_h": _s("horizon {h}", "horizon {h}"),
+    "ad_measure": _s("Mesurer le PSI maintenant", "Measure PSI now"),
+    "ad_measuring": _s("Mesure en cours : les variables récentes sont reconstruites (quelques dizaines de secondes).", "Measuring: recent features are rebuilt (a few tens of seconds)."),
+    "ad_measure_hint": _s("Reconstruit les variables récentes du modèle exporté et les compare à la distribution d'entraînement ; le résultat est enregistré et lu par la page Prédictions.", "Rebuilds the exported model's recent features and compares them with the training distribution; the result is stored and read by the Predictions page."),
+    "ad_psi_h": _s("PSI mesurés dans le temps", "PSI measured over time"),
+    "ad_psi_title": _s("PSI par date de mesure", "PSI by measurement date"),
+    "ad_psi_max": _s("Pire variable", "Worst feature"),
+    "ad_psi_mean": _s("Moyenne des variables", "Mean over features"),
+    "ad_psi_hint": _s("PSI < 0,10 : stable ; 0,10 – 0,25 : léger décalage ; > 0,25 : décalage marqué de la distribution.", "PSI < 0.10: stable; 0.10 – 0.25: slight shift; > 0.25: marked shift of the distribution."),
+    "ad_psi_none": _s("Aucun PSI mesuré pour ce couple : utiliser le bouton ci-dessus.", "No PSI measured for this pair: use the button above."),
+    "ad_feat_h": _s("PSI par variable à la dernière mesure ({d}, {n} variables)", "PSI by feature at the latest measurement ({d}, {n} features)"),
+    "ad_live_h": _s("Appels live jugés", "Judged live calls"),
+    "ad_live_n": _s("{r} appels jugés, {i} indépendants", "{r} calls judged, {i} independent"),
+    "ad_live_hit": _s("Réussite {h}", "Hit rate {h}"),
+    "ad_live_params": _s("Page-Hinkley : tolérance {d}, seuil {l}", "Page-Hinkley: tolerance {d}, threshold {l}"),
+    "ad_live_detected": _s("Rupture détectée le {d}", "Break detected on {d}"),
+    "ad_live_few": _s("Moins de {n} appels indépendants : dérive de concept non testable", "Fewer than {n} independent calls: concept drift not testable"),
+    "ad_live_x": _s("Appel indépendant n°", "Independent call no."),
+    "ad_ph_h": _s("Test de Page-Hinkley", "Page-Hinkley test"),
+    "ad_ph_title": _s("Statistique de Page-Hinkley", "Page-Hinkley statistic"),
+    "ad_ph_thr": _s("seuil {l}", "threshold {l}"),
+    "ad_ph_alarm": _s("alarme", "alarm"),
+    "ad_ph_hint": _s("La statistique monte quand les erreurs dépassent leur niveau habituel et retombe sinon ; l'alarme sonne au premier franchissement du seuil. Un appel indépendant par horizon de séances, car les rendements à h jours se chevauchent.", "The statistic rises when errors exceed their usual level and falls back otherwise; the alarm sounds at the first crossing of the threshold. One independent call per horizon of sessions, because h-day returns overlap."),
+    "ad_roll_title": _s("Réussite glissante ({w} appels)", "Rolling hit rate ({w} calls)"),
+}

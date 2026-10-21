@@ -6,22 +6,20 @@ build-backend = "setuptools.build_meta"
 name = "patrick"
 version = "0.1.0"
 description = "Cadre ML/DL multi-actifs autonome : walk-forward, features avancées (Heston/EGARCH/Kalman/HMM/VRP/spike), sélection SHAP/RFE/LASSO, samplers, tuning Optuna — méthodologie issue du projet VIX, généralisée à n'importe quel actif."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "pandas",
     "pyarrow",
     "scikit-learn",
-    # xgboost >= 3.1 serializes `base_score` as a vector string ("[5E-1]");
-    # shap only parses it from 0.50.0 (shap#4187), which requires Python
-    # >= 3.11 -- on 3.10 pip stops at shap 0.49.1 and TreeExplainer raises
-    # `ValueError: could not convert string to float`. Cap xgboost there only.
-    "xgboost<3.1; python_version < '3.11'",
-    "xgboost; python_version >= '3.11'",
+    # xgboost >= 3.1 serializes `base_score` as a vector string ("[5E-1]"); shap only parses it from 0.50.0
+    # (shap#4187), which requires Python >= 3.11. The old `xgboost<3.1` cap existed only for Python 3.10
+    # (end of life: October 2026), now dropped: the floor on shap keeps the pair consistent.
+    "xgboost",
     "lightgbm",
     "catboost",
     "imbalanced-learn",
-    "shap",
+    "shap>=0.50",
     "yfinance",
     "pandas_datareader",
     "requests",
@@ -42,7 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx", "ruff"]
+dev = ["pytest", "pytest-timeout", "hypothesis", "httpx", "ruff"]
 web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 # Pages Deep learning (/dl) et Reinforcement learning (/rl) : PyTorch, Gymnasium et Stable-Baselines3 ne sont importés qu'à l'usage.
 deep = ["torch"]
@@ -76,7 +74,36 @@ extend-select = ["DTZ"]
 # exécute le reste (entraînements de modèles/pipelines complets/EGARCH-HMM-
 # ARIMA/sous-processus worker réels). Les deux commandes sont documentées
 # dans le README.
-addopts = "-m 'not slow'"
+addopts = "-m 'not slow and not validity'"
+# Garde-fou contre un test figé (une slow-suite CI bloquée sans explication, un pytest orphelin sur le poste) : 30 minutes
+# par test, le plus long mesuré en faisant ~5 minutes. `thread` : le mode `signal` n'existe pas sous Windows.
+timeout = 1800
+timeout_method = "thread"
 markers = [
     "slow: tests dépassant ~10s (entraînement de modèles, pipeline complet, sous-processus worker réel) -- exclus par défaut, lancer avec `pytest -m slow`.",
+    "validity: le pipeline complet sur des marches aléatoires (protocole statistique de bout en bout, ~1 min par monde) -- exclus par défaut et de la CI poussée, lancer avec `pytest -m validity`.",
+]
+
+[tool.mutmut]
+# Test de mutation des modules statistiques (`.github/workflows/mutation.yml`, Linux : mutmut ne tourne pas sous Windows).
+# Une mutation qui survit = un comportement que les tests ne protègent pas. mutmut 3 copie `source_paths` dans `mutants/`
+# (le paquet entier, pour que les imports se résolvent) et ne mute que `only_mutate` ; les tests sont limités à ceux de ces modules.
+source_paths = ["patrick/"]
+only_mutate = [
+    "patrick/validation/dsr.py",
+    "patrick/validation/fdr.py",
+    "patrick/validation/diebold_mariano.py",
+    "patrick/validation/pbo.py",
+    "patrick/validation/cpcv.py",
+    "patrick/validation/purge.py",
+    "patrick/validation/embargo.py",
+]
+pytest_add_cli_args_test_selection = [
+    "tests/test_dsr.py",
+    "tests/test_fdr.py",
+    "tests/test_diebold_mariano.py",
+    "tests/test_pbo.py",
+    "tests/test_cpcv.py",
+    "tests/test_purge.py",
+    "tests/test_splitters_properties.py",
 ]

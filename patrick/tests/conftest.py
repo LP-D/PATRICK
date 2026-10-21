@@ -6,6 +6,22 @@ import pytest
 
 from patrick.tracking import db as trackdb
 
+
+def shutdown_loky_workers() -> None:
+    """Ferme le pool de processus loky que joblib garde ouvert entre deux `Parallel` (s'il existe). Sans cela, les
+    workers d'un test survivent à la session -- et à un pytest interrompu -- et fatiguent la suite suivante."""
+    try:
+        from joblib.externals.loky import reusable_executor
+    except ImportError:
+        return
+    executor = getattr(reusable_executor, "_executor", None)
+    if executor is not None:
+        executor.shutdown(wait=True, kill_workers=True)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    shutdown_loky_workers()
+
 # Relative, not absolute: `data/ingest.py` requires >= 20 years of history
 # (`min_history = today - 20*365.25 days`). An absolute date drifts under
 # that threshold as real time passes -- 30 years back keeps a decade of

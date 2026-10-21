@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PATRICK — {{ t('ra_title') }} · {{ info.name }}</title>
+<style>{{ css | safe }}</style>
+<style>
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+.ra-export-main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+.ra-export-main h1 { margin: 0 0 4px; font-size: 22px; }
+.ra-export-meta { color: var(--text-2); font-size: 13px; margin: 0 0 18px; }
+.ra-export-main .card { animation: none; }
+</style>
+<script>window.I18N = {{ i18n_js | tojson }}; window.RA_FILE_PREFIX = {{ info.run_id | tojson }};</script>
+</head>
+<body>
+<main class="ra-export-main">
+    <h1>{{ t('ra_title') }} · {{ info.name }}</h1>
+    {% set pfx = 'ra_s_rl_' if info.mode == 'rl' else 'ra_s_' %}{% set hpfx = 'ra_h_rl_' if info.mode == 'rl' else 'ra_h_' %}
+    <p class="ra-export-meta">{{ info.target }} · {{ t('rd_horizon') }} {{ t('h_horizon_unit', h=info.horizon) }} · {{ 'CPCV' if info.scheme == 'cpcv' else 'walk-forward' }} · {{ info.status }}
+        · {{ t('ra_started_on') }} {{ info.started_at or '—' }}{% if info.finished_at %}, {{ t('ra_finished_on') }} {{ info.finished_at }}{% endif %}
+        · {{ t('ra_exported_on') }} {{ generated_at }}{% if info.config_hash %} · config {{ info.config_hash }}{% endif %}{% if info.snapshot_id %} · snapshot {{ info.snapshot_id }}{% endif %}</p>
+    <div id="ra-root" data-run-id="{{ info.run_id }}" data-kind="{{ info.mode }}">
+    {% for name in info.sections %}
+    <section id="s-{{ name }}" class="card ra-section">
+        <h2>{{ t(pfx ~ name) }}</h2>
+        <p class="hint">{{ t(hpfx ~ name) }}</p>
+        <div data-ra-mount="{{ name }}"></div>
+    </section>
+    {% endfor %}
+    </div>
+</main>
+<script id="ra-embed" type="application/json">{{ embed_json | safe }}</script>
+<script>{{ js | safe }}</script>
+</body>
+</html>

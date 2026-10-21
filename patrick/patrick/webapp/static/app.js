@@ -71,6 +71,16 @@
         profileStatus.dataset.error = isError ? "true" : "false";
     }
 
+    /* Réglages dont la valeur diffère entre deux états du formulaire (`{nom: [valeurs]}`) : sert à dire ce qu'un profil change avant de l'appliquer. */
+    function diffFields(before, after) {
+        const names = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+        return Array.from(names).filter((name) => JSON.stringify((before || {})[name] || []) !== JSON.stringify((after || {})[name] || [])).sort();
+    }
+    function describeDiff(names) {
+        const shown = names.slice(0, 8).join(", ") + (names.length > 8 ? tr("profile_diff_more", " …") : "");
+        return names.length + " " + tr("profile_diff_count", "setting(s) differ:") + " " + shown;
+    }
+
     function readProfiles() {
         try {
             const parsed = JSON.parse(localStorage.getItem(profileStorageKey) || "[]");
@@ -147,13 +157,20 @@
                 return;
             }
             try {
-                const profiles = readProfiles().filter((profile) => profile.name !== name);
-                profiles.push({ name: name, fields: serializeLaunchForm() });
+                const all = readProfiles();
+                const previous = all.find((profile) => profile.name === name);
+                const fields = serializeLaunchForm();
+                const version = previous ? (previous.version || 1) + 1 : 1;
+                const versions = previous ? [{ version: previous.version || 1, saved_at: previous.saved_at || null, fields: previous.fields }, ...(previous.versions || [])].slice(0, 8) : [];
+                const profiles = all.filter((profile) => profile.name !== name);
+                profiles.push({ name: name, fields: fields, version: version, saved_at: new Date().toISOString(), versions: versions });
                 localStorage.setItem(profileStorageKey, JSON.stringify(profiles));
                 updateProfileOptions();
                 profileList.value = name;
                 updateProfileOptions();
-                showProfileStatus(tr("profile_saved_notice", "Profile saved."), false);
+                const changed = previous ? diffFields(previous.fields, fields) : [];
+                const detail = previous ? " " + (changed.length ? describeDiff(changed) : tr("profile_diff_none", "No setting changed.")) : "";
+                showProfileStatus(tr("profile_saved_notice", "Profile saved.") + " v" + version + "." + detail, false);
             } catch (error) {
                 showProfileStatus(tr("profile_save_error", "The profile could not be saved in this browser."), true);
             }
@@ -165,9 +182,10 @@
                 updateProfileOptions();
                 return;
             }
+            const changed = diffFields(serializeLaunchForm(), profile.fields);
             applyLaunchProfile(profile.fields);
             if (profileNameInput) profileNameInput.value = profile.name;
-            showProfileStatus(tr("profile_loaded", "Profile loaded. Review it before launching."), false);
+            showProfileStatus(tr("profile_loaded", "Profile loaded. Review it before launching.") + " " + (changed.length ? describeDiff(changed) : tr("profile_diff_none", "No setting changed.")), false);
         });
         deleteProfileButton.addEventListener("click", function () {
             const name = profileList.value;

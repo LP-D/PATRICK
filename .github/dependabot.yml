@@ -1,0 +1,17 @@
+# Mises à jour proposées automatiquement (une PR par sujet, jamais fusionnées sans lecture).
+#   - github-actions : les actions des workflows (checkout, setup-python...) ;
+#   - pip : les dépendances déclarées dans patrick/pyproject.toml. La suite lente de la CI les fige par
+#     .github/constraints-py311.txt (uv pip compile) : une PR de dépendance ne vaut que si ce fichier est régénéré
+#     avec elle (voir l'en-tête du fichier), puis le golden master via une branche `golden-regen/*`.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+  - package-ecosystem: "pip"
+    directory: "/patrick"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3

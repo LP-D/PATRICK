@@ -1,0 +1,29 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('av_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('analysis.css') }}">
+<h1 class="page-title">{{ t('av_title') }}</h1>
+<p class="page-subtitle">{{ t('av_subtitle') }}</p>
+
+<nav class="section-index" aria-label="{{ t('ra_sections') }}">
+    <span class="section-index-label">{{ t('ra_sections') }}</span>
+    <a href="#familles">{{ t('av_s_fam') }}</a><a href="#series">{{ t('av_s_series') }}</a><a href="#cibles">{{ t('av_s_matrix') }}</a><a href="#liste">{{ t('av_s_list') }}</a>
+</nav>
+
+<div id="av-root">
+    <div class="metric-grid ra-kpis" id="av-kpis" aria-live="polite"></div>
+    <section id="familles" class="card ra-section"><h2>{{ t('av_s_fam') }}</h2><p class="hint">{{ t('av_h_fam') }}</p><div id="av-fam"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 70%"></div></div></div></section>
+    <section id="series" class="card ra-section"><h2>{{ t('av_s_series') }}</h2><p class="hint">{{ t('av_h_series') }}</p><div id="av-series"></div></section>
+    <section id="cibles" class="card ra-section"><h2>{{ t('av_s_matrix') }}</h2><p class="hint">{{ t('av_h_matrix') }}</p><div id="av-matrix"></div></section>
+    <section id="liste" class="card ra-section">
+        <h2>{{ t('av_s_list') }}</h2><p class="hint">{{ t('av_h_list') }}</p>
+        <div class="ra-filters" id="av-filters"></div>
+        <div id="av-table"></div><div class="row" id="av-pager"></div>
+        <div id="av-detail"></div>
+    </section>
+</div>
+
+<script src="{{ asset('analysis_kit.js') }}"></script>
+<script src="{{ asset('variables.js') }}"></script>
+{% endblock %}

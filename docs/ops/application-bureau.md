@@ -8,7 +8,7 @@ Mode d'emploi pour l'utilisateur : [`app/LISEZMOI.txt`](../../app/LISEZMOI.txt).
 
 | Étape | Réglage qui la désactive | Détail |
 |---|---|---|
-| 1. Mise à jour | `auto_update` | `git fetch` + avance rapide sur `origin/main`, sauvegarde de la base avant, réinstallation des composants seulement si `patrick/pyproject.toml` a changé, retour en arrière si pip échoue. Ignorée si un entraînement tourne, si le dossier n'est pas sur `main` ou a des modifications locales. Si le code a changé, le lanceur se relance avec le nouveau code. |
+| 1. Mise à jour | `auto_update` | `git fetch` + avance rapide sur `origin/stable` (le dernier commit de `main` dont toute la CI est verte, avancé par le job `promote` de `tests.yml` ; tant que `stable` n'existe pas, rien n'est installé), sauvegarde de la base avant, réinstallation des composants seulement si `patrick/pyproject.toml` a changé, retour en arrière si pip échoue. Ignorée si un entraînement tourne, si le dossier n'est pas sur `main` ou a des modifications locales. Si le code a changé, le lanceur se relance avec le nouveau code. |
 | 2. Assistant | — (une seule fois) | Si aucun choix n'a été fait (`setup_done`) et qu'aucun dossier n'est réglé : fenêtre « Où sont tes données partagées ? » (dossier OneDrive détecté / Parcourir / ce PC seul / plus tard). Une installation déjà réglée n'est pas interrogée. |
 | 3. Fusion | `sync_on_start`, ou aucun dossier | `patrick sync auto --only pull` (serveur fermé, voir [partage entre PC](partage-entre-pc.md)). Une erreur n'empêche jamais l'ouverture. |
 | 4. Serveur | — | `python -m patrick.cli serve --port <port>` sans console; attend qu'il réponde (120 s max). |

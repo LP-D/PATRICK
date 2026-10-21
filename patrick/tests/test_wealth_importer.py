@@ -8,22 +8,23 @@ import pytest
 
 from patrick.wealth import importer, ledger, symbols
 
-# Shape of a Trade Republic "Exportation de transactions" (made-up values).
+# Shape of a Trade Republic "Exportation de transactions" -- every date, quantity, price and amount is
+# invented (round figures, no connection with any real account).
 TR_CSV = """\
 "datetime","date","account_type","category","type","asset_class","name","symbol","shares","price","amount","fee","tax","currency","description"
-"2026-09-18T08:26:04Z","2026-09-18","DEFAULT","CASH","TRANSFER_INSTANT_INBOUND","","Jane Doe","","","","110.000000","","","EUR","Incoming transfer from Jane Doe (FR7630006000011234567890189)"
-"2026-09-18T08:28:07Z","2026-09-18","DEFAULT","TRADING","BUY","STOCK","Thales","FR0000121329","0.4212290000","237.4000000000","-100.00","-1.00","-0.40","EUR","Buy trade FR0000121329 THALES"
-"2026-09-18T08:29:13Z","2026-09-18","PEA","CASH","PEA_MARKETING","","","","","","1.000000","","","EUR","PEA activation"
-"2026-09-18T08:36:41Z","2026-09-18","DEFAULT","CASH","CUSTOMER_INPAYMENT","","Jane Doe","","","","10.100000","-0.10","","EUR","Apple Pay Top up"
-"2026-09-18T08:36:46Z","2026-09-18","DEFAULT","TRADING","BUY","CRYPTO","Axie Infinity","AXS","11.3246430000","0.8830300000","-10.00","-1.00","","EUR","Buy trade XF000AXS0014 Axie Infinity"
-"2026-09-18T08:51:26Z","2026-09-18","DEFAULT","TRADING","BUY","STOCK","Amazon.com","US0231351067","0.0454750000","219.8500000000","-10.00","","","EUR","Buy trade US0231351067 AMAZON.COM INC."
-"2026-09-18T08:51:27Z","2026-09-18","DEFAULT","CASH","REFERRAL","","","","","","10.000000","","","EUR","Onboarding cash reward"
-"2026-09-18T08:51:29Z","2026-09-18","DEFAULT","CASH","TRANSFER_OUT","","","","","","-78.690000","","","EUR","Versement PEA"
-"2026-09-18T08:51:29Z","2026-09-18","PEA","CASH","TRANSFER_IN","","","","","","78.690000","","","EUR","Versement PEA"
-"2026-09-18T08:51:26Z","2026-09-18","PEA","TRADING","BUY","STOCK","TotalEnergies","FR0000120271","1.0000000000","78.9800000000","-78.98","-0.39","-0.32","EUR","Buy trade FR0000120271"
-"2026-09-22T15:29:10Z","2026-09-22","PEA","TRADING","SELL","STOCK","TotalEnergies","FR0000120271","-1.0000000000","78.3200000000","78.32","-0.39","","EUR","Sell trade FR0000120271"
-"2026-09-22T15:40:18Z","2026-09-22","DEFAULT","CASH","TRANSFER_IN","","","","","","77.930000","","","EUR","Retrait PEA"
-"2026-09-22T15:40:18Z","2026-09-22","PEA","CASH","TRANSFER_OUT","","","","","","-77.930000","","","EUR","Retrait PEA"
+"2024-03-11T09:00:00Z","2024-03-11","DEFAULT","CASH","TRANSFER_INSTANT_INBOUND","","Jane Doe","","","","100.000000","","","EUR","Incoming transfer from Jane Doe (FR7630006000011234567890189)"
+"2024-03-11T09:02:00Z","2024-03-11","DEFAULT","TRADING","BUY","STOCK","Thales","FR0000121329","0.5000000000","200.0000000000","-100.00","-1.00","-0.40","EUR","Buy trade FR0000121329 THALES"
+"2024-03-11T09:03:00Z","2024-03-11","PEA","CASH","PEA_MARKETING","","","","","","1.000000","","","EUR","PEA activation"
+"2024-03-11T09:10:00Z","2024-03-11","DEFAULT","CASH","CUSTOMER_INPAYMENT","","Jane Doe","","","","10.100000","-0.10","","EUR","Apple Pay Top up"
+"2024-03-11T09:11:00Z","2024-03-11","DEFAULT","TRADING","BUY","CRYPTO","Axie Infinity","AXS","10.0000000000","1.0000000000","-10.00","-1.00","","EUR","Buy trade XF000AXS0014 Axie Infinity"
+"2024-03-11T09:20:00Z","2024-03-11","DEFAULT","TRADING","BUY","STOCK","Amazon.com","US0231351067","0.0500000000","200.0000000000","-10.00","","","EUR","Buy trade US0231351067 AMAZON.COM INC."
+"2024-03-11T09:20:01Z","2024-03-11","DEFAULT","CASH","REFERRAL","","","","","","10.000000","","","EUR","Onboarding cash reward"
+"2024-03-11T09:30:00Z","2024-03-11","DEFAULT","CASH","TRANSFER_OUT","","","","","","-80.000000","","","EUR","Versement PEA"
+"2024-03-11T09:30:00Z","2024-03-11","PEA","CASH","TRANSFER_IN","","","","","","80.000000","","","EUR","Versement PEA"
+"2024-03-11T09:31:00Z","2024-03-11","PEA","TRADING","BUY","STOCK","TotalEnergies","FR0000120271","1.0000000000","80.0000000000","-80.00","-0.40","-0.30","EUR","Buy trade FR0000120271"
+"2024-03-15T14:00:00Z","2024-03-15","PEA","TRADING","SELL","STOCK","TotalEnergies","FR0000120271","-1.0000000000","79.0000000000","79.00","-0.40","","EUR","Sell trade FR0000120271"
+"2024-03-15T14:10:00Z","2024-03-15","DEFAULT","CASH","TRANSFER_IN","","","","","","78.600000","","","EUR","Retrait PEA"
+"2024-03-15T14:10:00Z","2024-03-15","PEA","CASH","TRANSFER_OUT","","","","","","-78.600000","","","EUR","Retrait PEA"
 """
 
 # What Yahoo's search answers (checked 2026-09-30): the ISIN of Amazon only
@@ -67,9 +68,9 @@ def test_trade_republic_export_is_imported_whole_with_priced_symbols():
 
     plan = importer.plan_import(out["rows"], {}, "acc", {})
     assert [p["line"] for p in plan if p["status"] == "virement interne"] == [9, 10, 13, 14]
-    # Same cash as the broker: 110 - 101.40 + 10.10 - 0.10 - 11 - 10 + 10 + 1 - 79.69 + 77.93.
+    # Same cash as the broker: 100 - 101.40 + 10.10 - 0.10 - 11 - 10 + 10 + 1 - 80.70 + 78.60.
     cash = sum(p["amount"] for p in plan if not p["status"])
-    assert cash == pytest.approx(110 - 101.40 + 10.10 - 0.10 - 11 - 10 + 10 + 1 - 79.69 + 77.93, abs=0.01)
+    assert cash == pytest.approx(100 - 101.40 + 10.10 - 0.10 - 11 - 10 + 10 + 1 - 80.70 + 78.60, abs=0.01)
 
 
 def test_crypto_is_never_its_stock_homonym():

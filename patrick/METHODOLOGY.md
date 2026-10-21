@@ -79,6 +79,29 @@ le tuning Optuna, ni le tri du leaderboard ne les voient jamais.
 holdout, jamais pour choisir entre plusieurs configs (anti-pattern #1
 ci-dessous).
 
+**Registre d'accès** (`holdout_access`, migration 0038). Le holdout est lu à
+plusieurs endroits, tous via `_evaluate_holdout` : l'évaluation finale d'un
+run (`final_eval`), le diagnostic qui note tous les essais de la grille, en
+lecture seule (`diagnostic`), et le duel champion / challenger
+(`champion_duel_challenger`, `champion_duel_champion`), qui, lui, **choisit**
+un modèle sur le holdout : la p-value DM d'un champion a donc été calculée
+avant ce choix, mais sa performance holdout affichée est celle d'un gagnant.
+Chaque lecture est consignée (cible, horizon, run, fenêtre lue, lignes,
+finalité), en ajout seul et sans clé étrangère (un run supprimé garde ses
+lectures), fusionnée entre PC par union. `trackstats.holdout_reads` en donne
+le compte (total, par finalité, lectures « qui choisissent », runs distincts ;
+option `overlapping` : seules les lectures dont la fenêtre chevauche la
+fenêtre donnée) et la page d'un run l'affiche. Le registre démarre à sa
+création : les lectures antérieures sont inconnues. Le simulateur, qui relit
+les prédictions holdout déjà stockées, n'y est pas encore comptabilisé.
+
+**Règle « une erreur-type »** (`selection.one_se_rule`, activée par défaut depuis le 2026-10-20, ADR 0006). Le gagnant n'est plus la plus
+haute moyenne de F1_dir sur les plis : parmi les configurations dont la moyenne est à moins d'une erreur-type (écart-type des plis divisé
+par √plis) de la meilleure, on retient la plus simple (le moins de variables), puis la meilleure moyenne. Sans au moins deux plis, le
+maximum simple reste. Elle s'applique à toute la chaîne : gagnant du scan, candidat réglé par Optuna (le choix de la règle en tête),
+choix parmi les configurations réglées (erreur-type des plis du réglage), stabilité mesurée sur ce gagnant ; l'appliquer au seul scan
+serait annulé par le réglage. Une config qui la désactive garde le hachage d'avant le champ.
+
 ### Réduction de l'univers candidat : décidée dans chaque fold
 
 `universe.reduction_corr_threshold` (désactivé par défaut) regroupe les séries
@@ -127,7 +150,20 @@ via quatre garde-fous dans `patrick/validation/` :
 - **Diebold-Mariano** (`diebold_mariano.py`) : p-value du test de
   différence de perte entre le meilleur modèle et la meilleure baseline
   systématique — un modèle non significativement meilleur qu'une baseline
-  est signalé comme tel, pas caché.
+  est signalé comme tel, pas caché. À l'horizon h > 1, les pertes de lignes
+  voisines partagent h-1 barres : n lignes valent environ n/h observations
+  indépendantes. Mesuré par simulation sous H0 (test à 5 %), le test rejette
+  ~7 % du temps avec 15 blocs (n/h), ~10 % avec 10, ~22 % avec 2,6 (holdout de
+  15 mois à h=120) et plus de 80 % à h=504 : la correction HLN et la fenêtre
+  d'autocovariance ne suffisent pas. Sous 15 blocs (`MIN_BLOCKS_PER_HORIZON`),
+  le résultat est **non testable** (p-value absente, raison
+  `horizon_too_long`) : le moteur ne l'enregistre pas et la cible entre dans
+  la famille BH avec p = 1. Avec un holdout de 15 mois (~315 lignes), cela
+  rend le DM non testable dès h ≈ 21 (h=30 et au-delà, dont 252).
+
+**Preuve empirique du protocole** : `tests/test_null_world_validity.py` fait tourner le pipeline complet sur des marches
+aléatoires (BH sans rejet, PBO élevé, DSR bas) et sur des mondes à signal (contrôle positif) ; limites mesurées dans
+`KNOWN_ISSUES.md` (DM bilatéral à surveiller, faible puissance).
 
 Ces éléments apparaissent ensemble dans le leaderboard et dans
 `patrick report` : métrique de test, métrique de holdout, p-value DM vs
@@ -526,6 +562,14 @@ réutilisés SANS MODIFICATION, seule la source de la matrice change.
   modules paramétriques (pensés pour un simple préfixe `fit_end_idx`) ne
   supportent pas aujourd'hui. Risque de fuite résiduel sur CES familles
   seulement, en mode CPCV seulement.
+- Formules d'interaction : découvertes **par combinaison**, sur ses seules
+  barres d'entraînement (purgées sur l'horizon le plus long du run, mises sous
+  embargo) — `_cpcv_interaction_formulas`. Elles l'étaient une fois sur le
+  groupe 0, groupe de test de 6 combinaisons sur 21 (audit du 2026-10-19). Le
+  modèle exporté reçoit les siennes, découvertes sur tout l'historique. Reste
+  partagé, par approximation : les seuils de classes et régimes de
+  `run_target`, ajustés sur le seul groupe 0 (effet d'échelle, pas de choix de
+  variables).
 - Pas de holdout terminal (Phase 2.1), pas d'affinage Optuna, pas de
   Diebold-Mariano en mode CPCV : ces mécanismes reposent sur la topologie
   "une seule frontière, train=préfixe" du walk-forward (`_FoldContext`/

@@ -71,10 +71,11 @@
     dm_cell,
     up_down(r.class_balance.test if r.class_balance else none, 'true'),
     up_down(r.class_balance.test if r.class_balance else none, 'pred'),
+    '<a href="/runs/' ~ r.run_id ~ '/analyse">' ~ t('ra_open_analysis_short') ~ '</a>',
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials'), t('tg_col_f1best'), t('tg_col_persist'), t('hist_gap'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('tg_col_relaunch')],
+{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials'), t('tg_col_f1best'), t('tg_col_persist'), t('hist_gap'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('ra_col_analysis'), t('tg_col_relaunch')],
               rows, num_cols=[1, 5, 6, 7, 8, 9, 10, 11],
               footer=t('tg_runs_foot', n=detail.runs | length)) }}
 </section>

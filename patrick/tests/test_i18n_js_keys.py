@@ -19,8 +19,15 @@ _USES = [
 _DYNAMIC_PREFIXES = ("phase_", "status_", "queue_", "run_", "preview_", "news_", "gate_", "confirm_line_", "artifact_")
 
 
+# Pages dont `js_strings` ajoute des clés propres (analyses, actualités…) : on réunit ce que chacune expose.
+_PATHS = ("/", "/news", "/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet", "/diagnostics", "/risque",
+          "/donnees", "/runs/x/analyse")
+
+
 def _exposed() -> set[str]:
-    keys = set(i18n.js_strings("fr", "/"))
+    keys: set[str] = set()
+    for path in _PATHS:
+        keys.update(i18n.js_strings("fr", path))
     for path_keys in PAGE_JS_KEYS.values():
         keys.update(path_keys)
     return keys

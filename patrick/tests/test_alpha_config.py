@@ -29,8 +29,12 @@ def _alpha(symbol="MC.PA", **objective) -> RunConfig:
 
 def test_raw_run_hash_is_unchanged_by_the_new_fields():
     """Valeur calculée AVANT l'ajout de target_kind/benchmark : changer ce hachage casserait la reprise des runs
-    existants (noms d'études Optuna) et les empreintes de référence."""
-    assert _config_hash(_cfg()) == "5197c2fe5c3a66c8"
+    existants (noms d'études Optuna) et les empreintes de référence. Ce hachage est celui d'une config qui DÉSACTIVE la règle
+    « une erreur-type » (champ ajouté depuis, activé par défaut : une config par défaut a donc un autre hachage)."""
+    legacy = _cfg()
+    legacy.selection.one_se_rule = False
+    assert _config_hash(legacy) == "5197c2fe5c3a66c8"
+    assert _config_hash(_cfg()) != "5197c2fe5c3a66c8"
 
 
 def test_raw_is_the_default_and_leaves_the_universe_alone():
