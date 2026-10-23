@@ -26,7 +26,7 @@ dependencies = [
     "arch",
     "pykalman",
     "hmmlearn",
-    "pydantic>=2.14.1",
+    "pydantic>=2.13.5",        # plancher = version épinglée de .github/constraints-py311.txt : un plancher plus haut rend l'installation épinglée de la suite lente impossible (CI rouge, `stable` n'avance plus)
     "PyYAML",
     "typer",
     "joblib",
