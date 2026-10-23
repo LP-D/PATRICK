@@ -114,6 +114,27 @@ def test_a_missing_data_disk_stops_the_launcher_before_anything_starts(env, tmp_
     assert env.events == [] and len(rep.errors) == 1 and "PATRICK DATA" in rep.errors[0]
 
 
+def test_a_deferred_merge_is_named_in_the_launcher_log(env, tmp_path):
+    configure(tmp_path)
+    env.sync_result = {"code": 0, "seconds": 30, "lines": ["Reporté : fusion reportée : Fichier corrompu (sha256 différent) : patrick.db.gz"]}
+
+    launcher.run(FakeReporter())
+
+    log = (runtime.log_dir() / "launcher.log").read_text(encoding="utf-8")
+    line = next(entry for entry in log.splitlines() if "synchronisation (fusion)" in entry)
+    assert "reportée" in line and "sha256" in line                    # « code 0 » seul laissait croire que la fusion avait eu lieu
+
+
+def test_a_merge_that_ran_is_logged_as_before(env, tmp_path):
+    configure(tmp_path)
+
+    launcher.run(FakeReporter())
+
+    log = (runtime.log_dir() / "launcher.log").read_text(encoding="utf-8")
+    line = next(entry for entry in log.splitlines() if "synchronisation (fusion)" in entry)
+    assert "code 0" in line and "reportée" not in line
+
+
 def test_normal_launch_runs_every_step_in_order(env, tmp_path):
     configure(tmp_path)
     rep = FakeReporter()

@@ -196,7 +196,9 @@ def step_sync_pull(rep: Reporter) -> None:
     rep.status("Synchronisation avec tes autres PC…")
     result = run_sync("pull", on_tick=lambda s: rep.status(
         f"Synchronisation avec tes autres PC… {_elapsed_text(s)}\n(la première fois peut durer plusieurs minutes)"))
-    log(f"synchronisation (fusion) : code {result['code']} en {result['seconds']} s, détail dans sync.log")
+    deferred = next((line for line in result["lines"] if line.startswith("Reporté")), None)
+    note = f", reportée ({deferred.removeprefix('Reporté : ')})" if deferred else ""      # `sync auto` sort en code 0 même reportée
+    log(f"synchronisation (fusion) : code {result['code']} en {result['seconds']} s{note}, détail dans sync.log")
     _record_launch(sync={"mode": "pull", "code": result["code"], "lines": result["lines"][-6:]})
 
 
