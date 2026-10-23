@@ -11,6 +11,12 @@ import json
 import os
 import sqlite3
 import uuid
+from datetime import UTC, datetime
+
+try:
+    import psutil
+except ImportError:                                           # sans psutil, seul `pid_alive` tranche
+    psutil = None
 
 # A heartbeat older than this -> worker considered dead (`ensure_worker_running`
 # relaunches one). The worker refreshes its heartbeat from a dedicated thread
@@ -23,10 +29,15 @@ import uuid
 # `ensure_worker_running`).
 HEARTBEAT_STALE_S = 30.0
 
+# Reprises automatiques d'un job dont le worker a disparu (PC éteint, plantage) avant d'abandonner : un job qui fait mourir le worker à
+# chaque fois (mémoire, bibliothèque native) ne doit pas boucler.
+MAX_AUTO_RESUMES = 2
+INTERRUPTED_RUN_ERROR = "interrupted: the worker died before the end of the run (machine stopped or crash)"
+
 _JOB_COLUMNS = [
     "job_id", "config_json", "status", "created_at", "started_at", "finished_at",
     "error", "result_json", "phase", "progress_done", "progress_total", "log_tail",
-    "worker_pid", "pause_requested",
+    "worker_pid", "pause_requested", "resume_count",
 ]
 
 
@@ -48,13 +59,13 @@ def claim_next_job(conn: sqlite3.Connection, worker_pid: int) -> dict | None:
     conn.execute("BEGIN IMMEDIATE")
     try:
         row = conn.execute(
-            "SELECT job_id, config_json FROM job WHERE status = 'queued' "
+            "SELECT job_id, config_json, resume_count FROM job WHERE status = 'queued' "
             "ORDER BY created_at, rowid LIMIT 1"
         ).fetchone()
         if row is None:
             conn.execute("ROLLBACK")
             return None
-        job_id, config_json = row
+        job_id, config_json, resume_count = row
         conn.execute(
             "UPDATE job SET status = 'running', started_at = datetime('now'), "
             "worker_pid = ? WHERE job_id = ?",
@@ -64,7 +75,7 @@ def claim_next_job(conn: sqlite3.Connection, worker_pid: int) -> dict | None:
     except Exception:
         conn.execute("ROLLBACK")
         raise
-    return {"job_id": job_id, "config_json": config_json}
+    return {"job_id": job_id, "config_json": config_json, "resume_count": resume_count}
 
 
 def update_job_progress(conn: sqlite3.Connection, job_id: str, phase: str | None = None,
@@ -98,6 +109,14 @@ def finish_job(conn: sqlite3.Connection, job_id: str, status: str,
             "result_json = ?, error = ?, pause_requested = 0 WHERE job_id = ?",
             (status, result_json, error, job_id),
         )
+        if status == "error":
+            # Une exception de pipeline laissait ses lignes `run` « running » : indélébiles (« Cannot delete a running run ») jusqu'au prochain
+            # démarrage de worker et une heure d'âge.
+            conn.execute(
+                "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ? "
+                "WHERE job_id = ? AND status = 'running'",
+                (error or "failed", job_id),
+            )
 
 
 def _row_to_dict(row) -> dict:
@@ -254,6 +273,82 @@ def pid_alive(pid: int | None) -> bool:
     return True
 
 
+_CLOCK_MARGIN_S = 2.0
+
+
+def worker_process_alive(pid: int | None, started_at: str | None = None) -> bool:
+    """Le processus `pid` existe-t-il ET peut-il être le worker qui a pris un job à `started_at` (`YYYY-MM-DD HH:MM:SS`, UTC) ?
+
+    `pid_alive` seul se trompe après un redémarrage du PC : le système redonne le même numéro de processus à un autre programme (un
+    navigateur, par exemple), le job paraît alors vivant pour toujours, et « Arrêter » tuerait ce programme. Un worker réel est créé AVANT de
+    prendre son job et pendant que la machine est allumée : une machine démarrée après la prise du job, ou un processus créé après elle,
+    n'est pas lui. Sans `started_at`, retombe sur `pid_alive`."""
+    if not pid_alive(pid):
+        return False
+    if not started_at:
+        return True
+    if psutil is None:
+        return True
+    try:
+        claimed = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC).timestamp()
+        if psutil.boot_time() - claimed > _CLOCK_MARGIN_S:
+            return False
+        return psutil.Process(pid).create_time() - claimed <= _CLOCK_MARGIN_S
+    except psutil.NoSuchProcess:
+        return False
+    except (psutil.Error, OSError, ValueError):
+        return True                                           # impossible de trancher : on ne touche à rien
+
+
+def dead_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> list[tuple[str, int]]:
+    """`[(job_id, resume_count)]` des jobs « running » dont le worker n'existe plus. Sans `worker_pid` enregistré (anciennes lignes), seul l'âge
+    (`max_age_s`) tranche."""
+    rows = conn.execute(
+        "SELECT job_id, worker_pid, started_at, resume_count, (julianday('now') - julianday(started_at)) * 86400 "
+        "FROM job WHERE status = 'running'"
+    ).fetchall()
+    return [(job_id, resume_count or 0) for job_id, worker_pid, started_at, resume_count, age_s in rows
+            if (not worker_process_alive(worker_pid, started_at) if worker_pid else (age_s or 0) > max_age_s)]
+
+
+def recover_interrupted_jobs(conn: sqlite3.Connection, max_resumes: int = MAX_AUTO_RESUMES) -> dict[str, list[str]]:
+    """Jobs laissés « running » par un worker disparu (PC éteint, plantage, kill -9) : REMIS EN FILE pour reprise, au lieu d'être marqués en
+    erreur et abandonnés. `{"requeued": [ids], "failed": [ids]}`.
+
+    - le job repasse « queued » avec son rang d'origine (`created_at` inchangé : il repart avant les jobs créés après lui), sans pause
+      demandée, `resume_count` + 1 ; son lancement suivant rejoue le même instantané de données (`worker._resume_snapshot`) et les essais Optuna
+      déjà faits (`optuna.db`, étude de même nom) ;
+    - ses lignes `run` encore « running » passent « failed » (`INTERRUPTED_RUN_ERROR`) : la reprise en crée de nouvelles ;
+    - au-delà de `max_resumes` le job passe en erreur : un job qui tue le worker à chaque fois ne boucle pas.
+    Un job dont le worker est vivant n'est jamais touché, quel que soit son âge. Idempotent : deux appels simultanés (serveur et worker) ne
+    reprennent pas deux fois le même job (chaque mise à jour exige encore `status = 'running'`)."""
+    out: dict[str, list[str]] = {"requeued": [], "failed": []}
+    for job_id, resume_count in dead_running_jobs(conn):
+        with conn:
+            if resume_count < max_resumes:
+                note = json.dumps([f"[REPRISE] le worker précédent a disparu (arrêt du PC ou plantage) : reprise automatique n°{resume_count + 1}."])
+                changed = conn.execute(
+                    "UPDATE job SET status = 'queued', started_at = NULL, worker_pid = NULL, pause_requested = 0, phase = 'queued', "
+                    "progress_done = 0, resume_count = ?, error = NULL, log_tail = ? WHERE job_id = ? AND status = 'running'",
+                    (resume_count + 1, note, job_id),
+                ).rowcount
+                bucket = "requeued"
+            else:
+                changed = conn.execute(
+                    "UPDATE job SET status = 'error', finished_at = datetime('now'), pause_requested = 0, "
+                    "error = ? WHERE job_id = ? AND status = 'running'",
+                    (f"worker interrupted (process died) {resume_count + 1} times: automatic resumption abandoned", job_id),
+                ).rowcount
+                bucket = "failed"
+            if changed:
+                conn.execute(
+                    "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ? WHERE job_id = ? AND status = 'running'",
+                    (INTERRUPTED_RUN_ERROR, job_id),
+                )
+                out[bucket].append(job_id)
+    return out
+
+
 def reap_stale_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> int:
     """Jobs left 'running' whose worker process no longer exists (kill -9,
     crash, power loss) are switched to error rather than left blocking the
@@ -263,14 +358,7 @@ def reap_stale_running_jobs(conn: sqlite3.Connection, max_age_s: float = 3600.0)
     alone marked a live job as dead (2026-09-27, GSPC_62). `max_age_s` only
     still applies to legacy rows without a recorded `worker_pid`.
     Called at `run_worker_loop` startup, never during an ongoing execution."""
-    rows = conn.execute(
-        "SELECT job_id, worker_pid, (julianday('now') - julianday(started_at)) * 86400 "
-        "FROM job WHERE status = 'running'"
-    ).fetchall()
-    dead = [
-        job_id for job_id, worker_pid, age_s in rows
-        if (not pid_alive(worker_pid) if worker_pid else (age_s or 0) > max_age_s)
-    ]
+    dead = [job_id for job_id, _resume_count in dead_running_jobs(conn, max_age_s)]
     with conn:
         for job_id in dead:
             conn.execute(

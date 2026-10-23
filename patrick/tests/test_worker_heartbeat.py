@@ -66,7 +66,14 @@ def test_pid_alive_distinguishes_live_and_dead_processes():
     assert not jobs_db.pid_alive(0)
 
 
-def test_old_job_of_a_live_worker_is_not_reaped(db_path):
+@pytest.fixture
+def live_by_pid(monkeypatch):
+    """Ces tests posent un `started_at` d'il y a des heures avec le numéro du processus de test : seul l'existence du processus compte ici (le
+    contrôle de l'heure de création, qui détecte un numéro réattribué après un redémarrage, a ses propres tests)."""
+    monkeypatch.setattr(jobs_db, "worker_process_alive", lambda pid, started_at=None: jobs_db.pid_alive(pid))
+
+
+def test_old_job_of_a_live_worker_is_not_reaped(db_path, live_by_pid):
     import os
 
     conn = trackdb.connect(db_path)
@@ -96,7 +103,7 @@ def test_job_without_worker_pid_keeps_the_age_gate(db_path):
     conn.close()
 
 
-def test_runs_of_a_still_running_job_are_not_orphaned(db_path):
+def test_runs_of_a_still_running_job_are_not_orphaned(db_path, live_by_pid):
     import os
 
     conn = trackdb.connect(db_path)

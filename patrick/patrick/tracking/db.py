@@ -683,12 +683,15 @@ def reap_orphaned_runs(conn: sqlite3.Connection, max_age_s: float = 3600.0) -> i
     Called once at `run_worker_loop` startup, never during an ongoing
     execution."""
     with conn:
+        # Un run rattaché à un job qui n'est plus « running » (terminé, en erreur, remis en file) ne peut pas être en cours : refermé tout de
+        # suite, sans attendre une heure -- sinon un run interrompu par l'arrêt du PC restait « running » et indélébile (« Cannot delete a
+        # running run »). Seul un run sans job (lancé en ligne de commande) garde le délai : on ne sait pas lui trouver de processus.
         cur = conn.execute(
             "UPDATE run SET status = 'failed', finished_at = datetime('now'), "
             "error = 'orphaned: no matching process at worker startup' "
-            "WHERE status = 'running' AND "
-            "(julianday('now') - julianday(started_at)) * 86400 > ? AND "
-            "(job_id IS NULL OR job_id NOT IN (SELECT job_id FROM job WHERE status = 'running'))",
+            "WHERE status = 'running' AND ("
+            "(job_id IS NOT NULL AND job_id NOT IN (SELECT job_id FROM job WHERE status = 'running')) OR "
+            "(job_id IS NULL AND (julianday('now') - julianday(started_at)) * 86400 > ?))",
             (max_age_s,),
         )
     return cur.rowcount

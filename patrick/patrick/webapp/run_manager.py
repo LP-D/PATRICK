@@ -289,14 +289,21 @@ def queued_runs() -> list[dict]:
 
 
 def set_active_run_paused(job_id: str, paused: bool) -> dict | None:
+    """`None` si le run n'est plus actif -- y compris quand son worker a disparu (PC éteint, plantage) : le job est alors remis en file pour
+    reprise au lieu d'afficher « en pause » un calcul qui ne tourne plus."""
     conn = _connect()
     try:
-        if not jobs_db.set_job_paused(conn, job_id, paused):
-            return None
         job = jobs_db.get_job(conn, job_id)
-        return _job_view(job, None) if job else None
+        orphan = bool(job and job["status"] == "running" and job.get("worker_pid")
+                      and not jobs_db.worker_process_alive(job["worker_pid"], job["started_at"]))
+        if not orphan and jobs_db.set_job_paused(conn, job_id, paused):
+            job = jobs_db.get_job(conn, job_id)
+            return _job_view(job, None) if job else None
     finally:
         conn.close()
+    if orphan:
+        recover_interrupted_runs(force=True)
+    return None
 
 
 def remove_queued_run(job_id: str) -> bool:
@@ -361,7 +368,9 @@ def stop_active_run(job_id: str) -> bool:
         pid = job.get("worker_pid")
         if not pid or pid <= 0:
             raise RuntimeError("Le PID du worker actif est indisponible.")
-        _terminate_worker(pid)
+        # Un numéro de processus survit à un redémarrage du PC en changeant de propriétaire : ne tuer que si c'est bien le worker de ce job.
+        if jobs_db.worker_process_alive(pid, job["started_at"]):
+            _terminate_worker(pid)
         jobs_db.clear_heartbeat(conn, pid)       # le worker est mort : son pouls ne doit plus empêcher d'en relancer un
         stopped = jobs_db.finish_user_stopped_job(conn, job_id)
     finally:
@@ -369,6 +378,33 @@ def stop_active_run(job_id: str) -> bool:
     if queued_runs():
         ensure_worker_running()
     return stopped
+
+
+_RECOVERY_MIN_INTERVAL_S = 5.0
+_NO_AUTO_WORKER_ENV = "PATRICK_NO_AUTO_WORKER"          # posée par la suite de tests : la reprise automatique ne lance alors aucun processus
+_last_recovery = 0.0
+
+
+def recover_interrupted_runs(force: bool = False) -> dict:
+    """Reprend ce qu'un arrêt brutal (PC éteint, plantage, worker tué) a laissé en cours : les jobs « running » dont le worker n'existe plus
+    sont REMIS EN FILE (`jobs.recover_interrupted_jobs`), leurs runs orphelins refermés (donc supprimables), et un worker est relancé s'il y a
+    du travail. Avant, rien ne le faisait tant qu'un nouveau job n'était pas soumis à la main, et le job était alors marqué en erreur au
+    lieu d'être repris. Appelée au démarrage du serveur et par l'interface (au plus toutes les 5 s sauf `force`)."""
+    global _last_recovery
+    now = time.monotonic()
+    if not force and now - _last_recovery < _RECOVERY_MIN_INTERVAL_S:
+        return {"requeued": [], "failed": []}
+    _last_recovery = now
+    conn = _connect()
+    try:
+        out = jobs_db.recover_interrupted_jobs(conn)
+        trackdb.reap_orphaned_runs(conn)
+        has_work = bool(jobs_db.list_queued_job_ids(conn))
+    finally:
+        conn.close()
+    if has_work and not os.environ.get(_NO_AUTO_WORKER_ENV):
+        ensure_worker_running()
+    return out
 
 
 def ensure_worker_running() -> None:
