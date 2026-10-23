@@ -20,6 +20,9 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 Avec le lanceur `PATRICK.lnk` : la fusion se fait au démarrage (avant le
 serveur, écran « Synchronisation... »), la publication en arrière-plan à la fermeture de la fenêtre.
 Journal : `~/.patrick/logs/sync.log`.
+Les données lourdes (magasin, modèles, caches, sauvegardes) peuvent vivre sur un autre disque : voir
+[racine-de-donnees-sur-un-autre-disque.md](racine-de-donnees-sur-un-autre-disque.md) (c'est aussi là que se trouve le correctif des modèles
+absents du partage et le dépannage du message « Fichier corrompu (sha256 différent) »).
 
 **Mise en place sur un nouveau PC** : `app\Installer.bat` (installe tout), puis au premier démarrage choisir le
 **même** dossier OneDrive que sur le premier PC, sans cocher « référence du patrimoine » (ce PC adopte le

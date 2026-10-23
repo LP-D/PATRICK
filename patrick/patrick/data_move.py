@@ -521,6 +521,7 @@ def rollback(db_path: str | None = None, *, force: bool = False) -> dict:
     settings.save({paths.KEY_DATA_ROOT: journal["previous_data_root"]})
     journal = {**journal, "status": "rolled_back"}
     _write_json(paths.home_dir() / JOURNAL_NAME, journal)
+    (paths.home_dir() / STATE_NAME).unlink(missing_ok=True)       # l'avancement de la copie n'a plus de sens
     return journal
 
 
@@ -570,7 +571,19 @@ def finalize(*, source_root: Path | None = None) -> dict:
         raise MoveError(f"Suppression interrompue ({exc}) : ferme ce qui utilise ces fichiers, puis relance "
                         "`patrick data move --finalize` pour la terminer.") from exc
     _write_json(journal_path, {**journal, "status": "finalized", "removed": doomed, "kept": kept})
+    (paths.home_dir() / STATE_NAME).unlink(missing_ok=True)       # l'avancement de la copie n'a plus de sens
     return {"removed": doomed, "kept": kept}
+
+
+def finalize_preview() -> dict:
+    """Ce que `finalize` s'apprête à supprimer, sans rien toucher : `{"source_root", "target", "components"}` (composants encore
+    présents à la source). Sert à l'invite de `patrick data move --finalize`."""
+    journal = _read_json(paths.home_dir() / JOURNAL_NAME)
+    if not journal or journal.get("status") not in ("switched", "finalizing"):
+        raise MoveError("Rien à finaliser : aucun déplacement basculé n'est en attente.")
+    src_root = Path(journal["source_root"])
+    return {"source_root": str(src_root), "target": journal["target"],
+            "components": [name for name in COMPONENTS if (src_root / name).is_dir()]}
 
 
 def use_root(folder: str | None) -> dict:

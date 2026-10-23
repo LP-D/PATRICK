@@ -37,7 +37,7 @@ sync_app = typer.Typer(help="Partage de la base, des modèles et des données en
 app.add_typer(sync_app, name="sync")
 data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, caches, sauvegardes) : état, création, déplacement.")
 app.add_typer(data_app, name="data")
-news_app =typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
+news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
 app.add_typer(news_app, name="news")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
@@ -903,8 +903,11 @@ def data_status_cmd() -> None:
         typer.echo(f"  {c['name']:<14} {c['path']}{'' if c['exists'] else '  (absent)'}")
     u = s["unresolved"]
     typer.echo(f"Chemins qui ne se résolvent pas : modèles {u['artifact_paths']}, index du magasin {u['store_index']}")
-    if s["progress"]:
-        typer.echo(f"Déplacement en cours ou interrompu : {s['progress']}")
+    progress = s["progress"]
+    if progress and progress.get("phase") == "copy":          # « copied » = copie terminée : rien n'est en cours
+        typer.echo(f"Copie en cours ou interrompue vers {progress.get('target')} : dossier {progress.get('component') or '...'}, "
+                   f"{progress.get('files_done')} fichier(s), {progress.get('bytes_done', 0) / 1e9:.1f} Go sur "
+                   f"{progress.get('total_bytes', 0) / 1e9:.1f} Go. Relance `patrick data move` pour la reprendre.")
 
 
 @data_app.command(name="init")
@@ -934,8 +937,14 @@ def data_move_cmd(
         if folder:
             typer.echo("Refusé : --finalize n'accepte aucun dossier.", err=True)
             raise typer.Exit(code=1)
-        answer = typer.prompt("Supprimer définitivement l'ancien emplacement des données (la copie a été contrôlée) ? (o/n)",
-                              default="n")
+        try:
+            plan = data_move.finalize_preview()
+        except data_move.MoveError as exc:
+            typer.echo(f"Refusé : {exc}", err=True)
+            raise typer.Exit(code=1) from None
+        answer = typer.prompt(f"Supprimer définitivement de {plan['source_root']} : {', '.join(plan['components']) or 'rien'} ? "
+                              f"Les données sont dans {plan['target']} ; la copie est revérifiée fichier par fichier avant la "
+                              "suppression, qui est irréversible. (o/n)", default="n")
         if answer.strip().lower() not in ("o", "oui", "y", "yes"):
             typer.echo("Rien n'a été supprimé.")
             raise typer.Exit(code=1)
