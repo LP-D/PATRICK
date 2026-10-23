@@ -6,6 +6,7 @@ tout emplacement se résout par `patrick.paths`.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -15,7 +16,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from patrick import paths, sync
+from patrick import paths, settings, sync
 from patrick.desktop import prefs, runtime
 
 COMPONENTS = ("store", "models", "feature_cache", "cache", "backups", "archive", "reports")
@@ -273,3 +274,84 @@ def copy_components(target: str, *, source_root: Path | None = None, progress=No
     _verify_copy(src_root, dst_root, names)
     record("copied", "", force=True)
     return dict(done)
+
+
+# --------------------------------------------------------------------------
+# Phase 2 : bascule (réécriture des chemins absolus, réglage) avec journal
+# --------------------------------------------------------------------------
+
+def rebase_path(value: str, old_root: str, new_root: str) -> str | None:
+    """`value` déplacé de `old_root` vers `new_root`, ou None s'il n'est pas sous `old_root`. Séparateurs mixtes
+    (`C:\\Users\\x/.patrick/store\\snapshot=…`) et casse Windows tolérés."""
+    v, old, new = os.path.normpath(value), os.path.normpath(old_root), os.path.normpath(new_root)
+    if os.path.normcase(v) == os.path.normcase(old):
+        return new
+    prefix = os.path.normcase(old).rstrip("\\/") + os.sep
+    if os.path.normcase(v).startswith(prefix):
+        return os.path.join(new, v[len(prefix):])
+    return None
+
+
+def _rebased_index(index: dict, old_store: Path, new_store: Path) -> tuple[dict, dict]:
+    """`_index.json` réécrit vers `new_store`, et les anciennes valeurs `{"<clé>|<snapshot_id>": chemin}`."""
+    rewritten: dict = {}
+    old_values: dict = {}
+    for key, value in index.items():
+        snapshots = []
+        for entry in (value or {}).get("snapshots", []):
+            current = entry.get("path", "")
+            rebased = rebase_path(current, str(old_store), str(new_store))
+            if rebased is None and (m := sync._SNAPSHOT_REL_RE.search(current)) and (new_store / m[1] / m[2]).is_file():
+                rebased = str(new_store / m[1] / m[2])
+            if rebased and rebased != current:
+                old_values[f"{key}|{entry.get('snapshot_id', '')}"] = current
+                entry = {**entry, "path": rebased}
+            snapshots.append(entry)
+        rewritten[key] = {**(value or {}), "snapshots": snapshots}
+    return rewritten, old_values
+
+
+def switch(target: str, *, db_path: str | None = None, source_root: Path | None = None) -> dict:
+    """Phase 2 : fait de `target` (déjà copié) la racine de données. Dans l'ordre : le journal des anciennes valeurs, les
+    `trial.artifact_path` absolus de l'ancien dossier `models` (UNE transaction), l'`_index.json` de la COPIE (celui de la
+    source ne bouge pas), puis le réglage `data_root`. Sans effet si `target` est déjà la racine. Renvoie le journal."""
+    dst_root = Path(target)
+    journal_path = paths.home_dir() / JOURNAL_NAME
+    configured = paths.configured_data_root()
+    if configured is not None and _norm(configured) == _norm(dst_root):
+        return _read_json(journal_path) or {}
+    src_root = Path(source_root) if source_root is not None else paths.data_root()
+    db_path = db_path or paths.db_path()
+    if not (dst_root / "models").is_dir():
+        raise MoveError(f"La copie est absente de {dst_root} : lance d'abord `patrick data move`.")
+    old_models, new_models = str(src_root / "models"), str(dst_root / "models")
+    index_path = dst_root / "store" / "_index.json"
+    index = _read_json(index_path)
+    new_index, old_index = _rebased_index(index or {}, src_root / "store", dst_root / "store")
+
+    conn = sqlite3.connect(db_path, timeout=60, isolation_level=None) if os.path.exists(db_path) else None
+    try:
+        rows = conn.execute("SELECT trial_id, artifact_path FROM trial "
+                            "WHERE artifact_path IS NOT NULL AND artifact_path <> ''").fetchall() if conn else []
+        changes = [[tid, old, new] for tid, old in rows if (new := rebase_path(old, old_models, new_models)) and new != old]
+        journal = {"status": "switched", "source_root": str(src_root), "target": str(dst_root), "artifact_paths": changes,
+                   "store_index_old": old_index, "previous_data_root": str(configured) if configured is not None else None,
+                   "created_at": datetime.now(UTC).isoformat(timespec="seconds")}
+        _write_json(journal_path, journal)
+        if changes:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.executemany("UPDATE trial SET artifact_path = ? WHERE trial_id = ?", [(new, tid) for tid, _old, new in changes])
+                conn.execute("COMMIT")
+            except sqlite3.Error as exc:
+                with contextlib.suppress(sqlite3.Error):
+                    conn.execute("ROLLBACK")
+                journal_path.unlink(missing_ok=True)
+                raise MoveError(f"Bascule interrompue, aucune modification faite ({exc}).") from exc
+    finally:
+        if conn:
+            conn.close()
+    if index is not None and old_index:
+        _write_json(index_path, new_index)
+    settings.save({paths.KEY_DATA_ROOT: str(dst_root)})
+    return journal

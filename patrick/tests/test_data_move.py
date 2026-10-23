@@ -4,13 +4,14 @@ Tout se passe sur des arbres et de petites bases sous `tmp_path` : jamais le vra
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
 
-from patrick import data_move, settings
+from patrick import data_move, paths, settings
 from patrick.cli import app as cli_app
 from patrick.tracking import db as trackdb
 
@@ -223,3 +224,100 @@ def test_cli_move_stops_on_a_blocking_precondition(pc, monkeypatch):
 
     assert out.exit_code == 1 and "Refusé" in out.output and "PATRICK est ouvert" in out.output
     assert not (pc.tmp / "PATRICK DATA").exists()
+
+
+# --- phase 2 : bascule et journal --------------------------------------------------------------------------------
+
+OLD_STORE = r"C:\Users\leonp\.patrick\store"
+NEW_STORE = r"D:\PATRICK DATA\store"
+
+
+def test_rebase_path_handles_mixed_separators_and_case():
+    mixed = r"C:\Users\leonp/.patrick/store\snapshot=2026-07-28\raw_IDX_VIX__02b2bd20a711.parquet"   # tel que dans _index.json
+
+    assert data_move.rebase_path(mixed, OLD_STORE, NEW_STORE) == (
+        r"D:\PATRICK DATA\store\snapshot=2026-07-28\raw_IDX_VIX__02b2bd20a711.parquet")
+    assert data_move.rebase_path(r"c:\users\LEONP\.PATRICK\store\snapshot=1\f.parquet", OLD_STORE, NEW_STORE) == (
+        r"D:\PATRICK DATA\store\snapshot=1\f.parquet")
+    assert data_move.rebase_path(OLD_STORE, OLD_STORE, NEW_STORE) == NEW_STORE
+
+
+def test_rebase_path_leaves_other_paths_alone():
+    assert data_move.rebase_path(r"C:\Users\leonp\.patrick\models\1\m.joblib", OLD_STORE, NEW_STORE) is None
+    assert data_move.rebase_path(r"C:\Users\leonp\.patrick\store2\x.parquet", OLD_STORE, NEW_STORE) is None   # préfixe, pas un dossier parent
+    assert data_move.rebase_path("runs\\GSPC_34\\m.joblib", OLD_STORE, NEW_STORE) is None
+
+
+def prepare(pc, *, extra_models: tuple[str, ...] = ()) -> SimpleNamespace:
+    """Une source avec modèles, base et index du magasin à séparateurs mixtes, déjà copiée vers `tmp/PATRICK DATA`."""
+    model = pc.home / "models" / "1" / "m.joblib"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"model")
+    relative = "runs\\GSPC_34\\GSPC_34_best_model_h1.joblib"
+    db = make_db(pc.home / "patrick.db", [str(model), relative, None, "", "C:\\ailleurs\\x.joblib",
+                                         *(str(pc.home / "models" / name / "x.joblib") for name in extra_models)])
+    store = pc.home / "store"
+    (store / "snapshot=2026-07-28").mkdir(parents=True)
+    (store / "snapshot=2026-07-28" / "a__1.parquet").write_bytes(b"parquet")
+    mixed = str(store).replace("\\", "/") + "\\snapshot=2026-07-28\\a__1.parquet"
+    (store / "_index.json").write_text(json.dumps({"k": {"rows": 1, "snapshots": [{"snapshot_id": "s1", "path": mixed}]}}),
+                                       encoding="utf-8")
+    target = pc.tmp / "PATRICK DATA"
+    data_move.copy_components(str(target))
+    return SimpleNamespace(db=db, target=target, model=model, relative=relative, store=store)
+
+
+def artifact_paths(db: str) -> list:
+    conn = sqlite3.connect(db)
+    try:
+        return [r[0] for r in conn.execute("SELECT artifact_path FROM trial ORDER BY trial_id")]
+    finally:
+        conn.close()
+
+
+def test_switch_rewrites_only_the_absolute_model_paths_and_the_copied_index_then_sets_the_root(pc):
+    p = prepare(pc)
+    source_index = (p.store / "_index.json").read_bytes()
+    new_model = str(p.target / "models" / "1" / "m.joblib")
+
+    journal = data_move.switch(str(p.target), db_path=p.db)
+
+    assert artifact_paths(p.db) == [new_model, p.relative, None, "", "C:\\ailleurs\\x.joblib"]
+    new_index = json.loads((p.target / "store" / "_index.json").read_text(encoding="utf-8"))
+    assert new_index["k"]["snapshots"][0]["path"] == str(p.target / "store" / "snapshot=2026-07-28" / "a__1.parquet")
+    assert (p.store / "_index.json").read_bytes() == source_index                  # l'index de la source ne bouge pas
+    assert settings.load()["data_root"] == str(p.target) and paths.data_root() == p.target
+    assert journal["artifact_paths"] == [[1, str(p.model), new_model]] and journal["target"] == str(p.target)
+    assert json.loads((pc.home / data_move.JOURNAL_NAME).read_text(encoding="utf-8")) == journal
+    assert data_move.status()["unresolved"] == {"artifact_paths": 1, "store_index": 0}   # « C:\ailleurs » n'a jamais existé
+
+
+def test_a_second_switch_changes_nothing_and_keeps_the_journal(pc):
+    p = prepare(pc)
+    first = data_move.switch(str(p.target), db_path=p.db)
+    journal_bytes = (pc.home / data_move.JOURNAL_NAME).read_bytes()
+    paths_after_first = artifact_paths(p.db)
+
+    second = data_move.switch(str(p.target), db_path=p.db)
+
+    assert second == first and (pc.home / data_move.JOURNAL_NAME).read_bytes() == journal_bytes
+    assert artifact_paths(p.db) == paths_after_first
+
+
+def test_a_failure_in_the_sql_transaction_changes_nothing(pc):
+    p = prepare(pc, extra_models=("boom",))
+    conn = sqlite3.connect(p.db)
+    conn.execute("CREATE TRIGGER boom BEFORE UPDATE OF artifact_path ON trial WHEN NEW.artifact_path LIKE '%boom%' "
+                 "BEGIN SELECT RAISE(ABORT, 'boom'); END")
+    conn.commit()
+    conn.close()
+    before = artifact_paths(p.db)
+    index_before = (p.target / "store" / "_index.json").read_bytes()
+
+    with pytest.raises(data_move.MoveError, match="aucune modification"):
+        data_move.switch(str(p.target), db_path=p.db)
+
+    assert artifact_paths(p.db) == before
+    assert "data_root" not in settings.load()
+    assert (p.target / "store" / "_index.json").read_bytes() == index_before
+    assert not (pc.home / data_move.JOURNAL_NAME).exists()
