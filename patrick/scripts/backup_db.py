@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source", default=None,
-        help="Chemin de la base a sauvegarder (defaut : $PATRICK_DB_PATH ou ~/.patrick/patrick.db).",
+        help="Chemin de la base a sauvegarder (defaut : $PATRICK_DB_PATH, sinon patrick.db du dossier maison).",
     )
     parser.add_argument(
         "--backup-dir", default=None,

@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db-path", default=None,
-                         help="Chemin vers patrick.db (défaut : ~/.patrick/patrick.db, "
+                         help="Chemin vers patrick.db (défaut : celui du dossier maison, "
                               "cf. patrick.tracking.db.default_db_path)")
     parser.add_argument("--base-dir", default=None,
                          help="Répertoire de base pour résoudre les artifact_path relatifs et pour "

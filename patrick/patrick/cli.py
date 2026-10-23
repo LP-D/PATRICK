@@ -192,7 +192,7 @@ def resume_cmd(
 def report_cmd(
     run_id: str = typer.Option(..., "--run-id", help="Identifiant du run (table `run`)"),
     output: str = typer.Option(
-        None, "--output", help="Chemin du fichier HTML (défaut : ~/.patrick/reports/<run_id>.html)"),
+        None, "--output", help="Chemin du fichier HTML (défaut : <run_id>.html dans le dossier reports de la racine de données)"),
     fdr_alpha: float = typer.Option(
         0.10, "--fdr-alpha",
         help="Seuil FDR (Phase 6.4) pour la correction Benjamini-Hochberg entre cibles"),
@@ -334,7 +334,7 @@ def audit_degradation_cmd(
 
 @audit_app.command(name="speed")
 def audit_speed_cmd(
-    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH / ~/.patrick/patrick.db)"),
+    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH, sinon patrick.db du dossier maison)"),
     target: str = typer.Option(None, "--target",
                                help="Cible dont le snapshot brut le plus récent sert à mesurer le coût par famille"),
     n_folds: int = typer.Option(5, "--n-folds", help="Folds walk-forward (les familles paramétriques sont refittées par fold)"),

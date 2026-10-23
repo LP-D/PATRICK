@@ -48,6 +48,14 @@ plusieurs branches en parallèle : toujours utiliser
 `monkeypatch.setenv("PATRICK_DB_PATH", ...)` dans les tests pour ne jamais
 toucher la vraie base.
 
+Deux dossiers, deux rôles : le **dossier maison** (`~/.patrick`) garde la base
+active, les journaux et l'état de la machine ; la **racine de données** (réglage
+`data_root` ou `PATRICK_DATA_ROOT`, par défaut le dossier maison) porte le
+magasin, les modèles, les caches, les sauvegardes, les archives et les rapports.
+Tous les emplacements se résolvent par `patrick/paths.py` (un test interdit d'écrire
+`.patrick` en dur ailleurs) ; `patrick data status` les affiche et
+`patrick data move` déplace la racine sur un autre disque.
+
 ## 2. Flux de données de bout en bout
 
 ```mermaid
@@ -101,6 +109,7 @@ Sous `patrick/patrick/` :
 | `desktop/` | Application de bureau : lanceur (`python -m patrick.desktop`), mise à jour depuis GitHub, assistant du dossier partagé, raccourcis — voir `docs/ops/application-bureau.md`. |
 | `sync.py`, `sync_merge.py` | Partage de la base, des modèles et du magasin entre PC (fusion par union des runs, PC de référence du patrimoine) — voir `docs/ops/partage-entre-pc.md`. |
 | `settings.py` | Réglages de la machine (`~/.patrick/settings.json`), relus à chaque appel. |
+| `paths.py`, `data_move.py` | Emplacements des données (dossier maison, racine de données, composants) et commande `patrick data` (état, création, déplacement vérifié avec retour arrière). |
 | `wealth/` | Patrimoine : comptes réels et fictifs, mouvements, import CSV, valorisation et risque ex ante (pages `/patrimoine`, `/mouvements`). |
 | `rl/`, `exploration/`, `research/` | Reinforcement learning (page `/rl`), études statistiques entre actifs (page `/exploration`), études d'événements et campagne alpha. |
 | `benchmark/` | Mesure et non-régression des performances (`python -m patrick.benchmark`). |
