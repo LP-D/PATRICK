@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import threading
 import time
 
@@ -52,7 +53,8 @@ def test_job_view_exposes_eta_and_caps_progress(monkeypatch):
     assert view["eta_confidence"] is None
 
 
-def _running_job(conn, job_id: str, worker_pid: int = 12345) -> None:
+def _running_job(conn, job_id: str, worker_pid: int | None = None) -> None:
+    worker_pid = os.getpid() if worker_pid is None else worker_pid       # un worker vivant : un faux numéro de processus passerait pour disparu
     with conn:
         conn.execute(
             "INSERT INTO job (job_id, config_json, status, worker_pid) "
@@ -186,6 +188,7 @@ def test_stop_terminates_active_worker_and_marks_job_error(tmp_path, monkeypatch
     terminated = []
     monkeypatch.setattr(run_manager, "_terminate_worker", terminated.append)
     monkeypatch.setattr(run_manager, "ensure_worker_running", lambda: None)
+    monkeypatch.setattr(jobs, "worker_process_alive", lambda pid, started_at=None: True)
 
     response = TestClient(app).post("/api/jobs/active/stop")
     assert response.status_code == 200, response.text

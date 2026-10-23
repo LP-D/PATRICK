@@ -19,6 +19,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from patrick.config import defaults as D
 from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
+from patrick.pipeline import pause
 from patrick.validation.metrics import metrics
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -148,6 +149,7 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
         tscv = TimeSeriesSplit(n_splits=n_splits, gap=gap)
         scores = []
         for i, (tr_idx, va_idx) in enumerate(tscv.split(X)):
+            pause.checkpoint()
             X_tr, X_va = X[tr_idx], X[va_idx]
             y_tr, y_va = y[tr_idx], y[va_idx]
             Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
@@ -172,7 +174,12 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
         # Counts ALL trials already in the database (including pruned/failed)
         # for this study, not just this call's -> a resume only relaunches
         # the remaining balance rather than `n_trials` extra trials every time.
-        n_remaining = max(n_trials - len(study.trials), 0)
+        # Un essai laissé « RUNNING » par un processus tué (PC éteint) n'a jamais fini : il ne compte pas dans le budget (sinon la reprise fait
+        # un essai de moins par interruption) et passe en échec au lieu de rester en cours pour toujours.
+        stale = [t.number for t in study.trials if t.state == optuna.trial.TrialState.RUNNING]
+        for number in stale:
+            study.tell(number, state=optuna.trial.TrialState.FAIL)
+        n_remaining = max(n_trials - (len(study.trials) - len(stale)), 0)
         if n_remaining:
             study.optimize(objective, n_trials=n_remaining, show_progress_bar=False, callbacks=callbacks)
     else:

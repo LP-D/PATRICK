@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 
 import pytest
@@ -83,7 +84,7 @@ def test_run_state_tells_the_family_and_the_target_of_each_job(client, tmp_path)
     rl_cfg = {"name": "NDX_rl_1", "kind": "rl", "objective": {"target_symbol": "^NDX"}}
     conn = db.connect()
     running = jobs.enqueue_job(conn, json.dumps(ml_cfg))
-    jobs.claim_next_job(conn, 1234)
+    jobs.claim_next_job(conn, os.getpid())                            # un worker vivant : un faux numéro passerait pour un worker disparu
     jobs.enqueue_job(conn, json.dumps(dl_cfg))
     jobs.enqueue_job(conn, json.dumps(rl_cfg))
     conn.close()

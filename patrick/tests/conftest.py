@@ -67,6 +67,9 @@ def _isolated_machine_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
     monkeypatch.delenv("PATRICK_PARAMETRIC_JOBS", raising=False)
     monkeypatch.delenv("PATRICK_SCAN_JOBS", raising=False)
+    # La reprise automatique (`run_manager.recover_interrupted_runs`, appelée par `/api/run-state`) relance un worker quand la file n'est pas
+    # vide : un test qui lit l'état d'une file ne doit pas faire démarrer un vrai processus. Les tests de la reprise retirent cette variable.
+    monkeypatch.setenv("PATRICK_NO_AUTO_WORKER", "1")
 
 
 class FakeScheduledTask:

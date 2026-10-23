@@ -86,7 +86,7 @@ from patrick.models.uniqueness import (
     effective_sample_size,
 )
 from patrick.numeric import is_nan
-from patrick.pipeline import parallel
+from patrick.pipeline import parallel, pause
 from patrick.pipeline.leaderboard import Leaderboard, rank_configs
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
@@ -711,6 +711,7 @@ def _xy_data_hash(X_tr: np.ndarray, y_tr: np.ndarray) -> str:
 
 def _select(conn, target: str, horizon: int, snapshot_id: str,
             config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
+    pause.checkpoint()
     data_hash = _xy_data_hash(X_tr, y_tr)
     selector_hash = _selector_config_hash(config, n_feat, seed)
     cached = trackdb.get_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash)
@@ -833,6 +834,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     passed directly to `.fit()`. Combination with `calibration=True` not
     handled (documented limitation): the calibrated path stays unweighted
     even when weights are available."""
+    pause.checkpoint()
     apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
                          and sample_weight is not None)
     resample = safe_resample

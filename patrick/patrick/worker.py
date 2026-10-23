@@ -27,6 +27,7 @@ import numpy as np
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.keep_awake import keep_awake
+from patrick.pipeline import pause
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
@@ -336,13 +337,69 @@ def _run_one_rl_job(conn, job: dict, pid: int, raw_config: dict) -> None:
     jobs_db.finish_job(conn, job_id, "done", result_json=json.dumps(_to_native(result)))
 
 
+def _pause_gate(conn, job_id: str):
+    """Porte de `pipeline.pause` : attend tant que la pause du job est demandée (consultée au plus toutes les 0,5 s, une erreur de base
+    n'interrompt jamais un calcul)."""
+    last = [0.0]
+
+    def gate() -> None:
+        if time.monotonic() - last[0] < 0.5:
+            return
+        try:
+            while jobs_db.pause_requested(conn, job_id):
+                time.sleep(0.5)
+        except sqlite3.Error:
+            pass
+        last[0] = time.monotonic()
+
+    return gate
+
+
+def _resume_snapshot(conn, job_id: str, resume_count: int) -> str | None:
+    """Instantané de données du dernier lancement interrompu d'un job repris : la reprise rejoue EXACTEMENT les mêmes données (comme
+    `patrick resume`), jamais un millésime FRED ou une révision Yahoo plus récents que les essais déjà faits."""
+    if not resume_count:
+        return None
+    row = conn.execute("SELECT snapshot_id FROM run WHERE job_id = ? AND error = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
+                       (job_id, jobs_db.INTERRUPTED_RUN_ERROR)).fetchone()
+    return row[0] if row else None
+
+
+def _run_pipeline_for_job(config: RunConfig, job_id: str, snapshot_id: str | None) -> dict:
+    """`run_pipeline` d'un job ; une reprise dont l'instantané a disparu du magasin (cache purgé) repart sur les données du jour plutôt
+    que d'échouer : les essais Optuna déjà faits sont repris dans les deux cas."""
+    try:
+        return run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id, snapshot_id=snapshot_id)
+    except FileNotFoundError:
+        if snapshot_id is None:
+            raise
+        print(f"[REPRISE] instantané {snapshot_id} introuvable : reprise sur les données du jour (essais Optuna déjà faits conservés).")
+        return run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id, snapshot_id=None)
+
+
 def _run_one_job(conn, job: dict, pid: int) -> None:
     job_id = job["job_id"]
     raw_config = json.loads(job["config_json"])
+    pause.set_hook(_pause_gate(conn, job_id))
+    try:
+        _run_claimed_job(conn, job, pid, raw_config)
+    except Exception as exc:  # noqa: BLE001 -- job boundary: a config that no longer validates fails THIS job, never the worker (it would die on it, again after each resumption)
+        traceback.print_exc()
+        jobs_db.finish_job(conn, job_id, "error", error=f"{type(exc).__name__}: {exc}")
+    finally:
+        pause.set_hook(None)
+
+
+def _run_claimed_job(conn, job: dict, pid: int, raw_config: dict) -> None:
+    job_id = job["job_id"]
     if raw_config.get("kind") == "rl":
         _run_one_rl_job(conn, job, pid, raw_config)
         return
     config = RunConfig.model_validate(raw_config)
+    snapshot_id = _resume_snapshot(conn, job_id, int(job.get("resume_count") or 0))
+    if job.get("resume_count"):
+        on_snapshot = f" sur l'instantané {snapshot_id}" if snapshot_id else ""
+        print(f"[REPRISE] job {job_id}, reprise automatique n°{job['resume_count']}{on_snapshot}.")
     jobs_db.update_job_progress(
         conn, job_id, phase="ingestion", progress_done=0,
         progress_total=_estimate_total(config), log_tail=[],
@@ -352,7 +409,7 @@ def _run_one_job(conn, job: dict, pid: int) -> None:
     sys.stdout = capture
     try:
         with keep_awake():
-            result = run_pipeline(config, store=DataStore(), db_path=trackdb.default_db_path(), job_id=job_id)
+            result = _run_pipeline_for_job(config, job_id, snapshot_id)
     except Exception as exc:  # noqa: BLE001 -- job boundary: any pipeline failure is recorded on the job, the worker keeps running
         sys.stdout = old_stdout
         traceback.print_exc()  # full traceback in the worker log; the job only keeps the message
@@ -404,9 +461,11 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
 
 def _worker_loop(pid: int, db_path: str, poll_interval: float, idle_timeout: float) -> None:
     conn = trackdb.connect(db_path)
-    n_reaped = jobs_db.reap_stale_running_jobs(conn)
-    if n_reaped:
-        print(f"[WORKER] {n_reaped} 'running' job(s) abandoned by a previous worker -> error.")
+    recovered = jobs_db.recover_interrupted_jobs(conn)
+    if recovered["requeued"]:
+        print(f"[WORKER] {len(recovered['requeued'])} 'running' job(s) left by a dead worker -> requeued for resumption.")
+    if recovered["failed"]:
+        print(f"[WORKER] {len(recovered['failed'])} 'running' job(s) abandoned after too many interruptions -> error.")
     n_reaped_runs = trackdb.reap_orphaned_runs(conn)
     if n_reaped_runs:
         print(f"[WORKER] {n_reaped_runs} 'running' run(s) orphaned by a previous worker -> failed.")

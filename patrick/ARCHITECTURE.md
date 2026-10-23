@@ -173,6 +173,13 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
 - La file de jobs web (`tracking/jobs.py` + `worker.py`, lancé
   automatiquement par `run_manager.ensure_worker_running`) exécute les runs
   soumis depuis `/ml`, `/dl` et `/rl` de façon asynchrone.
+- **Arrêt brutal (PC éteint, plantage) = reprise, pas abandon** (2026-10-23). Un job « running » dont le worker n'existe plus
+  (`jobs.worker_process_alive` : processus absent, créé après la prise du job, ou machine redémarrée depuis) est remis en file
+  (`jobs.recover_interrupted_jobs`, au plus `MAX_AUTO_RESUMES` fois, `job.resume_count`) ; ses runs « running » passent « failed » ; la
+  reprise rejoue le même instantané de données (`worker._resume_snapshot`) et les essais Optuna déjà faits (`optuna.db`). Déclenchée
+  au démarrage du serveur, par `/api/run-state` (au plus toutes les 5 s) et au démarrage d'un worker. Pause : `pipeline/pause.py`
+  (`checkpoint()` avant chaque ajustement, sélection et pli d'Optuna) la rend effective même sans ligne affichée ; « Arrêter » ne
+  tue jamais un processus qui ne fait que réutiliser le numéro du worker.
 - **Texte minimal** : `static/help.js` replie derrière un « ? » tout texte
   d'aide statique (`.hint`, sous-titres, notes, explications entre
   parenthèses d'un libellé). Un message d'état dynamique reste visible s'il a

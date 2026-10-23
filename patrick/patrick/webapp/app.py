@@ -250,6 +250,12 @@ def _on_startup() -> None:
         trackdb.connect().close()
     except (sqlite3.Error, OSError):
         pass
+    # PC éteint ou plantage pendant un entraînement : le job « en cours » dont le worker a disparu est remis en file et un worker relancé,
+    # sans attendre qu'on soumette un nouveau job (il resterait « en cours » pour toujours).
+    try:
+        run_manager.recover_interrupted_runs(force=True)
+    except (sqlite3.Error, OSError):
+        pass
     # Les trois rafraîchissements d'arrière-plan (cours des « plus fortes variations », signaux live, état du marché)
     # occupent le processeur pendant des dizaines de secondes : lancés tout de suite, ils ralentiraient précisément les
     # premières pages. Ils démarrent après un court délai (PATRICK_BACKGROUND_DELAY_S, 20 s par défaut, 0 = aussitôt).
@@ -914,6 +920,7 @@ def run_state():
     """Lightweight aggregated state (active run + queue) — periodic JS-side
     polling to track queue progress, distinct from the detailed polling of
     `/runs/{run_id}/status` (progress/logs of a specific run)."""
+    run_manager.recover_interrupted_runs()               # un worker disparu (PC éteint) : job remis en file, worker relancé
     active = run_manager.active_run()
     return {
         "active_run": active,
@@ -946,6 +953,13 @@ def stop_job(job_id: str):
     if not stopped:
         raise HTTPException(status_code=409, detail="Ce run n'est plus actif.")
     return {"stopped": True}
+
+
+@app.post("/api/jobs/recover")
+def recover_jobs():
+    """Reprise explicite des jobs interrompus (le bouton « Reprendre » de l'interface, ou un test à la main)."""
+    out = run_manager.recover_interrupted_runs(force=True)
+    return {"requeued": len(out["requeued"]), "failed": len(out["failed"])}
 
 
 @app.delete("/api/queue/{job_id}")
@@ -1306,6 +1320,7 @@ def _back_to_history(request: Request) -> RedirectResponse:
 
 @app.post("/runs/{run_id}/delete")
 def delete_historical_run(run_id: str, request: Request):
+    run_manager.recover_interrupted_runs(force=True)      # un run laissé « running » par un worker mort doit pouvoir être supprimé
     conn = trackdb.connect()
     try:
         if rl_history.is_live_rl_job(conn, run_id):
