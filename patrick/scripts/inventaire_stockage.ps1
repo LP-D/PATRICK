@@ -15,8 +15,6 @@ function Gb($b) { '{0,8:N1} Go' -f ($b / 1GB) }
 
 # Attributs "en ligne seulement" (OneDrive a la demande) : RecallOnDataAccess, RecallOnOpen, Offline.
 $RECALL = 0x400000 + 0x40000 + 0x1000
-# Attributs cloud d'un dossier OneDrive (a ne pas confondre avec une jonction) : Recall*, Pinned, Unpinned.
-$CLOUD = 0x400000 + 0x40000 + 0x80000 + 0x100000
 $script:liens = New-Object System.Collections.Generic.List[string]
 
 # Taille d'un dossier sans suivre les jonctions/liens symboliques (sinon un dossier deplace sur un autre
@@ -34,10 +32,12 @@ function Get-DirSize([string]$Path) {
                 if (([int]$f.Attributes -band $RECALL) -ne 0) { $online += $f.Length } else { $local += $f.Length }
             }
             foreach ($s in $di.EnumerateDirectories()) {
-                $a = [int]$s.Attributes
-                if (($a -band 0x400) -ne 0 -and ($a -band $CLOUD) -eq 0) {
-                    $tgt = (Get-Item -LiteralPath $s.FullName -Force).Target
-                    $script:liens.Add(('{0}  ->  {1}' -f $s.FullName, ($tgt -join ' ; ')))
+                # Un point d'analyse n'est une jonction/un lien que si LinkType le dit : les dossiers OneDrive a la
+                # demande en portent aussi (sans etre des liens) et doivent etre parcourus.
+                $it = $null
+                if (([int]$s.Attributes -band 0x400) -ne 0) { $it = Get-Item -LiteralPath $s.FullName -Force }
+                if ($it -and $it.LinkType) {
+                    $script:liens.Add(('{0}  ->  {1}' -f $s.FullName, ($it.Target -join ' ; ')))
                 } else { $stack.Push($s.FullName) }
             }
         } catch {}
@@ -50,9 +50,8 @@ function Show-Children([string]$Path, [int]$Top = 15) {
     $res = New-Object System.Collections.Generic.List[object]
     Get-ChildItem -LiteralPath $Path -Force | ForEach-Object {
         if ($_.PSIsContainer) {
-            if (([int]$_.Attributes -band 0x400) -ne 0 -and ([int]$_.Attributes -band $CLOUD) -eq 0) {
-                $tgt = $_.Target
-                $script:liens.Add(('{0}  ->  {1}' -f $_.FullName, ($tgt -join ' ; ')))
+            if (([int]$_.Attributes -band 0x400) -ne 0 -and $_.LinkType) {
+                $script:liens.Add(('{0}  ->  {1}' -f $_.FullName, ($_.Target -join ' ; ')))
             } else {
                 $r = Get-DirSize $_.FullName
                 $res.Add([pscustomobject]@{ Nom = $_.Name + '\'; Local = $r.Local; Online = $r.Online; Files = $r.Files })
