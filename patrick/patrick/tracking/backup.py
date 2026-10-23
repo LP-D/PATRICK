@@ -39,11 +39,10 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from patrick import paths
 from patrick.tracking.db import default_db_path
 
 logger = logging.getLogger("patrick.tracking.backup")
-
-DEFAULT_BACKUP_DIR = os.path.expanduser("~/.patrick/backups")
 
 _FILENAME_TEMPLATE = "patrick_backup_{stamp}.db"
 _FILENAME_RE = re.compile(r"^patrick_backup_(\d{8}_\d{6})\.db$")
@@ -97,8 +96,8 @@ def backup_database(
     """Produit une copie horodatée et cohérente de la base SQLite située à
     `source_path` (défaut : `db.default_db_path()`, donc
     `$PATRICK_DB_PATH` ou `~/.patrick/patrick.db`) dans `backup_dir`
-    (défaut : `DEFAULT_BACKUP_DIR` = `~/.patrick/backups/`, créé si absent
-    -- volontairement hors du dépôt git).
+    (défaut : `paths.backups_dir()`, le dossier `backups` de la racine de
+    données, créé si absent -- volontairement hors du dépôt git).
 
     Utilise `sqlite3.Connection.backup()` (voir docstring du module pour la
     justification vs. `shutil.copy` / `VACUUM INTO`). `pages`/`sleep_s`
@@ -126,7 +125,7 @@ def backup_database(
     if not os.path.exists(src):
         raise FileNotFoundError(f"Base source introuvable : {src}")
 
-    dest_dir = Path(backup_dir or DEFAULT_BACKUP_DIR)
+    dest_dir = Path(backup_dir or paths.backups_dir())
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     stamp = timestamp or time.strftime("%Y%m%d_%H%M%S")

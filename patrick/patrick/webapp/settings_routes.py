@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from patrick import paths as data_paths
 from patrick import sync
 from patrick.desktop import launcher, prefs, runtime, share, shortcuts, update
 
@@ -38,7 +39,11 @@ async def _json(request: Request) -> dict:
 
 
 def _backups_dir() -> Path:
-    return runtime.data_dir() / "backups"
+    """Dossier des sauvegardes de la racine de données ; si son disque manque, le dossier attendu (listé comme vide)."""
+    try:
+        return data_paths.backups_dir()
+    except data_paths.DataRootUnavailable:
+        return data_paths.configured_data_root() / "backups"
 
 
 def backups_info() -> dict:
@@ -66,7 +71,7 @@ def spawn_relaunch(*, do_sync: bool = False, do_update: bool = False) -> None:
 def spawn_backup() -> None:
     runtime.spawn_detached(
         [runtime.console_python(), str(runtime.project_dir() / "scripts" / "backup_db.py"), "--log-file",
-         str(_backups_dir() / "backup.log")], cwd=runtime.project_dir())
+         str(runtime.log_dir() / "backup.log")], cwd=runtime.project_dir())
 
 
 def open_in_explorer(target: Path) -> None:

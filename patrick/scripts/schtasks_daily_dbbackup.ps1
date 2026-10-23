@@ -16,8 +16,10 @@ Prerequis avant de lancer la commande ci-dessous :
   ~/.patrick/patrick.db (voir `tracking/db.py::default_db_path`) -- pas
   besoin de --source explicite si la tache tourne sous le meme utilisateur
   que le serveur/worker.
-- Destination par defaut : ~/.patrick/backups/ (cree si absent),
-  volontairement HORS du depot git.
+- Destination par defaut : le dossier backups de la racine de donnees (~/.patrick/backups/
+  sans reglage ; voir `patrick data status`), cree si absent, volontairement HORS du depot git.
+  Le journal de la tache reste dans le dossier maison (~/.patrick/logs/) : il doit rester
+  ecrivable meme si le disque de donnees est debranche.
 - L'heure choisie (23:30) est apres la fenetre habituelle d'inference
   quotidienne (`Patrick-DailyPredict`, 22:05, cf. schtasks_daily_predict.ps1)
   pour sauvegarder une base qui inclut deja les predictions live du jour.
@@ -26,14 +28,14 @@ Prerequis avant de lancer la commande ci-dessous :
 $RepoDir    = "C:\Users\leonp\PATRICK\patrick"
 $PythonExe  = "$RepoDir\.venv\Scripts\python.exe"
 $ScriptPath = "$RepoDir\scripts\backup_db.py"
-$LogFile    = "$env:USERPROFILE\.patrick\backups\backup.log"
+$LogFile    = "$env:USERPROFILE\.patrick\logs\backup.log"
 
 Write-Output "Commande schtasks (a executer manuellement, PAS par ce script) -- copier-coller"
 Write-Output "telle quelle dans une invite cmd.exe ou PowerShell (les guillemets internes sont"
 Write-Output "deja echappes pour /tr, qui attend UNE seule chaine cmd.exe) :"
 Write-Output @"
 
-schtasks /create /tn "Patrick-DailyDBBackup" /tr "\`"C:\Users\leonp\PATRICK\patrick\.venv\Scripts\python.exe\`" \`"C:\Users\leonp\PATRICK\patrick\scripts\backup_db.py\`" --log-file \`"%USERPROFILE%\.patrick\backups\backup.log\`"" /sc daily /st 23:30 /ru "%USERNAME%" /rl LIMITED /f
+schtasks /create /tn "Patrick-DailyDBBackup" /tr "\`"C:\Users\leonp\PATRICK\patrick\.venv\Scripts\python.exe\`" \`"C:\Users\leonp\PATRICK\patrick\scripts\backup_db.py\`" --log-file \`"%USERPROFILE%\.patrick\logs\backup.log\`"" /sc daily /st 23:30 /ru "%USERNAME%" /rl LIMITED /f
 
 "@
 

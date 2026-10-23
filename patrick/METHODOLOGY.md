@@ -854,7 +854,7 @@ que soit l'actif.
 Projet mono-utilisateur local : SQLite (pas de service séparé), migrations
 SQL numérotées (`patrick/tracking/migrations/`, pas d'Alembic — ce projet ne
 passe pas par SQLAlchemy). `tracking/db.py::connect` ouvre
-`~/.patrick/patrick.db` en mode WAL (`foreign_keys=ON`, `busy_timeout=5000`)
+`~/.patrick/patrick.db` (dossier maison, résolu par `patrick/paths.py`) en mode WAL (`foreign_keys=ON`, `busy_timeout=5000`)
 et applique automatiquement toute migration non encore enregistrée dans
 `schema_version` à chaque connexion — jamais d'étape manuelle séparée.
 

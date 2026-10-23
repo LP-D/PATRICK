@@ -19,7 +19,7 @@ from pathlib import Path
 
 import psutil
 
-from patrick import sync
+from patrick import paths, sync
 from patrick.desktop import prefs, runtime, share, update
 from patrick.desktop.ui import Reporter
 
@@ -240,6 +240,11 @@ def run(rep: Reporter, *, skip_update: bool = False) -> int:
     if not instance.acquire():
         return _second_click(rep, port, url)
     try:
+        problem = paths.data_root_problem()
+        if problem:                          # disque de données débranché : rien ne démarre, on l'explique
+            log(f"démarrage annulé : {problem}")
+            rep.error(problem)
+            return 1
         if not skip_update:
             try:
                 status = step_update(rep, port)

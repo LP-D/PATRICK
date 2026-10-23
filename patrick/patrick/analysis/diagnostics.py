@@ -18,6 +18,8 @@ from pathlib import Path
 
 import psutil
 
+from patrick import paths
+
 SIZE_BUDGET_S = 6.0
 SIZE_TTL_S = 120.0
 LOG_TAIL_BYTES = 400_000
@@ -28,12 +30,19 @@ _lock = threading.Lock()
 
 
 def home() -> Path:
-    db = os.environ.get("PATRICK_DB_PATH")
-    return Path(db).parent if db else Path.home() / ".patrick"
+    return paths.home_dir()
 
 
 def logs_dir() -> Path:
-    return home() / "logs"
+    return paths.logs_dir()
+
+
+def _data_folder(name: str, folder) -> str:
+    """Chemin d'un dossier de données ; si le disque de données manque, le chemin attendu (listé comme absent)."""
+    try:
+        return str(folder())
+    except paths.DataRootUnavailable:
+        return str(paths.configured_data_root() / name)
 
 
 def system() -> dict:
@@ -41,6 +50,8 @@ def system() -> dict:
     sw = psutil.swap_memory()
     disks = []
     seen = set()
+    data_root = paths.configured_data_root()
+    data_places = [str(home()).lower()] + ([str(data_root).lower()] if data_root else [])      # base ET données
     for part in psutil.disk_partitions(all=False):
         if "cdrom" in part.opts or not part.fstype or part.mountpoint in seen:
             continue
@@ -50,7 +61,7 @@ def system() -> dict:
         except OSError:
             continue
         disks.append({"mount": part.mountpoint, "total": u.total, "used": u.used, "free": u.free, "percent": u.percent,
-                      "holds_data": str(home()).lower().startswith(part.mountpoint.lower())})
+                      "holds_data": any(place.startswith(part.mountpoint.lower()) for place in data_places)})
     freq = None
     with contextlib.suppress(Exception):
         f = psutil.cpu_freq()
@@ -140,10 +151,10 @@ def _dir_size(path: Path, deadline: float) -> tuple[int, int, bool]:
 
 def storage() -> dict:
     """Taille des dossiers de données (cache de téléchargement, cache de variables, lac de données, modèles, sauvegardes, journaux, archives)."""
-    root = home()
-    dirs = {"cache": os.environ.get("PATRICK_CACHE_ROOT") or str(root / "cache"), "feature_cache": os.environ.get("PATRICK_FEATURE_CACHE_ROOT") or str(root / "feature_cache"),
-            "store": os.environ.get("PATRICK_STORE_ROOT") or str(root / "store"), "models": str(root / "models"), "backups": str(root / "backups"),
-            "logs": str(root / "logs"), "archive": str(root / "archive")}
+    dirs = {"cache": _data_folder("cache", paths.cache_dir), "feature_cache": _data_folder("feature_cache", paths.feature_cache_dir),
+            "store": _data_folder("store", paths.store_dir), "models": _data_folder("models", paths.models_dir),
+            "backups": _data_folder("backups", paths.backups_dir), "logs": str(paths.logs_dir()),
+            "archive": _data_folder("archive", paths.archive_dir)}
     key = "|".join(dirs.values())
     with _lock:
         hit = _size_cache.get(key)

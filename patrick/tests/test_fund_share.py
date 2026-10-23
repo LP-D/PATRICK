@@ -284,3 +284,18 @@ def test_the_exported_file_holds_only_the_funds(pcs):
     assert conn.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM fund_strategy").fetchone()[0] == 1
     conn.close()
+
+
+def test_the_loser_is_saved_in_the_data_root_backups_when_no_folder_is_given(pcs):
+    from patrick import paths
+
+    a, b = pcs
+    sid = a.strategy("Version ancienne", stamp=OLD, orders=1)
+    b.merge(a)
+    b.conn.execute("UPDATE fund_strategy SET name = 'Version récente' WHERE strategy_id = ?", (sid,))
+    store.insert_order(b.conn, _order(sid, position_id="pos_x", symbol="NEW.PA"))
+
+    out = share.merge_funds(a.path, b.file())
+
+    assert out["replaced"] == [sid]
+    assert len(list(paths.backups_dir().glob("*.json"))) == 1

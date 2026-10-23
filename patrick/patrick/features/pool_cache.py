@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from patrick import paths
+
 _FEATURE_SOURCES = (
     "technical.py", "spike.py", "vol_models.py", "macro.py", "guida.py",
     "equity_fundamentals.py", "_utils.py", "interactions.py", "sanitize.py", "long_cycle.py",
@@ -53,8 +55,7 @@ FEATURE_CODE_HASH = _feature_code_hash()
 
 
 def _root() -> Path:
-    return Path(os.environ.get("PATRICK_FEATURE_CACHE_ROOT")
-                or os.path.expanduser("~/.patrick/feature_cache"))
+    return paths.feature_cache_dir()
 
 
 def enabled() -> bool:

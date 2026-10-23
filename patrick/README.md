@@ -178,7 +178,8 @@ causal feature pool per fold; `patrick/selection` picks features (SHAP by
 default); `patrick/pipeline/engine.py` runs the walk-forward grid scan and
 calls into `patrick/tuning` (Optuna) and `patrick/validation` (leakage
 guards, statistical validity — DM, PBO, FDR); `patrick/tracking` persists
-everything to SQLite (`~/.patrick/patrick.db`) and exports Parquet snapshots;
+everything to SQLite (`~/.patrick/patrick.db`; every data location is resolved by
+`patrick/paths.py`, and `patrick data status` prints them) and exports Parquet snapshots;
 `patrick/simulate` turns predictions into a backtested position/P&L curve;
 `patrick/webapp` and `patrick/cli.py` are the two front doors to the same
 `run_pipeline()`.

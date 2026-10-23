@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import sync
+from patrick import paths, sync
 from patrick.desktop import launcher, prefs, runtime, share, update
 from patrick.webapp import i18n, nav_registry, settings_routes
 from patrick.webapp.app import app
@@ -125,8 +125,8 @@ def test_overview_describes_this_pc(client, tmp_path):
 
 
 def test_overview_counts_backups(client):
-    folder = runtime.data_dir() / "backups"
-    folder.mkdir(parents=True)
+    folder = paths.backups_dir()                              # les sauvegardes vivent dans la racine de données
+    folder.mkdir(parents=True, exist_ok=True)
     (folder / "patrick_backup_20261007_233000.db").write_bytes(b"x")
     (folder / "autre.txt").write_text("x")
     assert client.get("/api/app/overview").json()["backups"]["count"] == 1
@@ -177,6 +177,24 @@ def test_status_of_an_empty_share(client, tmp_path):
     trackdb.connect().close()
     body = client.get("/api/app/share/status").json()
     assert body["remote"] is None and body["need_push"] is True and body["local_runs"] == 0
+
+
+def test_status_exposes_the_data_root_and_its_free_space(client, tmp_path):
+    client.post("/api/app/share/apply", json={"folder": folder_in(tmp_path)})
+    from patrick.tracking import db as trackdb
+
+    trackdb.connect().close()
+    body = client.get("/api/app/share/status").json()
+
+    assert body["data_available"] is True and body["data_root"] and body["data_free_gb"] > 0
+
+
+def test_the_data_disk_strings_exist_in_both_languages_and_reach_the_browser():
+    for key in ("app_status_data_disk", "app_status_data_missing", "app_status_disk_low"):
+        assert {"fr", "en"} <= set(i18n.STRINGS[key])
+    assert "~/.patrick" not in i18n.STRINGS["app_status_disk_low"]["fr"]
+    assert {"app_status_data_disk", "app_status_data_missing"} <= set(i18n.js_strings("fr", "/reglages"))
+    assert "app_status_data_disk" in (STATIC / "reglages.js").read_text(encoding="utf-8")
 
 
 def test_suggestions_endpoint(client, tmp_path, monkeypatch):

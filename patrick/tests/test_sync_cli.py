@@ -81,14 +81,13 @@ def test_push_include_personal_to_github_is_refused(tmp_path, monkeypatch):
 
 def _pc_env(tmp_path, monkeypatch, name: str) -> str:
     """Environnement d'un « PC » : base, état/réglages et magasin propres, sauvegardes dans tmp_path."""
-    from patrick.tracking import backup
-
     (tmp_path / name).mkdir(exist_ok=True)               # réglages ET état de synchro propres à chaque PC
+    (tmp_path / f"{name}_data").mkdir(exist_ok=True)     # racine de données du PC : sauvegardes, modèles
     db = str(tmp_path / f"{name}.db")
     monkeypatch.setenv("PATRICK_DB_PATH", db)
     monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / name / "settings.json"))
     monkeypatch.setenv("PATRICK_STORE_ROOT", str(tmp_path / f"{name}_store"))
-    monkeypatch.setattr(backup, "DEFAULT_BACKUP_DIR", str(tmp_path / f"{name}_backups"))
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path / f"{name}_data"))
     return db
 
 

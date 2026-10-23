@@ -21,6 +21,7 @@ import time
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
+from patrick import paths
 from patrick.config.defaults import ALL_DL_ALGOS
 from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
@@ -45,7 +46,7 @@ def default_db_path() -> str:
     — and tests must be able to isolate each run on a `tmp_path` by setting
     `PATRICK_DB_PATH` before calling `connect()`, which a parameter default
     (evaluated once at module import) would not allow."""
-    return os.environ.get("PATRICK_DB_PATH") or os.path.expanduser("~/.patrick/patrick.db")
+    return paths.db_path()
 
 
 _TRACKED_LIBS = (

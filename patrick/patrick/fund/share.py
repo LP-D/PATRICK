@@ -24,6 +24,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from patrick import paths
 from patrick.tracking import db as trackdb
 
 # Parents avant enfants. Les enfants d'une stratégie sont recopiés avec elle.
@@ -157,7 +158,7 @@ def merge_funds(db_path: str, incoming: str | Path, *, backup_dir: str | Path | 
     """Fusionne dans `db_path` (modifiée en place, en UNE transaction) les fonds du fichier `incoming` (voir le
     module). Renvoie `imported`, `replaced`, `deleted` (identifiants de stratégie), `orders` (ordres ajoutés),
     `prices_newer` (titres rafraîchis par l'autre PC) et `backups` (fichiers JSON des versions écartées)."""
-    backup_dir = backup_dir or os.path.expanduser("~/.patrick/backups")
+    backup_dir = backup_dir or paths.backups_dir()
     conn = sqlite3.connect(_uri(db_path, "rw"), uri=True, isolation_level=None, timeout=60)
     try:
         conn.execute("PRAGMA foreign_keys = OFF")          # enfants gérés à la main, parents avant enfants

@@ -132,7 +132,7 @@ def _backup_database(project_dir: Path) -> tuple[int, str]:
         return 0, "pas de base à sauvegarder"
     proc = runtime.run_hidden(
         [runtime.console_python(), str(project_dir / "scripts" / "backup_db.py"), "--log-file",
-         str(runtime.data_dir() / "backups" / "backup.log")], cwd=project_dir, timeout=900)
+         str(runtime.log_dir() / "backup.log")], cwd=project_dir, timeout=900)
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 

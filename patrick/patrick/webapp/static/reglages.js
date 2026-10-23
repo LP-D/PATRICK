@@ -119,6 +119,13 @@
             if (s.disk_free_gb !== undefined) {
                 add(tr(s.disk_free_gb < 10 ? "app_status_disk_low" : "app_status_disk", {free: s.disk_free_gb, db: s.db_gb}));
             }
+            if (s.data_root) {
+                if (s.data_available === false) {
+                    add(tr("app_status_data_missing", {path: s.data_root}));
+                } else if (s.data_free_gb !== null && s.data_free_gb !== undefined) {
+                    add(tr(s.data_free_gb < 10 ? "app_status_data_low" : "app_status_data_disk", {path: s.data_root, free: s.data_free_gb}));
+                }
+            }
         });
     }
 

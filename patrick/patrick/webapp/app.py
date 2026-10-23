@@ -22,7 +22,7 @@ from fastapi.exception_handlers import (
     http_exception_handler as default_http_exception_handler,
 )
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
@@ -30,7 +30,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from patrick import live_refresh
+from patrick import live_refresh, paths
 from patrick import settings as settings_store
 from patrick.clock import utc_now, utc_today
 from patrick.config import asset_classes, dl_profiles, training_profiles
@@ -184,6 +184,8 @@ templates.env.globals["asset"] = asset
 templates.env.globals["nav_icon"] = icons.nav_icon
 # 504/756-day horizons are descriptive (decision of 2026-09-26): labelled everywhere.
 templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
+# Bandeau « disque de données introuvable » (base_v2.html, sur toutes les pages) : relu à chaque affichage.
+templates.env.globals["data_root_missing"] = paths.data_root_missing
 
 
 def _horizon_label(h) -> str:
@@ -214,6 +216,16 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
         exc = StarletteHTTPException(status_code=exc.status_code, headers=getattr(exc, "headers", None),
                                      detail=i18n_server.translate(exc.detail, i18n.get_lang(request)))
     return await default_http_exception_handler(request, exc)
+
+
+@app.exception_handler(paths.DataRootUnavailable)
+async def _data_root_unavailable_handler(request: Request, exc: paths.DataRootUnavailable):
+    """Disque de données débranché : un 503 expliqué (jamais un 500 muet, jamais un repli sur un autre disque)."""
+    message = i18n_server.translate(str(exc), i18n.get_lang(request))
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"error": message}, status_code=503)
+    return HTMLResponse(f"<!doctype html><meta charset=\"utf-8\"><title>PATRICK</title><p>{html.escape(message)}</p>",
+                        status_code=503)
 
 
 def _translated_errors(request: Request, errors: list[str]) -> list[str]:

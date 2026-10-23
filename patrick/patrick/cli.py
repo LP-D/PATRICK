@@ -12,6 +12,7 @@ import os
 
 import typer
 
+from patrick import paths
 from patrick import predict as predict_module
 from patrick import worker as worker_module
 from patrick.config import defaults as D
@@ -34,7 +35,9 @@ fund_app = typer.Typer(help="Fonds : règles du mode systématique (ordres gén�
 app.add_typer(fund_app, name="fund")
 sync_app = typer.Typer(help="Partage de la base, des modèles et des données entre PC (GitHub ou dossier).")
 app.add_typer(sync_app, name="sync")
-news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
+data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, caches, sauvegardes) : état, création, déplacement.")
+app.add_typer(data_app, name="data")
+news_app =typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
 app.add_typer(news_app, name="news")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
@@ -189,7 +192,7 @@ def resume_cmd(
 def report_cmd(
     run_id: str = typer.Option(..., "--run-id", help="Identifiant du run (table `run`)"),
     output: str = typer.Option(
-        None, "--output", help="Chemin du fichier HTML (défaut : ~/.patrick/reports/<run_id>.html)"),
+        None, "--output", help="Chemin du fichier HTML (défaut : <run_id>.html dans le dossier reports de la racine de données)"),
     fdr_alpha: float = typer.Option(
         0.10, "--fdr-alpha",
         help="Seuil FDR (Phase 6.4) pour la correction Benjamini-Hochberg entre cibles"),
@@ -248,6 +251,14 @@ def manifest_cmd(run_id: str = typer.Argument(..., help="Identifiant du run")) -
     typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _require_data_root() -> None:
+    """Le serveur et le worker n'ont pas de sens sans disque de données : on s'arrête avec un message clair."""
+    problem = paths.data_root_problem()
+    if problem:
+        typer.echo(problem, err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="worker")
 def worker_cmd(
     idle_timeout: float = typer.Option(
@@ -260,6 +271,7 @@ def worker_cmd(
     web server (`ensure_worker_running`, see `webapp/run_manager.py`) -- this
     command is for manual launch/debugging, or as a dedicated service if you
     prefer not to rely on auto-spawn."""
+    _require_data_root()
     worker_module.run_worker_loop(poll_interval=poll_interval, idle_timeout=idle_timeout)
 
 
@@ -272,6 +284,7 @@ def serve_cmd(
     """Launches the web interface (synthesis dashboard on `/`, config form +
     run tracking + leaderboard on `/launch`), replacing manual YAML editing.
     Requires the `web` extra (`pip install -e ".[web]"`)."""
+    _require_data_root()
     try:
         import uvicorn
     except ImportError:
@@ -321,7 +334,7 @@ def audit_degradation_cmd(
 
 @audit_app.command(name="speed")
 def audit_speed_cmd(
-    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH / ~/.patrick/patrick.db)"),
+    db: str = typer.Option(None, "--db", help="Base patrick.db (défaut : PATRICK_DB_PATH, sinon patrick.db du dossier maison)"),
     target: str = typer.Option(None, "--target",
                                help="Cible dont le snapshot brut le plus récent sert à mesurer le coût par famille"),
     n_folds: int = typer.Option(5, "--n-folds", help="Folds walk-forward (les familles paramétriques sont refittées par fold)"),
@@ -873,3 +886,130 @@ def news_summary_cmd() -> None:
     typer.echo(f"Nouvelles en base : {s['n_items']} ({s['n_24h']} depuis 24 h, {s['n_stale']} anciennes écartées)")
     typer.echo(f"Rattachées à un actif : {s['n_linked']} ({s['n_symbols']} actif(s)) ; sources : {s['n_sources']}")
     typer.echo(f"Dernière nouvelle connue : {s['last_known_at'] or 'aucune'}")
+
+
+@data_app.command(name="status")
+def data_status_cmd() -> None:
+    """Où sont les données de ce PC (dossier maison, racine de données), l'espace libre et les chemins qui ne se résolvent plus."""
+    from patrick import data_move
+
+    s = data_move.status()
+    if s["data_root"] is None:
+        typer.echo("Racine de données : aucune réglée (tout est dans le dossier maison).")
+    else:
+        typer.echo(f"Racine de données : {s['data_root']} ({'disponible' if s['available'] else 'INTROUVABLE'})")
+    typer.echo(f"Dossier maison : {s['home']} ; base : {s['db']}")
+    for var, value in s["env_overrides"].items():
+        typer.echo(f"Variable d'environnement posée : {var} = {value} (prime sur le réglage)")
+    for volume in s["volumes"]:
+        typer.echo(f"Volume de {volume['path']} : {volume['free_gb']} Go libres")
+    for c in s["components"]:
+        typer.echo(f"  {c['name']:<14} {c['path']}{'' if c['exists'] else '  (absent)'}")
+    u = s["unresolved"]
+    typer.echo(f"Chemins qui ne se résolvent pas : modèles {u['artifact_paths']}, index du magasin {u['store_index']}")
+    if s["progress"]:
+        typer.echo(f"Déplacement en cours ou interrompu : {s['progress']}")
+
+
+@data_app.command(name="init")
+def data_init_cmd(folder: str = typer.Argument(..., help="Racine de données à créer, par exemple \"D:\\PATRICK DATA\"")) -> None:
+    """Crée la racine de données et ses sous-dossiers (ne déplace rien et ne change aucun réglage)."""
+    from patrick import data_move
+
+    try:
+        root = data_move.init_root(folder)
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Racine de données prête : {root}")
+
+
+@data_app.command(name="move")
+def data_move_cmd(
+    folder: str = typer.Argument(None, help="Nouvelle racine de données, par exemple \"D:\\PATRICK DATA\""),
+    finalize: bool = typer.Option(False, "--finalize", help="Supprime l'ancien emplacement, après contrôle et accord (sans dossier)"),
+) -> None:
+    """Déplace les données de ce PC (magasin, modèles, caches, sauvegardes…) vers une nouvelle racine : copie vérifiée, puis
+    bascule. La base reste où elle est. À lancer PATRICK fermé, aucun entraînement en cours, dans ton propre terminal (la
+    copie peut durer une heure). L'ancien emplacement n'est supprimé que par `--finalize`."""
+    from patrick import data_move
+
+    if finalize:
+        if folder:
+            typer.echo("Refusé : --finalize n'accepte aucun dossier.", err=True)
+            raise typer.Exit(code=1)
+        answer = typer.prompt("Supprimer définitivement l'ancien emplacement des données (la copie a été contrôlée) ? (o/n)",
+                              default="n")
+        if answer.strip().lower() not in ("o", "oui", "y", "yes"):
+            typer.echo("Rien n'a été supprimé.")
+            raise typer.Exit(code=1)
+        try:
+            out = data_move.finalize()
+        except data_move.MoveError as exc:
+            typer.echo(f"Refusé : {exc}", err=True)
+            raise typer.Exit(code=1) from None
+        typer.echo(f"Ancien emplacement supprimé : {', '.join(out['removed']) or 'rien à supprimer'}.")
+        if out["kept"]:
+            typer.echo(f"Conservés (leur emplacement actif est encore dans l'ancien dossier) : {', '.join(out['kept'])}.")
+        return
+    if not folder:
+        typer.echo("Refusé : indique le dossier de destination (par exemple \"D:\\PATRICK DATA\").", err=True)
+        raise typer.Exit(code=1)
+    problems = data_move.check_preconditions(folder)
+    if problems:
+        for problem in problems:
+            typer.echo(f"Refusé : {problem}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Rappel : la tâche planifiée PATRICK-Sync doit être désactivée pendant le déplacement.")
+
+    def show(component: str, files: int, copied: int, total: int) -> None:
+        typer.echo(f"  {component or '...':<14} {files} fichier(s), {copied / 1e9:.1f} Go copiés sur {total / 1e9:.1f} Go")
+
+    try:
+        out = data_move.copy_components(folder, progress=show)
+        typer.echo(f"Copie terminée : {out['files']} fichier(s) copié(s), {out['skipped']} déjà présent(s).")
+        data_move.switch(folder)
+        check = data_move.verify()
+    except data_move.MoveError as exc:
+        typer.echo(f"Échec : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Bascule faite : la racine de données est maintenant {folder}.")
+    if not check["ok"]:
+        typer.echo(f"ATTENTION, contrôle en échec ({check}) : ne finalise pas ; `patrick data rollback` remet l'état d'origine.", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Contrôle réussi. Après ta mesure de vitesse, lance `patrick data move --finalize` pour supprimer l'ancien emplacement.")
+
+
+@data_app.command(name="rollback")
+def data_rollback_cmd(force: bool = typer.Option(False, "--force", help="Même si l'application a créé des fichiers sur la nouvelle racine")) -> None:
+    """Annule la bascule d'un déplacement (réglage et chemins d'origine rétablis). Impossible après `--finalize`."""
+    from patrick import data_move
+
+    try:
+        data_move.rollback(force=force)
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo("Retour arrière fait : l'état d'origine est rétabli (l'ancien emplacement n'avait pas été touché).")
+
+
+@data_app.command(name="use")
+def data_use_cmd(
+    folder: str = typer.Argument(None, help="Racine de données existante à utiliser, par exemple \"D:\\PATRICK DATA\""),
+    none: bool = typer.Option(False, "--none", help="Retire le réglage : les données reviennent dans le dossier maison"),
+) -> None:
+    """Change la racine de données SANS rien déplacer (disque mort, dossier déplacé à la main). Refusé si un déplacement est en
+    attente (finalise-le ou annule-le d'abord)."""
+    from patrick import data_move
+
+    if bool(folder) == bool(none):
+        typer.echo("Refusé : indique un dossier, ou --none (pas les deux, pas aucun).", err=True)
+        raise typer.Exit(code=1)
+    try:
+        out = data_move.use_root(None if none else folder)
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Racine de données : {out['data_root'] or 'aucune (dossier maison)'}.")
+    if out["env_override"]:
+        typer.echo("Attention : la variable d'environnement PATRICK_DATA_ROOT est posée et prime sur ce réglage.", err=True)

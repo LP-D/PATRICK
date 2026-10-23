@@ -22,6 +22,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from patrick import paths
 from patrick.config.target_label import split_run_label
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.tracking import db as trackdb
@@ -48,7 +49,11 @@ def artifact_roots() -> list[Path]:
     if env:
         roots.append(Path(env))
     here = Path(__file__).resolve()
-    roots += [Path.cwd(), here.parents[2], here.parents[3] / "patrick", Path.home() / ".patrick"]
+    roots += [Path.cwd(), here.parents[2], here.parents[3] / "patrick", paths.home_dir()]
+    try:
+        roots.append(paths.models_dir())
+    except paths.DataRootUnavailable:               # disque de données absent : le modèle « n'est pas sur ce PC »
+        pass
     return list(dict.fromkeys(roots))
 
 
