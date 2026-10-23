@@ -223,11 +223,17 @@ def _drop_orphan_parts(src_dir: Path, dst_dir: Path) -> None:
             part.unlink(missing_ok=True)
 
 
-def _verify_copy(src_root: Path, dst_root: Path, names: list[str]) -> None:
+def _verify_copy(src_root: Path, dst_root: Path, names: list[str], *, rewritten: tuple[str, ...] = ()) -> None:
+    """Chaque fichier de la source existe dans la copie, à l'identique (taille ; sha256 pour `store` et `models`). Les chemins de
+    `rewritten` (posix, relatifs à la racine) ont été réécrits exprès par `switch` : on exige seulement leur présence."""
     for name in names:
         for file in _tree(src_root / name):
             rel = file.relative_to(src_root)
             copy = dst_root / rel
+            if rel.as_posix() in rewritten:
+                if not copy.is_file():
+                    raise MoveError(f"Copie incomplète : {rel} est absent de {dst_root}.")
+                continue
             if not copy.is_file() or copy.stat().st_size != file.stat().st_size:
                 raise MoveError(f"Copie incomplète : {rel} est absent ou de taille différente dans {dst_root}.")
             if name in _HASHED and sync._sha256(file) != sync._sha256(copy):
@@ -355,3 +361,77 @@ def switch(target: str, *, db_path: str | None = None, source_root: Path | None 
         _write_json(index_path, new_index)
     settings.save({paths.KEY_DATA_ROOT: str(dst_root)})
     return journal
+
+
+# --------------------------------------------------------------------------
+# Phase 3 : contrôle, retour arrière, finalisation
+# --------------------------------------------------------------------------
+
+def _journal() -> dict:
+    journal = _read_json(paths.home_dir() / JOURNAL_NAME)
+    if not journal:
+        raise MoveError("Aucun déplacement en cours : le journal de déplacement est absent.")
+    return journal
+
+
+def verify(db_path: str | None = None) -> dict:
+    """Contrôle ce que `switch` a déplacé : chaque modèle qui existait à la source existe à sa nouvelle place, chaque snapshot
+    réécrit dans l'index existe. Les chemins déjà introuvables avant le déplacement (modèle élagué) ne comptent pas.
+    Renvoie `{"artifact_unresolved", "store_unresolved", "ok"}`."""
+    journal = _journal()
+    artifacts = sum(1 for _tid, old, new in journal["artifact_paths"] if os.path.exists(old) and not os.path.exists(new))
+    index = _read_json(Path(journal["target"]) / "store" / "_index.json") or {}
+    moved = journal["store_index_old"]
+    store = sum(1 for key, value in index.items() for entry in (value or {}).get("snapshots", [])
+                if f"{key}|{entry.get('snapshot_id', '')}" in moved and not os.path.exists(entry.get("path", "")))
+    return {"artifact_unresolved": artifacts, "store_unresolved": store, "ok": artifacts == 0 and store == 0}
+
+
+def rollback(db_path: str | None = None) -> dict:
+    """Défait `switch` depuis le journal : remet les anciens `artifact_path` (ceux qui n'ont pas changé depuis), retire ou
+    rétablit le réglage `data_root`. La source n'a jamais été touchée. Refusé après `finalize` (la source n'existe plus)."""
+    journal = _journal()
+    if journal["status"] == "finalized":
+        raise MoveError("Retour arrière impossible : la source a été supprimée par `finalize`.")
+    if journal["status"] == "rolled_back":
+        return journal
+    db_path = db_path or paths.db_path()
+    if journal["artifact_paths"] and os.path.exists(db_path):
+        conn = sqlite3.connect(db_path, timeout=60, isolation_level=None)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.executemany("UPDATE trial SET artifact_path = ? WHERE trial_id = ? AND artifact_path = ?",
+                             [(old, tid, new) for tid, old, new in journal["artifact_paths"]])
+            conn.execute("COMMIT")
+        except sqlite3.Error as exc:
+            with contextlib.suppress(sqlite3.Error):
+                conn.execute("ROLLBACK")
+            raise MoveError(f"Retour arrière interrompu, aucune modification faite ({exc}).") from exc
+        finally:
+            conn.close()
+    settings.save({paths.KEY_DATA_ROOT: journal["previous_data_root"]})
+    journal = {**journal, "status": "rolled_back"}
+    _write_json(paths.home_dir() / JOURNAL_NAME, journal)
+    return journal
+
+
+def finalize(*, source_root: Path | None = None) -> dict:
+    """Supprime de la source les sept composants déplacés, après un contrôle complet (`verify`, puis la copie est revérifiée
+    fichier par fichier, sha256 pour `store` et `models`). Ne touche jamais la base, les réglages, les journaux ni le profil
+    du navigateur. Renvoie `{"removed": [...]}`."""
+    journal = _read_json(paths.home_dir() / JOURNAL_NAME)
+    if not journal or journal.get("status") != "switched":
+        raise MoveError("Rien à finaliser : aucun déplacement basculé n'est en attente.")
+    src_root = Path(source_root) if source_root is not None else Path(journal["source_root"])
+    dst_root = Path(journal["target"])
+    if _inside(dst_root, src_root) or _inside(src_root, dst_root):
+        raise MoveError(f"La source ({src_root}) et la cible ({dst_root}) se chevauchent : rien n'est supprimé.")
+    check = verify()
+    if not check["ok"]:
+        raise MoveError(f"Contrôle en échec ({check}) : rien n'est supprimé.")
+    names = [name for name in COMPONENTS if (src_root / name).is_dir()]
+    _verify_copy(src_root, dst_root, names, rewritten=("store/_index.json",))      # l'index de la copie a été réécrit par `switch`
+    for name in names:
+        shutil.rmtree(src_root / name)
+    _write_json(paths.home_dir() / JOURNAL_NAME, {**journal, "status": "finalized"})
+    return {"removed": names}

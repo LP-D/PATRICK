@@ -923,11 +923,34 @@ def data_init_cmd(folder: str = typer.Argument(..., help="Racine de données à 
 
 
 @data_app.command(name="move")
-def data_move_cmd(folder: str = typer.Argument(..., help="Nouvelle racine de données, par exemple \"D:\\PATRICK DATA\"")) -> None:
-    """Déplace les données de ce PC (magasin, modèles, caches, sauvegardes…) vers une nouvelle racine. La base reste où elle
-    est. À lancer PATRICK fermé, aucun entraînement en cours, dans ton propre terminal (la copie peut durer une heure)."""
+def data_move_cmd(
+    folder: str = typer.Argument(None, help="Nouvelle racine de données, par exemple \"D:\\PATRICK DATA\""),
+    finalize: bool = typer.Option(False, "--finalize", help="Supprime l'ancien emplacement, après contrôle et accord (sans dossier)"),
+) -> None:
+    """Déplace les données de ce PC (magasin, modèles, caches, sauvegardes…) vers une nouvelle racine : copie vérifiée, puis
+    bascule. La base reste où elle est. À lancer PATRICK fermé, aucun entraînement en cours, dans ton propre terminal (la
+    copie peut durer une heure). L'ancien emplacement n'est supprimé que par `--finalize`."""
     from patrick import data_move
 
+    if finalize:
+        if folder:
+            typer.echo("Refusé : --finalize n'accepte aucun dossier.", err=True)
+            raise typer.Exit(code=1)
+        answer = typer.prompt("Supprimer définitivement l'ancien emplacement des données (la copie a été contrôlée) ? (o/n)",
+                              default="n")
+        if answer.strip().lower() not in ("o", "oui", "y", "yes"):
+            typer.echo("Rien n'a été supprimé.")
+            raise typer.Exit(code=1)
+        try:
+            out = data_move.finalize()
+        except data_move.MoveError as exc:
+            typer.echo(f"Refusé : {exc}", err=True)
+            raise typer.Exit(code=1) from None
+        typer.echo(f"Ancien emplacement supprimé : {', '.join(out['removed']) or 'rien à supprimer'}.")
+        return
+    if not folder:
+        typer.echo("Refusé : indique le dossier de destination (par exemple \"D:\\PATRICK DATA\").", err=True)
+        raise typer.Exit(code=1)
     problems = data_move.check_preconditions(folder)
     if problems:
         for problem in problems:
@@ -940,7 +963,27 @@ def data_move_cmd(folder: str = typer.Argument(..., help="Nouvelle racine de don
 
     try:
         out = data_move.copy_components(folder, progress=show)
+        typer.echo(f"Copie terminée : {out['files']} fichier(s) copié(s), {out['skipped']} déjà présent(s).")
+        data_move.switch(folder)
+        check = data_move.verify()
     except data_move.MoveError as exc:
-        typer.echo(f"Échec de la copie : {exc}", err=True)
+        typer.echo(f"Échec : {exc}", err=True)
         raise typer.Exit(code=1) from None
-    typer.echo(f"Copie terminée : {out['files']} fichier(s) copié(s), {out['skipped']} déjà présent(s).")
+    typer.echo(f"Bascule faite : la racine de données est maintenant {folder}.")
+    if not check["ok"]:
+        typer.echo(f"ATTENTION, contrôle en échec ({check}) : ne finalise pas ; `patrick data rollback` remet l'état d'origine.", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Contrôle réussi. Après ta mesure de vitesse, lance `patrick data move --finalize` pour supprimer l'ancien emplacement.")
+
+
+@data_app.command(name="rollback")
+def data_rollback_cmd() -> None:
+    """Annule la bascule d'un déplacement (réglage et chemins d'origine rétablis). Impossible après `--finalize`."""
+    from patrick import data_move
+
+    try:
+        data_move.rollback()
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo("Retour arrière fait : l'état d'origine est rétabli (l'ancien emplacement n'avait pas été touché).")

@@ -248,7 +248,7 @@ def test_rebase_path_leaves_other_paths_alone():
     assert data_move.rebase_path("runs\\GSPC_34\\m.joblib", OLD_STORE, NEW_STORE) is None
 
 
-def prepare(pc, *, extra_models: tuple[str, ...] = ()) -> SimpleNamespace:
+def prepare(pc, *, extra_models: tuple[str, ...] = (), copy: bool = True) -> SimpleNamespace:
     """Une source avec modèles, base et index du magasin à séparateurs mixtes, déjà copiée vers `tmp/PATRICK DATA`."""
     model = pc.home / "models" / "1" / "m.joblib"
     model.parent.mkdir(parents=True)
@@ -263,7 +263,8 @@ def prepare(pc, *, extra_models: tuple[str, ...] = ()) -> SimpleNamespace:
     (store / "_index.json").write_text(json.dumps({"k": {"rows": 1, "snapshots": [{"snapshot_id": "s1", "path": mixed}]}}),
                                        encoding="utf-8")
     target = pc.tmp / "PATRICK DATA"
-    data_move.copy_components(str(target))
+    if copy:
+        data_move.copy_components(str(target))
     return SimpleNamespace(db=db, target=target, model=model, relative=relative, store=store)
 
 
@@ -321,3 +322,96 @@ def test_a_failure_in_the_sql_transaction_changes_nothing(pc):
     assert "data_root" not in settings.load()
     assert (p.target / "store" / "_index.json").read_bytes() == index_before
     assert not (pc.home / data_move.JOURNAL_NAME).exists()
+
+
+# --- phase 3 : contrôle, retour arrière, finalisation ------------------------------------------------------------
+
+def switched(pc) -> SimpleNamespace:
+    p = prepare(pc)
+    data_move.switch(str(p.target), db_path=p.db)
+    return p
+
+
+def test_verify_is_ok_after_a_valid_switch_and_flags_a_missing_moved_file(pc):
+    p = switched(pc)
+
+    assert data_move.verify(p.db) == {"artifact_unresolved": 0, "store_unresolved": 0, "ok": True}
+
+    (p.target / "models" / "1" / "m.joblib").unlink()
+    (p.target / "store" / "snapshot=2026-07-28" / "a__1.parquet").unlink()
+    broken = data_move.verify(p.db)
+
+    assert broken == {"artifact_unresolved": 1, "store_unresolved": 1, "ok": False}
+
+
+def test_verify_without_a_journal_is_refused(pc):
+    with pytest.raises(data_move.MoveError, match="journal"):
+        data_move.verify()
+
+
+def test_rollback_restores_the_old_values_and_the_setting_and_leaves_the_source_intact(pc):
+    p = prepare(pc)
+    before = artifact_paths(p.db)
+    model_bytes, index_bytes = p.model.read_bytes(), (p.store / "_index.json").read_bytes()
+    data_move.switch(str(p.target), db_path=p.db)
+
+    out = data_move.rollback(p.db)
+
+    assert out["status"] == "rolled_back" and artifact_paths(p.db) == before
+    assert "data_root" not in settings.load() and paths.data_root() == pc.home
+    assert p.model.read_bytes() == model_bytes and (p.store / "_index.json").read_bytes() == index_bytes
+    assert data_move.rollback(p.db)["status"] == "rolled_back"                        # sans effet la deuxième fois
+
+
+def test_finalize_deletes_only_the_components_of_the_source_and_then_rollback_is_refused(pc):
+    p = switched(pc)
+    (pc.home / "logs").mkdir()
+    (pc.home / "logs" / "x.log").write_text("journal", encoding="utf-8")
+
+    out = data_move.finalize()
+
+    assert sorted(out["removed"]) == ["models", "store"]
+    assert not (pc.home / "models").exists() and not (pc.home / "store").exists()
+    assert (pc.home / "patrick.db").exists() and (pc.home / "settings.json").exists() and (pc.home / "logs" / "x.log").exists()
+    assert (p.target / "models" / "1" / "m.joblib").read_bytes() == b"model"
+    with pytest.raises(data_move.MoveError, match="finalize"):
+        data_move.rollback(p.db)
+
+
+def test_finalize_refuses_when_the_check_fails_and_deletes_nothing(pc):
+    p = switched(pc)
+    (p.target / "models" / "1" / "m.joblib").unlink()
+
+    with pytest.raises(data_move.MoveError):
+        data_move.finalize()
+
+    assert p.model.exists() and (p.store / "_index.json").exists()
+
+
+def test_finalize_refuses_when_nothing_was_switched(pc):
+    with pytest.raises(data_move.MoveError, match="finaliser"):
+        data_move.finalize()
+
+
+def test_cli_move_runs_the_three_phases_then_finalize_needs_a_yes(pc, calm):
+    p = prepare(pc, copy=False)
+
+    moved = CliRunner().invoke(cli_app, ["data", "move", str(p.target)])
+
+    assert moved.exit_code == 0 and "Copie terminée" in moved.output and "--finalize" in moved.output
+    assert settings.load()["data_root"] == str(p.target)
+    refused = CliRunner().invoke(cli_app, ["data", "move", "--finalize"], input="n\n")
+    assert refused.exit_code == 1 and p.model.exists()
+    accepted = CliRunner().invoke(cli_app, ["data", "move", "--finalize"], input="o\n")
+    assert accepted.exit_code == 0 and not p.model.exists() and (p.target / "models" / "1" / "m.joblib").exists()
+
+
+def test_cli_finalize_takes_no_folder_and_rollback_works(pc, calm):
+    p = prepare(pc, copy=False)
+    CliRunner().invoke(cli_app, ["data", "move", str(p.target)])
+
+    both = CliRunner().invoke(cli_app, ["data", "move", str(p.target), "--finalize"], input="o\n")
+    back = CliRunner().invoke(cli_app, ["data", "rollback"])
+
+    assert both.exit_code == 1 and "aucun dossier" in both.output and p.model.exists()
+    assert back.exit_code == 0 and "data_root" not in settings.load()
