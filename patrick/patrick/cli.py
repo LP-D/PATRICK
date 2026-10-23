@@ -848,10 +848,6 @@ def fund_rule_apply_cmd(
         typer.echo(f"  {len(res['drift'])} ordre(s) automatique(s) existant(s) hors du plan actuel (conservés).")
 
 
-if __name__ == "__main__":
-    app()
-
-
 @news_app.command(name="refresh")
 def news_refresh_cmd(
     gdelt: bool = typer.Option(False, "--gdelt", help="Ajoute GDELT (une requête toutes les ~5 s, environ 35 s au total)"),
@@ -1013,3 +1009,7 @@ def data_use_cmd(
     typer.echo(f"Racine de données : {out['data_root'] or 'aucune (dossier maison)'}.")
     if out["env_override"]:
         typer.echo("Attention : la variable d'environnement PATRICK_DATA_ROOT est posée et prime sur ce réglage.", err=True)
+
+
+if __name__ == "__main__":
+    app()
