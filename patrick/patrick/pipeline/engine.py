@@ -784,6 +784,17 @@ def _report_calibration_skips(n_fits: int) -> None:
               "was missing from the calibration rows): their scores are not comparable to the calibrated ones.")
 
 
+def _keep_rows(_sampler_name: str, _seed: int, X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Même signature que `safe_resample`, sans rien rééchantillonner (voir « Stacking » dans `_fit_eval_full`)."""
+    return X, y
+
+
+def scan_algos(config: RunConfig) -> list[str]:
+    """Algorithmes de la grille du scan : ceux du run, plus « Stacking » quand l'empilement est activé (walk-forward)."""
+    algos = list(config.models.algos)
+    return [*algos, registry.STACK_ALGO] if config.models.stacking else algos
+
+
 def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray,
                    sampler_name: str, algo: str, seed: int, calibration: bool = False,
                    sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
@@ -824,6 +835,12 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     even when weights are available."""
     apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
                          and sample_weight is not None)
+    resample = safe_resample
+    if algo == registry.STACK_ALGO:
+        # « Stacking » coupe l'entraînement par le temps et rééchantillonne lui-même ses lignes d'ajustement : un rééchantillonnage en
+        # amont collerait les lignes synthétiques à la fin et en ferait les lignes du méta-modèle.
+        algo_overrides = {**algo_overrides, "sampler": sampler_name, "gap": int(calibration_gap)}
+        resample = _keep_rows
     clf = get_classifier(algo, seed=seed, **algo_overrides)
     split = calibration_lib.calibration_split(len(X_tr), gap=calibration_gap) if calibration else None
 
@@ -831,7 +848,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     classes = None
     calibrated = False
     if split is not None:
-        Xf, yf = safe_resample(sampler_name, seed, X_tr[:split.fit_end], y_tr[:split.fit_end])
+        Xf, yf = resample(sampler_name, seed, X_tr[:split.fit_end], y_tr[:split.fit_end])
         clf.fit(Xf, yf)
         y_cal = y_tr[split.cal_start:split.thr_start]
         if calibration_lib.calibration_classes_match(clf, y_cal):
@@ -857,7 +874,7 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
                       "of the model -- uncalibrated probabilities used.")
             clf = get_classifier(algo, seed=seed, **algo_overrides)
     if not calibrated:
-        Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
+        Xr, yr = resample(sampler_name, seed, X_tr, y_tr)
         weight_applies = apply_uniqueness and len(Xr) == len(X_tr)
         if weight_applies and algo == "RandomForest":
             clf = SequentialBootstrapRandomForestClassifier(seed=seed)
@@ -1587,9 +1604,10 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
             if candidate_filter is None or any(item[0] == n for item in candidate_filter)]
     if not grid:
         return
+    algos = scan_algos(config)
     active_candidates = [
         (n, sampler_name, algo) for n in grid
-        for sampler_name in config.sampler.candidates for algo in config.models.algos
+        for sampler_name in config.sampler.candidates for algo in algos
         if candidate_filter is None or (n, sampler_name, algo) in candidate_filter
     ]
     fit_kwargs = {"calibration": config.models.calibration, "calibration_method": config.models.calibration_method,
@@ -1597,6 +1615,8 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
                   "uniqueness_weights_enabled": config.sampling.uniqueness_weights}
     if config.models.deep is not None and any(a in D.ALL_DL_ALGOS for a in config.models.algos):
         fit_kwargs["deep"] = config.models.deep.model_dump()          # les processus de calcul parallèle ne partagent pas l'état du parent
+    if config.models.stacking:
+        fit_kwargs["stack"] = config.models.stack_settings()          # idem : les processus de calcul parallèle reçoivent le panel d'empilement
     jobs = parallel.resolve_jobs(len(active_candidates), int(fd.X_tr.nbytes + fd.X_te.nbytes))
     fit_results = {}
     if jobs > 1:
@@ -1625,7 +1645,7 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
         fold_names = fd.feature_names if fd.feature_names is not None else st.feature_pool
         feat_names = [fold_names[c] for c in cols]
         for sampler_name in config.sampler.candidates:
-            for algo in config.models.algos:
+            for algo in algos:
                 candidate = (n_feat, sampler_name, algo)
                 if candidate_filter is not None and candidate not in candidate_filter:
                     continue
@@ -1827,13 +1847,22 @@ def _tuning_candidates(st: _RunState) -> list[dict]:
     scan trial dominates must not capture the whole Optuna budget."""
     config = st.config
     one_se = config.selection.one_se_rule          # le candidat réglé est le choix de la règle, pas le maximum simple
+    tunable = _without_stack(st.board)
     if not config.tuning.optuna_select_top_k_per_horizon:
-        return st.board.top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se)
+        return tunable.top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se)
     top_configs = []
     for horizon in config.objective.horizons:
-        top_configs.extend(_board_for_horizon(st.board, horizon, models_only=False)
+        top_configs.extend(_board_for_horizon(tunable, horizon, models_only=False)
                            .top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se))
     return top_configs
+
+
+def _without_stack(board: Leaderboard) -> Leaderboard:
+    """Le classement sans les lignes « Stacking » : ses modèles de base sont tirés au hasard, volontairement non réglés (rigueur allégée)
+    et Optuna n'a pas d'espace de recherche pour lui."""
+    out = Leaderboard()
+    out.rows = [r for r in board.rows if r.get("algo") != registry.STACK_ALGO]
+    return out
 
 
 def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
@@ -2136,6 +2165,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)
+    registry.set_stack_defaults(config.models.stack_settings() if config.models.stacking else None)
 
     # Ingestion runs before any run_id exists: timed here, written once the
     # run rows are created (same duplication as run.started_at).

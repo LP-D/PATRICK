@@ -221,9 +221,13 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   arbitraire).
 - **Stacking et DL : plus d'exclusion a priori** (`docs/ways-of-working.md`).
   Le stacking est une catégorie comparée explicitement (global / par régime
-  / stacking) ; le toggle historique `DEFAULT_STACKING_ENABLED` reste
-  désactivé par défaut (perd sur 93% des paires horizon/fold en
-  walk-forward, résultat mesuré, pas un interdit).
+  / stacking) ; le toggle `DEFAULT_STACKING_ENABLED` reste désactivé par
+  défaut (perd sur 93% des paires horizon/fold en walk-forward, résultat
+  mesuré, pas un interdit). Depuis le 2026-10-23 il fait quelque chose :
+  `models/stacking.py` ajoute « Stacking » à la grille (N modèles de base
+  saisi à la main, tirés au hasard, sans Optuna ; méta-modèle appris sur
+  des probabilités hors-échantillon seulement), voir
+  `docs/audits/audit-base-2026-10-23.md`.
 - **`MODEL_N_JOBS = 1`** (`models/registry.py`) — ne jamais repasser à `-1`
   sans revalider : cause avérée d'oversubscription CPU massive (variance de
   temps de tuning ×20+ mesurée avant fix).

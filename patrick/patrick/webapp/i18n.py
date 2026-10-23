@@ -209,10 +209,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "section_universe": {"fr": "Univers — features brutes", "en": "Universe — raw features"},
     "field_start_date": {"fr": "Date de début", "en": "Start date"},
     "field_yf_coverage": {"fr": "Couverture minimale yfinance (0-1)", "en": "Minimum yfinance coverage (0-1)"},
-    "field_universe_scope": {"fr": "Univers candidat", "en": "Candidate universe"},
-    "universe_scope_default": {"fr": "Standard (univers par défaut)", "en": "Standard (default universe)"},
-    "universe_scope_extended": {"fr": "Étendu (+ indices, taux, FX, ETF sectoriels/obligataires…)",
-                                "en": "Extended (+ indices, rates, FX, sector/bond ETFs…)"},
+    "field_universe_scope": {"fr": "Univers de variables", "en": "Feature universe"},
+    "universe_scope_always_extended": {
+        "fr": "étendu, toujours (univers par défaut + indices, taux, devises, ETF sectoriels et obligataires…)",
+        "en": "extended, always (default universe + indices, rates, currencies, sector and bond ETFs…)"},
     "field_reduction_corr_threshold": {
         "fr": "Seuil de réduction |corr| (vide = désactivé)",
         "en": "Reduction |corr| threshold (empty = disabled)"},
@@ -289,6 +289,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "section_models": {"fr": "Modèles", "en": "Models"},
     "field_calibration": {"fr": "Calibration (probabilités)", "en": "Calibration (probabilities)"},
     "field_stacking": {"fr": "Stacking", "en": "Stacking"},
+    "field_stacking_n_models": {"fr": "Stacking : nombre de modèles de base", "en": "Stacking: number of base models"},
+    "stacking_n_models_hint": {
+        "fr": "Saisi à la main. Modèles tirés au hasard (hyperparamètres, variables, lignes), sans Optuna ni sélection : des bons et des "
+              "mauvais, le méta-modèle pondère. Coût : 2 ajustements par modèle et par candidat.",
+        "en": "Entered by hand. Randomly drawn models (hyperparameters, features, rows), no Optuna, no selection: good and bad ones, the "
+              "meta-model weighs them. Cost: 2 fits per model and per candidate."},
 
     "section_tuning": {"fr": "Tuning Optuna", "en": "Optuna tuning"},
     "field_enabled": {"fr": "Activé", "en": "Enabled"},

@@ -16,6 +16,7 @@ from sklearn.preprocessing import RobustScaler
 from starlette.datastructures import FormData
 
 from patrick.config import defaults as D
+from patrick.config import universe_extension as UX
 from patrick.config.schema import RunConfig
 from patrick.pipeline import engine as engine_module
 from patrick.selection import universe_reduction as ur
@@ -438,37 +439,43 @@ def _isolated(tmp_path, monkeypatch):
 
 
 def test_form_exposes_threshold_and_extended_scope(_isolated):
-    cfg, errors = forms.build_config_dict(
-        _form(reduction_corr_threshold="0,85", universe_scope="extended"), target_symbol="^VIX", name="VIX_1")
+    cfg, errors = forms.build_config_dict(_form(reduction_corr_threshold="0,85"), target_symbol="^VIX", name="VIX_1")
     assert not errors
     assert cfg["universe"]["reduction_corr_threshold"] == 0.85
     assert "XLK" in cfg["universe"]["yf_tickers"] and "^VIX" not in cfg["universe"]["yf_tickers"]
     assert len(cfg["universe"]["yf_tickers"]) > len(D.DEFAULT_UNIVERSE_YF_TICKERS)
     RunConfig.model_validate(cfg)
     view = forms.to_view(cfg)
-    assert view["reduction_corr_threshold"] == 0.85 and view["universe_scope"] == "extended"
+    assert view["reduction_corr_threshold"] == 0.85 and "universe_scope" not in view
 
 
-def test_form_defaults_are_unchanged_universe_and_no_reduction(_isolated):
+def test_form_always_uses_the_extended_universe_and_no_reduction_by_default(_isolated):
+    # Depuis 2026-10-23 : univers de variables étendu TOUJOURS (plus de choix « standard »), regroupement par corrélation optionnel.
     cfg, errors = forms.build_config_dict(_form(), target_symbol="^VIX", name="VIX_1")
     assert not errors
     assert cfg["universe"]["reduction_corr_threshold"] is None
-    assert cfg["universe"]["yf_tickers"] == [t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != "^VIX"]
-    assert forms.to_view(cfg)["universe_scope"] == "default"
+    assert cfg["universe"]["yf_tickers"] == [t for t in UX.extended_candidate_yf_tickers() if t != "^VIX"]
+    assert "XLK" in cfg["universe"]["yf_tickers"]
+    default_cfg = forms.default_config_dict()
+    assert "XLK" in default_cfg["universe"]["yf_tickers"]
 
 
-def test_form_rejects_out_of_range_threshold_and_unknown_scope(_isolated):
+def test_form_ignores_a_stale_universe_scope_field(_isolated):
+    # Un ancien marque-page ou formulaire en cache peut encore envoyer `universe_scope=default` : sans effet, l'univers reste étendu.
+    cfg, errors = forms.build_config_dict(_form(universe_scope="default"), target_symbol="^VIX", name="VIX_1")
+    assert not errors and "XLK" in cfg["universe"]["yf_tickers"]
+
+
+def test_form_rejects_out_of_range_threshold(_isolated):
     _, errors = forms.build_config_dict(_form(reduction_corr_threshold="1.7"), target_symbol="^VIX", name="VIX_1")
     assert any("réduction" in e for e in errors)
-    _, errors = forms.build_config_dict(_form(universe_scope="galaxy"), target_symbol="^VIX", name="VIX_1")
-    assert any("Univers candidat" in e for e in errors)
 
 
-def test_launch_page_renders_the_new_fields(_isolated):
+def test_launch_page_has_no_universe_choice_left(_isolated):
     from patrick.webapp.app import app
     html = TestClient(app).get("/ml").text
     assert 'name="reduction_corr_threshold"' in html
-    assert 'name="universe_scope"' in html
+    assert 'name="universe_scope"' not in html
 
 
 # --- run_pipeline: which training bars each decision reads (~6 s each) ------

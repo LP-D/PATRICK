@@ -1,7 +1,9 @@
 """Lots prêts à lancer des pages Modèles (ML, DL, RL) : ce que la base sait déjà et ce qui manque.
 
 Trois lots, en plus des profils d'entraînement :
-- **cibles jamais lancées** : les cibles de l'univers sans aucun run de la famille (RL : sans run RL) ;
+- **une carte par classe d'actifs** (depuis 2026-10-23, à la place de « cibles jamais lancées » : toutes les cibles ont été faites) :
+  sélectionne d'un clic toutes les cibles de la classe (actions US, Europe, Asie-Pacifique, futures, devises, crypto, volatilité, macro…) ;
+  le compte dit combien n'ont encore aucun run de la famille (RL : aucun run RL) ;
 - **horizons jamais lancés** : pour les cibles déjà entraînées, les horizons par défaut sans run (couple cible × horizon) ;
 - **runs conseillés** (ML) : pour chaque cible, le meilleur réentraînement proposé par le conseiller
   (`tracking/retrain_advisor.py`), appliqué à la configuration de son dernier run terminé.
@@ -80,18 +82,42 @@ def _long_enough(symbol: str, first_dates: dict[str, str], today: date, min_year
         return True
 
 
+# Ordre d'affichage des classes d'actifs (les clés sont celles de `data/session_calendar.classify_asset_class`).
+CLASS_ORDER = ("equities_us", "equities_europe", "equities_asia_pacific", "equities_americas_other", "futures", "fx", "crypto",
+               "volatility_index", "macro", "other")
+
+
+def by_asset_class(candidates: Iterable[str], never: Iterable[str], sources: dict[str, str]) -> list[dict]:
+    """`[{"key": classe, "symbols": [cibles], "never": n}]` : les cibles proposables regroupées par classe d'actifs (ordre `CLASS_ORDER`,
+    classes vides omises) ; `never` = combien n'ont encore aucun run. `sources` : `{cible: "yfinance" | "fred"}` (une cible absente est
+    classée comme une valeur yfinance)."""
+    from patrick.data.session_calendar import classify_asset_class
+
+    never_set = set(never)
+    groups: dict[str, list[str]] = {}
+    for symbol in candidates:
+        groups.setdefault(classify_asset_class(symbol, sources.get(symbol, "yfinance")), []).append(symbol)
+    keys = [k for k in CLASS_ORDER if k in groups] + sorted(k for k in groups if k not in CLASS_ORDER)
+    return [{"key": k, "symbols": groups[k], "never": sum(1 for s in groups[k] if s in never_set)} for k in keys]
+
+
 def overview(conn: sqlite3.Connection, family: str, symbols: Iterable[str], first_dates: dict[str, str], today: date,
-             min_years: float = D.DEFAULT_MIN_HISTORY_YEARS, horizons: Iterable[int] = D.DEFAULT_HORIZONS) -> dict:
+             min_years: float = D.DEFAULT_MIN_HISTORY_YEARS, horizons: Iterable[int] = D.DEFAULT_HORIZONS,
+             sources: dict[str, str] | None = None) -> dict:
     """`{"never": [cibles], "missing": {cible: [horizons]}}` pour `family` (`ml`, `dl` ou `rl`) ; `symbols` = cibles proposables.
-    Pas d'horizon pour le RL : `missing` y est toujours vide."""
+    Pas d'horizon pour le RL : `missing` y est toujours vide. Avec `sources`, ajoute `"by_class"` (`by_asset_class`)."""
     candidates = [s for s in dict.fromkeys(symbols) if _long_enough(s, first_dates, today, min_years)]
     if family == "rl":
         done = rl_executed_targets(conn)
-        return {"never": [s for s in candidates if s not in done], "missing": {}}
-    done_pairs = executed_pairs(conn, family)
-    wanted = list(horizons)
-    missing = {s: gaps for s in candidates if s in done_pairs and (gaps := [h for h in wanted if h not in done_pairs[s]])}
-    return {"never": [s for s in candidates if s not in done_pairs], "missing": missing}
+        out = {"never": [s for s in candidates if s not in done], "missing": {}}
+    else:
+        done_pairs = executed_pairs(conn, family)
+        wanted = list(horizons)
+        missing = {s: gaps for s in candidates if s in done_pairs and (gaps := [h for h in wanted if h not in done_pairs[s]])}
+        out = {"never": [s for s in candidates if s not in done_pairs], "missing": missing}
+    if sources is not None:
+        out["by_class"] = by_asset_class(candidates, out["never"], sources)
+    return out
 
 
 class FormOverride:

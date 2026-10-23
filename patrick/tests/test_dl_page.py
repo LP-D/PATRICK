@@ -56,7 +56,8 @@ def test_the_page_offers_networks_only_and_every_training_field(client):
         assert f'name="algos" value="{tree}"' not in html
     for key in D.DEFAULT_DEEP:
         assert f'name="dl_{key}"' in html, key
-    assert 'name="calibration"' in html and 'name="stacking"' in html
+    assert 'name="calibration"' in html
+    assert 'name="stacking"' not in html          # l'empilement tire ses modèles de base parmi les algorithmes à arbres : pas de case ici
 
 
 def test_the_simple_view_keeps_the_networks_visible_and_folds_the_detail(client):

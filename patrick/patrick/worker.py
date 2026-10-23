@@ -147,7 +147,8 @@ def _estimate_total(config: RunConfig) -> int:
     then only the finalists (per horizon and regime) on the other folds.
     Total-window screening: every candidate once on the whole out-of-sample
     window, then only the finalists on every fold."""
-    candidates = len(config.selection.n_features_grid) * len(config.sampler.candidates) * len(config.models.algos)
+    candidates = (len(config.selection.n_features_grid) * len(config.sampler.candidates)
+                  * (len(config.models.algos) + (1 if config.models.stacking else 0)))      # « Stacking » : un algorithme de plus
     folds = config.validation.n_wf_folds
     finalists = min(config.selection.screening_finalists_per_group, candidates)
     if config.selection.screening_mode == "total_window":

@@ -164,7 +164,7 @@ See `configs/examples/vix_direction.yaml` and `configs/examples/aapl_direction.y
 Main sections: `objective` (target, horizons, regimes), `universe`
 (feature-pool tickers/FRED series), `features` (enabled families),
 `validation` (folds, purge, `holdout_months` [12-24]), `selection` (method,
-N grid), `sampler`, `models` (algos, calibration, stacking), `tuning`
+N grid), `sampler`, `models` (algos, calibration, stacking + `stacking_n_models`), `tuning`
 (Optuna).
 
 ## Architecture

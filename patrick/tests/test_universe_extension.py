@@ -16,8 +16,10 @@ def test_extension_is_selectable_but_not_a_feature():
     assert len(ext) >= 100
     assert all(forms.TARGET_SOURCE_BY_SYMBOL[s] == "yfinance" for s in ext)
     assert not ext & set(D.DEFAULT_UNIVERSE_YF_TICKERS)
-    yf, _fred = forms.universe_excluding("XLK")
+    yf, _fred = forms.universe_excluding("XLK", scope="default")           # le pool par défaut du schéma n'est pas touché
     assert sorted(yf) == sorted(D.DEFAULT_UNIVERSE_YF_TICKERS)
+    yf_web, _ = forms.universe_excluding("^VIX")                           # le formulaire, lui, est étendu depuis le 2026-10-23
+    assert set(UX.EXTENDED_FEATURE_CANDIDATES) <= set(yf_web) and "^VIX" not in yf_web
     assert not ext & set(EQ.EQUITY_UNIVERSE)
 
 

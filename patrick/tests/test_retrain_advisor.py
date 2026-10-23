@@ -37,6 +37,20 @@ def test_a_healthy_run_triggers_none_of_the_problem_rules():
     assert advise(diag()) and not problems & set(keys(diag()))
 
 
+def test_over_confident_probabilities_of_an_untuned_run_suggest_the_standard_tuning():
+    untuned = {**VIEW, "tuning_enabled": False, "n_wf_folds": 3, "algos": ["XGBoost", "LightGBM"]}
+    out = advise(diag(brier_holdout=0.285, ece_holdout=0.17, view=untuned))
+    s = next(s for s in out if s.key == "overconfident")
+    assert s.patch["tuning_enabled"] is True and s.patch["n_wf_folds"] == 5 and len(s.patch["algos"]) == 4
+    assert 36 < s.score < 58 and s.facts["brier"] == "0.285" and s.available and not s.manual
+    assert {c["field"] for c in s.changes} >= {"tuning_enabled", "n_wf_folds", "algos"}
+    assert s.cost_factor > 1.0                                                  # le réglage coûte : le conseiller le dit
+    assert "overconfident" not in keys(diag(brier_holdout=0.285, view=VIEW))   # déjà réglé : un autre levier
+    assert "overconfident" not in keys(diag(brier_holdout=0.255, view=untuned))
+    assert "overconfident" not in keys(diag(brier_holdout=None, view=untuned))
+    assert "overconfident" not in keys(diag(brier_holdout=0.30, view=untuned, suspect="F1_dir 0.96"))
+
+
 def test_a_suspect_run_is_told_to_rerun_with_the_leak_guard_first():
     out = advise(diag(suspect="F1_dir 0.96 ≥ 0.80", guard_active=False, auc_test=0.97))
     assert out[0].key == "fix_leak" and out[0].score == 100 and out[0].available
@@ -256,7 +270,7 @@ def test_every_profile_patch_uses_form_fields_and_every_text_exists():
         for k in p.resolved_patch():
             assert f"advf_{k}" in STRINGS or p.key == "standard", (p.key, k)
     for key in ("fix_leak", "derived_target", "signal_absent", "overfit", "recent_window", "regimes", "unstable_features", "more_capacity",
-                "deep_learning", "short_history", "data_degraded", "class_balance", "calibrate", "confirm_cpcv", "try_alpha",
+                "deep_learning", "short_history", "data_degraded", "class_balance", "overconfident", "calibrate", "confirm_cpcv", "try_alpha",
                 "best_horizon", "faster_iteration", "seed_check"):
         for part in ("title", "why", "try"):
             assert f"adv_{key}_{part}" in STRINGS, (key, part)

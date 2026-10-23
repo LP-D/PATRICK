@@ -130,21 +130,52 @@ def test_the_pages_load_their_batches_after_the_first_paint(client):
         html = client.get(f"/{family}").text
         assert f'data-lazy-url="/fragments/launch-batches?family={family}"' in html, family
         assert 'id="batch-gallery"' in html and "/static/launch_batches.js" in html
-        assert 'data-batch="never"' not in html                          # les cartes n'arrivent qu'avec le fragment
+        assert 'data-batch="class"' not in html                          # les cartes n'arrivent qu'avec le fragment
 
 
 def test_the_fragment_offers_the_lots_of_each_family(client, conn):
     _add_run(conn, "p1", "^VIX", 1, "done")
     ml = client.get("/fragments/launch-batches?family=ml").text
-    assert 'data-batch="never"' in ml and 'data-batch="missing"' in ml and 'data-batch="recommended"' in ml
+    assert 'data-batch="class"' in ml and 'data-batch="missing"' in ml and 'data-batch="recommended"' in ml
+    assert 'data-batch="never"' not in ml                                # remplacée par une carte par classe d'actifs
     gaps = json.loads(ml.split("data-gaps='")[1].split("'")[0])
     assert gaps["^VIX"] == [2, 3, 5, 7, 10]
-    never = json.loads(ml.split("data-symbols='")[1].split("'")[0])
-    assert "^VIX" not in never and "^GSPC" in never
     dl = client.get("/fragments/launch-batches?family=dl").text
-    assert 'data-batch="never"' in dl and 'data-batch="missing"' in dl and 'data-batch="recommended"' not in dl
+    assert 'data-batch="class"' in dl and 'data-batch="missing"' in dl and 'data-batch="recommended"' not in dl
     rl = client.get("/fragments/launch-batches?family=rl").text
-    assert 'data-batch="never"' in rl and 'data-batch="missing"' not in rl and 'data-batch="recommended"' not in rl
+    assert 'data-batch="class"' in rl and 'data-batch="missing"' not in rl and 'data-batch="recommended"' not in rl
+
+
+def test_one_card_per_asset_class_selects_the_whole_class(client, conn):
+    _add_run(conn, "p1", "^VIX", 1, "done")
+    ml = client.get("/fragments/launch-batches?family=ml").text
+    cards = {}
+    for chunk in ml.split('data-batch="class" data-symbols=\'')[1:]:
+        symbols = json.loads(chunk.split("'")[0])
+        label = chunk.split('<span class="profile-name">')[1].split("</span>")[0]
+        cards[label] = symbols
+    assert "^VIX" in cards["Volatilité US"]
+    assert "^GSPC" in cards["Actions US"] and "^VIX" not in cards["Actions US"]
+    assert "EURUSD=X" in cards["Devises"] and "GC=F" in cards["Futures"]
+    every = [s for symbols in cards.values() for s in symbols]
+    assert len(every) == len(set(every))                                  # une cible n'est que dans une classe
+    assert "jamais lancée" in ml
+
+
+def test_by_asset_class_groups_in_display_order_and_counts_the_never_run():
+    out = launch_batches.by_asset_class(["GC=F", "AAPL", "^GSPC", "EURUSD=X", "SAN.PA"], never=["GC=F", "AAPL"],
+                                        sources={"SOFR": "fred"})
+    assert [c["key"] for c in out] == ["equities_us", "equities_europe", "futures", "fx"]
+    us = out[0]
+    assert us["symbols"] == ["AAPL", "^GSPC"] and us["never"] == 1
+    macro = launch_batches.by_asset_class(["SOFR"], never=[], sources={"SOFR": "fred"})
+    assert macro == [{"key": "macro", "symbols": ["SOFR"], "never": 0}]
+
+
+def test_overview_only_adds_by_class_when_the_sources_are_given(conn):
+    assert "by_class" not in launch_batches.overview(conn, "ml", ["^GSPC"], {}, TODAY)
+    out = launch_batches.overview(conn, "ml", ["^GSPC", "GC=F"], {}, TODAY, sources={})
+    assert {c["key"] for c in out["by_class"]} == {"equities_us", "futures"}
 
 
 def test_an_unknown_family_is_a_404(client):
@@ -152,8 +183,8 @@ def test_an_unknown_family_is_a_404(client):
 
 
 def test_the_fragment_is_translated(client):
-    assert "Never-run targets" in client.get("/fragments/launch-batches?family=ml&lang=en").text
-    assert "Cibles jamais lancées" in client.get("/fragments/launch-batches?family=ml").text
+    assert "US equities" in client.get("/fragments/launch-batches?family=ml&lang=en").text
+    assert "Actions US" in client.get("/fragments/launch-batches?family=ml").text
 
 
 # --------------------------------------------------------------------------- « horizons jamais lancés » à la soumission

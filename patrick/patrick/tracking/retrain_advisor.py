@@ -51,6 +51,12 @@ CAPACITY_ALGOS = ["RandomForest", "CatBoost", "XGBoost"]
 # Grille du nombre de variables : plus de variables, meilleur holdout dans la plage observée (AUC holdout relative au run : -0,005 pour
 # 6 variables ou moins, +0,004 pour 12 à 16).
 CAPACITY_FEATURE_GRID = "10,12,14,16"
+# Probabilités sur-confiantes (audit du 2026-10-23, 2 052 runs terminés, 1 917 avec Brier holdout) : un modèle sans information a un Brier
+# de 0,25 sur P(hausse) ; 83 % des runs « rapides » (réglage Optuna coupé, 3 folds, 2 algorithmes) font pire (moyenne 0,269, 42 % au-dessus
+# de 0,265) contre 64 % des runs réglés (0,246, 11 % au-dessus). Comparés sur la même cible et le même horizon (15 paires), régler
+# Optuna avec 4 algorithmes et 5 folds baisse le Brier de 0,006 (erreur-type 0,003) et l'ECE de 0,019 (0,010) sans bouger l'AUC (+0,004,
+# erreur-type 0,006) : le réglage améliore les probabilités, pas le classement. Or le mode systématique du fonds trade sur ces probabilités.
+BRIER_OVERCONFIDENT = 0.265
 
 COST_LABEL = {0: "low", 1: "medium", 2: "high"}
 
@@ -69,6 +75,8 @@ class Diagnosis:
     f1_test: float | None = None
     auc_holdout: float | None = None
     f1_holdout: float | None = None
+    brier_holdout: float | None = None      # Brier de P(hausse) sur le holdout (0,25 = pas d'information)
+    ece_holdout: float | None = None
     fold_auc: list[float] = field(default_factory=list)
     persistence_f1: float | None = None
     dm_p: float | None = None
@@ -174,13 +182,16 @@ def _units(view: dict) -> float:
         splits = max(1, int(view.get("n_wf_folds") or 5))
     scan = algos * samplers * grid * horizons * regimes * (1 if view.get("staged_screening") else splits)
     scan += algos * samplers * horizons * regimes * splits * (3 if view.get("staged_screening") else 0)   # finalistes sur les folds
+    if view.get("stacking"):
+        # « Stacking » = un candidat de plus par (variables x échantillonneur) qui coûte 2 N ajustements de modèles de base (hors-échantillon
+        # puis sur tout l'entraînement).
+        scan += grid * samplers * horizons * regimes * (1 if view.get("staged_screening") else splits) * 2 * int(
+            view.get("stacking_n_models") or D.DEFAULT_STACKING_N_MODELS)
     tuning = 0.0
     if view.get("tuning_enabled", True):
         tuning = (int(view.get("top_k") or 1) * int(view.get("n_trials") or 100) * int(view.get("cv_splits") or 3)
                   * horizons * regimes * 0.35)
-    extra = 1.0 + (0.35 if view.get("stacking") else 0.0) + (0.1 if view.get("calibration") else 0.0)
-    if view.get("universe_scope") == "extended":
-        extra += 0.4
+    extra = 1.0 + (0.1 if view.get("calibration") else 0.0)
     return (scan + tuning) * extra
 
 
@@ -306,7 +317,8 @@ def _rule_more_capacity(d: Diagnosis) -> Suggestion | None:
     if not small:
         return None
     return Suggestion("more_capacity", 52, {
-        "algos": list(CAPACITY_ALGOS), "n_features_grid": CAPACITY_FEATURE_GRID, "stacking": True, "tuning_enabled": True,
+        "algos": list(CAPACITY_ALGOS), "n_features_grid": CAPACITY_FEATURE_GRID, "stacking": True, "stacking_n_models": 10,
+        "tuning_enabled": True,
         "n_trials": max(150, int(cur.get("n_trials") or 100)), "top_k": 3}, {"auc": d.auc_test, "gap": _signed(d.gap_auc), "std": d.fold_std})
 
 
@@ -344,6 +356,20 @@ def _rule_class_balance(d: Diagnosis) -> Suggestion | None:
     return Suggestion("class_balance", _clip(40 + (hi / lo - IMBALANCE_RATIO) * 12, 0, 70), {
         "sampler_candidates": ["SMOTE", "BorderlineSMOTE", "SMOTETomek"], "uniqueness_weights": True},
         {"ratio": f"{hi / lo:.1f}", "hi": _pct(hi), "lo": _pct(lo)})
+
+
+def _rule_overconfident(d: Diagnosis) -> Suggestion | None:
+    """Run sans réglage Optuna dont la P(hausse) fait pire qu'une pièce (Brier holdout au-dessus de `BRIER_OVERCONFIDENT`) : relancer avec le
+    réglage standard (Optuna, 4 algorithmes, 5 folds), qui rend les probabilités nettement plus sobres (voir la constante)."""
+    if d.suspect or d.brier_holdout is None or d.brier_holdout <= BRIER_OVERCONFIDENT:
+        return None
+    cur = d.view
+    if cur.get("tuning_enabled", True):                      # déjà réglé : un autre levier (calibration, horizon) est à tester
+        return None
+    return Suggestion("overconfident", _clip(36 + (d.brier_holdout - BRIER_OVERCONFIDENT) * 600, 0, 58), {
+        "tuning_enabled": True, "n_trials": max(40, min(int(cur.get("n_trials") or 100), 100)), "top_k": 1,
+        "algos": list(D.DEFAULT_ML_ALGOS), "n_wf_folds": max(5, int(cur.get("n_wf_folds") or 5))},
+        {"brier": d.brier_holdout, "ece": d.ece_holdout, "threshold": f"{BRIER_OVERCONFIDENT:.3f}"})
 
 
 def _rule_calibrate(d: Diagnosis) -> Suggestion | None:
@@ -401,7 +427,7 @@ def _rule_robustness_seed(d: Diagnosis) -> Suggestion | None:
 
 
 RULES = (_rule_fix_leak, _rule_signal_absent, _rule_no_edge, _rule_overfit, _rule_unstable_folds, _rule_unstable_features, _rule_more_capacity,
-         _rule_deep_learning, _rule_short_history, _rule_data_degraded, _rule_class_balance, _rule_calibrate, _rule_confirm_cpcv,
+         _rule_deep_learning, _rule_short_history, _rule_data_degraded, _rule_class_balance, _rule_overconfident, _rule_calibrate, _rule_confirm_cpcv,
          _rule_try_alpha, _rule_best_horizon, _rule_faster_iteration, _rule_robustness_seed)
 
 
@@ -508,7 +534,7 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
         asset_class=classify_asset_class(symbol, obj.get("target_source", "yfinance")), kind=obj.get("target_kind", "raw"),
         scheme=detail.get("scheme", "walkforward"), suspect=detail.get("suspect"), guard_active=guard,
         auc_test=test.get("AUC_ovr_4cls"), f1_test=test.get("F1_dir"), auc_holdout=holdout.get("AUC_ovr_4cls"),
-        f1_holdout=holdout.get("F1_dir"), fold_auc=fold_auc, persistence_f1=persistence, dm_p=dm.get("p_value"),
+        f1_holdout=holdout.get("F1_dir"), brier_holdout=holdout.get("Brier_up"), ece_holdout=holdout.get("ECE_up"), fold_auc=fold_auc, persistence_f1=persistence, dm_p=dm.get("p_value"),
         pbo=None if pbo.get("pbo") is None or pbo.get("pbo") != pbo.get("pbo") else pbo["pbo"],
         pbo_reliable=bool((pbo.get("reliability") or {}).get("ok")),
         jaccard=stab.get("mean_jaccard"), rho_test_holdout=diag_ho.get("rho") if (diag_ho.get("n_trials") or 0) >= 3 else None,
