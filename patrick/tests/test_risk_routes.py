@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from test_portfolio_risk import _prices
 
 from patrick.tracking import db as trackdb
 from patrick.wealth import ledger
 from patrick.webapp import risk_routes
 from patrick.webapp.app import app
-from tests.test_portfolio_risk import _prices
 
 
 @pytest.fixture
