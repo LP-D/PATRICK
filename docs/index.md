@@ -23,6 +23,7 @@ Ce dossier centralise la documentation du projet PATRICK. Les documents à jour 
 
 - [application-bureau.md](ops/application-bureau.md) — lanceur, assistant du dossier partagé, page Réglages, installateur.
 - [partage-entre-pc.md](ops/partage-entre-pc.md) — partage de la base entre deux PC (fusion par union, PC de référence du patrimoine).
+- [racine-de-donnees-sur-un-autre-disque.md](ops/racine-de-donnees-sur-un-autre-disque.md) — données sur un autre disque (`patrick data`), correctif du partage des modèles : mémo pour les autres PC.
 - [politique-derive.md](ops/politique-derive.md) — alerte de dérive.
 - [veille-windows-runs-de-reference.md](ops/veille-windows-runs-de-reference.md) — empêcher la veille pendant un run.
 - [taches-planifiees-agents.md](ops/taches-planifiees-agents.md) — tâche planifiée créée par un agent.
