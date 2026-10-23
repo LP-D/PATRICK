@@ -326,6 +326,10 @@ RL_MIN_ROWS = 600            # lignes minimales après les fenêtres de calcul d
 DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
 DEFAULT_STACKING_ENABLED = False
+# Empilement (`models/stacking.py`) : nombre de modèles de base, SAISI à la main (formulaire). Bornes : en dessous de 3 le méta-modèle n'a
+# rien à pondérer ; au-dessus de 60, 2 N ajustements par candidat de la grille rendent le run inabordable.
+DEFAULT_STACKING_N_MODELS = 12
+STACKING_N_MODELS_BOUNDS = (3, 60)
 
 # Embargo (Phase 0 correctness, distinct from the purge above): removes from the
 # TEST set the first `embargo_bars` bars following the train/test cut, against

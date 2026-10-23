@@ -22,9 +22,15 @@ from patrick.config.schema import RunConfig
 from patrick.features.alpha_target import run_target
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.models import calibration as calibration_lib
-from patrick.models.registry import get_classifier
+from patrick.models.registry import STACK_ALGO, get_classifier
 from patrick.selection.registry import select_features
 from patrick.tuning.optuna_runner import safe_resample
+
+
+def _stack_overrides(algo: str, sampler_name: str, horizon: int, params: dict) -> dict:
+    """Paramètres de construction de `algo` : ceux de `params`, plus pour « Stacking » le rééchantillonneur de la grille et le trou d'un
+    horizon entre modèles de base et méta-modèle (le moteur les pose de même, `pipeline/engine.py::_fit_eval_full`)."""
+    return {**params, "sampler": sampler_name, "gap": int(horizon)} if algo == STACK_ALGO else params
 
 
 def scale_selected(scaler: RobustScaler, values: np.ndarray, columns: list[int]) -> np.ndarray:
@@ -54,8 +60,10 @@ def _fit_live_calibrator(config: RunConfig, X_n: np.ndarray, y: np.ndarray, samp
     split = calibration_lib.calibration_split(len(y), gap=horizon)
     if split is None:
         return None, None
-    Xf, yf = safe_resample(sampler_name, seed, X_n[:split.fit_end], y[:split.fit_end])
-    fit_clf = get_classifier(algo, seed=seed, **best_params)
+    Xf, yf = X_n[:split.fit_end], y[:split.fit_end]
+    if algo != STACK_ALGO:                     # « Stacking » rééchantillonne lui-même ses lignes d'ajustement
+        Xf, yf = safe_resample(sampler_name, seed, Xf, yf)
+    fit_clf = get_classifier(algo, seed=seed, **_stack_overrides(algo, sampler_name, horizon, best_params))
     fit_clf.fit(Xf, yf)
     y_cal = y[split.cal_start:split.thr_start]
     if not calibration_lib.calibration_classes_match(fit_clf, y_cal):
@@ -110,10 +118,13 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     X_n = X[:, cols]
     feat_names = [feature_pool[c] for c in cols]
 
-    Xr, yr = safe_resample(sampler_name, seed, X_n, y)
-    clf = get_classifier(algo, seed=seed, **best_params)
+    Xr, yr = (X_n, y) if algo == STACK_ALGO else safe_resample(sampler_name, seed, X_n, y)
+    clf = get_classifier(algo, seed=seed, **_stack_overrides(algo, sampler_name, horizon, best_params))
     clf.fit(Xr, yr)
     calibrator, calibration_meta = _fit_live_calibrator(config, X_n, y, sampler_name, seed, algo, best_params, horizon, clf)
+    if algo == STACK_ALGO:
+        # Panel d'empilement consigné (N, algorithmes) : un champion rejoué plus tard depuis un autre run (duel) retrouve le SIEN.
+        best_params = {"stack": clf.settings(), **best_params}
     if getattr(clf, "is_deep", False):
         # Réseau : réglages complets consignés (ceux du run + ceux d'Optuna). Rejouer ce champion plus tard, depuis un autre run (duel de
         # champions), reconstruit le MÊME réseau, pas celui qu'un autre jeu de réglages donnerait.

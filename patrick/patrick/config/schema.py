@@ -306,13 +306,24 @@ class ModelsConfig(BaseModel):
         data = handler(self)
         if isinstance(data, dict) and data.get("deep") is None:
             data.pop("deep", None)
+        if isinstance(data, dict) and not data.get("stacking"):
+            data.pop("stacking_n_models", None)         # sans empilement, le nombre de modèles n'existe pas : même JSON qu'avant le champ
         return data
     calibration: bool = D.DEFAULT_CALIBRATION_ENABLED
     # Roadmap bloc 3: isotonic (non-parametric, needs more rows) or sigmoid
     # (Platt, 2 parameters per class, stabler on the ~7% of a fold's train
     # it is fitted on). Only used when `calibration` is True.
     calibration_method: Literal["isotonic", "sigmoid"] = "isotonic"
+    # Empilement (`models/stacking.py`) : ajoute « Stacking » à la grille du scan. `stacking_n_models` = nombre de modèles de base,
+    # saisi à la main ; ils sont tirés au hasard parmi les algorithmes à arbres de `algos` (rigueur allégée : pas d'Optuna, pas de
+    # sélection), puis un méta-modèle pondère leurs probabilités hors-échantillon.
     stacking: bool = D.DEFAULT_STACKING_ENABLED
+    stacking_n_models: int = Field(D.DEFAULT_STACKING_N_MODELS, ge=D.STACKING_N_MODELS_BOUNDS[0], le=D.STACKING_N_MODELS_BOUNDS[1])
+
+    def stack_settings(self) -> dict:
+        """Réglages passés au classifieur « Stacking » (`registry.set_stack_defaults`) : N et les algorithmes à arbres du run."""
+        from patrick.models.stacking import STACK_BASE_ALGOS
+        return {"n_models": self.stacking_n_models, "algos": [a for a in self.algos if a in STACK_BASE_ALGOS]}
 
 
 class TuningConfig(BaseModel):
@@ -421,6 +432,18 @@ class RunConfig(BaseModel):
                                  "sur-échantillonneur réordonne et synthétise des lignes")
             if self.validation.scheme == "cpcv":
                 raise ValueError(f"les modèles à fenêtre ({', '.join(sorted(sequence))}) ne tournent pas en CPCV (lignes non contiguës)")
+        return self
+
+    @model_validator(mode="after")
+    def _check_stacking(self):
+        """L'empilement coupe l'entraînement en deux par le temps (modèles de base | méta-modèle) : il lui faut des lignes contiguës dans
+        l'ordre du temps (walk-forward ; la CPCV recolle des groupes non contigus) et au moins un algorithme à arbres pour ses modèles de base."""
+        if not self.models.stacking:
+            return self
+        if self.validation.scheme == "cpcv":
+            raise ValueError("l'empilement ne tourne pas en CPCV (groupes d'entraînement non contigus) : choisir le walk-forward")
+        if not self.models.stack_settings()["algos"]:
+            raise ValueError("l'empilement exige au moins un algorithme à arbres (XGBoost, LightGBM, RandomForest, GradientBoosting, CatBoost)")
         return self
 
     @property

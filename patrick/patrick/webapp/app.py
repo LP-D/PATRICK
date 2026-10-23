@@ -464,6 +464,7 @@ def _render_launch(request: Request, view: dict, errors: list[str], status_code:
             "depth_first": data_health.depth_by_symbol_for_form(),
             "min_history_bounds": D.MIN_HISTORY_YEARS_BOUNDS,
             "min_history_default": D.DEFAULT_MIN_HISTORY_YEARS,
+            "stacking_bounds": D.STACKING_N_MODELS_BOUNDS,
             **_i18n_context(request),
         },
         status_code=status_code,
@@ -481,20 +482,21 @@ def launch_legacy_redirect(request: Request):
 @app.get("/fragments/launch-batches")
 def launch_batches_fragment(request: Request, family: str = "ml"):
     """Fragment des lots prêts à lancer d'une page Modèles (chargé par `static/lazy.js` après l'affichage de la page) :
-    cibles jamais lancées, horizons jamais lancés (ML/DL) et runs conseillés (ML). Lecture seule ; rien n'est lancé ici."""
+    une carte par classe d'actifs, horizons jamais lancés (ML/DL) et runs conseillés (ML). Lecture seule ; rien n'est lancé ici."""
     if family not in ("ml", "dl", "rl"):
         raise HTTPException(status_code=404, detail="Famille inconnue")
     groups = forms_rl.rl_target_groups() if family == "rl" else forms.TARGET_GROUPS
     conn = trackdb.connect()
     try:
         overview = launch_batches.overview(conn, family, [sym for items in groups.values() for sym, _ in items],
-                                           data_health.depth_by_symbol_for_form(), utc_today())
+                                           data_health.depth_by_symbol_for_form(), utc_today(),
+                                           sources=forms.TARGET_SOURCE_BY_SYMBOL)
     finally:
         conn.close()
     missing = overview["missing"]
     return templates.TemplateResponse(
         request, "_launch_batches.html",
-        {"family": family, "never": overview["never"], "missing": missing,
+        {"family": family, "by_class": overview["by_class"], "missing": missing,
          "missing_horizons": sorted({h for gaps in missing.values() for h in gaps}),
          "n_missing_pairs": sum(len(gaps) for gaps in missing.values()), **_i18n_context(request)},
     )

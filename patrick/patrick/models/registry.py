@@ -8,6 +8,7 @@ from lightgbm import LGBMClassifier
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 
 from patrick.config import defaults as D
+from patrick.models import stacking as stacking_module
 from patrick.models.xgb_labels import AnyLabelXGBClassifier
 
 ML_ALGOS = ("XGBoost", "LightGBM", "RandomForest", "GradientBoosting", "CatBoost")
@@ -24,6 +25,18 @@ def set_deep_defaults(settings: dict | None) -> None:
     """Réglages neuronaux du run courant (`None` ou `{}` : les défauts de `config.defaults.DEFAULT_DEEP`)."""
     _DEEP_ACTIVE.clear()
     _DEEP_ACTIVE.update(settings or {})
+
+
+# « Stacking » : un algorithme de plus de la grille (`models/stacking.py`), construit avec les réglages d'empilement du run en cours
+# (`RunConfig.models.stack_settings()`), posés ici par `run_pipeline` comme les réglages neuronaux ci-dessus.
+STACK_ALGO = stacking_module.STACK_ALGO
+_STACK_ACTIVE: dict = {}
+
+
+def set_stack_defaults(settings: dict | None) -> None:
+    """Réglages d'empilement du run courant (`None` ou `{}` : le run n'empile pas)."""
+    _STACK_ACTIVE.clear()
+    _STACK_ACTIVE.update(settings or {})
 
 # Coordination point (fix/tuning-n-jobs-oversubscription): scan and Optuna
 # tuning are strictly sequential -- one config, one walk-forward fold, one
@@ -48,6 +61,9 @@ MODEL_N_JOBS = 1
 
 def get_classifier(algo: str, seed: int = 42, **overrides):
     deep = overrides.pop("deep", None)          # réglages neuronaux explicites : ignorés des algorithmes à arbres
+    stack = overrides.pop("stack", None)        # réglages d'empilement explicites : ignorés de tout algorithme sauf « Stacking »
+    if algo == STACK_ALGO:
+        return stacking_module.build_stacking(seed=seed, **{**_STACK_ACTIVE, **(stack or {}), **overrides})
     if algo in DL_ALGOS:
         from patrick.models.deep import build_deep_classifier
         return build_deep_classifier(algo, seed=seed, **{**_DEEP_ACTIVE, **(deep or {}), **overrides})

@@ -45,12 +45,13 @@ def slug_target(symbol: str) -> str:
 UNIVERSE_SCOPES = ("default", "extended")
 
 
-def universe_excluding(target_symbol: str, scope: str = "default") -> tuple[list[str], dict[str, str]]:
+def universe_excluding(target_symbol: str, scope: str = "extended") -> tuple[list[str], dict[str, str]]:
     """The feature universe is always "everything we have" (no more manual
     ticker/source selection) -- except the target itself, so it isn't fed
-    back in as an input feature (trivial leak). `scope="extended"` (opt-in,
-    ported from feature/replay-cache-universe): the default universe plus
-    the verified feature candidates of `universe_extension`."""
+    back in as an input feature (trivial leak). Since 2026-10-23 the web form
+    ALWAYS uses `scope="extended"` (no choice left): the default universe
+    plus the verified feature candidates of `universe_extension`.
+    `scope="default"` stays reachable from code (tests, YAML-free callers)."""
     base = UX.extended_candidate_yf_tickers() if scope == "extended" else D.DEFAULT_UNIVERSE_YF_TICKERS
     yf_tickers = [t for t in base if t != target_symbol]
     fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if v != target_symbol}
@@ -455,11 +456,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     if target_symbol not in TARGET_SOURCE_BY_SYMBOL:
         errors.append("« Que prédire » : choix invalide.")
     target_source = TARGET_SOURCE_BY_SYMBOL.get(target_symbol, "yfinance")
-    universe_scope = form.get("universe_scope") or "default"
-    if universe_scope not in UNIVERSE_SCOPES:
-        errors.append("« Univers candidat » : choix invalide.")
-        universe_scope = "default"
-    yf_tickers, fred_series = universe_excluding(target_symbol, universe_scope)
+    yf_tickers, fred_series = universe_excluding(target_symbol)
 
     # Cible alpha : rendement excédentaire face à un benchmark (champ vide = déterminé automatiquement).
     target_kind = (form.get("target_kind") or "raw").strip()
@@ -536,6 +533,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         ("top_k", "Top-K configs affinées", D.DEFAULT_TUNING_TOP_K, int),
         ("n_trials", "Essais Optuna", D.DEFAULT_TUNING_N_TRIALS, int),
         ("cv_splits", "Folds CV", D.DEFAULT_TUNING_CV_SPLITS, int),
+        ("stacking_n_models", "Modèles de base du stacking", D.DEFAULT_STACKING_N_MODELS, int),
         ("seed", "Graine (seed)", D.DEFAULT_SEED, int),
         ("max_frozen_run", "Série figée maximale (max_frozen_run)", D.DEFAULT_QUALITY_MAX_FROZEN_RUN, int),
         ("max_gap_bdays", "Écart maximal (jours ouvrés)", D.DEFAULT_QUALITY_MAX_GAP_BDAYS, int),
@@ -556,6 +554,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     top_k = _int_values["top_k"]
     n_trials = _int_values["n_trials"]
     cv_splits = _int_values["cv_splits"]
+    stacking_n_models = _int_values["stacking_n_models"]
     seed = _int_values["seed"]
     max_frozen_run = _int_values["max_frozen_run"]
     max_gap_bdays = _int_values["max_gap_bdays"]
@@ -632,6 +631,11 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
         screening_finalists = 1
     if cv_splits < 2:
         errors.append("« Folds CV » doit être un entier >= 2.")
+    stacking_lo, stacking_hi = D.STACKING_N_MODELS_BOUNDS
+    if not stacking_lo <= stacking_n_models <= stacking_hi:
+        if _checked(form, "stacking"):
+            errors.append(f"« Modèles de base du stacking » doit être compris entre {stacking_lo} et {stacking_hi}.")
+        stacking_n_models = D.DEFAULT_STACKING_N_MODELS
 
     # flexibility-gaps Gap 7: config/schema.py::ValidationConfig.holdout_months
     # already enforces `ge=12, le=24` (pydantic) -- checked here too, same
@@ -714,6 +718,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             **({"deep": deep} if deep is not None else {}),
             "calibration": _checked(form, "calibration"),
             "stacking": _checked(form, "stacking"),
+            "stacking_n_models": stacking_n_models,
         },
         "tuning": {
             "enabled": _checked(form, "tuning_enabled"),
@@ -750,8 +755,6 @@ def to_view(cfg: dict) -> dict:
         "regimes": ",".join(obj.get("regimes", [])),
         "start_date": uni.get("start_date", "2000-01-01"),
         "yf_coverage": uni.get("yf_coverage", 0.85),
-        "universe_scope": "extended" if (set(uni.get("yf_tickers", [])) & set(UX.EXTENDED_FEATURE_CANDIDATES))
-        - set(D.DEFAULT_UNIVERSE_YF_TICKERS) else "default",
         "reduction_corr_threshold": "" if uni.get("reduction_corr_threshold") is None
         else uni["reduction_corr_threshold"],
         "data_quality_enabled": bool(dq.get("enabled", True)),
@@ -809,6 +812,7 @@ def to_view(cfg: dict) -> dict:
         **{f"dl_{key}": (mod.get("deep") or {}).get(key, default) for key, default in D.DEFAULT_DEEP.items()},
         "calibration": bool(mod.get("calibration", False)),
         "stacking": bool(mod.get("stacking", False)),
+        "stacking_n_models": mod.get("stacking_n_models", D.DEFAULT_STACKING_N_MODELS),
         "tuning_enabled": bool(tun.get("enabled", True)),
         "top_k": tun.get("top_k", D.DEFAULT_TUNING_TOP_K),
         "n_trials": tun.get("n_trials", D.DEFAULT_TUNING_N_TRIALS),

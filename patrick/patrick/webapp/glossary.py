@@ -26,6 +26,7 @@ TERM_LABEL_KEYS: dict[str, str] = {
     "uniqueness_weights": "field_uniqueness_weights",
     "calibration": "field_calibration",
     "stacking": "field_stacking",
+    "stacking_n_models": "field_stacking_n_models",
     "regime_detection_enabled": "field_regime_detection_enabled",
     "regime_threshold_mode": "field_regime_threshold_mode",
     "tuning_enabled": "field_enabled",
@@ -417,11 +418,20 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "probabilities before applying a decision threshold."),
     },
     "stacking": {
-        "fr": ("Stacking : combine les prédictions de plusieurs modèles via un "
-               "méta-modèle entraîné par-dessus, au lieu de garder le meilleur "
-               "modèle individuel."),
-        "en": ("Stacking: combines several models' predictions via a meta-model "
-               "trained on top, instead of keeping the best individual model."),
+        "fr": ("Stacking : ajoute à la grille un modèle qui empile N modèles de base (N saisi à la main) : un méta-modèle apprend à "
+               "pondérer leurs probabilités hors-échantillon (jamais sur des lignes qu'ils ont vues). Les modèles de base sont "
+               "volontairement peu rigoureux (hyperparamètres, variables et lignes tirés au hasard, pas d'Optuna) : il faut des bons "
+               "et des mauvais pour que l'empilement ait quelque chose à apprendre."),
+        "en": ("Stacking: adds to the grid a model that stacks N base models (N entered by hand): a meta-model learns to weigh their "
+               "out-of-sample probabilities (never on rows they were fitted on). The base models are deliberately light on rigour "
+               "(randomly drawn hyperparameters, features and rows, no Optuna): a mix of good and bad ones is what gives stacking "
+               "something to learn."),
+    },
+    "stacking_n_models": {
+        "fr": ("Nombre de modèles de base de l'empilement. Plus il est grand, plus le panel est varié et plus le run est long : "
+               "chaque modèle est ajusté deux fois (hors-échantillon puis sur tout l'entraînement), pour chaque candidat de la grille."),
+        "en": ("Number of base models in the stack. The larger it is, the more varied the panel and the longer the run: each model "
+               "is fitted twice (out-of-sample, then on the whole training set), for every candidate of the grid."),
     },
     "regime_detection_enabled": {
         "fr": ("Détecte le régime de volatilité courant (calme/normal/stress) via un "

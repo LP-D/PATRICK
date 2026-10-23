@@ -1,5 +1,5 @@
 /* Lots prêts à lancer des pages Modèles (/ml, /dl, /rl) : les cartes arrivent par `lazy.js` (`/fragments/launch-batches`), le clic est
-   délégué ici. « Cibles jamais lancées » et « Horizons jamais lancés » pré-remplissent la sélection du formulaire (rien n'est lancé
+   délégué ici. Les cartes par classe d'actifs et « Horizons jamais lancés » pré-remplissent la sélection du formulaire (rien n'est lancé
    avant « Lancer ») ; « Runs conseillés » analyse à la demande, demande confirmation puis met en file. */
 (function () {
     "use strict";
@@ -35,7 +35,7 @@
     }
     function reveal(select) { select.scrollIntoView({ behavior: "smooth", block: "center" }); }
 
-    function selectNever(button) {
+    function selectClass(button) {
         var select = targetSelect();
         if (!select) return;
         var n = pick(select, new Set(JSON.parse(button.dataset.symbols)));
@@ -90,7 +90,7 @@
     root.addEventListener("click", function (ev) {
         var button = ev.target.closest("[data-batch]");
         if (!button || button.disabled) return;
-        if (button.dataset.batch === "never") selectNever(button);
+        if (button.dataset.batch === "class") selectClass(button);
         else if (button.dataset.batch === "missing") selectMissing(button);
         else if (button.dataset.batch === "recommended") recommended(button);
     });

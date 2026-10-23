@@ -251,7 +251,7 @@ def explain_last_prediction(target: str, horizon: int, db_path: str | None = Non
         pred_class = int(latest["y_pred"])
 
         nf = len(feature_names)
-        if getattr(model, "is_deep", False):
+        if getattr(model, "is_deep", False) or getattr(model, "is_stack", False):     # ni l'un ni l'autre n'est un arbre : Shapley par permutation
             contrib, base_value, units = _deep_contributions(model, full_pool, feature_names, scaler, sel_idx, ts, pred_class)
             final_value = base_value + float(np.sum(contrib))
             raw_values = row[feature_names].iloc[0]

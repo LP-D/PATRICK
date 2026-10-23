@@ -132,12 +132,7 @@
             <label>{{ t('field_yf_coverage') }}
                 <input type="number" step="any" min="0" max="1" name="yf_coverage" value="{{ view.yf_coverage }}">
             </label>
-            <label>{{ t('field_universe_scope') }}{{ info('universe', t('gl_label_universe')) }}
-                <select name="universe_scope">
-                    <option value="default" {% if view.universe_scope != 'extended' %}selected{% endif %}>{{ t('universe_scope_default') }}</option>
-                    <option value="extended" {% if view.universe_scope == 'extended' %}selected{% endif %}>{{ t('universe_scope_extended') }}</option>
-                </select>
-            </label>
+            <p class="hint">{{ t('field_universe_scope') }}{{ info('universe', t('gl_label_universe')) }} : {{ t('universe_scope_always_extended') }}</p>
             <label>{{ t('field_reduction_corr_threshold') }}{{ info('reduction') }}
                 <input type="number" step="any" min="0" max="1" name="reduction_corr_threshold" value="{{ view.reduction_corr_threshold }}">
             </label>
@@ -394,6 +389,10 @@
             <label class="checkbox">
                 <input type="checkbox" name="stacking" {% if view.stacking %}checked{% endif %}>
                 {{ t('field_stacking') }}{{ info('stacking') }}
+            </label>
+            <label>{{ t('field_stacking_n_models') }}{{ info('stacking_n_models') }}
+                <input type="number" step="1" min="{{ stacking_bounds[0] }}" max="{{ stacking_bounds[1] }}" name="stacking_n_models" value="{{ view.stacking_n_models }}">
+                <p class="hint">{{ t('stacking_n_models_hint') }}</p>
             </label>
             </div>
         </details>

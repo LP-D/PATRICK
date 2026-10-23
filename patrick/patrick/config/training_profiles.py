@@ -60,7 +60,9 @@ PROFILES: tuple[TrainingProfile, ...] = (
     TrainingProfile("ensemble", "high", {
         "algos": ALL_ALGOS, "stacking": True, "calibration": True, "n_trials": 120, "top_k": 2}, icon="layers"),
     TrainingProfile("clustered", "medium", {"reduction_corr_threshold": 0.85, "n_features_grid": "5,6,7,8,9,10,11,12"}, icon="layers"),
-    TrainingProfile("wide_universe", "high", {"universe_scope": "extended", "reduction_corr_threshold": 0.9}, icon="globe"),
+    TrainingProfile("stacking", "medium", {
+        "stacking": True, "stacking_n_models": 20, "algos": ["XGBoost", "LightGBM", "RandomForest"], "tuning_enabled": False,
+        "staged_screening": True, "n_features_grid": "8,12,16"}, icon="layers"),
     TrainingProfile("balanced", "medium", {
         "sampler_candidates": ["SMOTE", "BorderlineSMOTE", "SMOTETomek"], "uniqueness_weights": True}, icon="layers"),
     TrainingProfile("alpha", "medium", {"target_kind": "alpha"}, needs="equity", icon="trending-up"),
