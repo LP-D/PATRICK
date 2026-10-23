@@ -31,6 +31,30 @@ def _code_strings(source: str):
             yield node.lineno, node.value
 
 
+_COMPONENTS = {"store", "models", "feature_cache", "cache", "backups", "archive", "reports"}
+
+
+def _builds_a_component_from_the_settings_folder(source: str):
+    """`runtime.data_dir() / "backups"` : un dossier de la racine de données bâti sur le dossier maison (qui ne se déplace pas)."""
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and isinstance(node.right, ast.Constant)
+                and node.right.value in _COMPONENTS and isinstance(node.left, ast.Call)):
+            func = node.left.func
+            if (isinstance(func, ast.Attribute) and func.attr == "data_dir") or (isinstance(func, ast.Name) and func.id == "data_dir"):
+                yield node.lineno, node.right.value
+
+
+def test_no_data_component_is_built_from_the_settings_folder():
+    offenders = []
+    for root in SCANNED:
+        for path in sorted(root.rglob("*.py")):
+            if ".venv" in path.parts:
+                continue
+            for line, name in _builds_a_component_from_the_settings_folder(path.read_text(encoding="utf-8")):
+                offenders.append(f"{path.relative_to(PACKAGE)}:{line}: data_dir() / {name!r} (utiliser patrick.paths)")
+    assert not offenders, "dossiers de la racine de données bâtis sur le dossier maison :\n" + "\n".join(offenders)
+
+
 def test_the_home_folder_is_written_only_in_paths_py():
     offenders = []
     for root in SCANNED:

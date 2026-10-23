@@ -158,9 +158,10 @@ _RULES: list[tuple[str, str]] = [
      "PyTorch is not installed: neural networks are unavailable. Install it with: {cmd} (or {alt})."),
     (r"« (?P<l>.+?) » : (?P<rest>.+)", "“{l}”: {rest}"),
     # --- paths.py : disque de données absent
-    (r"Le disque de données (?P<p>.+) est introuvable\. Branche-le ou change le réglage `data_root` "
-     r"\(page Réglages ou `patrick data status`\)\.",
-     "The data disk {p} was not found. Plug it in or change the `data_root` setting (Settings page or `patrick data status`)."),
+    (r"Le disque de données (?P<p>.+) est introuvable\. Branche-le, ou lance `patrick data use <dossier>` "
+     r"\(ou `patrick data use --none`\) pour changer de racine de données\.",
+     "The data disk {p} was not found. Plug it in, or run `patrick data use <folder>` (or `patrick data use --none`) to change "
+     "the data root."),
 ]
 _COMPILED = [(re.compile(pat, re.DOTALL), en) for pat, en in _RULES]
 

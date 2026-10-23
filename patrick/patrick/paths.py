@@ -52,8 +52,8 @@ def configured_data_root() -> Path | None:
 
 
 def _unavailable_message(root: Path) -> str:
-    return (f"Le disque de données {root} est introuvable. Branche-le ou change le réglage `{KEY_DATA_ROOT}` "
-            "(page Réglages ou `patrick data status`).")
+    return (f"Le disque de données {root} est introuvable. Branche-le, ou lance `patrick data use <dossier>` "
+            "(ou `patrick data use --none`) pour changer de racine de données.")
 
 
 def data_root() -> Path:

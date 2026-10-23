@@ -4,6 +4,7 @@ Tout se passe sur des arbres et de petites bases sous `tmp_path` : jamais le vra
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -230,8 +231,10 @@ def test_cli_move_stops_on_a_blocking_precondition(pc, monkeypatch):
 
 OLD_STORE = r"C:\Users\leonp\.patrick\store"
 NEW_STORE = r"D:\PATRICK DATA\store"
+windows_only = pytest.mark.skipif(os.name != "nt", reason="chemins Windows : lettre de lecteur, antislash, casse insensible")
 
 
+@windows_only
 def test_rebase_path_handles_mixed_separators_and_case():
     mixed = r"C:\Users\leonp/.patrick/store\snapshot=2026-07-28\raw_IDX_VIX__02b2bd20a711.parquet"   # tel que dans _index.json
 
@@ -242,6 +245,7 @@ def test_rebase_path_handles_mixed_separators_and_case():
     assert data_move.rebase_path(OLD_STORE, OLD_STORE, NEW_STORE) == NEW_STORE
 
 
+@windows_only
 def test_rebase_path_leaves_other_paths_alone():
     assert data_move.rebase_path(r"C:\Users\leonp\.patrick\models\1\m.joblib", OLD_STORE, NEW_STORE) is None
     assert data_move.rebase_path(r"C:\Users\leonp\.patrick\store2\x.parquet", OLD_STORE, NEW_STORE) is None   # préfixe, pas un dossier parent
@@ -254,7 +258,8 @@ def prepare(pc, *, extra_models: tuple[str, ...] = (), copy: bool = True) -> Sim
     model.parent.mkdir(parents=True)
     model.write_bytes(b"model")
     relative = "runs\\GSPC_34\\GSPC_34_best_model_h1.joblib"
-    db = make_db(pc.home / "patrick.db", [str(model), relative, None, "", "C:\\ailleurs\\x.joblib",
+    elsewhere = str(pc.tmp / "ailleurs" / "x.joblib")                  # absolu sur tout système, jamais existé
+    db = make_db(pc.home / "patrick.db", [str(model), relative, None, "", elsewhere,
                                          *(str(pc.home / "models" / name / "x.joblib") for name in extra_models)])
     store = pc.home / "store"
     (store / "snapshot=2026-07-28").mkdir(parents=True)
@@ -265,7 +270,7 @@ def prepare(pc, *, extra_models: tuple[str, ...] = (), copy: bool = True) -> Sim
     target = pc.tmp / "PATRICK DATA"
     if copy:
         data_move.copy_components(str(target))
-    return SimpleNamespace(db=db, target=target, model=model, relative=relative, store=store)
+    return SimpleNamespace(db=db, target=target, model=model, relative=relative, store=store, elsewhere=elsewhere)
 
 
 def artifact_paths(db: str) -> list:
@@ -283,14 +288,14 @@ def test_switch_rewrites_only_the_absolute_model_paths_and_the_copied_index_then
 
     journal = data_move.switch(str(p.target), db_path=p.db)
 
-    assert artifact_paths(p.db) == [new_model, p.relative, None, "", "C:\\ailleurs\\x.joblib"]
+    assert artifact_paths(p.db) == [new_model, p.relative, None, "", p.elsewhere]
     new_index = json.loads((p.target / "store" / "_index.json").read_text(encoding="utf-8"))
     assert new_index["k"]["snapshots"][0]["path"] == str(p.target / "store" / "snapshot=2026-07-28" / "a__1.parquet")
     assert (p.store / "_index.json").read_bytes() == source_index                  # l'index de la source ne bouge pas
     assert settings.load()["data_root"] == str(p.target) and paths.data_root() == p.target
     assert journal["artifact_paths"] == [[1, str(p.model), new_model]] and journal["target"] == str(p.target)
     assert json.loads((pc.home / data_move.JOURNAL_NAME).read_text(encoding="utf-8")) == journal
-    assert data_move.status()["unresolved"] == {"artifact_paths": 1, "store_index": 0}   # « C:\ailleurs » n'a jamais existé
+    assert data_move.status()["unresolved"] == {"artifact_paths": 1, "store_index": 0}   # `elsewhere` n'a jamais existé
 
 
 def test_a_second_switch_changes_nothing_and_keeps_the_journal(pc):

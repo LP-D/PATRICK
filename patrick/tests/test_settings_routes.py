@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import sync
+from patrick import paths, sync
 from patrick.desktop import launcher, prefs, runtime, share, update
 from patrick.webapp import i18n, nav_registry, settings_routes
 from patrick.webapp.app import app
@@ -125,8 +125,8 @@ def test_overview_describes_this_pc(client, tmp_path):
 
 
 def test_overview_counts_backups(client):
-    folder = runtime.data_dir() / "backups"
-    folder.mkdir(parents=True)
+    folder = paths.backups_dir()                              # les sauvegardes vivent dans la racine de données
+    folder.mkdir(parents=True, exist_ok=True)
     (folder / "patrick_backup_20261007_233000.db").write_bytes(b"x")
     (folder / "autre.txt").write_text("x")
     assert client.get("/api/app/overview").json()["backups"]["count"] == 1

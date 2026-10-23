@@ -39,6 +39,7 @@ def test_home_and_data_folders_come_from_paths(home):
     assert by["archive"] == str(paths.archive_dir()) and by["logs"] == str(home / "logs")
 
 
+@pytest.mark.skipif(os.name != "nt", reason="lettres de lecteur Windows")
 def test_both_volumes_hold_data_when_the_data_root_is_on_another_disk(home, monkeypatch):
     from types import SimpleNamespace
 

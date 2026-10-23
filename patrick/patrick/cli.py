@@ -899,6 +899,8 @@ def data_status_cmd() -> None:
     else:
         typer.echo(f"Racine de données : {s['data_root']} ({'disponible' if s['available'] else 'INTROUVABLE'})")
     typer.echo(f"Dossier maison : {s['home']} ; base : {s['db']}")
+    for var, value in s["env_overrides"].items():
+        typer.echo(f"Variable d'environnement posée : {var} = {value} (prime sur le réglage)")
     for volume in s["volumes"]:
         typer.echo(f"Volume de {volume['path']} : {volume['free_gb']} Go libres")
     for c in s["components"]:
@@ -947,6 +949,8 @@ def data_move_cmd(
             typer.echo(f"Refusé : {exc}", err=True)
             raise typer.Exit(code=1) from None
         typer.echo(f"Ancien emplacement supprimé : {', '.join(out['removed']) or 'rien à supprimer'}.")
+        if out["kept"]:
+            typer.echo(f"Conservés (leur emplacement actif est encore dans l'ancien dossier) : {', '.join(out['kept'])}.")
         return
     if not folder:
         typer.echo("Refusé : indique le dossier de destination (par exemple \"D:\\PATRICK DATA\").", err=True)
@@ -977,13 +981,35 @@ def data_move_cmd(
 
 
 @data_app.command(name="rollback")
-def data_rollback_cmd() -> None:
+def data_rollback_cmd(force: bool = typer.Option(False, "--force", help="Même si l'application a créé des fichiers sur la nouvelle racine")) -> None:
     """Annule la bascule d'un déplacement (réglage et chemins d'origine rétablis). Impossible après `--finalize`."""
     from patrick import data_move
 
     try:
-        data_move.rollback()
+        data_move.rollback(force=force)
     except data_move.MoveError as exc:
         typer.echo(f"Refusé : {exc}", err=True)
         raise typer.Exit(code=1) from None
     typer.echo("Retour arrière fait : l'état d'origine est rétabli (l'ancien emplacement n'avait pas été touché).")
+
+
+@data_app.command(name="use")
+def data_use_cmd(
+    folder: str = typer.Argument(None, help="Racine de données existante à utiliser, par exemple \"D:\\PATRICK DATA\""),
+    none: bool = typer.Option(False, "--none", help="Retire le réglage : les données reviennent dans le dossier maison"),
+) -> None:
+    """Change la racine de données SANS rien déplacer (disque mort, dossier déplacé à la main). Refusé si un déplacement est en
+    attente (finalise-le ou annule-le d'abord)."""
+    from patrick import data_move
+
+    if bool(folder) == bool(none):
+        typer.echo("Refusé : indique un dossier, ou --none (pas les deux, pas aucun).", err=True)
+        raise typer.Exit(code=1)
+    try:
+        out = data_move.use_root(None if none else folder)
+    except data_move.MoveError as exc:
+        typer.echo(f"Refusé : {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Racine de données : {out['data_root'] or 'aucune (dossier maison)'}.")
+    if out["env_override"]:
+        typer.echo("Attention : la variable d'environnement PATRICK_DATA_ROOT est posée et prime sur ce réglage.", err=True)
