@@ -15,7 +15,7 @@ import json
 import os
 import shutil
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from patrick.desktop import runtime
@@ -126,10 +126,15 @@ def _pip_install(project_dir: Path) -> tuple[int, str]:
 
 
 def _backup_database(project_dir: Path) -> tuple[int, str]:
+    from patrick.tracking import backup as trackbackup
     from patrick.tracking import db as trackdb
 
     if not os.path.exists(trackdb.default_db_path()):
         return 0, "pas de base à sauvegarder"
+    age = trackbackup.latest_backup_age()
+    if age is not None and age < timedelta(hours=trackbackup.RECENT_BACKUP_HOURS):
+        hours = max(0, int(age.total_seconds() // 3600))
+        return 0, f"sauvegarde récente (il y a {hours} h) : pas de nouvelle copie"
     proc = runtime.run_hidden(
         [runtime.console_python(), str(project_dir / "scripts" / "backup_db.py"), "--log-file",
          str(runtime.log_dir() / "backup.log")], cwd=project_dir, timeout=900)

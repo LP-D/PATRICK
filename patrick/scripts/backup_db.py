@@ -30,6 +30,7 @@ import sys
 import time
 
 from patrick.tracking.backup import (
+    DEFAULT_KEEP_COUNT,
     DEFAULT_RETENTION_DAYS,
     backup_database,
 )
@@ -65,6 +66,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Purge apres la sauvegarde les fichiers de --backup-dir plus vieux que N jours "
              f"(0 pour desactiver la purge, defaut : {DEFAULT_RETENTION_DAYS}).",
     )
+    parser.add_argument(
+        "--keep", type=int, default=DEFAULT_KEEP_COUNT,
+        help="Nombre de sauvegardes completes conservees apres celle-ci (0 pour desactiver le plafond, "
+             f"defaut : {DEFAULT_KEEP_COUNT}).",
+    )
     args = parser.parse_args(argv)
 
     handlers: list[logging.Handler] = [logging.StreamHandler()]
@@ -82,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         dest_path = backup_database(
             args.source, args.backup_dir, pages=args.pages, sleep_s=args.sleep,
-            retention_days=args.retention_days,
+            retention_days=args.retention_days, keep=args.keep,
         )
     except FileNotFoundError as exc:
         logger.error("Sauvegarde annulee : %s", exc)
