@@ -378,9 +378,16 @@ def _default_store_root() -> str:
     return str(paths.store_dir())
 
 
+def _project_dir() -> Path:
+    """Dossier du projet (celui qui contient `runs/` et le paquet `patrick/`) : le dossier de travail du worker, auquel se rapportent
+    les `trial.artifact_path` relatifs, quel que soit le dossier de travail du processus qui publie (la tâche planifiée Windows
+    démarre dans `C:\\Windows\\System32`)."""
+    return Path(__file__).resolve().parents[1]
+
+
 def _default_models_roots() -> list[str]:
     home = str(paths.home_dir())
-    roots = [os.getcwd(), home, os.path.join(home, "runs")]
+    roots = [str(_project_dir()), os.getcwd(), home, os.path.join(home, "runs")]
     try:
         roots.append(str(paths.models_dir()))
     except paths.DataRootUnavailable:        # disque de données absent : ses modèles « ne sont pas sur ce PC »
