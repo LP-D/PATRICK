@@ -15,7 +15,7 @@ jobs:
         # October 2026) -- exercise the range it advertises (3.11/3.12), not just one.
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
@@ -70,7 +70,7 @@ jobs:
       OPENBLAS_CORETYPE: Haswell
       NPY_ENABLE_CPU_FEATURES: X86_V3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
@@ -98,7 +98,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
