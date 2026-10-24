@@ -14,7 +14,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from patrick.fund import asset_classes, autopilot, instruments, service, store, systematic
+from patrick.fund import (
+    asset_classes,
+    autopilot,
+    instruments,
+    service,
+    store,
+    systematic,
+)
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
 from patrick.webapp import instruments as display_names
