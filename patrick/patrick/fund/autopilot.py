@@ -17,7 +17,6 @@ import logging
 import math
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import timezone
 
 import pandas as pd
 
@@ -250,7 +249,7 @@ def run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None
     strategy, stored, settings = _enabled(conn, strategy_id)
     plan = build_plan(conn, strategy, settings, today)
     desired = {(m["target"], m["horizon"]): m for m in plan["selected"]}
-    report: dict = {"day": today.isoformat(), "at": dt.datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    report: dict = {"day": today.isoformat(), "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                     "selected": len(desired), "created": [], "updated": [], "retired": [], "failed": [], "refused": [],
                     "placed": 0, "pending": 0}
 

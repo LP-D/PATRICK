@@ -1158,8 +1158,8 @@ def fund_autopilot_run_cmd(
 @fund_app.command(name="autopilot-classes")
 def fund_autopilot_classes_cmd(
     create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les stratégies et active leur pilote ; sans cette option : aperçu"),
-    only: list[str] = typer.Option(None, "--class", help="Seulement cette classe (répétable)"),
-    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),
+    only: list[str] = typer.Option(None, "--class", help="Seulement cette classe (répétable)"),  # noqa: B008 -- liste : valeur par défaut de typer
+    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
     tier: str = typer.Option("large", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
     capital: float = typer.Option(100_000, "--capital", help="Capital d'une stratégie créée"),
