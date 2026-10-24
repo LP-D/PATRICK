@@ -6,7 +6,17 @@
 {% set fam_label = {'ml': t('nav_ml'), 'dl': t('nav_dl'), 'rl': t('nav_rl')} %}
 {% set fam_url = {'ml': '/ml', 'dl': '/dl', 'rl': '/rl'} %}
 <h1 class="page-title">{{ t('nav_runs') }}</h1>
-<p class="page-subtitle">{{ t('hist_subtitle') }}</p>
+<p class="page-subtitle">{{ t('ah_subtitle') if view == 'analyses' else t('hist_subtitle') }}</p>
+
+{# Deux vues d'un même historique : la liste des runs, et leurs analyses transverses (ancienne page « Analyses », fusionnée ici). #}
+<nav class="kind-tabs view-tabs" aria-label="{{ t('hist_view_aria') }}">
+    <a href="/runs" class="kind-tab{% if view != 'analyses' %} active{% endif %}">{{ t('hist_view_runs') }} <span class="kind-count">{{ n_all_runs }}</span></a>
+    <a href="/runs?vue=analyses" class="kind-tab{% if view == 'analyses' %} active{% endif %}">{{ t('hist_view_analyses') }}</a>
+</nav>
+
+{% if view == 'analyses' %}
+{% include "_runs_analyses.html" %}
+{% else %}
 
 {# Trois familles qui ne se mélangent jamais : le machine learning (arbres), le deep learning (réseaux de neurones, mêmes mesures que le
    ML) et le reinforcement learning (un agent qui apprend une position, mesuré comme une stratégie). Sans onglet choisi, une section par
@@ -170,7 +180,9 @@
             <td class="num pk-mono">{{ '%.1f %%' | format(r.max_drawdown * 100) if r.max_drawdown is not none else '—' }}</td>
             <td class="num pk-mono">{{ '%.1f %%' | format(r.dsr * 100) if r.dsr is not none else '—' }}</td>
             <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
-            <td class="hc-actions">{% if not locked %}
+            <td class="hc-actions">{% if r.status == 'done' %}
+                <a class="icon-btn" href="/runs/{{ r.run_id | urlencode }}/analyse" aria-label="{{ t('hist_open_analysis') }} {{ r.run_id }}" title="{{ t('hist_open_analysis') }}">{{ icon('analyses', 14) }}</a>
+            {% endif %}{% if not locked %}
                 <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
                       data-confirm="{{ t('rlh_del_confirm_done') if r.status == 'done' else t('rlh_del_confirm_error') }}" data-confirm-label="{{ t('pat_delete') }}" data-confirm-danger>
                     <button type="submit" class="icon-btn danger" aria-label="{{ t('pat_delete') }} {{ r.run_id }}" title="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>
@@ -218,7 +230,9 @@
             <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>
             <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'pred') }}</td>
             <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
-            <td class="hc-actions">{% if not locked %}
+            <td class="hc-actions">{% if r.status == 'done' %}
+                <a class="icon-btn" href="/runs/{{ r.run_id | urlencode }}/analyse" aria-label="{{ t('hist_open_analysis') }} {{ r.run_id }}" title="{{ t('hist_open_analysis') }}">{{ icon('analyses', 14) }}</a>
+            {% endif %}{% if not locked %}
                 <button type="button" class="icon-btn" data-rename="{{ r.run_id }}" data-name="{{ (r.name or r.run_id) | safe }}" aria-label="{{ t('rn_rename_btn') }} {{ r.run_id }}" title="{{ t('rn_rename_btn') }}">{{ icon('pencil', 14) }}</button>
                 <form method="post" action="/runs/{{ r.run_id }}/delete" class="inline-form"
                       data-confirm="{{ t('rn_del_confirm') }}" data-confirm-label="{{ t('pat_delete') }}" data-confirm-danger>
@@ -265,5 +279,6 @@
         {% for fam in (['ml', 'dl', 'rl'] if not filter_family else [filter_family]) %}<a href="{{ fam_url[fam] }}">{{ fam_label[fam] }}</a>{{ ' · ' if not loop.last }}{% endfor %}.
     </p>
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -1,142 +1,11 @@
-/* Page /analyses : tous les entraînements (ML, DL, RL) dans un tableau filtrable et triable, carte cible × horizon, distribution des
-   scores par algorithme, nuage des runs RL. Données : /api/analyses/index puis /api/analyses/maps. */
+/* Vue « Analyses » de l'Historique (/runs?vue=analyses, ancienne page /analyses) : carte cible × horizon, distribution des scores par
+   algorithme, nuage des runs RL. La liste des runs est l'autre vue de la page (runs.html) : elle porte un lien d'analyse par ligne.
+   Données : /api/analyses/maps. */
 (function () {
     "use strict";
     var PK = window.PK, root = document.getElementById("ah-root");
     if (!PK || !root) return;
-    var T = PK.T, h = PK.h, num = PK.num, pct = PK.pct, int = PK.int, isNum = PK.isNum;
-    var st = { sel: [], rows: [], q: "", kind: "", status: "done", horizon: "", noSuspect: false, sortKey: "started_at", sortDir: -1, page: 0, per: 100 };
-
-    // ---------------------------------------------------------------- colonnes
-    function badge(kind) { return h("span", { class: "ra-kind ra-kind-" + kind, text: kind.toUpperCase() }); }
-    function dash(v, f) { return isNum(v) ? f(v) : "—"; }
-    function pickCell(r) {
-        if ((r.kind !== "ml" && r.kind !== "dl") || r.status !== "done") return "";
-        var cb = h("input", { type: "checkbox", "aria-label": T("ac_c_pick") });
-        cb.checked = st.sel.indexOf(r.id) >= 0;
-        cb.addEventListener("change", function () {
-            var i = st.sel.indexOf(r.id);
-            if (cb.checked && i < 0) { if (st.sel.length >= 4) { cb.checked = false; return; } st.sel.push(r.id); }
-            if (!cb.checked && i >= 0) st.sel.splice(i, 1);
-            updateCompare();
-        });
-        return cb;
-    }
-    function updateCompare() {
-        var a = document.getElementById("ah-compare");
-        if (!a) return;
-        var ok = st.sel.length >= 2;
-        a.textContent = T("ac_compare_selected", { n: st.sel.length });
-        a.setAttribute("aria-disabled", String(!ok));
-        a.classList.toggle("disabled", !ok);
-        a.href = ok ? "/analyses/comparer?" + st.sel.map(function (i) { return "run_ids=" + encodeURIComponent(i); }).join("&") : "#";
-    }
-    var COLS = [
-        { key: "pick", label: "ac_c_pick", cell: pickCell, sort: function (r) { return st.sel.indexOf(r.id) >= 0 ? 0 : 1; } },
-        { key: "kind", label: "ah_c_kind", cell: function (r) { return badge(r.kind); }, sort: function (r) { return r.kind; } },
-        { key: "name", label: "ah_c_name", cell: function (r) { return h("a", { class: "ra-cell-link", href: r.url, text: r.name || r.id }); }, sort: function (r) { return (r.name || r.id || "").toLowerCase(); } },
-        { key: "target", label: "ah_c_target", cell: function (r) { return r.target || "—"; }, sort: function (r) { return (r.target || "").toLowerCase(); } },
-        { key: "horizon", label: "ah_c_horizon", num: true, cell: function (r) { return r.horizon === null || r.horizon === undefined ? "—" : String(r.horizon); }, sort: function (r) { return r.horizon; } },
-        { key: "algo", label: "ah_c_algo", cell: function (r) { return r.algo || "—"; }, sort: function (r) { return (r.algo || "").toLowerCase(); } },
-        { key: "n_features", label: "ah_c_nfeat", num: true, cell: function (r) { return r.n_features === null || r.n_features === undefined ? "—" : String(r.n_features); }, sort: function (r) { return r.n_features; } },
-        { key: "status", label: "ah_c_status", cell: function (r) { return statusChip(r); }, sort: function (r) { return r.status; } },
-        { key: "f1_test", label: "ah_c_f1_test", num: true, cell: function (r) { return r.kind === "rl" ? dash(r.sharpe, function (v) { return "S " + num(v, 2); }) : dash(r.f1_test, function (v) { return num(v, 3); }); }, sort: function (r) { return r.kind === "rl" ? r.sharpe : r.f1_test; } },
-        { key: "f1_holdout", label: "ah_c_f1_hold", num: true, cell: function (r) { return r.kind === "rl" ? dash(r.sharpe_bh, function (v) { return "BH " + num(v, 2); }) : dash(r.f1_holdout, function (v) { return num(v, 3); }); }, sort: function (r) { return r.kind === "rl" ? r.sharpe_bh : r.f1_holdout; } },
-        { key: "auc_test", label: "ah_c_auc", num: true, cell: function (r) { return r.kind === "rl" ? dash(r.dsr, function (v) { return "DSR " + pct(v, 0); }) : dash(r.auc_test, function (v) { return num(v, 3); }); }, sort: function (r) { return r.kind === "rl" ? r.dsr : r.auc_test; } },
-        { key: "dm_p", label: "ah_c_dm", num: true, cell: function (r) { return dash(r.dm_p, PK.pval); }, sort: function (r) { return r.dm_p; } },
-        { key: "n_trials", label: "ah_c_trials", num: true, cell: function (r) { return r.n_trials === null || r.n_trials === undefined ? "—" : String(r.n_trials); }, sort: function (r) { return r.n_trials; } },
-        { key: "started_at", label: "ah_c_started", cell: function (r) { return (r.started_at || "—").slice(0, 16); }, sort: function (r) { return r.started_at || ""; } },
-    ];
-    function statusChip(r) {
-        var kind = r.status === "done" ? "ok" : (r.status === "failed" || r.status === "error" ? "neg" : "neutral");
-        var span = PK.chip(r.status + (r.suspect ? " ⚠" : ""), r.suspect ? "warn" : kind);
-        if (r.suspect) span.title = T("ah_suspect");
-        return span;
-    }
-
-    // ---------------------------------------------------------------- filtres
-    function filtered() {
-        var q = st.q.trim().toLowerCase();
-        return st.rows.filter(function (r) {
-            if (st.kind && r.kind !== st.kind) return false;
-            if (st.status === "done" && r.status !== "done") return false;
-            if (st.status === "failed" && r.status !== "failed" && r.status !== "error") return false;
-            if (st.status === "active" && ["running", "queued", "paused"].indexOf(r.status) < 0) return false;
-            if (st.horizon && String(r.horizon) !== st.horizon) return false;
-            if (st.noSuspect && r.suspect) return false;
-            if (q && ((r.name || "") + " " + (r.target || "") + " " + (r.algo || "") + " " + r.id).toLowerCase().indexOf(q) < 0) return false;
-            return true;
-        });
-    }
-    function buildFilters() {
-        var box = document.getElementById("ah-filters");
-        PK.clear(box);
-        var search = h("input", { type: "search", placeholder: T("ah_filter_q"), "aria-label": T("ah_filter_q"), value: st.q });
-        search.addEventListener("input", function () { st.q = search.value; st.page = 0; drawTable(); });
-        box.appendChild(search);
-        box.appendChild(PK.select([{ value: "", label: T("ah_all_kinds") }, { value: "ml", label: "ML" }, { value: "dl", label: "DL" }, { value: "rl", label: "RL" }], st.kind, function (v) { st.kind = v; st.page = 0; drawTable(); }, T("ah_f_kind")));
-        box.appendChild(PK.select([{ value: "done", label: T("ah_st_done") }, { value: "", label: T("ah_all_status") }, { value: "active", label: T("ah_st_active") }, { value: "failed", label: T("ah_st_failed") }], st.status, function (v) { st.status = v; st.page = 0; drawTable(); }, T("ah_f_status")));
-        var hs = Array.from(new Set(st.rows.map(function (r) { return r.horizon; }).filter(function (v) { return v !== null && v !== undefined; }))).sort(function (a, b) { return a - b; });
-        box.appendChild(PK.select([{ value: "", label: T("ah_all_horizons") }].concat(hs.map(function (v) { return { value: String(v), label: String(v) }; })), st.horizon, function (v) { st.horizon = v; st.page = 0; drawTable(); }, T("ah_f_horizon")));
-        var cb = h("input", { type: "checkbox" });
-        cb.checked = st.noSuspect;
-        cb.addEventListener("change", function () { st.noSuspect = cb.checked; st.page = 0; drawTable(); });
-        box.appendChild(h("label", { class: "ra-control" }, [cb, h("span", { text: T("ah_hide_suspect") })]));
-        box.appendChild(h("a", { id: "ah-compare", class: "btn-secondary", href: "#", title: T("ac_pick_hint") }));
-        updateCompare();
-    }
-
-    // ---------------------------------------------------------------- tableau
-    function drawKpis() {
-        var box = document.getElementById("ah-kpis");
-        PK.clear(box);
-        var c = {}, done = 0, failed = 0;
-        st.rows.forEach(function (r) { c[r.kind] = (c[r.kind] || 0) + 1; if (r.status === "done") done++; if (r.status === "failed" || r.status === "error") failed++; });
-        box.appendChild(PK.kpi(T("ah_k_total"), int(st.rows.length), T("ah_k_total_sub", { d: int(done), f: int(failed) }), "neutral"));
-        ["ml", "dl", "rl"].forEach(function (k) { box.appendChild(PK.kpi(T("ah_k_" + k), int(c[k] || 0), T("ah_k_" + k + "_sub"), "neutral")); });
-    }
-    function drawTable() {
-        var host = document.getElementById("ah-table"), rows = filtered();
-        var col = COLS.filter(function (c) { return c.key === st.sortKey; })[0] || COLS[COLS.length - 1];
-        rows.sort(function (a, b) {
-            var x = col.sort(a), y = col.sort(b), nx = x === null || x === undefined || (typeof x === "number" && !isFinite(x)), ny = y === null || y === undefined || (typeof y === "number" && !isFinite(y));
-            if (nx && ny) return 0;
-            if (nx) return 1;
-            if (ny) return -1;
-            return (x < y ? -1 : (x > y ? 1 : 0)) * st.sortDir;
-        });
-        var pages = Math.max(1, Math.ceil(rows.length / st.per));
-        st.page = Math.min(st.page, pages - 1);
-        var slice = rows.slice(st.page * st.per, (st.page + 1) * st.per);
-        var thead = h("tr", {}, COLS.map(function (c) {
-            var th = h("th", { scope: "col", class: c.num ? "num pk-mono" : "", text: T(c.label), "aria-sort": c.key === st.sortKey ? (st.sortDir > 0 ? "ascending" : "descending") : "none", tabindex: "0" });
-            function sortBy() { if (st.sortKey === c.key) st.sortDir = -st.sortDir; else { st.sortKey = c.key; st.sortDir = c.num ? -1 : 1; } drawTable(); }
-            th.addEventListener("click", sortBy);
-            th.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); sortBy(); } });
-            return th;
-        }));
-        var tbody = h("tbody", {}, slice.map(function (r) {
-            return h("tr", { class: r.suspect ? "row-suspect" : "" }, COLS.map(function (c) {
-                var td = h("td", { class: c.num ? "num pk-mono" : "" });
-                var v = c.cell(r);
-                if (v && v.nodeType) td.appendChild(v); else td.textContent = v;
-                return td;
-            }));
-        }));
-        PK.clear(host).appendChild(h("div", { class: "table-scroll" }, [h("table", { class: "data-table ra-sortable" }, [h("thead", {}, [thead]), tbody])]));
-        host.appendChild(PK.info(T("ah_rows", { n: int(rows.length), total: int(st.rows.length) })));
-        var pager = document.getElementById("ah-pager");
-        PK.clear(pager);
-        if (pages > 1) {
-            var prev = h("button", { type: "button", class: "btn-secondary", text: T("ah_prev") }), next = h("button", { type: "button", class: "btn-secondary", text: T("ah_next") });
-            prev.disabled = st.page === 0; next.disabled = st.page >= pages - 1;
-            prev.addEventListener("click", function () { st.page--; drawTable(); });
-            next.addEventListener("click", function () { st.page++; drawTable(); });
-            pager.appendChild(prev); pager.appendChild(h("span", { class: "pk-mono", text: (st.page + 1) + " / " + pages })); pager.appendChild(next);
-        }
-        host.dispatchEvent(new CustomEvent("patrick:content", { bubbles: true }));
-    }
-
+    var T = PK.T, h = PK.h, num = PK.num, pct = PK.pct, isNum = PK.isNum;
     // ---------------------------------------------------------------- carte cible × horizon
     function drawMap(d) {
         var host = document.getElementById("ah-map"), metric = "f1_holdout", query = "", per = 40;
@@ -216,14 +85,6 @@
     }
 
     // ---------------------------------------------------------------- démarrage
-    PK.fetchJSON("/api/analyses/index").then(function (d) {
-        st.rows = d.rows;
-        drawKpis();
-        buildFilters();
-        drawTable();
-    }).catch(function (e) {
-        PK.clear(document.getElementById("ah-table")).appendChild(h("p", { class: "banner banner-error", role: "alert", text: T("ra_error") + " " + e.message }));
-    });
     PK.fetchJSON("/api/analyses/maps").then(function (d) { drawMap(d); drawAlgos(d); drawRL(d); }).catch(function (e) {
         ["ah-map", "ah-algos", "ah-rl"].forEach(function (id) { PK.clear(document.getElementById(id)).appendChild(PK.empty(T("ra_error") + " " + e.message)); });
     });

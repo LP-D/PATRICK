@@ -1093,11 +1093,14 @@ def download_artifact(run_id: str, artifact: str):
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
                    scheme: str | None = None, q: str | None = None, algo: str | None = None,
-                   kind: str | None = None, family: str | None = None,
+                   kind: str | None = None, family: str | None = None, vue: str | None = None,
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0)):
     """Phase 7.1 — full run-history explorer.
+
+    Deux vues sur la même page : la liste des runs (défaut) et, avec `vue=analyses`, les analyses transverses (carte cible × horizon, scores
+    par algorithme, nuage RL — ancienne page `/analyses`, dessinées par `analyses_hub.js`).
 
     Trois familles qui ne se mélangent jamais : machine learning (arbres), deep learning (réseaux de neurones : mêmes tables `run` et
     mêmes mesures que le ML) et reinforcement learning (table `job` seule, mesures de performance de stratégie). `family` en choisit une ;
@@ -1114,6 +1117,11 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     by_family = {"ml": [r for r in all_runs if r.get("family") != "dl"], "dl": [r for r in all_runs if r.get("family") == "dl"],
                  "rl": _rl_history_rows()}
     family_counts = {f: len(rows) for f, rows in by_family.items()}
+    if vue == "analyses":
+        ctx = _i18n_context(request)
+        ctx["i18n_js"] = i18n.js_strings(ctx["lang"], "/analyses")        # textes du navigateur des pages d'analyse
+        return templates.TemplateResponse(
+            request, "runs.html", {"view": "analyses", "family_counts": family_counts, "n_all_runs": sum(family_counts.values()), **ctx})
     family = family if family in by_family else None
     scope = (family,) if family else tuple(by_family)
 
@@ -1157,7 +1165,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
     return templates.TemplateResponse(
         request, "runs.html",
-        {"family_sections": sections, "n_listed": sum(len(s["runs"]) for s in sections), "targets": targets,
+        {"view": "list", "family_sections": sections, "n_listed": sum(len(s["runs"]) for s in sections), "targets": targets,
          "filter_family": family or "", "family_counts": family_counts, "scope_dm": scope_dm, "scope_rl": scope_rl,
          "filter_target": html.escape(target) if target else "",
          "filter_status": html.escape(status) if status else "",

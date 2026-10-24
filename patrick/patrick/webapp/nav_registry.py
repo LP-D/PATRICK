@@ -70,13 +70,14 @@ GROUPS: tuple[NavGroup, ...] = (
 NAV_ENTRIES: tuple[NavEntry, ...] = (
     # PILOTAGE -- piloter la station : vue d'ensemble, suivi des modeles, signaux, recherche, sante des donnees.
     NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
+    # Historique = la liste des runs ET leurs analyses (vue « Analyses » : carte cible x horizon, scores par algorithme, nuage RL) ;
+    # la page d'analyse d'un run et la comparaison detaillee en dependent.
     NavEntry("runs", "Historique", "/runs", "pilotage", 20, "nav_runs", group="suivi",
-             child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs")),
-    NavEntry("analyses", "Analyses", "/analyses", "pilotage", 21, "nav_analyses", group="suivi",
-             child_routes=("/runs/{run_id}/analyse", "/analyses/comparer")),
-    NavEntry("models_registry", "Registre de modèles", "/modeles", "pilotage", 22, "nav_models_registry", group="suivi",
+             child_routes=("/runs/{run_id}", "/runs/{run_id}/detail", "/compare-runs",
+                           "/runs/{run_id}/analyse", "/analyses/comparer")),
+    NavEntry("models_registry", "Registre de modèles", "/modeles", "pilotage", 21, "nav_models_registry", group="suivi",
              child_routes=("/modeles/fiche",)),
-    NavEntry("guardrails", "Garde-fous", "/garde-fous", "pilotage", 23, "nav_guardrails", group="suivi"),
+    NavEntry("guardrails", "Garde-fous", "/garde-fous", "pilotage", 22, "nav_guardrails", group="suivi"),
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 30, "nav_predictions", group="signaux"),
     NavEntry("drift", "Dérive", "/derive", "pilotage", 31, "nav_drift", group="signaux"),
     NavEntry("journal", "Journal", "/journal", "pilotage", 32, "nav_journal", group="signaux"),
@@ -139,6 +140,7 @@ NON_PAGE_ROUTES: frozenset[str] = frozenset({
     "/patrimoine-simulation",   # redirection permanente vers /fonds (ancienne page « Simulateur patrimoine »)
     "/equities",                # redirection permanente vers /equity (ancienne page « Actions individuelles »)
     "/data-freshness",          # redirection permanente vers /universe (page « Fraîcheur » fusionnée avec l'Univers)
+    "/analyses",                # redirection permanente vers /runs?vue=analyses (page « Analyses » fusionnée avec l'Historique)
 })
 
 
@@ -167,8 +169,6 @@ def _child_pattern(route: str) -> re.Pattern[str]:
 def is_active(entry: NavEntry, path: str) -> bool:
     """`/` en egalite stricte, les autres par prefixe de segment (`/runs` allume `/runs/{id}/detail`) ; une page enfant declaree dans
     `child_routes` allume aussi son entree (`/targets/^VIX` allume Univers, `/compare-runs` allume Historique)."""
-    if path.startswith("/runs/") and path.endswith("/analyse"):
-        return entry.slug == "analyses"          # l'analyse d'un run allume « Analyses », pas « Historique » (même préfixe /runs)
     if entry.url == "/":
         return path == "/"
     return (path == entry.url or path.startswith(entry.url + "/")

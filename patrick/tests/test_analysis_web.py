@@ -75,11 +75,36 @@ def test_api_forwards_query_parameters(client):
     assert r.json()["available"] is False
 
 
-def test_nav_entry_and_utility_pages_are_registered(client):
-    c, _ = client
-    assert c.get("/analyses").status_code == 200
-    # la palette de commandes et la barre latérale proposent la page
-    assert 'href="/analyses"' in c.get("/").text
+def test_the_analyses_page_is_now_a_view_of_the_history(client):
+    c, info = client
+    # l'ancienne adresse redirige (liens et marque-pages conservés) vers la vue « Analyses » de l'Historique
+    moved = c.get("/analyses", follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "/runs?vue=analyses"
+    page = c.get("/runs?vue=analyses")
+    assert page.status_code == 200
+    for anchor in ('id="carte"', 'id="algos"', 'id="rl"'):
+        assert anchor in page.text, anchor
+    assert 'src="/static/analyses_hub.js' in page.text and 'history-table' not in page.text   # ni liste ni script de la liste
+    # la page porte les deux onglets de vue, « Analyses » actif, et les textes du navigateur des pages d'analyse
+    assert re.search(r'class="kind-tab active"[^>]*>\s*Analyses', page.text) or 'href="/runs?vue=analyses" class="kind-tab active"' in page.text
+    assert "ra_cls3" in page.text
+    # la barre latérale n'a plus d'entrée « Analyses » : Historique reste allumé, sur la vue comme sur l'analyse d'un run
+    for path in ("/runs?vue=analyses", f"/runs/{info['run_id']}/analyse"):
+        html = c.get(path).text
+        side = re.search(r'<nav class="sidebar-nav".*?</nav>', html, re.DOTALL).group(0)
+        assert 'href="/analyses"' not in side
+        assert re.search(r'<a href="/runs"[^>]*aria-current="page"', side), path
+    from patrick.webapp import nav_registry
+    runs_entry = next(e for e in nav_registry.NAV_ENTRIES if e.slug == "runs")
+    assert nav_registry.is_active(runs_entry, "/analyses/comparer")          # la comparaison détaillée dépend aussi de l'Historique
+    assert not any(e.slug == "analyses" for e in nav_registry.NAV_ENTRIES)
+
+
+def test_each_finished_run_of_the_list_links_to_its_detailed_analysis(client):
+    c, info = client
+    html = c.get("/runs").text
+    assert f'href="/runs/{info["run_id"]}/analyse"' in html
+    assert 'href="/runs?vue=analyses"' in html      # l'autre vue de la page
 
 
 def test_js_strings_ship_on_analysis_pages_only(client):

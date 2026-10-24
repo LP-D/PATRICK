@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -458,8 +458,9 @@ def register(app: FastAPI, templates, context) -> None:
         return JSONResponse(await run_in_threadpool(work))
 
     @app.get("/analyses")
-    def analyses_page(request: Request):
-        return templates.TemplateResponse(request, "analyses.html", context(request))
+    def analyses_page():
+        """Ancienne page « Analyses » : fusionnée dans l'Historique (vue « Analyses ») ; liens et marque-pages conservés."""
+        return RedirectResponse("/runs?vue=analyses", status_code=308)
 
     @app.get("/api/analyses/index")
     async def analyses_index():
