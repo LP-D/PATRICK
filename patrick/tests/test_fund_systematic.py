@@ -328,15 +328,18 @@ def test_a_rule_reads_the_recorded_probability_of_a_rise_not_the_confidence_of_t
         {"ts": pd.Timestamp("2026-01-06"), "action": "open", "side": "long", "score": 0.62}]
 
 
-def test_a_model_without_the_probability_of_a_rise_cannot_back_a_rule(conn):
+def test_a_model_without_the_probability_of_a_rise_cannot_back_a_threshold_rule_but_a_direction_rule(conn):
     sid = store.create_strategy(conn, "Macro CTO", "CTO", 100_000, "2026-01-05")
     tid = _model(conn, with_p_up=False)
     _finish(conn, tid)
     with pytest.raises(store.FundError, match=r"P\(hausse\)"):
         systematic.create_rule(conn, sid, "ML seuils", _config(tid))
-    assert systematic.available_models(conn) == []                                  # et il n'est pas proposé
+    (offered,) = systematic.available_models(conn)                                  # il est proposé : tous les modèles le sont
+    assert offered["trial_id"] == tid and offered["segments"] == {"holdout": len(SCORES)} and offered["pup_segments"] == {}
     with pytest.raises(store.FundError, match=r"P\(hausse\)"):
         systematic.load_scores(conn, {"trial_id": tid, "segment": "holdout"})
+    direction = {**_config(tid), "signal": {"mode": "direction"}}                   # le mode direction n'a pas besoin de p_up
+    assert systematic.create_rule(conn, sid, "Direction", direction)
 
 
 def _finish(conn, trial_id):

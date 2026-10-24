@@ -27,10 +27,11 @@ import numpy as np
 import pandas as pd
 
 from patrick.config import defaults as D
+from patrick.config import universe_extension as UX
 from patrick.config.schema import RunConfig
 from patrick.config.target_label import split_run_label
 from patrick.features import alpha_target
-from patrick.fund import prices, service, store
+from patrick.fund import instruments, prices, service, store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
@@ -118,6 +119,11 @@ def validate_config(config: dict) -> dict:
     for key in ("since", "retired_on"):
         if config.get(key) is not None:
             out[key] = _date(config[key], key)
+    if config.get("follow_champion") is not None:
+        if not isinstance(config["follow_champion"], bool):
+            raise store.FundError("follow_champion invalide : booléen attendu")
+        if config["follow_champion"]:
+            out["follow_champion"] = True
     if config.get("managed") is not None:
         if not isinstance(config["managed"], dict):
             raise store.FundError("managed invalide : objet attendu")
@@ -449,11 +455,40 @@ def p_up_segments(conn: sqlite3.Connection, trial_id: int) -> dict[str, int]:
     return {seg: complete[seg] for seg in ("test", "holdout", "live") if seg in complete}
 
 
-def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
-    """Essais gagnants dont on peut rejouer les signaux : un run terminé, jamais un horizon descriptif (pas un
-    signal de portefeuille), au moins un signal dans un segment. Les modèles en titre d'abord, puis les plus récents.
-    Seuls les essais qui enregistrent une P(hausse) (`prediction.p_up`) sont proposés : les seuils portent sur elle.
-    Un modèle d'alpha (`kind == "alpha"`) se trade en paire couverte contre son benchmark."""
+def instrument_hint(symbol: str, groups: dict[str, str]) -> dict:
+    """Instrument conseillé pour trader la cible d'un modèle : action ou ETF au comptant quand c'est un titre coté, sinon CFD
+    (indice, devise, matière première, future continu, crypto, volatilité, taux). `groups` : symbole -> groupe de l'univers."""
+    sym = symbol.upper()
+    if instruments.classify_cfd_underlying(sym) == "equity" and not sym.endswith(".NYB"):
+        return {"kind": "etf" if "ETF" in groups.get(symbol, "") else "equity", "symbol": sym}
+    return {"kind": "cfd", "symbol": sym}
+
+
+def _chunks(items: list, size: int = 500):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def _signal_segments(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict[str, tuple[int, int]]]:
+    """`{essai: {segment: (lignes, lignes avec p_up)}}` en une requête groupée par paquet d'essais."""
+    out: dict[int, dict[str, tuple[int, int]]] = {}
+    for chunk in _chunks(trial_ids):
+        marks = ",".join("?" for _ in chunk)
+        for trial_id, split, n, with_p in conn.execute(
+                f"SELECT trial_id, split, COUNT(*), SUM(p_up IS NOT NULL) FROM prediction WHERE trial_id IN ({marks}) "
+                "AND y_proba IS NOT NULL AND split IN ('test', 'holdout', 'live') GROUP BY trial_id, split", chunk):
+            out.setdefault(trial_id, {})[split] = (int(n), int(with_p or 0))
+    return out
+
+
+def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
+    """TOUS les modèles qu'une règle peut rejouer : un par cellule (cible x horizon), le champion en titre ou, à défaut, le
+    meilleur essai du dernier run terminé ; jamais un horizon descriptif ; au moins un signal. Les champions d'abord.
+
+    `segments` : segments qui ont des signaux ; `pup_segments` : ceux dont TOUTES les lignes portent une P(hausse) (seuls
+    utilisables avec des seuils ; le mode « direction » n'en a pas besoin) ; `dm_p` : p de Diebold-Mariano du run (None si
+    absent) ; `instrument_hint` : action/ETF au comptant ou CFD sur la cible. Un modèle d'alpha (`kind == "alpha"`) se trade
+    en paire couverte contre son benchmark."""
     descriptive = sorted(D.DESCRIPTIVE_HORIZONS)
     rows = conn.execute(
         "SELECT trial.trial_id, trial.run_id, trial.algo, run.target, run.horizon, run.started_at, "
@@ -461,22 +496,74 @@ def available_models(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
         "FROM trial JOIN run ON run.run_id = trial.run_id "
         "LEFT JOIN champion ON champion.trial_id = trial.trial_id "
         f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
-        "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC LIMIT ?", (*descriptive, limit)).fetchall()
-    headline = trackdb.batch_best_metrics(conn, [r[1] for r in rows])
+        "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC", descriptive).fetchall()
+    seen: set[tuple[str, int]] = set()
+    cells = []
+    for row in rows:                                     # un modèle par cellule : le premier (champion, sinon le plus récent)
+        if (row[3], row[4]) not in seen:
+            seen.add((row[3], row[4]))
+            cells.append(row)
+    cells = cells[:limit]
+    segments = _signal_segments(conn, [c[0] for c in cells])
+    run_ids = [c[1] for c in cells]
+    headline: dict = {}
+    dm_p: dict[str, float] = {}
+    for chunk in _chunks(run_ids):
+        headline.update(trackdb.batch_best_metrics(conn, chunk))
+        marks = ",".join("?" for _ in chunk)
+        dm_p.update(dict(conn.execute(f"SELECT run_id, p_value FROM dm_result WHERE kind = 'class_specific' "
+                                      f"AND run_id IN ({marks})", chunk).fetchall()))
+    groups = {sym: group for group, items in UX.all_target_groups().items() for sym, _ in items}
     out = []
-    for trial_id, run_id, algo, target, horizon, started_at, is_champion in rows:
-        segments = p_up_segments(conn, trial_id)
-        if segments:
-            asset, kind, benchmark = split_run_label(target)
-            scores = headline.get(run_id, {})
-            hold, test = scores.get("holdout", {}), scores.get("test", {})
-            out.append({"trial_id": trial_id, "run_id": run_id, "algo": algo, "target": target, "horizon": horizon,
-                        "started_at": started_at, "champion": bool(is_champion), "segments": segments,
-                        "kind": kind, "asset": asset, "benchmark": benchmark,
-                        "auc": hold.get("AUC_ovr_4cls", test.get("AUC_ovr_4cls")),
-                        "f1_dir": hold.get("F1_dir", test.get("F1_dir")),
-                        # un score impossible = fuite de données : un modèle suspect ne se trade jamais
-                        "suspect": suspicion.suspect_reason(hold) or suspicion.suspect_reason(test)})
+    for trial_id, run_id, algo, target, horizon, started_at, is_champion in cells:
+        by_split = segments.get(trial_id)
+        if not by_split:
+            continue
+        asset, kind, benchmark = split_run_label(target)
+        scores = headline.get(run_id, {})
+        hold, test = scores.get("holdout", {}), scores.get("test", {})
+        order = ("test", "holdout", "live")
+        out.append({"trial_id": trial_id, "run_id": run_id, "algo": algo, "target": target, "horizon": horizon,
+                    "started_at": started_at, "champion": bool(is_champion),
+                    "segments": {seg: by_split[seg][0] for seg in order if seg in by_split},
+                    "pup_segments": {seg: by_split[seg][0] for seg in order if seg in by_split and by_split[seg][0] == by_split[seg][1]},
+                    "kind": kind, "asset": asset, "benchmark": benchmark, "dm_p": dm_p.get(run_id),
+                    "instrument_hint": instrument_hint(asset, groups),
+                    "auc": hold.get("AUC_ovr_4cls", test.get("AUC_ovr_4cls")),
+                    "f1_dir": hold.get("F1_dir", test.get("F1_dir")),
+                    # un score impossible = fuite de données : un modèle suspect ne se trade jamais
+                    "suspect": suspicion.suspect_reason(hold) or suspicion.suspect_reason(test)})
+    return out
+
+
+def roll_to_champions(conn: sqlite3.Connection, today: dt.date | None = None) -> list[dict]:
+    """Remplace par le champion en titre le modèle de chaque règle `follow_champion` (segment live) quand un meilleur modèle a
+    été entraîné. Même principe que le pilote : l'ancienne règle est retirée (plus de signal après la veille, ses positions
+    se ferment) et une règle neuve, aux mêmes réglages, démarre aujourd'hui avec le champion. Si la règle neuve est refusée
+    (modèle suspect, pas de P(hausse) pour des seuils...), l'ancienne reste en place. Renvoie un compte rendu par règle."""
+    today = service._today(today)
+    yesterday = (today - dt.timedelta(days=1)).isoformat()
+    out: list[dict] = []
+    for strategy in store.list_strategies(conn):
+        for rule in list_rules(conn, strategy["strategy_id"]):
+            cfg = rule["config"]
+            if not cfg.get("follow_champion") or "retired_on" in cfg or cfg["segment"] != "live":
+                continue
+            cell = conn.execute("SELECT run.target, run.horizon FROM trial JOIN run ON run.run_id = trial.run_id "
+                                "WHERE trial.trial_id = ?", (cfg["trial_id"],)).fetchone()
+            champion = conn.execute("SELECT trial_id FROM champion WHERE target = ? AND horizon = ?", cell).fetchone() if cell else None
+            if champion is None or champion[0] == cfg["trial_id"]:
+                continue
+            fresh = {k: v for k, v in cfg.items() if k != "retired_on"}
+            fresh.update(trial_id=champion[0], since=today.isoformat())
+            try:
+                created = create_rule(conn, strategy["strategy_id"], rule["name"], fresh)
+            except store.FundError as exc:
+                out.append({"strategy_id": strategy["strategy_id"], "rule_id": rule["rule_id"], "error": str(exc)})
+                continue
+            retire_rule(conn, rule["rule_id"], yesterday)
+            out.append({"strategy_id": strategy["strategy_id"], "retired": rule["rule_id"], "created": created,
+                        "trial_id": champion[0]})
     return out
 
 
@@ -528,10 +615,20 @@ def _events(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
     """Événements d'une règle : `signal` / `requested` (ISO), `action`, `side`, `score`. Les règles à seuils et à tenue
     « signal » gardent l'hystérésis d'origine ; toutes les autres passent par la machine directionnelle."""
     if cfg["signal"]["mode"] == "score" and cfg["hold"]["mode"] == "signal":
-        return [{"signal": sig["ts"].date().isoformat(),
-                 "requested": (sig["ts"] + pd.Timedelta(days=1)).date().isoformat(), "action": sig["action"],
-                 "side": sig["side"], "score": sig["score"], "reason": "signal"}
-                for sig in decide(load_scores(conn, cfg), cfg["enter"], cfg["exit"], cfg["allow_short"])]
+        scores = load_scores(conn, cfg)
+        if cfg.get("since"):
+            scores = scores[scores.index >= pd.Timestamp(cfg["since"])]
+        retired = cfg.get("retired_on")
+        if retired:
+            scores = scores[scores.index <= pd.Timestamp(retired)]
+        events = [{"signal": sig["ts"].date().isoformat(),
+                   "requested": (sig["ts"] + pd.Timedelta(days=1)).date().isoformat(), "action": sig["action"],
+                   "side": sig["side"], "score": sig["score"], "reason": "signal"}
+                  for sig in decide(scores, cfg["enter"], cfg["exit"], cfg["allow_short"])]
+        if retired and events and events[-1]["action"] == "open":      # règle retirée : la position ouverte se ferme le lendemain
+            events.append({"signal": retired, "requested": (pd.Timestamp(retired) + pd.Timedelta(days=1)).date().isoformat(),
+                           "action": "close", "side": events[-1]["side"], "score": None, "reason": "retired"})
+        return events
     sessions = cfg["hold"]["sessions"] if cfg["hold"]["mode"] == "horizon" else None
     return decide_directional(load_signals(conn, cfg), cfg["allow_short"], sessions, cfg.get("retired_on"))
 

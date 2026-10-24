@@ -18,7 +18,8 @@ from dataclasses import asdict, dataclass
 
 from patrick.clock import utc_today
 from patrick.config import defaults as D
-from patrick.config.target_label import is_alpha_label
+from patrick.config import universe_extension as UX
+from patrick.config.target_label import is_alpha_label, split_run_label
 from patrick.fund import store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
@@ -50,6 +51,8 @@ class Policy:
     alpha_bh: float = 0.10
     fresh_days: int = 7
     max_models: int = 40
+    horizons: tuple[int, ...] | None = None          # périmètre : seulement ces horizons (None = tous)
+    groups: tuple[str, ...] | None = None            # périmètre : seulement ces groupes de l'univers (classes d'actifs)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Policy:
@@ -64,10 +67,25 @@ class Policy:
                    alpha_dm=_probability(raw.get("alpha_dm", base.alpha_dm), "alpha_dm"),
                    alpha_bh=_probability(raw.get("alpha_bh", base.alpha_bh), "alpha_bh"),
                    fresh_days=_count(raw.get("fresh_days", base.fresh_days), "fresh_days", 365),
-                   max_models=_count(raw.get("max_models", base.max_models), "max_models", 500))
+                   max_models=_count(raw.get("max_models", base.max_models), "max_models", 500),
+                   horizons=_scope(raw.get("horizons"), "horizons", int), groups=_scope(raw.get("groups"), "groups", str))
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _scope(value, name: str, kind: type) -> tuple | None:
+    """Liste d'entiers >= 1 (horizons) ou de textes non vides (groupes) ; None = pas de restriction."""
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or not value:
+        raise store.FundError(f"{name} invalide : liste non vide attendue")
+    for item in value:
+        ok = (isinstance(item, int) and not isinstance(item, bool) and item >= 1) if kind is int else (
+            isinstance(item, str) and item.strip() != "")
+        if not ok:
+            raise store.FundError(f"{name} invalide : {'entiers >= 1' if kind is int else 'textes'} attendus ({item!r})")
+    return tuple(value)
 
 
 def _probability(value, name: str) -> float:
@@ -126,6 +144,12 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
         "SELECT champion.target, champion.horizon, champion.run_id, champion.trial_id, trial.algo "
         "FROM champion LEFT JOIN trial ON trial.trial_id = champion.trial_id "
         "ORDER BY champion.target, champion.horizon").fetchall()
+    total = len(champions)
+    if policy.horizons:
+        champions = [c for c in champions if c[1] in policy.horizons]
+    if policy.groups:
+        group_of = {sym: group for group, items in UX.all_target_groups().items() for sym, _ in items}
+        champions = [c for c in champions if group_of.get(split_run_label(c[0])[0]) in policy.groups]
     run_ids = sorted({c[2] for c in champions})
     metrics = {}
     for chunk in _chunks(run_ids):
@@ -187,7 +211,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     counts: dict[str, int] = {}
     for cell in excluded_cells:
         counts[cell["code"]] = counts.get(cell["code"], 0) + 1
-    return {"selected": selected, "n_cells": len(champions), "excluded_cells": excluded_cells,
+    return {"selected": selected, "n_cells": len(champions), "n_total": total, "excluded_cells": excluded_cells,
             "excluded": [{"code": code, "label": LABELS[code], "n": n} for code, n in counts.items()]}
 
 

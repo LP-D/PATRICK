@@ -170,3 +170,37 @@ def test_policy_round_trips_and_ignores_unknown_keys():
 
     assert policy.tier == "large" and policy.max_models == 12 and policy.alpha_dm == 0.05
     assert selection.Policy.from_dict(policy.to_dict()) == policy
+
+
+# --- périmètre : horizons et classes d'actifs (une stratégie par classe, à horizon 1) -----------------------------
+
+def test_the_scope_keeps_only_the_wanted_horizons_and_asset_groups(conn, world):
+    world.cell("GC=F", 1)
+    world.cell("GC=F", 5)
+    world.cell("CL=F", 1)
+    world.cell("AAPL", 1)
+    scope = selection.Policy(horizons=(1,), groups=("Matières premières (futures)",))
+
+    out = selection.select_models(conn, scope, today=TODAY)
+
+    assert [(m["target"], m["horizon"]) for m in out["selected"]] == [("CL=F", 1), ("GC=F", 1)]
+    assert out["n_cells"] == 2 and out["n_total"] == 4 and out["excluded"] == []      # hors périmètre : ni exclu ni compté
+
+
+def test_a_target_outside_every_group_is_never_in_a_group_scope(conn, world):
+    world.cell("AAA", 1)
+
+    out = selection.select_models(conn, selection.Policy(groups=("Matières premières (futures)",)), today=TODAY)
+
+    assert out["selected"] == [] and out["n_cells"] == 0
+
+
+def test_policy_scope_validation_and_round_trip():
+    policy = selection.Policy.from_dict({"horizons": [1, 5], "groups": ["Devises (majeures)"]})
+
+    assert policy.horizons == (1, 5) and policy.groups == ("Devises (majeures)",)
+    assert selection.Policy.from_dict(policy.to_dict()) == policy
+    assert selection.Policy().horizons is None and selection.Policy().groups is None
+    for bad in ({"horizons": [0]}, {"horizons": "1"}, {"horizons": [True]}, {"groups": "Devises"}, {"groups": [3]}):
+        with pytest.raises(store.FundError):
+            selection.Policy.from_dict(bad)
