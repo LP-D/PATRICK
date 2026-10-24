@@ -29,26 +29,18 @@ def test_migration_seeds_the_nine_confirmed_unavailable_symbols():
 
 
 def test_active_tickers_excludes_seeded_symbols_but_keeps_the_rest():
-    """Univers réduit (feature/universe-reduction) : des 9 symboles exclus
-    seedés par la migration 0013, LBS=F était le dernier encore présent dans
-    D.DEFAULT_UNIVERSE_YF_TICKERS ; il en est retiré le 2026-09-26 (plus
-    aucune cotation Yahoo). Les 8 autres appartenaient à des groupes
-    entièrement retirés. L'exclusion M1 reste en place pour tout univers
-    explicite (config YAML) qui les listerait encore -- calculé
-    dynamiquement plutôt que réaffirmé en dur."""
+    """Les 9 symboles exclus seedés par la migration 0013 ne doivent apparaître nulle part dans le périmètre du bandeau ; LBS=F, le
+    dernier encore présent dans D.DEFAULT_UNIVERSE_YF_TICKERS, en est retiré le 2026-09-26 (plus aucune cotation Yahoo). L'exclusion M1
+    reste en place pour tout univers explicite (config YAML) qui les listerait encore."""
     active = alerts._active_tickers()
     seeded_excluded = {"LBS=F", "HYLD", "TBP", "GXG", "LVRK", "TERM", "^EVZ", "CYB", "BZF"}
     assert "LBS=F" not in active
+    assert not seeded_excluded & set(active)
     still_in_universe = seeded_excluded & set(D.DEFAULT_UNIVERSE_YF_TICKERS)
     assert still_in_universe == set(), (
         "précondition du test invalide : le jeu de tickers seedés comme exclus "
         "présents dans l'univers réduit a changé, ce test doit être revu"
     )
-    # The ranked pool is every selectable yfinance target (a superset of the
-    # default feature pool): nothing of the default pool is lost, and no
-    # seeded-excluded symbol is present anywhere in it.
-    assert set(D.DEFAULT_UNIVERSE_YF_TICKERS) - set(active) == still_in_universe
-    assert not seeded_excluded & set(active)
 
 
 def test_compute_once_never_passes_an_excluded_symbol_to_download_batch_across_restarts(monkeypatch):
@@ -118,23 +110,42 @@ def test_loop_reapplies_the_exclusion_filter_on_every_periodic_cycle(monkeypatch
         assert "^EVZ" not in tickers, f"cycle {cycle_num} leaked an excluded symbol"
 
 
-def test_movers_rank_every_selectable_yfinance_target_not_just_the_feature_pool():
-    """« Plus fortes variations » proposait des symboles cliquables : le
-    classement doit donc couvrir TOUS les tickers yfinance sélectionnables au
-    lancement (univers réduit + actions + extension vérifiée), pas
-    seulement le pool de features par défaut (24 symboles)."""
+def test_the_banner_ranks_equities_fx_futures_the_vix_and_the_major_indices_only():
+    """Le bandeau ne garde que : actions individuelles, devises, futures, VIX et grands indices (décision du 2026-10-24) -- ni les
+    indices de volatilité autres que le VIX, ni les ETF sectoriels / pays / obligataires / matières premières, ni les cryptos."""
     from patrick.webapp import forms
 
     active = set(alerts._active_tickers())
-    selectable = {s for s, _, src in forms.TARGET_CHOICES if src == "yfinance"} - D.BAD_TICKERS
-    assert active == selectable
-    assert len(active) > 4 * len(D.DEFAULT_UNIVERSE_YF_TICKERS)
-    # un titre individuel, une action française de l'extension, un ETF, une action allemande
-    assert {"AMZN", "MC.PA", "XLK", "SAP.DE", "TSLA"} <= active
+    # un titre américain, une action française de l'extension, une allemande, une asiatique
+    assert {"AMZN", "MC.PA", "TSLA", "SAP.DE", "7203.T", "SHEL.L", "ASML.AS"} <= active
+    # devises : paires majeures, croisées et l'indice dollar
+    assert {"EURUSD=X", "GBPUSD=X", "USDJPY=X", "DX-Y.NYB"} <= active
+    # futures : matières premières, compléments et taux
+    assert {"GC=F", "CL=F", "ZC=F", "PL=F", "ZN=F"} <= active
+    # le VIX et les indices les plus connus
+    assert {"^VIX", "^GSPC", "^DJI", "^IXIC", "^NDX", "^RUT", "^FCHI", "^GDAXI", "^FTSE", "^STOXX50E", "^N225", "^HSI", "000001.SS"} <= active
+    # indices de volatilité autres que le VIX
+    assert not {"^VIX3M", "^VVIX", "^VXN", "^OVX", "^GVZ", "^MOVE", "^SKEW", "^VIX9D", "^VXD"} & active
+    # ETF trop spécialisés ou hors périmètre, cryptos, taux en indice, indices de niche
+    assert not {"XLK", "XBI", "KRE", "ITB", "SMH", "TLT", "HYG", "EWJ", "EEM", "GLD", "USO", "BTC-USD", "ETH-USD", "^TNX", "^SOX", "^DJT", "^NYA"} & active
+    # tout ce qui reste est un titre, une devise, un future, le VIX ou un grand indice
+    for sym in active:
+        group = next((g for g, items in forms.TARGET_GROUPS.items() if any(s == sym for s, _ in items)), None)
+        assert alerts.is_mover_symbol(sym, group), sym
     # le fonds FRED n'est pas téléchargeable chez Yahoo
     assert "VIXCLS" not in active
     assert alerts._label_for("MC.PA") == "LVMH"
     assert alerts._label_for("INCONNU") == "INCONNU"
+    assert len(active) > 250                                         # des centaines d'actions : le périmètre reste large
+
+
+def test_is_mover_symbol_decides_by_symbol_shape_and_group():
+    assert alerts.is_mover_symbol("^VIX") and alerts.is_mover_symbol("^GSPC") and alerts.is_mover_symbol("GC=F")
+    assert alerts.is_mover_symbol("EURUSD=X") and alerts.is_mover_symbol("AAPL", "Actions US (méga-capitalisations)")
+    assert alerts.is_mover_symbol("DX-Y.NYB", "Devises")
+    assert not alerts.is_mover_symbol("^VVIX", "Volatilité") and not alerts.is_mover_symbol("XLK", "ETFs sectoriels & thématiques")
+    assert not alerts.is_mover_symbol("BTC-USD", "Crypto") and not alerts.is_mover_symbol("^TNX", "Taux US (indices CBOE)")
+    assert not alerts.is_mover_symbol("INCONNU")
 
 
 def test_compute_once_ranks_all_downloaded_symbols_and_reports_coverage(monkeypatch):
@@ -144,7 +155,7 @@ def test_compute_once_ranks_all_downloaded_symbols_and_reports_coverage(monkeypa
     data[alerts.clean_symbol("TSLA")] = [100.0] * 6 + [100.0, 105.0, 110.0, 115.0, 120.0, 130.0]
     data[alerts.clean_symbol("SAP.DE")] = [100.0] * 6 + [100.0, 95.0, 90.0, 85.0, 80.0, 70.0]
     frame = pd.DataFrame(data, index=days)
-    del_cols = [alerts.clean_symbol("XLK")]
+    del_cols = [alerts.clean_symbol("GC=F")]
     frame = frame.drop(columns=del_cols)  # a symbol Yahoo silently failed to serve
     monkeypatch.setattr(alerts, "download_batch", lambda t, s: frame)
 

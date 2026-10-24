@@ -1,17 +1,14 @@
-"""Alert list (largest recent moves) over EVERY yfinance symbol selectable as
-a launch target (reduced default universe + individual equities + verified
-extension, i.e. `forms.TARGET_CHOICES`) — computed in the background every
-30 minutes and cached: downloading it on every page load would be too slow
-on this many tickers (per user decision). Independent from
-`patrick.data.ingest` (which caches a full run): here we just want a quick,
-regularly refreshed snapshot. Error/status strings in `_cache` are
-user-facing and stay in French, matching the rest of the web interface.
+"""Bandeau des plus fortes variations : classement des variations sur 5 jours des symboles yfinance du PÉRIMÈTRE DU BANDEAU
+(`_mover_pool`) parmi les cibles sélectionnables au lancement -- actions individuelles, devises, futures, VIX et grands indices
+mondiaux. Calculé en arrière-plan toutes les 30 minutes et mis en cache : le télécharger à chaque chargement de page serait trop lent
+sur autant de tickers (décision de l'utilisateur). Indépendant de `patrick.data.ingest` (qui met en cache un run complet) : on veut
+seulement un instantané rapide et régulièrement rafraîchi. Les chaînes d'erreur/état de `_cache` sont affichées telles quelles et restent
+en français, comme le reste de l'interface web.
 
-The ranked pool is the launch form's target list, NOT the default feature
-pool (`D.DEFAULT_UNIVERSE_YF_TICKERS`): a mover is a candidate target, so
-every ticker the user can click must be ranked — equities and extended
-symbols included. `n_ranked`/`n_requested` in the cache expose the actual
-coverage so a silent provider gap is visible in the UI.
+Le périmètre est volontairement étroit (décision du 2026-10-24) : sans lui, le classement se remplissait d'indices de volatilité
+(VIX3M, VVIX, MOVE...), d'ETF sectoriels très spécialisés, d'ETF de pays ou d'obligations, qui ne sont pas ce que l'on veut lire dans un
+bandeau. Chaque symbole du bandeau reste cliquable comme cible : `n_ranked`/`n_requested` du cache exposent la couverture réelle, pour
+qu'un trou du fournisseur reste visible dans l'interface.
 """
 from __future__ import annotations
 
@@ -40,12 +37,36 @@ def get_cached() -> dict:
         return dict(_cache)
 
 
-def _yf_target_symbols() -> list[str]:
-    """Every yfinance symbol offered as a launch target, in display order,
-    deduplicated, minus the known-bad blocklist."""
+# Périmètre du bandeau. Actions et devises : par groupe du formulaire de lancement ; futures : symbole en « =F » ; volatilité : le VIX
+# seul ; indices : une liste fermée des plus connus (pas les indices de niche : semi-conducteurs, transports, petits marchés).
+MOVER_EQUITY_GROUP_PREFIX = "Actions"
+MOVER_FX_GROUPS = frozenset({"Devises", "Devises (majeures)"})
+MOVER_VOLATILITY_SYMBOLS = frozenset({"^VIX"})
+MOVER_INDEX_SYMBOLS = frozenset({
+    "^GSPC", "^DJI", "^IXIC", "^NDX", "^RUT",                    # États-Unis : S&P 500, Dow Jones, Nasdaq Composite et 100, Russell 2000
+    "^FCHI", "^GDAXI", "^FTSE", "^STOXX50E",                     # Europe : CAC 40, DAX, FTSE 100, Euro Stoxx 50
+    "^N225", "^HSI", "000001.SS",                                # Asie : Nikkei 225, Hang Seng, Shanghai Composite
+})
+
+
+def is_mover_symbol(symbol: str, group: str | None = None) -> bool:
+    """Le symbole figure-t-il dans le périmètre du bandeau ? `group` : son groupe du formulaire de lancement, s'il en a un."""
+    if symbol in MOVER_INDEX_SYMBOLS or symbol in MOVER_VOLATILITY_SYMBOLS:
+        return True
+    if symbol.endswith(("=F", "=X")):                           # futures ; paires de devises
+        return True
+    return group is not None and (group.startswith(MOVER_EQUITY_GROUP_PREFIX) or group in MOVER_FX_GROUPS)
+
+
+def _mover_pool() -> list[str]:
+    """Symboles yfinance du périmètre du bandeau, dans l'ordre d'affichage du formulaire, sans doublon, hors liste noire connue."""
+    group_of: dict[str, str] = {}
+    for group, items in forms.TARGET_GROUPS.items():
+        for sym, _label in items:
+            group_of.setdefault(sym, group)
     seen: dict[str, None] = {}
     for sym, _label, src in forms.TARGET_CHOICES:
-        if src == "yfinance" and sym not in D.BAD_TICKERS:
+        if src == "yfinance" and sym not in D.BAD_TICKERS and is_mover_symbol(sym, group_of.get(sym)):
             seen.setdefault(sym)
     return list(seen)
 
@@ -58,16 +79,15 @@ def _label_for(symbol: str) -> str:
 
 
 def _active_tickers() -> list[str]:
-    """All selectable yfinance targets (`_yf_target_symbols`) minus symbols
-    persisted as confirmed unavailable (M1, migration 0013) -- a symbol that
-    fails identically at every startup (delisted/invalid) must be excluded
-    once, not retried on every refresh forever."""
+    """Le périmètre du bandeau (`_mover_pool`) moins les symboles persistés comme confirmés indisponibles (M1, migration 0013) : un
+    symbole qui échoue de la même façon à chaque démarrage (retiré de la cote, invalide) doit être exclu une fois, pas retenté
+    indéfiniment à chaque rafraîchissement."""
     conn = trackdb.connect()
     try:
         excluded = {row["symbol"] for row in trackdb.list_excluded_symbols(conn)}
     finally:
         conn.close()
-    return [t for t in _yf_target_symbols() if t not in excluded]
+    return [t for t in _mover_pool() if t not in excluded]
 
 
 def _compute_once() -> None:
