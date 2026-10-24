@@ -66,6 +66,68 @@
     if (openBtn) openBtn.addEventListener("click", function () { setDrawer(true); });
     if (scrim) scrim.addEventListener("click", function () { setDrawer(false); });
 
+    /* ---- Arborescence de navigation (style explorateur de VS Code) ----
+       Categories et dossiers sont des boutons `aria-expanded` qui montrent / cachent la liste qui les suit. L'etat
+       (cle -> ouvert) est range dans localStorage['patrick-nav-tree'] ; le petit script de base_v2.html le rejoue avant le
+       premier rendu. Une branche qui contient la page courante s'ouvre toujours (`data-has-active`).
+       Clavier : ↑ ↓ passent d'une ligne visible a l'autre, → ouvre un dossier (puis entre dedans), ← le referme (puis remonte
+       au parent), Debut / Fin, Entree ou Espace ouvrent / ferment ; Tab reste le parcours habituel des liens visibles. */
+    var tree = document.getElementById("sidebar-tree");
+    if (tree) {
+        var TREE_KEY = "patrick-nav-tree";
+        var treeState = {};
+        try { treeState = JSON.parse(localStorage.getItem(TREE_KEY) || "{}") || {}; } catch (e) { treeState = {}; }
+        var ROW = ".sidebar-nav-heading, .nav-folder-btn, .nav-leaf a";
+        var boxButton = function (box) { return box.querySelector(":scope > button"); };
+        var boxList = function (box) { return box.querySelector(":scope > ul"); };
+        var isOpen = function (btn) { return btn.getAttribute("aria-expanded") === "true"; };
+        var setBox = function (box, open) {
+            var btn = boxButton(box), list = boxList(box);
+            if (!btn || !list) return;
+            btn.setAttribute("aria-expanded", open ? "true" : "false");
+            list.hidden = !open;
+            treeState[box.getAttribute("data-nav-key")] = open;
+        };
+        var saveTree = function () { store(TREE_KEY, JSON.stringify(treeState)); };
+        var visibleRows = function () {
+            return Array.prototype.filter.call(tree.querySelectorAll(ROW), function (r) { return r.offsetParent !== null; });
+        };
+        tree.addEventListener("click", function (e) {
+            var btn = e.target.closest ? e.target.closest(".sidebar-nav-heading, .nav-folder-btn") : null;
+            if (!btn || !tree.contains(btn)) return;
+            setBox(btn.parentElement, !isOpen(btn));
+            saveTree();
+        });
+        var allBoxes = function (open) {
+            Array.prototype.forEach.call(tree.querySelectorAll("[data-nav-key]"), function (box) { setBox(box, open); });
+            saveTree();
+        };
+        var collapseAll = document.getElementById("nav-collapse-all");
+        var expandAll = document.getElementById("nav-expand-all");
+        if (collapseAll) collapseAll.addEventListener("click", function () { allBoxes(false); });
+        if (expandAll) expandAll.addEventListener("click", function () { allBoxes(true); });
+        tree.addEventListener("keydown", function (e) {
+            var row = e.target.closest ? e.target.closest(ROW) : null;
+            if (!row || e.altKey || e.ctrlKey || e.metaKey) return;
+            var rows = visibleRows(), i = rows.indexOf(row), folder = row.matches(".sidebar-nav-heading, .nav-folder-btn");
+            var target = null;
+            if (e.key === "ArrowDown") target = rows[Math.min(rows.length - 1, i + 1)];
+            else if (e.key === "ArrowUp") target = rows[Math.max(0, i - 1)];
+            else if (e.key === "Home") target = rows[0];
+            else if (e.key === "End") target = rows[rows.length - 1];
+            else if (e.key === "ArrowRight" && folder) {
+                if (!isOpen(row)) { setBox(row.parentElement, true); saveTree(); return e.preventDefault(); }
+                target = rows[i + 1];
+            } else if (e.key === "ArrowLeft") {
+                if (folder && isOpen(row)) { setBox(row.parentElement, false); saveTree(); return e.preventDefault(); }
+                var holder = row.closest("ul") && row.closest("ul").parentElement;
+                target = holder ? boxButton(holder) : null;
+            } else return;
+            e.preventDefault();
+            if (target) target.focus();
+        });
+    }
+
     /* ---- Command palette ---- */
     var dialog = document.getElementById("cmdk");
     var input = document.getElementById("cmdk-input");

@@ -13,7 +13,11 @@
     "use strict";
 
     var DAY = 86400000;
-    var DEFAULTS = { type: "line", height: 240, zoomable: true, markers: "auto", legend: "auto", compact: false, connectGaps: false, ranges: false };
+    // Rendu « finance » (défaut des courbes) : axe des valeurs à droite, grille horizontale en pointillés, aire dégradée sous une courbe seule,
+    // étiquette du dernier point, réticule à pastilles. `trend` colore la courbe en vert / rouge selon la variation de la fenêtre ;
+    // `quote` ajoute l'en-tête de cotation (valeur, variation) ; `ohlc` + `candles` : bougies ; `volume` : barres sous la courbe.
+    var DEFAULTS = { type: "line", height: 240, zoomable: true, markers: "auto", legend: "auto", compact: false, connectGaps: false, ranges: false,
+                     finance: true, area: "auto", trend: false, baseline: false, quote: false, candles: false };
     var live = [];            // graphiques montés (redessinés au changement de thème, élagués une fois détachés du document)
 
     // ------------------------------------------------------------------ outils purs (testés sous Node)
@@ -114,6 +118,42 @@
         return [lo, hi];
     }
 
+    // Couleur (jeton résolu : « #rrggbb », « #rgb » ou « rgb(...) ») avec une opacité ; toute autre forme est rendue telle quelle.
+    function withAlpha(c, a) {
+        var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c || "");
+        if (m) {
+            var h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1], n = parseInt(h, 16);
+            return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+        }
+        var r = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(c || "");
+        return r ? "rgba(" + r[1] + "," + r[2] + "," + r[3] + "," + a + ")" : c;
+    }
+
+    // Variation sur la fenêtre [x0, x1] : premier et dernier points valides visibles → { i0, i1, first, last, abs, pct } (null si aucun).
+    function windowChange(xs, ys, x0, x1) {
+        var lo = lowerBound(xs, x0), hi = lowerBound(xs, x1 + 1e-9) - 1, a = -1, b = -1, i;
+        function ok(v) { return v !== null && v !== undefined && isFinite(v); }
+        for (i = lo; i <= hi; i++) if (ok(ys[i])) { a = i; break; }
+        for (i = hi; i >= lo; i--) if (ok(ys[i])) { b = i; break; }
+        if (a < 0 || b < 0) return null;
+        var first = ys[a], last = ys[b], abs = last - first;
+        return { i0: a, i1: b, first: first, last: last, abs: abs, pct: first !== 0 ? abs / Math.abs(first) * 100 : null };
+    }
+
+    // Bornes verticales d'une fenêtre pour des bougies : plus bas des « bas », plus haut des « hauts ».
+    function candleExtent(xs, highs, lows, x0, x1) {
+        var lo = Infinity, hi = -Infinity, i0 = lowerBound(xs, x0), i1 = lowerBound(xs, x1 + 1e-9);
+        for (var i = i0; i < i1; i++) {
+            var h = highs[i], l = lows[i];
+            if (h !== null && h !== undefined && isFinite(h) && h > hi) hi = h;
+            if (l !== null && l !== undefined && isFinite(l) && l < lo) lo = l;
+        }
+        return isFinite(lo) && isFinite(hi) ? [lo, hi] : null;
+    }
+
+    // Début d'année civile (ms UTC) de la dernière date : borne de la période « YTD ».
+    function yearStart(t) { return Date.UTC(new Date(t).getUTCFullYear(), 0, 1); }
+
     // ------------------------------------------------------------------ utilitaires d'environnement
     function lang() { return (root.document && root.document.documentElement.lang) || "fr"; }
     function tr(key, fallback) { var I = root.I18N || {}; return I[key] || fallback || key; }
@@ -165,6 +205,10 @@
         var minSpan = 1;
         var geo = null;                                   // géométrie du dernier tracé (pour la surcouche)
         var hover = null, drag = null, raf = 0, destroyed = false, pointers = {}, pinch = null;
+        var fin = o.finance !== false && !isBar;                                   // rendu « finance » (cf. DEFAULTS)
+        var hasOhlc = !!(o.ohlc && o.ohlc.open && o.ohlc.high && o.ohlc.low && series[0] && timeAxis);
+        var hasVol = !!(o.volume && o.volume.length && series[0] && timeAxis);
+        var mode = hasOhlc && o.candles ? "candle" : "line";
 
         host.classList.add("pp");
         host.textContent = "";
@@ -181,10 +225,23 @@
         }
         stage.appendChild(base); stage.appendChild(over); stage.appendChild(tip); stage.appendChild(tools);
         var legend = el("div", "pp-legend");
-        if (o.ranges && timeAxis) host.appendChild(bar);
+        var quoteEl = null, qVal = null, qChg = null, qDate = null;
+        if (o.quote && fin && timeAxis) {
+            quoteEl = el("div", "pp-quote");
+            var qId = el("div", "pp-quote-id");
+            if (o.title && o.quoteTitle !== false) qId.appendChild(el("strong", "pp-quote-title", { text: o.title }));
+            if (o.subtitle) qId.appendChild(el("span", "pp-quote-sub", { text: o.subtitle }));
+            var qNum = el("div", "pp-quote-num");
+            qVal = el("span", "pp-quote-val"); qChg = el("span", "pp-quote-chg"); qDate = el("span", "pp-quote-date");
+            qNum.appendChild(qVal); qNum.appendChild(qChg); qNum.appendChild(qDate);
+            quoteEl.appendChild(qId); quoteEl.appendChild(qNum);
+            host.appendChild(quoteEl);
+        }
+        if ((o.ranges || hasOhlc) && timeAxis) host.appendChild(bar);
         host.appendChild(stage);
         host.appendChild(legend);
         if (o.compact) host.classList.add("pp-compact");
+        if (fin) host.classList.add("pp-fin");                  // axe à droite : les outils de zoom passent à gauche
         stage.style.height = o.height + "px";
         stage.setAttribute("data-zoomed", "false");
 
@@ -240,6 +297,25 @@
         function schedule() { if (!raf && !destroyed) raf = root.requestAnimationFrame(function () { raf = 0; draw(); }); }
 
         var shown = false;                                // vrai dès que le graphique a été tracé dans le document
+        function inkFor(bg) {                             // encre lisible (claire ou sombre) sur une pastille de couleur `bg`
+            var m = /^#([0-9a-f]{6})$/i.exec(bg || ""), n = m ? parseInt(m[1], 16) : 0x5b8def;
+            var lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+            return lum > 0.6 ? "#0a0c10" : "#ffffff";
+        }
+        function chip(ctx, text, x, y, bg, fg, align) {   // pastille arrondie (valeur de l'axe, dernier point, date du réticule)
+            ctx.save();
+            ctx.font = '600 11px ' + (token("--mono") || "monospace");
+            var w = Math.ceil(ctx.measureText(text).width) + 12, h = 18, left = align === "center" ? x - w / 2 : (align === "right" ? x - w : x);
+            left = Math.max(1, Math.min(left, W - w - 1));
+            var top = Math.max(1, Math.min(y - h / 2, H - h - 1)), r = 4;
+            ctx.fillStyle = bg; ctx.beginPath();
+            ctx.moveTo(left + r, top); ctx.lineTo(left + w - r, top); ctx.quadraticCurveTo(left + w, top, left + w, top + r);
+            ctx.lineTo(left + w, top + h - r); ctx.quadraticCurveTo(left + w, top + h, left + w - r, top + h);
+            ctx.lineTo(left + r, top + h); ctx.quadraticCurveTo(left, top + h, left, top + h - r);
+            ctx.lineTo(left, top + r); ctx.quadraticCurveTo(left, top, left + r, top); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(text, left + 6, top + h / 2 + 0.5);
+            ctx.restore();
+        }
         function draw() {
             if (destroyed || !sizeCanvases()) return;
             if (host.isConnected) shown = true;
@@ -248,6 +324,7 @@
             ctx.clearRect(0, 0, W, H);
             var v = cur(), vx0 = v[0], vx1 = v[1];
             var visible = series.filter(function (s) { return !s.hidden; });
+            var candle = mode === "candle" && hasOhlc;
             // Repères (lignes, bande, seuils) : toujours inclus à la vue initiale ; une fois zoomé, seuls ceux proches des données comptent,
             // sinon un repère lointain empêcherait le recalcul de l'échelle. Bornes imposées (yMin/yMax) : vue initiale seulement.
             var marks = (o.hlines || []).map(function (l) { return l.y; });
@@ -258,7 +335,7 @@
                 if (o.yMin !== undefined) always.push(o.yMin);
                 if (o.yMax !== undefined) always.push(o.yMax);
             }
-            var ye = yExtent(series, vx0, vx1, view ? marks : [], always);
+            var ye = candle ? candleExtent(series[0].xs, o.ohlc.high, o.ohlc.low, vx0, vx1) : yExtent(series, vx0, vx1, view ? marks : [], always);
             var muted = token("--text-3"), grid = token("--chart-grid"), line = token("--line-strong"), font = '11px ' + (token("--mono") || "monospace");
             if (!ye || !visible.length) {
                 ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "left";
@@ -267,32 +344,42 @@
             }
             var lo = ye[0], hi = ye[1], pad = (hi - lo) * 0.06 || 0.5;
             lo -= (isBar && lo >= 0) ? 0 : pad; hi += pad;
-            var padT = 10, padB = 24, padR = 14;
-            var yTicks = niceTicks(lo, hi, Math.max(2, Math.min(7, Math.floor((H - padT - padB) / 44))));
+            var padT = 10, padB = 24, padR = 14, padL = 12;
+            var volOn = fin && hasVol, fullH = H - padT - padB, volH = volOn ? Math.max(30, Math.round(fullH * 0.2)) : 0;
+            var ph = fullH - (volOn ? volH + 8 : 0);                              // hauteur de la zone de prix (le volume est dessous)
+            var yTicks = niceTicks(lo, hi, Math.max(2, Math.min(7, Math.floor(ph / 44))));
             var dec = decimalsFor(yTicks.step), yFmt = o.yFmt ? function (x) { return o.yFmt(x, dec); } : function (x) { return numFmt(x, dec); };
             ctx.font = font;
-            var padL = 12;
-            yTicks.forEach(function (t) { padL = Math.max(padL, ctx.measureText(yFmt(t)).width + 14); });
-            padL = Math.min(padL, W * 0.4);
-            var pw = W - padL - padR, ph = H - padT - padB;
+            var labelW = 12;
+            yTicks.forEach(function (t) { labelW = Math.max(labelW, ctx.measureText(yFmt(t)).width + 14); });
+            if (fin) { padL = 8; padR = Math.min(Math.max(labelW + 6, 54), W * 0.4); } else padL = Math.min(labelW, W * 0.4);
+            var pw = W - padL - padR;
             function X(x) { return padL + (x - vx0) / (vx1 - vx0) * pw; }
             function Y(y) { return padT + (1 - (y - lo) / (hi - lo)) * ph; }
-            // grille et axe Y
-            ctx.lineWidth = 1; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+            // variation de la fenêtre (en-tête, couleur de tendance, ligne de départ) sur la première série visible
+            var ref0 = visible[0], ch = (fin && ref0) ? windowChange(ref0.xs, ref0.ys, vx0, vx1) : null;
+            var trendCol = (fin && o.trend && ch) ? token(ch.abs >= 0 ? "--pos" : "--neg") : null;
+            // grille et axe Y (à droite en rendu finance : grille horizontale en pointillés, rien de vertical)
+            ctx.lineWidth = 1; ctx.textBaseline = "middle";
             yTicks.forEach(function (t) {
                 var yy = Math.round(Y(t)) + 0.5;
-                ctx.strokeStyle = grid; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
-                ctx.fillStyle = muted; ctx.fillText(yFmt(t), padL - 8, yy);
+                ctx.strokeStyle = grid; if (fin) ctx.setLineDash([2, 4]);
+                ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = muted;
+                if (fin) { ctx.textAlign = "left"; ctx.fillText(yFmt(t), W - padR + 8, yy); }
+                else { ctx.textAlign = "right"; ctx.fillText(yFmt(t), padL - 8, yy); }
             });
             // axe X
             ctx.textBaseline = "alphabetic"; ctx.textAlign = "center";
             var xTicks = axisX(vx0, vx1, pw, ctx);
+            if (fin) { ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(padL, padT + fullH + 0.5); ctx.lineTo(W - padR, padT + fullH + 0.5); ctx.stroke(); }
             xTicks.forEach(function (tk) {
                 var xx = Math.round(X(tk.x)) + 0.5;
-                ctx.strokeStyle = grid; ctx.beginPath(); ctx.moveTo(xx, padT); ctx.lineTo(xx, padT + ph); ctx.stroke();
+                ctx.strokeStyle = grid;
+                ctx.beginPath(); ctx.moveTo(xx, fin ? padT + fullH : padT); ctx.lineTo(xx, fin ? padT + fullH + 4 : padT + ph); ctx.stroke();
                 ctx.fillStyle = muted; ctx.fillText(tk.label, Math.min(Math.max(xx, padL + 14), W - padR - 14), H - 7);
             });
-            ctx.save(); ctx.beginPath(); ctx.rect(padL, padT - 1, pw, ph + 2); ctx.clip();
+            ctx.save(); ctx.beginPath(); ctx.rect(padL, padT - 1, pw, fullH + 2); ctx.clip();
             if (o.band) { ctx.fillStyle = token("--neutral-soft"); ctx.fillRect(padL, Y(o.band[1]), pw, Math.max(0, Y(o.band[0]) - Y(o.band[1]))); }
             if (isBar && o.band) {
                 [o.band, -o.band].forEach(function (b) { ctx.strokeStyle = muted; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(padL, Y(b)); ctx.lineTo(W - padR, Y(b)); ctx.stroke(); ctx.setLineDash([]); });
@@ -302,11 +389,39 @@
                 ctx.setLineDash(dashOf(l.dash, [4, 4])); ctx.beginPath(); ctx.moveTo(padL, Y(l.y)); ctx.lineTo(W - padR, Y(l.y)); ctx.stroke(); ctx.setLineDash([]);
                 if (l.label) { ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(l.label, W - padR - 6, Y(l.y) - 3); ctx.textBaseline = "alphabetic"; }
             });
+            if (fin && ch && (o.baseline || o.trend)) {                           // niveau de départ de la période (comme la « clôture précédente »)
+                ctx.strokeStyle = withAlpha(muted, 0.8); ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+                ctx.beginPath(); ctx.moveTo(padL, Math.round(Y(ch.first)) + 0.5); ctx.lineTo(W - padR, Math.round(Y(ch.first)) + 0.5); ctx.stroke(); ctx.setLineDash([]);
+            }
+            if (volOn) drawVolume(ctx, X, vx0, vx1, padT + fullH, volH);
             if (isBar) drawBars(ctx, X, Y, vx0, vx1, pw);
-            else visible.forEach(function (s) { drawLine(ctx, s, X, Y, vx0, vx1, pw); });
+            else if (candle) drawCandles(ctx, X, Y, vx0, vx1);
+            else {
+                var wantArea = fin && o.area !== false && (o.area === true || visible.length === 1);
+                visible.forEach(function (s, k) { drawLine(ctx, s, X, Y, vx0, vx1, pw, k === 0 ? trendCol : null, wantArea && k === 0, padT + ph); });
+            }
             ctx.restore();
             if (isBar) { ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(padL, Math.round(Y(0)) + 0.5); ctx.lineTo(W - padR, Math.round(Y(0)) + 0.5); ctx.stroke(); }
-            geo = { padL: padL, padT: padT, pw: pw, ph: ph, X: X, Y: Y, vx0: vx0, vx1: vx1, lo: lo, hi: hi, yFmt: yFmt };
+            // étiquette du dernier point visible de chaque courbe (≤ 3), sur l'axe de droite, avec un fil pointillé jusqu'à elle
+            var lastTags = [];
+            if (fin && visible.length <= 3) {
+                visible.forEach(function (s, k) {
+                    var wc = windowChange(s.xs, s.ys, vx0, vx1);
+                    if (!wc) return;
+                    var col = (k === 0 && trendCol) ? trendCol : color(s.color);
+                    lastTags.push({ y: Y(wc.last), v: wc.last, x: X(s.xs[wc.i1]), col: col });
+                });
+                lastTags.forEach(function (tg) {
+                    ctx.save(); ctx.beginPath(); ctx.rect(padL, padT - 1, pw + 1, fullH + 2); ctx.clip();
+                    ctx.strokeStyle = withAlpha(tg.col, 0.55); ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+                    ctx.beginPath(); ctx.moveTo(Math.max(padL, tg.x), Math.round(tg.y) + 0.5); ctx.lineTo(W - padR, Math.round(tg.y) + 0.5); ctx.stroke();
+                    ctx.restore();
+                });
+                lastTags.sort(function (a, b) { return a.y - b.y; });
+                for (var q = 1; q < lastTags.length; q++) if (lastTags[q].ty === undefined && lastTags[q].y - (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) < 19) lastTags[q].ty = (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) + 19;
+                lastTags.forEach(function (tg) { chip(ctx, (o.tipFmt || valFmt)(tg.v), W - padR + 3, tg.ty !== undefined ? tg.ty : tg.y, tg.col, inkFor(tg.col), "left"); });
+            }
+            geo = { padL: padL, padR: padR, padT: padT, pw: pw, ph: ph, hit: fullH, X: X, Y: Y, vx0: vx0, vx1: vx1, lo: lo, hi: hi, yFmt: yFmt, ch: ch, trendCol: trendCol, candle: candle, vol: volOn };
             setAria(ye);
             updateChrome(); drawOver();
         }
@@ -340,28 +455,77 @@
             return out;
         }
 
-        function drawLine(ctx, s, X, Y, vx0, vx1, pw) {
+        function drawLine(ctx, s, X, Y, vx0, vx1, pw, override, area, baseY) {
             var n = s.xs.length;
             if (!n) return;
             var i0 = Math.max(0, lowerBound(s.xs, vx0) - 1), i1 = Math.min(n - 1, lowerBound(s.xs, vx1));
-            var idx = decimate(s.xs, s.ys, i0, i1, X, pw);
-            ctx.strokeStyle = color(s.color); ctx.lineWidth = s.width; ctx.lineJoin = "round"; ctx.lineCap = "round";
-            ctx.setLineDash(dashOf(s.dash, []));
-            ctx.beginPath();
-            var pen = false;
+            var idx = decimate(s.xs, s.ys, i0, i1, X, pw), col = override || color(s.color);
+            var segs = [], seg = null;
             for (var k = 0; k < idx.length; k++) {
                 var j = idx[k], yv = s.ys[j];
-                if (yv === null || yv === undefined || !isFinite(yv)) { if (!o.connectGaps) pen = false; continue; }   // trou honnête : jamais de valeur inventée
-                if (!pen) { ctx.moveTo(X(s.xs[j]), Y(yv)); pen = true; } else ctx.lineTo(X(s.xs[j]), Y(yv));
+                if (yv === null || yv === undefined || !isFinite(yv)) { if (!o.connectGaps) seg = null; continue; }   // trou honnête : jamais de valeur inventée
+                if (!seg) { seg = []; segs.push(seg); }
+                seg.push([X(s.xs[j]), Y(yv)]);
             }
+            if (area) {                                                             // aire sous la courbe : dégradé de la couleur vers le transparent
+                var gr = ctx.createLinearGradient(0, 0, 0, baseY);
+                gr.addColorStop(0, withAlpha(col, 0.30)); gr.addColorStop(1, withAlpha(col, 0));
+                ctx.fillStyle = gr;
+                segs.forEach(function (sg) {
+                    if (sg.length < 2) return;
+                    ctx.beginPath(); ctx.moveTo(sg[0][0], baseY);
+                    sg.forEach(function (pt) { ctx.lineTo(pt[0], pt[1]); });
+                    ctx.lineTo(sg[sg.length - 1][0], baseY); ctx.closePath(); ctx.fill();
+                });
+            }
+            ctx.strokeStyle = col; ctx.lineWidth = s.width; ctx.lineJoin = "round"; ctx.lineCap = "round";
+            ctx.setLineDash(dashOf(s.dash, []));
+            ctx.beginPath();
+            segs.forEach(function (sg) { sg.forEach(function (pt, m) { if (m === 0) ctx.moveTo(pt[0], pt[1]); else ctx.lineTo(pt[0], pt[1]); }); });
             ctx.stroke(); ctx.setLineDash([]);
             if (o.markers === true || (o.markers === "auto" && i1 - i0 < 60 && pw / Math.max(1, i1 - i0) > 14)) {   // points marqués quand ils sont espacés
-                ctx.fillStyle = color(s.color);
+                ctx.fillStyle = col;
                 for (var m = i0; m <= i1; m++) {
                     var mv = s.ys[m];
                     if (mv === null || mv === undefined || !isFinite(mv)) continue;
                     ctx.beginPath(); ctx.arc(X(s.xs[m]), Y(mv), 2.4, 0, Math.PI * 2); ctx.fill();
                 }
+            }
+        }
+
+        // Largeur d'une barre / d'une bougie : 70 % de l'écart en pixels entre deux points voisins de la fenêtre.
+        function slotWidth(X, xs, i0, i1) {
+            var a = Math.max(0, i0), b = Math.min(xs.length - 1, Math.max(a + 1, i1));
+            return b > a ? Math.abs(X(xs[b]) - X(xs[a])) / (b - a) : 6;
+        }
+        function drawCandles(ctx, X, Y, vx0, vx1) {
+            var xs = series[0].xs, cl = series[0].ys, O = o.ohlc.open, Hh = o.ohlc.high, L = o.ohlc.low;
+            var i0 = Math.max(0, lowerBound(xs, vx0) - 1), i1 = Math.min(xs.length - 1, lowerBound(xs, vx1));
+            var slot = slotWidth(X, xs, i0, i1), bw = Math.max(1, Math.min(18, slot * 0.7));
+            var up = token("--pos"), down = token("--neg");
+            for (var i = i0; i <= i1; i++) {
+                var op = O[i], hh = Hh[i], ll = L[i], c = cl[i];
+                if ([op, hh, ll, c].some(function (z) { return z === null || z === undefined || !isFinite(z); })) continue;
+                var col = c >= op ? up : down, x = X(xs[i]);
+                ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
+                var xm = Math.round(x) + 0.5;
+                ctx.beginPath(); ctx.moveTo(xm, Y(hh)); ctx.lineTo(xm, Y(ll)); ctx.stroke();
+                if (bw > 1.6) { var top = Math.min(Y(op), Y(c)); ctx.fillRect(Math.round(x - bw / 2), top, Math.max(1, Math.round(bw)), Math.max(1, Math.abs(Y(op) - Y(c)))); }
+            }
+        }
+        function drawVolume(ctx, X, vx0, vx1, bottom, vh) {
+            var xs = series[0].xs, vol = o.volume, cl = series[0].ys;
+            var i0 = Math.max(0, lowerBound(xs, vx0) - 1), i1 = Math.min(xs.length - 1, lowerBound(xs, vx1)), vmax = 0, i;
+            for (i = i0; i <= i1; i++) if (isFinite(vol[i]) && vol[i] > vmax) vmax = vol[i];
+            if (!(vmax > 0)) return;
+            var slot = slotWidth(X, xs, i0, i1), bw = Math.max(1, Math.min(18, slot * 0.7)), up = token("--pos"), down = token("--neg");
+            for (i = i0; i <= i1; i++) {
+                var vv = vol[i];
+                if (vv === null || vv === undefined || !isFinite(vv) || vv <= 0) continue;
+                var prev = i > 0 ? cl[i - 1] : cl[i], rising = hasOhlc ? cl[i] >= o.ohlc.open[i] : cl[i] >= prev;
+                ctx.fillStyle = withAlpha(rising ? up : down, 0.42);
+                var h = Math.max(1, vv / vmax * vh);
+                ctx.fillRect(Math.round(X(xs[i]) - bw / 2), bottom - h, Math.max(1, Math.round(bw)), h);
             }
         }
 
@@ -385,51 +549,106 @@
         function drawOver() {
             if (!geo) { tip.classList.add("hidden"); return; }
             overClear();
-            var c = over.getContext("2d");
+            var c = over.getContext("2d"), hitH = geo.hit || geo.ph;
             if (drag && drag.mode === "select") {
                 var a = Math.max(geo.padL, Math.min(drag.x0, drag.x1)), b = Math.min(geo.padL + geo.pw, Math.max(drag.x0, drag.x1));
                 c.fillStyle = token("--brand-soft"); c.strokeStyle = token("--brand"); c.lineWidth = 1;
-                c.fillRect(a, geo.padT, b - a, geo.ph); c.strokeRect(a + 0.5, geo.padT + 0.5, b - a, geo.ph);
+                c.fillRect(a, geo.padT, b - a, hitH); c.strokeRect(a + 0.5, geo.padT + 0.5, b - a, hitH);
                 tip.classList.add("hidden");
                 return;
             }
-            if (!hover) { tip.classList.add("hidden"); return; }
+            if (!hover) { tip.classList.add("hidden"); paintQuote(null); return; }
             var hx = hover.px;
             var vis = series.filter(function (s) { return !s.hidden && s.xs.length; });
             if (!vis.length) return;
             var xv = geo.vx0 + (hx - geo.padL) / geo.pw * (geo.vx1 - geo.vx0);
             var ref = vis[0], ri = nearestIndex(ref.xs, xv), rx = ref.xs[ri];
             var sx = geo.X(rx);
-            c.strokeStyle = token("--text-3"); c.lineWidth = 1; c.setLineDash([3, 3]);
-            c.beginPath(); c.moveTo(Math.round(sx) + 0.5, geo.padT); c.lineTo(Math.round(sx) + 0.5, geo.padT + geo.ph); c.stroke(); c.setLineDash([]);
+            var guide = token("--text-3");
+            c.strokeStyle = fin ? withAlpha(guide, 0.9) : guide; c.lineWidth = 1; c.setLineDash(fin ? [] : [3, 3]);
+            c.beginPath(); c.moveTo(Math.round(sx) + 0.5, geo.padT); c.lineTo(Math.round(sx) + 0.5, geo.padT + hitH); c.stroke(); c.setLineDash([]);
             var rows = [];
             vis.forEach(function (s) {
                 var i = nearestIndex(s.xs, rx), yv = s.ys[i];
                 if (yv === null || yv === undefined || !isFinite(yv)) return;
                 rows.push({ s: s, v: yv, i: i });
-                if (!isBar) { c.fillStyle = color(s.color); c.beginPath(); c.arc(geo.X(s.xs[i]), geo.Y(yv), 3.2, 0, Math.PI * 2); c.fill(); }
+                if (!isBar) {
+                    c.fillStyle = (rows.length === 1 && geo.trendCol) ? geo.trendCol : color(s.color);
+                    c.beginPath(); c.arc(geo.X(s.xs[i]), geo.Y(yv), 3.4, 0, Math.PI * 2); c.fill();
+                    if (fin) { c.strokeStyle = token("--chart-bg"); c.lineWidth = 1.5; c.stroke(); }
+                }
             });
             if (isBar && rows.length) {                      // la barre survolée
                 var r0 = rows[0], bw = Math.max(2, Math.min(40, geo.pw / (geo.vx1 - geo.vx0) * 0.7));
                 c.strokeStyle = token("--text"); c.lineWidth = 1.2;
                 c.strokeRect(geo.X(r0.i) - bw / 2 + 0.5, Math.min(geo.Y(0), geo.Y(r0.v)), bw, Math.max(1, Math.abs(geo.Y(r0.v) - geo.Y(0))));
             }
-            // infobulle (nœuds texte : jamais d'innerHTML sur des données)
+            if (fin && rows.length) {                        // réticule : fil horizontal + pastilles sur l'axe des valeurs et sur l'axe du temps
+                var rr = rows[0], ry = geo.Y(rr.v), chipBg = token("--text"), chipFg = token("--bg");
+                c.strokeStyle = withAlpha(guide, 0.6); c.lineWidth = 1; c.setLineDash([3, 3]);
+                c.beginPath(); c.moveTo(geo.padL, Math.round(ry) + 0.5); c.lineTo(W - geo.padR, Math.round(ry) + 0.5); c.stroke(); c.setLineDash([]);
+                drawChipOn(c, (o.tipFmt || valFmt)(rr.v), W - geo.padR + 3, ry, chipBg, chipFg, "left");
+                drawChipOn(c, xText(rx, ri), sx, geo.padT + geo.hit + 12, chipBg, chipFg, "center");
+            }
+            paintQuote(rows.length ? rows[0] : null);
+            // infobulle (nœuds texte : jamais d'innerHTML sur des données) ; l'en-tête de cotation la remplace pour une courbe seule
+            if (quoteEl && !geo.candle && vis.length === 1) { tip.classList.add("hidden"); return; }
             tip.textContent = "";
             var headTxt = isBar ? ((o.labels && o.labels[ri]) || String(ri)) : xText(rx, ri);
             tip.appendChild(el("strong", "pp-tip-head", { text: headTxt }));
-            rows.forEach(function (r) {
+            if (geo.candle) {                                // bougie survolée : ouverture, plus haut, plus bas, clôture, volume
+                [["O", o.ohlc.open[ri]], ["H", o.ohlc.high[ri]], ["L", o.ohlc.low[ri]], ["C", ref.ys[ri]]].forEach(function (kv) {
+                    var row = el("div", "pp-tip-row");
+                    row.appendChild(el("span", "pp-tip-k", { text: kv[0] })); row.appendChild(el("span", null, { text: (o.tipFmt || valFmt)(kv[1]) }));
+                    tip.appendChild(row);
+                });
+            } else rows.forEach(function (r) {
                 var row = el("div", "pp-tip-row");
                 if (!isBar && (series.length > 1 || r.s.name)) { var sw = el("span", "pp-dot"); sw.style.background = color(r.s.color); row.appendChild(sw); }
                 var label = r.s.name ? r.s.name + " " : "";
                 row.appendChild(el("span", null, { text: label + (o.tipFmt || o.yFmt || valFmt)(r.v) }));
                 tip.appendChild(row);
             });
+            if (hasVol && o.volume[ri] !== null && o.volume[ri] !== undefined && isFinite(o.volume[ri])) {
+                var vr = el("div", "pp-tip-row");
+                vr.appendChild(el("span", "pp-tip-k", { text: tr("chart_volume", "Vol.") })); vr.appendChild(el("span", null, { text: numFmt(o.volume[ri], 0) }));
+                tip.appendChild(vr);
+            }
             tip.classList.remove("hidden");
             var tw = tip.offsetWidth, th = tip.offsetHeight;
-            var left = sx + 12; if (left + tw > W - 4) left = sx - tw - 12;
+            var left = sx + 12; if (left + tw > W - geo.padR - 4) left = sx - tw - 12;
             var top = Math.max(4, Math.min(hover.py - th - 10, H - th - 4)); if (top < 4) top = 4;
             tip.style.left = Math.max(4, left) + "px"; tip.style.top = top + "px";
+        }
+
+        // Pastille dessinée sur la surcouche (même dessin que sur la toile de base).
+        function drawChipOn(c, text, x, y, bg, fg, align) {
+            c.save();
+            c.font = '600 11px ' + (token("--mono") || "monospace");
+            var w = Math.ceil(c.measureText(text).width) + 12, h = 18, left = align === "center" ? x - w / 2 : x;
+            left = Math.max(1, Math.min(left, W - w - 1));
+            var top = Math.max(1, Math.min(y - h / 2, H - h - 1)), r = 4;
+            c.fillStyle = bg; c.beginPath();
+            c.moveTo(left + r, top); c.lineTo(left + w - r, top); c.quadraticCurveTo(left + w, top, left + w, top + r);
+            c.lineTo(left + w, top + h - r); c.quadraticCurveTo(left + w, top + h, left + w - r, top + h);
+            c.lineTo(left + r, top + h); c.quadraticCurveTo(left, top + h, left, top + h - r);
+            c.lineTo(left, top + r); c.quadraticCurveTo(left, top, left + r, top); c.closePath(); c.fill();
+            c.fillStyle = fg; c.textAlign = "left"; c.textBaseline = "middle"; c.fillText(text, left + 6, top + h / 2 + 0.5);
+            c.restore();
+        }
+
+        // En-tête de cotation : dernière valeur de la fenêtre et variation depuis son début ; au survol, la valeur du point survolé.
+        function paintQuote(point) {
+            if (!quoteEl || !geo || !geo.ch) return;
+            var ch = geo.ch, ref = series.filter(function (s) { return !s.hidden && s.xs.length; })[0];
+            if (!ref) return;
+            var val = point ? point.v : ch.last, at = point ? ref.xs[point.i] : ref.xs[ch.i1];
+            var abs = val - ch.first, pct = ch.first !== 0 ? abs / Math.abs(ch.first) * 100 : null;
+            qVal.textContent = (o.tipFmt || valFmt)(val);
+            var sign = abs > 0 ? "+" : "";
+            qChg.textContent = sign + numFmt(abs, Math.abs(abs) >= 1 ? 2 : 4) + (pct === null ? "" : "  (" + sign + numFmt(pct, 2) + " %)");
+            qChg.className = "pp-quote-chg " + (abs > 0 ? "pp-up" : abs < 0 ? "pp-down" : "pp-flat");
+            qDate.textContent = dateFmt({ day: "numeric", month: "short", year: "numeric" }).format(at);
         }
 
         function xText(x, i) {
@@ -453,6 +672,9 @@
             var zoomed = !!view;
             stage.setAttribute("data-zoomed", zoomed ? "true" : "false");
             bReset.disabled = !zoomed; bOut.disabled = !zoomed; bIn.disabled = !!(view && (view[1] - view[0]) <= minSpan * 1.001);
+            bar.querySelectorAll("button[data-ytd]").forEach(function (b) {
+                b.classList.toggle("active", !!(zoomed && Math.abs(view[1] - ext[1]) < DAY * 2 && Math.abs(view[0] - yearStart(ext[1])) < DAY * 4));
+            });
             bar.querySelectorAll("button[data-days]").forEach(function (b) {
                 var d = b.getAttribute("data-days"), on = d === "all" ? !zoomed : (zoomed && Math.abs(view[1] - ext[1]) < DAY * 2 && Math.abs((view[1] - view[0]) - (+d) * DAY) < DAY * 3);
                 b.classList.toggle("active", on);
@@ -461,20 +683,47 @@
         }
 
         // ----- barre de périodes (axe du temps seulement)
-        function buildRanges() {
-            if (!(o.ranges && timeAxis)) return;
-            bar.textContent = "";
-            bar.className = "pp-ranges preview-range-buttons";
-            var total = span() / DAY;
-            [["1m", 30], ["3m", 91], ["6m", 182], ["1y", 365], ["5y", 1826]].forEach(function (r) {
-                if (r[1] >= total * 0.9) return;
-                var b = el("button", "range-btn", { type: "button", "data-days": String(r[1]), text: tr("chart_range_" + r[0], r[0].toUpperCase()) });
-                b.addEventListener("click", function () { setView(ext[1] - r[1] * DAY, ext[1], false); });
-                bar.appendChild(b);
+        function syncMode() {
+            bar.querySelectorAll("button[data-mode]").forEach(function (b) {
+                var on = b.getAttribute("data-mode") === mode;
+                b.classList.toggle("active", on); b.setAttribute("aria-pressed", on ? "true" : "false");
             });
-            var all = el("button", "range-btn", { type: "button", "data-days": "all", text: tr("chart_range_all", "All") });
-            all.addEventListener("click", resetView);
-            bar.appendChild(all);
+        }
+        function buildRanges() {
+            if (!(timeAxis && (o.ranges || hasOhlc))) return;
+            bar.textContent = "";
+            bar.className = "pp-ranges";
+            if (o.ranges) {
+                var box = el("div", "preview-range-buttons"), total = span() / DAY;
+                [["1m", 30], ["3m", 91], ["6m", 182], ["ytd", 0], ["1y", 365], ["5y", 1826]].forEach(function (r) {
+                    if (r[0] === "ytd") {
+                        var from = yearStart(ext[1]);
+                        if (total < 100 || from <= ext[0]) return;
+                        var by = el("button", "range-btn", { type: "button", "data-ytd": "1", text: tr("chart_range_ytd", "YTD") });
+                        by.addEventListener("click", function () { setView(from, ext[1], false); });
+                        box.appendChild(by);
+                        return;
+                    }
+                    if (r[1] >= total * 0.9) return;
+                    var b = el("button", "range-btn", { type: "button", "data-days": String(r[1]), text: tr("chart_range_" + r[0], r[0].toUpperCase()) });
+                    b.addEventListener("click", function () { setView(ext[1] - r[1] * DAY, ext[1], false); });
+                    box.appendChild(b);
+                });
+                var all = el("button", "range-btn", { type: "button", "data-days": "all", text: tr("chart_range_all", "All") });
+                all.addEventListener("click", resetView);
+                box.appendChild(all);
+                bar.appendChild(box);
+            }
+            if (hasOhlc) {
+                var modeBox = el("div", "segmented pp-mode", { role: "group", "aria-label": tr("chart_mode", "Display") });
+                [["line", tr("chart_mode_line", "Line")], ["candle", tr("chart_mode_candle", "Candles")]].forEach(function (m) {
+                    var bm = el("button", "range-btn", { type: "button", "data-mode": m[0], text: m[1] });
+                    bm.addEventListener("click", function () { mode = m[0]; syncMode(); schedule(); });
+                    modeBox.appendChild(bm);
+                });
+                bar.appendChild(modeBox);
+                syncMode();
+            }
         }
         buildRanges();
 
@@ -495,7 +744,7 @@
 
         // ----- interactions
         function pos(ev) { var r = over.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
-        function inPlot(p) { return geo && p.x >= geo.padL && p.x <= geo.padL + geo.pw && p.y >= geo.padT && p.y <= geo.padT + geo.ph; }
+        function inPlot(p) { return geo && p.x >= geo.padL && p.x <= geo.padL + geo.pw && p.y >= geo.padT && p.y <= geo.padT + (geo.hit || geo.ph); }
         function xAt(px) { return geo.vx0 + (px - geo.padL) / geo.pw * (geo.vx1 - geo.vx0); }
 
         over.addEventListener("pointermove", function (ev) {
@@ -594,10 +843,12 @@
             setView: function (a, b) { setView(a, b, false); },
             extent: function () { return ext.slice(); },
             zoomBy: zoomBy,
+            setMode: function (m) { if (hasOhlc && (m === "line" || m === "candle")) { mode = m; syncMode(); schedule(); } },
             destroy: function () { destroyed = true; if (ro) ro.disconnect(); },
             isStale: function () { return destroyed || (shown && !host.isConnected); },
             host: host,
         };
+        if (o.initialDays && timeAxis && span() > o.initialDays * DAY * 1.15) setView(ext[1] - o.initialDays * DAY, ext[1], false);   // vue de départ : les N derniers jours
         live = live.filter(function (c) { return !c.isStale(); });      // élague les graphiques d'une analyse remplacée (détachés après avoir été affichés)
         live.push(api);
         schedule();
@@ -644,7 +895,7 @@
         });
     }
 
-    var api = { create: create, parseDate: parseDate, _internals: { lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent } };
+    var api = { create: create, parseDate: parseDate, _internals: { lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent, withAlpha: withAlpha, windowChange: windowChange, candleExtent: candleExtent, yearStart: yearStart } };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     root.PatrickPlot = api;
 })(typeof window !== "undefined" ? window : globalThis);

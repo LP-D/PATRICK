@@ -21,7 +21,10 @@
 {{ metric(t('home_kpi_auc'), f3(home.auc_median), t('home_kpi_auc_rel', f1=f3(home.f1_median)), "neutral") }}
 {{ metric(t('home_kpi_data'), (home.n_recent_failures + home.n_suspect), t('home_kpi_data_rel', f=home.n_recent_failures, s=home.n_suspect, d=home.recent_days), "error" if home.n_suspect else ("warning" if home.n_recent_failures else "ok")) }}
 {{ metric(t('home_kpi_short'), home.n_short, t('home_kpi_short_rel', y=home.min_years, n=home.n_targets), "warning" if home.n_short else "ok") }}
-{{ metric(t('home_kpi_inference'), coverage.last_inference_at or "—", t('home_kpi_inference_rel'), "neutral" if coverage.last_inference_at else "pending") }}
+{# Date seule quand l'heure est minuit (signal de clôture) ; sinon date et heure, sans le « T » ni les secondes. #}
+{% set inference_at = (coverage.last_inference_at | string) if coverage.last_inference_at else "" %}
+{% set inference_label = ((inference_at[:10] ~ ((" " ~ inference_at[11:16]) if inference_at[11:16] and inference_at[11:16] != "00:00" else "")) if inference_at else "—") %}
+{{ metric(t('home_kpi_inference'), inference_label, t('home_kpi_inference_rel'), "neutral" if coverage.last_inference_at else "pending") }}
 {% if verdict and verdict.n_runs %}
 {% if verdict.survivors is none %}
 {{ metric(t('verdict_survivors'), "—", t('verdict_not_computable'), "pending") }}
@@ -41,7 +44,7 @@
 <section class="card home-card">
     <h2>{{ t('home_q_data') }}</h2>
     <p>{{ t('home_q_data_body', f=home.n_recent_failures, d=home.recent_days, s=home.n_short, y=home.min_years) }}</p>
-    <p class="home-links"><a href="/data-quality">{{ t('nav_data_quality') }} →</a> <a href="/data-freshness">{{ t('nav_data_freshness') }} →</a></p>
+    <p class="home-links"><a href="/data-quality">{{ t('nav_data_quality') }} →</a> <a href="/universe">{{ t('nav_universe') }} →</a></p>
 </section>
 <section class="card home-card">
     <h2>{{ t('home_q_models') }}</h2>

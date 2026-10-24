@@ -1407,52 +1407,37 @@ def _extract_scheme(run: dict) -> str:
 
 @app.get("/universe")
 def universe_page(request: Request):
-    """Target universe cross-referenced with run history.
+    """Univers de séries : chaque cible configurable (et chaque série d'entraînement FRED) avec la fraîcheur de ses données en cache
+    et son historique de runs, au même endroit (ancienne page « Fraîcheur » fusionnée ici).
 
-    The DB/config join itself (`DEFAULT_TARGET_GROUPS` x run history) is
-    delegated to `tracking/history.py::universe_overview` -- previously
-    duplicated here with a bug (iterating `(symbol, label)` tuples as if
-    they were plain symbol strings, so `target in symbol_info` was always
-    False and every group came back empty). Only the i18n group-name
-    translation stays here, since it needs `request`, which the read-only
-    history layer doesn't have access to."""
+    La jointure DB/config (`DEFAULT_TARGET_GROUPS` x historique de runs) est faite par `tracking/history.py::universe_overview` ;
+    la fraîcheur est lue UNIQUEMENT depuis le data lake local (`data/freshness.py`, jamais d'appel réseau). Les deux sont jointes ici
+    par symbole ; seule la traduction des noms de groupe reste ici, car elle a besoin de `request`."""
+    from patrick.data import freshness as data_freshness
+
     conn = trackdb.connect()
     try:
         raw_groups = trackhistory.universe_overview(conn)
     finally:
         conn.close()
+    runs = {s["symbol"]: s for g in raw_groups for s in g["symbols"]}
 
     t = i18n.translator(i18n.get_lang(request))
     groups = [
         {"group": t(i18n.TARGET_GROUP_LABEL_KEYS.get(g["group"], f"group_{g['group']}")),
-         "symbols": g["symbols"]}
-        for g in raw_groups if g["symbols"]
+         "rows": [{"fresh": r, "run": runs.get(r.symbol)} for r in g["results"]]}
+        for g in data_freshness.freshness_overview()
     ]
-
     return templates.TemplateResponse(
         request, "universe.html",
-        {"groups": groups, **_i18n_context(request)},
+        {"groups": groups, "known_targets": forms.TARGET_SOURCE_BY_SYMBOL, **_i18n_context(request)},
     )
 
 
 @app.get("/data-freshness")
-def data_freshness_page(request: Request):
-    """Phase 5 -- fraîcheur des données ingérées, par ticker/série, lue
-    uniquement depuis le data lake local (`data/freshness.py`, jamais
-    d'appel réseau yfinance/FRED depuis cette page)."""
-    from patrick.data import freshness as data_freshness
-
-    t = i18n.translator(i18n.get_lang(request))
-    raw_groups = data_freshness.freshness_overview()
-    groups = [
-        {"group": t(i18n.TARGET_GROUP_LABEL_KEYS.get(g["group"], f"group_{g['group']}")),
-         "results": g["results"]}
-        for g in raw_groups
-    ]
-    return templates.TemplateResponse(
-        request, "data_freshness.html",
-        {"groups": groups, "known_targets": forms.TARGET_SOURCE_BY_SYMBOL, **_i18n_context(request)},
-    )
+def data_freshness_redirect(request: Request):
+    """Ancienne page « Fraîcheur » : fusionnée dans /universe (mêmes groupes de séries, mêmes lignes) ; liens et marque-pages conservés."""
+    return RedirectResponse("/universe", status_code=308)
 
 
 @app.get("/data-quality")

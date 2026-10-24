@@ -247,3 +247,53 @@ def test_sidebar_labels_are_translated():
     side = _sidebar(resp.text)
     assert ">Overview<" in side
     assert "ASSET CLASSES" in side
+
+
+# ---------------------------------------------------------------------------
+# Arborescence : dossiers (style explorateur de VS Code)
+# ---------------------------------------------------------------------------
+
+def test_every_group_is_used_and_every_entry_group_exists_in_its_category():
+    keys = {(g.category, g.key) for g in nav_registry.GROUPS}
+    assert len(keys) == len(nav_registry.GROUPS), "cle de dossier dupliquee dans une categorie"
+    for g in nav_registry.GROUPS:
+        assert g.category in EXPECTED_CATEGORIES, g
+        assert any(e.category == g.category and e.group == g.key for e in nav_registry.NAV_ENTRIES), f"dossier vide : {g}"
+    for e in nav_registry.NAV_ENTRIES:
+        assert not e.group or (e.category, e.group) in keys, f"dossier inconnu pour {e.slug}"
+
+
+def test_the_tree_holds_exactly_the_flat_entries_and_a_folder_takes_its_first_entry_place():
+    for section in nav_registry.nav_sections("/"):
+        flat = [e["slug"] for e in section["entries"]]
+        from_tree = [leaf["slug"] for node in section["nodes"]
+                     for leaf in (node["entries"] if node["type"] == "folder" else [node])]
+        assert sorted(flat) == sorted(from_tree), section["key"]
+        # un dossier n'apparait qu'une fois, a la place de sa premiere entree
+        folder_keys = [n["key"] for n in section["nodes"] if n["type"] == "folder"]
+        assert len(folder_keys) == len(set(folder_keys))
+
+
+def test_the_folder_holding_the_current_page_is_open_and_the_others_are_closed():
+    html = TestClient(app).get("/runs").text
+    side = _sidebar(html)
+    opened = re.search(r'<li class="nav-folder" data-nav-key="pilotage/suivi" data-has-active>\s*'
+                       r'<button[^>]*aria-expanded="true"', side)
+    assert opened is not None
+    closed = re.search(r'<li class="nav-folder" data-nav-key="pilotage/signaux">\s*<button[^>]*aria-expanded="false"[^>]*>[^<]*</button>\s*'
+                       r'<ul class="nav-tree" id="nav-list-pilotage-signaux" hidden>', side)
+    assert closed is not None
+
+
+def test_folder_and_category_headings_are_buttons_that_control_their_list():
+    side = _sidebar(TestClient(app).get("/").text)
+    for key in EXPECTED_CATEGORIES:
+        assert re.search(rf'<button type="button" class="sidebar-nav-heading" id="nav-cat-{key}" aria-expanded="(true|false)" '
+                         rf'aria-controls="nav-list-{key}">', side), key
+        assert f'<ul class="nav-tree" id="nav-list-{key}"' in side
+
+
+def test_tree_labels_are_translated():
+    side = _sidebar(TestClient(app).get("/?lang=en").text)
+    for label in ("Model tracking", "Signals", "Research", "Data", "Markets"):
+        assert f">{label}<" in side, label

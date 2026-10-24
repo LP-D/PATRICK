@@ -56,19 +56,53 @@ script below (no flash), otherwise the OS preference applies.
                 </span>
                 <span class="brand-text">PATRICK<span class="brand-sub">{{ t('brand_tagline') }}</span></span>
             </a>
-            {# Liens generes depuis webapp/nav_registry.py (seule source, cf.
-               MASTER.md "Navigation Registry") -- jamais de <a> en dur ici. #}
-            <nav class="sidebar-nav" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
+            {# Arborescence (style explorateur de VS Code) generee depuis webapp/nav_registry.py (seule source, cf.
+               MASTER.md "Navigation Registry") -- jamais de <a> en dur ici. Categories et dossiers sont des boutons
+               repliables (aria-expanded) ; l'etat est range dans localStorage['patrick-nav-tree'] par shell.js et rejoue
+               par le petit script juste apres la navigation (pas d'eclair au chargement). #}
+            {% macro nav_leaf(item) %}{% set label = t(item.label_key) if (t and item.label_key) else item.label %}<li class="nav-leaf"><a href="{{ item.url }}" title="{{ label }}" {% if item.active %}aria-current="page"{% endif %}>{{ nav_icon(item.slug) }}<span class="nav-label">{{ label }}</span></a></li>{% endmacro %}
+            <div class="sidebar-tree-head">
+                <span class="sidebar-tree-title">{{ t('nav_tree_title') }}</span>
+                <span class="sidebar-tree-tools">
+                    <button type="button" class="icon-btn icon-btn-sm" id="nav-collapse-all" aria-label="{{ t('nav_tree_collapse_all') }}" title="{{ t('nav_tree_collapse_all') }}">{{ icon('chevrons-down-up', 14) }}</button>
+                    <button type="button" class="icon-btn icon-btn-sm" id="nav-expand-all" aria-label="{{ t('nav_tree_expand_all') }}" title="{{ t('nav_tree_expand_all') }}">{{ icon('chevrons-up-down', 14) }}</button>
+                </span>
+            </div>
+            <nav class="sidebar-nav" id="sidebar-tree" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
                 {% for section in sections %}
-                <div class="sidebar-nav-group" role="group" aria-labelledby="nav-cat-{{ section.key }}">
-                    <span class="sidebar-nav-heading" id="nav-cat-{{ section.key }}">{{ t(section.label_key) if t else section.label }}</span>
-                    {% for item in section.entries %}
-                    {% set label = t(item.label_key) if (t and item.label_key) else item.label %}
-                    <a href="{{ item.url }}" title="{{ label }}" {% if item.active %}aria-current="page"{% endif %}>{{ nav_icon(item.slug) }}<span class="nav-label">{{ label }}</span></a>
-                    {% endfor %}
+                <div class="sidebar-nav-group" role="group" aria-labelledby="nav-cat-{{ section.key }}" data-nav-key="{{ section.key }}"{% if section.entries | selectattr('active') | list %} data-has-active{% endif %}>
+                    <button type="button" class="sidebar-nav-heading" id="nav-cat-{{ section.key }}" aria-expanded="true" aria-controls="nav-list-{{ section.key }}">{{ t(section.label_key) if t else section.label }}</button>
+                    <ul class="nav-tree" id="nav-list-{{ section.key }}">
+                        {% for node in section.nodes %}
+                        {% if node.type == 'folder' %}
+                        <li class="nav-folder" data-nav-key="{{ node.key }}"{% if node.active %} data-has-active{% endif %}>
+                            <button type="button" class="nav-folder-btn" aria-expanded="{{ 'true' if node.active else 'false' }}" aria-controls="nav-list-{{ node.key | replace('/', '-') }}">{{ t(node.label_key) if t else node.label }}</button>
+                            <ul class="nav-tree" id="nav-list-{{ node.key | replace('/', '-') }}"{% if not node.active %} hidden{% endif %}>
+                                {% for item in node.entries %}{{ nav_leaf(item) }}{% endfor %}
+                            </ul>
+                        </li>
+                        {% else %}{{ nav_leaf(node) }}{% endif %}
+                        {% endfor %}
+                    </ul>
                 </div>
                 {% endfor %}
             </nav>
+            <script>
+                (function () {
+                    try {
+                        var saved = JSON.parse(localStorage.getItem("patrick-nav-tree") || "{}");
+                        document.querySelectorAll("#sidebar-tree [data-nav-key]").forEach(function (box) {
+                            var key = box.getAttribute("data-nav-key");
+                            if (!(key in saved) || box.hasAttribute("data-has-active")) return;
+                            var open = !!saved[key];
+                            var button = box.querySelector(":scope > button"), list = box.querySelector(":scope > ul");
+                            if (!button || !list) return;
+                            button.setAttribute("aria-expanded", open ? "true" : "false");
+                            list.hidden = !open;
+                        });
+                    } catch (e) { /* storage blocked: default state */ }
+                })();
+            </script>
             <div class="sidebar-footer">
                 <nav class="sidebar-lang" aria-label="Langue / Language">
                     <a href="/set-lang/fr?next={{ request.url.path }}" class="{{ 'active' if (lang | default('fr')) == 'fr' else '' }}">fr</a>

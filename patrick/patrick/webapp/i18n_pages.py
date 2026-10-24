@@ -14,6 +14,19 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "nav_vocabulary": _s("Vocabulaire", "Vocabulary"),
     "nav_analysis": _s("Séries & modèles", "Series & models"),
     "nav_cat_models": _s("MODÈLES", "MODELS"),
+    # Sous-dossiers de l'arborescence de la barre latérale (nav_registry.GROUPS) et ses boutons.
+    "nav_grp_suivi": _s("Suivi des modèles", "Model tracking"),
+    "nav_grp_signaux": _s("Signaux", "Signals"),
+    "nav_grp_recherche": _s("Recherche", "Research"),
+    "nav_grp_donnees": _s("Données", "Data"),
+    "nav_grp_marches": _s("Marchés", "Markets"),
+    "un_sub3": _s("Toutes les séries de l'univers : fraîcheur des données en cache et historique des runs, au même endroit.",
+                  "Every series of the universe: freshness of the cached data and run history, in one place."),
+    "un_footer_all": _s("{n} série(s) · {c} en cache · {d} avec au moins un run terminé",
+                        "{n} series · {c} cached · {d} with at least one finished run"),
+    "nav_tree_title": _s("Navigation", "Navigation"),
+    "nav_tree_collapse_all": _s("Tout replier", "Collapse all"),
+    "nav_tree_expand_all": _s("Tout déplier", "Expand all"),
 
     # ------------------------------------------------------------------ qualité des données
     "dq_title": _s("Qualité des données", "Data quality"),

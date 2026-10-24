@@ -217,3 +217,43 @@ def test_compute_stats_sanitizes_malformed_and_reverse_chronology():
     assert out["insufficient_history"] is False
     assert out["dates"][0] < out["dates"][-1]
     assert out["returns"]["1"] is not None
+
+
+# ---------------------------------------------------------------- bougies et volumes (graphique de type « cotation »)
+
+def _with_candles(n: int) -> dict:
+    series = _series(n, daily_growth=0.001)
+    closes = np.array(series["closes"])
+    series.update(opens=[float(v) * 0.99 for v in closes], highs=[float(v) * 1.02 for v in closes],
+                  lows=[float(v) * 0.97 for v in closes], volumes=[1000 + i for i in range(n)])
+    return series
+
+
+def test_candles_and_volumes_follow_the_closes_row_for_row():
+    series = _with_candles(60)
+    out = asset_stats.compute_stats(series)
+    for key in ("opens", "highs", "lows", "volumes"):
+        assert len(out[key]) == len(out["closes"]) == 60, key
+    assert out["highs"][0] > out["closes"][0] > out["lows"][0]
+    assert out["volumes"][-1] == 1059.0
+
+
+def test_a_dropped_close_drops_the_same_candle():
+    series = _with_candles(40)
+    series["closes"][5] = None          # ligne sans clôture : écartée, avec sa bougie et son volume
+    out = asset_stats.compute_stats(series)
+    assert len(out["closes"]) == len(out["opens"]) == len(out["volumes"]) == 39
+    assert 1005.0 not in out["volumes"]
+
+
+def test_empty_candle_cells_become_null_not_a_crash():
+    series = _with_candles(40)
+    series["volumes"][3] = None
+    series["highs"][4] = float("nan")
+    out = asset_stats.compute_stats(series)
+    assert out["volumes"][3] is None and out["highs"][4] is None
+
+
+def test_series_without_candles_has_no_candle_keys():
+    out = asset_stats.compute_stats(_series(60))      # FRED : clôtures seules
+    assert not any(k in out for k in ("opens", "highs", "lows", "volumes"))

@@ -67,7 +67,7 @@ def _crumbs(html: str) -> str:
 
 
 def test_no_page_body_carries_its_own_breadcrumb(client):
-    for path in ("/", "/runs", "/predictions", "/universe", "/macro", "/portfolio", "/data-freshness", "/runs/run1", "/targets/%5EVIX"):
+    for path in ("/", "/runs", "/predictions", "/universe", "/macro", "/portfolio", "/data-quality", "/runs/run1", "/targets/%5EVIX"):
         assert 'class="breadcrumb"' not in client.get(path).text, path
 
 

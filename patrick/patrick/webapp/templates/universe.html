@@ -1,47 +1,68 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table %}
+{% from "_components.html" import status_badge, data_table, help_icon %}
 {% block title %}PATRICK — {{ t('un_title') }}{% endblock %}
 
+{# Univers de séries : une ligne par cible ou série d'entraînement, avec la fraîcheur de ses données (data lake local) et son
+   historique de runs. Fusion de l'ancienne page « Fraîcheur » : mêmes groupes, mêmes lignes, deux jeux de colonnes. #}
 {% block content %}
-<h1 class="page-title">{{ t('nav_universe') }}</h1>
-<p class="page-subtitle">{{ t('un_sub2') }}</p>
+<h1 class="page-title">{{ t('nav_universe') }}
+    {{ help_icon('data_freshness', t('fr_title'), t('glossary_open_aria', term=t('fr_title'))) }}
+</h1>
+<p class="page-subtitle">{{ t('un_sub3') }}</p>
 
-{# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici
-   serait la redondance que la passe `distill` vient d'enlever. Cette ligne
-   répond à la question propre à cette page — sur tout cet univers, qu'est-ce
-   qui a déjà été exploré ? Les comptes viennent des groupes déjà rendus,
-   aucune requête de plus. #}
-{% set ns = namespace(total=0, touched=0, done=0) %}
-{% for g in groups %}{% for s in g.symbols %}
+{# Portée LOCALE : le bandeau porte déjà le verdict global, le répéter ici serait de la redondance. Ces deux lignes répondent
+   aux questions propres à cette page — qu'est-ce qui a déjà été exploré, et qu'est-ce qui est en cache ? Les comptes viennent
+   des groupes déjà rendus, aucune requête de plus. #}
+{% set ns = namespace(total=0, touched=0, done=0, series=0, cached=0) %}
+{% for g in groups %}{% for row in g.rows %}
+{% set ns.series = ns.series + 1 %}
+{% if row.fresh.cached %}{% set ns.cached = ns.cached + 1 %}{% endif %}
+{% if row.run %}
 {% set ns.total = ns.total + 1 %}
-{% if s.n_runs %}{% set ns.touched = ns.touched + 1 %}{% endif %}
-{% if s.n_done %}{% set ns.done = ns.done + 1 %}{% endif %}
+{% if row.run.n_runs %}{% set ns.touched = ns.touched + 1 %}{% endif %}
+{% if row.run.n_done %}{% set ns.done = ns.done + 1 %}{% endif %}
+{% endif %}
 {% endfor %}{% endfor %}
 <p class="scope-line">
     <b>{{ t('scope_universe') }}</b>
     <span class="scope-value">{{ ns.touched }} / {{ ns.total }}</span>
     <span class="scope-rel">{{ t('scope_universe_rel', done=ns.done, never=ns.total - ns.touched) }}</span>
 </p>
+<p class="scope-line">
+    <b>{{ t('fr_cache_cov') }}</b>
+    <span class="scope-value">{{ ns.cached }} / {{ ns.series }}</span>
+    <span class="scope-rel">{{ t('fr_cache_rel') }}</span>
+</p>
 
 {% for g in groups %}
 <div class="group-block">
-    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.symbols | length }})</span></h2>
+    <h2 class="group-title">{{ g.group }} <span class="hint">({{ g.rows | length }})</span></h2>
     {% set rows = [] %}
-    {% for s in g.symbols %}
-    {% set state = 'ok' if s.n_done > 0 else ('neutral' if s.n_runs > 0 else 'disabled') %}
-    {% set label = t('un_state_done', n=s.n_done) if s.n_done > 0 else (t('un_state_running', n=s.n_runs) if s.n_runs > 0 else t('un_state_never')) %}
-    {% set _ = rows.append([
-        '<a href="/targets/' ~ s.symbol ~ '">' ~ s.symbol ~ '</a>',
-        s.label,
-        s.source,
-        status_badge(label, state),
-        s.last_started_at or '—',
-    ]) %}
+    {% for row in g.rows %}
+    {% set r = row.fresh %}
+    {% set symbol_cell %}{% if r.symbol in known_targets %}<a href="/targets/{{ r.symbol }}">{{ r.symbol }}</a>{% else %}{{ r.symbol }}{% endif %}{% endset %}
+    {% if r.cached %}
+        {% set fresh_cell = status_badge(t('fr_days_late', n=r.business_days_late), 'ok' if r.state == 'ok' else 'warning') %}
+        {% set date_cell = r.date_max %}
+    {% else %}
+        {% set fresh_cell = status_badge(t('fr_never_cached'), 'disabled') %}
+        {% set date_cell = '<span class="na">—</span>' %}
+    {% endif %}
+    {% if row.run %}
+        {% set state = 'ok' if row.run.n_done > 0 else ('neutral' if row.run.n_runs > 0 else 'disabled') %}
+        {% set run_label = t('un_state_done', n=row.run.n_done) if row.run.n_done > 0 else (t('un_state_running', n=row.run.n_runs) if row.run.n_runs > 0 else t('un_state_never')) %}
+        {% set run_cell = status_badge(run_label, state) %}
+        {% set last_cell = row.run.last_started_at or '—' %}
+    {% else %}
+        {% set run_cell = '<span class="na">—</span>' %}
+        {% set last_cell = '<span class="na">—</span>' %}
+    {% endif %}
+    {% set _ = rows.append([symbol_cell, r.label, r.periodicity, date_cell, fresh_cell, run_cell, last_cell]) %}
     {% endfor %}
-    {% set n_done = g.symbols | selectattr('n_done', 'gt', 0) | list | length %}
-    {% set n_never = g.symbols | selectattr('n_runs', 'eq', 0) | list | length %}
-    {{ data_table([t('un_col_symbol'), t('un_col_label'), t('un_col_source'), t('un_col_history'), t('un_col_last_run')], rows,
-                  footer=t('un_footer', n=(g.symbols | length), d=n_done, v=n_never)) }}
+    {% set n_cached = g.rows | map(attribute='fresh') | selectattr('cached') | list | length %}
+    {% set n_done = g.rows | selectattr('run') | selectattr('run.n_done', 'gt', 0) | list | length %}
+    {{ data_table([t('un_col_symbol'), t('un_col_label'), t('fr_col_period'), t('fr_col_last'), t('fr_col_fresh'), t('un_col_history'), t('un_col_last_run')], rows,
+                  footer=t('un_footer_all', n=(g.rows | length), c=n_cached, d=n_done)) }}
 </div>
 {% endfor %}
 {% endblock %}

@@ -24,6 +24,11 @@ CHART_STRINGS: dict[str, dict[str, str]] = {
     "chart_range_5y": _s("5A", "5Y"),
     "chart_range_all": _s("Tout", "All"),
     "chart_range_max": _s("Max", "Max"),
+    "chart_range_ytd": _s("YTD", "YTD"),
+    "chart_mode": _s("Affichage", "Display"),
+    "chart_mode_line": _s("Courbe", "Line"),
+    "chart_mode_candle": _s("Bougies", "Candles"),
+    "chart_volume": _s("Vol.", "Vol."),
 }
 
 CHART_JS_KEYS: tuple[str, ...] = tuple(CHART_STRINGS)

@@ -83,7 +83,7 @@ def test_data_freshness_links_only_existing_target_pages(tmp_path, monkeypatch):
     """Les séries macro (FRED) figurent dans le tableau mais n'ont pas de page de cible : pas de lien vers un 404."""
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    page = TestClient(app).get("/data-freshness").text
+    page = TestClient(app).get("/universe").text
     linked = set(re.findall(r'href="/targets/([^"]+)"', page))
     assert linked, "les cibles réelles doivent rester cliquables"
     assert not [s for s in linked if s not in forms.TARGET_SOURCE_BY_SYMBOL]

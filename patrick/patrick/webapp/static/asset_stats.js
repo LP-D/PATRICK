@@ -25,14 +25,17 @@
         return (v > 0 ? "+" : "") + fmtNum(v, digits);
     }
 
-    function drawChart(host, symbol, dates, closes) {
-        var P = window.PatrickPlot;
+    function drawChart(host, symbol, data) {
+        var P = window.PatrickPlot, dates = data.dates || [], closes = data.closes || [];
         var xs = dates.map(P.parseDate), timed = xs.length === closes.length && xs.every(function (x) { return isFinite(x); });
         if (!timed) xs = closes.map(function (_, i) { return i; });
+        var ohlc = timed && data.opens && data.opens.length === closes.length ? { open: data.opens, high: data.highs, low: data.lows } : null;
         P.create(host, {
             type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
             series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 1.8 }],
-            title: symbol, height: 170, compact: true, empty: tr("preview_no_data", "No data for this period."),
+            title: symbol, quoteTitle: false, initialDays: 365,
+            quote: timed, trend: true, ranges: timed, height: 220, empty: tr("preview_no_data", "No data for this period."),
+            ohlc: ohlc, volume: ohlc && data.volumes && data.volumes.some(function (v) { return v > 0; }) ? data.volumes : null,
         });
     }
 
@@ -106,7 +109,7 @@
             renderMetricsGrid(data);
 
         var host = body.querySelector(".asset-chart");
-        if (host) drawChart(host, symbol, data.dates || [], data.closes || []);
+        if (host) drawChart(host, symbol, data);
     }
 
     function loadPanel(panel) {

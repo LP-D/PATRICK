@@ -161,10 +161,14 @@ def compute_stats(
         dates = dates[:n]
         closes = closes[:n]
 
-    frame = pd.DataFrame({
-        "date": pd.to_datetime(dates, errors="coerce"),
-        "close": pd.to_numeric(closes, errors="coerce"),
-    }).dropna().sort_values("date").drop_duplicates(subset="date", keep="last")
+    cols = {"date": pd.to_datetime(dates, errors="coerce"), "close": pd.to_numeric(closes, errors="coerce")}
+    extras = {"open": "opens", "high": "highs", "low": "lows", "volume": "volumes"}
+    for col, key in extras.items():           # bougies et volumes : seulement s'ils sont alignés sur les clôtures
+        values = list(series.get(key) or [])
+        if len(values) >= len(dates) and dates:
+            cols[col] = pd.to_numeric(values[:len(dates)], errors="coerce")
+    frame = (pd.DataFrame(cols).dropna(subset=["date", "close"]).sort_values("date")
+             .drop_duplicates(subset="date", keep="last"))
 
     dates = [d.strftime("%Y-%m-%d") for d in frame["date"]]
     closes = [float(v) for v in frame["close"]]
@@ -175,6 +179,7 @@ def compute_stats(
         "insufficient_history": len(closes) < MIN_HISTORY_FOR_STATS,
         "dates": dates,
         "closes": closes,
+        **{key: [None if v != v else float(v) for v in frame[col]] for col, key in extras.items() if col in frame.columns},
         "returns": {},
         "long_window_returns": {},
         "zscore_60d": None,

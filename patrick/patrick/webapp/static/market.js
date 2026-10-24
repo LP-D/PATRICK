@@ -29,7 +29,8 @@
         return select.selectedOptions[0].value;
     }
 
-    // Tracé : moteur commun (chart_kit.js) — zoom par sélection, déplacement, échelle recalculée, infobulle, redessin au changement de thème.
+    // Tracé : moteur commun (chart_kit.js) en style cotation : en-tête (dernier cours, variation de la période), courbe verte / rouge selon
+    // la tendance, bougies et volumes quand le fournisseur les donne. Zoom par sélection, déplacement, infobulle, redessin au changement de thème.
     function drawChart(series) {
         if (!chartHost) return;
         if (chart) chart.destroy();
@@ -37,10 +38,14 @@
         var xs = dates.map(window.PatrickPlot.parseDate);
         var timed = xs.length === closes.length && xs.every(function (x) { return isFinite(x); });
         if (!timed) xs = closes.map(function (_, i) { return i; });
+        var ohlc = timed && series.opens && series.opens.length === closes.length
+            ? { open: series.opens, high: series.highs, low: series.lows } : null;
         chart = window.PatrickPlot.create(chartHost, {
             type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
             series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 2 }],
-            title: currentSymbol || "", height: 190, empty: tr("preview_no_data", "No data for this period."),
+            title: currentSymbol || "", quote: timed, trend: true, height: 240,
+            ohlc: ohlc, volume: ohlc && series.volumes && series.volumes.some(function (v) { return v > 0; }) ? series.volumes : null,
+            empty: tr("preview_no_data", "No data for this period."),
         });
     }
 

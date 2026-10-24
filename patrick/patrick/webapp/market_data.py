@@ -56,11 +56,22 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
         if hist is None or hist.empty:
             return {"dates": [], "closes": []}
         s = hist["Close"].dropna()
+        hist = hist.loc[s.index]
 
     out = {
         "dates": [d.strftime("%Y-%m-%d") for d in s.index],
         "closes": [round(float(v), 4) for v in s.values],
     }
+    if source != "fred":
+        # Bougies et volumes (graphique de type « cotation ») : mêmes dates que les clôtures ; `None` si la case est vide.
+        def _col(name: str, digits: int | None) -> list:
+            if name not in hist.columns:
+                return [None] * len(s)
+            vals = hist[name].tolist()
+            return [None if v != v else (round(float(v), digits) if digits is not None else int(v)) for v in vals]
+
+        out["opens"], out["highs"], out["lows"] = _col("Open", 4), _col("High", 4), _col("Low", 4)
+        out["volumes"] = _col("Volume", None)
     if source == "fred" and len(s):
         _fred_cache[(symbol, period)] = (time.monotonic(), out)
     return out

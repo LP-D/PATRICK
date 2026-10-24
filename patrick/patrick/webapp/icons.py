@@ -34,6 +34,8 @@ ICONS: dict[str, str] = {
     "moon": '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
     "sidebar": '<rect width="18" height="18" x="3" y="3" rx="2"/> <path d="M9 3v18"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "chevrons-down-up": '<path d="m7 20 5-5 5 5"/> <path d="m7 4 5 5 5-5"/>',
+    "chevrons-up-down": '<path d="m7 15 5 5 5-5"/> <path d="m7 9 5-5 5 5"/>',
     "info": '<circle cx="12" cy="12" r="10"/> <path d="M12 16v-4"/> <path d="M12 8h.01"/>',
     "command": '<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/>',
     "ok": '<circle cx="12" cy="12" r="10"/> <path d="m16 9-5.5 5.5L8 12"/>',

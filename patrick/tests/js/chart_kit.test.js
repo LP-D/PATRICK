@@ -81,4 +81,28 @@ assert.equal(K.yExtent(series, 0, 5, [], []), null, "série masquée ignorée");
 const withNulls = [{ xs: [0, 1, 2], ys: [null, 4, NaN], hidden: false }];
 assert.deepEqual(K.yExtent(withNulls, 0, 2, [], []), [4, 4]);
 
+// ---- rendu « cotation » : couleurs, variation de la fenêtre, bougies, YTD
+assert.equal(K.withAlpha("#5B8DEF", 0.3), "rgba(91,141,239,0.3)");
+assert.equal(K.withAlpha("#fff", 0.5), "rgba(255,255,255,0.5)");
+assert.equal(K.withAlpha("rgb(10, 20, 30)", 0.2), "rgba(10,20,30,0.2)");
+assert.equal(K.withAlpha("rgba(10,20,30,0.9)", 0.2), "rgba(10,20,30,0.2)");
+assert.equal(K.withAlpha("red", 0.5), "red", "forme inconnue rendue telle quelle");
+
+const wx = [0, 1, 2, 3, 4, 5], wy = [null, 10, 12, NaN, 15, null];
+let wc = K.windowChange(wx, wy, 0, 5);
+assert.deepEqual([wc.i0, wc.i1, wc.first, wc.last, wc.abs], [1, 4, 10, 15, 5], "trous ignorés aux deux bouts");
+assert.equal(Math.round(wc.pct), 50);
+wc = K.windowChange(wx, wy, 2, 5);
+assert.deepEqual([wc.first, wc.last], [12, 15], "seule la fenêtre compte");
+assert.equal(K.windowChange(wx, wy, 20, 30), null, "aucun point visible");
+assert.equal(K.windowChange([0, 1], [0, 5], 0, 1).pct, null, "départ nul : pas de pourcentage");
+assert.ok(K.windowChange([0, 1], [10, 8], 0, 1).abs < 0, "baisse : variation négative");
+
+assert.deepEqual(K.candleExtent([0, 1, 2, 3], [5, 9, 7, 12], [4, 3, 6, 2], 0, 2), [3, 9], "bornes des bougies visibles");
+assert.deepEqual(K.candleExtent([0, 1, 2], [null, 9, NaN], [null, 3, NaN], 0, 2), [3, 9], "cases vides ignorées");
+assert.equal(K.candleExtent([0, 1], [5, 6], [4, 3], 10, 20), null);
+
+assert.equal(K.yearStart(Date.UTC(2026, 9, 22)), Date.UTC(2026, 0, 1));
+assert.equal(K.yearStart(Date.UTC(2024, 0, 1)), Date.UTC(2024, 0, 1));
+
 console.log("chart_kit : tous les tests passent");
