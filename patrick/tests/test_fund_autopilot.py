@@ -287,7 +287,7 @@ def test_manual_rules_are_never_touched(conn, world):
     tid = world.cell("AAPL", 3, live=AAPL_SIGNALS)
     sid = _strategy(conn)
     manual = systematic.create_rule(conn, sid, "Ma règle", {
-        "trial_id": tid, "segment": "live", "enter": 0.55, "exit": 0.5, "instrument": {"kind": "equity", "symbol": "AAPL"},
+        "trial_id": tid, "segment": "live", "signal": {"mode": "direction"}, "instrument": {"kind": "equity", "symbol": "AAPL"},
         "sizing": {"amount": 1000}})
     autopilot.configure(conn, sid, {})
     conn.execute("DELETE FROM champion")                                      # plus aucun modèle retenu

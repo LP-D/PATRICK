@@ -29,7 +29,7 @@ from patrick.tracking import db as trackdb
 
 # Parents avant enfants. Les enfants d'une stratégie sont recopiés avec elle.
 TABLES = ("fund_strategy", "fund_rule", "fund_order", "fund_deleted", "fund_price_meta", "fund_price")
-MIN_SCHEMA = 36                                        # 0033 : `updated_at`, `fund_deleted` ; 0036 : `autopilot_json`
+MIN_SCHEMA = 44                                        # 0033 : `updated_at`, `fund_deleted` ; 0044 : `autopilot_json`
 
 
 class FundShareError(RuntimeError):

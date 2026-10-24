@@ -356,8 +356,8 @@ def create_rule(conn: sqlite3.Connection, strategy_id: str, name: str, config: d
         raise store.FundError("couverture : seulement pour un modèle d'alpha (un modèle de direction n'en a pas besoin)")
     if sim_engine.available_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
         raise store.FundError(f"aucun signal du segment {cfg['segment']!r} pour l'essai {cfg['trial_id']}")
-    if p_up_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
-        raise store.FundError(f"segment {cfg['segment']!r} : {NO_P_UP}")
+    if cfg["signal"]["mode"] == "score" and p_up_segments(conn, cfg["trial_id"]).get(cfg["segment"], 0) < 1:
+        raise store.FundError(f"segment {cfg['segment']!r} : {NO_P_UP}")      # le mode direction n'a pas besoin de p_up
     rule_id = store.new_id("rule")
     with conn:
         conn.execute("INSERT INTO fund_rule (rule_id, strategy_id, name, config_json) VALUES (?, ?, ?, ?)",

@@ -70,7 +70,7 @@ exclus avec ce motif. Un future continu (`=F`) se négocie en CFD avec l'avertis
 
 ## 6. Cycle (`fund/autopilot.py`)
 
-Politique par stratégie dans `fund_strategy.autopilot_json` (migration 0036) : `enabled`, `tier`, `gross`, `max_models`,
+Politique par stratégie dans `fund_strategy.autopilot_json` (migration 0044) : `enabled`, `tier`, `gross`, `max_models`,
 `allow_short`, `min_confidence`, `fresh_days`, dernière exécution. `run(strategy)` : sélectionne → complète/ajuste les règles
 **gérées** (`config.managed`) → retire (`retired_on`) celles dont le modèle n'est plus retenu ou dont le champion a changé →
 applique chaque règle → rend un compte rendu (créées, ajustées, retirées, ordres placés, refusés avec motifs). Les règles
@@ -80,7 +80,7 @@ n'est cherché). Déclenchement : bouton, commande `patrick fund autopilot-run`,
 jamais les prédictions.
 
 Partage entre PC : `autopilot_json` est une colonne de la stratégie, elle voyage avec elle (`fund/share.py`) ; version
-minimale du schéma relevée à 36.
+minimale du schéma relevée à 44.
 
 ## 7. Page, API, commande
 

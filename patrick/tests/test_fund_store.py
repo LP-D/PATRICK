@@ -131,7 +131,7 @@ def test_deleting_a_strategy_leaves_a_dated_tombstone(conn):
     assert [r[0] for r in row] == [sid] and row[0][1] > "2020-01-01"
 
 
-# --- réglages du pilote automatique (migration 0036) --------------------------------------------------------------
+# --- réglages du pilote automatique (migration 0044) --------------------------------------------------------------
 
 def test_autopilot_settings_roundtrip_touch_the_strategy_and_can_be_cleared(conn):
     sid = store.create_strategy(conn, "A", "CTO", 1000, "2026-01-05")
