@@ -73,3 +73,9 @@ def test_the_scope_reaches_the_selection(conn, monkeypatch):
     plan = autopilot.preview(conn, sid, TODAY)
 
     assert [m["target"] for m in plan["selected"] + [{"target": e["target"]} for e in plan["excluded"]]] == ["GC=F"]
+
+
+def test_setup_has_no_cap_on_the_number_of_models_by_default(conn):
+    out = asset_classes.setup(conn, today=TODAY, only=["Devises"])
+
+    assert store.get_autopilot(conn, out[0]["strategy_id"])["settings"]["max_models"] is None

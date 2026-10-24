@@ -170,3 +170,15 @@ def test_the_model_selector_lists_every_model_by_name_with_its_p_value(client, w
     assert html.index("Apple · h1") < html.index("Future · Or · h1") < html.index("Indice")    # triés par nom
     assert "(p = 0.400)" in html and "disabled" in html.split("(p = 0.400)")[0].rsplit("<option", 1)[1]
     assert 'name="signal_mode"' in html and 'name="follow_champion"' in html and "fund_rule_follow" not in html
+
+
+def test_an_empty_max_models_in_the_preview_address_means_no_cap(client, world):
+    for i in range(3):
+        world.cell(f"T{i}", 3, live=SIGNALS)
+    world.cell("AAPL", 3, live=SIGNALS)
+    sid = fs.make_strategy(client)
+
+    capped = client.get(url(sid, "/preview.html?max_models=1")).text
+    unlimited = client.get(url(sid, "/preview.html?max_models=")).text
+
+    assert "Au-delà du nombre maximal" in capped and "Au-delà du nombre maximal" not in unlimited

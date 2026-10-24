@@ -289,7 +289,7 @@
         box.querySelectorAll("[data-auto-field]").forEach(function (el) {
             if (el.type === "checkbox") out[el.name] = el.checked;
             else if (el.name === "gross") out.gross = Number(el.value) / 100;
-            else if (el.name === "max_models") out.max_models = Number(el.value);
+            else if (el.name === "max_models") out.max_models = el.value.trim() === "" ? null : Number(el.value);   // vide : aucun plafond
             else out[el.name] = el.value;
         });
         return out;
@@ -303,7 +303,7 @@
         if (act === "auto-preview") {
             var query = new URLSearchParams(), settings = autoSettings(box);
             Object.keys(settings).forEach(function (k) {
-                query.set(k, settings[k] === true ? "1" : settings[k] === false ? "0" : String(settings[k]));
+                query.set(k, settings[k] === true ? "1" : settings[k] === false ? "0" : settings[k] === null ? "" : String(settings[k]));
             });
             var res = await fetch(base + "/preview.html?" + query.toString());
             if (!res.ok) {

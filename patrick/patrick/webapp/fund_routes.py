@@ -294,6 +294,9 @@ def register(app: FastAPI, templates, context) -> None:
                     raise store.FundError(f"{key} invalide : nombre attendu ({params[key]!r})") from exc
         for key in ("fresh_days", "max_models"):
             if key in params:
+                if key == "max_models" and params[key].strip() == "":
+                    raw[key] = None                                  # vide : aucun plafond
+                    continue
                 try:
                     raw[key] = int(params[key])
                 except ValueError as exc:

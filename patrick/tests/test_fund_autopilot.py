@@ -365,3 +365,10 @@ def test_sizing_changes_below_ten_percent_are_ignored():
     assert autopilot._stable_sizing({"amount": 5000.0}, {"amount": 5200.0}) == {"amount": 5000.0}
     assert autopilot._stable_sizing({"amount": 5000.0}, {"quantity": 2}) == {"quantity": 2}
     assert autopilot._stable_sizing(None, {"amount": 10.0}) == {"amount": 10.0}
+
+
+def test_settings_accept_no_cap_on_the_number_of_models():
+    settings = autopilot.Settings.from_dict({"max_models": None})
+
+    assert settings.selection.max_models is None and settings.to_dict()["max_models"] is None
+    assert autopilot.Settings.from_dict(settings.to_dict()) == settings

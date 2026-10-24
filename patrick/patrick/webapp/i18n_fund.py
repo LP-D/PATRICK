@@ -280,6 +280,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_auto_tier_large": _s("Large : tous les signaux non suspects", "Wide: every non-suspect signal"),
     "fund_auto_gross": _s("Exposition brute (%)", "Gross exposure (%)"),
     "fund_auto_max": _s("Modèles au plus", "Max models"),
+    "fund_auto_max_none": _s("aucun plafond", "no cap"),
     "fund_auto_short": _s("Vente à découvert (CFD)", "Short selling (CFD)"),
     "fund_auto_preview": _s("Prévisualiser", "Preview"),
     "fund_auto_enable": _s("Activer", "Enable"),

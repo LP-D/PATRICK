@@ -1067,7 +1067,7 @@ def fund_autopilot_select_cmd(
     strategy: str = typer.Option(None, "--strategy", help="Stratégie (str_...) : ajoute instruments et tailles"),
     tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
-    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles"),
+    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles (0 : aucun plafond)"),
     short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
@@ -1078,7 +1078,7 @@ def fund_autopilot_select_cmd(
     day = _fund_day(today)
     conn = trackdb.connect()
     try:
-        raw = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": short}
+        raw = {"tier": tier, "gross": gross, "max_models": max_models or None, "allow_short": short}
         if strategy:
             plan = autopilot.preview(conn, strategy, day, autopilot.Settings.from_dict(raw))
         else:
@@ -1097,7 +1097,7 @@ def fund_autopilot_enable_cmd(
     strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)"),
     tier: str = typer.Option("strict", "--tier", help="strict ou large"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
-    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles"),
+    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles (0 : aucun plafond)"),
     short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
 ) -> None:
     """Active le pilote automatique d'une stratégie (le premier cycle se lance avec `autopilot-run`)."""
@@ -1106,7 +1106,7 @@ def fund_autopilot_enable_cmd(
 
     conn = trackdb.connect()
     try:
-        stored = autopilot.configure(conn, strategy, {"tier": tier, "gross": gross, "max_models": max_models,
+        stored = autopilot.configure(conn, strategy, {"tier": tier, "gross": gross, "max_models": max_models or None,
                                                      "allow_short": short})
     except fund_store.FundError as exc:
         typer.echo(f"Refusé : {exc}")
@@ -1115,7 +1115,7 @@ def fund_autopilot_enable_cmd(
         conn.close()
     st = stored["settings"]
     typer.echo(f"Pilote automatique activé sur {strategy} (niveau {st['tier']}, exposition brute {st['gross'] * 100:g} %, "
-               f"{st['max_models']} modèles au plus).")
+               + (f"{st['max_models']} modèles au plus)." if st["max_models"] else "sans plafond de modèles)."))
 
 
 @fund_app.command(name="autopilot-run")
@@ -1163,7 +1163,7 @@ def fund_autopilot_classes_cmd(
     tier: str = typer.Option("large", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
     capital: float = typer.Option(100_000, "--capital", help="Capital d'une stratégie créée"),
-    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles par stratégie"),
+    max_models: int = typer.Option(0, "--max-models", help="Nombre maximal de modèles par stratégie (0 : aucun plafond)"),
     wrapper: str = typer.Option("CTO", "--wrapper", help="Enveloppe d'une stratégie créée (CTO ou PEA)"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
@@ -1174,7 +1174,7 @@ def fund_autopilot_classes_cmd(
     conn = trackdb.connect()
     try:
         rows = asset_classes.setup(conn, today=_fund_day(today), only=only or None, horizons=tuple(horizon), tier=tier,
-                                   gross=gross, capital=capital, wrapper=wrapper, max_models=max_models, dry_run=not create)
+                                   gross=gross, capital=capital, wrapper=wrapper, max_models=max_models or None, dry_run=not create)
     except fund_store.FundError as exc:
         typer.echo(f"Refusé : {exc}")
         raise typer.Exit(code=1) from exc

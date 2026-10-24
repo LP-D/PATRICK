@@ -141,3 +141,14 @@ def test_rule_roll_reports_nothing_when_every_rule_follows_its_champion(setup):
     _, runner = setup
 
     assert "Aucune règle à remplacer" in run(runner, "rule-roll", "--today", "2026-01-16")
+
+
+def test_a_zero_max_models_means_no_cap_on_the_command_line(setup):
+    sid, runner = setup
+
+    out = run(runner, "autopilot-enable", "--strategy", sid, "--max-models", "0")
+
+    assert "sans plafond" in out
+    conn = trackdb.connect()
+    assert store.get_autopilot(conn, sid)["settings"]["max_models"] is None
+    conn.close()

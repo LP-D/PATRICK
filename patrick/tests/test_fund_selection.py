@@ -204,3 +204,15 @@ def test_policy_scope_validation_and_round_trip():
     for bad in ({"horizons": [0]}, {"horizons": "1"}, {"horizons": [True]}, {"groups": "Devises"}, {"groups": [3]}):
         with pytest.raises(store.FundError):
             selection.Policy.from_dict(bad)
+
+
+def test_no_cap_keeps_every_model_and_none_round_trips(conn, world):
+    for i in range(60):
+        world.cell(f"T{i}", dm_p=0.001 + i / 10_000)
+
+    unlimited = selection.select_models(conn, selection.Policy.from_dict({"max_models": None}), today=TODAY)
+
+    assert len(unlimited["selected"]) == 60 and unlimited["excluded"] == []
+    assert selection.Policy.from_dict({"max_models": None}).max_models is None
+    assert selection.Policy.from_dict(selection.Policy.from_dict({"max_models": None}).to_dict()).max_models is None
+    assert selection.Policy.from_dict({}).max_models == 40                        # sans mention : le plafond par defaut

@@ -50,7 +50,7 @@ class Policy:
     alpha_dm: float = 0.05
     alpha_bh: float = 0.10
     fresh_days: int = 7
-    max_models: int = 40
+    max_models: int | None = 40                     # None = aucun plafond
     horizons: tuple[int, ...] | None = None          # périmètre : seulement ces horizons (None = tous)
     groups: tuple[str, ...] | None = None            # périmètre : seulement ces groupes de l'univers (classes d'actifs)
 
@@ -67,7 +67,8 @@ class Policy:
                    alpha_dm=_probability(raw.get("alpha_dm", base.alpha_dm), "alpha_dm"),
                    alpha_bh=_probability(raw.get("alpha_bh", base.alpha_bh), "alpha_bh"),
                    fresh_days=_count(raw.get("fresh_days", base.fresh_days), "fresh_days", 365),
-                   max_models=_count(raw.get("max_models", base.max_models), "max_models", 500),
+                   max_models=(None if "max_models" in raw and raw["max_models"] is None
+                               else _count(raw.get("max_models", base.max_models), "max_models", 5000)),
                    horizons=_scope(raw.get("horizons"), "horizons", int), groups=_scope(raw.get("groups"), "groups", str))
 
     def to_dict(self) -> dict:
@@ -204,9 +205,10 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     selected.sort(key=lambda m: (m["target"], m["horizon"]))                    # trois tris stables : le dernier prime
     selected.sort(key=lambda m: m["last_signal"]["ts"], reverse=True)
     selected.sort(key=lambda m: 1.0 if m["dm_p"] is None else m["dm_p"])
-    for over in selected[policy.max_models:]:
-        reject(over["target"], over["horizon"], "cap", f"au-delà de {policy.max_models} modèles")
-    selected = selected[:policy.max_models]
+    if policy.max_models is not None:
+        for over in selected[policy.max_models:]:
+            reject(over["target"], over["horizon"], "cap", f"au-delà de {policy.max_models} modèles")
+        selected = selected[:policy.max_models]
     _describe(conn, selected, latest_live)
     counts: dict[str, int] = {}
     for cell in excluded_cells:

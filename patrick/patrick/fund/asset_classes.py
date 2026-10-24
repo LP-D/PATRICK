@@ -36,7 +36,7 @@ def strategy_name(asset_class: str) -> str:
 
 def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[str] | None = None,
           horizons: tuple[int, ...] = (1,), tier: str = "large", gross: float = 1.0, capital: float = 100_000,
-          wrapper: str = "CTO", max_models: int = 40, dry_run: bool = False) -> list[dict]:
+          wrapper: str = "CTO", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
     """Une stratégie en pilote automatique par classe (toutes, ou `only`). Une stratégie qui porte déjà le nom
     `Systematic <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est
     écrit, seul le nombre de modèles candidats est compté. Renvoie, par classe : `class`, `name`, `strategy_id`, `created`, `candidates`."""
