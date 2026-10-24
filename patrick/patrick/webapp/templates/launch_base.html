@@ -75,7 +75,9 @@
                     {% for group, items in target_groups.items() %}
                     <optgroup label="{{ group_labels.get(group, group) }}">
                         {% for sym, sym_label in items %}
-                        <option value="{{ sym }}" data-first="{{ depth_first.get(sym, '') }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}</option>
+                        {# le badge « données insuffisantes » est collé au libellé par app.py ; seul ce suffixe est repris, le nom vient du registre #}
+                        {% set badge = (' [' ~ sym_label.split(' [', 1)[1]) if (sym_label.endswith(']') and ' [' in sym_label) else '' %}
+                        <option value="{{ sym }}" title="{{ sym }}" data-first="{{ depth_first.get(sym, '') }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym | iname }}{{ badge }}</option>
                         {% endfor %}
                     </optgroup>
                     {% endfor %}
@@ -547,7 +549,7 @@
             {% for r in recent_runs %}
             <li>
                 <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
-                <span class="recent-runs-meta">{{ r.target }}/{{ r.horizon }}{{ t('day_suffix') }} · {{ r.status }}</span>
+                <span class="recent-runs-meta" title="{{ r.target }}">{{ r.target | iname }}/{{ r.horizon }}{{ t('day_suffix') }} · {{ r.status }}</span>
                 <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
                 {# « meilleur de 0 essai(s) » sur un run en cours était une
                    contrepartie de fiabilité qui affirmait une fausseté : il n'y

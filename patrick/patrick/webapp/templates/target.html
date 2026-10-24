@@ -1,10 +1,10 @@
 {% extends "base_v2.html" %}
 {% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb %}
-{% block title %}PATRICK — {{ target }}{% endblock %}
+{% block title %}PATRICK — {{ target | iname }}{% endblock %}
 
-{% block crumb_trail %}{{ crumb(target) }}{% endblock %}
+{% block crumb_trail %}{{ crumb(target | iname) }}{% endblock %}
 {% block content %}
-<h1 class="page-title">{{ target }}</h1>
+<h1 class="page-title" title="{{ target }}">{{ target | iname }}</h1>
 <p class="page-subtitle">{{ t('tg_sub2') }} <a href="/runs?target={{ target }}">{{ t('tg_all_runs') }}</a></p>
 
 {% if detail is none %}
@@ -129,7 +129,7 @@
 {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
 {% set _ = arows.append([
     '<a href="/runs/' ~ r.run_id ~ '/detail">' ~ (r.name or r.run_id) ~ '</a>' ~ (' ' ~ status_badge(t('suspect_tag'), 'error') if r.suspect else ''),
-    r.benchmark or '—',
+    (('<span title="' ~ r.benchmark ~ '">' ~ (r.benchmark | iname_h) ~ '</span>') if r.benchmark else '—'),
     r.horizon | hlabel,
     status_badge(r.status, state),
     r.started_at or '—',

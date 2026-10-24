@@ -17,13 +17,13 @@
             var search = h("input", { type: "search", class: "ra-num", style: { width: "180px", "margin-left": "12px" }, placeholder: T("ah_filter_q"), value: query });
             search.addEventListener("change", function () { query = search.value; draw(); });
             host.appendChild(search);
-            var ts = d.targets.filter(function (t) { return !query || t.toLowerCase().indexOf(query.trim().toLowerCase()) >= 0; });
+            var ts = d.targets.filter(function (t) { return !query || PK.instMatch(t, query.trim().toLowerCase()); });
             ts.sort(function (a, b) {
                 function best(t) { var m = -1; d.horizons.forEach(function (hz) { var c = cells[t + "|" + hz]; if (c && isNum(c[metric]) && c[metric] > m) m = c[metric]; }); return m; }
                 return best(b) - best(a);
             });
             var shown = ts.slice(0, per);
-            host.appendChild(PK.heat(shown, d.horizons.map(String), function (r, c) {
+            host.appendChild(PK.heat(shown.map(function (t) { return PK.inst(t); }), d.horizons.map(String), function (r, c) {
                 var cell = cells[shown[r] + "|" + d.horizons[c]];
                 if (!cell || !isNum(cell[metric])) return { text: "" };
                 var v = cell[metric], dev = Math.min(1, Math.abs(v - 0.5) / 0.12);
@@ -76,7 +76,7 @@
             var c = PK.s("circle", { cx: P.X(p.sharpe_bh), cy: P.Y(p.sharpe), r: 3.6, fill: p.sharpe > p.sharpe_bh ? "var(--pos)" : "var(--neg)", "fill-opacity": 0.6 });
             c.style.cursor = "pointer";
             c.addEventListener("click", function () { window.location.href = "/runs/" + encodeURIComponent(p.id) + "/analyse"; });
-            PK.hoverTip(P.add(c), function () { return [p.target + " · " + p.algo, T("ah_rl_t", { s: num(p.sharpe, 2), b: num(p.sharpe_bh, 2), d: isNum(p.dsr) ? pct(p.dsr, 0) : "—" })]; });
+            PK.hoverTip(P.add(c), function () { return [PK.inst(p.target) + " · " + p.algo, T("ah_rl_t", { s: num(p.sharpe, 2), b: num(p.sharpe_bh, 2), d: isNum(p.dsr) ? pct(p.dsr, 0) : "—" })]; });
         });
         var above = pts.filter(function (p) { return p.sharpe > p.sharpe_bh; }).length;
         host.appendChild(P.node);

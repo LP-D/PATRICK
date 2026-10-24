@@ -73,10 +73,10 @@ def test_no_page_body_carries_its_own_breadcrumb(client):
 
 def test_child_pages_extend_the_top_bar_trail(client):
     target = client.get("/targets/%5EVIX").text
-    assert _crumbs(target).endswith("Univers ^VIX")
+    assert _crumbs(target).endswith("Univers Volatilité · VIX (S&P 500)")
     assert re.search(r'<a class="crumb-entry" href="/universe">', target)
     run = _crumbs(client.get("/runs/run1/detail").text)
-    assert "Historique" in run and "^VIX" in run and run.endswith("run1")
+    assert "Historique" in run and "VIX (S&P 500)" in run and run.endswith("run1")
 
 
 def test_child_pages_light_up_their_navigation_entry(client):

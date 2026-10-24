@@ -169,7 +169,7 @@
    as-is. #}
 {% macro asset_panel(symbol, label, slug, note='') %}
 <div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}">
-  <h2>{{ label }} <span class="hint pk-mono asset-panel-symbol">{{ symbol }}</span>{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
+  <h2 title="{{ symbol }}">{{ symbol | iname }}{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
   <div class="asset-panel-body" data-state="loading">
     <div class="skeleton-line" style="width: 100%; margin-bottom: 8px"></div>
     <div class="skeleton-line" style="width: 70%; margin-bottom: 8px"></div>

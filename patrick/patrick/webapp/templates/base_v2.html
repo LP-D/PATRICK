@@ -31,7 +31,11 @@ script below (no flash), otherwise the OS preference applies.
     <link rel="stylesheet" href="{{ asset('patrick.css') }}">
     {# Moteur de graphiques : chargé dès l'en-tête, car les scripts des pages (dans le bloc content) tracent avant les scripts de pied de page. #}
     <script src="{{ asset('chart_kit.js') }}"></script>
+    {# Noms des instruments pour les scripts (window.PatrickNames) : les données sont dans la page, lues au premier appel. #}
+    <script src="{{ asset('names.js') }}"></script>
     <script id="i18n-data" type="application/json">{{ i18n_js | default({}) | tojson }}</script>
+    {# avant tout script de page : les récapitulatifs calculés au chargement ont besoin des noms #}
+    <script id="instrument-names" type="application/json">{{ instrument_names(lang | default('fr')) | tojson }}</script>
     <script>
         window.I18N = JSON.parse(document.getElementById("i18n-data").textContent || "{}");
     </script>

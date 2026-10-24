@@ -8,7 +8,7 @@
 {% set out = [] %}
 {% for r in rows %}
 {% set cls = '' if r.mean_score is none else ('exp-chip-pos' if r.mean_score > 0.15 else ('exp-chip-neg' if r.mean_score < -0.15 else '')) %}
-{% set symbol_cell %}<a href="/news?symbol={{ r.symbol | urlencode }}&amp;window={{ window }}">{{ r.symbol }}</a>{% endset %}
+{% set symbol_cell %}<a href="/news?symbol={{ r.symbol | urlencode }}&amp;window={{ window }}" title="{{ r.symbol }}">{{ r.symbol | iname }}</a>{% endset %}
 {% set score_cell %}{% if r.mean_score is not none %}<span class="exp-chip {{ cls }}">{{ '%+.2f' | format(r.mean_score) }}</span>{% else %}<span class="na">—</span>{% endif %}{% endset %}
 {% set _ = out.append([
     symbol_cell,

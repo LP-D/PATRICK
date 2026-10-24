@@ -11,7 +11,7 @@
 </h3>
 {% for a in assets %}
 <p>
-  <strong>{{ a.label }}</strong> <span class="hint pk-mono">{{ a.symbol }}</span>
+  <strong title="{{ a.symbol }}">{{ a.symbol | iname }}</strong>
   ({{ a.currency }}, {{ a.exchange }}, {{ t('eq_first_listed') }} : {{ a.first_listed }})
   {{ status_badge(t('dq_status_ok') if a.sufficient else t('dq_status_short'), 'ok' if a.sufficient else 'warning') }}
   <br><span class="hint">{{ t.tx(a.reason) }}</span>
@@ -41,7 +41,7 @@
     {{ help_icon('equity_fundamentals', t('eq_fundamentals'), t('glossary_open_aria', term=t('eq_fundamentals'))) }}
 </h3>
 {% for a in assets %}
-<h4>{{ a.label }} <span class="hint pk-mono">{{ a.symbol }}</span></h4>
+<h4 title="{{ a.symbol }}">{{ a.symbol | iname }}</h4>
 {% set rows = fundamentals.get(a.symbol, []) %}
 {% if rows %}
 <div class="table-scroll">
@@ -55,7 +55,7 @@
 </table>
 </div>
 {% else %}
-<p class="hint">{{ t('eq_no_fundamentals', symbol=a.symbol) }}</p>
+<p class="hint">{{ t('eq_no_fundamentals', symbol=a.symbol | iname) }}</p>
 {% endif %}
 {% endfor %}
 </div>

@@ -237,4 +237,4 @@ def test_predictions_page_shows_trained_assets_outside_the_default_list(tmp_path
 
     assert 'href="/targets/XLK"' in html and "Autres actifs" in html and "ZZZ.UNKNOWN" in html
     assert 'href="/targets/XLF"' not in html and "AAA__alpha_BBB" not in html
-    assert "VIX_Price" in html                                      # les actifs par défaut restent affichés
+    assert "Volatilité · VIX (S&amp;P 500)" in html                  # les actifs par défaut restent affichés, sous leur nom

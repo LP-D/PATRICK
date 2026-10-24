@@ -12,7 +12,7 @@
 {% set title_cell %}{% if it.url and it.url.startswith(('http://', 'https://')) %}<a href="{{ it.url }}" target="_blank" rel="noopener noreferrer">{{ it.title }}</a>{% else %}{{ it.title }}{% endif %}{% endset %}
 {% set score_cell %}{% if it.score is not none %}<span class="exp-chip {{ cls }}">{{ '%+.2f' | format(it.score) }}</span>{% else %}<span class="na">—</span>{% endif %}{% endset %}
 {% set events_cell %}{% for tag in it.events %}<span class="exp-chip exp-chip-warn">{{ t('news_ev_' ~ tag) }}</span> {% endfor %}{% endset %}
-{% set symbols_cell %}{% for s in it.symbols %}<a href="/news?symbol={{ s | urlencode }}">{{ s }}</a> {% endfor %}{% endset %}
+{% set symbols_cell %}{% for s in it.symbols %}<a href="/news?symbol={{ s | urlencode }}" title="{{ s }}">{{ s | iname }}</a> {% endfor %}{% endset %}
 {% set _ = out.append([
     time_cell,
     title_cell,

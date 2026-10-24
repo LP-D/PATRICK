@@ -9,7 +9,7 @@
 {% set bl_rows = [] %}
 {% for r in rows %}
 {% set _ = bl_rows.append([
-    '<a href="/targets/' ~ r.symbol ~ '">' ~ r.symbol ~ '</a>',
+    '<a href="/targets/' ~ r.symbol ~ '" title="' ~ r.symbol ~ '">' ~ (r.symbol | iname_h) ~ '</a>',
     "%.1f %%" | format(r.reference * 100),
     "%.1f %%" | format(r.weight * 100),
     "%+.1f" | format(r.tilt_pts),

@@ -53,7 +53,7 @@
         return Array.prototype.map.call($("rl-targets").selectedOptions, function (o) { return o.value; });
     }
     function recap() {
-        var targets = selectedTargets();
+        var targets = selectedTargets().map(function (sym) { return window.PatrickNames ? window.PatrickNames.label(sym) : sym; });
         var label = targets.length > 3 ? targets.slice(0, 3).join(", ") + " +" + (targets.length - 3) : (targets.join(", ") || "—");
         $("rl-recap").textContent = fmtStr(tr("rlp_recap"), {
             targets: label, algo: algoSel.value, steps: Number(form.elements.rl_total_timesteps.value || 0).toLocaleString(document.documentElement.lang || "fr"),
@@ -245,7 +245,7 @@
 
     function renderResults(r, runId) {
         var box = h("div", { class: "rl-results" });
-        box.appendChild(h("p", { class: "exp-meta", text: [r.name + " · " + r.target + " · " + r.algo,
+        box.appendChild(h("p", { class: "exp-meta", text: [r.name + " · " + (window.PatrickNames ? window.PatrickNames.label(r.target) : r.target) + " · " + r.algo,
             fmtStr(tr("rlp_n_obs"), { n: r.strategy.n, start: r.curves.dates[0], end: r.curves.dates[r.curves.dates.length - 1] }),
             fmtStr(tr("rlp_elapsed"), { t: fmtDuration(r.elapsed_s) })].join(" · ") }));
         (r.warnings || []).forEach(function (w) { box.appendChild(h("p", { class: "banner banner-warning", role: "status", text: w })); });
@@ -329,7 +329,7 @@
                 else track(run.run_id);
             });
             var kind = run.status === "done" ? "ok" : (run.status === "error" ? "neg" : "warn");
-            return [{ cell: run.name || run.run_id, cls: "pk-mono" }, run.target || "—", run.algo || "—", { cell: chip(run.status, kind) },
+            return [{ cell: run.name || run.run_id, cls: "pk-mono" }, (run.target ? (window.PatrickNames ? window.PatrickNames.label(run.target) : run.target) : "—"), run.algo || "—", { cell: chip(run.status, kind) },
                 run.sharpe === undefined || run.sharpe === null ? "—" : { cell: num(run.sharpe, 2) + " / " + num(run.sharpe_buy_hold, 2), cls: "num pk-mono" },
                 { cell: open }];
         });

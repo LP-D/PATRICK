@@ -8,8 +8,6 @@
 <p class="page-subtitle">{{ t('cmp_subtitle') }}</p>
 {% set cmp_kinds = [] %}{% for run in runs %}{% set _ = cmp_kinds.append('alpha' if '__alpha_' in (run.target or '') else 'directional') %}{% endfor %}
 {% if cmp_kinds | unique | list | length > 1 %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed') }}</p>{% endif %}
-{% set cmp_kinds = [] %}{% for run in runs %}{% set _ = cmp_kinds.append('alpha' if '__alpha_' in (run.target or '') else 'directional') %}{% endfor %}
-{% if cmp_kinds | unique | list | length > 1 %}<p class="banner banner-warning" role="note">{{ t('cmp_mixed') }}</p>{% endif %}
 <div class="compare-runs-table-wrap">
 <table class="data-table compare-runs-table">
     <thead>
@@ -17,8 +15,7 @@
     </thead>
     <tbody>
         <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
-        <tr><th>{{ t('kind_col') }}</th>{% for run in runs %}<td>{% if '__alpha_' in (run.target or '') %}<span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span>{% else %}<span class="kind-badge kind-directional">{{ t('kind_directional') }}</span>{% endif %}</td>{% endfor %}</tr>
-        <tr><th>{{ t('col_target') }}</th>{% for run in runs %}<td>{{ run.target }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_target') }}</th>{% for run in runs %}<td title="{{ run.target }}">{{ run.target | iname }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_horizons') }}</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} {{ t('cmp_days') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_validation') }}</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('col_status') }}</th>{% for run in runs %}<td>{{ run.status }}</td>{% endfor %}</tr>

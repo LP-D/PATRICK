@@ -35,7 +35,7 @@
         var chips = document.getElementById("ac-runs");
         PK.clear(chips);
         runs.forEach(function (r, i) {
-            chips.appendChild(h("a", { class: "exp-chip-btn", href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", style: { "border-color": COLORS[i] } }, [h("i", { class: "ra-swatch", style: { background: COLORS[i] } }), " " + r.name + " · " + r.target + " h" + r.horizon + " · " + r.algo]));
+            chips.appendChild(h("a", { class: "exp-chip-btn", href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", style: { "border-color": COLORS[i] } }, [h("i", { class: "ra-swatch", style: { background: COLORS[i] } }), " " + r.name + " · " + PK.inst(r.target) + " h" + r.horizon + " · " + r.algo]));
         });
         if (!data.same_target) chips.appendChild(PK.info(T("ac_mixed")));
         head(); curves(); folds(); dm(); diff();

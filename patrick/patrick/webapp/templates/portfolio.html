@@ -75,10 +75,10 @@
 {% set contradiction_rows = [] %}
 {% for c in overview.contradictions %}
 {% set _ = contradiction_rows.append([
-    '<a href="/targets/' ~ c.symbol_a ~ '">' ~ c.symbol_a ~ '</a> / <a href="/targets/' ~ c.symbol_b ~ '">' ~ c.symbol_b ~ '</a>',
+    '<a href="/targets/' ~ c.symbol_a ~ '" title="' ~ c.symbol_a ~ '">' ~ (c.symbol_a | iname_h) ~ '</a> / <a href="/targets/' ~ c.symbol_b ~ '" title="' ~ c.symbol_b ~ '">' ~ (c.symbol_b | iname_h) ~ '</a>',
     (c.horizon | hlabel),
-    status_badge(c.symbol_a ~ ' : ' ~ c.direction_a, 'ok' if c.direction_a == 'UP' else 'warning'),
-    status_badge(c.symbol_b ~ ' : ' ~ c.direction_b, 'ok' if c.direction_b == 'UP' else 'warning'),
+    status_badge((c.symbol_a | iname) ~ ' : ' ~ c.direction_a, 'ok' if c.direction_a == 'UP' else 'warning'),
+    status_badge((c.symbol_b | iname) ~ ' : ' ~ c.direction_b, 'ok' if c.direction_b == 'UP' else 'warning'),
     ('négative attendue' if c.correlation == 'negative' else 'positive attendue'),
     c.rationale,
 ]) %}
@@ -104,7 +104,7 @@
 {% set hrp_rows = [] %}
 {% for symbol, weight in hrp.weights.items() %}
 {% set _ = hrp_rows.append([
-    '<a href="/targets/' ~ symbol ~ '">' ~ symbol ~ '</a>',
+    '<a href="/targets/' ~ symbol ~ '" title="' ~ symbol ~ '">' ~ (symbol | iname_h) ~ '</a>',
     "%.1f%%" | format(weight * 100),
 ]) %}
 {% endfor %}

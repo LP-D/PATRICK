@@ -2,11 +2,11 @@
 {% from "_components.html" import crumb %}
 {% block title %}PATRICK — {{ t('am_title') }}{% endblock %}
 
-{% block crumb_trail %}{% if card_mode %}{{ crumb(target ~ ' · ' ~ t('ad_h', h=horizon)) }}{% endif %}{% endblock %}
+{% block crumb_trail %}{% if card_mode %}{{ crumb((target | iname) ~ ' · ' ~ t('ad_h', h=horizon)) }}{% endif %}{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ asset('analysis.css') }}">
 {% if card_mode %}
-<h1 class="page-title">{{ t('am_card_title') }} · {{ target }} · {{ t('ad_h', h=horizon) }}</h1>
+<h1 class="page-title">{{ t('am_card_title') }} · {{ target | iname }} · {{ t('ad_h', h=horizon) }}</h1>
 <p class="page-subtitle">{{ t('am_card_subtitle') }}</p>
 <div id="am-card" data-target="{{ target }}" data-horizon="{{ horizon }}"><div class="ra-skeleton" role="status" aria-label="{{ t('ra_loading') }}"><div class="skeleton-line" style="width: 90%"></div><div class="skeleton-line" style="width: 72%"></div></div></div>
 {% else %}

@@ -66,6 +66,7 @@ from patrick.webapp import (
     i18n,
     i18n_server,
     icons,
+    instruments,
     launch_batches,
     market_data,
     market_regime,
@@ -180,6 +181,13 @@ templates.env.globals["movers_snapshot"] = alerts.get_cached
 # Design system v3: inline Lucide SVG icons (webapp/icons.py).
 templates.env.globals["icon"] = icons.icon
 templates.env.globals["ui_t"] = i18n.ui_t
+# Noms d'affichage des instruments (webapp/instruments.py) : `{{ symbole | iname }}` (texte) ou `| iname_tip` (texte + symbole au survol).
+templates.env.filters["iname"] = instruments.display
+templates.env.filters["iname_tip"] = instruments.display_with_tip
+templates.env.filters["iname_h"] = instruments.display_html
+templates.env.filters["iname_h"] = instruments.display_html
+templates.env.globals["instrument_names"] = instruments.names_for_browser
+templates.env.globals["instr_name"] = instruments.display_instrument
 templates.env.globals["asset"] = asset
 templates.env.globals["nav_icon"] = icons.nav_icon
 # 504/756-day horizons are descriptive (decision of 2026-09-26): labelled everywhere.

@@ -146,6 +146,14 @@ Une page relève d'**une seule** catégorie (5 : `pilotage`, `modeles`, `classes
 - **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n_server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/test_i18n_server.py`.
 - **Vocabulaire commun** (un terme = une traduction) : *Hausse forte / faible, Baisse forte / faible* (jamais « Forte baisse »), *Drawdown max*, *Tuning Optuna*, *Derniers runs*, *Stacking*, *Fonds / Fund*, *Ticket d'ordres / Order ticket*. Nombres, dates et devises suivent la langue de la page (`Intl`, pas de `fr-FR` en dur).
 
+## Noms des instruments
+
+- **L'interface montre le nom, jamais le symbole** : société et ETF → le nom seul (*Apple*, *LVMH*) ; futures, CFD, indices, volatilité, devises, cryptos, taux, séries macro → le genre en tête (*Future · Or*, *CFD · Apple*, *Indice · S&P 500*, *Devise · EUR/USD*, *Crypto · Bitcoin*, *Taux · Trésor US 10 ans*, *Macro · …*). Cible d'alpha : *Apple · α vs S&P 500*.
+- **Le symbole reste l'identifiant** (URL, `value`, API, base) et se lit au survol : `title="{{ symbole }}"`. Registre : `config/instrument_names.py` (symbole → genre, nom FR, nom EN) ; règle serveur `webapp/instruments.py` ; navigateur `static/names.js` (`PatrickNames.label/name/tip`, `PK.inst` dans `analysis_kit.js`), alimenté par `<script id="instrument-names">` posé dans l'en-tête de `base_v2.html`, avant tout script de page.
+- **Gabarits** : `{{ s | iname }}` (texte), `{{ s | iname_tip }}` (avec bulle), `{{ s | iname_h }}` pour une cellule assemblée par `~` puis `| safe` (déjà échappé, `str` ordinaire — voir le piège Markup). Position de fonds : `{{ p.symbol | iname(none, p.kind) }}` impose le genre ; instrument de règle : `instr_name(c.instrument)`.
+- **Nouveau symbole dans l'univers** : l'ajouter au registre (`tests/test_instrument_names.py` échoue sinon). Symbole inconnu (Patrimoine, Simulation) : genre deviné d'après la forme (`=F`, `=X`, `-USD`, `^`), puis nom appris en arrière-plan chez Yahoo (`~/.patrick/instrument_names.json`, coupé par `PATRICK_INSTRUMENT_LOOKUP=0`).
+- **Exceptions assumées** : les messages composés par le domaine (phrases traduites par `i18n_server`) et les noms de runs enregistrés gardent le symbole tel qu'il a été écrit.
+
 ## Anti-Patterns (Do NOT Use)
 
 - ❌ Emojis comme icônes — icônes Lucide via `icon()` uniquement (un seul jeu, trait 2px)

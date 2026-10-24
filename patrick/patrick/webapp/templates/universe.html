@@ -40,7 +40,7 @@
     {% set rows = [] %}
     {% for row in g.rows %}
     {% set r = row.fresh %}
-    {% set symbol_cell %}{% if r.symbol in known_targets %}<a href="/targets/{{ r.symbol }}">{{ r.symbol }}</a>{% else %}{{ r.symbol }}{% endif %}{% endset %}
+    {% set symbol_cell %}{% if r.symbol in known_targets %}<a href="/targets/{{ r.symbol }}" title="{{ r.symbol }}">{{ r.symbol | iname }}</a>{% else %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% endif %}{% endset %}
     {% if r.cached %}
         {% set fresh_cell = status_badge(t('fr_days_late', n=r.business_days_late), 'ok' if r.state == 'ok' else 'warning') %}
         {% set date_cell = r.date_max %}
@@ -57,11 +57,11 @@
         {% set run_cell = '<span class="na">—</span>' %}
         {% set last_cell = '<span class="na">—</span>' %}
     {% endif %}
-    {% set _ = rows.append([symbol_cell, r.label, r.periodicity, date_cell, fresh_cell, run_cell, last_cell]) %}
+    {% set _ = rows.append([symbol_cell, r.periodicity, date_cell, fresh_cell, run_cell, last_cell]) %}
     {% endfor %}
     {% set n_cached = g.rows | map(attribute='fresh') | selectattr('cached') | list | length %}
     {% set n_done = g.rows | selectattr('run') | selectattr('run.n_done', 'gt', 0) | list | length %}
-    {{ data_table([t('un_col_symbol'), t('un_col_label'), t('fr_col_period'), t('fr_col_last'), t('fr_col_fresh'), t('un_col_history'), t('un_col_last_run')], rows,
+    {{ data_table([t('un_col_instrument'), t('fr_col_period'), t('fr_col_last'), t('fr_col_fresh'), t('un_col_history'), t('un_col_last_run')], rows,
                   footer=t('un_footer_all', n=(g.rows | length), c=n_cached, d=n_done)) }}
 </div>
 {% endfor %}

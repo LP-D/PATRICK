@@ -42,7 +42,7 @@
 
         var tr = d.trial || {}, run = d.run || {};
         var ident = [
-            [T("ra_id_target"), run.target + " · " + T("ra_id_horizon", { h: run.horizon })], [T("ra_id_algo"), tr.algo], [T("ra_id_sampler"), tr.sampler],
+            [T("ra_id_target"), PK.inst(run.target) + " · " + T("ra_id_horizon", { h: run.horizon })], [T("ra_id_algo"), tr.algo], [T("ra_id_sampler"), tr.sampler],
             [T("ra_id_nfeat"), tr.n_features], [T("ra_id_selector"), tr.selector], [T("ra_id_regime"), tr.regime + (tr.category ? " · " + tr.category : "")],
             [T("ra_id_trial"), "#" + tr.trial_id], [T("ra_id_scheme"), d.scheme === "cpcv" ? "CPCV" : "walk-forward"],
             [T("ra_id_period"), (sp.test ? sp.test.start + " → " : "") + (sp.holdout ? sp.holdout.end : (sp.test ? sp.test.end : "—"))],

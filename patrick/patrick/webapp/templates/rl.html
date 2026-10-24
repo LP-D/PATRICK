@@ -99,7 +99,7 @@
                     {% for group, items in target_groups.items() %}
                     <optgroup label="{{ group_labels.get(group, group) }}">
                         {% for sym, sym_label in items %}
-                        <option value="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym }} — {{ sym_label }}{% if sym in untradable %} · {{ t('rlp_untradable_tag') }}{% endif %}</option>
+                        <option value="{{ sym }}" title="{{ sym }}" {% if view.target_symbol == sym %}selected{% endif %}>{{ sym | iname }}{% if sym in untradable %} · {{ t('rlp_untradable_tag') }}{% endif %}</option>
                         {% endfor %}
                     </optgroup>
                     {% endfor %}

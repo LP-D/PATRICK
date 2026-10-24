@@ -78,7 +78,7 @@
 <p class="hint">{{ t('an_series_hint') }}</p>
 {% set srows = [] %}
 {% for s in a.series[:40] %}
-{% set _ = srows.append(['<span class="pk-mono">' ~ (s.series | e) ~ '</span>', s.n_models, s.n_features, s.n_targets, f3(s.best_f1)]) %}
+{% set _ = srows.append(['<span title="' ~ s.series ~ '">' ~ (s.series | iname_h) ~ '</span>', s.n_models, s.n_features, s.n_targets, f3(s.best_f1)]) %}
 {% endfor %}
 {{ data_table([t('dq_col_series'), t('an_col_n_models'), t('an_col_n_features'), t('an_col_targets'), t('an_col_best_f1')], srows,
               num_cols=[1, 2, 3, 4], collapse_after=5, more_label=more, less_label=less) }}
@@ -108,7 +108,7 @@
 {% for m in a.models %}
 {% set _ = mrows.append(['<a href="/runs/' ~ m.run_id ~ '/detail">' ~ m.run_id ~ '</a>',
     ('<span class="kind-badge kind-' ~ ('alpha' if m.kind == 'alpha' else 'directional') ~ '">' ~ (t('kind_alpha') if m.kind == 'alpha' else t('kind_directional')) ~ '</span>'),
-    (m.asset | e), m.horizon ~ ' j', m.algo, m.n_features, f3(m.auc), f3(m.f1), ('★' if m.champion else '')]) %}
+    ('<span title="' ~ m.asset ~ '">' ~ (m.asset | iname_h) ~ '</span>'), m.horizon ~ ' j', m.algo, m.n_features, f3(m.auc), f3(m.f1), ('★' if m.champion else '')]) %}
 {% endfor %}
 {{ data_table([t('dq_col_run'), t('kind_col'), t('dq_col_target'), t('dq_col_horizon'), t('an_col_algo'), t('an_col_n'), 'AUC', 'F1', t('an_col_champ')], mrows,
               num_cols=[5, 6, 7], collapse_after=5, more_label=more, less_label=less) }}

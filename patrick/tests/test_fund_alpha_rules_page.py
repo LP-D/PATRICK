@@ -67,8 +67,9 @@ def test_the_panel_shows_the_hedge_of_an_existing_rule(client, trial_id):
     client.post(f"/api/fund/strategies/{sid}/rules", json={"name": "Alpha couvert", "config": _config(trial_id)})
     html = client.get(f"/api/fund/strategies/{sid}/panel").text
 
-    assert "couvert contre ^GSPC" in html and "AAPL" in html
-    assert client.get(f"/api/fund/strategies/{sid}/panel?lang=en").text.count("hedged against ^GSPC") == 1
+    # la couverture est un CFD : le genre passe en tête, le symbole ^GSPC n'apparaît plus dans le texte
+    assert "couvert contre CFD · S&amp;P 500" in html and "Apple" in html
+    assert client.get(f"/api/fund/strategies/{sid}/panel?lang=en").text.count("hedged against CFD · S&amp;P 500") == 1
 
 
 def test_no_untranslated_key_leaks_into_the_alpha_panel(client, trial_id):

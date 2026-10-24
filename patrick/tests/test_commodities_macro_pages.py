@@ -13,9 +13,10 @@ and slow -- exactly what the AJAX split avoids."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from markupsafe import escape
 
 from patrick.config import defaults as D
-from patrick.webapp import forms
+from patrick.webapp import forms, instruments
 from patrick.webapp.app import app
 
 
@@ -35,8 +36,8 @@ def test_asset_statistics_explanations_are_clickable():
 def test_commodities_page_lists_every_asset_label_and_symbol():
     client = TestClient(app)
     resp = client.get("/commodities")
-    for symbol, label in D.DEFAULT_TARGET_GROUPS["Matières premières (futures)"]:
-        assert label in resp.text
+    for symbol, _label in D.DEFAULT_TARGET_GROUPS["Matières premières (futures)"]:
+        assert str(escape(instruments.display(symbol, "fr"))) in resp.text
         assert symbol in resp.text
 
 
@@ -61,8 +62,8 @@ def test_macro_page_returns_200():
 def test_macro_page_lists_every_asset_label_and_symbol():
     client = TestClient(app)
     resp = client.get("/macro")
-    for symbol, label in D.DEFAULT_TARGET_GROUPS[D.FRED_TARGET_GROUP]:
-        assert label in resp.text
+    for symbol, _label in D.DEFAULT_TARGET_GROUPS[D.FRED_TARGET_GROUP]:
+        assert str(escape(instruments.display(symbol, "fr"))) in resp.text
         assert symbol in resp.text
 
 
@@ -78,9 +79,9 @@ def test_macro_page_shows_every_fred_series_sectioned_by_domain():
     assert resp.status_code == 200
     text = resp.text
     for _, series in D.macro_page_sections():
-        for sid, label in series:
+        for sid, _label in series:
             assert f'data-symbol="{sid}"' in text
-            assert label in text
+            assert str(escape(instruments.display(sid, "fr"))) in text
     assert text.count('class="card asset-panel"') == len(D.DEFAULT_UNIVERSE_FRED_SERIES)
     # Headline indicators first, then the domains in order.
     order = [text.index(f'id="macro-{key}"') for key, _ in D.macro_page_sections()]

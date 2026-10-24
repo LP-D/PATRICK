@@ -29,10 +29,10 @@
         a.className = "ticker-item movers-pick";
         a.href = "/targets/" + encodeURIComponent(row.symbol);
         a.dataset.symbol = row.symbol;
-        a.title = row.label || row.symbol;
+        a.title = row.symbol;
         var sym = document.createElement("span");
         sym.className = "ticker-sym";
-        sym.textContent = row.symbol;
+        sym.textContent = (window.PatrickNames ? window.PatrickNames.label(row.symbol) : row.symbol);
         var pct = document.createElement("span");
         pct.className = "ticker-pct " + (sign > 0 ? "movers-up" : "movers-down");
         var value = Number(row.pct);

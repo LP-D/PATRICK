@@ -17,7 +17,7 @@
       {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       {% if a.kind in ('PEA', 'CTO', 'DAT') %}{{ info(a.kind | lower, a.kind) }}{% endif %}
       {% if a.opened_on %} · {{ t('pat_opened_lc') }} {{ a.opened_on }}{% endif %}
-      {% if a.benchmark %} · {{ t('pat_bench_lc') }} <span class="pk-mono">{{ a.benchmark }}</span>{% endif %}
+      {% if a.benchmark %} · {{ t('pat_bench_lc') }} <span title="{{ a.benchmark }}">{{ a.benchmark | iname }}</span>{% endif %}
       {% if a.source_account_id %} · <a href="/patrimoine/comptes/{{ a.source_account_id }}">{{ t('pat_source_acc') }}</a>{% endif %}
     </p>
   </div>
@@ -45,11 +45,11 @@
 {% endif %}
 {{ metric(t('pat_xirr_l'), perf.xirr | pct(2, true) if perf.xirr is not none else "—", t('pat_xirr'), "neutral" if perf.xirr is not none else "pending") }}
 {% if a.benchmark and perf.benchmark_return is not none %}
-{{ metric("vs " ~ a.benchmark, perf.excess_vs_benchmark | pct(2, true) if perf.excess_vs_benchmark is not none else "—",
+{{ metric("vs " ~ (a.benchmark | iname), perf.excess_vs_benchmark | pct(2, true) if perf.excess_vs_benchmark is not none else "—",
           t('pat_bench_rel', r=(perf.benchmark_return | pct(2, true)), v=(perf.benchmark_replica_value | eur)) ~ ((' ' ~ t('pat_bench_price')) if a.benchmark.startswith('^') else ""),
           ("ok" if perf.excess_vs_benchmark >= 0 else "warning") if perf.excess_vs_benchmark is not none else "neutral") }}
 {% elif a.benchmark %}
-{{ metric("vs " ~ a.benchmark, "—", t('pat_bench_na'), "pending") }}
+{{ metric("vs " ~ (a.benchmark | iname), "—", t('pat_bench_na'), "pending") }}
 {% endif %}
 {% set proxied = [] %}
 {% for p in detail.risk.proxied or [] %}{% set _ = proxied.append(p.symbol ~ " " ~ t('pat_via') ~ " " ~ p.proxy ~ " × " ~ ("%.1f" | format(p.scale)) ~ (" (" ~ t('pat_prior') ~ ")" if p.scale_source == "prior" else " (" ~ t('pat_estimated') ~ ")")) %}{% endfor %}
@@ -64,7 +64,7 @@
   </div>
   {% if chart.value | length > 1 %}
   <div id="wealth-chart" class="chart-wrap" aria-label="{{ t('pat_chart_aria') }}"></div>
-  <script id="wealth-chart-data" type="application/json">{{ dict(chart, labels={"value": t('pat_leg_value'), "net": t('pat_leg_net'), "bench": t('pat_leg_bench', b=a.benchmark)}) | tojson }}</script>
+  <script id="wealth-chart-data" type="application/json">{{ dict(chart, labels={"value": t('pat_leg_value'), "net": t('pat_leg_net'), "bench": t('pat_leg_bench', b=(a.benchmark | iname))}) | tojson }}</script>
   {% else %}
   {{ empty_state(t('pat_chart_none'), t('pat_chart_none_hint')) }}
   {% endif %}
@@ -76,7 +76,7 @@
   {% for r in h.rows %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
      Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
-  {% set symbol_cell %}<span class="pk-mono">{{ r.symbol }}</span>{% endset %}
+  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% endset %}
   {% set price_cell %}<span title="{{ r.price_source }}">{{ r.price | eur }}</span>{% if r.price_source == 'prix de transaction' %} <span class="tag">{{ t('pat_tx_tag') }}</span>{% endif %}{% endset %}
   {% set _ = rows.append([
       symbol_cell,
@@ -120,7 +120,7 @@
           <option value="">— {{ t('pat_no_asset') }}</option>
           {% for group, items in symbol_groups %}
           <optgroup label="{{ group_labels.get(group, group) }}">
-            {% for sym, sym_label in items %}<option value="{{ sym }}">{{ sym_label }} — {{ sym }}</option>{% endfor %}
+            {% for sym, sym_label in items %}<option value="{{ sym }}" title="{{ sym }}">{{ sym | iname }}{% if sym_label == 'hors banque de tickers' %} — {{ sym_label }}{% endif %}</option>{% endfor %}
           </optgroup>
           {% endfor %}
           <option value="__other__">{{ t('pat_other_sym') }}</option>
@@ -140,7 +140,7 @@
 
   {% set mv_rows = [] %}
   {% for m in detail.movements | reverse %}
-  {% set symbol_cell %}<span class="pk-mono">{{ m.symbol or '' }}</span>{% endset %}
+  {% set symbol_cell %}<span title="{{ m.symbol or '' }}">{{ m.symbol | iname }}</span>{% endset %}
   {% set note_cell %}{{ m.note or '' }}{% endset %}
   {% set delete_cell %}<button type="button" class="btn-ghost" data-api="/api/wealth/movements/{{ m.movement_id }}" data-method="DELETE" data-confirm="{{ t('pat_del_mv') }}" data-reload aria-label="{{ t('pat_delete') }}">{{ icon('trash', 14) }}</button>{% endset %}
   {% set _ = mv_rows.append([

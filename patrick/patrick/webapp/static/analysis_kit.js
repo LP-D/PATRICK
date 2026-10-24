@@ -435,7 +435,13 @@
     var CLASS_COLORS = ["var(--neg)", "color-mix(in srgb, var(--neg) 50%, var(--text-3))", "color-mix(in srgb, var(--pos) 50%, var(--text-3))", "var(--pos)"];
     var CAT_COLORS = ["var(--ra-c1)", "var(--ra-c2)", "var(--ra-c3)", "var(--ra-c4)", "var(--ra-c5)", "var(--ra-c6)", "var(--ra-c7)", "var(--ra-c8)"];
 
+    // Noms des instruments (names.js) : le symbole reste l'identifiant, la page montre le nom ; sans names.js, le symbole tel quel.
+    function inst(symbol) { return window.PatrickNames ? window.PatrickNames.label(symbol) : (symbol === null || symbol === undefined ? "" : String(symbol)); }
+    function instName(symbol) { return window.PatrickNames ? window.PatrickNames.name(symbol) : (symbol === null || symbol === undefined ? "" : String(symbol)); }
+    function instMatch(symbol, needle) { return (String(symbol) + " " + inst(symbol)).toLowerCase().indexOf(needle) >= 0; }
+
     window.PK = {
+        inst: inst, instName: instName, instMatch: instMatch,
         T: T, num: num, signed: signed, pct: pct, spct: spct, int: int, pval: pval, isNum: isNum, dateMs: dateMs, dateStr: dateStr, shortDate: shortDate,
         h: h, s: s, showTip: showTip, hideTip: hideTip, hoverTip: hoverTip, linear: linear, niceTicks: niceTicks, timeTicks: timeTicks, extent: extent,
         plot: plot, line: line, band: band, points: points, bars: bars, hline: hline, vline: vline, xband: xband, yband: yband, hover: hover, brush: brush,

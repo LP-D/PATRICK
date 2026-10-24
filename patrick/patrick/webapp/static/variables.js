@@ -30,7 +30,7 @@
     }
     function matrix(d) {
         var m = d.matrix, host = PK.clear(document.getElementById("av-matrix"));
-        host.appendChild(PK.heat(m.rows.map(function (r) { return r.target; }), m.families.map(function (f) { return T("ra_fam_" + f); }), function (r, c) {
+        host.appendChild(PK.heat(m.rows.map(function (r) { return PK.inst(r.target); }), m.families.map(function (f) { return T("ra_fam_" + f); }), function (r, c) {
             var v = m.rows[r].shares[m.families[c]] || 0;
             return { text: v >= 0.005 ? pct(v, 0) : "", intensity: Math.min(1, v * 2.5), base: "var(--brand)", href: "/targets/" + encodeURIComponent(m.rows[r].target) };
         }, { corner: T("av_m_corner") }));
@@ -83,9 +83,9 @@
         PK.fetchJSON("/api/variables/detail?feature=" + encodeURIComponent(feature)).then(function (d) {
             PK.clear(host);
             host.appendChild(h("h3", { class: "pk-mono", text: d.feature }));
-            host.appendChild(h("div", { class: "ra-chips" }, [PK.chip(T("ra_fam_" + d.family)), PK.chip(T("av_c_series") + " : " + d.series), PK.chip(T("av_d_runs", { n: int(d.n_runs), t: int(d.targets.length) }))]));
+            host.appendChild(h("div", { class: "ra-chips" }, [PK.chip(T("ra_fam_" + d.family)), PK.chip(T("av_c_series") + " : " + PK.inst(d.series)), PK.chip(T("av_d_runs", { n: int(d.n_runs), t: int(d.targets.length) }))]));
             host.appendChild(PK.table([T("ah_c_name"), T("ah_c_target"), T("ah_c_horizon"), T("ah_c_algo"), T("ah_c_nfeat"), T("av_c_freq"), T("ah_c_f1_test").split(" · ")[0]],
-                d.runs.map(function (r) { return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", text: r.run_id }) }, r.target, r.horizon, r.algo || "—", r.n_features === null ? "—" : r.n_features, pct(r.freq, 0), isNum(r.f1) ? num(r.f1, 3) : "—"]; }), { num: [2, 4, 5, 6] }));
+                d.runs.map(function (r) { return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", text: r.run_id }) }, PK.inst(r.target), r.horizon, r.algo || "—", r.n_features === null ? "—" : r.n_features, pct(r.freq, 0), isNum(r.f1) ? num(r.f1, 3) : "—"]; }), { num: [2, 4, 5, 6] }));
             host.dispatchEvent(new CustomEvent("patrick:content", { bubbles: true }));
             host.scrollIntoView({ block: "nearest" });
         }).catch(function (e) { PK.clear(host).appendChild(PK.empty(T("ra_error") + " " + e.message)); });

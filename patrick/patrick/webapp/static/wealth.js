@@ -239,7 +239,7 @@
             var tbody = document.createElement("tbody");
             data.rows.slice(0, 200).forEach(function (r) {
                 var tr_ = document.createElement("tr");
-                var cells = [r.ts, kindLabel(r.kind), r.symbol || "",
+                var cells = [r.ts, kindLabel(r.kind), r.symbol ? (window.PatrickNames ? window.PatrickNames.label(r.symbol) : r.symbol) : "",
                              r.quantity ? r.quantity.toLocaleString(LANG, { maximumFractionDigits: 6 }) : "",
                              (r.amount || 0).toLocaleString(LANG, { minimumFractionDigits: 2, maximumFractionDigits: 2 })];
                 if (multi) cells.push((r.source || "") + " → " + (r.target ? names[r.target] || r.target : "—"));

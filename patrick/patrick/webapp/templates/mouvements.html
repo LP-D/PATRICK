@@ -54,7 +54,7 @@
       <td class="pk-mono">{{ m.ts }}</td>
       <td>{{ acc.name }} {{ status_badge(t('wealth_mode_real') if acc.mode == 'real' else t('wealth_mode_fictive'), 'ok' if acc.mode == 'real' else 'pending') }}</td>
       <td>{{ m.kind | mvkind }}</td>
-      <td class="pk-mono">{{ m.symbol or '' }}</td>
+      <td title="{{ m.symbol or '' }}">{{ m.symbol | iname }}</td>
       <td class="num">{{ m.quantity | qty if m.quantity is not none else '' }}</td>
       <td class="num">{{ m.price | eur if m.price is not none else '' }}</td>
       <td class="num {{ 'pos' if m.amount >= 0 else 'neg' }}">{{ m.amount | eur }}</td>

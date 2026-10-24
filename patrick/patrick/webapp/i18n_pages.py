@@ -28,6 +28,17 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "hist_view_runs": _s("Runs", "Runs"),
     "hist_view_analyses": _s("Analyses", "Analyses"),
     "hist_open_analysis": _s("Analyse détaillée", "Detailed analysis"),
+    # Noms d'affichage des instruments (webapp/instruments.py) : le genre placé devant le nom d'un future, d'un indice, d'une devise...
+    "inst_kind_future": _s("Future", "Future"),
+    "inst_kind_cfd": _s("CFD", "CFD"),
+    "inst_kind_index": _s("Indice", "Index"),
+    "inst_kind_vol": _s("Volatilité", "Volatility"),
+    "inst_kind_fx": _s("Devise", "FX"),
+    "inst_kind_crypto": _s("Crypto", "Crypto"),
+    "inst_kind_rate": _s("Taux", "Rate"),
+    "inst_kind_macro": _s("Macro", "Macro"),
+    "inst_alpha_vs": _s("α vs {bench}", "α vs {bench}"),
+    "un_col_instrument": _s("Instrument", "Instrument"),
     "nav_tree_title": _s("Navigation", "Navigation"),
     "nav_tree_collapse_all": _s("Tout replier", "Collapse all"),
     "nav_tree_expand_all": _s("Tout déplier", "Expand all"),
@@ -658,4 +669,6 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "cb_split_holdout": _s("le holdout", "the holdout"),
 }
 
-PAGES_JS_KEYS: list[str] = ["target_short_history", "target_greyed_count"]
+PAGES_JS_KEYS: list[str] = ["target_short_history", "target_greyed_count",
+                            "inst_kind_future", "inst_kind_cfd", "inst_kind_index", "inst_kind_vol", "inst_kind_fx", "inst_kind_crypto",
+                            "inst_kind_rate", "inst_kind_macro", "inst_alpha_vs"]

@@ -11,7 +11,7 @@ from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
-from patrick.webapp import stats_help
+from patrick.webapp import instruments, stats_help
 from patrick.webapp.app import app
 from patrick.webapp.glossary import GLOSSARY
 from patrick.webapp.glossary_extra import CATEGORIES, TERM_CATEGORY
@@ -150,6 +150,7 @@ def test_headline_metrics_come_first_and_folds_are_collapsed_after_five(seeded):
 def test_collapsible_rows_only_when_they_are_worth_hiding():
     components = (Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates" / "_components.html").read_text(encoding="utf-8")
     env = Environment(loader=DictLoader({"c.html": components}))
+    env.filters.update({"iname": instruments.display, "iname_h": instruments.display_html, "iname_tip": instruments.display_with_tip})
     tpl = env.from_string('{% from "c.html" import data_table %}{{ data_table(h, rows, collapse_after=5, more_label="{n} de plus") }}')
     few = tpl.render(h=["a"], rows=[[i] for i in range(6)])
     many = tpl.render(h=["a"], rows=[[i] for i in range(9)])
@@ -200,7 +201,7 @@ def test_the_predictions_page_has_a_separate_alpha_view(seeded):
     client = TestClient(app)
     alpha = client.get("/predictions?kind=alpha").text
     visible = re.sub(r"<script.*?</script>", "", alpha, flags=re.DOTALL)        # les données de traduction embarquées citent tous les libellés
-    assert "MC.PA α vs ^STOXX50E" in alpha and "Surperformance forte" in alpha and "Baisse forte" not in visible
+    assert "LVMH · α vs Euro Stoxx 50" in alpha and "Surperformance forte" in alpha and "Baisse forte" not in visible
     directional = client.get("/predictions").text
     assert "Baisse forte" in directional and "Surperformance" not in directional
     assert "kind-tab active" in directional

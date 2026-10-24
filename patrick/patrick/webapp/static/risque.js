@@ -67,7 +67,7 @@
     // ----------------------------------------------------------------------------------------- rapport
     function excludedNote(list) {
         if (!list || !list.length) return null;
-        return PK.info(T("rk_excluded") + " " + list.map(function (e) { return e.symbol + " (" + T("rk_ex_" + e.reason, { n: e.n }) + ")"; }).join(", "), "warn");
+        return PK.info(T("rk_excluded") + " " + list.map(function (e) { return PK.inst(e.symbol) + " (" + T("rk_ex_" + e.reason, { n: e.n }) + ")"; }).join(", "), "warn");
     }
     function renderReport(r) {
         st.report = r;
@@ -120,25 +120,25 @@
     function renderContrib(r) {
         var host = box("rk-contrib"), mx = Math.max.apply(null, r.contributions.map(function (c) { return Math.max(c.share, c.weight / (r.covered_weight || 1)); }).concat([0.01]));
         host.appendChild(h("div", { class: "ra-hbars" }, r.contributions.map(function (c) {
-            return h("div", { class: "ra-hbar" }, [h("span", { class: "ra-hbar-label", title: c.symbol, text: c.symbol }),
+            return h("div", { class: "ra-hbar" }, [h("span", { class: "ra-hbar-label", title: c.symbol, text: PK.inst(c.symbol) }),
                 h("span", { class: "ra-hbar-track", title: T("rk_c_share") + " " + pct(c.share, 1) }, [h("i", { style: { width: (c.share / mx * 100).toFixed(1) + "%", background: "var(--ra-c1)" } })]),
                 h("span", { class: "ra-hbar-val pk-mono", text: pct(c.share, 0) })]);
         })));
         host.appendChild(PK.table([T("rk_c_symbol"), T("rk_c_weight"), T("rk_c_vol"), T("rk_c_share"), T("rk_c_contrib")],
-            r.contributions.map(function (c) { return [c.symbol, pct(c.weight, 1), pct(c.vol, 1), pct(c.share, 1), pct(c.contribution, 2)]; }), { num: [1, 2, 3, 4] }));
+            r.contributions.map(function (c) { return [PK.inst(c.symbol), pct(c.weight, 1), pct(c.vol, 1), pct(c.share, 1), pct(c.contribution, 2)]; }), { num: [1, 2, 3, 4] }));
     }
     function renderCorr(r) {
         var c = r.correlation, host = box("rk-corr");
-        host.appendChild(PK.heat(c.symbols, c.symbols, function (i, j) {
+        host.appendChild(PK.heat(c.symbols.map(PK.instName), c.symbols.map(PK.instName), function (i, j) {
             var v = c.values[i][j];
-            return { text: num(v, 2), intensity: Math.abs(v), base: v < 0 ? "var(--ra-c2)" : "var(--ra-c1)", title: c.symbols[i] + " / " + c.symbols[j] };
+            return { text: num(v, 2), intensity: Math.abs(v), base: v < 0 ? "var(--ra-c2)" : "var(--ra-c1)", title: PK.inst(c.symbols[i]) + " / " + PK.inst(c.symbols[j]) };
         }));
     }
     function renderStress(r) {
         var rows = r.stress.map(function (w) {
             var worst = w.legs.length ? w.legs[0] : null;
             return [T("rk_w_" + w.key), w.start + " → " + w.end, pct(w.coverage, 0), w.sufficient ? { cell: spct(w.return_risky, 1), cls: "neg" } : { cell: T("rk_insufficient"), cls: "hint" },
-                w.sufficient ? { cell: spct(w.return_total, 1), cls: "neg" } : "—", worst && w.sufficient ? worst.symbol + " " + spct(worst.return, 0) : "—"];
+                w.sufficient ? { cell: spct(w.return_total, 1), cls: "neg" } : "—", worst && w.sufficient ? PK.inst(worst.symbol) + " " + spct(worst.return, 0) : "—"];
         });
         box("rk-stress").appendChild(PK.table([T("rk_c_window"), T("rk_c_period"), T("rk_c_cover"), T("rk_c_ret_risky"), T("rk_c_ret_total"), T("rk_c_worst")], rows, { num: [2, 3, 4] }));
     }
@@ -190,15 +190,15 @@
         var m = d.methods.filter(function (x) { return x.method === st.rule; })[0] || d.methods[0];
         var mx = Math.max.apply(null, m.attribution.map(function (a) { return Math.abs(a.contribution); }).concat([1e-9]));
         host.appendChild(h("div", { class: "ra-hbars" }, m.attribution.map(function (a) {
-            return h("div", { class: "ra-hbar" }, [h("span", { class: "ra-hbar-label", title: a.symbol, text: a.symbol }),
+            return h("div", { class: "ra-hbar" }, [h("span", { class: "ra-hbar-label", title: a.symbol, text: PK.inst(a.symbol) }),
                 h("span", { class: "ra-hbar-track" }, [h("i", { style: { width: (Math.abs(a.contribution) / mx * 100).toFixed(1) + "%", background: a.contribution >= 0 ? "var(--pos)" : "var(--neg)" } })]),
                 h("span", { class: "ra-hbar-val pk-mono", text: spct(a.contribution, 1) })]);
         })));
         var w = m.weights, wx = w.dates.map(PK.dateMs), lo = Math.min.apply(null, wx), hi = Math.max.apply(null, wx), pad = Math.max((hi - lo) * 0.01, 86400000);
         var P = PK.plot({ w: 780, h: 230, x: { type: "time", domain: [lo - pad, hi + pad] }, y: { domain: [0, Math.max(0.1, PK.extent(w.values, 0.05)[1])], fmt: function (v) { return pct(v, 0); } }, title: T("rk_weights_over_time") });
         w.symbols.forEach(function (s, j) { PK.line(P, wx, w.values.map(function (row) { return row[j]; }), { color: COLORS[j % COLORS.length], width: 1.5, step: true }); });
-        PK.hover(P, function (xv) { var k = nearest(wx, xv); return k < 0 ? null : [w.dates[k]].concat(w.symbols.map(function (s, j) { return s + " " + pct(w.values[k][j], 1); })); });
-        host.appendChild(h("div", { class: "ra-block" }, [h("h3", { text: T("rk_weights_over_time") }), PK.legend(w.symbols.map(function (s, j) { return { color: COLORS[j % COLORS.length], label: s, line: true }; })), P.node]));
+        PK.hover(P, function (xv) { var k = nearest(wx, xv); return k < 0 ? null : [w.dates[k]].concat(w.symbols.map(function (s, j) { return PK.inst(s) + " " + pct(w.values[k][j], 1); })); });
+        host.appendChild(h("div", { class: "ra-block" }, [h("h3", { text: T("rk_weights_over_time") }), PK.legend(w.symbols.map(function (s, j) { return { color: COLORS[j % COLORS.length], label: PK.inst(s), line: true }; })), P.node]));
         done();
     }
     function loadBacktest() {
@@ -215,7 +215,7 @@
         if (ex) host.appendChild(ex);
         if (!d.available) { host.appendChild(PK.empty(T("rk_bt_reason_" + (d.reason || "need_two_assets"), { n: 0 }))); done(); return; }
         var rows = d.rows.map(function (r) {
-            return [r.symbol, pct(r.current, 1), pct(r.target, 1), { cell: (r.gap > 0 ? "+" : "") + num(r.gap * 100, 1) + " pts", cls: r.outside_band ? (r.gap > 0 ? "pos" : "neg") : "" }, { cell: eur(r.amount), cls: r.outside_band ? "" : "hint" }, r.outside_band ? PK.chip(T("rk_yes"), "warn") : T("rk_no")];
+            return [PK.inst(r.symbol), pct(r.current, 1), pct(r.target, 1), { cell: (r.gap > 0 ? "+" : "") + num(r.gap * 100, 1) + " pts", cls: r.outside_band ? (r.gap > 0 ? "pos" : "neg") : "" }, { cell: eur(r.amount), cls: r.outside_band ? "" : "hint" }, r.outside_band ? PK.chip(T("rk_yes"), "warn") : T("rk_no")];
         });
         host.appendChild(PK.table([T("rk_c_symbol"), T("rk_c_current"), T("rk_c_target"), T("rk_c_gap"), T("rk_c_gap_amount"), T("rk_c_band")], rows, { num: [1, 2, 3, 4] }));
         host.appendChild(PK.info(T("rk_gaps_note", { t: eur(d.turnover_amount), b: num(d.cost_bps, 0), c: eur(d.cost_estimate), n: d.n_outside, d: d.as_of })));

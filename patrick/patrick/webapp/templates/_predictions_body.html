@@ -150,8 +150,8 @@
         <tbody>
         {% for a in g.assets %}
         <tr>
-            <td>{% if kind == 'alpha' %}<span title="{{ a.symbol }}">{{ a.label }}</span>{% else %}<a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.label }}</a>{% endif %}</td>
-            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.label, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}</td>{% endfor %}
+            <td>{% if kind == 'alpha' %}<span title="{{ a.symbol }}">{{ a.symbol | iname }}</span>{% else %}<a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a>{% endif %}</td>
+            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}</td>{% endfor %}
         </tr>
         {% endfor %}
         </tbody>

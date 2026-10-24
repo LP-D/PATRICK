@@ -5,7 +5,7 @@
 <header class="rp-head">
     <div class="rp-title">
         <strong>{{ row.name or row.run_id }}</strong>
-        <span class="rp-sub">{{ row.target or '—' }} · {{ row.algo or '—' }}
+        <span class="rp-sub">{{ (row.target | iname) if row.target else '—' }} · {{ row.algo or '—' }}
             · <span class="kind-badge kind-rl">{{ t('nav_rl') }}</span></span>
     </div>
     <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ row.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>

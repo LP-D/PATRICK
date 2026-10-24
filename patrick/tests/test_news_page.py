@@ -177,10 +177,10 @@ def test_event_study_reports_the_reaction_when_there_are_enough_events(seeded, m
 def test_tables_render_real_links_not_escaped_markup(seeded):
     client = TestClient(app)
     assets = client.get("/fragments/news-assets", params={"window": 7}).text
-    assert '<a href="/news?symbol=AAPL&amp;window=7">AAPL</a>' in assets and "&lt;a" not in assets
+    assert '<a href="/news?symbol=AAPL&amp;window=7" title="AAPL">Apple</a>' in assets and "&lt;a" not in assets
     feed = client.get("/fragments/news-feed").text
     assert '<a href="https://x.example/0" target="_blank" rel="noopener noreferrer">Apple shares surge' in feed
-    assert '<a href="/news?symbol=AAPL">AAPL</a>' in feed and "&lt;a" not in feed
+    assert '<a href="/news?symbol=AAPL" title="AAPL">Apple</a>' in feed and "&lt;a" not in feed
     central = client.get("/fragments/news-central").text
     assert '<a href="https://x.example/0"' in central and "&lt;a" not in central
 

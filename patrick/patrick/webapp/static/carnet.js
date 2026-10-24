@@ -17,7 +17,7 @@
 
     function card(n, onChange) {
         var chips = h("div", { class: "ra-chips" }, [PK.chip(T("cn_k_" + n.kind), n.kind === "hypothesis" ? "warn" : "neutral"), PK.chip(T("cn_s_" + n.status), STATUS_KIND[n.status])]);
-        if (n.target) chips.appendChild(h("a", { class: "exp-chip-btn", href: "/targets/" + encodeURIComponent(n.target), text: n.target + (n.horizon ? " · h" + n.horizon : "") }));
+        if (n.target) chips.appendChild(h("a", { class: "exp-chip-btn", href: "/targets/" + encodeURIComponent(n.target), title: n.target, text: (window.PK ? PK.inst(n.target) : n.target) + (n.horizon ? " · h" + n.horizon : "") }));
         if (n.run_id) chips.appendChild(h("a", { class: "exp-chip-btn", href: "/runs/" + encodeURIComponent(n.run_id) + "/analyse", text: n.run_id }));
         if (n.kind === "hypothesis" && n.before_run !== null && n.before_run !== undefined) chips.appendChild(PK.chip(n.before_run ? T("cn_before_run") : T("cn_after_run"), n.before_run ? "ok" : "warn"));
         n.tags.forEach(function (t) { chips.appendChild(h("span", { class: "exp-chip", text: "#" + t })); });

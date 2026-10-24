@@ -8,18 +8,21 @@
     var tr = C.tr, fmtStr = C.fmtStr, num = C.num, pct = C.pct, pval = C.pval, h = C.h, s = C.s, chip = C.chip, note = C.note;
     var table = C.table, numCell = C.numCell, lineChart = C.lineChart, barChart = C.barChart;
     function $(id) { return document.getElementById(id); }
+    var PN = window.PatrickNames || { label: function (s) { return s; }, name: function (s) { return s; }, tip: function () { return ""; } };
 
     function heatmap(res) {
-        var labels = res.labels, n = labels.length;
+        var labels = res.labels.map(function (sym) { return PN.name(sym); }), n = labels.length;
         var cs = Math.max(18, Math.min(46, Math.floor(560 / n)));
-        var longest = labels.reduce(function (m, l) { return Math.max(m, l.length); }, 0);
-        var ml = Math.min(120, longest * 6.4 + 12), mt = ml;
+        // axes : noms raccourcis (le nom complet reste dans l'infobulle de chaque case)
+        var axis = labels.map(function (l) { return l.length > 22 ? l.slice(0, 21) + "…" : l; });
+        var longest = axis.reduce(function (m, l) { return Math.max(m, l.length); }, 0);
+        var ml = Math.min(150, longest * 6.4 + 12), mt = ml;
         var W = ml + n * cs + 8, H = mt + n * cs + 8;
         var svg = s("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, class: "exp-heat", role: "img",
             "aria-label": fmtStr(tr("exp_chart_aria"), { t: tr("exp_tab_corr") }) });
         labels.forEach(function (lab, i) {
-            svg.appendChild(s("text", { x: ml - 6, y: mt + i * cs + cs / 2 + 3.5, "text-anchor": "end", class: "exp-axis", text: lab }));
-            svg.appendChild(s("text", { x: 0, y: 0, class: "exp-axis", text: lab, transform: "translate(" + (ml + i * cs + cs / 2 + 3.5) + "," + (mt - 6) + ") rotate(-90)" }));
+            svg.appendChild(s("text", { x: ml - 6, y: mt + i * cs + cs / 2 + 3.5, "text-anchor": "end", class: "exp-axis", text: axis[i] }));
+            svg.appendChild(s("text", { x: 0, y: 0, class: "exp-axis", text: axis[i], transform: "translate(" + (ml + i * cs + cs / 2 + 3.5) + "," + (mt - 6) + ") rotate(-90)" }));
         });
         res.matrix.forEach(function (row, i) {
             row.forEach(function (rho, j) {
@@ -48,7 +51,7 @@
         var box = $("exp-chips"), syms = selected();
         box.replaceChildren();
         syms.forEach(function (sym) {
-            var b = h("button", { type: "button", class: "exp-chip-btn", "aria-label": fmtStr(tr("exp_remove"), { s: sym }) }, [sym + " ×"]);
+            var b = h("button", { type: "button", class: "exp-chip-btn", title: sym, "aria-label": fmtStr(tr("exp_remove"), { s: PN.label(sym) }) }, [PN.label(sym) + " ×"]);
             b.addEventListener("click", function () {
                 Array.prototype.forEach.call(assets.options, function (o) { if (o.value === sym) o.selected = false; });
                 onSelectionChange();
@@ -63,7 +66,7 @@
         document.querySelectorAll(".exp-asset-select").forEach(function (sel) {
             var previous = sel.value, role = sel.dataset.role;
             sel.replaceChildren();
-            syms.forEach(function (sym) { sel.appendChild(h("option", { value: sym, text: sym })); });
+            syms.forEach(function (sym) { sel.appendChild(h("option", { value: sym, text: PN.label(sym), title: sym })); });
             if (previous && syms.indexOf(previous) >= 0) sel.value = previous;
             else if (syms.length) sel.value = syms[role === "b" ? Math.min(1, syms.length - 1) : 0];
         });
@@ -133,7 +136,7 @@
     function pairList(title, rows) {
         if (!rows.length) return null;
         return h("div", { class: "exp-pairs" }, [h("h4", { text: title }), table(["", "ρ", "p"], rows.map(function (r) {
-            return [r.a + " × " + r.b, numCell(num(r.rho, 2), r.rho), { cell: pval(r.p_adj), cls: "num pk-mono" }];
+            return [PN.label(r.a) + " × " + PN.label(r.b), numCell(num(r.rho, 2), r.rho), { cell: pval(r.p_adj), cls: "num pk-mono" }];
         }))]);
     }
 
@@ -154,7 +157,7 @@
     function renderRolling(res) {
         var box = h("div", {});
         box.appendChild(lineChart({
-            dates: res.dates, series: [{ values: res.values }], yMin: -1, yMax: 1, title: res.a + " × " + res.b,
+            dates: res.dates, series: [{ values: res.values }], yMin: -1, yMax: 1, title: PN.label(res.a) + " × " + PN.label(res.b),
             band: [res.full_sample - res.noise_band, res.full_sample + res.noise_band],
             hlines: [{ y: res.full_sample, dash: "2 3" }, { y: 0, color: "var(--line-strong)", dash: "0" }],
         }));
@@ -170,7 +173,7 @@
         var headers = [tr("exp_col_asset"), tr("exp_col_mean"), tr("exp_col_vol"), tr("exp_col_skew"), tr("exp_col_kurt"), tr("exp_col_normal"),
             { text: tr("exp_col_var"), term: "exp_var_es" }, { text: tr("exp_col_es"), term: "exp_var_es" }, tr("exp_col_worst"), tr("exp_col_best"), tr("exp_col_dd"), tr("exp_col_pos"), tr("exp_col_ac1")];
         var rows = res.rows.map(function (r) {
-            return [{ cell: r.symbol, cls: "pk-mono" }, numCell(pct(r.mean_ann), r.mean_ann), { cell: pct(r.vol_ann), cls: "num pk-mono" },
+            return [{ cell: PN.label(r.symbol) }, numCell(pct(r.mean_ann), r.mean_ann), { cell: pct(r.vol_ann), cls: "num pk-mono" },
                 numCell(num(r.skew, 2), r.skew), { cell: num(r.excess_kurtosis, 2), cls: "num pk-mono" },
                 { cell: chip(r.normal_rejected ? tr("exp_normal_rejected") : tr("exp_normal_kept"), r.normal_rejected ? "warn" : "ok") },
                 numCell(pct(r.var95, 2), r.var95), numCell(pct(r.es95, 2), r.es95),
@@ -186,10 +189,10 @@
     function renderStationarity(res) {
         var headers = [tr("exp_col_asset"), { text: tr("exp_col_adf"), term: "exp_adf" }, { text: tr("exp_col_kpss"), term: "exp_kpss" }, tr("exp_col_level"), tr("exp_col_ret_stat"), { text: tr("exp_col_hurst"), term: "exp_hurst" }];
         var rows = res.rows.map(function (r) {
-            if (r.error) return [{ cell: r.symbol, cls: "pk-mono" }, { cell: r.error }, "", "", "", ""];
+            if (r.error) return [{ cell: PN.label(r.symbol) }, { cell: r.error }, "", "", "", ""];
             var level = r.level_stationary ? chip(tr("exp_v_stationary"), "ok") : (r.level_unit_root ? chip(tr("exp_v_unit_root"), "warn") : chip(tr("exp_v_ambiguous"), "neutral"));
             var hurstKind = r.hurst_label === "random_walk" ? "neutral" : (r.hurst_label === "trending" ? "pos" : "neg");
-            return [{ cell: r.symbol, cls: "pk-mono" }, { cell: pval(r.adf_level_p), cls: "num pk-mono" }, { cell: pval(r.kpss_level_p), cls: "num pk-mono" },
+            return [{ cell: PN.label(r.symbol) }, { cell: pval(r.adf_level_p), cls: "num pk-mono" }, { cell: pval(r.kpss_level_p), cls: "num pk-mono" },
                 { cell: level }, { cell: chip(r.return_stationary ? tr("exp_v_stationary") : tr("exp_v_ambiguous"), r.return_stationary ? "ok" : "neutral") },
                 { cell: h("span", {}, [num(r.hurst, 2) + " ", r.hurst === null ? "" : chip(tr("exp_h_" + r.hurst_label), hurstKind)]) }];
         });
@@ -265,7 +268,7 @@
             fmtStr(tr("exp_obs"), { n: res.n_obs })].join(" · ") }));
         var parts = res.components.slice(0, 3).map(function (c) {
             return h("div", { class: "exp-comp" }, [h("h4", { text: fmtStr(tr("exp_pca_comp"), { k: c.component }) + " · " + pct(c.explained, 0) }),
-                table(["", tr("exp_pca_loadings")], c.loadings.slice(0, 8).map(function (l) { return [{ cell: l.symbol, cls: "pk-mono" }, numCell(num(l.loading, 2), l.loading)]; }))]);
+                table(["", tr("exp_pca_loadings")], c.loadings.slice(0, 8).map(function (l) { return [{ cell: PN.label(l.symbol) }, numCell(num(l.loading, 2), l.loading)]; }))]);
         });
         box.appendChild(h("div", { class: "exp-three" }, parts));
         return box;

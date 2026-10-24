@@ -16,7 +16,7 @@
     if (listRoot) {
         var st = { items: [], q: "", status: "", sortKey: "target", sortDir: 1, page: 0, per: 50 };
         var COLS = [
-            { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: cardUrl(r.target, r.horizon), text: r.target }); }, sort: function (r) { return r.target.toLowerCase(); } },
+            { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: cardUrl(r.target, r.horizon), title: r.target, text: PK.inst(r.target) }); }, sort: function (r) { return PK.inst(r.target).toLowerCase(); } },
             { key: "horizon", label: "ag_c_horizon", num: true, cell: function (r) { return String(r.horizon); }, sort: function (r) { return r.horizon; } },
             { key: "algo", label: "ah_c_algo", cell: function (r) { return (r.algo || "—") + (r.n_features ? " · N=" + r.n_features : ""); }, sort: function (r) { return r.algo || ""; } },
             { key: "implicit", label: "am_c_title", cell: function (r) { return PK.chip(r.implicit ? T("am_implicit") : T("am_explicit"), r.implicit ? "neutral" : "ok"); }, sort: function (r) { return r.implicit ? 1 : 0; } },
@@ -44,7 +44,7 @@
         var drawTable = function () {
             var host = document.getElementById("am-table"), q = st.q.trim().toLowerCase();
             var rows = st.items.filter(function (r) {
-                if (q && r.target.toLowerCase().indexOf(q) < 0) return false;
+                if (q && !PK.instMatch(r.target, q)) return false;
                 if (st.status === "explicit" && r.implicit) return false;
                 if (st.status === "implicit" && !r.implicit) return false;
                 if (st.status === "stale" && !(r.age_days > 90)) return false;
@@ -147,7 +147,7 @@
                 .catch(function (e) { PK.clear(cardRoot).appendChild(h("p", { class: "banner banner-error", role: "alert", text: T("ra_error") + " " + e.message })); });
         };
         var promote = async function (v) {
-            var ok = window.patrickDialog ? await window.patrickDialog.confirm(T("am_promote_confirm", { t: target, h: horizon, r: v.run_id }), T("am_promote"), false) : false;
+            var ok = window.patrickDialog ? await window.patrickDialog.confirm(T("am_promote_confirm", { t: PK.inst(target), h: horizon, r: v.run_id }), T("am_promote"), false) : false;
             if (!ok) return;
             fetch("/api/modeles/promote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: target, horizon: horizon, run_id: v.run_id }) })
                 .then(function (r) { return r.json().then(function (b) { if (!r.ok) throw new Error(T("am_err_" + (b.detail || "unknown"))); return b; }); })

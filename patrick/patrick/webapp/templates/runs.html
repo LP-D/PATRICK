@@ -72,7 +72,7 @@
         <select name="target" onchange="this.form.submit()">
             <option value="">— {{ t('rl_filter_all_f') }} —</option>
             {% for tg in targets %}
-            <option value="{{ tg.target }}" {% if tg.target == filter_target %}selected{% endif %}>{{ tg.target }} ({{ tg.n_runs }})</option>
+            <option value="{{ tg.target }}" {% if tg.target == filter_target %}selected{% endif %}>{{ tg.target | iname }} ({{ tg.n_runs }})</option>
             {% endfor %}
         </select>
     </label>
@@ -170,7 +170,7 @@
         <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
             <td class="hc-check">{% if r.status == 'done' %}<input type="checkbox" class="compare-run-checkbox" form="compare-rl-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
             <td class="hc-name" title="{{ r.run_id }}">{{ r.name or r.run_id }}</td>
-            <td>{{ r.target or '—' }}</td>
+            <td title="{{ r.target }}">{{ (r.target | iname) if r.target else '—' }}</td>
             <td>{{ r.algo or '—' }}</td>
             <td>{{ status_badge(r.status, state) }}</td>
             <td class="num pk-mono headline">{{ '%.2f' | format(r.sharpe) if r.sharpe is not none else '—' }}</td>
@@ -220,7 +220,7 @@
             <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
             <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
             <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
-            <td>{{ r.target | safe }}</td>
+            <td title="{{ r.target }}">{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
             <td>{{ status_badge(r.status, state) }}</td>
             <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>

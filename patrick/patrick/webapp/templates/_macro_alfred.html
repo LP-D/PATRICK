@@ -28,13 +28,13 @@
 </div>
 {% if sm.most_revised %}
 <p class="hint"><strong>{{ t('alf_top') }}</strong>
-{% for r in sm.most_revised %}{{ r.label or r.series }} ({{ '%.1f' | format(r.ratio) }}×){% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% for r in sm.most_revised %}{{ r.series | iname }} ({{ '%.1f' | format(r.ratio) }}×){% if not loop.last %}, {% endif %}{% endfor %}</p>
 {% endif %}
 
 {% set rows = [] %}
 {% for r in report.rows | sort(attribute='label') %}
 {% set _ = rows.append([
-    '<strong>' ~ (r.label | e) ~ '</strong> <span class="hint pk-mono">' ~ (r.series | e) ~ '</span>',
+    '<strong title="' ~ r.series ~ '">' ~ (r.series | iname_h) ~ '</strong>',
     status_badge(t('alf_mode_rebased') if r.level_break else mode_label[r.mode], 'warning' if r.level_break else mode_state[r.mode]),
     (r.first_vintage or '—'),
     ('%.1f' | format(r.lost_years_if_alfred_only)) if r.lost_years_if_alfred_only is not none else '—',

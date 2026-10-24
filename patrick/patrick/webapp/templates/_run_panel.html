@@ -6,7 +6,7 @@
 <header class="rp-head">
     <div class="rp-title">
         <strong>{{ (r.name or r.run_id) | safe }}</strong>
-        <span class="rp-sub">{{ r.target | safe }} · {{ r.horizon | hlabel }}
+        <span class="rp-sub">{{ r.target | iname }} · {{ r.horizon | hlabel }}
             · <span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></span>
     </div>
     <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ r.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>

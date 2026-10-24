@@ -5,7 +5,7 @@
 {% block session_context %}
 {% set r = detail.run %}
 <div class="session-context">
-    <span><b>{{ t('rd_ctx_target') }}</b> <a href="/targets/{{ r.target }}">{{ r.target }}</a>/{{ t('h_horizon_unit', h=r.horizon) }}</span>
+    <span><b>{{ t('rd_ctx_target') }}</b> <a href="/targets/{{ r.target }}" title="{{ r.target }}">{{ r.target | iname }}</a>/{{ t('h_horizon_unit', h=r.horizon) }}</span>
     <span><b>snapshot</b> {{ r.snapshot_id or '—' }}</span>
     <span><b>config</b> {{ r.config_hash or '—' }}</span>
     <span><b>git</b> {{ r.git_sha or '—' }}</span>
@@ -13,13 +13,13 @@
 </div>
 {% endblock %}
 
-{% block crumb_trail %}{{ crumb(detail.run.target, '/targets/' ~ (detail.run.target | urlencode)) }}{{ crumb(detail.run.run_id | truncate(12, true)) }}{% endblock %}
+{% block crumb_trail %}{{ crumb(detail.run.target | iname, '/targets/' ~ (detail.run.target | urlencode)) }}{{ crumb(detail.run.run_id | truncate(12, true)) }}{% endblock %}
 {% block content %}
 {% set run = detail.run %}
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
 <p class="page-subtitle">
-    <a href="/targets/{{ run.target }}">{{ run.target }}</a> · {{ t('rd_horizon') }} {{ t('h_horizon_unit', h=run.horizon) }} ·
+    <a href="/targets/{{ run.target }}" title="{{ run.target }}">{{ run.target | iname }}</a> · {{ t('rd_horizon') }} {{ t('h_horizon_unit', h=run.horizon) }} ·
     {{ status_badge('CPCV' if detail.is_cpcv else 'walk-forward', 'neutral') }}
     {{ status_badge(run.status, state) }} ·
     {{ t('rd_started_on') }} {{ run.started_at or '—' }}{% if run.finished_at %}, {{ t('rd_finished_on') }} {{ run.finished_at }}{% endif %}
@@ -178,7 +178,7 @@
 {% if kpi and kpi.n_candidates %}
 <section id="kpi" class="card">
 <h2>{{ t('rd_kpi_h') }}</h2>
-<p>{{ t('rd_kpi_target') }} <strong>{{ kpi.target }}</strong> · {{ t('rd_kpi_horizons') }} {{ kpi.horizons | join(', ') }} · {{ t('rd_kpi_cands', n=kpi.n_candidates) }}
+<p>{{ t('rd_kpi_target') }} <strong title="{{ kpi.target }}">{{ kpi.target | iname }}</strong> · {{ t('rd_kpi_horizons') }} {{ kpi.horizons | join(', ') }} · {{ t('rd_kpi_cands', n=kpi.n_candidates) }}
 {{ t.tx(kpi.window.note) }} {{ t('rd_kpi_def') }}</p>
 
 <h3>{{ t('rd_by_algo') }}</h3>

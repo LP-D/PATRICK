@@ -65,7 +65,7 @@
 {% if o.excluded %}
 <h3>{{ t('dq_excluded_title') }}</h3>
 <p class="hint">{{ t('dq_excluded_hint') }}</p>
-<p>{% for e in o.excluded %}<span class="tag" title="{{ e.reason }}">{{ e.symbol }}</span> {% endfor %}</p>
+<p>{% for e in o.excluded %}<span class="tag" title="{{ e.symbol }} : {{ e.reason }}">{{ e.symbol | iname }}</span> {% endfor %}</p>
 {% endif %}
 </section>
 
@@ -80,7 +80,7 @@
     <thead><tr><th>{{ t('dq_col_run') }}</th><th>{{ t('dq_col_target') }}</th><th>{{ t('dq_col_horizon') }}</th><th class="num">F1_dir</th><th class="num">AUC</th><th>{{ t('dq_col_cause') }}</th></tr></thead>
     <tbody>
     {% for s in o.suspects %}
-    <tr><td class="pk-mono"><a href="/runs/{{ s.run_id }}/detail">{{ s.run_id }}</a></td><td>{{ s.target }}</td><td>{{ s.horizon | hlabel }}</td>
+    <tr><td class="pk-mono"><a href="/runs/{{ s.run_id }}/detail">{{ s.run_id }}</a></td><td title="{{ s.target }}">{{ s.target | iname }}</td><td>{{ s.horizon | hlabel }}</td>
         <td class="num pk-mono">{{ '%.3f' | format(s.F1_dir) if s.F1_dir is not none else '—' }}</td>
         <td class="num pk-mono">{{ '%.3f' | format(s.AUC) if s.AUC is not none else '—' }}</td>
         <td>{{ s.cause }}</td></tr>
@@ -113,7 +113,7 @@
         <tbody>
         {% for r in g.list %}
         <tr class="{{ 'dq-row-short' if r.status == 'short' else '' }}">
-            <td><span class="pk-mono">{{ r.symbol }}</span> <span class="hint">{{ r.label }}</span></td>
+            <td title="{{ r.symbol }}">{{ r.symbol | iname }}</td>
             <td>{{ r.first or '—' }}</td>
             <td class="num pk-mono">{{ r.years if r.years is not none else '—' }}</td>
             <td class="num pk-mono">{{ r.n_obs if r.n_obs is not none else '—' }}</td>

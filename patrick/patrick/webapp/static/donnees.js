@@ -226,7 +226,7 @@
 
     // ------------------------------------------------------------------------------------------------ listes de suivi
     function initWatch() {
-        PK.fetchJSON("/api/donnees/symbols").then(function (s) { var dl = box("dx-symbols"); s.forEach(function (x) { dl.appendChild(h("option", { value: x })); }); }).catch(function () { /* l'autocomplétion est facultative */ });
+        PK.fetchJSON("/api/donnees/symbols").then(function (s) { var dl = box("dx-symbols"); s.forEach(function (x) { dl.appendChild(h("option", { value: x, label: PK.inst(x) })); }); }).catch(function () { /* l'autocomplétion est facultative */ });
         checkControls();
         loadLists();
     }
@@ -292,8 +292,8 @@
             function chg(v) { return isNum(v) ? { cell: spct(v, 1), cls: v < 0 ? "neg" : "pos" } : "—"; }
             host.appendChild(PK.table([T("dx_c_symbol"), T("dx_c_price"), T("dx_c_d1"), T("dx_c_d5"), T("dx_c_d21"), T("dx_c_d63"), T("dx_c_d252"), T("dx_c_stale"), T("dx_c_trend")],
                 d.rows.map(function (r) {
-                    return r.in_lake ? [r.symbol, fmtVal(r.last_price), chg(r.d1), chg(r.d5), chg(r.d21), chg(r.d63), chg(r.d252), { cell: int(r.stale_bdays), cls: r.stale_bdays > 3 ? "neg" : "" }, { cell: spark(r.spark) }]
-                        : [r.symbol, { cell: T("dx_not_in_lake"), cls: "hint" }, "—", "—", "—", "—", "—", "—", ""];
+                    return r.in_lake ? [PK.inst(r.symbol), fmtVal(r.last_price), chg(r.d1), chg(r.d5), chg(r.d21), chg(r.d63), chg(r.d252), { cell: int(r.stale_bdays), cls: r.stale_bdays > 3 ? "neg" : "" }, { cell: spark(r.spark) }]
+                        : [PK.inst(r.symbol), { cell: T("dx_not_in_lake"), cls: "hint" }, "—", "—", "—", "—", "—", "—", ""];
                 }), { num: [1, 2, 3, 4, 5, 6, 7] }));
             done();
         }).catch(function (e) { if (n === seq.watch) fail("dx-watch", e); });
@@ -308,7 +308,7 @@
             out.appendChild(skeleton());
             send("POST", "/api/donnees/ticker-check", { symbol: sym.value.trim() }).then(function (r) {
                 var text = T("dx_chk_" + r.status, { n: r.n_obs, a: r.first, b: r.last, r: r.reason || "" });
-                PK.clear(out).appendChild(PK.info(r.symbol + " — " + text, r.status === "ok" ? "ok" : "warn"));
+                PK.clear(out).appendChild(PK.info(PK.inst(r.symbol) + " — " + text, r.status === "ok" ? "ok" : "warn"));
             }).catch(function (e) { fail("dx-check", e); });
         });
         c.appendChild(sym);

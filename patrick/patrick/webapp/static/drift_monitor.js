@@ -17,7 +17,7 @@
     }
     var COLS = [
         { key: "action", label: "ad_c_action", cell: function (r) { return PK.chip(T("ad_a_" + r.action), ACTION_KIND[r.action]); }, sort: function (r) { return ORDER[r.action]; } },
-        { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(r.target), text: r.target }); }, sort: function (r) { return r.target.toLowerCase(); } },
+        { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(r.target), title: r.target, text: PK.inst(r.target) }); }, sort: function (r) { return PK.inst(r.target).toLowerCase(); } },
         { key: "horizon", label: "ag_c_horizon", num: true, cell: function (r) { return String(r.horizon); }, sort: function (r) { return r.horizon; } },
         { key: "psi", label: "ad_c_psi", num: true, cell: function (r) { return isNum(r.psi) ? num(r.psi, 3) + (r.worst_feature ? " " : "") : "—"; }, sort: function (r) { return r.psi; } },
         { key: "share_significant", label: "ad_c_share", num: true, cell: function (r) { return isNum(r.share_significant) ? pct(r.share_significant, 0) + " (" + r.n_features + ")" : "—"; }, sort: function (r) { return r.share_significant; } },
@@ -35,7 +35,7 @@
     }
     function table() {
         var host = document.getElementById("ad-table"), q = st.q.trim().toLowerCase();
-        var rows = st.items.filter(function (r) { return (!q || r.target.toLowerCase().indexOf(q) >= 0) && (!st.action || r.action === st.action); });
+        var rows = st.items.filter(function (r) { return (!q || PK.instMatch(r.target, q)) && (!st.action || r.action === st.action); });
         var col = COLS.filter(function (c) { return c.key === st.sortKey; })[0] || COLS[0];
         rows.sort(function (a, b) {
             var x = col.sort(a), y = col.sort(b), nx = x === null || x === undefined, ny = y === null || y === undefined;

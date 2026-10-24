@@ -33,7 +33,7 @@
         P.create(host, {
             type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
             series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 1.8 }],
-            title: symbol, quoteTitle: false, initialDays: 365,
+            title: (window.PatrickNames ? window.PatrickNames.label(symbol) : symbol), quoteTitle: false, initialDays: 365,
             quote: timed, trend: true, ranges: timed, height: 220, empty: tr("preview_no_data", "No data for this period."),
             ohlc: ohlc, volume: ohlc && data.volumes && data.volumes.some(function (v) { return v > 0; }) ? data.volumes : null,
         });

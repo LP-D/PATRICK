@@ -43,14 +43,14 @@
         if (!d.pairs.length) { host.appendChild(PK.empty(T("aj_no_pairs"))); return; }
         var rows = d.pairs.map(function (p) {
             var c = p.calibration;
-            return [{ cell: h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(p.target), text: p.target }) }, p.horizon, int(p.signals), int(p.judged), int(p.pending), isNum(p.hit_rate) ? pct(p.hit_rate, 0) : "—", isNum(p.last_hit) ? pct(p.last_hit, 0) : "—",
+            return [{ cell: h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(p.target), title: p.target, text: PK.inst(p.target) }) }, p.horizon, int(p.signals), int(p.judged), int(p.pending), isNum(p.hit_rate) ? pct(p.hit_rate, 0) : "—", isNum(p.last_hit) ? pct(p.last_hit, 0) : "—",
                 c ? num(c.ece, 3) : "—", c ? num(c.brier, 3) + " / " + num(c.base_brier, 3) : "—", p.first + " → " + p.last, int(p.models), int(p.backfill)];
         });
         host.appendChild(PK.table([T("ag_c_target"), T("ag_c_horizon"), T("aj_c_signals"), T("aj_c_judged"), T("aj_c_pending"), T("ad_c_hit"), T("aj_c_last", { n: 30 }), "ECE", "Brier / " + T("aj_c_base"), T("aj_c_span"), T("aj_c_models"), T("aj_c_backfill")], rows, { num: [1, 2, 3, 4, 5, 6, 7, 8, 10, 11] }));
         host.appendChild(PK.note(T("aj_pairs_hint", { m: 30 })));
         if (d.divergences.length) {
             host.appendChild(h("h3", { text: T("aj_div_h") }));
-            host.appendChild(PK.table([T("ag_c_target"), T("ag_c_horizon"), T("aj_c_date"), T("aj_div_journal"), T("aj_div_table")], d.divergences.map(function (x) { return [x.target, x.horizon, x.day, "y=" + x.journal.y_pred + " p=" + (isNum(x.journal.p_up) ? num(x.journal.p_up, 3) : "—"), "y=" + x.table.y_pred + " p=" + (isNum(x.table.p_up) ? num(x.table.p_up, 3) : "—")]; }), { num: [1] }));
+            host.appendChild(PK.table([T("ag_c_target"), T("ag_c_horizon"), T("aj_c_date"), T("aj_div_journal"), T("aj_div_table")], d.divergences.map(function (x) { return [PK.inst(x.target), x.horizon, x.day, "y=" + x.journal.y_pred + " p=" + (isNum(x.journal.p_up) ? num(x.journal.p_up, 3) : "—"), "y=" + x.table.y_pred + " p=" + (isNum(x.table.p_up) ? num(x.table.p_up, 3) : "—")]; }), { num: [1] }));
             host.appendChild(PK.note(T("aj_div_hint")));
         }
     }
@@ -58,7 +58,7 @@
         var host = document.getElementById("aj-entries");
         PK.fetchJSON("/api/journal/entries?limit=" + st.per + "&offset=" + st.offset + (st.target ? "&target=" + encodeURIComponent(st.target) : "")).then(function (d) {
             var rows = d.items.map(function (e) {
-                return [e.journal_id, (e.recorded_at || "").slice(0, 19), PK.chip(T("aj_kind_" + e.kind), e.kind === "signal" ? "neutral" : "ok"), e.origin === "backfill" ? PK.chip(T("aj_backfill"), "warn") : "", e.target, e.horizon, e.signal_date,
+                return [e.journal_id, (e.recorded_at || "").slice(0, 19), PK.chip(T("aj_kind_" + e.kind), e.kind === "signal" ? "neutral" : "ok"), e.origin === "backfill" ? PK.chip(T("aj_backfill"), "warn") : "", PK.inst(e.target), e.horizon, e.signal_date,
                     isNum(e.y_pred) ? T("ra_cls" + Math.round(e.y_pred)) : "—", isNum(e.p_up) ? num(e.p_up, 3) : "—", isNum(e.y_true) ? (e.y_true >= 0.5 ? T("ra_up") : T("ra_down")) : "—", { cell: short(e.model_hash), cls: "pk-mono" }, { cell: short(e.entry_hash), cls: "pk-mono" }];
             });
             PK.clear(host).appendChild(PK.table(["#", T("aj_c_recorded"), T("aj_c_kind"), T("aj_c_origin"), T("ag_c_target"), T("ag_c_horizon"), T("aj_c_date"), T("aj_c_pred"), "P(up)", T("aj_c_outcome"), T("aj_c_model"), T("aj_c_hash")], rows, { num: [0, 5, 8] }));
@@ -73,7 +73,7 @@
     }
     function filters(d) {
         var box = PK.clear(document.getElementById("aj-filters")), targets = Array.from(new Set(d.pairs.map(function (p) { return p.target; }))).sort();
-        box.appendChild(PK.select([{ value: "", label: T("ah_all_status") }].concat(targets.map(function (t) { return { value: t, label: t }; })), st.target, function (v) { st.target = v; st.offset = 0; entries(); }, T("ag_c_target")));
+        box.appendChild(PK.select([{ value: "", label: T("ah_all_status") }].concat(targets.map(function (t) { return { value: t, label: PK.inst(t) }; })), st.target, function (v) { st.target = v; st.offset = 0; entries(); }, T("ag_c_target")));
     }
     function load() {
         PK.fetchJSON("/api/journal/overview").then(function (d) { kpis(d); actions(d); pairs(d); filters(d); entries(); root.dispatchEvent(new CustomEvent("patrick:content", { bubbles: true })); })

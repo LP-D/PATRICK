@@ -26,7 +26,7 @@
                 {% for g in catalog %}
                 <optgroup label="{{ g.label }}">
                     {% for it in g['items'] %}
-                    <option value="{{ it.symbol }}" data-per="{{ it.periodicity }}" data-text="{{ (it.symbol ~ ' ' ~ it.label) | lower }}">{{ it.symbol }} — {{ it.label }}</option>
+                    <option value="{{ it.symbol }}" data-per="{{ it.periodicity }}" title="{{ it.symbol }}" data-text="{{ (it.symbol ~ ' ' ~ (it.symbol | iname)) | lower }}">{{ it.symbol | iname }}</option>
                     {% endfor %}
                 </optgroup>
                 {% endfor %}

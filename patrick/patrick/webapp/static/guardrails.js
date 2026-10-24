@@ -60,7 +60,7 @@
         PK.hline(P, 0.5, { color: "var(--text-3)" });
         pts.forEach(function (r) {
             var c = r.verdict === "beyond_noise" ? "var(--pos)" : (r.verdict === "suspect" ? "var(--warn)" : "var(--text-3)");
-            PK.hoverTip(P.add(PK.s("circle", { cx: P.X(Math.log10(Math.max(1, r.trials))), cy: P.Y(Math.min(r.best_acc, 0.85)), r: 3.2, fill: c, "fill-opacity": 0.6 })), function () { return [r.target + " · h" + r.horizon, T("ag_sc_t", { n: int(r.trials), a: pct(r.best_acc, 1), pd: PK.pval(r.p_deflated) })]; });
+            PK.hoverTip(P.add(PK.s("circle", { cx: P.X(Math.log10(Math.max(1, r.trials))), cy: P.Y(Math.min(r.best_acc, 0.85)), r: 3.2, fill: c, "fill-opacity": 0.6 })), function () { return [PK.inst(r.target) + " · h" + r.horizon, T("ag_sc_t", { n: int(r.trials), a: pct(r.best_acc, 1), pd: PK.pval(r.p_deflated) })]; });
         });
         host.appendChild(P.node);
         host.appendChild(PK.legend([{ color: "var(--pos)", label: T("ag_v_beyond_noise") }, { color: "var(--text-3)", label: T("ag_v_within_noise") }, { color: "var(--warn)", label: T("ag_v_suspect") }, { color: "var(--warn)", label: T("ag_sc_curve"), line: true }]));
@@ -78,7 +78,7 @@
     }
 
     var COLS = [
-        { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(r.target), text: r.target }); }, sort: function (r) { return r.target.toLowerCase(); } },
+        { key: "target", label: "ag_c_target", cell: function (r) { return h("a", { class: "ra-cell-link", href: "/targets/" + encodeURIComponent(r.target), title: r.target, text: PK.inst(r.target) }); }, sort: function (r) { return PK.inst(r.target).toLowerCase(); } },
         { key: "horizon", label: "ag_c_horizon", num: true, cell: function (r) { return r.horizon === null ? "—" : String(r.horizon); }, sort: function (r) { return r.horizon; } },
         { key: "runs", label: "ag_c_runs", num: true, cell: function (r) { return int(r.runs); }, sort: function (r) { return r.runs; } },
         { key: "configs", label: "ag_c_configs", num: true, cell: function (r) { return int(r.configs); }, sort: function (r) { return r.configs; } },
@@ -94,7 +94,7 @@
     function filtered() {
         var q = st.q.trim().toLowerCase();
         return st.rows.filter(function (r) {
-            if (q && r.target.toLowerCase().indexOf(q) < 0) return false;
+            if (q && !PK.instMatch(r.target, q)) return false;
             if (st.verdict && r.verdict !== st.verdict) return false;
             return r.trials >= st.minTrials;
         });
@@ -151,7 +151,7 @@
         if (r.pairs_read_more_than_once) host.appendChild(h("p", { class: "banner banner-warning", role: "note", text: T("ag_h_warn", { n: int(r.pairs_read_more_than_once) }) }));
         if (!d.log.length) { host.appendChild(PK.empty(T("ag_h_nolog"))); return; }
         host.appendChild(PK.table([T("ra_hl_a_when"), T("ag_c_target"), T("ag_c_horizon"), T("ra_hl_a_purpose"), T("ra_hl_a_run"), T("ra_hl_a_window"), T("ra_hl_a_rows")],
-            d.log.map(function (x) { return [x.accessed_at, x.target, x.horizon, { cell: x.purpose, cls: x.purpose.indexOf("duel") >= 0 ? "neg" : "" }, x.run_id || "—", (x.holdout_start || "") + " → " + (x.holdout_end || ""), int(x.n_rows)]; }), { num: [2, 6] }));
+            d.log.map(function (x) { return [x.accessed_at, PK.inst(x.target), x.horizon, { cell: x.purpose, cls: x.purpose.indexOf("duel") >= 0 ? "neg" : "" }, x.run_id || "—", (x.holdout_start || "") + " → " + (x.holdout_end || ""), int(x.n_rows)]; }), { num: [2, 6] }));
     }
 
     PK.fetchJSON("/api/garde-fous/summary").then(function (d) {

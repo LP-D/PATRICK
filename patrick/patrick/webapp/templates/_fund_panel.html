@@ -64,7 +64,7 @@
       {% set opening = snap.orders | selectattr('position_id', 'equalto', p.position_id) | selectattr('action', 'equalto', 'open') | first %}
       <tr class="fund-position">
         <td>
-          <span class="pk-mono">{{ p.symbol }}</span> <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span>
+          <span class="instr" title="{{ p.symbol }}">{{ p.symbol | iname(none, p.kind) }}</span>{% if p.kind in ('equity', 'etf') %} <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span>{% endif %}
           {% if p.expiry %}<span class="hint">{{ t('fund_expiry', date=p.expiry) }}</span>{% endif %}
           {% if p.leverage and p.kind == 'cfd' %}<span class="hint">{{ p.leverage | qty }}:1</span>{% endif %}
           {% if p.price_quality %}<span class="tag" title="{{ t('fund_quality_continuous') }}">!</span>{% endif %}
@@ -169,7 +169,7 @@
     <tbody>
       {% for p in closed_positions %}
       <tr>
-        <td><span class="pk-mono">{{ p.symbol }}</span> <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span></td>
+        <td><span class="instr" title="{{ p.symbol }}">{{ p.symbol | iname(none, p.kind) }}</span>{% if p.kind in ('equity', 'etf') %} <span class="tag">{{ t('fund_kind_' ~ p.kind) }}</span>{% endif %}</td>
         <td>{{ t('fund_side_' ~ p.side) }}</td>
         <td class="pk-mono">{{ p.opened_on }} → {{ p.closed_on }}</td>
         <td>{{ t('fund_status_' ~ p.status) }}</td>
@@ -203,13 +203,13 @@
       <tr class="fund-rule">
         <td>{{ r.name }}</td>
         <td class="pk-mono">
-          {% if r.model %}{% if r.model.kind == 'alpha' %}{{ r.model.target.split('__alpha_')[0] }} <span class="tag">α vs {{ r.model.benchmark }}</span>{% else %}{{ r.model.target }}{% endif %} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}—{% endif %}
+          {% if r.model %}{{ r.model.target | iname }} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}—{% endif %}
           <span class="tag">{{ c.segment }}</span>
           {% if c.segment == 'test' %}<span class="tag" title="{{ t('fund_rule_test_warning') }}">!</span>{% endif %}
         </td>
         <td class="pk-mono">{{ t('fund_rule_enter') }} {{ c.enter }} · {{ t('fund_rule_exit') }} {{ c.exit }}{% if c.allow_short %} · {{ t('fund_rule_short_on') }}{% endif %}</td>
-        <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol or c.instrument.spec.root }}</span>
-          {% if c.hedge %}<br><span class="hint">{{ t('fund_rule_hedged_vs', symbol=(c.hedge.symbol or c.hedge.spec.root)) }}</span>{% endif %}</td>
+        <td><span class="instr" title="{{ c.instrument.symbol or c.instrument.spec.root }}">{{ instr_name(c.instrument) }}</span>
+          {% if c.hedge %}<br><span class="hint">{{ t('fund_rule_hedged_vs', symbol=instr_name(c.hedge)) }}</span>{% endif %}</td>
         <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>
         <td class="num pk-mono">{{ r.n_orders }}</td>
         <td class="fund-actions">
@@ -252,7 +252,7 @@
         {% for o in snap.orders | reverse %}
         <tr>
           <td class="pk-mono">{{ o.ts }}</td><td>{{ t('fund_action_' ~ o.action) }}</td>
-          <td class="pk-mono">{{ o.symbol }}</td><td>{{ t('fund_side_' ~ o.side) }}</td>
+          <td title="{{ o.symbol }}">{{ o.symbol | iname(none, o.instrument_kind) }}</td><td>{{ t('fund_side_' ~ o.side) }}</td>
           <td class="num pk-mono">{{ o.quantity | qty }}</td>
           <td class="num pk-mono">{{ o.price | qty }}{% if o.price_source == 'manual' %} *{% endif %}</td>
           <td class="num pk-mono">{{ o.fees | eur }}{% if o.fees_source == 'manual' %} *{% endif %}</td>

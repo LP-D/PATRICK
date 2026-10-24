@@ -78,6 +78,7 @@ def _isolated_machine_settings(tmp_path, monkeypatch):
     # La reprise automatique (`run_manager.recover_interrupted_runs`, appelée par `/api/run-state`) relance un worker quand la file n'est pas
     # vide : un test qui lit l'état d'une file ne doit pas faire démarrer un vrai processus. Les tests de la reprise retirent cette variable.
     monkeypatch.setenv("PATRICK_NO_AUTO_WORKER", "1")
+    monkeypatch.setenv("PATRICK_INSTRUMENT_LOOKUP", "0")             # un affichage n'apprend jamais un nom par le réseau (webapp/instruments.py)
 
 
 class FakeScheduledTask:

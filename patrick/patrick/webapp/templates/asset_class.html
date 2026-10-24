@@ -51,9 +51,9 @@
         </tr></thead>
         <tbody>
         {% for r in g.rows %}
-        <tr class="cls-row" data-symbol="{{ r.symbol }}" data-search="{{ (r.symbol ~ ' ' ~ r.label) | lower }}"
+        <tr class="cls-row" data-symbol="{{ r.symbol }}" data-search="{{ (r.symbol ~ ' ' ~ (r.symbol | iname)) | lower }}"
             data-trained="{{ 1 if r.n_dir else 0 }}" data-alpha="{{ 1 if r.n_alpha else 0 }}" data-short="{{ 1 if r.history == 'short' else 0 }}">
-            <td><a href="/targets/{{ r.symbol }}" class="pk-mono">{{ r.symbol }}</a> <span class="hint">{{ r.label }}</span>{% if r.suspects %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason='F1 ≥ 0,80') }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+            <td><a href="/targets/{{ r.symbol }}" title="{{ r.symbol }}">{{ r.symbol | iname }}</a>{% if r.suspects %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason='F1 ≥ 0,80') }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
             <td>{% if r.first %}<span class="pk-mono">{{ r.first }}</span> <span class="hint">· {{ r.years }} {{ t('cls_years') }}</span>
                 {% if r.history == 'short' %}{{ status_badge(t('dq_status_short'), 'warning') }}{% endif %}{% else %}—{% endif %}</td>
             <td class="num pk-mono headline">{{ '%.3f' | format(r.auc) if r.auc is not none else '—' }}</td>

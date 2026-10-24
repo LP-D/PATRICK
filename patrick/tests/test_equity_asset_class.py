@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from markupsafe import escape
 
 from patrick.config import defaults as D
 from patrick.config import equity_universe
@@ -31,7 +32,7 @@ from patrick.data.store import DataStore
 from patrick.features import equity_fundamentals, guida
 from patrick.pipeline import engine as engine_module
 from patrick.validation import equity_sufficiency
-from patrick.webapp import forms
+from patrick.webapp import forms, instruments
 from patrick.webapp.app import app
 
 # ---------------------------------------------------------------------------
@@ -575,7 +576,7 @@ def test_equities_page_returns_200_and_lists_every_ticker(monkeypatch):
     assert resp.status_code == 200
     for symbol, meta in equity_universe.EQUITY_UNIVERSE.items():
         assert symbol in resp.text
-        assert meta["label"] in resp.text
+        assert str(escape(instruments.display(symbol, "fr"))) in resp.text
     # exclusions carry/cross-sectional momentum affichees explicitement
     assert "Cross-sectional momentum" in resp.text or "cross_sectional_momentum" in resp.text
 

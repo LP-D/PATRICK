@@ -772,7 +772,7 @@
         // se confirmerait sur un résumé qui n'en montre qu'une (ou aucune).
         var targetSelect = form.querySelector("#target_symbols");
         var target = targetSelect
-            ? Array.prototype.map.call(targetSelect.selectedOptions, function (o) { return o.value; }).join(", ") || "?"
+            ? Array.prototype.map.call(targetSelect.selectedOptions, function (o) { return window.PatrickNames ? window.PatrickNames.label(o.value) : o.value; }).join(", ") || "?"
             : "?";
         var horizons = selectedValues(form.querySelector("[name=horizons]")).join(", ") || "?";
         var regimes = (form.querySelector("[name=regimes]") || {}).value || "?";
@@ -1007,7 +1007,13 @@
         const bits = [];
         if (target) {
             const selected = Array.from(target.selectedOptions).map((o) => o.value);
-            if (selected.length === 1) bits.push("<b>" + selected[0] + "</b>");
+            if (selected.length === 1) {
+                const label = window.PatrickNames ? window.PatrickNames.label(selected[0]) : selected[0];
+                const holder = document.createElement("b");
+                holder.textContent = label;
+                holder.title = selected[0];
+                bits.push(holder.outerHTML);
+            }
             else if (selected.length > 1) bits.push(fmtStr(tr("recap_targets_count", "{n} targets"), { n: selected.length }));
         }
         const horizonsVals = selectedValues(horizons);

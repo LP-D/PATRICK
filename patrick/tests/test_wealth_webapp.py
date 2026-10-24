@@ -48,7 +48,7 @@ def test_account_lifecycle_and_pages(client):
     assert page.status_code == 200 and "PEA test" in page.text and "MC.PA" in page.text
     detail = client.get(f"/patrimoine/comptes/{acc}")
     assert detail.status_code == 200
-    assert "Performance (TWR)" in detail.text and "vs ^STOXX50E" in detail.text
+    assert "Performance (TWR)" in detail.text and "vs Indice · Euro Stoxx 50" in detail.text
     assert 'id="wealth-chart-data"' in detail.text
     assert client.get("/mouvements").status_code == 200
 
@@ -143,7 +143,7 @@ def test_table_cells_render_html_not_escaped_markup(client):
     for page in (client.get("/patrimoine").text, client.get(f"/patrimoine/comptes/{acc}").text):
         assert "&lt;span" not in page and "&lt;button" not in page
     detail = client.get(f"/patrimoine/comptes/{acc}").text
-    assert '<span class="pk-mono">MC.PA</span>' in detail
+    assert '<span title="MC.PA">LVMH</span>' in detail
     assert "&lt;b&gt;x&lt;/b&gt;" in detail
 
 
@@ -175,12 +175,12 @@ def test_add_movement_form_picks_the_asset_from_the_ticker_bank(client):
 
     assert '<select name="symbol" data-symbol-select>' in form
     assert 'type="text" name="symbol"' in form and "disabled" in form  # the free field is off by default
-    assert '<option value="ALDAT.PA">Date Devel Applic Tech Energie SA — ALDAT.PA</option>' in form
+    assert '<option value="ALDAT.PA" title="ALDAT.PA">D.A.T.E</option>' in form
     assert 'value="MC.PA"' in form and 'value="__other__"' in form
     assert 'value="DFF"' not in form and 'value="CPIAUCSL"' not in form  # FRED: nothing to hold
     held = form.index(f'label="{wealth_routes.HELD_GROUP}"')
     assert held < form.index('value="ALDAT.PA"')
-    assert '<option value="CW8.PA">hors banque de tickers — CW8.PA</option>' in form
+    assert '<option value="CW8.PA" title="CW8.PA">Amundi MSCI World UCITS ETF — hors banque de tickers</option>' in form
 
 
 def test_symbol_groups_keep_fred_out_and_held_symbols_first():

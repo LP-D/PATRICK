@@ -39,7 +39,7 @@
         if (d.run && d.run.error) m.appendChild(h("p", { class: "banner banner-error", role: "alert", text: d.run.error }));
         var rows = [perfRow(T("ra_rl_agent"), s), perfRow(T("ra_rl_bh"), bh), perfRow(T("ra_rl_mom"), (d.baselines || {}).momentum), perfRow(T("ra_rl_flat"), (d.baselines || {}).flat)].filter(Boolean);
         m.appendChild(titled(T("ra_rl_perf"), PK.table(PERF_HEAD.map(function (k) { return k.indexOf("ra_") === 0 ? T(k) : k; }), rows, { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }), T("ra_rl_perf_hint")));
-        var r = d.run || {}, ident = [[T("ra_id_target"), r.target], [T("ra_id_algo"), r.algo], [T("ra_id_period"), (d.period || []).join(" → ")], [T("ra_rl_rows"), int(d.n_rows)], [T("ra_rl_pool"), int(d.n_pool)],
+        var r = d.run || {}, ident = [[T("ra_id_target"), PK.inst(r.target)], [T("ra_id_algo"), r.algo], [T("ra_id_period"), (d.period || []).join(" → ")], [T("ra_rl_rows"), int(d.n_rows)], [T("ra_rl_pool"), int(d.n_pool)],
             [T("ra_rl_elapsed"), isNum(d.elapsed_s) ? num(d.elapsed_s / 60, 1) + " min" : "—"], [T("ra_rl_started"), r.started_at]];
         var settings = d.settings || {};
         Object.keys(settings).forEach(function (k) { if (settings[k] !== null && settings[k] !== undefined) ident.push([k, String(settings[k])]); });

@@ -61,7 +61,7 @@
       <div class="account-value">{{ a.value | eur }}</div>
       <div class="hint">
         {% if a.twr is not none %}TWR {{ a.twr | pct(1, true) }}{% else %}TWR —{% endif %}
-        {% if a.benchmark %} · <span class="tip" data-tip="{{ t('pat_excess_tip', b=a.benchmark) }}">vs {{ a.benchmark }} {{ a.excess | pct(1, true) }}</span>{% endif %}
+        {% if a.benchmark %} · <span class="tip" data-tip="{{ t('pat_excess_tip', b=(a.benchmark | iname)) }}">vs {{ a.benchmark | iname }} {{ a.excess | pct(1, true) }}</span>{% endif %}
         · {{ t('pat_n_mv', n=a.n_movements) }}
       </div>
     </a>
@@ -78,7 +78,7 @@
   {% for r in data.holdings %}
   {# Cellules HTML via {% set %} : une concatenation `~` avec un operande
      Markup (| e, icon(), macro) echapperait les morceaux HTML litteraux. #}
-  {% set symbol_cell %}<span class="pk-mono">{{ r.symbol }}</span>{% if r.is_term_deposit %} <span class="tag">DAT</span>{% endif %}{% endset %}
+  {% set symbol_cell %}<span title="{{ r.symbol }}">{{ r.symbol | iname }}</span>{% if r.is_term_deposit %} <span class="tag">DAT</span>{% endif %}{% endset %}
   {% set _ = rows.append([
       symbol_cell,
       r.quantity | qty,

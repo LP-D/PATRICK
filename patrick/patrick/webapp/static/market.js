@@ -43,7 +43,7 @@
         chart = window.PatrickPlot.create(chartHost, {
             type: "line", xKind: timed ? "time" : "index", xs: xs, xLabel: function (i) { return dates[i] || String(i); },
             series: closes.length < 2 ? [] : [{ values: closes, color: "--brand", width: 2 }],
-            title: currentSymbol || "", quote: timed, trend: true, height: 240,
+            title: (window.PatrickNames ? window.PatrickNames.label(currentSymbol) : currentSymbol) || "", quote: timed, trend: true, height: 240,
             ohlc: ohlc, volume: ohlc && series.volumes && series.volumes.some(function (v) { return v > 0; }) ? series.volumes : null,
             empty: tr("preview_no_data", "No data for this period."),
         });

@@ -106,7 +106,7 @@
     }
     function fillRoots() {
         rootSel.textContent = "";
-        futures.forEach(function (f) { option(rootSel, f.root + " — " + f.name, f.root); });
+        futures.forEach(function (f) { option(rootSel, tr("inst_kind_future", "Future") + " · " + f.name, f.root); });
         fillContracts();
     }
     /* Ticker : liste groupée (banque de tickers du type d'instrument) ou « Autre ticker Yahoo » = saisie libre. */
@@ -119,13 +119,19 @@
         form.symbol.disabled = !other;
         if (other && focus) form.symbol.focus();
     }
+    // Nom du ticker dans la liste : le nom seul pour une action ou un ETF, le genre d'abord pour un CFD (« CFD · Apple »).
+    function instrumentLabel(symbol) {
+        var PN = window.PatrickNames;
+        if (!PN) return symbol;
+        return kind() === "cfd" ? tr("inst_kind_cfd", "CFD") + " · " + PN.name(symbol) : PN.name(symbol);
+    }
     function fillTickers() {
         var keep = symbolPick.value, otherOption = symbolPick.querySelector('option[value="__other__"]');
         symbolPick.querySelectorAll("optgroup").forEach(function (g) { g.remove(); });
         (tickerBank[kind()] || []).forEach(function (group) {
             var og = document.createElement("optgroup");
             og.label = group.group;
-            group.items.forEach(function (it) { option(og, it[1] + " — " + it[0], it[0]); });
+            group.items.forEach(function (it) { option(og, instrumentLabel(it[0]), it[0]); });
             symbolPick.insertBefore(og, otherOption);
         });
         symbolPick.value = keep;
