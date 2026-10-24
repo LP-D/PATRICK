@@ -18,15 +18,15 @@
       <select name="trial_id">
         {% if directional %}
         <optgroup label="{{ t('kind_directional') }} — {{ t('ml_kind_directional_short') }}">
-          {% for m in directional %}
-          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-kind="raw" data-asset="{{ m.asset }}" data-benchmark="">{{ m.target }} h{{ m.horizon }} · {{ m.algo }} · AUC {{ '%.3f' | format(m.auc) if m.auc is not none else '—' }} · F1 {{ '%.3f' | format(m.f1_dir) if m.f1_dir is not none else '—' }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% for m in directional | sort(attribute='label') %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-pup='{{ m.pup_segments | tojson }}' data-horizon="{{ m.horizon }}" data-symbol="{{ m.instrument_hint.symbol }}" data-kind-hint="{{ m.instrument_hint.kind }}" data-kind="raw" data-asset="{{ m.asset }}" data-benchmark="">{{ m.label }} · h{{ m.horizon }}{% if m.dm_p is not none %} ({{ t('fund_model_p', p='%.3f' | format(m.dm_p)) }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
           {% endfor %}
         </optgroup>
         {% endif %}
         {% if alphas %}
         <optgroup label="{{ t('kind_alpha') }} — {{ t('ml_kind_alpha_short') }}">
-          {% for m in alphas %}
-          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-kind="alpha" data-asset="{{ m.asset }}" data-benchmark="{{ m.benchmark or '' }}">{{ m.asset }} α vs {{ m.benchmark }} h{{ m.horizon }} · {{ m.algo }} · AUC {{ '%.3f' | format(m.auc) if m.auc is not none else '—' }} · F1 {{ '%.3f' | format(m.f1_dir) if m.f1_dir is not none else '—' }}{% if m.champion %} ({{ t('fund_rule_champion') }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% for m in alphas | sort(attribute='label') %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-pup='{{ m.pup_segments | tojson }}' data-horizon="{{ m.horizon }}" data-symbol="{{ m.instrument_hint.symbol }}" data-kind-hint="{{ m.instrument_hint.kind }}" data-kind="alpha" data-asset="{{ m.asset }}" data-benchmark="{{ m.benchmark or '' }}">{{ m.label }} · h{{ m.horizon }}{% if m.dm_p is not none %} ({{ t('fund_model_p', p='%.3f' | format(m.dm_p)) }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
           {% endfor %}
         </optgroup>
         {% endif %}
@@ -39,8 +39,14 @@
         <option value="test">{{ t('fund_rule_segment_test') }}</option>
       </select>
     </label>
-    <label>{{ t('fund_rule_enter') }} <input type="number" name="enter" min="0.51" max="0.99" step="0.01" value="0.60" required></label>
-    <label>{{ t('fund_rule_exit') }} <input type="number" name="exit" min="0.5" max="0.99" step="0.01" value="0.50" required></label>
+    <label>{{ t('fund_rule_mode') }}
+      <select name="signal_mode">
+        <option value="threshold">{{ t('fund_rule_mode_threshold') }}</option>
+        <option value="direction">{{ t('fund_rule_mode_direction') }}</option>
+      </select>
+    </label>
+    <label data-modes="threshold">{{ t('fund_rule_enter') }} <input type="number" name="enter" min="0.51" max="0.99" step="0.01" value="0.60"></label>
+    <label data-modes="threshold">{{ t('fund_rule_exit') }} <input type="number" name="exit" min="0.5" max="0.99" step="0.01" value="0.50"></label>
     <label>{{ t('fund_rule_instrument') }}
       <select name="kind">
         {% for kind in ('equity', 'etf', 'cfd', 'future') %}<option value="{{ kind }}">{{ t('fund_kind_' ~ kind) }}</option>{% endfor %}
@@ -57,6 +63,9 @@
     <label data-alpha-only hidden>{{ t('fund_rule_hedge_symbol') }} <input type="text" name="hedge_symbol" maxlength="30"></label>
     <label data-alpha-only hidden>{{ t('fund_rule_hedge_leverage') }} <input type="number" name="hedge_leverage" min="1" step="any"></label>
   </div>
+  <p class="hint" data-modes="threshold">{{ t('fund_rule_thresholds_hint') }}</p>
+  <p class="hint" data-modes="direction" hidden>{{ t('fund_rule_direction_hint') }}</p>
+  <label class="fund-check"><input type="checkbox" name="follow_champion" checked> {{ t('fund_rule_follow') }}</label>
   <p class="hint" data-alpha-only hidden>{{ t('fund_rule_alpha_hint') }}</p>
   <p class="hint">{{ t('ml_rule_honesty') }}</p>
   <p class="fund-form-error banner banner-error" hidden></p>

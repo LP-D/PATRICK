@@ -110,3 +110,34 @@ def test_rule_list_names_the_mode_of_the_autopilot_rules(setup):
     out = run(runner, "rule-list", "--strategy", sid)
 
     assert "direction" in out and "horizon 3" in out
+
+
+def test_classes_preview_writes_nothing_then_create_makes_one_strategy_per_class(setup):
+    sid, runner = setup
+
+    preview = run(runner, "autopilot-classes", "--class", "Future", "--class", "Devises", "--today", "2026-01-16")
+    assert "Aperçu" in preview and "Systematic Future" in preview and "Systematic Devises" in preview and "à créer" in preview
+
+    created = run(runner, "autopilot-classes", "--create", "--class", "Future", "--class", "Devises", "--today", "2026-01-16")
+    assert "créée" in created
+    again = run(runner, "autopilot-classes", "--create", "--class", "Future", "--today", "2026-01-16")
+    assert "reprise" in again and sid not in again
+
+    conn = trackdb.connect()
+    names = [s["name"] for s in store.list_strategies(conn)]
+    conn.close()
+    assert sorted(names) == ["Pilote", "Systematic Devises", "Systematic Future"]
+
+
+def test_classes_refuses_an_unknown_class(setup):
+    _, runner = setup
+
+    result = runner.invoke(app, ["fund", "autopilot-classes", "--class", "Nulle part"])
+
+    assert result.exit_code == 1 and "classe" in result.output
+
+
+def test_rule_roll_reports_nothing_when_every_rule_follows_its_champion(setup):
+    _, runner = setup
+
+    assert "Aucune règle à remplacer" in run(runner, "rule-roll", "--today", "2026-01-16")

@@ -152,5 +152,21 @@ def test_the_panel_offers_the_autopilot_and_keeps_manual_rules_apart(client, wor
     client.post(url(sid, "/run"), json={})
     on = client.get(f"/api/fund/strategies/{sid}/panel").text
     assert 'data-act="auto-run"' in on and 'data-act="auto-off"' in on
-    assert 'class="fund-auto-rule"' in on and "AAPL h3 · XGBoost" in on     # listée dans le bloc du pilote
+    assert 'class="fund-auto-rule"' in on and 'title="AAPL"' in on and "h3 · XGBoost" in on     # listée dans le bloc du pilote
     assert on.count('class="fund-rule"') == 0                              # et pas dans le tableau des règles manuelles
+
+
+def test_the_model_selector_lists_every_model_by_name_with_its_p_value(client, world):
+    world.cell("AAPL", 1, live=SIGNALS, dm_p=0.012)
+    world.cell("GC=F", 1, live=SIGNALS, dm_p=None)
+    world.cell("^GSPC", 3, live=SIGNALS, dm_p=0.4, f1=0.99)                   # suspect : visible mais désactivé
+    sid = fs.make_strategy(client)
+
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+
+    assert "Apple · h1 (p = 0.012)" in html                                   # le nom, pas le symbole ; la p entre parenthèses
+    assert "Future · Or · h1<" in html                                        # pas de p : rien entre parenthèses
+    assert 'data-symbol="AAPL"' in html and 'data-kind-hint="equity"' in html and 'data-kind-hint="cfd"' in html
+    assert html.index("Apple · h1") < html.index("Future · Or · h1") < html.index("Indice")    # triés par nom
+    assert "(p = 0.400)" in html and "disabled" in html.split("(p = 0.400)")[0].rsplit("<option", 1)[1]
+    assert 'name="signal_mode"' in html and 'name="follow_champion"' in html and "fund_rule_follow" not in html

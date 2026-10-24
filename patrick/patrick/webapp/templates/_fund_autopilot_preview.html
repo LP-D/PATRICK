@@ -15,12 +15,12 @@
     <tbody>
       {% for m in plan.selected %}
       <tr data-model="{{ m.target }} {{ m.horizon }}">
-        <td class="pk-mono">{{ m.target }} h{{ m.horizon }} · {{ m.algo }}</td>
+        <td class="pk-mono"><span title="{{ m.target }}">{{ m.target | iname }}</span> h{{ m.horizon }} · {{ m.algo }}</td>
         <td class="num pk-mono">{{ '%.3f' | format(m.dm_p) if m.dm_p is not none else '—' }}</td>
         <td class="num pk-mono">{{ '%.3f' | format(m.bh_p) if m.bh_p is not none else '—' }}</td>
         <td class="pk-mono">{{ m.last_signal.ts }} <span class="tag">{{ t('fund_auto_dir_up') if m.last_signal.direction == 'UP' else t('fund_auto_dir_down') }}</span></td>
         <td class="num pk-mono">{% if m.live_hit_rate is not none %}{{ (m.live_hit_rate * 100) | round(0) | int }} % ({{ m.live_n }}){% else %}—{% endif %}</td>
-        <td><span class="tag">{{ t('fund_kind_' ~ m.instrument.kind) }}</span> <span class="pk-mono">{{ m.instrument.symbol }}</span></td>
+        <td><span class="instr" title="{{ m.instrument.symbol }}">{{ m.instrument.symbol | iname(none, m.instrument.kind) }}</span></td>
         <td class="num pk-mono">{{ (m.weight * 100) | round(1) }} %</td>
         <td class="num pk-mono">{{ m.notional | eur(0) }}</td>
       </tr>
@@ -40,7 +40,7 @@
       <thead><tr><th>{{ t('fund_auto_col_model') }}</th><th>{{ t('fund_auto_col_reason') }}</th></tr></thead>
       <tbody>
         {% for e in plan.excluded[:150] %}
-        <tr data-excluded="{{ e.target }} {{ e.horizon }}"><td class="pk-mono">{{ e.target }} h{{ e.horizon }}</td><td>{{ t('fund_auto_code_' ~ e.code) }}<span class="hint"> · {{ e.detail }}</span></td></tr>
+        <tr data-excluded="{{ e.target }} {{ e.horizon }}"><td class="pk-mono"><span title="{{ e.target }}">{{ e.target | iname }}</span> h{{ e.horizon }}</td><td>{{ t('fund_auto_code_' ~ e.code) }}<span class="hint"> · {{ e.detail }}</span></td></tr>
         {% endfor %}
       </tbody>
     </table>

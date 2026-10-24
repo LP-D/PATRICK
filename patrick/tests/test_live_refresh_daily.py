@@ -116,3 +116,36 @@ def test_run_autopilots_cycles_every_enabled_strategy(tmp_path):
     reports = live_refresh.run_autopilots(db_path)
 
     assert [r["strategy_id"] for r in reports] == [on] and "error" not in reports[0] and reports[0]["selected"] == 0
+
+
+def test_run_autopilots_first_rolls_the_following_rules_to_the_champion(monkeypatch, tmp_path):
+    from patrick.fund import autopilot, systematic
+    from patrick.tracking import db
+
+    db_path = str(tmp_path / "p.db")
+    db.connect(db_path).close()
+    order: list[str] = []
+    monkeypatch.setattr(systematic, "roll_to_champions", lambda conn, today=None: order.append("roll") or [])
+    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None: order.append("autopilot") or [])
+
+    live_refresh.run_autopilots(db_path)
+
+    assert order == ["roll", "autopilot"]
+
+
+def test_a_failing_champion_roll_never_stops_the_autopilot_cycle(monkeypatch, tmp_path):
+    from patrick.fund import autopilot, systematic
+    from patrick.tracking import db
+
+    db_path = str(tmp_path / "p.db")
+    db.connect(db_path).close()
+    ran: list[str] = []
+
+    def boom(conn, today=None):
+        raise RuntimeError("base verrouillée")
+    monkeypatch.setattr(systematic, "roll_to_champions", boom)
+    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None: ran.append("autopilot") or [])
+
+    live_refresh.run_autopilots(db_path)
+
+    assert ran == ["autopilot"]

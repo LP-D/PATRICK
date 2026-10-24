@@ -288,7 +288,10 @@ def test_the_simulation_page_offers_ml_models_split_by_family(tmp_path, monkeypa
     conn.close()
     html = TestClient(app).get("/simulate").text
     assert 'id="ml-rule-form"' in html and "Piloter avec un modèle ML entraîné" in html
-    assert '<optgroup label="Directionnels' in html and "AUC 0.550" in html and "F1 0.520" in html
+    assert '<optgroup label="Directionnels' in html
+    assert 'data-pup=' in html and 'data-horizon="5"' in html and 'data-symbol="^GSPC"' in html     # ticker prérempli à la sélection
+    assert 'data-kind-hint="cfd"' in html and 'name="signal_mode"' in html and 'name="follow_champion"' in html
+    assert "AUC 0.550" not in html                                          # le libellé ne porte plus que le nom, l'horizon et p
     assert 'src="/static/ml_rule.js?v=' in html
 
 

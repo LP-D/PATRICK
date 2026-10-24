@@ -232,8 +232,8 @@
       <tbody>
         {% for r in autopilot.rules %}{% set c = r.config %}
         <tr class="fund-auto-rule">
-          <td class="pk-mono">{% if r.model %}{{ r.model.target }} h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}{{ r.name }}{% endif %}</td>
-          <td><span class="tag">{{ t('fund_kind_' ~ c.instrument.kind) }}</span> <span class="pk-mono">{{ c.instrument.symbol }}</span></td>
+          <td class="pk-mono">{% if r.model %}<span title="{{ r.model.target }}">{{ r.model.target | iname }}</span> h{{ r.model.horizon }} · {{ r.model.algo }}{% else %}{{ r.name }}{% endif %}</td>
+          <td><span class="instr" title="{{ c.instrument.symbol }}">{{ c.instrument.symbol | iname(none, c.instrument.kind) }}</span></td>
           <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>
           <td class="num pk-mono">{{ r.n_orders }}</td>
           <td>{% if c.retired_on %}<span class="tag">{{ t('fund_auto_retired', day=c.retired_on) }}</span>{% else %}<span class="tag">{{ t('fund_auto_active') }}</span>{% endif %}</td>
@@ -266,7 +266,7 @@
           <span class="tag">{{ c.segment }}</span>
           {% if c.segment == 'test' %}<span class="tag" title="{{ t('fund_rule_test_warning') }}">!</span>{% endif %}
         </td>
-        <td class="pk-mono">{{ t('fund_rule_enter') }} {{ c.enter }} · {{ t('fund_rule_exit') }} {{ c.exit }}{% if c.allow_short %} · {{ t('fund_rule_short_on') }}{% endif %}</td>
+        <td class="pk-mono">{% if c.signal.mode == 'direction' %}{{ t('fund_rule_mode_direction_short', h=(c.hold.sessions if c.hold.mode == 'horizon' else '–')) }}{% else %}{{ t('fund_rule_enter') }} {{ c.enter }} · {{ t('fund_rule_exit') }} {{ c.exit }}{% endif %}{% if c.allow_short %} · {{ t('fund_rule_short_on') }}{% endif %}{% if c.follow_champion %} <span class="tag">{{ t('fund_rule_follow_tag') }}</span>{% endif %}</td>
         <td><span class="instr" title="{{ c.instrument.symbol or c.instrument.spec.root }}">{{ instr_name(c.instrument) }}</span>
           {% if c.hedge %}<br><span class="hint">{{ t('fund_rule_hedged_vs', symbol=instr_name(c.hedge)) }}</span>{% endif %}</td>
         <td class="num pk-mono">{% if c.sizing.amount %}{{ c.sizing.amount | eur(0) }}{% else %}{{ c.sizing.quantity }}{% endif %}</td>

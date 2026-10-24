@@ -252,6 +252,22 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_rule_col_instrument": _s("Instrument", "Instrument"),
     "fund_rule_col_size": _s("Taille", "Size"),
 
+    # formulaire de règle : modèles, mode, suivi du champion
+    "fund_model_p": _s("p = {p}", "p = {p}"),
+    "fund_rule_mode": _s("Mode", "Mode"),
+    "fund_rule_mode_threshold": _s("Seuils sur la P(hausse)", "Thresholds on P(up)"),
+    "fund_rule_mode_direction": _s("Direction, sortie à l'horizon du modèle", "Direction, exit at the model horizon"),
+    "fund_rule_mode_direction_short": _s("direction · horizon {h}", "direction · horizon {h}"),
+    "fund_rule_thresholds_hint": _s(
+        "Entrée : on ouvre quand la P(hausse) atteint ce seuil. Sortie : on ferme quand elle repasse dessous.",
+        "Entry: open when P(up) reaches this level. Exit: close when it falls back below."),
+    "fund_rule_direction_hint": _s(
+        "Le sens du signal décide ; la position se ferme à l'horizon du modèle et se renouvelle tant que le signal tient.",
+        "The signal direction decides; the position closes at the model horizon and renews while the signal holds."),
+    "fund_rule_follow": _s("Remplacer le modèle quand un meilleur est entraîné (segment live)",
+                           "Replace the model when a better one is trained (live segment)"),
+    "fund_rule_follow_tag": _s("suit le champion", "follows the champion"),
+
     # /fonds : pilote automatique
     "fund_auto_title": _s("Pilote automatique", "Autopilot"),
     "fund_auto_on": _s("actif", "on"),

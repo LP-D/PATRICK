@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from patrick.fund import autopilot, instruments, service, store, systematic
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
+from patrick.webapp import instruments as display_names
 from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty, symbol_groups
 
 log = logging.getLogger("patrick.fund")
@@ -73,6 +74,13 @@ async def _json_body(request: Request) -> dict:
     return body
 
 
+def _labelled(models: list[dict]) -> list[dict]:
+    """Chaque modèle avec son nom d'affichage (`label` : le nom de l'instrument, pas son symbole), triés par nom puis horizon."""
+    for model in models:
+        model["label"] = display_names.display(model["target"])
+    return sorted(models, key=lambda m: (m["kind"] != "raw", m["label"].lower(), m["horizon"]))
+
+
 def _call(fn, *args, **kwargs):
     """Ouvre une connexion, appelle `fn(conn, ...)`, traduit les erreurs métier en HTTP."""
     conn = trackdb.connect()
@@ -122,7 +130,7 @@ def register(app: FastAPI, templates, context) -> None:
         data = _call(service.overview, today)
         ctx = context(request)
         return templates.TemplateResponse(request, "simulate.html", {
-            "models": _call(systematic.available_models),
+            "models": _labelled(_call(systematic.available_models)),
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today),
             "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),
@@ -157,7 +165,7 @@ def register(app: FastAPI, templates, context) -> None:
         def run(conn):
             snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
             rules = systematic.rule_summaries(conn, strategy_id)
-            return snap, rules, systematic.available_models(conn), autopilot.status(conn, strategy_id, rules)
+            return snap, rules, _labelled(systematic.available_models(conn)), autopilot.status(conn, strategy_id, rules)
         snap, rules, models, auto = _call(run)
         manual = [r for r in rules if not (r["config"].get("managed") or {}).get("by")]     # celles du pilote : dans son bloc
         return templates.TemplateResponse(request, "_fund_panel.html", {
@@ -245,7 +253,7 @@ def register(app: FastAPI, templates, context) -> None:
     @app.get("/api/fund/models")
     def api_models():
         """Essais gagnants dont on peut rejouer les signaux (formulaire de création d'une règle)."""
-        return {"models": _call(systematic.available_models)}
+        return {"models": _labelled(_call(systematic.available_models))}
 
     @app.get("/api/fund/strategies/{strategy_id}/rules")
     def api_list_rules(strategy_id: str):

@@ -1155,6 +1155,56 @@ def fund_autopilot_run_cmd(
         conn.close()
 
 
+@fund_app.command(name="autopilot-classes")
+def fund_autopilot_classes_cmd(
+    create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les stratégies et active leur pilote ; sans cette option : aperçu"),
+    only: list[str] = typer.Option(None, "--class", help="Seulement cette classe (répétable)"),
+    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),
+    tier: str = typer.Option("large", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
+    capital: float = typer.Option(100_000, "--capital", help="Capital d'une stratégie créée"),
+    max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles par stratégie"),
+    wrapper: str = typer.Option("CTO", "--wrapper", help="Enveloppe d'une stratégie créée (CTO ou PEA)"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Une stratégie `Systematic <classe>` par classe d'actifs, en pilote automatique à l'horizon voulu (1 jour par défaut)."""
+    from patrick.fund import asset_classes
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        rows = asset_classes.setup(conn, today=_fund_day(today), only=only or None, horizons=tuple(horizon), tier=tier,
+                                   gross=gross, capital=capital, wrapper=wrapper, max_models=max_models, dry_run=not create)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(("Stratégies" if create else "Aperçu (rien n'est écrit)") + f" — niveau {tier}, horizon(s) {', '.join(map(str, horizon))} :")
+    for r in rows:
+        state = "créée" if r["created"] else ("reprise" if r["strategy_id"] else "à créer")
+        typer.echo(f"  {r['name']:<28} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
+
+
+@fund_app.command(name="rule-roll")
+def fund_rule_roll_cmd(today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)")) -> None:
+    """Remplace par le champion en titre le modèle des règles qui le suivent, quand un meilleur modèle a été entraîné."""
+    from patrick.fund import systematic
+
+    conn = trackdb.connect()
+    try:
+        report = systematic.roll_to_champions(conn, _fund_day(today))
+    finally:
+        conn.close()
+    if not report:
+        typer.echo("Aucune règle à remplacer : chacune suit déjà son champion.")
+    for r in report:
+        if "error" in r:
+            typer.echo(f"  {r['rule_id']} : conservée, le champion est refusé ({r['error']})")
+        else:
+            typer.echo(f"  {r['retired']} retirée, {r['created']} créée avec le champion (essai {r['trial_id']}).")
+
+
 @fund_app.command(name="autopilot-off")
 def fund_autopilot_off_cmd(strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)")) -> None:
     """Désactive le pilote : ses règles sont supprimées ; les ordres passés et les positions ouvertes restent."""

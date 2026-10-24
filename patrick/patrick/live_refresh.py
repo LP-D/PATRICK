@@ -155,12 +155,22 @@ REFRESH_CHECK_SECONDS = 30 * 60
 
 def run_autopilots(db_path: str | None = None) -> list[dict]:
     """Un cycle du pilote automatique des fonds pour chaque stratégie activée : sélection des modèles, règles, ordres
-    échus. À lancer APRÈS les prédictions du jour (il lit leurs signaux). Une erreur sur une stratégie est dans son
-    compte rendu, jamais levée ; l'appelant protège le reste."""
-    from patrick.fund import autopilot
+    échus. Avant lui, les règles saisies à la main qui suivent le champion passent au nouveau champion (un meilleur modèle
+    entraîné entre-temps). À lancer APRÈS les prédictions du jour (il lit leurs signaux). Une erreur sur une stratégie est
+    dans son compte rendu, jamais levée ; l'appelant protège le reste."""
+    from patrick.fund import autopilot, systematic
 
     conn = trackdb.connect(db_path)
     try:
+        try:
+            for rolled in systematic.roll_to_champions(conn):
+                if "error" in rolled:
+                    logger.warning("règle %s : le champion n'a pas pu la remplacer (%s)", rolled["rule_id"], rolled["error"])
+                else:
+                    logger.info("règle %s remplacée par %s (nouveau champion, essai %s)", rolled["retired"], rolled["created"],
+                                rolled["trial_id"])
+        except Exception:
+            logger.exception("suivi du champion en échec")        # n'empêche pas le cycle du pilote
         reports = autopilot.run_all(conn)
     finally:
         conn.close()

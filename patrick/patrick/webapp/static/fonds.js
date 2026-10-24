@@ -157,8 +157,15 @@
         });
         var shortable = kind === "cfd" || kind === "future";
         if (f.allow_short) { f.allow_short.disabled = !shortable; if (!shortable) f.allow_short.checked = false; }
-        var opt = f.trial_id.options[f.trial_id.selectedIndex], segments = {};
+        var opt = f.trial_id.options[f.trial_id.selectedIndex], segments = {}, pup = {};
         try { segments = JSON.parse(opt.getAttribute("data-segments") || "{}"); } catch (e) { segments = {}; }
+        try { pup = JSON.parse(opt.getAttribute("data-pup") || "{}"); } catch (e) { pup = {}; }
+        /* sans P(hausse) enregistrée, seuls la direction et la sortie à l'horizon sont possibles */
+        var hasPup = Object.keys(pup).length > 0;
+        f.signal_mode.options[0].disabled = !hasPup;
+        if (!hasPup) f.signal_mode.value = "direction";
+        var mode = f.signal_mode.value, usable = mode === "threshold" ? pup : segments;
+        form.querySelectorAll("[data-modes]").forEach(function (el) { el.hidden = el.getAttribute("data-modes") !== mode; });
         /* modèle d'alpha : la jambe de couverture apparaît, l'actif négocié est celui du modèle */
         var alpha = opt.getAttribute("data-kind") === "alpha";
         form.querySelectorAll("[data-alpha-only]").forEach(function (el) { el.hidden = !alpha; });
@@ -166,14 +173,23 @@
             f.hedge_symbol.placeholder = opt.getAttribute("data-benchmark") || "";
             if (f.symbol && !f.symbol.value.trim()) f.symbol.value = opt.getAttribute("data-asset") || "";
         }
-        Array.prototype.forEach.call(f.segment.options, function (o) { o.disabled = !segments[o.value]; });
+        Array.prototype.forEach.call(f.segment.options, function (o) { o.disabled = !usable[o.value]; });
         if (f.segment.options[f.segment.selectedIndex].disabled) {
             var first = Array.prototype.find.call(f.segment.options, function (o) { return !o.disabled; });
             if (first) f.segment.value = first.value;
         }
     }
+    /* Choisir un modèle renseigne tout de suite l'instrument concerné : type conseillé (action, ETF ou CFD) et ticker. */
+    function applyModel(form) {
+        var f = form.elements, opt = f.trial_id.options[f.trial_id.selectedIndex];
+        if (!opt) return;
+        var hint = opt.getAttribute("data-kind-hint"), symbol = opt.getAttribute("data-symbol");
+        if (hint && f.kind.value !== "future") f.kind.value = hint;
+        if (f.symbol && symbol) f.symbol.value = symbol;
+        syncRuleForm(form);
+    }
     function initRuleForms() {
-        panel.querySelectorAll('form[data-form="rule"]').forEach(syncRuleForm);
+        panel.querySelectorAll('form[data-form="rule"]').forEach(applyModel);
     }
     async function submitRule(form) {
         var f = form.elements, kind = f.kind.value, instrument = { kind: kind };
@@ -184,12 +200,19 @@
             if (kind === "cfd" && present(f.leverage.value)) instrument.spec = { leverage: Number(f.leverage.value) };
         }
         var config = {
-            trial_id: Number(f.trial_id.value), segment: f.segment.value,
-            enter: Number(f.enter.value), exit: Number(f.exit.value), allow_short: !!f.allow_short.checked,
+            trial_id: Number(f.trial_id.value), segment: f.segment.value, allow_short: !!f.allow_short.checked,
             instrument: instrument,
             sizing: (kind === "equity" || kind === "etf") ? { amount: Number(f.amount.value) } : { quantity: Number(f.quantity.value) },
         };
         var chosen = f.trial_id.options[f.trial_id.selectedIndex];
+        if (f.signal_mode.value === "direction") {
+            config.signal = { mode: "direction" };
+            config.hold = { mode: "horizon", sessions: Number(chosen.getAttribute("data-horizon")) };
+        } else {
+            config.enter = Number(f.enter.value);
+            config.exit = Number(f.exit.value);
+        }
+        config.follow_champion = !!f.follow_champion.checked && f.segment.value === "live";
         if (chosen && chosen.getAttribute("data-kind") === "alpha") {
             config.hedge = { kind: "cfd", symbol: f.hedge_symbol.value.trim() };
             if (present(f.hedge_leverage.value)) config.hedge.spec = { leverage: Number(f.hedge_leverage.value) };
@@ -230,7 +253,10 @@
     panel.addEventListener("change", function (e) {
         var form = e.target.closest("form[data-form]");
         if (!form) return;
-        if (form.getAttribute("data-form") === "rule") { syncRuleForm(form); return; }
+        if (form.getAttribute("data-form") === "rule") {
+            if (e.target.name === "trial_id") applyModel(form); else syncRuleForm(form);
+            return;
+        }
         if (e.target.name === "action") syncActions(form);
     });
     /* Un envoi à la fois : tant que la requête n'est pas revenue, le bouton est inactif (un double clic créait
