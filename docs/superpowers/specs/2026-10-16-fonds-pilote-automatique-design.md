@@ -95,3 +95,22 @@ décompte des exclusions par motif. API : `GET|PUT|DELETE /api/fund/strategies/{
 `strict` par défaut ; fraîcheur 7 jours ; plafond 40 modèles ; exposition brute 100 % ; aucun levier explicite (le défaut du
 service) ; sortie après `h` séances comptées depuis l'exécution ; pas de carry ; les règles gérées ne passent pas par le
 registre des essais.
+
+## 9. Compléments du 24/10/2026
+
+- **Tous les modèles au choix.** Le sélecteur de règle (`/fonds` et `/simulate`) propose un modèle par cellule (cible x horizon) :
+  le champion en titre ou, à défaut, le meilleur essai du dernier run terminé. Chaque ligne porte le NOM de l'instrument (comme
+  dans le reste de l'application), l'horizon et, entre parenthèses, la p de Diebold-Mariano du run (« Apple · h1 (p = 0.012) »).
+  Un modèle sans P(hausse) enregistrée reste proposé : il ne se trade qu'en mode direction.
+- **Instrument prérempli.** Choisir un modèle renseigne le type conseillé (action ou ETF au comptant pour un titre coté, CFD pour
+  indice, devise, matière première, future continu, crypto, volatilité, taux) et le ticker.
+- **Deux modes de règle dans le formulaire** : seuils sur la P(hausse) (entrée, sortie) ou direction avec sortie à l'horizon du modèle.
+- **Suivi du champion.** Une règle sur le segment live peut suivre le champion (`follow_champion`, cochée par défaut) : quand un
+  entraînement produit un meilleur champion, la règle est retirée (plus de signal après la veille ; sa position se ferme, à
+  l'horizon ou, pour une règle à seuils, le lendemain) et une règle neuve aux mêmes réglages démarre avec le champion. Refusé
+  (modèle suspect, pas de P(hausse) pour des seuils) : l'ancienne règle reste. Le cycle quotidien le fait avant celui du pilote.
+- **Périmètre du pilote** : `horizons` et `groups` (groupes de l'univers) bornent la sélection.
+- **Une stratégie par classe d'actifs** (`fund/asset_classes.py`, `patrick fund autopilot-classes`) : `Systematic <classe>`, pilote
+  borné aux groupes de la classe et à l'horizon 1. Aperçu par défaut ; `--create` écrit.
+- Migration du pilote : 0044 (la 0036 était prise). Version minimale du schéma partagé : 44.
+
