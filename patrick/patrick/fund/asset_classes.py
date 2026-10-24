@@ -39,7 +39,8 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
           wrapper: str = "CTO", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
     """Une stratégie en pilote automatique par classe (toutes, ou `only`). Une stratégie qui porte déjà le nom
     `Systematic <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est
-    écrit, seul le nombre de modèles candidats est compté. Renvoie, par classe : `class`, `name`, `strategy_id`, `created`, `candidates`."""
+    écrit, seul le nombre de modèles candidats est compté. Une stratégie reprise sans ordre prend le capital demandé (`capital_changed`) ; avec des ordres elle garde le sien.
+    Renvoie, par classe : `class`, `name`, `strategy_id`, `created`, `capital_changed`, `candidates`."""
     today = service._today(today)
     unknown = [c for c in (only or []) if c not in CLASSES]
     if unknown:
@@ -54,11 +55,18 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
         policy = autopilot.Settings.from_dict(settings)
         name = strategy_name(asset_class)
         row = {"class": asset_class, "name": name, "strategy_id": existing.get(name), "created": False,
+               "capital_changed": False,
                "candidates": len(selection.select_models(conn, policy.selection, today)["selected"])}
         if not dry_run:
             if row["strategy_id"] is None:
                 row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat())
                 row["created"] = True
+            elif abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - float(capital)) > 0.005:
+                try:                                  # une stratégie reprise sans ordre prend le capital demandé
+                    store.set_initial_capital(conn, row["strategy_id"], capital)
+                    row["capital_changed"] = True
+                except store.FundError:
+                    pass                              # avec des ordres, son capital reste celui qu'elle a
             autopilot.configure(conn, row["strategy_id"], settings)
         out.append(row)
     return out

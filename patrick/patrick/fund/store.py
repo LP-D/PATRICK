@@ -64,15 +64,7 @@ def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_c
         raise FundError("nom de stratégie manquant")
     if wrapper not in WRAPPERS:
         raise FundError(f"enveloppe inconnue : {wrapper!r} ({WRAPPERS})")
-    try:
-        capital = float(str(initial_capital).replace(",", ".").replace(" ", ""))
-    except ValueError as exc:
-        raise FundError(f"capital invalide : {initial_capital!r}") from exc
-    if not math.isfinite(capital) or capital <= 0:
-        raise FundError("le capital doit être strictement positif")
-    if wrapper == "PEA" and capital > PEA_DEPOSIT_CAP_EUR:
-        raise FundError(f"PEA : capital {capital:,.0f} € > plafond de versements {PEA_DEPOSIT_CAP_EUR:,.0f} €"
-                        .replace(",", " "))
+    capital = _check_capital(initial_capital, wrapper)
     opened = _iso(opened_on)
     if opened > utc_today().isoformat():
         raise FundError("la date d'ouverture ne peut pas être dans le futur")
@@ -82,6 +74,32 @@ def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_c
                      f"opened_on, updated_at) VALUES (?, ?, ?, ?, ?, ?, {_NOW})",
                      (strategy_id, name[:120], wrapper, (base_currency or "EUR").upper()[:3], capital, opened))
     return strategy_id
+
+
+def _check_capital(initial_capital, wrapper: str) -> float:
+    try:
+        capital = float(str(initial_capital).replace(",", ".").replace(" ", ""))
+    except ValueError as exc:
+        raise FundError(f"capital invalide : {initial_capital!r}") from exc
+    if not math.isfinite(capital) or capital <= 0:
+        raise FundError("le capital doit être strictement positif")
+    if wrapper == "PEA" and capital > PEA_DEPOSIT_CAP_EUR:
+        raise FundError(f"PEA : capital {capital:,.0f} € > plafond de versements {PEA_DEPOSIT_CAP_EUR:,.0f} €"
+                        .replace(",", " "))
+    return capital
+
+
+def set_initial_capital(conn: sqlite3.Connection, strategy_id: str, initial_capital) -> None:
+    """Change le capital de départ d'une stratégie SANS ordre (avec des ordres, il est figé : tout l'historique en dépend)."""
+    strategy = get_strategy(conn, strategy_id)
+    if strategy is None:
+        raise FundError("stratégie introuvable")
+    capital = _check_capital(initial_capital, strategy["wrapper"])
+    if conn.execute("SELECT 1 FROM fund_order WHERE strategy_id = ? LIMIT 1", (strategy_id,)).fetchone():
+        raise FundError("capital figé : la stratégie a déjà des ordres")
+    with conn:
+        conn.execute("UPDATE fund_strategy SET initial_capital = ? WHERE strategy_id = ?", (capital, strategy_id))
+        touch_strategy(conn, strategy_id)
 
 
 def get_strategy(conn: sqlite3.Connection, strategy_id: str) -> dict | None:

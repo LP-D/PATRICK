@@ -79,3 +79,35 @@ def test_setup_has_no_cap_on_the_number_of_models_by_default(conn):
     out = asset_classes.setup(conn, today=TODAY, only=["Devises"])
 
     assert store.get_autopilot(conn, out[0]["strategy_id"])["settings"]["max_models"] is None
+
+
+def test_a_reused_strategy_without_orders_takes_the_requested_capital_but_one_with_orders_keeps_its_own(conn):
+    empty = store.create_strategy(conn, "Systematic Future", "CTO", 100_000, "2026-01-05")
+    busy = store.create_strategy(conn, "Systematic Devises", "CTO", 100_000, "2026-01-05")
+    store.insert_order(conn, {"strategy_id": busy, "position_id": "pos_a", "ts": "2026-01-07", "action": "open",
+                              "instrument_kind": "equity", "symbol": "MC.PA", "side": "long", "quantity": 4.0, "price": 700.0,
+                              "price_source": "market", "currency": "EUR", "fx_rate": 1.0, "fees": 1.0,
+                              "fees_source": "estimated", "fee_seed": 7, "spec": {}, "note": None})
+
+    out = {r["class"]: r for r in asset_classes.setup(conn, today=TODAY, capital=10_000_000, only=["Future", "Devises"])}
+
+    assert store.get_strategy(conn, empty)["initial_capital"] == 10_000_000 and out["Future"]["capital_changed"] is True
+    assert store.get_strategy(conn, busy)["initial_capital"] == 100_000 and out["Devises"]["capital_changed"] is False
+
+
+def test_the_initial_capital_of_a_strategy_with_orders_is_frozen(conn):
+    sid = store.create_strategy(conn, "A", "CTO", 100_000, "2026-01-05")
+    store.set_initial_capital(conn, sid, "2 500 000,5")
+    assert store.get_strategy(conn, sid)["initial_capital"] == 2_500_000.5
+    for bad in (0, -5, "abc", float("inf")):
+        with pytest.raises(store.FundError):
+            store.set_initial_capital(conn, sid, bad)
+    pea = store.create_strategy(conn, "P", "PEA", 50_000, "2026-01-05")
+    with pytest.raises(store.FundError, match="plafond"):
+        store.set_initial_capital(conn, pea, 200_000)
+    store.insert_order(conn, {"strategy_id": sid, "position_id": "pos_a", "ts": "2026-01-07", "action": "open",
+                              "instrument_kind": "equity", "symbol": "MC.PA", "side": "long", "quantity": 4.0, "price": 700.0,
+                              "price_source": "market", "currency": "EUR", "fx_rate": 1.0, "fees": 1.0,
+                              "fees_source": "estimated", "fee_seed": 7, "spec": {}, "note": None})
+    with pytest.raises(store.FundError, match="figé"):
+        store.set_initial_capital(conn, sid, 1_000_000)

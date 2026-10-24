@@ -1182,7 +1182,8 @@ def fund_autopilot_classes_cmd(
         conn.close()
     typer.echo(("Stratégies" if create else "Aperçu (rien n'est écrit)") + f" — niveau {tier}, horizon(s) {', '.join(map(str, horizon))} :")
     for r in rows:
-        state = "créée" if r["created"] else ("reprise" if r["strategy_id"] else "à créer")
+        state = "créée" if r["created"] else ("reprise" + (", capital mis à jour" if r["capital_changed"] else "")
+                                               if r["strategy_id"] else "à créer")
         typer.echo(f"  {r['name']:<28} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
 
 
