@@ -76,6 +76,35 @@ GLOSSARY_MODELS: dict[str, dict[str, str]] = {
         "l'ES est la perte moyenne quand elle l'est. L'ES dit la gravité de la queue, que la VaR ignore.",
         "VaR (value at risk) and ES (expected shortfall): 95% VaR is the loss exceeded in only 5% of periods; ES is the average loss "
         "when it is exceeded. ES conveys the tail's severity, which VaR ignores."),
+    "exp_dcor": _g(
+        "Corrélation de distance : mesure de dépendance qui vaut 0 seulement si deux séries sont indépendantes, quelle que soit la forme "
+        "du lien (courbe en U, volatilité commune, seuil), là où la corrélation de Pearson ne voit que la part linéaire. Entre 0 et 1, "
+        "sans signe. La version corrigée du biais ne se gonfle pas sur un petit échantillon.",
+        "Distance correlation: a dependence measure that is 0 only when two series are independent, whatever the shape of the link "
+        "(U-curve, shared volatility, threshold), where Pearson correlation sees only the linear part. Between 0 and 1, unsigned. The "
+        "bias-corrected version does not inflate on a small sample."),
+    "exp_mi": _g(
+        "Information mutuelle : combien connaître l'une des séries réduit l'incertitude sur l'autre, quel que soit le lien. Ramenée à "
+        "l'échelle de Linfoot (racine de 1 − e^(−2·IM)), elle se lit comme une corrélation : elle vaut |ρ| pour un couple gaussien. "
+        "Calculée ici sur les rangs, donc insensible aux queues épaisses des rendements.",
+        "Mutual information: how much knowing one series reduces uncertainty about the other, whatever the link. Brought back to the "
+        "Linfoot scale (square root of 1 − e^(−2·MI)) it reads like a correlation: it equals |ρ| for a Gaussian pair. Computed here on "
+        "ranks, so insensitive to the fat tails of returns."),
+    "exp_prewhiten": _g(
+        "Préblanchiment : on retire d'une série ce que son propre passé explique (modèle autorégressif) avant de la croiser avec une "
+        "autre. Sans cela, deux séries persistantes, même indépendantes, paraissent corrélées à de nombreux décalages.",
+        "Prewhitening: what a series' own past explains (autoregressive model) is removed before crossing it with another. Without it, "
+        "two persistent series, even independent, look correlated at many lags."),
+    "exp_vr": _g(
+        "Ratio de variance : variance des rendements sur q périodes divisée par q fois celle d'une période. Il vaut 1 pour une marche "
+        "aléatoire, plus de 1 si les mouvements se prolongent, moins de 1 s'ils se corrigent.",
+        "Variance ratio: variance of q-period returns divided by q times that of one period. It equals 1 for a random walk, above 1 if "
+        "moves continue, below 1 if they correct."),
+    "exp_partial": _g(
+        "Corrélation partielle : corrélation de deux actifs une fois retiré l'effet de tous les autres de la sélection. Elle sépare le "
+        "lien direct du lien qui passe par un facteur commun (par exemple le marché).",
+        "Partial correlation: correlation of two assets once the effect of all the others in the selection is removed. It separates a "
+        "direct link from one that runs through a common factor (for example the market)."),
 }
 
 # ---------------------------------------------------------------------------------------------------------------------------------
@@ -399,4 +428,9 @@ LABEL_STRINGS: dict[str, dict[str, str]] = {
     "exp_gl_tail": _g("Dépendance de queue", "Tail dependence"),
     "exp_gl_pca": _g("Analyse en composantes principales", "Principal component analysis"),
     "exp_gl_var_es": _g("VaR et ES", "VaR and ES"),
+    "exp_gl_dcor": _g("Corrélation de distance", "Distance correlation"),
+    "exp_gl_mi": _g("Information mutuelle", "Mutual information"),
+    "exp_gl_prewhiten": _g("Préblanchiment", "Prewhitening"),
+    "exp_gl_vr": _g("Ratio de variance", "Variance ratio"),
+    "exp_gl_partial": _g("Corrélation partielle", "Partial correlation"),
 }

@@ -10,7 +10,10 @@
     function $(id) { return document.getElementById(id); }
     var PN = window.PatrickNames || { label: function (s) { return s; }, name: function (s) { return s; }, tip: function () { return ""; } };
 
-    function heatmap(res) {
+    // Matrice carrée en cases colorées. `o.symbol` : grandeur affichée dans l'infobulle (ρ pour une corrélation) ; `o.title` : nom de l'étude.
+    function heatmap(res, o) {
+        o = o || {};
+        var symbol = o.symbol || "ρ";
         var labels = res.labels.map(function (sym) { return PN.name(sym); }), n = labels.length;
         var cs = Math.max(18, Math.min(46, Math.floor(560 / n)));
         // axes : noms raccourcis (le nom complet reste dans l'infobulle de chaque case)
@@ -19,7 +22,7 @@
         var ml = Math.min(150, longest * 6.4 + 12), mt = ml;
         var W = ml + n * cs + 8, H = mt + n * cs + 8;
         var svg = s("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, class: "exp-heat", role: "img",
-            "aria-label": fmtStr(tr("exp_chart_aria"), { t: tr("exp_tab_corr") }) });
+            "aria-label": fmtStr(tr("exp_chart_aria"), { t: o.title || tr("exp_tab_corr") }) });
         labels.forEach(function (lab, i) {
             svg.appendChild(s("text", { x: ml - 6, y: mt + i * cs + cs / 2 + 3.5, "text-anchor": "end", class: "exp-axis", text: axis[i] }));
             svg.appendChild(s("text", { x: 0, y: 0, class: "exp-axis", text: axis[i], transform: "translate(" + (ml + i * cs + cs / 2 + 3.5) + "," + (mt - 6) + ") rotate(-90)" }));
@@ -31,11 +34,41 @@
                 var fill = diag ? "var(--surface-3)" : (rho >= 0 ? "var(--brand)" : "var(--neg)");
                 var op = diag ? 1 : Math.min(1, Math.abs(rho) * 1.05) * (sig === false ? 0.28 : 1);
                 var cell = s("rect", { x: ml + j * cs + 1, y: mt + i * cs + 1, width: cs - 2, height: cs - 2, rx: 3, fill: fill, "fill-opacity": op });
-                cell.appendChild(s("title", { text: labels[i] + " × " + labels[j] + " : ρ = " + num(rho, 2) + (sig === false ? " (" + tr("exp_nonsig") + ")" : "") }));
+                cell.appendChild(s("title", { text: labels[i] + " × " + labels[j] + " : " + symbol + " = " + num(rho, 2) + (sig === false ? " (" + tr("exp_nonsig") + ")" : "") }));
                 svg.appendChild(cell);
                 if (!diag && cs >= 28) {
                     svg.appendChild(s("text", { x: ml + j * cs + cs / 2, y: mt + i * cs + cs / 2 + 3.5, "text-anchor": "middle", class: "exp-cell", text: num(rho, 2).replace("-", "−") }));
                 }
+            });
+        });
+        return h("div", { class: "exp-heat-wrap" }, [svg]);
+    }
+
+    // Matrice « qui mène qui » : ligne = cause, colonne = effet ; case pleine = lien significatif (plus foncée = p corrigée plus petite).
+    function grangerHeat(res) {
+        var labels = res.labels.map(function (sym) { return PN.name(sym); }), n = labels.length;
+        var cs = Math.max(18, Math.min(46, Math.floor(560 / n)));
+        var axis = labels.map(function (l) { return l.length > 22 ? l.slice(0, 21) + "…" : l; });
+        var longest = axis.reduce(function (m, l) { return Math.max(m, l.length); }, 0);
+        var ml = Math.min(150, longest * 6.4 + 12), mt = ml;
+        var W = ml + n * cs + 8, H = mt + n * cs + 8;
+        var svg = s("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, class: "exp-heat", role: "img",
+            "aria-label": fmtStr(tr("exp_chart_aria"), { t: tr("exp_gm_title") }) });
+        labels.forEach(function (lab, i) {
+            svg.appendChild(s("text", { x: ml - 6, y: mt + i * cs + cs / 2 + 3.5, "text-anchor": "end", class: "exp-axis", text: axis[i] }));
+            svg.appendChild(s("text", { x: 0, y: 0, class: "exp-axis", text: axis[i], transform: "translate(" + (ml + i * cs + cs / 2 + 3.5) + "," + (mt - 6) + ") rotate(-90)" }));
+        });
+        res.p_adj.forEach(function (row, i) {
+            row.forEach(function (q, j) {
+                var diag = i === j, sig = res.significant[i][j] === true;
+                var strength = sig ? 0.4 + 0.6 * Math.min(1, -Math.log10(Math.max(q === null ? 1 : q, 1e-12)) / 8) : 0;
+                var cell = s("rect", { x: ml + j * cs + 1, y: mt + i * cs + 1, width: cs - 2, height: cs - 2, rx: 3,
+                    fill: diag ? "var(--surface-3)" : (sig ? "var(--brand)" : "var(--surface-2)"), "fill-opacity": diag ? 1 : (sig ? strength : 0.8) });
+                if (!diag) {
+                    var g = res.gain[i][j];
+                    cell.appendChild(s("title", { text: fmtStr(tr("exp_gm_cell"), { a: labels[i], b: labels[j], q: pval(q), g: g === null ? "—" : pct(g, 2) }) }));
+                }
+                svg.appendChild(cell);
             });
         });
         return h("div", { class: "exp-heat-wrap" }, [svg]);
@@ -116,9 +149,13 @@
     function fail(out) {
         return function (err) { out.replaceChildren(h("p", { class: "banner banner-error", role: "alert", text: fmtStr(tr("exp_error"), { e: err.message }) })); };
     }
+    // Une réponse n'est affichée que si aucune demande plus récente n'a été lancée pour la même zone (deux « Appliquer » rapprochés : la
+    // réponse arrivée en dernier ne doit pas écraser la dernière demande).
     function job(outId, study, extra, builder) {
-        var out = $(outId), done = paint(out, builder);
-        return api(study, extra).then(done).catch(fail(out));
+        var out = $(outId), seq = (out._seq = (out._seq || 0) + 1), done = paint(out, builder), failed = fail(out);
+        return api(study, extra)
+            .then(function (result) { if (out._seq === seq) done(result); })
+            .catch(function (err) { if (out._seq === seq) failed(err); });
     }
     function pair(prefix) {
         var a = $(prefix + "-a"), b = $(prefix + "-b");
@@ -217,23 +254,130 @@
         return box;
     }
 
+    function renderVarianceRatio(res) {
+        var box = h("div", {});
+        // la barre part de 1 (marche aléatoire) : au-dessus, les mouvements se prolongent ; en dessous, ils se corrigent
+        box.appendChild(barChart({ values: res.rows.map(function (r) { return r.vr - 1; }), labels: res.rows.map(function (r) { return String(r.q); }),
+            yMin: -0.5, yMax: 0.5, yFmt: function (v) { return num(1 + v, 2); }, title: tr("exp_vr_title"),
+            strong: res.rows.map(function (r) { return r.significant === true; }) }));
+        box.appendChild(table([tr("exp_vr_horizon"), tr("exp_vr_ratio"), tr("exp_vr_z"), tr("exp_col_p"), tr("exp_col_padj"), ""],
+            res.rows.map(function (r) {
+                return [{ cell: r.q, cls: "num" }, { cell: num(r.vr, 2), cls: "num pk-mono" }, numCell(num(r.z_robust, 2), r.z_robust),
+                    { cell: pval(r.p_robust), cls: "num pk-mono" }, { cell: pval(r.p_adj), cls: "num pk-mono" },
+                    { cell: r.significant ? chip(tr("exp_sig"), "pos") : "" }];
+            })));
+        var kind = res.verdict === "momentum" ? "pos" : (res.verdict === "mean_reversion" ? "neg" : "neutral");
+        box.appendChild(h("p", { class: "exp-meta" }, [tr("exp_vr_joint") + " " + pval(res.joint_p) + " ", chip(tr("exp_vr_v_" + res.verdict), kind),
+            " · " + fmtStr(tr("exp_obs"), { n: res.n_obs })]));
+        return box;
+    }
+
     function renderXcorr(res) {
         var box = h("div", {});
         box.appendChild(barChart({ values: res.values, labels: res.lags.map(String), band: res.band, yMin: -0.3, yMax: 0.3,
             strong: res.significant, title: tr("exp_xcorr_title") }));
-        box.appendChild(h("p", { class: "exp-meta", text: [tr("exp_xcorr_best") + " " + res.best_lag + " (ρ = " + num(res.best_value, 2) + ")",
-            tr("exp_xcorr_zero") + " ρ = " + num(res.contemporaneous, 2), fmtStr(tr("exp_obs"), { n: res.n_obs })].join(" · ") }));
+        var meta = [tr("exp_xcorr_best") + " " + res.best_lag + " (ρ = " + num(res.best_value, 2) + ")",
+            tr("exp_xcorr_zero") + " ρ = " + num(res.contemporaneous, 2)];
+        if (res.portmanteau_valid && res.b_leads_p !== null && res.a_leads_p !== null) {
+            meta.push(fmtStr(tr("exp_ccf_b_leads"), { a: PN.name(res.a), b: PN.name(res.b), p: pval(res.b_leads_p) }));
+            meta.push(fmtStr(tr("exp_ccf_a_leads"), { a: PN.name(res.a), b: PN.name(res.b), p: pval(res.a_leads_p) }));
+        }
+        meta.push(fmtStr(tr("exp_obs"), { n: res.n_obs }));
+        box.appendChild(h("p", { class: "exp-meta", text: meta.join(" · ") }));
+        if (res.prewhitened) {
+            var ar = res.ar_orders || {};
+            box.appendChild(h("p", { class: "exp-meta", text: fmtStr(tr("exp_ccf_ar"), { a: PN.name(res.a), pa: ar[res.a], b: PN.name(res.b), pb: ar[res.b] }) }));
+        } else {
+            box.appendChild(h("p", { class: "exp-meta" }, [chip(tr("exp_ccf_raw_warn"), "warn")]));
+        }
         return box;
     }
 
     function renderGranger(res) {
         function row(d) {
-            return [{ cell: fmtStr(tr("exp_granger_dir"), { a: d.cause, b: d.effect }), cls: "pk-mono" },
-                { cell: tr("exp_granger_lag") + " " + d.best_lag, cls: "num" }, { cell: pval(d.p_bonferroni), cls: "num pk-mono" },
+            return [{ cell: fmtStr(tr("exp_granger_dir"), { a: PN.name(d.cause), b: PN.name(d.effect) }), cls: "pk-mono" },
+                { cell: d.order, cls: "num" }, { cell: pval(d.p_order), cls: "num pk-mono" }, { cell: pct(d.gain_order, 2), cls: "num pk-mono" },
+                { cell: pval(d.p_bonferroni), cls: "num pk-mono" },
                 { cell: chip(d.predictive ? tr("exp_v_predictive") : tr("exp_v_not_predictive"), d.predictive ? "pos" : "neutral") }];
         }
-        return h("div", {}, [table(["", "", tr("exp_col_padj"), ""], [row(res.a_to_b), row(res.b_to_a)]),
-            h("p", { class: "exp-meta", text: fmtStr(tr("exp_obs"), { n: res.n_obs }) })]);
+        var box = h("div", {}, [table(["", tr("exp_gr_order"), tr("exp_gr_p"), tr("exp_gr_gain"), tr("exp_gr_bonf"), ""], [row(res.a_to_b), row(res.b_to_a)])]);
+        var meta = [fmtStr(tr("exp_obs"), { n: res.n_obs })];
+        if (res.on === "abs") meta.push(tr("exp_gr_on_abs"));
+        box.appendChild(h("p", { class: "exp-meta", text: meta.join(" · ") }));
+        if (res.nonstationary && res.nonstationary.length) {
+            box.appendChild(h("p", { class: "exp-meta" }, [chip(fmtStr(tr("exp_gr_nonstat"), { s: res.nonstationary.map(PN.label).join(", ") }), "warn")]));
+        }
+        return box;
+    }
+
+    // Dépendance non linéaire d'un couple, décalage par décalage (corrélation de distance ou information mutuelle).
+    function renderDepPair(res) {
+        var box = h("div", {});
+        var title = tr(res.measure === "mi" ? "exp_mi_title" : "exp_dcor_title");
+        box.appendChild(barChart({ values: res.values, labels: res.lags.map(String), yMin: 0, yMax: 0.3, strong: res.significant, title: title,
+            hlines: [{ y: res.band, dash: "4 4" }], color: function () { return "var(--brand)"; } }));
+        var maxPearson = Math.max.apply(null, res.pearson_abs.filter(function (v) { return v !== null; }));
+        var meta = [tr("exp_xcorr_best") + " " + res.best_lag + " (" + num(res.best_value, 2) + ")", tr("exp_xcorr_zero") + " " + num(res.contemporaneous, 2),
+            tr("exp_depp_threshold") + " " + num(res.band, 2), tr("exp_depp_pearson") + " " + num(maxPearson, 2)];
+        box.appendChild(h("p", { class: "exp-meta", text: meta.join(" · ") }));
+        var verdict = res.nonlinear_only ? chip(tr("exp_v_nonlinear_only"), "warn")
+            : (res.contemporaneous_significant ? chip(tr("exp_v_linear_too"), "pos") : chip(tr("exp_v_no_link"), "neutral"));
+        var line = [verdict, " " + fmtStr(tr("exp_obs"), { n: res.n_used })];
+        if (res.windowed) line.push(" · " + fmtStr(tr("exp_depp_window"), { n: res.n_used, total: res.n_obs }));
+        box.appendChild(h("p", { class: "exp-meta" }, line));
+        return box;
+    }
+
+    function pairLabel(a, b) { return PN.name(a) + " × " + PN.name(b); }
+
+    // Matrice de dépendance non linéaire de toute la sélection + les couples que Pearson ne voit pas.
+    function renderDependence(res) {
+        var box = h("div", {});
+        var symbol = res.measure === "mi" ? "IC" : "dCor";
+        box.appendChild(heatmap(res, { symbol: symbol, title: tr(res.measure === "mi" ? "exp_m_mi" : "exp_m_dcor") }));
+        box.appendChild(h("div", { class: "exp-legend" }, [res.significant ? chip(tr("exp_legend_faded"), "faded") : null]));
+        var meta = [fmtStr(tr("exp_corr_tests"), { n: res.n_tests }),
+            tr("exp_dep_mean") + " " + num(res.mean_dependence, 2) + " " + tr("exp_dep_mean_pearson") + " " + num(res.mean_abs_pearson, 2),
+            fmtStr(tr("exp_obs"), { n: res.n_used })];
+        if (res.windowed) meta.push(fmtStr(tr("exp_dep_window"), { n: res.n_used, total: res.n_obs }));
+        box.appendChild(h("p", { class: "exp-meta", text: meta.join(" · ") }));
+        function listing(title, rows, gap) {
+            var headers = [tr("exp_dep_col_pair"), tr("exp_dep_col_value"), tr("exp_dep_col_pearson")];
+            if (gap) headers.push(tr("exp_dep_col_gap"));
+            headers.push(tr("exp_col_padj"));
+            return h("div", { class: "exp-pairs" }, [h("h4", { text: title }), table(headers, rows.map(function (r) {
+                var cells = [{ cell: pairLabel(r.a, r.b), cls: "pk-mono" }, { cell: num(r.value, 2), cls: "num pk-mono" }, { cell: num(Math.abs(r.pearson), 2), cls: "num pk-mono" }];
+                if (gap) cells.push(numCell(num(r.gap, 2), r.gap));
+                cells.push({ cell: pval(r.p_adj), cls: "num pk-mono" });
+                return cells;
+            }))]);
+        }
+        var hidden = res.hidden.length ? listing(tr("exp_dep_hidden"), res.hidden, true)
+            : h("div", { class: "exp-pairs" }, [h("h4", { text: tr("exp_dep_hidden") }), h("p", { class: "hint", "data-keep": "", text: tr("exp_dep_no_hidden") })]);
+        box.appendChild(h("div", { class: "exp-two exp-two-wide" }, [listing(tr("exp_dep_strongest"), res.strongest, false), hidden]));
+        return box;
+    }
+
+    // « Qui mène qui » : matrice de causalité de Granger, meneurs et liens significatifs.
+    function renderGrangerMatrix(res) {
+        var box = h("div", {});
+        box.appendChild(grangerHeat(res));
+        box.appendChild(h("div", { class: "exp-legend" }, [chip(tr("exp_gm_legend"), "pos")]));
+        var meta = [fmtStr(tr("exp_gm_summary"), { e: res.n_edges, t: res.n_tests }), fmtStr(tr("exp_obs"), { n: res.n_obs })];
+        if (res.on === "abs") meta.push(tr("exp_gr_on_abs"));
+        box.appendChild(h("p", { class: "exp-meta", text: meta.join(" · ") }));
+        if (!res.n_edges) { box.appendChild(h("p", { class: "hint", "data-keep": "", text: tr("exp_gm_none") })); return box; }
+        var leaders = h("div", { class: "exp-pairs" }, [h("h4", { text: tr("exp_gm_leaders") }),
+            table(["", tr("exp_gm_out"), tr("exp_gm_in"), tr("exp_gm_net")], res.leaders.filter(function (r) { return r.out || r.in; }).slice(0, 8).map(function (r) {
+                return [{ cell: PN.name(r.symbol), cls: "pk-mono" }, { cell: r.out, cls: "num" }, { cell: r.in, cls: "num" }, numCell(String(r.net), r.net)];
+            }))]);
+        var edges = h("div", { class: "exp-pairs" }, [h("h4", { text: tr("exp_gm_edges") }),
+            table([tr("exp_gm_col_link"), tr("exp_gm_col_order"), tr("exp_gm_col_q"), tr("exp_gm_col_gain")], res.edges.slice(0, 12).map(function (e) {
+                return [{ cell: fmtStr(tr("exp_granger_dir"), { a: PN.name(e.cause), b: PN.name(e.effect) }), cls: "pk-mono" }, { cell: e.order, cls: "num" },
+                    { cell: pval(e.p_adj), cls: "num pk-mono" }, { cell: e.gain === null ? "—" : pct(e.gain, 2), cls: "num pk-mono" }];
+            }))]);
+        box.appendChild(h("div", { class: "exp-two exp-two-wide" }, [leaders, edges]));
+        return box;
     }
 
     function renderCoint(res) {
@@ -314,8 +458,11 @@
         if (loaded[key] === runId) return;
         loaded[key] = runId;
         if (key === "corr") {
-            job("exp-corr-out", "correlation", { method: $("exp-corr-method").value }, renderCorrelation);
+            loadCorrelation();
             loadRolling();
+        } else if (key === "dep") {
+            loadDependence();
+            loadGrangerMatrix();
         } else if (key === "dist") {
             job("exp-dist-out", "describe", {}, renderDescribe);
         } else if (key === "memory") {
@@ -330,23 +477,39 @@
             loadSeason();
         }
     }
+    function loadCorrelation() {
+        var method = $("exp-corr-method").value;
+        if (method === "partial") job("exp-corr-out", "partial", {}, renderCorrelation);
+        else job("exp-corr-out", "correlation", { method: method }, renderCorrelation);
+    }
+    function loadDependence() { job("exp-dep-out", "dependence", { measure: $("exp-dep-measure").value }, renderDependence); }
+    function loadGrangerMatrix() {
+        job("exp-gm-out", "granger_matrix", { maxlag: $("exp-gm-lags").value, on: $("exp-gm-on").value, scope: $("exp-gm-scope").value }, renderGrangerMatrix);
+    }
     function loadRolling() {
         var p = pair("exp-roll");
         if (needPair("exp-roll-out", p)) job("exp-roll-out", "rolling", { a: p.a, b: p.b, window: $("exp-roll-window").value }, renderRolling);
     }
     function loadMemory() {
         var p = pair("exp-mem");
-        if (p.a) job("exp-mem-out", "memory", { a: p.a, nlags: $("exp-mem-lags").value }, renderMemory);
+        if (p.a) {
+            job("exp-mem-out", "memory", { a: p.a, nlags: $("exp-mem-lags").value }, renderMemory);
+            job("exp-vr-out", "variance_ratio", { a: p.a }, renderVarianceRatio);
+        }
     }
     function loadLink() {
         var p = pair("exp-link");
         if (!p.a || !p.b || p.a === p.b) {
-            ["exp-xcorr-out", "exp-granger-out", "exp-coint-out", "exp-tail-out"].forEach(function (id) { needPair(id, p); });
+            ["exp-xcorr-out", "exp-granger-out", "exp-dcor-out", "exp-mi-out", "exp-coint-out", "exp-tail-out"].forEach(function (id) { needPair(id, p); });
             return;
         }
-        var lags = $("exp-link-lags").value;
-        job("exp-xcorr-out", "leadlag", { a: p.a, b: p.b, maxlag: lags }, renderXcorr);
-        job("exp-granger-out", "granger", { a: p.a, b: p.b, maxlag: Math.min(10, lags) }, renderGranger);
+        var lags = $("exp-link-lags").value, basis = $("exp-link-basis").value;
+        job("exp-xcorr-out", "leadlag", { a: p.a, b: p.b, maxlag: lags, basis: basis, prewhiten: $("exp-link-prewhiten").checked ? 1 : 0,
+            method: $("exp-link-rank").checked ? "spearman" : "pearson" }, renderXcorr);
+        job("exp-granger-out", "granger", { a: p.a, b: p.b, maxlag: Math.min(10, lags), on: basis === "abs" ? "abs" : "returns" }, renderGranger);
+        ["dcor", "mi"].forEach(function (measure) {
+            job("exp-" + measure + "-out", "dependence_pair", { a: p.a, b: p.b, measure: measure, maxlag: Math.min(20, lags) }, renderDepPair);
+        });
         job("exp-coint-out", "cointegration", { a: p.a, b: p.b }, renderCoint);
         job("exp-tail-out", "tail", { a: p.a, b: p.b, q: $("exp-link-q").value }, renderTail);
     }
@@ -410,6 +573,8 @@
     });
     $("exp-run").addEventListener("click", runAll);
     $("exp-corr-method").addEventListener("change", function () { loaded.corr = undefined; if (selected().length) loadPanel("corr"); });
+    $("exp-dep-measure").addEventListener("change", function () { if (selected().length) loadDependence(); });
+    $("exp-gm-run").addEventListener("click", loadGrangerMatrix);
     $("exp-roll-run").addEventListener("click", loadRolling);
     $("exp-mem-run").addEventListener("click", loadMemory);
     $("exp-link-run").addEventListener("click", loadLink);

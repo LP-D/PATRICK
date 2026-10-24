@@ -17,12 +17,13 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from patrick.data.freshness import fred_periodicity
+from patrick.exploration import dependence as DEP
 from patrick.exploration import panel as P
 from patrick.exploration import studies as S
 from patrick.webapp import forms, market_data
 
-STUDIES = ("correlation", "rolling", "describe", "stationarity", "memory", "leadlag", "granger", "cointegration",
-           "pca", "beta", "tail", "seasonality")
+STUDIES = ("correlation", "partial", "rolling", "describe", "stationarity", "memory", "variance_ratio", "leadlag", "granger",
+           "granger_matrix", "dependence", "dependence_pair", "cointegration", "pca", "beta", "tail", "seasonality")
 PANEL_TTL_S = 900
 PANEL_CACHE_MAX = 12
 _cache: OrderedDict[tuple, tuple[float, P.Panel]] = OrderedDict()
@@ -133,20 +134,33 @@ def _pick(name: str, value: str | None, valid: list[str], dropped: dict[str, str
     return value
 
 
+def _flag(params: dict, name: str, default: bool) -> bool:
+    raw = params.get(name)
+    return default if raw is None else str(raw).lower() in ("1", "true", "yes", "on")
+
+
 def run_study(study: str, pan: P.Panel, params: dict) -> dict:
     cols = list(pan.returns.columns)
     ret, lev = pan.returns, pan.levels
     if study == "correlation":
         return S.correlation(ret, params.get("method", "pearson"))
+    if study == "partial":
+        return S.partial_correlation(ret)
     if study == "describe":
         return S.describe(ret, lev, pan.periods_per_year, pan.transforms)
     if study == "stationarity":
         return S.stationarity(lev, ret)
     if study == "pca":
         return S.pca(ret, int(params.get("n_components", 5)))
+    if study == "granger_matrix":
+        return S.granger_matrix(ret, int(params.get("maxlag", 5)), params.get("on", "returns"), params.get("scope", "conditional"))
+    if study == "dependence":
+        return DEP.dependence_matrix(ret, params.get("measure", "dcor"))
     a = _pick("a", params.get("a"), cols, pan.dropped)
     if study == "memory":
         return S.memory(ret[a], int(params.get("nlags", 20)))
+    if study == "variance_ratio":
+        return S.variance_ratio(ret[a])
     if study == "seasonality":
         return S.seasonality(ret[a], pan.freq)
     if study == "beta":
@@ -156,9 +170,12 @@ def run_study(study: str, pan: P.Panel, params: dict) -> dict:
     if study == "rolling":
         return S.rolling_correlation(ret, a, b, int(params.get("window", 60)))
     if study == "leadlag":
-        return S.cross_correlation(ret, a, b, int(params.get("maxlag", 10)))
+        return S.cross_correlation(ret, a, b, int(params.get("maxlag", 10)), basis=params.get("basis", "returns"),
+                                   prewhiten=_flag(params, "prewhiten", True), method=params.get("method", "pearson"), levels=lev)
     if study == "granger":
-        return S.granger(ret, a, b, int(params.get("maxlag", 5)))
+        return S.granger(ret, a, b, int(params.get("maxlag", 5)), params.get("on", "returns"))
+    if study == "dependence_pair":
+        return DEP.dependence_pair(ret, a, b, params.get("measure", "dcor"), int(params.get("maxlag", 10)))
     if study == "cointegration":
         return S.cointegration(lev, a, b, int(params.get("zwindow", 60)))
     if study == "tail":

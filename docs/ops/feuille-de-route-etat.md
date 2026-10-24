@@ -61,7 +61,7 @@ pipeline d'entraînement : hachage de configuration, golden master et worker son
 | Analyse d'erreurs | fait | section « Erreurs » (régime, calendrier, confiance) |
 | Tests de robustesse | fait | section « Robustesse » (permutation, bootstrap par blocs, décalage) |
 | Frise des régimes (HMM causal) | fait | section « Régimes » ; le HMM est ajusté avant le premier jour de test |
-| Avance-retard entre séries | déjà présent | `/exploration` (corrélation croisée, Granger) |
+| Avance-retard entre séries | déjà présent, approfondi le 2026-10-24 | `/exploration` (corrélation croisée préblanchie, Granger robuste, matrice « qui mène qui », dépendance non linéaire) |
 | « Explique ce résultat » | fait | « Lecture guidée » : texte déterministe produit à partir des métriques, sans modèle de langage, jamais de conseil |
 | SHAP global, ablation par famille | reporté | exigent de ré-entraîner (2 entrées seulement en cache SHAP) : à lancer comme jobs |
 

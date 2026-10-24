@@ -85,7 +85,7 @@
         var P = window.PatrickPlot, host = h("div", { class: "exp-chart-wrap" });
         P.create(host, {
             type: "bar", values: o.values, labels: o.labels, xLabel: function (i) { return o.labels ? o.labels[i] : String(i); },
-            band: o.band, yMin: o.yMin, yMax: o.yMax, yFmt: o.yFmt, color: o.color, strong: o.strong, title: o.title || "", height: o.height || 200,
+            band: o.band, hlines: o.hlines, yMin: o.yMin, yMax: o.yMax, yFmt: o.yFmt, color: o.color, strong: o.strong, title: o.title || "", height: o.height || 200,
         });
         return host;
     }

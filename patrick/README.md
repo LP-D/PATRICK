@@ -127,8 +127,12 @@ Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement lear
   walk-forward results against buy-and-hold, a momentum rule and staying flat, with bootstrap
   interval, probabilistic and deflated Sharpe.
 - `/exploration` — statistical studies between assets that exist nowhere else: correlations
-  (Pearson/Spearman/Kendall, clustered, BH-corrected), distribution, stationarity (ADF, KPSS, Hurst),
-  autocorrelation, lead-lag, Granger, cointegration, tail dependence, PCA, beta/alpha, seasonality.
+  (Pearson/Spearman/Kendall/partial, clustered, BH-corrected), nonlinear dependence (distance
+  correlation, mutual information, with circular-shift nulls that keep each series' own dynamics),
+  distribution, stationarity (ADF, KPSS, Hurst), autocorrelation, variance ratio, prewhitened
+  cross-correlation (returns, differences or volatility), Granger (BIC order, robust Wald, effect size,
+  pairwise and conditional "who leads whom" matrix), cointegration, tail dependence, PCA, beta/alpha,
+  seasonality.
 - `/runs`, `/runs/{id}` — searchable/filterable run history and detail pages (actual vs predicted up/down shares, flagged beyond 70% on one side);
   the history can compare 2–4 completed runs at `/compare-runs?run_ids=...`.
 - `/universe` — configured target universe crossed with run history.

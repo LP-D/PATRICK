@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from patrick.webapp.glossary_models import LABEL_STRINGS
 from patrick.webapp.i18n_dl import DL_STRINGS
+from patrick.webapp.i18n_exploration import EXPLORATION_STRINGS
 from patrick.webapp.i18n_rl import RL_STRINGS
 
 
@@ -112,10 +113,13 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "exp_corr_hint": _s(
         "Cases pleines : corrélation significative après correction de Benjamini-Hochberg sur l'ensemble des paires ; cases pâles : "
         "non significative. Bleu : les deux actifs bougent ensemble ; rouge : ils bougent en sens opposé. Les actifs sont rangés par "
-        "classification hiérarchique : les blocs corrélés apparaissent côte à côte. Spearman et Kendall résistent aux valeurs aberrantes.",
+        "classification hiérarchique : les blocs corrélés apparaissent côte à côte. Spearman et Kendall résistent aux valeurs aberrantes. "
+        "Partielle : le lien de chaque couple une fois retiré l'effet de tous les autres actifs (trois actifs au moins) ; deux actifs "
+        "qui suivent un même troisième y paraissent sans lien.",
         "Solid cells: significant correlation after Benjamini-Hochberg correction across all pairs; faded cells: not significant. "
         "Blue: both assets move together; red: they move in opposite directions. Assets are ordered by hierarchical clustering: "
-        "correlated blocks appear side by side. Spearman and Kendall resist outliers."),
+        "correlated blocks appear side by side. Spearman and Kendall resist outliers. Partial: each pair's link once the effect of "
+        "all the other assets is removed (three assets at least); two assets that follow the same third one look unlinked there."),
     "exp_corr_most_pos": _s("Les plus liés", "Most linked"),
     "exp_corr_most_neg": _s("Les plus opposés", "Most opposed"),
     "exp_corr_mean_abs": _s("Corrélation absolue moyenne", "Mean absolute correlation"),
@@ -204,26 +208,38 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
 
     # --- lien entre deux actifs
     "exp_link_hint": _s(
-        "Quatre regards sur le même couple : la corrélation croisée (qui précède qui), la causalité de Granger (le passé de l'un aide-t-il "
-        "à prédire l'autre ; un pouvoir prédictif, jamais une cause économique), la cointégration (les deux prix reviennent-ils l'un vers "
-        "l'autre à long terme) et la dépendance de queue (chutent-ils ensemble plus souvent que la corrélation ne le laisse croire).",
-        "Four views of the same pair: cross-correlation (who leads whom), Granger causality (does one's past help predict the other; "
-        "predictive power, never an economic cause), cointegration (do the two prices revert toward each other in the long run) and tail "
-        "dependence (do they fall together more often than correlation suggests)."),
+        "Cinq regards sur le même couple : la corrélation croisée (qui précède qui, sur rendements, différences ou volatilité), la "
+        "causalité de Granger (le passé de l'un aide-t-il à prédire l'autre ; un pouvoir prédictif, jamais une cause économique), la "
+        "dépendance non linéaire par décalage, la cointégration (les deux prix reviennent-ils l'un vers l'autre à long terme) et la "
+        "dépendance de queue (chutent-ils ensemble plus souvent que la corrélation ne le laisse croire).",
+        "Five views of the same pair: cross-correlation (who leads whom, on returns, differences or volatility), Granger causality (does "
+        "one's past help predict the other; predictive power, never an economic cause), nonlinear dependence by lag, cointegration (do "
+        "the two prices revert toward each other in the long run) and tail dependence (do they fall together more often than "
+        "correlation suggests)."),
     "exp_xcorr_title": _s("Corrélation croisée", "Cross-correlation"),
     "exp_xcorr_hint": _s(
         "Corrélation entre A aujourd'hui et B décalé de k périodes. k > 0 : B mène (le passé de B éclaire A) ; k < 0 : A mène. "
-        "La bande ±1,96/√n est valable pour un décalage isolé, sans correction des décalages testés.",
-        "Correlation between A today and B shifted by k periods. k > 0: B leads (B's past informs A); k < 0: A leads. The "
-        "±1.96/√n band holds for a single lag, without correction for the lags tested."),
+        "Préblanchir retire l'autocorrélation propre à chaque série : sans cela, deux séries persistantes paraissent liées à tous les "
+        "décalages. Barres pleines : significatives après correction de Benjamini-Hochberg sur tous les décalages, avec un écart-type "
+        "robuste à une volatilité qui change ; la bande grisée est le seuil classique ±1,96/√n. « Volatilité » croise les rendements "
+        "absolus, où les marchés se parlent le plus. Le test d'ensemble de Haugh-Pierce juge tous les décalages d'un sens à la fois.",
+        "Correlation between A today and B shifted by k periods. k > 0: B leads (B's past informs A); k < 0: A leads. Prewhitening "
+        "removes each series' own autocorrelation: without it, two persistent series look linked at every lag. Solid bars: significant "
+        "after Benjamini-Hochberg correction across all lags, with a standard error robust to changing volatility; the grey band is the "
+        "classic ±1.96/√n threshold. \"Volatility\" crosses absolute returns, where markets talk most. The Haugh-Pierce joint test "
+        "judges all the lags of one direction at once."),
     "exp_xcorr_best": _s("Meilleur décalage", "Best lag"),
     "exp_xcorr_zero": _s("Simultanée", "Contemporaneous"),
     "exp_granger_title": _s("Causalité de Granger", "Granger causality"),
     "exp_granger_hint": _s(
-        "p-value corrigée de Bonferroni sur les décalages essayés (on ne retient pas le meilleur décalage sans le payer). "
-        "p < 5 % : le passé de la cause apporte de l'information sur l'effet au-delà du passé de l'effet lui-même.",
-        "Bonferroni-corrected p-value over the lags tried (the best lag is not kept without paying for it). p < 5%: the cause's past "
-        "adds information about the effect beyond the effect's own past."),
+        "Test de Wald robuste à une variance qui change, à l'ordre choisi par le critère BIC du modèle à deux actifs : un seul test, l'ordre "
+        "n'est pas pêché pour obtenir une p-value. Le gain est la part de variance de l'effet expliquée en plus par le passé de la cause : "
+        "une p-value minuscule avec un gain de 0,1 % n'a pas d'intérêt pratique. La p-value de Bonferroni sur tous les ordres sert de "
+        "contrôle de sensibilité. Avec « Volatilité » le test porte sur |rendement|.",
+        "Wald test robust to changing variance, at the order chosen by the BIC criterion of the two-asset model: a single test, the "
+        "order is not fished for a p-value. The gain is the share of the effect's variance explained in addition by the cause's past: a "
+        "tiny p-value with a 0.1% gain has no practical interest. The Bonferroni p-value over all orders is a sensitivity check. With "
+        "\"Volatility\" the test is on |return|."),
     "exp_granger_dir": _s("{a} → {b}", "{a} → {b}"),
     "exp_granger_lag": _s("meilleur décalage", "best lag"),
     "exp_v_predictive": _s("pouvoir prédictif", "predictive"),
@@ -349,6 +365,7 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
 MODELS_STRINGS.update(LABEL_STRINGS)
 MODELS_STRINGS.update(DL_STRINGS)
 MODELS_STRINGS.update(RL_STRINGS)
+MODELS_STRINGS.update(EXPLORATION_STRINGS)
 
 # Clés lues par le navigateur (`window.I18N`) : `help_aria` partout ; les libellés des pages à graphiques seulement sur leur page (la charge
 # utile de chaque page reste petite). Les textes réservés au gabarit (`*_hint`, `*_subtitle`) ne sont jamais envoyés.

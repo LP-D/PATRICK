@@ -60,7 +60,7 @@ def test_the_page_lists_every_target_group_and_the_presets(client):
     assert 'value="^GSPC"' in html and 'value="BAMLH0A0HYM2"' in html
     assert 'data-symbols="^GSPC,^NDX,^STOXX50E,^GDAXI,^FTSE,^N225"' in html
     assert "/static/exploration.js" in html
-    assert 'role="tablist"' in html and html.count('role="tabpanel"') == 6
+    assert 'role="tablist"' in html and html.count('role="tabpanel"') == 7
 
 
 def test_the_page_is_in_the_english_interface_without_leaking_keys(client):
@@ -96,6 +96,13 @@ def test_the_catalog_endpoint_carries_the_periodicity_of_fred_series(client):
     ("cointegration", {"a": "^GSPC", "b": "^NDX"}, {"p_value", "hedge_ratio", "zscore"}),
     ("tail", {"a": "^GSPC", "b": "^NDX", "q": 0.05}, {"lower", "upper", "lower_ratio"}),
     ("beta", {"a": "XLK", "b": "^GSPC", "window": 60}, {"beta", "alpha_annualized", "rolling_beta"}),
+    ("partial", {}, {"labels", "matrix", "significant", "condition_number"}),
+    ("variance_ratio", {"a": "^GSPC"}, {"rows", "joint_p", "verdict"}),
+    ("granger_matrix", {"maxlag": 3}, {"labels", "p_adj", "edges", "leaders", "scope"}),
+    ("dependence", {"measure": "dcor"}, {"labels", "matrix", "pearson", "hidden", "n_used"}),
+    ("dependence", {"measure": "mi"}, {"labels", "matrix", "strongest"}),
+    ("dependence_pair", {"a": "^GSPC", "b": "^NDX", "measure": "dcor", "maxlag": 3}, {"lags", "values", "p_adj", "band", "nonlinear_only"}),
+    ("dependence_pair", {"a": "^GSPC", "b": "^NDX", "measure": "mi", "maxlag": 3}, {"lags", "values", "mi_nats", "band"}),
 ])
 def test_every_study_answers_with_its_meta_and_result(client, calls, study, extra, keys):
     resp = client.get(f"/api/exploration/{study}", params=_q(**extra))
@@ -188,3 +195,39 @@ def test_simultaneous_studies_on_one_selection_download_each_series_once(client,
         t.join()
     assert results == [200] * 4
     assert sorted(seen) == sorted(SYMS)                    # 4 séries, 4 chargements : pas 16
+
+
+def test_the_cross_correlation_route_takes_series_prewhitening_and_method(client, calls):
+    base = client.get("/api/exploration/leadlag", params=_q(a="^GSPC", b="^NDX", maxlag=4)).json()["result"]
+    assert base["basis"] == "returns" and base["prewhitened"] is True and base["method"] == "pearson"
+    raw = client.get("/api/exploration/leadlag", params=_q(a="^GSPC", b="^NDX", maxlag=4, prewhiten=0, basis="abs", method="spearman"))
+    assert raw.status_code == 200
+    body = raw.json()["result"]
+    assert body["basis"] == "abs" and body["prewhitened"] is False and body["method"] == "spearman" and body["ar_orders"] == {}
+    diff = client.get("/api/exploration/leadlag", params=_q(a="^GSPC", b="^NDX", basis="diff"))
+    assert diff.status_code == 200 and diff.json()["result"]["basis"] == "diff"
+
+
+def test_the_granger_routes_take_the_series_and_the_scope(client, calls):
+    vol = client.get("/api/exploration/granger", params=_q(a="^GSPC", b="^NDX", on="abs", maxlag=3)).json()["result"]
+    assert vol["on"] == "abs" and {"order", "p_order", "gain_order", "p_bonferroni"} <= set(vol["a_to_b"])
+    pair = client.get("/api/exploration/granger_matrix", params=_q(scope="pairwise", maxlag=2)).json()["result"]
+    assert pair["scope"] == "pairwise" and pair["n_tests"] == 12
+
+
+def test_the_new_studies_answer_readable_400s_to_bad_requests(client, calls):
+    bad = [
+        ("leadlag", {"a": "^GSPC", "b": "^NDX", "basis": "levels"}, "série inconnue"),
+        ("leadlag", {"a": "^GSPC", "b": "^NDX", "method": "kendall"}, "méthode inconnue"),
+        ("granger", {"a": "^GSPC", "b": "^NDX", "on": "levels"}, "série inconnue"),
+        ("granger_matrix", {"scope": "global"}, "portée inconnue"),
+        ("dependence", {"measure": "cosine"}, "mesure inconnue"),
+        ("dependence_pair", {"a": "^GSPC", "b": "^GSPC"}, "différents"),
+        ("dependence_pair", {"a": "^GSPC", "b": "^NDX", "measure": "cosine"}, "mesure inconnue"),
+        ("variance_ratio", {}, "« a »"),
+    ]
+    for study, extra, message in bad:
+        r = client.get(f"/api/exploration/{study}", params=_q(**extra))
+        assert r.status_code == 400 and message in r.json()["error"], (study, r.text)
+    two = client.get("/api/exploration/partial", params=_q(symbols="^GSPC,^NDX"))
+    assert two.status_code == 400 and "trois actifs" in two.json()["error"]

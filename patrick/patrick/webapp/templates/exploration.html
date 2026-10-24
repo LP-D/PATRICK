@@ -80,6 +80,7 @@
 
 <div class="exp-tabs" role="tablist" aria-label="{{ t('exp_title') }}">
     <button type="button" role="tab" id="exp-tab-corr" aria-selected="true" aria-controls="exp-panel-corr" data-panel="corr">{{ t('exp_tab_corr') }}</button>
+    <button type="button" role="tab" id="exp-tab-dep" aria-selected="false" aria-controls="exp-panel-dep" data-panel="dep" tabindex="-1">{{ t('exp_tab_dep') }}</button>
     <button type="button" role="tab" id="exp-tab-dist" aria-selected="false" aria-controls="exp-panel-dist" data-panel="dist" tabindex="-1">{{ t('exp_tab_dist') }}</button>
     <button type="button" role="tab" id="exp-tab-memory" aria-selected="false" aria-controls="exp-panel-memory" data-panel="memory" tabindex="-1">{{ t('exp_tab_memory') }}</button>
     <button type="button" role="tab" id="exp-tab-link" aria-selected="false" aria-controls="exp-panel-link" data-panel="link" tabindex="-1">{{ t('exp_tab_link') }}</button>
@@ -95,6 +96,7 @@
                 <option value="pearson">{{ t('exp_m_pearson') }}</option>
                 <option value="spearman">{{ t('exp_m_spearman') }}</option>
                 <option value="kendall">{{ t('exp_m_kendall') }}</option>
+                <option value="partial">{{ t('exp_m_partial') }}</option>
             </select>
         </label>
     </div>
@@ -135,6 +137,47 @@
         <button type="button" class="queue-action" id="exp-mem-run">{{ t('exp_apply') }}</button>
     </div>
     <div class="exp-out" id="exp-mem-out"></div>
+
+    <h3>{{ t('exp_vr_title') }}</h3>
+    <p class="hint">{{ t('exp_vr_hint') }}</p>
+    <div class="exp-out" id="exp-vr-out"></div>
+</section>
+
+{# ---- Dépendance : matrices (non linéaire, qui mène qui) ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-dep" aria-labelledby="exp-tab-dep" hidden>
+    <h3>{{ t('exp_dep_title') }}</h3>
+    <p class="hint">{{ t('exp_dep_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('exp_measure') }}
+            <select id="exp-dep-measure">
+                <option value="dcor">{{ t('exp_m_dcor') }}</option>
+                <option value="mi">{{ t('exp_m_mi') }}</option>
+            </select>
+        </label>
+    </div>
+    <div class="exp-out" id="exp-dep-out"></div>
+
+    <h3>{{ t('exp_gm_title') }}</h3>
+    <p class="hint">{{ t('exp_gm_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('exp_gm_on') }}
+            <select id="exp-gm-on">
+                <option value="returns">{{ t('exp_gm_on_returns') }}</option>
+                <option value="abs">{{ t('exp_gm_on_abs') }}</option>
+            </select>
+        </label>
+        <label>{{ t('exp_gm_scope') }}
+            <select id="exp-gm-scope">
+                <option value="conditional">{{ t('exp_gm_conditional') }}</option>
+                <option value="pairwise">{{ t('exp_gm_pairwise') }}</option>
+            </select>
+        </label>
+        <label>{{ t('exp_lags') }}
+            <input type="number" id="exp-gm-lags" min="1" max="10" step="1" value="5">
+        </label>
+        <button type="button" class="queue-action" id="exp-gm-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-gm-out"></div>
 </section>
 
 {# ---- Lien entre deux actifs ---- #}
@@ -145,6 +188,15 @@
         <label>{{ t('exp_lags') }}
             <input type="number" id="exp-link-lags" min="1" max="40" step="1" value="10">
         </label>
+        <label>{{ t('exp_ccf_basis') }}
+            <select id="exp-link-basis">
+                <option value="returns">{{ t('exp_basis_returns') }}</option>
+                <option value="diff">{{ t('exp_basis_diff') }}</option>
+                <option value="abs">{{ t('exp_basis_abs') }}</option>
+            </select>
+        </label>
+        <label class="exp-check"><input type="checkbox" id="exp-link-prewhiten" checked> {{ t('exp_prewhiten') }}</label>
+        <label class="exp-check"><input type="checkbox" id="exp-link-rank"> {{ t('exp_rank') }}</label>
         <label>{{ t('exp_tail_q') }}
             <input type="number" id="exp-link-q" min="0.01" max="0.2" step="0.01" value="0.05">
         </label>
@@ -156,6 +208,12 @@
     <h3>{{ t('exp_granger_title') }}</h3>
     <p class="hint">{{ t('exp_granger_hint') }}</p>
     <div class="exp-out" id="exp-granger-out"></div>
+    <h3>{{ t('exp_depp_title') }}</h3>
+    <p class="hint">{{ t('exp_depp_hint') }}</p>
+    <h4>{{ t('exp_dcor_title') }}</h4>
+    <div class="exp-out" id="exp-dcor-out"></div>
+    <h4>{{ t('exp_mi_title') }}</h4>
+    <div class="exp-out" id="exp-mi-out"></div>
     <h3>{{ t('exp_coint_title') }}</h3>
     <p class="hint">{{ t('exp_coint_hint') }}</p>
     <div class="exp-out" id="exp-coint-out"></div>
