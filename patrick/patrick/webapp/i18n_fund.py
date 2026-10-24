@@ -268,6 +268,27 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
                            "Replace the model when a better one is trained (live segment)"),
     "fund_rule_follow_tag": _s("suit le champion", "follows the champion"),
 
+    # /fonds : création rapide par classe d'actifs
+    "fund_cls_title": _s("Stratégies par classe d'actifs", "Strategies by asset class"),
+    "fund_cls_hint": _s(
+        "Crée d'un clic une stratégie en pilote automatique par classe, bornée à ses actifs et à l'horizon choisi.",
+        "Creates one autopilot strategy per class in one click, limited to its assets and the chosen horizon."),
+    "fund_cls_classes": _s("Classes", "Classes"),
+    "fund_cls_horizons": _s("Horizons (jours)", "Horizons (days)"),
+    "fund_cls_capital": _s("Capital par stratégie (€)", "Capital per strategy (€)"),
+    "fund_cls_wrapper": _s("Enveloppe", "Wrapper"),
+    "fund_cls_run_now": _s("Lancer le premier cycle tout de suite", "Run the first cycle right away"),
+    "fund_cls_preview": _s("Prévisualiser", "Preview"),
+    "fund_cls_create": _s("Créer", "Create"),
+    "fund_cls_done": _s("{created} stratégie(s) créée(s), {reused} reprise(s).", "{created} strategy(ies) created, {reused} reused."),
+    "fund_cls_cycle": _s("Le premier cycle tourne en arrière-plan (quelques minutes).", "The first cycle runs in the background (a few minutes)."),
+    "fund_cls_pv_total": _s("{n} modèle(s) candidat(s) pour {k} stratégie(s)", "{n} candidate model(s) for {k} strategy(ies)"),
+    "fund_cls_col_class": _s("Classe", "Class"),
+    "fund_cls_col_strategy": _s("Stratégie", "Strategy"),
+    "fund_cls_col_candidates": _s("Candidats", "Candidates"),
+    "fund_cls_state_new": _s("à créer", "to create"),
+    "fund_cls_state_exists": _s("existe déjà", "already exists"),
+
     # /fonds : pilote automatique
     "fund_auto_title": _s("Pilote automatique", "Autopilot"),
     "fund_auto_on": _s("actif", "on"),

@@ -30,12 +30,23 @@ CLASSES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Réglages proposés partout (commande et page) : horizon 1 jour, tous les signaux non suspects, aucun plafond de modèles.
+DEFAULTS = {"horizons": [1], "tier": "large", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO", "max_models": None}
+
+
 def strategy_name(asset_class: str) -> str:
     return f"Systematic {asset_class}"
 
 
+def class_rows(conn: sqlite3.Connection) -> list[dict]:
+    """Les classes avec leurs groupes et la stratégie qui porte déjà leur nom (`strategy_id`, sinon None)."""
+    existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
+    return [{"name": name, "groups": list(groups), "strategy_id": existing.get(strategy_name(name))}
+            for name, groups in CLASSES.items()]
+
+
 def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[str] | None = None,
-          horizons: tuple[int, ...] = (1,), tier: str = "large", gross: float = 1.0, capital: float = 100_000,
+          horizons: tuple[int, ...] = (1,), tier: str = "large", gross: float = 1.0, capital: float = 10_000_000,
           wrapper: str = "CTO", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
     """Une stratégie en pilote automatique par classe (toutes, ou `only`). Une stratégie qui porte déjà le nom
     `Systematic <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est
@@ -45,6 +56,11 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
     unknown = [c for c in (only or []) if c not in CLASSES]
     if unknown:
         raise store.FundError(f"classe inconnue : {', '.join(unknown)} (classes : {', '.join(CLASSES)})")
+    if wrapper not in store.WRAPPERS:
+        raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
+    store._check_capital(capital, wrapper)                  # tout est validé AVANT la première écriture
+    autopilot.Settings.from_dict({"tier": tier, "gross": gross, "max_models": max_models, "horizons": list(horizons),
+                                  "groups": ["x"]})
     existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
     out = []
     for asset_class, groups in CLASSES.items():

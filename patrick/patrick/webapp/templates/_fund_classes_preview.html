@@ -1,0 +1,18 @@
+{# Aperçu de la création par classe d'actifs (fragment de /fonds, rendu serveur et échappé) : `rows` = fund.asset_classes.setup(dry_run). #}
+<p class="hint">{{ t('fund_cls_pv_total', n=rows | sum(attribute='candidates'), k=rows | length) }}</p>
+<div class="table-scroll">
+  <table class="data-table fund-cls-preview">
+    <thead>
+      <tr><th>{{ t('fund_cls_col_class') }}</th><th>{{ t('fund_cls_col_strategy') }}</th><th class="num pk-mono">{{ t('fund_cls_col_candidates') }}</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr data-class="{{ r.class }}" data-candidates="{{ r.candidates }}">
+        <td>{{ r.class }}</td>
+        <td><span class="pk-mono">{{ r.name }}</span> <span class="tag">{{ t('fund_cls_state_exists') if r.strategy_id else t('fund_cls_state_new') }}</span></td>
+        <td class="num pk-mono">{{ r.candidates }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

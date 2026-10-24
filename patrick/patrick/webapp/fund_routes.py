@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from patrick.fund import autopilot, instruments, service, store, systematic
+from patrick.fund import asset_classes, autopilot, instruments, service, store, systematic
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
 from patrick.webapp import instruments as display_names
@@ -143,7 +143,8 @@ def register(app: FastAPI, templates, context) -> None:
         se lisent ici."""
         archived = _call(lambda conn: [s for s in store.list_strategies(conn, include_archived=True) if s["archived"]])
         return templates.TemplateResponse(request, "fonds.html", {
-            "selected_id": strategy, "archived": archived, **context(request)})
+            "selected_id": strategy, "archived": archived, "class_names": list(asset_classes.CLASSES),
+            "class_defaults": asset_classes.DEFAULTS, **context(request)})
 
     @app.get("/fragments/fund-overview")
     def fund_overview_fragment(request: Request, strategy: str | None = None):
@@ -351,3 +352,92 @@ def register(app: FastAPI, templates, context) -> None:
             return autopilot.preview(conn, strategy_id, service.current_date(), settings)
         plan = await run_in_threadpool(_call, run)
         return templates.TemplateResponse(request, "_fund_autopilot_preview.html", {"plan": plan, **context(request)})
+
+    # ------------------------------------------------- stratégies par classe d'actifs (création rapide)
+
+    def _class_options(raw: dict) -> dict:
+        """Réglages d'une création par classe, validés AVANT toute écriture : `classes` (liste, toutes si absent), `horizons`,
+        `tier`, `gross` (fraction du capital), `capital`, `wrapper`, `max_models` (None : aucun plafond), `run`."""
+        merged = {**asset_classes.DEFAULTS, **{k: v for k, v in raw.items() if k in (*asset_classes.DEFAULTS, "classes", "run")}}
+        classes = merged.get("classes") or list(asset_classes.CLASSES)
+        if not isinstance(classes, list) or not all(isinstance(c, str) for c in classes):
+            raise store.FundError("classes invalides : liste de noms attendue")
+        unknown = [c for c in classes if c not in asset_classes.CLASSES]
+        if unknown:
+            raise store.FundError(f"classe inconnue : {', '.join(unknown)}")
+        wrapper = merged["wrapper"]
+        if wrapper not in store.WRAPPERS:
+            raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
+        store._check_capital(merged["capital"], wrapper)
+        autopilot.Settings.from_dict({"tier": merged["tier"], "gross": merged["gross"], "max_models": merged["max_models"],
+                                      "horizons": merged["horizons"], "groups": ["x"]})
+        return {"only": classes, "horizons": tuple(merged["horizons"]), "tier": merged["tier"], "gross": float(merged["gross"]),
+                "capital": merged["capital"], "wrapper": wrapper, "max_models": merged["max_models"],
+                "run": bool(merged.get("run"))}
+
+    def _class_query(params) -> dict:
+        """Les mêmes réglages passés dans l'adresse (`?classes=Future,Devises&horizons=1,5&tier=large&capital=1e7`)."""
+        raw: dict = {}
+        if "classes" in params:
+            raw["classes"] = [c for c in params["classes"].split(",") if c]
+        if "horizons" in params:
+            try:
+                raw["horizons"] = [int(h) for h in params["horizons"].split(",") if h.strip()]
+            except ValueError as exc:
+                raise store.FundError(f"horizons invalides : entiers séparés par des virgules ({params['horizons']!r})") from exc
+        for key in ("gross", "capital"):
+            if key in params:
+                try:
+                    raw[key] = float(params[key])
+                except ValueError as exc:
+                    raise store.FundError(f"{key} invalide : nombre attendu ({params[key]!r})") from exc
+        for key in ("tier", "wrapper"):
+            if key in params:
+                raw[key] = params[key]
+        if "max_models" in params:
+            try:
+                raw["max_models"] = int(params["max_models"]) if params["max_models"].strip() else None
+            except ValueError as exc:
+                raise store.FundError(f"max_models invalide : entier attendu ({params['max_models']!r})") from exc
+        return raw
+
+    @app.get("/api/fund/asset-classes")
+    def api_asset_classes():
+        return {"classes": _call(asset_classes.class_rows), "defaults": asset_classes.DEFAULTS}
+
+    @app.post("/api/fund/asset-classes/preview")
+    async def api_asset_classes_preview(request: Request):
+        body = await _json_body(request)
+
+        def run(conn):
+            options = _class_options(body)
+            options.pop("run")
+            return {"rows": asset_classes.setup(conn, today=service.current_date(), dry_run=True, **options)}
+        return await run_in_threadpool(_call, run)
+
+    @app.get("/api/fund/asset-classes/preview.html")
+    async def api_asset_classes_preview_html(request: Request):
+        """Fragment HTML (rendu serveur, échappé) de l'aperçu par classe, pour la section de /fonds."""
+        params = dict(request.query_params)
+
+        def run(conn):
+            options = _class_options(_class_query(params))
+            options.pop("run")
+            return asset_classes.setup(conn, today=service.current_date(), dry_run=True, **options)
+        rows = await run_in_threadpool(_call, run)
+        return templates.TemplateResponse(request, "_fund_classes_preview.html", {"rows": rows, **context(request)})
+
+    @app.post("/api/fund/asset-classes")
+    async def api_asset_classes_create(request: Request):
+        """Une stratégie en pilote automatique par classe (créée ou reprise), puis, si `run`, un premier cycle en arrière-plan."""
+        body = await _json_body(request)
+
+        def run(conn):
+            options = _class_options(body)
+            start = options.pop("run")
+            rows = asset_classes.setup(conn, today=service.current_date(), **options)
+            return rows, start
+        rows, start = await run_in_threadpool(_call, run)
+        if start:
+            autopilot.start_cycles([r["strategy_id"] for r in rows])
+        return {"rows": rows, "cycle_started": bool(start)}

@@ -333,6 +333,62 @@
         }
     }
 
+    /* ---- stratégies par classe d'actifs : réglages lus dans la section, aperçu = fragment HTML rendu serveur ---- */
+    var classes = document.getElementById("fund-classes");
+    function classOptions() {
+        var out = { classes: [] };
+        classes.querySelectorAll("[data-cls-field]").forEach(function (el) {
+            if (el.name === "class") { if (el.checked) out.classes.push(el.value); }
+            else if (el.type === "checkbox") out[el.name] = el.checked;
+            else if (el.name === "horizons") {
+                out.horizons = el.value.split(",").map(function (h) { return Number(h.trim()); }).filter(function (h) { return h > 0; });
+            }
+            else if (el.name === "gross") out.gross = Number(el.value) / 100;
+            else if (el.name === "capital") out.capital = Number(el.value);
+            else if (el.name === "max_models") out.max_models = el.value.trim() === "" ? null : Number(el.value);
+            else out[el.name] = el.value;
+        });
+        return out;
+    }
+    async function classesAct(btn, act) {
+        var options = classOptions(), out = classes.querySelector("[data-cls-result]");
+        if (act === "classes-preview") {
+            var query = new URLSearchParams();
+            query.set("classes", options.classes.join(","));
+            query.set("horizons", options.horizons.join(","));
+            ["tier", "wrapper", "capital", "gross"].forEach(function (k) { query.set(k, String(options[k])); });
+            query.set("max_models", options.max_models === null ? "" : String(options.max_models));
+            var res = await fetch("/api/fund/asset-classes/preview.html?" + query.toString());
+            if (!res.ok) {
+                var data = {};
+                try { data = await res.json(); } catch (err) { data = {}; }
+                throw new Error(typeof data.detail === "string" ? data.detail : "HTTP " + res.status);
+            }
+            out.innerHTML = await res.text();            // fragment rendu serveur, échappé par Jinja
+            out.hidden = false;
+            setBusy(btn, false);
+        } else {
+            var done = await call("/api/fund/asset-classes", "POST", options);
+            var created = done.rows.filter(function (r) { return r.created; }).length;
+            var text = fill(btn.getAttribute("data-done"), { created: created, reused: done.rows.length - created });
+            say(done.cycle_started ? text + " " + btn.getAttribute("data-cycle") : text, "info");
+            setTimeout(function () { reload(null); }, 1500);
+        }
+    }
+    if (classes) {
+        classes.addEventListener("click", async function (e) {
+            var btn = e.target.closest("[data-act]");
+            if (!btn || btn.disabled) return;
+            setBusy(btn, true);
+            try {
+                await classesAct(btn, btn.getAttribute("data-act"));
+            } catch (err) {
+                say((err.blocking || [err.message]).join(" · "), "error");
+                setBusy(btn, false);
+            }
+        });
+    }
+
     panel.addEventListener("click", async function (e) {
         var btn = e.target.closest("[data-act]");
         if (!btn) return;

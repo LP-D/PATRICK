@@ -16,12 +16,14 @@ import datetime as dt
 import logging
 import math
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 
 import pandas as pd
 
 from patrick.config import universe_extension as UX
 from patrick.fund import instruments, prices, selection, service, store, systematic
+from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.fund.autopilot")
 
@@ -242,9 +244,35 @@ def managed_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     return [r for r in systematic.list_rules(conn, strategy_id) if (r["config"].get("managed") or {}).get("by") == MANAGER]
 
 
+_RUN_LOCK = threading.Lock()          # un seul cycle à la fois dans ce processus : deux cycles simultanés doubleraient les ordres
+
+
 def run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None) -> dict:
     """Un cycle : sélectionner, ajuster les règles du pilote, appliquer chacune. Idempotent. Rend le compte rendu et
     l'enregistre (`last_run`) avec les réglages."""
+    with _RUN_LOCK:
+        return _run(conn, strategy_id, today)
+
+
+def start_cycles(strategy_ids: list[str], db_path: str | None = None) -> threading.Thread:
+    """Lance en arrière-plan un cycle pour chacune de ces stratégies, l'une après l'autre (la sélection et les cotations de plusieurs
+    centaines de modèles prennent des minutes : la page ne les attend pas). Le compte rendu de chacune est dans son `last_run`."""
+    def work() -> None:
+        conn = trackdb.connect(db_path)
+        try:
+            for strategy_id in strategy_ids:
+                try:
+                    run(conn, strategy_id)
+                except Exception:                             # une stratégie en échec n'arrête pas les suivantes
+                    logger.exception("autopilot cycle failed for %s", strategy_id)
+        finally:
+            conn.close()
+    thread = threading.Thread(target=work, name="autopilot-cycles", daemon=True)
+    thread.start()
+    return thread
+
+
+def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> dict:
     today = service._today(today)
     strategy, stored, settings = _enabled(conn, strategy_id)
     plan = build_plan(conn, strategy, settings, today)

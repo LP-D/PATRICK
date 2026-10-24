@@ -27,6 +27,45 @@
 
 <section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
 
+{# Création rapide : une stratégie en pilote automatique par classe d'actifs (fund/asset_classes.py). Aperçu = fragment rendu serveur. #}
+<details class="card fund-classes" id="fund-classes">
+  <summary>{{ t('fund_cls_title') }}</summary>
+  <p class="hint">{{ t('fund_cls_hint') }}</p>
+  <div class="form fund-inline-form">
+    <fieldset class="fund-cls-list">
+      <legend>{{ t('fund_cls_classes') }}</legend>
+      {% for name in class_names %}
+      <label class="fund-check"><input type="checkbox" name="class" value="{{ name }}" data-cls-field checked> {{ name }}</label>
+      {% endfor %}
+    </fieldset>
+    <div class="subgrid">
+      <label>{{ t('fund_cls_horizons') }} <input type="text" name="horizons" value="{{ class_defaults.horizons | join(', ') }}" data-cls-field></label>
+      <label>{{ t('fund_auto_tier') }}
+        <select name="tier" data-cls-field>
+          <option value="large"{% if class_defaults.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
+          <option value="strict"{% if class_defaults.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
+        </select>
+      </label>
+      <label>{{ t('fund_cls_capital') }} <input type="number" name="capital" min="1000" step="1000" value="{{ class_defaults.capital }}" data-cls-field></label>
+      <label>{{ t('fund_cls_wrapper') }}
+        <select name="wrapper" data-cls-field>
+          <option value="CTO"{% if class_defaults.wrapper == 'CTO' %} selected{% endif %}>CTO</option>
+          <option value="PEA"{% if class_defaults.wrapper == 'PEA' %} selected{% endif %}>PEA</option>
+        </select>
+      </label>
+      <label>{{ t('fund_auto_gross') }} <input type="number" name="gross" min="10" max="200" step="5" value="{{ (class_defaults.gross * 100) | round(0) | int }}" data-cls-field></label>
+      <label>{{ t('fund_auto_max') }} <input type="number" name="max_models" min="1" max="5000" step="1" value="" placeholder="{{ t('fund_auto_max_none') }}" data-cls-field></label>
+      <label class="fund-check"><input type="checkbox" name="run" data-cls-field checked> {{ t('fund_cls_run_now') }}</label>
+    </div>
+    <div class="fund-actions">
+      <button type="button" class="btn-ghost" data-act="classes-preview">{{ t('fund_cls_preview') }}</button>
+      <button type="button" class="btn" data-act="classes-create"
+              data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_cls_create') }}</button>
+    </div>
+    <div class="fund-cls-result" data-cls-result hidden aria-live="polite"></div>
+  </div>
+</details>
+
 {# Saisie du nouveau nom : boîte de la page (jamais celle du navigateur), ouverte par fonds.js ; la confirmation
    des suppressions est la boîte partagée de base_v2.html. Hors du fragment rechargé du panneau. #}
 <dialog id="fund-rename-dialog" class="modal" aria-labelledby="fund-rename-title">
