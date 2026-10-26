@@ -39,5 +39,5 @@ Start-ScheduledTask -TaskName Patrick-Nightly   # essai immédiat
 .\schtasks_nightly.ps1 -Remove          # supprime la tâche
 ```
 
-Les tâches `Patrick-DailyPredict` (prédictions seules), `Patrick-DailyDbBackup` et `Patrick-NewsRefresh` font chacune une partie de ces
+Les tâches `Patrick-DailyPredict` (prédictions seules), `Patrick-DailyDBBackup` et `Patrick-NewsRefresh` font chacune une partie de ces
 étapes : inutile de les installer en plus (elles ne gênent pas, tout est idempotent).
