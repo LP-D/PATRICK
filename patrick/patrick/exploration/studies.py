@@ -399,7 +399,7 @@ def ar_residuals(x: pd.Series, max_order: int = 20) -> tuple[pd.Series, int]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                sel = ar_select_order(x.to_numpy(dtype=float), maxlag=pmax, ic="aic", trend="c", old_names=False)
+                sel = ar_select_order(x.to_numpy(dtype=float), maxlag=pmax, ic="aic", trend="c")
                 lags = list(sel.ar_lags or [])
                 if lags:
                     resid = np.asarray(sel.model.fit().resid, dtype=float)

@@ -1,6 +1,8 @@
 """`patrick fund autopilot-select|autopilot-enable|autopilot-run|autopilot-off`. Aucun réseau."""
 from __future__ import annotations
 
+import re
+
 import fund_support as fs
 import pytest
 from test_fund_selection import World
@@ -91,7 +93,8 @@ def test_run_needs_a_strategy_or_all(setup):
 
     result = runner.invoke(app, ["fund", "autopilot-run"])
 
-    assert result.exit_code == 2 and "--strategy" in result.output
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)                  # Typer colore les noms d'options selon le terminal
+    assert result.exit_code == 2 and "strategy" in plain and "--all" in plain
 
 
 def test_a_bad_setting_is_refused(setup):
