@@ -54,7 +54,7 @@ def test_an_alpha_rule_without_a_hedge_is_a_readable_400(client, trial_id):
 
 def test_the_panel_offers_the_alpha_model_and_the_hedge_fields(client, trial_id):
     sid = fs.make_strategy(client)
-    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    html = client.get(f"/api/fund/strategies/{sid}/rule-form").text
 
     assert f'<option value="{trial_id}"' in html and 'data-kind="alpha"' in html
     assert 'data-asset="AAPL"' in html and 'data-benchmark="^GSPC"' in html

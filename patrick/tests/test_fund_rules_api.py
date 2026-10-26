@@ -129,10 +129,11 @@ def test_deleting_a_strategy_deletes_its_rules(client, trial_id):
 def test_panel_without_rule_offers_the_creation_form_with_the_available_models(client, trial_id):
     sid = fs.make_strategy(client)
     html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    form = client.get(f"/api/fund/strategies/{sid}/rule-form").text        # le formulaire se charge à part (liste des modèles lente)
 
-    assert "Règles automatiques" in html and 'data-form="rule"' in html
-    assert f'<option value="{trial_id}"' in html and "^GSPC" in html
-    assert "Aucune règle" in html
+    assert "Règles automatiques" in html and "Aucune règle" in html
+    assert f'data-rule-form-url="/api/fund/strategies/{sid}/rule-form"' in html and 'data-form="rule"' not in html
+    assert 'data-form="rule"' in form and f'<option value="{trial_id}"' in form and "S&amp;P 500" in form
 
 
 def test_panel_lists_a_rule_with_its_actions_and_escapes_its_name(client, trial_id):
@@ -146,9 +147,10 @@ def test_panel_lists_a_rule_with_its_actions_and_escapes_its_name(client, trial_
     assert "0,6" in html or "0.6" in html                                   # seuil d'entrée affiché
 
 
-def test_panel_warns_when_models_are_missing(client):
+def test_the_form_warns_when_models_are_missing(client):
     sid = fs.make_strategy(client)
-    assert "Aucun modèle avec signaux" in client.get(f"/api/fund/strategies/{sid}/panel").text
+    assert "Aucun modèle avec signaux" in client.get(f"/api/fund/strategies/{sid}/rule-form").text
+    assert client.get("/api/fund/strategies/str_inconnue/rule-form").status_code == 404
 
 
 def test_rule_helpers_are_importable_from_the_module():

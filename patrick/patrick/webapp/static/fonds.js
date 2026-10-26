@@ -83,7 +83,7 @@
                 if (current !== id) return;
                 panel.innerHTML = html;          // fragment rendu serveur, échappé par Jinja
                 drawChart();
-                initRuleForms();
+                loadRuleForm();
                 panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
             })
             .catch(function () { if (current === id) loading.textContent = "—"; });
@@ -190,6 +190,21 @@
     }
     function initRuleForms() {
         panel.querySelectorAll('form[data-form="rule"]').forEach(applyModel);
+    }
+    /* Le formulaire « Nouvelle règle » liste tous les modèles : il se charge à part, juste après le panneau, pour que le détail
+       de la stratégie s'affiche tout de suite. */
+    function loadRuleForm() {
+        var box = panel.querySelector("[data-rule-form-url]");
+        if (!box) return;
+        var url = box.getAttribute("data-rule-form-url"), id = current;
+        fetch(url)
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (html) {
+                if (current !== id || !box.isConnected) return;
+                box.innerHTML = html;             // fragment rendu serveur, échappé par Jinja
+                initRuleForms();
+            })
+            .catch(function () { if (box.isConnected) box.textContent = "—"; });
     }
     async function submitRule(form) {
         var f = form.elements, kind = f.kind.value, instrument = { kind: kind };

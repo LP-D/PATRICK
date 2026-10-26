@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
+import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -88,6 +90,54 @@ def _labelled(models: list[dict]) -> list[dict]:
     return sorted(models, key=lambda m: (m["kind"] != "raw", m["label"].lower(), m["horizon"]))
 
 
+# Liste des modèles du sélecteur : une requête par cellule sur la table `prediction` (18 millions de lignes), 3 à 10 s sur la vraie base.
+# Elle est donc gardée en mémoire. Invalidée tout de suite quand l'ensemble des runs ou des champions change ; sinon, passé
+# `MODELS_SOFT_TTL`, on sert l'ancienne liste et on la recalcule en arrière-plan (de nouveaux signaux live ne changent que les
+# segments proposés).
+MODELS_SOFT_TTL = 120.0
+_MODELS_CACHE: dict[str, dict] = {}
+_MODELS_LOCK = threading.Lock()
+
+
+def _models_signature(conn: sqlite3.Connection) -> tuple:
+    return tuple(conn.execute(
+        "SELECT (SELECT COUNT(*) FROM champion), (SELECT COALESCE(MAX(promoted_at), '') FROM champion), "
+        "(SELECT COUNT(*) FROM run), (SELECT COALESCE(MAX(finished_at), '') FROM run), "
+        "(SELECT COALESCE(MAX(trial_id), 0) FROM trial)").fetchone())
+
+
+def _refresh_models(key: str, signature: tuple) -> None:
+    conn = trackdb.connect()
+    try:
+        models = _labelled(systematic.available_models(conn))
+    except Exception:
+        log.exception("liste des modèles : recalcul en échec")
+        with _MODELS_LOCK:
+            if key in _MODELS_CACHE:
+                _MODELS_CACHE[key]["refreshing"] = False
+        return
+    finally:
+        conn.close()
+    with _MODELS_LOCK:
+        _MODELS_CACHE[key] = {"sig": signature, "at": time.monotonic(), "models": models, "refreshing": False}
+
+
+def _cached_models(conn: sqlite3.Connection) -> list[dict]:
+    key = conn.execute("PRAGMA database_list").fetchone()[2]
+    signature = _models_signature(conn)
+    with _MODELS_LOCK:
+        entry = _MODELS_CACHE.get(key)
+        if entry and entry["sig"] == signature:
+            if time.monotonic() - entry["at"] > MODELS_SOFT_TTL and not entry["refreshing"]:
+                entry["refreshing"] = True
+                threading.Thread(target=_refresh_models, args=(key, signature), name="models-refresh", daemon=True).start()
+            return entry["models"]
+    models = _labelled(systematic.available_models(conn))
+    with _MODELS_LOCK:
+        _MODELS_CACHE[key] = {"sig": signature, "at": time.monotonic(), "models": models, "refreshing": False}
+    return models
+
+
 def _call(fn, *args, **kwargs):
     """Ouvre une connexion, appelle `fn(conn, ...)`, traduit les erreurs métier en HTTP."""
     conn = trackdb.connect()
@@ -137,7 +187,7 @@ def register(app: FastAPI, templates, context) -> None:
         data = _call(service.overview, today)
         ctx = context(request)
         return templates.TemplateResponse(request, "simulate.html", {
-            "models": _labelled(_call(systematic.available_models)),
+            "models": _call(_cached_models),
             "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today),
             "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),
@@ -173,12 +223,22 @@ def register(app: FastAPI, templates, context) -> None:
         def run(conn):
             snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
             rules = systematic.rule_summaries(conn, strategy_id)
-            return snap, rules, _labelled(systematic.available_models(conn)), autopilot.status(conn, strategy_id, rules)
-        snap, rules, models, auto = _call(run)
+            return snap, rules, autopilot.status(conn, strategy_id, rules)
+        snap, rules, auto = _call(run)
         manual = [r for r in rules if not (r["config"].get("managed") or {}).get("by")]     # celles du pilote : dans son bloc
         return templates.TemplateResponse(request, "_fund_panel.html", {
-            "snap": snap, "rules": manual, "models": models, "autopilot": auto, "today": today.isoformat(),
-            **context(request)})
+            "snap": snap, "rules": manual, "autopilot": auto, "today": today.isoformat(), **context(request)})
+
+    @app.get("/api/fund/strategies/{strategy_id}/rule-form")
+    def api_rule_form(request: Request, strategy_id: str):
+        """Fragment HTML du formulaire « Nouvelle règle » (tous les modèles) : le panneau le charge à part, car la liste des
+        modèles est la partie lente de la page."""
+        def run(conn):
+            _require_strategy(conn, strategy_id)
+            return _cached_models(conn)
+        models = _call(run)
+        return templates.TemplateResponse(request, "_fund_rule_form_block.html", {
+            "models": models, "strategy_id": strategy_id, "today": service.current_date().isoformat(), **context(request)})
 
     # ---------------------------------------------------------------- API
 
@@ -261,7 +321,7 @@ def register(app: FastAPI, templates, context) -> None:
     @app.get("/api/fund/models")
     def api_models():
         """Essais gagnants dont on peut rejouer les signaux (formulaire de création d'une règle)."""
-        return {"models": _labelled(_call(systematic.available_models))}
+        return {"models": _call(_cached_models)}
 
     @app.get("/api/fund/strategies/{strategy_id}/rules")
     def api_list_rules(strategy_id: str):

@@ -162,7 +162,7 @@ def test_the_model_selector_lists_every_model_by_name_with_its_p_value(client, w
     world.cell("^GSPC", 3, live=SIGNALS, dm_p=0.4, f1=0.99)                   # suspect : visible mais désactivé
     sid = fs.make_strategy(client)
 
-    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+    html = client.get(f"/api/fund/strategies/{sid}/rule-form").text
 
     assert "Apple · h1 (p = 0.012)" in html                                   # le nom, pas le symbole ; la p entre parenthèses
     assert "Future · Or · h1<" in html                                        # pas de p : rien entre parenthèses
@@ -182,3 +182,46 @@ def test_an_empty_max_models_in_the_preview_address_means_no_cap(client, world):
     unlimited = client.get(url(sid, "/preview.html?max_models=")).text
 
     assert "Au-delà du nombre maximal" in capped and "Au-delà du nombre maximal" not in unlimited
+
+
+def test_the_panel_does_not_compute_the_model_list(client, world, monkeypatch):
+    """La liste de tous les modèles est la partie lente : le panneau s'affiche sans elle, le formulaire se charge à part."""
+    world.cell("AAPL", 1, live=SIGNALS)
+    sid = fs.make_strategy(client)
+
+    def boom(conn, limit=5000):
+        raise AssertionError("le panneau ne doit pas calculer les modèles")
+    monkeypatch.setattr(systematic, "available_models", boom)
+
+    assert client.get(f"/api/fund/strategies/{sid}/panel").status_code == 200
+
+
+def test_the_model_list_is_cached_until_the_runs_or_champions_change(client, world, monkeypatch):
+    world.cell("AAPL", 1, live=SIGNALS)
+    sid = fs.make_strategy(client)
+    calls: list[int] = []
+    real = systematic.available_models
+
+    def counting(conn, limit=5000):
+        calls.append(1)
+        return real(conn, limit)
+    monkeypatch.setattr(systematic, "available_models", counting)
+
+    first = client.get(f"/api/fund/strategies/{sid}/rule-form").text
+    second = client.get(f"/api/fund/strategies/{sid}/rule-form").text
+    assert len(calls) == 1 and first == second                                 # la deuxième ouverture ne recalcule rien
+
+    world.cell("GC=F", 1, live=SIGNALS)                                       # un nouveau champion : liste recalculée tout de suite
+    third = client.get(f"/api/fund/strategies/{sid}/rule-form").text
+    assert len(calls) == 2 and "Future · Or" in third
+
+
+def test_the_model_list_never_offers_a_fred_series(client, world):
+    from patrick.config import defaults as D
+    fred = next(sym for sym, _, src in D.DEFAULT_TARGET_CHOICES if src == "fred")
+    world.cell(fred, 1, live=SIGNALS)
+    world.cell("AAPL", 1, live=SIGNALS)
+
+    models = client.get("/api/fund/models").json()["models"]
+
+    assert [m["target"] for m in models] == ["AAPL"]

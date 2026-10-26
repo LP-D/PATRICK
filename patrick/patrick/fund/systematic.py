@@ -31,7 +31,7 @@ from patrick.config import universe_extension as UX
 from patrick.config.schema import RunConfig
 from patrick.config.target_label import split_run_label
 from patrick.features import alpha_target
-from patrick.fund import instruments, prices, service, store
+from patrick.fund import instruments, prices, selection, service, store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
@@ -470,13 +470,14 @@ def _chunks(items: list, size: int = 500):
 
 
 def _signal_segments(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict[str, tuple[int, int]]]:
-    """`{essai: {segment: (lignes, lignes avec p_up)}}` en une requête groupée par paquet d'essais."""
+    """`{essai: {segment: (lignes, lignes avec p_up)}}`. Une requête par essai, sur l'index de la clé primaire : la requête groupée
+    sur une liste d'essais faisait choisir au planificateur de SQLite un parcours de la table `prediction` (18 millions de lignes,
+    plusieurs minutes : la page d'une stratégie ne s'ouvrait plus)."""
     out: dict[int, dict[str, tuple[int, int]]] = {}
-    for chunk in _chunks(trial_ids):
-        marks = ",".join("?" for _ in chunk)
-        for trial_id, split, n, with_p in conn.execute(
-                f"SELECT trial_id, split, COUNT(*), SUM(p_up IS NOT NULL) FROM prediction WHERE trial_id IN ({marks}) "
-                "AND y_proba IS NOT NULL AND split IN ('test', 'holdout', 'live') GROUP BY trial_id, split", chunk):
+    for trial_id in trial_ids:
+        for split, n, with_p in conn.execute(
+                "SELECT split, COUNT(*), SUM(p_up IS NOT NULL) FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+                "WHERE trial_id = ? AND y_proba IS NOT NULL AND split IN ('test', 'holdout', 'live') GROUP BY split", (trial_id,)):
             out.setdefault(trial_id, {})[split] = (int(n), int(with_p or 0))
     return out
 
@@ -498,9 +499,10 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
         f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
         "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC", descriptive).fetchall()
     seen: set[tuple[str, int]] = set()
+    fred = selection._fred_symbols()                     # séries macro : pas négociables, jamais proposées
     cells = []
     for row in rows:                                     # un modèle par cellule : le premier (champion, sinon le plus récent)
-        if (row[3], row[4]) not in seen:
+        if row[3] not in fred and (row[3], row[4]) not in seen:
             seen.add((row[3], row[4]))
             cells.append(row)
     cells = cells[:limit]

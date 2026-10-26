@@ -1,0 +1,9 @@
+{# Contenu de « Nouvelle règle » dans le panneau d'une stratégie (fragment chargé à part : /api/fund/strategies/{id}/rule-form).
+   Variables : `models`, `strategy_id`, `today`. #}
+{% if models %}
+{% with form_id='rule-form-' ~ strategy_id, strategies=none, apply_after=false %}
+{% include "_fund_rule_form.html" %}
+{% endwith %}
+{% else %}
+<p class="hint">{{ t('fund_rule_no_model') }}</p>
+{% endif %}

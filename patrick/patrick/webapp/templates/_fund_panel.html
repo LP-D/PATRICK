@@ -286,14 +286,8 @@
 {% endif %}
 
 <details class="fund-rule-new" id="ml-rules">
-  <summary>{{ t('fund_rule_new') }}{% if models %} <span class="tag">{{ t('ml_models_available', n=models | length) }}</span>{% endif %}</summary>
-  {% if models %}
-  {% with strategy_id=s.strategy_id, form_id='rule-form-' ~ s.strategy_id, strategies=none, apply_after=false %}
-  {% include "_fund_rule_form.html" %}
-  {% endwith %}
-  {% else %}
-  <p class="hint">{{ t('fund_rule_no_model') }}</p>
-  {% endif %}
+  <summary>{{ t('fund_rule_new') }}</summary>
+  <div data-rule-form-url="/api/fund/strategies/{{ s.strategy_id }}/rule-form"><p class="hint">{{ t('sb_loading') }}</p></div>
 </details>
 
 <details class="fund-orders">
