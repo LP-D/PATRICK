@@ -114,7 +114,7 @@ def test_only_symbol_shaped_strings_are_looked_up_online(text, ok):
 # ---------------------------------------------------------------------------------------------------------------- pages
 def test_pages_ship_the_names_before_any_page_script():
     html = TestClient(app).get("/ml").text
-    block = re.search(r'<script id="instrument-names" type="application/json">(.*?)</script>', html, re.S)
+    block = re.search(r'<script id="instrument-names" type="application/json">(.*?)</script>', html, re.DOTALL)
     assert block is not None
     names = json.loads(block.group(1))
     assert names["^VIX"] == "Volatilité · VIX (S&P 500)" and names["AAPL"] == "Apple"

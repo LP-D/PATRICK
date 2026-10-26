@@ -179,7 +179,7 @@ def compute_stats(
         "insufficient_history": len(closes) < MIN_HISTORY_FOR_STATS,
         "dates": dates,
         "closes": closes,
-        **{key: [None if v != v else float(v) for v in frame[col]] for col, key in extras.items() if col in frame.columns},
+        **{key: [None if pd.isna(v) else float(v) for v in frame[col]] for col, key in extras.items() if col in frame.columns},
         "returns": {},
         "long_window_returns": {},
         "zscore_60d": None,

@@ -574,7 +574,7 @@ def test_equities_page_returns_200_and_lists_every_ticker(monkeypatch):
     client = TestClient(app)
     resp = client.get("/equities")
     assert resp.status_code == 200
-    for symbol, meta in equity_universe.EQUITY_UNIVERSE.items():
+    for symbol in equity_universe.EQUITY_UNIVERSE:
         assert symbol in resp.text
         assert str(escape(instruments.display(symbol, "fr"))) in resp.text
     # exclusions carry/cross-sectional momentum affichees explicitement

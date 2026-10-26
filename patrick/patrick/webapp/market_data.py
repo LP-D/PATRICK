@@ -9,6 +9,7 @@ import datetime as dt
 import os
 import time
 
+import pandas as pd
 import pandas_datareader.data as web
 import yfinance as yf
 
@@ -68,7 +69,7 @@ def price_history(symbol: str, source: str, period: str = "1y") -> dict:
             if name not in hist.columns:
                 return [None] * len(s)
             vals = hist[name].tolist()
-            return [None if v != v else (round(float(v), digits) if digits is not None else int(v)) for v in vals]
+            return [None if pd.isna(v) else (round(float(v), digits) if digits is not None else int(v)) for v in vals]
 
         out["opens"], out["highs"], out["lows"] = _col("Open", 4), _col("High", 4), _col("Low", 4)
         out["volumes"] = _col("Volume", None)
