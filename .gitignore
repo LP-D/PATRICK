@@ -24,3 +24,9 @@ runs/
 # mutmut (tests de mutation, Linux/CI seulement)
 mutants/
 .mutmut-cache
+
+# Fichiers générés localement par les outils (graphify, skills d'agents, captures de vérification)
+graphify-out/
+.agents/
+skills-lock.json
+design-system/**/*-screenshot*.png
