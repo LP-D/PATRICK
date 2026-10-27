@@ -19,7 +19,7 @@ Le bouton « Actualiser » de `/news` lance la même collecte (flux par défaut 
 ## Quand la collecte tourne
 
 - **Passage de nuit** (`Patrick-Nightly`, 23 h 30) : l'étape « actualités » passe **avant** les prédictions. Elle était placée après et
-  n'avait jamais tourné : les prédictions durent plus que la limite de 6 h de la tâche, qui est coupée en pleines prédictions
+  n'avait jamais tourné : les prédictions durent des heures et la tâche était coupée à 6 h, en pleines prédictions (limite supprimée le 27/10)
   (journal du 26 au 27/10, code de résultat 267014). La sauvegarde de la base et la synchronisation, placées après les prédictions,
   sont coupées de la même façon.
 - **Tâche dédiée** (optionnelle) : `scripts/schtasks_news.ps1` affiche la tâche Windows `Patrick-NewsRefresh` (toutes les 4 h,

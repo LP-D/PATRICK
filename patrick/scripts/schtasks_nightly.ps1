@@ -21,7 +21,7 @@ CE QUE WINDOWS PEUT ET NE PEUT PAS FAIRE
 
 Securites : le PC n'est remis en veille que si PATRICK n'est pas ouvert, qu'aucun entrainement ne tourne et que personne n'a touche
 au clavier ni a la souris depuis `-IdleMinutes` minutes. `StartWhenAvailable` : un passage manque (PC eteint a l'heure prevue)
-part des que le PC redemarre. Journal : `runs\nightly.log`.
+part des que le PC redemarre. Aucune limite de duree (Windows coupait la tache a 6 h, en pleines predictions : sauvegarde et synchro ne tournaient jamais). Journal : `runs\nightly.log`.
 #>
 param(
     [switch]$Install,
@@ -53,6 +53,7 @@ Write-Output "Tache      : $TaskName (tous les jours a $At, heure locale, reveil
 Write-Output "Commande   : powershell.exe $Arguments"
 Write-Output "Dossier    : $RepoDir"
 Write-Output "Fin        : $End (seulement si PATRICK est ferme, aucun entrainement et PC inutilise depuis $IdleMinutes min)"
+Write-Output "Duree max  : aucune (la tache va au bout des predictions, meme si elles durent plus de 6 h)"
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 Write-Output ("Etat actuel: " + $(if ($existing) { "deja installee ($($existing.State))" } else { "non installee" }))
 
@@ -92,7 +93,7 @@ if (-not $Install) {
 $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $Arguments -WorkingDirectory $RepoDir
 $trigger  = New-ScheduledTaskTrigger -Daily -At $At
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 6)
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force `
     -Description "PATRICK : passage de nuit (predictions, pilote automatique des fonds, actualites, sauvegarde, synchronisation), puis mise en veille prolongee." | Out-Null
 Write-Output ""

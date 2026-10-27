@@ -7,8 +7,8 @@ Chaque etape est independante : une etape en echec est journalisee et n'empeche 
 Etapes, dans l'ordre :
   1. reseau       : attend la connexion (au reveil, le Wi-Fi met parfois une minute).
   2. mise a jour  : `python -m patrick.desktop update` (avance rapide sur la branche `stable`, sautee si un entrainement tourne).
-  3. actualites   : `patrick news refresh` (une minute ou deux) ; AVANT les predictions, qui durent plus que la limite de 6 h de
-                    la tache : placee apres, cette etape n'a jamais tourne (journal du 26-27/10 : tache coupee en pleines predictions).
+  3. actualites   : `patrick news refresh` (une minute ou deux) ; AVANT les predictions, qui durent des heures (la tache etait coupee a 6 h,
+                    sans limite depuis le 27/10) : placee apres, cette etape n'avait jamais tourne (journal du 26-27/10).
   4. predictions  : `scripts/daily_predict.py` = prediction du jour de chaque modele + jugement des anciennes + cycle du pilote
                     automatique des fonds (positions, ordres) + derive.
   5. sauvegarde   : `scripts/backup_db.py` (copie de la base).
@@ -97,7 +97,7 @@ function Patrick-Busy {
 Log "===== passage de nuit (fin : $End, inactivite requise : $IdleMinutes min)$(if ($DryRun) { ' [SIMULATION]' })"
 Wait-Network
 Step "mise a jour"  @("-m", "patrick.desktop", "update")
-# Les nouvelles d'abord : courtes, et les predictions peuvent depasser la limite de 6 h de la tache (le reste serait coupe).
+# Les nouvelles d'abord : courtes, alors que les predictions durent des heures.
 Step "actualites"   @("-m", "patrick.cli", "news", "refresh")
 Step "predictions et pilote automatique" @((Join-Path $RepoDir "scripts\daily_predict.py"), "--base-dir", $RepoDir, "--log-file", (Join-Path $RepoDir "runs\daily_predict.log"))
 Step "sauvegarde"   @((Join-Path $RepoDir "scripts\backup_db.py"))

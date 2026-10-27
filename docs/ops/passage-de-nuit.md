@@ -6,8 +6,9 @@ Tâche Windows `Patrick-Nightly` (`patrick/scripts/schtasks_nightly.ps1`), qui l
 
 1. réveille le PC (veille ou veille prolongée) et attend le réseau ;
 2. met PATRICK à jour (avance rapide sur `stable`, sautée si un entraînement tourne) ;
-3. actualités (`patrick news refresh`), **avant** les prédictions : elles durent plus que la limite de 6 h de la tâche (le passage
-   du 26 au 27/10 a été coupé en pleines prédictions, et l'étape « actualités » placée après n'avait donc jamais tourné) ;
+3. actualités (`patrick news refresh`), **avant** les prédictions : elles durent des heures (le passage
+   du 26 au 27/10 avait été coupé à 6 h, en pleines prédictions, et l'étape « actualités » placée après n'avait donc jamais tourné ;
+   la limite de durée de la tâche est supprimée depuis le 27/10) ;
 4. `scripts/daily_predict.py` : prédiction du jour de chaque modèle, jugement des anciennes, **cycle du pilote automatique des
    fonds** (sélection, règles, ordres), dérive ;
 5. sauvegarde de la base (`scripts/backup_db.py`), synchronisation OneDrive (`patrick sync auto`) ;
