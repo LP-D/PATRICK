@@ -20,7 +20,7 @@ import pandas as pd
 
 from patrick.features import event_features as ef
 from patrick.research import event_study as es
-from patrick.text import store
+from patrick.text import readiness, store
 
 MIN_ATTENTION_HISTORY = 30
 
@@ -115,6 +115,14 @@ def features_for_symbol(conn, symbol: str, trading_days, scorer: str, version: s
             merged = merged.merge(nov, on="item_id", how="left")
     cols = ["known_at", "score"] + (["novelty"] if "novelty" in merged.columns else [])
     return sentiment_features(merged[cols], days, horizons=horizons, **kwargs)
+
+
+def training_features_for_symbol(conn, symbol: str, trading_days, scorer: str, version: str, **kwargs) -> pd.DataFrame:
+    """`features_for_symbol` réservé à l'entraînement : lève `readiness.NewsHistoryTooShort` tant que l'historique point-in-time de
+    `symbol` est trop court (`readiness.MIN_SPAN_SESSIONS` séances, `readiness.MIN_NEWS_DAYS` jours avec nouvelles). C'est
+    l'unique point d'entrée prévu pour le pipeline : jamais de colonnes presque vides présentées comme une variable."""
+    readiness.require_history(conn, symbol)
+    return features_for_symbol(conn, symbol, trading_days, scorer, version, **kwargs)
 
 
 def _novelty_scores(conn, scorer: str, version: str | None) -> pd.DataFrame | None:

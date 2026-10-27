@@ -7,9 +7,11 @@ Règle d'horodatage point-in-time (voir `store.py`) :
   et de première observation : c'est la seule source ici qui permette de **reconstituer** un historique sans fuite.
 Une entrée sans date est écartée et comptée (`skipped_without_date`), jamais datée par nous.
 
-Les flux par défaut sont ceux qui répondaient en lecture le 2026-10-18. Ne répondaient pas : BCE (certificat refusé par
-Python sur ce poste), USDA et OPEP (403 aux requêtes automatiques), AIE (404). Ajoutables via le réglage
-`news_extra_feeds` de `~/.patrick/settings.json` (https uniquement).
+Les flux par défaut sont ceux qui répondaient en lecture le 2026-10-18, complétés le 2026-10-27 (BCE, Banque du Canada, BRI).
+Vérifiés le 2026-10-27 et non retenus : OPEP (403 aux requêtes automatiques) ; AIE (aucun flux RSS officiel, 404 sur les URL
+usuelles) ; USDA (`usda.gov` 403 ; le seul flux lisible, `ams.usda.gov`, ne publie que des formations et des événements) ;
+Banque du Japon (liens en http, refusés ; surtout des séries statistiques) ; SNB (certificat non reconnu par Windows : voir
+`docs/ops/collecte-news.md`). Ajoutables via le réglage `news_extra_feeds` de `~/.patrick/settings.json` (https uniquement).
 """
 from __future__ import annotations
 
@@ -51,6 +53,9 @@ DEFAULT_FEEDS: tuple[Feed, ...] = (
     Feed("fed_monetary", "https://www.federalreserve.gov/feeds/press_monetary.xml", "central_bank"),
     Feed("fed_speeches", "https://www.federalreserve.gov/feeds/speeches.xml", "central_bank"),
     Feed("boe_news", "https://www.bankofengland.co.uk/rss/news", "central_bank"),
+    Feed("ecb_press", "https://www.ecb.europa.eu/rss/press.xml", "central_bank"),
+    Feed("boc_press", "https://www.bankofcanada.ca/content_type/press-releases/feed/", "central_bank"),
+    Feed("bis_speeches", "https://www.bis.org/doclist/cbspeeches.rss", "central_bank"),
     Feed("eia_today", "https://www.eia.gov/rss/todayinenergy.xml", "commodity_report"),
     Feed("eia_press", "https://www.eia.gov/rss/press_rss.xml", "commodity_report"),
     Feed("ft_markets", "https://www.ft.com/markets?format=rss", "news"),
@@ -155,7 +160,14 @@ def parse_feed(xml_text: str, feed: Feed, fetched_at) -> ParsedFeed:
 
 
 def parse_gdelt(payload) -> ParsedFeed:
-    data = json.loads(payload) if isinstance(payload, (str, bytes)) else payload
+    if isinstance(payload, (str, bytes)):
+        try:
+            data = json.loads(payload)
+        except ValueError as exc:       # GDELT répond parfois en texte brut (limite de débit, requête refusée)
+            text = payload.decode("utf-8", "replace") if isinstance(payload, bytes) else payload
+            raise ValueError(f"réponse GDELT non JSON : {text.strip()[:100]!r}") from exc
+    else:
+        data = payload
     out = ParsedFeed()
     for art in (data or {}).get("articles", []) or []:
         title = _clean(art.get("title"))

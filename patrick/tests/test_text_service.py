@@ -45,7 +45,7 @@ def test_refresh_stores_scores_and_links_everything(conn, linker):
     apple_id = int(items.loc["Apple shares surge as profit beats forecasts", "item_id"])
     oil_id = int(items.loc["Oil prices plunge after sanctions are lifted", "item_id"])
     assert lex[apple_id] > 0 and lex[oil_id] < 0
-    tone = store.load_scores(conn, "cb_tone", "1").set_index("item_id")["score"]
+    tone = store.load_scores(conn, "cb_tone", service.TONE_VERSION).set_index("item_id")["score"]
     fed_id = int(items.loc["FOMC statement", "item_id"])
     assert list(tone.index) == [fed_id] and tone[fed_id] > 0
     links = store.load_links(conn)

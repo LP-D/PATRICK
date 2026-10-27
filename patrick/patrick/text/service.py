@@ -13,7 +13,16 @@ import sqlite3
 import pandas as pd
 
 from patrick import settings as machine_settings
-from patrick.text import central_bank, events, lexicon, novelty, sources, store
+from patrick.text import (
+    central_bank,
+    events,
+    fulltext,
+    lexicon,
+    novelty,
+    readiness,
+    sources,
+    store,
+)
 from patrick.text.entities import EntityLinker, universe_linker
 
 LEXICON = "lexicon"
@@ -22,6 +31,8 @@ NOVELTY = "novelty"
 EVENTS = "events"
 LINKS = "entity_link"
 VERSION = "1"
+TONE_VERSION = "3"        # 3 : texte complet de la page + expressions Fed/BoE + filtre de pertinence (central_bank.py)
+LINKS_VERSION = "2"       # 2 : orthographes de presse, tickers de place de cotation, indices, devises, taux (entities.py)
 NOVELTY_WINDOW_DAYS = 7.0
 
 
@@ -39,6 +50,13 @@ def lexicon_from_settings(settings: dict | None = None) -> lexicon.Lexicon:
 
 def lexicon_version(settings: dict | None = None) -> str:
     return lexicon_from_settings(settings).name
+
+
+def lexicon_coverage(conn: sqlite3.Connection, lex: lexicon.Lexicon) -> tuple[int, int]:
+    """(nouvelles où `lex` trouve au moins un mot de sentiment, nouvelles en base) : mesure ce qu'un lexique apporte sans rien écrire."""
+    items = store.load_items(conn)
+    scored = sum(lexicon.score_text(_text(r), lex).polarity is not None for _, r in items.iterrows())
+    return scored, len(items)
 
 
 def _text(row) -> str:
@@ -62,13 +80,18 @@ def score_pending(conn: sqlite3.Connection, linker: EntityLinker | None = None, 
                                   "lit": s.n_litigious, "tokens": s.n_tokens})
     store.save_scores(conn, LEXICON, lex.name, scores)
 
+    pending_tone = [i for i in store.unscored_item_ids(conn, TONE, TONE_VERSION) if rows[i]["source_kind"] == "central_bank"]
+    ready = fulltext.tone_ready_ids(conn)
+    bodies = fulltext.load_body_texts(conn, [i for i in pending_tone if i in ready])
     tone = {}
-    for i in store.unscored_item_ids(conn, TONE, VERSION):
-        if rows[i]["source_kind"] != "central_bank":
+    for i in pending_tone:
+        if i not in ready:                      # page pas encore lue : le ton attend (sinon il serait calculé sur une phrase)
             continue
-        t = central_bank.score_tone(_text(rows[i]))
-        tone[i] = (t.tone, {"hawkish": t.n_hawkish, "dovish": t.n_dovish})
-    store.save_scores(conn, TONE, VERSION, tone)
+        text = _text(rows[i]) + ("\n" + bodies[i] if bodies.get(i) else "")
+        t = central_bank.score_tone(text)
+        tone[i] = (t.tone, {"hawkish": t.n_hawkish, "dovish": t.n_dovish, "monetary": t.n_monetary, "chars": len(text),
+                            "full_text": bool(bodies.get(i))})
+    store.save_scores(conn, TONE, TONE_VERSION, tone)
 
     tags = {i: (None, {"tags": events.extract_events(_text(rows[i]))}) for i in store.unscored_item_ids(conn, EVENTS, VERSION)}
     store.save_scores(conn, EVENTS, VERSION, tags)
@@ -82,11 +105,11 @@ def score_pending(conn: sqlite3.Connection, linker: EntityLinker | None = None, 
         store.save_scores(conn, NOVELTY, VERSION, {int(i): (float(series[i]), None) for i in pending_nov})
 
     links = []
-    pending_links = store.unscored_item_ids(conn, LINKS, VERSION)
+    pending_links = store.unscored_item_ids(conn, LINKS, LINKS_VERSION)
     for i in pending_links:
         links.extend((i, symbol, method) for symbol, method in linker.link(_text(rows[i])))
     store.save_links(conn, links)
-    store.save_scores(conn, LINKS, VERSION, {i: (None, None) for i in pending_links})
+    store.save_scores(conn, LINKS, LINKS_VERSION, {i: (None, None) for i in pending_links})
     return len(pending_lex)
 
 
@@ -101,7 +124,7 @@ def _link_hints(conn: sqlite3.Connection, hints: dict[str, list[str]], source: s
 
 def refresh(conn: sqlite3.Connection, feeds=None, fetch=None, now=None, linker: EntityLinker | None = None,
             with_gdelt: bool = False, gdelt_queries=None, gdelt_fetch=None, yahoo_symbols=None, yahoo_fetch=None,
-            score: bool = True, settings: dict | None = None) -> dict:
+            score: bool = True, settings: dict | None = None, bodies: bool = True) -> dict:
     settings = machine_settings.load() if settings is None else settings
     now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
     feeds = sources.feeds_from_settings(settings) if feeds is None else feeds
@@ -139,8 +162,14 @@ def refresh(conn: sqlite3.Connection, feeds=None, fetch=None, now=None, linker: 
     added = store.add_items(conn, items)
     for source, hints in hints_by_source.items():
         _link_hints(conn, hints, source)
+    body_report = {"fetched": 0, "failed": 0, "skipped": 0}
+    if bodies:
+        # les hôtes lisibles sont ceux des flux de banque centrale demandés ET des flux des réglages (un appel sans flux, par
+        # exemple Yahoo seul, ne doit pas déclarer « illisibles » des pages dont l'hôte est connu)
+        body_report = fulltext.fetch_bodies(conn, list(feeds) + sources.feeds_from_settings(settings), fetch or sources.fetch_url,
+                                            now=now)
     scored = score_pending(conn, linker=linker, settings=settings) if score else 0
-    return {"added": added, "scored": scored, "errors": errors, "skipped_without_date": skipped}
+    return {"added": added, "scored": scored, "errors": errors, "skipped_without_date": skipped, "bodies": body_report}
 
 
 MAX_LAG_HOURS = 72.0      # au-delà, une news n'est plus de l'actualité (flux relu après coup) : stockée mais écartée
@@ -184,7 +213,7 @@ def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 
         df = store.load_scores(conn, scorer, version)
         return df.set_index("item_id") if not df.empty else df
 
-    lex, tone, nov, ev = (by_id(LEXICON, lexicon_version()), by_id(TONE, VERSION), by_id(NOVELTY, VERSION),
+    lex, tone, nov, ev = (by_id(LEXICON, lexicon_version()), by_id(TONE, TONE_VERSION), by_id(NOVELTY, VERSION),
                           by_id(EVENTS, VERSION))
 
     def val(df, i, col="score"):
@@ -218,7 +247,7 @@ def summary(conn: sqlite3.Connection, now=None) -> dict:
     n_linked, n_symbols = conn.execute("SELECT COUNT(DISTINCT item_id), COUNT(DISTINCT symbol) FROM news_link").fetchone()
     n_stale = conn.execute(f"SELECT COUNT(*) FROM news_item WHERE {store.LAG_SQL} > ?", (MAX_LAG_HOURS,)).fetchone()[0]
     return {"n_items": n_items, "n_24h": n_24h, "n_linked": n_linked, "n_symbols": n_symbols, "n_sources": n_sources,
-            "last_known_at": last, "n_stale": n_stale}
+            "last_known_at": last, "n_stale": n_stale, "history": readiness.quick_counts(conn)}
 
 
 def scored_items_for_symbol(conn: sqlite3.Connection, symbol: str) -> pd.DataFrame:

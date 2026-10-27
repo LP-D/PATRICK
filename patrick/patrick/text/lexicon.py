@@ -40,6 +40,27 @@ _UNCERTAINTY = frozenset(["uncertain", "uncertainty", "uncertainties", "unclear"
 _LITIGIOUS = frozenset(["lawsuit", "lawsuits", "litigation", "court", "courts", "plaintiff", "plaintiffs", "defendant", "defendants", "sue", "sued", "sues", "indictment", "attorney", "attorneys", "settlement", "settlements", "verdict", "subpoena", "allegation", "allegations", "tribunal", "procès", "plainte", "plaintes", "poursuite", "poursuites", "jugement"])
 
 
+# Ajouts de la version 2 (2026-10-27) : verbes de titres boursiers que la version 1 ne notait pas (« shares slip », « bank cutting
+# jobs », « bid for liquidators »). Mots d'emploi général seulement ; les mots ambigus (« hit », « raises », « tariffs ») restent
+# dehors : mieux vaut « aucune information » qu'un signe faux.
+_POSITIVE_V2 = frozenset(["boom", "booms", "booming", "tops", "topped", "surpass", "surpasses", "surpassed", "outpace", "outpaces",
+                          "outpaced", "lifts", "lifted", "gagnent", "flambe", "flambent", "reprise"])
+_NEGATIVE_V2 = frozenset(["slip", "slips", "slipped", "slide", "slides", "slid", "sink", "sinks", "sank", "tank", "tanks", "tanked",
+                          "dip", "dips", "dipped", "retreat", "retreats", "retreated", "cutting", "cutback", "cutbacks", "slash",
+                          "slashes", "slashed", "axe", "axes", "axed", "layoff", "turmoil", "tensions", "hostilities", "conflict",
+                          "war", "attack", "attacks", "cyberattack", "hack", "hacked", "breach", "ban", "bans", "banned",
+                          "liquidation", "liquidator", "liquidators", "insolvency", "insolvent", "bailout", "downturn", "struggle",
+                          "struggles", "struggling", "trouble", "troubles", "tumbling", "glisse", "glissent", "dégringole",
+                          "tensions", "guerre", "licenciements", "licenciement", "interdiction"])
+
+# Expressions à plusieurs mots ramenées à un mot du lexique avant le découpage (le découpage coupe « sell-off » en deux).
+_PHRASES = (
+    (re.compile(r"\bsell[- ]offs?\b", re.IGNORECASE), "selloff"),
+    (re.compile(r"\b(?:lay|lays|laying|laid)[- ]off\b", re.IGNORECASE), "layoff"),
+    (re.compile(r"\bflare[- ]ups?\b", re.IGNORECASE), "conflict"),
+)
+
+
 @dataclass(frozen=True)
 class Lexicon:
     name: str
@@ -60,7 +81,7 @@ class SentimentScore:
 
 
 def default_lexicon() -> Lexicon:
-    return Lexicon("builtin-fr-en-reduced-1", _POSITIVE, _NEGATIVE, _UNCERTAINTY, _LITIGIOUS)
+    return Lexicon("builtin-fr-en-reduced-2", _POSITIVE | _POSITIVE_V2, _NEGATIVE | _NEGATIVE_V2, _UNCERTAINTY, _LITIGIOUS)
 
 
 def load_loughran_mcdonald(path) -> Lexicon:
@@ -87,7 +108,10 @@ def load_loughran_mcdonald(path) -> Lexicon:
 
 def tokenize(text: str) -> list[str]:
     tokens = []
-    for raw in _TOKEN.findall((text or "").lower().replace("’", "'")):
+    text = text or ""
+    for rx, word in _PHRASES:
+        text = rx.sub(word, text)
+    for raw in _TOKEN.findall(text.lower().replace("’", "'")):
         m = _ELISION.match(raw)
         tokens.append(m.group(1) if m else raw)
     return tokens

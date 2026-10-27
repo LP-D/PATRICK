@@ -161,3 +161,16 @@ def test_comparison_signs_in_a_headline_are_not_mistaken_for_markup():
            "<pubDate>Wed, 17 Sep 2025 18:00:00 GMT</pubDate></item></channel></rss>")
     parsed = sources.parse_feed(rss, FEED, FETCHED)
     assert parsed.items[0].title == "Gold < 2000 as S&P > 5000 now"
+
+
+def test_the_ecb_the_bank_of_canada_and_the_bis_are_default_central_bank_feeds():
+    kinds = {f.name: f.kind for f in sources.DEFAULT_FEEDS}
+    for name in ("ecb_press", "boc_press", "bis_speeches"):
+        assert kinds[name] == "central_bank"
+
+
+def test_a_plain_text_gdelt_answer_is_reported_with_its_text_not_as_a_json_error():
+    with pytest.raises(ValueError, match="Please limit requests"):
+        sources.parse_gdelt("Please limit requests to one every 5 seconds or contact the operator.")
+    with pytest.raises(ValueError, match="non JSON"):
+        sources.parse_gdelt(b"")

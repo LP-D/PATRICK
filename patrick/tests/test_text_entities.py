@@ -61,3 +61,52 @@ def test_universe_linker_knows_the_tracked_equities_and_commodities():
     linker = entities.universe_linker()
     syms = {s for s, _ in linker.link("Nvidia and LVMH rally while Brent and gold rise")}
     assert {"NVDA", "MC.PA", "BZ=F", "GC=F"} <= syms
+
+
+def _universe_linker():
+    groups = {
+        "Actions US (grandes capitalisations)": [("BAC", "BankOfAmerica"), ("T", "ATT"), ("MCD", "McDonalds"), ("JNJ", "Johnson_Johnson"),
+                                                ("GOOGL", "Alphabet"), ("JPM", "JPMorgan"), ("AAPL", "Apple")],
+        "Indices mondiaux": [("^GDAXI", "DAX"), ("^N225", "Nikkei"), ("^FTSE", "FTSE")],
+        "Devises (majeures)": [("USDJPY=X", "USDJPY"), ("GBPUSD=X", "GBPUSD"), ("DX-Y.NYB", "Dollar")],
+        "Matières premières (futures)": [("CL=F", "WTI_Futures"), ("BZ=F", "Brent_Futures")],
+        "Taux US (indices CBOE)": [("^TNX", "US10Y")],
+    }
+    return entities.universe_linker(groups)
+
+
+def _universe_symbols(text):
+    return {s for s, _ in _universe_linker().link(text)}
+
+
+def test_press_spelling_of_a_company_links_even_when_the_universe_label_is_different():
+    assert _universe_symbols("Bank of America and JPMorgan Chase beat estimates") == {"BAC", "JPM"}
+    assert _universe_symbols("AT&T raises its dividend; McDonald's and Johnson & Johnson follow") == {"T", "MCD", "JNJ"}
+    assert _universe_symbols("Google unveils a new model") == {"GOOGL"}
+    assert _universe_symbols("bank of america") == set()                    # casse respectée comme pour tout nom
+
+
+def test_a_ticker_after_its_exchange_links_but_a_bare_uppercase_word_does_not():
+    assert _universe_linker().link("Shares of the maker (NASDAQ: AAPL) rose") == [("AAPL", "ticker")]
+    assert _universe_symbols("NYSE: JPM and NYSE American: T") == {"JPM", "T"}
+    assert _universe_symbols("The CEO said the IT team is AI ready (T) ") == set()
+    assert _universe_symbols("NASDAQ: ZZZZ") == set()                       # hors univers
+
+
+def test_indices_currencies_and_rates_are_linked_by_theme():
+    assert _universe_symbols("Nikkei closes higher while the yen weakens") == {"^N225", "USDJPY=X"}
+    assert _universe_symbols("Treasury yields climb as the dollar firms") == {"^TNX", "DX-Y.NYB"}
+    assert _universe_symbols("Sterling slides after the FTSE 100 opens lower") == {"GBPUSD=X", "^FTSE"}
+    assert _universe_symbols("OPEC+ meeting lifts crude") == {"CL=F", "BZ=F"}
+
+
+def test_acronym_themes_need_their_capitals_but_words_do_not():
+    assert _universe_symbols("The DAX gained 1%") == {"^GDAXI"}
+    assert _universe_symbols("Dax Shepard joins the cast") == set()
+    assert _universe_symbols("opec meets") == set()
+    assert _universe_symbols("Brent and BRENT and brent") == {"BZ=F"}
+
+
+def test_ambiguous_everyday_words_are_not_themes():
+    assert _universe_symbols("Cable news ratings fall") == set()                            # « cable » seul ne désigne pas la livre
+    assert _universe_symbols("The euro zone and the single currency") == set()

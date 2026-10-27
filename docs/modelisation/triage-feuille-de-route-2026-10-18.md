@@ -79,22 +79,22 @@ nouvelle vue plus de 72 h après sa publication (flux relu après coup) est éca
 | Item | Statut | Où |
 |---|---|---|
 | Ingestion point-in-time (GDELT, RSS, presse) | **Livré 18/10** | `text/sources.py` : 9 flux RSS vérifiés en réel le 18/10 (244 nouvelles collectées, 29 actifs rattachés), Yahoo (`--yahoo`). GDELT (`--gdelt`) : analyseur testé sur la forme documentée de l'API, **non vérifié en réel** (HTTP 429 persistant depuis ce poste le 18/10). |
-| Discours et communiqués de banques centrales | **Livré 18/10** | Fed (communiqués, discours), BoE. BCE : certificat refusé par Python ici, ajoutable par `news_extra_feeds`. |
-| Rapports matières premières | **Livré 18/10** (partiel) | EIA. USDA et OPEP (403 aux requêtes automatiques), AIE (404) : à ajouter par `news_extra_feeds` avec une autre URL. |
+| Discours et communiqués de banques centrales | **Livré 18/10, étendu 27/10** | Fed, BoE, puis BCE, Banque du Canada, BRI (27/10). Les pages complètes sont lues (`text/fulltext.py`, migration 0045), y compris le procès-verbal du FOMC. SNB : certificat non reconnu par Windows ici. |
+| Rapports matières premières | **Livré 18/10** (partiel) | EIA. Revérifiés le 27/10 : OPEP (403), AIE (aucun flux RSS officiel), USDA (`usda.gov` 403 ; `ams.usda.gov` ne publie que des événements). Rien d'ajoutable sans URL valide. |
 | Transcripts d'earnings calls | Bloqué | Sources payantes ou sous licence. |
 | Réseaux sociaux (X, Reddit, StockTwits) | Bloqué | API à clé et conditions d'usage ; pas de collecte sans accord explicite. |
-| Indices textuels existants (EPU, GPR) | Reporté | Séries mensuelles publiées par leurs auteurs : à brancher comme séries macro, pas comme texte. |
-| Sentiment par dictionnaire (Loughran-McDonald) | **Livré 18/10** | `text/lexicon.py` : lexique réduit intégré (FR/EN) ; le fichier LM complet se branche par `news_lm_dictionary` (non redistribué). |
+| Indices textuels existants (EPU, GPR) | Reporté, instruit le 27/10 | FRED publie `USEPUINDXD` (jour), `USEPUINDXM` et `GEPUCURRENT` (mois) ; l'indice est révisé (ALFRED ne garde les versions que depuis 2014). Les brancher comme séries macro change les variables de tous les nouveaux runs (tables `MACRO_ONLY_FRED_SERIES`, fraîcheur, délais de publication) : décision à prendre, pas un ajout silencieux. GPR : pas d'identifiant FRED trouvé. |
+| Sentiment par dictionnaire (Loughran-McDonald) | **Livré 18/10, lexique v2 le 27/10** | `text/lexicon.py` : lexique réduit intégré (FR/EN), 38 % des nouvelles notées (contre 33 %) ; `patrick news lexicon fichier.csv` branche le fichier LM complet (à télécharger par Léon, non redistribué). |
 | Sentiment FinBERT et ajustement matières premières | Bloqué | Demande PyTorch + modèle téléchargé + données étiquetées. Interface prévue dans `topics.py` / `service.py`. |
-| Ton hawkish / dovish des banques centrales | **Livré 18/10** | `text/central_bank.py`. |
+| Ton hawkish / dovish des banques centrales | **Livré 18/10, refondu le 27/10** | `text/central_bank.py` : calculé sur la page complète, vocabulaire Fed/BoE, filtre de pertinence monétaire (17 documents sur 152 ont un ton, contre 0 sur 79). |
 | Classification directionnelle zero-shot par LLM | Bloqué | Demande une clé d'API ; le garde-fou, lui, est livré (`text/llm_guard.py`). |
 | Plongements de news | **Livré 18/10** (LSA) | `text/topics.py::fit_embedder` : TF-IDF + SVD, pas un transformeur. |
 | Thèmes (LDA, BERTopic) | **Livré 18/10** (LDA) | `text/topics.py::fit_topics`. BERTopic non installé. |
 | Extraction d'événements | **Livré 18/10** | `text/events.py` : choc d'offre, sanction, grève, météo (FR/EN). |
 | Score de nouveauté | **Livré 18/10** | `text/novelty.py` (haché, strictement antérieur). |
 | Attention médiatique | **Livré 18/10** (volume) | z-score du nombre de nouvelles (`text/aggregate.py`). Google Trends : bloqué (non officiel). |
-| Rattachement news → ticker | **Livré 18/10** | `text/entities.py` : cashtag, nom (casse respectée), thèmes. |
-| Agrégation par actif et par horizon | **Livré 18/10** | `text/aggregate.py::sentiment_features`, `features_for_symbol`. **Pas encore une variable d'entraînement** (voir limites). |
+| Rattachement news → ticker | **Livré 18/10, élargi le 27/10** | `text/entities.py` : cashtag, ticker de place de cotation, nom et orthographe de presse (casse respectée), thèmes (indices, devises, taux, matières premières). 75 nouvelles rattachées sur 431 (17 %) : les flux contiennent beaucoup d'articles sans actif de l'univers. |
+| Agrégation par actif et par horizon | **Livré 18/10** | `text/aggregate.py::sentiment_features`, `features_for_symbol`. **Pas encore une variable d'entraînement** : `training_features_for_symbol` refuse tant que `text/readiness.py` mesure moins de 250 séances et 60 jours avec nouvelles (`patrick news readiness`). Branchement dans `RunConfig` volontairement non fait (changerait la clé du cache de variables et l'identité des runs). |
 | Garde-fou contre la fuite temporelle des LLM | **Livré 18/10** | `text/llm_guard.py`. |
 | Event study textuel | **Livré 18/10** | `aggregate.textual_event_study`, à la demande sur `/news`. |
 

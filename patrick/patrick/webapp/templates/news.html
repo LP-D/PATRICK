@@ -14,6 +14,7 @@
 {{ metric(t('news_k_total'), summary.n_items, t('news_k_total_rel', n=summary.n_24h, s=summary.n_stale), "neutral") }}
 {{ metric(t('news_k_linked'), summary.n_linked, t('news_k_linked_rel', n=summary.n_symbols), "neutral") }}
 {{ metric(t('news_k_sources'), summary.n_sources, t('news_k_sources_rel', n=summary.n_sources), "neutral") }}
+{{ metric(t('news_k_history'), t('news_k_history_val', n=summary.history.span_sessions, m=summary.history.required_sessions), t('news_k_history_rel', d=summary.history.news_days), "neutral") }}
 {{ metric(t('news_k_last'), summary.last_known_at or t('news_k_last_none'), '', "neutral") }}
 </div>
 

@@ -59,6 +59,10 @@ TEXT_STRINGS: dict[str, dict[str, str]] = {
     "news_k_linked_rel": _s("{n} actif(s) concerné(s)", "{n} asset(s) concerned"),
     "news_k_sources": _s("Sources", "Sources"),
     "news_k_sources_rel": _s("{n} flux différent(s) en base", "{n} distinct feed(s) stored"),
+    "news_k_history": _s("Historique pour l'entraînement", "History for training"),
+    "news_k_history_val": _s("{n} / {m} séances", "{n} / {m} sessions"),
+    "news_k_history_rel": _s("{d} jour(s) avec nouvelles ; hors entraînement tant que la durée n'est pas atteinte",
+                             "{d} day(s) with stories; kept out of training until the length is reached"),
     "news_k_last": _s("Dernière nouvelle connue", "Latest known story"),
     "news_k_last_none": _s("aucune", "none"),
     "news_window": _s("Fenêtre", "Window"),
@@ -119,12 +123,14 @@ TEXT_STRINGS: dict[str, dict[str, str]] = {
         "Une nouvelle compte à partir de la plus tardive de sa publication annoncée et de la première fois que PATRICK l'a vue ; "
         "après la clôture, elle compte pour la séance suivante. Les notes viennent d'un lexique réduit (anglais, français) : un "
         "fichier Loughran-McDonald complet se branche par le réglage news_lm_dictionary. Le rattachement aux actifs privilégie la "
-        "précision (casse respectée) ; un lien manqué est préféré à un faux lien. Aucune variable de ce flux n'entre dans les "
+        "précision (casse respectée) ; un lien manqué est préféré à un faux lien. Le ton des banques centrales est calculé sur la "
+        "page complète du document, et seulement s'il parle de politique monétaire. Aucune variable de ce flux n'entre dans les "
         "entraînements tant qu'un historique suffisant n'est pas constitué.",
         "A story counts from the later of its announced publication and the first time PATRICK saw it; after the close it counts for "
         "the next session. Scores come from a reduced lexicon (English, French): a full Loughran-McDonald file plugs in through the "
         "news_lm_dictionary setting. Linking to assets favours precision (case respected); a missed link is preferred to a false "
-        "one. No variable from this feed enters training until enough history has accumulated."),
+        "one. The central bank tone is computed on the full page of the document, and only if it is about monetary policy. No "
+        "variable from this feed enters training until enough history has accumulated."),
 }
 
 TEXT_STRINGS.update(LABEL_STRINGS)

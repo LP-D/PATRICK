@@ -81,3 +81,15 @@ def test_balanced_or_empty_statement_has_no_tone():
 def test_french_central_bank_vocabulary():
     assert central_bank.score_tone("Le Conseil poursuit le resserrement et juge la politique restrictive").tone > 0
     assert central_bank.score_tone("Une baisse des taux et une politique accommodante").tone < 0
+
+
+def test_v2_stock_headline_verbs_are_scored():
+    for text in ("Anheuser-Busch shares slip as sales come up shy", "Barclays cutting 5,000 jobs", "US stocks set for rebound after AI sell-off"):
+        assert lexicon.score_text(text).polarity is not None, text
+    assert lexicon.score_text("Microsoft to lay off 650 people").polarity == -1.0
+    assert lexicon.score_text("Oil hits $117 on fears of flare-up in Iran hostilities").polarity == -1.0
+    assert lexicon.score_text("Shares rebound after the sell-off").polarity == pytest.approx(0.0)
+
+
+def test_the_builtin_lexicon_version_changes_with_its_content():
+    assert lexicon.default_lexicon().name == "builtin-fr-en-reduced-2"

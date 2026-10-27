@@ -50,6 +50,11 @@ def test_the_frame_opens_with_figures_and_lazy_blocks(seeded):
     assert "Sentiment par actif" in resp.text and "surge as profit" not in resp.text      # les titres arrivent par fragment
 
 
+def test_the_frame_shows_how_much_history_is_gathered_for_training(seeded):
+    text = TestClient(app).get("/news").text
+    assert "Historique pour l&#39;entraînement" in text and "1 / 250 séances" in text
+
+
 def test_an_empty_database_still_renders_the_frame(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     resp = TestClient(app).get("/news")

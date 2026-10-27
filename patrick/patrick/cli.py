@@ -867,8 +867,67 @@ def news_refresh_cmd(
         conn.close()
     typer.echo(f"{report['added']} nouvelle(s) ajoutée(s), {report['scored']} notée(s)"
                f" ; {report['skipped_without_date']} écartée(s) faute de date.")
+    pages = report["bodies"]
+    if pages["fetched"] or pages["failed"]:
+        typer.echo(f"Pages de banque centrale lues : {pages['fetched']} ({pages['failed']} échec(s), {pages['skipped']} ignorée(s)).")
     for name, error in report["errors"]:
         typer.echo(f"Source en échec : {name} -- {error}")
+
+
+@news_app.command(name="readiness")
+def news_readiness_cmd(symbol: str = typer.Option("", "--symbol", help="Actif dont on mesure l'historique (sinon tout le magasin)")) -> None:
+    """Historique de nouvelles disponible et date à laquelle il suffira pour en faire des variables d'entraînement."""
+    from patrick.text import readiness
+
+    conn = trackdb.connect()
+    try:
+        status = readiness.measure(conn, symbol or None)
+    finally:
+        conn.close()
+    where = f" pour {status.symbol}" if status.symbol else ""
+    typer.echo(f"Nouvelles utilisables{where} : {status.n_items} sur {status.news_days} jour(s) ; "
+               f"{status.span_sessions} séance(s) d'historique sur {readiness.MIN_SPAN_SESSIONS} requises "
+               f"(et {readiness.MIN_NEWS_DAYS} jours avec nouvelles).")
+    if status.ready:
+        typer.echo("Historique suffisant : les variables textuelles peuvent être construites (aggregate.training_features_for_symbol).")
+    elif status.first_day is not None:
+        typer.echo(f"Il manque {status.missing()}. Au mieux, la durée sera atteinte le {status.ready_on.date()} si la collecte tourne chaque jour.")
+    else:
+        typer.echo("Aucune nouvelle utilisable : lancer `patrick news refresh`.")
+
+
+@news_app.command(name="lexicon")
+def news_lexicon_cmd(
+    path: str = typer.Argument("", help="Fichier CSV du dictionnaire Loughran-McDonald (Master Dictionary) à brancher"),
+    clear: bool = typer.Option(False, "--clear", help="Revenir au lexique réduit intégré"),
+) -> None:
+    """Affiche le lexique de sentiment actif et ce qu'il couvre ; avec un fichier, le valide, le branche et renote les nouvelles."""
+    from patrick import settings as machine_settings
+    from patrick.text import lexicon, service
+
+    if clear:
+        machine_settings.save({"news_lm_dictionary": None})
+        typer.echo("Lexique intégré rétabli (réglage news_lm_dictionary supprimé).")
+    elif path:
+        file = os.path.abspath(os.path.expanduser(path))
+        try:
+            candidate = lexicon.load_loughran_mcdonald(file)
+        except (OSError, ValueError) as exc:
+            typer.echo(f"Dictionnaire refusé : {exc}")
+            raise typer.Exit(code=1) from exc
+        machine_settings.save({"news_lm_dictionary": file})
+        typer.echo(f"Dictionnaire branché : {candidate.name} ({len(candidate.positive)} mots positifs, {len(candidate.negative)} négatifs).")
+    conn = trackdb.connect()
+    try:
+        active = service.lexicon_from_settings()
+        if path and not clear:
+            service.score_pending(conn)
+        scored, total = service.lexicon_coverage(conn, active)
+        builtin_scored, _ = service.lexicon_coverage(conn, lexicon.default_lexicon())
+    finally:
+        conn.close()
+    typer.echo(f"Lexique actif : {active.name} ; nouvelles avec au moins un mot de sentiment : {scored} / {total}"
+               f" (lexique intégré : {builtin_scored} / {total}).")
 
 
 @news_app.command(name="summary")
