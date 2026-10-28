@@ -607,10 +607,11 @@ def get_feature_stability(conn: sqlite3.Connection, run_id: str) -> dict | None:
 
 
 DM_SAMPLES = ("holdout", "last_wf_fold")
+DM_LOSSES = ("class4", "direction")
 
 
 def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
-                    kind: str = "class_specific", *, sample: str) -> None:
+                    kind: str = "class_specific", *, sample: str, loss: str = "class4") -> None:
     """Phase 6.4 (P6.4). Persists THIS run's Diebold-Mariano result (Phase
     2.5) so it is queryable across the whole history (see migration 0009)
     -- `dm_result` comes from `validation.diebold_mariano.diebold_mariano()`
@@ -624,19 +625,23 @@ def save_dm_result(conn: sqlite3.Connection, run_id: str, dm_result: dict,
 
     `sample` (F08, migration 0022) is mandatory: `"holdout"` (terminal
     holdout, never used to choose -- the only evidence) or `"last_wf_fold"`
-    (selection data, biased towards significance)."""
+    (selection data, biased towards significance).
+
+    `loss` (migration 0046, ADR 0008): `"class4"` (0/1 sur les 4 classes, méthode 1) ou `"direction"` (0/1 sur le sens, méthode 2)."""
+    if loss not in DM_LOSSES:
+        raise ValueError(f"unknown DM loss {loss!r} (expected one of {DM_LOSSES})")
     if sample not in DM_SAMPLES:
         raise ValueError(f"unknown DM sample {sample!r} (expected one of {DM_SAMPLES})")
     n_obs = dm_result.get("n_obs")
     with conn:
         conn.execute(
-            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value, sample, n_obs) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value, sample, n_obs, loss) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(run_id, kind) DO UPDATE SET baseline = excluded.baseline, "
             "dm_stat = excluded.dm_stat, p_value = excluded.p_value, sample = excluded.sample, "
-            "n_obs = excluded.n_obs, computed_at = datetime('now')",
+            "n_obs = excluded.n_obs, loss = excluded.loss, computed_at = datetime('now')",
             (run_id, kind, dm_result["baseline"], dm_result.get("dm_stat"), dm_result["p_value"],
-             sample, int(n_obs) if n_obs is not None else None),
+             sample, int(n_obs) if n_obs is not None else None, loss),
         )
 
 
@@ -1116,6 +1121,28 @@ def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, 
             "VALUES (?, ?, ?, ?, ?, ?)",
             (target, horizon, source, run_id, int(n_trials), detail),
         )
+
+
+PLACEBO_VARIANTS = ("real", "lag1")
+PLACEBO_METRICS = ("AUC_ovr_4cls", "F1_dir", "Acc_dir", "MCC_4cls")
+
+
+def save_placebo(conn: sqlite3.Connection, run_id: str, variant: str, metrics: dict) -> None:
+    """Écrit les métriques de holdout d'une variante du placebo de décalage (migration 0047)."""
+    if variant not in PLACEBO_VARIANTS:
+        raise ValueError(f"unknown placebo variant {variant!r} (expected one of {PLACEBO_VARIANTS})")
+    rows = [(run_id, variant, m, float(metrics[m])) for m in PLACEBO_METRICS
+            if metrics.get(m) is not None and not is_nan(metrics[m])]
+    with conn:
+        conn.executemany("INSERT OR REPLACE INTO run_placebo (run_id, variant, metric, value) VALUES (?, ?, ?, ?)", rows)
+
+
+def get_placebo(conn: sqlite3.Connection, run_id: str) -> dict[str, dict[str, float]]:
+    """`{variante: {métrique: valeur}}` du placebo d'un run (vide si le run n'en a pas)."""
+    out: dict[str, dict[str, float]] = {}
+    for variant, metric, value in conn.execute("SELECT variant, metric, value FROM run_placebo WHERE run_id = ?", (run_id,)):
+        out.setdefault(variant, {})[metric] = value
+    return out
 
 
 HOLDOUT_PURPOSES = ("final_eval", "diagnostic", "champion_duel_challenger", "champion_duel_champion")

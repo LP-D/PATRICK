@@ -54,7 +54,11 @@ from patrick.config.schema import RunConfig
 from patrick.data import alignment
 from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
-from patrick.data.session_calendar import CURRENT_SESSION_RULE, classify_asset_class, session_rule_tag
+from patrick.data.session_calendar import (
+    CURRENT_SESSION_RULE,
+    classify_asset_class,
+    session_rule_tag,
+)
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
 from patrick.features import (
@@ -75,6 +79,7 @@ from patrick.features.interactions import (
     discover_interactions,
 )
 from patrick.features.sanitize import finite_features, finite_scaled
+from patrick.features.target import non_flat_mask
 from patrick.models import calibration as calibration_lib
 from patrick.models import deep as deep_module
 from patrick.models import registry
@@ -603,7 +608,7 @@ class _FoldContext:
         else:
             reg_al = reg_r.reindex(idx).fillna("NORMAL").values
             sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
-        tr_mask = tr_mask & sel
+        tr_mask = tr_mask & sel & non_flat_mask(target_series)
         te_mask = te_mask & sel
 
         if cfg.validation.purge:
@@ -692,6 +697,7 @@ def _selector_config_hash(config: RunConfig, n_feat: int, seed: int) -> str:
         "shap_sample": config.selection.shap_sample,
         "pool_prefilter": config.features.pool_prefilter, "seed": seed,
         "ranking": RANKING_VERSION,
+        **({"shap_recent": True} if config.validation.method_version >= 2 else {}),
     }, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -719,7 +725,8 @@ def _select(conn, target: str, horizon: int, snapshot_id: str,
         return cached
     cols = [int(c) for c in select_features(config.selection.method, X_tr, y_tr, n_feat,
                                              config.features.pool_prefilter, seed=seed,
-                                             shap_sample=config.selection.shap_sample)]
+                                             shap_sample=config.selection.shap_sample,
+                                             shap_recent=config.validation.method_version >= 2)]
     trackdb.save_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash, cols)
     return cols
 
@@ -745,7 +752,8 @@ def _select_batch(conn, target: str, horizon: int, snapshot_id: str, config: Run
             todo.append(i)
     tasks = [("select_features", (config.selection.method, items[i][0], items[i][1], items[i][2],
                                 config.features.pool_prefilter),
-              {"seed": seed, "shap_sample": config.selection.shap_sample}) for i in todo]
+              {"seed": seed, "shap_sample": config.selection.shap_sample,
+               "shap_recent": config.validation.method_version >= 2}) for i in todo]
     for i, cols in zip(todo, parallel.run_ordered(tasks, jobs), strict=True):
         cols = [int(c) for c in cols]
         trackdb.save_cached_selection(conn, target, horizon, snapshot_id, keys[i][0], keys[i][1], cols)
@@ -975,7 +983,7 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     te_mask = np.asarray(idx >= holdout_start_date)
     reg_al = reg_r.reindex(idx).fillna("NORMAL").values
     sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
-    tr_mask, te_mask = tr_mask & sel, te_mask & sel
+    tr_mask, te_mask = tr_mask & sel & non_flat_mask(target_series), te_mask & sel
 
     y_tr = target_series.values[tr_mask].astype(int)
     y_te = target_series.values[te_mask].astype(int)
@@ -1047,26 +1055,37 @@ def _best_baseline_among(fd: FoldData, candidate_keys: list[str]) -> tuple[str |
     return best_name, best_pred
 
 
+def _dm_losses(y_true, y_pred, loss: str) -> np.ndarray:
+    """Erreur 0/1 par ligne. `"class4"` : classe exacte parmi les 4 (méthode 1 : une baseline qui prédit toujours la classe 2 y est
+    battue par un modèle qui ne devine que l'amplitude). `"direction"` : sens hausse (classes 2 et 3) contre baisse (0 et 1), ce que
+    le fonds négocie (méthode 2)."""
+    y_true, y_pred = np.asarray(y_true).ravel(), np.asarray(y_pred).ravel()
+    if loss == "direction":
+        return ((y_pred >= 2) != (y_true >= 2)).astype(float)
+    return (y_pred != y_true).astype(float)
+
+
 def _dm_against_baselines(y_true, y_pred, baseline_predictions: dict | None,
-                          class_name: str | None, horizon: int) -> dict:
-    """Diebold-Mariano (0/1 directional loss, HLN) of the model against the
+                          class_name: str | None, horizon: int, loss: str = "class4") -> dict:
+    """Diebold-Mariano (0/1 loss, HLN) of the model against the
     class-specific baseline `class_name` and the common persistence
     baseline, all predicted on the same rows. A baseline absent from
-    `baseline_predictions` gives `None` for its kind."""
+    `baseline_predictions` gives `None` for its kind. `loss`: see `_dm_losses`."""
     y_true = np.asarray(y_true).ravel()
-    loss_model = (np.asarray(y_pred).ravel() != y_true).astype(float)
+    loss_model = _dm_losses(y_true, y_pred, loss)
 
     def against(name: str | None) -> dict | None:
         pred = (baseline_predictions or {}).get(name) if name else None
         if pred is None:
             return None
-        dm = diebold_mariano(loss_model, (np.asarray(pred).ravel() != y_true).astype(float), h=horizon)
+        dm = diebold_mariano(loss_model, _dm_losses(y_true, pred, loss), h=horizon)
         if is_nan(dm["p_value"]):
             # Untestable (horizon too long for the sample, too few rows, undefined variance): "not computed", like a
             # missing baseline -- no `dm_result` row with an empty p-value, no NaN in the run summary.
             print(f"  [DM] h={horizon}d vs {name}: untestable ({dm['untestable_reason']}, n={dm['n_obs']}) -- not computed.")
             return None
         dm["baseline"] = name
+        dm["loss"] = loss
         return dm
 
     return {"class_specific": against(class_name), "common": against(_COMMON_BASELINE_KEY)}
@@ -1096,6 +1115,7 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
     Returns `None` only if neither comparison could be computed -- otherwise
     a dict with `sample`, `asset_class` and either kind possibly `None`."""
     horizon, regime = int(best_cfg["horizon"]), best_cfg["regime"]
+    loss = "direction" if ctx.config.validation.method_version >= 2 else "class4"
     fd = ctx.prepare(horizon, last_fold, regime, want_baselines=True)
     if fd is None or not fd.baseline_predictions:
         return None
@@ -1108,7 +1128,7 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
     if holdout_eval is not None and holdout_eval.get("baseline_predictions"):
         sample = "holdout"
         dms = _dm_against_baselines(holdout_eval["y_true"], holdout_eval["y_pred"],
-                                    holdout_eval["baseline_predictions"], class_name, horizon)
+                                    holdout_eval["baseline_predictions"], class_name, horizon, loss)
     else:
         sample = "last_wf_fold"
         n_feat, sampler_name, algo = int(best_cfg["N"]), best_cfg["sampler"], best_cfg["algo"]
@@ -1119,7 +1139,7 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
                                   calibration=ctx.config.models.calibration, **best_params)
         print("  [WARN] Diebold-Mariano on the last walk-forward fold (no holdout evaluation): "
               "selection-biased, excluded from the cross-target BH family.")
-        dms = _dm_against_baselines(fd.y_te, y_pred, fd.baseline_predictions, class_name, horizon)
+        dms = _dm_against_baselines(fd.y_te, y_pred, fd.baseline_predictions, class_name, horizon, loss)
 
     if dms["class_specific"] is None and dms["common"] is None:
         return None
@@ -1165,6 +1185,9 @@ def _config_hash(config: RunConfig) -> str:
     # la désactive garde le hachage d'avant le champ ; activée (défaut), elle change le gagnant et entre dans le hachage.
     if not config.selection.one_se_rule:
         exclude["selection"] = {"one_se_rule"}
+    # Idem pour la version de méthode : un run de méthode 1 (tout run d'avant le champ) garde son hachage.
+    if config.validation.method_version < 2:
+        exclude["validation"] = {"method_version"}
     exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 
@@ -1288,19 +1311,20 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         X_pool_df = full_pool[feature_pool].reindex(idx)
         X_all = _finite_features(X_pool_df.values, f"CPCV (h={horizon}d)")
         y_all = target_series.values.astype(int)
+        train_ok = non_flat_mask(target_series)
 
         for regime in config.objective.regimes:
             regime_sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
 
             def prep_combo(ci, combo, horizon=horizon, regime=regime, idx=idx, regime_sel=regime_sel,
-                           y_all=y_all, X_all=X_all):
+                           y_all=y_all, X_all=X_all, train_ok=train_ok):
                 """Masks, train/test labels and scaled matrices of one CPCV combination
                 (None when excluded for too few rows)."""
                 split = cpcv_module.build_split(groups, combo, horizon,
                                                  embargo_bars=config.validation.embargo_bars)
                 train_dates = set(all_dates[split.train_mask])
                 test_dates = set(all_dates[split.test_mask])
-                tr_mask = np.asarray([d in train_dates for d in idx]) & regime_sel
+                tr_mask = np.asarray([d in train_dates for d in idx]) & regime_sel & train_ok
                 te_mask = np.asarray([d in test_dates for d in idx]) & regime_sel
 
                 y_tr, y_te = y_all[tr_mask], y_all[te_mask]
@@ -1848,6 +1872,58 @@ def _holdout_diagnostic(st: _RunState) -> None:
     st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
 
 
+PLACEBO_MIN_AUC = 0.58
+PLACEBO_MIN_DROP = 0.08
+
+
+class _LaggedPoolBuilder:
+    """Enveloppe d'un `_FoldPoolBuilder` dont chaque pool voit TOUTES ses variables (jamais le prix de la cible) retardées de `lag` barres."""
+
+    def __init__(self, inner, target_col: str, lag: int = 1):
+        self.inner, self.target_col, self.lag = inner, target_col, lag
+
+    def get(self, cut_idx: int) -> pd.DataFrame:
+        pool = self.inner.get(cut_idx).copy()
+        feats = [c for c in pool.columns if c != self.target_col]
+        pool[feats] = pool[feats].shift(self.lag)
+        return pool
+
+
+def placebo_verdict(real: dict | None, lagged: dict | None) -> str | None:
+    """`"same_day"` si un signal net du holdout (AUC >= `PLACEBO_MIN_AUC`) perd au moins `PLACEBO_MIN_DROP` d'AUC quand les variables sont
+    retardées d'un jour : il repose sur l'information du jour même (souvent une fuite de date). `"stable"` sinon, `None` sans données."""
+    a = (real or {}).get("AUC_ovr_4cls")
+    b = (lagged or {}).get("AUC_ovr_4cls")
+    if a is None or b is None or is_nan(a) or is_nan(b):
+        return None
+    return "same_day" if a >= PLACEBO_MIN_AUC and a - b >= PLACEBO_MIN_DROP else "stable"
+
+
+def _placebo_lag(st: _RunState, final_best: dict, holdout_eval: dict | None) -> dict | None:
+    """Placebo automatique (ADR 0008) : le modèle final réévalué sur le holdout avec toutes les variables retardées d'un jour de plus.
+    Ne choisit rien et ne fait jamais échouer un run ; écrit `run_placebo` et renvoie `{"real", "lag1", "verdict"}`."""
+    if holdout_eval is None or not st.has_holdout:
+        return None
+    try:
+        run_id = st.run_ids[int(final_best["horizon"])]
+        lagged = _evaluate_holdout(st.conn, st.snapshot_id, _LaggedPoolBuilder(st.pool_builder, st.target_col), st.target_col,
+                                   st.feature_pool, st.config, st.all_dates_full, st.n_wf, final_best, st.seed,
+                                   universe=st.universe, purpose="diagnostic", run_id=run_id)
+        if lagged is None:
+            return None
+        trackdb.save_placebo(st.conn, run_id, "real", holdout_eval["metrics"])
+        trackdb.save_placebo(st.conn, run_id, "lag1", lagged["metrics"])
+        verdict = placebo_verdict(holdout_eval["metrics"], lagged["metrics"])
+        real_auc, lag_auc = holdout_eval["metrics"].get("AUC_ovr_4cls"), lagged["metrics"].get("AUC_ovr_4cls")
+        note = {"same_day": "le signal repose sur l'information du JOUR MÊME (souvent un décalage de date : à vérifier)",
+                "stable": "le signal ne dépend pas du dernier jour", None: "non concluant"}[verdict]
+        print(f"[PLACEBO] holdout, variables retardées d'un jour : AUC {real_auc} -> {lag_auc} ; {note}.")
+        return {"real": holdout_eval["metrics"], "lag1": lagged["metrics"], "verdict": verdict}
+    except Exception:  # noqa: BLE001 -- diagnostic : il ne doit jamais empêcher un run de se terminer
+        traceback.print_exc()
+        return None
+
+
 def _tuning_candidates(st: _RunState) -> list[dict]:
     """Audit report, C3: top_k PER horizon by default -- a horizon whose best
     scan trial dominates must not capture the whole Optuna budget."""
@@ -2113,7 +2189,8 @@ def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict |
         run_id = st.run_ids[int(final_best["horizon"])]
         for kind in ("class_specific", "common"):
             if dm_result.get(kind) is not None:
-                trackdb.save_dm_result(st.conn, run_id, dm_result[kind], kind=kind, sample=dm_result["sample"])
+                trackdb.save_dm_result(st.conn, run_id, dm_result[kind], kind=kind, sample=dm_result["sample"],
+                                       loss=dm_result[kind].get("loss", "class4"))
     return dm_result
 
 
@@ -2172,6 +2249,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # Run neuf (une reprise rejoue la règle de son enregistrement) : règle d'alignement des séances d'aujourd'hui,
         # écrite dans la config pour que le live, l'explication et la reprise la rejouent (ADR 0007).
         config.objective.session_rule = CURRENT_SESSION_RULE
+        config.validation.method_version = D.CURRENT_METHOD_VERSION
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)
@@ -2225,7 +2303,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         final_best, final_best_by_horizon = _select_finals(st, best, tuned_df)
 
         model_path, model_paths = None, {}
-        holdout_result = dm_result = pbo_result = holdout_diagnostic_result = None
+        holdout_result = dm_result = pbo_result = holdout_diagnostic_result = placebo_result = None
         cumulative_trials = 0
         trial_id_by_horizon: dict[int, int] = {}
         known_holdout_evals: dict[int, dict] = {}
@@ -2238,6 +2316,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if holdout_eval is not None and final_best_by_horizon.get(final_horizon) == final_best:
                 known_holdout_evals[final_horizon] = holdout_eval
             dm_result = _final_diebold_mariano(st, final_best, holdout_eval)
+            placebo_result = _placebo_lag(st, final_best, holdout_eval)
             # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
             # the whole history of this target/horizon (CPCV paths when that
             # scheme is active).
@@ -2277,6 +2356,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             "elapsed_s": time.time() - t0,
             "holdout": holdout_result,
             "diebold_mariano": dm_result,
+            "placebo": placebo_result,
             "cumulative_trials": cumulative_trials,
             "pbo": pbo_result,
             "holdout_diagnostic": holdout_diagnostic_result,

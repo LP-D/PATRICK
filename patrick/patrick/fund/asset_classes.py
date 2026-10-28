@@ -30,8 +30,11 @@ CLASSES: dict[str, tuple[str, ...]] = {
 }
 
 
-# Réglages proposés partout (commande et page) : horizon 1 jour, tous les signaux non suspects, aucun plafond de modèles.
-DEFAULTS = {"horizons": [1], "tier": "large", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO", "max_models": None}
+# Réglages proposés partout (commande et page) : horizon 1 jour, niveau « strict » (cible qui survit à la correction pour tests multiples
+# ET test de Diebold-Mariano de la cellule concluant), aucun plafond de modèles. Le niveau « large » (tous les signaux non suspects, sans preuve
+# statistique) reste disponible mais n'est plus le défaut (critique du 28/10 : on tradait sans preuve, puis on classait les classes sur leur P&L
+# fictif, une sélection non corrigée).
+DEFAULTS = {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO", "max_models": None}
 
 
 def strategy_name(asset_class: str) -> str:
@@ -46,7 +49,7 @@ def class_rows(conn: sqlite3.Connection) -> list[dict]:
 
 
 def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[str] | None = None,
-          horizons: tuple[int, ...] = (1,), tier: str = "large", gross: float = 1.0, capital: float = 10_000_000,
+          horizons: tuple[int, ...] = (1,), tier: str = "strict", gross: float = 1.0, capital: float = 10_000_000,
           wrapper: str = "CTO", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
     """Une stratégie en pilote automatique par classe (toutes, ou `only`). Une stratégie qui porte déjà le nom
     `Systematic <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est

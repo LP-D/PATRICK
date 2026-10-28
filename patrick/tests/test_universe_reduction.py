@@ -540,8 +540,14 @@ def test_walkforward_run_decides_per_fold_holdout_and_final_model(tmp_path, monk
     assert bundle["universe_reduction"]["dropped"] == {"Y": "X"}
     assert not [f for f in bundle["feature_pool"] if f == "Y" or f.startswith("Y_")]
     board = result["leaderboard"]
-    later = board[(board["fold"] > 1) & board["N"].notna()]
-    assert not any(f == "Y" or f.startswith("Y_") for row in later["features"] for f in row.split("|"))
+    # une fonction ne peut utiliser que les variables que SA décision de réduction a gardées : on vérifie chaque pli contre sa propre décision
+    # (le pli 2 s'entraîne jusqu'à la barre 928, où X et Y ne sont identiques que depuis 28 barres : rien n'y est retiré, et un tirage de
+    # sélection peut légitimement y retenir une variable de Y)
+    for fold in sorted(board["fold"].dropna().unique()):
+        if fold <= 1 or not decisions[_prefix(n, cuts[int(fold) - 1])]:
+            continue
+        rows = board[(board["fold"] == fold) & board["N"].notna()]["features"]
+        assert not any(f == "Y" or f.startswith("Y_") for row in rows for f in row.split("|"))
 
 
 def test_cpcv_run_decides_on_each_combinations_train_mask(tmp_path, monkeypatch):

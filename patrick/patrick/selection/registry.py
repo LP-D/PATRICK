@@ -13,9 +13,10 @@ SELECTION_METHODS = ("shap", "rfe", "lasso")
 
 
 def select_features(method: str, X_tr: np.ndarray, y_tr: np.ndarray, top_n: int,
-                     prefilter: int, seed: int = 42, shap_sample: int = 500) -> list[int]:
+                     prefilter: int, seed: int = 42, shap_sample: int = 500,
+                     shap_recent: bool = False) -> list[int]:
     if method == "shap":
-        return shap_rank(X_tr, y_tr, [], top_n, prefilter, shap_sample=shap_sample, seed=seed)
+        return shap_rank(X_tr, y_tr, [], top_n, prefilter, shap_sample=shap_sample, seed=seed, recent=shap_recent)
     if method == "rfe":
         return list(rfe_rank(X_tr, y_tr, top_n, prefilter, seed=seed))
     if method == "lasso":

@@ -147,6 +147,7 @@ def test_every_holdout_read_of_a_launch_is_registered_with_its_purpose_and_run(t
     """Registre d'accès (migration 0038). Un lancement à deux horizons, premier run (aucun champion à affronter) :
     - une évaluation finale, pour le gagnant global seulement ;
     - le diagnostic note TOUS les essais de la grille : une lecture par essai ;
+    - le placebo de décalage (ADR 0008) relit le holdout pour le modèle final : une lecture « diagnostic » de plus ;
     - le duel lit le holdout du challenger de l'AUTRE horizon (celui du gagnant global est réutilisé, pas relu)."""
     db_path = str(tmp_path / "patrick.db")
     monkeypatch.setenv("PATRICK_DB_PATH", db_path)
@@ -160,7 +161,7 @@ def test_every_holdout_read_of_a_launch_is_registered_with_its_purpose_and_run(t
     conn = trackdb.connect(db_path)
     try:
         n_trials = conn.execute("SELECT COUNT(*) FROM trial").fetchone()[0]
-        assert _reads_by_purpose(conn) == {"final_eval": 1, "diagnostic": n_trials, "champion_duel_challenger": 1}
+        assert _reads_by_purpose(conn) == {"final_eval": 1, "diagnostic": n_trials + 1, "champion_duel_challenger": 1}
         # Chaque lecture dit quel run elle sert et quelle fenêtre elle a lue.
         rows = conn.execute("SELECT run_id, horizon, holdout_start, holdout_end, n_rows FROM holdout_access").fetchall()
         run_horizon = dict(conn.execute("SELECT run_id, horizon FROM run").fetchall())

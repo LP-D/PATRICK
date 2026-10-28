@@ -449,6 +449,12 @@ def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_conf
         return _synthetic_raw()
 
     monkeypatch.setattr(engine_module, "ingest", fake_ingest)
+    # Les données synthétiques sont presque déterministes : en méthode 2 (jours plats gardés dans l'évaluation) l'AUC du holdout atteint
+    # 0,95, au-dessus du seuil « trop beau pour être vrai » (0,85), et le duel refuserait de couronner le challenger. Ce test vérifie la
+    # reproductibilité et l'élagage du duel, pas le garde-fou : on le désarme ici.
+    from patrick.validation import suspicion
+    monkeypatch.setattr(suspicion, "SUSPECT_AUC", 2.0)
+    monkeypatch.setattr(suspicion, "SUSPECT_F1_DIR", 2.0)
     db_path = str(tmp_path / "patrick_test.db")
     store = DataStore(root=str(tmp_path / "store"))
 

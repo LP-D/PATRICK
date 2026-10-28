@@ -21,6 +21,7 @@ from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.features.alpha_target import run_target
 from patrick.features.sanitize import finite_features, finite_scaled
+from patrick.features.target import non_flat_mask
 from patrick.models import calibration as calibration_lib
 from patrick.models.registry import STACK_ALGO, get_classifier
 from patrick.selection.registry import select_features
@@ -108,13 +109,15 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     reg_al = reg_r.reindex(idx).fillna("NORMAL").values
     sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
 
+    sel = sel & non_flat_mask(target_series)       # méthode 2 : les jours plats ne servent pas à l'entraînement
     y = target_series.values[sel].astype(int)
     X_pool_df = pool[feature_pool].reindex(idx)
     sc = RobustScaler()
     X = finite_scaled(sc.fit_transform(finite_features(X_pool_df.values[sel], "export")), "export")
 
     cols = select_features(config.selection.method, X, y, n_feat, config.features.pool_prefilter,
-                            seed=seed, shap_sample=config.selection.shap_sample)
+                            seed=seed, shap_sample=config.selection.shap_sample,
+                            shap_recent=config.validation.method_version >= 2)
     X_n = X[:, cols]
     feat_names = [feature_pool[c] for c in cols]
 

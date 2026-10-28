@@ -42,7 +42,7 @@ from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.features import alpha_target
 from patrick.features.sanitize import finite_features, finite_scaled
-from patrick.features.target import classify_return, live_class_thresholds
+from patrick.features.target import classify_return, live_class_thresholds, spec_for
 from patrick.models import calibration as calibration_lib
 from patrick.pipeline.engine import build_full_feature_pool
 from patrick.selection.universe_reduction import restrict_to_required_series
@@ -87,7 +87,7 @@ def _alpha_live_thresholds(raw: pd.DataFrame, config: RunConfig, target_col: str
     asset_t = raw[target_col].loc[:t].dropna()
     bench_t = raw[clean_symbol(obj.benchmark)].loc[:t]
     ret = alpha_target.alpha_labels(asset_t, bench_t, horizon, bench_lag=alpha_target.bench_lag(obj))
-    return live_class_thresholds(asset_t, horizon, obj.flat_thr, ret=ret)
+    return live_class_thresholds(asset_t, horizon, obj.flat_thr, ret=ret, spec=spec_for(config))
 
 
 def _realised_outcome(ret: float, row: dict) -> tuple[float, int | None] | None:
@@ -324,7 +324,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                 if alpha_forward is not None:
                     lo, hi = _alpha_live_thresholds(raw, config, target_col, t, horizon)
                 else:
-                    lo, hi = live_class_thresholds(series.loc[:t].dropna(), horizon, config.objective.flat_thr)
+                    lo, hi = live_class_thresholds(series.loc[:t].dropna(), horizon, config.objective.flat_thr,
+                                                   spec=spec_for(config))
             except Exception:
                 logger.exception("live thresholds failed for %s at %s", target_col, t)
                 lo = hi = None

@@ -26,9 +26,9 @@ def test_a_machine_learning_config_hash_never_sees_the_deep_block(monkeypatch):
     payload = _hashed_payload(base, monkeypatch)
     assert b'"deep"' not in payload and b'"models":{"algos"' in payload
     # et la charge utile est exactement celle d'une configuration d'avant : la sortie complète privée de la seule clé « deep »
-    assert payload == base.model_dump_json(exclude={"models": {"deep"},
+    assert payload == base.model_dump_json(exclude={"models": {"deep"}, "validation": {"method_version"},
                                                     "objective": {"benchmark", "benchmark_source", "target_kind",
-                                                                  "leak_guard", "alignment"}}).encode()
+                                                                  "leak_guard", "alignment", "session_rule"}}).encode()
 
 
 def test_a_deep_config_hash_includes_its_settings_and_differs_from_the_ml_one(monkeypatch):

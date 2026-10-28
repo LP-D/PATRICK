@@ -196,6 +196,11 @@ class ValidationConfig(BaseModel):
     embargo_enabled: bool = D.DEFAULT_EMBARGO_ENABLED
     embargo_bars: int | None = D.DEFAULT_EMBARGO_BARS
     min_train_rows: int = 100
+    # Version de la méthode d'évaluation (ADR 0008). 1 = méthode d'origine, valeur de tout run enregistré avant le champ (le live,
+    # l'explication, la reprise et le duel de champions lui rejouent donc ses définitions). 2 = test de Diebold-Mariano sur la
+    # DIRECTION, SHAP classé sur les lignes les plus RÉCENTES, régimes par volatilité réalisée, jours plats retirés de
+    # l'entraînement mais gardés dans l'évaluation. Un run neuf reçoit la version courante dans `run_pipeline`.
+    method_version: int = 1
     # Correction report, D3: fold-size guard that already existed (verified,
     # not added) -- `_FoldContext.prepare`/`_evaluate_holdout` exclude (now
     # with an explicit warning, see `pipeline/engine.py`) any fold below this

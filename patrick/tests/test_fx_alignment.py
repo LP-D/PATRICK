@@ -15,7 +15,11 @@ import pytest
 
 from patrick.config.schema import ObjectiveConfig, RunConfig
 from patrick.data.ingest import _apply_session_lag
-from patrick.data.session_calendar import CURRENT_SESSION_RULE, session_lag_days, session_rule_tag
+from patrick.data.session_calendar import (
+    CURRENT_SESSION_RULE,
+    session_lag_days,
+    session_rule_tag,
+)
 from patrick.pipeline import engine
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion

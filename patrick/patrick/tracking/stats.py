@@ -215,20 +215,25 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
         f"SELECT DISTINCT target FROM run WHERE status = 'done' AND {not_descriptive} ORDER BY target",
         descriptive) if in_family(t)]
     rows = conn.execute(
-        "SELECT run.target, dm_result.dm_stat, dm_result.p_value FROM dm_result "
+        "SELECT run.target, dm_result.dm_stat, dm_result.p_value, dm_result.loss FROM dm_result "
         "JOIN run ON dm_result.run_id = run.run_id "
         "WHERE dm_result.kind = ? AND dm_result.p_value IS NOT NULL AND run.status = 'done' "
         f"AND dm_result.sample = 'holdout' AND {not_descriptive}",
         (kind, *descriptive),
     ).fetchall()
     per_target: dict[str, list[float]] = {}
-    for target, dm_stat, p_value in rows:
+    legacy_loss: dict[str, list[float]] = {}
+    for target, dm_stat, p_value, loss in rows:
         if not in_family(target) or is_nan(p_value):
             continue
         p = float(p_value)
         if one_sided:
             p = p / 2 if (dm_stat is not None and not is_nan(dm_stat) and dm_stat < 0) else 1 - p / 2
-        per_target.setdefault(target, []).append(p)
+        # Méthode 2 (ADR 0008) : le test porte sur la DIRECTION. Une cible qui en a un l'utilise seul ; une cible qui n'a que des p-values
+        # sur les 4 classes (méthode 1, biaisées vers le rejet pour une baseline qui prédit toujours la même classe) les garde, faute de mieux.
+        (per_target if loss == "direction" else legacy_loss).setdefault(target, []).append(p)
+    for target, ps in legacy_loss.items():
+        per_target.setdefault(target, ps)
     observed = {target: (min(ps), len(ps)) for target, ps in per_target.items()}
     biased = {t for (t,) in conn.execute(
         "SELECT DISTINCT run.target FROM dm_result JOIN run ON dm_result.run_id = run.run_id "

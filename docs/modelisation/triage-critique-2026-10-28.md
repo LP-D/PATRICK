@@ -72,7 +72,46 @@ run EURUSD h = 1 stocké (CatBoost, 10 variables), holdout 2025-07-07 -> 2026-10
   significatif à 5 %. La stratégie « Systematic Devises » existe déjà (1 ordre). Les autres classes ne sont pas testées.
 - Le holdout n'est donc pas en cause (jours plats retirés) : c'est l'alignement des dates des séries de change.
 
-## À décider (changent les résultats, rendent les 2 249 runs existants non comparables)
+## Statut en fin de séance du 28/10 (point par point)
 
-1.1 DM directionnel, 1.2 jours plats (seuil en multiple de la volatilité), 1.3 régimes de volatilité, 1.4 SHAP sur les
-dernières lignes. Chacun demande un marqueur de version de méthode (ou une migration) et une régénération du golden CI.
+Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou faux dans le code actuel ; **non fait** = reste à faire (voir « Suite »).
+
+| Point de la liste | Statut |
+|---|---|
+| 1.1 DM sur la direction | **fait** (méthode 2, `dm_result.loss`, ADR 0008) |
+| 1.2 jours plats retirés de l'évaluation | **fait** (méthode 2 : seuil en volatilité, jours plats gardés dans l'évaluation) |
+| 1.3 régimes par niveau de prix | **fait** (méthode 2 : terciles de volatilité, sauf indices de volatilité) |
+| 1.4 SHAP sur les plus anciennes lignes | **fait** (méthode 2 : les plus récentes) |
+| 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict` ; **non fait** : comptage des stratégies dans `trial_registry` |
+| 1.6 PBO sous 3 plis | **périmé** (refusé sous 6 blocs depuis C5) |
+| 1.7 variables de niveau brut, `fracdiff` | non fait |
+| 1.8 `holdout_access` vide | **périmé** (1 077 lignes) ; simulateur non compté : **périmé** (le DSR utilise `count_registered_trials`) ; 98 runs sans essai gagnant, mutants survivants, monde à pertes égales : non fait |
+| 1.8 décalage de séance des actions européennes | **fait** : audité (corrélation 0,08 -> 0,04), règle FRED (ADR 0007) |
+| (hors liste) barres de change du début de journée | **fait** (ADR 0007), cause du signal des devises |
+| 2.1 verrou d'écriture à chaque connexion | **fait** |
+| 2.2 verdict BH sur chaque page | **fait** |
+| 2.3 synthèse : runs lus deux fois | **fait** ; `home_summary` en différé : non fait |
+| 2.4 mémoïsation inopérante pendant un run | **fait** |
+| 2.5 SQLite | `synchronous`, cache, mmap **fait** ; `ANALYZE` / `PRAGMA optimize` non fait |
+| 2.6 JSON de 100 Ko par page, `chart_kit.js` bloquant | non fait |
+| 2.7 polling | onglet caché **fait** ; flux SSE non fait |
+| 3.1 toutes les prédictions du scan écrites (92 % des lignes) | non fait |
+| 3.2 éviction de cache, float32 + zstd | non fait |
+| 3.3 plusieurs workers | non fait |
+| 3.4 reprise au niveau du scan | non fait |
+| 3.5 ablation de Kalman | non fait |
+| 4 (SHAP global, DM sur score continu, journal synchronisé...) | non fait |
+| 5.1 cible volatilité | non fait |
+| 5.2 placebo automatique par run | **fait** (`run_placebo`, verdict `same_day`) ; affichage dans l'interface non fait |
+| 5.3 population d'évaluation explicite | **fait** pour la méthode 2 (le jeu est celui du live) ; affichage côte à côte non fait |
+| 5.4 badge de profil / méthode | non fait |
+| 5.5 calibration par défaut pour les runs du fonds | non fait |
+| 5.6 budget d'essais avant lancement | non fait |
+| 6 ergonomie (38 entrées de navigation, accueil, tableaux) | non fait |
+| 7 design v3 | non fait |
+
+## Suite
+
+Les points « non fait » de vitesse et de stockage (2.3 en différé, 2.6, SSE, 3.1 à 3.5, `ANALYZE`) sont des chantiers indépendants, sans lien avec les
+résultats ; ceux d'interface (6, 7, affichage du placebo, badge) aussi. Les points 1.5 (comptage des stratégies), 1.7 et 5.1 à 5.6 touchent la méthode et
+demandent une décision de conception avant d'être codés.

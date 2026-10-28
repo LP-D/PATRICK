@@ -22,7 +22,7 @@ import pandas as pd
 
 from patrick.data.session_calendar import session_lag_days
 from patrick.data.sources.yfinance_source import clean_symbol
-from patrick.features.target import build_target
+from patrick.features.target import METHOD_1, TargetSpec, build_target, spec_for
 
 DEFAULT_WINDOW = 252
 DEFAULT_MIN_OBS = 60
@@ -104,13 +104,14 @@ def alpha_pair_level(asset: pd.Series, bench_asof: pd.Series, window: int = DEFA
 
 def build_alpha_target(asset: pd.Series, bench_asof: pd.Series, horizon: int, split_idx: int,
                        window: int = DEFAULT_WINDOW, min_obs: int = DEFAULT_MIN_OBS,
-                       flat_thr: float = 0.003, bench_lag: int = 0) -> tuple[pd.Series, pd.Series, dict]:
+                       flat_thr: float = 0.003, bench_lag: int = 0,
+                       spec: TargetSpec = METHOD_1) -> tuple[pd.Series, pd.Series, dict]:
     """Cible 4 classes (comme `features.target.build_target`) sur le rendement
     excédentaire. Seuils et régimes ajustés sur le train du fold uniquement;
     `split_idx` s'exprime sur l'index commun actif/benchmark."""
     a, b = _aligned(asset, bench_asof)
     alpha = alpha_labels(a, b, horizon, window, min_obs, bench_lag)
-    return build_target(a, horizon, split_idx, flat_thr, ret=alpha)
+    return build_target(a, horizon, split_idx, flat_thr, ret=alpha, spec=spec)
 
 
 # --------------------------------------------------------------------------- branchement au pipeline
@@ -128,10 +129,11 @@ def run_target(pool: pd.DataFrame, config, target_col: str, horizon: int,
     """Point d'entrée unique du moteur : (cible, régime, seuils) selon `objective.target_kind`.
     Cible brute : exactement `build_target(pool[target_col], ...)` (comportement historique)."""
     obj = config.objective
+    spec = spec_for(config)
     if obj.target_kind != "alpha":
-        return build_target(pool[target_col], horizon, split_idx, obj.flat_thr)
+        return build_target(pool[target_col], horizon, split_idx, obj.flat_thr, spec=spec)
     return build_alpha_target(pool[target_col], pool[clean_symbol(obj.benchmark)], horizon, split_idx,
-                              flat_thr=obj.flat_thr, bench_lag=bench_lag(obj))
+                              flat_thr=obj.flat_thr, bench_lag=bench_lag(obj), spec=spec)
 
 
 def baseline_price_series(pool: pd.DataFrame, config, target_col: str) -> pd.Series:

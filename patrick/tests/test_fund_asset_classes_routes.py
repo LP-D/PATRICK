@@ -54,7 +54,7 @@ def test_the_class_list_shows_the_strategy_each_class_already_has(client):
     classes = {c["name"]: c for c in body["classes"]}
     assert set(classes) == set(asset_classes.CLASSES) and classes["Future"]["strategy_id"] == mine
     assert classes["Devises"]["strategy_id"] is None and classes["Future"]["groups"] == list(asset_classes.CLASSES["Future"])
-    assert body["defaults"] == {"horizons": [1], "tier": "large", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO",
+    assert body["defaults"] == {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO",
                                 "max_models": None}
 
 
