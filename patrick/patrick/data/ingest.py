@@ -12,7 +12,7 @@ from patrick.cache_manager import LocalCache
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
 from patrick.data import publication_lag
 from patrick.data import quality as quality_module
-from patrick.data.session_calendar import session_lag_days
+from patrick.data.session_calendar import session_lag_days, session_rule_tag
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 from patrick.data.store import DataStore
@@ -36,7 +36,7 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
     for col in out.columns:
         original_symbol = reverse.get(col, col)
         if session_lag_days(original_symbol, "yfinance",
-                             objective.target_symbol, objective.target_source):
+                             objective.target_symbol, objective.target_source, rule=objective.session_rule):
             out[col] = out[col].shift(1)
             lagged.append(original_symbol)
     if lagged:
@@ -151,7 +151,8 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     # F01: a cached frame built under another point-in-time rule (or before
     # F01 -- no version recorded: FRED series on their reference dates) is
     # stale whatever its age, never served.
-    pit = f"{publication_lag.PIT_VERSION}:{universe.fred_point_in_time}"
+    pit = (f"{publication_lag.PIT_VERSION}:{universe.fred_point_in_time}"
+           + session_rule_tag(objective.target_symbol, objective.target_source, objective.session_rule))
     latest = store.latest_entry(cache_key)
     if not force and latest is not None and latest.get("pit_version") == pit:
         df = store.load(cache_key)

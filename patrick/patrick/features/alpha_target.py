@@ -119,7 +119,8 @@ def bench_lag(objective) -> int:
     """Décalage (en barres) appliqué au benchmark par l'ingestion : même règle que `data.ingest._apply_session_lag`."""
     if objective.disable_session_lag:
         return 0
-    return session_lag_days(objective.benchmark, "yfinance", objective.target_symbol, objective.target_source)
+    return session_lag_days(objective.benchmark, "yfinance", objective.target_symbol, objective.target_source,
+                            rule=getattr(objective, "session_rule", 1) or 1)
 
 
 def run_target(pool: pd.DataFrame, config, target_col: str, horizon: int,

@@ -117,15 +117,55 @@ def classify_asset_class(symbol: str, source: str = "yfinance") -> str:
     return "other"
 
 
+# Règle d'alignement des cibles de change (`ObjectiveConfig.session_rule`, ADR 0007). 1 = règle d'origine (barre `=X` supposée
+# clôturer à 22 h UTC), conservée pour tout run enregistré avant le champ. 2 = une barre Yahoo `=X` datée d porte le cours du
+# DÉBUT de la journée d, pas de sa clôture : Brexit (chute de la livre le ven. 24/06/2016) lu à la date du lun. 27/06, choc du
+# franc suisse (jeu. 15/01/2015) lu à la date du ven. 16/01, yen du Brexit à la date du 27/06. Le rendement d'un label `=X`
+# daté d (prix d+1 / prix d) est donc le mouvement réel de la journée d : toute série cotée à sa vraie date (or, S&P 500...)
+# dont la clôture du jour d est « connue » à la ligne d recouvre le label. Placebo EURUSD h=1 : exactitude 70,8 % -> 45,8 %
+# et AUC 0,69 -> 0,51 quand les variables sont retardées d'un jour de plus.
+CURRENT_SESSION_RULE = 2
+
+
+def is_yahoo_fx_pair(symbol: str, source: str = "yfinance") -> bool:
+    return source == "yfinance" and symbol.endswith("=X")
+
+
+def session_rule_tag(target_symbol: str, target_source: str, session_rule: int) -> str:
+    """Suffixe de la version de cache d'un snapshot brut (`data/ingest.py`) : seule une cible de change sous la règle 2 est
+    construite autrement ; toute autre cible garde la version (et donc les snapshots) d'avant."""
+    if session_rule >= 2 and is_yahoo_fx_pair(target_symbol, target_source):
+        return ":fx-start-of-day"
+    return ""
+
+
+# Clôture américaine des séries FRED quotidiennes de marché (VIXCLS, VXNCLS, écarts de crédit ICE BofA, anticipations d'inflation...) :
+# en mode ALFRED la première publication tombe le soir même, donc la valeur du jour d est « connue » à la ligne d.
+FRED_MARKET_CLOSE_UTC_HOUR = 20.0
+
+
+def target_close_hour(target_symbol: str, target_source: str, rule: int = 1) -> float:
+    """Heure UTC (0-24) à laquelle une ligne de cette cible est « décidée » : la clôture de sa classe, ou le début de journée
+    d'une paire `=X` sous la règle 2."""
+    if rule >= 2 and is_yahoo_fx_pair(target_symbol, target_source):
+        return 1.0
+    return CLOSE_UTC_HOUR[classify_asset_class(target_symbol, target_source)]
+
+
 def session_lag_days(feature_symbol: str, feature_source: str,
-                      target_symbol: str, target_source: str) -> int:
+                      target_symbol: str, target_source: str, rule: int = 1) -> int:
     """1 if the feature must be delayed by one bar before being joined to the
     target (its "same-day" close happens after the target's -> not yet known
     at decision time), 0 otherwise. Always 0 if the target itself is not
     yfinance (FRED: its own temporal correction is the subject of Phase 0.5,
-    not this one — see module docstring)."""
+    not this one — see module docstring).
+
+    `rule >= 2`, cible `=X` : une autre paire `=X` suit la même convention de date (aucun retard) ; toute autre série cotée,
+    DXY compris (cours de clôture réel), est retardée d'une barre. Voir `CURRENT_SESSION_RULE`."""
     if target_source != "yfinance":
         return 0
+    if rule >= 2 and is_yahoo_fx_pair(target_symbol, target_source):
+        return 0 if is_yahoo_fx_pair(feature_symbol, feature_source) else 1
     feature_class = classify_asset_class(feature_symbol, feature_source)
     target_class = classify_asset_class(target_symbol, target_source)
     return 1 if CLOSE_UTC_HOUR[feature_class] > CLOSE_UTC_HOUR[target_class] else 0

@@ -184,3 +184,56 @@ def test_decide_marks_new_runs_to_drop_future_rows():
     df = _frame_fred_target()
     spec = alignment.decide(df, _objective("SP500", "fred"), UniverseConfig(yf_tickers=["^GSPC"]), 15)
     assert spec.drop_future is True
+
+
+# --------------------------------------------------------------------------- audit statistique et séries FRED (ADR 0007)
+
+def test_the_audit_threshold_is_five_standard_errors_with_a_floor():
+    assert alignment.audit_threshold(250) == pytest.approx(5 / np.sqrt(250))
+    assert alignment.audit_threshold(4000) == alignment.AUDIT_CORR_FLOOR == 0.10
+    assert alignment.audit_threshold(0) > 0.10
+
+
+def _leaky_column(price: pd.Series, strength: float, seed: int) -> pd.Series:
+    """Série dont la variation du jour contient `strength` fois la variation future de la cible, noyée dans du bruit."""
+    rng = np.random.default_rng(seed)
+    fwd = (price.shift(-1) - price).fillna(0.0)
+    noise = pd.Series(rng.normal(0, fwd.std(), len(price)), index=price.index)
+    return (strength * fwd + noise).cumsum() + 100
+
+
+def test_a_moderate_leak_below_the_old_fixed_threshold_is_now_found():
+    idx, price = _market(n=3000, seed=11)
+    df = pd.DataFrame({"T": price, "LEAKY": _leaky_column(price, 0.2, 1), "NOISE": 50 * _walk(len(idx), 5)}, index=idx)
+    corrs = alignment.leaking_columns(df, "T", ["LEAKY", "NOISE"], threshold=alignment.AUDIT_CORR_THRESHOLD)
+    assert corrs == {}                                                       # l'ancien seuil fixe de 0,30 laissait passer
+    found = alignment.leaking_columns(df, "T", ["LEAKY", "NOISE"])
+    assert "LEAKY" in found and "NOISE" not in found and 0.10 <= abs(found["LEAKY"]) < 0.30
+
+
+def _fred_frame(target: str, n=600):
+    idx, price = _market(n=n, seed=21)
+    col = {"^N225": "IDX_N225", "^GSPC": "IDX_GSPC", "EURUSD=X": "EURUSD=X"}[target]
+    return pd.DataFrame({col: price, "VIX": 20 * _walk(n, 7), "CPI": 250 * _walk(n, 8, 0.001)}, index=idx)
+
+
+@pytest.mark.parametrize("target, delayed", [("^N225", True), ("^FCHI", True), ("EURUSD=X", True), ("^GSPC", False)])
+def test_daily_fred_market_series_are_delayed_for_a_target_that_closes_before_the_us(target, delayed):
+    from patrick.data.sources.yfinance_source import clean_symbol
+
+    idx, price = _market(n=600, seed=21)
+    df = pd.DataFrame({clean_symbol(target): price, "VIX": 20 * _walk(600, 7), "CPI": 250 * _walk(600, 8, 0.001)}, index=idx)
+    uni = UniverseConfig(fred_series={"VIX": "VIXCLS", "CPI": "CPIAUCSL"}, fred_point_in_time="alfred")
+    spec = alignment.decide(df, _objective(target, "yfinance", session_rule=2), uni, 15)
+    assert (spec.column_lags.get("VIX") == 1) is delayed
+    assert "CPI" not in spec.column_lags                                      # mensuelle : déjà décalée par sa publication
+    if delayed:
+        assert "connue après la clôture de la cible" in spec.reasons["VIX"]
+
+
+def test_the_fred_rule_only_applies_to_alfred_first_releases():
+    idx, price = _market(n=600, seed=21)
+    df = pd.DataFrame({"IDX_N225": price, "VIX": 20 * _walk(600, 7)}, index=idx)
+    for mode in ("publication_lag", "reference_date"):
+        uni = UniverseConfig(fred_series={"VIX": "VIXCLS"}, fred_point_in_time=mode)
+        assert "VIX" not in alignment.decide(df, _objective("^N225", "yfinance"), uni, 15).column_lags

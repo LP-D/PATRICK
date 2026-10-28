@@ -7,21 +7,28 @@ PUBLICATION (J+1 pour un taux quotidien) ; le label de la ligne J est donc le mo
 cotées (^GSPC, ^TNX, ^VIX...) étaient jointes à leur date de cotation, sans retard : la feature « rendement de ^GSPC en J »
 reproduisait exactement le label (corrélation 1,000). Le modèle « prédisait » un chiffre déjà observé.
 
-Deux protections, aucune ne dépend de la performance :
+Trois protections, aucune ne dépend de la performance :
 
 1. **Retard de publication** : pour une cible FRED, toute série cotée est retardée du délai de publication de la cible
    (`publication_lag.publication_delay_bars`) : à la ligne J, le marché n'est connu que jusqu'à la dernière date couverte
    par la dernière valeur publiée de la cible.
-2. **Audit empirique** : toute série cotée dont le rendement du jour est corrélé (Spearman) au rendement futur de la cible
-   au-delà de `AUDIT_CORR_THRESHOLD` est retardée d'une barre (puis retirée si cela ne suffit pas). Aucun actif ne prédit
-   le lendemain d'un autre avec une corrélation de rang de 0,30 : c'est un horodatage décalé du fournisseur (cas observé :
-   DX-Y.NYB daté J contient le mouvement d'EURUSD=X daté J+1, corrélation -0,40). Calculé sur les lignes AVANT le holdout
-   uniquement, pour que le holdout ne serve jamais à décider d'un traitement.
+2. **Audit empirique** : toute série dont le rendement du jour est corrélé (Spearman) au rendement futur de la cible
+   au-delà de `audit_threshold(n)` est retardée d'une barre (puis retirée si cela ne suffit pas). Aucun actif ne prédit
+   le lendemain d'un autre avec une telle corrélation de rang : c'est un horodatage décalé (cas observé : DX-Y.NYB daté J contient
+   le mouvement d'EURUSD=X daté J+1, corrélation -0,40). Calculé sur les lignes AVANT le holdout uniquement, pour que le holdout
+   ne serve jamais à décider d'un traitement.
+3. **Règle des séances** (`data/session_calendar.py`, appliquée à l'ingestion) pour les séries Yahoo.
+
+Version 2 de l'audit (ADR 0007) : le seuil fixe de 0,30 laissait passer les fuites plus faibles (devises : or, argent, S&P 500 à 0,17-0,30 ;
+actions asiatiques : VIX, VXN, écarts de crédit FRED à 0,20-0,30) ; le seuil est maintenant statistique, `max(0,10 ; 5 / racine(n))`
+(cinq écarts-types d'un bruit de corrélation de rang, soit 0,08 pour 4 000 lignes), et l'audit couvre aussi les séries FRED d'une cible cotée.
 
 La décision (`AlignmentSpec`) est écrite dans la config du run : la prédiction live, l'explication et la reprise rejouent
 les mêmes décalages. Un run antérieur (`version == 0`) n'en a aucun et garde exactement ses entrées d'origine.
 """
 from __future__ import annotations
+
+import math
 
 import numpy as np
 import pandas as pd
@@ -29,10 +36,14 @@ import pandas as pd
 from patrick.clock import utc_today
 from patrick.config.schema import AlignmentSpec, ObjectiveConfig, UniverseConfig
 from patrick.data import publication_lag
+from patrick.data.freshness import fred_periodicity
+from patrick.data.session_calendar import FRED_MARKET_CLOSE_UTC_HOUR, target_close_hour
 from patrick.data.sources.yfinance_source import clean_symbol
 
-ALIGNMENT_VERSION = 1
-AUDIT_CORR_THRESHOLD = 0.30
+ALIGNMENT_VERSION = 2
+AUDIT_CORR_THRESHOLD = 0.30        # seuil fixe de la version 1, conservé pour mémoire et pour les appels qui le passent
+AUDIT_CORR_FLOOR = 0.10
+AUDIT_Z = 5.0
 AUDIT_MIN_ROWS = 250
 AUDIT_MIN_DISTINCT = 20
 MAX_EXTRA_LAG = 2
@@ -70,11 +81,18 @@ def _forward_change(s: pd.Series) -> pd.Series:
     return s.shift(-1) - s
 
 
+def audit_threshold(n_pairs: int) -> float:
+    """Corrélation de rang au-delà de laquelle une série est jugée recouvrir le label : cinq écarts-types du bruit
+    (1 / racine(n)), jamais moins de `AUDIT_CORR_FLOOR`. 0,30 pour 250 paires (séries en escalier), 0,10 dès 2 500."""
+    return max(AUDIT_CORR_FLOOR, AUDIT_Z / math.sqrt(max(int(n_pairs), 1)))
+
+
 def leaking_columns(df: pd.DataFrame, target_col: str, columns: list[str], cutoff: pd.Timestamp | None = None,
-                    threshold: float = AUDIT_CORR_THRESHOLD) -> dict[str, float]:
+                    threshold: float | None = None) -> dict[str, float]:
     """{colonne: corrélation de rang} des séries de `columns` dont la variation du jour (colonne en t moins en t-1)
-    est corrélée à la variation FUTURE de la cible (cible en t+1 moins en t) au-delà de `threshold`.
-    Premières différences : valables aussi pour une série qui change de signe (spread de taux)."""
+    est corrélée à la variation FUTURE de la cible (cible en t+1 moins en t) au-delà de `threshold` (`None` : le seuil
+    statistique `audit_threshold(n)` de chaque série). Premières différences : valables aussi pour une série qui change
+    de signe (spread de taux)."""
     if target_col not in df.columns:
         return {}
     work = df if cutoff is None else df.loc[:cutoff]
@@ -91,7 +109,8 @@ def leaking_columns(df: pd.DataFrame, target_col: str, columns: list[str], cutof
         if len(pair) < AUDIT_MIN_ROWS:
             continue
         corr = pair["fwd"].rank().corr(pair["x"].rank())
-        if corr is not None and np.isfinite(corr) and abs(corr) >= threshold:
+        limit = audit_threshold(len(pair)) if threshold is None else threshold
+        if corr is not None and np.isfinite(corr) and abs(corr) >= limit:
             out[col] = float(corr)
     return out
 
@@ -100,6 +119,12 @@ def market_columns(raw: pd.DataFrame, universe: UniverseConfig, protected: set[s
     """Colonnes de séries cotées (yfinance) présentes dans `raw`, hors cible et benchmark."""
     cols = [clean_symbol(t) for t in universe.yf_tickers]
     return [c for c in dict.fromkeys(cols) if c in raw.columns and c not in protected]
+
+
+def fred_columns(raw: pd.DataFrame, universe: UniverseConfig, protected: set[str]) -> list[str]:
+    """Colonnes FRED de `universe` présentes dans `raw`, hors cible : auditées elles aussi pour une cible cotée (un VIX ou un écart
+    de crédit FRED daté du jour recouvre le label d'une cible qui clôture avant les États-Unis)."""
+    return [c for c in dict.fromkeys(universe.fred_series) if c in raw.columns and c not in protected]
 
 
 def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConfig,
@@ -112,6 +137,7 @@ def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConf
     if objective.target_kind == "alpha" and objective.benchmark:
         protected.add(clean_symbol(objective.benchmark))   # le benchmark garde son calendrier : `features/alpha_target.py`
     market = market_columns(raw, universe, protected)
+    audited = market + (fred_columns(raw, universe, protected) if objective.target_source == "yfinance" else [])
     base: dict[str, int] = {}
     reasons: dict[str, list[str]] = {}
 
@@ -122,6 +148,18 @@ def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConf
                 base[col] = delay
                 reasons[col] = [f"cible FRED publiée avec {delay} barre(s) de retard : le marché est connu jusque-là"]
 
+    if objective.target_source == "yfinance" and universe.fred_point_in_time == "alfred":
+        # Une cible qui clôture avant les États-Unis (Asie, Europe, changes) : la valeur FRED quotidienne du jour d, publiée le
+        # soir même par ALFRED, est connue APRÈS sa décision. Les écarts de crédit n'ont que 3 ans d'historique : l'audit
+        # statistique n'a pas la puissance pour les voir, d'où cette règle structurelle (Asie : corrélation -0,20 à -0,30).
+        hour = target_close_hour(objective.target_symbol, objective.target_source, getattr(objective, "session_rule", 1))
+        if hour < FRED_MARKET_CLOSE_UTC_HOUR:
+            for col in fred_columns(raw, universe, protected):
+                if fred_periodicity(universe.fred_series.get(col, col)) == "daily":
+                    base[col] = base.get(col, 0) + 1
+                    reasons.setdefault(col, []).append(
+                        f"série FRED quotidienne du jour (ALFRED) connue après la clôture de la cible ({hour:g} h UTC)")
+
     cutoff = None
     if len(raw) and holdout_months > 0:
         cutoff = pd.Timestamp(raw.index.max()) - pd.DateOffset(months=holdout_months)
@@ -130,7 +168,7 @@ def decide(raw: pd.DataFrame, objective: ObjectiveConfig, universe: UniverseConf
     for _ in range(MAX_EXTRA_LAG + 1):
         lags = {c: base.get(c, 0) + extra.get(c, 0) for c in set(base) | set(extra)}
         current = apply_spec(raw, AlignmentSpec(column_lags=lags, dropped=dropped))
-        flagged = leaking_columns(current, target_col, [c for c in market if c not in dropped], cutoff)
+        flagged = leaking_columns(current, target_col, [c for c in audited if c not in dropped], cutoff)
         if not flagged:
             break
         for col, corr in flagged.items():

@@ -54,7 +54,7 @@ from patrick.config.schema import RunConfig
 from patrick.data import alignment
 from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
-from patrick.data.session_calendar import classify_asset_class
+from patrick.data.session_calendar import CURRENT_SESSION_RULE, classify_asset_class, session_rule_tag
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
 from patrick.features import (
@@ -1153,6 +1153,10 @@ def _config_hash(config: RunConfig) -> str:
     align = config.objective.alignment
     if not (align.column_lags or align.dropped or align.drop_future):
         obj_exclude |= {"leak_guard", "alignment"}
+    # Idem pour la règle d'alignement des séances : seule une cible de change sous la règle 2 est construite autrement,
+    # toute autre cible (et tout run d'avant le champ) garde son hachage.
+    if not session_rule_tag(config.objective.target_symbol, config.objective.target_source, config.objective.session_rule):
+        obj_exclude.add("session_rule")
     exclude: dict = {"objective": obj_exclude} if obj_exclude else {}
     # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
     if config.models.deep is None:
@@ -2164,6 +2168,10 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         raise ValueError("La présélection progressive nécessite au moins deux folds walk-forward.")
     store = store or DataStore()
     seed = config.output.seed
+    if snapshot_id is None:
+        # Run neuf (une reprise rejoue la règle de son enregistrement) : règle d'alignement des séances d'aujourd'hui,
+        # écrite dans la config pour que le live, l'explication et la reprise la rejouent (ADR 0007).
+        config.objective.session_rule = CURRENT_SESSION_RULE
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)

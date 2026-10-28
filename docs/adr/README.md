@@ -12,3 +12,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0004](0004-cpcv-interactions-par-combinaison.md) | CPCV : formules d'interaction découvertes par combinaison | 2026-10-19 | Acceptée |
 | [0005](0005-registre-d-acces-au-holdout.md) | Registre d'accès au holdout terminal | 2026-10-19 | Acceptée |
 | [0006](0006-regle-une-erreur-type-par-defaut.md) | Règle de parcimonie « une erreur-type » activée par défaut | 2026-10-20 | Acceptée |
+| [0007](0007-alignement-des-devises-et-audit-statistique.md) | Alignement des cibles de change et audit statistique des fuites de date | 2026-10-28 | Acceptée |

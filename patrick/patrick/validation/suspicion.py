@@ -33,6 +33,25 @@ def f1_suspect(f1_dir) -> bool:
     return v is not None and v >= SUSPECT_F1_DIR
 
 
+ALIGNMENT_LABEL = "alignement des devises"
+
+
+def alignment_reason(target: str | None, config: dict | None) -> str | None:
+    """Motif si ce run est une cible de change `=X` entraînée avant la règle d'alignement 2 (ADR 0007) : ses variables du jour
+    (or, S&P 500...) recouvraient le label, donc son exactitude est un « nowcast » non négociable, quel que soit son score.
+    Le run reste lisible (rien n'est supprimé) mais n'est ni champion crédible ni candidat du fonds."""
+    from patrick.config.target_label import split_run_label
+    from patrick.data.session_calendar import is_yahoo_fx_pair
+
+    if not isinstance(target, str) or not is_yahoo_fx_pair(split_run_label(target)[0]):
+        return None
+    objective = (config or {}).get("objective") if isinstance(config, dict) else None
+    rule = objective.get("session_rule", 1) if isinstance(objective, dict) else 1
+    if isinstance(rule, int) and rule >= 2:
+        return None
+    return f"{ALIGNMENT_LABEL} : barres de change du début de journée (règle 1)"
+
+
 def suspect_reason(metrics: dict | None) -> str | None:
     """Motif lisible si `metrics` (F1_dir, AUC_ovr_4cls, Acc_dir...) dépasse un seuil de plausibilité, sinon None."""
     if not metrics:

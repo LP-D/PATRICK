@@ -385,7 +385,8 @@ def _suspect_reason(conn: sqlite3.Connection, trial_id: int) -> str | None:
     if run is None:
         return None
     scores = trackdb.batch_best_metrics(conn, [run[0]]).get(run[0], {})
-    return suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
+    return (suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
+            or trackdb.alignment_reasons(conn, [run[0]]).get(run[0]))
 
 
 def _check_alpha_rule(cfg: dict, model: dict) -> None:
@@ -516,6 +517,7 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
         dm_p.update(dict(conn.execute(f"SELECT run_id, p_value FROM dm_result WHERE kind = 'class_specific' "
                                       f"AND run_id IN ({marks})", chunk).fetchall()))
     groups = {sym: group for group, items in UX.all_target_groups().items() for sym, _ in items}
+    legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     out = []
     for trial_id, run_id, algo, target, horizon, started_at, is_champion in cells:
         by_split = segments.get(trial_id)
@@ -534,7 +536,8 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
                     "auc": hold.get("AUC_ovr_4cls", test.get("AUC_ovr_4cls")),
                     "f1_dir": hold.get("F1_dir", test.get("F1_dir")),
                     # un score impossible = fuite de données : un modèle suspect ne se trade jamais
-                    "suspect": suspicion.suspect_reason(hold) or suspicion.suspect_reason(test)})
+                    "suspect": (suspicion.suspect_reason(hold) or suspicion.suspect_reason(test)
+                                or legacy_alignment.get(run_id))})
     return out
 
 

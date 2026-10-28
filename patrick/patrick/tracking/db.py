@@ -1024,6 +1024,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     out = []
     for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
         name, scheme, family = None, "walkforward", "ml"
+        cfg = {}
         try:
             cfg = json.loads(config_json) if config_json else {}
             name = cfg.get("name")
@@ -1038,7 +1039,8 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "run_id": run_id, "target": html.escape(target) if isinstance(target, str) else target,
             "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
             "family": family,
-            "suspect": suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m),
+            "suspect": (suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m)
+                        or suspicion.alignment_reason(target, cfg)),
             "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
             "holdout_f1_dir": holdout_m.get("F1_dir"),
             "horizon": horizon,
@@ -1051,6 +1053,25 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
             "class_balance": balance_by_run.get(run_id),
         })
+    return out
+
+
+def alignment_reasons(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, str]:
+    """`{run_id: motif}` des runs de change entraînés avant la règle d'alignement 2 (`validation/suspicion.py::alignment_reason`).
+    Seuls les runs `=X` parmi `run_ids` voient leur config relue."""
+    out: dict[str, str] = {}
+    for start in range(0, len(run_ids), 500):
+        chunk = run_ids[start:start + 500]
+        marks = ",".join("?" for _ in chunk)
+        for run_id, target, config_json in conn.execute(
+                f"SELECT run_id, target, config_json FROM run WHERE run_id IN ({marks}) AND target LIKE '%=X%'", chunk):
+            try:
+                cfg = json.loads(config_json) if config_json else {}
+            except (TypeError, ValueError):
+                cfg = {}
+            reason = suspicion.alignment_reason(target, cfg)
+            if reason:
+                out[run_id] = reason
     return out
 
 

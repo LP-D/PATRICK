@@ -36,6 +36,10 @@ class ObjectiveConfig(BaseModel):
     # disable it and measure its impact. False (default) = unchanged production
     # behavior (fix always applied) for every existing run.
     disable_session_lag: bool = False
+    # Règle d'alignement des séances (`data/session_calendar.py::CURRENT_SESSION_RULE`, ADR 0007). 1 = règle d'origine, valeur
+    # de tout run enregistré avant le champ (le live, l'explication et la reprise rejouent donc ses entrées d'origine) ;
+    # 2 = barres de change au début de journée. Un run neuf reçoit la règle courante dans `run_pipeline`.
+    session_rule: int = 1
     # Garde anti-fuite (`data/alignment.py`) : décale les séries de marché dont la date recouvre déjà la fenêtre du label
     # (cible FRED publiée avec retard, séries cotées dans un autre fuseau). `False` = comportement antérieur, réservé aux
     # audits de dégradation. La décision prise est écrite dans `alignment` pour que le run reste reproductible.

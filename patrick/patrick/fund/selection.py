@@ -35,6 +35,7 @@ LABELS = {
     "alpha": "modèle d'alpha (paire couverte : non gérée par le pilote)",
     "descriptive": "horizon descriptif (pas un signal de portefeuille)",
     "suspect": "score suspect (fuite de données probable)",
+    "alignment": "devise entraînée avant la correction d'alignement (signal du jour recouvrant le label)",
     "no_live": "aucun signal live",
     "stale": "signal live trop ancien",
     "bh": "cible écartée par la correction pour tests multiples (Benjamini-Hochberg)",
@@ -156,6 +157,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     for chunk in _chunks(run_ids):
         metrics.update(trackdb.batch_best_metrics(conn, chunk))
     latest_live = _latest_live(conn, [c[3] for c in champions])
+    legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     dm = _dm_results(conn, run_ids)
     fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier == "strict" else {}
     fred = _fred_symbols()
@@ -175,6 +177,8 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
             reject(target, horizon, "alpha")
         elif horizon in D.DESCRIPTIVE_HORIZONS:
             reject(target, horizon, "descriptive")
+        elif run_id in legacy_alignment:
+            reject(target, horizon, "alignment", legacy_alignment[run_id])
         else:
             scores = metrics.get(run_id, {})
             suspect = suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
