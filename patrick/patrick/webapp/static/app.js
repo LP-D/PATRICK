@@ -333,8 +333,14 @@
     const progressStallThresholdMs = 10 * 60 * 1000;
     let progressWatch = { runId: null, done: null, phase: null, status: null, since: 0, warned: false };
 
+    // Un onglet caché n'interroge pas le serveur (chaque appel ouvre une connexion à la base) ; il se remet à jour dès
+    // qu'on y revient.
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && trackedRunId && detailPollTimer) detailPoll();
+    });
+
     async function detailPoll() {
-        if (!trackedRunId) return;
+        if (!trackedRunId || document.hidden) return;
         let data;
         try {
             const res = await fetch(`/runs/${trackedRunId}/status`);

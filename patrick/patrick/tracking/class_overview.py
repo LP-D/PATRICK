@@ -17,13 +17,14 @@ from patrick.tracking import data_health
 from patrick.tracking import db as trackdb
 
 
-def model_stats_by_asset(conn: sqlite3.Connection) -> dict[str, dict]:
-    """`{actif: {directional: {...}, alpha: {...}, champions: [horizons], suspects: n}}` sur tous les runs non archivés."""
+def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = None) -> dict[str, dict]:
+    """`{actif: {directional: {...}, alpha: {...}, champions: [horizons], suspects: n}}` sur tous les runs non archivés.
+    `runs` : `list_all_runs` déjà lu par l'appelant (chaque lecture parse le `config_json` de tous les runs)."""
     champions: dict[str, set[int]] = {}
     for target, horizon in conn.execute("SELECT target, horizon FROM champion"):
         champions.setdefault(split_run_label(target)[0], set()).add(int(horizon))
     stats: dict[str, dict] = {}
-    for run in trackdb.list_all_runs(conn):
+    for run in (trackdb.list_all_runs(conn) if runs is None else runs):
         asset, kind, _bench = split_run_label(html.unescape(run["target"] or ""))
         entry = stats.setdefault(asset, {
             "directional": {"n": 0, "n_done": 0, "best_auc": None, "best_f1": None, "last": None},
@@ -82,9 +83,9 @@ def class_page(conn: sqlite3.Connection, class_key: str, all_groups: dict[str, l
 
 
 def all_classes_summary(conn: sqlite3.Connection, all_groups: dict[str, list[tuple[str, str]]], min_years: int,
-                        store: DataStore | None = None) -> list[dict]:
+                        store: DataStore | None = None, runs: list[dict] | None = None) -> list[dict]:
     """Une ligne par classe d'actifs (compteurs de `class_page`) : le tableau « par classe » de la synthèse."""
-    stats = model_stats_by_asset(conn)
+    stats = model_stats_by_asset(conn, runs)
     out = []
     for cls in asset_classes.ASSET_CLASSES:
         page = class_page(conn, cls.key, all_groups, min_years, store, stats=stats)

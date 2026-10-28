@@ -65,8 +65,30 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     # a manual cleanup, a backup) must delay a multi-hour run, not kill it
     # with "database is locked" (2026-09-27: GSPC_62 and HO_PA_1 lost that way).
     conn.execute("PRAGMA busy_timeout = 30000")
-    migrate(conn)
+    # WAL + NORMAL: a power cut can lose the last commits but never corrupts the file, and the scan no longer pays an
+    # fsync per commit. 64 MB of page cache (2 MB by default) and a 256 MB memory map for a ~30 GB database.
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -65536")
+    conn.execute("PRAGMA mmap_size = 268435456")
+    if not _schema_is_current(conn):
+        migrate(conn)
     return conn
+
+
+def _latest_migration_version() -> int:
+    return max((int(script.name.split("_", 1)[0]) for script in MIGRATIONS_DIR.glob("*.sql")), default=0)
+
+
+def _schema_is_current(conn: sqlite3.Connection) -> bool:
+    """True when `schema_version` already holds the newest migration. A plain read in WAL: it never takes the write
+    lock, whereas `migrate()` opens with `BEGIN IMMEDIATE` -- every page of the web app (79 `connect()` calls) used to
+    queue behind a running worker's write transaction for up to `busy_timeout`. `migrate()` itself is unchanged and
+    still serialises the connections that really have something to apply."""
+    try:
+        current = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_version").fetchone()[0]
+    except sqlite3.OperationalError:               # no schema_version table yet: a brand new database
+        return False
+    return current >= _latest_migration_version()
 
 
 def _split_statements(sql: str) -> list[str]:

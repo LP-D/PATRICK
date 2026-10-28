@@ -1,7 +1,7 @@
 """Mémoïsation des vues lourdes de la base de suivi (synthèse, tableau des prédictions).
 
 Sur la vraie base (27 Go, ~24 millions de prédictions), la synthèse demande ~6 s et le tableau des prédictions ~3 s, à chaque
-chargement de page. Leur résultat ne change que quand un run se termine, qu'un champion est promu ou qu'une prédiction est
+chargement de page. Leur résultat ne change que quand un run se termine, qu'un champion est promu ou qu'une prédiction live est
 écrite : `fingerprint` capte exactement ces événements en quelques lectures O(1), et le résultat calculé est réutilisé tant
 que l'empreinte est la même (et pendant `ttl` secondes au plus).
 
@@ -26,11 +26,14 @@ _cache: dict[Hashable, tuple[float, tuple, Any]] = {}
 
 
 def fingerprint(conn: sqlite3.Connection) -> tuple:
-    """Empreinte de l'état de la base qui détermine les vues : dernière prédiction écrite, runs (nombre, dernière fin),
-    champions (nombre, dernière promotion), derniers tests de Diebold-Mariano, jobs en cours."""
+    """Empreinte de l'état de la base qui détermine les vues : prédictions live (nombre, dernière date), runs (nombre,
+    dernière fin), champions (nombre, dernière promotion), derniers tests de Diebold-Mariano, jobs en cours.
+
+    Les prédictions des plis et du holdout ne comptent pas : pendant un run le scan en écrit en continu, ce qui rendait
+    la mémoïsation inopérante dès qu'un worker tournait ; une fois le run fini, `run.finished_at` bouge et suffit."""
     one = conn.execute
     return (
-        one("SELECT MAX(rowid) FROM prediction").fetchone()[0],
+        tuple(one("SELECT COUNT(*), MAX(ts) FROM prediction WHERE split = 'live'").fetchone()),
         tuple(one("SELECT COUNT(*), MAX(finished_at) FROM run").fetchone()),
         tuple(one("SELECT COUNT(*), MAX(promoted_at) FROM champion").fetchone()),
         one("SELECT MAX(computed_at) FROM dm_result").fetchone()[0],

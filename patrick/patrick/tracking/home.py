@@ -42,7 +42,7 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
     failures = data_health.failures(conn)
     since = (utc_now() - timedelta(days=RECENT_DAYS)).strftime("%Y-%m-%d")
     recent_failures = [f for f in failures if (f["at"] or "") >= since and f["kind"] not in ("stopped",)]
-    classes = class_overview.all_classes_summary(conn, groups, min_years, store)
+    classes = class_overview.all_classes_summary(conn, groups, min_years, store, runs=runs)
     n_champions = conn.execute("SELECT COUNT(*) FROM champion").fetchone()[0]
     return {
         "n_done": len(done), "n_sane": len(sane), "n_suspect": len(done) - len(sane), "n_champions": n_champions,

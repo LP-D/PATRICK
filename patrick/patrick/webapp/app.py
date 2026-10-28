@@ -339,7 +339,9 @@ def _metric_labels(t) -> dict:
     return out
 
 
-def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
+def _i18n_context(request: Request, fdr_alpha: float = 0.10, with_verdict: bool = False) -> dict:
+    """`with_verdict`: only the synthesis page reads `verdict` -- computing it (a full FDR pass, a `COUNT(*)` on `trial` and a
+    second connection) for every other page cost time and a database connection for nothing."""
     lang = i18n.get_lang(request)
     t = i18n.translator(lang)
     return {
@@ -353,7 +355,7 @@ def _i18n_context(request: Request, fdr_alpha: float = 0.10) -> dict:
         # the template falls back to the term itself.
         "glossary_labels": {k: t(v) for k, v in TERM_LABEL_KEYS.items()},
         "i18n_js": i18n.js_strings(lang, request.url.path),
-        "verdict": _station_verdict(fdr_alpha),
+        "verdict": _station_verdict(fdr_alpha) if with_verdict else None,
     }
 
 
@@ -685,7 +687,8 @@ def synthesis_page(request: Request, fdr_alpha: float = 0.10):
         conn.close()
     return templates.TemplateResponse(
         request, "synthesis.html",
-        {"coverage": coverage, "home": home, "fdr_alpha": fdr_alpha, **_i18n_context(request, fdr_alpha=fdr_alpha)},
+        {"coverage": coverage, "home": home, "fdr_alpha": fdr_alpha,
+         **_i18n_context(request, fdr_alpha=fdr_alpha, with_verdict=True)},
     )
 
 
