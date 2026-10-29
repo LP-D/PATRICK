@@ -57,6 +57,15 @@ Mesures du 29/10/2026 sur la vraie base (31,4 Go, aucun worker vivant) :
   `features.vol_models` change, sans `kalman`) sur au moins une dizaine de cibles, avec comparaison des F1_dir / AUC de holdout et des durées. À lancer depuis un
   PowerShell de Léon, pas depuis l'application.
 
+## Résultat mesuré le 29/10/2026 (exécution sur la vraie base, worker et serveur arrêtés)
+
+- `archive-predictions` : 2 883 runs, **15 713 698 lignes** archivées en Parquet (**161 Mo** sur D:), toutes supprimées de la base (18,9 M de lignes `test` restent : le meilleur essai et le top-5 de chaque run).
+- `compress-caches` : 219 199 entrées, **15,65 Go** gagnés (estimation avant : ~26 Go -> ~11 Go).
+- `reindex` : `idx_pred_live` créé, `idx_pred_path` et `idx_pred_split` supprimés ; `analyze` : `sqlite_stat1` créé (55 lignes).
+- `vacuum` : base **31,37 Go -> 12,95 Go** (-59 %), 0 page libre. La commande affichait « 44,42 Go » parce qu'elle lisait la taille avant la troncature du journal WAL
+  (VACUUM écrit la nouvelle base dans le journal) ; corrigé (`PRAGMA wal_checkpoint(TRUNCATE)` avant la mesure).
+- Contrôle après coup, en lecture seule : 219 199 entrées relues à l'identique après compression, empreinte de cache des prédictions live en 17 ms.
+
 ## Conséquences
 
 - Gain attendu sur la base : `vol_model_cache` ~26 Go -> ~11 Go (compression), 15,7 M de lignes de prédiction en moins (~45 % des lignes de scan) ; l'espace

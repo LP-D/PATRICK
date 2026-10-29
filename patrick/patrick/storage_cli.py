@@ -168,6 +168,9 @@ def vacuum_cmd(yes: bool = typer.Option(False, "--yes", help="Confirme (réécri
     conn = _connect_idle()
     try:
         conn.execute("VACUUM")
+        # En mode WAL, VACUUM écrit d'abord la nouvelle base dans le journal : sans cette troncature, la taille lue juste après
+        # compte encore le journal (44 Go affichés le 29/10 pour une base qui n'en faisait plus que 13).
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     finally:
         conn.close()
-    typer.echo(f"base après VACUUM : {_gb(_db_files(db))}")
+    typer.echo(f"base après VACUUM : {_gb(_db_files(db))} (avant : {_gb(size)})")

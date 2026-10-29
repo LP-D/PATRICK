@@ -283,3 +283,17 @@ def test_float32_mode_gives_the_same_values_on_a_miss_and_on_a_hit_and_halves_th
     assert compact_size < plain_size * 0.65
     assert pool_cache.cache_key("pool", raw, {"k": 1}) != (monkeypatch.setenv("PATRICK_FEATURE_CACHE_FLOAT32", "0")
                                                           or pool_cache.cache_key("pool", raw, {"k": 1}))
+
+
+def test_vacuum_reports_the_size_after_the_journal_is_truncated(tmp_path, monkeypatch):
+    db = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", db)
+    conn = trackdb.connect(db)
+    _seed(conn)
+    conn.close()
+    runner = CliRunner()
+    assert "Relance avec --yes" in runner.invoke(storage_app, ["vacuum"]).output          # sans --yes : rien n'est réécrit
+    result = runner.invoke(storage_app, ["vacuum", "--yes"])
+    assert result.exit_code == 0 and "base après VACUUM" in result.output and "avant" in result.output
+    wal = tmp_path / "patrick.db-wal"
+    assert not wal.exists() or wal.stat().st_size == 0                                     # le journal ne gonfle pas la taille affichée

@@ -92,10 +92,10 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 2.2 verdict BH sur chaque page | **fait** |
 | 2.3 synthèse : runs lus deux fois | **fait** ; `home_summary` en différé : non fait |
 | 2.4 mémoïsation inopérante pendant un run | **fait** |
-| 2.5 SQLite | `synchronous`, cache, mmap **fait** ; `ANALYZE` / `PRAGMA optimize` : **fait comme commande** (`patrick storage analyze`, worker arrêté), pas encore lancée |
+| 2.5 SQLite | `synchronous`, cache, mmap **fait** ; `ANALYZE` : **fait** le 29/10 (`sqlite_stat1`, 55 lignes) |
 | 2.6 JSON de 100 Ko par page, `chart_kit.js` bloquant | non fait |
 | 2.7 polling | onglet caché **fait** ; flux SSE non fait |
-| 3.1 toutes les prédictions du scan écrites | **fait** (ADR 0009) : archivage Parquet automatique en fin de job + `patrick storage archive-predictions` ; index : `reindex`. Mesure : 45 % des lignes de scan partent avec le top-5, pas 92 % (le meilleur essai en garde beaucoup, surtout en CPCV) |
+| 3.1 toutes les prédictions du scan écrites | **fait et exécuté le 29/10** : 15,7 M de lignes archivées (161 Mo de Parquet), base 31,4 Go -> 12,95 Go après compression et VACUUM (ADR 0009) : archivage Parquet automatique en fin de job + `patrick storage archive-predictions` ; index : `reindex`. Mesure : 45 % des lignes de scan partent avec le top-5, pas 92 % (le meilleur essai en garde beaucoup, surtout en CPCV) |
 | 3.2 éviction de cache, float32 + zstd | **fait** : plafond LRU du cache de variables (150 Go), `vol_model_cache` comprimé (zlib, ÷2,3) et évinçable par âge ; float32 en option (zstd seul ne gagne que 6 % sur des flottants continus). Vraie cible de taille : `vol_model_cache` = 26 Go sur 31, pas les prédictions |
 | 3.3 plusieurs workers | **non fait, justifié** : la machine (6 coeurs) est déjà saturée par `scan_jobs`/`parametric_jobs` (4 chacun) et le protocole de file suppose un seul worker (ADR 0009) |
 | 3.4 reprise au niveau du scan | non fait (conception à faire : cache de résultats de fit qui conserve les prédictions des essais de tête, ADR 0009) ; les sélections SHAP sont déjà en cache |
