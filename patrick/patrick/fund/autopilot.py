@@ -91,6 +91,15 @@ def configure(conn: sqlite3.Connection, strategy_id: str, raw: dict | None) -> d
     return stored
 
 
+def overlay(conn: sqlite3.Connection, strategy_id: str, raw: dict | None) -> dict:
+    """Les réglages `raw` posés sur ceux déjà enregistrés de la stratégie : ce qu'un formulaire ne montre pas (le périmètre :
+    groupes et horizons d'une stratégie par classe d'actifs) est conservé, au lieu de revenir à « tout l'univers »."""
+    if raw is not None and not isinstance(raw, dict):
+        return raw                                                # `Settings.from_dict` refuse ce qui n'est pas un objet
+    stored = (store.get_autopilot(conn, strategy_id) or {}).get("settings") or {}
+    return {**stored, **(raw or {})}
+
+
 def _enabled(conn: sqlite3.Connection, strategy_id: str) -> tuple[dict, dict, Settings]:
     strategy = store.get_strategy(conn, strategy_id)
     if strategy is None:

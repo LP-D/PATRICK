@@ -384,8 +384,13 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.put("/api/fund/strategies/{strategy_id}/autopilot")
     async def api_autopilot_configure(request: Request, strategy_id: str):
-        """Active le pilote avec ces réglages (les absents prennent leur défaut)."""
-        return await run_in_threadpool(_call, autopilot.configure, strategy_id, await _json_body(request))
+        """Active le pilote avec ces réglages posés sur ceux déjà enregistrés (le périmètre qu'un formulaire ne montre pas est conservé ;
+        sur une stratégie sans pilote, les absents prennent leur défaut)."""
+        body = await _json_body(request)
+
+        def run(conn):
+            return autopilot.configure(conn, strategy_id, autopilot.overlay(conn, strategy_id, body))
+        return await run_in_threadpool(_call, run)
 
     @app.delete("/api/fund/strategies/{strategy_id}/autopilot")
     def api_autopilot_disable(strategy_id: str):
@@ -405,7 +410,7 @@ def register(app: FastAPI, templates, context) -> None:
         body = await _json_body(request)
 
         def run(conn):
-            settings = autopilot.Settings.from_dict(body) if body else None
+            settings = autopilot.Settings.from_dict(autopilot.overlay(conn, strategy_id, body)) if body else None
             return autopilot.preview(conn, strategy_id, service.current_date(), settings)
         return await run_in_threadpool(_call, run)
 
@@ -415,7 +420,7 @@ def register(app: FastAPI, templates, context) -> None:
         params = dict(request.query_params)
 
         def run(conn):
-            settings = autopilot.Settings.from_dict(_query_settings(params)) if params else None
+            settings = autopilot.Settings.from_dict(autopilot.overlay(conn, strategy_id, _query_settings(params))) if params else None
             return autopilot.preview(conn, strategy_id, service.current_date(), settings)
         plan = await run_in_threadpool(_call, run)
         return templates.TemplateResponse(request, "_fund_autopilot_preview.html", {"plan": plan, **context(request)})

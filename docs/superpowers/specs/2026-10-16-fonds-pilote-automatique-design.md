@@ -114,3 +114,17 @@ registre des essais.
   borné aux groupes de la classe et à l'horizon 1. Aperçu par défaut ; `--create` écrit.
 - Migration du pilote : 0044 (la 0036 était prise). Version minimale du schéma partagé : 44.
 
+## 10. Compléments du 29/10/2026
+
+- **Niveaux `dm` et `bh`** (`fund/selection.py`) : `strict` exige la correction de Benjamini-Hochberg (cible) ET le test de Diebold-Mariano
+  (cellule) ; `dm` n'exige que le second, `bh` que la première, `large` aucun. Deux stratégies globales (toutes les classes, horizon 1,
+  10 M€, CTO, sans plafond), `Systematic Diebold-Mariano` et `Systematic Benjamini-Hochberg` (`asset_classes.setup_tiers`,
+  `patrick fund autopilot-tiers [--create]`), reprises par leur nom, jamais dupliquées ; chaque modèle retenu compte un essai (ADR 0010).
+- **Le périmètre survit à un enregistrement partiel.** `autopilot.configure` remplace tous les réglages (les absents reprennent leur
+  défaut) : le panneau n'envoyant que niveau, exposition, plafond et vente à découvert, un clic sur « Appliquer » effaçait `groups` et
+  `horizons`, et la stratégie `Systematic Future` (modifiée le 26/10 à 22 h 05) sélectionnait 2 072 modèles au lieu de 27. L'API
+  (enregistrement et aperçus) et `autopilot-enable` posent désormais les réglages reçus sur ceux enregistrés (`autopilot.overlay`).
+- **Les modèles des fonds d'abord** (`live_refresh.split_for_funds`) : l'app et `daily_predict.py` prédisent d'abord les cellules que les
+  pilotes retiendraient (sans la limite de fraîcheur) et celles des règles manuelles, lancent le cycle, puis font le reste. Aucun fonds
+  concerné : l'ordre d'avant.
+

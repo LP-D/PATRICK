@@ -1,12 +1,14 @@
 """Pilote automatique du fonds : API /api/fund/strategies/{id}/autopilot*, bloc du panneau /fonds. Aucun réseau."""
 from __future__ import annotations
 
+import re
+
 import fund_support as fs
 import pytest
 from fastapi.testclient import TestClient
 from test_fund_selection import World
 
-from patrick.fund import systematic
+from patrick.fund import autopilot, systematic
 from patrick.tracking import db as trackdb
 from patrick.webapp.app import app
 
@@ -61,6 +63,38 @@ def test_put_enables_the_autopilot_with_validated_settings(client):
     assert status["enabled"] is True and status["settings"]["tier"] == "large" and status["settings"]["gross"] == 0.5
     bad = client.put(url(sid), json={"gross": 9})
     assert bad.status_code == 400 and "gross" in bad.json()["detail"]
+
+
+def _scoped_strategy(client) -> str:
+    """Une stratégie dont le périmètre (groupes, horizon) n'est pas dans le panneau : celui d'une stratégie par classe d'actifs."""
+    sid = fs.make_strategy(client)
+    conn = trackdb.connect()
+    autopilot.configure(conn, sid, {"tier": "large", "groups": ["Crypto"], "horizons": [1], "max_models": None})
+    conn.close()
+    return sid
+
+
+def test_saving_from_the_panel_keeps_the_scope_that_the_panel_does_not_show(client):
+    """Le panneau n'envoie que niveau, exposition, plafond et vente à découvert : le périmètre ne doit pas revenir à « tout »."""
+    sid = _scoped_strategy(client)
+
+    ok = client.put(url(sid), json={"tier": "dm", "gross": 0.5, "max_models": None, "allow_short": True})
+
+    settings = client.get(url(sid)).json()["settings"]
+    assert ok.status_code == 200
+    assert settings["tier"] == "dm" and settings["gross"] == 0.5                      # ce que le panneau a envoyé est appliqué
+    assert settings["groups"] == ["Crypto"] and settings["horizons"] == [1]            # le reste est conservé
+
+
+def test_the_preview_from_the_panel_keeps_the_scope_too(client, world):
+    world.cell("AAPL", 1, live=SIGNALS)
+    sid = _scoped_strategy(client)
+
+    posted = client.post(url(sid, "/preview"), json={"tier": "large"}).json()
+    queried = client.get(url(sid, "/preview.html?tier=large&gross=1")).text
+
+    assert posted["selected"] == [] and posted["excluded"] == []                      # AAPL est hors du périmètre Crypto
+    assert "AAPL" not in queried
 
 
 def test_writes_require_a_json_content_type(client):
@@ -154,6 +188,19 @@ def test_the_panel_offers_the_autopilot_and_keeps_manual_rules_apart(client, wor
     assert 'data-act="auto-run"' in on and 'data-act="auto-off"' in on
     assert 'class="fund-auto-rule"' in on and 'title="AAPL"' in on and "h3 · XGBoost" in on     # listée dans le bloc du pilote
     assert on.count('class="fund-rule"') == 0                              # et pas dans le tableau des règles manuelles
+
+
+@pytest.mark.parametrize("tier", ["strict", "large", "dm", "bh"])
+def test_the_panel_keeps_the_tier_of_the_strategy_selected(client, tier):
+    """Un niveau absent de la liste ferait revenir la stratégie à « strict » au premier clic sur Appliquer."""
+    sid = fs.make_strategy(client)
+    client.put(url(sid), json={"tier": tier})
+
+    html = client.get(f"/api/fund/strategies/{sid}/panel").text
+
+    select = html.split('name="tier"', 1)[1].split("</select>", 1)[0]
+    assert re.findall(r'<option value="(\w+)" selected', select) == [tier]
+    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["bh", "dm", "large", "strict"]
 
 
 def test_the_model_selector_lists_every_model_by_name_with_its_p_value(client, world):

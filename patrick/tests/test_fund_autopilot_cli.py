@@ -132,6 +132,49 @@ def test_classes_preview_writes_nothing_then_create_makes_one_strategy_per_class
     assert sorted(names) == ["Pilote", "Systematic Devises", "Systematic Future"]
 
 
+def test_tiers_preview_writes_nothing_then_create_makes_the_two_evidence_strategies(setup):
+    sid, runner = setup
+
+    preview = run(runner, "autopilot-tiers", "--today", "2026-01-16")
+    assert "Aperçu" in preview and "Systematic Diebold-Mariano" in preview and "Systematic Benjamini-Hochberg" in preview
+    assert preview.count("à créer") == 2
+
+    created = run(runner, "autopilot-tiers", "--create", "--today", "2026-01-16")
+    assert created.count("créée") == 2
+    again = run(runner, "autopilot-tiers", "--create", "--tier", "dm", "--today", "2026-01-16")
+    assert "reprise" in again and sid not in again
+
+    conn = trackdb.connect()
+    names = [s["name"] for s in store.list_strategies(conn)]
+    capitals = {s["name"]: s["initial_capital"] for s in store.list_strategies(conn)}
+    conn.close()
+    assert sorted(names) == ["Pilote", "Systematic Benjamini-Hochberg", "Systematic Diebold-Mariano"]
+    assert capitals["Systematic Diebold-Mariano"] == 10_000_000
+
+
+def test_tiers_refuses_a_tier_that_has_no_strategy_of_its_own(setup):
+    _, runner = setup
+
+    result = runner.invoke(app, ["fund", "autopilot-tiers", "--tier", "large"])
+
+    assert result.exit_code == 1 and "niveau" in result.output
+
+
+def test_enable_on_a_class_strategy_changes_the_tier_but_keeps_its_scope(setup):
+    _, runner = setup
+    run(runner, "autopilot-classes", "--create", "--class", "Future", "--today", "2026-01-16")
+    conn = trackdb.connect()
+    future = next(s["strategy_id"] for s in store.list_strategies(conn) if s["name"] == "Systematic Future")
+    conn.close()
+
+    run(runner, "autopilot-enable", "--strategy", future, "--tier", "dm", "--max-models", "0")
+
+    conn = trackdb.connect()
+    settings = store.get_autopilot(conn, future)["settings"]
+    conn.close()
+    assert settings["tier"] == "dm" and settings["horizons"] == [1] and settings["groups"]       # le périmètre de la classe reste
+
+
 def test_classes_refuses_an_unknown_class(setup):
     _, runner = setup
 

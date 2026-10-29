@@ -9,11 +9,13 @@ Etapes, dans l'ordre :
   2. mise a jour  : `python -m patrick.desktop update` (avance rapide sur la branche `stable`, sautee si un entrainement tourne).
   3. actualites   : `patrick news refresh` (une minute ou deux) ; AVANT les predictions, qui durent des heures (la tache etait coupee a 6 h,
                     sans limite depuis le 27/10) : placee apres, cette etape n'avait jamais tourne (journal du 26-27/10).
-  4. predictions  : `scripts/daily_predict.py` = prediction du jour de chaque modele + jugement des anciennes + cycle du pilote
-                    automatique des fonds (positions, ordres) + derive.
+  4. predictions utiles aux fonds : `daily_predict.py --funds-only` = les modeles dont un fonds a besoin (retenus par un pilote automatique
+                    ou suivis par une regle) puis le cycle du pilote automatique (positions, ordres). Environ 3 h.
   5. sauvegarde   : `scripts/backup_db.py` (copie de la base).
   6. synchro      : `patrick sync auto` (fusionne et publie vers le dossier OneDrive).
-  7. extinction   : voir ci-dessous.
+  7. autres predictions : `daily_predict.py --skip-funds` = les ~1 800 autres modeles + jugement + derive (une douzaine d'heures) ;
+                    en dernier : les etapes 4 a 6 avaient toutes ete empechees par cette longue etape (journaux des 26-29/10).
+  8. extinction   : voir ci-dessous.
 
 Extinction (`-End`) : `hibernate` (defaut : le PC se rallumera tout seul a la prochaine echeance), `sleep`, `shutdown`
 (attention : un PC eteint ne peut PAS etre reveille par une tache Windows) ou `none`. Elle n'a lieu QUE si :
@@ -27,12 +29,13 @@ param(
     [ValidateSet("hibernate", "sleep", "shutdown", "none")][string]$End = "hibernate",
     [int]$IdleMinutes = 10,
     [int]$NetworkWaitMinutes = 5,
+    [string]$LogFile = "",
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Continue"
 $RepoDir    = Split-Path -Parent $PSScriptRoot
-$LogFile    = Join-Path $RepoDir "runs\nightly.log"
+if (-not $LogFile) { $LogFile = Join-Path $RepoDir "runs\nightly.log" }
 $VenvPython = Join-Path $RepoDir ".venv\Scripts\python.exe"
 $Python     = if (Test-Path $VenvPython) { $VenvPython } else { (Get-Command python -ErrorAction Stop).Source }
 Set-Location $RepoDir
@@ -99,9 +102,14 @@ Wait-Network
 Step "mise a jour"  @("-m", "patrick.desktop", "update")
 # Les nouvelles d'abord : courtes, alors que les predictions durent des heures.
 Step "actualites"   @("-m", "patrick.cli", "news", "refresh")
-Step "predictions et pilote automatique" @((Join-Path $RepoDir "scripts\daily_predict.py"), "--base-dir", $RepoDir, "--log-file", (Join-Path $RepoDir "runs\daily_predict.log"))
+# Les ~2 000 predictions de tous les modeles durent une douzaine d'heures : d'abord celles dont les fonds ont besoin et leur cycle,
+# puis sauvegarde et synchro, et seulement apres le reste (une nuit interrompue ne laisse plus les fonds sans cycle).
+$Predict = Join-Path $RepoDir "scripts\daily_predict.py"
+$PredictLog = Join-Path $RepoDir "runs\daily_predict.log"
+Step "predictions utiles aux fonds et pilote automatique" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--funds-only")
 Step "sauvegarde"   @((Join-Path $RepoDir "scripts\backup_db.py"))
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
+Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
 
 if ($End -eq "none") { Log "== fin : aucune extinction demandee"; return }
 if (Patrick-Busy) { Log "== fin : PATRICK est ouvert ou un entrainement tourne : le PC reste allume"; return }

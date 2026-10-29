@@ -299,6 +299,8 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_auto_tier": _s("Niveau", "Level"),
     "fund_auto_tier_strict": _s("Strict : tests multiples + Diebold-Mariano", "Strict: multiple testing + Diebold-Mariano"),
     "fund_auto_tier_large": _s("Large : tous les signaux non suspects", "Wide: every non-suspect signal"),
+    "fund_auto_tier_dm": _s("Diebold-Mariano seul", "Diebold-Mariano only"),
+    "fund_auto_tier_bh": _s("Tests multiples (Benjamini-Hochberg) seuls", "Multiple testing (Benjamini-Hochberg) only"),
     "fund_auto_gross": _s("Exposition brute (%)", "Gross exposure (%)"),
     "fund_auto_max": _s("Modèles au plus", "Max models"),
     "fund_auto_max_none": _s("aucun plafond", "no cap"),

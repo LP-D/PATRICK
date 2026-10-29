@@ -44,6 +44,8 @@
         <select name="tier" data-cls-field>
           <option value="large"{% if class_defaults.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
           <option value="strict"{% if class_defaults.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
+          <option value="dm"{% if class_defaults.tier == 'dm' %} selected{% endif %}>{{ t('fund_auto_tier_dm') }}</option>
+          <option value="bh"{% if class_defaults.tier == 'bh' %} selected{% endif %}>{{ t('fund_auto_tier_bh') }}</option>
         </select>
       </label>
       <label>{{ t('fund_cls_capital') }} <input type="number" name="capital" min="1000" step="1000" value="{{ class_defaults.capital }}" data-cls-field></label>

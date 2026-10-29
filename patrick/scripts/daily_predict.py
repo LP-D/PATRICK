@@ -50,6 +50,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     find_predictable_candidates,
     run_autopilots,
     run_daily_predictions,
+    split_for_funds,
 )
 from patrick.tracking import db as trackdb
 
@@ -140,6 +141,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--drift-limit", type=int, default=10,
                          help="Nombre maximal de (ticker, horizon) dont le PSI est re-mesuré par exécution "
                               "(~30 s chacun ; les suivants sont reportés).")
+    only = parser.add_mutually_exclusive_group()
+    only.add_argument("--funds-only", action="store_true",
+                      help="Seulement les prédictions utiles aux fonds, puis leur cycle de pilote automatique (pas le reste, pas la dérive).")
+    only.add_argument("--skip-funds", action="store_true",
+                      help="Seulement les prédictions que les fonds n'utilisent pas (leur cycle a déjà eu lieu : il ne se relance pas).")
     args = parser.parse_args(argv)
 
     _configure_logging(args.log_file)
@@ -171,19 +177,33 @@ def main(argv: list[str] | None = None) -> int:
         print("Aucun (ticker, horizon) exploitable trouvé -- rien à faire.")
         return 0
 
-    summary = run_daily_predictions(candidates, db_path=args.db_path)
-    print_summary(summary)
+    # Les modèles dont les fonds ont besoin d'abord, puis leur cycle, puis le reste (~2 000 prédictions, une douzaine d'heures) : une nuit
+    # interrompue ne laisse plus les fonds sans cycle. Aucun fonds concerné : tout, puis le cycle (l'ordre d'avant).
+    first, rest = split_for_funds(candidates, args.db_path)
+    if not first:
+        first, rest = candidates, []
+    logger.info("%d prédiction(s) utiles aux fonds d'abord, %d ensuite", len(first), len(rest))
+    summary = RunSummary()
+    if not args.skip_funds:
+        summary = run_daily_predictions(first, db_path=args.db_path)
+        print_summary(summary)
+        try:
+            for report in run_autopilots(args.db_path):
+                print(f"Pilote automatique {report['strategy_id']} : "
+                      + (f"ERREUR {report['error']}" if "error" in report else
+                         f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
+        except Exception:
+            logger.exception("AUTOPILOT FAIL")           # n'arrête rien et ne change pas le code de sortie
+    if args.funds_only:
+        return 1 if summary.failures else 0
+    if rest or args.skip_funds:
+        later = run_daily_predictions(rest, db_path=args.db_path)
+        print_summary(later)
+        summary.outcomes.extend(later.outcomes)
     if not args.no_drift:
         drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
         print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "
               f"{drift_report['skipped_fresh']} à jour, {drift_report['deferred']} reportée(s) à demain.")
-    try:
-        for report in run_autopilots(args.db_path):
-            print(f"Pilote automatique {report['strategy_id']} : "
-                  + (f"ERREUR {report['error']}" if "error" in report else
-                     f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
-    except Exception:
-        logger.exception("AUTOPILOT FAIL")               # n'arrête rien et ne change pas le code de sortie
     return 1 if summary.failures else 0
 
 

@@ -1143,7 +1143,7 @@ def _echo_report(report: dict) -> None:
 @fund_app.command(name="autopilot-select")
 def fund_autopilot_select_cmd(
     strategy: str = typer.Option(None, "--strategy", help="Stratégie (str_...) : ajoute instruments et tailles"),
-    tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano) ou large"),
+    tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano), large (sans preuve), dm (Diebold-Mariano seul) ou bh (tests multiples seuls)"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
     max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles (0 : aucun plafond)"),
     short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
@@ -1173,7 +1173,7 @@ def fund_autopilot_select_cmd(
 @fund_app.command(name="autopilot-enable")
 def fund_autopilot_enable_cmd(
     strategy: str = typer.Option(..., "--strategy", help="Identifiant de la stratégie (str_...)"),
-    tier: str = typer.Option("strict", "--tier", help="strict ou large"),
+    tier: str = typer.Option("strict", "--tier", help="strict, large, dm (Diebold-Mariano seul) ou bh (tests multiples seuls)"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
     max_models: int = typer.Option(40, "--max-models", help="Nombre maximal de modèles (0 : aucun plafond)"),
     short: bool = typer.Option(True, "--short/--no-short", help="Vente à découvert (CFD) permise"),
@@ -1184,8 +1184,8 @@ def fund_autopilot_enable_cmd(
 
     conn = trackdb.connect()
     try:
-        stored = autopilot.configure(conn, strategy, {"tier": tier, "gross": gross, "max_models": max_models or None,
-                                                     "allow_short": short})
+        stored = autopilot.configure(conn, strategy, autopilot.overlay(conn, strategy, {
+            "tier": tier, "gross": gross, "max_models": max_models or None, "allow_short": short}))
     except fund_store.FundError as exc:
         typer.echo(f"Refusé : {exc}")
         raise typer.Exit(code=1) from exc
@@ -1238,7 +1238,7 @@ def fund_autopilot_classes_cmd(
     create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les stratégies et active leur pilote ; sans cette option : aperçu"),
     only: list[str] = typer.Option(None, "--class", help="Seulement cette classe (répétable)"),  # noqa: B008 -- liste : valeur par défaut de typer
     horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
-    tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano, défaut) ou large (sans preuve statistique)"),
+    tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano, défaut), large (sans preuve statistique), dm (Diebold-Mariano seul) ou bh (tests multiples seuls)"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
     capital: float = typer.Option(100_000, "--capital", help="Capital d'une stratégie créée"),
     max_models: int = typer.Option(0, "--max-models", help="Nombre maximal de modèles par stratégie (0 : aucun plafond)"),
@@ -1263,6 +1263,39 @@ def fund_autopilot_classes_cmd(
         state = "créée" if r["created"] else ("reprise" + (", capital mis à jour" if r["capital_changed"] else "")
                                                if r["strategy_id"] else "à créer")
         typer.echo(f"  {r['name']:<28} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
+
+
+@fund_app.command(name="autopilot-tiers")
+def fund_autopilot_tiers_cmd(
+    create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les stratégies et active leur pilote ; sans cette option : aperçu"),
+    tiers: list[str] = typer.Option(None, "--tier", help="Seulement ce niveau : dm ou bh (répétable ; défaut : les deux)"),  # noqa: B008 -- liste : valeur par défaut de typer
+    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
+    capital: float = typer.Option(10_000_000, "--capital", help="Capital d'une stratégie créée"),
+    max_models: int = typer.Option(0, "--max-models", help="Nombre maximal de modèles par stratégie (0 : aucun plafond)"),
+    wrapper: str = typer.Option("CTO", "--wrapper", help="Enveloppe d'une stratégie créée (CTO ou PEA)"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Une stratégie globale (toutes les classes d'actifs) par preuve statistique : `Systematic Diebold-Mariano` (test de
+    Diebold-Mariano seul) et `Systematic Benjamini-Hochberg` (correction pour tests multiples seule)."""
+    from patrick.fund import asset_classes
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        kwargs = {"tiers": tuple(tiers)} if tiers else {}
+        rows = asset_classes.setup_tiers(conn, today=_fund_day(today), horizons=tuple(horizon), gross=gross, capital=capital,
+                                         wrapper=wrapper, max_models=max_models or None, dry_run=not create, **kwargs)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(("Stratégies" if create else "Aperçu (rien n'est écrit)") + f" par preuve statistique — horizon(s) {', '.join(map(str, horizon))} :")
+    for r in rows:
+        state = "créée" if r["created"] else ("reprise" + (", capital mis à jour" if r["capital_changed"] else "")
+                                               if r["strategy_id"] else "à créer")
+        typer.echo(f"  {r['name']:<32} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
 
 
 @fund_app.command(name="rule-roll")

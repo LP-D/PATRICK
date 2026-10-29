@@ -14,6 +14,8 @@ réécrit), et le signal affiché garde la date de sa dernière séance.
 """
 from __future__ import annotations
 
+import dataclasses
+import json
 import logging
 import os
 import threading
@@ -153,6 +155,43 @@ _stop = threading.Event()
 REFRESH_CHECK_SECONDS = 30 * 60
 
 
+def _fund_cells(db_path: str | None = None) -> set[tuple[str, int]]:
+    """Les (cible, horizon) dont un fonds a besoin du signal du jour : les modèles que le pilote automatique de chaque stratégie
+    retiendrait (sélection sans la limite de fraîcheur : c'est justement le signal à renouveler) et ceux des règles saisies à la main."""
+    from patrick.fund import autopilot, selection, store
+
+    conn = trackdb.connect(db_path)
+    try:
+        cells: set[tuple[str, int]] = set()
+        for strategy in store.list_strategies(conn):
+            stored = store.get_autopilot(conn, strategy["strategy_id"])
+            if stored and stored.get("enabled"):
+                policy = dataclasses.replace(autopilot.Settings.from_dict(stored.get("settings")).selection, fresh_days=365)
+                cells |= {(m["target"], m["horizon"]) for m in selection.select_models(conn, policy)["selected"]}
+        for (config_json,) in conn.execute("SELECT config_json FROM fund_rule").fetchall():
+            trial_id = json.loads(config_json).get("trial_id")
+            row = conn.execute("SELECT run.target, run.horizon FROM trial JOIN run ON run.run_id = trial.run_id "
+                               "WHERE trial.trial_id = ?", (trial_id,)).fetchone() if trial_id else None
+            if row:
+                cells.add((row[0], row[1]))
+        return cells
+    finally:
+        conn.close()
+
+
+def split_for_funds(candidates: list[PredictCandidate], db_path: str | None = None) -> tuple[list[PredictCandidate], list[PredictCandidate]]:
+    """`(prioritaires, autres)` : les candidats dont un fonds a besoin passent en premier, pour que son cycle ne dépende pas des quelque
+    2 000 autres prédictions (environ 13 h : la tâche de nuit était interrompue avant le cycle). L'ordre d'origine est gardé dans chaque
+    lot. Aucun fonds concerné, ou une panne du calcul : `([], candidates)`, l'appelant garde alors l'ordre d'avant (tout, puis le cycle)."""
+    try:
+        needed = _fund_cells(db_path)
+    except Exception:
+        logger.exception("modèles utiles aux fonds : ordre d'origine conservé")
+        return [], list(candidates)
+    first = [c for c in candidates if (c.target, c.horizon) in needed]
+    return first, [c for c in candidates if (c.target, c.horizon) not in needed]
+
+
 def run_autopilots(db_path: str | None = None) -> list[dict]:
     """Un cycle du pilote automatique des fonds pour chaque stratégie activée : sélection des modèles, règles, ordres
     échus. Avant lui, les règles saisies à la main qui suivent le champion passent au nouveau champion (un meilleur modèle
@@ -212,15 +251,20 @@ def _refresh_once(db_path: str | None = None) -> None:
             _state["judged"] += int(detail.get("n_outcomes_updated") or 0)
             _state["judged_right"] += int(detail.get("n_outcomes_right") or 0)
 
+    first, rest = split_for_funds(candidates, db_path)
+    if not first:
+        first, rest = candidates, []             # aucun fonds concerné : tout, puis le cycle (l'ordre d'avant)
     try:
-        run_daily_predictions(candidates, db_path=db_path, on_item=_progress)
+        run_daily_predictions(first, db_path=db_path, on_item=_progress)
+        try:
+            run_autopilots(db_path)              # les signaux utiles aux fonds sont écrits : le pilote automatique les traite sans attendre le reste
+        except Exception:
+            logger.exception("autopilot cycle failed")
+        if rest:
+            run_daily_predictions(rest, db_path=db_path, on_item=_progress)
     finally:
         with _state_lock:
             _state.update(running=False, finished_at=datetime.now(UTC).isoformat())
-    try:
-        run_autopilots(db_path)                  # les signaux du jour sont écrits : les fonds en pilote automatique les traitent
-    except Exception:
-        logger.exception("autopilot cycle failed")
 
 
 def _refresh_loop(db_path: str | None = None) -> None:

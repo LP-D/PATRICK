@@ -4,7 +4,8 @@ Lecture seule. Une cellule est un couple (cible, horizon) ; son modèle est le c
 Les critères, dans l'ordre (le premier échec est le motif d'exclusion) : pas une série FRED, pas un modèle d'alpha, pas
 un horizon descriptif, score non suspect, signal live frais ; puis, au niveau `strict`, la cible survit à la correction
 de Benjamini-Hochberg et le test de Diebold-Mariano de la cellule conclut (p < `alpha_dm`). Au niveau `large`, seuls les
-quatre premiers critères comptent. Spécification : `docs/superpowers/specs/2026-10-16-fonds-pilote-automatique-design.md`.
+quatre premiers critères comptent ; au niveau `dm`, les quatre premiers plus le seul test de Diebold-Mariano ; au niveau `bh`,
+les quatre premiers plus la seule correction de Benjamini-Hochberg. Spécification : `docs/superpowers/specs/2026-10-16-fonds-pilote-automatique-design.md`.
 
 Ce module ne regarde ni les cotations ni l'instrument : ce qui rend une cellule négociable (cotation disponible,
 instrument possible dans l'enveloppe) se vérifie dans `fund.autopilot`, qui ajoute ses propres motifs d'exclusion.
@@ -27,7 +28,9 @@ from patrick.tracking import history as trackhistory
 from patrick.tracking import stats as trackstats
 from patrick.validation import suspicion
 
-TIERS = ("strict", "large")
+TIERS = ("strict", "large", "dm", "bh")
+BH_TIERS = ("strict", "bh")            # niveaux qui exigent la correction de Benjamini-Hochberg (cible)
+DM_TIERS = ("strict", "dm")            # niveaux qui exigent le test de Diebold-Mariano (cellule)
 _CHUNK = 500
 
 LABELS = {
@@ -159,7 +162,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     latest_live = _latest_live(conn, [c[3] for c in champions])
     legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     dm = _dm_results(conn, run_ids)
-    fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier == "strict" else {}
+    fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier in BH_TIERS else {}
     fred = _fred_symbols()
     freshest = (today - dt.timedelta(days=policy.fresh_days)).isoformat()
 
@@ -192,9 +195,9 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
             else:
                 evidence = fdr.get(target, {})
                 dm_row = dm.get(run_id)
-                if policy.tier == "strict" and not evidence.get("significant"):
+                if policy.tier in BH_TIERS and not evidence.get("significant"):
                     reject(target, horizon, "bh", f"p corrigé de la cible : {_p(evidence.get('p_value'))}")
-                elif policy.tier == "strict" and (dm_row is None or dm_row["p_value"] is None
+                elif policy.tier in DM_TIERS and (dm_row is None or dm_row["p_value"] is None
                                                   or dm_row["p_value"] >= policy.alpha_dm):
                     reject(target, horizon, "dm", "pas de test de Diebold-Mariano" if dm_row is None
                            else f"test de Diebold-Mariano non concluant (p = {_p(dm_row['p_value'])})")

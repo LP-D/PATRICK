@@ -45,3 +45,17 @@ def test_the_installer_refuses_an_unknown_end_action():
     result = _run("-File", str(SCRIPTS / "schtasks_nightly.ps1"), "-End", "reboot")
 
     assert result.returncode != 0
+
+
+def test_the_night_runs_the_funds_first_then_backup_and_sync_then_the_other_predictions(tmp_path):
+    """Les ~2 000 prédictions durent une douzaine d'heures : sauvegarde et synchro ne doivent pas attendre derrière."""
+    log = tmp_path / "nightly.log"
+
+    result = _run("-File", str(SCRIPTS / "nightly_run.ps1"), "-DryRun", "-End", "none", "-LogFile", str(log))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = [line.split(" == ", 1)[1] for line in log.read_text(encoding="utf-8").splitlines() if " == " in line]
+    assert [line.split(" :")[0] for line in lines] == [
+        "reseau", "mise a jour", "actualites", "predictions utiles aux fonds et pilote automatique", "sauvegarde",
+        "synchronisation", "autres predictions", "fin"]
+    assert "--funds-only" in lines[3] and "--skip-funds" in lines[6]

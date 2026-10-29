@@ -124,3 +124,56 @@ def test_setup_counts_each_chosen_model_once_in_the_trial_registry_but_a_dry_run
     assert count() == sum(r["candidates"] for r in out) == 2
     rows = conn.execute("SELECT detail FROM trial_registry WHERE detail LIKE 'fund_selection:%'").fetchall()
     assert {d.split(":", 1)[1] for (d,) in rows} <= {r["name"] for r in out}
+
+
+# --- une stratégie globale par preuve statistique (Diebold-Mariano seul, Benjamini-Hochberg seul) ----------------------
+
+
+def test_setup_tiers_creates_one_global_strategy_per_evidence_tier_over_every_class(conn):
+    out = asset_classes.setup_tiers(conn, today=TODAY, capital=50_000)
+
+    assert [(r["tier"], r["name"], r["created"]) for r in out] == [
+        ("dm", "Systematic Diebold-Mariano", True), ("bh", "Systematic Benjamini-Hochberg", True)]
+    for row in out:
+        strategy = store.get_strategy(conn, row["strategy_id"])
+        assert strategy["name"] == row["name"] and strategy["wrapper"] == "CTO" and strategy["initial_capital"] == 50_000
+        stored = store.get_autopilot(conn, row["strategy_id"])
+        assert stored["enabled"] is True
+        assert stored["settings"]["tier"] == row["tier"] and stored["settings"]["horizons"] == [1]
+        assert stored["settings"]["groups"] is None and stored["settings"]["max_models"] is None     # toutes les classes, sans plafond
+
+
+def test_each_tier_strategy_keeps_only_the_models_that_pass_its_own_test(conn, monkeypatch):
+    world = World(conn, monkeypatch)
+    world.cell("AAPL", 1, live=[("2026-01-15", 3, 0.6)], dm_p=0.01, bh=(False, 0.50))        # DM seul
+    world.cell("GC=F", 1, live=[("2026-01-15", 3, 0.6)], dm_p=0.60, bh=(True, 0.01))         # BH seul
+    world.cell("SI=F", 1, live=[("2026-01-15", 3, 0.6)], dm_p=0.02, bh=(True, 0.01))     # les deux
+
+    out = {r["tier"]: r for r in asset_classes.setup_tiers(conn, today=TODAY)}
+    selected = {tier: sorted(m["target"] for m in autopilot.preview(conn, row["strategy_id"], TODAY)["selected"])
+                for tier, row in out.items()}
+
+    assert out["dm"]["candidates"] == 2 and out["bh"]["candidates"] == 2
+    assert selected["dm"] == ["AAPL", "SI=F"] and selected["bh"] == ["GC=F", "SI=F"]
+
+
+def test_setup_tiers_never_duplicates_counts_the_trials_and_a_dry_run_writes_nothing(conn, monkeypatch):
+    world = World(conn, monkeypatch)
+    world.cell("GC=F", 1, live=[("2026-01-15", 3, 0.6)])
+    count = lambda: conn.execute("SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE detail LIKE 'fund_selection:%'").fetchone()[0]
+
+    dry = asset_classes.setup_tiers(conn, today=TODAY, dry_run=True)
+    assert [r["candidates"] for r in dry] == [1, 1] and store.list_strategies(conn) == [] and count() == 0
+    first = asset_classes.setup_tiers(conn, today=TODAY)
+    second = asset_classes.setup_tiers(conn, today=TODAY)
+
+    assert [r["created"] for r in first] == [True, True] and [r["created"] for r in second] == [False, False]
+    assert [r["strategy_id"] for r in first] == [r["strategy_id"] for r in second] and len(store.list_strategies(conn)) == 2
+    assert {d.split(":", 1)[1] for (d,) in conn.execute(
+        "SELECT detail FROM trial_registry WHERE detail LIKE 'fund_selection:%'")} == {r["name"] for r in first}
+
+
+def test_setup_tiers_refuses_an_unknown_tier_and_writes_nothing(conn):
+    with pytest.raises(store.FundError, match="niveau"):
+        asset_classes.setup_tiers(conn, today=TODAY, tiers=("dm", "large"))
+    assert store.list_strategies(conn) == []

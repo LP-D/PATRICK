@@ -93,6 +93,28 @@ def test_the_large_tier_ignores_the_multiple_testing_evidence(conn, world):
     assert out["excluded"] == []
 
 
+def test_the_dm_tier_asks_only_for_the_diebold_mariano_test(conn, world):
+    world.cell("AAA", dm_p=0.04, bh=(False, 0.9))             # DM concluant, cible écartée par BH : retenue
+    world.cell("BBB", dm_p=0.20, bh=(True, 0.01))             # BH passe, DM non concluant : exclue
+    world.cell("CCC", dm_p=None, bh=(True, 0.01))             # aucun test DM : exclue
+
+    out = selection.select_models(conn, selection.Policy(tier="dm"), today=TODAY)
+
+    assert [m["target"] for m in out["selected"]] == ["AAA"]
+    assert _codes(out) == {"dm": 2}
+
+
+def test_the_bh_tier_asks_only_for_the_multiple_testing_correction(conn, world):
+    world.cell("AAA", dm_p=0.9, bh=(True, 0.01))              # BH passe, DM non concluant : retenue
+    world.cell("BBB", dm_p=None, bh=(True, 0.02))             # BH passe, aucun test DM : retenue
+    world.cell("CCC", dm_p=0.001, bh=(False, 0.40))           # DM concluant, cible écartée par BH : exclue
+
+    out = selection.select_models(conn, selection.Policy(tier="bh"), today=TODAY)
+
+    assert sorted(m["target"] for m in out["selected"]) == ["AAA", "BBB"]
+    assert _codes(out) == {"bh": 1}
+
+
 def test_each_exclusion_has_its_own_code_and_detail(conn, world):
     world.cell(FRED_SYMBOL)
     world.cell("AAA__alpha_BBB")

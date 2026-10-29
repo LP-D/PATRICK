@@ -38,6 +38,10 @@ CLASSES: dict[str, tuple[str, ...]] = {
 DEFAULTS = {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO", "max_models": None}
 
 
+# Stratégies globales par preuve statistique : le niveau de sélection -> le nom de la stratégie (toutes les classes d'actifs réunies).
+TIER_STRATEGIES = {"dm": "Systematic Diebold-Mariano", "bh": "Systematic Benjamini-Hochberg"}
+
+
 def strategy_name(asset_class: str) -> str:
     return f"Systematic {asset_class}"
 
@@ -65,33 +69,64 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
     store._check_capital(capital, wrapper)                  # tout est validé AVANT la première écriture
     autopilot.Settings.from_dict({"tier": tier, "gross": gross, "max_models": max_models, "horizons": list(horizons),
                                   "groups": ["x"]})
-    existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
     out = []
     for asset_class, groups in CLASSES.items():
         if only and asset_class not in only:
             continue
         settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": True,
                     "horizons": list(horizons), "groups": list(groups)}
-        policy = autopilot.Settings.from_dict(settings)
-        name = strategy_name(asset_class)
-        chosen = selection.select_models(conn, policy.selection, today)["selected"]
-        row = {"class": asset_class, "name": name, "strategy_id": existing.get(name), "created": False,
-               "capital_changed": False, "candidates": len(chosen)}
-        if not dry_run:
-            # Choisir ces modèles pour une stratégie est un usage de plus des mêmes données : chaque (cible, horizon) retenu compte un essai de
-            # plus dans le registre (source `simulation`, détail `fund_selection:<stratégie>` : la table n'accepte que les sources connues), comme une simulation. Compté ici, à la mise en place, jamais à chaque réévaluation
-            # quotidienne du pilote (ADR 0010).
-            for model in chosen:
-                trackdb.register_trials(conn, model["target"], model["horizon"], "simulation", 1, detail=f"fund_selection:{name}")
-            if row["strategy_id"] is None:
-                row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat())
-                row["created"] = True
-            elif abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - float(capital)) > 0.005:
-                try:                                  # une stratégie reprise sans ordre prend le capital demandé
-                    store.set_initial_capital(conn, row["strategy_id"], capital)
-                    row["capital_changed"] = True
-                except store.FundError:
-                    pass                              # avec des ordres, son capital reste celui qu'elle a
-            autopilot.configure(conn, row["strategy_id"], settings)
-        out.append(row)
+        row = _provision(conn, name=strategy_name(asset_class), settings=settings, capital=capital, wrapper=wrapper,
+                         today=today, dry_run=dry_run)
+        out.append({"class": asset_class, **row})
+    return out
+
+
+def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: float, wrapper: str, today: dt.date,
+               dry_run: bool) -> dict:
+    """Retrouve (par son nom) ou crée la stratégie `name` et y active le pilote avec `settings` ; `dry_run` : rien n'est écrit.
+    Renvoie `name`, `strategy_id` (None si elle n'existe pas encore), `created`, `capital_changed`, `candidates`."""
+    existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
+    policy = autopilot.Settings.from_dict(settings)
+    chosen = selection.select_models(conn, policy.selection, today)["selected"]
+    row = {"name": name, "strategy_id": existing.get(name), "created": False, "capital_changed": False,
+           "candidates": len(chosen)}
+    if not dry_run:
+        # Choisir ces modèles pour une stratégie est un usage de plus des mêmes données : chaque (cible, horizon) retenu compte un essai de
+        # plus dans le registre (source `simulation`, détail `fund_selection:<stratégie>` : la table n'accepte que les sources connues), comme une simulation. Compté ici, à la mise en place, jamais à chaque réévaluation
+        # quotidienne du pilote (ADR 0010).
+        for model in chosen:
+            trackdb.register_trials(conn, model["target"], model["horizon"], "simulation", 1, detail=f"fund_selection:{name}")
+        if row["strategy_id"] is None:
+            row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat())
+            row["created"] = True
+        elif abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - float(capital)) > 0.005:
+            try:                                  # une stratégie reprise sans ordre prend le capital demandé
+                store.set_initial_capital(conn, row["strategy_id"], capital)
+                row["capital_changed"] = True
+            except store.FundError:
+                pass                              # avec des ordres, son capital reste celui qu'elle a
+        autopilot.configure(conn, row["strategy_id"], settings)
+    return row
+
+
+def setup_tiers(conn: sqlite3.Connection, *, today: dt.date | None = None, tiers: tuple[str, ...] = tuple(TIER_STRATEGIES),
+                horizons: tuple[int, ...] = (1,), gross: float = 1.0, capital: float = 10_000_000, wrapper: str = "CTO",
+                max_models: int | None = None, dry_run: bool = False) -> list[dict]:
+    """Une stratégie globale (toutes les classes d'actifs) par niveau de preuve statistique : `dm` (test de Diebold-Mariano seul)
+    et `bh` (correction de Benjamini-Hochberg seule). Même logique que `setup` : reprise par le nom, jamais dupliquée, essais comptés,
+    tout validé avant la première écriture. Renvoie, par niveau : `tier`, `name`, `strategy_id`, `created`, `capital_changed`, `candidates`."""
+    today = service._today(today)
+    unknown = [t for t in tiers if t not in TIER_STRATEGIES]
+    if unknown:
+        raise store.FundError(f"niveau inconnu : {', '.join(unknown)} (niveaux : {', '.join(TIER_STRATEGIES)})")
+    if wrapper not in store.WRAPPERS:
+        raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
+    store._check_capital(capital, wrapper)                  # tout est validé AVANT la première écriture
+    out = []
+    for tier in tiers:
+        settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": True,
+                    "horizons": list(horizons), "groups": None}
+        row = _provision(conn, name=TIER_STRATEGIES[tier], settings=settings, capital=capital, wrapper=wrapper,
+                         today=today, dry_run=dry_run)
+        out.append({"tier": tier, **row})
     return out

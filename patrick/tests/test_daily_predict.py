@@ -25,6 +25,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from patrick.tracking import db as trackdb
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "daily_predict.py"
@@ -273,3 +275,77 @@ def test_main_survives_a_failing_autopilot(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "run_autopilots", failing)
 
     assert mod.main(["--db-path", db_path, "--no-drift"]) == 0              # le code de sortie reste celui des prédictions
+
+
+def test_main_predicts_what_the_funds_need_then_runs_their_cycle_then_the_rest(tmp_path, monkeypatch):
+    mod = daily_predict
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    needed, other = mod.PredictCandidate("AAA", 1, "run_a", 1, "a.joblib"), mod.PredictCandidate("BBB", 5, "run_b", 2, "b.joblib")
+    events: list = []
+    monkeypatch.setattr(mod, "find_predictable_candidates", lambda conn: [other, needed])
+    monkeypatch.setattr(mod, "split_for_funds", lambda candidates, db_path=None: ([needed], [other]))
+    monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: (
+        events.append(("predictions", [c.target for c in candidates])), mod.RunSummary())[1])
+    monkeypatch.setattr(mod, "run_autopilots", lambda path=None: events.append("autopilot") or [])
+
+    code = mod.main(["--db-path", db_path, "--no-drift"])
+
+    assert code == 0 and events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB"])]
+
+
+def test_main_exit_code_counts_the_failures_of_both_batches(tmp_path, monkeypatch):
+    mod = daily_predict
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    first, rest = mod.PredictCandidate("AAA", 1, "run_a", 1, "a.joblib"), mod.PredictCandidate("BBB", 5, "run_b", 2, "b.joblib")
+    monkeypatch.setattr(mod, "find_predictable_candidates", lambda conn: [first, rest])
+    monkeypatch.setattr(mod, "split_for_funds", lambda candidates, db_path=None: ([first], [rest]))
+    monkeypatch.setattr(mod, "run_autopilots", lambda path=None: [])
+
+    def fake(candidates, db_path=None, on_item=None):
+        summary = mod.RunSummary()
+        summary.add(mod.PredictOutcome(candidate=candidates[0], ok=candidates[0].target != "BBB", error="x"))      # le second lot échoue
+        return summary
+    monkeypatch.setattr(mod, "run_daily_predictions", fake)
+
+    assert mod.main(["--db-path", db_path, "--no-drift"]) == 1
+
+
+def _two_batches(tmp_path, monkeypatch):
+    mod = daily_predict
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    needed, other = mod.PredictCandidate("AAA", 1, "run_a", 1, "a.joblib"), mod.PredictCandidate("BBB", 5, "run_b", 2, "b.joblib")
+    events: list = []
+    monkeypatch.setattr(mod, "find_predictable_candidates", lambda conn: [other, needed])
+    monkeypatch.setattr(mod, "split_for_funds", lambda candidates, db_path=None: ([needed], [other]))
+    monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: (
+        events.append(("predictions", [c.target for c in candidates])), mod.RunSummary())[1])
+    monkeypatch.setattr(mod, "run_autopilots", lambda path=None: events.append("autopilot") or [])
+    monkeypatch.setattr(mod, "remeasure_stale_drift", lambda *a, **k: events.append("drift") or {
+        "measured": 0, "failed": 0, "skipped_fresh": 0, "deferred": 0})
+    return mod, db_path, events
+
+
+def test_funds_only_stops_after_the_fund_cycle(tmp_path, monkeypatch):
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+
+    assert mod.main(["--db-path", db_path, "--funds-only"]) == 0
+
+    assert events == [("predictions", ["AAA"]), "autopilot"]                      # ni le reste, ni la dérive
+
+
+def test_skip_funds_predicts_only_the_rest_without_a_fund_cycle(tmp_path, monkeypatch):
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+
+    assert mod.main(["--db-path", db_path, "--skip-funds"]) == 0
+
+    assert events == [("predictions", ["BBB"]), "drift"]                          # le cycle a déjà eu lieu : il ne se relance pas
+
+
+def test_funds_only_and_skip_funds_exclude_each_other(tmp_path, monkeypatch):
+    mod, db_path, _ = _two_batches(tmp_path, monkeypatch)
+
+    with pytest.raises(SystemExit):
+        mod.main(["--db-path", db_path, "--funds-only", "--skip-funds"])

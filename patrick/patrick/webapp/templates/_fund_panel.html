@@ -196,6 +196,8 @@
         <select name="tier" data-auto-field>
           <option value="strict"{% if autopilot.settings.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
           <option value="large"{% if autopilot.settings.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
+          <option value="dm"{% if autopilot.settings.tier == 'dm' %} selected{% endif %}>{{ t('fund_auto_tier_dm') }}</option>
+          <option value="bh"{% if autopilot.settings.tier == 'bh' %} selected{% endif %}>{{ t('fund_auto_tier_bh') }}</option>
         </select>
       </label>
       <label>{{ t('fund_auto_gross') }}

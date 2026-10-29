@@ -1,11 +1,16 @@
 """Actualisation live quotidienne : l'app laissée ouverte doit prédire et juger chaque jour, pas seulement au lancement."""
 from __future__ import annotations
 
-from datetime import date
+import json
+from datetime import date, timedelta
 
 import pytest
+from test_fund_selection import World
 
 from patrick import live_refresh
+from patrick.clock import utc_today
+from patrick.fund import autopilot, store
+from patrick.tracking import db as trackdb
 
 
 def test_refresh_is_due_at_launch_then_once_per_new_day():
@@ -149,3 +154,60 @@ def test_a_failing_champion_roll_never_stops_the_autopilot_cycle(monkeypatch, tm
     live_refresh.run_autopilots(db_path)
 
     assert ran == ["autopilot"]
+
+
+# --- les modèles dont les fonds ont besoin passent en premier : leur cycle ne dépend pas des ~2 000 autres prédictions -----------
+
+def _candidate(world_trial: int, target: str, horizon: int) -> live_refresh.PredictCandidate:
+    return live_refresh.PredictCandidate(target, horizon, f"run_{target}_{horizon}", world_trial, "a.joblib")
+
+
+def test_the_cells_a_fund_needs_are_predicted_first(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    conn = trackdb.connect(db_path)
+    world, yesterday = World(conn, monkeypatch), (utc_today() - timedelta(days=1)).isoformat()
+    live = [(yesterday, 3, 0.6)]
+    cells = {"AAA": world.cell("AAA", 1, live=live, dm_p=0.01),          # retenue par le pilote (Diebold-Mariano seul, horizon 1)
+             "BBB": world.cell("BBB", 5, live=live, dm_p=0.01),          # hors de l'horizon du pilote
+             "CCC": world.cell("CCC", 1, live=live, dm_p=0.90),          # Diebold-Mariano non concluant : le pilote ne la retient pas
+             "DDD": world.cell("DDD", 10, live=live, dm_p=0.90)}         # modèle d'une règle saisie à la main
+    sid = store.create_strategy(conn, "Pilote", "CTO", 100_000, "2026-10-01")
+    autopilot.configure(conn, sid, {"tier": "dm", "horizons": [1]})
+    conn.execute("INSERT INTO fund_rule (rule_id, strategy_id, name, config_json, created_at) VALUES ('rule_x', ?, 'manuelle', ?, '2026-10-01')",
+                 (sid, json.dumps({"trial_id": cells["DDD"]})))
+    conn.commit()
+    conn.close()
+    candidates = [_candidate(cells[t], t, h) for t, h in (("BBB", 5), ("CCC", 1), ("AAA", 1), ("DDD", 10))]
+
+    first, rest = live_refresh.split_for_funds(candidates, db_path)
+
+    assert sorted((c.target, c.horizon) for c in first) == [("AAA", 1), ("DDD", 10)]
+    assert [(c.target, c.horizon) for c in rest] == [("BBB", 5), ("CCC", 1)]          # l'ordre d'origine est gardé dans chaque lot
+
+
+def test_without_any_fund_nothing_is_prioritised_and_a_failure_falls_back_to_the_original_order(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    candidates = [_candidate(1, "AAA", 1), _candidate(2, "BBB", 5)]
+
+    assert live_refresh.split_for_funds(candidates, db_path) == ([], candidates)
+
+    monkeypatch.setattr(live_refresh, "_fund_cells", lambda path: (_ for _ in ()).throw(RuntimeError("base verrouillée")))
+    assert live_refresh.split_for_funds(candidates, db_path) == ([], candidates)         # une panne ne bloque pas les prédictions
+
+
+def test_the_refresh_runs_the_fund_cycle_between_the_two_batches(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    first, rest = [_candidate(1, "AAA", 1)], [_candidate(2, "BBB", 5), _candidate(3, "CCC", 1)]
+    events: list = []
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: first + rest)
+    monkeypatch.setattr(live_refresh, "split_for_funds", lambda candidates, path=None: (first, rest))
+    monkeypatch.setattr(live_refresh, "run_daily_predictions",
+                        lambda candidates, db_path=None, on_item=None: events.append(("predictions", [c.target for c in candidates])))
+    monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: events.append("autopilot") or [])
+
+    live_refresh._refresh_once(db_path)
+
+    assert events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB", "CCC"])]
+    assert live_refresh.refresh_status()["total"] == 3 and live_refresh.refresh_status()["running"] is False

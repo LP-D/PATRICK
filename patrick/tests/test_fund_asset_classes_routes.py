@@ -1,6 +1,8 @@
 """Création rapide des stratégies par classe d'actifs depuis /fonds : API /api/fund/asset-classes*, section de la page. Aucun réseau."""
 from __future__ import annotations
 
+import re
+
 import fund_support as fs
 import pytest
 from fastapi.testclient import TestClient
@@ -44,6 +46,13 @@ def test_the_fonds_page_offers_the_quick_creation_with_every_class_checked(clien
     for name in asset_classes.CLASSES:
         assert f'value="{name}" data-cls-field' in html and "checked" in html.split(f'value="{name}"')[1][:80]
     assert 'name="capital"' in html and 'value="10000000"' in html and 'name="horizons"' in html and 'value="1"' in html
+
+
+def test_the_quick_creation_offers_every_selection_level(client):
+    html = client.get("/fonds").text
+
+    select = html.split('<select name="tier" data-cls-field>', 1)[1].split("</select>", 1)[0]
+    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["bh", "dm", "large", "strict"]
 
 
 def test_the_class_list_shows_the_strategy_each_class_already_has(client):
