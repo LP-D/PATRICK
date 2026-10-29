@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import zlib
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
@@ -295,6 +296,19 @@ def save_cached_selection(conn: sqlite3.Connection, target: str, horizon: int, s
         )
 
 
+def encode_cached_json(value) -> bytes:
+    """JSON compressé (zlib) d'une entrée de cache : exactement les mêmes flottants au retour (la représentation JSON d'un float se relit
+    à l'identique), environ 2,3 fois moins d'octets. `vol_model_cache` pèse ~26 Go sur 31 (219 000 séries de ~6 600 valeurs)."""
+    return zlib.compress(json.dumps(value).encode(), 6)
+
+
+def decode_cached_json(stored):
+    """Relit une entrée de cache : compressée (octets) ou en clair (texte, lignes d'avant la compression)."""
+    if isinstance(stored, bytes | bytearray | memoryview):
+        return json.loads(zlib.decompress(bytes(stored)).decode())
+    return json.loads(stored)
+
+
 def get_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: str, model: str,
                           fit_end_idx: int, test_end_idx: int, data_hash: str) -> list[float | None] | None:
     """Cache for parametric volatility-model computations (EGARCH/Kalman/HMM/
@@ -308,7 +322,7 @@ def get_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: str
         "AND fit_end_idx = ? AND test_end_idx = ? AND data_hash = ?",
         (snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash),
     ).fetchone()
-    return json.loads(row[0]) if row else None
+    return decode_cached_json(row[0]) if row else None
 
 
 def save_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: str, model: str,
@@ -319,7 +333,7 @@ def save_cached_vol_model(conn: sqlite3.Connection, snapshot_id: str, ticker: st
             "INSERT INTO vol_model_cache "
             "(snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash, result_json) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
-            (snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash, json.dumps(values)),
+            (snapshot_id, ticker, model, fit_end_idx, test_end_idx, data_hash, encode_cached_json(values)),
         )
 
 

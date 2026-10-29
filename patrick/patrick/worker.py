@@ -24,6 +24,7 @@ import traceback
 
 import numpy as np
 
+from patrick import cache_eviction
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.keep_awake import keep_awake
@@ -31,6 +32,7 @@ from patrick.pipeline import pause
 from patrick.pipeline.engine import run_pipeline
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
+from patrick.tracking import prediction_archive
 
 _FOLD_LINE_RE = re.compile(r"cumulative rows")
 _FOLD_LINE_NUM_RE = re.compile(r":\s*(\d+)\s*cumulative")
@@ -420,6 +422,22 @@ def _run_claimed_job(conn, job: dict, pid: int, raw_config: dict) -> None:
     capture.final_flush()
     summary = _summarize_result(config, result)
     jobs_db.finish_job(conn, job_id, "done", result_json=json.dumps(summary))
+    _tidy_storage(conn, job_id)
+
+
+def _tidy_storage(conn, job_id: str) -> None:
+    """Entretien de fin de job (ADR 0009), après que le job est marqué terminé : prédictions de scan des essais hors tête archivées en
+    Parquet, cache de variables ramené sous son plafond. Ne fait jamais échouer le worker."""
+    results = prediction_archive.archive_job_runs(conn, job_id)
+    rows = sum(r["rows"] for r in results)
+    if rows:
+        print(f"[ARCHIVE] {rows} lignes de prédictions de scan archivées ({sum(r['trials'] for r in results)} essais hors tête).")
+    try:
+        evicted = cache_eviction.evict_feature_cache()
+        if evicted["removed_files"]:
+            print(f"[CACHE] cache de variables ramené sous son plafond : {evicted['removed_files']} fichiers retirés.")
+    except Exception as exc:  # noqa: BLE001 -- l'éviction est de l'entretien : elle ne doit jamais faire échouer un worker
+        print(f"[CACHE] éviction non faite : {type(exc).__name__}: {exc}")
 
 
 def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> None:

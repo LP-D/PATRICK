@@ -62,6 +62,28 @@ def enabled() -> bool:
     return os.environ.get("PATRICK_FEATURE_CACHE", "1") != "0"
 
 
+def float32_enabled() -> bool:
+    """Mode compact (désactivé par défaut) : les pools sont stockés en float32, environ deux fois plus petits. Pour que le résultat ne
+    dépende jamais de l'état du cache, la valeur ARRONDIE en float32 est aussi celle que reçoit l'appelant au premier calcul ; les
+    pools de ce mode ont leur propre clé. Activer : réglage `feature_cache_float32` ou `PATRICK_FEATURE_CACHE_FLOAT32=1`. Les résultats
+    diffèrent alors à la septième décimale de ceux du mode normal (jamais comparer bit à bit les deux modes)."""
+    env = os.environ.get("PATRICK_FEATURE_CACHE_FLOAT32")
+    if env is not None:
+        return env == "1"
+    from patrick import settings
+    return bool(settings.load().get("feature_cache_float32", False))
+
+
+def _to_float32(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [c for c, t in df.dtypes.items() if t == "float64"]
+    return df.astype({c: "float32" for c in cols}) if cols else df
+
+
+def _to_float64(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [c for c, t in df.dtypes.items() if t == "float32"]
+    return df.astype({c: "float64" for c in cols}) if cols else df
+
+
 def frame_hash(df: pd.DataFrame) -> str:
     """Content hash of a raw frame (values + index + column names)."""
     h = hashlib.sha256(pd.util.hash_pandas_object(df, index=True).values.tobytes())
@@ -71,7 +93,7 @@ def frame_hash(df: pd.DataFrame) -> str:
 
 def cache_key(stage: str, raw: pd.DataFrame, payload: dict) -> str:
     body = json.dumps({"stage": stage, "vintage": frame_hash(raw), "code": FEATURE_CODE_HASH,
-                       **payload}, sort_keys=True, default=str)
+                       **payload, **({"float32": True} if float32_enabled() else {})}, sort_keys=True, default=str)
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -84,9 +106,14 @@ def load(key: str) -> pd.DataFrame | None:
     if not path.exists():
         return None
     try:
-        return pd.read_parquet(path)
+        frame = pd.read_parquet(path)
     except (OSError, ValueError):
         return None
+    try:
+        os.utime(path)                      # « utilisé récemment » : l'éviction (`cache_eviction`) retire d'abord les moins récemment lus
+    except OSError:
+        pass
+    return frame
 
 
 def save(key: str, df: pd.DataFrame) -> None:
@@ -95,7 +122,9 @@ def save(key: str, df: pd.DataFrame) -> None:
     fd, tmp = tempfile.mkstemp(prefix=".", suffix=".parquet.tmp", dir=path.parent)
     os.close(fd)
     try:
-        df.to_parquet(tmp)
+        # zstd + byte_stream_split : sans perte (float64 conservés : une valeur relue est celle qui a été calculée, le déterminisme
+        # ne change pas), nettement plus petit que snappy sur des colonnes de flottants. Les fichiers déjà écrits restent lisibles.
+        df.to_parquet(tmp, compression="zstd", use_byte_stream_split=True)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -112,13 +141,20 @@ def cached(stage: str, raw: pd.DataFrame, payload: dict, compute: Callable[[], p
     if not enabled():
         return compute()
     key = cache_key(stage, raw, payload)
+    compact = float32_enabled()
     hit = load(key)
     if hit is not None:
+        if compact:
+            hit = _to_float64(hit)
         # Parquet drops index metadata (e.g. `freq`): the pool is always
         # built on `raw`'s own index, restored as-is when it matches.
         if len(hit) == len(raw) and hit.index.equals(raw.index):
             hit.index = raw.index
         return hit
     out = compute()
+    if compact:
+        out = _to_float32(out)
+        save(key, out)
+        return _to_float64(out)             # même valeur arrondie au premier calcul et aux lectures suivantes
     save(key, out)
     return out

@@ -15,6 +15,8 @@ import os
 import sqlite3
 import threading
 
+from patrick.tracking.prediction_archive import live_index_hint
+
 GENESIS = "0" * 64
 _TRIGGERS = (
     ("CREATE TRIGGER IF NOT EXISTS prediction_journal_no_update BEFORE UPDATE ON prediction_journal "
@@ -156,7 +158,7 @@ def seal_existing(conn: sqlite3.Connection, batch: int = 500) -> dict:
     de `batch` lignes, des transactions courtes (la base peut être utilisée par un worker)."""
     done = conn.execute("SELECT trial_id, signal_date FROM prediction_journal WHERE kind = 'signal'").fetchall()
     have = {(t, d) for t, d in done}
-    rows = conn.execute("SELECT trial_id, ts, y_pred, p_up, y_true FROM prediction INDEXED BY idx_pred_split WHERE split = 'live' ORDER BY ts").fetchall()
+    rows = conn.execute(f"SELECT trial_id, ts, y_pred, p_up, y_true FROM prediction INDEXED BY {live_index_hint(conn)} WHERE split = 'live' ORDER BY ts").fetchall()
     ctx_cache: dict[int, dict | None] = {}
     sealed = outcomes = 0
     pending: list[dict] = []

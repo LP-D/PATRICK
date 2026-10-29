@@ -21,6 +21,7 @@ from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
 from patrick.keep_awake import keep_awake
 from patrick.pipeline.engine import run_pipeline
+from patrick.storage_cli import storage_app
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
 
@@ -39,6 +40,7 @@ data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, cac
 app.add_typer(data_app, name="data")
 news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
 app.add_typer(news_app, name="news")
+app.add_typer(storage_app, name="storage")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(
     None, "--min-history-years",
