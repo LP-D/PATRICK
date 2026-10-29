@@ -1137,6 +1137,25 @@ def register_trials(conn: sqlite3.Connection, target: str, horizon: int | None, 
         )
 
 
+def save_dm_brier(conn: sqlite3.Connection, run_id: str, result: dict) -> None:
+    """Résultat du DM sur le Brier de P(hausse) contre le taux de hausse de l'entraînement (migration 0048, ADR 0010)."""
+    with conn:
+        conn.execute(
+            "INSERT INTO dm_brier_result (run_id, baseline, brier_model, brier_baseline, dm_stat, p_value, n_obs) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(run_id) DO UPDATE SET baseline = excluded.baseline, "
+            "brier_model = excluded.brier_model, brier_baseline = excluded.brier_baseline, dm_stat = excluded.dm_stat, "
+            "p_value = excluded.p_value, n_obs = excluded.n_obs, computed_at = datetime('now')",
+            (run_id, result["baseline"], result["brier_model"], result["brier_baseline"],
+             None if is_nan(result.get("dm_stat")) else result.get("dm_stat"),
+             None if is_nan(result.get("p_value")) else result.get("p_value"), result.get("n_obs")))
+
+
+def get_dm_brier(conn: sqlite3.Connection, run_id: str) -> dict | None:
+    row = conn.execute("SELECT baseline, brier_model, brier_baseline, dm_stat, p_value, n_obs FROM dm_brier_result WHERE run_id = ?",
+                       (run_id,)).fetchone()
+    return None if row is None else dict(zip(("baseline", "brier_model", "brier_baseline", "dm_stat", "p_value", "n_obs"), row, strict=True))
+
+
 PLACEBO_VARIANTS = ("real", "lag1")
 PLACEBO_METRICS = ("AUC_ovr_4cls", "F1_dir", "Acc_dir", "MCC_4cls")
 

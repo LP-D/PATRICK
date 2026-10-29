@@ -115,6 +115,7 @@ from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
 from patrick.validation.metrics import align_proba, metrics
+from patrick.validation.placebo import placebo_verdict
 from patrick.validation.purge import purge_mask
 from patrick.validation.walkforward import build_fold_cuts, describe_folds
 
@@ -1016,6 +1017,7 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
         _thr, reg_r,
         return_predictions=True)
     return {"metrics": met, "y_pred": y_pred, "y_proba": confidence, "y_true": y_te, "p_up": p_up,
+            "train_up_rate": float(np.isin(y_tr, (2, 3)).mean()),
             "test_dates": test_dates, "n_train": len(y_tr), "n_test": len(y_te),
             "baseline_predictions": baseline_predictions}
 
@@ -1089,6 +1091,24 @@ def _dm_against_baselines(y_true, y_pred, baseline_predictions: dict | None,
         return dm
 
     return {"class_specific": against(class_name), "common": against(_COMMON_BASELINE_KEY)}
+
+
+def dm_brier(y_true, p_up, train_up_rate: float, horizon: int) -> dict | None:
+    """Diebold-Mariano sur le score CONTINU : erreur quadratique de P(hausse) du modèle contre celle d'une baseline probabiliste constante (le
+    taux de hausse de l'entraînement). `None` sans probabilité ou sans ligne exploitable. Une perte 0/1 jette la confiance du modèle."""
+    if p_up is None or train_up_rate is None:
+        return None
+    y = (np.asarray(y_true, dtype=float).ravel() >= 2).astype(float)
+    p = np.asarray(p_up, dtype=float).ravel()
+    if len(p) != len(y):
+        return None
+    ok = np.isfinite(p)
+    if ok.sum() < 10:
+        return None
+    loss_model, loss_base = (p[ok] - y[ok]) ** 2, (float(train_up_rate) - y[ok]) ** 2
+    dm = diebold_mariano(loss_model, loss_base, h=horizon)
+    return {"baseline": "train_up_rate", "brier_model": float(loss_model.mean()), "brier_baseline": float(loss_base.mean()),
+            "dm_stat": dm["dm_stat"], "p_value": dm["p_value"], "n_obs": dm["n_obs"]}
 
 
 def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cfg: dict,
@@ -1872,10 +1892,6 @@ def _holdout_diagnostic(st: _RunState) -> None:
     st.record_phase_all_runs("holdout_diagnostic", t_start, time.time())
 
 
-PLACEBO_MIN_AUC = 0.58
-PLACEBO_MIN_DROP = 0.08
-
-
 class _LaggedPoolBuilder:
     """Enveloppe d'un `_FoldPoolBuilder` dont chaque pool voit TOUTES ses variables (jamais le prix de la cible) retardées de `lag` barres."""
 
@@ -1887,16 +1903,6 @@ class _LaggedPoolBuilder:
         feats = [c for c in pool.columns if c != self.target_col]
         pool[feats] = pool[feats].shift(self.lag)
         return pool
-
-
-def placebo_verdict(real: dict | None, lagged: dict | None) -> str | None:
-    """`"same_day"` si un signal net du holdout (AUC >= `PLACEBO_MIN_AUC`) perd au moins `PLACEBO_MIN_DROP` d'AUC quand les variables sont
-    retardées d'un jour : il repose sur l'information du jour même (souvent une fuite de date). `"stable"` sinon, `None` sans données."""
-    a = (real or {}).get("AUC_ovr_4cls")
-    b = (lagged or {}).get("AUC_ovr_4cls")
-    if a is None or b is None or is_nan(a) or is_nan(b):
-        return None
-    return "same_day" if a >= PLACEBO_MIN_AUC and a - b >= PLACEBO_MIN_DROP else "stable"
 
 
 def _placebo_lag(st: _RunState, final_best: dict, holdout_eval: dict | None) -> dict | None:
@@ -2194,11 +2200,34 @@ def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict |
     return dm_result
 
 
+def _final_dm_brier(st: _RunState, final_best: dict, holdout_eval: dict | None) -> None:
+    """DM sur le Brier de P(hausse) (ADR 0010), enregistré dans `dm_brier_result` ; un diagnostic de plus, jamais un échec de run."""
+    if holdout_eval is None or not st.is_walkforward:
+        return
+    try:
+        horizon = int(final_best["horizon"])
+        result = dm_brier(holdout_eval["y_true"], holdout_eval.get("p_up"), holdout_eval.get("train_up_rate"), horizon)
+        if result is not None:
+            trackdb.save_dm_brier(st.conn, st.run_ids[horizon], result)
+            print(f"  [DM-BRIER] h={horizon}d : Brier {result['brier_model']:.4f} contre {result['brier_baseline']:.4f} "
+                  f"(taux de hausse de l'entraînement), p = {result['p_value']}")
+    except Exception:  # noqa: BLE001 -- diagnostic : il ne doit jamais empêcher un run de se terminer
+        traceback.print_exc()
+
+
 def _finish_runs(st: _RunState) -> None:
     """`finish_run` for every horizon, then the plain-text phase timing log
     (needs `run.finished_at` to compute totals, hence after)."""
-    for run_id in st.run_ids.values():
-        trackdb.finish_run(st.conn, run_id, status="done", n_trials=st.n_trials_per_run[run_id])
+    for horizon, run_id in st.run_ids.items():
+        if st.n_trials_per_run[run_id] == 0:
+            # Aucune configuration évaluée à cet horizon (tous les plis exclus : trop peu de lignes). 33 runs d'octobre 2026 (séries FRED
+            # mensuelles à 1 jour, presque toujours sans variation) se terminaient « done » sans un mot ; ils sont maintenant en échec, avec la raison.
+            reason = (f"aucune configuration évaluable à h={horizon} : tous les plis ont été exclus (lignes d'entraînement ou de test "
+                      "insuffisantes ; série presque toujours inchangée à cet horizon ?)")
+            print(f"  [WARN] {reason}")
+            trackdb.finish_run(st.conn, run_id, status="failed", n_trials=0, error=reason)
+        else:
+            trackdb.finish_run(st.conn, run_id, status="done", n_trials=st.n_trials_per_run[run_id])
     for run_id in st.run_ids.values():
         breakdown = trackhistory.phase_breakdown_for_run(st.conn, run_id)
         timing_log_path = phase_timing_log.write_phase_timing_log(st.config.output.dir, run_id, breakdown)
@@ -2316,6 +2345,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
             if holdout_eval is not None and final_best_by_horizon.get(final_horizon) == final_best:
                 known_holdout_evals[final_horizon] = holdout_eval
             dm_result = _final_diebold_mariano(st, final_best, holdout_eval)
+            _final_dm_brier(st, final_best, holdout_eval)
             placebo_result = _placebo_lag(st, final_best, holdout_eval)
             # Phase 2.2/2.4 -- cumulative trials (registry, F03) and PBO over
             # the whole history of this target/horizon (CPCV paths when that

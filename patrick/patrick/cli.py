@@ -261,6 +261,23 @@ def _require_data_root() -> None:
         raise typer.Exit(code=1)
 
 
+@app.command(name="budget")
+def budget_cmd(
+    target: str = typer.Argument(..., help="Symbole de la cible, ex. EURUSD=X"),
+    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable)"),  # noqa: B008
+) -> None:
+    """Budget d'essais d'un lancement avec la configuration par défaut : essais déjà comptés, essais ajoutés, seuil de Sharpe sous H0."""
+    from patrick.tracking import trial_budget
+
+    config = RunConfig.model_validate({"objective": {"target_symbol": target, "horizons": sorted(set(horizon))}})
+    conn = trackdb.connect()
+    try:
+        for line in trial_budget.describe(trial_budget.trial_budget(conn, config)):
+            typer.echo(line)
+    finally:
+        conn.close()
+
+
 @app.command(name="worker")
 def worker_cmd(
     idle_timeout: float = typer.Option(

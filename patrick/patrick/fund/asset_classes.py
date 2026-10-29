@@ -10,6 +10,7 @@ import datetime as dt
 import sqlite3
 
 from patrick.fund import autopilot, selection, service, store
+from patrick.tracking import db as trackdb
 
 UNTRADABLE_GROUP = "Macro (FRED)"
 
@@ -73,10 +74,15 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
                     "horizons": list(horizons), "groups": list(groups)}
         policy = autopilot.Settings.from_dict(settings)
         name = strategy_name(asset_class)
+        chosen = selection.select_models(conn, policy.selection, today)["selected"]
         row = {"class": asset_class, "name": name, "strategy_id": existing.get(name), "created": False,
-               "capital_changed": False,
-               "candidates": len(selection.select_models(conn, policy.selection, today)["selected"])}
+               "capital_changed": False, "candidates": len(chosen)}
         if not dry_run:
+            # Choisir ces modèles pour une stratégie est un usage de plus des mêmes données : chaque (cible, horizon) retenu compte un essai de
+            # plus dans le registre (source `simulation`, détail `fund_selection:<stratégie>` : la table n'accepte que les sources connues), comme une simulation. Compté ici, à la mise en place, jamais à chaque réévaluation
+            # quotidienne du pilote (ADR 0010).
+            for model in chosen:
+                trackdb.register_trials(conn, model["target"], model["horizon"], "simulation", 1, detail=f"fund_selection:{name}")
             if row["strategy_id"] is None:
                 row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat())
                 row["created"] = True

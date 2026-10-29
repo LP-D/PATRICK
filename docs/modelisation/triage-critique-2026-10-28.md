@@ -82,10 +82,10 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 1.2 jours plats retirés de l'évaluation | **fait** (méthode 2 : seuil en volatilité, jours plats gardés dans l'évaluation) |
 | 1.3 régimes par niveau de prix | **fait** (méthode 2 : terciles de volatilité, sauf indices de volatilité) |
 | 1.4 SHAP sur les plus anciennes lignes | **fait** (méthode 2 : les plus récentes) |
-| 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict` ; **non fait** : comptage des stratégies dans `trial_registry` |
+| 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict`, un essai compté par modèle retenu à la mise en place (ADR 0010) ; **non fait** : Sharpe déflaté au niveau d'une stratégie, choix de la meilleure classe |
 | 1.6 PBO sous 3 plis | **périmé** (refusé sous 6 blocs depuis C5) |
 | 1.7 variables de niveau brut, `fracdiff` | non fait |
-| 1.8 `holdout_access` vide | **périmé** (1 077 lignes) ; simulateur non compté : **périmé** (le DSR utilise `count_registered_trials`) ; 98 runs sans essai gagnant, mutants survivants, monde à pertes égales : non fait |
+| 1.8 `holdout_access` vide | **périmé** (1 077 lignes) ; simulateur non compté : **périmé** (le DSR utilise `count_registered_trials`) ; **98 runs sans essai gagnant : élucidé** (113 aujourd'hui : 80 d'août = ancien export par horizon, 33 d'octobre = séries FRED mensuelles à 1 jour, zéro évaluation, désormais en échec avec la raison) ; mutants survivants, monde à pertes égales : non fait |
 | 1.8 décalage de séance des actions européennes | **fait** : audité (corrélation 0,08 -> 0,04), règle FRED (ADR 0007) |
 | (hors liste) barres de change du début de journée | **fait** (ADR 0007), cause du signal des devises |
 | 2.1 verrou d'écriture à chaque connexion | **fait** |
@@ -100,14 +100,14 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 3.3 plusieurs workers | **non fait, justifié** : la machine (6 coeurs) est déjà saturée par `scan_jobs`/`parametric_jobs` (4 chacun) et le protocole de file suppose un seul worker (ADR 0009) |
 | 3.4 reprise au niveau du scan | non fait (conception à faire : cache de résultats de fit qui conserve les prédictions des essais de tête, ADR 0009) ; les sélections SHAP sont déjà en cache |
 | 3.5 ablation de Kalman | non fait : demande des runs complets appariés, protocole écrit dans l'ADR 0009 |
-| 4 (SHAP global, DM sur score continu, journal synchronisé...) | non fait |
+| 4 (SHAP global, DM sur score continu, journal synchronisé...) | DM sur le Brier **fait** (`dm_brier_result`) ; le reste non fait |
 | 5.1 cible volatilité | non fait |
-| 5.2 placebo automatique par run | **fait** (`run_placebo`, verdict `same_day`) ; affichage dans l'interface non fait |
+| 5.2 placebo automatique par run | **fait** (`run_placebo`, verdict `same_day`), affiché sur la page d'un run |
 | 5.3 population d'évaluation explicite | **fait** pour la méthode 2 (le jeu est celui du live) ; affichage côte à côte non fait |
-| 5.4 badge de profil / méthode | non fait |
+| 5.4 badge de profil / méthode | **fait** pour la méthode et l'alignement (page d'un run) ; le profil Rapide / Standard / Exhaustif n'a pas de badge |
 | 5.5 calibration par défaut pour les runs du fonds | non fait |
-| 5.6 budget d'essais avant lancement | non fait |
-| 6 ergonomie (38 entrées de navigation, accueil, tableaux) | non fait |
+| 5.6 budget d'essais avant lancement | **fait** en API et en commande (`/api/trial-budget`, `patrick budget`) ; pas encore dans le formulaire de lancement |
+| 6 ergonomie (38 entrées de navigation, accueil, tableaux) | **fait en partie** : tableaux (tri, filtre, CSV), bloc « À faire » de l'accueil, onglets de run, qualité des données sous Données ; non fait : navigation à ~20 entrées, page de run fusionnée, comparateur unique |
 | 7 design v3 | non fait |
 
 ## Suite

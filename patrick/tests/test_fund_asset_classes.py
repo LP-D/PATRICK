@@ -111,3 +111,16 @@ def test_the_initial_capital_of_a_strategy_with_orders_is_frozen(conn):
                               "fees_source": "estimated", "fee_seed": 7, "spec": {}, "note": None})
     with pytest.raises(store.FundError, match="figé"):
         store.set_initial_capital(conn, sid, 1_000_000)
+
+
+def test_setup_counts_each_chosen_model_once_in_the_trial_registry_but_a_dry_run_counts_nothing(conn, monkeypatch):
+    world = World(conn, monkeypatch)
+    world.cell("GC=F", 1, live=[("2026-01-15", 3, 0.6)])
+    world.cell("SI=F", 1, live=[("2026-01-15", 3, 0.6)])
+    count = lambda: conn.execute("SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE detail LIKE 'fund_selection:%'").fetchone()[0]
+    asset_classes.setup(conn, today=TODAY, capital=50_000, tier="large", dry_run=True)
+    assert count() == 0
+    out = asset_classes.setup(conn, today=TODAY, capital=50_000, tier="large")
+    assert count() == sum(r["candidates"] for r in out) == 2
+    rows = conn.execute("SELECT detail FROM trial_registry WHERE detail LIKE 'fund_selection:%'").fetchall()
+    assert {d.split(":", 1)[1] for (d,) in rows} <= {r["name"] for r in out}

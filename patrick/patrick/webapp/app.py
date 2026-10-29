@@ -52,8 +52,10 @@ from patrick.tracking import home as trackhome
 from patrick.tracking import hrp as trackhrp
 from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import portfolio as trackportfolio
+from patrick.tracking import trial_budget as trialbudget
 from patrick.tracking import usage as trackusage
 from patrick.validation import equity_sufficiency, feasibility, suspicion
+from patrick.validation.placebo import placebo_verdict
 from patrick.webapp import (
     alerts,
     analysis_routes,
@@ -779,6 +781,26 @@ def horizon_feasibility(target: Annotated[list[str] | None, Query()] = None):
     return out
 
 
+@app.get("/api/trial-budget")
+def trial_budget_api(target: str, horizons: str = "1", profile: str | None = None):
+    """Budget d'essais d'un lancement (ADR 0010) : essais déjà comptés pour la cible, ceux que le run ajoute, seuil de Sharpe sous H0 avant /
+    après. Config par défaut de l'application (ou celle de `profile` s'il est connu) ; lecture seule."""
+    if target not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Symbole inconnu")
+    try:
+        hs = sorted({int(h) for h in horizons.split(",") if h.strip()})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="horizons : entiers séparés par des virgules") from exc
+    if not hs or any(h < 1 or h > 800 for h in hs):
+        raise HTTPException(status_code=422, detail="horizons hors limites")
+    config = RunConfig.model_validate({"objective": {"target_symbol": target, "horizons": hs}})
+    conn = trackdb.connect()
+    try:
+        return trialbudget.trial_budget(conn, config)
+    finally:
+        conn.close()
+
+
 @app.get("/api/settings")
 def get_settings():
     """Réglages machine exposés à la page « Lancer » (hors config des runs)."""
@@ -1059,13 +1081,14 @@ def run_page(request: Request, run_id: str, dm_alpha: float = trackhistory.DM_SI
     try:
         detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha)
         kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
+        run_method = _run_method_context(conn, run_id, detail)
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable (ni en mémoire, ni en base)")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id, "run_method": run_method,
          **_i18n_context(request)},
     )
 
@@ -2266,15 +2289,37 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
         detail = trackhistory.run_detail(conn, run_id, fdr_alpha=fdr_alpha, with_meta_labeling=False)
         # KPI of the WHOLE launch (all the horizons that share this run's job)
         kpi = trackkpi.summarize(conn, trackkpi.sibling_run_ids(conn, run_id))
+        run_method = _run_method_context(conn, run_id, detail)
     finally:
         conn.close()
     if detail is None:
         raise HTTPException(status_code=404, detail="Run introuvable")
     return templates.TemplateResponse(
         request, "run_detail.html",
-        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id,
+        {"detail": detail, "kpi": kpi, "dm_significance_alpha": dm_alpha, "stats_run_id": run_id, "run_method": run_method,
          **_i18n_context(request)},
     )
+
+
+def _run_method_context(conn, run_id: str, detail: dict | None) -> dict:
+    """Version de méthode et d'alignement d'un run (ADR 0007 et 0008), placebo de décalage, DM sur le Brier : ce qui dit si ses chiffres
+    sont comparables à ceux d'un autre run. Un run d'avant les champs est de méthode 1 et de règle d'alignement 1."""
+    out: dict = {"method": 1, "session_rule": 1, "placebo": None, "placebo_verdict": None, "dm_brier": None, "alignment_reason": None}
+    if detail is None:
+        return out
+    try:
+        cfg = json.loads(detail["run"].get("config_json") or "{}")
+    except (TypeError, ValueError):
+        cfg = {}
+    out["method"] = int((cfg.get("validation") or {}).get("method_version", 1) or 1)
+    out["session_rule"] = int((cfg.get("objective") or {}).get("session_rule", 1) or 1)
+    out["alignment_reason"] = suspicion.alignment_reason(detail["run"].get("target"), cfg)
+    placebo = trackdb.get_placebo(conn, run_id)
+    if placebo.get("real") and placebo.get("lag1"):
+        out["placebo"] = placebo
+        out["placebo_verdict"] = placebo_verdict(placebo["real"], placebo["lag1"])
+    out["dm_brier"] = trackdb.get_dm_brier(conn, run_id)
+    return out
 
 
 @app.get("/fragments/run-advice/{run_id}")

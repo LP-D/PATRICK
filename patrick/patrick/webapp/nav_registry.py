@@ -86,8 +86,8 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 42, "nav_exploration", group="recherche"),
     NavEntry("news", "News", "/news", "pilotage", 43, "nav_news", group="recherche"),
     NavEntry("carnet", "Carnet", "/carnet", "pilotage", 44, "nav_carnet", group="recherche"),
-    NavEntry("donnees", "Données", "/donnees", "pilotage", 50, "nav_donnees", group="donnees"),
-    NavEntry("data_quality", "Qualité des données", "/data-quality", "pilotage", 52, "nav_data_quality", group="donnees"),
+    NavEntry("donnees", "Données", "/donnees", "pilotage", 50, "nav_donnees", group="donnees",
+             child_routes=("/data-quality",)),
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
     # deep learning (reseaux de neurones, memes runs que le ML), reinforcement learning (agent qui apprend une position).
     NavEntry("ml", "Machine learning", "/ml", "modeles", 10, "nav_ml"),

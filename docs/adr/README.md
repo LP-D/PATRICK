@@ -15,3 +15,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0007](0007-alignement-des-devises-et-audit-statistique.md) | Alignement des cibles de change et audit statistique des fuites de date | 2026-10-28 | Acceptée |
 | [0008](0008-methode-d-evaluation-2.md) | Méthode d'évaluation 2 : DM sur la direction, jours plats dans l'évaluation, régimes par volatilité, SHAP récent, placebo | 2026-10-28 | Acceptée |
 | [0009](0009-stockage-et-entretien-de-la-base.md) | Stockage : archivage des prédictions du scan, caches comprimés et évincés, index | 2026-10-29 | Acceptée |
+| [0010](0010-budget-d-essais-dm-continu-et-interface.md) | Budget d'essais, DM sur le Brier, runs sans évaluation en échec, interface (onglets, tableaux, À faire) | 2026-10-29 | Acceptée |

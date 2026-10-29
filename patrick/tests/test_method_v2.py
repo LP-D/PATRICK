@@ -307,3 +307,37 @@ def test_the_placebo_is_stored_per_run_and_variant(tmp_path):
     with pytest.raises(ValueError):
         trackdb.save_placebo(conn, "a1", "lag2", {})
     conn.close()
+
+
+# --------------------------------------------------------------------------- DM sur le score continu (ADR 0010)
+
+def test_dm_on_the_brier_score_rewards_information_the_base_rate_does_not_have():
+    rng = np.random.default_rng(3)
+    n = 600
+    signal = rng.normal(size=n)
+    y_class = np.where(signal + rng.normal(scale=1.0, size=n) > 0, 3, 0)         # classes 3 (hausse) ou 0 (baisse)
+    p_good = 1 / (1 + np.exp(-1.2 * signal))                                     # confiance informée
+    base = float(np.mean(y_class >= 2))
+    good = engine.dm_brier(y_class, p_good, base, 1)
+    assert good["brier_model"] < good["brier_baseline"] and good["dm_stat"] < 0 and good["p_value"] < 0.01
+    flat = engine.dm_brier(y_class, np.full(n, base), base, 1)                   # un modèle qui ne dit que le taux de base
+    assert flat["brier_model"] == pytest.approx(flat["brier_baseline"]) and not (flat["p_value"] < 0.05)
+    overconfident = engine.dm_brier(y_class, np.where(rng.random(n) < 0.5, 0.99, 0.01), base, 1)
+    assert overconfident["brier_model"] > overconfident["brier_baseline"]        # un 0/1 aléatoire sur-confiant est puni (la perte 0/1 l'ignore)
+
+
+def test_dm_brier_needs_probabilities_and_enough_rows():
+    assert engine.dm_brier([0, 3], None, 0.5, 1) is None
+    assert engine.dm_brier([0, 3, 2], [0.5, 0.5], 0.5, 1) is None
+    assert engine.dm_brier(np.zeros(5), np.full(5, 0.4), 0.5, 1) is None
+
+
+def test_dm_brier_result_is_stored_per_run(tmp_path):
+    conn = _db_with_runs(tmp_path)
+    assert trackdb.get_dm_brier(conn, "a1") is None
+    res = {"baseline": "train_up_rate", "brier_model": 0.21, "brier_baseline": 0.25, "dm_stat": -2.1, "p_value": float("nan"), "n_obs": 300}
+    trackdb.save_dm_brier(conn, "a1", res)
+    trackdb.save_dm_brier(conn, "a1", {**res, "p_value": 0.04})
+    assert trackdb.get_dm_brier(conn, "a1") == {"baseline": "train_up_rate", "brier_model": 0.21, "brier_baseline": 0.25,
+                                                "dm_stat": -2.1, "p_value": 0.04, "n_obs": 300}
+    conn.close()

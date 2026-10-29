@@ -9,6 +9,41 @@ def _s(fr: str, en: str) -> dict[str, str]:
 
 
 PAGES_STRINGS: dict[str, dict[str, str]] = {
+    # ------------------------------------------------------------------ page d'un run : méthode, alignement, placebo (ADR 0007 à 0010)
+    "rd_method": _s("Méthode d'évaluation", "Evaluation method"),
+    "rd_method_value": _s("Méthode {m} · alignement {a}", "Method {m} · alignment {a}"),
+    "rd_method_1_hint": _s("Méthode d'origine : Diebold-Mariano sur les 4 classes, jours plats retirés de l'évaluation, régimes par niveau de prix. "
+                           "Ne se compare pas à un run de méthode 2.",
+                           "Original method: Diebold-Mariano on the 4 classes, flat days removed from the evaluation, price-level regimes. "
+                           "Not comparable to a method 2 run."),
+    "rd_method_2_hint": _s("Diebold-Mariano sur la direction, jours plats gardés dans l'évaluation, régimes par volatilité, SHAP sur les lignes récentes.",
+                           "Diebold-Mariano on direction, flat days kept in the evaluation, volatility regimes, SHAP on the most recent rows."),
+    "rd_alignment": _s("Alignement des dates", "Date alignment"),
+    "rd_alignment_legacy": _s("Devise d'avant la correction", "Currency run from before the fix"),
+    "rd_placebo": _s("Placebo (variables retardées d'un jour)", "Placebo (features lagged by one day)"),
+    "rd_placebo_value": _s("AUC {a} → {b}", "AUC {a} → {b}"),
+    "rd_placebo_same_day": _s("Le signal repose sur l'information du jour même : souvent un décalage de date, à vérifier avant de s'y fier.",
+                              "The signal rests on same-day information: often a date misalignment, to check before relying on it."),
+    "rd_placebo_stable": _s("Le signal ne dépend pas du dernier jour.", "The signal does not depend on the latest day."),
+    "rd_placebo_none": _s("Pas de placebo pour ce run (run d'avant le 29/10/2026, ou sans holdout).",
+                          "No placebo for this run (run from before 2026-10-29, or without a holdout)."),
+    "rd_dm_brier": _s("Diebold-Mariano sur le Brier de P(hausse)", "Diebold-Mariano on the Brier score of P(up)"),
+    "rd_dm_brier_rel": _s("Brier du modèle {m} contre {b} pour le taux de hausse de l'entraînement, {n} lignes.",
+                          "Model Brier {m} against {b} for the training up-rate, {n} rows."),
+    "dx_quality_hint": _s("séries exclues de l'univers, trous, valeurs figées, anomalies de cours", "series excluded from the universe, gaps, frozen prices, price anomalies"),
+    "hm_actions_title": _s("À faire", "To do"),
+    "hm_action_open": _s("Ouvrir", "Open"),
+    "hm_action_failures": _s("{n} échec(s) de run ces {d} derniers jours : à relire, puis à relancer si la cause est réglée.",
+                             "{n} run failure(s) in the last {d} days: review, then relaunch once the cause is fixed."),
+    "hm_action_suspect": _s("{n} run(s) au score trop beau pour être vrai ou d'avant une correction d'alignement : jamais un signal à suivre.",
+                            "{n} run(s) with a score too good to be true or from before an alignment fix: never a signal to follow."),
+    "hm_action_queue": _s("File d'attente : {n} job(s) en attente, {r} en cours.", "Queue: {n} job(s) waiting, {r} running."),
+    "hm_action_fx_legacy": _s("{n} champion(s) de change entraîné(s) avant la correction d'alignement : relancer des runs de change pour les remplacer.",
+                              "{n} currency champion(s) trained before the alignment fix: launch new currency runs to replace them."),
+    "rt_label": _s("Pages de ce run", "Pages of this run"),
+    "rt_detail": _s("Détail", "Detail"),
+    "rt_analysis": _s("Analyse", "Analysis"),
+    "rt_compare": _s("Comparer", "Compare"),
     # ------------------------------------------------------------------ navigation
     "nav_data_quality": _s("Qualité des données", "Data quality"),
     "nav_vocabulary": _s("Vocabulaire", "Vocabulary"),

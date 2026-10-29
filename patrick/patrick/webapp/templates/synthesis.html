@@ -14,6 +14,18 @@
 <h1 class="page-title">{{ t('nav_home') }}</h1>
 <p class="page-subtitle">{{ t('home_subtitle') }} <a href="/ml">{{ t('nav_ml') }} →</a></p>
 
+{# ---- À faire : ce qui demande une action maintenant, avec le lien vers la page où agir (`tracking/home.py::action_items`) ---- #}
+{% if home.actions %}
+<section class="card home-actions" aria-labelledby="home-actions-title">
+<h2 id="home-actions-title" style="margin-top: 0">{{ t('hm_actions_title') }}</h2>
+<ul class="home-actions-list">
+{% for a in home.actions %}
+<li class="home-action home-action-{{ a.level }}"><span>{{ t('hm_action_' ~ a.key, n=a.n, d=a.days or 0, r=a.running or 0) }}</span><a class="btn-secondary" href="{{ a.href }}">{{ t('hm_action_open') }}</a></li>
+{% endfor %}
+</ul>
+</section>
+{% endif %}
+
 {# ---- Ligne 1 : six chiffres ---- #}
 <div class="metric-grid">
 {{ metric(t('home_kpi_models'), home.n_sane, t('home_kpi_models_rel', d=home.kinds.directional.n, a=home.kinds.alpha.n), "ok" if home.n_sane else "neutral") }}

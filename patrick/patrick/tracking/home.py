@@ -25,6 +25,25 @@ def _median(values) -> float | None:
     return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
 
 
+def action_items(conn: sqlite3.Connection, n_recent_failures: int, n_suspect: int) -> list[dict]:
+    """Ce qui demande une action maintenant, une ligne par sujet, avec la page où agir (ADR 0010) : échecs récents, runs suspects, file d'attente,
+    champions de change d'avant la correction d'alignement. Une ligne sans objet n'apparaît pas."""
+    items: list[dict] = []
+    if n_recent_failures:
+        items.append({"key": "failures", "n": n_recent_failures, "href": "/runs", "level": "warning", "days": RECENT_DAYS})
+    if n_suspect:
+        items.append({"key": "suspect", "n": n_suspect, "href": "/runs", "level": "error"})
+    queued = conn.execute("SELECT COUNT(*) FROM job WHERE status = 'queued'").fetchone()[0]
+    running = conn.execute("SELECT COUNT(*) FROM job WHERE status = 'running'").fetchone()[0]
+    if queued or running:
+        items.append({"key": "queue", "n": queued, "running": running, "href": "/ml", "level": "neutral"})
+    champions = [r[0] for r in conn.execute("SELECT run_id FROM champion WHERE target LIKE '%=X%'")]
+    legacy = len(trackdb.alignment_reasons(conn, champions)) if champions else 0
+    if legacy:
+        items.append({"key": "fx_legacy", "n": legacy, "href": "/fx", "level": "warning"})
+    return items
+
+
 def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str]]],
                  min_years: int = D.DEFAULT_MIN_HISTORY_YEARS, store: DataStore | None = None) -> dict:
     runs = trackdb.list_all_runs(conn)
@@ -50,4 +69,5 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
         "n_failures": len(failures), "n_recent_failures": len(recent_failures), "recent_days": RECENT_DAYS,
         "n_short": sum(c["n_short"] for c in classes), "n_targets": sum(c["n_targets"] for c in classes),
         "classes": classes, "min_years": min_years,
+        "actions": action_items(conn, len(recent_failures), len(done) - len(sane)),
     }

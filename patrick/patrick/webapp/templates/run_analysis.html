@@ -15,6 +15,7 @@
 {% block crumb_trail %}{{ crumb(info.target | iname, '/targets/' ~ (info.target | urlencode)) }}{{ crumb(info.run_id | truncate(12, true)) }}{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ asset('analysis.css') }}">
+{% set tab = 'analysis' %}{% set run_tabs_id = info.run_id if info.run_id is defined else run_id %}{% include "_run_tabs.html" %}
 {% set state = 'ok' if info.status == 'done' else ('pending' if info.status in ('running', 'queued') else ('error' if info.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ t('ra_title') }} · {{ info.name }}</h1>
 <p class="page-subtitle">

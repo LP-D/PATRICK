@@ -15,7 +15,7 @@
 
 {% block crumb_trail %}{{ crumb(detail.run.target | iname, '/targets/' ~ (detail.run.target | urlencode)) }}{{ crumb(detail.run.run_id | truncate(12, true)) }}{% endblock %}
 {% block content %}
-{% set run = detail.run %}
+{% set run = detail.run %}{% set tab = 'detail' %}{% set run_tabs_id = run.run_id %}{% include "_run_tabs.html" %}
 {% set state = 'ok' if run.status == 'done' else ('pending' if run.status in ('running', 'queued') else ('error' if run.status in ('failed', 'error') else 'neutral')) %}
 <h1 class="page-title">{{ detail.config.name or run.run_id }}</h1>
 <p class="page-subtitle">
@@ -125,6 +125,28 @@
           "neutral") }}
 {% else %}
 {{ metric(t('rd_corr_short'), "—", t('rd_corr_none', n=detail.holdout_diag.n_trials), "disabled") }}
+{% endif %}
+
+{# Méthode d'évaluation et règle d'alignement du run (ADR 0007 et 0008) : deux runs de méthodes différentes ne se comparent pas. #}
+{{ metric(t('rd_method'), t('rd_method_value', m=run_method.method, a=run_method.session_rule),
+          t('rd_method_2_hint') if run_method.method >= 2 else t('rd_method_1_hint'),
+          "ok" if run_method.method >= 2 else "neutral") }}
+{% if run_method.alignment_reason %}
+{{ metric(t('rd_alignment'), t('rd_alignment_legacy'), run_method.alignment_reason, "warning") }}
+{% endif %}
+{% if run_method.placebo %}
+{% set pr = run_method.placebo.real %}{% set pl = run_method.placebo.lag1 %}
+{{ metric(t('rd_placebo'), t('rd_placebo_value', a='%.3f' | format(pr['AUC_ovr_4cls']), b='%.3f' | format(pl['AUC_ovr_4cls'])),
+          t('rd_placebo_same_day') if run_method.placebo_verdict == 'same_day' else t('rd_placebo_stable'),
+          "warning" if run_method.placebo_verdict == 'same_day' else "ok") }}
+{% else %}
+{{ metric(t('rd_placebo'), "—", t('rd_placebo_none'), "disabled") }}
+{% endif %}
+{% if run_method.dm_brier %}
+{% set db = run_method.dm_brier %}
+{{ metric(t('rd_dm_brier'), ("p = %.4f" | format(db.p_value)) if db.p_value is not none else "—",
+          t('rd_dm_brier_rel', m='%.4f' | format(db.brier_model), b='%.4f' | format(db.brier_baseline), n=db.n_obs),
+          "ok" if (db.p_value is not none and db.p_value < dm_significance_alpha and db.brier_model < db.brier_baseline) else "warning") }}
 {% endif %}
 </div>
 {% if refus_rest is defined and refus_rest %}

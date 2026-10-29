@@ -439,6 +439,11 @@ def test_undersized_fold_is_excluded_with_explicit_warning(tiny_config, monkeypa
     assert "min 10000" in captured.out or "(min 10000)" in captured.out
     assert len(result["leaderboard"]) == 0, "aucun fold ne satisfaisant le seuil, la grille SCAN doit être vide."
     assert result["final_best"] is None
+    conn = sqlite3.connect(str(tmp_path / "patrick_test_d3.db"))
+    statuses = conn.execute("SELECT status, error FROM run").fetchall()
+    conn.close()
+    assert statuses and all(status == "failed" and "aucune configuration évaluable" in error for status, error in statuses), (
+        "un run sans aucune évaluation ne doit pas se terminer « done » : il est en échec, avec la raison.")
 
 
 def test_run_writes_full_db_trail_and_is_reproducible_on_same_snapshot(tiny_config, monkeypatch, tmp_path):
