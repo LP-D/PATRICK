@@ -18,7 +18,7 @@ Le bouton « Actualiser » de `/news` lance la même collecte (flux par défaut 
 
 ## Quand la collecte tourne
 
-- **Passage de nuit** (`Patrick-Nightly`, 23 h 30) : l'étape « actualités » passe **avant** les prédictions. Elle était placée après et
+- **Passage de nuit** (`Patrick-Nightly`, 23 h) : l'étape « actualités » passe **avant** les prédictions. Elle était placée après et
   n'avait jamais tourné : les prédictions durent des heures et la tâche était coupée à 6 h, en pleines prédictions (limite supprimée le 27/10)
   (journal du 26 au 27/10, code de résultat 267014). La sauvegarde de la base et la synchronisation, placées après les prédictions,
   sont coupées de la même façon.

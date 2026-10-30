@@ -2,7 +2,7 @@
 
 Tâche Windows `Patrick-Nightly` (`patrick/scripts/schtasks_nightly.ps1`), qui lance `patrick/scripts/nightly_run.ps1`.
 
-## Ce qu'elle fait, chaque jour à l'heure choisie (23 h 30 par défaut)
+## Ce qu'elle fait, chaque jour à l'heure choisie (23 h par défaut, depuis le 30/10 ; 23 h 30 avant)
 
 1. réveille le PC (veille ou veille prolongée) et attend le réseau ;
 2. met PATRICK à jour (avance rapide sur `stable`, sautée si un entraînement tourne) ;

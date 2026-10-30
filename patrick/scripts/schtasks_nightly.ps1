@@ -1,14 +1,14 @@
 <#
 Passage de nuit planifie : tache Windows "Patrick-Nightly" pour `scripts/nightly_run.ps1`.
 
-Chaque jour a l'heure choisie, la tache REVEILLE le PC, lance tout ce qui doit tourner (mise a jour, predictions des modeles et
+Chaque jour a l'heure choisie (23:00 par defaut), la tache REVEILLE le PC, lance tout ce qui doit tourner (mise a jour, predictions des modeles et
 cycle du pilote automatique des fonds, actualites, sauvegarde de la base, synchronisation OneDrive), puis remet le PC en veille
 prolongee s'il n'y a plus rien d'autre en cours. Detail des etapes : en-tete de `nightly_run.ps1`.
 
 Utilisation (PowerShell, depuis n'importe ou) :
     .\schtasks_nightly.ps1                        # n'installe RIEN : affiche la tache et l'etat du reveil automatique
     .\schtasks_nightly.ps1 -Install               # cree (ou remplace) la tache pour l'utilisateur courant
-    .\schtasks_nightly.ps1 -Install -At 23:30 -End hibernate -IdleMinutes 10
+    .\schtasks_nightly.ps1 -Install -At 23:30 -End hibernate -IdleMinutes 10   # autre heure, autre fin
     .\schtasks_nightly.ps1 -Remove                # supprime la tache
 
 CE QUE WINDOWS PEUT ET NE PEUT PAS FAIRE
@@ -26,7 +26,7 @@ part des que le PC redemarre. Aucune limite de duree (Windows coupait la tache a
 param(
     [switch]$Install,
     [switch]$Remove,
-    [string]$At = "23:30",
+    [string]$At = "23:00",
     [ValidateSet("hibernate", "sleep", "shutdown", "none")][string]$End = "hibernate",
     [int]$IdleMinutes = 10
 )
