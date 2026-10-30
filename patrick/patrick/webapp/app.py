@@ -1329,8 +1329,14 @@ def compare_runs(request: Request, run_ids: Annotated[list[str] | None, Query()]
         objective = config.get("objective") if isinstance(config.get("objective"), dict) else {}
         sampler = config.get("sampler") if isinstance(config.get("sampler"), dict) else {}
         horizons = objective.get("horizons", [run.get("horizon")])
+        try:
+            profile = training_profiles.identify(forms.to_view(config), forms.to_view(forms.default_config_dict("ml")))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            profile = None
         selected_runs.append({
             **run,
+            "profile": profile,
+            "method": int((config.get("validation") or {}).get("method_version", 1) or 1),
             "name": config.get("name") or run_id,
             "target": html.unescape(run.get("target") or ""),
             "algorithms": _extract_algorithms(run.get("config_json")),

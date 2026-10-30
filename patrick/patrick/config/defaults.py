@@ -327,6 +327,10 @@ RL_MIN_ROWS = 600            # lignes minimales après les fenêtres de calcul d
 # legacy single-toggle path, still off by default).
 DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
+# Méthode 3 (ADR 0011) : un run lancé depuis l'interface part avec la calibration cochée. Les probabilités brutes d'un run « rapide » sont sur-confiantes (Brier 0,269 ;
+# 0,25 est celui d'une probabilité constante) et le fonds s'en sert pour dimensionner. Le schéma garde False : les fichiers de configuration, les tests de référence
+# (golden master) et les runs déjà enregistrés ne bougent pas ; la case reste décochable.
+DEFAULT_FORM_CALIBRATION = True
 DEFAULT_STACKING_ENABLED = False
 # Empilement (`models/stacking.py`) : nombre de modèles de base, SAISI à la main (formulaire). Bornes : en dessous de 3 le méta-modèle n'a
 # rien à pondérer ; au-dessus de 60, 2 N ajustements par candidat de la grille rendent le run inabordable.

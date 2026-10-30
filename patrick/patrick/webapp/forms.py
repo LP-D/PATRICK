@@ -68,7 +68,7 @@ def default_config_dict(family: str = "ml") -> dict:
         cfg["sampler"] = {"candidates": ["none"]}
         cfg["selection"].update({"n_features_grid": [8, 12], "screening_mode": "total_window", "screening_finalists_per_group": 1})
         cfg["models"] = {"algos": list(D.DEFAULT_DL_ALGOS), "deep": dict(D.DEFAULT_DEEP),
-                         "calibration": D.DEFAULT_CALIBRATION_ENABLED, "stacking": D.DEFAULT_STACKING_ENABLED}
+                         "calibration": D.DEFAULT_FORM_CALIBRATION, "stacking": D.DEFAULT_STACKING_ENABLED}
         cfg["tuning"].update({"enabled": True, "top_k": 1, "n_trials": 15, "cv_splits": 3})
     return cfg
 
@@ -147,7 +147,7 @@ def _default_ml_config_dict() -> dict:
         "sampling": {"uniqueness_weights": True},
         "models": {
             "algos": list(D.DEFAULT_ML_ALGOS),
-            "calibration": D.DEFAULT_CALIBRATION_ENABLED,
+            "calibration": D.DEFAULT_FORM_CALIBRATION,
             "stacking": D.DEFAULT_STACKING_ENABLED,
         },
         "tuning": {

@@ -141,10 +141,12 @@
 {% endif %}
 {% endmacro %}
 
-{% macro empty_state(message, hint='') %}
+{% macro empty_state(message, hint='', action_url='', action_label='') %}
 <div class="empty-state">
   <p class="empty-state-message">{{ message }}</p>
   {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  {# Un état vide propose le geste qui le remplit (ADR 0010) : lien vers la page où agir. #}
+  {% if action_url and action_label %}<p><a class="btn-secondary" href="{{ action_url }}">{{ action_label }}</a></p>{% endif %}
 </div>
 {% endmacro %}
 

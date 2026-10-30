@@ -7,7 +7,7 @@
 <section class="card">
 <h2>{{ t('home_quality_by_target') }} <button type="button" class="info-icon" data-term="diebold_mariano" data-term-label="Diebold-Mariano" aria-label="{{ t('glossary_open_aria', term='Diebold-Mariano') }}">i</button></h2>
 {% if overview.fdr_n_tested == 0 %}
-{{ empty_state(t('home_no_dm'), t('home_no_dm_hint')) }}
+{{ empty_state(t('home_no_dm'), t('home_no_dm_hint'), '/ml?profile=robust', t('es_launch_robust')) }}
 {% else %}
 {% if overview.fdr_n_tested == 1 %}<p class="hint">{{ t('home_bh_single') }}</p>{% endif %}
 {% set quality_rows_fmt = [] %}
@@ -48,7 +48,7 @@
 <h2>{{ t('home_dir_metrics') }}</h2>
 {% set metric_rows_present = overview.metric_rows | selectattr("metrics") | list %}
 {% if not metric_rows_present %}
-{{ empty_state(t('home_no_metrics'), t('home_no_metrics_hint')) }}
+{{ empty_state(t('home_no_metrics'), t('home_no_metrics_hint'), '/ml?profile=quick', t('es_launch_quick')) }}
 {% else %}
 {% set metric_rows_fmt = [] %}
 {% for r in metric_rows_present %}

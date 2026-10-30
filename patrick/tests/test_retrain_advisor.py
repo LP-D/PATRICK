@@ -169,9 +169,10 @@ def test_imbalanced_classes_suggest_more_samplers():
 
 
 def test_a_good_ranking_without_calibration_suggests_calibrating():
-    assert "calibrate" in keys(diag(auc_test=0.60))
+    uncalibrated = {**VIEW, "calibration": False}        # le formulaire part calibré depuis la méthode 3 : le cas visé est un run décoché
+    assert "calibrate" in keys(diag(auc_test=0.60, view=uncalibrated))
     assert "calibrate" not in keys(diag(auc_test=0.60, view={**VIEW, "calibration": True}))
-    assert "calibrate" not in keys(diag(auc_test=0.60, auc_holdout=0.50))     # le holdout dément le classement
+    assert "calibrate" not in keys(diag(auc_test=0.60, auc_holdout=0.50, view=uncalibrated))     # le holdout dément le classement
 
 
 def test_a_solid_holdout_suggests_confirming_with_cpcv_only_for_walk_forward():

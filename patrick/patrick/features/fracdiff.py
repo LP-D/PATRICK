@@ -39,6 +39,22 @@ def frac_diff_ffd(series: pd.Series, d: float, threshold: float = 1e-4) -> pd.Se
     return pd.Series(windows @ w, index=s.index[width - 1:], name=series.name)
 
 
+# Ordre et seuil du niveau fractionnaire de la méthode 3 (ADR 0011). d = 0,4 garde l'essentiel de la mémoire du niveau (corrélation de l'ordre de 0,9 avec lui sur
+# un cours) tout en rendant stationnaires la plupart des séries de cours et de taux ; un seuil de 1e-3 coupe la fenêtre vers 140 observations (1e-4 : plus de 700,
+# soit trois ans de lignes sans valeur au début de l'historique).
+LEVEL_ORDER = 0.4
+LEVEL_THRESHOLD = 1e-3
+
+
+def fracdiff_level(series: pd.Series, d: float = LEVEL_ORDER, threshold: float = LEVEL_THRESHOLD) -> pd.Series:
+    """Niveau de `series` différencié fractionnairement, sur l'index d'origine (NaN avant la première fenêtre pleine). Log du niveau quand la série est
+    strictement positive (cours, indices) : la dérive d'un cours est multiplicative. Causal : chaque valeur ne dépend que des `width` dernières observations."""
+    s = series.astype(float)
+    known = s.dropna()
+    base = np.log(s) if len(known) and bool((known > 0).all()) else s
+    return frac_diff_ffd(base, d, threshold).reindex(series.index)
+
+
 def _adf_pvalue(x: np.ndarray) -> float:
     from statsmodels.tsa.stattools import adfuller
     return float(adfuller(x, maxlag=1, regression="c", autolag=None)[1])

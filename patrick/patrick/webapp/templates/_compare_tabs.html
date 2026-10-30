@@ -1,0 +1,7 @@
+{# Les deux vues d'une même comparaison de runs (ADR 0010) : le tableau des réglages (`/compare-runs`) et l'analyse détaillée (`/analyses/comparer`) partagent la
+   sélection. `compare_ids` : les runs comparés ; `cmp_tab` : 'table' | 'analysis'. #}
+<nav class="run-tabs compare-tabs" aria-label="{{ t('ct_label') }}">
+  <a href="/compare-runs?{% for rid in compare_ids %}run_ids={{ rid | urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}"{% if cmp_tab == 'table' %} aria-current="page"{% endif %}>{{ t('ct_table') }}</a>
+  <a href="/analyses/comparer?{% for rid in compare_ids %}run_ids={{ rid | urlencode }}{% if not loop.last %}&amp;{% endif %}{% endfor %}"{% if cmp_tab == 'analysis' %} aria-current="page"{% endif %}>{{ t('ct_analysis') }}</a>
+  <a href="/runs">{{ t('cmp_back') }}</a>
+</nav>

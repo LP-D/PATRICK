@@ -26,6 +26,18 @@
 </section>
 {% endif %}
 
+{# ---- Premier lancement : aucun run terminé, trois gestes dans l'ordre ---- #}
+{% if not home.n_done %}
+<section class="card first-run" aria-labelledby="first-run-title">
+<h2 id="first-run-title" class="flush-top">{{ t('fr_title') }}</h2>
+<ol class="first-run-steps">
+<li><a href="/donnees">{{ t('fr_step_data') }}</a></li>
+<li><a href="/ml?profile=quick">{{ t('fr_step_run') }}</a></li>
+<li>{{ t('fr_step_read') }}</li>
+</ol>
+</section>
+{% endif %}
+
 {# ---- Ligne 1 : six chiffres ---- #}
 <div class="metric-grid">
 {{ metric(t('home_kpi_models'), home.n_sane, t('home_kpi_models_rel', d=home.kinds.directional.n, a=home.kinds.alpha.n), "ok" if home.n_sane else "neutral") }}

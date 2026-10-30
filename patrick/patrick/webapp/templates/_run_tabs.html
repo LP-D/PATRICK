@@ -2,5 +2,5 @@
 <nav class="run-tabs" aria-label="{{ t('rt_label') }}">
   <a href="/runs/{{ run_tabs_id | urlencode }}/detail"{% if tab == 'detail' %} aria-current="page"{% endif %}>{{ t('rt_detail') }}</a>
   <a href="/runs/{{ run_tabs_id | urlencode }}/analyse"{% if tab == 'analysis' %} aria-current="page"{% endif %}>{{ t('rt_analysis') }}</a>
-  <a href="/analyses/comparer?runs={{ run_tabs_id | urlencode }}">{{ t('rt_compare') }}</a>
+  <a href="/runs?compare={{ run_tabs_id | urlencode }}">{{ t('rt_compare') }}</a>
 </nav>

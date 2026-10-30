@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ asset('analysis.css') }}">
 <h1 class="page-title">{{ t('ac_title') }}</h1>
 <p class="page-subtitle">{{ t('ac_subtitle') }}</p>
+{% set compare_ids = run_ids %}{% set cmp_tab = 'analysis' %}{% include "_compare_tabs.html" %}
 
 <div id="ac-root" data-run-ids="{{ run_ids | join(',') }}">
     <div class="ra-controls" id="ac-controls"></div>

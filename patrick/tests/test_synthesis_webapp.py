@@ -208,3 +208,11 @@ def test_phase9_page_is_removed(tmp_path, monkeypatch):
     client = TestClient(app)
     resp = client.get("/phase9")
     assert resp.status_code == 404
+
+
+def test_an_empty_installation_shows_the_first_launch_guide_and_actionable_empty_states(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    page = TestClient(app).get("/").text
+    assert 'class="card first-run"' in page and "/ml?profile=quick" in page
+    # les états vides renvoient vers la page où agir
+    assert 'href="/ml?profile=quick"' in page

@@ -111,4 +111,15 @@
         boxes.forEach(function (box) { box.addEventListener("change", update); });
         update();
     });
+    /* `/runs?compare=<run_id>` (onglet « Comparer » de la page d'un run) : le run est déjà coché, il reste à choisir les autres. */
+    var wanted = new URLSearchParams(window.location.search).get("compare");
+    if (wanted) {
+        var first = Array.prototype.find.call(document.querySelectorAll(".compare-run-checkbox"), function (box) { return box.value === wanted && !box.disabled; });
+        if (first) {
+            first.checked = true;
+            first.dispatchEvent(new Event("change", {bubbles: true}));
+            var row = first.closest("tr");
+            if (row) { row.classList.add("is-picked"); row.scrollIntoView({block: "center"}); }
+        }
+    }
 })();

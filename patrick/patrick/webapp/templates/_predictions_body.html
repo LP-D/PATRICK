@@ -134,8 +134,8 @@
 </p>
 
 {% if ns.total == 0 %}
-{% if kind == 'alpha' %}{{ empty_state(t('pred_alpha_empty'), t('pred_alpha_empty_hint')) }}
-{% else %}{{ empty_state(t('pb_no_target'), t('pf_no_group_hint')) }}{% endif %}
+{% if kind == 'alpha' %}{{ empty_state(t('pred_alpha_empty'), t('pred_alpha_empty_hint'), '/ml?profile=alpha', t('es_launch_alpha')) }}
+{% else %}{{ empty_state(t('pb_no_target'), t('pf_no_group_hint'), '/ml?profile=quick', t('es_launch_quick')) }}{% endif %}
 {% endif %}
 
 {% for g in groups %}

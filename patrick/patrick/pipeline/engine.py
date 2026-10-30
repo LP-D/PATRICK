@@ -73,6 +73,7 @@ from patrick.features import (
 )
 from patrick.features import macro as feat_macro
 from patrick.features.alpha_target import baseline_price_series, run_target
+from patrick.features.fracdiff import fracdiff_level
 from patrick.features.interactions import (
     INTERACTION_TYPES,
     apply_interaction,
@@ -151,9 +152,29 @@ def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str)
     return kept
 
 
+def _fracdiff_levels(config: RunConfig) -> bool:
+    """Méthode 3 (ADR 0011) : les niveaux bruts (colonnes de cours et de séries macro) entrent dans la réserve différenciés fractionnairement."""
+    return config.validation.method_version >= 3
+
+
 def _features_payload(config: RunConfig) -> dict:
+    # La clé de cache ne bouge que pour la méthode 3 : un run de méthode 1 ou 2 retrouve ses réserves déjà calculées.
     return {"features": config.features.model_dump(mode="json"),
-            "fred": sorted(config.universe.fred_series), "target": config.objective.target_symbol}
+            "fred": sorted(config.universe.fred_series), "target": config.objective.target_symbol,
+            **({"raw_level": "fracdiff"} if _fracdiff_levels(config) else {})}
+
+
+def _stationary_raw(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
+    """`raw` dont chaque niveau, sauf ceux dont la cible a besoin tels quels (son propre prix, et celui de l'indice de référence d'une cible alpha), devient
+    son niveau différencié fractionnairement sous le même nom : les noms, donc la réduction d'univers et les modèles exportés, ne changent pas."""
+    keep = {target_col}
+    if config.objective.target_kind == "alpha" and config.objective.benchmark:
+        keep.add(clean_symbol(config.objective.benchmark))
+    out = raw.copy()
+    for col in raw.columns:
+        if col not in keep:
+            out[col] = fracdiff_level(raw[col])
+    return out
 
 
 def build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str) -> pd.DataFrame:
@@ -173,7 +194,7 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
     families = config.features.families
     guida_on = config.features.enable_guida_features
     guida_windows = list(D.GUIDA_LOOKBACKS) if guida_on else None
-    parts: list[pd.DataFrame] = [raw]
+    parts: list[pd.DataFrame] = [_stationary_raw(raw, config, target_col) if _fracdiff_levels(config) else raw]
 
     # Phase 3 (feature/hyperparams-lookbacks): sanitized once, outside the
     # per-column loop below (`_sanitize_lookback_windows` is pure/cheap, but
@@ -205,7 +226,7 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
 
     if "macro" in families and config.universe.fred_series:
         macro_cols = list(config.universe.fred_series.keys())
-        parts.append(feat_macro.build_macro_features(raw, macro_cols, guida_windows=guida_windows))
+        parts.append(feat_macro.build_macro_features(raw, macro_cols, guida_windows=guida_windows, fracdiff=_fracdiff_levels(config)))
 
     if guida_on:
         parts.append(guida.build_guida_estimated_features(raw))

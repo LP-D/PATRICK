@@ -8,7 +8,7 @@
 <p class="page-subtitle">{{ t('tg_sub2') }} <a href="/runs?target={{ target }}">{{ t('tg_all_runs') }}</a></p>
 
 {% if detail is none %}
-{{ empty_state(t('tg_empty'), t('tg_empty_hint2')) }}
+{{ empty_state(t('tg_empty'), t('tg_empty_hint2'), '/ml?profile=quick&target=' ~ (target | urlencode), t('es_launch_quick')) }}
 {% else %}
 
 <div class="metric-grid">

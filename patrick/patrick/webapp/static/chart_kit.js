@@ -18,6 +18,7 @@
     // `quote` ajoute l'en-tête de cotation (valeur, variation) ; `ohlc` + `candles` : bougies ; `volume` : barres sous la courbe.
     var DEFAULTS = { type: "line", height: 240, zoomable: true, markers: "auto", legend: "auto", compact: false, connectGaps: false, ranges: false,
                      finance: true, area: "auto", trend: false, baseline: false, quote: false, candles: false };
+    var syncGroups = {};      // `options.sync` : nom de groupe -> graphiques qui partagent leur réticule
     var live = [];            // graphiques montés (redessinés au changement de thème, élagués une fois détachés du document)
 
     // ------------------------------------------------------------------ outils purs (testés sous Node)
@@ -46,6 +47,13 @@
         out.step = step;
         return out;
     }
+    function visibleMarkers(list, x0, x1) {   // repères verticaux dont x tombe dans la fenêtre visible
+        return (list || []).filter(function (l) { return l && l.x >= x0 && l.x <= x1; });
+    }
+    function peersOf(groups, name, self) {    // les autres graphiques encore montés du groupe `name`
+        return ((name && groups[name]) || []).filter(function (c) { return c !== self && !c.isStale(); });
+    }
+
     function decimalsFor(step) { return step >= 1 ? 0 : Math.min(8, Math.max(0, -Math.floor(Math.log10(step) + 1e-9))); }
 
     function parseDate(s) {                // « AAAA-MM-JJ », « AAAA-MM », « AAAA-MM-JJTHH:MM:SS » → ms UTC (NaN si illisible)
@@ -205,6 +213,7 @@
         var minSpan = 1;
         var geo = null;                                   // géométrie du dernier tracé (pour la surcouche)
         var hover = null, drag = null, raf = 0, destroyed = false, pointers = {}, pinch = null;
+        var guideX = null;                                // réticule venu d'un autre graphique du même groupe `sync` (valeur de x, pas un pixel)
         var fin = o.finance !== false && !isBar;                                   // rendu « finance » (cf. DEFAULTS)
         var hasOhlc = !!(o.ohlc && o.ohlc.open && o.ohlc.high && o.ohlc.low && series[0] && timeAxis);
         var hasVol = !!(o.volume && o.volume.length && series[0] && timeAxis);
@@ -389,6 +398,12 @@
                 ctx.setLineDash(dashOf(l.dash, [4, 4])); ctx.beginPath(); ctx.moveTo(padL, Y(l.y)); ctx.lineTo(W - padR, Y(l.y)); ctx.stroke(); ctx.setLineDash([]);
                 if (l.label) { ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText(l.label, W - padR - 6, Y(l.y) - 3); ctx.textBaseline = "alphabetic"; }
             });
+            visibleMarkers(o.vlines, vx0, vx1).forEach(function (l) {             // événements datés (frontière de pli, début du holdout, promotion...) : x dans l'unité de l'axe
+                var px = Math.round(X(l.x)) + 0.5;
+                ctx.strokeStyle = color(l.color || "--text-3"); ctx.lineWidth = l.width || 1;
+                ctx.setLineDash(dashOf(l.dash, [2, 3])); ctx.beginPath(); ctx.moveTo(px, padT); ctx.lineTo(px, padT + ph); ctx.stroke(); ctx.setLineDash([]);
+                if (l.label) { ctx.fillStyle = muted; ctx.font = font; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(l.label, px + 4, padT + 2); ctx.textBaseline = "alphabetic"; }
+            });
             if (fin && ch && (o.baseline || o.trend)) {                           // niveau de départ de la période (comme la « clôture précédente »)
                 ctx.strokeStyle = withAlpha(muted, 0.8); ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
                 ctx.beginPath(); ctx.moveTo(padL, Math.round(Y(ch.first)) + 0.5); ctx.lineTo(W - padR, Math.round(Y(ch.first)) + 0.5); ctx.stroke(); ctx.setLineDash([]);
@@ -557,7 +572,15 @@
                 tip.classList.add("hidden");
                 return;
             }
-            if (!hover) { tip.classList.add("hidden"); paintQuote(null); return; }
+            if (!hover) {
+                tip.classList.add("hidden"); paintQuote(null);
+                if (guideX !== null && guideX >= geo.vx0 && guideX <= geo.vx1) {         // le curseur est sur un autre graphique du groupe : même date, ici
+                    var gx = Math.round(geo.X(guideX)) + 0.5;
+                    c.strokeStyle = token("--text-3"); c.lineWidth = 1; c.setLineDash([3, 3]);
+                    c.beginPath(); c.moveTo(gx, geo.padT); c.lineTo(gx, geo.padT + hitH); c.stroke(); c.setLineDash([]);
+                }
+                return;
+            }
             var hx = hover.px;
             var vis = series.filter(function (s) { return !s.hidden && s.xs.length; });
             if (!vis.length) return;
@@ -746,6 +769,9 @@
         function pos(ev) { var r = over.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
         function inPlot(p) { return geo && p.x >= geo.padL && p.x <= geo.padL + geo.pw && p.y >= geo.padT && p.y <= geo.padT + (geo.hit || geo.ph); }
         function xAt(px) { return geo.vx0 + (px - geo.padL) / geo.pw * (geo.vx1 - geo.vx0); }
+        function broadcast(x) {                           // groupe `sync` : tous les graphiques qui le portent montrent la même date sous le curseur
+            peersOf(syncGroups, o.sync, api).forEach(function (peer) { peer.setGuide(x); });
+        }
 
         over.addEventListener("pointermove", function (ev) {
             var p = pos(ev);
@@ -758,6 +784,7 @@
                 return;
             }
             hover = inPlot(p) ? { px: p.x, py: p.y } : null; drawOver();
+            broadcast(hover ? xAt(p.x) : null);
         });
         over.addEventListener("pointerdown", function (ev) {
             if (!o.zoomable || !geo) return;
@@ -779,7 +806,7 @@
             drawOver();
         });
         over.addEventListener("pointercancel", function (ev) { delete pointers[ev.pointerId]; pinch = null; drag = null; drawOver(); });
-        over.addEventListener("pointerleave", function (ev) { if (ev.pointerType !== "touch" && !drag) { hover = null; drawOver(); } });
+        over.addEventListener("pointerleave", function (ev) { if (ev.pointerType !== "touch" && !drag) { hover = null; drawOver(); broadcast(null); } });
         over.addEventListener("dblclick", function () { if (o.zoomable) resetView(); });
         over.addEventListener("wheel", function (ev) {
             if (!o.zoomable || !geo) return;
@@ -845,12 +872,14 @@
             zoomBy: zoomBy,
             setMode: function (m) { if (hasOhlc && (m === "line" || m === "candle")) { mode = m; syncMode(); schedule(); } },
             destroy: function () { destroyed = true; if (ro) ro.disconnect(); },
+            setGuide: function (x) { guideX = x; if (!hover) drawOver(); },
             isStale: function () { return destroyed || (shown && !host.isConnected); },
             host: host,
         };
         if (o.initialDays && timeAxis && span() > o.initialDays * DAY * 1.15) setView(ext[1] - o.initialDays * DAY, ext[1], false);   // vue de départ : les N derniers jours
         live = live.filter(function (c) { return !c.isStale(); });      // élague les graphiques d'une analyse remplacée (détachés après avoir été affichés)
         live.push(api);
+        if (o.sync) { syncGroups[o.sync] = (syncGroups[o.sync] || []).filter(function (c) { return !c.isStale(); }); syncGroups[o.sync].push(api); }
         schedule();
         return api;
     }
@@ -895,7 +924,7 @@
         });
     }
 
-    var api = { create: create, parseDate: parseDate, _internals: { lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent, withAlpha: withAlpha, windowChange: windowChange, candleExtent: candleExtent, yearStart: yearStart } };
+    var api = { create: create, parseDate: parseDate, _internals: { visibleMarkers: visibleMarkers, peersOf: peersOf, lowerBound: lowerBound, nearestIndex: nearestIndex, niceTicks: niceTicks, decimalsFor: decimalsFor, timeTicks: timeTicks, decimate: decimate, yExtent: yExtent, withAlpha: withAlpha, windowChange: windowChange, candleExtent: candleExtent, yearStart: yearStart } };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     root.PatrickPlot = api;
 })(typeof window !== "undefined" ? window : globalThis);

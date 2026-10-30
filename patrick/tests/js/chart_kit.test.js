@@ -105,4 +105,12 @@ assert.equal(K.candleExtent([0, 1], [5, 6], [4, 3], 10, 20), null);
 assert.equal(K.yearStart(Date.UTC(2026, 9, 22)), Date.UTC(2026, 0, 1));
 assert.equal(K.yearStart(Date.UTC(2024, 0, 1)), Date.UTC(2024, 0, 1));
 
+// ---- repères verticaux d'événements et réticule synchronisé
+assert.deepEqual(K.visibleMarkers([{ x: 1 }, { x: 5 }, { x: 9 }, null], 2, 9).map((l) => l.x), [5, 9], "seuls les repères de la fenêtre, bornes comprises");
+assert.deepEqual(K.visibleMarkers(undefined, 0, 1), []);
+const live = { isStale: () => false }, gone = { isStale: () => true }, me = { isStale: () => false };
+assert.deepEqual(K.peersOf({ g: [me, live, gone] }, "g", me), [live], "ni soi-même ni un graphique détaché");
+assert.deepEqual(K.peersOf({ g: [me, live] }, "autre", me), [], "un autre groupe n'est pas concerné");
+assert.deepEqual(K.peersOf({ g: [me, live] }, undefined, me), [], "sans groupe, rien n'est partagé");
+
 console.log("chart_kit : tous les tests passent");

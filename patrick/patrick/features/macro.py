@@ -5,11 +5,13 @@ from __future__ import annotations
 import pandas as pd
 
 from patrick.features._utils import safe_pct_change
+from patrick.features.fracdiff import fracdiff_level
 
 
 def build_macro_features(df: pd.DataFrame, macro_cols: list[str],
                           lags: tuple[int, ...] = (1, 5, 10),
-                          guida_windows: list[int] | None = None) -> pd.DataFrame:
+                          guida_windows: list[int] | None = None,
+                          fracdiff: bool = False) -> pd.DataFrame:
     """`guida_windows` (Phase 2, feature/guida-features-full): the return
     (`_ret_Xd`) and vol (`_vol_Xd`) windows used to be hardcoded to 5d/20d
     only -- when provided (typically `config.defaults.GUIDA_LOOKBACKS`),
@@ -24,13 +26,16 @@ def build_macro_features(df: pd.DataFrame, macro_cols: list[str],
             continue
         s = df[col]
         ret = safe_pct_change(s)
-        out[f"{col}_level"] = s
+        # Méthode 3 (ADR 0011) : le niveau d'une série macro n'est pas stationnaire (les arbres extrapolent mal hors de la plage vue) ;
+        # son niveau et ses retards deviennent le niveau différencié fractionnairement, sous les mêmes noms.
+        level = fracdiff_level(s) if fracdiff else s
+        out[f"{col}_level"] = level
         for w in ret_windows:
             out[f"{col}_ret_{w}d"] = safe_pct_change(s, w)
         for w in vol_windows:
             out[f"{col}_vol_{w}d"] = ret.rolling(w).std()
         for lag in lags:
-            out[f"{col}_lag{lag}"] = s.shift(lag)
+            out[f"{col}_lag{lag}"] = level.shift(lag)
     if not out:
         return pd.DataFrame(index=df.index)
     return pd.DataFrame(out, index=df.index)

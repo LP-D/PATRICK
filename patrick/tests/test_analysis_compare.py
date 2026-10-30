@@ -108,7 +108,27 @@ def test_old_comparison_page_links_to_detailed_one(tmp_path, monkeypatch):
     assert r.status_code == 200 and "/analyses/comparer?run_ids=run_a&amp;run_ids=run_b" in r.text
 
 
+def test_both_comparison_views_share_one_tab_bar_and_the_run_tab_preselects(tmp_path, monkeypatch):
+    _two_runs(tmp_path, monkeypatch)
+    c = TestClient(app)
+    table = c.get("/compare-runs?run_ids=run_a&run_ids=run_b").text
+    detail = c.get("/analyses/comparer?run_ids=run_a&run_ids=run_b").text
+    for text, current in ((table, "/compare-runs?"), (detail, "/analyses/comparer?")):
+        assert 'class="run-tabs compare-tabs"' in text and "/compare-runs?run_ids=run_a&amp;run_ids=run_b" in text
+        assert f'href="{current}run_ids=run_a&amp;run_ids=run_b" aria-current="page"' in text
+    # l'onglet « Comparer » d'un run ouvre l'historique avec ce run coché, pas la comparaison (qui exige 2 à 4 runs)
+    assert 'href="/runs?compare=run_a"' in c.get("/runs/run_a/detail").text
+    assert "compare" in c.get("/static/runs_panel.js").text
+
+
 @pytest.fixture(autouse=True)
 def _clear():
     yield
     registry.clear_cache()
+
+
+def test_the_table_shows_each_runs_profile_and_method_and_warns_when_they_differ(tmp_path, monkeypatch):
+    _two_runs(tmp_path, monkeypatch)
+    text = TestClient(app).get("/compare-runs?run_ids=run_a&run_ids=run_b").text
+    assert "Profil d&#39;entraînement" in text or "Profil d'entraînement" in text
+    assert "<th>Méthode d&#39;évaluation</th>" in text or "<th>Méthode d'évaluation</th>" in text
