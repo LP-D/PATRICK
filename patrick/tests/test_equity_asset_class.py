@@ -40,40 +40,41 @@ from patrick.webapp.app import app
 #    de features par defaut d'un autre run.
 # ---------------------------------------------------------------------------
 
-def test_equity_universe_has_required_metadata_per_ticker():
-    for symbol, meta in equity_universe.EQUITY_UNIVERSE.items():
-        assert {"label", "currency", "exchange", "first_listed"} <= set(meta), symbol
-        assert meta["currency"] and isinstance(meta["currency"], str)
-        assert meta["exchange"] and isinstance(meta["exchange"], str)
+FORMER_SINGLE_STOCKS = ("TTE.PA", "HO.PA", "AMZN", "ALDAT.PA")
 
 
-def test_equity_universe_contains_the_four_expected_tickers():
-    assert set(equity_universe.EQUITY_UNIVERSE) == {"TTE.PA", "HO.PA", "AMZN", "ALDAT.PA"}
+def _group_of(symbol: str) -> str:
+    return next(g for g, items in forms.TARGET_GROUPS.items() if symbol in [s for s, _ in items])
 
 
-def test_equity_group_absent_from_default_target_groups():
-    """Separation explicite (spec) : le groupe actions ne doit JAMAIS
-    apparaitre dans `DEFAULT_TARGET_GROUPS` lui-meme -- sans quoi il
-    fuirait dans `DEFAULT_UNIVERSE_YF_TICKERS` (univers de features par
-    defaut de CHAQUE run, y compris ceux predisant le VIX/l'or/etc.) et
-    casserait `test_universe_matches_exactly_the_reduced_target_set`."""
-    assert equity_universe.EQUITY_TARGET_GROUP not in D.DEFAULT_TARGET_GROUPS
-    for symbol in equity_universe.EQUITY_UNIVERSE:
-        assert symbol not in D.DEFAULT_UNIVERSE_YF_TICKERS
+def test_history_proxies_are_declared_for_recently_listed_stocks():
+    assert equity_universe.history_proxies() == {"ALDAT.PA": ("^FCHI", 2.0)}
+
+
+def test_the_four_former_single_stocks_sit_in_their_real_groups_exactly_once():
+    assert "Actions individuelles" not in forms.TARGET_GROUPS
+    assert _group_of("TTE.PA") == "Actions France (CAC 40)"
+    assert _group_of("HO.PA") == "Actions France (CAC 40)"
+    assert _group_of("AMZN") == "Actions US (méga-capitalisations)"
+    assert _group_of("ALDAT.PA") == "Actions France (autres valeurs)"
+    occurrences = [s for items in forms.TARGET_GROUPS.values() for s, _ in items if s in FORMER_SINGLE_STOCKS]
+    assert sorted(occurrences) == sorted(FORMER_SINGLE_STOCKS)
+
+
+def test_every_stock_of_the_universe_is_recognised_as_an_equity():
+    assert all(equity_universe.is_equity_symbol(s) for s in FORMER_SINGLE_STOCKS + ("MC.PA", "AAPL", "SAP.DE", "SHEL.L", "7203.T"))
+    assert not any(equity_universe.is_equity_symbol(s) for s in ("^GSPC", "GC=F", "BTC-USD", "XLK", "EURUSD=X"))
+    assert len(equity_universe.equity_symbols()) >= 280
 
 
 def test_equities_are_selectable_as_target_but_never_in_the_default_feature_universe():
-    """`webapp/forms.py` : les actions doivent apparaitre comme CIBLES
-    possibles (TARGET_GROUPS/TARGET_SOURCE_BY_SYMBOL), mais
-    `universe_excluding` (l'univers de features par defaut de tout run,
-    quel que soit son target) ne doit JAMAIS les inclure."""
-    assert equity_universe.EQUITY_TARGET_GROUP in forms.TARGET_GROUPS
-    for symbol in equity_universe.EQUITY_UNIVERSE:
-        assert symbol in forms.TARGET_SOURCE_BY_SYMBOL
+    """Les actions sont des CIBLES possibles (TARGET_GROUPS / TARGET_SOURCE_BY_SYMBOL) mais jamais dans l'univers de features par défaut :
+    `DEFAULT_UNIVERSE_YF_TICKERS` n'en contient aucune, et le run d'une autre cible n'en reçoit aucune."""
+    for symbol in FORMER_SINGLE_STOCKS:
         assert forms.TARGET_SOURCE_BY_SYMBOL[symbol] == "yfinance"
-
+        assert symbol not in D.DEFAULT_UNIVERSE_YF_TICKERS
     yf_tickers, _ = forms.universe_excluding("^VIX")
-    for symbol in equity_universe.EQUITY_UNIVERSE:
+    for symbol in FORMER_SINGLE_STOCKS:
         assert symbol not in yf_tickers
 
 
@@ -549,14 +550,13 @@ def test_carry_is_empty_not_silently_zero_for_equity_only_raw():
     assert out.empty
 
 
-def test_equity_feature_exclusions_documents_carry_and_cross_sectional_momentum():
+def test_equity_feature_exclusions_document_carry_cross_sectional_momentum_and_fundamentals():
     exclusions = guida.equity_feature_exclusions()
-    assert set(exclusions) == {"carry", "cross_sectional_momentum"}
-    assert exclusions["carry"].strip()
-    assert exclusions["cross_sectional_momentum"].strip()
-    # message explicite, pas un silence : cite le seuil minimum reel
-    assert str(guida._MIN_GROUP_SIZE_FOR_RANKING) in exclusions["cross_sectional_momentum"]
-    assert str(len(equity_universe.EQUITY_UNIVERSE)) in exclusions["cross_sectional_momentum"]
+    assert set(exclusions) == {"carry", "cross_sectional_momentum", "fundamentals"}
+    assert all(text.strip() for text in exclusions.values())
+    # message explicite, pas un silence : dit par quoi la comparaison au marché est apportée
+    assert "contexte" in exclusions["cross_sectional_momentum"]
+    assert "point-in-time" in exclusions["fundamentals"]
 
 
 # ---------------------------------------------------------------------------
@@ -564,44 +564,17 @@ def test_equity_feature_exclusions_documents_carry_and_cross_sectional_momentum(
 #    listant des tickers actions).
 # ---------------------------------------------------------------------------
 
-def test_equities_page_returns_200_and_lists_every_ticker(monkeypatch):
-    monkeypatch.setattr(
-        equity_sufficiency.yfinance_source, "download_one",
-        lambda symbol, start: pd.Series(np.arange(100, dtype=float)),
-    )
-    monkeypatch.setattr(fundamentals_source, "fetch_fundamentals",
-                         lambda symbol: pd.DataFrame(columns=["fiscalDateEnding", "metric", "value"]))
+def test_equities_page_returns_200_and_lists_every_stock_under_its_name():
     client = TestClient(app)
-    resp = client.get("/equities")
+    resp = client.get("/equities")                      # redirection permanente vers /equity
     assert resp.status_code == 200
-    for symbol in equity_universe.EQUITY_UNIVERSE:
-        assert symbol in resp.text
+    for symbol in equity_universe.equity_symbols():
+        assert f'data-symbol="{symbol}"' in resp.text, symbol
+    for symbol in FORMER_SINGLE_STOCKS:
         assert str(escape(instruments.display(symbol, "fr"))) in resp.text
-    # exclusions carry/cross-sectional momentum affichees explicitement
-    assert "Cross-sectional momentum" in resp.text or "cross_sectional_momentum" in resp.text
-
-
-def test_equities_page_fundamentals_display_unaffected_by_the_training_guard(monkeypatch):
-    """CHANTIER (suite) : le blocage de `equity_fundamentals.
-    build_equity_fundamentals_features` (feature d'entrainement) ne doit
-    RIEN casser sur /equities -- `webapp/app.py::equities_page` appelle
-    `fundamentals_source.fetch_fundamentals` DIRECTEMENT, jamais le wrapper
-    desormais bloque. Donnees de forme REELLE (verifiee empiriquement pour
-    TTE.PA/AMZN, ÉTAPE 0)."""
-    monkeypatch.setattr(
-        equity_sufficiency.yfinance_source, "download_one",
-        lambda symbol, start: pd.Series(np.arange(100, dtype=float)),
-    )
-    monkeypatch.setattr(fundamentals_source, "fetch_fundamentals", lambda symbol: pd.DataFrame({
-        "fiscalDateEnding": ["2025-12-31", "2026-03-31"],
-        "metric": ["Total Revenue", "Total Revenue"],
-        "value": [43844000000.0, 44676000000.0],
-    }))
-    client = TestClient(app)
-    resp = client.get("/equities")
-    assert resp.status_code == 200
-    assert "Total Revenue" in resp.text
-    assert "43844000000.0" in resp.text
+    # features de contexte et exclusions (carry, cross-sectional momentum, fondamentaux) affichées explicitement
+    assert "Contexte de marché" in resp.text and "Cross-sectional momentum" in resp.text
+    assert "Actions suivies en détail" not in resp.text
 
 
 def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(monkeypatch):

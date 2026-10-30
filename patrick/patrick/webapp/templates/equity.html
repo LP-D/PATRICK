@@ -1,22 +1,19 @@
 {% extends "asset_class.html" %}
-{% from "_components.html" import asset_panel, status_badge, help_icon %}
+{% from "_components.html" import help_icon %}
 
 {% block class_extra %}
-<section class="card" id="followed">
-<h2>{{ t('eq_followed_title') }}</h2>
-<p class="hint">{{ t('eq_followed_hint') }}</p>
+<section class="card" id="equity-features">
+<h2>{{ t('eq_features_title') }}</h2>
+<p class="hint">{{ t('eq_features_hint') }}</p>
 <div class="group-block">
-<h3>{{ t('eq_availability') }}
-    {{ help_icon('equity_min_history', t('eq_threshold'), t('glossary_open_aria', term=t('eq_threshold'))) }}
+<h3>{{ t('eq_context_h') }}
+    {{ help_icon('equity_context_features', t('eq_context_h'), t('glossary_open_aria', term=t('eq_context_h'))) }}
 </h3>
-{% for a in assets %}
-<p>
-  <strong title="{{ a.symbol }}">{{ a.symbol | iname }}</strong>
-  ({{ a.currency }}, {{ a.exchange }}, {{ t('eq_first_listed') }} : {{ a.first_listed }})
-  {{ status_badge(t('dq_status_ok') if a.sufficient else t('dq_status_short'), 'ok' if a.sufficient else 'warning') }}
-  <br><span class="hint">{{ t.tx(a.reason) }}</span>
-</p>
+<ul>
+{% for key in context_features %}
+<li>{{ t('eq_ctx_' ~ key) }}</li>
 {% endfor %}
+</ul>
 </div>
 
 <div class="group-block">
@@ -28,36 +25,6 @@
 <li><strong>{{ family }}</strong> — {{ t.tx(reason) }}</li>
 {% endfor %}
 </ul>
-</div>
-
-<div class="group-block asset-panel-grid">
-{% for a in assets %}
-{{ asset_panel(a.symbol, a.label, a.slug) }}
-{% endfor %}
-</div>
-
-<div class="group-block">
-<h3>{{ t('eq_fundamentals') }}
-    {{ help_icon('equity_fundamentals', t('eq_fundamentals'), t('glossary_open_aria', term=t('eq_fundamentals'))) }}
-</h3>
-{% for a in assets %}
-<h4 title="{{ a.symbol }}">{{ a.symbol | iname }}</h4>
-{% set rows = fundamentals.get(a.symbol, []) %}
-{% if rows %}
-<div class="table-scroll">
-<table class="data-table">
-<thead><tr><th>fiscalDateEnding</th><th>metric</th><th class="num pk-mono">value</th></tr></thead>
-<tbody>
-{% for row in rows %}
-<tr><td>{{ row.fiscalDateEnding }}</td><td>{{ row.metric }}</td><td class="num pk-mono">{{ row.value }}</td></tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-{% else %}
-<p class="hint">{{ t('eq_no_fundamentals', symbol=a.symbol | iname) }}</p>
-{% endif %}
-{% endfor %}
 </div>
 </section>
 {% endblock %}

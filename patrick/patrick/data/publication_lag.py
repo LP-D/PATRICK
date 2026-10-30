@@ -87,6 +87,10 @@ PERIOD_END_LAG_DAYS: dict[str, int] = {
     "CFNAI": 30,                      # Chicago Fed: ~4th week of M+1
     "M2SL": 30,                       # Fed H.6
     "IRLTLT01DEM156N": 45, "IRLTLT01JPM156N": 45, "IRLTLT01GBM156N": 45,   # OECD monthly yields
+    "IRLTLT01FRM156N": 45, "IRLTLT01ITM156N": 45,                           # OECD monthly yields, euro area
+    "LRHUTTTTDEM156S": 45,            # OECD harmonised unemployment, Germany
+    "CP0000EZ19M086NEST": 25,         # Eurostat HICP, euro area: final release ~17th-20th of M+1
+    "CLVMNACSCAB1GQEA19": 60,         # Eurostat euro-area GDP: flash t+30, revised estimate t+45-65
 }
 DEFAULT_MONTHLY_LAG_DAYS = 45
 DEFAULT_QUARTERLY_LAG_DAYS = 95
@@ -101,6 +105,7 @@ _KNOWN_IDS = set(DAILY_LAG_BDAYS) | set(PERIOD_END_LAG_DAYS) | set(WEEKLY_LAG_DA
     "NFCIRISK", "NFCICREDIT", "NFCILEVERAGE",
     "DFII10", "DFII5", "DAAA", "DBAA", "AAA10Y", "BAA10Y", "T10YFF", "T5YFF", "DPRIME",
     "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS",
+    "ECBMRRFR",        # ECB main refinancing rate: daily step function, like ECBDFR (default 1-bar lag)
 }
 
 

@@ -18,7 +18,6 @@ from datetime import UTC, date, datetime
 
 from patrick.clock import utc_today
 from patrick.config import defaults as D
-from patrick.config import equity_universe as EQ
 from patrick.config import universe_extension as UX
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
@@ -220,11 +219,9 @@ def history_depths(store: DataStore | None = None) -> dict[str, dict]:
 
 
 def declared_first_dates() -> dict[str, str]:
-    """Première cotation vérifiée (`config/universe_extension.py`, `config/equity_universe.py`) des cibles jamais ingérées :
+    """Première cotation vérifiée (`config/universe_extension.py`) des cibles jamais ingérées :
     permet de griser une cible trop récente AVANT son premier téléchargement."""
-    out = {sym: first for items in UX.EXTENDED_TARGET_GROUPS.values() for sym, _label, first in items}
-    out.update({sym: meta["first_listed"] for sym, meta in EQ.EQUITY_UNIVERSE.items() if meta.get("first_listed")})
-    return out
+    return {sym: first for items in UX.EXTENDED_TARGET_GROUPS.values() for sym, _label, first in items}
 
 
 def years_available(first: str | None, today: date | None = None) -> float | None:

@@ -20,7 +20,6 @@ CLASSES: dict[str, tuple[str, ...]] = {
     "Actions France": ("Actions France (CAC 40)", "Actions France (autres valeurs)"),
     "Actions Europe": ("Actions Allemagne", "Actions Royaume-Uni", "Actions Europe (autres pays)"),
     "Actions Asie": ("Actions Asie (locales & ADR)",),
-    "Actions individuelles": ("Actions individuelles",),
     "Indices": ("Indices mondiaux", "Indices"),
     "ETF": ("ETFs sectoriels & thématiques", "Obligataire & taux (ETFs)", "International (ETFs pays)",
             "Matières premières & devises (ETFs)"),

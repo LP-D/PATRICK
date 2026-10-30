@@ -16,10 +16,10 @@ from patrick.pipeline import engine as engine_module
 # (`frequency_short`) when the list was built on 2026-10-07.
 _FREQ = {
     "daily": {"DFII10", "DFII5", "DAAA", "DBAA", "AAA10Y", "BAA10Y", "T10YFF", "T5YFF", "DPRIME",
-              "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS", "DEXJPUS", "DEXUSUK", "DEXCHUS", "DEXSZUS", "DEXCAUS"},
+              "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS", "DEXJPUS", "DEXUSUK", "DEXCHUS", "DEXSZUS", "DEXCAUS", "ECBMRRFR"},
     "weekly": {"ICSA", "CCSA", "GASREGW", "WALCL", "WTREGEN", "WRESBAL", "TOTCI", "MORTGAGE30US",
                "MORTGAGE15US", "NFCIRISK", "NFCICREDIT", "NFCILEVERAGE"},
-    "quarterly": {"GDPC1", "A191RL1Q225SBEA"},
+    "quarterly": {"GDPC1", "A191RL1Q225SBEA", "CLVMNACSCAB1GQEA19"},
 }
 _FREQ["monthly"] = set(D.MACRO_ONLY_FRED_SERIES.values()) - set().union(*_FREQ.values())
 

@@ -13,23 +13,17 @@ import re
 from pathlib import Path
 
 from patrick.config import defaults as D
-from patrick.config import equity_universe as EQ
+from patrick.config import equity_context as EC
 from patrick.config import universe_extension as UX
 from patrick.features.benchmark import BenchmarkError, resolve_benchmark
 from patrick.validation import feasibility, history_length
 
-# CHANTIER (feature/equity-asset-class): equities are selectable as a run's
-# TARGET (merged into TARGET_SOURCE_BY_SYMBOL/TARGET_CHOICES/TARGET_GROUPS
-# below), but deliberately NOT merged into D.DEFAULT_UNIVERSE_YF_TICKERS --
-# `universe_excluding` below stays untouched, so no run's default FEATURE
-# pool (commodities/macro, any target) ever gains an equity column just
-# because this new group exists. See `config/equity_universe.py`'s module
-# docstring for the full rationale ("separate from the existing commo/macro
-# universe", per this chantier's spec).
+# Equities are selectable as a run's TARGET like every other symbol of the verified extended universe
+# (config/universe_extension.py), but not merged into D.DEFAULT_UNIVERSE_YF_TICKERS: no run's default FEATURE pool
+# ever gains an equity column just because a stock exists. A stock target gets its own market-context tickers
+# instead (`universe_excluding`, `config/equity_context.py`).
 TARGET_SOURCE_BY_SYMBOL = {sym: src for sym, _, src in D.DEFAULT_TARGET_CHOICES}
-TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in EQ.equity_target_choices()})
-# Roadmap bloc 4: verified extended universe (config/universe_extension.py),
-# targets only -- same separation from the default feature pool as equities.
+# Roadmap bloc 4: verified extended universe (config/universe_extension.py), targets only.
 TARGET_SOURCE_BY_SYMBOL.update({sym: src for sym, _, src in UX.extended_target_choices()})
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
@@ -54,6 +48,9 @@ def universe_excluding(target_symbol: str, scope: str = "extended") -> tuple[lis
     `scope="default"` stays reachable from code (tests, YAML-free callers)."""
     base = UX.extended_candidate_yf_tickers() if scope == "extended" else D.DEFAULT_UNIVERSE_YF_TICKERS
     yf_tickers = [t for t in base if t != target_symbol]
+    # A stock target also gets the indices it is compared with (`config/equity_context.py`): its home index and, in Europe, the
+    # national indices behind the euro-area composite. Nothing is added for any other target.
+    yf_tickers += [t for t in EC.context_tickers(target_symbol) if t not in yf_tickers]
     fred_series = {k: v for k, v in D.DEFAULT_UNIVERSE_FRED_SERIES.items() if v != target_symbol}
     return yf_tickers, fred_series
 
@@ -107,6 +104,7 @@ def _default_ml_config_dict() -> dict:
             "interact_top_pairs": 20,
             "interact_final_n": 30,
             "pool_prefilter": D.DEFAULT_POOL_PREFILTER,
+            "enable_equity_context_features": D.DEFAULT_ENABLE_EQUITY_CONTEXT_FEATURES,
             "technical_lookbacks": {
                 "returns_windows": list(D.DEFAULT_RETURNS_WINDOWS),
                 "zscore_windows": list(D.DEFAULT_ZSCORE_WINDOWS),
@@ -180,7 +178,7 @@ ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
 # TARGET_SOURCE_BY_SYMBOL's comment above) -- keeps
 # `test_universe_matches_exactly_the_reduced_target_set` (asserting on
 # `D.DEFAULT_TARGET_GROUPS` directly) unaffected by this new group.
-TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + EQ.equity_target_choices() + UX.extended_target_choices()
+TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + UX.extended_target_choices()
 TARGET_GROUPS = UX.all_target_groups()
 # Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
 # driving the "Lookbacks technical" section of `index.html` -- one
@@ -685,6 +683,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "interact_top_pairs": interact_top_pairs,
             "interact_final_n": interact_final_n,
             "pool_prefilter": pool_prefilter,
+            "enable_equity_context_features": D.DEFAULT_ENABLE_EQUITY_CONTEXT_FEATURES,
             "technical_lookbacks": technical_lookbacks,
         },
         "validation": {

@@ -118,6 +118,11 @@ DEFAULT_TUNING_OPTUNA_SELECT_TOP_K_PER_HORIZON = True
 # simple opt-in de recherche.
 DEFAULT_ENABLE_FUNDAMENTALS_FEATURES = False
 
+# Features de contexte de marche des actions (`features/equity_context.py`) : le schema reste a False (un run enregistre avant ce champ
+# se rejoue -- predict, explain, resume -- avec exactement les colonnes sur lesquelles il a ete entraine, meme principe que
+# `fred_point_in_time`), mais tout run NEUF (formulaire, lots de lancement) l'active. Sans effet sur une cible qui n'est pas une action.
+DEFAULT_ENABLE_EQUITY_CONTEXT_FEATURES = True
+
 # CHANTIER (feature/equity-asset-class, suite) -- seuil GLOBAL, parametrable,
 # d'anciennete minimale d'historique (en annees) exige a l'ingestion pour
 # TOUTE cible (`data/ingest.py`) -- remplace le 20 fige en dur. Ramene a 10
@@ -634,6 +639,22 @@ MACRO_ONLY_FRED_SERIES = {
     "Mortgage_30Y_Rate": "MORTGAGE30US",
     "Mortgage_15Y_Rate": "MORTGAGE15US",
     "Germany_10Y_Yield": "IRLTLT01DEM156N",
+    # Euro area (2026-10-30): sovereign yields (the Italy / France spreads over Germany are the euro stress gauge), HICP inflation,
+    # real GDP, German unemployment and the ECB main refinancing rate (the deposit rate is the feature-only `EUR_DFR_Rate`).
+    "France_10Y_Yield": "IRLTLT01FRM156N",
+    "Italy_10Y_Yield": "IRLTLT01ITM156N",
+    "Euro_HICP": "CP0000EZ19M086NEST",
+    "Euro_Real_GDP": "CLVMNACSCAB1GQEA19",
+    "Germany_Unemployment": "LRHUTTTTDEM156S",
+    "ECB_MRO_Rate": "ECBMRRFR",
+    # Euro area (2026-10-30): sovereign yields (the Italy / France spreads over Germany are the euro stress gauge), HICP inflation,
+    # real GDP, German unemployment and the ECB main refinancing rate (the deposit rate is the feature-only `EUR_DFR_Rate`).
+    "France_10Y_Yield": "IRLTLT01FRM156N",
+    "Italy_10Y_Yield": "IRLTLT01ITM156N",
+    "Euro_HICP": "CP0000EZ19M086NEST",
+    "Euro_Real_GDP": "CLVMNACSCAB1GQEA19",
+    "Germany_Unemployment": "LRHUTTTTDEM156S",
+    "ECB_MRO_Rate": "ECBMRRFR",
     "Japan_10Y_Yield": "IRLTLT01JPM156N",
     "UK_10Y_Yield": "IRLTLT01GBM156N",
     # Financial conditions and volatility indices
@@ -677,8 +698,9 @@ MACRO_PAGE_SECTIONS: list[tuple[str, list[str]]] = [
     ("liquidity", ["M2SL", "WALCL", "WRESBAL", "WTREGEN", "TOTCI"]),
     ("markets", ["SP500", "VXNCLS", "RVXCLS", "OVXCLS", "GVZCLS"]),
     ("commodities", ["DCOILWTICO", "DCOILBRENTEU", "GASREGW"]),
-    ("international", ["DEXJPUS", "DEXUSUK", "DEXCHUS", "DEXSZUS", "DEXCAUS",
-                       "IRLTLT01DEM156N", "IRLTLT01JPM156N", "IRLTLT01GBM156N"]),
+    ("international", ["DEXJPUS", "DEXUSUK", "DEXCHUS", "DEXSZUS", "DEXCAUS", "IRLTLT01JPM156N", "IRLTLT01GBM156N"]),
+    ("euro", ["IRLTLT01DEM156N", "IRLTLT01FRM156N", "IRLTLT01ITM156N", "CP0000EZ19M086NEST", "CLVMNACSCAB1GQEA19",
+              "LRHUTTTTDEM156S", "ECBMRRFR"]),
 ]
 MACRO_DISPLAY_IDS = frozenset(sid for _, ids in MACRO_PAGE_SECTIONS for sid in ids)
 

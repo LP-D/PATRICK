@@ -50,7 +50,7 @@ def test_equity_replaces_the_individual_stocks_page():
     redirect = client.get("/equities", follow_redirects=False)
     assert redirect.status_code == 308 and redirect.headers["location"] == "/equity"
     html = client.get("/equity").text
-    assert "Equity" in html and "Actions suivies en détail" in html
+    assert "Equity" in html and "Features des actions" in html
 
 
 @pytest.mark.parametrize("cls", CLASS_PAGES, ids=lambda c: c.key)

@@ -50,6 +50,7 @@ from sklearn.preprocessing import RobustScaler
 
 from patrick.clock import utc_today
 from patrick.config import defaults as D
+from patrick.config.equity_universe import is_equity_symbol
 from patrick.config.schema import RunConfig
 from patrick.data import alignment
 from patrick.data import quality as quality_module
@@ -62,6 +63,7 @@ from patrick.data.session_calendar import (
 from patrick.data.sources.yfinance_source import clean_symbol, download_ohlc
 from patrick.data.store import DataStore
 from patrick.features import (
+    equity_context,
     equity_fundamentals,
     guida,
     long_cycle,
@@ -240,6 +242,10 @@ def _build_base_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: s
     if config.features.enable_fundamentals_features:
         parts.append(equity_fundamentals.build_equity_fundamentals_features(
             config.objective.target_symbol, raw.index))
+
+    # Stock targets: position against the home index / euro-area composite (empty for any other target).
+    if config.features.enable_equity_context_features:
+        parts.append(equity_context.build_equity_context_features(raw, config.objective.target_symbol))
 
     if "technical" in families:
         ohlc = download_ohlc(config.objective.target_symbol, config.universe.start_date)
@@ -1229,6 +1235,10 @@ def _config_hash(config: RunConfig) -> str:
     # Idem pour la version de méthode : un run de méthode 1 (tout run d'avant le champ) garde son hachage.
     if config.validation.method_version < 2:
         exclude["validation"] = {"method_version"}
+    # Idem pour les features de contexte des actions : sans effet sur une cible qui n'est pas une action, et absentes de tout run d'avant
+    # le champ ; seul un run d'action qui les active les porte dans son hachage.
+    if not (config.features.enable_equity_context_features and is_equity_symbol(config.objective.target_symbol)):
+        exclude["features"] = {"enable_equity_context_features"}
     exclude = exclude or None
     return hashlib.sha256(config.model_dump_json(exclude=exclude).encode()).hexdigest()[:16]
 

@@ -16,3 +16,5 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0008](0008-methode-d-evaluation-2.md) | Méthode d'évaluation 2 : DM sur la direction, jours plats dans l'évaluation, régimes par volatilité, SHAP récent, placebo | 2026-10-28 | Acceptée |
 | [0009](0009-stockage-et-entretien-de-la-base.md) | Stockage : archivage des prédictions du scan, caches comprimés et évincés, index | 2026-10-29 | Acceptée |
 | [0010](0010-budget-d-essais-dm-continu-et-interface.md) | Budget d'essais, DM sur le Brier, runs sans évaluation en échec, interface (onglets, tableaux, À faire) | 2026-10-29 | Acceptée |
+| [0011](0011-methode-3-interface-et-audit-des-tests.md) | Méthode 3 (niveaux bruts, calibration), interface, audit des tests | 2026-10-30 | Acceptée (méthode 3 non activée) |
+| [0012](0012-actions-dans-leur-groupe-et-features-de-contexte.md) | Les actions dans leur vrai groupe, features de contexte de marché (zone euro) | 2026-10-30 | Acceptée |

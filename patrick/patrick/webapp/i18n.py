@@ -422,7 +422,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "group_volatility": {"fr": "Volatilité", "en": "Volatility"},
     "group_crypto": {"fr": "Crypto", "en": "Crypto"},
     "group_international_etfs": {"fr": "International (ETFs pays)", "en": "International (country ETFs)"},
-    "group_stocks": {"fr": "Actions individuelles", "en": "Individual stocks"},
     "group_fred_macro": {"fr": "Macro (FRED)", "en": "Macro (FRED)"},
     "group_world_indices": {"fr": "Indices mondiaux", "en": "World indices"},
     "group_us_megacaps": {"fr": "Actions US (méga-capitalisations)", "en": "US stocks (mega caps)"},
@@ -493,7 +492,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "macro_section_commodities": {"fr": "Énergie et matières premières", "en": "Energy and commodities"},
     "macro_section_international": {"fr": "International : devises et taux étrangers",
                                     "en": "International: currencies and foreign yields"},
-    "nav_equities": {"fr": "Actions individuelles", "en": "Individual stocks"},
+    "macro_section_euro": {"fr": "Zone euro : taux, inflation, croissance", "en": "Euro area: yields, inflation, growth"},
+    "macro_section_euro": {"fr": "Zone euro : taux, inflation, croissance", "en": "Euro area: yields, inflation, growth"},
+    "nav_equities": {"fr": "Actions", "en": "Stocks"},
     "group_fred_training": {"fr": "Séries FRED d'entraînement", "en": "FRED training series"},
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},
     # Phase 8 (feature/portfolio-view)
@@ -814,7 +815,6 @@ TARGET_GROUP_LABEL_KEYS = {
     "Volatilité": "group_volatility",
     "Crypto": "group_crypto",
     "International (ETFs pays)": "group_international_etfs",
-    "Actions individuelles": "group_stocks",
     "Macro (FRED)": "group_fred_macro",
     "Séries FRED d'entraînement": "group_fred_training",
     # Roadmap bloc 4 -- groupes de l'univers etendu (config/universe_extension.py)

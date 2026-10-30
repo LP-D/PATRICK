@@ -574,29 +574,24 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "\"Never cached\" means no run has loaded the series yet."),
     },
     "equity_universe": {
-        "fr": ("Univers actions séparé des features des autres classes. Chaque titre peut être "
-               "choisi comme cible d'un run, mais n'est pas injecté dans les autres modèles."),
-        "en": ("The equity universe is separate from other asset-class features. Each stock can "
-               "be selected as a run target but is not injected into other models."),
+        "fr": ("Chaque action est dans son vrai groupe (pays et taille). Elle peut être choisie "
+               "comme cible d'un run ; ses features de contexte la comparent à son marché."),
+        "en": ("Each stock sits in its real group (country and size). It can be selected as a run "
+               "target; its context features compare it with its market."),
     },
-    "equity_min_history": {
-        "fr": ("Le badge indique si l'historique disponible atteint le seuil minimal pour "
-               "envisager un entraînement. Les prix et fondamentaux restent consultables "
-               "en dessous de ce seuil."),
-        "en": ("The badge indicates whether available history reaches the minimum threshold "
-               "to consider training. Prices and fundamentals remain viewable below it."),
+    "equity_context_features": {
+        "fr": ("Comparaison de l'action à son marché : rendement relatif, bêta, corrélation, volatilité "
+               "propre et force relative, calculés sur des fenêtres qui se terminent à la date courante. "
+               "Pour une action européenne, la référence est aussi un indice composite de la zone euro."),
+        "en": ("Comparison of the stock with its market: relative return, beta, correlation, idiosyncratic "
+               "volatility and relative strength, computed on windows ending at the current date. For a European "
+               "stock the reference also includes a euro-area composite index."),
     },
     "equity_feature_exclusions": {
-        "fr": ("Certaines familles de features ne s'appliquent pas aux actions individuelles. "
+        "fr": ("Certaines familles de features ne s'appliquent pas aux actions. "
                "Chaque exclusion est listée avec son motif."),
-        "en": ("Some feature families do not apply to individual equities. Each exclusion is "
+        "en": ("Some feature families do not apply to stocks. Each exclusion is "
                "listed with its reason."),
-    },
-    "equity_fundamentals": {
-        "fr": ("Données collectées hors pipeline ML. Les valeurs fondamentales peuvent être "
-               "révisées et leur date réelle de publication n'est pas vérifiée."),
-        "en": ("Collected outside the ML pipeline. Fundamentals may be revised, and their "
-               "actual publication date is not verified."),
     },
     "prediction_overview": {
         "fr": ("Affiche le dernier signal enregistré par cible et horizon, ainsi que sa "

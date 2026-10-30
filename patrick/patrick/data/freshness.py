@@ -65,7 +65,7 @@ FRED_DAILY_PREFIXES = ("DGS", "DTB", "T10Y", "T5Y", "BAML", "DCOIL", "VIXCLS", "
 #: interrompue par la Fed depuis 2022, mais la FRÉQUENCE de publication
 #: documentée reste quotidienne -- ce module classe par fréquence de
 #: publication, pas par "série encore active").
-FRED_DAILY_EXACT = {"DFF", "EFFR", "SOFR", "SP500", "WILL5000IND", "TEDRATE"}
+FRED_DAILY_EXACT = {"DFF", "EFFR", "SOFR", "SP500", "WILL5000IND", "TEDRATE", "ECBMRRFR"}
 
 #: Préfixes reconnus -> mensuel. CPI* (CPIAUCSL/CPILFESL), PCE* (PCE/PCEPILFE).
 FRED_MONTHLY_PREFIXES = ("CPI", "PCE")
@@ -77,10 +77,12 @@ FRED_MONTHLY_EXACT = {
     "CUSR0000SAH1", "STICKCPIM159SFRBATL", "PPIACO", "MICH", "PSAVERT", "DSPIC96",
     "HOUST", "PERMIT", "DGORDER", "AMTMNO", "TCU", "IPMAN", "TOTALSA", "CSUSHPINSA",
     "CFNAI", "M2SL", "IRLTLT01DEM156N", "IRLTLT01JPM156N", "IRLTLT01GBM156N",
+    # Euro area (2026-10-30)
+    "IRLTLT01FRM156N", "IRLTLT01ITM156N", "CP0000EZ19M086NEST", "LRHUTTTTDEM156S",
 }
 
 #: Codes exacts -> trimestriel.
-FRED_QUARTERLY_EXACT = {"GDP", "GDPC1", "A191RL1Q225SBEA"}
+FRED_QUARTERLY_EXACT = {"GDP", "GDPC1", "A191RL1Q225SBEA", "CLVMNACSCAB1GQEA19"}
 
 #: Codes exacts -> hebdomadaire (NFCI/STLFSI4, publiées le jeudi par la Fed
 #: de Chicago/St. Louis). Données FRED étendues: allocations chômage, bilan de

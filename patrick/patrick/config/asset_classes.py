@@ -22,7 +22,7 @@ class AssetClass:
 
 ASSET_CLASSES: tuple[AssetClass, ...] = (
     AssetClass("equity", "/equity", (
-        "Actions individuelles", "Actions US (méga-capitalisations)", "Actions France (CAC 40)",
+        "Actions US (méga-capitalisations)", "Actions France (CAC 40)",
         "Actions US (grandes capitalisations)", "Actions France (autres valeurs)", "Actions Allemagne",
         "Actions Royaume-Uni", "Actions Europe (autres pays)", "Actions Asie (locales & ADR)"), 20, "asset_equity"),
     AssetClass("indices", "/indices", ("Indices", "Indices mondiaux", "Volatilité"), 30, "asset_index"),

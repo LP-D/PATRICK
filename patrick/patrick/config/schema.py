@@ -178,6 +178,11 @@ class FeaturesConfig(BaseModel):
     # effect when the run's target is an equity symbol
     # (`config.equity_universe.EQUITY_UNIVERSE`); a no-op otherwise.
     enable_fundamentals_features: bool = D.DEFAULT_ENABLE_FUNDAMENTALS_FEATURES
+    # Equity market-context features (`features/equity_context.py`): relative return, beta, correlation and idiosyncratic volatility
+    # against the stock's home index and, for European stocks, a euro-area composite. A no-op for a target that is not a stock.
+    # The schema default is False so that a run stored before this field is replayed (predict/explain/resume) with exactly the
+    # columns it was trained on; every NEW run (web form, launch batches) sets it to `D.DEFAULT_ENABLE_EQUITY_CONTEXT_FEATURES`.
+    enable_equity_context_features: bool = False
     technical_lookbacks: TechnicalLookbacksConfig = Field(default_factory=TechnicalLookbacksConfig)
 
 

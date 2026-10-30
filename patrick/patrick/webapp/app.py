@@ -38,8 +38,7 @@ from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
 from patrick.data import session_calendar
-from patrick.data.sources import fundamentals_source
-from patrick.features import guida, parametric_parallel
+from patrick.features import equity_context, guida, parametric_parallel
 from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
 from patrick.rl import history as rl_history
@@ -408,26 +407,25 @@ def _recent_runs(limit: int = 8) -> list[dict]:
 
 
 def _target_groups_with_equity_badges() -> dict:
-    """CHANTIER (feature/equity-asset-class): badge d'insuffisance de
-    donnees (`validation/equity_sufficiency.py`) injecte directement dans le
-    libelle de chaque option du groupe "Actions individuelles" sur
-    `/launch` -- seul groupe concerne (seuil ABSOLU de jours de cotation,
-    independant du garde-fou horizon existant, `/api/horizon-feasibility`).
-    Recompute a CHAQUE requete (pas au chargement du module, contrairement a
-    `forms.TARGET_GROUPS`) : `equity_sufficiency.check_data_sufficiency`
-    appelle yfinance (via `download_one`, deja mis en cache localement 7
-    jours) -- un calcul au chargement du module figerait le badge au
-    demarrage du serveur, jamais rafraichi. Les autres groupes ne sont pas
-    touches (aucun appel reseau supplementaire pour eux)."""
-    groups = dict(forms.TARGET_GROUPS)
-    equity_items = []
-    for sym, label in groups.get(EQ.EQUITY_TARGET_GROUP, []):
-        result = equity_sufficiency.check_data_sufficiency(sym)
-        suffix = "" if result.sufficient else i18n_server.translate(
-            f" [données insuffisantes : {result.n_trading_days}j/{result.min_required}j]", i18n.request_lang())
-        equity_items.append((sym, f"{label}{suffix}"))
-    if EQ.EQUITY_TARGET_GROUP in groups:
-        groups[EQ.EQUITY_TARGET_GROUP] = equity_items
+    """Badge d'insuffisance de donnees (`validation/equity_sufficiency.py`) injecte dans le libelle de l'option des actions
+    declarees sans assez d'historique (`config.equity_universe.history_proxies`, aujourd'hui D.A.T.E) sur `/launch`, dans
+    leur groupe habituel (seuil ABSOLU de jours de cotation, independant du garde-fou horizon, `/api/horizon-feasibility`).
+    Recompute a CHAQUE requete (pas au chargement du module, contrairement a `forms.TARGET_GROUPS`) :
+    `equity_sufficiency.check_data_sufficiency` appelle yfinance (via `download_one`, deja mis en cache localement 7 jours).
+    Les autres actions ne sont pas touchees : aucun appel reseau supplementaire pour elles (la page grise deja les cibles
+    trop recentes d'apres leur premiere date declaree)."""
+    declared = EQ.history_proxies()
+    groups = {}
+    for group, items in forms.TARGET_GROUPS.items():
+        out = []
+        for sym, label in items:
+            if sym in declared:
+                result = equity_sufficiency.check_data_sufficiency(sym)
+                if not result.sufficient:
+                    label = f"{label}" + i18n_server.translate(
+                        f" [données insuffisantes : {result.n_trading_days}j/{result.min_required}j]", i18n.request_lang())
+            out.append((sym, label))
+        groups[group] = out
     return groups
 
 
@@ -2127,27 +2125,6 @@ def macro_alfred_status():
     return alfred_report.status()
 
 
-def _equity_asset_group_view() -> list[dict]:
-    """CHANTIER (feature/equity-asset-class): same panel-skeleton shape as
-    `_asset_group_view` (symbol/label/slug), plus the data-sufficiency badge
-    (`validation/equity_sufficiency.py`) and the ticker's metadata
-    (`config.equity_universe.EQUITY_UNIVERSE`) -- unlike commodities/macro,
-    this group has few enough tickers (4) that computing the badge
-    server-side, once per page load, is cheap (cached 7 days via
-    `yfinance_source.download_one`'s own `LocalCache`)."""
-    out = []
-    for sym, meta in EQ.EQUITY_UNIVERSE.items():
-        result = equity_sufficiency.check_data_sufficiency(sym)
-        out.append({
-            "symbol": sym, "label": meta["label"], "slug": forms.slug_target(sym),
-            "currency": meta["currency"], "exchange": meta["exchange"],
-            "first_listed": meta["first_listed"],
-            "sufficient": result.sufficient, "n_trading_days": result.n_trading_days,
-            "min_required": result.min_required, "reason": result.reason,
-        })
-    return out
-
-
 @app.get("/equities")
 def equities_legacy_redirect():
     """Ancienne page « Actions individuelles » : devenue le module Equity (`/equity`)."""
@@ -2157,18 +2134,12 @@ def equities_legacy_redirect():
 @app.get("/equity")
 def equity_page(request: Request, min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS):
     """Module Equity : toutes les actions de l'univers (US, France, Allemagne, Royaume-Uni, Europe, Asie), avec pour chacune
-    son historique et ses modèles directionnels / alpha ; puis le détail des actions suivies en profondeur (prix et
-    statistiques, disponibilité des données, fondamentaux). Fondamentaux rendus côté serveur (4 tickers seulement, déjà
-    mis en cache 7 jours par `fundamentals_source.fetch_fundamentals`)."""
+    son historique et ses modèles directionnels / alpha ; puis les features propres aux actions (contexte de marché) et
+    celles qui ne s'appliquent pas."""
     ctx = _asset_class_context(request, "equity", min_history_years)
-    assets = _equity_asset_group_view()
-    fundamentals = {
-        a["symbol"]: fundamentals_source.fetch_fundamentals(a["symbol"]).tail(12).to_dict("records")
-        for a in assets
-    }
     return templates.TemplateResponse(
         request, "equity.html",
-        {**ctx, "assets": assets, "fundamentals": fundamentals, "exclusions": guida.equity_feature_exclusions()},
+        {**ctx, "exclusions": guida.equity_feature_exclusions(), "context_features": equity_context.describe()},
     )
 
 

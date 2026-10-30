@@ -65,10 +65,15 @@ _RULES: list[tuple[str, str]] = [
      r"taux qui n'existe pas pour une action au comptant\.",
      "Carry does not apply to individual stocks in the Guida sense: this factor relies on a futures / rate-differential structure "
      "that does not exist for a cash equity."),
-    (r"Cross-sectional momentum desactive pour les actions individuelles : l'univers actions \((?P<n>\d+) tickers\) est sous le seuil "
-     r"minimum \((?P<m>\d+)\) requis pour un classement relatif non degenere\.",
-     "Cross-sectional momentum is disabled for individual stocks: the equity universe ({n} tickers) is below the minimum "
-     "({m}) required for a non-degenerate relative ranking."),
+    (r"Cross-sectional momentum non calcule pour les actions : le classement relatif demanderait les cours de tous les titres "
+     r"d'un groupe dans l'univers de features de chaque run\. Les features de contexte \(indice de la place, zone euro\) "
+     r"apportent la comparaison au marche\.",
+     "Cross-sectional momentum is not computed for stocks: the relative ranking would need the prices of every stock of a group "
+     "in each run's feature universe. The context features (home index, euro area) bring the comparison with the market."),
+    (r"Fondamentaux non utilises comme features : yfinance ne fournit aucune source point-in-time \(etat actuel seulement, "
+     r"potentiellement retraite\), les reindexer sur la date de cloture de l'exercice introduirait un biais look-ahead\.",
+     "Fundamentals are not used as features: yfinance has no point-in-time source (current state only, possibly restated), and "
+     "reindexing them on the fiscal year-end date would introduce a look-ahead bias."),
     # --- tracking/history.py
     (r"aucune P\(hausse\) enregistrée \(run antérieur à la migration 0024\)", "no P(up) recorded (run predates migration 0024)"),
     (r"(?P<n>\d+) prédictions hors échantillon < (?P<m>\d+)", "{n} out-of-sample predictions < {m}"),

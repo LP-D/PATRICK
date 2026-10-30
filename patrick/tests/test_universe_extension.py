@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
-from patrick.config import equity_universe as EQ
+from patrick.config import equity_context as EC
 from patrick.config import universe_extension as UX
 from patrick.webapp import forms
 from patrick.webapp.app import app
@@ -20,12 +20,15 @@ def test_extension_is_selectable_but_not_a_feature():
     assert sorted(yf) == sorted(D.DEFAULT_UNIVERSE_YF_TICKERS)
     yf_web, _ = forms.universe_excluding("^VIX")                           # le formulaire, lui, est étendu depuis le 2026-10-23
     assert set(UX.EXTENDED_FEATURE_CANDIDATES) <= set(yf_web) and "^VIX" not in yf_web
-    assert not ext & set(EQ.EQUITY_UNIVERSE)
+    # une action cible reçoit en plus les indices auxquels on la compare (sa place, la zone euro), rien pour les autres actifs
+    yf_stock, _ = forms.universe_excluding("MC.PA", scope="default")
+    assert set(EC.context_tickers("MC.PA")) <= set(yf_stock) and "MC.PA" not in yf_stock
+    assert sorted(forms.universe_excluding("^VIX", scope="default")[0]) == sorted(t for t in D.DEFAULT_UNIVERSE_YF_TICKERS if t != "^VIX")
 
 
 def test_group_names_never_overwrite_an_existing_group():
     assert not set(UX.EXTENDED_TARGET_GROUPS) & set(D.DEFAULT_TARGET_GROUPS)
-    assert EQ.EQUITY_TARGET_GROUP not in UX.EXTENDED_TARGET_GROUPS
+    assert "Actions individuelles" not in UX.all_target_groups()           # chaque action est dans son vrai groupe
     merged = UX.all_target_groups()
     assert merged["Crypto"] == D.DEFAULT_TARGET_GROUPS["Crypto"]
 
@@ -70,7 +73,7 @@ def test_individual_equity_groups_added_on_2026_10_07_are_selectable_translated_
     assert not {"UNA.AS", "STLAM.MI", "2330.TW"} & set(symbols)
     every = [s for items in UX.EXTENDED_TARGET_GROUPS.values() for s, _, _ in items]
     assert len(every) == len(set(every)), "symbole en double dans l'extension"
-    assert not set(symbols) & (set(D.DEFAULT_UNIVERSE_YF_TICKERS) | set(EQ.EQUITY_UNIVERSE) | D.BAD_TICKERS)
+    assert not set(symbols) & (set(D.DEFAULT_UNIVERSE_YF_TICKERS) | D.BAD_TICKERS)
     assert all(g in i18n.TARGET_GROUP_LABEL_KEYS for g in UX.all_target_groups())
     for g in groups:
         key = i18n.TARGET_GROUP_LABEL_KEYS[g]

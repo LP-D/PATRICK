@@ -1,6 +1,6 @@
 """Roadmap bloc 4 -- univers ETENDU de cibles, verifie en direct.
 
-Cibles SEULEMENT, comme `config/equity_universe.py` : ces groupes
+Cibles SEULEMENT : ces groupes
 alimentent le selecteur de cible (`webapp/forms.py::TARGET_GROUPS`) et la
 page Univers, JAMAIS `config.defaults.DEFAULT_UNIVERSE_YF_TICKERS` (le
 pool de features de chaque run). Les ajouter aux features multiplierait le
@@ -20,10 +20,9 @@ branche feature/replay-cache-universe absents de cette liste.
 branche (39 tickers), fusionnee ici -- une seule source de verite, chaque
 candidat est un symbole verifie de `EXTENDED_TARGET_GROUPS`. Opt-in par run
 (formulaire, « Univers candidat » = etendu), a coupler avec la reduction
-par clustering de correlation (`UniverseConfig.reduction_corr_threshold`). Les actions ci-dessous ne sont PAS dans
-`EQUITY_UNIVERSE` : pas de features fondamentales ni de momentum
-cross-sectionnel pour elles (decisions prises pour cet univers-la, voir
-`features/guida.py`), seulement le pipeline standard.
+par clustering de correlation (`UniverseConfig.reduction_corr_threshold`).
+Les actions (US, France, Allemagne, Royaume-Uni, Europe, Asie) vivent toutes dans leur groupe d'ici ; leurs features propres
+(contexte de marche : indice de leur place, zone euro) sont decrites dans `config/equity_context.py`.
 
 Noms de groupes : ceux de l'ancien univers quand ils existent (traductions
 deja presentes, `webapp/i18n.py::TARGET_GROUP_LABEL_KEYS`), sinon nouveaux ;
@@ -133,6 +132,7 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
         ("WMT", "Walmart", "1972-08-25"),
         ("PG", "Procter_Gamble", "1962-01-02"),
         ("KO", "CocaCola", "1962-01-02"),
+        ("AMZN", "Amazon", "1997-05-15"),
     ],
     "Actions France (CAC 40)": [
         ("MC.PA", "LVMH", "2000-01-03"),
@@ -150,6 +150,8 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
         ("KER.PA", "Kering", "2000-01-03"),
         ("EL.PA", "EssilorLuxottica", "2000-01-03"),
         ("CAP.PA", "Capgemini", "2000-01-03"),
+        ("TTE.PA", "TotalEnergies", "2000-01-03"),
+        ("HO.PA", "Thales", "2000-01-03"),
     ],
     "Devises (majeures)": [
         ("GBPUSD=X", "GBP_USD", "2003-12-01"),
@@ -372,6 +374,7 @@ EXTENDED_TARGET_GROUPS: dict[str, list[tuple[str, str, str]]] = {
         ("BIM.PA", "BioMerieux", "2004-07-07"),
         ("BOL.PA", "Bollore", "2000-01-03"),
         ("CO.PA", "Casino", "2000-01-03"),
+        ("ALDAT.PA", "DATE_Energie", "2026-09-25"),
     ],
     "Actions Allemagne": [
         ("SAP.DE", "SAP", "1998-04-09"),
@@ -613,15 +616,9 @@ def extended_target_groups() -> dict[str, list[tuple[str, str]]]:
 
 def all_target_groups() -> dict[str, list[tuple[str, str]]]:
     """Every selectable target, grouped: the reduced default universe (also
-    the default feature pool), the individual equities
-    (`equity_universe`), then the verified extension -- the same list the
-    launch form and /universe show. Targets only: the default feature pool
-    stays `defaults.DEFAULT_UNIVERSE_YF_TICKERS`."""
+    the default feature pool), then the verified extension -- the same list
+    the launch form and /universe show. Targets only: the default feature
+    pool stays `defaults.DEFAULT_UNIVERSE_YF_TICKERS`."""
     from patrick.config import defaults as D
-    from patrick.config import equity_universe as EQ
 
-    return {
-        **D.DEFAULT_TARGET_GROUPS,
-        EQ.EQUITY_TARGET_GROUP: [(sym, meta["label"]) for sym, meta in EQ.EQUITY_UNIVERSE.items()],
-        **extended_target_groups(),
-    }
+    return {**D.DEFAULT_TARGET_GROUPS, **extended_target_groups()}

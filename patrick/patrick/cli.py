@@ -426,8 +426,8 @@ def audit_tickers_cmd(
 
     pools = {
         "default": [s for s, _, src in D.DEFAULT_TARGET_CHOICES if src == "yfinance"],
-        "equities": list(EQ.EQUITY_UNIVERSE),
-        "extended": [s for s, _, _ in UX.extended_target_choices()],
+        "equities": sorted(EQ.equity_symbols()),
+        "extended": [s for s, _, _ in UX.extended_target_choices() if s not in EQ.equity_symbols()],
     }
     if scope not in (*pools, "all"):
         raise typer.BadParameter(f"scope inconnu : {scope}")
