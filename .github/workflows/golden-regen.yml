@@ -57,7 +57,7 @@ jobs:
         run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
       - name: Numeric environment
         run: python .github/scripts/numeric_env.py
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: golden
           path: patrick/tests/golden
@@ -71,7 +71,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: golden
           path: patrick/tests/golden
