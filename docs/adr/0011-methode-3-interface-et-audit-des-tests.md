@@ -37,7 +37,12 @@ changer `CURRENT_METHOD_VERSION` et ajouter la ligne à l'ADR avec les chiffres.
 - **États vides actionnables** (`empty_state(…, action_url, action_label)`) et **guide de premier lancement** (trois gestes) sur la synthèse quand aucun run n'est terminé.
 - **Hygiène** : les `style="…"` en ligne deviennent des classes ; il n'en reste que deux, des largeurs calculées par les données (test garde-fou).
 - **Graphiques** : `chart_kit.js` accepte `vlines` (repères verticaux datés : frontière de pli, début du holdout, promotion, rupture) et `sync` (réticule partagé entre graphiques
-  empilés d'un même groupe). Capacité livrée et testée sous Node ; **aucune page ne les passe encore** (voir « Non fait »).
+  empilés d'un même groupe). Capacité testée sous Node. Premier branchement : le graphique de dérive des phases d'une cible marque les runs devenus champions (`vlines`). `sync` n'est passé par aucune page
+  (aucune page n'empile encore deux graphiques de même axe).
+- **Fiabilité de P(hausse) au survol** de chaque case de la page Prédictions (`GET /api/predictions/reliability`) : 5 tranches de même effectif, probabilité annoncée contre fréquence observée,
+  hors échantillon (test et holdout) du modèle en titre ; refusé sous 30 prédictions avec probabilité.
+- **Fonds : Sharpe déflaté par stratégie (1.5)** (`fund/kpis.py::deflated`) : le nombre d'essais est celui des stratégies du fonds, archivées comprises ; sous 20 rendements il n'est pas calculé.
+  Il corrige le choix de la meilleure stratégie sur son P&L fictif ; il ne corrige pas le choix de la meilleure *classe* d'actifs, qui reste un essai de plus par modèle retenu.
 
 ### Suite de tests (audit du 30/10)
 
@@ -61,12 +66,12 @@ Restent coûteux (≥ 10 s sous charge) : `test_regime_detection` (HMM, trois te
   doivent chacun décider ce qu'un modèle de volatilité y fait (jamais un signal de direction du prix, jamais dans la famille BH des directions). Conception retenue pour la suite : étiquette
   `symbole__vol`, classes sur `log(σ_futur / σ_passé)` avec la même fenêtre `h` que l'horizon (sinon la purge est trop courte), baselines HAR-RV sur le niveau de volatilité. Rien n'est écrit :
   du code non branché serait de la plomberie morte (voir la critique sur `phase9`).
-- **Annotations et réticule dans les pages** : `vlines` / `sync` ne sont passés par aucune page (il faut, par page, la donnée : dates de plis, début du holdout, promotion du champion, ruptures Page-Hinkley).
-  Petits multiples de la vue toutes cibles, diagramme de fiabilité à côté de chaque `p_up` de la page Prédictions (la page d'analyse d'un run en a déjà), page de run réellement fusionnée.
+- **Annotations dans les autres pages** : `vlines` n'est passé que par le graphique de dérive (champions) ; dates de plis, début du holdout et ruptures Page-Hinkley demandent, par page, la donnée
+  correspondante. Petits multiples de la vue toutes cibles et page de run réellement fusionnée (trois URL reliées par des onglets) ne sont pas faits.
 - **Vitesse des pages** (2.3, 2.6, 2.7) : mesurées le 30/10 sur une base vide : 22 à 131 ms de rendu, 150 à 320 Ko de HTML dont 100 Ko de JSON (glossaire 60 Ko, noms d'instruments 21 Ko,
   textes 18 Ko). Sur une machine locale (boucle locale, cache de fichiers statiques) le gain de sortir ce JSON ou de différer `chart_kit.js` est nul, et `glossary.js` / `names.js` lisent ces blocs
   de façon synchrone : les rendre asynchrones coûte du code pour un gain non mesurable. Le sondage de l'état d'un run (1,5 s) ne tourne que sur la page de suivi, onglet visible : le flux SSE n'apporte rien de plus.
-- **Reprise au niveau du scan (3.4)**, **ablation de Kalman (3.5)**, **plusieurs workers (3.3)**, **Sharpe déflaté au niveau d'une stratégie (1.5)**, **mutants survivants / mondes à pertes égales (1.8)** :
+- **Reprise au niveau du scan (3.4)**, **ablation de Kalman (3.5)**, **plusieurs workers (3.3)**, **mutants survivants / mondes à pertes égales (1.8)** :
   inchangés (voir l'ADR 0009 pour la conception de 3.4 et 3.5, qui demandent des runs complets appariés).
 
 ## Conséquences

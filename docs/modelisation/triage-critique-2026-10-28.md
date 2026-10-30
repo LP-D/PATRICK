@@ -82,7 +82,7 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 1.2 jours plats retirés de l'évaluation | **fait** (méthode 2 : seuil en volatilité, jours plats gardés dans l'évaluation) |
 | 1.3 régimes par niveau de prix | **fait** (méthode 2 : terciles de volatilité, sauf indices de volatilité) |
 | 1.4 SHAP sur les plus anciennes lignes | **fait** (méthode 2 : les plus récentes) |
-| 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict`, un essai compté par modèle retenu à la mise en place (ADR 0010) ; **non fait** : Sharpe déflaté au niveau d'une stratégie, choix de la meilleure classe |
+| 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict`, un essai compté par modèle retenu à la mise en place (ADR 0010) ; Sharpe déflaté par stratégie **fait** (30/10, ADR 0011) ; **non fait** : choix de la meilleure classe |
 | 1.6 PBO sous 3 plis | **périmé** (refusé sous 6 blocs depuis C5) |
 | 1.7 variables de niveau brut, `fracdiff` | **fait, non activé par défaut** (30/10) : méthode 3, niveaux différenciés fractionnairement sous les mêmes noms, ADR 0011 ; `CURRENT_METHOD_VERSION` reste 2 tant que le panel n'est pas mesuré |
 | 1.8 `holdout_access` vide | **périmé** (1 077 lignes) ; simulateur non compté : **périmé** (le DSR utilise `count_registered_trials`) ; **98 runs sans essai gagnant : élucidé** (113 aujourd'hui : 80 d'août = ancien export par horizon, 33 d'octobre = séries FRED mensuelles à 1 jour, zéro évaluation, désormais en échec avec la raison) ; mutants survivants, monde à pertes égales : non fait |
@@ -108,7 +108,7 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 5.5 calibration par défaut pour les runs du fonds | **fait** (30/10) : case cochée par défaut dans les formulaires ML et DL (`DEFAULT_FORM_CALIBRATION`) ; le schéma garde False (golden master, configs enregistrées) |
 | 5.6 budget d'essais avant lancement | **fait** : API, commande (`patrick budget`) et bloc du formulaire de lancement (30/10) |
 | 6 ergonomie (38 entrées de navigation, accueil, tableaux) | **fait en grande partie** : tableaux (tri, filtre, CSV), bloc « À faire » de l'accueil, onglets de run, qualité des données sous Données, navigation en arborescence (16 entrées visibles repliée + 3 utilitaires, 31 feuilles), comparateur à deux vues reliées (onglet « Comparer » d'un run corrigé : il menait à une erreur 400), états vides actionnables, guide de premier lancement ; non fait : page de run réellement fusionnée |
-| 7 design v3 | **en partie** (30/10) : 30 `style="…"` en ligne ramenés au CSS (2 largeurs calculées restent), N_eff et plis à côté des métriques de tête, `chart_kit.js` accepte `vlines` (annotations) et `sync` (réticule partagé) ; non fait : branchement de ces deux options dans les pages, petits multiples, diagramme de fiabilité à côté de chaque `p_up` |
+| 7 design v3 | **en partie** (30/10) : 30 `style="…"` en ligne ramenés au CSS (2 largeurs calculées restent), N_eff et plis à côté des métriques de tête, `chart_kit.js` accepte `vlines` (annotations) et `sync` (réticule partagé) ; diagramme de fiabilité de P(hausse) au survol des prédictions, champions repérés sur le graphique de dérive ; non fait : `sync` dans une page, petits multiples |
 
 ## Suite
 
