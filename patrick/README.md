@@ -147,6 +147,19 @@ Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement lear
   here in an earlier iteration, moved to `/` (regime classification is not
   wired to any production path — see `KNOWN_ISSUES.md`).
 
+### Amplitude usage event (optional)
+`patrick serve` can send one anonymous `app_started` event to [Amplitude](https://amplitude.com)
+(HTTP API v2, `patrick/amplitude.py`): PATRICK version, OS, Python version, entry point and a random
+device id kept in `~/.patrick/amplitude_device_id` — never a symbol, figure, path or run name.
+It is off unless `AMPLITUDE_API_KEY` is set in the environment (the key never goes in the repository);
+`AMPLITUDE_REGION=eu` selects the European server (default `us`). Check the setup without starting the
+server:
+
+```powershell
+$env:AMPLITUDE_API_KEY = "<project API key>"   # PowerShell, current window only
+patrick amplitude-test                         # sends the same event, prints the HTTP result
+```
+
 ### `patrick audit degradation`
 Diagnostic tool — measures the real impact of the Phase 0 leakage fixes
 (purge/embargo, as-of alignment, FRED vintages) by comparing 4 stacked

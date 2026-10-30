@@ -313,6 +313,20 @@ def serve_cmd(
     uvicorn.run("patrick.webapp.app:app", host=host, port=port, reload=reload)
 
 
+@app.command(name="amplitude-test")
+def amplitude_test_cmd() -> None:
+    """Envoie à Amplitude l'événement `app_started` (même code que le démarrage de l'interface web) et affiche
+    la réponse. Nécessite la variable d'environnement AMPLITUDE_API_KEY (AMPLITUDE_REGION=eu pour l'Europe)."""
+    from patrick import amplitude
+    if not amplitude.enabled():
+        typer.echo(f"{amplitude.ENV_API_KEY} est absente : rien n'est envoyé.")
+        raise typer.Exit(code=1)
+    ok, detail = amplitude.send("app_started", amplitude.app_started_properties("cli_test"))
+    typer.echo(f"Amplitude ({amplitude.endpoint()}) : {'événement reçu' if ok else 'échec'} -- {detail}")
+    if not ok:
+        raise typer.Exit(code=1)
+
+
 @audit_app.command(name="degradation")
 def audit_degradation_cmd(
     targets: str = typer.Option(

@@ -30,7 +30,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from patrick import live_refresh, paths
+from patrick import amplitude, live_refresh, paths
 from patrick import settings as settings_store
 from patrick.clock import utc_now, utc_today
 from patrick.config import asset_classes, dl_profiles, training_profiles
@@ -278,6 +278,8 @@ def _on_startup() -> None:
         run_manager.recover_interrupted_runs(force=True)
     except (sqlite3.Error, OSError):
         pass
+    # Mesure d'usage anonyme (version, système) : inerte sans AMPLITUDE_API_KEY, envoyée en arrière-plan.
+    amplitude.track_app_started("web")
     # Les trois rafraîchissements d'arrière-plan (cours des « plus fortes variations », signaux live, état du marché)
     # occupent le processeur pendant des dizaines de secondes : lancés tout de suite, ils ralentiraient précisément les
     # premières pages. Ils démarrent après un court délai (PATRICK_BACKGROUND_DELAY_S, 20 s par défaut, 0 = aussitôt).
