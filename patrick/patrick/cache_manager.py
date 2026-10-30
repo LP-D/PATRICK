@@ -31,9 +31,29 @@ class LocalCache:
     def _meta_path(self, key: str) -> Path:
         return self.root / f"{key}.meta.json"
 
+    @staticmethod
+    def _replace(tmp: Path, path: Path) -> None:
+        """`os.replace` avec reprises : sous Windows le fichier cible, ouvert en lecture un instant par un autre fil, refuse le remplacement."""
+        for attempt in range(10):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 9:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+
     def _write_meta(self, key: str, payload: dict) -> None:
-        with open(self._meta_path(key), "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, sort_keys=True)
+        # Atomique, comme le fichier de données : un lecteur ne voit jamais un fichier de métadonnées à moitié écrit, et deux écritures simultanées
+        # de la même clé ne se disputent plus l'ouverture (PermissionError mesuré sous charge le 30/10 : trois écrivains et deux lecteurs).
+        path = self._meta_path(key)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, sort_keys=True)
+            self._replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def _read_meta(self, key: str) -> dict:
         path = self._meta_path(key)
@@ -63,14 +83,7 @@ class LocalCache:
         tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
         try:
             df.to_parquet(tmp)
-            for attempt in range(10):
-                try:
-                    os.replace(tmp, path)
-                    break
-                except PermissionError:          # Windows : le fichier cible est ouvert en lecture un instant
-                    if attempt == 9:
-                        raise
-                    time.sleep(0.05 * (attempt + 1))
+            self._replace(tmp, path)
         finally:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
