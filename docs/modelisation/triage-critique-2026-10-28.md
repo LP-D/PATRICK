@@ -84,7 +84,7 @@ Légende : **fait** = codé, testé, commité ; **périmé** = déjà traité ou
 | 1.4 SHAP sur les plus anciennes lignes | **fait** (méthode 2 : les plus récentes) |
 | 1.5 stratégies de fonds sans preuve | **fait en partie** : défaut `strict`, un essai compté par modèle retenu à la mise en place (ADR 0010) ; Sharpe déflaté par stratégie **fait** (30/10, ADR 0011) ; **non fait** : choix de la meilleure classe |
 | 1.6 PBO sous 3 plis | **périmé** (refusé sous 6 blocs depuis C5) |
-| 1.7 variables de niveau brut, `fracdiff` | **fait, non activé par défaut** (30/10) : méthode 3, niveaux différenciés fractionnairement sous les mêmes noms, ADR 0011 ; `CURRENT_METHOD_VERSION` reste 2 tant que le panel n'est pas mesuré |
+| 1.7 variables de niveau brut, `fracdiff` | **fait, non activé** (30/10) : méthode 3, niveaux différenciés fractionnairement sous les mêmes noms, ADR 0011 ; panel de six cibles mesuré : AUC moyen -0,016, aucun gain distinguable du bruit, `CURRENT_METHOD_VERSION` reste 2 |
 | 1.8 `holdout_access` vide | **périmé** (1 077 lignes) ; simulateur non compté : **périmé** (le DSR utilise `count_registered_trials`) ; **98 runs sans essai gagnant : élucidé** (113 aujourd'hui : 80 d'août = ancien export par horizon, 33 d'octobre = séries FRED mensuelles à 1 jour, zéro évaluation, désormais en échec avec la raison) ; mutants survivants, monde à pertes égales : non fait |
 | 1.8 décalage de séance des actions européennes | **fait** : audité (corrélation 0,08 -> 0,04), règle FRED (ADR 0007) |
 | (hors liste) barres de change du début de journée | **fait** (ADR 0007), cause du signal des devises |

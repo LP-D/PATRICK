@@ -1,6 +1,6 @@
 # ADR 0011 — Méthode 3 (niveaux bruts, calibration), interface, audit des tests
 
-Date : 2026-10-30 · Statut : acceptée (méthode 3 codée, **non activée par défaut** : voir « Activation ») · Code : `features/fracdiff.py` (`fracdiff_level`), `features/macro.py`, `pipeline/engine.py` (`_stationary_raw`, `_fracdiff_levels`, `_features_payload`), `config/defaults.py` (`DEFAULT_FORM_CALIBRATION`), `config/training_profiles.py` (`identify`), `tracking/history.py` (`evaluation_sizes`), `webapp/` (`trial_budget.js`, `_compare_tabs.html`, états vides, guide de premier lancement), `static/chart_kit.js` (`vlines`, `sync`), `tests/conftest.py` · Tests : `tests/test_method_v3.py`, `tests/test_training_profile_identify.py`, `tests/test_run_detail_method.py`, `tests/test_analysis_compare.py`, `tests/js/chart_kit.test.js`
+Date : 2026-10-30 · Statut : acceptée (méthode 3 codée, **non activée par défaut** : panel mesuré, aucun gain, voir « Activation ») · Code : `features/fracdiff.py` (`fracdiff_level`), `features/macro.py`, `pipeline/engine.py` (`_stationary_raw`, `_fracdiff_levels`, `_features_payload`), `config/defaults.py` (`DEFAULT_FORM_CALIBRATION`), `config/training_profiles.py` (`identify`), `tracking/history.py` (`evaluation_sizes`), `webapp/` (`trial_budget.js`, `_compare_tabs.html`, états vides, guide de premier lancement), `static/chart_kit.js` (`vlines`, `sync`), `tests/conftest.py` · Tests : `tests/test_method_v3.py`, `tests/test_training_profile_identify.py`, `tests/test_run_detail_method.py`, `tests/test_analysis_compare.py`, `tests/js/chart_kit.test.js`
 
 ## Contexte
 
@@ -25,6 +25,23 @@ badge de profil, N_eff, hygiène CSS, comparateur, états vides, graphiques) et,
 de le rendre défaut. Protocole : mêmes cibles, mêmes réglages (profil rapide), méthode 2 contre méthode 3, un run chacun, comparer AUC et F1 de holdout, Brier de P(hausse), placebo
 de décalage, nombre de variables de niveau retenues. Pour essayer un run en méthode 3 : `validation.method_version: 3` dans la configuration (CLI ou fichier). Basculer le défaut =
 changer `CURRENT_METHOD_VERSION` et ajouter la ligne à l'ADR avec les chiffres.
+
+**Mesure du 30/10 (`scripts/compare_methods.py`, six cibles).** Chaque run enregistré est rejoué deux fois (mêmes réglages du meilleur essai, mêmes plis, sélection SHAP refaite) : réserve de la méthode 2, puis de
+la méthode 3. Holdout de 316 à 381 jours, tous les jours, base et caches temporaires.
+
+| Cible (horizon) | Exactitude m2 -> m3 | AUC m2 -> m3 | Brier m2 -> m3 (taux d'entraînement) | Niveaux bruts retenus m2 -> m3 |
+|---|---|---|---|---|
+| `^GSPC` (5) | 0,558 -> 0,558 | 0,555 -> 0,526 | 0,247 -> 0,254 (0,239) | 0 % -> 0 % |
+| `CL=F` (5) | 0,455 -> 0,461 | 0,475 -> 0,461 | 0,304 -> 0,276 (0,251) | 14 % -> 14 % |
+| `IEF` (10) | 0,530 -> 0,454 | 0,519 -> 0,480 | 0,282 -> 0,276 (0,251) | 25 % -> 12 % |
+| `SI=F` (10) | 0,494 -> 0,418 | 0,459 -> 0,397 | 0,335 -> 0,332 (0,247) | 0 % -> 20 % |
+| `DX-Y.NYB` (10) | 0,449 -> 0,430 | 0,432 -> 0,410 | 0,267 -> 0,273 (0,250) | 25 % -> 25 % |
+| `AAPL` (10) | 0,491 -> 0,563 | 0,490 -> 0,556 | 0,307 -> 0,264 (0,236) | 0 % -> 0 % |
+
+Lecture : l'AUC moyen baisse de 0,016 (meilleur sur 1 cible de 6, `AAPL`), l'exactitude baisse de 0,015, le Brier s'améliore sur 4 cibles de 6 (-0,011 en moyenne) mais **aucun modèle ne bat
+la probabilité constante** (le Brier du modèle reste au-dessus du taux d'entraînement dans les douze cas). Avec N_eff ≈ n / h ≈ 30 à 60 observations indépendantes, l'écart-type d'un AUC est de 0,05 à 0,07 :
+toutes les différences sont du bruit. Les variables de niveau brut sont rarement retenues (0 à 25 %) avec l'une comme avec l'autre méthode. **Aucune preuve en faveur de la méthode 3 : `CURRENT_METHOD_VERSION`
+reste 2** (décision du 30/10). Limite de la mesure : réglages de modèles choisis sous la méthode 1 d'origine, un seul run par cible et par méthode.
 
 ### Interface
 
