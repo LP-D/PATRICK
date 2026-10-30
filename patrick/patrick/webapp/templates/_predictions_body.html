@@ -6,9 +6,10 @@
 {% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
 
 {# Une case = la prédiction seule ; tout le détail est dans le popover au survol. #}
-{% macro pred_cell(c, name, alpha, warn_thr, _t) %}
+{% macro pred_cell(c, name, alpha, warn_thr, _t, symbol='') %}
 {% set s = c.signal %}
-<span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0">
+{# `data-rel-*` : `predictions_pop.js` ajoute au popover le diagramme de fiabilité de P(hausse) de ce modèle (`/api/predictions/reliability`). #}
+<span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0"{% if symbol and s %} data-rel-target="{{ symbol }}" data-rel-horizon="{{ c.horizon }}"{% endif %}>
 {% if c.suspect %}<span class="status-badge status-error">{{ _t('suspect_tag') }}</span>
 {% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ _t.tx(s[0]) }}</span>{% else %}<span class="na">—</span>{% endif %}
 <span class="pop-content">
@@ -151,7 +152,7 @@
         {% for a in g.assets %}
         <tr>
             <td>{% if kind == 'alpha' %}<span title="{{ a.symbol }}">{{ a.symbol | iname }}</span>{% else %}<a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a>{% endif %}</td>
-            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}</td>{% endfor %}
+            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol) }}</td>{% endfor %}
         </tr>
         {% endfor %}
         </tbody>

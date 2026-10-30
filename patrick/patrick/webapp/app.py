@@ -803,6 +803,34 @@ def trial_budget_api(target: str, horizons: str = "1", profile: str | None = Non
         conn.close()
 
 
+@app.get("/api/predictions/reliability")
+def prediction_reliability(request: Request, target: str, horizon: int):
+    """Diagramme de fiabilité de P(hausse) du modèle en titre d'une cible et d'un horizon (page Prédictions, au survol d'une case) : par tranche de
+    même effectif, probabilité annoncée contre fréquence observée de hausses, sur les prédictions hors échantillon (test et holdout). Lecture seule ;
+    textes dans la langue de la requête. `bins` vide sous 30 prédictions avec probabilité : un diagramme sur si peu de points tromperait."""
+    from patrick.analysis import stats_core
+    from patrick.config.target_label import split_run_label
+    from patrick.tracking import champions as trackchampions
+
+    if split_run_label(target)[0] not in forms.TARGET_SOURCE_BY_SYMBOL or not 1 <= horizon <= 800:
+        raise HTTPException(status_code=404, detail="Cible ou horizon inconnu")
+    t = i18n.translator(i18n.get_lang(request))
+    conn = trackdb.connect()
+    try:
+        champ = trackchampions.current(conn, target, horizon)
+        rows = conn.execute(
+            "SELECT p_up, y_true FROM prediction INDEXED BY sqlite_autoindex_prediction_1 WHERE trial_id = ? "
+            "AND split IN ('test', 'holdout') AND p_up IS NOT NULL AND y_true IS NOT NULL", (champ["trial_id"],)).fetchall() if champ else []
+    finally:
+        conn.close()
+    rel = stats_core.reliability([r[0] for r in rows], [1.0 if r[1] >= 2 else 0.0 for r in rows], 5, "quantile") if len(rows) >= 30 else None
+    out = {"title": t("pb_rel_title"), "axes": t("pb_rel_axes"), "none": t("pb_rel_none"), "bins": [], "caption": ""}
+    if rel and rel["bins"]:
+        out["bins"] = [{"p": b["p_mean"], "freq": b["freq"], "n": b["n"]} for b in rel["bins"]]
+        out["caption"] = t("pb_rel_caption", n=rel["n"], brier=f"{rel['brier']:.3f}", ece=f"{rel['ece']:.3f}")
+    return out
+
+
 @app.get("/api/settings")
 def get_settings():
     """Réglages machine exposés à la page « Lancer » (hors config des runs)."""
@@ -2226,6 +2254,8 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
         # the same connection avoids a second `trackdb.connect()`.
         phase_drift = trackhistory.phase_timing_drift_for_target(conn, ticker)
         alpha_runs = trackhistory.alpha_runs_for_asset(conn, ticker)
+        # Runs devenus champions de cette cible : repères verticaux du graphique de dérive (promotion de champion)
+        champion_runs = [r[0] for r in conn.execute("SELECT run_id FROM champion WHERE target = ?", (ticker,))]
     finally:
         conn.close()
 
@@ -2239,7 +2269,7 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
     return templates.TemplateResponse(
         request, "target.html",
         {"target": ticker, "detail": detail, "phase_drift": phase_drift, "alpha_runs": alpha_runs,
-         "phase_labels": PHASE_LABELS, "shap_horizons": done_horizons, **_i18n_context(request)},
+         "champion_runs": champion_runs, "phase_labels": PHASE_LABELS, "shap_horizons": done_horizons, **_i18n_context(request)},
     )
 
 

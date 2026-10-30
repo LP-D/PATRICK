@@ -55,6 +55,22 @@ def compute(strategy: dict, result: SimResult) -> dict:
     }
 
 
+def deflated(daily: pd.DataFrame, n_trials: int) -> dict | None:
+    """Sharpe déflaté d'une stratégie (ADR 0011, point 1.5) : le meilleur de `n_trials` stratégies comparées sur leur P&L fictif a un Sharpe gonflé par le seul fait
+    d'avoir été choisi. `n_trials` = nombre de stratégies du fonds (archivées comprises : une stratégie abandonnée a bien été essayée). `None` sous 20 rendements
+    quotidiens (la statistique n'a pas de sens). Mêmes rendements de jours ouvrés que le Sharpe affiché."""
+    from patrick.validation.dsr import deflated_sharpe_ratio
+
+    if daily.empty:
+        return None
+    nav = daily["nav"][daily.index.dayofweek < 5]
+    returns = nav.pct_change().dropna().to_numpy(dtype=float)
+    out = deflated_sharpe_ratio(returns, max(int(n_trials), 1))
+    if out["n_obs"] < 20:
+        return None
+    return {"dsr": _num(out["dsr"]), "benchmark_sr": _num(out["benchmark_sr"]), "sr": _num(out["sr"]), "n_trials": out["n_trials"], "n_obs": out["n_obs"]}
+
+
 def series_points(daily: pd.DataFrame, columns=("nav", "cash")) -> list[dict]:
     if daily.empty:
         return []

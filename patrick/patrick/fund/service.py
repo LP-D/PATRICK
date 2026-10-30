@@ -442,7 +442,10 @@ def strategy_snapshot(conn: sqlite3.Connection, strategy: dict, today: dt.date |
     orders = store.list_orders(conn, strategy["strategy_id"])
     market, notes = prices.build_market(conn, orders, strategy["base_currency"])
     result = engine.simulate(strategy, orders, market, end=today)
-    return {"strategy": strategy, "kpis": kpis.compute(strategy, result), "positions": result.positions,
+    strategy_kpis = kpis.compute(strategy, result)
+    # Sharpe déflaté : la stratégie a été choisie parmi toutes celles du fonds (archivées comprises)
+    strategy_kpis["deflated"] = kpis.deflated(result.daily, len(store.list_strategies(conn, include_archived=True)))
+    return {"strategy": strategy, "kpis": strategy_kpis, "positions": result.positions,
             "series": kpis.series_points(result.daily), "orders": orders, "notes": notes,
             "violations": [v["message"] for v in result.violations],
             "alert_days": result.alert_days}

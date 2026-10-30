@@ -457,3 +457,18 @@ def test_overview_gives_each_strategy_its_share_of_the_fund_nav(conn):
     assert rows[0]["share"] == pytest.approx(0.75) and rows[1]["share"] == pytest.approx(0.25)
     assert rows[0]["nav"] == pytest.approx(30_000) and sum(r["share"] for r in rows) == pytest.approx(1)
     assert service.overview(conn, TODAY)["fund"]["n_strategies"] == 2
+
+
+def test_the_deflated_sharpe_shrinks_as_the_fund_tries_more_strategies():
+    import numpy as np
+    import pandas as pd
+
+    from patrick.fund import kpis
+
+    idx = pd.bdate_range("2025-01-01", periods=250)
+    rng = np.random.default_rng(1)
+    daily = pd.DataFrame({"nav": 100_000 * np.cumprod(1 + rng.normal(0.0006, 0.01, 250))}, index=idx)
+    one, many = kpis.deflated(daily, 1), kpis.deflated(daily, 200)
+    assert one["n_trials"] == 1 and many["n_trials"] == 200 and one["n_obs"] > 200
+    assert many["benchmark_sr"] > one["benchmark_sr"] and many["dsr"] < one["dsr"]              # essayer plus de stratégies relève le seuil
+    assert kpis.deflated(daily.iloc[:15], 5) is None and kpis.deflated(daily.iloc[0:0], 5) is None   # sous 20 rendements : pas de statistique

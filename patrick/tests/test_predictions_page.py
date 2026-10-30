@@ -238,3 +238,32 @@ def test_predictions_page_shows_trained_assets_outside_the_default_list(tmp_path
     assert 'href="/targets/XLK"' in html and "Autres actifs" in html and "ZZZ.UNKNOWN" in html
     assert 'href="/targets/XLF"' not in html and "AAA__alpha_BBB" not in html
     assert "Volatilité · VIX (S&amp;P 500)" in html                  # les actifs par défaut restent affichés, sous leur nom
+
+
+def test_a_prediction_cell_carries_the_reliability_hook_and_the_api_draws_it(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    trial_id = conn.execute("SELECT trial_id FROM trial WHERE run_id = 'run1'").fetchone()[0]
+    conn.execute("UPDATE trial SET artifact_path = 'model.joblib' WHERE trial_id = ?", (trial_id,))      # un modèle exporté : il est en titre
+    ts = [f"2023-{m:02d}-{d:02d}" for m in range(1, 4) for d in range(1, 29)]        # 84 jours hors échantillon avec probabilité
+    p_up = [0.25 + 0.5 * (i % 10) / 9 for i in range(len(ts))]
+    y_true = [3.0 if (i % 10) / 9 > 0.5 else 0.0 for i in range(len(ts))]               # les probabilités élevées se réalisent : bien calibré
+    db.add_predictions(conn, trial_id, fold_index=2, split="test", ts=ts, y_true=y_true, y_pred=y_true, y_proba=[0.7] * len(ts), p_up=p_up)
+    conn.close()
+    client = TestClient(app)
+    assert 'data-rel-target="^VIX" data-rel-horizon="5"' in client.get("/predictions").text
+    data = client.get("/api/predictions/reliability", params={"target": "^VIX", "horizon": 5}).json()
+    assert data["title"] == "Fiabilité de P(hausse)" and len(data["bins"]) >= 3 and "84 prédictions" in data["caption"]
+    freqs = [b["freq"] for b in data["bins"]]
+    assert freqs == sorted(freqs) and freqs[0] < 0.5 < freqs[-1]                        # croissant : la fiabilité se lit
+    en = client.get("/api/predictions/reliability", params={"target": "^VIX", "horizon": 5, "lang": "en"}).json()
+    assert en["title"] == "Reliability of P(up)"
+
+
+def test_the_reliability_api_refuses_too_few_points_and_unknown_targets(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    client = TestClient(app)
+    few = client.get("/api/predictions/reliability", params={"target": "^VIX", "horizon": 5}).json()
+    assert few["bins"] == [] and "Pas assez" in few["none"]                              # 2 lignes de test : rien à tracer
+    assert client.get("/api/predictions/reliability", params={"target": "NOPE", "horizon": 5}).status_code == 404
+    assert client.get("/api/predictions/reliability", params={"target": "^VIX", "horizon": 0}).status_code == 404

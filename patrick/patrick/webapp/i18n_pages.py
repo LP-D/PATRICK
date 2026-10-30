@@ -49,6 +49,18 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                        "3. When the run is done, open its page: the headline figures first tell whether the score can be trusted."),
     "cmp_mixed_profile": _s("Ces runs n'ont pas le même profil d'entraînement ou la même méthode d'évaluation : leurs scores ne se comparent pas à effort égal.",
                             "These runs do not share the same training profile or evaluation method: their scores are not comparable at equal effort."),
+    "tg_champion_mark": _s("champion", "champion"),
+    "pb_rel_title": _s("Fiabilité de P(hausse)", "Reliability of P(up)"),
+    "pb_rel_axes": _s("annoncé → observé", "announced → observed"),
+    "pb_rel_none": _s("Pas assez de prédictions avec probabilité hors échantillon pour tracer la fiabilité.",
+                      "Not enough out-of-sample predictions with a probability to draw the reliability."),
+    "pb_rel_caption": _s("{n} prédictions hors échantillon · Brier {brier} · écart moyen {ece}",
+                         "{n} out-of-sample predictions · Brier {brier} · mean gap {ece}"),
+    "fund_kpi_dsr": _s("Sharpe déflaté", "Deflated Sharpe"),
+    "fund_hint_dsr": _s("Probabilité que le vrai Sharpe dépasse celui qu'on obtient par chance en choisissant la meilleure de {n} stratégies du fonds "
+                        "(seuil {thr} par jour). Sous 0,95, le P&L fictif ne prouve rien.",
+                        "Probability that the true Sharpe exceeds what picking the best of {n} fund strategies yields by luck "
+                        "(threshold {thr} per day). Under 0.95, the simulated P&L proves nothing."),
     "ct_label": _s("Vues de la comparaison", "Comparison views"),
     "ct_table": _s("Tableau des réglages", "Settings table"),
     "ct_analysis": _s("Analyse détaillée", "Detailed analysis"),

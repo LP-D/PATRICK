@@ -31,6 +31,10 @@
   {{ metric(t('fund_kpi_financing'), k.financing | eur, t('fund_hint_financing'), "neutral") }}
   {{ metric(t('fund_kpi_vol'), k.volatility | pct(1), t('fund_hint_vol'), "neutral") }}
   {{ metric(t('fund_kpi_sharpe'), k.sharpe | qty, t('fund_hint_sharpe'), "neutral") }}
+  {% if k.deflated and k.deflated.dsr is not none %}
+  {{ metric(t('fund_kpi_dsr'), '%.2f' | format(k.deflated.dsr), t('fund_hint_dsr', n=k.deflated.n_trials, thr='%.3f' | format(k.deflated.benchmark_sr)),
+            "ok" if k.deflated.dsr >= 0.95 else "warning") }}
+  {% endif %}
   {{ metric(t('fund_kpi_dd'), k.max_drawdown | pct(1), t('fund_hint_dd'), "neutral") }}
   {{ metric(t('fund_kpi_gross'), k.gross_exposure_pct | pct(0), t('fund_hint_gross'), "neutral") }}
   {{ metric(t('fund_kpi_net'), k.net_exposure_pct | pct(0), t('fund_hint_net'), "neutral") }}

@@ -79,5 +79,8 @@
         }),
         yMin: 0, yFmt: function (v, d) { return fmtNum(v, d) + " " + unitLabel; }, tipFmt: function (v) { return fmtDuration(v * unit); },
         markers: true, legend: true, title: host.getAttribute("aria-label") || "", height: 260,
+        // Un repère par run devenu champion de la cible : on voit si un changement de durée précède ou suit une promotion.
+        vlines: (window.DRIFT_CHAMPIONS || []).filter(function (id) { return runIndexById[id] !== undefined; })
+            .map(function (id) { return { x: runIndexById[id], label: window.DRIFT_CHAMPION_LABEL || "", color: "--accent-ink", dash: "4 3" }; }),
     });
 })();

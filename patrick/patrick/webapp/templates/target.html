@@ -159,6 +159,8 @@
 <script>
 window.DRIFT_POINTS = {{ phase_drift | default([]) | tojson }};
 window.DRIFT_PHASE_LABELS = {{ phase_labels | default({}) | tojson }};
+window.DRIFT_CHAMPIONS = {{ champion_runs | default([]) | tojson }};
+window.DRIFT_CHAMPION_LABEL = {{ t('tg_champion_mark') | tojson }};
 </script>
 <script src="{{ asset('drift.js') }}"></script>
 {% endblock %}

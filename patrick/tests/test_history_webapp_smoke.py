@@ -417,3 +417,15 @@ def test_history_table_renders_html_and_side_panel_fragment(tmp_path, monkeypatc
     assert panel.status_code == 200
     assert "vix_smoke" in panel.text and "/runs/run1/detail" in panel.text
     assert client.get("/runs/missing/panel").status_code == 404
+
+
+def test_the_target_page_marks_the_champion_runs_on_the_drift_chart(tmp_path, monkeypatch):
+    _seed_db(tmp_path, monkeypatch)
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    conn.execute("INSERT INTO champion (target, horizon, run_id, trial_id, reason, promoted_at) "
+                 "SELECT target, horizon, run_id, (SELECT trial_id FROM trial WHERE run_id = 'run1' LIMIT 1), 'test', '2026-10-01' FROM run WHERE run_id = 'run1'")
+    conn.commit()
+    conn.close()
+    page = TestClient(app).get("/targets/%5EVIX").text
+    assert 'window.DRIFT_CHAMPIONS = ["run1"]' in page
+    assert "vlines" in TestClient(app).get("/static/drift.js").text
