@@ -48,7 +48,8 @@ jobs:
       # self-documenting equivalent for CI. Run `pytest -m slow` locally
       # before a release-sensitive merge to cover the excluded tests.
       - name: Run fast test suite
-        run: pytest patrick/tests/ -q -m "not slow and not validity"
+        # `-n auto` : un processus par coeur (pytest-xdist) ; les tests ne partagent ni base, ni cache, ni dossier de données (patrick/tests/conftest.py).
+        run: pytest patrick/tests/ -q -m "not slow and not validity" -n auto
 
   slow-suite:
     # The ~42 tests marked `slow` (CPCV/DM/PBO, real model training, full

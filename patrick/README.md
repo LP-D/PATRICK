@@ -216,8 +216,9 @@ The assumed limits of each part of the product (deep learning, reinforcement lea
 extras) and the plumbing kept on purpose are documented in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md). The
 methodological guarantees and their measured effect are in [`METHODOLOGY.md`](./METHODOLOGY.md).
 
-- **Test suite**: `pytest` runs the fast suite (about 1,800 tests; `@pytest.mark.slow` tests are excluded)
-  during development; `pytest -m slow` (full pipeline runs, worker subprocess, EGARCH, webapp smoke) before a
+- **Test suite**: `pytest` runs the fast suite (about 3,500 tests; `@pytest.mark.slow` tests are excluded)
+  during development, in about 17 minutes serially or about 5 with `pytest -n 5` (pytest-xdist; every test has
+  its own database, caches and data root, see `tests/conftest.py`); `pytest -m slow` (full pipeline runs, worker subprocess, EGARCH, webapp smoke) before a
   commit/push or in CI.
   The `run_pipeline` golden master (`tests/test_run_pipeline_golden.py`) is
   bit-exact only in the pinned CI environment that generated it: on another

@@ -40,7 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-timeout", "hypothesis", "httpx", "ruff"]
+dev = ["pytest", "pytest-timeout", "pytest-xdist", "hypothesis", "httpx", "ruff"]
 web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 # Pages Deep learning (/dl) et Reinforcement learning (/rl) : PyTorch, Gymnasium et Stable-Baselines3 ne sont importés qu'à l'usage.
 deep = ["torch"]
@@ -74,6 +74,8 @@ extend-select = ["DTZ"]
 # exécute le reste (entraînements de modèles/pipelines complets/EGARCH-HMM-
 # ARIMA/sous-processus worker réels). Les deux commandes sont documentées
 # dans le README.
+# La suite rapide (3 500 tests) prend ~17 min en série, ~5 min avec `pytest -n 5` (pytest-xdist) : chaque test a sa base, ses caches et sa racine de données
+# (`tests/conftest.py`), donc ils ne partagent rien. `-n` n'est pas dans `addopts` : un poste sans pytest-xdist doit pouvoir lancer `pytest`.
 addopts = "-m 'not slow and not validity'"
 # Garde-fou contre un test figé (une slow-suite CI bloquée sans explication, un pytest orphelin sur le poste) : 30 minutes
 # par test, le plus long mesuré en faisant ~5 minutes. `thread` : le mode `signal` n'existe pas sous Windows.

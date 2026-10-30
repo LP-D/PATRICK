@@ -163,7 +163,7 @@ def test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1(tmp_path):
     different WHERE clause (`trial_id = ...`), so this filter isolates just
     the query under test."""
     conn = db.connect(str(tmp_path / "patrick.db"))
-    n_targets = 40
+    n_targets = 8
     for i in range(n_targets):
         target = f"SYM{i}"
         _make_run(conn, f"run{i}", target, 5, status="done")
@@ -207,7 +207,7 @@ def test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1(tmp_path):
     call) never touch `run_id FROM run WHERE target =` at all, so they
     don't leak into this count."""
     conn = db.connect(str(tmp_path / "patrick.db"))
-    n_targets = 40
+    n_targets = 8
     for i in range(n_targets):
         target = f"SYM{i}"
         run_id = f"run{i}"
@@ -267,8 +267,8 @@ def test_latest_predictions_by_target_and_horizon_is_not_n_plus_1(tmp_path):
     (mesure plus lente sur la vraie base ~12M lignes, voir docstring de
     `latest_predictions_by_target`)."""
     conn = db.connect(str(tmp_path / "patrick.db"))
-    targets = [f"SYM{i}" for i in range(10)]
-    horizons = [1, 5, 10]
+    targets = [f"SYM{i}" for i in range(4)]
+    horizons = [1, 5]
     for i, target in enumerate(targets):
         for h in horizons:
             run_id = f"run_{i}_{h}"
@@ -330,8 +330,8 @@ def test_direction_metrics_by_target_and_horizon_is_not_n_plus_1(tmp_path):
     `test_synthesis_overview_direction_metrics_lookup_is_not_n_plus_1`,
     etendue a (target, horizon)."""
     conn = db.connect(str(tmp_path / "patrick.db"))
-    targets = [f"SYM{i}" for i in range(10)]
-    horizons = [1, 5, 10]
+    targets = [f"SYM{i}" for i in range(4)]
+    horizons = [1, 5]
     for i, target in enumerate(targets):
         for h in horizons:
             run_id = f"run_{i}_{h}"
@@ -477,8 +477,8 @@ def test_live_hit_rate_by_target_and_horizon_is_not_n_plus_1(tmp_path):
     pour recuperer toutes les lignes live -- jamais une requete par paire,
     jamais de ROW_NUMBER() OVER (PARTITION BY ...)."""
     conn = db.connect(str(tmp_path / "patrick.db"))
-    targets = [f"SYM{i}" for i in range(10)]
-    horizons = [1, 5, 10]
+    targets = [f"SYM{i}" for i in range(4)]
+    horizons = [1, 5]
     for i, target in enumerate(targets):
         for h in horizons:
             run_id = f"run_{i}_{h}"

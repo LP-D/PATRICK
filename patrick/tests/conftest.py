@@ -66,6 +66,14 @@ def _isolated_data_root(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_database(tmp_path_factory, monkeypatch):
+    """La base active (`paths.db_path()` : `~/.patrick/patrick.db`, 13 Go sur le poste de Léon) est par test. Un test de page qui n'avait pas posé
+    `PATRICK_DB_PATH` ouvrait la VRAIE base : ~12 s par rendu mesurés le 30/10 (une demi-douzaine de tests de pages, soit plus d'une minute de la
+    suite), et rien n'empêchait un test d'y écrire. Un test qui pose son propre chemin le remplace ; créée à côté de `tmp_path`, pas dedans."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path_factory.mktemp("db") / "patrick.db"))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_machine_settings(tmp_path, monkeypatch):
     """Machine settings and shell-level worker overrides must not affect tests.
 
