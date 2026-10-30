@@ -2739,3 +2739,21 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .home-action-error { border-left-color: var(--error, #d92d20); }
 .home-action-warning { border-left-color: var(--warning, #b54708); }
 .home-action-neutral { border-left-color: var(--line); }
+
+/* Formulaire de lancement : budget d'essais (`trial_budget.js`, ADR 0010). */
+.trial-budget { margin: 8px 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--warning, #b54708); border-radius: var(--radius); background: var(--surface); font-size: 13px; }
+.trial-budget-lines { margin: 4px 0; padding-left: 18px; }
+.trial-budget-hint { margin: 0; }
+
+/* Utilitaires qui remplacent les `style="…"` en ligne des gabarits (design v3, hygiène) : seules les largeurs calculées par les données restent en ligne. */
+.sk-70 { width: 70%; } .sk-72 { width: 72%; } .sk-80 { width: 80%; } .sk-85 { width: 85%; } .sk-86 { width: 86%; }
+.sk-90 { width: 90%; } .sk-94 { width: 94%; } .sk-100 { width: 100%; }
+.sk-gap { margin-bottom: 8px; } .sk-gap-lg { margin-bottom: 10px; }
+.row-end { justify-content: flex-end; }
+.flush-top { margin-top: 0; }
+.metric-grid-spaced { margin-bottom: 2rem; }
+.enter-60 { --enter-delay: 60ms; } .enter-100 { --enter-delay: 100ms; } .enter-140 { --enter-delay: 140ms; } .enter-180 { --enter-delay: 180ms; }
+.drop-zone-compact { min-height: 72px; padding: 10px; }
+.hint-flush { margin: 0; }
+.input-grow { flex: 1; margin-top: 0; }
+.headline-n { white-space: nowrap; }

@@ -97,3 +97,11 @@ def test_dates_in_data_tables_never_wrap(client):
     html = client.get("/targets/%5EVIX").text
     cells = re.findall(r'<td class="nowrap">(\d{4}-\d{2}-\d{2}[ 0-9:]*)</td>', html)
     assert cells, "la date de lancement d'un run doit être protégée contre le retour à la ligne"
+
+
+def test_templates_keep_only_data_driven_inline_styles():
+    """Design v3 : un `style="…"` en ligne ne sert qu'à une largeur calculée par les données ; le reste va dans `patrick.css` (jetons)."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates"
+    inline = {p.name: p.read_text(encoding="utf-8").count('style="') for p in root.glob("*.html")}
+    assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1}

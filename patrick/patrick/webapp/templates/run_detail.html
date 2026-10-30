@@ -33,7 +33,11 @@
 {% if detail.suspect %}
 <p class="banner banner-error" role="alert"><b>{{ t('suspect_banner_title') }}</b> {{ t('suspect_banner_body', reason=detail.suspect) }} <a href="/data-quality">{{ t('suspect_banner_link') }}</a></p>
 {% endif %}
-{{ headline_metrics(detail.headline, m_labels) }}
+{# N_eff et plis à côté des métriques : n lignes d'étiquettes qui se recouvrent valent ~ n / horizon observations indépendantes (`history.evaluation_sizes`). #}
+{% set sz = detail.sizes or {} %}
+{% set size_notes = {'test': t('rd_sizes_test', n=sz.test.n, neff=sz.test.n_eff, k=sz.test.folds) if sz.test else '',
+                     'holdout': t('rd_sizes_holdout', n=sz.holdout.n, neff=sz.holdout.n_eff) if sz.holdout else ''} %}
+{{ headline_metrics(detail.headline, m_labels, size_notes) }}
 
 {# Ce ne sont pas des onglets : les trois cibles sont des sections de CETTE
    page, toutes rendues, toutes déjà là. Les styler en onglets (soulignement
@@ -52,9 +56,9 @@
 </nav>
 
 <section id="resume" class="card">
-<h2 style="margin-top: 0">{{ t('rd_section_summary') }}</h2>
+<h2 class="flush-top">{{ t('rd_section_summary') }}</h2>
 
-<div class="metric-grid" style="margin-bottom: 2rem;">
+<div class="metric-grid metric-grid-spaced">
 {{ metric(t('tg_cum_title'), detail.cumulative_trials,
           t('rd_cum_rel'), "neutral") }}
 
@@ -131,6 +135,9 @@
 {{ metric(t('rd_method'), t('rd_method_value', m=run_method.method, a=run_method.session_rule),
           t('rd_method_2_hint') if run_method.method >= 2 else t('rd_method_1_hint'),
           "ok" if run_method.method >= 2 else "neutral") }}
+{# Profil d'entraînement (déduit des réglages du run : il n'est pas enregistré) : deux runs de profils différents ne se comparent pas à effort égal. #}
+{{ metric(t('rd_profile'), t('prof_' ~ run_method.profile ~ '_name') if run_method.profile else t('rd_profile_custom'),
+          t('rd_profile_hint'), "neutral") }}
 {% if run_method.alignment_reason %}
 {{ metric(t('rd_alignment'), t('rd_alignment_legacy'), run_method.alignment_reason, "warning") }}
 {% endif %}

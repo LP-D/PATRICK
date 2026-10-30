@@ -127,6 +127,20 @@ METRIC_ORDER = ("AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir", "BalAcc_4cls", "
 SPLIT_ORDER = ("test", "test_path", "holdout", "valid")
 
 
+def evaluation_sizes(conn: sqlite3.Connection, trial_id: int, horizon: int) -> dict:
+    """Combien de lignes et de plis soutiennent les métriques d'un essai, par échantillon (`test`, `holdout`) : `n` lignes évaluées, `n_eff` leur
+    nombre effectif, `folds` plis. Des étiquettes à `horizon` jours se recouvrent (la ligne d et la ligne d+1 partagent h-1 jours de rendement) :
+    n lignes valent à peu près n / h observations indépendantes ; un score sur 300 lignes à h = 20 repose sur ~15 observations."""
+    out: dict = {}
+    for split, n in conn.execute("SELECT split, COUNT(*) FROM prediction WHERE trial_id = ? AND split IN ('test', 'holdout') GROUP BY split",
+                                 (trial_id,)):
+        out[split] = {"n": n, "n_eff": max(1, round(n / max(horizon, 1))), "folds": 0}
+    if "test" in out:
+        out["test"]["folds"] = conn.execute("SELECT COUNT(DISTINCT fold_index) FROM fold_metric WHERE trial_id = ? AND split = 'test' "
+                                            "AND metric = 'F1_dir'", (trial_id,)).fetchone()[0]
+    return out
+
+
 def _headline_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict:
     """`{"test": {AUC, F1_dir}, "holdout": {AUC, F1_dir}}` of one trial -- what every list and card shows first."""
     out: dict[str, dict[str, float]] = {}
@@ -506,6 +520,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
         "fold_metrics": fold_metrics(conn, best_trial["trial_id"]) if best_trial else [],
         "headline": headline,
+        "sizes": evaluation_sizes(conn, best_trial["trial_id"], int(run["horizon"])) if best_trial else {},
         "class_balance": (class_balance.for_trials(conn, [best_trial["trial_id"]]).get(best_trial["trial_id"])
                           if best_trial else None),
         "suspect": (suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test"))),

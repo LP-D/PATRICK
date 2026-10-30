@@ -54,3 +54,12 @@ def test_the_budget_api_and_the_command(tmp_path, monkeypatch):
     assert client.get("/api/trial-budget", params={"target": "^GSPC", "horizons": "0"}).status_code == 422
     out = CliRunner().invoke(cli.app, ["budget", "^GSPC", "--horizon", "3"])
     assert out.exit_code == 0 and "h=3j" in out.output
+
+
+def test_the_launch_form_shows_the_trial_budget_block(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    client = TestClient(app)
+    page = client.get("/ml").text
+    assert 'id="trial-budget"' in page and "trial_budget.js" in page
+    script = client.get("/static/trial_budget.js")
+    assert script.status_code == 200 and "/api/trial-budget" in script.text

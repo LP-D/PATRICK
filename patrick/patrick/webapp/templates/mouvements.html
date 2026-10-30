@@ -30,8 +30,8 @@
         {{ status_badge(t('wealth_mode_real') if a.mode == 'real' else t('wealth_mode_fictive'), 'ok' if a.mode == 'real' else 'pending') }}
       </div>
       <div class="account-name"><a href="/patrimoine/comptes/{{ a.account_id }}">{{ a.name }}</a></div>
-      <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button" style="min-height:72px; padding:10px">
-        {{ icon('upload') }}<span class="hint" style="margin:0">CSV</span>
+      <div class="drop-zone drop-zone-compact" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
+        {{ icon('upload') }}<span class="hint hint-flush">CSV</span>
         <input type="file" accept=".csv,text/csv" hidden>
       </div>
       <div class="import-preview" data-import-preview="{{ a.account_id }}"></div>

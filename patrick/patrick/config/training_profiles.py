@@ -87,3 +87,33 @@ def apply_patch(view: dict, patch: dict) -> dict:
     if unknown:
         raise KeyError(f"réglage(s) absent(s) du formulaire : {', '.join(sorted(unknown))}")
     return {**view, **patch}
+
+
+def _norm(value):
+    """Forme comparable d'un réglage : listes et chaînes séparées par des virgules deviennent des tuples de chaînes, les nombres des flottants."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return tuple(str(x).strip() for x in value)
+    if isinstance(value, str):
+        return tuple(x.strip() for x in value.split(",")) if "," in value else value.strip()
+    if isinstance(value, (int, float)):
+        return float(value)
+    return value
+
+
+def identify(view: dict, default_view: dict, today: date | None = None) -> str | None:
+    """Profil fourni qui décrit une configuration (sa vue de formulaire) : un run n'enregistre pas le profil dont il est parti, il se déduit
+    de ses réglages. Le profil reconnu est celui dont le plus de réglages sont tous identiques ; `standard` (patch vide) quand chaque réglage
+    que touche un profil est à sa valeur par défaut ; `None` pour une configuration personnalisée. La date de départ, relative au jour du
+    lancement, n'est pas comparée."""
+    best: tuple[str, int] | None = None
+    touched: set[str] = set()
+    for p in PROFILES:
+        patch = {k: v for k, v in p.resolved_patch(today).items() if k != "start_date"}
+        touched.update(patch)
+        if patch and all(_norm(view.get(k)) == _norm(v) for k, v in patch.items()) and (best is None or len(patch) > best[1]):
+            best = (p.key, len(patch))
+    if best is not None:
+        return best[0]
+    return "standard" if all(_norm(view.get(k)) == _norm(default_view.get(k)) for k in touched) else None

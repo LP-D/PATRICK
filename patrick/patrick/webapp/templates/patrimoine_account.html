@@ -96,7 +96,7 @@
 
 <section class="card">
   <h2>{{ t('pat_import') }}</h2>
-  <div class="drop-zone" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
+  <div class="drop-zone drop-zone-compact" data-import-account="{{ a.account_id }}" tabindex="0" role="button">
     {{ icon('upload') }}
     <span>{{ t('wealth_drop_csv') }}</span>
     <span class="hint">{{ info('wealth_csv_import', t('pat_csv_details')) }} {{ t('pat_csv_note') }}</span>
@@ -134,7 +134,7 @@
       <label>{{ t('pat_rate') }} <input type="text" inputmode="decimal" name="rate" placeholder="0.03"></label>
       <label>{{ t('pat_maturity') }} <input type="date" name="maturity"></label>
     </div>
-    <div class="row"><input type="text" name="note" placeholder="{{ t('pat_note_ph') }}" class="input" style="flex:1; margin-top:0"><button type="submit" class="btn">{{ icon('plus') }} {{ t('pat_add') }}</button></div>
+    <div class="row"><input type="text" name="note" placeholder="{{ t('pat_note_ph') }}" class="input input-grow"><button type="submit" class="btn">{{ icon('plus') }} {{ t('pat_add') }}</button></div>
     <p class="hint">{{ t('pat_form_hint') }}</p>
   </form>
 

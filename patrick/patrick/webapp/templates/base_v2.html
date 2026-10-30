@@ -236,7 +236,7 @@ script below (no flash), otherwise the OS preference applies.
         <form method="dialog" class="form">
             <h2 id="confirm-title">{{ t('confirm_title') if t else 'Confirmation' }}</h2>
             <p id="confirm-message"></p>
-            <div class="row" style="justify-content:flex-end">
+            <div class="row row-end">
                 <button type="button" class="btn-secondary" data-close-dialog autofocus>{{ t('confirm_cancel') if t else 'Annuler' }}</button>
                 <button type="submit" class="btn" id="confirm-ok" data-default-label="{{ t('confirm_ok') if t else 'Confirmer' }}"></button>
             </div>

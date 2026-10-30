@@ -115,13 +115,13 @@
 {% endmacro %}
 
 {# Deux mesures d'en-tête, toujours dans cet ordre : AUC puis F1. `headline` vient de `tracking/history.py`. #}
-{% macro headline_metrics(headline, labels) %}
+{% macro headline_metrics(headline, labels, notes=None) %}
 <div class="headline-metrics">
   {% for key, name in (('AUC_ovr_4cls', 'AUC'), ('F1_dir', 'F1')) %}
   <div class="headline-metric">
     <span class="headline-name">{{ name }}</span>
     <span class="headline-value pk-mono">{{ '%.3f' | format(headline.test[key]) if headline and headline.test and headline.test.get(key) is not none else '—' }}</span>
-    <span class="headline-sub hint">{{ labels.test }}{% if headline and headline.holdout and headline.holdout.get(key) is not none %} · {{ labels.holdout }} <span class="pk-mono">{{ '%.3f' | format(headline.holdout[key]) }}</span>{% endif %}</span>
+    <span class="headline-sub hint">{{ labels.test }}{% if notes and notes.test %} <span class="headline-n">({{ notes.test }})</span>{% endif %}{% if headline and headline.holdout and headline.holdout.get(key) is not none %} · {{ labels.holdout }} <span class="pk-mono">{{ '%.3f' | format(headline.holdout[key]) }}</span>{% if notes and notes.holdout %} <span class="headline-n">({{ notes.holdout }})</span>{% endif %}{% endif %}</span>
   </div>
   {% endfor %}
 </div>
@@ -171,9 +171,9 @@
 <div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}">
   <h2 title="{{ symbol }}">{{ symbol | iname }}{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
   <div class="asset-panel-body" data-state="loading">
-    <div class="skeleton-line" style="width: 100%; margin-bottom: 8px"></div>
-    <div class="skeleton-line" style="width: 70%; margin-bottom: 8px"></div>
-    <div class="skeleton-line" style="width: 85%"></div>
+    <div class="skeleton-line sk-100 sk-gap"></div>
+    <div class="skeleton-line sk-70 sk-gap"></div>
+    <div class="skeleton-line sk-85"></div>
   </div>
 </div>
 {% endmacro %}
@@ -187,7 +187,7 @@
 {% set retry = retry if retry is not none else (ui_t('lazy_retry') if ui_t is defined else 'Retry') %}
 <div class="lazy-block" data-lazy-url="{{ url }}" data-label-error="{{ label }}" data-label-retry="{{ retry }}" aria-busy="true" aria-live="polite">
   <div class="lazy-skeleton" role="status" aria-label="{{ label }}">
-    {% for i in range(lines) %}<div class="skeleton-line" style="width: {{ [100, 86, 94, 72, 90, 80][i % 6] }}%; margin-bottom: 10px"></div>{% endfor %}
+    {% for i in range(lines) %}<div class="skeleton-line sk-{{ [100, 86, 94, 72, 90, 80][i % 6] }} sk-gap-lg"></div>{% endfor %}
   </div>
 </div>
 {% endmacro %}

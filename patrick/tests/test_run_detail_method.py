@@ -96,3 +96,23 @@ def test_the_home_page_lists_what_needs_an_action_with_a_link_each(tmp_path, mon
 def test_the_home_page_has_no_to_do_block_when_nothing_needs_an_action(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     assert "home-actions" not in TestClient(app).get("/").text
+
+
+def test_the_run_page_shows_its_training_profile(tmp_path, monkeypatch):
+    page = _page(tmp_path, monkeypatch, lambda conn: _run(conn, "r1", "^GSPC", 2, 2))
+    html = htmllib.unescape(page.text)
+    assert "Profil d'entraînement" in html and "Déduit des réglages du run" in html
+
+
+def test_the_run_page_shows_how_many_rows_and_folds_back_the_metrics(tmp_path, monkeypatch):
+    def seed(conn):
+        _run(conn, "r1", "^GSPC", 2, 2)
+        trial = trackdb.create_trial(conn, "r1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
+        trackdb.mark_best_trial(conn, trial)
+        for fold in (1, 2, 3):
+            trackdb.add_fold_metrics(conn, trial, fold, "test", {"F1_dir": 0.55, "AUC_ovr_4cls": 0.54})
+        ts = [f"2024-01-{d:02d}" for d in range(1, 21)]
+        trackdb.add_predictions(conn, trial, 1, "test", ts, [1.0] * 20, [1.0] * 20)
+
+    html = htmllib.unescape(_page(tmp_path, monkeypatch, seed).text)
+    assert "n = 20 · N_eff ≈ 20 · 3 plis" in html                       # horizon 1 : les lignes sont indépendantes

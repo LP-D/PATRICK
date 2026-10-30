@@ -114,6 +114,13 @@
                 </select>
                 <p class="hint">{{ t('horizons_multiselect_hint') }}</p>
             </label>
+            {# Budget d'essais (ADR 0010) : `trial_budget.js` interroge `/api/trial-budget` quand la cible ou les horizons changent. #}
+            <div id="trial-budget" class="trial-budget" hidden aria-live="polite"
+                 data-title="{{ t('tb_title') }}" data-line="{{ t('tb_line', target='{target}', h='{h}', existing='{existing}', after='{after}', added='{added}', before='{before}', thr='{thr}', delta='{delta}') }}" data-hint="{{ t('tb_hint') }}" data-error="{{ t('tb_error') }}">
+                <strong class="trial-budget-title"></strong>
+                <ul class="trial-budget-lines"></ul>
+                <p class="hint trial-budget-hint"></p>
+            </div>
             <label>{{ t('field_flat_thr') }}
                 <input type="number" step="any" name="flat_thr" value="{{ view.flat_thr }}">
             </label>
@@ -614,6 +621,7 @@
     window.INITIAL_RUN_ID = {{ initial_run_id | tojson }};
 </script>
 <script src="{{ asset('app.js') }}"></script>
+<script src="{{ asset('trial_budget.js') }}" defer></script>
 <script>
 (function () {
     var pj = document.getElementById("setting-parametric-jobs");

@@ -10,6 +10,12 @@ def _s(fr: str, en: str) -> dict[str, str]:
 
 PAGES_STRINGS: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------------ page d'un run : méthode, alignement, placebo (ADR 0007 à 0010)
+    "rd_sizes_test": _s("n = {n} · N_eff ≈ {neff} · {k} plis", "n = {n} · N_eff ≈ {neff} · {k} folds"),
+    "rd_sizes_holdout": _s("n = {n} · N_eff ≈ {neff}", "n = {n} · N_eff ≈ {neff}"),
+    "rd_profile": _s("Profil d'entraînement", "Training profile"),
+    "rd_profile_custom": _s("Personnalisé", "Custom"),
+    "rd_profile_hint": _s("Déduit des réglages du run. Un profil rapide teste moins de configurations qu'un profil approfondi : leurs scores ne se comparent pas à effort égal.",
+                          "Inferred from the run's settings. A quick profile tests fewer configurations than a deep one: their scores are not comparable at equal effort."),
     "rd_method": _s("Méthode d'évaluation", "Evaluation method"),
     "rd_method_value": _s("Méthode {m} · alignement {a}", "Method {m} · alignment {a}"),
     "rd_method_1_hint": _s("Méthode d'origine : Diebold-Mariano sur les 4 classes, jours plats retirés de l'évaluation, régimes par niveau de prix. "
@@ -33,6 +39,12 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "dx_quality_hint": _s("séries exclues de l'univers, trous, valeurs figées, anomalies de cours", "series excluded from the universe, gaps, frozen prices, price anomalies"),
     "hm_actions_title": _s("À faire", "To do"),
     "hm_action_open": _s("Ouvrir", "Open"),
+    "tb_title": _s("Budget d'essais", "Trial budget"),
+    "tb_line": _s("{target}, h={h} j : {existing} essais comptés, {after} après ce run (+{added}) ; seuil de Sharpe sous H0 {before} -> {thr} écarts-types ({delta}).",
+                  "{target}, h={h} d: {existing} trials counted, {after} after this run (+{added}); Sharpe threshold under H0 {before} -> {thr} standard deviations ({delta})."),
+    "tb_hint": _s("Estimation avec la grille par défaut : un Sharpe observé vaudra moins après ce run (Sharpe déflaté).",
+                  "Estimate with the default grid: an observed Sharpe will be worth less after this run (deflated Sharpe)."),
+    "tb_error": _s("Budget d'essais indisponible pour cette sélection.", "Trial budget unavailable for this selection."),
     "hm_action_failures": _s("{n} échec(s) de run ces {d} derniers jours : à relire, puis à relancer si la cause est réglée.",
                              "{n} run failure(s) in the last {d} days: review, then relaunch once the cause is fixed."),
     "hm_action_suspect": _s("{n} run(s) au score trop beau pour être vrai ou d'avant une correction d'alignement : jamais un signal à suivre.",

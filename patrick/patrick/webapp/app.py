@@ -2304,13 +2304,18 @@ def run_detail_page(request: Request, run_id: str, dm_alpha: float = trackhistor
 def _run_method_context(conn, run_id: str, detail: dict | None) -> dict:
     """Version de méthode et d'alignement d'un run (ADR 0007 et 0008), placebo de décalage, DM sur le Brier : ce qui dit si ses chiffres
     sont comparables à ceux d'un autre run. Un run d'avant les champs est de méthode 1 et de règle d'alignement 1."""
-    out: dict = {"method": 1, "session_rule": 1, "placebo": None, "placebo_verdict": None, "dm_brier": None, "alignment_reason": None}
+    out: dict = {"method": 1, "session_rule": 1, "placebo": None, "placebo_verdict": None, "dm_brier": None, "alignment_reason": None,
+                 "profile": None}
     if detail is None:
         return out
     try:
         cfg = json.loads(detail["run"].get("config_json") or "{}")
     except (TypeError, ValueError):
         cfg = {}
+    try:
+        out["profile"] = training_profiles.identify(forms.to_view(cfg), forms.to_view(forms.default_config_dict("ml")))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        out["profile"] = None
     out["method"] = int((cfg.get("validation") or {}).get("method_version", 1) or 1)
     out["session_rule"] = int((cfg.get("objective") or {}).get("session_rule", 1) or 1)
     out["alignment_reason"] = suspicion.alignment_reason(detail["run"].get("target"), cfg)

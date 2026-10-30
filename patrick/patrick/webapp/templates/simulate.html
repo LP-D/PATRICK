@@ -167,7 +167,7 @@
       <label>{{ t('fund_field_capital') }} <input type="number" name="initial_capital" required min="1" step="any" value="100000"></label>
     </div>
     <label>{{ t('fund_field_opened') }} <input type="date" name="opened_on" required value="{{ today }}" max="{{ today }}"></label>
-    <div class="row" style="justify-content:flex-end">
+    <div class="row row-end">
       <button type="button" class="btn-secondary" data-close-dialog>{{ t('fund_btn_cancel') }}</button>
       <button type="submit" class="btn">{{ t('fund_btn_create') }}</button>
     </div>
