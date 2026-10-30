@@ -89,9 +89,20 @@ def send(event_type: str, properties: dict | None = None) -> tuple[bool, str]:
         logger.warning("Amplitude injoignable : %s", type(exc).__name__)
         return False, f"réseau : {type(exc).__name__}"
     if response.status_code != 200:
-        logger.warning("Amplitude a refusé l'événement (HTTP %s)", response.status_code)
-        return False, f"HTTP {response.status_code}"
+        reason = _reason(response, key)
+        logger.warning("Amplitude a refusé l'événement (HTTP %s)%s", response.status_code, f" : {reason}" if reason else "")
+        return False, f"HTTP {response.status_code}" + (f" : {reason}" if reason else "")
     return True, "HTTP 200"
+
+
+def _reason(response, key: str) -> str:
+    """Motif donné par Amplitude dans le corps d'une réponse refusée ; la clé, qu'il recopie parfois, est masquée."""
+    try:
+        body = response.json()
+        text = " ".join(str(body[k]) for k in ("error", "missing_field") if isinstance(body, dict) and body.get(k))
+    except ValueError:
+        return ""
+    return text.replace(key, "***")[:200]
 
 
 def track(event_type: str, properties: dict | None = None) -> None:

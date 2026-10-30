@@ -13,8 +13,14 @@ from patrick.cli import app
 
 
 class _Reponse:
-    def __init__(self, status_code: int = 200):
+    def __init__(self, status_code: int = 200, corps=None):
         self.status_code = status_code
+        self._corps = corps
+
+    def json(self):
+        if self._corps is None:
+            raise ValueError("pas de JSON")
+        return self._corps
 
 
 @pytest.fixture
@@ -84,6 +90,16 @@ def test_reponse_refusee_ou_reseau_coupe_ne_leve_pas(monkeypatch, tmp_path):
 
     monkeypatch.setattr(amplitude.requests, "post", coupe)
     assert amplitude.send("app_started") == (False, "réseau : ConnectionError")
+
+
+def test_motif_du_refus_affiche_sans_la_cle(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "home" / "patrick.db"))
+    monkeypatch.setenv("AMPLITUDE_API_KEY", "cle-secrete-de-test")
+    corps = {"code": 400, "error": "Invalid API key: cle-secrete-de-test", "missing_field": None}
+    monkeypatch.setattr(amplitude.requests, "post", lambda *a, **k: _Reponse(400, corps))
+    ok, detail = amplitude.send("app_started")
+    assert not ok
+    assert detail == "HTTP 400 : Invalid API key: ***"
 
 
 def test_track_envoie_en_arriere_plan(appels, monkeypatch):
