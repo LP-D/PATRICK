@@ -77,7 +77,7 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out
 $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $Arguments -WorkingDirectory $RepoDir
 $trigger  = New-ScheduledTaskTrigger -Daily -At $At
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 3)
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force `
     -Description "PATRICK : prediction live quotidienne de chaque modele + jugement des signaux arrives a echeance." | Out-Null
 Write-Output ""

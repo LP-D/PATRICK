@@ -1110,7 +1110,7 @@ def register_task(minutes: int = 60) -> str:
         ["powershell", "-NoProfile", "-Command",
          (f"Set-ScheduledTask -TaskName '{SYNC_TASK}' -Settings (New-ScheduledTaskSettingsSet "
           "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable "
-          "-ExecutionTimeLimit (New-TimeSpan -Hours 6)) | Out-Null")],
+          "-ExecutionTimeLimit ([TimeSpan]::Zero)) | Out-Null")],      # aucune limite de durée (30/10)
         capture_output=True, text=True, check=False)
     if settings.returncode != 0:
         raise SyncError(f"réglages de la tâche (batterie) : {(settings.stderr or settings.stdout).strip()}")
