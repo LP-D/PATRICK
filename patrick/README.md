@@ -152,8 +152,8 @@ Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement lear
 (HTTP API v2, `patrick/amplitude.py`): PATRICK version, OS, Python version, entry point and a random
 device id kept in `~/.patrick/amplitude_device_id` — never a symbol, figure, path or run name.
 It is off unless `AMPLITUDE_API_KEY` is set in the environment (the key never goes in the repository);
-`AMPLITUDE_REGION=eu` selects the European server (default `us`). Check the setup without starting the
-server:
+`AMPLITUDE_REGION=eu` selects the European server (default `us`; a project in the other region answers
+`HTTP 400 : Invalid API key`). Check the setup without starting the server:
 
 ```powershell
 $env:AMPLITUDE_API_KEY = "<project API key>"   # PowerShell, current window only
