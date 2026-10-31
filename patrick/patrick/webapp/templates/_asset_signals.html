@@ -1,0 +1,33 @@
+{# Fragment de la fiche d'un actif (`/fragments/asset-signals/{symbol}`, chargé par lazy.js après l'affichage de la page) : un signal par
+   horizon -- même cellule, même bulle de détail que `/predictions` -- et le champion de l'horizon. `cells` = {horizon: cellule},
+   `champions` = {horizon: champion}. #}
+{% from "_components.html" import empty_state %}
+{% from "_pred_cell.html" import pred_cell with context %}
+{% if not horizons %}
+{{ empty_state(t('as_no_signal'), t('as_no_signal_hint'), '/ml?profile=quick&target=' ~ (symbol | urlencode), t('es_launch_quick')) }}
+{% else %}
+<div class="table-scroll">
+<table class="data-table as-signals">
+    <thead><tr>
+        <th>{{ t('col_horizon') }}</th><th>{{ t('as_col_signal') }}</th><th>{{ t('as_col_champion') }}</th>
+        <th class="num">{{ t('as_col_live') }}</th><th class="num">{{ t('as_col_dm') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for h in horizons %}{% set c = cells.get(h) %}{% set ch = champions.get(h) %}
+    <tr>
+        <td class="pk-mono">{{ h | hlabel }}</td>
+        <td>{% if c %}{{ pred_cell(c, symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, symbol) }}{% else %}<span class="na">—</span>{% endif %}
+            {% if c and c.ts %}<span class="hint as-ts">{{ c.ts[:10] }}</span>{% endif %}</td>
+        <td>{% if ch %}<a href="/runs/{{ ch.run_id }}/detail">{{ t('as_champ_line', algo=ch.algo or '—', n=ch.n_features if ch.n_features is not none else '—') }}</a>
+            {% if ch.holdout_f1_dir is not none %}<span class="hint pk-mono">F1 {{ '%.3f' | format(ch.holdout_f1_dir) }}</span>{% endif %}
+            {% else %}<span class="na">—</span>{% endif %}</td>
+        <td class="num pk-mono">{% if c and c.live_hit_rate is not none %}{{ '%.0f' | format(c.live_hit_rate * 100) }} %
+            <span class="hint">({{ c.live_hit_rate_n }})</span>{% else %}<span class="na">—</span>{% endif %}</td>
+        <td class="num pk-mono">{% if c and c.dm_p_value is not none %}{{ '%.3f' | format(c.dm_p_value) }}{% else %}<span class="na">—</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="hint">{{ t('as_signals_foot') }}</p>
+{% endif %}

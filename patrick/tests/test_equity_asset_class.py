@@ -568,13 +568,14 @@ def test_equities_page_returns_200_and_lists_every_stock_under_its_name():
     client = TestClient(app)
     resp = client.get("/equities")                      # redirection permanente vers /equity
     assert resp.status_code == 200
+    text = resp.text + client.get("/fragments/asset-class/equity").text      # le tableau arrive en fragment, après la page
     for symbol in equity_universe.equity_symbols():
-        assert f'data-symbol="{symbol}"' in resp.text, symbol
+        assert f'data-symbol="{symbol}"' in text, symbol
     for symbol in FORMER_SINGLE_STOCKS:
-        assert str(escape(instruments.display(symbol, "fr"))) in resp.text
+        assert str(escape(instruments.display(symbol, "fr"))) in text
     # features de contexte et exclusions (carry, cross-sectional momentum, fondamentaux) affichées explicitement
-    assert "Contexte de marché" in resp.text and "Cross-sectional momentum" in resp.text
-    assert "Actions suivies en détail" not in resp.text
+    assert "Contexte de marché" in text and "Cross-sectional momentum" in text
+    assert "Actions suivies en détail" not in text
 
 
 def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(monkeypatch):

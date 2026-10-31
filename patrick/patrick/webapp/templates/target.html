@@ -1,11 +1,84 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb, asset_panel, lazy_block %}
 {% block title %}PATRICK — {{ target | iname }}{% endblock %}
 
 {% block crumb_trail %}{{ crumb(target | iname) }}{% endblock %}
 {% block content %}
+<div class="asset-page">
 <h1 class="page-title" title="{{ target }}">{{ target | iname }}</h1>
-<p class="page-subtitle">{{ t('tg_sub2') }} <a href="/runs?target={{ target }}">{{ t('tg_all_runs') }}</a></p>
+<p class="page-subtitle asset-meta">
+    {% if fiche.class_key %}<a href="{{ fiche.class_url }}">{{ t('nav_' ~ fiche.class_key) }}</a> · {% endif %}
+    {% if fiche.group and not (fiche.class_key and group_labels.get(fiche.group, fiche.group) == t('nav_' ~ fiche.class_key)) %}{{ group_labels.get(fiche.group, fiche.group) }} · {% endif %}
+    <span class="pk-mono">{{ target }}</span> · {{ t('as_source_' ~ fiche.source) }}
+    {% if fiche.history.first %} · {{ t('as_history', d=fiche.history.first, y=('%.1f' | format(fiche.history.years))) }}{% endif %}
+</p>
+<p class="asset-actions">
+    <a class="btn" href="/ml?target={{ target | urlencode }}">{{ t('as_launch_ml') }}</a>
+    <a class="btn-secondary" href="/dl?target={{ target | urlencode }}">{{ t('as_launch_dl') }}</a>
+    {% if fiche.source == 'yfinance' %}<a class="btn-secondary" href="/rl?target={{ target | urlencode }}">{{ t('as_launch_rl') }}</a>{% endif %}
+    <a class="btn-ghost" href="/runs?target={{ target | urlencode }}">{{ t('tg_all_runs') }}</a>
+    <a class="btn-ghost" href="/news?symbol={{ target | urlencode }}">{{ t('as_news_all') }}</a>
+</p>
+
+<nav class="section-index" aria-label="{{ t('rd_sections_aria') }}">
+    <span class="section-index-label">{{ t('rd_sections') }}</span>
+    <a href="#marche">{{ t('as_market_h') }}</a>
+    {% if fiche.context %}<a href="#contexte">{{ t('eq_context_h') }}</a>{% endif %}
+    <a href="#signaux">{{ t('as_signals_h') }}</a>
+    <a href="#actualites">{{ t('as_news_h') }}</a>
+    <a href="#fonds">{{ t('as_funds_h') }}</a>
+    <a href="#entrainements">{{ t('as_runs_h') }}</a>
+</nav>
+
+{# Cours, graphique zoomable et statistiques : le même panneau que les pages de classes d'actifs (asset_stats.js), rempli après l'affichage. #}
+<section id="marche" class="asset-hero">{{ asset_panel(target, target | iname, fiche.slug) }}</section>
+
+{% if fiche.context %}
+<section id="contexte" class="card">
+    <h2>{{ t('eq_context_h') }}</h2>
+    <p class="as-context">
+        {% if fiche.context.home_index %}{{ t('as_ctx_home') }} <a class="vocab-chip" href="/targets/{{ fiche.context.home_index | urlencode }}">{{ fiche.context.home_index | iname }}</a>{% else %}<span class="hint">{{ t('as_ctx_no_home') }}</span>{% endif %}
+        {{ t('as_ctx_world') }} <a class="vocab-chip" href="/targets/{{ fiche.context.benchmark | urlencode }}">{{ fiche.context.benchmark | iname }}</a>
+        {% if fiche.context.euro_members %}{{ t('as_ctx_euro') }}
+        {% for m in fiche.context.euro_members %}<a class="vocab-chip" href="/targets/{{ m | urlencode }}" title="{{ m }}">{{ m | iname }}</a> {% endfor %}{% endif %}
+    </p>
+    <p class="hint">{{ t('as_ctx_foot') }}</p>
+</section>
+
+{% endif %}
+<section id="signaux" class="card">
+    <h2>{{ t('as_signals_h') }}</h2>
+    {{ lazy_block('/fragments/asset-signals/' ~ (target | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section id="actualites" class="card">
+    <h2>{{ t('as_news_h') }} <a class="hint" href="/news?symbol={{ target | urlencode }}">{{ t('as_news_all') }}</a></h2>
+    {{ lazy_block('/fragments/news-feed?symbol=' ~ (target | urlencode), 4, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
+<section id="fonds" class="card">
+    <h2>{{ t('as_funds_h') }}</h2>
+    {% if fiche.funds %}
+    <ul class="as-funds">
+    {% for f in fiche.funds %}
+        <li><a href="/fonds?strategy={{ f.strategy_id | urlencode }}">{{ f.name }}</a> <span class="tag">{{ f.wrapper }}</span>
+            <span class="hint">{{ t('as_funds_line', n=f.n_orders, d=f.last_order) }}</span></li>
+    {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint">{{ t('as_funds_none') }}</p>
+    {% endif %}
+</section>
+
+{% if fiche.peers %}
+<section id="voisins" class="card">
+    <h2>{{ t('as_peers_h') }}</h2>
+    <p class="as-peers">{% for p in fiche.peers %}<a class="vocab-chip" href="/targets/{{ p | urlencode }}" title="{{ p }}">{{ p | iname }}</a> {% endfor %}</p>
+</section>
+{% endif %}
+
+<h2 id="entrainements" class="as-section-title">{{ t('as_runs_h') }}</h2>
+<p class="hint">{{ t('tg_sub2') }}</p>
 
 {% if detail is none %}
 {{ empty_state(t('tg_empty'), t('tg_empty_hint2'), '/ml?profile=quick&target=' ~ (target | urlencode), t('es_launch_quick')) }}
@@ -155,6 +228,8 @@
 <p class="hint">{{ t('tg_phase_none') }}</p>
 {% endif %}
 </section>
+
+</div>{# /asset-page #}
 
 <script>
 window.DRIFT_POINTS = {{ phase_drift | default([]) | tojson }};
