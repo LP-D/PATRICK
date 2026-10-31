@@ -240,7 +240,7 @@
   "baseline_metric": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "dm_result": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "feature_stability": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "fold_metric": "91a27032eb47983f7ed2e000a81eee29c049244c84aa27b06158f57eeb64bb5e",
+  "fold_metric": "c305a2b3ae8a69a023e808c24b537146b742facd0ec6ffef62a21e739c9d655e",
   "holdout_diagnostic": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "phases": "dd146f6c9df35197809ab8628373412dafe9eba17e278b34a680a21299f8fc43",
   "prediction": "545709cb53eeaa646764375186fc4e72bde04aabcb07abf2b38f7519e3972cc5",
