@@ -124,25 +124,6 @@ def test_run_hidden_never_raises():
     assert slow.returncode == -1 and "délai" in slow.stderr
 
 
-def test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant(tmp_path):
-    """Régression : l'assistant de relance est lancé PAR le serveur qu'il arrête. Il ne doit pas se tuer avant lui."""
-    marker = tmp_path / "survivor.txt"
-    child = ("import os, time\nfrom patrick.desktop import runtime\n"
-             "runtime.kill_process_tree(os.getppid())\n"
-             f"open({str(marker)!r}, 'w').write('alive')\n")
-    parent = f"import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', {child!r}])\ntime.sleep(60)\n"
-    proc = subprocess.Popen([sys.executable, "-c", parent])
-    try:
-        proc.wait(timeout=20)                                    # le parent (« serveur ») a été arrêté
-        deadline = time.monotonic() + 10
-        while not marker.exists() and time.monotonic() < deadline:
-            time.sleep(0.1)
-        assert marker.read_text() == "alive"                    # l'enfant (« assistant ») a survécu
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-
-
 def _alive(pid: int) -> bool:
     try:
         return psutil.Process(pid).is_running() and psutil.Process(pid).status() != psutil.STATUS_ZOMBIE

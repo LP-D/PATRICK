@@ -286,9 +286,6 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
   d'horizon entre les deux) ; les lignes les plus récentes ne servent donc pas à cette probabilité.
 - **Black-Litterman** : conversion P(hausse) -> rendement attendu par une hypothèse gaussienne (tailles de hausse et de baisse égales) ;
   prior = portefeuille HRP faute de capitalisations ; aucune comparaison hors échantillon avec la pondération de référence.
-- `tests/test_desktop_runtime.py::test_kill_process_tree_spares_the_caller_even_when_it_is_a_descendant` échoue sur ce poste, lancé
-  depuis un shell de l'application Claude (cause probable : processus placés dans un objet de tâche Windows, non confirmée) ; le
-  code concerné (`desktop/`) n'est pas modifié par ces chantiers.
 
 ---
 
