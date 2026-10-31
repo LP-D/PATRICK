@@ -494,7 +494,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "macro_section_international": {"fr": "International : devises et taux étrangers",
                                     "en": "International: currencies and foreign yields"},
     "macro_section_euro": {"fr": "Zone euro : taux, inflation, croissance", "en": "Euro area: yields, inflation, growth"},
-    "macro_section_euro": {"fr": "Zone euro : taux, inflation, croissance", "en": "Euro area: yields, inflation, growth"},
     "nav_equities": {"fr": "Actions", "en": "Stocks"},
     "group_fred_training": {"fr": "Séries FRED d'entraînement", "en": "FRED training series"},
     "nav_predictions": {"fr": "Prédictions", "en": "Predictions"},

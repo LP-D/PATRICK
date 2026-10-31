@@ -657,14 +657,6 @@ MACRO_ONLY_FRED_SERIES = {
     "Euro_Real_GDP": "CLVMNACSCAB1GQEA19",
     "Germany_Unemployment": "LRHUTTTTDEM156S",
     "ECB_MRO_Rate": "ECBMRRFR",
-    # Euro area (2026-10-30): sovereign yields (the Italy / France spreads over Germany are the euro stress gauge), HICP inflation,
-    # real GDP, German unemployment and the ECB main refinancing rate (the deposit rate is the feature-only `EUR_DFR_Rate`).
-    "France_10Y_Yield": "IRLTLT01FRM156N",
-    "Italy_10Y_Yield": "IRLTLT01ITM156N",
-    "Euro_HICP": "CP0000EZ19M086NEST",
-    "Euro_Real_GDP": "CLVMNACSCAB1GQEA19",
-    "Germany_Unemployment": "LRHUTTTTDEM156S",
-    "ECB_MRO_Rate": "ECBMRRFR",
     "Japan_10Y_Yield": "IRLTLT01JPM156N",
     "UK_10Y_Yield": "IRLTLT01GBM156N",
     # Financial conditions and volatility indices
