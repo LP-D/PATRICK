@@ -57,5 +57,5 @@ def test_the_night_runs_the_funds_first_then_backup_and_sync_then_the_other_pred
     lines = [line.split(" == ", 1)[1] for line in log.read_text(encoding="utf-8").splitlines() if " == " in line]
     assert [line.split(" :")[0] for line in lines] == [
         "reseau", "mise a jour", "actualites", "predictions utiles aux fonds et pilote automatique", "sauvegarde",
-        "synchronisation", "autres predictions", "fin"]
-    assert "--funds-only" in lines[3] and "--skip-funds" in lines[6]
+        "signaux regroupes", "synchronisation", "autres predictions", "fin"]
+    assert "--funds-only" in lines[3] and "--skip-funds" in lines[7]

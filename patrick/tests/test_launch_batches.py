@@ -169,7 +169,7 @@ def test_by_asset_class_groups_in_display_order_and_counts_the_never_run():
     us = out[0]
     assert us["symbols"] == ["AAPL", "^GSPC"] and us["never"] == 1
     macro = launch_batches.by_asset_class(["SOFR"], never=[], sources={"SOFR": "fred"})
-    assert macro == [{"key": "macro", "symbols": ["SOFR"], "never": 0}]
+    assert macro == [{"key": "macro", "symbols": ["SOFR"], "never": 0, "auc": None, "n_significant": None}]
 
 
 def test_overview_only_adds_by_class_when_the_sources_are_given(conn):

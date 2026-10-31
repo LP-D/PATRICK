@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import sqlite3
 
-METRICS = ("F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls")
+METRICS = ("F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls", "AUC_dir")
 _CHUNK = 400
 _TOP_RANKING_IN_TEXT = 10
 
@@ -128,8 +128,18 @@ def _holdout_diagnostic(conn: sqlite3.Connection, trial_id: int) -> dict:
     return {"diag_F1_dir": scores.get("F1_dir"), "diag_Acc_dir": scores.get("Acc_dir")}
 
 
+def _rank_metric(conn: sqlite3.Connection, run_ids: list[str]) -> str:
+    """Critère qui a classé les candidats de ce lancement (`selection.criterion`, walk-forward) ; `F1_dir` pour un run d'avant le champ."""
+    row = conn.execute("SELECT json_extract(config_json, '$.selection.criterion'), json_extract(config_json, '$.validation.scheme') "
+                       "FROM run WHERE run_id = ?", (run_ids[0],)).fetchone() if run_ids else None
+    if row and row[0] == "AUC_dir" and row[1] in (None, "walkforward"):
+        return "AUC_dir"
+    return "F1_dir"
+
+
 def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
     trials = _load_trials(conn, list(run_ids)) if run_ids else []
+    rank_by = _rank_metric(conn, list(run_ids))
     runs = {t["run_id"]: t["horizon"] for t in trials}
 
     folds_by_horizon: dict[int, list[int]] = {}
@@ -171,7 +181,8 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
     by_horizon = []
     for run_id, horizon in sorted(runs.items(), key=lambda kv: kv[1]):
         members = [t for t in trials if t["run_id"] == run_id]
-        best = min(members, key=lambda t: (-(t["score"].get("F1_dir") or 0.0), t["algo"], t["n_features"]))
+        metric = rank_by if any(t["score"].get(rank_by) is not None for t in members) else "F1_dir"
+        best = min(members, key=lambda t: (-(t["score"].get(metric) or 0.0), t["algo"], t["n_features"]))
         full = _score(best["folds"], sorted(best["folds"])) if best["folds"] else dict.fromkeys(METRICS)
         by_horizon.append({
             "horizon": horizon, "run_id": run_id, "algo": best["algo"], "n_features": best["n_features"],

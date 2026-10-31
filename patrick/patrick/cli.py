@@ -437,6 +437,56 @@ def audit_signal_cmd(
         typer.echo(f"  q={row['q_value']:.3f}  AUC {row['auc']:.3f}  {row['target']} h={row['horizon']}  ({row['n_runs']} run(s))")
 
 
+@audit_app.command(name="placebo-panel")
+def audit_placebo_panel_cmd(
+    group: str = typer.Option("asia", "--group", help="asia | controls | all (indices asiatiques, témoins Europe/États-Unis, les deux)"),
+    horizons: str = typer.Option("1,3", "--horizons", help="Horizons des runs, séparés par des virgules"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Affiche les runs sans rien mettre en file"),
+) -> None:
+    """Met en file un petit panel de runs légers pour obtenir leur placebo de décalage (ADR 0008, 0013) : les mêmes réglages sur le
+    holdout avec toutes les variables retardées d'un jour de plus. Un signal qui s'effondre repose sur l'information du jour même.
+    Les runs passent par la file ordinaire (un worker est lancé si besoin) ; lis le résultat avec `audit placebo-report`."""
+    from patrick import audit_placebo
+
+    try:
+        hs = tuple(sorted({int(h) for h in horizons.split(",") if h.strip()}))
+        names = audit_placebo.enqueue(group, hs or audit_placebo.PANEL_HORIZONS, dry_run=dry_run)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if not names:
+        typer.echo("Rien à mettre en file : toutes les cibles du panel sont déjà en file ou en cours.")
+        return
+    typer.echo(("[dry-run] " if dry_run else "[EN FILE] ") + f"{len(names)} run(s) : " + ", ".join(names))
+
+
+@audit_app.command(name="placebo-report")
+def audit_placebo_report_cmd(
+    group: str = typer.Option(None, "--group", help="asia | controls | all (défaut : tous les runs qui ont un placebo)"),
+) -> None:
+    """Résultat du placebo de décalage : par run puis par classe d'actifs et horizon, AUC réelle contre AUC avec les variables retardées d'un jour
+    de plus, et part des runs au verdict « jour même » (signal qui repose sur l'information du jour)."""
+    from patrick import audit_placebo
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect()
+    try:
+        rows = audit_placebo.report(conn, group)
+    finally:
+        conn.close()
+    if not rows:
+        typer.echo("Aucun run n'a encore de placebo (lance `patrick audit placebo-panel`, puis attends la fin des runs).")
+        return
+    for row in rows:
+        real = "—" if row["auc_real"] is None else f"{row['auc_real']:.3f}"
+        lag = "—" if row["auc_lag1"] is None else f"{row['auc_lag1']:.3f}"
+        typer.echo(f"  {row['target']:<12} h={row['horizon']:<3} AUC réelle {real}  retardée {lag}  verdict {row['verdict'] or '—'}")
+    typer.echo("")
+    typer.echo("Par classe et horizon :")
+    for item in audit_placebo.summarize(rows):
+        typer.echo(f"  {item['class']:<24} h={item['horizon']:<3} {item['n']} run(s)  AUC réelle {item['auc_real']:.3f}  retardée {item['auc_lag1']:.3f}"
+                   f"  « jour même » : {item['share_same_day']:.0%}")
+
+
 @audit_app.command(name="tickers")
 def audit_tickers_cmd(
     scope: str = typer.Option("all", "--scope", help="default | equities | extended | all"),

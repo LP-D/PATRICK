@@ -668,7 +668,7 @@ def test_total_window_screening_scores_every_candidate_once_then_walks_forward_t
         screen = conn.execute(
             "SELECT r.horizon, t.algo, fm.value FROM fold_metric fm JOIN trial t ON t.trial_id = fm.trial_id "
             "JOIN run r ON r.run_id = t.run_id WHERE fm.split = 'valid' AND fm.fold_index = 0 "
-            "AND fm.metric = 'F1_dir'").fetchall()
+            "AND fm.metric = 'AUC_dir'").fetchall()
         screen_n_test = dict(conn.execute(
             "SELECT r.horizon, fm.value FROM fold_metric fm JOIN trial t ON t.trial_id = fm.trial_id "
             "JOIN run r ON r.run_id = t.run_id WHERE fm.split = 'valid' AND fm.metric = 'n_test' "
@@ -683,7 +683,7 @@ def test_total_window_screening_scores_every_candidate_once_then_walks_forward_t
         group = [d for d in decisions if d[0] == horizon]
         assert [d[2] for d in group] == ["finalist"] + ["screened_out"] * (len(algos) - 1)
         assert "fenêtre totale" in group[0][3]
-        assert group[0][4] == max(v for h, _a, v in screen if h == horizon)      # best screening F1_dir wins
+        assert group[0][4] == max(v for h, _a, v in screen if h == horizon)      # best screening AUC_dir wins (critère par défaut)
 
     # only the finalist is walked forward, on every fold; no prediction is stored for the screening window
     board = result["leaderboard"]

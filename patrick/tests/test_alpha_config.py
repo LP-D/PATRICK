@@ -33,6 +33,7 @@ def test_raw_run_hash_is_unchanged_by_the_new_fields():
     « une erreur-type » (champ ajouté depuis, activé par défaut : une config par défaut a donc un autre hachage)."""
     legacy = _cfg()
     legacy.selection.one_se_rule = False
+    legacy.selection.criterion = "F1_dir"            # critère d'avant le champ (2026-10-31) : hors du hachage
     assert _config_hash(legacy) == "5197c2fe5c3a66c8"
     assert _config_hash(_cfg()) != "5197c2fe5c3a66c8"
 
