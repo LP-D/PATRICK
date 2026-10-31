@@ -87,6 +87,56 @@ def test_push_to_folder_publishes_db_without_any_personal_row(tmp_path):
     assert _count(src, "wealth_movement") == 1
 
 
+def _home_named(monkeypatch, tmp_path: Path, name: str) -> str:
+    """Simule un PC dont le dossier personnel s'appelle `name` ; renvoie le chemin Windows d'un fichier du cache."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / name))
+    bs = chr(92)
+    return bs.join(["C:", "Users", name, ".patrick", "cache", "series_XLK.parquet.tmp"])
+
+
+def test_push_redacts_the_username_from_error_messages_and_keeps_the_local_db_untouched(tmp_path, monkeypatch):
+    """Régression du 2026-10-31 : deux messages d'erreur (`job.error`) contenant le chemin du cache d'un PC bloquaient TOUTE publication
+    (142 refus d'affilée) : un traceback Windows porte presque toujours un chemin absolu."""
+    leaked = _home_named(monkeypatch, tmp_path, "leonpaul")
+    src = tmp_path / "pc1.db"
+    _make_db(src)
+    conn = sqlite3.connect(str(src))
+    conn.execute("INSERT INTO job (job_id, config_json, status, error) VALUES ('j1', '{}', 'error', ?)",
+                 (f"PermissionError: [WinError 32] fichier utilisé: '{leaked}'",))
+    conn.execute("UPDATE run SET error = ? WHERE run_id = 'run_1'", (f"boom dans {leaked}",))
+    conn.commit()
+    conn.close()
+    dest = tmp_path / "share"
+
+    _push(dest, src, tmp_path)                                       # ne lève plus
+
+    restored = tmp_path / "restored.db"
+    restored.write_bytes(gzip.decompress((dest / "patrick.db.gz").read_bytes()))
+    raw = restored.read_bytes()
+    assert b"leonpaul" not in raw and b"LEONPAUL" not in raw.upper()
+    conn = sqlite3.connect(str(restored))
+    published = conn.execute("SELECT error FROM job WHERE job_id = 'j1'").fetchone()[0]
+    conn.close()
+    assert published.startswith("PermissionError") and "series_XLK.parquet.tmp" in published    # le message reste utile
+    # la base locale n'est pas modifiée : l'original reste lisible pour le diagnostic
+    conn = sqlite3.connect(str(src))
+    assert "leonpaul" in conn.execute("SELECT error FROM job WHERE job_id = 'j1'").fetchone()[0]
+    conn.close()
+
+
+def test_push_still_refuses_a_username_found_outside_error_messages(tmp_path, monkeypatch):
+    """La rédaction ne vaut que pour les messages d'erreur : le nom d'utilisateur dans la configuration d'un run reste une fuite."""
+    _home_named(monkeypatch, tmp_path, "leonpaul")
+    src = tmp_path / "pc1.db"
+    _make_db(src)
+    conn = sqlite3.connect(str(src))
+    conn.execute("UPDATE run SET config_json = ? WHERE run_id = 'run_1'", (json.dumps({"output": {"dir": "C:/Users/leonpaul/runs"}}),))
+    conn.commit()
+    conn.close()
+    with pytest.raises(sync.SyncError, match="nom d'utilisateur"):
+        _push(tmp_path / "share", src, tmp_path)
+
+
 def test_manifest_checksums_match_the_published_files(tmp_path):
     src = tmp_path / "pc1.db"
     _make_db(src)

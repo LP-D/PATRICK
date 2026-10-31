@@ -104,6 +104,44 @@ def _username_leaks(conn: sqlite3.Connection, needle: str) -> dict[str, int]:
     return leaks
 
 
+# Messages d'erreur libres d'une base : un traceback Windows y porte presque toujours un chemin absolu du dossier personnel.
+_ERROR_TEXT_COLUMNS = (("job", "error"), ("job", "log_tail"), ("run", "error"))
+
+
+def _redact_username_in_errors(conn: sqlite3.Connection, needle: str) -> int:
+    """Remplace, dans la COPIE d'export, le dossier personnel du PC par `~` et son nom d'utilisateur par `<utilisateur>` dans les
+    messages d'erreur (`job.error`, `job.log_tail`, `run.error`) ; renvoie le nombre de lignes modifiées.
+
+    Le 2026-10-31, deux messages d'erreur du 22/10 (chemin du cache dans une `PermissionError`) bloquaient toute publication : 142
+    refus d'affilée, la recherche de ce PC n'atteignait plus le partage. Un message d'erreur n'a aucun intérêt scientifique à porter
+    le nom d'un utilisateur, alors que refuser tout l'export à cause de lui coûte des jours de recherche non sauvegardée. Les
+    AUTRES colonnes (configuration d'un run, problèmes de données...) ne sont pas touchées : un nom d'utilisateur qui y apparaît
+    reste refusé par `_username_leaks`, car il révélerait une fuite de structure, pas un simple message."""
+    home = str(Path.home())
+    variants = sorted({home, Path(home).as_posix()}, key=len, reverse=True)
+    home_patterns = [re.compile(re.escape(v), re.IGNORECASE) for v in variants if v]
+    name_pattern = re.compile(re.escape(needle), re.IGNORECASE)
+
+    def redact(text):
+        if not isinstance(text, str):
+            return text
+        for pattern in home_patterns:
+            text = pattern.sub("~", text)
+        return name_pattern.sub("<utilisateur>", text)
+
+    conn.create_function("_redact_user", 1, redact, deterministic=True)
+    conn.execute("PRAGMA secure_delete = ON")       # l'ancien texte est écrasé de zéros, pas seulement détaché : sans VACUUM d'une grosse copie
+    tables = {name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    changed = 0
+    for table, column in _ERROR_TEXT_COLUMNS:
+        if table in tables and column in _text_columns(conn, table):
+            changed += conn.execute(
+                f'UPDATE "{table}" SET "{column}" = _redact_user("{column}") WHERE "{column}" LIKE ?',
+                (f"%{needle}%",)).rowcount
+    conn.commit()
+    return changed
+
+
 def _neutralise_runtime_state(conn: sqlite3.Connection) -> None:
     """État d'exécution propre à un PC : un job en attente ou en cours serait
     repris par le worker de l'autre PC, et un battement de worker récent y
@@ -466,6 +504,8 @@ def push(dest: str, *, db_path: str | None = None, store_root: str | None = None
             if not include_personal:
                 excluded = personal_tables(copy)            # non copiées dans l'export : on vérifie seulement la fuite
                 needle = Path.home().name
+                if len(needle) >= 4:
+                    _redact_username_in_errors(copy, needle)         # messages d'erreur seulement ; la copie jetable, pas la base locale
                 leaks = _username_leaks(copy, needle) if len(needle) >= 4 else {}
                 if leaks:
                     raise SyncError("La base contient le nom d'utilisateur du PC (" + ", ".join(
