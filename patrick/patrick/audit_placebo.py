@@ -45,9 +45,13 @@ def build_config(target: str, name: str, horizons: tuple[int, ...] = PANEL_HORIZ
     })
 
 
-def enqueue(group: str, horizons: tuple[int, ...] = PANEL_HORIZONS, dry_run: bool = False) -> list[str]:
-    """Met en file un run par cible du panel (sauf celles déjà en file ou en cours) ; renvoie les noms. `dry_run` : ne touche à rien."""
+def enqueue(group: str, horizons: tuple[int, ...] = PANEL_HORIZONS, dry_run: bool = False, start_worker: bool = False) -> list[str]:
+    """Met en file un run par cible du panel (sauf celles déjà en file ou en cours) ; renvoie les noms. `dry_run` : ne touche à rien.
+    Aucun worker n'est lancé par défaut (`start_worker=False`) : un panel de ~20 runs dure des heures, et un worker lancé depuis un
+    terminal éphémère ou l'assistant est tué avec lui (runs « orphelins »). Les jobs attendent le prochain worker (`patrick worker`, ou
+    la prochaine soumission depuis la page web)."""
     from patrick.tracking import db as trackdb
+    from patrick.tracking import jobs as jobs_db
     from patrick.webapp import launch_batches, run_manager
 
     conn = trackdb.connect()
@@ -56,13 +60,19 @@ def enqueue(group: str, horizons: tuple[int, ...] = PANEL_HORIZONS, dry_run: boo
     finally:
         conn.close()
     names = []
-    for target in panel_targets(group):
-        if target in busy:
-            continue
-        name = f"{NAME_PREFIX}_{run_manager.next_run_name(target)}"
-        names.append(name)
-        if not dry_run:
-            run_manager.start_run(build_config(target, name, horizons))
+    conn = trackdb.connect()
+    try:
+        for target in panel_targets(group):
+            if target in busy:
+                continue
+            name = f"{NAME_PREFIX}_{run_manager.next_run_name(target)}"
+            names.append(name)
+            if not dry_run:
+                jobs_db.enqueue_job(conn, build_config(target, name, horizons).model_dump_json())
+    finally:
+        conn.close()
+    if names and start_worker and not dry_run:
+        run_manager.ensure_worker_running()
     return names
 
 

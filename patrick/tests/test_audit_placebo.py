@@ -51,6 +51,19 @@ def test_report_gives_the_verdict_per_run_and_the_summary_per_class(tmp_path, mo
     conn.close()
 
 
+def test_enqueue_inserts_the_jobs_without_starting_any_worker(tmp_path, monkeypatch):
+    from patrick.webapp import run_manager
+
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
+    monkeypatch.setattr(run_manager, "_spawn_worker", lambda *_a, **_k: pytest.fail("un worker a été lancé"))
+    names = audit_placebo.enqueue("controls")
+    assert names == ["placebo_GSPC_1", "placebo_FCHI_1", "placebo_GDAXI_1"]
+    conn = db.connect(str(tmp_path / "p.db"))
+    assert conn.execute("SELECT COUNT(*) FROM job WHERE status = 'queued'").fetchone()[0] == 3
+    conn.close()
+    assert audit_placebo.enqueue("controls") == []              # déjà en file : pas de doublon
+
+
 def test_the_panel_commands_dry_run_and_report(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
     runner = CliRunner()
