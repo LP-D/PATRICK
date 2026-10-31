@@ -125,7 +125,7 @@ def _direction_auc(clf, X_va: np.ndarray, y_va: np.ndarray) -> float:
     if p_up is None or len(p_up) != len(y_va):
         return 0.5
     auc = direction.direction_metrics(np.isin(np.asarray(y_va), calibration_lib.UP_CLASSES), p_up)[direction.METRIC_AUC]
-    return 0.5 if auc != auc else float(auc)
+    return 0.5 if np.isnan(auc) else float(auc)
 
 
 def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,

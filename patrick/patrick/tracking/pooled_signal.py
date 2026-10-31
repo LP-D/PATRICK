@@ -67,7 +67,7 @@ def save(conn: sqlite3.Connection, rows: list[dict]) -> None:
 
 
 def _num(value):
-    return None if value is None or value != value else float(value)
+    return None if value is None or pd.isna(value) else float(value)
 
 
 def load(conn: sqlite3.Connection) -> list[dict]:

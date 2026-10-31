@@ -519,9 +519,12 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
     groups = forms_rl.rl_target_groups() if family == "rl" else forms.TARGET_GROUPS
     conn = trackdb.connect()
     try:
+        from patrick.tracking import pooled_signal
+
+        evidence = {c["class"]: c for c in pooled_signal.class_summary(pooled_signal.load(conn))}
         overview = launch_batches.overview(conn, family, [sym for items in groups.values() for sym, _ in items],
                                            data_health.depth_by_symbol_for_form(), utc_today(),
-                                           sources=forms.TARGET_SOURCE_BY_SYMBOL)
+                                           sources=forms.TARGET_SOURCE_BY_SYMBOL, evidence=evidence)
     finally:
         conn.close()
     missing = overview["missing"]

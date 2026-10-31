@@ -63,7 +63,10 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
     recent_failures = [f for f in failures if (f["at"] or "") >= since and f["kind"] not in ("stopped",)]
     classes = class_overview.all_classes_summary(conn, groups, min_years, store, runs=runs)
     n_champions = conn.execute("SELECT COUNT(*) FROM champion").fetchone()[0]
+    from patrick.tracking import pooled_signal
+
     return {
+        "pooled": pooled_signal.summary(conn),
         "n_done": len(done), "n_sane": len(sane), "n_suspect": len(done) - len(sane), "n_champions": n_champions,
         "kinds": kinds, "auc_median": _median(r.get("best_auc") for r in sane), "f1_median": _median(r.get("best_f1_dir") for r in sane),
         "n_failures": len(failures), "n_recent_failures": len(recent_failures), "recent_days": RECENT_DAYS,

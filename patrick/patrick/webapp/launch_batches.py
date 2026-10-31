@@ -87,10 +87,13 @@ CLASS_ORDER = ("equities_us", "equities_europe", "equities_asia_pacific", "equit
                "volatility_index", "macro", "other")
 
 
-def by_asset_class(candidates: Iterable[str], never: Iterable[str], sources: dict[str, str]) -> list[dict]:
+def by_asset_class(candidates: Iterable[str], never: Iterable[str], sources: dict[str, str],
+                   evidence: dict[str, dict] | None = None) -> list[dict]:
     """`[{"key": classe, "symbols": [cibles], "never": n}]` : les cibles proposables regroupées par classe d'actifs (ordre `CLASS_ORDER`,
     classes vides omises) ; `never` = combien n'ont encore aucun run. `sources` : `{cible: "yfinance" | "fred"}` (une cible absente est
-    classée comme une valeur yfinance)."""
+    classée comme une valeur yfinance). `evidence` : `{classe: {"auc": AUC regroupée moyenne, "n_significant": paires significatives}}`
+    (`tracking/pooled_signal.py`) : les classes mesurées passent devant, la plus forte AUC d'abord, et la carte affiche la mesure ;
+    sans mesure, l'ordre est celui de `CLASS_ORDER`."""
     from patrick.data.session_calendar import classify_asset_class
 
     never_set = set(never)
@@ -98,12 +101,15 @@ def by_asset_class(candidates: Iterable[str], never: Iterable[str], sources: dic
     for symbol in candidates:
         groups.setdefault(classify_asset_class(symbol, sources.get(symbol, "yfinance")), []).append(symbol)
     keys = [k for k in CLASS_ORDER if k in groups] + sorted(k for k in groups if k not in CLASS_ORDER)
-    return [{"key": k, "symbols": groups[k], "never": sum(1 for s in groups[k] if s in never_set)} for k in keys]
+    evidence = {k: v for k, v in (evidence or {}).items() if v.get("auc") is not None}
+    keys = sorted((k for k in keys if k in evidence), key=lambda k: -evidence[k]["auc"]) + [k for k in keys if k not in evidence]
+    return [{"key": k, "symbols": groups[k], "never": sum(1 for s in groups[k] if s in never_set),
+             "auc": evidence.get(k, {}).get("auc"), "n_significant": evidence.get(k, {}).get("n_significant")} for k in keys]
 
 
 def overview(conn: sqlite3.Connection, family: str, symbols: Iterable[str], first_dates: dict[str, str], today: date,
              min_years: float = D.DEFAULT_MIN_HISTORY_YEARS, horizons: Iterable[int] = D.DEFAULT_HORIZONS,
-             sources: dict[str, str] | None = None) -> dict:
+             sources: dict[str, str] | None = None, evidence: dict[str, dict] | None = None) -> dict:
     """`{"never": [cibles], "missing": {cible: [horizons]}}` pour `family` (`ml`, `dl` ou `rl`) ; `symbols` = cibles proposables.
     Pas d'horizon pour le RL : `missing` y est toujours vide. Avec `sources`, ajoute `"by_class"` (`by_asset_class`)."""
     candidates = [s for s in dict.fromkeys(symbols) if _long_enough(s, first_dates, today, min_years)]
@@ -116,7 +122,7 @@ def overview(conn: sqlite3.Connection, family: str, symbols: Iterable[str], firs
         missing = {s: gaps for s in candidates if s in done_pairs and (gaps := [h for h in wanted if h not in done_pairs[s]])}
         out = {"never": [s for s in candidates if s not in done_pairs], "missing": missing}
     if sources is not None:
-        out["by_class"] = by_asset_class(candidates, out["never"], sources)
+        out["by_class"] = by_asset_class(candidates, out["never"], sources, evidence)
     return out
 
 

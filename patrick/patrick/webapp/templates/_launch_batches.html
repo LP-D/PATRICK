@@ -7,7 +7,7 @@
             <span class="profile-name">{{ t('mkt_' ~ c.key) }}</span>
         </button>
         <span class="profile-desc">{{ t('batch_class_desc') }}</span>
-        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_class_count', n=c.symbols | length, never=c.never) }}</span></span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_class_count', n=c.symbols | length, never=c.never) }}</span>{% if c.auc is not none %}<span class="batch-count pk-mono">{{ t('batch_class_auc', auc="%.3f" | format(c.auc), n=c.n_significant) }}</span>{% endif %}</span>
     </div>
     {% endfor %}
     {% if family != 'rl' %}

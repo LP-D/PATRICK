@@ -76,7 +76,7 @@ class Leaderboard:
         """`metric` s'il a au moins une valeur dans ce tableau, sinon `fallback` (un modèle sans probabilités n'a pas d'AUC)."""
         for row in self.rows:
             value = row.get(metric)
-            if value is not None and value == value:
+            if value is not None and not pd.isna(value):
                 return metric
         return fallback
 

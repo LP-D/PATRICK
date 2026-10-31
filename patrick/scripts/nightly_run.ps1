@@ -108,6 +108,7 @@ $Predict = Join-Path $RepoDir "scripts\daily_predict.py"
 $PredictLog = Join-Path $RepoDir "runs\daily_predict.log"
 Step "predictions utiles aux fonds et pilote automatique" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--funds-only")
 Step "sauvegarde"   @((Join-Path $RepoDir "scripts\backup_db.py"))
+Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
 Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
 

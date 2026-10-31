@@ -410,6 +410,33 @@ def audit_speed_cmd(
         typer.echo(report)
 
 
+@audit_app.command(name="signal")
+def audit_signal_cmd(
+    shifts: int = typer.Option(1000, "--shifts", help="Décalages circulaires de l'étiquette par paire (précision de la p-value)"),
+    alpha: float = typer.Option(0.10, "--alpha", help="Niveau Benjamini-Hochberg sur l'ensemble des paires"),
+    seed: int = typer.Option(7, "--seed", help="Graine des décalages (résultat reproductible)"),
+) -> None:
+    """Signal de chaque paire cible-horizon en regroupant ses runs (prédictions du holdout) : AUC du score moyen, test de permutation par
+    décalage circulaire (respecte le chevauchement des horizons) et correction Benjamini-Hochberg sur toutes les paires. Écrit la table
+    `pooled_signal` lue par la Synthèse et les cartes de lots ; ne modifie ni run ni prédiction."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import pooled_signal
+
+    conn = trackdb.connect()
+    try:
+        rows = pooled_signal.compute_all(conn, n_shift=shifts, seed=seed, alpha=alpha)
+        pooled_signal.save(conn, rows)
+    finally:
+        conn.close()
+    significant = [r for r in rows if r["significant"]]
+    typer.echo(f"[SIGNAL] {len(rows)} paires cible-horizon testées, {len(significant)} significatives (BH {alpha:.2f}).")
+    for item in pooled_signal.class_summary(rows):
+        auc = "—" if item["auc"] is None else f"{item['auc']:.3f}"
+        typer.echo(f"  {item['class']:<26} AUC regroupée moyenne {auc}  paires {item['n_pairs']:>4}  significatives {item['n_significant']:>3}")
+    for row in significant[:15]:
+        typer.echo(f"  q={row['q_value']:.3f}  AUC {row['auc']:.3f}  {row['target']} h={row['horizon']}  ({row['n_runs']} run(s))")
+
+
 @audit_app.command(name="tickers")
 def audit_tickers_cmd(
     scope: str = typer.Option("all", "--scope", help="default | equities | extended | all"),

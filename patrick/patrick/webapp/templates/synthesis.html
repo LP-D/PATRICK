@@ -57,6 +57,9 @@
 {% endif %}
 {{ metric(t('verdict_cost'), "{:,}".format(verdict.cumulative_trials).replace(",", " "), t('verdict_cost_rel', runs=verdict.n_runs, targets=verdict.n_targets), "neutral") }}
 {% endif %}
+{% if home.pooled %}
+{{ metric(t('pooled_kpi'), home.pooled.n_significant ~ " / " ~ home.pooled.n_tested, t('pooled_kpi_rel', alpha=home.pooled.alpha), "ok" if home.pooled.n_significant else "neutral") }}
+{% endif %}
 </div>
 
 {% if home.n_suspect %}

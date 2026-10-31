@@ -328,6 +328,10 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     # Carte « en cours et file d'attente » (identique sur /ml, /dl, /rl : c'est la même machine) et bandeau des variations.
     "machine_title": _s("File d'attente", "Queue"),
     "machine_idle": _s("Aucun run en attente.", "No run queued."),
+    "pooled_kpi": _s("Signaux regroupés", "Pooled signals"),
+    "pooled_kpi_rel": _s("paires cible-horizon dont l'AUC regroupée dépasse le hasard (permutation, BH α={alpha})",
+                         "target-horizon pairs whose pooled AUC beats chance (permutation, BH α={alpha})"),
+    "batch_class_auc": _s("AUC {auc} · {n} signal(aux)", "AUC {auc} · {n} signal(s)"),
     # Lots prêts à lancer (`launch_batches.py`, `_launch_batches.html`, `launch_batches.js`) : en plus des profils, sur /ml, /dl et /rl.
     "batch_title": _s("Lots prêts à lancer", "Ready-made batches"),
     "batch_loading": _s("Calcul des lots…", "Working out the batches…"),

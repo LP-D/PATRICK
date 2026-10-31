@@ -52,6 +52,7 @@ from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.equity_universe import is_equity_symbol
 from patrick.config.schema import RunConfig
+from patrick.config.targets import refuse_non_target
 from patrick.data import alignment
 from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
@@ -95,7 +96,7 @@ from patrick.models.uniqueness import (
 )
 from patrick.numeric import is_nan
 from patrick.pipeline import parallel, pause
-from patrick.pipeline.leaderboard import Leaderboard, rank_configs
+from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
 from patrick.selection.registry import select_features
@@ -114,11 +115,10 @@ from patrick.tuning.optuna_runner import (
     tune_config,
 )
 from patrick.validation import cpcv as cpcv_module
+from patrick.validation import direction as direction_lib
 from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
-from patrick.config.targets import refuse_non_target
-from patrick.validation import direction as direction_lib
 from patrick.validation.metrics import align_proba, metrics
 from patrick.validation.placebo import placebo_verdict
 from patrick.validation.purge import purge_mask
@@ -2120,9 +2120,9 @@ def _best_tuned(tuned_df: pd.DataFrame, group_cols: list[str], one_se: bool, hor
 def _higher(candidate: dict, reference: dict, metric: str) -> bool:
     """`candidate` bat `reference` sur `metric` ; une valeur absente ne bat rien."""
     a, b = candidate.get(metric), reference.get(metric)
-    if a is None or a != a:
+    if a is None or pd.isna(a):
         return False
-    return b is None or b != b or a > b
+    return b is None or pd.isna(b) or a > b
 
 
 def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> tuple[dict | None, dict[int, dict]]:

@@ -67,7 +67,7 @@ def test_pair(frames: list[pd.Series], y: pd.Series, horizon: int, n_shift: int 
     `n_dates`, `auc` (score regroupé), `auc_run_mean` (AUC moyenne d'un run seul, sur les mêmes dates), `p_value`, `null_sd`."""
     pooled = pool_scores(frames)
     common = pooled.index.intersection(y.index)
-    out = {"n_runs": len(frames), "n_dates": int(len(common)), "auc": float("nan"), "auc_run_mean": float("nan"),
+    out = {"n_runs": len(frames), "n_dates": len(common), "auc": float("nan"), "auc_run_mean": float("nan"),
            "p_value": float("nan"), "null_sd": float("nan")}
     if len(common) < MIN_DATES:
         return out

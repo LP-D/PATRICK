@@ -56,7 +56,7 @@ def test_launch_pages_do_not_list_any_macro_series(client, path):
 
 
 def test_a_macro_series_is_refused_as_a_target_by_the_launch_form(client):
-    config, errors = forms.build_config_dict(_form(), target_symbol="DGS10", name="DGS10_1")
+    _config, errors = forms.build_config_dict(_form(), target_symbol="DGS10", name="DGS10_1")
     assert any("variables" in e and "cible" in e for e in errors)
 
 
