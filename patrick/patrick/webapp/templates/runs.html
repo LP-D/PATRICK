@@ -65,6 +65,7 @@
 <form class="filter-bar history-filters" method="get" action="/runs">
     {% if filter_kind %}<input type="hidden" name="kind" value="{{ filter_kind }}">{% endif %}
     {% if filter_family %}<input type="hidden" name="family" value="{{ filter_family }}">{% endif %}
+    {% if filter_vides %}<input type="hidden" name="vides" value="1">{% endif %}
     <label>{{ t('hist_search') }}
         <input type="search" name="q" value="{{ filter_query }}" placeholder="{{ t('hist_search_ph') }}">
     </label>
@@ -79,7 +80,7 @@
     <label>{{ t('col_status') }}
         <select name="status" onchange="this.form.submit()">
             <option value="">— {{ t('rl_filter_all_m') }} —</option>
-            {% for s in ["done", "running", "queued", "failed"] %}
+            {% for s in ["done", "running", "queued", "failed", "stopped"] %}
             <option value="{{ s }}" {% if s == filter_status %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
         </select>
@@ -120,6 +121,16 @@
     </details>
 </form>
 
+{# Runs vides : échoués ou arrêtés avant le moindre essai, rien à lire ; masqués par défaut pour alléger la liste. #}
+{% if n_empty %}
+<p class="scope-line history-empties" data-keep>
+    <b>{{ t('hist_empty_label') }}</b>
+    <span class="scope-value">{{ n_empty }}</span>
+    <span class="scope-rel">{{ t('hist_empty_rel') }}</span>
+    <a href="{{ empty_link }}">{{ t('hist_empty_hide') if show_empty else t('hist_empty_show') }}</a>
+</p>
+{% endif %}
+
 {% if n_listed %}
 {# La comparaison ne porte que sur les runs ML et DL (mêmes mesures, donc comparables entre eux) ; un run RL se lit dans son panneau. #}
 {% if scope_dm.total %}
@@ -133,7 +144,7 @@
 {% set fam = section.family %}
 <section class="history-section" data-family="{{ fam }}">
     {% if not filter_family %}
-    <h2 class="history-section-title">{{ fam_label[fam] }} <span class="kind-count">{{ section.runs | length }}</span></h2>
+    <h2 class="history-section-title">{{ fam_label[fam] }} <span class="kind-count">{{ section.total }}</span></h2>
     {% endif %}
     {% if not section.runs %}
     <p class="hint history-empty">
@@ -164,7 +175,8 @@
         </tr></thead>
         <tbody>
         {% for r in section.runs %}
-        {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+        {% set shown_status = r.status_label or r.status %}
+        {% set state = 'ok' if shown_status == 'done' else ('pending' if shown_status in ('running', 'queued') else ('error' if shown_status in ('failed', 'error') else 'neutral')) %}
         {% set locked = r.status in ('running', 'queued') %}
         {% set has_gap = r.sharpe is not none and r.sharpe_buy_hold is not none %}
         <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
@@ -172,7 +184,7 @@
             <td class="hc-name" title="{{ r.run_id }}">{{ r.name or r.run_id }}</td>
             <td title="{{ r.target }}">{{ (r.target | iname) if r.target else '—' }}</td>
             <td>{{ r.algo or '—' }}</td>
-            <td>{{ status_badge(r.status, state) }}</td>
+            <td>{{ status_badge(shown_status, state) }}</td>
             <td class="num pk-mono headline">{{ '%.2f' | format(r.sharpe) if r.sharpe is not none else '—' }}</td>
             <td class="num pk-mono">{{ '%.2f' | format(r.sharpe_buy_hold) if r.sharpe_buy_hold is not none else '—' }}</td>
             <td class="num pk-mono">{% if has_gap %}<span class="{{ 'pos' if r.sharpe >= r.sharpe_buy_hold else 'neg' }}">{{ '%+.2f' | format(r.sharpe - r.sharpe_buy_hold) }}</span>{% else %}—{% endif %}</td>
@@ -214,15 +226,16 @@
         </tr></thead>
         <tbody>
         {% for r in section.runs %}
-        {% set state = 'ok' if r.status == 'done' else ('pending' if r.status in ('running', 'queued') else ('error' if r.status in ('failed', 'error') else 'neutral')) %}
+        {% set shown_status = r.status_label or r.status %}
+        {% set state = 'ok' if shown_status == 'done' else ('pending' if shown_status in ('running', 'queued') else ('error' if shown_status in ('failed', 'error') else 'neutral')) %}
         {% set locked = r.status in ('running', 'queued') %}
         <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
             <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
-            <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+            <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.partial %} <span class="tag tag-partial" title="{{ t('hist_partial_tip') }}">{{ t('hist_partial_tag') }}</span>{% endif %}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
             <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
             <td title="{{ r.target }}">{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
-            <td>{{ status_badge(r.status, state) }}</td>
+            <td>{{ status_badge(shown_status, state) }}</td>
             <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>
             <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
             <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
@@ -245,10 +258,22 @@
     </table>
     </div>
     {% endif %}
+    {% if section.runs and not filter_family and section.total > section.runs | length %}
+    <p class="history-more"><a href="{{ family_links[fam] }}">{{ t('hist_see_all', n=section.total, shown=section.runs | length) }}</a></p>
+    {% endif %}
+    {% if section.runs and filter_family and n_pages > 1 %}
+    <nav class="history-pager" aria-label="{{ t('hist_pager_aria') }}">
+        {% if page > 1 %}<a class="btn-secondary" href="{{ page_base }}1" aria-label="{{ t('hist_first') }}">«</a>
+        <a class="btn-secondary" href="{{ page_base }}{{ page - 1 }}" rel="prev">‹ {{ t('hist_prev') }}</a>{% endif %}
+        <span class="history-pager-pos">{{ t('hist_page_of', p=page, n=n_pages) }}</span>
+        {% if page < n_pages %}<a class="btn-secondary" href="{{ page_base }}{{ page + 1 }}" rel="next">{{ t('hist_next') }} ›</a>
+        <a class="btn-secondary" href="{{ page_base }}{{ n_pages }}" aria-label="{{ t('hist_last') }}">»</a>{% endif %}
+    </nav>
+    {% endif %}
 </section>
 {% endfor %}
 {# filter_* sont déjà échappés par la route (`runs_explorer`) : `| safe`, sinon double échappement. #}
-<p class="table-footer">{{ t('rn_shown', n=n_listed) }}
+<p class="table-footer">{{ t('hist_shown_of', shown=n_shown, n=n_listed) }}
     {%- if filter_target %} · {{ t('rn_f_target') }} = {{ filter_target | safe }}{% endif %}
     {%- if filter_status %} · {{ t('rn_f_status') }} = {{ filter_status | safe }}{% endif %}
     {%- if filter_scheme %} · {{ t('rn_f_scheme') }} = {{ filter_scheme | safe }}{% endif %}

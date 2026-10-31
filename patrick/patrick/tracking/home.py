@@ -46,7 +46,7 @@ def action_items(conn: sqlite3.Connection, n_recent_failures: int, n_suspect: in
 
 def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str]]],
                  min_years: int = D.DEFAULT_MIN_HISTORY_YEARS, store: DataStore | None = None) -> dict:
-    runs = trackdb.list_all_runs(conn)
+    runs = trackdb.list_all_runs(conn, with_balance=False)          # ni la page ni les classes n'affichent la répartition haut / bas
     done = [r for r in runs if r["status"] == "done"]
     sane = [r for r in done if not r.get("suspect")]
     kinds = {"directional": {"n": 0, "auc": [], "f1": []}, "alpha": {"n": 0, "auc": [], "f1": []}}

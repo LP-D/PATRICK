@@ -108,7 +108,8 @@ def test_without_a_tab_each_family_has_its_own_section(client, seeded):
     assert list(sections) == ["ml", "dl", "rl"]
     assert "arbre_vix" in sections["ml"] and "melange_vix" in sections["ml"] and "reseau_vix" not in sections["ml"]
     assert "reseau_vix" in sections["dl"] and "arbre_vix" not in sections["dl"]
-    assert all(n in sections["rl"] for n in ("agent_ppo", "agent_dqn", "agent_a2c"))
+    assert all(n in sections["rl"] for n in ("agent_ppo", "agent_a2c"))
+    assert "agent_dqn" not in sections["rl"]                         # échoué sans aucun résultat : un run vide, masqué par défaut
     assert not any(n in sections["ml"] + sections["dl"] for n in ("agent_ppo", "agent_dqn"))
     assert 'history-table-cls' in sections["ml"] and 'history-table-cls' in sections["dl"] and 'history-table-rl' in sections["rl"]
 
@@ -117,7 +118,7 @@ def test_the_family_tabs_carry_one_count_each(client, seeded):
     page = client.get("/runs").text
     tabs = re.search(r'<nav class="kind-tabs family-tabs".*?</nav>', page, re.DOTALL).group(0)
     counts = [int(c) for c in re.findall(r'class="kind-count">(\d+)<', tabs)]
-    assert counts == [6, 2, 1, 3]                                   # tous, ML, DL, RL
+    assert counts == [5, 2, 1, 2]                                   # tous, ML, DL, RL (le run RL vide est masqué)
     assert 'href="/runs?family=dl"' in tabs and 'href="/runs?family=rl"' in tabs
 
 
@@ -131,7 +132,7 @@ def test_a_family_tab_shows_that_family_only(client, seeded):
 
 
 def test_the_rl_table_has_strategy_columns_instead_of_classification_ones(client, seeded):
-    rl = client.get("/runs?family=rl").text
+    rl = client.get("/runs?family=rl&vides=1").text
     assert "agent_ppo" in rl and "agent_dqn" in rl and "arbre_vix" not in rl
     assert "history-table-rl" in rl and "history-table-cls" not in rl
     assert ">0.80<" in rl and ">0.50<" in rl and "+0.30" in rl     # Sharpe, Sharpe B&H, écart
@@ -149,7 +150,7 @@ def test_ml_and_dl_tables_keep_compare_and_actions(client, seeded):
 
 
 def test_an_rl_error_counts_as_failed_and_a_queued_job_is_listed(client, seeded):
-    failed = client.get("/runs?family=rl&status=failed").text
+    failed = client.get("/runs?family=rl&status=failed&vides=1").text
     assert "agent_dqn" in failed and "agent_ppo" not in failed and "agent_a2c" not in failed
     queued = client.get("/runs?family=rl&status=queued").text
     assert "agent_a2c" in queued and "agent_ppo" not in queued
@@ -228,7 +229,7 @@ def _job(job_id: str):
 
 
 def test_rl_rows_get_a_checkbox_when_done_and_a_delete_button_unless_running(client, seeded):
-    rl = _sections(client.get("/runs").text)["rl"]
+    rl = _sections(client.get("/runs?vides=1").text)["rl"]
     rows = {m.group(1): m.group(0) for m in re.finditer(r'<tr class="history-row" data-run-id="(\w+)".*?</tr>', rl, re.DOTALL)}
     done, error, queued = rows[seeded["done"]], rows[seeded["error"]], rows[seeded["queued"]]
     assert 'form="compare-rl-form"' in done and 'form="compare-rl-form"' not in error and 'form="compare-rl-form"' not in queued

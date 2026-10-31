@@ -61,11 +61,14 @@ def for_trials(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict
     return out
 
 
-def for_runs(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, dict[str, dict]]:
-    """Même résultat pour le meilleur essai de chaque run, indexé par `run_id`."""
+def for_runs(conn: sqlite3.Connection, run_ids: list[str], best_trial_by_run: dict[str, int] | None = None) -> dict[str, dict[str, dict]]:
+    """Même résultat pour le meilleur essai de chaque run, indexé par `run_id`. `best_trial_by_run` : essais déjà choisis (le meilleur
+    provisoire d'un run interrompu compris), sinon `is_best = 1`."""
     if not run_ids:
         return {}
-    ph = ",".join("?" for _ in run_ids)
-    best = dict(conn.execute(f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({ph}) AND is_best = 1", run_ids))
+    if best_trial_by_run is None:
+        ph = ",".join("?" for _ in run_ids)
+        best_trial_by_run = dict(conn.execute(f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({ph}) AND is_best = 1", run_ids))
+    best = {run_id: best_trial_by_run[run_id] for run_id in run_ids if run_id in best_trial_by_run}
     by_trial = for_trials(conn, list(best.values()))
     return {run_id: by_trial[trial_id] for run_id, trial_id in best.items() if trial_id in by_trial}

@@ -15,7 +15,7 @@ import threading
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exception_handlers import (
@@ -1152,10 +1152,15 @@ def download_artifact(run_id: str, artifact: str):
     return FileResponse(path, filename=os.path.basename(path))
 
 
+HISTORY_PAGE_SIZE = 50        # lignes par page quand une seule famille est affichée
+HISTORY_PREVIEW = 12          # lignes par famille dans la vue « Tous » (le reste : lien « Voir les N runs »)
+
+
 @app.get("/runs")
 def runs_explorer(request: Request, target: str | None = None, status: str | None = None,
                    scheme: str | None = None, q: str | None = None, algo: str | None = None,
                    kind: str | None = None, family: str | None = None, vue: str | None = None,
+                   page: int = Query(default=1, ge=1), vides: int = Query(default=0, ge=0, le=1),
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
                    max_duration_s: float | None = Query(default=None, ge=0)):
@@ -1166,48 +1171,65 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
 
     Trois familles qui ne se mélangent jamais : machine learning (arbres), deep learning (réseaux de neurones : mêmes tables `run` et
     mêmes mesures que le ML) et reinforcement learning (table `job` seule, mesures de performance de stratégie). `family` en choisit une ;
-    sans lui, une section par famille."""
+    sans lui, une section par famille.
+
+    Légère : les comptes, filtres et la pagination se font sur un index sans chiffres (`trackdb.list_run_index`), et seules les lignes
+    affichées sont complétées (`trackdb.enrich_runs`) -- la page relisait les prédictions de tous les runs (17 s) pour rendre 12 Mo de HTML.
+    Les runs VIDES (échoués ou arrêtés avant le moindre essai : rien n'a été effectué) sont masqués, `vides=1` les montre."""
     if started_after and started_before and started_after > started_before:
         raise HTTPException(status_code=400, detail="La date de début doit précéder la date de fin.")
     if min_duration_s is not None and max_duration_s is not None and min_duration_s > max_duration_s:
         raise HTTPException(status_code=400, detail="La durée minimale dépasse la durée maximale.")
     conn = trackdb.connect()
     try:
-        all_runs = trackdb.list_all_runs(conn)
+        index = trackdb.list_run_index(conn)
+        every = {"ml": [r for r in index if r["family"] != "dl"], "dl": [r for r in index if r["family"] == "dl"], "rl": _rl_history_rows()}
+        if vue == "analyses":
+            counts = {f: len(rows) for f, rows in every.items()}
+            ctx = _i18n_context(request)
+            ctx["i18n_js"] = i18n.js_strings(ctx["lang"], "/analyses")        # textes du navigateur des pages d'analyse
+            return templates.TemplateResponse(
+                request, "runs.html", {"view": "analyses", "family_counts": counts, "n_all_runs": sum(counts.values()), **ctx})
+        n_empty = sum(1 for rows in every.values() for r in rows if r.get("empty"))
+        by_family = every if vides else {f: [r for r in rows if not r.get("empty")] for f, rows in every.items()}
+        family_counts = {f: len(rows) for f, rows in by_family.items()}
+        family = family if family in by_family else None
+        scope = (family,) if family else tuple(by_family)
+
+        # Directional (price-direction) and alpha (excess return vs a benchmark) models are never mixed: a tab each.
+        # Ils n'existent que pour le ML et le DL (une stratégie RL n'a pas de cible directionnelle ou alpha).
+        classif_scope = [r for f in scope if f != "rl" for r in by_family[f]]
+        kind_counts = {"directional": sum(1 for r in classif_scope if r.get("kind") == "directional"),
+                       "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha")}
+        kind = kind if kind in kind_counts and family != "rl" else None
+        scope_runs = [r for f in scope for r in by_family[f]]
+        algorithm_options = sorted({model for run in scope_runs for model in _run_algorithms(run)})
+        sections, filtered_classif, filtered_rl = [], [], []
+        shown_total = 0
+        for fam in scope:
+            if fam == "rl" and kind:
+                continue                    # filtrer par type directionnel/alpha écarte la famille RL, qui n'en a pas
+            runs = _filter_history_runs(
+                by_family[fam], kind=kind, target=target, status=status, scheme=scheme, algo=algo, q=q,
+                started_after=started_after, started_before=started_before,
+                min_duration_s=min_duration_s, max_duration_s=max_duration_s)
+            total = len(runs)
+            if family:                      # une seule famille : paginée
+                page = min(page, max(1, -(-total // HISTORY_PAGE_SIZE)))
+                shown = runs[(page - 1) * HISTORY_PAGE_SIZE:page * HISTORY_PAGE_SIZE]
+            else:
+                shown = runs[:HISTORY_PREVIEW]
+            shown_total += len(shown)
+            (filtered_rl if fam == "rl" else filtered_classif).extend(runs)
+            sections.append({"family": fam, "total": total, "runs": shown if fam == "rl" else trackdb.enrich_runs(conn, shown)})
+        # « runs comparés aux baselines » : sur TOUS les runs filtrés, pas seulement ceux de la page (une seule requête).
+        with_dm = len(trackdb.batch_dm_results(conn, [r["run_id"] for r in filtered_classif])) if filtered_classif else 0
     finally:
         conn.close()
-    by_family = {"ml": [r for r in all_runs if r.get("family") != "dl"], "dl": [r for r in all_runs if r.get("family") == "dl"],
-                 "rl": _rl_history_rows()}
-    family_counts = {f: len(rows) for f, rows in by_family.items()}
-    if vue == "analyses":
-        ctx = _i18n_context(request)
-        ctx["i18n_js"] = i18n.js_strings(ctx["lang"], "/analyses")        # textes du navigateur des pages d'analyse
-        return templates.TemplateResponse(
-            request, "runs.html", {"view": "analyses", "family_counts": family_counts, "n_all_runs": sum(family_counts.values()), **ctx})
-    family = family if family in by_family else None
-    scope = (family,) if family else tuple(by_family)
-
-    # Directional (price-direction) and alpha (excess return vs a benchmark) models are never mixed: a tab each.
-    # Ils n'existent que pour le ML et le DL (une stratégie RL n'a pas de cible directionnelle ou alpha).
-    classif_scope = [r for f in scope if f != "rl" for r in by_family[f]]
-    kind_counts = {"directional": sum(1 for r in classif_scope if r.get("kind") == "directional"),
-                   "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha")}
-    kind = kind if kind in kind_counts and family != "rl" else None
-    scope_runs = [r for f in scope for r in by_family[f]]
-    algorithm_options = sorted({model for run in scope_runs for model in _run_algorithms(run)})
-    sections = []
-    for fam in scope:
-        if fam == "rl" and kind:
-            continue                    # filtrer par type directionnel/alpha écarte la famille RL, qui n'en a pas
-        sections.append({"family": fam, "runs": _filter_history_runs(
-            by_family[fam], kind=kind, target=target, status=status, scheme=scheme, algo=algo, q=q,
-            started_after=started_after, started_before=started_before,
-            min_duration_s=min_duration_s, max_duration_s=max_duration_s)})
-    classif_listed = [r for s in sections if s["family"] != "rl" for r in s["runs"]]
-    rl_done = [r for s in sections if s["family"] == "rl" for r in s["runs"]
-               if r.get("sharpe") is not None and r.get("sharpe_buy_hold") is not None]
-    scope_dm = {"with": sum(1 for r in classif_listed if r.get("dm_p_value") is not None), "total": len(classif_listed)}
+    rl_done = [r for r in filtered_rl if r.get("sharpe") is not None and r.get("sharpe_buy_hold") is not None]
+    scope_dm = {"with": with_dm, "total": len(filtered_classif)}
     scope_rl = {"with": sum(1 for r in rl_done if r["sharpe"] > r["sharpe_buy_hold"]), "total": len(rl_done)}
+    n_listed = sum(s["total"] for s in sections)
 
     # Count runs per target for the dropdown filter
     target_counts = {}
@@ -1216,6 +1238,20 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         if tgt:
             target_counts[tgt] = target_counts.get(tgt, 0) + 1
     targets = [{"target": k, "n_runs": v} for k, v in sorted(target_counts.items())]
+
+    def history_url(**override) -> str:
+        """Adresse de la page avec les filtres actuels (sauf ceux qu'on remplace ; `None` retire un paramètre)."""
+        params = {"family": family, "kind": kind, "target": target, "status": status, "scheme": scheme, "q": q, "algo": algo,
+                  "started_after": started_after.isoformat() if started_after else None,
+                  "started_before": started_before.isoformat() if started_before else None,
+                  "min_duration_s": min_duration_s, "max_duration_s": max_duration_s, "vides": 1 if vides else None}
+        params.update(override)
+        query = urlencode({k: v for k, v in params.items() if v not in (None, "")})
+        return "/runs?" + query if query else "/runs"
+
+    n_pages = max(1, -(-n_listed // HISTORY_PAGE_SIZE)) if family else 1
+    page_base = history_url(page=None)
+    page_base += ("&" if "?" in page_base else "?") + "page="
 
     # Security (reflected XSS) -- `runs.html`'s footer concatenates these
     # three query-param-derived strings directly into an HTML string that
@@ -1227,8 +1263,12 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
     # "running"/..., "walkforward"/"cpcv" never contain HTML metacharacters).
     return templates.TemplateResponse(
         request, "runs.html",
-        {"view": "list", "family_sections": sections, "n_listed": sum(len(s["runs"]) for s in sections), "targets": targets,
+        {"view": "list", "family_sections": sections, "n_listed": n_listed, "n_shown": shown_total, "targets": targets,
          "filter_family": family or "", "family_counts": family_counts, "scope_dm": scope_dm, "scope_rl": scope_rl,
+         "page": page, "n_pages": n_pages, "page_base": page_base, "page_size": HISTORY_PAGE_SIZE,
+         "family_links": {f: history_url(family=f, page=None) for f in by_family},
+         "n_empty": n_empty, "show_empty": bool(vides),
+         "empty_link": history_url(vides=None if vides else 1, page=None),
          "filter_target": html.escape(target) if target else "",
          "filter_status": html.escape(status) if status else "",
          "filter_scheme": html.escape(scheme) if scheme else "",
@@ -1239,6 +1279,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
          "filter_started_before": started_before.isoformat() if started_before else "",
          "filter_min_duration_s": min_duration_s if min_duration_s is not None else "",
          "filter_max_duration_s": max_duration_s if max_duration_s is not None else "",
+         "filter_vides": 1 if vides else "",
          "algorithms": algorithm_options,
          **_i18n_context(request)},
     )
@@ -1247,14 +1288,20 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
 def _rl_history_rows() -> list[dict]:
     """Runs RL (table `job`, jamais dans `run`) au format de la liste Historique : un job en erreur s'affiche « failed » et un job encore
     en file porte sa date de création comme date de départ."""
-    return [{**r, "family": "rl", "status": "failed" if r["status"] == "error" else r["status"],
-             "started_at": r.get("started_at") or r.get("created_at")} for r in rl_routes.list_rl_jobs(None)]
+    rows = []
+    for r in rl_routes.list_rl_history():
+        status = "failed" if r["status"] == "error" else r["status"]
+        rows.append({**r, "family": "rl", "status": status, "status_label": trackdb.status_label(status, r.get("error")),
+                     "empty": status == "failed", "started_at": r.get("started_at") or r.get("created_at")})
+    return rows
 
 
 def _run_algorithms(run: dict) -> list[str]:
     """Algorithmes d'une ligne de l'Historique : celui de l'agent pour un run RL, ceux de la configuration sinon."""
     if run.get("family") == "rl":
         return [run["algo"]] if run.get("algo") else []
+    if run.get("algorithms") is not None:                 # ligne de l'index léger : déjà lue
+        return run["algorithms"]
     return _extract_algorithms(run.get("config_json"))
 
 
@@ -1267,10 +1314,10 @@ def _filter_history_runs(runs: list[dict], *, kind: str | None, target: str | No
     if target:
         runs = [r for r in runs if r.get("target") == target]
     if status:
-        runs = [r for r in runs if r.get("status") == status]
+        runs = [r for r in runs if (r.get("status_label") or r.get("status")) == status]
     if scheme:
-        # Scheme stored in config_json — extracted on the Python side
-        runs = [r for r in runs if _extract_scheme(r) == scheme]
+        # Scheme stored in config_json — read by `list_run_index` (a RL run is always walk-forward)
+        runs = [r for r in runs if (r.get("scheme") or _extract_scheme(r)) == scheme]
     if algo:
         runs = [r for r in runs if algo in _run_algorithms(r)]
     if q:
@@ -1328,7 +1375,7 @@ def compare_runs(request: Request, run_ids: Annotated[list[str] | None, Query()]
     conn = trackdb.connect()
     try:
         rl_ids = rl_history.live_rl_job_ids(conn, selected_ids)
-        runs_by_id = {run["run_id"]: run for run in trackdb.list_all_runs(conn)} if len(rl_ids) < len(selected_ids) else {}
+        runs_by_id = {run["run_id"]: run for run in trackdb.run_rows(conn, selected_ids)} if len(rl_ids) < len(selected_ids) else {}
     finally:
         conn.close()
     if rl_ids:
@@ -1439,7 +1486,7 @@ def run_side_panel(request: Request, run_id: str):
         return templates.TemplateResponse(request, "_rl_run_panel.html", {**rl_run, **_i18n_context(request)})
     conn = trackdb.connect()
     try:
-        run = next((r for r in trackdb.list_all_runs(conn) if r["run_id"] == run_id), None)
+        run = next(iter(trackdb.run_rows(conn, [run_id])), None)
     finally:
         conn.close()
     if run is None:
@@ -1455,6 +1502,8 @@ def run_side_panel(request: Request, run_id: str):
     conn = trackdb.connect()
     try:
         best = trackhistory._best_trial_id(conn, run_id)
+        if best is None and run.get("partial"):           # run interrompu : ses résultats provisoires (meilleur essai déjà évalué)
+            best = trackdb.partial_best_trials(conn, [run_id]).get(run_id)
         folds = trackhistory.fold_metrics(conn, best) if best else []
         headline = trackhistory._headline_for_trial(conn, best) if best else {}
     finally:

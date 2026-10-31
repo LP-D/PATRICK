@@ -13,6 +13,8 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 
+from patrick.tracking.db import USER_STOPPED_ERROR
+
 try:
     import psutil
 except ImportError:                                           # sans psutil, seul `pid_alive` tranche
@@ -227,18 +229,20 @@ def pause_requested(conn: sqlite3.Connection, job_id: str) -> bool:
 
 
 def finish_user_stopped_job(conn: sqlite3.Connection, job_id: str) -> bool:
-    error = "Stopped by user."
+    """Arrêt manuel d'un job : ses runs sont refermés « failed » + `USER_STOPPED_ERROR` (l'Historique les affiche « stopped ») avec le nombre
+    d'essais déjà évalués, pour que ce qui a été effectué avant l'arrêt reste lisible (essais et métriques sont déjà en base)."""
     with conn:
         cur = conn.execute(
             "UPDATE job SET status = 'error', finished_at = datetime('now'), error = ?, "
             "pause_requested = 0 WHERE job_id = ? AND status = 'running'",
-            (error, job_id),
+            (USER_STOPPED_ERROR, job_id),
         )
         if cur.rowcount:
             conn.execute(
-                "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ? "
+                "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ?, "
+                "n_trials = (SELECT COUNT(*) FROM trial WHERE trial.run_id = run.run_id) "
                 "WHERE job_id = ? AND status = 'running'",
-                (error, job_id),
+                (USER_STOPPED_ERROR, job_id),
             )
     return cur.rowcount == 1
 

@@ -11,10 +11,11 @@
     </div>
     <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ r.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>
 </header>
+{% if r.partial %}<p class="banner banner-warning rp-banner" role="note">{{ t('rp_partial_banner') }}</p>{% endif %}
 {% if r.suspect %}<p class="banner banner-error rp-banner">{{ t('suspect_banner_title') }} {{ t('suspect_banner_body', reason=r.suspect) }}</p>{% endif %}
 {{ headline_metrics(headline, m_labels) }}
 <dl class="rp-grid">
-    <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status }}</dd></div>
+    <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status_label or r.status }}</dd></div>
     <div><dt>{{ t('rp_scheme') }}</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>
     <div><dt>{{ t('rp_persistence') }}</dt><dd class="pk-mono">{{ '%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '—' }}</dd></div>
     <div><dt>{{ t('hist_gap') }}</dt><dd class="pk-mono {{ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') if has_gap else '' }}">{{ '%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir) if has_gap else '—' }}</dd></div>

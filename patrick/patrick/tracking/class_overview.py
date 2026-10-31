@@ -24,7 +24,7 @@ def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = Non
     for target, horizon in conn.execute("SELECT target, horizon FROM champion"):
         champions.setdefault(split_run_label(target)[0], set()).add(int(horizon))
     stats: dict[str, dict] = {}
-    for run in (trackdb.list_all_runs(conn) if runs is None else runs):
+    for run in (trackdb.list_all_runs(conn, with_balance=False) if runs is None else runs):
         asset, kind, _bench = split_run_label(html.unescape(run["target"] or ""))
         entry = stats.setdefault(asset, {
             "directional": {"n": 0, "n_done": 0, "best_auc": None, "best_f1": None, "last": None},

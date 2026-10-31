@@ -2429,6 +2429,11 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .kind-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; letter-spacing: .02em; }
 .kind-badge.kind-directional { background: var(--brand-soft); color: var(--brand); }
 .kind-badge.kind-alpha { background: var(--pos-soft); color: var(--pos); }
+.tag-partial { background: var(--warn-soft, var(--surface-2)); color: var(--warn, var(--text-2)); }
+.history-more { margin: 6px 0 0; }
+.history-pager { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+.history-pager-pos { color: var(--text-2); font-variant-numeric: tabular-nums; padding: 0 6px; }
+.history-empties a { margin-left: 10px; }
 .kind-badge.kind-rl { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); }
 .family-tabs { flex-wrap: wrap; }
 .rp-table { width: 100%; margin: 6px 0 10px; font-size: 12.5px; table-layout: fixed; }

@@ -891,7 +891,52 @@ def list_screening_decisions(conn: sqlite3.Connection, run_id: str) -> list[dict
     return [dict(zip(keys, row)) for row in cursor.fetchall()]
 
 
-def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, float | None]:
+USER_STOPPED_ERROR = "Stopped by user."        # `run.error` d'un run arrêté à la main (`jobs.finish_user_stopped_job`)
+
+
+def status_label(status: str | None, error: str | None) -> str | None:
+    """Statut affiché d'un run : « stopped » pour un run arrêté à la main (`run.status` est contraint à queued/running/done/failed, et un
+    arrêt est « failed » + `USER_STOPPED_ERROR` : une migration sur la table `run` de plusieurs Go n'en vaut pas la peine), sinon le statut."""
+    if status == "failed" and isinstance(error, str) and error.startswith(USER_STOPPED_ERROR):
+        return "stopped"
+    return status
+
+
+def _chunks(items: list, size: int = 500):
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
+
+
+def best_trials(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, int]:
+    """`{run_id: trial_id}` du meilleur essai (`is_best = 1`, posé à l'export du modèle) des runs donnés."""
+    out: dict[str, int] = {}
+    for chunk in _chunks(run_ids):
+        marks = ",".join("?" for _ in chunk)
+        out.update(conn.execute(f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({marks}) AND is_best = 1", chunk))
+    return out
+
+
+def partial_best_trials(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, int]:
+    """`{run_id: trial_id}` du MEILLEUR ESSAI PROVISOIRE d'un run interrompu (arrêté à la main, worker disparu) : il n'a jamais exporté de
+    modèle, donc aucun essai n'est `is_best`, mais ses essais et leurs métriques sont en base. Même critère que le classement final (F1_dir
+    moyen sur les plis de test), restreint aux essais évalués sur le plus de plis : sans cela un essai de dépistage n'ayant vu qu'un pli,
+    et chanceux, passerait devant les finalistes. Rien n'est écrit : c'est une lecture, pour l'affichage."""
+    out: dict[str, int] = {}
+    for chunk in _chunks(run_ids, 200):
+        marks = ",".join("?" for _ in chunk)
+        best: dict[str, tuple[int, float, int]] = {}
+        for run_id, trial_id, n_folds, avg in conn.execute(
+                "SELECT t.run_id, t.trial_id, COUNT(DISTINCT fm.fold_index), AVG(fm.value) FROM trial t "
+                "JOIN fold_metric fm ON fm.trial_id = t.trial_id "
+                f"WHERE t.run_id IN ({marks}) AND fm.split IN ('test', 'test_path') AND fm.metric = 'F1_dir' GROUP BY t.trial_id", chunk):
+            if run_id not in best or (n_folds, avg) > best[run_id][:2]:
+                best[run_id] = (n_folds, avg, trial_id)
+        out.update({run_id: trial_id for run_id, (_n, _avg, trial_id) in best.items()})
+    return out
+
+
+def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
+                      best_trial_by_run: dict[str, int] | None = None) -> dict[str, float | None]:
     """Batched `best trial -> avg test/test_path F1_dir` lookup for every
     run_id in `run_ids`: TWO fixed queries (best-trial ids, then their
     fold_metric average) regardless of len(run_ids), instead of up to two
@@ -900,14 +945,12 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str,
     independently -- see those functions, which call this instead of
     duplicating the pattern: `history.py` already depends on `db.py`, never
     the reverse). A run_id with no best trial, or a best trial with no
-    matching fold_metric row, is simply absent from the returned dict."""
+    matching fold_metric row, is simply absent from the returned dict. `best_trial_by_run` : essais déjà choisis (voir `best_trials`),
+    sinon lus (`is_best = 1`)."""
     if not run_ids:
         return {}
-    placeholders = ",".join("?" for _ in run_ids)
-    best_trial_by_run: dict[str, int] = dict(conn.execute(
-        f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({placeholders}) AND is_best = 1",
-        run_ids,
-    ))
+    if best_trial_by_run is None:
+        best_trial_by_run = best_trials(conn, run_ids)
     trial_ids = list(best_trial_by_run.values())
     best_f1_by_trial: dict[int, float] = {}
     if trial_ids:
@@ -923,16 +966,16 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str,
 HEADLINE_METRICS = ("AUC_ovr_4cls", "F1_dir")
 
 
-def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str],
-                       metrics: tuple[str, ...] = HEADLINE_METRICS) -> dict[str, dict[str, dict[str, float]]]:
+def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str], metrics: tuple[str, ...] = HEADLINE_METRICS,
+                       best_trial_by_run: dict[str, int] | None = None) -> dict[str, dict[str, dict[str, float]]]:
     """Headline metrics (AUC first, then F1) of each run's best trial, in TWO fixed queries whatever `len(run_ids)`:
     `{run_id: {"test": {metric: mean over the walk-forward test folds / CPCV paths}, "holdout": {metric: value}}}`.
-    A run without a best trial, or a best trial without these rows, is simply absent / has an empty dict."""
+    A run without a best trial, or a best trial without these rows, is simply absent / has an empty dict. `best_trial_by_run` : voir
+    `batch_best_f1_dir`."""
     if not run_ids:
         return {}
-    placeholders = ",".join("?" for _ in run_ids)
-    best_trial_by_run: dict[str, int] = dict(conn.execute(
-        f"SELECT run_id, trial_id FROM trial WHERE run_id IN ({placeholders}) AND is_best = 1", run_ids))
+    if best_trial_by_run is None:
+        best_trial_by_run = best_trials(conn, run_ids)
     if not best_trial_by_run:
         return {}
     trial_ids = list(best_trial_by_run.values())
@@ -999,7 +1042,109 @@ def run_family(cfg: dict) -> str:
     return "dl" if isinstance(algos, list) and algos and all(a in ALL_DL_ALGOS for a in algos) else "ml"
 
 
-def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> list[dict]:
+def list_run_index(conn: sqlite3.Connection, include_archived: bool = False, run_ids: list[str] | None = None) -> list[dict]:
+    """Index LÉGER des runs, le plus récent d'abord : ce qu'il faut pour compter, filtrer et paginer sans rien calculer (0,1 s pour
+    4 000 runs). Les chiffres (AUC, F1, DM, répartition haut / bas) viennent de `enrich_runs`, sur les seules lignes affichées : la page
+    Historique relisait avant les prédictions de tous les runs (17 s) et rendait 12 Mo de HTML. `run_ids` : seulement ces runs.
+
+    Chaque ligne : `run_id`, `target`, `horizon`, `status` (celui de la base), `status_label` (« stopped » pour un arrêt manuel),
+    `started_at`, `finished_at`, `n_trials`, `error`, `name`, `scheme`, `algorithms`, `family`, `kind`, `has_trials` et `empty` (échoué ou
+    arrêté avant le moindre essai : rien n'a été effectué). `target` et `name` sont BRUTS (le gabarit les échappe) ; `config_json` est
+    illisible tel quel : il est valide ou NULL, d'où `json_valid`."""
+    where, params = [], []
+    if not include_archived:
+        where.append("r.is_archived = 0")
+    if run_ids is not None:
+        if not run_ids:
+            return []
+        where.append(f"r.run_id IN ({','.join('?' for _ in run_ids)})")
+        params.extend(run_ids)
+    query = (
+        "SELECT r.run_id, r.target, r.horizon, r.status, r.started_at, r.finished_at, r.n_trials, r.error, "
+        "CASE WHEN json_valid(r.config_json) THEN json_extract(r.config_json, '$.name') END, "
+        "CASE WHEN json_valid(r.config_json) THEN json_extract(r.config_json, '$.validation.scheme') END, "
+        "CASE WHEN json_valid(r.config_json) THEN json_extract(r.config_json, '$.models.algos') END, "
+        "EXISTS (SELECT 1 FROM trial t WHERE t.run_id = r.run_id) FROM run r"
+        + (f" WHERE {' AND '.join(where)}" if where else "") + " ORDER BY r.started_at DESC")
+    out = []
+    for run_id, target, horizon, status, started_at, finished_at, n_trials, error, name, scheme, algos_json, has_trials in conn.execute(query, params):
+        try:
+            algos = [a for a in json.loads(algos_json) if isinstance(a, str)] if algos_json else []
+        except (TypeError, ValueError):
+            algos = []
+        label = status_label(status, error)
+        out.append({
+            "run_id": run_id, "target": target, "horizon": horizon, "status": status, "status_label": label,
+            "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials, "error": error,
+            "name": name if isinstance(name, str) else None, "scheme": scheme if isinstance(scheme, str) else "walkforward",
+            "algorithms": algos, "family": run_family({"models": {"algos": algos}}),
+            "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
+            "has_trials": bool(has_trials), "empty": status == "failed" and not has_trials,
+        })
+    return out
+
+
+def enrich_runs(conn: sqlite3.Connection, index_rows: list[dict], with_balance: bool = True) -> list[dict]:
+    """Lignes de `list_run_index` complétées de leurs chiffres, en requêtes GROUPÉES (le coût ne dépend pas du nombre de runs mais de leur
+    taille) : même forme que `list_all_runs`. Un run interrompu sans modèle exporté (arrêté à la main, worker disparu) montre ses
+    résultats PROVISOIRES -- meilleur essai parmi ceux déjà évalués (`partial_best_trials`) -- et porte `partial = True`.
+    `with_balance=False` saute la répartition haut / bas (`class_balance`), la seule lecture de la table `prediction` : 17 s pour les
+    4 000 runs, inutile à qui n'affiche pas ces deux colonnes (`class_balance` vaut alors `None`)."""
+    run_ids = [r["run_id"] for r in index_rows]
+    if not run_ids:
+        return []
+    configs: dict[str, str | None] = {}
+    for chunk in _chunks(run_ids):
+        marks = ",".join("?" for _ in chunk)
+        configs.update(conn.execute(f"SELECT run_id, config_json FROM run WHERE run_id IN ({marks})", chunk))
+    best = best_trials(conn, run_ids)
+    unfinished = [r["run_id"] for r in index_rows if r["status"] == "failed" and r["has_trials"] and r["run_id"] not in best]
+    provisional = partial_best_trials(conn, unfinished) if unfinished else {}
+    chosen = {**best, **provisional}
+    best_f1_by_run = batch_best_f1_dir(conn, run_ids, chosen)
+    dm_by_run = batch_dm_results(conn, run_ids)
+    benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
+    headline_by_run = batch_best_metrics(conn, run_ids, best_trial_by_run=chosen)
+    balance_by_run = class_balance.for_runs(conn, run_ids, best_trial_by_run=chosen) if with_balance else {}
+
+    out = []
+    for r in index_rows:
+        run_id, target, config_json = r["run_id"], r["target"], configs.get(r["run_id"])
+        try:
+            cfg = json.loads(config_json) if config_json else {}
+        except (TypeError, ValueError):
+            cfg = {}
+        cfg = cfg if isinstance(cfg, dict) else {}
+        dm_result = dm_by_run.get(run_id)
+        headline = headline_by_run.get(run_id, {})
+        test_m, holdout_m = headline.get("test", {}), headline.get("holdout", {})
+        name = r["name"]
+        out.append({
+            **r,
+            "target": html.escape(target) if isinstance(target, str) else target,
+            "name": html.escape(name) if isinstance(name, str) else name,
+            "suspect": (suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m)
+                        or suspicion.alignment_reason(target, cfg)),
+            "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
+            "holdout_f1_dir": holdout_m.get("F1_dir"),
+            "config_json": config_json,
+            "best_f1_dir": best_f1_by_run.get(run_id),
+            "dm_p_value": dm_result["p_value"] if dm_result else None,
+            "dm_sample": dm_result["sample"] if dm_result else None,
+            "benchmark_f1_dir": benchmark_by_run.get(run_id),
+            "class_balance": balance_by_run.get(run_id),
+            "partial": run_id in provisional,
+        })
+    return out
+
+
+def run_rows(conn: sqlite3.Connection, run_ids: list[str], include_archived: bool = False) -> list[dict]:
+    """Les runs donnés, complets (`enrich_runs`), sans relire les autres : le panneau d'un run et la comparaison de runs relisaient les
+    4 000 runs de l'Historique pour n'en garder que deux ou trois."""
+    return enrich_runs(conn, list_run_index(conn, include_archived, run_ids))
+
+
+def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False, with_balance: bool = True) -> list[dict]:
     """All runs, most recent first — for exploratory surfaces (Phase 5).
     Includes `scheme`/`best_f1_dir`/`dm_p_value` (same queries as
     `tracking.history.list_runs`, duplicated here rather than imported:
@@ -1027,52 +1172,7 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False) -> l
     sanitizes a web-submitted target) -- escaped here, at the source, since
     `_components.html::data_table` legitimately needs raw HTML for other
     cells (links, badges) and so cannot escape indiscriminately itself."""
-    query = "SELECT run_id, target, horizon, status, started_at, finished_at, config_json, n_trials FROM run"
-    if not include_archived:
-        query += " WHERE is_archived = 0"
-    query += " ORDER BY started_at DESC"
-    rows = conn.execute(query).fetchall()
-
-    run_ids = [r[0] for r in rows]
-    best_f1_by_run = batch_best_f1_dir(conn, run_ids)
-    dm_by_run = batch_dm_results(conn, run_ids)
-    benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
-    headline_by_run = batch_best_metrics(conn, run_ids)
-    balance_by_run = class_balance.for_runs(conn, run_ids)
-
-    out = []
-    for run_id, target, horizon, status, started_at, finished_at, config_json, n_trials in rows:
-        name, scheme, family = None, "walkforward", "ml"
-        cfg = {}
-        try:
-            cfg = json.loads(config_json) if config_json else {}
-            name = cfg.get("name")
-            scheme = cfg.get("validation", {}).get("scheme", "walkforward")
-            family = run_family(cfg)
-        except (TypeError, ValueError, AttributeError):
-            pass
-        dm_result = dm_by_run.get(run_id)
-        headline = headline_by_run.get(run_id, {})
-        test_m, holdout_m = headline.get("test", {}), headline.get("holdout", {})
-        out.append({
-            "run_id": run_id, "target": html.escape(target) if isinstance(target, str) else target,
-            "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
-            "family": family,
-            "suspect": (suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m)
-                        or suspicion.alignment_reason(target, cfg)),
-            "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
-            "holdout_f1_dir": holdout_m.get("F1_dir"),
-            "horizon": horizon,
-            "status": status, "started_at": started_at, "finished_at": finished_at,
-            "n_trials": n_trials, "name": html.escape(name) if isinstance(name, str) else name,
-            "config_json": config_json,
-            "scheme": scheme, "best_f1_dir": best_f1_by_run.get(run_id),
-            "dm_p_value": dm_result["p_value"] if dm_result else None,
-            "dm_sample": dm_result["sample"] if dm_result else None,
-            "benchmark_f1_dir": benchmark_by_run.get(run_id),
-            "class_balance": balance_by_run.get(run_id),
-        })
-    return out
+    return enrich_runs(conn, list_run_index(conn, include_archived), with_balance)
 
 
 def alignment_reasons(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, str]:

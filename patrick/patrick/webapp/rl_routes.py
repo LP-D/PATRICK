@@ -89,7 +89,7 @@ def _summary(job: dict) -> dict:
         config = {}
     row = {"run_id": job["job_id"], "name": config.get("name"), "target": (config.get("objective") or {}).get("target_symbol"),
            "algo": (config.get("rl") or {}).get("algo"), "status": job["status"], "created_at": job.get("created_at"),
-           "started_at": job.get("started_at"), "finished_at": job.get("finished_at"),
+           "started_at": job.get("started_at"), "finished_at": job.get("finished_at"), "error": job.get("error"),
            "sharpe": None, "sharpe_buy_hold": None, "total_return": None, "max_drawdown": None, "dsr": None}
     if job["status"] == "done" and job.get("result_json"):
         try:
@@ -116,6 +116,33 @@ def list_rl_jobs(limit: int | None = LIST_LIMIT) -> list[dict]:
     finally:
         conn.close()
     return [_summary(dict(zip(cols, r, strict=True))) for r in rows]
+
+
+def list_rl_history() -> list[dict]:
+    """Tous les runs RL de l'Historique, au format de `list_rl_jobs(None)`, en UNE requête : les chiffres clés sont lus dans le résultat par
+    `json_extract` au lieu de relire et d'analyser 437 résultats complets en Python (57 Mo : ~2 s contre ~0,3 s). Un résultat illisible
+    fait échouer la requête : on retombe alors sur la lecture ligne à ligne, qui le tolère."""
+    conn = trackdb.connect(trackdb.default_db_path())
+    try:
+        rows = conn.execute(
+            "SELECT job_id, status, created_at, started_at, finished_at, error, "
+            "json_extract(config_json, '$.name'), json_extract(config_json, '$.objective.target_symbol'), json_extract(config_json, '$.rl.algo'), "
+            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.sharpe') END, "
+            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.baselines.buy_hold.sharpe') END, "
+            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.total_return') END, "
+            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.max_drawdown') END, "
+            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.stats.dsr.dsr') END "
+            "FROM job WHERE config_json LIKE ? AND phase != ? ORDER BY created_at DESC, rowid DESC",
+            (RL_JOB_FILTER, DELETED_PHASE)).fetchall()
+    except sqlite3.Error:
+        rows = None
+    finally:
+        conn.close()
+    if rows is None:
+        return list_rl_jobs(None)
+    keys = ("run_id", "status", "created_at", "started_at", "finished_at", "error", "name", "target", "algo",
+            "sharpe", "sharpe_buy_hold", "total_return", "max_drawdown", "dsr")
+    return [dict(zip(keys, row, strict=True)) for row in rows]
 
 
 def _is_deleted(job_id: str) -> bool:

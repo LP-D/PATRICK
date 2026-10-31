@@ -21,7 +21,7 @@
         <tr><th>{{ t('col_target') }}</th>{% for run in runs %}<td title="{{ run.target }}">{{ run.target | iname }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_horizons') }}</th>{% for run in runs %}<td>{{ run.horizons | join(', ') }} {{ t('cmp_days') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_validation') }}</th>{% for run in runs %}<td>{{ 'CPCV' if run.scheme == 'cpcv' else 'Walk-forward' }}</td>{% endfor %}</tr>
-        <tr><th>{{ t('col_status') }}</th>{% for run in runs %}<td>{{ run.status }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('col_status') }}</th>{% for run in runs %}<td>{{ run.status_label or run.status }}</td>{% endfor %}</tr>
         <tr><th>{{ t('rp_duration') }}</th>{% for run in runs %}<td>{{ '%.0f s' | format(run.duration_s) if run.duration_s is not none else t('cmp_running') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('col_trials') }}</th>{% for run in runs %}<td>{{ run.n_trials if run.n_trials is not none else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_f1') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.best_f1_dir) if run.best_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
