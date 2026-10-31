@@ -23,7 +23,7 @@
     <h2 class="group-title">{{ s.title }} <span class="hint">{{ s.assets | length }}</span></h2>
     <div class="asset-panel-grid">
     {% for a in s.assets %}
-    {{ asset_panel(a.symbol, a.label, a.slug, t('macro_training_only') if a.training_only else '') }}
+    {{ asset_panel(a.symbol, a.label, a.slug, t('macro_training_only') if a.training_only else '', '' if a.training_only else '/targets/' ~ (a.symbol | urlencode)) }}
     {% endfor %}
     </div>
 </section>

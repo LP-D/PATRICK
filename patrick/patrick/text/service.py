@@ -205,9 +205,9 @@ def item_feed(conn: sqlite3.Connection, symbol: str | None = None, limit: int = 
     by_item = links.groupby("item_id")["symbol"].apply(list).to_dict() if not links.empty else {}
     if symbol is not None:
         items = items[items["item_id"].map(lambda i: symbol in by_item.get(i, []))]
-    items = items.sort_values(["known_at", "item_id"], ascending=False).head(limit)
-    if items.empty:
+    if items.empty:                  # base sans actualités : pas de colonnes à trier
         return []
+    items = items.sort_values(["known_at", "item_id"], ascending=False).head(limit)
 
     def by_id(scorer, version):
         df = store.load_scores(conn, scorer, version)
