@@ -111,12 +111,29 @@ def feasible_inner_splits(n_rows: int, cv_splits: int, gap: int) -> int:
         f"(needs >= {_MIN_INNER_TRAIN_ROWS} rows in the first train block).")
 
 
+def _direction_auc(clf, X_va: np.ndarray, y_va: np.ndarray) -> float:
+    """AUC de P(hausse) du classifieur contre la direction réelle ; 0,5 quand elle n'est pas définie."""
+    from patrick.models import calibration as calibration_lib
+    from patrick.validation import direction
+
+    if not hasattr(clf, "predict_proba"):
+        return 0.5
+    try:
+        p_up = calibration_lib.p_up_from_proba(clf.predict_proba(X_va), list(getattr(clf, "classes_", [])))
+    except (AttributeError, ValueError):
+        return 0.5
+    if p_up is None or len(p_up) != len(y_va):
+        return 0.5
+    auc = direction.direction_metrics(np.isin(np.asarray(y_va), calibration_lib.UP_CLASSES), p_up)[direction.METRIC_AUC]
+    return 0.5 if auc != auc else float(auc)
+
+
 def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
                  n_trials: int = 100, cv_splits: int = 3, seed: int = 42,
                  storage_path: str | None = None, study_name: str | None = None,
                  bounds: dict | None = None, horizon: int = 1,
                  embargo_bars: int | None = None, purge: bool = False,
-                 embargo_enabled: bool = True, registry=None) -> tuple[dict, float]:
+                 embargo_enabled: bool = True, registry=None, criterion: str = "F1_dir") -> tuple[dict, float]:
     """`storage_path`/`study_name` (Phase 3.2, `patrick resume`): persists
     the study in a dedicated SQLite file (`optuna.db`, never `patrick.db` —
     Optuna's internal schema changes between versions, must not be coupled
@@ -139,7 +156,10 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
 
     `registry` (F03): optional Optuna callback -- typically
     `tracking.db.TrialRecorder` -- called once per finished trial, so every
-    evaluated configuration reaches the DSR's `n_trials`."""
+    evaluated configuration reaches the DSR's `n_trials`.
+
+    `criterion` : `F1_dir` (défaut, le comportement d'avant) ou `AUC_dir` -- l'AUC de P(hausse) contre la direction réelle sur le bloc de
+    validation (`validation/direction.py`), sans seuil ; un bloc à une seule direction vaut 0,5 (neutre)."""
     callbacks = [registry] if registry is not None else None
     gap = inner_cv_gap(horizon, embargo_bars, purge, embargo_enabled)
     n_splits = feasible_inner_splits(len(X), cv_splits, gap)
@@ -155,8 +175,11 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
             Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
             clf = get_classifier(algo, seed=seed, **params)
             clf.fit(Xr, yr)
-            met = metrics(y_va, clf.predict(X_va))
-            scores.append(met["F1_dir"])
+            if criterion == "AUC_dir":
+                scores.append(_direction_auc(clf, X_va, y_va))
+            else:
+                met = metrics(y_va, clf.predict(X_va))
+                scores.append(met["F1_dir"])
             trial.report(float(np.mean(scores)), i)
             if trial.should_prune():
                 raise optuna.TrialPruned()

@@ -266,6 +266,12 @@ class SelectionConfig(BaseModel):
     # simplest (fewest features). On by default since 2026-10-20: the plain maximum over hundreds of near-equal candidates
     # is noise. A config that turns it off keeps the pre-field hash (`engine._config_hash`).
     one_se_rule: bool = True
+    # Critère qui CLASSE les candidats (examen, réglage, choix final) : `AUC_dir` (défaut depuis le 2026-10-31) ou `F1_dir` (le critère
+    # d'avant). Le F1 dépend de la décision (classe la plus probable parmi 4 puis direction) et d'un seuil ; sur 130 runs à 36 essais
+    # comparés le classement par F1 en validation croisée prédit à peine le holdout (corrélation de rang +0,11) contre +0,37 pour l'AUC
+    # de direction (`validation/direction.py`). Walk-forward seulement : le schéma CPCV agrège des F1 par chemin et garde `F1_dir`. Un
+    # run enregistré avant le champ est relu avec `F1_dir` (`RunConfig.from_stored_json`) et son hachage ne change pas.
+    criterion: Literal["F1_dir", "AUC_dir"] = "AUC_dir"
 
 
 class SamplerConfig(BaseModel):
@@ -397,6 +403,7 @@ class RunConfig(BaseModel):
             selection = data.setdefault("selection", {})
             if isinstance(selection, dict):
                 selection.setdefault("one_se_rule", False)
+                selection.setdefault("criterion", "F1_dir")
         return cls.model_validate(data)
 
     @model_validator(mode="before")

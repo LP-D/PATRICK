@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 DEFAULT_GROUP_COLS: tuple[str, ...] = ("horizon", "regime", "N", "sampler", "algo")
+CARRIED_METRICS: tuple[str, ...] = ("F1_dir", "AUC_dir")     # moyennes toujours renvoyées avec la configuration, quel que soit le critère
 _TIEBREAK_ORDER: tuple[str, ...] = ("N", "horizon", "regime", "sampler", "algo")
 
 
@@ -50,6 +51,9 @@ class Leaderboard:
         cols = [c for c in group_cols if c in df.columns]
         grouped = df.groupby(cols)[metric]
         agg = grouped.mean().reset_index()
+        for extra in CARRIED_METRICS:
+            if extra != metric and extra in df.columns:
+                agg[extra] = df.groupby(cols)[extra].mean().values
         agg["n_folds"] = grouped.count().values
         agg["_se"] = grouped.std(ddof=1).fillna(0.0).values / np.sqrt(np.maximum(agg["n_folds"].values, 1))
         return agg, cols
@@ -67,6 +71,14 @@ class Leaderboard:
         chosen = near.sort_values(["N", metric] + others, ascending=[True, False] + [True] * len(others),
                                   kind="mergesort").index[0]
         return pd.concat([ranked.loc[[chosen]], ranked.drop(index=chosen)])
+
+    def usable_metric(self, metric: str, fallback: str = "F1_dir") -> str:
+        """`metric` s'il a au moins une valeur dans ce tableau, sinon `fallback` (un modèle sans probabilités n'a pas d'AUC)."""
+        for row in self.rows:
+            value = row.get(metric)
+            if value is not None and value == value:
+                return metric
+        return fallback
 
     def best(self, metric: str = "F1_dir", group_cols: tuple[str, ...] = DEFAULT_GROUP_COLS,
              one_se: bool = False) -> dict | None:

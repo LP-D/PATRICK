@@ -118,6 +118,7 @@ from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
 from patrick.config.targets import refuse_non_target
+from patrick.validation import direction as direction_lib
 from patrick.validation.metrics import align_proba, metrics
 from patrick.validation.placebo import placebo_verdict
 from patrick.validation.purge import purge_mask
@@ -944,6 +945,8 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
         y_up = np.isin(np.asarray(y_te), calibration_lib.UP_CLASSES).astype(float)
         met["Brier_up"] = calibration_lib.brier_score(p_up, y_up)
         met["ECE_up"] = calibration_lib.expected_calibration_error(p_up, y_up)
+        # AUC de direction (sans seuil) et F1 de la décision tirée de P(hausse), centrée sur les prédictions récentes : `validation/direction.py`
+        met.update(direction_lib.direction_metrics(y_up, p_up))
     return met, y_pred, confidence, p_up
 
 
@@ -1212,6 +1215,12 @@ def _require_alpha_columns(raw: pd.DataFrame, config: RunConfig) -> None:
             "ou repasse en cible brute.")
 
 
+def _criterion(config: RunConfig) -> str:
+    """Critère qui classe les candidats de ce run : celui de la configuration en walk-forward ; le schéma CPCV agrège des F1 par chemin
+    de test (`F1_dir` = leur médiane) et garde `F1_dir`."""
+    return config.selection.criterion if config.validation.scheme == "walkforward" else "F1_dir"
+
+
 def _config_hash(config: RunConfig) -> str:
     # Un run brut garde exactement le hachage d'avant l'ajout des champs alpha (reprise des runs existants,
     # noms d'études Optuna) : ils ne sont dans la charge utile que pour une cible alpha.
@@ -1231,8 +1240,14 @@ def _config_hash(config: RunConfig) -> str:
         exclude["models"] = {"deep"}
     # Idem pour la règle de parcimonie « une erreur-type » : hors du hachage quand elle est désactivée, donc une config qui
     # la désactive garde le hachage d'avant le champ ; activée (défaut), elle change le gagnant et entre dans le hachage.
+    selection_exclude = set()
     if not config.selection.one_se_rule:
-        exclude["selection"] = {"one_se_rule"}
+        selection_exclude.add("one_se_rule")
+    # Idem pour le critère de sélection : `F1_dir` (tout run d'avant le champ, relu par `from_stored_json`) garde son hachage.
+    if config.selection.criterion == "F1_dir":
+        selection_exclude.add("criterion")
+    if selection_exclude:
+        exclude["selection"] = selection_exclude
     # Idem pour la version de méthode : un run de méthode 1 (tout run d'avant le champ) garde son hachage.
     if config.validation.method_version < 2:
         exclude["validation"] = {"method_version"}
@@ -1774,12 +1789,13 @@ def _select_screening_finalists(st: _RunState, horizon: int, regime: str, run_id
                   if row.get("horizon") == horizon and row.get("regime") == regime and row.get("fold") == 1]
     group_board = Leaderboard()
     group_board.rows = group_rows
+    crit = group_board.usable_metric(_criterion(st.config))
     ranked = group_board.top_k(st.config.selection.screening_finalists_per_group,
-                               metric="F1_dir", group_cols=("N", "sampler", "algo"))
+                               metric=crit, group_cols=("N", "sampler", "algo"))
     selected = {(int(row["N"]), row["sampler"], row["algo"]) for row in ranked}
     score_by_key = {
-        (int(row["N"]), row["sampler"], row["algo"]): row.get("F1_dir")
-        for row in group_board.top_k(len(group_rows), metric="F1_dir", group_cols=("N", "sampler", "algo"))
+        (int(row["N"]), row["sampler"], row["algo"]): row.get(crit)
+        for row in group_board.top_k(len(group_rows), metric=crit, group_cols=("N", "sampler", "algo"))
     }
     rank_by_key = {key: rank for rank, key in enumerate(
         ((int(row["N"]), row["sampler"], row["algo"]) for row in ranked), start=1)}
@@ -1788,8 +1804,8 @@ def _select_screening_finalists(st: _RunState, horizon: int, regime: str, run_id
         {"horizon": horizon, "N": n_features, "sampler": sampler, "algo": algo,
          "score": score_by_key[(n_features, sampler, algo)], "rank": rank_by_key.get((n_features, sampler, algo)),
          "decision": "finalist" if (n_features, sampler, algo) in selected else "screened_out",
-         "reason": ("retenu selon F1_dir du fold 1" if (n_features, sampler, algo) in selected
-                    else f"hors des {st.config.selection.screening_finalists_per_group} finalistes selon F1_dir du fold 1")}
+         "reason": (f"retenu selon {crit} du fold 1" if (n_features, sampler, algo) in selected
+                    else f"hors des {st.config.selection.screening_finalists_per_group} finalistes selon {crit} du fold 1")}
         for n_features, sampler, algo in all_candidates
     ]
     st.screening_finalists[(horizon, regime)] = selected
@@ -1818,10 +1834,11 @@ def _select_total_window_finalists(st: _RunState, horizon: int, regime: str, run
     n_finalists = st.config.selection.screening_finalists_per_group
     group_board = Leaderboard()
     group_board.rows = [{"horizon": horizon, "regime": regime, "fold": 0, **row} for row in rows]
-    ranked = group_board.top_k(n_finalists, metric="F1_dir", group_cols=("N", "sampler", "algo"))
+    crit = group_board.usable_metric(_criterion(st.config))
+    ranked = group_board.top_k(n_finalists, metric=crit, group_cols=("N", "sampler", "algo"))
     selected = {(int(row["N"]), row["sampler"], row["algo"]) for row in ranked}
-    score_by_key = {(int(row["N"]), row["sampler"], row["algo"]): row.get("F1_dir")
-                    for row in group_board.top_k(len(rows), metric="F1_dir", group_cols=("N", "sampler", "algo"))}
+    score_by_key = {(int(row["N"]), row["sampler"], row["algo"]): row.get(crit)
+                    for row in group_board.top_k(len(rows), metric=crit, group_cols=("N", "sampler", "algo"))}
     rank_by_key = {key: rank for rank, key in enumerate(
         ((int(row["N"]), row["sampler"], row["algo"]) for row in ranked), start=1)}
     all_candidates = sorted(score_by_key, key=lambda key: (rank_by_key.get(key, len(rank_by_key) + 1), key))
@@ -1829,8 +1846,8 @@ def _select_total_window_finalists(st: _RunState, horizon: int, regime: str, run
         {"horizon": horizon, "N": n_features, "sampler": sampler, "algo": algo,
          "score": score_by_key[(n_features, sampler, algo)], "rank": rank_by_key.get((n_features, sampler, algo)),
          "decision": "finalist" if (n_features, sampler, algo) in selected else "screened_out",
-         "reason": ("retenu selon F1_dir sur la fenêtre totale" if (n_features, sampler, algo) in selected
-                    else f"hors des {n_finalists} finalistes selon F1_dir sur la fenêtre totale")}
+         "reason": (f"retenu selon {crit} sur la fenêtre totale" if (n_features, sampler, algo) in selected
+                    else f"hors des {n_finalists} finalistes selon {crit} sur la fenêtre totale")}
         for n_features, sampler, algo in all_candidates
     ]
     st.screening_finalists[(horizon, regime)] = selected
@@ -1887,7 +1904,7 @@ def _track_stability(st: _RunState) -> None:
         return
     for horizon in st.config.objective.horizons:
         board_h = _board_for_horizon(st.board, horizon)
-        top_h = board_h.top_k(1, metric="F1_dir", one_se=st.config.selection.one_se_rule)
+        top_h = board_h.top_k(1, metric=board_h.usable_metric(_criterion(st.config)), one_se=st.config.selection.one_se_rule)
         if not top_h:
             continue
         winner = top_h[0]
@@ -1968,12 +1985,13 @@ def _tuning_candidates(st: _RunState) -> list[dict]:
     config = st.config
     one_se = config.selection.one_se_rule          # le candidat réglé est le choix de la règle, pas le maximum simple
     tunable = _without_stack(st.board)
+    crit = tunable.usable_metric(_criterion(config))
     if not config.tuning.optuna_select_top_k_per_horizon:
-        return tunable.top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se)
+        return tunable.top_k(config.tuning.top_k, metric=crit, one_se=one_se)
     top_configs = []
     for horizon in config.objective.horizons:
         top_configs.extend(_board_for_horizon(tunable, horizon, models_only=False)
-                           .top_k(config.tuning.top_k, metric="F1_dir", one_se=one_se))
+                           .top_k(config.tuning.top_k, metric=crit, one_se=one_se))
     return top_configs
 
 
@@ -2004,7 +2022,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
             cv_splits=config.tuning.cv_splits, seed=st.seed, storage_path=optuna_storage_path,
             study_name=study_name, bounds=config.tuning.optuna_bounds, horizon=horizon,
             embargo_bars=config.validation.embargo_bars, purge=config.validation.purge,
-            embargo_enabled=config.validation.embargo_enabled,
+            embargo_enabled=config.validation.embargo_enabled, criterion=_criterion(config),
             registry=trackdb.TrialRecorder(st.conn, config.objective.run_label(), horizon,
                                            run_id=run_id, detail=study_name))
     except InnerCVInfeasible as exc:
@@ -2012,7 +2030,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
         return
     best_params = _model_params(config, algo, best_params)
     print(f"  h={horizon}d {regime} N={n_feat} {sampler_name} {algo}: "
-          f"cv_F1_dir={best_cv:.4f} params={best_params}")
+          f"cv_{_criterion(config)}={best_cv:.4f} params={best_params}")
 
     tuned_key = (horizon, regime, n_feat, sampler_name, algo, json.dumps(best_params, sort_keys=True))
     st.tuned_trial_ids[tuned_key] = trackdb.create_trial(
@@ -2086,19 +2104,25 @@ def _export_tables(st: _RunState) -> pd.DataFrame:
     return tuned_df
 
 
-def _best_tuned(tuned_df: pd.DataFrame, group_cols: list[str], one_se: bool, horizon: int | None = None) -> dict | None:
-    """The best fold-averaged tuned configuration (of one horizon, or of all): the highest mean, or with `one_se` the
-    parsimony rule's choice over the folds (`Leaderboard.best`)."""
+def _best_tuned(tuned_df: pd.DataFrame, group_cols: list[str], one_se: bool, horizon: int | None = None,
+                metric: str = "F1_dir") -> dict | None:
+    """The best fold-averaged tuned configuration (of one horizon, or of all) on `metric`: the highest mean, or with `one_se` the
+    parsimony rule's choice over the folds (`Leaderboard.best`). Carries the F1_dir / AUC_dir means whatever the criterion."""
     rows = tuned_df if horizon is None else tuned_df[tuned_df["horizon"] == horizon]
     if not len(rows):
         return None
     cols = group_cols + ["best_params"]
-    if one_se:
-        board = Leaderboard()
-        board.rows = rows.to_dict("records")
-        return board.best(metric="F1_dir", group_cols=tuple(cols), one_se=True)
-    ranked = rank_configs(rows.groupby(cols)["F1_dir"].mean().reset_index(), "F1_dir", cols)
-    return ranked.iloc[0].to_dict()
+    board = Leaderboard()
+    board.rows = rows.to_dict("records")
+    return board.best(metric=board.usable_metric(metric), group_cols=tuple(cols), one_se=one_se)
+
+
+def _higher(candidate: dict, reference: dict, metric: str) -> bool:
+    """`candidate` bat `reference` sur `metric` ; une valeur absente ne bat rien."""
+    a, b = candidate.get(metric), reference.get(metric)
+    if a is None or a != a:
+        return False
+    return b is None or b != b or a > b
 
 
 def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> tuple[dict | None, dict[int, dict]]:
@@ -2112,18 +2136,19 @@ def _select_finals(st: _RunState, best: dict | None, tuned_df: pd.DataFrame) -> 
     whenever tuning is active -- the tuned version of a bigger model almost always beats the untuned simple one."""
     group_cols = ["horizon", "regime", "N", "sampler", "algo"]
     one_se = st.config.selection.one_se_rule
+    crit = st.board.usable_metric(_criterion(st.config))
     final_best = dict(best) if best else None
     if len(tuned_df):
-        tuned_best = _best_tuned(tuned_df, group_cols, one_se)
-        if tuned_best is not None and (final_best is None or tuned_best["F1_dir"] > final_best["F1_dir"]):
+        tuned_best = _best_tuned(tuned_df, group_cols, one_se, metric=crit)
+        if tuned_best is not None and (final_best is None or _higher(tuned_best, final_best, crit)):
             final_best = tuned_best
 
     final_best_by_horizon: dict[int, dict] = {}
     for horizon in st.config.objective.horizons:
-        best_h = _board_for_horizon(st.board, horizon).best(metric="F1_dir", one_se=one_se)
+        best_h = _board_for_horizon(st.board, horizon).best(metric=crit, one_se=one_se)
         if len(tuned_df):
-            tuned_h = _best_tuned(tuned_df, group_cols, one_se, horizon)
-            if tuned_h is not None and (best_h is None or tuned_h["F1_dir"] > best_h["F1_dir"]):
+            tuned_h = _best_tuned(tuned_df, group_cols, one_se, horizon, metric=crit)
+            if tuned_h is not None and (best_h is None or _higher(tuned_h, best_h, crit)):
                 best_h = tuned_h
         if best_h is not None:
             final_best_by_horizon[horizon] = best_h
@@ -2353,10 +2378,11 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         n_scan_fits = st.n_scan_evals or len(st.board.rows)  # CPCV does not count fits one by one
         print(f"\n[SCAN] {n_scan_fits} evaluations in {(time.time()-t0)/60:.1f}min")
         _report_calibration_skips(n_scan_fits)
-        best = st.board.best(metric="F1_dir", one_se=config.selection.one_se_rule)
+        crit = st.board.usable_metric(_criterion(config))
+        best = st.board.best(metric=crit, one_se=config.selection.one_se_rule)
         if best:
             print(f"[BEST before Optuna] h={best['horizon']}d {best['regime']} N={best['N']} "
-                  f"{best['sampler']} {best['algo']} -> F1_dir={best['F1_dir']}")
+                  f"{best['sampler']} {best['algo']} -> {crit}={best[crit]} F1_dir={best.get('F1_dir')}")
 
         _track_stability(st)
         _holdout_diagnostic(st)
