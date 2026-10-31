@@ -59,6 +59,7 @@ from patrick.webapp import (
     alerts,
     analysis_routes,
     asset_stats,
+    asset_view,
     data_routes,
     exploration_routes,
     forms,
@@ -1709,7 +1710,7 @@ def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[t
     return groups
 
 
-def _predictions_overview(kind: str = "directional") -> dict:
+def _predictions_overview(kind: str = "directional", only: str | None = None) -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
     grouping `/universe` already uses) plus every other trained asset of the
@@ -1750,11 +1751,15 @@ def _predictions_overview(kind: str = "directional") -> dict:
             market_class = {label: session_calendar.classify_asset_class(asset) for label, asset, _ in alpha_labels}
         else:
             item_groups = _directional_prediction_groups(conn)
+            if only is not None:          # fiche d'un actif : une seule ligne, ses horizons seulement
+                item_groups = {g: [(sym, label) for sym, label in items if sym == only] for g, items in item_groups.items()}
+                item_groups = {g: items for g, items in item_groups.items() if items} or {_OTHER_ASSETS_GROUP: [(only, only)]}
             all_symbols = [sym for items in item_groups.values() for sym, _ in items]
             market_class = {sym: session_calendar.classify_asset_class(sym, forms.TARGET_SOURCE_BY_SYMBOL.get(sym, "yfinance"))
                             for sym in all_symbols}
             # Colonnes = horizons par defaut + tout horizon deja entraine (ex. 15/20/30 j).
-            trained = {int(r[0]) for r in conn.execute("SELECT DISTINCT horizon FROM run")}
+            trained = {int(r[0]) for r in (conn.execute("SELECT DISTINCT horizon FROM run WHERE target = ?", (only,)) if only is not None
+                                           else conn.execute("SELECT DISTINCT horizon FROM run"))}
             horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
@@ -1934,6 +1939,70 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     )
 
 
+@app.get("/fragments/asset-signals/{symbol}")
+def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+    """Fiche d'un actif : ses signaux du jour, un par horizon (même cellule et même bulle que `/predictions`), avec le champion de
+    chaque horizon. Chargé par `static/lazy.js` après l'affichage de la page."""
+    if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    overview = _predictions_overview("directional", only=symbol)
+    cells = overview["groups"][0]["assets"][0]["cells"] if overview["groups"] else {}
+    conn = trackdb.connect()
+    try:
+        champions = asset_view.champions_by_horizon(conn, symbol)
+    finally:
+        conn.close()
+    horizons = [h for h in overview["horizons"] if cells.get(h, {}).get("direction") or h in champions]
+    return templates.TemplateResponse(
+        request, "_asset_signals.html",
+        {"symbol": symbol, "cells": cells, "horizons": horizons, "champions": champions,
+         "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
+         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+    )
+
+
+def _class_signal_rows(conn: sqlite3.Connection, symbols: list[str]) -> dict[str, list]:
+    """Le dernier signal de chaque horizon par défaut des `symbols` : `{symbole: [[horizon, flèches, état, libellé]]}`. Un modèle au score
+    impossible n'affiche rien (`validation/suspicion.py`), comme sur `/predictions`. Une seule lecture groupée, sans les tableaux de fiabilité
+    et de dérive de la vue complète (89 s sur la vraie base) : seul le signal compte ici."""
+    preds = trackhistory.latest_predictions_by_target_and_horizon(conn, symbols, list(D.DEFAULT_HORIZONS)) if symbols else {}
+    shown = trackdb.batch_best_metrics(conn, sorted({p["run_id"] for p in preds.values()}))
+    out: dict[str, list] = {}
+    for (sym, h), pred in sorted(preds.items()):
+        scores = shown.get(pred["run_id"], {})
+        if suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test")):
+            continue
+        signal = _PREDICTION_SIGNALS.get((pred["direction"], pred["amplitude"]))
+        if signal:
+            out.setdefault(sym, []).append([h, signal[1], signal[2], signal[0]])
+    return out
+
+
+@app.get("/api/class-signals/{class_key}")
+async def class_signals_api(request: Request, class_key: str):
+    """Pages de classes d'actifs : le signal de chaque horizon de chaque actif entraîné de la classe, `{symbole: [[horizon, flèches, état,
+    libellé]]}`. Mémorisé tant que la base ne change pas ; le premier calcul (quelques secondes à quelques dizaines de secondes sur la
+    vraie base, disque froid) se fait en tâche de fond : la page est déjà ouverte."""
+    cls = asset_classes.BY_KEY.get(class_key)
+    if cls is None:
+        raise HTTPException(status_code=404, detail="Classe inconnue")
+    t = i18n.translator(i18n.get_lang(request))
+
+    def compute() -> dict[str, list]:
+        conn = trackdb.connect()
+        try:
+            stats = memo.memoize(conn, ("class-stats",), lambda: class_overview.model_stats_by_asset(conn))
+            symbols = [sym for g in cls.groups for sym, *_ in forms.TARGET_GROUPS.get(g, [])
+                       if stats.get(sym, {}).get("directional", {}).get("n_done", 0) > 0]
+            return memo.memoize(conn, ("class-signals", class_key), lambda: _class_signal_rows(conn, symbols))
+        finally:
+            conn.close()
+
+    rows = await run_in_threadpool(compute)
+    return {sym: [[h, arrows, state, t.tx(label)] for h, arrows, state, label in row] for sym, row in rows.items()}
+
+
 @app.get("/fragments/predictions")
 def predictions_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
                          kind: str = "directional"):
@@ -2082,24 +2151,39 @@ risk_routes.register(app, templates, lambda request: _i18n_context(request))
 data_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
-def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:
-    """Contexte commun des pages de classes d'actifs (`templates/asset_class.html`) : une ligne par cible avec son historique et
-    ses modèles directionnels / alpha, les compteurs d'en-tête, et la grille de cours (si la classe est assez petite)."""
+def _check_min_history_years(min_history_years: int) -> None:
     bounds = D.MIN_HISTORY_YEARS_BOUNDS
     if not bounds["min_allowed"] <= min_history_years <= bounds["max_allowed"]:
         raise HTTPException(status_code=400, detail=f"min_history_years doit être compris entre "
                                                     f"{bounds['min_allowed']} et {bounds['max_allowed']}.")
+
+
+def _asset_class_context(request: Request, class_key: str, min_history_years: int) -> dict:
+    """Cadre des pages de classes d'actifs (`templates/asset_class.html`) : la classe et la grille de cours (si la classe est assez petite).
+    Rien ne lit la base ici, la page s'ouvre tout de suite : compteurs et tableaux arrivent par `/fragments/asset-class/{classe}`."""
+    _check_min_history_years(min_history_years)
+    cls = asset_classes.BY_KEY[class_key]
+    items = [(sym, label) for g in cls.groups for sym, label, *_ in forms.TARGET_GROUPS.get(g, [])]
+    panels = ([{"symbol": sym, "label": label, "slug": forms.slug_target(sym)} for sym, label in items] if len(items) <= 40 else [])
+    return {"cls": cls, "panels": panels, "min_years": min_history_years, **_i18n_context(request)}
+
+
+@app.get("/fragments/asset-class/{class_key}")
+def asset_class_fragment(request: Request, class_key: str, min_history_years: int = D.DEFAULT_MIN_HISTORY_YEARS):
+    """Compteurs, recherche, filtres et tableaux d'une classe d'actifs : une ligne par cible avec son historique et ses modèles
+    directionnels / alpha. Chargé par `static/lazy.js` ; la lecture de tous les runs est mémorisée tant que la base ne change pas."""
+    if class_key not in asset_classes.BY_KEY:
+        raise HTTPException(status_code=404, detail="Classe inconnue")
+    _check_min_history_years(min_history_years)
     conn = trackdb.connect()
     try:
-        page = class_overview.class_page(conn, class_key, forms.TARGET_GROUPS, min_history_years)
+        stats = memo.memoize(conn, ("class-stats",), lambda: class_overview.model_stats_by_asset(conn))
+        page = class_overview.class_page(conn, class_key, forms.TARGET_GROUPS, min_history_years, stats=stats)
     finally:
         conn.close()
-    total = page["kpi"]["n_targets"]
-    panels = ([{"symbol": r["symbol"], "label": r["label"], "slug": forms.slug_target(r["symbol"])}
-               for g in page["groups"] for r in g["rows"]] if total <= 40 else [])
-    return {"cls": page["class"], "groups": page["groups"], "kpi": page["kpi"], "panels": panels,
-            "min_years": min_history_years,
-            **_i18n_context(request)}
+    return templates.TemplateResponse(
+        request, "_asset_class_body.html",
+        {"cls": page["class"], "groups": page["groups"], "kpi": page["kpi"], "min_years": min_history_years, **_i18n_context(request)})
 
 
 def _register_asset_class_pages() -> None:
@@ -2286,9 +2370,22 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
     # offering an horizon that obviously never finished a run).
     done_horizons = sorted({r["horizon"] for r in (detail["runs"] if detail else []) if r["status"] == "done"})
 
+    group, class_key = asset_view.locate(ticker, forms.TARGET_GROUPS)
+    conn = trackdb.connect()
+    try:
+        funds = asset_view.fund_usage(conn, ticker)
+    finally:
+        conn.close()
+    asset = {"symbol": ticker, "group": group, "class_key": class_key,
+             "class_url": asset_classes.BY_KEY[class_key].url if class_key else None,
+             "source": forms.TARGET_SOURCE_BY_SYMBOL[ticker], "history": asset_view.history(ticker),
+             "peers": asset_view.peers(ticker, group, forms.TARGET_GROUPS), "funds": funds,
+             "context": asset_view.market_context(ticker),
+             "slug": forms.slug_target(ticker)}
+
     return templates.TemplateResponse(
         request, "target.html",
-        {"target": ticker, "detail": detail, "phase_drift": phase_drift, "alpha_runs": alpha_runs,
+        {"target": ticker, "fiche": asset, "detail": detail, "phase_drift": phase_drift, "alpha_runs": alpha_runs,
          "champion_runs": champion_runs, "phase_labels": PHASE_LABELS, "shap_horizons": done_horizons, **_i18n_context(request)},
     )
 

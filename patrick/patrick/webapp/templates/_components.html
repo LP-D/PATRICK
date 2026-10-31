@@ -169,9 +169,9 @@
    yfinance/FRED calls. `slug` (from `forms.slug_target`) makes the id
    valid even for symbols like `GC=F`/`^VIX` that aren't valid HTML ids
    as-is. #}
-{% macro asset_panel(symbol, label, slug, note='') %}
+{% macro asset_panel(symbol, label, slug, note='', href='') %}
 <div class="card asset-panel" id="asset-{{ slug }}" data-symbol="{{ symbol }}">
-  <h2 title="{{ symbol }}">{{ symbol | iname }}{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
+  <h2 title="{{ symbol }}">{% if href %}<a href="{{ href }}">{{ symbol | iname }}</a>{% else %}{{ symbol | iname }}{% endif %}{% if note %} <span class="tag">{{ note }}</span>{% endif %}</h2>
   <div class="asset-panel-body" data-state="loading">
     <div class="skeleton-line sk-100 sk-gap"></div>
     <div class="skeleton-line sk-70 sk-gap"></div>

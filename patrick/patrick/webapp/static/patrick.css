@@ -2768,3 +2768,19 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 
 .pop-rel { display: grid; gap: 2px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .pop-rel svg { color: var(--text-3); }
+
+/* ---- Fiche d'un actif (/targets/{symbole}) et signaux des pages de classes d'actifs ------------------------------------ */
+.asset-meta a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.asset-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.asset-hero > .asset-panel > h2 { display: none; }
+.asset-hero > .asset-panel { margin-bottom: 14px; }
+.as-section-title { margin: 26px 0 4px; }
+.as-signals td, .as-signals th { vertical-align: middle; }
+.as-ts { margin-left: 8px; }
+.as-funds { margin: 0; padding-left: 18px; }
+.as-peers { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.cls-signals { white-space: nowrap; }
+.cls-sig { display: inline-block; min-width: 1.6em; padding: 0 3px; margin-right: 2px; border-radius: 4px; font-size: .78rem; text-align: center; cursor: help; }
+.cls-sig-ok { color: var(--pos); background: var(--pos-soft); }
+.cls-sig-warning { color: var(--warn); background: var(--warn-soft); }
+.as-context { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 6px; }

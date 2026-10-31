@@ -16,6 +16,16 @@ from patrick.webapp.app import app
 CLASS_PAGES = [c for c in asset_classes.ASSET_CLASSES if c.key != "macro"]
 
 
+def class_html(client, url: str) -> str:
+    """Une page de classe d'actifs et son tableau : la page n'envoie que son cadre, le tableau arrive par /fragments/asset-class/{classe}."""
+    path, _, query = url.partition("?")
+    page = client.get(url).text
+    cls = next((c for c in asset_classes.ASSET_CLASSES if c.url == path), None)
+    if cls is None:
+        return page
+    return page + client.get(f"/fragments/asset-class/{cls.key}" + (f"?{query}" if query else "")).text
+
+
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
@@ -49,13 +59,13 @@ def test_equity_replaces_the_individual_stocks_page():
     client = TestClient(app)
     redirect = client.get("/equities", follow_redirects=False)
     assert redirect.status_code == 308 and redirect.headers["location"] == "/equity"
-    html = client.get("/equity").text
+    html = class_html(client, "/equity")
     assert "Equity" in html and "Features des actions" in html
 
 
 @pytest.mark.parametrize("cls", CLASS_PAGES, ids=lambda c: c.key)
 def test_every_class_page_lists_all_its_targets(cls):
-    html = TestClient(app).get(cls.url).text
+    html = class_html(TestClient(app), cls.url)
     for group in cls.groups:
         for symbol, _label in forms.TARGET_GROUPS.get(group, []):
             assert f'data-symbol="{symbol}"' in html, (cls.key, symbol)
@@ -110,7 +120,7 @@ def test_class_overview_separates_directional_and_alpha_and_never_credits_a_susp
 
 
 def test_class_page_shows_short_history_against_the_threshold():
-    html = TestClient(app).get("/crypto?min_history_years=10").text
+    html = class_html(TestClient(app), "/crypto?min_history_years=10")
     assert "Historique court" in html
     assert 'data-short="1"' in html            # ETH-USD (2017) sous 10 ans
     assert TestClient(app).get("/crypto?min_history_years=1").status_code == 400
