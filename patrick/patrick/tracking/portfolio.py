@@ -297,7 +297,8 @@ def portfolio_overview(
     the actual effective list (default or custom), so the caller can
     round-trip it back into the page's own textarea via
     `format_correlated_pairs` without re-deriving which one was active."""
-    target_groups = D.DEFAULT_TARGET_GROUPS if target_groups is None else target_groups
+    target_groups = ({g: v for g, v in D.DEFAULT_TARGET_GROUPS.items() if g not in D.NON_TARGET_GROUPS}
+                     if target_groups is None else target_groups)
     horizons = list(D.DEFAULT_HORIZONS) if horizons is None else horizons
     # 504/756 days are descriptive (decision of 2026-09-26): never a signal here.
     horizons = [h for h in horizons if h not in D.DESCRIPTIVE_HORIZONS]

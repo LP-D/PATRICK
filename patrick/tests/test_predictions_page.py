@@ -222,9 +222,9 @@ def test_directional_groups_add_every_trained_asset_to_the_default_list(tmp_path
     groups = _directional_prediction_groups(conn)
     conn.close()
 
-    defaults = [sym for items in D.DEFAULT_TARGET_GROUPS.values() for sym, _ in items]
+    defaults = [sym for name, items in D.DEFAULT_TARGET_GROUPS.items() if name not in D.NON_TARGET_GROUPS for sym, _ in items]
     shown = [sym for items in groups.values() for sym, _ in items]
-    assert shown[:len(defaults)] == defaults                      # les actifs par défaut, dans le même ordre
+    assert shown[:len(defaults)] == defaults                      # les actifs par défaut (sans les séries macro), dans le même ordre
     assert "XLK" in [sym for sym, _ in next(items for name, items in groups.items() if name.startswith("ETFs sectoriels"))]
     assert groups["Autres actifs"] == [("ZZZ.UNKNOWN", "ZZZ.UNKNOWN")]
     assert "XLF" not in shown and "AAA__alpha_BBB" not in shown   # sans modèle ou alpha : pas dans le tableau directionnel

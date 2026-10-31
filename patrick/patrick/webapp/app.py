@@ -590,8 +590,8 @@ async def launch_batches_recommended_launch(request: Request):
 def _launch_page(request: Request, family: str, run_id: str | None, target: str | None, profile: str | None,
                  suggest: str | None):
     cfg = forms.default_config_dict(family)
-    if target and target in forms.TARGET_SOURCE_BY_SYMBOL:
-        # lien « Lancer » des pages de classes d'actifs : la cible est présélectionnée
+    if target and forms.TARGET_SOURCE_BY_SYMBOL.get(target, "fred") not in D.NON_TARGET_SOURCES:
+        # lien « Lancer » des pages de classes d'actifs : la cible est présélectionnée (jamais une série macro)
         cfg["objective"]["target_symbol"] = target
         cfg["objective"]["target_source"] = forms.TARGET_SOURCE_BY_SYMBOL[target]
     if run_id:
@@ -1694,7 +1694,7 @@ def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[t
     (`forms.TARGET_GROUPS`) qui a un modèle entraîné (un run `done`), rangé dans son groupe du catalogue. Un actif entraîné
     qui n'est dans aucun groupe du catalogue finit dans « Autres actifs ». Sans ça, les ETF, actions et indices entraînés
     hors de la liste par défaut avaient bien des prédictions chaque jour mais n'apparaissaient nulle part."""
-    groups = {name: list(items) for name, items in D.DEFAULT_TARGET_GROUPS.items()}
+    groups = {name: list(items) for name, items in D.DEFAULT_TARGET_GROUPS.items() if name not in D.NON_TARGET_GROUPS}
     shown = {sym for items in groups.values() for sym, _ in items}
     trained = {r[0] for r in conn.execute("SELECT DISTINCT target FROM run WHERE status = 'done'")
                if "__alpha_" not in r[0]}
@@ -2123,12 +2123,11 @@ def _macro_sections_view(t) -> list[dict]:
     """/macro: every FRED series of the universe, one panel skeleton each,
     grouped by domain with the headline indicators first
     (`D.MACRO_PAGE_SECTIONS`). `training_only` flags the series that feed
-    the models but are not offered as targets."""
-    targets = {sym for sym, _ in D.DEFAULT_TARGET_GROUPS[D.FRED_TARGET_GROUP]}
+    the models. Since 2026-10-31 NONE is offered as a target any more (`D.NON_TARGET_GROUPS`)."""
     return [
         {"key": key, "title": t(f"macro_section_{key}"),
          "assets": [{"symbol": sid, "label": label, "slug": forms.slug_target(sid),
-                     "training_only": sid not in targets} for sid, label in series]}
+                     "training_only": True} for sid, label in series]}
         for key, series in D.macro_page_sections()
     ]
 

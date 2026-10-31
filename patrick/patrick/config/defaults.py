@@ -438,6 +438,16 @@ BAD_TICKERS = {
 
 FRED_TARGET_GROUP = "Macro (FRED)"
 
+# Depuis le 2026-10-31 les séries macro (FRED) ne sont PLUS des cibles : elles restent des variables d'entraînement (les colonnes de
+# l'univers ci-dessous, inchangées) et la page Macro. Sur 341 runs à cible FRED, des séries dérivées du même taux (T10Y3M, T10Y2Y,
+# T10YIE...) recouvraient le label du jour (DGS10 à 1 jour : AUC 0,95 ; SP500 : 1,00) et gonflaient le F1 moyen de l'application.
+# `DEFAULT_TARGET_GROUPS` garde le groupe : c'est le CATALOGUE des séries (page Macro, exploration, variables croisées de
+# `features/guida.py`) ; ce qui s'offre au lancement en est le catalogue privé de ces groupes (`webapp/forms.py::TARGET_GROUPS`).
+NON_TARGET_GROUPS = (FRED_TARGET_GROUP,)
+NON_TARGET_SOURCES = ("fred",)
+NON_TARGET_MESSAGE = ("Les séries macro (FRED) ne sont plus des cibles : elles restent des variables d'entraînement "
+                      "(page Macro). Choisis un actif coté.")
+
 DEFAULT_TARGET_GROUPS = {
     # Univers reduit (feature/universe-reduction) : commodites + macro + 4
     # actifs conserves explicitement (VIX, EUR/USD, S&P500, BTC). Ancien

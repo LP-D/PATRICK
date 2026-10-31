@@ -70,9 +70,10 @@ def periodicity(symbol: str, source: str) -> str:
 
 
 def catalog(group_labels: dict[str, str]) -> list[dict]:
-    """Groupes de cibles du formulaire de lancement : {group, label, items: [{symbol, label, source, periodicity}]}."""
+    """Catalogue des séries (cibles du formulaire de lancement ET séries macro, qui ne sont plus des cibles mais restent à explorer) :
+    {group, label, items: [{symbol, label, source, periodicity}]}."""
     out = []
-    for group, items in forms.TARGET_GROUPS.items():
+    for group, items in forms.CATALOGUE_GROUPS.items():
         out.append({"group": group, "label": group_labels.get(group, group), "items": [
             {"symbol": sym, "label": lab, "source": forms.TARGET_SOURCE_BY_SYMBOL.get(sym, "yfinance"),
              "periodicity": periodicity(sym, forms.TARGET_SOURCE_BY_SYMBOL.get(sym, "yfinance"))}

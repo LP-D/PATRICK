@@ -171,6 +171,7 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     for run_id, target, horizon, raw in conn.execute(
             "SELECT run_id, target, horizon, config_json FROM run WHERE status = 'done' ORDER BY started_at DESC, rowid DESC"):
         if ("__alpha_" not in target and target not in latest and target in forms.TARGET_SOURCE_BY_SYMBOL
+                and forms.TARGET_SOURCE_BY_SYMBOL[target] not in D.NON_TARGET_SOURCES
                 and config_family(_loads(raw)) == "ml"):
             latest[target] = (run_id, int(horizon))
     busy = pending_targets(conn, "ml")

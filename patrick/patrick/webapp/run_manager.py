@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
+from patrick.config.targets import refuse_non_target
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.webapp import forms
@@ -174,6 +175,7 @@ def start_run(config: RunConfig) -> dict:
     process), so immediately after this call the job is still 'queued' even
     if there is no other active run (the worker generally claims it in
     under a second, see `poll_interval`)."""
+    refuse_non_target(config, resumed=False)
     conn = _connect()
     try:
         job_id = jobs_db.enqueue_job(conn, config.model_dump_json())

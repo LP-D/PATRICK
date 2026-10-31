@@ -34,18 +34,25 @@ def f1_suspect(f1_dir) -> bool:
 
 
 ALIGNMENT_LABEL = "alignement des devises"
+NON_TARGET_SOURCES = ("fred",)          # `config/defaults.py::NON_TARGET_SOURCES` (copie : ce module reste sans dépendance)
+MACRO_TARGET_REASON = ("cible macro (FRED) retirée : des séries dérivées du même taux recouvraient le label (fuite d'alignement), "
+                       "score non crédible")
 
 
 def alignment_reason(target: str | None, config: dict | None) -> str | None:
     """Motif si ce run est une cible de change `=X` entraînée avant la règle d'alignement 2 (ADR 0007) : ses variables du jour
     (or, S&P 500...) recouvraient le label, donc son exactitude est un « nowcast » non négociable, quel que soit son score.
-    Le run reste lisible (rien n'est supprimé) mais n'est ni champion crédible ni candidat du fonds."""
+    Même sort pour un run dont la cible est une série macro (FRED) : retirées des cibles le 2026-10-31 (AUC 0,95 à 1,00 sur des taux et le
+    S&P 500, fuite par des séries dérivées du même taux). Le run reste lisible (rien n'est supprimé) mais n'est ni champion crédible ni
+    candidat du fonds, et sort des moyennes."""
     from patrick.config.target_label import split_run_label
     from patrick.data.session_calendar import is_yahoo_fx_pair
 
+    objective = (config or {}).get("objective") if isinstance(config, dict) else None
+    if isinstance(objective, dict) and objective.get("target_source") in NON_TARGET_SOURCES:
+        return MACRO_TARGET_REASON
     if not isinstance(target, str) or not is_yahoo_fx_pair(split_run_label(target)[0]):
         return None
-    objective = (config or {}).get("objective") if isinstance(config, dict) else None
     rule = objective.get("session_rule", 1) if isinstance(objective, dict) else 1
     if isinstance(rule, int) and rule >= 2:
         return None

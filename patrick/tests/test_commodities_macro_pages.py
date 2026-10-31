@@ -92,8 +92,8 @@ def test_macro_page_tags_training_only_series():
     text = TestClient(app).get("/macro").text
     gdp_panel = text[text.index('data-symbol="GDP"'):text.index('data-symbol="GDP"') + 400]
     real_gdp_panel = text[text.index('data-symbol="GDPC1"'):text.index('data-symbol="GDPC1"') + 400]
-    assert 'class="tag"' not in gdp_panel          # targetable
-    assert 'class="tag"' in real_gdp_panel         # training data only
+    assert 'class="tag"' in gdp_panel              # plus aucune série macro n'est une cible (2026-10-31) : toutes servent à l'entraînement
+    assert 'class="tag"' in real_gdp_panel
 
 
 def test_asset_stats_api_serves_display_only_macro_series(monkeypatch):

@@ -662,6 +662,8 @@ def universe_overview(conn: sqlite3.Connection) -> list[dict]:
     history = {h["target"]: h for h in list_distinct_targets(conn)}
     groups = []
     for group_name, items in all_target_groups().items():
+        if group_name in D.NON_TARGET_GROUPS:        # séries macro : variables seulement, plus des cibles (page Macro)
+            continue
         source = "fred" if group_name == D.FRED_TARGET_GROUP else "yfinance"
         symbols = []
         for symbol, label in items:

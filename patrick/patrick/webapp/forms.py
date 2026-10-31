@@ -179,7 +179,10 @@ ALL_HORIZONS = list(D.SELECTABLE_HORIZONS)
 # `test_universe_matches_exactly_the_reduced_target_set` (asserting on
 # `D.DEFAULT_TARGET_GROUPS` directly) unaffected by this new group.
 TARGET_CHOICES = list(D.DEFAULT_TARGET_CHOICES) + UX.extended_target_choices()
-TARGET_GROUPS = UX.all_target_groups()
+# Catalogue de TOUTES les séries connues (page Macro, exploration statistique) ; `TARGET_GROUPS` n'en garde que ce qu'on peut
+# prédire : les séries macro (FRED) n'y sont plus (`config/defaults.py::NON_TARGET_GROUPS`).
+CATALOGUE_GROUPS = UX.all_target_groups()
+TARGET_GROUPS = {group: items for group, items in CATALOGUE_GROUPS.items() if group not in D.NON_TARGET_GROUPS}
 # Phase 3 (feature/hyperparams-lookbacks): (field, French label) pairs
 # driving the "Lookbacks technical" section of `index.html` -- one
 # comma-separated `<input>` per `features/technical.py` function, same
@@ -454,6 +457,8 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     if target_symbol not in TARGET_SOURCE_BY_SYMBOL:
         errors.append("« Que prédire » : choix invalide.")
     target_source = TARGET_SOURCE_BY_SYMBOL.get(target_symbol, "yfinance")
+    if target_source in D.NON_TARGET_SOURCES:
+        errors.append("« Que prédire » : " + D.NON_TARGET_MESSAGE)
     yf_tickers, fred_series = universe_excluding(target_symbol)
 
     # Cible alpha : rendement excédentaire face à un benchmark (champ vide = déterminé automatiquement).

@@ -117,6 +117,7 @@ from patrick.validation import cpcv as cpcv_module
 from patrick.validation.baselines import compute_baselines
 from patrick.validation.diebold_mariano import diebold_mariano
 from patrick.validation.embargo import embargo_mask
+from patrick.config.targets import refuse_non_target
 from patrick.validation.metrics import align_proba, metrics
 from patrick.validation.placebo import placebo_verdict
 from patrick.validation.purge import purge_mask
@@ -2298,6 +2299,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     which would load the LATEST snapshot of the key, i.e. possibly a newer
     FRED vintage than the one the interrupted run was launched on. `None`
     (default, every fresh run) keeps the regular `ingest()` path."""
+    refuse_non_target(config, resumed=snapshot_id is not None)
     mode = config.selection.screening_mode
     if mode in ("staged", "total_window") and config.validation.scheme != "walkforward":
         raise ValueError("La présélection progressive nécessite le schéma walk-forward.")

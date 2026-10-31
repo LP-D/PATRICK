@@ -1176,14 +1176,15 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False, with
 
 
 def alignment_reasons(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, str]:
-    """`{run_id: motif}` des runs de change entraînés avant la règle d'alignement 2 (`validation/suspicion.py::alignment_reason`).
-    Seuls les runs `=X` parmi `run_ids` voient leur config relue."""
+    """`{run_id: motif}` des runs de change entraînés avant la règle d'alignement 2 et des runs à cible macro retirée
+    (`validation/suspicion.py::alignment_reason`). Seuls les runs `=X` ou FRED parmi `run_ids` voient leur config relue."""
     out: dict[str, str] = {}
     for start in range(0, len(run_ids), 500):
         chunk = run_ids[start:start + 500]
         marks = ",".join("?" for _ in chunk)
         for run_id, target, config_json in conn.execute(
-                f"SELECT run_id, target, config_json FROM run WHERE run_id IN ({marks}) AND target LIKE '%=X%'", chunk):
+                f"SELECT run_id, target, config_json FROM run WHERE run_id IN ({marks}) AND (target LIKE '%=X%' "
+                f"OR json_extract(config_json, '$.objective.target_source') = 'fred')", chunk):
             try:
                 cfg = json.loads(config_json) if config_json else {}
             except (TypeError, ValueError):
