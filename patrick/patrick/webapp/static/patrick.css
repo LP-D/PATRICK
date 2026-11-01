@@ -2745,6 +2745,16 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .home-action-warning { border-left-color: var(--warning, #b54708); }
 .home-action-neutral { border-left-color: var(--line); }
 
+/* Pages « À faire » (`todo.html`, `a_faire.js`) : un bloc par cause, ses lignes cochables, le réentraînement proposé. */
+.td-group { margin-bottom: 16px; }
+.td-plan { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius); background: var(--surface); font-size: 13px; }
+.td-scroll { max-height: 420px; }
+.td-pick-col { width: 28px; text-align: center; }
+.td-detail { max-width: 460px; overflow-wrap: anywhere; font-size: 12px; color: var(--text-2); }
+.td-state-replaced, .td-state-pending, .td-state-blocked { opacity: .7; }
+.td-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.td-actions .td-count { margin-right: auto; }
+
 /* Formulaire de lancement : budget d'essais (`trial_budget.js`, ADR 0010). */
 .trial-budget { margin: 8px 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--warning, #b54708); border-radius: var(--radius); background: var(--surface); font-size: 13px; }
 .trial-budget-lines { margin: 4px 0; padding-left: 18px; }

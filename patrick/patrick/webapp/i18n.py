@@ -25,6 +25,7 @@ from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_K
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 from patrick.webapp.i18n_text import TEXT_JS_KEYS, TEXT_STRINGS
+from patrick.webapp.i18n_todo import TODO_JS_KEYS, TODO_STRINGS
 from patrick.webapp.i18n_ui import UI_JS_KEYS, UI_STRINGS
 
 LANG_COOKIE = "patrick_lang"
@@ -697,6 +698,8 @@ STRINGS.update(UI_STRINGS)
 STRINGS.update(TEXT_STRINGS)
 # Pages d'analyse des entraînements (webapp/i18n_analysis.py).
 STRINGS.update(ANALYSIS_STRINGS)
+# Pages « À faire » de la Synthèse (webapp/i18n_todo.py).
+STRINGS.update(TODO_STRINGS)
 # Fiche d'un actif et pages de classes d'actifs (webapp/i18n_asset.py).
 STRINGS.update(ASSET_STRINGS)
 
@@ -796,7 +799,8 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
         "shap_loading", "shap_load_error", "shap_unavailable", "shap_caption",
         "shap_units_hint", "shap_units_hint_probability", "shap_class_0", "shap_class_1", "shap_class_2", "shap_class_3",
     ]
-    keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ())]
+    keys = [*keys, *PAGE_JS_KEYS.get(path, ()), *(TEXT_JS_KEYS if path == "/news" else ()),
+            *(TODO_JS_KEYS if path.startswith("/a-faire/") else ())]
     if path.startswith(("/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet", "/diagnostics", "/risque", "/donnees")) or (path.startswith("/runs/") and path.endswith("/analyse")):
         keys = [*keys, *ANALYSIS_JS_KEYS]
     t = translator(lang)

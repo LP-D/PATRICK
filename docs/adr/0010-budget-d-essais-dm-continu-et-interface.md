@@ -31,6 +31,8 @@ exclus faute de lignes, et le run se terminait « done » sans un mot.
    gardent leur repli). La synthèse affiche un bloc « À faire » (échecs récents, runs suspects, file d'attente, champions de change à remplacer) avec un lien par ligne.
    « Qualité des données » devient une page enfant du hub « Données » (une entrée de navigation en moins).
 
+6. **Pages « À faire » (2026-11-01)** : chaque ligne du bloc ouvre sa page (`/a-faire/<ligne>`, `webapp/todo_actions.py`, enfant de la Synthèse) : le nombre de la ligne, groupé par cause, avec le réentraînement adapté à chaque cause. Un réentraînement est un groupe de lignes refaites avec une modification des réglages du run d'origine (`{}` quand la cause est corrigée ou passagère) : échecs de présélection progressive en CPCV sans présélection, devises d'avant la règle 2 refaites avec la règle d'aujourd'hui, score trop beau refait avec la garde anti-fuite. Les cibles macro retirées (FRED) et les causes inconnues ne se relancent pas : on les lit seulement. Les lignes déjà en file ou déjà couvertes par un run plus récent ne sont pas reproposées. Rien ne part sans confirmation ; le navigateur n'envoie que « ce groupe, ces sources » (`POST /api/a-faire/<ligne>/launch`), le serveur relit tout, patch compris. Cause racine d'une panne trouvée en chemin : la suggestion « confirmer en CPCV » du conseiller laissait la présélection progressive active, que le moteur refuse hors walk-forward (44 runs conseillés échoués le 2026-10-24) ; elle la coupe désormais.
+
 ## Non fait
 
 - **Variables de niveau brut** (`raw_level`, non stationnaires) : brancher `fracdiff` ou retirer la famille change les variables de tous les runs : à faire sous un numéro de version de méthode 3, avec mesure sur un panel de cibles.

@@ -31,6 +31,15 @@ ERROR_KINDS: list[tuple[str, str, str, str, str]] = [
      ("Corrigé le 2026-10-09 (`features/sanitize.py`, `features/vol_models.py`) : toute valeur au-delà de 1e30 est traitée "
       "comme manquante, avant et après la mise à l'échelle, et un ajustement ARIMA divergent ne produit plus de feature. "
       "Relancer ces cibles.")),
+    ("staged_cpcv", r"présélection progressive nécessite le schéma walk-forward", "Présélection progressive avec la validation CPCV",
+     ("La présélection progressive ne tourne qu'en walk-forward. Le formulaire laissait la combiner avec la validation CPCV (suggestion "
+      "« confirmer en CPCV » du conseiller sur un run rapide) : le run partait, puis échouait à l'ingestion."),
+     ("Corrigé le 2026-11-01 : la suggestion « confirmer en CPCV » coupe désormais la présélection progressive. Relancer ces runs "
+      "depuis la page « À faire ».")),
+    ("store_locked", r"PermissionError.*WinError 5", "Fichier du magasin de données verrouillé",
+     ("Windows a refusé de renommer un fichier d'index du magasin (un autre processus le tenait : un autre run, OneDrive ou un "
+      "antivirus)."),
+     "Corrigé le 2026-10-30 (`fix(cache)` : écriture atomique des métadonnées). Relancer."),
     ("orphaned", r"orphaned", "Processus perdu",
      ("Le worker qui exécutait ce run a disparu (fermeture de l'application, mise en veille, plantage) : le run n'a "
       "jamais pu se terminer."),

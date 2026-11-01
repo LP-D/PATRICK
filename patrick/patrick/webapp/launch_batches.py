@@ -220,25 +220,38 @@ def build_recommended_config(conn: sqlite3.Connection, run_id: str, key: str, hi
     return _refit(config, suggestion)
 
 
-def _ml_run_config(conn: sqlite3.Connection, run_id: str):
-    """`(RunConfig, [])` du run `run_id`, ou `(None, [erreurs])` s'il est introuvable ou n'est pas un run de machine learning."""
+def source_config(conn: sqlite3.Connection, source_id: str):
+    """`(RunConfig, [])` de la configuration d'un job ou d'un run (ML ou DL), ou `(None, [erreurs])` s'il est introuvable, s'il n'a pas de
+    configuration (run de renforcement : pas de `RunConfig`) ou si la sienne n'est plus lisible par le schéma d'aujourd'hui."""
+    from pydantic import ValidationError
+
     from patrick.config.schema import RunConfig
     from patrick.tracking import db as trackdb
     from patrick.webapp import run_manager
 
-    config = run_manager.get_run_config(run_id)
+    config = run_manager.get_run_config(source_id)
     if config is None:
-        row = trackdb.get_run(conn, run_id)
+        row = trackdb.get_run(conn, source_id)
         if row is None or not row.get("config_json"):
-            return None, [f"{run_id} : run introuvable (configuration indisponible)."]
-        config = RunConfig.model_validate_json(row["config_json"])
-    if config.family != "ml":
-        return None, [f"{run_id} : le conseiller ne s'applique qu'aux runs de machine learning."]
+            return None, [f"{source_id} : run introuvable (configuration indisponible)."]
+        try:
+            config = RunConfig.model_validate_json(row["config_json"])
+        except ValidationError:
+            return None, [f"{source_id} : configuration d'un ancien run, devenue illisible."]
     return config, []
 
 
-def _refit(config, suggestion):
-    """`(RunConfig, [])` ou `(None, [erreurs])` : `config` refaite avec `suggestion`, par le chemin du formulaire."""
+def _ml_run_config(conn: sqlite3.Connection, run_id: str):
+    """`(RunConfig, [])` du run `run_id`, ou `(None, [erreurs])` s'il est introuvable ou n'est pas un run de machine learning."""
+    config, errors = source_config(conn, run_id)
+    if config is not None and config.family != "ml":
+        return None, [f"{run_id} : le conseiller ne s'applique qu'aux runs de machine learning."]
+    return config, errors
+
+
+def refit(config, patch: dict):
+    """`(RunConfig, [])` ou `(None, [erreurs])` : `config` refaite avec `patch` (champs du formulaire de lancement ; `{}` = les mêmes
+    réglages), par le chemin du formulaire. Un nouveau nom de run est pris à chaque appel."""
     from pydantic import ValidationError
 
     from patrick.config.schema import RunConfig
@@ -247,7 +260,7 @@ def _refit(config, suggestion):
     cfg = config.model_dump()
     cfg["output"]["dir"] = ""
     view = forms.to_view(cfg)
-    view = {**view, **{k: v for k, v in suggestion.patch.items() if k in view}}
+    view = {**view, **{k: v for k, v in patch.items() if k in view}}
     symbol = view["target_symbol"]
     config_dict, errors = forms.build_config_dict(forms.FormFromView(view), target_symbol=symbol, name=run_manager.next_run_name(symbol))
     if not errors:
@@ -256,3 +269,20 @@ def _refit(config, suggestion):
         except ValidationError as exc:
             errors = [f"{'.'.join(str(p) for p in e['loc'])} : {e['msg']}" for e in exc.errors()]
     return None, [f"{symbol} : {e}" for e in errors]
+
+
+def _refit(config, suggestion):
+    """`refit` avec la modification d'une proposition du conseiller."""
+    return refit(config, suggestion.patch)
+
+
+def pending_pairs(conn: sqlite3.Connection) -> dict[str, set[int]]:
+    """`{cible: {horizons}}` des jobs de classification déjà en file ou en cours (ML et DL) : ce qu'un lot ne doit pas doubler."""
+    out: dict[str, set[int]] = {}
+    marks = ",".join("?" for _ in PENDING_STATUSES)
+    for (raw,) in conn.execute(f"SELECT config_json FROM job WHERE status IN ({marks})", PENDING_STATUSES):
+        cfg = _loads(raw)
+        objective = cfg.get("objective") or {}
+        if cfg.get("kind") != "rl" and objective.get("target_symbol"):
+            out.setdefault(objective["target_symbol"], set()).update(int(h) for h in objective.get("horizons") or [])
+    return out

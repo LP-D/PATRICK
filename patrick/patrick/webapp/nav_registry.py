@@ -69,7 +69,7 @@ GROUPS: tuple[NavGroup, ...] = (
 
 NAV_ENTRIES: tuple[NavEntry, ...] = (
     # PILOTAGE -- piloter la station : vue d'ensemble, suivi des modeles, signaux, recherche, sante des donnees.
-    NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home"),
+    NavEntry("synthese", "Synthèse", "/", "pilotage", 10, "nav_home", child_routes=("/a-faire/{key}",)),
     # Historique = la liste des runs ET leurs analyses (vue « Analyses » : carte cible x horizon, scores par algorithme, nuage RL) ;
     # la page d'analyse d'un run et la comparaison detaillee en dependent.
     NavEntry("runs", "Historique", "/runs", "pilotage", 20, "nav_runs", group="suivi",

@@ -83,6 +83,7 @@ from patrick.webapp import (
     settings_routes,
     shap_chart,
     stats_help,
+    todo_actions,
     wealth_routes,
 )
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
@@ -696,6 +697,44 @@ def synthesis_page(request: Request, fdr_alpha: float = 0.10):
         {"coverage": coverage, "home": home, "fdr_alpha": fdr_alpha,
          **_i18n_context(request, fdr_alpha=fdr_alpha, with_verdict=True)},
     )
+
+
+@app.get("/a-faire/{key}")
+def todo_page(request: Request, key: str):
+    """Page dédiée d'une ligne « À faire » de la Synthèse (`webapp/todo_actions.py`) : ce qui est concerné, la cause, et les
+    réentraînements adaptés à cette cause (jamais lancés ici : le bouton de la page demande confirmation puis met en file)."""
+    conn = trackdb.connect()
+    try:
+        page = todo_actions.detail(conn, key)
+    finally:
+        conn.close()
+    if page is None:
+        raise HTTPException(status_code=404, detail="Page « À faire » inconnue.")
+    return templates.TemplateResponse(
+        request, "todo.html",
+        {"key": key, "page": page, "recent_days": trackhome.RECENT_DAYS, **_i18n_context(request)},
+    )
+
+
+@app.post("/api/a-faire/{key}/launch")
+async def todo_launch(request: Request, key: str):
+    """Met en file les lignes cochées d'un réentraînement proposé : `{"group": id, "sources": [id, …]}`. Le serveur relit la page : il
+    ne reçoit jamais les réglages, seulement « ce groupe, ces sources ». Réponse : `{"runs": [...], "errors": [...]}` (400 si rien n'a été mis en file)."""
+    if key not in todo_actions.KEYS:
+        raise HTTPException(status_code=404, detail="Page « À faire » inconnue.")
+    body = await request.json()
+    group = str(body.get("group") or "")
+    sources = [str(s) for s in body.get("sources") or [] if isinstance(s, str)]
+
+    def work() -> tuple[list[dict], list[str]]:
+        conn = trackdb.connect()
+        try:
+            return todo_actions.launch(conn, key, group, sources, run_manager.start_run)
+        finally:
+            conn.close()
+
+    runs, errors = await run_in_threadpool(work)
+    return JSONResponse({"runs": runs, "errors": _translated_errors(request, errors)}, status_code=200 if runs else 400)
 
 
 @app.get("/fragments/home")

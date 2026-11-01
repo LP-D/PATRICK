@@ -90,7 +90,7 @@ def test_the_home_page_lists_what_needs_an_action_with_a_link_each(tmp_path, mon
     assert [i["key"] for i in items] == ["failures", "suspect", "fx_legacy"] and items[-1]["n"] == 1
     page = htmllib.unescape(TestClient(app).get("/").text)
     assert "À faire" in page and "champion(s) de change entraîné(s) avant la correction" in page
-    assert 'href="/fx"' in page
+    assert 'href="/a-faire/fx_legacy"' in page
 
 
 def test_the_home_page_has_no_to_do_block_when_nothing_needs_an_action(tmp_path, monkeypatch):

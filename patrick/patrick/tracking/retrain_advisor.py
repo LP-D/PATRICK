@@ -204,6 +204,9 @@ def _cost_class(factor: float) -> str:
     return COST_LABEL[0 if factor <= 0.7 else (1 if factor <= 1.6 else 2)]
 
 
+cost_class = _cost_class
+
+
 # ---------------------------------------------------------------------------------------------------------------- règles
 
 def _next_horizons(horizon: int) -> list[int]:
@@ -385,7 +388,9 @@ def _rule_confirm_cpcv(d: Diagnosis) -> Suggestion | None:
         return None
     if (d.gap_auc is not None and d.gap_auc >= GAP_AUC) or (d.edge_vs_persistence is not None and d.edge_vs_persistence <= 0):
         return None
-    return Suggestion("confirm_cpcv", 56, {"scheme": "cpcv", "purge": True, "embargo_enabled": True},
+    # La présélection progressive ne tourne qu'en walk-forward (`pipeline/engine.py`) : sans la couper, un run rapide passé en CPCV échoue
+    # à l'ingestion (44 runs conseillés échoués le 2026-10-24).
+    return Suggestion("confirm_cpcv", 56, {"scheme": "cpcv", "purge": True, "embargo_enabled": True, "staged_screening": False},
                       {"auc_ho": d.auc_holdout, "gap": _signed(d.gap_auc)})
 
 

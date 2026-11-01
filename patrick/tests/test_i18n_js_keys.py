@@ -21,7 +21,7 @@ _DYNAMIC_PREFIXES = ("phase_", "status_", "queue_", "run_", "preview_", "news_",
 
 # Pages dont `js_strings` ajoute des clés propres (analyses, actualités…) : on réunit ce que chacune expose.
 _PATHS = ("/", "/news", "/analyses", "/garde-fous", "/variables", "/derive", "/modeles", "/journal", "/carnet", "/diagnostics", "/risque",
-          "/donnees", "/runs/x/analyse")
+          "/donnees", "/runs/x/analyse", "/a-faire/failures")
 
 
 def _exposed() -> set[str]:

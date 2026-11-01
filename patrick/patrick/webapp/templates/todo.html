@@ -1,0 +1,86 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge, metric, crumb %}
+{% block title %}PATRICK — {{ t('td_title_' ~ key) }}{% endblock %}
+{% block crumb_trail %}{{ crumb(t('td_title_' ~ key)) }}{% endblock %}
+
+{# Page d'une ligne « À faire » de la Synthèse (`webapp/todo_actions.py`) : le nombre de la ligne, puis un bloc par cause avec ses lignes et, quand
+   il existe, le réentraînement adapté (cases à cocher, confirmation, mise en file par `static/a_faire.js`). `page` = `todo_actions.detail`. #}
+
+{% block content %}
+{% set totals = page.totals %}
+<h1 class="page-title">{{ t('td_title_' ~ key) }}</h1>
+<p class="page-subtitle">{{ t('td_sub_' ~ key, d=recent_days) }}</p>
+
+<div class="metric-grid">
+{{ metric(t('td_kpi_total'), page.n, t('td_kpi_total_rel'), "neutral") }}
+{% if key != 'queue' %}
+{{ metric(t('td_kpi_todo'), totals.get('todo', 0), t('td_kpi_todo_rel'), "warning" if totals.get('todo', 0) else "ok") }}
+{% if totals.get('pending') %}{{ metric(t('td_kpi_pending'), totals.pending, t('td_kpi_pending_rel'), "neutral") }}{% endif %}
+{% if totals.get('replaced') %}{{ metric(t('td_kpi_replaced'), totals.replaced, t('td_kpi_replaced_rel'), "neutral") }}{% endif %}
+{% if totals.get('blocked') %}{{ metric(t('td_kpi_blocked'), totals.blocked, t('td_kpi_blocked_rel'), "warning") }}{% endif %}
+{% if totals.get('inspect') %}{{ metric(t('td_kpi_inspect'), totals.inspect, t('td_kpi_inspect_rel'), "neutral") }}{% endif %}
+{% endif %}
+</div>
+
+{% if not page.groups %}
+<section class="card"><p class="hint">{{ t('td_empty') }}</p></section>
+{% endif %}
+
+{% for g in page.groups %}
+{% set title = t('td_g_' ~ g.id ~ '_title') %}
+{% set retrain = g.kind == 'retrain' and g.n_todo %}
+{% set plan = (t('td_plan_changed', changes=g.changes | join(', ')) if g.changes else t('td_plan_same')) ~ ' ' ~ (t('td_cost_' ~ g.cost, f=g.factor) if g.cost else '') %}
+<section class="card td-group" data-key="{{ key }}" data-group="{{ g.id }}" data-title="{{ title }}" data-plan="{{ plan }}">
+    <div class="dq-item-head">
+        <h2 class="flush-top">{{ title }}</h2>
+        {{ status_badge(t('td_group_runs', n=g.n_runs), 'neutral') }}
+        {% if retrain %}{{ status_badge(t('td_group_todo', n=g.n_todo), 'warning') }}{% endif %}
+    </div>
+    <p class="hint">{{ t('td_g_' ~ g.id ~ '_why') }}</p>
+    {% if retrain %}
+    <p class="td-plan"><b>{{ t('td_plan_title') }} :</b> {{ plan }}</p>
+    {% endif %}
+    <div class="table-scroll dq-scroll td-scroll">
+    <table class="data-table td-table">
+        <thead><tr>
+            {% if retrain %}<th class="td-pick-col"></th>{% endif %}
+            <th>{{ t('td_col_target') }}</th><th>{{ t('td_col_horizons') }}</th><th>{{ t('td_col_run') }}</th><th>{{ t('td_col_when') }}</th><th>{{ t('td_col_detail') }}</th><th>{{ t('td_col_state') }}</th>
+        </tr></thead>
+        <tbody>
+        {% for i in g.lines %}
+        <tr class="td-row td-state-{{ i.state }}">
+            {% if retrain %}<td class="td-pick-col">{% if i.state == 'todo' %}<input type="checkbox" class="td-pick" value="{{ i.source }}" checked aria-label="{{ i.target }}">{% endif %}</td>{% endif %}
+            <td class="pk-mono">{{ i.target }}{% if i.n_runs > 1 %} <span class="hint">· {{ t('td_runs_n', n=i.n_runs) }}</span>{% endif %}</td>
+            <td class="pk-mono">{{ i.horizons | join(', ') }}</td>
+            <td><a href="/runs/{{ i.source | urlencode }}">{{ i.name or i.source }}</a>
+                {% if i.name and key != 'queue' %}<a class="hint" href="/{{ i.family }}?run_id={{ i.source | urlencode }}" title="{{ t('td_open_form_title') }}">{{ t('td_open_form') }}</a>{% endif %}</td>
+            <td class="pk-mono">{{ i.at }}</td>
+            <td class="td-detail">{{ i.problem or i.detail }}</td>
+            <td>{% if i.state == 'todo' %}{{ status_badge(t('td_state_todo'), 'warning') }}
+                {% elif i.state == 'pending' %}{{ status_badge(t('td_state_pending'), 'neutral') }}
+                {% elif i.state == 'replaced' %}{{ status_badge(t('td_state_replaced'), 'ok') }}
+                {% elif i.state == 'blocked' %}{{ status_badge(t('td_state_blocked'), 'error') }}
+                {% else %}{{ status_badge(t('td_state_inspect'), 'neutral') }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if retrain %}
+    <div class="td-actions">
+        <button type="button" class="btn-secondary" data-td-all="1">{{ t('td_select_all') }}</button>
+        <button type="button" class="btn-secondary" data-td-all="0">{{ t('td_select_none') }}</button>
+        <span class="hint td-count" aria-live="polite"></span>
+        <button type="button" class="primary" data-td-launch>{{ t('td_launch') }}</button>
+    </div>
+    <p class="hint">{{ t('td_after') }} {{ t('td_untouched') }}</p>
+    {% endif %}
+</section>
+{% endfor %}
+
+{% set see = {'failures': ('/data-quality', 'nav_data_quality'), 'suspect': ('/data-quality', 'nav_data_quality'), 'fx_legacy': ('/fx', 'nav_fx'), 'queue': ('/ml', 'nav_ml')}[key] %}
+<p class="hint">{{ t('td_see_also') }} <a href="{{ see[0] }}">{{ t(see[1]) }} →</a></p>
+
+<p id="td-status" class="banner" role="status" hidden></p>
+<script src="{{ asset('a_faire.js') }}"></script>
+{% endblock %}
