@@ -164,3 +164,54 @@ def test_dm_size_stays_near_nominal_at_the_smallest_allowed_sample():
                          for _ in range(reps)])
     assert np.isfinite(p_values).all()
     assert (p_values < 0.05).mean() < 0.11
+
+
+# --- Valeurs exactes et frontières (survivants de mutation, 2026-11-02) ----------------------------------------------------
+
+def test_dm_bartlett_fallback_uses_the_documented_weights():
+    """Noyau de Bartlett : poids 1 - k/h sur les retards 1..h-1, pas ceux d'une autre fenêtre."""
+    from scipy import stats
+
+    d, h = _NEG_VAR_D, 3
+    T = len(d)
+    c = d - d.mean()
+    g = [c[k:] @ c[:T - k] / T for k in range(h)]
+    var = g[0] + 2 * sum((1 - k / h) * g[k] for k in range(1, h))
+    dm_star = d.mean() / np.sqrt(var / T) * np.sqrt((T + 1 - 2 * h + h * (h - 1) / T) / T)
+    out = diebold_mariano(d, np.zeros(T), h=h)
+    assert out["variance_kernel"] == "bartlett"
+    assert out["dm_stat"] == pytest.approx(dm_star, abs=1e-4)
+    assert out["p_value"] == pytest.approx(2 * stats.t.sf(abs(dm_star), df=T - 1), abs=1e-4)
+
+
+def test_dm_a_candidate_that_is_worse_gets_a_positive_statistic_and_the_sign_follows_the_mean():
+    rng = np.random.default_rng(21)
+    worse, better = rng.binomial(1, 0.6, 200).astype(float), rng.binomial(1, 0.3, 200).astype(float)
+    out = diebold_mariano(worse, better)
+    assert out["dm_stat"] > 0 and out["mean_loss_diff"] > 0 and out["p_value"] < 0.01
+    assert out["mean_loss_diff"] == pytest.approx(worse.mean() - better.mean(), abs=1e-6)
+
+
+def test_dm_values_are_rounded_to_four_and_six_decimals_and_carry_the_sample_size():
+    rng = np.random.default_rng(22)
+    a, b = rng.random(60), rng.random(60)
+    out = diebold_mariano(a, b, h=2)
+    assert out["dm_stat"] == round(out["dm_stat"], 4) and out["p_value"] == round(out["p_value"], 4)
+    assert out["mean_loss_diff"] == round(out["mean_loss_diff"], 6)
+    assert out["n_obs"] == 60 and out["correction"] == "HLN" and out["variance_kernel"] == "rectangular"
+
+
+def test_dm_a_constant_nonzero_gap_is_infinitely_significant_in_the_right_direction():
+    worse = diebold_mariano(np.full(20, 0.5), np.full(20, 0.2))
+    better = diebold_mariano(np.full(20, 0.2), np.full(20, 0.5))
+    assert worse["dm_stat"] == np.inf and worse["p_value"] == 0.0 and worse["mean_loss_diff"] == pytest.approx(0.3)
+    assert better["dm_stat"] == -np.inf and better["p_value"] == 0.0 and better["mean_loss_diff"] == pytest.approx(-0.3)
+
+
+def test_dm_needs_exactly_ten_rows_at_h1():
+    rng = np.random.default_rng(23)
+    a, b = rng.random(10), rng.random(10)
+    assert np.isfinite(diebold_mariano(a, b)["p_value"])
+    nine = diebold_mariano(a[:9], b[:9])
+    assert np.isnan(nine["p_value"]) and nine["untestable_reason"] == "too_few_observations" and nine["n_obs"] == 9
+    assert np.isnan(nine["mean_loss_diff"]) and nine["variance_kernel"] is None

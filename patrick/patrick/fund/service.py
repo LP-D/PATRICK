@@ -437,14 +437,25 @@ def correct_order(conn: sqlite3.Connection, order_id: int, req: dict, today: dt.
 
 # ------------------------------------------------------------- instantanés
 
+def _classes_compared(conn: sqlite3.Connection) -> int:
+    """Classes d'actifs que la Synthèse a classées par signal regroupé : autant de choix possibles de la « meilleure classe » (0 si rien n'est calculé)."""
+    from patrick.tracking import pooled_signal
+
+    try:
+        return len(pooled_signal.class_summary(pooled_signal.load(conn)))
+    except sqlite3.Error:
+        return 0
+
+
 def strategy_snapshot(conn: sqlite3.Connection, strategy: dict, today: dt.date | None = None) -> dict:
     today = _today(today)
     orders = store.list_orders(conn, strategy["strategy_id"])
     market, notes = prices.build_market(conn, orders, strategy["base_currency"])
     result = engine.simulate(strategy, orders, market, end=today)
     strategy_kpis = kpis.compute(strategy, result)
-    # Sharpe déflaté : la stratégie a été choisie parmi toutes celles du fonds (archivées comprises)
-    strategy_kpis["deflated"] = kpis.deflated(result.daily, len(store.list_strategies(conn, include_archived=True)))
+    # Sharpe déflaté : la stratégie a été choisie parmi toutes celles du fonds (archivées comprises) et parmi les classes d'actifs classées par la Synthèse
+    strategy_kpis["deflated"] = kpis.deflated(result.daily, kpis.deflation_trials(
+        len(store.list_strategies(conn, include_archived=True)), _classes_compared(conn)))
     return {"strategy": strategy, "kpis": strategy_kpis, "positions": result.positions,
             "series": kpis.series_points(result.daily), "orders": orders, "notes": notes,
             "violations": [v["message"] for v in result.violations],

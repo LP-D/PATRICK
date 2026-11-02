@@ -472,3 +472,17 @@ def test_the_deflated_sharpe_shrinks_as_the_fund_tries_more_strategies():
     assert one["n_trials"] == 1 and many["n_trials"] == 200 and one["n_obs"] > 200
     assert many["benchmark_sr"] > one["benchmark_sr"] and many["dsr"] < one["dsr"]              # essayer plus de stratégies relève le seuil
     assert kpis.deflated(daily.iloc[:15], 5) is None and kpis.deflated(daily.iloc[0:0], 5) is None   # sous 20 rendements : pas de statistique
+
+
+def test_the_deflation_counts_at_least_the_asset_classes_the_synthesis_ranked(conn):
+    from patrick.fund import kpis
+    from patrick.tracking import pooled_signal
+
+    assert kpis.deflation_trials(0) == 1 and kpis.deflation_trials(3) == 3                    # sans classement : le nombre de stratégies
+    assert kpis.deflation_trials(2, 7) == 7 and kpis.deflation_trials(12, 7) == 12            # un plancher, pas une somme
+    assert service._classes_compared(conn) == 0                                               # rien de calculé
+    row = {"n_runs": 3, "n_dates": 200, "auc_run_mean": 0.5, "p_value": 0.2, "q_value": 0.4, "significant": False}
+    pooled_signal.save(conn, [{"target": "^GSPC", "horizon": 1, "auc": 0.53, **row}, {"target": "^FCHI", "horizon": 1, "auc": 0.52, **row},
+                              {"target": "GC=F", "horizon": 1, "auc": 0.51, **row}, {"target": "EURUSD=X", "horizon": 1, "auc": 0.55, **row},
+                              {"target": "^GSPC", "horizon": 5, "auc": 0.50, **row}])
+    assert service._classes_compared(conn) == 4                                               # équités US, Europe, futures, change

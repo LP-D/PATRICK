@@ -55,6 +55,14 @@ def compute(strategy: dict, result: SimResult) -> dict:
     }
 
 
+def deflation_trials(n_strategies: int, n_classes_compared: int = 0) -> int:
+    """Essais à déflater pour le Sharpe d'une stratégie : les stratégies du fonds (archivées comprises) et, au moins, les classes d'actifs entre lesquelles on a pu
+    choisir. La Synthèse et les cartes de lots classent les classes par AUC regroupée (`tracking/pooled_signal.py`) : choisir la meilleure est un essai par classe
+    comparée, même si une seule a donné une stratégie (ADR 0014, reste du point 1.5 de l'ADR 0011). Un plancher, pas un produit : les modèles retenus dans chaque
+    stratégie sont déjà comptés dans le registre d'essais (`fund_selection:<stratégie>`)."""
+    return max(int(n_strategies), int(n_classes_compared), 1)
+
+
 def deflated(daily: pd.DataFrame, n_trials: int) -> dict | None:
     """Sharpe déflaté d'une stratégie (ADR 0011, point 1.5) : le meilleur de `n_trials` stratégies comparées sur leur P&L fictif a un Sharpe gonflé par le seul fait
     d'avoir été choisi. `n_trials` = nombre de stratégies du fonds (archivées comprises : une stratégie abandonnée a bien été essayée). `None` sous 20 rendements
