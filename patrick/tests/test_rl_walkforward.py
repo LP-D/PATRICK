@@ -31,7 +31,7 @@ def _data(n=1200, k=12, seed=0, signal=False) -> rl_data.RLData:
 def _cfg(**rl) -> RLRunConfig:
     return RLRunConfig.model_validate({"objective": {"target_symbol": "^GSPC"}, "output": {"seed": 7},
                                        "rl": {"n_folds": 3, "min_train_frac": 0.5, "max_features": 4, "bootstrap_samples": 300,
-                                              "total_timesteps": 1000, **rl}})
+                                              "total_timesteps": 1000, "n_seeds": 1, **rl}})
 
 
 def _run(data, cfg, positions=1.0, spy=None):

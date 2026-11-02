@@ -77,6 +77,17 @@ stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --sch
 - `manifest.json` : sha256 et taille de chaque fichier, version de schéma. `pull` refuse un fichier corrompu ou un
   partage plus récent que le code (faire `git pull` d'abord).
 
+## Listes de suivi, carnet et journal de prédictions (2026-11-02)
+
+- **Listes de suivi** (`watchlist`) : fusionnées par nom (insensible à la casse ASCII, comme leur contrainte d'unicité). Une liste déjà présente n'est jamais modifiée :
+  si deux PC ont modifié la même liste, chacun garde la sienne.
+- **Carnet de recherche** (`research_note`) : union dédoublonnée sur le contenu (date de création, type, titre, texte, étiquettes, cible, horizon, run). Une note retouchée sur un
+  PC après avoir été copiée apparaît en double (l'ancienne version et la nouvelle) : le contenu a changé, rien ne dit laquelle garder.
+- **Journal de prédictions** (`prediction_journal`) : **pas fusionné**. C'est une chaîne unique (chaque ligne porte l'empreinte de la précédente, `tracking/journal.py::verify`) :
+  deux PC produisent deux chaînes qui partent du même point, et leur union ne se vérifierait plus. Fusionner demande une conception à part : une colonne d'origine par PC, une
+  vérification chaîne par chaîne, et les `trial_id` de la charge utile (couverts par l'empreinte, donc non décalables comme dans `sync_merge`) remplacés par le `run_id`. Chaque PC
+  garde son journal, sur lequel il peut prouver ses propres signaux.
+
 ## Ce qui ne l'est jamais vers GitHub
 
 - Tables `wealth_*`, `fund_*` et `simulation` : vidées dans une **copie** de la base (la source n'est pas modifiée),

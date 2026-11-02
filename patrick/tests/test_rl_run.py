@@ -35,7 +35,7 @@ def _config(tmp_path, **rl) -> RLRunConfig:
         "universe": {"yf_tickers": ["SPX_LIKE"], "fred_series": {}, "start_date": "2015-01-01"},
         "features": {"families": ["technical"]},
         "rl": {"n_folds": 2, "min_train_frac": 0.5, "max_features": 6, "total_timesteps": 1500, "n_steps": 64, "batch_size": 32,
-               "n_epochs": 2, "policy_units": 16, "policy_layers": 1, "episode_length": 100, "bootstrap_samples": 300, **rl},
+               "n_epochs": 2, "policy_units": 16, "policy_layers": 1, "episode_length": 100, "bootstrap_samples": 300, "n_seeds": 1, **rl},
         "output": {"dir": str(tmp_path / "runs" / "rl_smoke"), "seed": 11}})
 
 

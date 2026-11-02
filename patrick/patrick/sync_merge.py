@@ -17,6 +17,10 @@ Règles :
 - `champion` : le plus récent (`promoted_at`) gagne pour une même (cible, horizon);
 - `trial_registry` (compteur d'essais du DSR) : union dédoublonnée;
 - `holdout_access` (lectures du holdout terminal) : union dédoublonnée;
+- `watchlist` (listes de suivi) : par nom ; une liste déjà présente localement n'est pas modifiée;
+- `research_note` (carnet) : union dédoublonnée sur le contenu (date de création, type, titre, texte, étiquettes, cible, horizon, run); une note modifiée sur
+  un PC après avoir été copiée garde sa version locale;
+- `prediction_journal` : PAS fusionné (chaîne unique à plusieurs PC : voir `docs/ops/partage-entre-pc.md`, « Journal de prédictions »);
 - caches (`shap_selection_cache`, `vol_model_cache`) : union par clé;
 - jamais fusionnés par union : patrimoine (`wealth_*`), `simulation` (les deux PC avaient importé les
   mêmes comptes sous des identifiants différents, une union créerait des doublons). Le patrimoine a un
@@ -202,6 +206,17 @@ def merge_databases(dst_path: str, src_path: str, *, fast: bool = False) -> dict
                 where=f"WHERE NOT EXISTS (SELECT 1 FROM main.holdout_access m WHERE {same})")
 
             added["champion"] = _merge_champions(conn, off)
+
+            # Listes de suivi : par nom (insensible à la casse, comme leur contrainte d'unicité) ; une liste déjà présente n'est jamais modifiée.
+            added["watchlist"] = _insert(
+                conn, "watchlist", skip=("watchlist_id",),
+                where="WHERE NOT EXISTS (SELECT 1 FROM main.watchlist m WHERE m.name = s.name)")
+            # Carnet de recherche : pas de clé naturelle, union dédoublonnée sur le contenu (sans l'identifiant propre à chaque base).
+            note = [c for c in _shared_columns(conn, "research_note") if c not in ("note_id", "updated_at", "revisions", "status")]
+            same = " AND ".join(f'm."{c}" IS s."{c}"' for c in note)
+            added["research_note"] = _insert(
+                conn, "research_note", skip=("note_id",),
+                where=f"WHERE NOT EXISTS (SELECT 1 FROM main.research_note m WHERE {same})")
 
             for table in _BY_KEY:
                 if table != "snapshot":

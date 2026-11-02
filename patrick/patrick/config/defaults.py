@@ -303,7 +303,9 @@ DEFAULT_RL: dict = {
     "n_steps": 512, "batch_size": 64, "n_epochs": 10, "ent_coef": 0.01, "clip_range": 0.2, "gae_lambda": 0.95,
     "buffer_size": 50000, "learning_starts": 1000, "train_freq": 4, "target_update_interval": 500,
     "exploration_fraction": 0.3, "tau": 0.005,
-    "n_seeds": 1, "device": "auto", "threads": 1,
+    # 3 agents (graines) dont la position est moyennée : un agent seul est une réalisation du hasard de l'entraînement (audit du 2026-10-16 : « 1 graine par défaut »).
+    # Coût x3 par pli ; les profils rapides peuvent redescendre à 1 (le formulaire garde le réglage).
+    "n_seeds": 3, "device": "auto", "threads": 1,
     # --- validation
     "n_folds": 4, "min_train_frac": 0.5, "retrain": "expanding", "rolling_bars": 1500, "bootstrap_samples": 1000,
 }

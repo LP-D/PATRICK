@@ -355,3 +355,63 @@ def test_a_model_with_the_probability_of_a_rise_is_offered(conn):
     _finish(conn, tid)
     assert [m["trial_id"] for m in systematic.available_models(conn)] == [tid]
     assert systematic.p_up_segments(conn, tid) == {"holdout": len(SCORES)}
+
+
+# --------------------------------------------------------------------------- dimensionnement proportionnel au score
+
+def test_conviction_weight_grows_with_the_distance_to_one_half_and_saturates():
+    w = systematic.conviction_weight
+    assert w(0.75) == pytest.approx(1.0) and w(0.90) == 1.0 and w(0.25) == pytest.approx(1.0) and w(0.05) == 1.0     # symétrique, plafonné à 1
+    assert w(0.62) == pytest.approx(0.48)                                                                              # 0,12 / 0,25
+    assert w(0.38) == pytest.approx(0.48)
+    assert w(0.51) == 0.25 and w(0.50) == 0.25                                                                         # plancher
+    assert w(0.62, saturation=0.62) == 1.0 and w(0.56, saturation=0.62, floor=0.1) == pytest.approx(0.5)
+
+
+def test_scaled_sizing_rounds_by_instrument():
+    s = systematic.scaled_sizing
+    assert s({"amount": 5000}, "equity", 0.48) == {"amount": 2400.0}
+    assert s({"amount": 1234.567}, "etf", 0.5) == {"amount": 617.28}                         # au centime
+    assert s({"quantity": 10}, "future", 0.48) == {"quantity": 5} and s({"quantity": 2}, "future", 0.25) == {"quantity": 1}   # entier >= 1
+    assert s({"quantity": 3}, "cfd", 0.5) == {"quantity": 1.5} and s({"quantity": 4}, "cfd", 0.5) == {"quantity": 2}
+    assert s({"quantity": 0.0001}, "cfd", 0.25) == {"quantity": systematic.MIN_CFD_QUANTITY}
+
+
+def test_validate_config_scale_by_score_is_normalised_and_limited_to_threshold_rules():
+    base = _config(1)
+    assert "scale_by_score" not in systematic.validate_config(base)
+    assert systematic.validate_config({**base, "scale_by_score": True})["scale_by_score"] == {"saturation": 0.75, "floor": 0.25}
+    assert systematic.validate_config({**base, "scale_by_score": {"saturation": 0.7, "floor": 0.5}})["scale_by_score"] == {
+        "saturation": 0.7, "floor": 0.5}
+    for bad, message in (({"saturation": 0.5}, "saturation"), ({"saturation": 1.2}, "saturation"), ({"floor": 0}, "floor"),
+                         ({"floor": 1.5}, "floor")):
+        with pytest.raises(store.FundError, match=message):
+            systematic.validate_config({**base, "scale_by_score": bad})
+    with pytest.raises(store.FundError, match="proportionnel"):
+        systematic.validate_config({**base, "scale_by_score": True, "signal": {"mode": "direction"}})
+    with pytest.raises(store.FundError, match="proportionnel"):
+        systematic.validate_config({**base, "scale_by_score": True, "hold": {"mode": "horizon", "sessions": 5}})
+
+
+def test_plan_sizes_each_opening_by_its_own_score_and_leaves_the_close_alone(conn):
+    _, rule_id = _rule(conn, scale_by_score={"saturation": 0.7, "floor": 0.1})
+    plan = systematic.plan(conn, systematic.get_rule(conn, rule_id))
+
+    opens = [p for p in plan if p["action"] == "open"]
+    assert [(p["signal"], p["score"]) for p in opens] == [("2026-01-06", 0.65), ("2026-01-12", 0.70), ("2026-01-15", 0.61)]
+    assert [p["request"]["amount"] for p in opens] == pytest.approx([5000 * 0.15 / 0.2, 5000.0, 5000 * 0.11 / 0.2])
+    assert all("amount" not in p["request"] for p in plan if p["action"] == "close")
+
+
+def test_plan_without_scale_by_score_keeps_the_fixed_size(conn):
+    _, rule_id = _rule(conn)
+    assert {p["request"]["amount"] for p in systematic.plan(conn, systematic.get_rule(conn, rule_id)) if p["action"] == "open"} == {5000}
+
+
+def test_apply_places_the_proportional_sizes(conn):
+    sid, rule_id = _rule(conn, scale_by_score={"saturation": 0.7, "floor": 0.1})
+
+    systematic.apply(conn, rule_id, TODAY)
+
+    opens = [o for o in store.list_orders(conn, sid) if o["action"] == "open"]
+    assert len(opens) == 3 and opens[1]["quantity"] > opens[0]["quantity"] > opens[2]["quantity"]       # 0,70 > 0,65 > 0,61 : conviction décroissante

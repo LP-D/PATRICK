@@ -260,3 +260,37 @@ def test_adopt_personal_tables_is_atomic(tmp_path, monkeypatch):
 
     assert _q(local, "SELECT account_id FROM wealth_account") == [("acc_local",)]
     assert _q(local, "SELECT COUNT(*) FROM wealth_movement") == [(1,)]
+
+
+def _add_personal_research(path: Path, watchlists: list[tuple[str, str]], notes: list[tuple[str, str]]) -> None:
+    conn = sqlite3.connect(str(path))
+    for name, symbols in watchlists:
+        conn.execute("INSERT INTO watchlist (name, symbols) VALUES (?, ?)", (name, symbols))
+    for title, body in notes:
+        conn.execute("INSERT INTO research_note (created_at, updated_at, kind, title, body) VALUES ('2026-10-25 10:00:00', '2026-10-25 10:00:00', 'note', ?, ?)",
+                     (title, body))
+    conn.commit()
+    conn.close()
+
+
+def test_watchlists_and_notes_of_both_pcs_are_united_without_duplicates(tmp_path):
+    local, remote = _pair(tmp_path, ["a1"], ["b1"])
+    _add_personal_research(local, [("A surveiller", '["^GSPC"]')], [("idée locale", "x"), ("commune", "même texte")])
+    _add_personal_research(remote, [("a SURVEILLER", '["^FCHI"]'), ("Énergie", '["CL=F"]')], [("idée distante", "y"), ("commune", "même texte")])
+
+    report = sync_merge.merge_databases(str(local), str(remote))
+
+    assert report["added"]["watchlist"] == 1 and report["added"]["research_note"] == 1
+    assert _q(local, "SELECT name, symbols FROM watchlist ORDER BY name COLLATE NOCASE") == [
+        ("A surveiller", '["^GSPC"]'), ("Énergie", '["CL=F"]')]                   # la liste locale du même nom (casse près) n'est pas modifiée
+    assert sorted(t for t, in _q(local, "SELECT title FROM research_note")) == ["commune", "idée distante", "idée locale"]
+
+
+def test_watchlist_and_note_merge_is_idempotent(tmp_path):
+    local, remote = _pair(tmp_path, ["a1"], ["b1"])
+    _add_personal_research(remote, [("Énergie", '["CL=F"]')], [("idée distante", "y")])
+    sync_merge.merge_databases(str(local), str(remote))
+    again = sync_merge.merge_databases(str(local), str(remote))
+
+    assert again["added"]["watchlist"] == 0 and again["added"]["research_note"] == 0
+    assert _q(local, "SELECT COUNT(*) FROM watchlist") == [(1,)] and _q(local, "SELECT COUNT(*) FROM research_note") == [(1,)]

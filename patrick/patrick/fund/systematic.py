@@ -40,6 +40,8 @@ EQUITY_KINDS = ("equity", "etf")
 NOTE_PREFIX = "auto"
 MIN_CFD_QUANTITY = 0.0001
 MAX_HOLD_SESSIONS = 250
+DEFAULT_SATURATION = 0.75       # dimensionnement proportionnel : P(hausse) (ou 1 - P) à partir de laquelle la taille configurée est atteinte
+DEFAULT_FLOOR = 0.25            # ... et fraction minimale de cette taille (un signal juste au seuil n'ouvre pas une position négligeable)
 
 
 # --------------------------------------------------------------------------- configuration
@@ -114,6 +116,9 @@ def validate_config(config: dict) -> dict:
     out = {"trial_id": trial_id, "segment": segment, "enter": enter, "exit": exit_, "allow_short": allow_short,
            "instrument": {"kind": kind, "symbol": symbol, "spec": spec}, "sizing": norm_sizing,
            "signal": signal, "hold": hold}
+    scaling = _validate_scaling(config, signal, hold)
+    if scaling is not None:
+        out["scale_by_score"] = scaling
     if config.get("hedge") is not None:
         out["hedge"] = _validate_hedge(config["hedge"])
     for key in ("since", "retired_on"):
@@ -129,6 +134,45 @@ def validate_config(config: dict) -> dict:
             raise store.FundError("managed invalide : objet attendu")
         out["managed"] = config["managed"]
     return out
+
+
+def _validate_scaling(config: dict, signal: dict, hold: dict) -> dict | None:
+    """`scale_by_score` : dimensionnement proportionnel à la conviction du signal. La taille de `sizing` devient un MAXIMUM, atteint quand P(hausse)
+    (ou 1 - P pour une vente) vaut `saturation` ; plus bas, la taille vaut la fraction `(|P - 0,5|) / (saturation - 0,5)` de ce maximum, jamais moins que
+    `floor`. Un score de 0,62 avec `saturation` 0,75 ouvre donc 48 % de la taille (0,12 / 0,25). Réservé aux règles à seuils tenues au signal : ce sont
+    les seules dont chaque ouverture porte son score (le mode direction et la sortie à l'horizon n'en ont pas). Absent = taille fixe, comme avant."""
+    raw = config.get("scale_by_score")
+    if raw is None or raw is False:
+        return None
+    if signal["mode"] != "score" or hold["mode"] != "signal":
+        raise store.FundError("dimensionnement proportionnel : réservé au mode score avec tenue au signal (les autres modes n'ont pas de score par ouverture)")
+    raw = {} if raw is True else raw
+    if not isinstance(raw, dict):
+        raise store.FundError("scale_by_score invalide : objet {saturation, floor} ou true attendu")
+    saturation = _float(raw.get("saturation", DEFAULT_SATURATION), "saturation")
+    floor = _float(raw.get("floor", DEFAULT_FLOOR), "floor")
+    if not 0.5 < saturation <= 1.0:
+        raise store.FundError("saturation doit être strictement entre 0,5 et 1 (inclus)")
+    if not 0.0 < floor <= 1.0:
+        raise store.FundError("floor doit être entre 0 (exclu) et 1")
+    return {"saturation": saturation, "floor": floor}
+
+
+def conviction_weight(score: float, saturation: float = DEFAULT_SATURATION, floor: float = DEFAULT_FLOOR) -> float:
+    """Fraction (floor..1) de la taille maximale pour un signal de P(hausse) `score` : proportionnelle à `|score - 0,5|`, atteignant 1 à `saturation`."""
+    return float(min(1.0, max(floor, abs(score - 0.5) / (saturation - 0.5))))
+
+
+def scaled_sizing(sizing: dict, kind: str, weight: float) -> dict:
+    """`sizing` (montant d'une action/ETF, quantité d'un CFD ou d'un future) multiplié par `weight`. Future : entier >= 1 ; CFD : jamais sous le minimum,
+    quatre décimales ; montant : au centime."""
+    if kind in EQUITY_KINDS:
+        return {"amount": round(sizing["amount"] * weight, 2)}
+    quantity = sizing["quantity"] * weight
+    if kind == "future":
+        return {"quantity": max(1, int(round(quantity)))}
+    quantity = max(MIN_CFD_QUANTITY, round(quantity, 4))
+    return {"quantity": int(quantity) if quantity == int(quantity) else quantity}
 
 
 def _date(value, name: str) -> str:
@@ -599,7 +643,11 @@ def plan(conn: sqlite3.Connection, rule: dict) -> list[dict]:
                 request["symbol"] = inst["symbol"]
             if inst["spec"]:
                 request["spec"] = dict(inst["spec"])
-            request.update(sizing)
+            scaling = cfg.get("scale_by_score")
+            if scaling and sig["score"] is not None:
+                request.update(scaled_sizing(sizing, inst["kind"], conviction_weight(sig["score"], scaling["saturation"], scaling["floor"])))
+            else:
+                request.update(sizing)
             if hedged:
                 open_hedge_pid = _position_id(rule_id, signal_day, sig["side"] + "_hedge")
                 extra = {"hedge_position_id": open_hedge_pid, "hedge_note": note + "_hedge"}
