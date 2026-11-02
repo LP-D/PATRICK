@@ -19,3 +19,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0011](0011-methode-3-interface-et-audit-des-tests.md) | Méthode 3 (niveaux bruts, calibration), interface, audit des tests | 2026-10-30 | Acceptée (méthode 3 non activée) |
 | [0012](0012-actions-dans-leur-groupe-et-features-de-contexte.md) | Les actions dans leur vrai groupe, features de contexte de marché (zone euro) | 2026-10-30 | Acceptée |
 | [0013](0013-efficacite-du-f1-macro-decision-selection-signal.md) | Efficacité du F1 : cibles macro retirées, décision de direction causale, critère AUC, signal regroupé, placebo de l'Asie | 2026-10-31 | Acceptée |
+| [0014](0014-feuille-de-route-2026-11-02.md) | Feuille de route du 2026-11-02 : duel sur l'AUC, placebo toutes classes, déflation par classes, dimensionnement proportionnel, retraits, sauvegardes | 2026-11-02 | Acceptée |

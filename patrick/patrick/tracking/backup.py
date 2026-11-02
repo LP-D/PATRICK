@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import time
 from datetime import datetime, timedelta
@@ -55,6 +56,9 @@ RECENT_BACKUP_HOURS = 24
 # Un fichier incomplet, une copie `.part` ou une annexe orpheline plus jeunes que cela peuvent être une sauvegarde en cours.
 _STALE_AFTER_SECONDS = 3600
 _PART_SUFFIX = ".part"
+PROGRESS_LOG_STEP_PERCENT = 5
+# Marge laissée libre sur le disque pendant la copie (la base continue d'écrire : journal, fichiers annexes).
+MIN_FREE_MARGIN_BYTES = 1 << 30
 _SQLITE_MAGIC = b"SQLite format 3\x00"
 _SIDECAR_RE = re.compile(r"^(patrick_backup_\d{8}_\d{6}\.db)-(wal|shm|journal)$")
 
@@ -156,6 +160,36 @@ def _delete_backup(path: Path) -> bool:
     return True
 
 
+def _stale_leftovers(dest_dir: Path, now_ts: float) -> list[Path]:
+    """Restes d'une sauvegarde interrompue (veille, redémarrage, tâche tuée) : fichiers `patrick_backup_*.db` incomplets, copies `.part` et annexes sans sauvegarde,
+    non touchés depuis plus d'une heure (plus jeunes, ils peuvent être une sauvegarde en cours)."""
+    out: list[Path] = []
+    for path in dest_dir.glob("patrick_backup_*"):
+        m = _FILENAME_RE.match(path.name)
+        if m and is_complete_backup(path):
+            continue
+        sidecar = _SIDECAR_RE.match(path.name)
+        if sidecar and (dest_dir / sidecar.group(1)).exists():
+            continue
+        if not (m or sidecar or path.name.endswith(".db" + _PART_SUFFIX)):
+            continue
+        try:
+            stale = now_ts - path.stat().st_mtime > _STALE_AFTER_SECONDS
+        except OSError:
+            continue
+        if stale:
+            out.append(path)
+    return out
+
+
+def purge_stale_leftovers(dest_dir: Path, *, now: float | None = None) -> list[Path]:
+    """Supprime les restes périmés (voir `_stale_leftovers`) SANS toucher à une sauvegarde complète. Appelée avant une nouvelle copie : une tâche tuée à
+    90 % laissait 62 Go de `.part` qui ne partaient qu'à la fin d'une copie réussie, c'est-à-dire jamais tant que la suivante était tuée aussi."""
+    if not dest_dir.exists():
+        return []
+    return [path for path in _stale_leftovers(dest_dir, time.time() if now is None else now) if _delete_backup(path)]
+
+
 def _purge_excess_backups(dest_dir: Path, keep: int, *, now: float | None = None) -> list[Path]:
     """Ne garde que les `keep` sauvegardes COMPLÈTES les plus récentes (ordre de l'horodatage du nom).
 
@@ -173,23 +207,24 @@ def _purge_excess_backups(dest_dir: Path, keep: int, *, now: float | None = None
         m = _FILENAME_RE.match(path.name)
         if m and is_complete_backup(path):
             complete.append((m.group(1), path))
-            continue
-        sidecar = _SIDECAR_RE.match(path.name)
-        if sidecar and (dest_dir / sidecar.group(1)).exists():
-            continue
-        if not (m or sidecar or path.name.endswith(".db" + _PART_SUFFIX)):
-            continue
-        try:
-            stale = now_ts - path.stat().st_mtime > _STALE_AFTER_SECONDS
-        except OSError:
-            continue
-        if stale and _delete_backup(path):
+    for path in _stale_leftovers(dest_dir, now_ts):
+        if _delete_backup(path):
             removed.append(path)
     complete.sort(reverse=True)
     for _, path in complete[keep:]:
         if _delete_backup(path):
             removed.append(path)
     return removed
+
+
+def _require_free_space(dest_dir: Path, needed: int) -> None:
+    """Refuse de commencer une copie qui ne tiendrait pas : un disque plein casse aussi les écritures de la base elle-même."""
+    free = shutil.disk_usage(dest_dir).free
+    if free < needed + MIN_FREE_MARGIN_BYTES:
+        gib = 1 << 30
+        raise OSError(f"Espace disque insuffisant pour la sauvegarde : {free / gib:.1f} Gio libres dans {dest_dir}, "
+                      f"{(needed + MIN_FREE_MARGIN_BYTES) / gib:.1f} Gio necessaires (base {needed / gib:.1f} Gio + marge). "
+                      "Supprimer d'anciennes sauvegardes ou deplacer le dossier.")
 
 
 def backup_database(
@@ -244,11 +279,21 @@ def backup_database(
     dest_path = dest_dir / _FILENAME_TEMPLATE.format(stamp=stamp)
     part_path = dest_path.with_name(dest_path.name + _PART_SUFFIX)
 
+    leftovers = purge_stale_leftovers(dest_dir)
+    if leftovers:
+        logger.info("Restes de sauvegardes interrompues supprimes avant la copie : %s", ", ".join(p.name for p in leftovers))
+    _require_free_space(dest_dir, os.path.getsize(src))
+
+    last_logged = [-1]
+
     def _log_progress(status: int, remaining: int, total: int) -> None:
+        # Un message par palier de 5 % (la copie d'une base de 65 Go appelait cette fonction 170 000 fois : un journal de 766 Mo).
         if total:
             done = total - remaining
-            logger.info("backup: %d/%d pages copiees (%.1f%%)", done, total,
-                        100.0 * done / total)
+            step = int(100.0 * done / total) // PROGRESS_LOG_STEP_PERCENT
+            if step > last_logged[0] or remaining == 0:
+                last_logged[0] = step
+                logger.info("backup: %d/%d pages copiees (%.1f%%)", done, total, 100.0 * done / total)
 
     source_conn = sqlite3.connect(src)
     try:

@@ -4,7 +4,7 @@
 Scores comparés, AUC hors échantillon (réajustement annuel, expansion, trou de h séances) :
   - 'mr'  : aucun modèle, score = -(log sigma_passé - log sigma_252) (retour à la moyenne vers le niveau long) ;
   - 'har' : régression logistique sur les variables HAR (log sigma sur 1, 5, 22, 66 séances, écart au niveau 252 séances).
-Usage : python scripts/vol_target_study.py [nombre d'actifs] [fichier CSV]. Lit le cache local ~/.patrick/cache (séries yfinance déjà téléchargées).
+Usage : python scripts/vol_target_study.py [nombre d'actifs] [fichier CSV]. Lit le cache local des cours (`paths.cache_dir()`, séries yfinance déjà téléchargées).
 Référence de comparaison : l'AUC de la direction du PRIX sur les mêmes séries (étiquette = signe du rendement futur sur h séances, mêmes variables).
 """
 import glob
@@ -19,8 +19,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
+from patrick import paths
+
 warnings.filterwarnings("ignore")
-CACHE = os.path.expanduser("~/.patrick/cache")
+CACHE = str(paths.cache_dir())
 HORIZONS = (5, 20)
 OOS_START = "2012-01-01"
 MIN_ROWS = 3000

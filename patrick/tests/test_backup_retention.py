@@ -229,3 +229,69 @@ def test_update_ignores_a_recent_but_incomplete_copy(update_env, source, tmp_pat
     _truncated_copy(old, dest / _name(_stamp(hours_ago=1)))
     update._backup_database(tmp_path / "projet")
     assert len(calls) == 1
+
+
+# --- Restes d'une copie tuée, espace disque, journal (2026-11-02) -------------------------------------------------
+# Le 2026-11-02 la tâche PATRICK-SauvegardeBase (limite d'une heure) a tué la copie de la base de 65 Go à 89 % : 62 Go de `.part` restés, un journal de 766 Mo
+# (une ligne par lot de 100 pages) et, le jour d'avant, une autre copie tuée de 32 Go. Les restes ne partaient qu'à la fin d'une copie réussie.
+
+def test_stale_leftovers_are_purged_without_touching_complete_backups(tmp_path, source):
+    dest = tmp_path / "backups"
+    good = _make(source, dest, _stamp(days_ago=1))
+    stale_part = dest / "patrick_backup_20260101_000000.db.part"
+    stale_part.write_bytes(b"x" * 100)
+    (dest / (stale_part.name + "-journal")).write_bytes(b"j")
+    fresh_part = dest / "patrick_backup_20260102_000000.db.part"
+    fresh_part.write_bytes(b"x")
+    _age(stale_part, 7200)
+
+    removed = backup.purge_stale_leftovers(dest)
+
+    assert [p.name for p in removed] == [stale_part.name]
+    assert not stale_part.exists() and not (dest / (stale_part.name + "-journal")).exists()
+    assert good.exists() and fresh_part.exists()
+    assert backup.purge_stale_leftovers(tmp_path / "absent") == []
+
+
+def test_a_new_backup_first_removes_the_leftovers_of_a_killed_one(tmp_path, source):
+    dest = tmp_path / "backups"
+    dest.mkdir()
+    killed = dest / "patrick_backup_20260101_000000.db.part"
+    killed.write_bytes(b"x" * 5000)
+    _age(killed, 7200)
+
+    path = backup.backup_database(source, str(dest), retention_days=0, keep=0)
+
+    assert backup.is_complete_backup(path) and not killed.exists()
+
+
+def test_a_backup_that_would_not_fit_is_refused_before_any_copy(tmp_path, source, monkeypatch):
+    dest = tmp_path / "backups"
+    size = os.path.getsize(source)
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: shutil._ntuple_diskusage(10 * size, 9 * size, backup.MIN_FREE_MARGIN_BYTES - 1))
+
+    with pytest.raises(OSError, match="insuffisant"):
+        backup.backup_database(source, str(dest), retention_days=0)
+
+    assert _names(dest) == []                                       # ni copie ni .part
+
+
+def test_a_backup_that_fits_with_the_margin_goes_through(tmp_path, source, monkeypatch):
+    size = os.path.getsize(source)
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: shutil._ntuple_diskusage(10 * size, 0, size + backup.MIN_FREE_MARGIN_BYTES))
+    assert backup.is_complete_backup(backup.backup_database(source, str(tmp_path / "backups"), retention_days=0))
+
+
+def test_progress_is_logged_by_five_percent_steps_not_by_batch(tmp_path, caplog):
+    path = tmp_path / "big.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE t (x BLOB)")
+    conn.executemany("INSERT INTO t VALUES (?)", [(os.urandom(2000),) for _ in range(1500)])
+    conn.commit()
+    conn.close()
+    with caplog.at_level("INFO", logger="patrick.tracking.backup"):
+        backup.backup_database(str(path), str(tmp_path / "backups"), pages=1, sleep_s=0, retention_days=0)
+
+    progress = [r.getMessage() for r in caplog.records if "pages copiees" in r.getMessage()]
+    assert 2 <= len(progress) <= 100 // backup.PROGRESS_LOG_STEP_PERCENT + 2        # des centaines de lots, au plus ~22 lignes
+    assert "(100.0%)" in progress[-1]

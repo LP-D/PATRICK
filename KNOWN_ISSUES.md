@@ -312,6 +312,9 @@ signal (contrôle positif). Résultats du 2026-10-19 :
   du holdout et la taille est gonflée. La famille BH est protégée dans les deux cas : elle ne lit que le sens « meilleur ». Pour
   trancher : un monde où modèle et baseline ont la même perte espérée par construction (deux prédicteurs indépendants du même
   bruit), ou beaucoup plus de mondes.
+  **Tranché le 2026-11-02** (`tests/test_dm_equal_loss_world.py`, ADR 0014) : dans un monde à pertes égales par construction, le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5
+  (~8 % à 15 blocs, h = 30, ce que dit déjà le seuil de 15 blocs). La taille du test n'est donc pas en cause à h = 5 (lecture (b) écartée) ; reste la lecture (a) : le modèle
+  choisi sur du bruit coûte de la variance face à sa baseline. Probabilité de >= 3 rejets sur 12 mondes à 5,5 % : ~2,7 %.
 - **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240
   lignes, perte 0/1 à 4 classes, baseline de persistance). Le DM seul ne reconnaîtrait pas un vrai signal modeste.
 - **Un signal par le rendement de la veille d'une autre série est écarté, à raison** : le garde anti-fuite d'alignement

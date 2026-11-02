@@ -133,7 +133,7 @@ $task = "`"$pythonw`" `"$backupScript`" --log-file `"$backupLog`""
 if ($NoBackupTask) { $global:LASTEXITCODE = 1 } else { & schtasks /Create /TN 'PATRICK-SauvegardeBase' /TR $task /SC DAILY /ST 23:30 /F | Out-Null }
 if ($LASTEXITCODE -eq 0) {
     # sur batterie et rattrapage si le PC était éteint à 23h30
-    & powershell -NoProfile -Command "Set-ScheduledTask -TaskName 'PATRICK-SauvegardeBase' -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable) | Out-Null"
+    & powershell -NoProfile -Command "Set-ScheduledTask -TaskName 'PATRICK-SauvegardeBase' -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)) | Out-Null"
     Write-Ok 'Sauvegarde de la base chaque jour à 23h30 (conservée 30 jours).'
 } else {
     Write-Host '   Sauvegarde quotidienne non planifiée.' -ForegroundColor Yellow
