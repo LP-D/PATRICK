@@ -84,7 +84,8 @@ def main(n_series=60, seed=3):
         name = os.path.basename(f)[len("series_"):-len("_2000-01-01.parquet")]
         try:
             close = load(f)
-        except Exception:
+        except (OSError, ValueError) as exc:        # fichier de cache illisible : on l'écarte en le disant
+            print(f"  [SKIP] {name}: {exc}")
             continue
         if len(close) < MIN_ROWS or close.index[-1] < pd.Timestamp("2026-01-01"):
             continue

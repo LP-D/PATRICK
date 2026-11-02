@@ -170,7 +170,7 @@ def scaled_sizing(sizing: dict, kind: str, weight: float) -> dict:
         return {"amount": round(sizing["amount"] * weight, 2)}
     quantity = sizing["quantity"] * weight
     if kind == "future":
-        return {"quantity": max(1, int(round(quantity)))}
+        return {"quantity": max(1, round(quantity))}
     quantity = max(MIN_CFD_QUANTITY, round(quantity, 4))
     return {"quantity": int(quantity) if quantity == int(quantity) else quantity}
 
