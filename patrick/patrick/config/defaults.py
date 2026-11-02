@@ -8,15 +8,15 @@ families under the same validation protocol (docs/ways-of-working.md).
 Stacking: the VIX-project finding that stacking lost on 93% of (horizon,
 fold) pairs applied to the single always-on `DEFAULT_STACKING_ENABLED`
 toggle below (a meta-model blended into the SAME leaderboard as every other
-candidate, never actually wired into `pipeline/engine.py`). CHANTIER B
-(feature/model-categories-comparison) lifts that blanket commitment: stacking
-is now one of three EXPLICIT, separately-compared model categories (global /
-per-regime / stacking, see `tracking/model_categories.py`), evaluated on its
-own merits per (ticker, horizon) via DM/FDR/PBO against the other two rather
-than assumed to lose a priori. `DEFAULT_STACKING_ENABLED` below still governs
-the legacy single-toggle path (unchanged, still off by default -- the old
-finding still applies to THAT path, which nothing here removes), independent
-of the new category comparison.
+candidate, never actually wired into `pipeline/engine.py`). That blanket
+commitment is lifted: stacking is a real algorithm of the grid since
+2026-10-23 (`models/stacking.py`, `DEFAULT_STACKING_N_MODELS` below), judged
+on its own merits like every other candidate. The three-category comparison
+(global / per-regime / stacking) that was sketched here was never wired into
+the engine and was removed on 2026-11-02: the grid already compares a global
+model with per-regime ones (`objective.regimes`) and with the stacking.
+`DEFAULT_STACKING_ENABLED` below still governs the legacy single-toggle path
+(unchanged, still off by default).
 """
 
 DEFAULT_ML_ALGOS = ["XGBoost", "LightGBM", "RandomForest", "CatBoost"]
@@ -328,10 +328,10 @@ RL_MIN_ROWS = 600            # lignes minimales après les fenêtres de calcul d
 # purge (VIX_PURGED_CV: negligible F1_dir delta), calibration (VIX_CALIBRATED_THRESHOLD:
 # regime-conditional gain, hurts in STRESS). Stacking (VIX_STACKING_WF: lost
 # 28/30 as a single blended toggle) is no longer a blanket "off" verdict --
-# see the module docstring above (CHANTIER B, tracking/model_categories.py):
-# it is now one of three separately-compared categories, not assumed inferior
-# a priori. DEFAULT_STACKING_ENABLED below is unchanged (still gates only the
-# legacy single-toggle path, still off by default).
+# see the module docstring above: it is now a real algorithm of the grid
+# (`models/stacking.py`), not assumed inferior a priori. DEFAULT_STACKING_ENABLED
+# below is unchanged (still gates only the legacy single-toggle path, still off
+# by default).
 DEFAULT_PURGE_ENABLED = False
 DEFAULT_CALIBRATION_ENABLED = False
 # Méthode 3 (ADR 0011) : un run lancé depuis l'interface part avec la calibration cochée. Les probabilités brutes d'un run « rapide » sont sur-confiantes (Brier 0,269 ;

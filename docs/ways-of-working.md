@@ -35,9 +35,13 @@ Les constats historiques du projet VIX restent des *résultats mesurés*
 (« le DL n'a jamais battu le ML classique », « le stacking perd sur 93 % des
 paires horizon/fold ») — ils ne sont plus des interdits de conception :
 
-- le **stacking** est l'une des trois catégories comparées explicitement
-  (global / par régime / stacking, `tracking/model_categories.py`), évaluée
-  sur pièces (DM/FDR/PBO) par (cible, horizon) ;
+- le **stacking** est un algorithme de la grille depuis le 2026-10-23
+  (`models/stacking.py`, nombre de modèles saisi à la main), jugé comme les
+  autres candidats (DM/FDR/PBO) par (cible, horizon). La comparaison en trois
+  catégories (global / par régime / stacking) esquissée en septembre n'a
+  jamais été branchée au moteur et a été retirée le 2026-11-02 : la grille
+  compare déjà un modèle global, des modèles par régime (`objective.regimes`)
+  et le stacking ;
 - le **DL** (séquentiel, TFT, modèles de diffusion) peut être introduit
   comme famille candidate **aux mêmes conditions** que le ML classique :
   même protocole ci-dessus, même registre d'essais (chaque configuration

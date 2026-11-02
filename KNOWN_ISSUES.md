@@ -235,8 +235,13 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
   vide (caractères backspace au lieu de `\b`), l'idiome NaN `v == v`.
 - **Conservé volontairement** (voir aussi « Plomberie future volontaire » ci-dessus) :
   - `phase9.py` (`StrategyEngine`…) : plomberie documentée pour la phase stratégie/exécution ;
-  - `pipeline/model_categories_training.py` et `tracking/model_categories.py` : catégories de modèles (global / par régime / stacking),
-    décrites dans `docs/ways-of-working.md`, non branchées sur le moteur à ce jour — à décider (brancher ou retirer) ;
+  - `pipeline/model_categories_training.py` et `tracking/model_categories.py` : **retirés le 2026-11-02** (avec leurs deux fichiers de tests et trois termes de glossaire).
+    Le stacking est devenu un vrai algorithme de la grille (`models/stacking.py`, 2026-10-23) et la grille compare déjà un modèle global à des modèles par régime
+    (`objective.regimes`) : la comparaison en trois catégories n'avait plus de rôle. La colonne `trial.category` et la source `category` du registre d'essais restent
+    dans le schéma (une colonne ne se retire pas d'une base existante) ;
+  - `features/triple_barrier.py` : étiquette à triple barrière (tests dans `test_alt_targets.py`), **conservée non branchée, décision du 2026-11-02** : c'est une étiquette de
+    cible alternative, avec le même coût d'intégration que la cible de volatilité (`docs/modelisation/cible-volatilite-faisabilite-2026-11-02.md`) : une vingtaine de
+    consommateurs de l'étiquette à décider un par un. `features/fracdiff.py`, lui, est branché (méthode 3, ADR 0011) ;
   - `features/event_features.py` : garde d'horodatage de publication pour les données textuelles (`docs/research/README.md`) ;
   - `wealth/signal_replay.py` : rejeu des signaux sur un patrimoine, dont `_winning_trial` sert encore à des tests ;
   - les fonctions d'accès aux données de `tracking/db.py` sans appelant (`exclude_symbol`, `list_drift_psi_history`,

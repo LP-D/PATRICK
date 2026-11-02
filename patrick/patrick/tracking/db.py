@@ -1317,12 +1317,10 @@ class TrialRecorder:
 def create_trial(conn: sqlite3.Connection, run_id: str, regime: str, algo: str,
                   sampler: str, n_features: int, selector: str,
                   params_json: str = "{}", category: str = "global") -> int:
-    """`category` (CHANTIER B, migration 0020, default 'global'): which of
-    the three compared model categories this trial belongs to
-    (global/per_regime/stacking, see
-    `pipeline/model_categories_training.py`) -- every pre-existing call site
-    (the main grid scan/Optuna loop) never passes it, so every trial it
-    produces stays correctly tagged 'global', unchanged.
+    """`category` (migration 0020, default 'global'): a leftover of the
+    three-category comparison removed on 2026-11-02 (the column stays: it cannot
+    be dropped from an existing database). Every call site never passes it, so
+    every trial stays tagged 'global'.
 
     F03: an untuned trial (`params_json == "{}"`) is a newly evaluated
     configuration and is registered in `trial_registry`. A tuned trial is

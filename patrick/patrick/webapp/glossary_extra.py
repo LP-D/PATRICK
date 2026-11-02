@@ -324,7 +324,6 @@ TERM_CATEGORY: dict[str, str] = {
                              "hmm", "heston_proxy", "vrp_proxy", "ar", "ma", "arma", "arima", "shap", "rfe", "lasso",
                              "SMOTE", "BorderlineSMOTE", "ADASYN", "SMOTETomek", "SMOTEENN", "XGBoost", "LightGBM",
                              "RandomForest", "GradientBoosting", "CatBoost", "stacking", "regime_detection_enabled",
-                             "model_category_global", "model_category_per_regime", "model_category_stacking",
                              "regime_threshold_mode", "tuning_enabled", "optuna_select_top_k_per_horizon",
                              "technical_lookbacks", "staged_screening", "optuna_bounds")},
     **{k: "portfolio" for k in ("hrp", "ledoit_wolf", "portfolio_contradictions", "portfolio_pairs",

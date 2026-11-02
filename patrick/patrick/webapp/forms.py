@@ -280,7 +280,7 @@ def _checked(form, name: str) -> bool:
 def validate_output_dir(raw: str, errors: list[str]) -> bool:
     """Security -- `output_dir` (web form) becomes `RunConfig.output.dir`
     and then reaches `os.makedirs(config.output.dir, ...)` downstream
-    (`pipeline/engine.py`, `worker.py`, `model_categories_training.py`)
+    (`pipeline/engine.py`, `worker.py`)
     with no validation at all. This is a local single-user tool (see
     `tracking/db.py`'s module docstring; `PATRICK_DB_PATH`/
     `PATRICK_STORE_ROOT` already accept an arbitrary absolute path the same
