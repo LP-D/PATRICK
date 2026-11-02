@@ -20,3 +20,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0012](0012-actions-dans-leur-groupe-et-features-de-contexte.md) | Les actions dans leur vrai groupe, features de contexte de marché (zone euro) | 2026-10-30 | Acceptée |
 | [0013](0013-efficacite-du-f1-macro-decision-selection-signal.md) | Efficacité du F1 : cibles macro retirées, décision de direction causale, critère AUC, signal regroupé, placebo de l'Asie | 2026-10-31 | Acceptée |
 | [0014](0014-feuille-de-route-2026-11-02.md) | Feuille de route du 2026-11-02 : duel sur l'AUC, placebo toutes classes, déflation par classes, dimensionnement proportionnel, retraits, sauvegardes | 2026-11-02 | Acceptée |
+| [0015](0015-journal-fusionne-bandit-carry.md) | Journal de prédictions fusionné entre PC, dimensionnement appris et carry de change mesurés | 2026-11-02 | Acceptée |

@@ -20,7 +20,8 @@ Règles :
 - `watchlist` (listes de suivi) : par nom ; une liste déjà présente localement n'est pas modifiée;
 - `research_note` (carnet) : union dédoublonnée sur le contenu (date de création, type, titre, texte, étiquettes, cible, horizon, run); une note modifiée sur
   un PC après avoir été copiée garde sa version locale;
-- `prediction_journal` : PAS fusionné (chaîne unique à plusieurs PC : voir `docs/ops/partage-entre-pc.md`, « Journal de prédictions »);
+- `prediction_journal` : chaque PC garde sa chaîne d'empreintes; les lignes de l'autre sont recopiées telles quelles et marquées `imported_from` (migration 0050,
+  `tracking/journal.py::verify` les vérifie une à une);
 - caches (`shap_selection_cache`, `vol_model_cache`) : union par clé;
 - jamais fusionnés par union : patrimoine (`wealth_*`), `simulation` (les deux PC avaient importé les
   mêmes comptes sous des identifiants différents, une union créerait des doublons). Le patrimoine a un
@@ -211,6 +212,11 @@ def merge_databases(dst_path: str, src_path: str, *, fast: bool = False) -> dict
             added["watchlist"] = _insert(
                 conn, "watchlist", skip=("watchlist_id",),
                 where="WHERE NOT EXISTS (SELECT 1 FROM main.watchlist m WHERE m.name = s.name)")
+            # Journal de prédictions : chaque PC garde SA chaîne ; les lignes de l'autre sont recopiées telles quelles (empreintes et trial_id compris, ils sont hachés),
+            # dans l'ordre de leur chaîne, marquées `imported_from` (migration 0050). Une ligne déjà présente (même `entry_hash`) est ignorée.
+            added["prediction_journal"] = _insert(
+                conn, "prediction_journal", or_ignore=True, skip=("journal_id",), where="ORDER BY s.journal_id",
+                override={"imported_from": "COALESCE(s.imported_from, 'import')"})
             # Carnet de recherche : pas de clé naturelle, union dédoublonnée sur le contenu (sans l'identifiant propre à chaque base).
             note = [c for c in _shared_columns(conn, "research_note") if c not in ("note_id", "updated_at", "revisions", "status")]
             same = " AND ".join(f'm."{c}" IS s."{c}"' for c in note)

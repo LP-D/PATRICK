@@ -7,6 +7,8 @@ le prérequis, et le critère d'entrée.
 
 ## 1. Apprentissage par renforcement (expérimental)
 
+> **Mesuré le 2026-11-02 (ADR 0015)** : le bandit LinUCB et le Kelly fractionnaire appris ne battent pas les heuristiques de `/simulate` après coûts sur 459 champions à 1 jour (critère d'entrée non atteint). Rapport : `docs/modelisation/mesures-bandit-carry-2026-11-02.md` (reproductible : `scripts/bandit_sizing_bench.py`).
+
 **Ce que ce serait** : un agent qui choisit une allocation (ou une taille de position) à partir de l'état
 (features, positions, coûts) pour maximiser une récompense (rendement ajusté du risque net de coûts).
 
@@ -37,6 +39,8 @@ surtout le bêta. Une cible alpha a un taux de base proche de 0,5 et correspond 
 d'entrée** : DM-HLN sur le holdout contre la persistance de l'alpha, et famille BH séparée des cibles brutes.
 
 ## 3. Extension futures (hors périmètre)
+
+> **Précision du 2026-11-02 (ADR 0015)** : le carry de CHANGE ne demande pas de courbe de futures (écart de taux courts, FRED) ; il a été mesuré (`features/fx_carry.py`) : Sharpe 0,17-0,18 sur sept devises, non significatif. Le carry de matières premières reste bloqué par l'absence de courbe d'échéances, comme ci-dessous.
 
 **Ce qui manque** : pas de courbe de futures dans les sources de données — les séries `=F` de Yahoo sont des
 contrats **continus** raccordés sans ajustement documenté (sauts de roll), et `LBS=F` a disparu en 2022

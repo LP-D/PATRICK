@@ -36,7 +36,7 @@ def test_live_signal_is_journaled_with_model_hash_and_chain(seeded):
     assert rows[0][8] == journal.GENESIS and rows[1][8] == rows[0][9]                      # chaîne : la 2e relie la 1re
     import hashlib
     assert rows[0][7] == hashlib.sha256(b"model-bytes").hexdigest() == journal.model_hash(str(model))
-    assert journal.verify(conn) == {"ok": True, "n": 2, "first_bad": None, "reason": None, "head": rows[1][9]}
+    assert journal.verify(conn) == {"ok": True, "n": 2, "n_imported": 0, "first_bad": None, "reason": None, "head": rows[1][9], "forks": 0}
 
 
 def test_first_write_wins_and_outcomes_append_once(seeded):

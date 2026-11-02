@@ -48,6 +48,8 @@ et pourquoi. Mesures sur la base locale (64,8 Gio, 3 173 runs terminés, lecture
 
 ## Non fait
 
+> Repris le même jour dans l'ADR 0015 : journal de prédictions fusionné entre PC (fait), dimensionnement appris et carry de change mesurés (négatifs, non adoptés).
+
 Carry trade (pas de courbe de futures) ; bandit contextuel du RL ; fusion du journal de prédictions ; cible de volatilité (décision de concevoir le niveau de σ à part) ; reprise du scan ; Optuna parallèle ;
 mesure des mutants après les nouveaux tests ; sauvegarde sans le cache de la base.
 

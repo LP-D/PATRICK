@@ -107,7 +107,7 @@ pipeline d'entraînement : hachage de configuration, golden master et worker son
 
 ## Limites connues
 
-- Le journal de prédictions n'est **pas synchronisé** entre deux PC (chaîne unique, voir `partage-entre-pc.md`). Les listes de suivi et le carnet le sont depuis le 2026-11-02.
+- Le journal de prédictions, les listes de suivi et le carnet sont synchronisés entre deux PC depuis le 2026-11-02 (`partage-entre-pc.md`, ADR 0015).
 - Les migrations 0040, 0041 et 0042 s'appliquent au prochain démarrage de `patrick serve` : relancer le serveur après la fusion.
 - Les rendements d'une analyse viennent du snapshot du run ; un run sans snapshot n'a pas les sections « rendements ».
 - Les courbes d'apprentissage des réseaux de neurones ne sont pas conservées : seules les métriques finales le sont.

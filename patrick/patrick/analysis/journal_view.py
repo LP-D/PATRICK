@@ -17,7 +17,7 @@ DIVERGENCE_LIMIT = 30
 
 
 def _load(conn: sqlite3.Connection) -> list[tuple]:
-    return conn.execute("SELECT journal_id, recorded_at, kind, origin, run_id, trial_id, target, horizon, signal_date, y_pred, p_up, y_true, model_hash, entry_hash "
+    return conn.execute("SELECT journal_id, recorded_at, kind, origin, run_id, trial_id, target, horizon, signal_date, y_pred, p_up, y_true, model_hash, entry_hash, imported_from "
                         "FROM prediction_journal ORDER BY journal_id").fetchall()
 
 
@@ -25,10 +25,10 @@ def overview(conn: sqlite3.Connection) -> dict:
     rows = _load(conn)
     signals: dict[tuple, dict] = {}
     outcome: dict[tuple, float] = {}
-    for jid, rec, kind, origin, run_id, trial_id, target, horizon, day, y_pred, p_up, y_true, mh, _eh in rows:
-        key = (trial_id, day)
+    for jid, rec, kind, origin, run_id, trial_id, target, horizon, day, y_pred, p_up, y_true, mh, _eh, imported in rows:
+        key = (imported, trial_id, day)             # un trial_id importé désigne un essai de l'autre base : jamais le même que le local
         if kind == "signal":
-            signals.setdefault(key, {"target": target, "horizon": int(horizon), "run_id": run_id, "y_pred": y_pred, "p_up": p_up, "origin": origin, "model_hash": mh, "day": day, "at": rec})
+            signals.setdefault(key, {"target": target, "horizon": int(horizon), "run_id": run_id, "y_pred": y_pred, "p_up": p_up, "origin": origin, "model_hash": mh, "day": day, "at": rec, "imported": imported})
         elif y_true is not None:
             outcome[key] = float(y_true)                      # la dernière issue journalisée fait foi
     pairs: dict[tuple, list] = {}
@@ -51,7 +51,9 @@ def overview(conn: sqlite3.Connection) -> dict:
     # écarts entre le premier signal journalisé et la table `prediction` (qui peut se réécrire)
     divergences = []
     n_checked = 0
-    for (trial_id, day), s in signals.items():
+    for (imported, trial_id, day), s in signals.items():
+        if imported is not None:
+            continue                                  # la table `prediction` locale ne recoupe que les signaux de ce PC
         row = conn.execute("SELECT y_pred, p_up FROM prediction WHERE trial_id = ? AND split = 'live' AND ts LIKE ? LIMIT 1", (trial_id, day + "%")).fetchone()
         if row is None:
             continue
@@ -64,7 +66,7 @@ def overview(conn: sqlite3.Connection) -> dict:
     stamps = [r[1] for r in rows]
     return sc.jsonable({
         "n_entries": len(rows), "n_signals": len(signals), "n_outcomes": len(outcome), "first_at": stamps[0] if stamps else None, "last_at": stamps[-1] if stamps else None,
-        "n_backfill": sum(1 for s in signals.values() if s["origin"] == "backfill"), "n_models": len({s["model_hash"] for s in signals.values() if s["model_hash"]}),
+        "n_imported": sum(1 for r in rows if r[14] is not None), "n_backfill": sum(1 for s in signals.values() if s["origin"] == "backfill"), "n_models": len({s["model_hash"] for s in signals.values() if s["model_hash"]}),
         "pairs": items, "divergences": divergences, "n_divergences": n_div, "n_checked": n_checked})
 
 
@@ -72,7 +74,7 @@ def entries(conn: sqlite3.Connection, target: str | None = None, limit: int = 20
     limit = max(1, min(1000, limit))
     where, params = ("WHERE target = ?", [target]) if target else ("", [])
     total = conn.execute(f"SELECT COUNT(*) FROM prediction_journal {where}", params).fetchone()[0]
-    cols = ("journal_id", "recorded_at", "kind", "origin", "run_id", "target", "horizon", "signal_date", "y_pred", "p_up", "y_true", "model_hash", "prev_hash", "entry_hash")
+    cols = ("journal_id", "recorded_at", "kind", "origin", "run_id", "target", "horizon", "signal_date", "y_pred", "p_up", "y_true", "model_hash", "prev_hash", "entry_hash", "imported_from")
     rows = conn.execute(f"SELECT {', '.join(cols)} FROM prediction_journal {where} ORDER BY journal_id DESC LIMIT ? OFFSET ?", (*params, limit, max(0, offset))).fetchall()
     return sc.jsonable({"total": int(total), "items": [dict(zip(cols, r, strict=True)) for r in rows]})
 
@@ -81,7 +83,7 @@ def export_csv(conn: sqlite3.Connection) -> str:
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
     cols = ("journal_id", "recorded_at", "kind", "origin", "run_id", "trial_id", "target", "horizon", "signal_date", "y_pred", "p_up", "y_true", "model_hash", "config_hash",
-            "prev_hash", "entry_hash")
+            "prev_hash", "entry_hash", "imported_from")
     w.writerow(cols)
     for r in conn.execute(f"SELECT {', '.join(cols)} FROM prediction_journal ORDER BY journal_id"):
         w.writerow(["" if v is None else v for v in r])

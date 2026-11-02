@@ -88,7 +88,7 @@ def _append(conn: sqlite3.Connection, rows: list[dict]) -> int:
     ensure_triggers(conn)
     conn.execute("BEGIN IMMEDIATE")
     try:
-        last = conn.execute("SELECT entry_hash FROM prediction_journal ORDER BY journal_id DESC LIMIT 1").fetchone()
+        last = conn.execute("SELECT entry_hash FROM prediction_journal WHERE imported_from IS NULL ORDER BY journal_id DESC LIMIT 1").fetchone()      # la chaîne de CE PC
         prev = last[0] if last else GENESIS
         for r in rows:
             r = {**r, "y_pred": _num(r.get("y_pred")), "p_up": _num(r.get("p_up")), "y_true": _num(r.get("y_true"))}
@@ -111,7 +111,7 @@ def record_signals(conn: sqlite3.Connection, trial_id: int, ts: list, y_pred, p_
     ctx = _trial_context(conn, trial_id)
     if ctx is None:
         return 0
-    seen = {r[0] for r in conn.execute("SELECT signal_date FROM prediction_journal WHERE trial_id = ? AND kind = 'signal'", (trial_id,))}
+    seen = {r[0] for r in conn.execute("SELECT signal_date FROM prediction_journal WHERE trial_id = ? AND kind = 'signal' AND imported_from IS NULL", (trial_id,))}
     ups = p_up if p_up is not None else [None] * len(ts)
     rows = []
     for t, yp, up in zip(ts, y_pred, ups, strict=True):
@@ -129,7 +129,7 @@ def record_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: flo
     if ctx is None:
         return 0
     day = str(ts)[:10]
-    last = conn.execute("SELECT y_true FROM prediction_journal WHERE trial_id = ? AND signal_date = ? AND kind = 'outcome' ORDER BY journal_id DESC LIMIT 1",
+    last = conn.execute("SELECT y_true FROM prediction_journal WHERE trial_id = ? AND signal_date = ? AND kind = 'outcome' AND imported_from IS NULL ORDER BY journal_id DESC LIMIT 1",
                         (trial_id, day)).fetchone()
     if last is not None and last[0] is not None and abs(last[0] - float(y_true)) < 1e-12:
         return 0
@@ -137,26 +137,53 @@ def record_outcome(conn: sqlite3.Connection, trial_id: int, ts: str, y_true: flo
 
 
 def verify(conn: sqlite3.Connection) -> dict:
-    """Rejoue la chaîne : chaque ligne doit relier l'empreinte précédente et se recalculer à l'identique. Renvoie `ok`, le nombre de lignes lues et, si
-    la chaîne est cassée, l'identifiant de la première ligne fautive et le motif (`prev_mismatch`, `hash_mismatch`)."""
+    """Rejoue la chaîne de CE PC : chaque ligne doit relier l'empreinte précédente et se recalculer à l'identique. Renvoie `ok`, le nombre de lignes locales lues (`n`) et, si
+    la chaîne est cassée, l'identifiant de la première ligne fautive et le motif (`prev_mismatch`, `hash_mismatch`). Les lignes venues d'un autre PC (`imported_from`, voir
+    la migration 0050) se vérifient une à une : l'empreinte se recalcule à partir du `prev_hash` annoncé (`imported_hash_mismatch`) et ce `prev_hash` désigne `GENESIS` ou
+    une ligne présente (`imported_prev_missing` : une ligne a été retirée avant elle). `n_imported` les compte ; `forks` compte les lignes qui prolongent une empreinte
+    déjà prolongée (deux PC partis d'une même copie : informatif, pas une altération)."""
     prev = GENESIS
     n = 0
     cols = ("journal_id", *_PAYLOAD_FIELDS, "prev_hash", "entry_hash")
-    for rec in conn.execute(f"SELECT {', '.join(cols)} FROM prediction_journal ORDER BY journal_id"):
+    for rec in conn.execute(f"SELECT {', '.join(cols)} FROM prediction_journal WHERE imported_from IS NULL ORDER BY journal_id"):
         d = dict(zip(cols, rec, strict=True))
         n += 1
         if d["prev_hash"] != prev:
-            return {"ok": False, "n": n, "first_bad": d["journal_id"], "reason": "prev_mismatch"}
+            return {"ok": False, "n": n, "n_imported": _count_imported(conn), "first_bad": d["journal_id"], "reason": "prev_mismatch"}
         if entry_hash(prev, d) != d["entry_hash"]:
-            return {"ok": False, "n": n, "first_bad": d["journal_id"], "reason": "hash_mismatch"}
+            return {"ok": False, "n": n, "n_imported": _count_imported(conn), "first_bad": d["journal_id"], "reason": "hash_mismatch"}
         prev = d["entry_hash"]
-    return {"ok": True, "n": n, "first_bad": None, "reason": None, "head": prev if n else None}
+    imported = _verify_imported(conn, cols)
+    if imported["bad"] is not None:
+        return {"ok": False, "n": n, "n_imported": imported["n"], "first_bad": imported["bad"][0], "reason": imported["bad"][1]}
+    return {"ok": True, "n": n, "n_imported": imported["n"], "first_bad": None, "reason": None, "head": prev if n else None, "forks": imported["forks"]}
+
+
+def _count_imported(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM prediction_journal WHERE imported_from IS NOT NULL").fetchone()[0]
+
+
+def _verify_imported(conn: sqlite3.Connection, cols: tuple) -> dict:
+    known = {r[0] for r in conn.execute("SELECT entry_hash FROM prediction_journal")}
+    followed: set[str] = set()
+    forks = n = 0
+    for rec in conn.execute(f"SELECT {', '.join(cols)} FROM prediction_journal WHERE imported_from IS NOT NULL ORDER BY journal_id"):
+        d = dict(zip(cols, rec, strict=True))
+        n += 1
+        if entry_hash(d["prev_hash"], d) != d["entry_hash"]:
+            return {"n": n, "forks": forks, "bad": (d["journal_id"], "imported_hash_mismatch")}
+        if d["prev_hash"] != GENESIS and d["prev_hash"] not in known:
+            return {"n": n, "forks": forks, "bad": (d["journal_id"], "imported_prev_missing")}
+        if d["prev_hash"] != GENESIS and d["prev_hash"] in followed:
+            forks += 1
+        followed.add(d["prev_hash"])
+    return {"n": n, "forks": forks, "bad": None}
 
 
 def seal_existing(conn: sqlite3.Connection, batch: int = 500) -> dict:
     """Scelle les prédictions live déjà stockées qui n'ont pas de ligne de journal (origine `backfill`) : signal, puis issue si elle est connue. Par lots
     de `batch` lignes, des transactions courtes (la base peut être utilisée par un worker)."""
-    done = conn.execute("SELECT trial_id, signal_date FROM prediction_journal WHERE kind = 'signal'").fetchall()
+    done = conn.execute("SELECT trial_id, signal_date FROM prediction_journal WHERE kind = 'signal' AND imported_from IS NULL").fetchall()
     have = {(t, d) for t, d in done}
     rows = conn.execute(f"SELECT trial_id, ts, y_pred, p_up, y_true FROM prediction INDEXED BY {live_index_hint(conn)} WHERE split = 'live' ORDER BY ts").fetchall()
     ctx_cache: dict[int, dict | None] = {}

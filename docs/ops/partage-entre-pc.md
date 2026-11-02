@@ -83,10 +83,10 @@ stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --sch
   si deux PC ont modifié la même liste, chacun garde la sienne.
 - **Carnet de recherche** (`research_note`) : union dédoublonnée sur le contenu (date de création, type, titre, texte, étiquettes, cible, horizon, run). Une note retouchée sur un
   PC après avoir été copiée apparaît en double (l'ancienne version et la nouvelle) : le contenu a changé, rien ne dit laquelle garder.
-- **Journal de prédictions** (`prediction_journal`) : **pas fusionné**. C'est une chaîne unique (chaque ligne porte l'empreinte de la précédente, `tracking/journal.py::verify`) :
-  deux PC produisent deux chaînes qui partent du même point, et leur union ne se vérifierait plus. Fusionner demande une conception à part : une colonne d'origine par PC, une
-  vérification chaîne par chaîne, et les `trial_id` de la charge utile (couverts par l'empreinte, donc non décalables comme dans `sync_merge`) remplacés par le `run_id`. Chaque PC
-  garde son journal, sur lequel il peut prouver ses propres signaux.
+- **Journal de prédictions** (`prediction_journal`) : fusionné depuis la migration 0050 (ADR 0015). Chaque PC garde SA chaîne d'empreintes ; les lignes de l'autre sont recopiées telles quelles
+  (empreintes et `trial_id` compris, ils sont dans la charge utile hachée) et marquées `imported_from`. `journal.verify` vérifie la chaîne locale, puis chaque ligne importée contre le
+  `prev_hash` qu'elle annonce. Une ligne retirée côté importé est détectée (`imported_prev_missing`), une ligne modifiée aussi (`imported_hash_mismatch`) ; une ligne fausse bien chaînée ne l'est pas.
+  Un PC sans la migration 0050 est refusé par la fusion : mettre le code à jour sur les deux PC.
 
 ## Ce qui ne l'est jamais vers GitHub
 
