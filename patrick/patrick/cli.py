@@ -439,7 +439,7 @@ def audit_signal_cmd(
 
 @audit_app.command(name="placebo-panel")
 def audit_placebo_panel_cmd(
-    group: str = typer.Option("asia", "--group", help="asia | controls | all (indices asiatiques, témoins Europe/États-Unis, les deux)"),
+    group: str = typer.Option("asia", "--group", help="asia | controls | all (Asie + témoins) | fx | futures | us | europe | americas | crypto | volatility | every_class (toutes les classes)"),
     horizons: str = typer.Option("1,3", "--horizons", help="Horizons des runs, séparés par des virgules"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Affiche les runs sans rien mettre en file"),
     start_worker: bool = typer.Option(False, "--start-worker", help="Lance aussi un worker détaché (sinon les runs attendent le prochain worker)"),
@@ -464,7 +464,8 @@ def audit_placebo_panel_cmd(
 
 @audit_app.command(name="placebo-report")
 def audit_placebo_report_cmd(
-    group: str = typer.Option(None, "--group", help="asia | controls | all (défaut : tous les runs qui ont un placebo)"),
+    group: str = typer.Option(None, "--group", help="asia | controls | all | fx | futures | us | europe | americas | crypto | volatility | every_class (défaut : tous les runs qui ont un placebo)"),
+    show_coverage: bool = typer.Option(False, "--coverage", help="Affiche aussi, par classe d'actifs, les runs terminés et ceux qui ont un placebo (court : horizon <= 3 jours)"),
 ) -> None:
     """Résultat du placebo de décalage : par run puis par classe d'actifs et horizon, AUC réelle contre AUC avec les variables retardées d'un jour
     de plus, et part des runs au verdict « jour même » (signal qui repose sur l'information du jour)."""
@@ -474,8 +475,15 @@ def audit_placebo_report_cmd(
     conn = trackdb.connect()
     try:
         rows = audit_placebo.report(conn, group)
+        covered = audit_placebo.coverage(conn) if show_coverage else []
     finally:
         conn.close()
+    if covered:
+        typer.echo("Couverture du placebo par classe d'actifs :")
+        for item in covered:
+            flag = "" if item["with_short_placebo"] else "   <- aucun placebo à horizon court : classe non auditée"
+            typer.echo(f"  {item['class']:<24} {item['runs']:>5} run(s)  placebo {item['with_placebo']:>3}  dont court {item['with_short_placebo']:>3}{flag}")
+        typer.echo("")
     if not rows:
         typer.echo("Aucun run n'a encore de placebo (lance `patrick audit placebo-panel`, puis attends la fin des runs).")
         return

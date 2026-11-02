@@ -18,6 +18,23 @@ def test_the_asia_panel_is_asian_and_the_controls_are_not():
         audit_placebo.panel_targets("mars")
 
 
+def test_the_every_class_panel_covers_every_asset_class_without_duplicates():
+    targets = audit_placebo.panel_targets("every_class")
+    assert len(targets) == len(set(targets))
+    assert {classify_asset_class(t) for t in targets} == {
+        "equities_us", "equities_europe", "equities_asia_pacific", "equities_americas_other", "fx", "futures", "crypto", "volatility_index"}
+    for group in ("fx", "futures", "us", "europe", "americas", "crypto", "volatility"):
+        assert set(audit_placebo.panel_targets(group)) <= set(targets)
+    assert {classify_asset_class(t) for t in audit_placebo.panel_targets("fx")} == {"fx"}
+    assert {classify_asset_class(t) for t in audit_placebo.panel_targets("volatility")} == {"volatility_index"}
+
+
+@pytest.mark.parametrize("target", audit_placebo.PANELS["every_class"])
+def test_every_panel_target_builds_a_valid_config_that_excludes_itself(target):
+    config = audit_placebo.build_config(target, "placebo_x")
+    assert config.objective.target_symbol == target and target not in config.universe.yf_tickers
+
+
 def test_a_panel_config_is_light_walk_forward_and_never_feeds_the_target_to_itself():
     config = audit_placebo.build_config("^N225", "placebo_N225_1")
     assert config.objective.horizons == [1, 3] and config.validation.scheme == "walkforward"
@@ -48,6 +65,21 @@ def test_report_gives_the_verdict_per_run_and_the_summary_per_class(tmp_path, mo
     summary = {(s["class"], s["horizon"]): s for s in audit_placebo.summarize(rows)}
     asia = summary[("equities_asia_pacific", 1)]
     assert asia["n"] == 2 and asia["share_same_day"] == 0.5 and asia["auc_real"] == pytest.approx(0.63)
+    conn.close()
+
+
+def test_coverage_says_which_classes_were_never_audited_at_a_short_horizon(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "p.db"))
+    conn = db.connect(str(tmp_path / "p.db"))
+    db.upsert_snapshot(conn, "snap", "h", 1, 1, "api")
+    _seed(conn, "gspc1", "^GSPC", 1, 0.53, 0.52)
+    _seed(conn, "gspc30", "^GSPC", 30, 0.53, 0.52)
+    db.create_run(conn, "eur", "EURUSD=X", 1, "snap", "{}", "c", "sha", 1)       # un run de change sans placebo
+    with conn:
+        conn.execute("UPDATE run SET status = 'done'")
+    cover = {c["class"]: c for c in audit_placebo.coverage(conn)}
+    assert (cover["equities_us"]["runs"], cover["equities_us"]["with_placebo"], cover["equities_us"]["with_short_placebo"]) == (2, 2, 1)
+    assert (cover["fx"]["runs"], cover["fx"]["with_placebo"], cover["fx"]["with_short_placebo"]) == (1, 0, 0)
     conn.close()
 
 

@@ -55,6 +55,7 @@ def setup(conn, tmp_path, monkeypatch):
     chal_config = _config("new")
     chal_tid = _run_with_best(conn, tmp_path, "chal_run", chal_config, "ChalAlgo", "-1 hours")
     scores = {"ChampAlgo": 0.55, "ChalAlgo": 0.60}
+    aucs: dict[str, float] = {}      # AUC_dir per algo, absent unless a test sets it (an evaluation without p_up has none)
     calls = []
 
     def fake_evaluate(conn_, snapshot_id, pool_builder, target_col, feature_pool, config, all_dates_full,
@@ -62,7 +63,10 @@ def setup(conn, tmp_path, monkeypatch):
         calls.append({"algo": best_cfg["algo"], "config": config, "pool_builder": pool_builder,
                       "n_wf": n_wf, "best_cfg": best_cfg})
         f1 = scores[best_cfg["algo"]]
-        return None if f1 is None else {"metrics": {"F1_dir": f1}, "n_test": 300}
+        if f1 is None:
+            return None
+        metrics = {"F1_dir": f1, **({"AUC_dir": aucs[best_cfg["algo"]]} if best_cfg["algo"] in aucs else {})}
+        return {"metrics": metrics, "n_test": 300}
 
     monkeypatch.setattr(engine, "_evaluate_holdout", fake_evaluate)
     monkeypatch.setattr(engine, "_FoldUniverse", lambda raw, target_col, config: "universe")
@@ -75,7 +79,7 @@ def setup(conn, tmp_path, monkeypatch):
     best_h = {"horizon": H, "regime": "GLOBAL", "N": 4, "sampler": "SMOTE", "algo": "ChalAlgo",
               "best_params": "{}"}
     return SimpleNamespace(st=st, best_h=best_h, champ_tid=champ_tid, chal_tid=chal_tid,
-                           scores=scores, calls=calls, conn=conn)
+                           scores=scores, aucs=aucs, calls=calls, conn=conn)
 
 
 def _duel(s):
@@ -121,6 +125,44 @@ def test_a_tie_keeps_the_champion(setup):
     setup.scores["ChalAlgo"] = 0.55
     assert _duel(setup)["decision"] == "champion_wins"
     assert champions.current(setup.conn, "^TEST", H)["run_id"] == "champ_run"
+
+
+def test_the_duel_follows_the_runs_criterion_auc_dir_when_both_sides_have_it(setup):
+    # The challenger has the better F1 but the worse AUC: the run ranks its candidates by AUC_dir (default), so the champion stays.
+    setup.aucs.update({"ChampAlgo": 0.58, "ChalAlgo": 0.54})
+
+    d = _duel(setup)
+
+    assert d["decision"] == "champion_wins"
+    assert (d["criterion"], d["challenger_score"], d["champion_score"]) == ("AUC_dir", 0.54, 0.58)
+    duel = json.loads(champions.list_archive(setup.conn, "^TEST", H)[0]["duel_json"])
+    assert duel["criterion"] == "AUC_dir" and duel["rule"].startswith("AUC_dir")
+
+
+def test_a_better_auc_takes_the_title_even_with_a_lower_f1(setup):
+    setup.scores.update({"ChampAlgo": 0.60, "ChalAlgo": 0.55})
+    setup.aucs.update({"ChampAlgo": 0.52, "ChalAlgo": 0.57})
+
+    assert _duel(setup)["decision"] == "challenger_wins"
+    assert champions.current(setup.conn, "^TEST", H)["run_id"] == "chal_run"
+
+
+def test_the_duel_falls_back_to_f1_when_one_side_has_no_auc(setup):
+    setup.aucs.update({"ChalAlgo": 0.40})            # the champion's replay carries no AUC_dir
+
+    d = _duel(setup)
+
+    assert (d["decision"], d["criterion"]) == ("challenger_wins", "F1_dir")
+
+
+def test_a_run_recorded_with_the_f1_criterion_keeps_judging_by_f1(setup):
+    setup.st.config = setup.st.config.model_copy(update={
+        "selection": setup.st.config.selection.model_copy(update={"criterion": "F1_dir"})})
+    setup.aucs.update({"ChampAlgo": 0.58, "ChalAlgo": 0.54})
+
+    d = _duel(setup)
+
+    assert (d["decision"], d["criterion"]) == ("challenger_wins", "F1_dir")
 
 
 def test_both_sides_are_scored_on_the_same_split_with_the_challengers_target_definition(setup):

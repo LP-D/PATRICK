@@ -2,7 +2,8 @@
 walk-forward run, once per exported horizon.
 
 Rule: the new run's model (challenger) replaces the model in title
-(champion) only if it scores a strictly better F1_dir on the SAME holdout,
+(champion) only if it scores a strictly better criterion -- `AUC_dir` since ADR 0013 (the criterion that ranks
+the candidates inside the run), `F1_dir` for a run recorded before it or when a side has no AUC -- on the SAME holdout,
 both configurations being retrained on the SAME pre-holdout data. The
 champion's exported model cannot be scored as-is: it was retrained on its
 whole history (`tracking/export.py`), which may overlap this holdout. Its
@@ -36,13 +37,37 @@ from patrick.validation import suspicion
 
 RULE = ("F1_dir strictly greater on the same holdout, both configurations retrained on the "
         "same pre-holdout data; tie -> the champion stays")
+RULE_BY_CRITERION = {
+    "F1_dir": RULE,
+    "AUC_dir": ("AUC_dir strictly greater on the same holdout (the criterion that ranks the candidates inside the run, ADR 0013), "
+                "both configurations retrained on the same pre-holdout data; tie -> the champion stays"),
+}
+
+
+def _metric(evaluation: dict | None, name: str) -> float | None:
+    if evaluation is None:
+        return None
+    value = evaluation.get("metrics", {}).get(name)
+    return None if value is None or math.isnan(value) else float(value)
 
 
 def _f1(evaluation: dict | None) -> float | None:
-    if evaluation is None:
-        return None
-    value = evaluation.get("metrics", {}).get("F1_dir")
-    return None if value is None or math.isnan(value) else float(value)
+    return _metric(evaluation, "F1_dir")
+
+
+def _duel_criterion(st) -> str:
+    """The criterion that ranks the candidates inside this run (`engine._criterion`: `selection.criterion` in walk-forward). `getattr`: a worker
+    started before the update keeps the old `engine` in memory but loads this module at the end of the run."""
+    criterion = getattr(engine, "_criterion", None)
+    return criterion(st.config) if criterion is not None else "F1_dir"
+
+
+def _judged_by(criterion: str, chal_eval: dict | None, champ_eval: dict | None) -> str:
+    """The metric the duel compares: the run's criterion when BOTH sides carry it (an evaluation without it, e.g. a model with no `p_up`,
+    cannot be compared on it), `F1_dir` otherwise -- the rule before ADR 0013."""
+    if criterion != "F1_dir" and _metric(chal_eval, criterion) is not None and _metric(champ_eval, criterion) is not None:
+        return criterion
+    return "F1_dir"
 
 
 def _champion_setup(st, champion: dict, horizon: int):
@@ -161,9 +186,14 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     if suspicion.f1_suspect(champ_f1):
         return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1)
 
-    challenger_wins = chal_f1 > champ_f1
+    judged_by = _judged_by(_duel_criterion(st), chal_eval, champ_eval)
+    chal_score, champ_score = _metric(chal_eval, judged_by), _metric(champ_eval, judged_by)
+    challenger_wins = chal_score > champ_score
     duel = {
-        "rule": RULE,
+        "rule": RULE_BY_CRITERION[judged_by],
+        "criterion": judged_by,
+        "challenger_score": chal_score,
+        "champion_score": champ_score,
         "holdout_start": str(st.all_dates_full[st.n_wf].date()),
         "holdout_end": str(st.all_dates_full[-1].date()),
         "data_snapshot": st.snapshot_id,
@@ -184,7 +214,7 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         champions.prune_run(st.conn, run_id)
         loser = run_id
     return {"decision": duel["winner"] + "_wins", "challenger_f1_dir": chal_f1, "champion_f1_dir": champ_f1,
-            "pruned_run": loser}
+            "criterion": judged_by, "challenger_score": chal_score, "champion_score": champ_score, "pruned_run": loser}
 
 
 def _restore_drift_reference(st, horizon: int) -> None:
@@ -221,7 +251,9 @@ def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_hor
             traceback.print_exc()
         d = decisions[horizon]
         scores = ""
-        if "champion_f1_dir" in d:
+        if "champion_score" in d:
+            scores = f" (challenger {d['criterion']}={d['challenger_score']:.4f} vs champion {d['champion_score']:.4f})"
+        elif "champion_f1_dir" in d:
             scores = f" (challenger F1_dir={d['challenger_f1_dir']:.4f} vs champion {d['champion_f1_dir']:.4f})"
         print(f"[CHAMPION] h={horizon}d: {d['decision']}{scores} [{time.time() - t_start:.0f}s]")
     return decisions

@@ -19,7 +19,21 @@ PANELS: dict[str, tuple[str, ...]] = {
     "controls": ("^GSPC", "^FCHI", "^GDAXI"),
 }
 PANELS["all"] = PANELS["asia"] + PANELS["controls"]
+# Les autres classes d'actifs (2026-11-02). Sur la base réelle, 113 runs seulement ont un placebo, presque tous à 10 jours et plus : aucun
+# pour les indices de volatilité, un seul pour le change (depuis la règle d'alignement 2), et le signal « jour même » se voit à 1-3 jours.
+PANELS.update({
+    "fx": ("EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCHF=X", "USDCAD=X"),
+    "futures": ("GC=F", "SI=F", "HG=F", "CL=F", "BZ=F", "NG=F"),
+    "us": ("^DJI", "^IXIC", "^RUT"),
+    "europe": ("^FTSE", "^STOXX50E", "^AEX", "^SSMI"),
+    "americas": ("^BVSP", "^MXX", "^GSPTSE"),
+    "crypto": ("BTC-USD", "ETH-USD"),
+    "volatility": ("^VIX", "^VXN"),
+})
+PANELS["every_class"] = tuple(dict.fromkeys(sum((PANELS[g] for g in (
+    "asia", "controls", "fx", "futures", "us", "europe", "americas", "crypto", "volatility")), ())))
 PANEL_HORIZONS = (1, 3)                    # 1 jour : là où l'écart est visible ; 3 jours : là où il a disparu
+SHORT_HORIZON = 3                          # « court » : l'effet du jour même s'y voit encore
 NAME_PREFIX = "placebo"
 
 
@@ -93,6 +107,23 @@ def report(conn: sqlite3.Connection, group: str | None = None) -> list[dict]:
                      "drop": None if real is None or lag is None else real - lag,
                      "verdict": placebo_verdict(entry["real"], entry["lag1"])})
     return sorted(rows, key=lambda r: (r["class"], r["target"], r["horizon"]))
+
+
+def coverage(conn: sqlite3.Connection) -> list[dict]:
+    """Par classe d'actifs : runs terminés, runs avec un placebo, et parmi eux ceux d'un horizon court (<= `SHORT_HORIZON`), là où un signal « jour
+    même » est visible. Une classe sans placebo court n'a pas été auditée : ses champions ne sont pas à croire sur parole."""
+    done: dict[str, int] = {}
+    for target, in conn.execute("SELECT target FROM run WHERE status = 'done'"):
+        cls = classify_asset_class(target)
+        done[cls] = done.get(cls, 0) + 1
+    covered: dict[str, int] = {}
+    short: dict[str, int] = {}
+    for row in report(conn):
+        covered[row["class"]] = covered.get(row["class"], 0) + 1
+        if row["horizon"] <= SHORT_HORIZON:
+            short[row["class"]] = short.get(row["class"], 0) + 1
+    return [{"class": cls, "runs": n, "with_placebo": covered.get(cls, 0), "with_short_placebo": short.get(cls, 0)}
+            for cls, n in sorted(done.items(), key=lambda kv: -kv[1])]
 
 
 def summarize(rows: list[dict]) -> list[dict]:
