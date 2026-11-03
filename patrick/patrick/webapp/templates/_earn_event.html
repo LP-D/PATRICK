@@ -1,0 +1,29 @@
+{# Fragment `/fragments/earn-event` : trajectoire autour de J0, rendement anormal, volume, décomposition overnight / intraday. #}
+{% if not d %}
+<p class="banner banner-warning" role="note">{{ t('earn_e_notfound') }}</p>
+{% else %}
+{% set p = d.payload %}
+<dl class="earn-kv">
+    <dt>{{ t('earn_e_day0') }}</dt><dd>{{ d.day0 }}</dd>
+    <dt>{{ t('earn_h_timing') }}</dt><dd>{{ p.timing }} · {{ p.timing_source }}{% if p.uncertain %} · <span class="status-badge status-warning">{{ t('earn_flag_timing_uncertain') }}</span>{% endif %}{% if p.timing_suspect %} <span class="status-badge status-warning">{{ t('earn_e_suspect') }}</span>{% endif %}</dd>
+    <dt>{{ t('earn_e_window') }}</dt><dd>[{{ d.reaction.window[0] }}, {{ d.reaction.window[1] }}]</dd>
+    <dt>{{ t('earn_h_car') }}</dt><dd>{{ earn_fmt(d.reaction.car, 'pct') }}</dd>
+    <dt>{{ t('earn_h_raw') }}</dt><dd>{{ earn_fmt(d.reaction.raw, 'pct') }}</dd>
+    <dt>{{ t('earn_h_z') }}</dt><dd>{{ earn_fmt(d.reaction.z, 'num2') }}</dd>
+    <dt>{{ t('earn_e_model') }}</dt><dd>{{ p.model_used }}{% if p.model_fallback %} <span class="status-badge status-warning">{{ t('earn_e_fallback', m=p.model_req) }}</span>{% endif %} · σ = {{ '%.2f' | format(p.sigma * 100) }} % · {{ t('earn_e_nest', n=p.n_est) }}</dd>
+    <dt>{{ t('earn_h_surprise') }}</dt><dd>{{ earn_fmt((p.surprise_pct / 100) if p.surprise_pct is not none else none, 'pct') }}</dd>
+    {% for k, v in d.bhar.items() %}<dt>BHAR [+{{ k.replace('_', ', +') }}]</dt><dd>{{ earn_fmt(v, 'pct') }}</dd>{% endfor %}
+</dl>
+<section class="card"><h2>{{ t('earn_e_car_path') }}</h2>
+{{ earn_line({'title': t('earn_e_car_path'), 'x': d.rel, 'series': [{'name': t('earn_e_car'), 'y': d.car_path}], 'x_label': t('earn_x_rel'), 'y_kind': 'pct', 'band': none}) }}
+</section>
+<section class="card"><h2>{{ t('earn_e_ar') }}</h2>
+{{ earn_line({'title': t('earn_e_ar'), 'x': d.rel, 'series': [{'name': t('earn_e_ar'), 'y': d.ar}, {'name': t('earn_e_ret'), 'y': d.ret}], 'x_label': t('earn_x_rel'), 'y_kind': 'pct', 'band': none}) }}
+</section>
+<section class="card"><h2>{{ t('earn_e_vol') }}</h2>
+{{ earn_line({'title': t('earn_e_vol'), 'x': d.rel, 'series': [{'name': t('earn_e_vol'), 'y': d.vol_ratio}], 'x_label': t('earn_x_rel'), 'y_kind': 'num2', 'band': none}) }}
+</section>
+<section class="card"><h2>{{ t('earn_e_split') }}</h2>
+{{ earn_line({'title': t('earn_e_split'), 'x': d.rel, 'series': [{'name': t('earn_h_on'), 'y': d.on}, {'name': t('earn_h_id'), 'y': d.id}], 'x_label': t('earn_x_rel'), 'y_kind': 'pct', 'band': none}) }}
+</section>
+{% endif %}

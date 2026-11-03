@@ -9,6 +9,7 @@ Etapes, dans l'ordre :
   2. mise a jour  : `python -m patrick.desktop update` (avance rapide sur la branche `stable`, sautee si un entrainement tourne).
   3. actualites   : `patrick news refresh` (une minute ou deux) ; AVANT les predictions, qui durent des heures (la tache etait coupee a 6 h,
                     sans limite depuis le 27/10) : placee apres, cette etape n'avait jamais tourne (journal du 26-27/10).
+  3 bis. resultats : `patrick earnings snapshot` (instantane du jour du consensus des titres dont l'annonce approche) ; court.
   4. predictions utiles aux fonds : `daily_predict.py --funds-only` = les modeles dont un fonds a besoin (retenus par un pilote automatique
                     ou suivis par une regle) puis le cycle du pilote automatique (positions, ordres). Environ 3 h.
   5. sauvegarde   : `scripts/backup_db.py` (copie de la base).
@@ -102,6 +103,9 @@ Wait-Network
 Step "mise a jour"  @("-m", "patrick.desktop", "update")
 # Les nouvelles d'abord : courtes, alors que les predictions durent des heures.
 Step "actualites"   @("-m", "patrick.cli", "news", "refresh")
+# Instantane du jour du consensus, des vendeurs a decouvert et des options des titres dont l'annonce approche : le seul moyen d'avoir un historique
+# date avec des sources gratuites (page /resultats). Court ; sans titre suivi, il ne fait rien.
+Step "resultats instantanes" @("-m", "patrick.cli", "earnings", "snapshot")
 # Les ~2 000 predictions de tous les modeles durent une douzaine d'heures : d'abord celles dont les fonds ont besoin et leur cycle,
 # puis sauvegarde et synchro, et seulement apres le reste (une nuit interrompue ne laisse plus les fonds sans cycle).
 $Predict = Join-Path $RepoDir "scripts\daily_predict.py"

@@ -1,0 +1,13 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import help_icon, lazy_block %}
+{% block title %}PATRICK — {{ t('earn_t_title') }} {{ symbol }}{% endblock %}
+
+{# Fiche titre : le cadre est immédiat, l'historique et les graphiques arrivent par fragment. #}
+{% block content %}
+<h1 class="page-title">{{ t('earn_t_title') }} · {{ symbol }}</h1>
+<p class="hint"><a href="/resultats">{{ t('earn_back') }}</a> · <a href="/targets/{{ symbol | urlencode }}">{{ t('earn_t_asset_page') }}</a></p>
+<div id="earn-title-body" data-symbol="{{ symbol }}">
+{{ lazy_block('/fragments/earn-title?symbol=' ~ (symbol | urlencode), 8, t('sb_loading'), t('lazy_retry')) }}
+</div>
+<script src="{{ asset('earnings.js') }}" defer></script>
+{% endblock %}

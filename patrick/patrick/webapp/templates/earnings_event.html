@@ -1,0 +1,9 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import lazy_block %}
+{% block title %}PATRICK — {{ t('earn_e_title') }} {{ symbol }} {{ day }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ t('earn_e_title') }} · {{ symbol }} · {{ day }}</h1>
+<p class="hint"><a href="/resultats/titre/{{ symbol | urlencode }}">{{ t('earn_e_back') }}</a></p>
+{{ lazy_block('/fragments/earn-event?symbol=' ~ (symbol | urlencode) ~ '&day=' ~ day, 8, t('sb_loading'), t('lazy_retry')) }}
+{% endblock %}

@@ -115,6 +115,7 @@ Sous `patrick/patrick/` :
 | `benchmark/` | Mesure et non-régression des performances (`python -m patrick.benchmark`). |
 | `live_refresh.py`, `keep_awake.py`, `resource_budget.py` | Actualisation des prédictions live, veille Windows pendant un run, plafond CPU/RAM des étapes parallèles. |
 | `text/` | Analyse textuelle des news : magasin point-in-time (`store.py`, migration 0036), sources RSS/GDELT/Yahoo (`sources.py`), lexique, ton des banques centrales, entités, nouveauté, événements, thèmes (`lexicon.py`…`topics.py`), agrégation par actif et horizon, garde-fou LLM (`aggregate.py`, `llm_guard.py`), orchestration (`service.py`) ; page `/news`, commande `patrick news`. Aucune variable textuelle n'entre encore dans l'entraînement. |
+| `earnings/` | Événements de résultats : parseur de newsletter, résolution nom → ligne (alias, Yahoo, confirmation), calendrier BMO/AMC et jour de réaction J0, event study (modèles marché / ajusté / facteurs / secteur, AR, CAR, BHAR, overnight/intraday, liquidité), tests (BMP, Patell, Kolari-Pynnönen, Corrado, signes, bootstrap par blocs), 54 cartes d'études `studies/` cachées par hash, registre FDR, modèle prédictif en panel, score composite, instantanés quotidiens. Tables `earn_*` créées par `store.ensure_schema` (jamais `db.migrate()`) ; page `/resultats`, commande `patrick earnings`, ADR 0016, `docs/ops/evenements-resultats.md`. |
 | `tracking/black_litterman.py` | Black-Litterman v2 sur P(hausse) calibrées (`prediction.p_up_calibrated`, migration 0037) ; section de `/portfolio`. |
 | `webapp/security.py` | Garde globale des requêtes : hôte local obligatoire, requêtes venues d'un autre site refusées (CSRF, DNS rebinding). |
 
@@ -175,7 +176,7 @@ FastAPI + Jinja2, design system **v3 « Cockpit Pro »**
   lancement : machine learning, deep learning, reinforcement learning ;
   `/launch` redirige vers `/ml`), `/exploration` (études statistiques entre
   actifs), `/runs`, `/runs/{id}`, `/targets/{ticker}`, `/universe`,
-  `/news` (flux de nouvelles point-in-time, sentiment par actif), `/commodities`, `/macro` (stats par actif, calcul côté client via
+  `/news` (flux de nouvelles point-in-time, sentiment par actif), `/resultats` (événements de résultats : newsletter, vue semaine, bibliothèque d'études), `/commodities`, `/macro` (stats par actif, calcul côté client via
   `asset_stats.js`/`/api/asset-stats/{symbol}`), `/predictions` (vue
   d'ensemble cible×horizon), `/simulate` (ticket d'ordres) et `/fonds`. Le journal et les snapshots
   Phase 9 restent accessibles via API, sans page de navigation dédiée.

@@ -1,0 +1,42 @@
+{# Fragment `/fragments/earn-study` : résultat d'une carte. Chaque libellé venu de l'étude passe par l'échappement automatique. #}
+{% if res.status == 'error' %}
+<p class="banner banner-error" role="alert">{{ t('earn_study_error') }} {{ res.reason }}</p>
+{% elif res.status == 'unavailable' %}
+<p class="banner banner-warning" role="note"><strong>{{ t('earn_study_unavailable') }}</strong> {{ res.reason }}</p>
+{% elif res.status == 'insufficient' %}
+<p class="banner banner-warning" role="note">{{ res.reason }}</p>
+{% else %}
+<div class="earn-meta">
+    <span class="status-badge status-neutral">N = {{ res.n }}</span>
+    {% if res.reliability %}<span class="status-badge status-{{ 'ok' if res.reliability.level in ['bon', 'moyen'] else 'warning' }}" title="{{ t('earn_rel_title', score=res.reliability.score, se=res.reliability.se_rel) }}">{{ t('earn_rel_label') }} : {{ t('earn_level_' ~ res.reliability.level) }}</span>{% endif %}
+    {% for f in res.flags %}<span class="status-badge status-warning">{{ f }}</span>{% endfor %}
+    <span class="hint">{% if res.cached %}{{ t('earn_study_cached', at=res.computed_at) }}{% else %}{{ t('earn_study_fresh', at=res.computed_at) }}{% endif %}</span>
+</div>
+{% for b in res.blocks %}
+    {% if b.type == 'table' %}
+    <h4>{{ b.title }}</h4>
+    <div class="table-wrap"><table class="data-table earn-study-table">
+        <thead><tr>{% for c in b.columns %}<th{% if b.kinds[loop.index0] != 'str' %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in b.rows %}
+        <tr{% if b.n_col is not none and row[b.n_col] is number and row[b.n_col] < 8 %} class="earn-small-n" title="{{ t('earn_small_n') }}"{% endif %}>
+            {% for cell in row %}<td{% if b.kinds[loop.index0] != 'str' %} class="num"{% endif %}>{{ earn_fmt(cell, b.kinds[loop.index0]) }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% if b.note %}<p class="hint">{{ b.note }}</p>{% endif %}
+    {% elif b.type == 'kv' %}
+    <h4>{{ b.title }}</h4>
+    <dl class="earn-kv">{% for it in b['items'] %}<dt>{{ it.label }}</dt><dd>{{ earn_fmt(it.value, it.kind) }}</dd>{% endfor %}</dl>
+    {% elif b.type == 'line' %}
+    <h4>{{ b.title }}</h4>
+    {{ earn_line(b) }}
+    {% elif b.type == 'bars' %}
+    <h4>{{ b.title }}</h4>
+    {{ earn_bars(b) }}
+    {% elif b.type == 'note' %}
+    <p class="banner banner-{{ 'warning' if b.level == 'warning' else 'info' }}" role="note">{{ b.text }}</p>
+    {% endif %}
+{% endfor %}
+{% endif %}

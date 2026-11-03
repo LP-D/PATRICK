@@ -61,6 +61,7 @@ from patrick.webapp import (
     asset_stats,
     asset_view,
     data_routes,
+    earnings_routes,
     exploration_routes,
     forms,
     forms_rl,
@@ -2179,6 +2180,9 @@ exploration_routes.register(app, templates, lambda request: _i18n_context(reques
 
 # Page News (/news) et API /api/news/* : flux de nouvelles point-in-time, sentiment par actif (patrick/text/).
 news_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Résultats (/resultats) et API /api/earnings/* : événements de résultats, event study et bibliothèque d'études (patrick/earnings/).
+earnings_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Reinforcement learning (/rl) et API /api/rl/* : cadrage, lancement et lecture des runs RL (patrick/rl/).
 rl_routes.register(app, templates, lambda request: _i18n_context(request))

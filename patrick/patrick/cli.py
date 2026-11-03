@@ -40,6 +40,11 @@ data_app = typer.Typer(help="Racine de données de ce PC (magasin, modèles, cac
 app.add_typer(data_app, name="data")
 news_app = typer.Typer(help="Nouvelles : collecte point-in-time, notes et rattachement aux actifs (jamais d'entraînement).")
 app.add_typer(news_app, name="news")
+from patrick.earnings.cli import (
+    app as earnings_app,
+)
+
+app.add_typer(earnings_app, name="earnings")
 app.add_typer(storage_app, name="storage")
 
 MIN_HISTORY_YEARS_OPTION = typer.Option(

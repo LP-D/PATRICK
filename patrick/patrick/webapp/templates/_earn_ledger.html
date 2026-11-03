@@ -1,0 +1,16 @@
+{# Fragment `/fragments/earn-ledger` : toutes les p-values des cartes calculées, corrigées par Benjamini-Hochberg. #}
+{% if not ledger.n_tested %}
+<p class="hint">{{ t('earn_ledger_empty') }}</p>
+{% else %}
+<p>{{ t('earn_ledger_summary', n=ledger.n_tested, raw=ledger.n_raw, bh=ledger.n_bh, alpha=('%.0f' | format(ledger.alpha * 100))) }}</p>
+<div class="table-wrap"><table class="data-table">
+    <thead><tr><th>{{ t('earn_ledger_test') }}</th><th class="num">{{ t('earn_ledger_p') }}</th><th class="num">{{ t('earn_ledger_q') }}</th><th>{{ t('earn_ledger_survives') }}</th></tr></thead>
+    <tbody>
+    {% for r in ledger.rows[:80] %}
+    <tr class="{{ 'earn-survives' if r.survives else '' }}"><td>{{ r.key }}</td><td class="num">{{ earn_fmt(r.p, 'p') }}</td><td class="num">{{ earn_fmt(r.q, 'p') }}</td>
+        <td>{% if r.survives %}<span class="status-badge status-ok">{{ t('earn_ledger_yes') }}</span>{% elif r.raw %}<span class="status-badge status-warning">{{ t('earn_ledger_noise') }}</span>{% else %}—{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+</table></div>
+<p class="hint">{{ t('earn_ledger_note') }}</p>
+{% endif %}

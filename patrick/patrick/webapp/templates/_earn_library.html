@@ -1,0 +1,37 @@
+{# Fragment `/fragments/earn-library` : une carte par étude, regroupées par thème. Activation et réglages côté navigateur ; calcul au clic. #}
+<p class="hint">{{ t('earn_lib_scope_n', n=n_scope) }}</p>
+{% for g, cards in by_group.items() if cards %}
+<details class="adv earn-group" data-group="{{ g }}">
+    <summary>{{ t('earn_g_' ~ g) }} <span class="hint">({{ cards | length }})</span></summary>
+    {% for st in cards %}
+    <article class="earn-card" data-study="{{ st.id }}" data-default-on="{{ 1 if st.default_on else 0 }}">
+        <header class="earn-card-head">
+            <label class="earn-toggle"><input type="checkbox" class="earn-enable" aria-label="{{ t('earn_card_enable') }} {{ st.title }}" checked>
+                <strong>{{ st.title }}</strong></label>
+            {% if st.id in done %}<span class="status-badge status-ok">{{ t('earn_card_cached') }}</span>{% endif %}
+            {% if st.heavy %}<span class="status-badge status-neutral">{{ t('earn_card_heavy') }}</span>{% endif %}
+            {% for need in st.needs %}<span class="status-badge status-neutral">{{ t('earn_need_' ~ need) }}</span>{% endfor %}
+        </header>
+        <p class="hint">{{ st.blurb }}</p>
+        {% if st.params %}
+        <div class="earn-params">
+            {% for pr in st.params %}
+            <label>{{ pr.label }}
+                {% if pr.kind == 'choice' %}
+                <select data-param="{{ pr.key }}">{% for c in pr.choices %}<option value="{{ c }}"{% if c == pr.default %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+                {% elif pr.kind == 'bool' %}
+                <input type="checkbox" data-param="{{ pr.key }}"{% if pr.default %} checked{% endif %}>
+                {% else %}
+                <input type="number" data-param="{{ pr.key }}" value="{{ pr.default }}"{% if pr.lo is not none %} min="{{ pr.lo }}"{% endif %}{% if pr.hi is not none %} max="{{ pr.hi }}"{% endif %}{% if pr.kind == 'float' %} step="any"{% endif %}>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <p class="earn-row"><button type="button" class="btn earn-run" data-url="/fragments/earn-study?study={{ st.id }}&amp;scope={{ scope | urlencode }}{% if batch %}&amp;batch={{ batch }}{% endif %}">{{ t('earn_card_compute') }}</button>
+            <button type="button" class="btn earn-force" hidden>{{ t('earn_card_recompute') }}</button></p>
+        <div class="earn-result" aria-live="polite"></div>
+    </article>
+    {% endfor %}
+</details>
+{% endfor %}

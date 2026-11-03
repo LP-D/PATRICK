@@ -1,0 +1,30 @@
+{# Fragment `/fragments/earn-week` : événements du lot classés par amplitude attendue, avec drapeaux et lien vers la fiche. #}
+{% if not rows %}
+<p class="hint">{{ t('earn_empty_week') }}</p>
+{% else %}
+<p class="hint">{{ t('earn_week_hint') }}</p>
+<div class="table-wrap"><table class="data-table earn-week-table">
+    <thead><tr>
+        <th>{{ t('earn_w_when') }}</th><th>{{ t('earn_w_title') }}</th><th class="num">{{ t('earn_w_hist') }}</th><th class="num">{{ t('earn_w_expected') }}</th>
+        <th class="num">{{ t('earn_w_range') }}</th><th class="num">{{ t('earn_w_up') }}</th><th>{{ t('earn_w_last') }}</th><th class="num">{{ t('earn_w_implied') }}</th>
+        <th>{{ t('earn_w_rel') }}</th><th>{{ t('earn_w_flags') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td>{{ r.ann_date }}<br><span class="status-badge {% if 'timing_uncertain' in r.flags %}status-warning{% else %}status-neutral{% endif %}" title="{{ r.timing_reason }}">{{ r.timing }}</span></td>
+        <td><a href="/resultats/titre/{{ r.symbol | urlencode }}">{{ r.name }}</a><br><span class="hint">{{ r.symbol }}{% if r.adr_symbol %} · {{ r.adr_symbol }}{% endif %} · {{ r.sector }}</span></td>
+        <td class="num">{{ r.hist.n }}</td>
+        <td class="num">{% if r.expected_abs is not none %}{{ '%.2f' | format(r.expected_abs * 100) }} %{% else %}—{% endif %}{% if r.expected_raw is not none and r.expected_abs is not none and r.hist.n < cfg.min_events * 2 %}<br><span class="hint">{{ t('earn_w_raw', v=('%.2f' | format(r.expected_raw * 100))) }}</span>{% endif %}</td>
+        <td class="num">{% if r.hist.n and r.hist.q10 is not none %}{{ '%.1f' | format(r.hist.q10 * 100) }} – {{ '%.1f' | format(r.hist.q90 * 100) }} %{% else %}—{% endif %}</td>
+        <td class="num">{% if r.hist.n %}{{ '%.0f' | format(r.hist.p_up * 100) }} %{% else %}—{% endif %}</td>
+        <td>{% if r.hist.n %}{{ earn_spark(r.hist.last) }}{% else %}—{% endif %}</td>
+        <td class="num">{% if r.implied is not none %}{{ '%.1f' | format(r.implied * 100) }} %{% else %}—{% endif %}</td>
+        <td>{% if r.hist.n %}<span class="status-badge status-{{ 'ok' if r.hist.reliability.level in ['bon', 'moyen'] else 'warning' }}" title="{{ r.hist.reliability.score }}">{{ t('earn_level_' ~ r.hist.reliability.level) }}</span>{% else %}—{% endif %}</td>
+        <td>{% for f in r.flags %}<span class="status-badge status-warning">{{ t('earn_flag_' ~ f) }}</span> {% endfor %}{% for n in r.notes %}<span class="status-badge status-neutral">{{ n }}</span> {% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table></div>
+<p class="hint">{{ t('earn_week_note') }}</p>
+{% endif %}
