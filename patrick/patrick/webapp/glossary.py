@@ -759,3 +759,11 @@ from patrick.webapp import glossary_text as _glossary_text
 GLOSSARY.update(_glossary_text.GLOSSARY_TEXT)
 TERM_LABEL_KEYS.update(_glossary_text.LABELS)
 _glossary_extra.TERM_CATEGORY.update(_glossary_text.CATEGORY)
+
+
+# Événements de résultats (webapp/glossary_earnings.py).
+from patrick.webapp import glossary_earnings as _glossary_earnings
+
+GLOSSARY.update(_glossary_earnings.GLOSSARY_EARNINGS)
+TERM_LABEL_KEYS.update(_glossary_earnings.LABELS)
+_glossary_extra.TERM_CATEGORY.update({k: "metrics" for k in _glossary_earnings.GLOSSARY_EARNINGS})

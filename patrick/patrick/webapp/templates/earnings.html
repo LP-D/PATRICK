@@ -1,0 +1,117 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import help_icon, metric, lazy_block %}
+{% block title %}PATRICK — {{ t('earn_title') }}{% endblock %}
+
+{# Page /resultats : le cadre (titre, chiffres de tête, zone de collage) s'affiche tout de suite ; la confirmation, la vue semaine, la
+   bibliothèque et le verdict FDR arrivent par fragments (`static/lazy.js`), chaque carte d'étude seulement au clic. #}
+{% block content %}
+<h1 class="page-title">{{ t('earn_title') }}
+    {{ help_icon('earn_event_study', t('gl_t_earn_event_study'), t('glossary_open_aria', term=t('gl_t_earn_event_study'))) }}
+</h1>
+<p class="hint">{{ t('earn_sub') }}</p>
+
+<div class="metric-grid">
+{{ metric(t('earn_k_events'), summary.n_events, t('earn_k_events_rel', n=summary.n_symbols), "neutral") }}
+{{ metric(t('earn_k_batches'), summary.n_batches, '', "neutral") }}
+{{ metric(t('earn_k_snap'), summary.n_snapshots, t('earn_k_snap_rel'), "neutral") }}
+</div>
+
+<section class="card">
+<h2>{{ t('earn_paste_title') }}</h2>
+<form id="earn-paste" autocomplete="off">
+    <label for="earn-text">{{ t('earn_paste_label') }}</label>
+    <textarea id="earn-text" name="text" rows="8" class="earn-textarea" placeholder="{{ t('earn_paste_ph') }}" maxlength="60000"></textarea>
+    <p class="earn-row">
+        <label for="earn-anchor">{{ t('earn_anchor') }}</label>
+        <input type="date" id="earn-anchor" name="anchor" value="{{ anchor }}">
+        <button type="submit" class="btn" id="earn-parse">{{ t('earn_parse') }}</button>
+        <span id="earn-parse-status" role="status" aria-live="polite" data-keep></span>
+    </p>
+    <p class="hint">{{ t('earn_anchor_hint') }}</p>
+</form>
+{% if batches %}
+<details class="adv"><summary>{{ t('earn_batches') }}</summary>
+<ul class="earn-batches">
+{% for b in batches %}
+    <li>{% if batch and b.batch_id == batch.batch_id %}<strong>{% endif %}<a href="/resultats?batch={{ b.batch_id }}">{{ t('earn_batch_open', id=b.batch_id, monday=b.anchor_monday, n=b.n_items, status=t('earn_status_' ~ b.status)) }}</a>{% if batch and b.batch_id == batch.batch_id %}</strong>{% endif %}</li>
+{% endfor %}
+</ul>
+</details>
+{% endif %}
+</section>
+
+{% if batch %}
+<section class="card" id="earn-batch" data-batch="{{ batch.batch_id }}" data-status="{{ batch.status }}">
+{% if batch.status == 'pending' %}
+    {{ lazy_block('/fragments/earn-confirm?batch=' ~ batch.batch_id, 6, t('sb_loading'), t('lazy_retry')) }}
+{% else %}
+    <h2>{{ t('earn_week_title') }} · {{ batch.anchor_monday }}
+        {{ help_icon('earn_week_view', t('gl_t_earn_week_view'), t('glossary_open_aria', term=t('gl_t_earn_week_view'))) }}
+    </h2>
+    {{ lazy_block('/fragments/earn-week?batch=' ~ batch.batch_id, 6, t('sb_loading'), t('lazy_retry')) }}
+{% endif %}
+<p><span id="earn-process-status" role="status" aria-live="polite" data-keep></span></p>
+</section>
+{% endif %}
+
+<section class="card">
+<h2>{{ t('earn_snapshot_title') }}</h2>
+<p class="hint">{{ t('earn_snapshot_hint') }}</p>
+<p><button type="button" class="btn" id="earn-snapshot">{{ t('earn_snapshot_btn') }}</button> <span id="earn-snapshot-status" role="status" aria-live="polite" data-keep></span></p>
+</section>
+
+<section class="card" id="earn-config-card">
+<h2>{{ t('earn_cfg_title') }}</h2>
+<form id="earn-config" class="earn-grid" autocomplete="off">
+    <label>{{ t('earn_cfg_model') }}
+        <select name="model">{% for m in models %}<option value="{{ m }}"{% if cfg.model == m %} selected{% endif %}>{{ t('earn_model_' ~ m) }}</option>{% endfor %}</select></label>
+    <label>{{ t('earn_cfg_est') }}
+        <span class="earn-pair"><input type="number" name="est_lo" value="{{ cfg.est_window[0] }}" min="-400" max="-20"> <input type="number" name="est_hi" value="{{ cfg.est_window[1] }}" min="-390" max="-11"></span></label>
+    <label>{{ t('earn_cfg_excl') }}<input type="number" name="est_exclude" value="{{ cfg.est_exclude }}" min="0" max="10"></label>
+    <label>{{ t('earn_cfg_react') }}
+        <select name="reaction">{% for r in ['auto', 'd0', 'd01'] %}<option value="{{ r }}"{% if cfg.reaction == r %} selected{% endif %}>{{ t('earn_react_' ~ r) }}</option>{% endfor %}</select></label>
+    <label>{{ t('earn_cfg_runup') }}
+        <span class="earn-pair"><input type="number" name="run_lo" value="{{ cfg.run_up[0] }}" min="-10" max="-1"> <input type="number" name="run_hi" value="{{ cfg.run_up[1] }}" min="-10" max="-1"></span></label>
+    <label>{{ t('earn_cfg_post') }}
+        <span class="earn-pair"><input type="number" name="post_lo" value="{{ cfg.short_post[0] }}" min="1" max="60"> <input type="number" name="post_hi" value="{{ cfg.short_post[1] }}" min="1" max="60"></span></label>
+    <label>{{ t('earn_cfg_drift') }}<input type="text" name="drift" value="{% for w in cfg.drift_windows %}{{ w[0] }}-{{ w[1] }}{% if not loop.last %}, {% endif %}{% endfor %}" pattern="[0-9, \-]+"></label>
+    <label>{{ t('earn_cfg_test') }}
+        <select name="test">{% for x in tests %}<option value="{{ x }}"{% if cfg.test == x %} selected{% endif %}>{{ t('earn_test_' ~ x) }}</option>{% endfor %}</select></label>
+    <label>{{ t('earn_cfg_wins') }}<input type="number" name="winsorize" value="{{ cfg.winsorize }}" min="0" max="0.24" step="0.01"></label>
+    <label>{{ t('earn_cfg_minev') }}<input type="number" name="min_events" value="{{ cfg.min_events }}" min="3" max="60"></label>
+    <label>{{ t('earn_cfg_big') }}<input type="number" name="big_move_sigma" value="{{ cfg.big_move_sigma }}" min="1" max="8" step="0.5"></label>
+    <p class="earn-row"><button type="submit" class="btn">{{ t('earn_cfg_save') }}</button>
+        <button type="button" class="btn" id="earn-recompute" hidden>{{ t('earn_recompute') }}</button>
+        <span id="earn-config-status" role="status" aria-live="polite" data-keep></span></p>
+</form>
+</section>
+
+<section class="card" id="earn-library-card" data-scope="{{ scope }}" data-batch="{{ batch.batch_id if batch else '' }}">
+<h2>{{ t('earn_lib_title') }}</h2>
+<p class="hint">{{ t('earn_lib_hint') }}</p>
+<p class="earn-row"><label for="earn-scope">{{ t('earn_scope') }}</label>
+    <select id="earn-scope">
+        <option value="all"{% if scope == 'all' %} selected{% endif %}>{{ t('earn_scope_all') }}</option>
+        {% if batch %}<option value="batch:{{ batch.batch_id }}"{% if scope.startswith('batch:') %} selected{% endif %}>{{ t('earn_scope_batch') }}</option>{% endif %}
+        {% for s in sectors %}<option value="sector:{{ s }}"{% if scope == 'sector:' ~ s %} selected{% endif %}>{{ t('earn_scope_sector', s=s) }}</option>{% endfor %}
+    </select>
+    <input type="text" id="earn-scope-symbol" placeholder="{{ t('earn_scope_symbol_ph') }}" pattern="[A-Za-z0-9.^=\-_]{1,20}" aria-label="{{ t('earn_scope_symbol') }}">
+    <button type="button" class="btn" id="earn-compute-all">{{ t('earn_compute_all') }}</button>
+    <span id="earn-compute-status" role="status" aria-live="polite" data-keep></span></p>
+<div id="earn-library">{{ lazy_block('/fragments/earn-library?scope=' ~ (scope | urlencode) ~ ('&batch=' ~ batch.batch_id if batch else ''), 6, t('sb_loading'), t('lazy_retry')) }}</div>
+</section>
+
+<section class="card">
+<h2>{{ t('earn_ledger_title') }}
+    {{ help_icon('earn_fdr', t('gl_t_earn_fdr'), t('glossary_open_aria', term=t('gl_t_earn_fdr'))) }}
+</h2>
+<p><button type="button" class="btn" id="earn-ledger-run" data-url="/fragments/earn-ledger?scope={{ scope | urlencode }}{% if batch %}&amp;batch={{ batch.batch_id }}{% endif %}">{{ t('earn_ledger_btn') }}</button></p>
+<div id="earn-ledger" aria-live="polite"></div>
+</section>
+
+<section class="card">
+<h2>{{ t('earn_method_title') }}</h2>
+<p class="hint">{{ t('earn_method') }}</p>
+</section>
+<script src="{{ asset('earnings.js') }}" defer></script>
+{% endblock %}

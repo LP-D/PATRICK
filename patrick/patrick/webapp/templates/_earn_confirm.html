@@ -1,0 +1,34 @@
+{# Fragment `/fragments/earn-confirm` : écran de confirmation éditable. Rien ne se calcule avant le clic sur « Confirmer ». #}
+<h2>{{ t('earn_confirm_title') }}</h2>
+<p class="hint">{{ t('earn_confirm_hint') }}</p>
+<form id="earn-confirm" data-batch="{{ batch.batch_id }}" autocomplete="off">
+<div class="table-wrap"><table class="data-table earn-confirm-table">
+    <thead><tr>
+        <th>{{ t('earn_col_in') }}</th><th>{{ t('earn_col_day') }}</th><th>{{ t('earn_col_name') }}</th><th>{{ t('earn_col_symbol') }}</th>
+        <th>{{ t('earn_col_adr') }}</th><th>{{ t('earn_col_timing') }}</th><th>{{ t('earn_col_check') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for it in items %}
+    <tr data-item="{{ it.item_id }}" class="{% if it.warn %}earn-row-warn{% endif %}">
+        <td><input type="checkbox" name="include" {% if it.symbol %}checked{% endif %} aria-label="{{ t('earn_col_in') }} {{ it.name }}"></td>
+        <td>{{ it.plan_date }}</td>
+        <td>{{ it.name }}{% if it.hint %} <span class="hint">({{ it.hint }})</span>{% endif %}</td>
+        <td>
+            <input type="text" name="symbol" value="{{ it.symbol or '' }}" list="earn-cand-{{ it.item_id }}" pattern="[A-Za-z0-9.^=\-_]{1,20}" required aria-label="{{ t('earn_col_symbol') }} {{ it.name }}">
+            <datalist id="earn-cand-{{ it.item_id }}">
+                {% for c in it.candidates %}<option value="{{ c.symbol }}">{{ c.name }} · {{ c.exchange }}{% if c.is_adr %} · ADR{% endif %}</option>{% endfor %}
+            </datalist>
+        </td>
+        <td><input type="text" name="adr_symbol" value="{{ it.adr_symbol or '' }}" pattern="[A-Za-z0-9.^=\-_]{0,20}" aria-label="{{ t('earn_col_adr') }} {{ it.name }}"></td>
+        <td>
+            <select name="timing" aria-label="{{ t('earn_col_timing') }} {{ it.name }}">
+                {% for opt in ['auto', 'BMO', 'AMC', 'DURING', 'UNKNOWN'] %}<option value="{{ opt }}"{% if (it.timing_override or 'auto') == opt %} selected{% endif %}>{{ t('earn_timing_' ~ opt | lower) }}</option>{% endfor %}
+            </select>
+        </td>
+        <td>{% for f in it.flag_view %}<span class="status-badge {{ 'status-warning' if f.warn else 'status-neutral' }}">{{ f.text }}</span> {% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table></div>
+<p class="earn-row"><button type="submit" class="btn btn-primary">{{ t('earn_confirm_go') }}</button></p>
+</form>

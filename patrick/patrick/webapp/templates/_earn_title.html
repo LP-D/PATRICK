@@ -1,0 +1,71 @@
+{% from "_components.html" import help_icon %}
+{# Fragment `/fragments/earn-title` : fiche d'un titre. #}
+{% set st = sheet.stats %}
+{% if not st.n %}
+<p class="banner banner-warning" role="note">{{ t('earn_t_none') }}</p>
+{% else %}
+<div class="metric-grid">
+    <div class="metric"><div class="metric-label">{{ t('earn_t_n') }}</div><div class="metric-value pk-mono">{{ st.n }}</div>
+        <div class="metric-reliability hint"><span class="status-badge status-{{ 'ok' if st.reliability.level in ['bon', 'moyen'] else 'warning' }}">{{ t('earn_rel_label') }} : {{ t('earn_level_' ~ st.reliability.level) }}</span></div></div>
+    <div class="metric"><div class="metric-label">{{ t('earn_t_mean_abs') }}</div><div class="metric-value pk-mono">{{ '%.2f' | format(st.mean_abs * 100) }} %</div>
+        <div class="metric-reliability hint">{% if st.q10 is not none %}{{ t('earn_t_range', lo=('%.1f' | format(st.q10 * 100)), hi=('%.1f' | format(st.q90 * 100))) }}{% endif %}</div></div>
+    <div class="metric"><div class="metric-label">{{ t('earn_t_pup') }}</div><div class="metric-value pk-mono">{{ '%.0f' | format(st.p_up * 100) }} %</div>
+        <div class="metric-reliability hint">{{ t('earn_t_sigma', v=('%.2f' | format(st.sigma * 100))) }}</div></div>
+    {% if st.beat_rate == st.beat_rate %}<div class="metric"><div class="metric-label">{{ t('earn_t_beat') }}</div><div class="metric-value pk-mono">{{ '%.0f' | format(st.beat_rate * 100) }} %</div></div>{% endif %}
+</div>
+{% if st.n < cfg.min_events %}<p class="banner banner-warning" role="note">{{ t('earn_t_small_n', n=st.n, m=cfg.min_events) }}</p>{% endif %}
+{% endif %}
+
+{% if sheet.instrument %}<p class="hint">{{ sheet.instrument.get('longName') or sheet.symbol }} · {{ sheet.instrument.get('sector') or '—' }} · {{ sheet.instrument.get('industry') or '—' }} · {{ sheet.instrument.get('currency') or '' }}{% if sheet.adr %} · {{ t('earn_t_adr', s=sheet.adr) }}{% endif %}</p>{% endif %}
+
+{% if sheet.upcoming %}
+<section class="card"><h2>{{ t('earn_t_upcoming') }}</h2>
+<ul>{% for u in sheet.upcoming %}<li>{{ u.ann_date }} {{ u.ann_local_time }} · <span class="status-badge status-{{ 'warning' if u.uncertain else 'neutral' }}" title="{{ u.reason }}">{{ u.timing }}</span>{% if u.eps_estimate is not none %} · {{ t('earn_t_eps_est', v=('%.2f' | format(u.eps_estimate))) }}{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if sheet.paths.n %}
+<section class="card"><h2>{{ t('earn_t_caar') }}
+    {{ help_icon('earn_car', t('gl_t_earn_car'), t('glossary_open_aria', term=t('gl_t_earn_car'))) }}</h2>
+{{ earn_line({'title': t('earn_t_caar'), 'x': sheet.paths.x, 'series': [{'name': t('earn_t_caar_mean', n=sheet.paths.n), 'y': sheet.paths.mean}], 'x_label': t('earn_x_rel'), 'y_kind': 'pct', 'band': none}) }}
+</section>
+{% endif %}
+
+{% if sheet.history %}
+<section class="card"><h2>{{ t('earn_t_hist') }}</h2>
+<div class="table-wrap"><table class="data-table">
+    <thead><tr><th>{{ t('earn_h_ann') }}</th><th>{{ t('earn_h_timing') }}</th><th class="num">{{ t('earn_h_car') }}</th><th class="num">{{ t('earn_h_raw') }}</th><th class="num">{{ t('earn_h_z') }}</th>
+        <th class="num">{{ t('earn_h_on') }}</th><th class="num">{{ t('earn_h_id') }}</th><th class="num">{{ t('earn_h_surprise') }}</th><th class="num">{{ t('earn_h_runup') }}</th><th class="num">{{ t('earn_h_vol') }}</th></tr></thead>
+    <tbody>
+    {% for h in sheet.history %}
+    <tr><td><a href="/resultats/evenement?symbol={{ sheet.symbol | urlencode }}&amp;day={{ h.event_key }}">{{ h.ann_date }}</a></td>
+        <td><span class="status-badge status-{{ 'warning' if h.uncertain or h.suspect else 'neutral' }}">{{ h.timing }}{% if h.suspect %} ?{% endif %}</span> <span class="hint">[{{ h.window[0] }},{{ h.window[1] }}]</span></td>
+        <td class="num">{{ earn_fmt(h.car, 'pct') }}</td><td class="num">{{ earn_fmt(h.raw, 'pct') }}</td><td class="num">{{ earn_fmt(h.z, 'num2') }}</td>
+        <td class="num">{{ earn_fmt(h.on0, 'pct') }}</td><td class="num">{{ earn_fmt(h.id0, 'pct') }}</td><td class="num">{{ earn_fmt((h.surprise_pct / 100) if h.surprise_pct is not none else none, 'pct') }}</td>
+        <td class="num">{{ earn_fmt(h.run_up, 'pct') }}</td><td class="num">{{ earn_fmt(h.vol0, 'num2') }}×</td></tr>
+    {% endfor %}
+    </tbody>
+</table></div>
+</section>
+{% endif %}
+
+{% if sheet.consensus %}
+<section class="card"><h2>{{ t('earn_t_cons') }} <span class="hint">({{ sheet.consensus_date }})</span></h2>
+<dl class="earn-kv">
+    <dt>{{ t('earn_t_cons_eps') }}</dt><dd>{{ earn_fmt(sheet.consensus.eps_avg, 'num2') }}</dd>
+    <dt>{{ t('earn_t_cons_n') }}</dt><dd>{{ earn_fmt(sheet.consensus.n_analysts, 'int') }}</dd>
+    <dt>{{ t('earn_t_cons_disp') }}</dt><dd>{{ earn_fmt(sheet.consensus.dispersion, 'pct0') }}</dd>
+    <dt>{{ t('earn_t_cons_rev') }}</dt><dd>{{ earn_fmt(sheet.consensus.rev_30d, 'pct') }}</dd>
+    <dt>{{ t('earn_t_cons_up') }}</dt><dd>{{ earn_fmt(sheet.consensus.pt_upside, 'pct') }}</dd>
+</dl>
+<p class="hint">{{ t('earn_t_cons_note', n=sheet.n_snapshots) }}</p>
+</section>
+{% endif %}
+
+<section class="card"><h2>{{ t('earn_t_manual') }}</h2>
+<p class="hint">{{ t('earn_t_manual_hint') }}</p>
+<form id="earn-manual" data-symbol="{{ sheet.symbol }}">
+    <textarea name="text" rows="4" class="earn-textarea" placeholder="2024-02-14 07:00&#10;2024-05-02 BMO"></textarea>
+    <p class="earn-row"><button type="submit" class="btn">{{ t('earn_t_manual_go') }}</button> <span id="earn-manual-status" role="status" aria-live="polite" data-keep></span></p>
+</form>
+</section>
