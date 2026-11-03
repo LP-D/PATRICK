@@ -62,6 +62,7 @@ from patrick.webapp import (
     asset_view,
     data_routes,
     earnings_routes,
+    econometrics_routes,
     exploration_routes,
     forms,
     forms_rl,
@@ -2177,6 +2178,8 @@ fund_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Exploration (/exploration) et API /api/exploration/* : études statistiques entre actifs (patrick/exploration/).
 exploration_routes.register(app, templates, lambda request: _i18n_context(request))
+# Page Économétrie (/econometrie) et API /api/econometrics/* : l'économétrie d'une série à la fois (patrick/econometrics/).
+econometrics_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page News (/news) et API /api/news/* : flux de nouvelles point-in-time, sentiment par actif (patrick/text/).
 news_routes.register(app, templates, lambda request: _i18n_context(request))

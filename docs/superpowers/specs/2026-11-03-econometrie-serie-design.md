@@ -102,3 +102,11 @@ Analyse en lot sur tout le catalogue (« quelles séries ont des effets ARCH ? �
 5. Calcul au clic dans un pool de threads, pas la file de runs.
 6. Cours rédigés par moi en français dans `docs/cours/econometrie/`, relus par Léon avant chaque phase de code.
 7. Les chiffres « 66 cibles / 105 séries » du cadrage sont remplacés par le catalogue réel (528 symboles).
+
+## 10. État d'avancement (2026-11-03)
+
+Réalisé et testé (voir `docs/adr/0017-page-econometrie.md`) : P1 complet (onglets Stationnarité, Dépendance, Moyenne, Variance, Prévision, y compris HAR-RV), onglet Régimes (Markov-switching et lecture du HMM du projet), onglet Multivarié dans `/exploration` (VAR, réponses impulsionnelles, décomposition de la variance, Johansen, VECM), cache de résultats, i18n FR/EN, navigation. Le cours avec les mathématiques est écrit dans `docs/cours/econometrie/cours-econometrie.md` (écrit **après** le code, à la demande de Léon, au lieu d'avant).
+
+Écarts avec ce cadrage : les cours préalables n'ont pas été écrits avant le code ; l'ordre de navigation place la page juste après Exploration (ordre 43, News, Carnet et Résultats décalés d'un cran) ; le HAR-RV est dans l'onglet Variance ; les spécifications de la prévision incluent RiskMetrics, la variance historique de 60 jours et le HAR-RV comme références.
+
+Non fait : P3 (variables ML GJR/APARCH/HAR en walk-forward, DCC-GARCH vers `/portfolio`), GARCH-M, ARFIMA exact, Bai-Perron, onglet 8 (EVT, ondelettes, entropie).

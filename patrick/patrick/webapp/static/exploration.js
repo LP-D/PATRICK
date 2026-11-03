@@ -453,6 +453,60 @@
         return box;
     }
 
+    // ------------------------------------------------------------------ multivarié : VAR et Johansen / VECM
+    function renderVar(res) {
+        var box = h("div", {});
+        var names = res.names.map(function (sym) { return PN.label(sym); });
+        box.appendChild(h("p", { class: "exp-meta", text: fmtStr(tr("exp_var_summary"), { p: res.order, n: res.n_obs, stable: tr(res.stable ? "exp_var_stable" : "exp_var_unstable") }) }));
+        var j = res.names.indexOf($("exp-var-shock").value);
+        if (j < 0) j = 0;
+        var labels = res.irf.map(function (_, hh) { return "h" + hh; });      // « h0 », « h1 »… : jamais lus comme des dates par le graphique
+        res.names.forEach(function (_, i) {
+            function col(arr) { return arr.map(function (row) { return row[i][j]; }); }
+            box.appendChild(lineChart({ dates: labels, title: fmtStr(tr("exp_var_irf"), { a: names[i], b: names[j] }), height: 170,
+                series: [{ values: col(res.irf), color: "--brand" }, { values: col(res.irf_lower), color: "--text-3", width: 1, dash: "3 3" },
+                    { values: col(res.irf_upper), color: "--text-3", width: 1, dash: "3 3" }],
+                hlines: [{ y: 0, dash: "0", color: "var(--line-strong)" }], yFmt: function (v) { return num(v * 100, 2) + " %"; } }));
+        });
+        var last = res.fevd.length - 1;
+        box.appendChild(h("h4", { text: fmtStr(tr("exp_var_fevd"), { h: res.fevd_horizons[last] }) }));
+        box.appendChild(table([tr("exp_var_fevd_row")].concat(names.map(function (n) { return tr("exp_var_shock") + " " + n; })), res.fevd[last].map(function (row, i) {
+            return [{ cell: names[i], cls: "pk-mono" }].concat(row.map(function (v) { return { cell: pct(v, 0), cls: "num pk-mono" }; }));
+        })));
+        box.appendChild(h("p", { class: "exp-meta", text: fmtStr(tr("exp_obs"), { n: res.n_obs }) }));
+        return box;
+    }
+
+    function renderJohansen(res) {
+        var box = h("div", {});
+        var n = res.names.length, names = res.names.map(function (sym) { return PN.label(sym); });
+        var key = res.rank === 0 ? "exp_joh_v_none" : (res.rank >= n ? "exp_joh_v_full" : "exp_joh_v_rank");
+        box.appendChild(h("p", { class: "exp-meta" }, [chip(fmtStr(tr(key), { r: res.rank, n: n }), res.rank > 0 && res.rank < n ? "pos" : "neutral")]));
+        box.appendChild(table([tr("exp_joh_rank_tested"), tr("exp_joh_trace"), tr("exp_joh_crit"), tr("exp_joh_reject")], res.rows.map(function (r) {
+            return [{ cell: r.null_rank, cls: "num" }, { cell: num(r.trace, 2), cls: "num pk-mono" }, { cell: num(r.trace_crit_95, 2), cls: "num pk-mono" },
+                { cell: r.trace > r.trace_crit_95 ? chip(tr("exp_sig"), "pos") : "" }];
+        })));
+        if (res.rank >= 1 && res.rank < n) {
+            box.appendChild(h("h4", { text: tr("exp_joh_vector") }));
+            box.appendChild(table(names, [res.vectors[0].map(function (v) { return numCell(num(v, 3), v); })]));
+        }
+        if (res.vecm) {
+            var v = res.vecm;
+            var speed = v.speed === null ? null : num(v.speed, 3);
+            if (speed !== null) {
+                box.appendChild(h("p", { class: "exp-meta", text: v.half_life === null ? fmtStr(tr("exp_vecm_nohalf"), { s: speed }) : fmtStr(tr("exp_vecm_speed"), { s: speed, h: num(v.half_life, 1) }) }));
+            }
+            box.appendChild(h("h4", { text: tr("exp_vecm_alpha") }));
+            box.appendChild(table(["", "α", tr("exp_col_p")], v.alpha.map(function (row, i) {
+                return [{ cell: names[i], cls: "pk-mono" }, numCell(num(row[0], 3), row[0]), { cell: pval(v.alpha_p[i][0]), cls: "num pk-mono" }];
+            })));
+            box.appendChild(lineChart({ dates: v.ect.dates, series: [{ values: v.ect.values, color: "--brand" }], hlines: [{ y: 0, dash: "0", color: "var(--line-strong)" }],
+                title: tr("exp_vecm_ect"), yFmt: function (x) { return num(x, 3); } }));
+        }
+        box.appendChild(h("p", { class: "exp-meta", text: fmtStr(tr("exp_obs"), { n: res.n_obs }) }));
+        return box;
+    }
+
     // ------------------------------------------------------------------ onglets
     function loadPanel(key) {
         if (loaded[key] === runId) return;
@@ -475,8 +529,13 @@
             loadBeta();
         } else if (key === "season") {
             loadSeason();
+        } else if (key === "multi") {
+            loadVar();
+            loadJohansen();
         }
     }
+    function loadVar() { job("exp-var-out", "var", { maxlag: $("exp-var-lags").value, periods: $("exp-var-periods").value }, renderVar); }
+    function loadJohansen() { job("exp-joh-out", "johansen", { det_order: $("exp-joh-det").value, k_ar_diff: $("exp-joh-lags").value }, renderJohansen); }
     function loadCorrelation() {
         var method = $("exp-corr-method").value;
         if (method === "partial") job("exp-corr-out", "partial", {}, renderCorrelation);
@@ -580,6 +639,9 @@
     $("exp-link-run").addEventListener("click", loadLink);
     $("exp-beta-run").addEventListener("click", loadBeta);
     $("exp-season-run").addEventListener("click", loadSeason);
+    $("exp-var-run").addEventListener("click", loadVar);
+    $("exp-var-shock").addEventListener("change", loadVar);
+    $("exp-joh-run").addEventListener("click", loadJohansen);
     document.querySelectorAll(".exp-tabs [role=tab]").forEach(function (tab, i, all) {
         tab.addEventListener("click", function () { showPanel(tab.dataset.panel); });
         tab.addEventListener("keydown", function (ev) {

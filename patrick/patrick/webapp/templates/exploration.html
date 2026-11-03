@@ -86,6 +86,7 @@
     <button type="button" role="tab" id="exp-tab-link" aria-selected="false" aria-controls="exp-panel-link" data-panel="link" tabindex="-1">{{ t('exp_tab_link') }}</button>
     <button type="button" role="tab" id="exp-tab-struct" aria-selected="false" aria-controls="exp-panel-struct" data-panel="struct" tabindex="-1">{{ t('exp_tab_struct') }}</button>
     <button type="button" role="tab" id="exp-tab-season" aria-selected="false" aria-controls="exp-panel-season" data-panel="season" tabindex="-1">{{ t('exp_tab_season') }}</button>
+    <button type="button" role="tab" id="exp-tab-multi" aria-selected="false" aria-controls="exp-panel-multi" data-panel="multi" tabindex="-1">{{ t('exp_tab_multi') }}</button>
 </div>
 
 {# ---- Corrélations ---- #}
@@ -247,6 +248,42 @@
         <button type="button" class="queue-action" id="exp-season-run">{{ t('exp_apply') }}</button>
     </div>
     <div class="exp-out" id="exp-season-out"></div>
+</section>
+
+{# ---- Multivarié : VAR, Johansen, VECM ---- #}
+<section class="card exp-panel" role="tabpanel" id="exp-panel-multi" aria-labelledby="exp-tab-multi" hidden>
+    <h3>{{ t('exp_var_title') }}</h3>
+    <p class="hint">{{ t('exp_var_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('exp_var_lags') }}
+            <input type="number" id="exp-var-lags" min="1" max="10" step="1" value="5">
+        </label>
+        <label>{{ t('exp_var_periods') }}
+            <input type="number" id="exp-var-periods" min="2" max="30" step="1" value="10">
+        </label>
+        <label>{{ t('exp_var_shock') }}
+            <select id="exp-var-shock" class="exp-asset-select" data-role="a"></select>
+        </label>
+        <button type="button" class="queue-action" id="exp-var-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-var-out"></div>
+
+    <h3>{{ t('exp_joh_title') }}</h3>
+    <p class="hint">{{ t('exp_joh_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('exp_joh_det') }}
+            <select id="exp-joh-det">
+                <option value="-1">{{ t('exp_joh_det_m1') }}</option>
+                <option value="0" selected>{{ t('exp_joh_det_0') }}</option>
+                <option value="1">{{ t('exp_joh_det_1') }}</option>
+            </select>
+        </label>
+        <label>{{ t('exp_joh_lags') }}
+            <input type="number" id="exp-joh-lags" min="1" max="10" step="1" value="1">
+        </label>
+        <button type="button" class="queue-action" id="exp-joh-run">{{ t('exp_apply') }}</button>
+    </div>
+    <div class="exp-out" id="exp-joh-out"></div>
 </section>
 
 <script src="{{ asset('charts.js') }}"></script>

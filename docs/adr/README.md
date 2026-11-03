@@ -22,3 +22,4 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0014](0014-feuille-de-route-2026-11-02.md) | Feuille de route du 2026-11-02 : duel sur l'AUC, placebo toutes classes, déflation par classes, dimensionnement proportionnel, retraits, sauvegardes | 2026-11-02 | Acceptée |
 | [0015](0015-journal-fusionne-bandit-carry.md) | Journal de prédictions fusionné entre PC, dimensionnement appris et carry de change mesurés | 2026-11-02 | Acceptée |
 | [0016](0016-evenements-de-resultats.md) | Événements de résultats : newsletter, event study, 54 cartes d'études, données gratuites seulement | 2026-11-03 | Acceptée |
+| [0017](0017-page-econometrie.md) | Page Économétrie : une série à la fois, descriptif contre prévision, aucun modèle couronné | 2026-11-03 | Acceptée |
