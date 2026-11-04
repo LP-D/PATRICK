@@ -40,6 +40,10 @@ patrick earnings snapshot                      # instantané du jour (étape de 
 patrick earnings manual DGE.L dates.txt        # dates passées d'un titre sans historique Yahoo
 ```
 
+## Comprendre les méthodes
+
+Le cours [`docs/cours/evenements-de-resultats.md`](../cours/evenements-de-resultats.md) explique chaque étude avec les formules : J0, rendement attendu, CAR et sa variance, les sept tests, le FDR, le rétrécissement bayésien, les modèles d'amplitude et de direction, les stratégies (DSR, PBO). À lire dans l'aperçu Markdown de VS Code pour que les formules s'affichent.
+
 ## Piège à connaître
 
 Les dates de newsletter sont des suppositions : si Yahoo donne une annonce à moins de 7 jours, c'est la date Yahoo qui est retenue (écart signalé en badge). Une date inventée par la newsletter et absente de Yahoo reste un événement « à venir » marqué incertain ; elle n'entre dans l'historique que si Yahoo ne la contredit pas.
