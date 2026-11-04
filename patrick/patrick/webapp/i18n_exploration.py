@@ -131,5 +131,42 @@ EXPLORATION_STRINGS: dict[str, dict[str, str]] = {
     "exp_gm_summary": _s("{e} liens sur {t} sens testés", "{e} links out of {t} directions tested"),
     "exp_gm_cell": _s("{a} → {b} · p corrigée {q} · gain {g}", "{a} → {b} · adjusted p {q} · gain {g}"),
     "exp_gm_legend": _s("lien significatif (couleur plus franche = lien plus net)", "significant link (stronger color = clearer link)"),
+
+    # --- onglet Multivarié : VAR, réponses impulsionnelles, décomposition de la variance, Johansen, VECM
+    "exp_tab_multi": _s("Multivarié", "Multivariate"),
+    "exp_var_title": _s("VAR : réponses à un choc et décomposition de la variance", "VAR: shock responses and variance decomposition"),
+    "exp_var_hint": _s(
+        "Le VAR relie chaque rendement à ses propres retards et à ceux des autres. Une réponse impulsionnelle montre l'effet d'un choc d'un écart-type "
+        "sur une série. L'ordre des séries (celui de la sélection) compte : la première ne réagit pas à l'instant 0 aux chocs des suivantes.",
+        "The VAR links each return to its own lags and to the others'. An impulse response shows the effect of a one-standard-deviation shock to one series. "
+        "The order of the series (the selection order) matters: the first does not react at time 0 to shocks in the following ones."),
+    "exp_var_lags": _s("Retards max", "Max lags"),
+    "exp_var_periods": _s("Horizon", "Horizon"),
+    "exp_var_shock": _s("Choc sur", "Shock to"),
+    "exp_var_summary": _s("VAR({p}) · {n} observations · {stable}", "VAR({p}) · {n} observations · {stable}"),
+    "exp_var_stable": _s("stable", "stable"),
+    "exp_var_unstable": _s("instable (racine proche de 1 ou au-delà)", "unstable (root near or beyond 1)"),
+    "exp_var_irf": _s("Réponse de {a} à un choc sur {b} (bande à 90 %)", "Response of {a} to a shock to {b} (90% band)"),
+    "exp_var_fevd": _s("Part de la variance de l'erreur de prévision due à chaque choc (horizon {h})", "Share of forecast-error variance due to each shock (horizon {h})"),
+    "exp_var_fevd_row": _s("Variance de", "Variance of"),
+    "exp_joh_title": _s("Cointégration de Johansen et VECM", "Johansen cointegration and VECM"),
+    "exp_joh_hint": _s(
+        "Des séries de prix qui dérivent chacune peuvent rester liées : leur écart à une relation de long terme est stationnaire. Le test de la trace compte ces "
+        "relations (le rang). Le VECM mesure alors à quelle vitesse l'écart se résorbe.",
+        "Price series that each drift can stay linked: their gap to a long-run relation is stationary. The trace test counts these relations (the rank). "
+        "The VECM then measures how fast the gap closes."),
+    "exp_joh_det": _s("Terme déterministe", "Deterministic term"),
+    "exp_joh_det_m1": _s("aucun", "none"), "exp_joh_det_0": _s("constante", "constant"), "exp_joh_det_1": _s("tendance linéaire", "linear trend"),
+    "exp_joh_lags": _s("Retards (différences)", "Lags (differences)"),
+    "exp_joh_rank_tested": _s("Rang testé (H0 : au plus)", "Rank tested (H0: at most)"), "exp_joh_trace": _s("Statistique de la trace", "Trace statistic"),
+    "exp_joh_crit": _s("Valeur critique à 5 %", "5% critical value"), "exp_joh_reject": _s("Rejet", "Reject"),
+    "exp_joh_v_rank": _s("Rang de cointégration retenu : {r} sur {n} séries.", "Cointegration rank chosen: {r} out of {n} series."),
+    "exp_joh_v_none": _s("Aucune relation de long terme détectée (rang 0) : les séries dérivent sans lien durable.", "No long-run relation detected (rank 0): the series drift with no lasting link."),
+    "exp_joh_v_full": _s("Rang plein : toutes les séries sont stationnaires en niveau (Johansen ne s'applique pas).", "Full rank: every series is stationary in levels (Johansen does not apply)."),
+    "exp_joh_vector": _s("Relation de long terme (normalisée sur la première série)", "Long-run relation (normalized on the first series)"),
+    "exp_vecm_speed": _s("Retour de l'écart vers la relation de long terme : {s} par période · demi-vie {h} périodes", "Gap closing toward the long-run relation: {s} per period · half-life {h} periods"),
+    "exp_vecm_nohalf": _s("Retour de l'écart : {s} par période (pas de demi-vie : l'écart ne se résorbe pas de façon régulière)", "Gap closing: {s} per period (no half-life: the gap does not close steadily)"),
+    "exp_vecm_alpha": _s("Vitesse d'ajustement de chaque série (α)", "Adjustment speed of each series (α)"),
+    "exp_vecm_ect": _s("Écart à la relation de long terme (centré)", "Gap to the long-run relation (centered)"),
 }
 

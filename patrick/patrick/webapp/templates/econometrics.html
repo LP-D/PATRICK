@@ -1,0 +1,259 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('eco_title') }}{% endblock %}
+
+{% macro model_options(selected='garch') %}
+<option value="arch" {{ 'selected' if selected == 'arch' }}>{{ t('eco_m_arch') }}</option>
+<option value="garch" {{ 'selected' if selected == 'garch' }}>{{ t('eco_m_garch') }}</option>
+<option value="gjr" {{ 'selected' if selected == 'gjr' }}>{{ t('eco_m_gjr') }}</option>
+<option value="egarch" {{ 'selected' if selected == 'egarch' }}>{{ t('eco_m_egarch') }}</option>
+<option value="aparch" {{ 'selected' if selected == 'aparch' }}>{{ t('eco_m_aparch') }}</option>
+<option value="figarch" {{ 'selected' if selected == 'figarch' }}>{{ t('eco_m_figarch') }}</option>
+<option value="igarch" {{ 'selected' if selected == 'igarch' }}>{{ t('eco_m_igarch') }}</option>
+{% endmacro %}
+
+{% macro dist_options(selected='normal') %}
+<option value="normal" {{ 'selected' if selected == 'normal' }}>{{ t('eco_d_normal') }}</option>
+<option value="t" {{ 'selected' if selected == 't' }}>{{ t('eco_d_t') }}</option>
+<option value="skewt" {{ 'selected' if selected == 'skewt' }}>{{ t('eco_d_skewt') }}</option>
+<option value="ged" {{ 'selected' if selected == 'ged' }}>{{ t('eco_d_ged') }}</option>
+{% endmacro %}
+
+{% macro proxy_options(with_none=True, selected='') %}
+{% if with_none %}<option value="none">{{ t('eco_px_none') }}</option>{% endif %}
+<option value="r2" {{ 'selected' if selected == 'r2' }}>{{ t('eco_px_r2') }}</option>
+<option value="parkinson" {{ 'selected' if selected == 'parkinson' }}>{{ t('eco_px_parkinson') }}</option>
+<option value="garman_klass" {{ 'selected' if selected == 'garman_klass' }}>{{ t('eco_px_garman_klass') }}</option>
+{% endmacro %}
+
+{% block content %}
+<h1 class="page-title">{{ t('eco_title') }}</h1>
+<p class="page-subtitle">{{ t('eco_subtitle') }}</p>
+
+<section class="card exp-select" aria-labelledby="eco-sel-title">
+    <h2 id="eco-sel-title">{{ t('eco_series_title') }}</h2>
+    <p class="hint">{{ t('eco_series_hint') }}</p>
+    <div class="exp-sel-grid">
+        <div class="exp-sel-list">
+            <input type="search" id="eco-filter" placeholder="{{ t('eco_filter') }}" aria-label="{{ t('eco_filter') }}" autocomplete="off">
+            <select id="eco-series" size="9" aria-label="{{ t('eco_series') }}">
+                {% for g in catalog %}
+                <optgroup label="{{ g.label }}">
+                    {% for it in g['items'] %}
+                    <option value="{{ it.symbol }}" data-per="{{ it.periodicity }}" title="{{ it.symbol }}" data-text="{{ (it.symbol ~ ' ' ~ (it.symbol | iname)) | lower }}">{{ it.symbol | iname }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="exp-controls">
+        <label>{{ t('eco_transform') }}
+            <select id="eco-transform">
+                <option value="logret">{{ t('eco_tr_logret') }}</option>
+                <option value="sqret">{{ t('eco_tr_sqret') }}</option>
+                <option value="parkinson">{{ t('eco_tr_parkinson') }}</option>
+                <option value="garman_klass">{{ t('eco_tr_garman_klass') }}</option>
+                <option value="diff">{{ t('eco_tr_diff') }}</option>
+                <option value="fracdiff">{{ t('eco_tr_fracdiff') }}</option>
+            </select>
+            <p class="hint">{{ t('eco_transform_hint') }}</p>
+        </label>
+        <label id="eco-frac-wrap" hidden>{{ t('eco_frac_d') }}
+            <input type="number" id="eco-frac-d" min="0.05" max="0.95" step="0.05" value="0.4">
+        </label>
+        <div class="exp-period">
+            <label>{{ t('eco_period') }}
+                <input type="date" id="eco-start">
+            </label>
+            <div class="exp-period-btns" role="group" aria-label="{{ t('eco_period') }}">
+                <button type="button" class="range-btn" data-years="1">{{ t('eco_p_1y') }}</button>
+                <button type="button" class="range-btn" data-years="3">{{ t('eco_p_3y') }}</button>
+                <button type="button" class="range-btn" data-years="5">{{ t('eco_p_5y') }}</button>
+                <button type="button" class="range-btn active" data-years="10">{{ t('eco_p_10y') }}</button>
+                <button type="button" class="range-btn" data-years="0">{{ t('eco_p_max') }}</button>
+            </div>
+        </div>
+        <button type="button" class="primary" id="eco-load">{{ t('eco_load') }}</button>
+    </div>
+    <p class="exp-status" id="eco-status" role="status" aria-live="polite" data-keep></p>
+    <ul class="exp-warnings" id="eco-warnings" data-keep></ul>
+    <div class="exp-out" id="eco-series-out"></div>
+</section>
+
+<div class="exp-tabs" role="tablist" aria-label="{{ t('eco_title') }}">
+    <button type="button" role="tab" id="eco-tab-unitroot" aria-selected="true" aria-controls="eco-panel-unitroot" data-panel="unitroot">{{ t('eco_tab_unitroot') }}</button>
+    <button type="button" role="tab" id="eco-tab-dependence" aria-selected="false" aria-controls="eco-panel-dependence" data-panel="dependence" tabindex="-1">{{ t('eco_tab_dependence') }}</button>
+    <button type="button" role="tab" id="eco-tab-mean" aria-selected="false" aria-controls="eco-panel-mean" data-panel="mean" tabindex="-1">{{ t('eco_tab_mean') }}</button>
+    <button type="button" role="tab" id="eco-tab-variance" aria-selected="false" aria-controls="eco-panel-variance" data-panel="variance" tabindex="-1">{{ t('eco_tab_variance') }}</button>
+    <button type="button" role="tab" id="eco-tab-regimes" aria-selected="false" aria-controls="eco-panel-regimes" data-panel="regimes" tabindex="-1">{{ t('eco_tab_regimes') }}</button>
+    <button type="button" role="tab" id="eco-tab-forecast" aria-selected="false" aria-controls="eco-panel-forecast" data-panel="forecast" tabindex="-1">{{ t('eco_tab_forecast') }}</button>
+</div>
+
+{# ---- 1. Stationnarité et ruptures ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-unitroot" aria-labelledby="eco-tab-unitroot">
+    <p class="hint">{{ t('eco_ur_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_trend') }}
+            <select id="eco-ur-trend">
+                <option value="c">{{ t('eco_trend_c') }}</option>
+                <option value="ct">{{ t('eco_trend_ct') }}</option>
+            </select>
+        </label>
+        <button type="button" class="queue-action" id="eco-ur-run">{{ t('eco_apply') }}</button>
+    </div>
+    <div class="exp-out" id="eco-ur-out"></div>
+</section>
+
+{# ---- 2. Dépendance ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-dependence" aria-labelledby="eco-tab-dependence" hidden>
+    <p class="hint">{{ t('eco_dep_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_lags') }}
+            <input type="number" id="eco-dep-lags" min="5" max="60" step="1" value="20">
+        </label>
+        <button type="button" class="queue-action" id="eco-dep-run">{{ t('eco_apply') }}</button>
+    </div>
+    <div class="exp-out" id="eco-dep-out"></div>
+</section>
+
+{# ---- 3. Moyenne conditionnelle ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-mean" aria-labelledby="eco-tab-mean" hidden>
+    <p class="hint">{{ t('eco_mean_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_max_p') }}
+            <input type="number" id="eco-mean-p" min="0" max="3" step="1" value="2">
+        </label>
+        <label>{{ t('eco_max_q') }}
+            <input type="number" id="eco-mean-q" min="0" max="3" step="1" value="2">
+        </label>
+        <label>{{ t('eco_d') }}
+            <input type="number" id="eco-mean-d" min="0" max="2" step="1" value="0">
+        </label>
+        <label class="exp-check" id="eco-seasonal-wrap" hidden><input type="checkbox" id="eco-mean-seasonal"> {{ t('eco_seasonal') }}</label>
+        <label>{{ t('eco_regressor') }}
+            <select id="eco-mean-reg">
+                <option value="">{{ t('eco_none') }}</option>
+                {% for g in catalog %}{% for it in g['items'] %}<option value="{{ it.symbol }}" data-per="{{ it.periodicity }}">{{ it.symbol | iname }}</option>{% endfor %}{% endfor %}
+            </select>
+        </label>
+        <button type="button" class="queue-action" id="eco-mean-run">{{ t('eco_apply') }}</button>
+    </div>
+    <div class="exp-out" id="eco-mean-out"></div>
+</section>
+
+{# ---- 4. Variance conditionnelle ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-variance" aria-labelledby="eco-tab-variance" hidden>
+    <p class="hint">{{ t('eco_var_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_model') }}
+            <select id="eco-var-model">{{ model_options('gjr') }}</select>
+        </label>
+        <label>{{ t('eco_dist') }}
+            <select id="eco-var-dist">{{ dist_options('t') }}</select>
+        </label>
+        <label>{{ t('eco_mean_spec') }}
+            <select id="eco-var-mean">
+                <option value="constant">{{ t('eco_mean_constant') }}</option>
+                <option value="zero">{{ t('eco_mean_zero') }}</option>
+            </select>
+        </label>
+        <label>{{ t('eco_proxy') }}
+            <select id="eco-var-proxy">{{ proxy_options(True, 'none') }}</select>
+        </label>
+        <button type="button" class="queue-action" id="eco-var-run">{{ t('eco_fit') }}</button>
+    </div>
+    <div class="exp-out" id="eco-var-out"></div>
+
+    <h3>{{ t('eco_grid_title') }}</h3>
+    <p class="hint">{{ t('eco_grid_hint') }}</p>
+    <div class="exp-params">
+        <fieldset class="exp-check-group">
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="arch"> {{ t('eco_m_arch') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="garch" checked> {{ t('eco_m_garch') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="gjr" checked> {{ t('eco_m_gjr') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="egarch" checked> {{ t('eco_m_egarch') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="aparch"> {{ t('eco_m_aparch') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="figarch"> {{ t('eco_m_figarch') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-model" value="igarch"> {{ t('eco_m_igarch') }}</label>
+        </fieldset>
+        <fieldset class="exp-check-group">
+            <label class="exp-check"><input type="checkbox" class="eco-grid-dist" value="normal" checked> {{ t('eco_d_normal') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-dist" value="t" checked> {{ t('eco_d_t') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-dist" value="skewt" checked> {{ t('eco_d_skewt') }}</label>
+            <label class="exp-check"><input type="checkbox" class="eco-grid-dist" value="ged"> {{ t('eco_d_ged') }}</label>
+        </fieldset>
+        <button type="button" class="queue-action" id="eco-grid-run">{{ t('eco_grid_run') }}</button>
+    </div>
+    <div class="exp-out" id="eco-grid-out"></div>
+
+    <h3>{{ t('eco_har_title') }}</h3>
+    <p class="hint">{{ t('eco_har_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_proxy') }}
+            <select id="eco-har-proxy">{{ proxy_options(False, 'parkinson') }}</select>
+        </label>
+        <label class="exp-check"><input type="checkbox" id="eco-har-log"> {{ t('eco_har_log') }}</label>
+        <button type="button" class="queue-action" id="eco-har-run">{{ t('eco_har_run') }}</button>
+    </div>
+    <div class="exp-out" id="eco-har-out"></div>
+</section>
+
+{# ---- 6. Régimes ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-regimes" aria-labelledby="eco-tab-regimes" hidden>
+    <p class="hint">{{ t('eco_reg_hint') }}</p>
+    <div class="exp-params">
+        <label>{{ t('eco_reg_method') }}
+            <select id="eco-reg-method">
+                <option value="ms">{{ t('eco_reg_ms') }}</option>
+                <option value="hmm">{{ t('eco_reg_hmm') }}</option>
+            </select>
+        </label>
+        <label>{{ t('eco_reg_k') }}
+            <input type="number" id="eco-reg-k" min="2" max="3" step="1" value="2">
+        </label>
+        <label>{{ t('eco_reg_max_states') }}
+            <input type="number" id="eco-reg-states" min="2" max="4" step="1" value="3">
+        </label>
+        <label class="exp-check"><input type="checkbox" id="eco-reg-sw-mean" checked> {{ t('eco_reg_sw_mean') }}</label>
+        <label class="exp-check"><input type="checkbox" id="eco-reg-sw-var" checked> {{ t('eco_reg_sw_var') }}</label>
+        <button type="button" class="queue-action" id="eco-reg-run">{{ t('eco_apply') }}</button>
+    </div>
+    <div class="exp-out" id="eco-reg-out"></div>
+</section>
+
+{# ---- 7. Prévision et comparaison ---- #}
+<section class="card exp-panel" role="tabpanel" id="eco-panel-forecast" aria-labelledby="eco-tab-forecast" hidden>
+    <p class="hint">{{ t('eco_fc_hint') }}</p>
+    <div class="exp-params">
+        <fieldset class="exp-check-group" id="eco-fc-specs">
+            <legend>{{ t('eco_fc_specs') }}</legend>
+            <label class="exp-check"><input type="checkbox" value="garch|normal" checked> {{ t('eco_m_garch') }} · {{ t('eco_d_normal') }}</label>
+            <label class="exp-check"><input type="checkbox" value="gjr|t" checked> {{ t('eco_m_gjr') }} · {{ t('eco_d_t') }}</label>
+            <label class="exp-check"><input type="checkbox" value="egarch|t"> {{ t('eco_m_egarch') }} · {{ t('eco_d_t') }}</label>
+            <label class="exp-check"><input type="checkbox" value="aparch|t"> {{ t('eco_m_aparch') }} · {{ t('eco_d_t') }}</label>
+            <label class="exp-check"><input type="checkbox" value="igarch|normal"> {{ t('eco_m_igarch') }}</label>
+            <label class="exp-check"><input type="checkbox" value="riskmetrics" checked> {{ t('eco_spec_riskmetrics') }}</label>
+            <label class="exp-check"><input type="checkbox" value="rolling60"> {{ t('eco_spec_rolling60') }}</label>
+            <label class="exp-check"><input type="checkbox" value="har"> {{ t('eco_spec_har') }}</label>
+        </fieldset>
+        <label>{{ t('eco_proxy') }}
+            <select id="eco-fc-proxy">{{ proxy_options(False, 'r2') }}</select>
+        </label>
+        <label>{{ t('eco_fc_min_train') }}
+            <input type="number" id="eco-fc-min" min="250" max="5000" step="50" value="750">
+        </label>
+        <label>{{ t('eco_fc_refit') }}
+            <input type="number" id="eco-fc-refit" min="10" max="500" step="10" value="60">
+        </label>
+        <label>{{ t('eco_fc_window') }}
+            <input type="number" id="eco-fc-window" min="0" max="5000" step="50" value="0">
+        </label>
+        <button type="button" class="queue-action primary" id="eco-fc-run">{{ t('eco_fc_run') }}</button>
+    </div>
+    <p class="hint">{{ t('eco_fc_slow') }}</p>
+    <div class="exp-out" id="eco-fc-out"></div>
+</section>
+
+<script src="{{ asset('charts.js') }}"></script>
+<script src="{{ asset('econometrics.js') }}"></script>
+{% endblock %}

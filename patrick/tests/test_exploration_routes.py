@@ -60,7 +60,7 @@ def test_the_page_lists_every_target_group_and_the_presets(client):
     assert 'value="^GSPC"' in html and 'value="BAMLH0A0HYM2"' in html
     assert 'data-symbols="^GSPC,^NDX,^STOXX50E,^GDAXI,^FTSE,^N225"' in html
     assert "/static/exploration.js" in html
-    assert 'role="tablist"' in html and html.count('role="tabpanel"') == 7
+    assert 'role="tablist"' in html and html.count('role="tabpanel"') == 8
 
 
 def test_the_page_is_in_the_english_interface_without_leaking_keys(client):

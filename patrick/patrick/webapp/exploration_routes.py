@@ -11,19 +11,21 @@ import time
 from collections import OrderedDict
 from datetime import date
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from patrick.data.freshness import fred_periodicity
+from patrick.econometrics import multivariate as MV
 from patrick.exploration import dependence as DEP
 from patrick.exploration import panel as P
 from patrick.exploration import studies as S
 from patrick.webapp import forms, market_data
 
 STUDIES = ("correlation", "partial", "rolling", "describe", "stationarity", "memory", "variance_ratio", "leadlag", "granger",
-           "granger_matrix", "dependence", "dependence_pair", "cointegration", "pca", "beta", "tail", "seasonality")
+           "granger_matrix", "dependence", "dependence_pair", "cointegration", "pca", "beta", "tail", "seasonality", "var", "johansen")
 PANEL_TTL_S = 900
 PANEL_CACHE_MAX = 12
 _cache: OrderedDict[tuple, tuple[float, P.Panel]] = OrderedDict()
@@ -140,6 +142,28 @@ def _flag(params: dict, name: str, default: bool) -> bool:
     return default if raw is None else str(raw).lower() in ("1", "true", "yes", "on")
 
 
+def _bounded(params: dict, name: str, default: int, lo: int, hi: int) -> int:
+    raw = params.get(name)
+    try:
+        v = int(raw) if raw not in (None, "") else default
+    except ValueError as exc:
+        raise ValueError(f"« {name} » : entier attendu.") from exc
+    if not lo <= v <= hi:
+        raise ValueError(f"« {name} » : entre {lo} et {hi} attendu (reçu {v}).")
+    return v
+
+
+def _johansen(levels: pd.DataFrame, params: dict) -> dict:
+    """Johansen sur le LOG des niveaux (prix : la relation de long terme est entre logarithmes) ; si le rang retenu est entre 1 et n-1, le VECM correspondant."""
+    data = np.log(levels) if bool((levels > 0).all().all()) else levels
+    k_ar_diff, det_order = _bounded(params, "k_ar_diff", 1, 1, 10), _bounded(params, "det_order", 0, -1, 1)
+    res = MV.johansen(data, det_order=det_order, k_ar_diff=k_ar_diff)
+    res["log_levels"] = data is not levels
+    if 1 <= res["rank"] < data.shape[1]:
+        res["vecm"] = MV.vecm(data, rank=res["rank"], k_ar_diff=k_ar_diff)
+    return res
+
+
 def run_study(study: str, pan: P.Panel, params: dict) -> dict:
     cols = list(pan.returns.columns)
     ret, lev = pan.returns, pan.levels
@@ -157,6 +181,10 @@ def run_study(study: str, pan: P.Panel, params: dict) -> dict:
         return S.granger_matrix(ret, int(params.get("maxlag", 5)), params.get("on", "returns"), params.get("scope", "conditional"))
     if study == "dependence":
         return DEP.dependence_matrix(ret, params.get("measure", "dcor"))
+    if study == "var":
+        return MV.var_analysis(ret, maxlag=_bounded(params, "maxlag", 5, 1, 10), irf_periods=_bounded(params, "periods", 10, 2, 30))
+    if study == "johansen":
+        return _johansen(lev, params)
     a = _pick("a", params.get("a"), cols, pan.dropped)
     if study == "memory":
         return S.memory(ret[a], int(params.get("nlags", 20)))

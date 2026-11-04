@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from patrick.webapp.glossary_models import LABEL_STRINGS
 from patrick.webapp.i18n_dl import DL_STRINGS
+from patrick.webapp.i18n_econometrics import ECONOMETRICS_STRINGS
 from patrick.webapp.i18n_exploration import EXPLORATION_STRINGS
 from patrick.webapp.i18n_rl import RL_STRINGS
 
@@ -370,6 +371,7 @@ MODELS_STRINGS.update(LABEL_STRINGS)
 MODELS_STRINGS.update(DL_STRINGS)
 MODELS_STRINGS.update(RL_STRINGS)
 MODELS_STRINGS.update(EXPLORATION_STRINGS)
+MODELS_STRINGS.update(ECONOMETRICS_STRINGS)
 
 # Clés lues par le navigateur (`window.I18N`) : `help_aria` partout ; les libellés des pages à graphiques seulement sur leur page (la charge
 # utile de chaque page reste petite). Les textes réservés au gabarit (`*_hint`, `*_subtitle`) ne sont jamais envoyés.
@@ -387,6 +389,7 @@ def _browser_keys(*prefixes: str) -> tuple[str, ...]:
 
 PAGE_JS_KEYS: dict[str, tuple[str, ...]] = {
     "/exploration": _browser_keys("exp_"),
+    "/econometrie": (*_browser_keys("eco_"), "exp_chart_aria", "exp_sig", "exp_vr_joint", "exp_vr_v_random_walk", "exp_vr_v_momentum", "exp_vr_v_mean_reversion"),
     "/ml": _browser_keys("batch_js_"),
     "/dl": _browser_keys("batch_js_"),
     "/rl": (*_browser_keys("rlp_"), *_browser_keys("batch_js_")),
