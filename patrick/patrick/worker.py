@@ -427,7 +427,7 @@ def _run_claimed_job(conn, job: dict, pid: int, raw_config: dict) -> None:
 
 def _tidy_storage(conn, job_id: str) -> None:
     """Entretien de fin de job (ADR 0009), après que le job est marqué terminé : prédictions de scan des essais hors tête archivées en
-    Parquet, cache de variables ramené sous son plafond. Ne fait jamais échouer le worker."""
+    Parquet, cache de variables ramené sous son plafond, entrées anciennes du cache de volatilité retirées. Ne fait jamais échouer le worker."""
     results = prediction_archive.archive_job_runs(conn, job_id)
     rows = sum(r["rows"] for r in results)
     if rows:
@@ -438,6 +438,13 @@ def _tidy_storage(conn, job_id: str) -> None:
             print(f"[CACHE] cache de variables ramené sous son plafond : {evicted['removed_files']} fichiers retirés.")
     except Exception as exc:  # noqa: BLE001 -- l'éviction est de l'entretien : elle ne doit jamais faire échouer un worker
         print(f"[CACHE] éviction non faite : {type(exc).__name__}: {exc}")
+    try:
+        removed = cache_eviction.evict_vol_cache(conn)
+        if removed:
+            print(f"[CACHE] cache de volatilité : {removed} entrées de snapshots de plus de {cache_eviction.vol_cache_keep_days()} jours retirées "
+                  "(le fichier de la base ne rétrécit que par `patrick storage vacuum`).")
+    except Exception as exc:  # noqa: BLE001 -- idem : jamais d'échec du worker pour de l'entretien
+        print(f"[CACHE] éviction du cache de volatilité non faite : {type(exc).__name__}: {exc}")
 
 
 def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> None:
