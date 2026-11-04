@@ -137,6 +137,8 @@ def compress_caches_cmd(limit: int = typer.Option(0, "--limit", help="Nombre max
 def evict_cmd(
     feature_cache_gb: float = typer.Option(None, "--feature-cache-gb", help="Plafond du cache de variables (défaut : réglage ou 150 Go)"),
     db_days: int = typer.Option(0, "--db-days", help="Supprime les entrées de cache de la base plus vieilles que N jours (0 : aucune)"),
+    vol_cache_days: int = typer.Option(None, "--vol-cache-days", help="Ne garde dans le cache de volatilité que les snapshots des N derniers jours "
+                                       "(0 : aucune éviction ; défaut du réglage `vol_cache_keep_days` : 3)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Compte seulement"),
 ) -> None:
     """Éviction : cache de variables (les moins récemment lus d'abord) et, si demandé, entrées anciennes des caches de la base."""
@@ -149,6 +151,13 @@ def evict_cmd(
         try:
             for table, n in cache_eviction.prune_db_caches(conn, db_days, dry_run=dry_run).items():
                 typer.echo(f"{table} : {_n(n)} entrées de plus de {db_days} jours")
+        finally:
+            conn.close()
+    if vol_cache_days is not None:
+        conn = _connect_idle()
+        try:
+            n = cache_eviction.evict_vol_cache(conn, vol_cache_days, dry_run=dry_run)
+            typer.echo(f"vol_model_cache : {_n(n)} entrées de snapshots de plus de {vol_cache_days} jours")
         finally:
             conn.close()
 

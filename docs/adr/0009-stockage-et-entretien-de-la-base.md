@@ -66,6 +66,18 @@ Mesures du 29/10/2026 sur la vraie base (31,4 Go, aucun worker vivant) :
   (VACUUM écrit la nouvelle base dans le journal) ; corrigé (`PRAGMA wal_checkpoint(TRUNCATE)` avant la mesure).
 - Contrôle après coup, en lecture seule : 219 199 entrées relues à l'identique après compression, empreinte de cache des prédictions live en 17 ms.
 
+## Mise à jour du 04/11/2026 : éviction automatique du cache de volatilité
+
+Mesure sur la base de ce PC (aucune éviction du cache de volatilité n'était automatique) : `vol_model_cache` est passé de 68 254 à 751 678 entrées en onze jours après une purge manuelle,
+la base de 10 à 69 Go, et les trois sauvegardes conservées de 57 à 65 Go chacune (189 Go). Le cache de variables avait son plafond ; celui-ci n'en avait pas.
+
+- `cache_eviction.evict_vol_cache` : à la fin de chaque job (`worker._tidy_storage`), les entrées des snapshots datés de plus de `vol_cache_keep_days` jours (réglage, **3 par défaut**, 0 désactive)
+  sont supprimées par paquets de 2 000. Sélection sur la date lue dans `snapshot_id` (dans l'index de la clé primaire) et non sur `created_at`, stocké derrière le JSON : le lire parcourt
+  toute la table. Un identifiant qui ne commence pas par une date n'est jamais évincé.
+- Les pages libérées sont réutilisées : la base cesse de grossir mais ne rétrécit que par `patrick storage vacuum --yes` (worker et serveur arrêtés, autant d'espace libre que la base).
+- `patrick storage evict --vol-cache-days N` fait la même chose à la main (`--dry-run` compte seulement ; refuse avec un worker vivant).
+- Conséquence : rejouer un snapshot de plus de trois jours (reprise d'un run interrompu) recalcule la volatilité paramétrique de ce snapshot.
+
 ## Conséquences
 
 - Gain attendu sur la base : `vol_model_cache` ~26 Go -> ~11 Go (compression), 15,7 M de lignes de prédiction en moins (~45 % des lignes de scan) ; l'espace
