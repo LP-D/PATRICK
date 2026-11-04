@@ -257,4 +257,91 @@
         var kbd = trigger.querySelector(".kbd");
         if (kbd) kbd.textContent = "⌘K";
     }
+
+    /* ---- Menu en blocs (barre du haut) ----
+       Bouton à bascule (aria-expanded) : clic, Entrée / Espace, Échap (le focus revient au bouton), clic en dehors, sortie du focus.
+       Sur un appareil à souris, il s'ouvre aussi au survol (avec un petit délai, pour qu'un passage de souris ne déclenche rien). */
+    var mega = document.getElementById("mega");
+    var megaBtn = document.getElementById("mega-trigger");
+    var megaPanel = document.getElementById("mega-panel");
+    var megaTimer = null;
+    function setMega(open, focusBack) {
+        if (!megaBtn || !megaPanel) return;
+        window.clearTimeout(megaTimer);
+        megaBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        megaPanel.hidden = !open;
+        if (!open && focusBack) megaBtn.focus();
+    }
+    if (mega && megaBtn && megaPanel) {
+        megaBtn.addEventListener("click", function () { setMega(megaPanel.hidden); });
+        var hoverable = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        if (hoverable) {
+            mega.addEventListener("pointerenter", function () {
+                window.clearTimeout(megaTimer);
+                megaTimer = window.setTimeout(function () { setMega(true); }, 140);
+            });
+            mega.addEventListener("pointerleave", function () {
+                window.clearTimeout(megaTimer);
+                megaTimer = window.setTimeout(function () { setMega(false); }, 260);
+            });
+        }
+        document.addEventListener("pointerdown", function (e) { if (!megaPanel.hidden && !mega.contains(e.target)) setMega(false); });
+        mega.addEventListener("focusout", function (e) { if (!megaPanel.hidden && e.relatedTarget && !mega.contains(e.relatedTarget)) setMega(false); });
+        mega.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && !megaPanel.hidden) { e.stopPropagation(); setMega(false, true); }
+        });
+        // Ouvert, un lien du menu est atteint par Tab depuis le bouton ; ↓ y entre directement.
+        megaBtn.addEventListener("keydown", function (e) {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMega(true);
+                var first = megaPanel.querySelector("a[href]");
+                if (first) first.focus();
+            }
+        });
+    }
+
+    /* ---- Retour en haut ----
+       Le bouton apparaît après un écran de défilement ; respecte « réduire les animations ». */
+    var toTop = document.getElementById("to-top");
+    if (toTop) {
+        var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var shownTop = false, ticking = false;
+        var syncTop = function () {
+            ticking = false;
+            var show = (window.pageYOffset || root.scrollTop) > Math.max(600, window.innerHeight * 0.7);
+            if (show === shownTop) return;
+            shownTop = show;
+            if (show) { toTop.hidden = false; window.requestAnimationFrame(function () { toTop.classList.add("is-visible"); }); }
+            else { toTop.classList.remove("is-visible"); window.setTimeout(function () { if (!shownTop) toTop.hidden = true; }, 320); }
+        };
+        window.addEventListener("scroll", function () { if (!ticking) { ticking = true; window.requestAnimationFrame(syncTop); } }, { passive: true });
+        toTop.addEventListener("click", function () {
+            window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+            var skip = document.querySelector("a.visually-hidden[href='#main']");
+            if (skip) skip.focus({ preventScroll: true });
+        });
+        syncTop();
+    }
+
+    /* ---- Section en cours dans un index de sections ----
+       `.section-index a[href^='#']` : le lien de la dernière section dont le haut a passé la barre collante porte aria-current="true"
+       (soulignement, voir patrick.css). Recalculé au défilement, au plus une fois par image. */
+    Array.prototype.forEach.call(document.querySelectorAll(".section-index"), function (index) {
+        var links = Array.prototype.filter.call(index.querySelectorAll("a[href^='#']"), function (a) { return a.getAttribute("href").length > 1; });
+        var targets = links.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+        if (!links.length) return;
+        var pending = false;
+        var mark = function () {
+            pending = false;
+            var line = index.getBoundingClientRect().bottom + 24, pick = -1;
+            targets.forEach(function (el, i) { if (el && el.getBoundingClientRect().top <= line) pick = i; });
+            if (window.innerHeight + (window.pageYOffset || 0) >= document.documentElement.scrollHeight - 4) {       // en bas de page : la dernière section, même courte
+                targets.forEach(function (el, i) { if (el) pick = i; });
+            }
+            links.forEach(function (a, i) { if (i === pick) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
+        };
+        window.addEventListener("scroll", function () { if (!pending) { pending = true; window.requestAnimationFrame(mark); } }, { passive: true });
+        mark();
+    });
 })();

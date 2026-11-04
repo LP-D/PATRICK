@@ -14,12 +14,15 @@ import sqlite3
 import time
 import zlib
 from collections.abc import Callable
+from datetime import date, timedelta
 from pathlib import Path
 
 from patrick import paths, settings
 
 KEY_FEATURE_CACHE_MAX_GB = "feature_cache_max_gb"
 DEFAULT_FEATURE_CACHE_MAX_GB = 150.0
+KEY_VOL_CACHE_KEEP_DAYS = "vol_cache_keep_days"
+DEFAULT_VOL_CACHE_KEEP_DAYS = 3      # 04/11/2026 : 751 678 entrées en 11 jours (base de 69 Go) quand rien ne les retirait
 MIN_AGE_S = 3600                    # un fichier écrit ou lu depuis moins d'une heure peut servir à un run en cours : jamais évincé
 DB_CACHE_TABLES = ("vol_model_cache", "shap_selection_cache")
 
@@ -30,6 +33,15 @@ def feature_cache_cap_bytes() -> int:
         return int(float(value) * 1e9)
     except (TypeError, ValueError):
         return int(DEFAULT_FEATURE_CACHE_MAX_GB * 1e9)
+
+
+def vol_cache_keep_days() -> int:
+    """Réglage `vol_cache_keep_days` : jours de snapshots gardés dans `vol_model_cache` par l'éviction de fin de job (0 : pas d'éviction)."""
+    value = settings.load().get(KEY_VOL_CACHE_KEEP_DAYS, DEFAULT_VOL_CACHE_KEEP_DAYS)
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError):
+        return DEFAULT_VOL_CACHE_KEEP_DAYS
 
 
 def _cache_files(root: Path) -> list[tuple[float, int, Path]]:
@@ -89,6 +101,39 @@ def prune_db_caches(conn: sqlite3.Connection, max_age_days: int = 90, dry_run: b
                 break
         out[table] = removed
     return out
+
+
+# `snapshot_id` commence par la date du snapshot (`AAAA-MM-JJ__<clé>__<empreinte>`, voir `DataStore`).
+_DATED_SNAPSHOT = "snapshot_id GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'"
+
+
+def evict_vol_cache(conn: sqlite3.Connection, keep_days: int | None = None, *, dry_run: bool = False, chunk: int = 2000,
+                    today: date | None = None) -> int:
+    """Supprime de `vol_model_cache` les entrées des snapshots datés de plus de `keep_days` jours (défaut : réglage
+    `vol_cache_keep_days`, 3 ; 0 : rien). Retourne le nombre d'entrées retirées (à retirer, en `dry_run`).
+
+    La sélection se fait sur la DATE DU SNAPSHOT, lue dans `snapshot_id` (début de la clé primaire, donc dans l'index), et non sur
+    `created_at` : `created_at` est la dernière colonne de la ligne, derrière ~100 Ko de JSON ; la lire parcourt toute la chaîne de pages de
+    débordement, soit toute la table (60 Go le 04/11/2026) à chaque passage. Un snapshot ne change jamais : une entrée de plus de quelques
+    jours ne sert plus qu'à rejouer ce snapshot (reprise d'un run interrompu), qui la recalculera. Un identifiant qui ne commence pas par
+    une date n'est jamais évincé.
+
+    Par paquets de `chunk` lignes validés un à un (le verrou d'écriture reste court). Les pages libérées sont réutilisées par les écritures
+    suivantes : le fichier cesse de grossir mais ne rétrécit que par `patrick storage vacuum`."""
+    days = vol_cache_keep_days() if keep_days is None else keep_days
+    if days <= 0:
+        return 0
+    cutoff = ((today or date.today()) - timedelta(days=days)).isoformat()  # noqa: DTZ011 -- date locale, comme celle des snapshots
+    if dry_run:
+        return conn.execute(f"SELECT COUNT(*) FROM vol_model_cache WHERE snapshot_id < ? AND {_DATED_SNAPSHOT}", (cutoff,)).fetchone()[0]
+    removed = 0
+    while True:
+        cur = conn.execute("DELETE FROM vol_model_cache WHERE rowid IN "
+                           f"(SELECT rowid FROM vol_model_cache WHERE snapshot_id < ? AND {_DATED_SNAPSHOT} LIMIT ?)", (cutoff, chunk))
+        conn.commit()
+        removed += cur.rowcount
+        if cur.rowcount < chunk:
+            return removed
 
 
 def recompress_vol_cache(conn: sqlite3.Connection, chunk: int = 500, limit_rows: int | None = None,

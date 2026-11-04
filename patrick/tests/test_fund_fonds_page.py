@@ -62,7 +62,8 @@ def test_navigation_lists_fonds_in_the_simulation_category_and_lights_it_up(clie
     assert entries == ["simulate", "fonds"]
     side = fonds_html(client, "/fonds")
     assert 'href="/fonds"' in side and 'href="/patrimoine-simulation"' not in side
-    current = re.findall(r'<a href="([^"]+)"[^>]*aria-current="page"', side)
+    sidebar = re.search(r'<aside class="sidebar".*?</aside>', side, re.DOTALL).group(0)           # le menu en blocs marque aussi la page courante
+    current = re.findall(r'<a href="([^"]+)"[^>]*aria-current="page"', sidebar)
     assert current == ["/fonds"]
     assert "/patrimoine-simulation" not in nav_registry.registered_routes()
     assert nav_registry.is_non_page_route("/patrimoine-simulation")

@@ -57,6 +57,7 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 
 - **Sidebar** 248px (rail 64px replié) : marque, **arborescence** du registre de navigation (catégories et dossiers repliables, style explorateur de VS Code, feuilles avec icônes), pied (langue + repli).
 - **Topbar** collante, translucide (`backdrop-filter`) : fil de localisation (catégorie › page, déduit du registre ; à défaut le `<title>` de la page), déclencheur de la **palette de commandes** (Ctrl K / ⌘K / `/`), bascule de thème. < 1024px : bouton menu (tiroir).
+- **Menu en blocs** (bouton « Parcourir » de la barre du haut, ≥ 1024 px) : toutes les pages d'un coup d'œil, généré depuis le registre de navigation comme la barre latérale (jamais de lien en dur). À gauche, la carte de la catégorie courante (phrase d'intro `nav_cat_desc_<catégorie>` + bouton « Ouvrir … » vers sa première page) ; à droite, une colonne par catégorie (les dossiers du registre en sous-titres), colonnes équilibrées en hauteur (`columns`). Bouton à bascule : clic, Entrée / Espace, ↓ (entre dans le menu), Échap (le focus revient au bouton), clic en dehors, sortie du focus ; ouverture au survol seulement sur souris, avec un délai.
 - **Palette de commandes** : entrées = registre de navigation (JSON rendu serveur), recherche insensible aux accents, préfixe > sous-chaîne > sous-séquence, ↑ ↓ ↵ Échap.
 - **Contenu** : colonne `max-width: 1480px`, marges 28px (16px mobile).
 
@@ -65,14 +66,17 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 | Composant | Classes | Notes |
 |---|---|---|
 | KPI | `.metric-grid > .metric` (`.metric-label`, `.metric-value.status-*`, `.metric-reliability`) | apparition échelonnée 35ms, désactivée par `prefers-reduced-motion` |
-| Carte | `.card` (`h2`, `.card-head`) | rayon 14px, pas de survol animé |
+| Carte | `.card` (`h2`, `.card-head`) | rayon `--radius-card` (20px), bordure fine, dégradé léger et ombre douce `--shadow-card` ; seule une carte cliquable (`a.card`, `.card.is-link`) réagit au survol (bordure, ombre — jamais de déplacement) |
 | Tableau | `.table-scroll > .data-table` (`th.num`/`td.num`, `tr.best`) | en-tête collant dans son conteneur, survol de ligne |
 | Badge | `.status-badge.status-{ok,error,warning,pending,neutral,disabled}` | pastille + point coloré |
 | Bannière | `.banner.banner-{error,warning,info}` | filet gauche 3px |
-| Boutons | `button.primary` / `.btn`, `.btn-secondary`, `.btn-ghost`, `.icon-btn`, `.btn-danger` | 36px (44px en pointeur grossier) |
+| Boutons | **deux niveaux** : `button.primary` / `.btn` (pastille à dégradé de la couleur de marque) et `.btn-secondary` (pastille translucide) ; `.btn-ghost`, `.icon-btn` et `.btn-danger` restent des variantes | 38px, rayon `--radius-pill`, transitions 300 ms (44px en pointeur grossier). Un seul bouton principal par page ; `.btn-arrow` ajoute la flèche de fin sur l'action principale (« Lancer le run », « Relancer », « Ouvrir … ») |
 | Formulaires | `.run-form`, `.form`, `.filter-bar`, `details.adv` | anneau de focus `--brand` 22 % |
 | Info-bulles | `.info-icon` (glossaire, `glossary.js`), `.tip[data-tip]` (CSS seul) | à utiliser sur toute surface régime/HRP/BL |
-| Segments | `.segmented` / `.preview-range-buttons > .range-btn` | |
+| Pastilles de filtre | `.kind-tabs > .kind-tab` (+ `.kind-count`) | une pastille ronde par choix, la pastille active est pleine ; liens (`<a>`) qui rechargent la page filtrée |
+| Segments | `.segmented` / `.preview-range-buttons > .range-btn` | capsule de périodes (1M…Tout) |
+| Index de sections | `.section-index > a[href="#…"]` | numérotation `01`, `02`… par compteurs CSS (rien à écrire dans le gabarit) ; `shell.js` pose `aria-current="true"` sur la section en cours (soulignement) |
+| Retour en haut | `#to-top.to-top` (base_v2.html) | rond, en bas à droite au-dessus du bandeau d'aide ; apparaît après un écran de défilement, défilement doux sauf préférence « réduire les animations » |
 | Patrimoine | `.account-grid > .account-card[data-kind]`, `.drop-zone[data-over]`, `.draggable-row`, `.drop-target` | comptes réels/fictifs, glisser-déposer |
 
 ## Graphiques
@@ -161,6 +165,7 @@ Une page relève d'**une seule** catégorie (5 : `pilotage`, `modeles`, `classes
 - ❌ Une `<canvas>` dessinée à la main dans une page : tout graphique passe par `PatrickPlot` (`chart_kit.js`)
 - ❌ Un texte français en dur dans un gabarit, un script ou un libellé d'erreur affiché tel quel
 - ❌ Vert/rouge décoratifs (réservés au sens gain/perte)
+- ❌ Plus de deux niveaux de boutons côte à côte (un principal, un secondaire) ; pas de bouton à angles droits ni de rayon propre à une page : `--radius-pill` / `--radius-card`
 - ❌ Translation/zoom au survol de panneaux statiques (décale la mise en page)
 - ❌ Changement d'état instantané (transitions 100–200ms) ; animation ignorant `prefers-reduced-motion`
 - ❌ Focus invisible ; élément cliquable sans `cursor: pointer`

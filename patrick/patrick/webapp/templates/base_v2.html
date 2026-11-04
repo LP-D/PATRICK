@@ -134,6 +134,39 @@ script below (no flash), otherwise the OS preference applies.
             </div>
             <header class="topbar">
                 <button type="button" class="icon-btn mobile-only" id="nav-open" aria-controls="sidebar" aria-label="{{ t('nav_open') }}">{{ icon('menu') }}</button>
+                {# Menu en blocs : toutes les pages d'un coup d'œil, par catégorie (carte de la catégorie courante à gauche, colonnes à droite). Généré depuis le
+                   registre de navigation comme la barre latérale, jamais de lien en dur ; ouvert au clic, au clavier ou au survol (shell.js). #}
+                {% set mega_cat = ns.cat if ns.cat else sections[0] %}
+                {% macro mega_leaf(item) %}{% set label = t(item.label_key) if (t and item.label_key) else item.label %}<li><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ label }}</a></li>{% endmacro %}
+                <div class="topbar-mega desktop-only" id="mega">
+                    <button type="button" class="mega-trigger" id="mega-trigger" aria-expanded="false" aria-controls="mega-panel" title="{{ t('nav_mega_aria') }}">
+                        {{ icon('grid', 15) }}<span>{{ t('nav_mega_trigger') }}</span>{{ icon('chevron-down', 14, 'mega-caret') }}
+                    </button>
+                    <div class="mega-panel" id="mega-panel" role="group" aria-label="{{ t('nav_mega_aria') }}" hidden>
+                        <div class="mega-feature">
+                            <span class="mega-eyebrow">{{ t(mega_cat.label_key) }}</span>
+                            <p class="mega-feature-title">{{ t('nav_cat_desc_' ~ mega_cat.key) }}</p>
+                            {% set first = mega_cat.entries[0] %}
+                            <a class="btn btn-arrow" href="{{ first.url }}">{{ t('nav_mega_open', page=(t(first.label_key) if first.label_key else first.label)) }}</a>
+                        </div>
+                        <div class="mega-cols">
+                            {% for section in sections %}
+                            <div class="mega-col{% if section.key == mega_cat.key %} is-current{% endif %}">
+                                <span class="mega-eyebrow">{{ t(section.label_key) }}</span>
+                                <ul>
+                                    {% for node in section.nodes %}
+                                    {% if node.type == 'folder' %}
+                                    <li class="mega-sub"><span class="mega-subhead">{{ t(node.label_key) }}</span>
+                                        <ul>{% for item in node.entries %}{{ mega_leaf(item) }}{% endfor %}</ul>
+                                    </li>
+                                    {% else %}{{ mega_leaf(node) }}{% endif %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
                 <div class="topbar-crumbs">
                     {% if ns.entry %}
                     <span>{{ (t(ns.cat.label_key) if t else ns.cat.label) | lower | capitalize }}</span>
@@ -244,6 +277,7 @@ script below (no flash), otherwise the OS preference applies.
     </dialog>
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
     <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
+    <button type="button" class="to-top" id="to-top" aria-label="{{ t('to_top') }}" title="{{ t('to_top') }}" hidden>{{ icon('arrow-up', 18) }}</button>
     <script src="{{ asset('confirm.js') }}"></script>
     <script src="{{ asset('shell.js') }}"></script>
     <script src="{{ asset('run_notify.js') }}" defer></script>
