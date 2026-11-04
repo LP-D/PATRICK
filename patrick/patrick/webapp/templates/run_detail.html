@@ -25,7 +25,7 @@
     {{ t('rd_started_on') }} {{ run.started_at or '—' }}{% if run.finished_at %}, {{ t('rd_finished_on') }} {{ run.finished_at }}{% endif %}
 </p>
 <form method="post" action="/runs/{{ run.run_id }}/relaunch" class="inline-form">
-    <button type="submit" class="primary">{{ t('rd_relaunch') }}</button>
+    <button type="submit" class="primary btn-arrow">{{ t('rd_relaunch') }}</button>
 </form>
 <a class="btn-secondary" href="/ml?run_id={{ run.run_id | urlencode }}">{{ t('rd_duplicate') }}</a>
 <a class="btn-secondary" href="/runs/{{ run.run_id | urlencode }}/analyse">{{ t('ra_open_analysis') }}</a>

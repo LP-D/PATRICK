@@ -518,7 +518,7 @@
            run, parce qu'ils sont 9 blocs plus haut au moment du clic. #}
         <div class="launch-bar">
             <p class="launch-recap" id="launch-recap" aria-live="polite"></p>
-            <button type="submit" class="primary" id="launch-btn"{% if torch_ok is defined and not torch_ok %} disabled aria-disabled="true"{% endif %}>
+            <button type="submit" class="primary btn-arrow" id="launch-btn"{% if torch_ok is defined and not torch_ok %} disabled aria-disabled="true"{% endif %}>
                 {{ t('btn_launch_run') }}
             </button>
         </div>

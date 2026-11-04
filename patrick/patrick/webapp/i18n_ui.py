@@ -11,6 +11,21 @@ def _s(fr: str, en: str) -> dict[str, str]:
 UI_STRINGS: dict[str, dict[str, str]] = {
     # --- gabarits
     "day_suffix": _s("j", "d"),
+    # --- menu en blocs (barre du haut) et bouton retour en haut
+    "nav_mega_trigger": _s("Parcourir", "Browse"),
+    "nav_mega_aria": _s("Toutes les pages, par catégorie", "All pages, by category"),
+    "nav_mega_open": _s("Ouvrir {page}", "Open {page}"),
+    "nav_cat_desc_pilotage": _s("Suivre vos modèles, vos signaux, vos recherches et la santé des données, au même endroit.",
+                                "Follow your models, signals, research and data health in one place."),
+    "nav_cat_desc_modeles": _s("Cadrer et lancer un entraînement : machine learning, deep learning ou reinforcement learning.",
+                               "Set up and launch a training run: machine learning, deep learning or reinforcement learning."),
+    "nav_cat_desc_classes_actifs": _s("Parcourir ce que PATRICK modélise, famille de sous-jacents par famille.",
+                                      "Browse what PATRICK models, one family of underlyings at a time."),
+    "nav_cat_desc_simulation": _s("Passer des ordres fictifs et suivre les stratégies du fonds.",
+                                  "Place paper orders and follow the fund's strategies."),
+    "nav_cat_desc_patrimoine": _s("Comptes, mouvements et risque de votre patrimoine, réel ou fictif.",
+                                  "Accounts, movements and risk of your wealth, real or paper."),
+    "to_top": _s("Retour en haut de la page", "Back to top"),
     "dt_empty": _s("Aucune donnée.", "No data."),
     "sparkline_aria": _s("tendance", "trend"),
     "pred_live_reliability": _s("Fiabilité live", "Live reliability"),
