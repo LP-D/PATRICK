@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from collections.abc import Iterable
 from datetime import date, timedelta
 
@@ -164,13 +165,34 @@ def best_suggestion(advice: dict | None, key: str | None = None):
     return None
 
 
+_ADVICE_TTL_S = 600.0
+_advice_cache: dict[tuple[str, str], tuple[float, dict | None]] = {}
+
+
+def _advice(conn: sqlite3.Connection, run_id: str, history: dict) -> dict | None:
+    """`advise_run` d'un run, gardé 10 minutes : la page calcule le lot (analyse de chaque cible), puis la confirmation le refait pour construire chaque
+    configuration. Sans cette mémoire le second passage coûtait autant que le premier (~3 min pour 519 cibles le 07/11/2026). Clé : base + run."""
+    from patrick.tracking import retrain_advisor
+
+    db_file = conn.execute("PRAGMA database_list").fetchone()[2]
+    key = (db_file, run_id)
+    now = time.monotonic()
+    hit = _advice_cache.get(key)
+    if hit is not None and now - hit[0] < _ADVICE_TTL_S:
+        return hit[1]
+    if len(_advice_cache) > 4000:
+        _advice_cache.clear()
+    result = retrain_advisor.advise_run(conn, run_id, history=history, limit=20)
+    _advice_cache[key] = (now, result)
+    return result
+
+
 def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     """Lot « runs conseillés » (ML) : par cible, le meilleur réentraînement proposé pour son dernier run terminé. Une ligne par
     cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`. Les cibles déjà en
     file sont écartées, comme celles dont la configuration refaite serait refusée par le formulaire (cible retirée de l'univers,
     ex. `^EVZ` ; historique devenu trop court…) : un seul refus annulant tout le lot à la mise en file, aucun run conseillé ne
     partirait. Le calcul (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
-    from patrick.tracking import retrain_advisor
     from patrick.webapp import forms
 
     latest: dict[str, tuple[str, int]] = {}
@@ -185,7 +207,7 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     for target, (run_id, horizon) in latest.items():
         if target in busy:
             continue
-        suggestion = best_suggestion(retrain_advisor.advise_run(conn, run_id, history=history, limit=20))
+        suggestion = best_suggestion(_advice(conn, run_id, history))
         if suggestion is None:
             continue
         config, _ = _ml_run_config(conn, run_id)
@@ -209,12 +231,10 @@ def summarize(items: list[dict]) -> dict:
 def build_recommended_config(conn: sqlite3.Connection, run_id: str, key: str, history: dict):
     """`(RunConfig, [])` ou `(None, [erreurs])` : la configuration du run `run_id` avec la suggestion `key` du conseiller, telle
     qu'on la lancerait en ouvrant `/ml?run_id=…&suggest=…` puis « Lancer » (même vue du formulaire, mêmes validations)."""
-    from patrick.tracking import retrain_advisor
-
     config, errors = _ml_run_config(conn, run_id)
     if config is None:
         return None, errors
-    suggestion = best_suggestion(retrain_advisor.advise_run(conn, run_id, history=history, limit=20), key)
+    suggestion = best_suggestion(_advice(conn, run_id, history), key)
     if suggestion is None:
         return None, [f"{run_id} : la suggestion « {key} » n'est plus proposée pour ce run."]
     return _refit(config, suggestion)

@@ -132,7 +132,9 @@ def evaluation_sizes(conn: sqlite3.Connection, trial_id: int, horizon: int) -> d
     nombre effectif, `folds` plis. Des étiquettes à `horizon` jours se recouvrent (la ligne d et la ligne d+1 partagent h-1 jours de rendement) :
     n lignes valent à peu près n / h observations indépendantes ; un score sur 300 lignes à h = 20 repose sur ~15 observations."""
     out: dict = {}
-    for split, n in conn.execute("SELECT split, COUNT(*) FROM prediction WHERE trial_id = ? AND split IN ('test', 'holdout') GROUP BY split",
+    # `+split` : sans lui SQLite choisit `idx_pred_split` (toutes les lignes `test` de tous les essais, 190 s mesurées le 07/11/2026 sur 71 Go) au lieu
+    # de la clé primaire (`trial_id = ?`, 0,03 s) ; ce run_detail est appelé pour chaque run par le conseiller de relancement (519 cibles).
+    for split, n in conn.execute("SELECT split, COUNT(*) FROM prediction WHERE trial_id = ? AND +split IN ('test', 'holdout') GROUP BY split",
                                  (trial_id,)):
         out[split] = {"n": n, "n_eff": max(1, round(n / max(horizon, 1))), "folds": 0}
     if "test" in out:

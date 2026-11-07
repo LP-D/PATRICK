@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from datetime import UTC, datetime
 
 import pandas as pd
@@ -35,6 +36,32 @@ def _default_store_dir() -> str:
     isolation (`PATRICK_STORE_ROOT` set before instantiating `DataStore()`).
     Resolution (component variable, then the data root): `patrick.paths.store_dir`."""
     return str(paths.store_dir())
+
+
+_LOCK_RETRIES = 12
+
+
+def _retry_locked(action):
+    """Rejoue `action` quand Windows refuse l'accès (`PermissionError`) : un fichier ouvert une fraction de seconde par un autre processus ne peut ni être lu ni
+    être remplacé. Le 07/11/2026 ce refus, non rejoué, faisait échouer `POST /runs` en 500 (lecture de `_index.json` pendant que le worker le réécrivait) ;
+    l'attente cumulée est d'environ 2 s, bien plus que la durée d'un remplacement."""
+    for attempt in range(_LOCK_RETRIES):
+        try:
+            return action()
+        except PermissionError:
+            if attempt == _LOCK_RETRIES - 1:
+                raise
+            time.sleep(min(0.4, 0.03 * (attempt + 1)))
+
+
+def _read_json(path: str) -> dict:
+    def _load() -> dict:
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+    return _retry_locked(_load)
 
 
 def _content_hash(df: pd.DataFrame) -> str:
@@ -64,10 +91,7 @@ class DataStore:
                              f"{self._safe_key(key)}__{content_hash}.parquet")
 
     def _read_index(self) -> dict:
-        if os.path.exists(self._index_path()):
-            with open(self._index_path()) as f:
-                return json.load(f)
-        return {}
+        return _read_json(self._index_path())
 
     def _write_index(self, idx: dict) -> None:
         """Atomic write (worker process and web process both touch
@@ -81,7 +105,7 @@ class DataStore:
         try:
             with os.fdopen(fd, "w") as f:
                 json.dump(idx, f, indent=1)
-            os.replace(tmp_path, self._index_path())
+            _retry_locked(lambda: os.replace(tmp_path, self._index_path()))
         except BaseException:
             try:
                 os.remove(tmp_path)
@@ -175,11 +199,7 @@ class DataStore:
         return os.path.join(self.root, "_series_observations.json")
 
     def _read_series_index(self) -> dict:
-        path = self._series_index_path()
-        if os.path.exists(path):
-            with open(path) as f:
-                return json.load(f)
-        return {}
+        return _read_json(self._series_index_path())
 
     def record_series_observations(self, last_dates: dict[str, str], source: str) -> None:
         """`last_dates`: {original symbol / FRED id: ISO date of its last
@@ -201,7 +221,7 @@ class DataStore:
         try:
             with os.fdopen(fd, "w") as f:
                 json.dump(idx, f, indent=1, sort_keys=True)
-            os.replace(tmp_path, self._series_index_path())
+            _retry_locked(lambda: os.replace(tmp_path, self._series_index_path()))
         except BaseException:
             try:
                 os.remove(tmp_path)

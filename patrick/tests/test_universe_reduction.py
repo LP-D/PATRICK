@@ -563,3 +563,38 @@ def test_cpcv_run_decides_on_each_combinations_train_mask(tmp_path, monkeypatch)
     expected.add(_prefix(n, n))
     assert {tuple(m) for m in masks} == expected
     assert joblib.load(result["model_path"])["universe_reduction"]["dropped"] == {"Y": "X"}
+
+
+# -- features de contexte d'une action : leurs références font partie des séries requises ----------------
+
+def test_context_feature_requires_its_reference_index():
+    """07/11/2026 : 65 prédictions quotidiennes échouaient (« Training pool columns missing ») car `required_series` ne gardait que la cible."""
+    from patrick.selection.universe_reduction import required_series
+
+    raw_columns = ["SU.PA", "IDX_FCHI", "IDX_GSPC", "IDX_N225", "Gold", "VIX"]
+    need = required_series(["SU.PA_ctx_rel_IDX_FCHI_ret_66d"], raw_columns, "SU.PA")
+    assert "IDX_FCHI" in need and "SU.PA" in need
+    assert "Gold" not in need and "VIX" not in need
+
+
+def test_context_features_rebuilt_from_restricted_raw_are_identical():
+    import numpy as np
+    import pandas as pd
+
+    from patrick.features.equity_context import build_equity_context_features
+    from patrick.selection.universe_reduction import restrict_to_required_series
+
+    rng = np.random.default_rng(3)
+    idx = pd.bdate_range("2022-01-03", periods=400)
+
+    def walk():
+        return 100 * np.exp(np.cumsum(rng.normal(0, 0.01, len(idx))))
+
+    raw = pd.DataFrame({"SU.PA": walk(), "IDX_FCHI": walk(), "IDX_GSPC": walk(), "Gold": walk(), "VIX": walk()}, index=idx)
+    full = build_equity_context_features(raw, "SU.PA")
+    wanted = [c for c in full.columns if "IDX_FCHI_ret_66d" in c]
+    assert wanted
+    restricted = restrict_to_required_series(raw, wanted, "SU.PA")
+    assert "Gold" not in restricted.columns and "IDX_FCHI" in restricted.columns
+    rebuilt = build_equity_context_features(restricted, "SU.PA")
+    pd.testing.assert_series_equal(rebuilt[wanted[0]], full[wanted[0]])

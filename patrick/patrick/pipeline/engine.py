@@ -398,7 +398,9 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
     for the fold in question."""
     if not formula_names:
         return pd.DataFrame(index=pool.index)
-    full_inter = pd.DataFrame(index=pool.index)
+    # Colonnes réunies dans un dict puis assemblées d'un coup : `full_inter[col] = …` dans la boucle fragmentait le DataFrame (PerformanceWarning
+    # par colonne, des dizaines de Mo de journal, et une copie de tout le bloc à chaque insertion).
+    columns: dict[str, pd.Series] = {}
     for col_name in formula_names:
         for tname, fn in INTERACTION_TYPES.items():
             marker = f"__{tname}__"
@@ -410,7 +412,7 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
                         # carries the anti-inf guard, indispensable HERE: a
                         # formula sound on the pilot fold can see its
                         # denominator go to ~0 on another fold.
-                        full_inter[col_name] = apply_interaction(fn, pool[a_name], pool[b_name])
+                        columns[col_name] = apply_interaction(fn, pool[a_name], pool[b_name])
                     except (TypeError, ValueError) as exc:
                         # Only the exceptions the underlying pandas/numpy
                         # elementwise arithmetic (INTERACTION_TYPES) can
@@ -422,7 +424,7 @@ def _apply_interaction_formulas(pool: pd.DataFrame, formula_names: list[str]) ->
                         logger.warning(
                             "interaction %r skipped for fold pool: %s", col_name, exc)
                 break
-    return full_inter
+    return pd.DataFrame(columns, index=pool.index)
 
 
 def build_full_feature_pool(raw: pd.DataFrame, config: RunConfig, target_col: str,

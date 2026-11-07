@@ -107,3 +107,86 @@ def test_query_via_duckdb_reads_parquet_directly(tmp_path):
 
     result = store.query(f"SELECT count(*) AS n FROM read_parquet('{store.glob_pattern()}')")
     assert result["n"].iloc[0] == 5
+
+
+# -- fichier d'index verrouillé un instant par un autre processus (Windows) ----
+
+def test_index_read_survives_a_transient_permission_error(tmp_path, monkeypatch):
+    """07/11/2026 : `POST /runs` répondait 500 quand la lecture de `_index.json` tombait pendant que le worker le remplaçait."""
+    import builtins
+
+    from patrick.data import store as store_mod
+
+    store = DataStore(root=str(tmp_path))
+    store.save("mykey", _df())
+    monkeypatch.setattr(store_mod.time, "sleep", lambda s: None)
+
+    real_open = builtins.open
+    calls = {"n": 0}
+
+    def flaky_open(path, *a, **k):
+        if str(path).endswith("_index.json") and calls["n"] < 3:
+            calls["n"] += 1
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr(store_mod, "open", flaky_open, raising=False)
+    assert store.exists("mykey")
+    assert calls["n"] == 3
+
+
+def test_index_read_gives_up_when_the_lock_never_lifts(tmp_path, monkeypatch):
+    from patrick.data import store as store_mod
+
+    store = DataStore(root=str(tmp_path))
+    store.save("mykey", _df())
+    monkeypatch.setattr(store_mod.time, "sleep", lambda s: None)
+
+    def locked(path, *a, **k):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(store_mod, "open", locked, raising=False)
+    with pytest.raises(PermissionError):
+        store.exists("mykey")
+
+
+def test_index_write_retries_the_replace(tmp_path, monkeypatch):
+    from patrick.data import store as store_mod
+
+    store = DataStore(root=str(tmp_path))
+    monkeypatch.setattr(store_mod.time, "sleep", lambda s: None)
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def flaky_replace(src, dst):
+        if calls["n"] < 2:
+            calls["n"] += 1
+            raise PermissionError(13, "Accès refusé", str(dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(store_mod.os, "replace", flaky_replace)
+    store.save("mykey", _df())
+    assert calls["n"] == 2
+    assert store.exists("mykey")
+    assert not glob.glob(os.path.join(str(tmp_path), "_index.*.tmp"))
+
+
+def test_series_index_survives_a_transient_permission_error(tmp_path, monkeypatch):
+    import builtins
+
+    from patrick.data import store as store_mod
+
+    store = DataStore(root=str(tmp_path))
+    store.record_series_observations({"AAA": "2026-01-02"}, "yfinance")
+    monkeypatch.setattr(store_mod.time, "sleep", lambda s: None)
+    real_open = builtins.open
+    calls = {"n": 0}
+
+    def flaky_open(path, *a, **k):
+        if str(path).endswith("_series_observations.json") and calls["n"] < 2:
+            calls["n"] += 1
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr(store_mod, "open", flaky_open, raising=False)
+    assert store.series_observation("AAA")["date_max"] == "2026-01-02"

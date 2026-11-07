@@ -113,6 +113,24 @@ def build_equity_context_features(raw: pd.DataFrame, target_symbol: str) -> pd.D
     return pd.DataFrame(cols, index=raw.index) if cols else pd.DataFrame(index=raw.index)
 
 
+def context_dependencies(feature: str, raw_columns) -> frozenset[str] | None:
+    """Séries brutes dont dépend une colonne `<cible>_ctx_*` (None pour toute autre colonne) : la cible, toutes les références possibles (indices de place,
+    composants du composite euro, S&P 500) et, pour le stress euro, les rendements et taux directeurs, limités à ce que `raw_columns` contient.
+
+    Sans cela `selection.universe_reduction.required_series` ne voyait que le préfixe (la cible) : la prédiction quotidienne reconstruisait le pool
+    sans l'indice de référence et échouait (« Training pool columns missing », 65 échecs relevés au 07/11/2026). Plus large que le strict nécessaire (une
+    colonne ne lit qu'une référence) mais jamais trop étroit, ce qui reste très loin de l'univers entier."""
+    if "_ctx_" not in feature:
+        return None
+    owner = feature.split("_ctx_", 1)[0]
+    cols = set(raw_columns)
+    if owner not in cols:
+        return None
+    wanted = {clean_symbol(t) for t in (*EC.EURO_COMPOSITE, EC.GLOBAL_BENCHMARK, *EC.HOME_INDEX_BY_SUFFIX.values())}
+    wanted |= {_YIELD_DE, _YIELD_FR, _YIELD_IT, _ECB_RATE, _FED_RATE}
+    return frozenset({owner} | (wanted & cols))
+
+
 # Pour la page Equity : (clé de texte, famille) de ce que reçoit une action ; les textes sont dans `webapp/i18n_pages.py` (`eq_ctx_<clé>`).
 def describe() -> list[str]:
     return ["relative", "beta", "idio", "strength", "euro_stress"]

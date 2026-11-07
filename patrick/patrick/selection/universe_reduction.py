@@ -54,6 +54,7 @@ import pandas as pd
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
+from patrick.features.equity_context import context_dependencies
 from patrick.features.guida import multi_series_dependencies
 from patrick.features.interactions import INTERACTION_TYPES
 
@@ -229,6 +230,8 @@ def feature_dependencies(feature: str, raw_columns: Sequence[str]) -> frozenset[
         a, b = (feature_dependencies(p, raw_columns) for p in parts)
         return None if a is None or b is None else a | b
     group = multi_series_dependencies(feature, raw_columns)
+    if group is None:
+        group = context_dependencies(feature, raw_columns)
     if group is not None:
         return group
     owner = feature_owner(feature, raw_columns)

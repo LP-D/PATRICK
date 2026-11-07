@@ -406,3 +406,22 @@ def test_one_invalid_recommended_item_enqueues_nothing(client, conn, seen):
                        json={"items": [{"run_id": "r1", "key": "fix_leak"}, {"run_id": "nope", "key": "fix_leak"}]})
     assert resp.status_code == 400 and seen == []
     assert client.post("/api/launch-batches/recommended", json={"items": []}).status_code == 400
+
+
+def test_advice_is_kept_between_the_batch_and_its_confirmation(conn, monkeypatch):
+    """Le lot analyse chaque cible, puis la confirmation reconstruit chaque configuration : une seule analyse par run pendant 10 minutes."""
+    from patrick.tracking import retrain_advisor
+
+    calls = []
+    monkeypatch.setattr(retrain_advisor, "advise_run", lambda c, run_id, **kw: calls.append(run_id) or {"run": run_id})
+    launch_batches._advice_cache.clear()
+    assert launch_batches._advice(conn, "r1", {}) == {"run": "r1"}
+    assert launch_batches._advice(conn, "r1", {}) == {"run": "r1"}
+    assert launch_batches._advice(conn, "r2", {}) == {"run": "r2"}
+    assert calls == ["r1", "r2"]
+
+    real = launch_batches.time.monotonic()
+    monkeypatch.setattr(launch_batches.time, "monotonic", lambda: real + launch_batches._ADVICE_TTL_S + 1)
+    launch_batches._advice(conn, "r1", {})
+    assert calls == ["r1", "r2", "r1"]                    # périmée : recalculée
+    launch_batches._advice_cache.clear()

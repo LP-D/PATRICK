@@ -493,3 +493,80 @@ def test_migration_numbers_are_unique():
     for script in db.MIGRATIONS_DIR.glob("*.sql"):
         by_number.setdefault(int(script.name.split("_", 1)[0]), []).append(script.name)
     assert {n: names for n, names in by_number.items() if len(names) > 1} == {}
+
+
+# -- statistiques du planificateur SQLite (le lot « runs conseillés » prenait 40 s par run, faute de sqlite_stat1) -----
+
+def _prediction_rows(conn, n):
+    conn.executemany("INSERT INTO prediction(trial_id, ts, split, y_pred, path_id) VALUES (1, ?, 'test', 0, ?)",
+                     ((f"2020-01-01T{i}", i) for i in range(n)))
+
+
+def test_small_database_keeps_no_planner_stats(tmp_path):
+    path = str(tmp_path / "small.db")
+    conn = db.connect(path)
+    assert db.ensure_planner_stats(conn, path + "-x") is False
+    assert not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_stat1'").fetchone()
+    conn.close()
+
+
+def test_big_prediction_table_gets_planner_stats_once(tmp_path, monkeypatch):
+    path = str(tmp_path / "big.db")
+    conn = db.connect(path)
+    conn.execute("PRAGMA foreign_keys = OFF")
+    monkeypatch.setattr(db, "PLANNER_STATS_MIN_ROWS", 50)
+    _prediction_rows(conn, 200)
+    conn.commit()
+    assert db.ensure_planner_stats(conn, path + "-big") is True
+    assert conn.execute("SELECT 1 FROM sqlite_stat1 WHERE tbl = 'prediction' LIMIT 1").fetchone()
+    assert db.ensure_planner_stats(conn, path + "-big") is False              # une seule fois par processus et par fichier
+    assert db.ensure_planner_stats(conn, path + "-big2") is False             # déjà analysée : rien à refaire
+    conn.close()
+
+
+def test_planner_stats_failure_is_silent(tmp_path, monkeypatch):
+    path = str(tmp_path / "ro.db")
+    conn = db.connect(path)
+    conn.execute("PRAGMA foreign_keys = OFF")
+    monkeypatch.setattr(db, "PLANNER_STATS_MIN_ROWS", 10)
+    _prediction_rows(conn, 50)
+    conn.commit()
+    conn.close()
+    ro = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    assert db.ensure_planner_stats(ro, path + "-ro") is False                 # base en lecture seule : pas d'exception
+    ro.close()
+
+
+def test_evaluation_sizes_reads_the_primary_key_index(tmp_path):
+    """`+split` : sans lui, SQLite lit `idx_pred_split` (tous les essais) au lieu de `trial_id = ?`."""
+    from patrick.tracking import history
+
+    conn = db.connect(str(tmp_path / "plan.db"))
+    conn.execute("PRAGMA foreign_keys = OFF")
+    rows = [(1, f"2020-01-{i + 1:02d}", "test", 0.0, i) for i in range(5)] + [(1, "2021-01-01", "holdout", 0.0, 9), (2, "2020-01-01", "test", 0.0, 0)]
+    conn.executemany("INSERT INTO prediction(trial_id, ts, split, y_pred, path_id) VALUES (?, ?, ?, ?, ?)", rows)
+    sizes = history.evaluation_sizes(conn, 1, horizon=5)
+    assert sizes["test"]["n"] == 5 and sizes["holdout"]["n"] == 1
+    plan = " ".join(r[3] for r in conn.execute(
+        "EXPLAIN QUERY PLAN SELECT split, COUNT(*) FROM prediction WHERE trial_id = 1 AND +split IN ('test', 'holdout') GROUP BY split"))
+    assert "idx_pred_split" not in plan
+    conn.close()
+
+
+def test_missing_migration_column_is_recreated(tmp_path):
+    """Base en version 50 sans `fund_strategy.updated_at` (migration 0033 jamais passée) : `connect` la recrée et reprend `created_at`."""
+    path = str(tmp_path / "drift.db")
+    conn = db.connect(path)
+    conn.execute("INSERT INTO fund_strategy(strategy_id, name, wrapper, base_currency, initial_capital, opened_on, created_at) "
+                 "VALUES ('s1', 'x', 'CTO', 'EUR', 1000, '2026-01-01', '2026-01-02')")
+    conn.commit()
+    conn.execute("ALTER TABLE fund_strategy DROP COLUMN updated_at")
+    conn.commit()
+    conn.close()
+
+    db._DRIFT_CHECKED.discard(path)
+    conn = db.connect(path)
+    assert "updated_at" in [r[1] for r in conn.execute("PRAGMA table_info(fund_strategy)")]
+    assert conn.execute("SELECT updated_at FROM fund_strategy").fetchone()[0] == "2026-01-02"
+    assert db.repair_schema_drift(conn, path) == []                       # déjà contrôlée : rien à refaire
+    conn.close()

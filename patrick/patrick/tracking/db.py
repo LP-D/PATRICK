@@ -73,7 +73,72 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA mmap_size = 268435456")
     if not _schema_is_current(conn):
         migrate(conn)
+    repair_schema_drift(conn, path)
+    ensure_planner_stats(conn, path)
     return conn
+
+
+# Colonnes que `schema_version` donne pour appliquées mais que certaines bases n'ont pas (constaté le 07/11/2026 sur la base réelle, version 50 :
+# `fund_strategy.updated_at` de la migration 0033 absente, d'où `POST /api/fund/strategies` en 500 et le report des fonds de l'autre PC en échec).
+# Chaque entrée : (table, colonne, instructions à rejouer, dans l'ordre, quand la colonne manque).
+_COLUMN_REPAIRS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("fund_strategy", "updated_at", ("ALTER TABLE fund_strategy ADD COLUMN updated_at TEXT",
+                                      "UPDATE fund_strategy SET updated_at = created_at WHERE updated_at IS NULL")),
+)
+_DRIFT_CHECKED: set[str] = set()
+
+
+def repair_schema_drift(conn: sqlite3.Connection, path: str) -> list[str]:
+    """Recrée les colonnes de `_COLUMN_REPAIRS` absentes d'une base dont la version de schéma est pourtant à jour ; renvoie `table.colonne` de celles
+    qui ont été recréées. Une fois par processus et par fichier ; une base verrouillée ou en lecture seule est laissée telle quelle."""
+    if path in _DRIFT_CHECKED:
+        return []
+    _DRIFT_CHECKED.add(path)
+    repaired: list[str] = []
+    try:
+        for table, column, statements in _COLUMN_REPAIRS:
+            columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
+            if columns and column not in columns:
+                for statement in statements:
+                    conn.execute(statement)
+                repaired.append(f"{table}.{column}")
+        if repaired:
+            conn.commit()
+    except sqlite3.Error:
+        conn.rollback()
+        return []
+    return repaired
+
+
+_STATS_CHECKED: set[str] = set()
+PLANNER_STATS_MIN_ROWS = 1_000_000
+
+
+def ensure_planner_stats(conn: sqlite3.Connection, path: str) -> bool:
+    """Donne à SQLite des statistiques (`sqlite_stat1`) sur une grosse base, une fois par processus et par fichier ; True si elles ont été calculées ici.
+
+    Sans elles, toute requête `WHERE trial_id = ? AND split = '…'` sur `prediction` choisit `idx_pred_split` (toutes les lignes d'un échantillon pour
+    tous les essais) au lieu de la clé primaire : 190 s mesurées le 07/11/2026 sur 71 Go (0,03 s avec l'autre index), et le lot « runs conseillés »
+    n'en finissait plus. `ANALYZE` échantillonné (`analysis_limit`) prend moins d'une seconde. Les petites bases (tests, première utilisation) sont
+    laissées telles quelles : le coût d'un mauvais plan y est nul, et elles ne gagnent pas une table `sqlite_stat1`."""
+    if path in _STATS_CHECKED:
+        return False
+    _STATS_CHECKED.add(path)
+    try:
+        if conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM prediction").fetchone()[0] < PLANNER_STATS_MIN_ROWS:
+            return False
+        try:
+            if conn.execute("SELECT 1 FROM sqlite_stat1 WHERE tbl = 'prediction' LIMIT 1").fetchone():
+                return False
+        except sqlite3.OperationalError:       # pas de table sqlite_stat1 : jamais analysée
+            pass
+        conn.execute("PRAGMA analysis_limit = 1000")
+        conn.execute("ANALYZE")
+        conn.execute("PRAGMA analysis_limit = 0")
+        conn.commit()
+        return True
+    except sqlite3.Error:                      # base verrouillée ou en lecture seule : les requêtes restent correctes, juste plus lentes
+        return False
 
 
 def _latest_migration_version() -> int:
