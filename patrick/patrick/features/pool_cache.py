@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -56,6 +57,31 @@ FEATURE_CODE_HASH = _feature_code_hash()
 
 def _root() -> Path:
     return paths.feature_cache_dir()
+
+
+# Mesure (07/11/2026) : le cache pèse 143 Go pour 150 Go de plafond, mais la clé contient l'empreinte du cadre brut entier : dès qu'une barre s'ajoute, tout ce qui précède
+# est inutilisable, et chaque cible a son propre cadre. Combien de lectures le cache sert-il vraiment ? Personne ne le savait ; `take_stats` le dit, par étape, et le worker
+# l'écrit à la fin de chaque job.
+_stats: dict[str, list[float]] = {}
+
+
+def _count(stage: str, *, hit: bool, compute_s: float = 0.0) -> None:
+    entry = _stats.setdefault(stage, [0, 0, 0.0])
+    entry[0 if hit else 1] += 1
+    entry[2] += compute_s
+
+
+def take_stats() -> dict[str, dict]:
+    """`{étape: {"hits", "misses", "compute_s"}}` depuis le dernier appel, puis remise à zéro (`compute_s` : secondes passées à calculer ce qui manquait)."""
+    out = {stage: {"hits": int(v[0]), "misses": int(v[1]), "compute_s": round(v[2], 1)} for stage, v in _stats.items()}
+    _stats.clear()
+    return out
+
+
+def stats_line(stats: dict[str, dict]) -> str:
+    """Une phrase pour le journal du worker ; vide s'il n'y a rien à dire."""
+    parts = [f"{stage} : {v['hits']} lus / {v['misses']} calculés ({v['compute_s']:.0f} s)" for stage, v in sorted(stats.items())]
+    return "pools de variables, " + " ; ".join(parts) if parts else ""
 
 
 def enabled() -> bool:
@@ -150,8 +176,11 @@ def cached(stage: str, raw: pd.DataFrame, payload: dict, compute: Callable[[], p
         # built on `raw`'s own index, restored as-is when it matches.
         if len(hit) == len(raw) and hit.index.equals(raw.index):
             hit.index = raw.index
+        _count(stage, hit=True)
         return hit
+    t0 = time.perf_counter()
     out = compute()
+    _count(stage, hit=False, compute_s=time.perf_counter() - t0)
     if compact:
         out = _to_float32(out)
         save(key, out)

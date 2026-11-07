@@ -34,6 +34,10 @@
 
     <form method="post" action="/runs" class="run-form" id="run-form" data-mode="simple">
         <input type="hidden" name="family" value="{{ family | default('ml') }}">
+        {% if applied and applied.kind == 'suggest' %}
+        <input type="hidden" name="suggest_key" value="{{ applied.key }}">
+        <input type="hidden" name="suggest_run_id" value="{{ applied.run_id }}">
+        {% endif %}
         {% if duplicated_run_id %}
         <p class="banner" role="status">{{ t('duplicate_run_loaded', run_id=duplicated_run_id) }}</p>
         {% endif %}

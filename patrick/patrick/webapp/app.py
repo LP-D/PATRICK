@@ -587,8 +587,9 @@ async def launch_batches_recommended_launch(request: Request):
     if errors:
         return JSONResponse({"errors": _translated_errors(request, errors)}, status_code=400)
     runs = []
-    for config in configs:
+    for (parent_run_id, key), config in zip(pairs, configs, strict=True):
         job_view = run_manager.start_run(config)
+        launch_batches.note_relaunch(job_view["id"], parent_run_id, key, "batch")
         runs.append({"run_id": job_view["id"], "status": job_view["status"], "queue_position": job_view["queue_position"],
                      "target": config.objective.target_symbol})
     return JSONResponse({"runs": runs})
@@ -980,9 +981,12 @@ async def create_run(request: Request):
     if errors:
         return JSONResponse({"errors": _translated_errors(request, errors)}, status_code=400)
 
+    suggest_key, suggest_run = (form.get("suggest_key") or "").strip(), (form.get("suggest_run_id") or "").strip()
     runs = []
     for config in configs:
         job_view = run_manager.start_run(config)
+        if suggest_key and suggest_run:                      # formulaire pré-rempli par une suggestion du conseiller (`/ml?run_id=…&suggest=…`)
+            launch_batches.note_relaunch(job_view["id"], suggest_run, suggest_key, "form")
         runs.append({
             "run_id": job_view["id"],
             "status": job_view["status"],

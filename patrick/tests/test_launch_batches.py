@@ -425,3 +425,24 @@ def test_advice_is_kept_between_the_batch_and_its_confirmation(conn, monkeypatch
     launch_batches._advice(conn, "r1", {})
     assert calls == ["r1", "r2", "r1"]                    # périmée : recalculée
     launch_batches._advice_cache.clear()
+
+
+def test_a_batch_launch_remembers_which_suggestion_produced_each_job(client, conn, seen):
+    _suspect_run(conn)
+    client.post("/api/launch-batches/recommended", json={"items": [{"run_id": "r1", "key": "fix_leak"}]})
+    row = conn.execute("SELECT parent_run_id, suggestion_key, source FROM relaunch_log WHERE job_id = 'job1'").fetchone()
+    assert row == ("r1", "fix_leak", "batch")
+
+
+def test_the_prefilled_form_carries_its_suggestion_to_the_launch(client, conn, seen):
+    _suspect_run(conn)
+    page = client.get("/ml?run_id=r1&suggest=fix_leak")
+    assert 'name="suggest_key" value="fix_leak"' in page.text and 'name="suggest_run_id" value="r1"' in page.text
+    assert 'name="suggest_key"' not in client.get("/ml").text                         # une page sans suggestion n'en porte pas
+    fields: dict[str, list[str]] = {"target_symbols": ["^VIX"]}
+    for name, value in _scrape(page.text).multi_items():
+        fields.setdefault(name, []).append(value)
+    resp = client.post("/runs", data=fields)
+    assert resp.status_code == 200, resp.text
+    row = conn.execute("SELECT parent_run_id, suggestion_key, source FROM relaunch_log").fetchone()
+    assert row == ("r1", "fix_leak", "form")

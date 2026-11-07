@@ -95,7 +95,7 @@ from patrick.models.uniqueness import (
     effective_sample_size,
 )
 from patrick.numeric import is_nan
-from patrick.pipeline import parallel, pause
+from patrick.pipeline import early_stop_shadow, parallel, pause
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
@@ -1565,6 +1565,7 @@ class _RunState:
     # Drift references of each horizon as they were just before this run's export replaced them: the
     # champion duel puts them back if the challenger is rejected (`champion_duel.duel_and_promote`).
     drift_reference_before: dict[int, list[tuple]] = field(default_factory=dict)
+    early_stop_shadow: dict[int, dict] = field(default_factory=dict)   # `early_stop_shadow.observe` : note par horizon, sans effet sur le run
 
     @property
     def is_walkforward(self) -> bool:
@@ -1886,7 +1887,19 @@ def _scan_walkforward(st: _RunState) -> None:
                     _select_screening_finalists(st, horizon, regime, run_id)
             print(f"  h={horizon:2d}d fold{k+1}: {st.n_scan_evals} cumulative rows "
                   f"[{time.time()-st.t0:.0f}s]")
+            _observe_early_stop(st, horizon, k)
         trackdb.record_phase_timing(st.conn, run_id, "scan", t_scan_start, time.time())
+
+
+def _observe_early_stop(st: _RunState, horizon: int, fold_k: int) -> None:
+    """Note, sans rien changer au run, si un arrêt anticipé de ce challenger se serait justifié (`pipeline/early_stop_shadow.py`)."""
+    if not st.is_walkforward:
+        return
+    try:
+        board_h = _board_for_horizon(st.board, horizon)
+        early_stop_shadow.observe(st, horizon, fold_k, criterion=board_h.usable_metric(_criterion(st.config)), board=board_h)
+    except Exception:  # noqa: BLE001 -- observation : elle ne doit jamais faire échouer un scan
+        traceback.print_exc()
 
 
 def _board_for_horizon(board: Leaderboard, horizon: int, models_only: bool = True) -> Leaderboard:

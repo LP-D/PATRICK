@@ -31,7 +31,7 @@ import traceback
 
 from patrick.config.schema import RunConfig
 from patrick.pipeline import engine
-from patrick.tracking import champions
+from patrick.tracking import champions, relaunch_stats
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
 
@@ -229,6 +229,24 @@ def _restore_drift_reference(st, horizon: int) -> None:
     trackdb.replace_drift_references(st.conn, st.config.objective.target_symbol, horizon, before)
 
 
+def _job_of(st, horizon: int) -> str | None:
+    try:
+        row = st.conn.execute("SELECT job_id FROM run WHERE run_id = ?", (st.run_ids[horizon],)).fetchone()
+        return row[0] if row else None
+    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+        return None
+
+
+def _note_duel(st, horizon: int, job_id: str | None, decision: dict, duration_s: float) -> None:
+    """Garde l'issue du duel (`duel_outcome`) : sans elle, savoir si une relance conseillée a valu son temps de calcul est impossible, le run battu étant élagué.
+    `shadow` : ce que la règle d'arrêt anticipé (`early_stop_shadow`), observée sans agir, aurait fait pour cet horizon."""
+    try:
+        relaunch_stats.record_duel(st.conn, job_id=job_id, run_id=st.run_ids[horizon], target=st.config.objective.run_label(), horizon=horizon,
+                                   decision=decision, duration_s=duration_s, shadow=getattr(st, "early_stop_shadow", {}).get(horizon))
+    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+        traceback.print_exc()
+
+
 def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_horizon: dict[int, int],
                      holdout_evals: dict[int, dict] | None = None) -> dict[int, dict]:
     """One duel per exported horizon. `holdout_evals`: challenger holdout
@@ -240,6 +258,7 @@ def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_hor
         if trial_id is None:
             continue
         t_start = time.time()
+        job_id = _job_of(st, horizon)           # lu avant le duel : le run d'un challenger battu est élagué avec lui
         try:
             decisions[horizon] = _duel_one(st, horizon, best_h, trial_id, holdout_evals.get(horizon))
         except Exception as exc:  # noqa: BLE001 -- a failed duel keeps the status quo, it never fails a finished run
@@ -250,6 +269,7 @@ def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_hor
         except Exception:  # noqa: BLE001 -- same rule: housekeeping after a duel never fails a finished run
             traceback.print_exc()
         d = decisions[horizon]
+        _note_duel(st, horizon, job_id, d, time.time() - t_start)
         scores = ""
         if "champion_score" in d:
             scores = f" (challenger {d['criterion']}={d['challenger_score']:.4f} vs champion {d['champion_score']:.4f})"

@@ -24,6 +24,7 @@ from math import comb
 from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import training_profiles as profiles
+from patrick.tracking import relaunch_stats
 
 # Seuils (AUC multiclasse un-contre-tous sur 4 classes : le hasard vaut 0,50).
 #
@@ -91,6 +92,7 @@ class Diagnosis:
     class_shares: dict[str, float] | None = None
     horizon_auc: dict[int, float] = field(default_factory=dict)   # AUC de test par horizon d'un même lancement
     duration_s: float | None = None
+    live_failure: dict | None = None        # prédiction quotidienne en échec depuis des jours faute de colonnes d'entrée (`relaunch_stats.live_failure`)
     view: dict = field(default_factory=dict)  # valeurs actuelles des champs du formulaire
 
     # ---- dérivés
@@ -341,6 +343,17 @@ def _rule_short_history(d: Diagnosis) -> Suggestion | None:
         "min_train_frac": 0.5}, {"years": f"{d.history_years:.1f}", "threshold": f"{SHORT_HISTORY_YEARS:.0f}"})
 
 
+def _rule_inputs_lost(d: Diagnosis) -> Suggestion | None:
+    """Le modèle ne sait plus prédire : une série dont il dépend est écartée par les portes de qualité du jour (couverture, trou, rendement aberrant).
+    Relancer avec les réglages d'aujourd'hui en construit un sur les séries qui restent. 740 échecs sur 261 runs relevés le 07/11/2026."""
+    f = d.live_failure
+    if not f:
+        return None
+    missing = f.get("missing") or []
+    return Suggestion("inputs_lost", _clip(90 + min(f["n"], 10) / 2, 0, 99), {},
+                      {"days": f["n"], "since": str(f.get("since") or "")[:10], "missing": ", ".join(missing[:3]) + ("…" if len(missing) > 3 else "")})
+
+
 def _rule_data_degraded(d: Diagnosis) -> Suggestion | None:
     if d.n_universe <= 0 or d.n_excluded / d.n_universe < EXCLUSION_FRAC:
         return None
@@ -432,12 +445,13 @@ def _rule_robustness_seed(d: Diagnosis) -> Suggestion | None:
 
 
 RULES = (_rule_fix_leak, _rule_signal_absent, _rule_no_edge, _rule_overfit, _rule_unstable_folds, _rule_unstable_features, _rule_more_capacity,
-         _rule_deep_learning, _rule_short_history, _rule_data_degraded, _rule_class_balance, _rule_overconfident, _rule_calibrate, _rule_confirm_cpcv,
+         _rule_deep_learning, _rule_short_history, _rule_inputs_lost, _rule_data_degraded, _rule_class_balance, _rule_overconfident, _rule_calibrate, _rule_confirm_cpcv,
          _rule_try_alpha, _rule_best_horizon, _rule_faster_iteration, _rule_robustness_seed)
 
 
-def advise(diag: Diagnosis, *, limit: int = 6) -> list[Suggestion]:
-    """Les propositions de réentraînement, de la plus pertinente à la moins pertinente (à score égal : la moins chère d'abord)."""
+def advise(diag: Diagnosis, *, limit: int = 6, stats: dict | None = None) -> list[Suggestion]:
+    """Les propositions de réentraînement, de la plus pertinente à la moins pertinente (à score égal : la moins chère d'abord). `stats` : le bilan des duels par
+    suggestion (`relaunch_stats.suggestion_stats`), qui nuance le score d'une clé une fois assez de duels observés (sans effet avant)."""
     out: list[Suggestion] = []
     seen: set[str] = set()
     for rule in RULES:
@@ -454,6 +468,8 @@ def advise(diag: Diagnosis, *, limit: int = 6) -> list[Suggestion]:
             if diag.duration_s:
                 s.est_minutes = round(diag.duration_s / 60 * s.cost_factor, 1)
         s.facts = {k: _fmt(v) for k, v in s.facts.items()}
+        if stats:
+            s.score = _clip(s.score * relaunch_stats.suggestion_factor(stats, s.key))
         out.append(s)
     out.sort(key=lambda s: (-s.score, s.cost_factor or 1.0))
     return out[:limit]
@@ -545,7 +561,8 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
         jaccard=stab.get("mean_jaccard"), rho_test_holdout=diag_ho.get("rho") if (diag_ho.get("n_trials") or 0) >= 3 else None,
         cumulative_trials=detail.get("cumulative_trials"), history_years=years, n_excluded=len(issues),
         n_universe=len(uni.get("yf_tickers") or []) + len(uni.get("fred_series") or {}), class_shares=shares,
-        horizon_auc=horizon_auc, duration_s=(detail.get("phase_breakdown") or {}).get("run_total_s"), view=view)
+        horizon_auc=horizon_auc, duration_s=(detail.get("phase_breakdown") or {}).get("run_total_s"),
+        live_failure=relaunch_stats.live_failure(conn, run_id), view=view)
 
 
 def advise_run(conn, run_id: str, *, detail: dict | None = None, history: dict | None = None, limit: int = 6) -> dict | None:
@@ -553,4 +570,4 @@ def advise_run(conn, run_id: str, *, detail: dict | None = None, history: dict |
     diag = diagnose_run(conn, run_id, detail=detail, history=history)
     if diag is None or diag.auc_test is None and diag.f1_test is None:
         return None
-    return {"diagnosis": diag, "suggestions": advise(diag, limit=limit)}
+    return {"diagnosis": diag, "suggestions": advise(diag, limit=limit, stats=relaunch_stats.suggestion_stats(conn))}

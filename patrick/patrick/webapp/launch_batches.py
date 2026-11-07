@@ -165,6 +165,22 @@ def best_suggestion(advice: dict | None, key: str | None = None):
     return None
 
 
+def note_relaunch(job_id: str, parent_run_id: str, key: str, source: str) -> None:
+    """Garde quel run et quelle suggestion ont produit ce job (`relaunch_stats`), pour mesurer plus tard lesquelles valent leur temps de calcul.
+    Mesure seulement : une base inaccessible ne doit jamais empêcher un lancement."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import relaunch_stats
+
+    try:
+        conn = trackdb.connect()
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        relaunch_stats.record_relaunch(conn, job_id, parent_run_id, key, source)
+    finally:
+        conn.close()
+
+
 _ADVICE_TTL_S = 600.0
 _advice_cache: dict[tuple[str, str], tuple[float, dict | None]] = {}
 

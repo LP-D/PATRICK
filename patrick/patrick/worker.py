@@ -27,6 +27,7 @@ import numpy as np
 from patrick import cache_eviction
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.features import pool_cache
 from patrick.keep_awake import keep_awake
 from patrick.pipeline import pause
 from patrick.pipeline.engine import run_pipeline
@@ -432,6 +433,12 @@ def _tidy_storage(conn, job_id: str) -> None:
     rows = sum(r["rows"] for r in results)
     if rows:
         print(f"[ARCHIVE] {rows} lignes de prédictions de scan archivées ({sum(r['trials'] for r in results)} essais hors tête).")
+    try:
+        line = pool_cache.stats_line(pool_cache.take_stats())
+        if line:
+            print(f"[CACHE] {line}")
+    except Exception as exc:  # noqa: BLE001 -- mesure : jamais bloquante
+        print(f"[CACHE] mesure des pools non écrite : {type(exc).__name__}: {exc}")
     try:
         evicted = cache_eviction.evict_feature_cache()
         if evicted["removed_files"]:

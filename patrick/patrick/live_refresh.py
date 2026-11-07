@@ -25,6 +25,7 @@ from functools import partial
 
 from patrick.clock import utc_today
 from patrick.tracking import db as trackdb
+from patrick.tracking import relaunch_stats
 
 logger = logging.getLogger("patrick.live_refresh")
 
@@ -100,8 +101,16 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
     return list(latest_per_pair.values())
 
 
+def _open_failure_tracker(db_path: str | None):
+    """Connexion qui sert à noter les échecs ; `None` si la base est inaccessible (la mesure ne doit jamais empêcher une prédiction)."""
+    try:
+        return trackdb.connect(db_path)
+    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+        return None
+
+
 def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=None,
-                           db_path: str | None = None, on_item=None) -> RunSummary:
+                           db_path: str | None = None, on_item=None, track_failures: bool | None = None) -> RunSummary:
     """Appelle `predict_live_fn(candidate.run_id, db_path=db_path)` pour
     chaque candidat, un par un. Une exception sur UN item ne doit JAMAIS
     interrompre le traitement des suivants -- try/except par item, erreur
@@ -110,7 +119,12 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
     `predict_live_fn` est injectable (mocké dans les tests) ; par défaut,
     `patrick.predict.predict_live` avec un cache de téléchargement partagé
     entre les runs de même objectif/univers. `on_item(outcome)` : rappel de
-    progression (affichage de l'avancement dans l'app)."""
+    progression (affichage de l'avancement dans l'app).
+
+    `track_failures` : noter dans la base (`live_failure`) les modèles qui échouent et effacer la note de ceux qui réussissent ; le conseiller de relance s'en sert
+    (suggestion `inputs_lost`). Par défaut seulement avec la vraie prédiction : un `predict_live_fn` injecté (tests) n'écrit jamais dans la base."""
+    if track_failures is None:
+        track_failures = predict_live_fn is None
     if predict_live_fn is None:
         from patrick import (
             predict as predict_module,  # chargé ici : tire sklearn / xgboost / le pipeline (~1 s)
@@ -119,6 +133,7 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
         predict_live_fn = partial(predict_module.predict_live, raw_cache={})
 
     summary = RunSummary()
+    tracker = _open_failure_tracker(db_path) if track_failures else None
     for candidate in candidates:
         started_at = datetime.now(UTC).isoformat()
         logger.info("START target=%s horizon=%s run_id=%s", candidate.target, candidate.horizon,
@@ -131,15 +146,21 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
                         detail.get("y_pred"), detail.get("y_proba"), detail.get("n_outcomes_updated"))
             outcome = PredictOutcome(candidate=candidate, ok=True, detail=detail,
                                      started_at=started_at, finished_at=finished_at)
+            if tracker is not None:
+                relaunch_stats.clear_live_failure(tracker, candidate.run_id)
         except Exception as exc:
             finished_at = datetime.now(UTC).isoformat()
             logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
                              candidate.horizon, candidate.run_id)
             outcome = PredictOutcome(candidate=candidate, ok=False, error=str(exc),
                                      started_at=started_at, finished_at=finished_at)
+            if tracker is not None:
+                relaunch_stats.record_live_failure(tracker, candidate.run_id, str(exc))
         summary.add(outcome)
         if on_item is not None:
             on_item(outcome)
+    if tracker is not None:
+        tracker.close()
     return summary
 
 
