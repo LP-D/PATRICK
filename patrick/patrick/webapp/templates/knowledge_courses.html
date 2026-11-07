@@ -1,0 +1,21 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('kb_courses_page_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('knowledge.css') }}">
+<h1 class="page-title">{{ t('kb_courses_page_title') }}</h1>
+<p class="page-subtitle">{{ t('kb_courses_page_subtitle') }}</p>
+
+<div class="kb-course-grid">
+    {% for c in courses %}
+    <article class="card kb-course-card">
+        <span class="kb-level kb-level-{{ c.level }}">{{ c.level_label }}</span>
+        <h2>{{ c.title }}</h2>
+        <p class="kb-text">{{ c.summary }}</p>
+        <p class="kb-themes">{% for th in c.themes %}<span class="kb-theme">{{ th }}</span>{% endfor %}</p>
+        <p class="kb-meta">{% if c.available %}{{ t('kb_reading_time', n=c.minutes) }} · {% endif %}{{ t('kb_course_entries', n=c.n_terms) }}</p>
+        {% if c.available %}<a class="primary" href="/connaissances/cours/{{ c.slug }}">{{ t('kb_read_course') }}</a>{% else %}<p class="hint">{{ t('kb_course_unavailable') }}</p>{% endif %}
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

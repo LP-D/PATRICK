@@ -50,7 +50,7 @@
         if (terms.length === 1) {
             titleEl.textContent = label || termLabel(terms[0]);
             bodyEl.textContent = GLOSSARY[terms[0]];
-            if (more) more.href = "/vocabulary#term-" + encodeURIComponent(terms[0]);
+            if (more) more.href = "/connaissances/dictionnaire#term-" + encodeURIComponent(terms[0]);
             return;
         }
         titleEl.textContent = label || terms.map(termLabel).join(" · ");
@@ -64,7 +64,7 @@
             para.appendChild(document.createTextNode(" " + GLOSSARY[key]));
             bodyEl.appendChild(para);
         });
-        if (more) more.href = "/vocabulary";
+        if (more) more.href = "/connaissances/dictionnaire";
     }
 
     /* Un seul « ? » par zone. Les définitions d'un bloc replié (`details.adv` du formulaire de lancement : algorithmes,

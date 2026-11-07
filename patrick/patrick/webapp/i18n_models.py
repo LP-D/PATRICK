@@ -9,6 +9,7 @@ from patrick.webapp.glossary_models import LABEL_STRINGS
 from patrick.webapp.i18n_dl import DL_STRINGS
 from patrick.webapp.i18n_econometrics import ECONOMETRICS_STRINGS
 from patrick.webapp.i18n_exploration import EXPLORATION_STRINGS
+from patrick.webapp.i18n_knowledge import KNOWLEDGE_STRINGS
 from patrick.webapp.i18n_rl import RL_STRINGS
 
 
@@ -372,6 +373,7 @@ MODELS_STRINGS.update(DL_STRINGS)
 MODELS_STRINGS.update(RL_STRINGS)
 MODELS_STRINGS.update(EXPLORATION_STRINGS)
 MODELS_STRINGS.update(ECONOMETRICS_STRINGS)
+MODELS_STRINGS.update(KNOWLEDGE_STRINGS)
 
 # Clés lues par le navigateur (`window.I18N`) : `help_aria` partout ; les libellés des pages à graphiques seulement sur leur page (la charge
 # utile de chaque page reste petite). Les textes réservés au gabarit (`*_hint`, `*_subtitle`) ne sont jamais envoyés.
