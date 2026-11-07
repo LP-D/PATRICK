@@ -100,16 +100,22 @@ def record_live_failure(conn: sqlite3.Connection, run_id: str, error: str) -> bo
         conn.commit()
         return True
     except sqlite3.Error:
+        conn.rollback()
         return False
 
 
 def clear_live_failure(conn: sqlite3.Connection, run_id: str) -> bool:
+    """Efface la note d'échec d'un modèle qui vient de réussir. Ne prend JAMAIS le verrou d'écriture quand il n'y a rien à effacer : un DELETE
+    qui ne touche aucune ligne ouvre quand même une transaction d'écriture, que personne ne fermait (pas de commit), et la connexion de suivi,
+    gardée ouverte pendant toute la boucle des prédictions du jour, bloquait alors le worker et le serveur pendant des heures."""
     try:
-        cur = conn.execute("DELETE FROM live_failure WHERE run_id = ?", (run_id,))
-        if cur.rowcount:
-            conn.commit()
+        if conn.execute("SELECT 1 FROM live_failure WHERE run_id = ?", (run_id,)).fetchone() is None:
+            return True
+        conn.execute("DELETE FROM live_failure WHERE run_id = ?", (run_id,))
+        conn.commit()
         return True
     except sqlite3.Error:
+        conn.rollback()
         return False
 
 

@@ -154,6 +154,34 @@ def test_daily_predictions_note_and_clear_failures(tmp_path):
     conn.close()
 
 
+def test_the_failure_tracker_never_holds_the_write_lock_between_predictions(tmp_path):
+    """Régression : `clear_live_failure` sur un modèle sans note (le cas courant) laissait une transaction d'écriture ouverte sur la connexion
+    de suivi ; le worker et le serveur recevaient « database is locked » tant que la boucle des prédictions du jour tournait."""
+    import sqlite3
+
+    from patrick import live_refresh
+
+    db_path = str(tmp_path / "lock.db")
+    db.connect(db_path).close()
+    cands = [live_refresh.PredictCandidate(target="X", horizon=1, run_id=f"r{i}", trial_id=i, artifact_path="a") for i in range(3)]
+    locked: list[bool] = []
+
+    def predict(run_id, db_path=None):
+        other = sqlite3.connect(db_path, timeout=0.2, isolation_level=None)       # un autre processus (worker, serveur) veut écrire
+        try:
+            other.execute("BEGIN IMMEDIATE")
+            other.execute("ROLLBACK")
+            locked.append(False)
+        except sqlite3.OperationalError:
+            locked.append(True)
+        finally:
+            other.close()
+        return {"y_pred": 1}
+
+    live_refresh.run_daily_predictions(cands, predict_live_fn=predict, db_path=db_path, track_failures=True)
+    assert locked == [False, False, False]
+
+
 def test_an_injected_prediction_function_never_writes_to_the_database(tmp_path):
     from patrick import live_refresh
 
