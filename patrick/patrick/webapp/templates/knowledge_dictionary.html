@@ -1,0 +1,58 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('kb_dict_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('knowledge.css') }}">
+<h1 class="page-title">{{ t('kb_dict_title') }}</h1>
+<p class="page-subtitle">{{ t('kb_dict_subtitle', n=total) }}</p>
+
+<section class="card kb-filters" aria-label="{{ t('kb_dict_title') }}">
+    <div class="kb-filter-row">
+        <input type="search" id="kb-search" class="kb-search" placeholder="{{ t('kb_dict_search') }}" aria-label="{{ t('kb_dict_search') }}" autocomplete="off" aria-controls="kb-body">
+        <label class="kb-select-label">{{ t('kb_filter_theme') }}
+            <select id="kb-theme">
+                <option value="">{{ t('kb_filter_all_themes') }}</option>
+                {% for th in themes %}<option value="{{ th.key }}">{{ th.label }} ({{ th.count }})</option>{% endfor %}
+            </select>
+        </label>
+        <button type="button" class="queue-action" id="kb-reset">{{ t('kb_filter_reset') }}</button>
+    </div>
+    <div class="kb-filter-row" role="group" aria-label="{{ t('kb_filter_level') }}">
+        <span class="kb-filter-label">{{ t('kb_filter_level') }}</span>
+        <button type="button" class="kb-chip is-active" data-level="">{{ t('kb_filter_all') }} <span class="kb-count">{{ total }}</span></button>
+        {% for lv in levels %}<button type="button" class="kb-chip kb-chip-level-{{ lv.key }}" data-level="{{ lv.key }}" title="{{ lv.desc }}">{{ lv.key }} · {{ lv.label }} <span class="kb-count">{{ lv.count }}</span></button>{% endfor %}
+    </div>
+    <nav class="kb-letters" aria-label="{{ t('kb_letters') }}">
+        {% for ch in letters %}<a href="#letter-{{ 'other' if ch == '#' else ch }}" data-letter-link="{{ ch }}">{{ ch }}</a>{% endfor %}
+    </nav>
+    <p class="hint kb-status" id="kb-count" role="status" aria-live="polite" data-keep data-template="{{ t('kb_dict_count', n='{n}', total='{total}') }}" data-total="{{ total }}">{{ t('kb_dict_count', n=total, total=total) }}</p>
+</section>
+
+<div id="kb-body">
+{% for g in groups %}
+<section class="kb-letter" id="letter-{{ 'other' if g.letter == '#' else g.letter }}" data-letter="{{ g.letter }}">
+    <h2 class="kb-letter-title">{{ g.letter }}</h2>
+    {% for it in g['items'] %}
+    <article class="kb-term" id="term-{{ it.key }}" data-theme="{{ it.theme }}" data-level="{{ it.level }}" data-alias="{{ it.alias }}" data-other="{{ it.other }}">
+        <header class="kb-term-head">
+            <h3>{{ it.label }}<a class="kb-link" href="#term-{{ it.key }}" aria-label="{{ t('kb_permalink') }}" title="{{ t('kb_permalink') }}">#</a></h3>
+            <span class="kb-level kb-level-{{ it.level }}">{{ it.level_label }}</span>
+            <span class="kb-theme">{{ it.theme_label }}</span>
+        </header>
+        {% if it.other or it.alias %}<p class="kb-also">{{ t('kb_also_called', names=((it.other ~ (' ; ' if it.other and it.alias else '') ~ it.alias))) }}</p>{% endif %}
+        <p class="kb-text">{{ it.text }}</p>
+        {% if it.formula %}<div class="kb-formula" aria-label="{{ t('kb_formula') }}">{{ it.formula }}</div>{% endif %}
+        {% if it.see or it.course %}
+        <footer class="kb-term-foot">
+            {% if it.see %}<span class="kb-foot-label">{{ t('kb_see_also') }}</span>{% for r in it.see %}<a class="kb-ref" href="#term-{{ r.key }}">{{ r.label }}</a>{% endfor %}{% endif %}
+            {% if it.course %}<a class="kb-course-link" href="/connaissances/cours/{{ it.course.slug }}{{ '#' ~ it.course.anchor if it.course.anchor }}">{{ t('kb_in_course') }} : {{ it.course.title }}</a>{% endif %}
+        </footer>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endfor %}
+<p class="hint hidden" id="kb-none">{{ t('kb_dict_none') }}</p>
+</div>
+<script src="{{ asset('dictionary.js') }}" defer></script>
+{% endblock %}

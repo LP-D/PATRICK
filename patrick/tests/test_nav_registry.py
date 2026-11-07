@@ -22,7 +22,7 @@ from patrick.webapp.app import app
 
 TEMPLATES_DIR = Path(nav_registry.__file__).resolve().parent / "templates"
 
-EXPECTED_CATEGORIES = ["pilotage", "modeles", "classes_actifs", "simulation", "patrimoine"]
+EXPECTED_CATEGORIES = ["pilotage", "modeles", "classes_actifs", "simulation", "patrimoine", "connaissances"]
 
 
 @pytest.fixture(autouse=True)
@@ -50,10 +50,10 @@ def _app_get_paths() -> set[str]:
 # Structure du registre
 # ---------------------------------------------------------------------------
 
-def test_categories_are_the_five_fixed_ones_in_order():
+def test_categories_are_the_six_fixed_ones_in_order():
     assert [c.key for c in nav_registry.CATEGORIES] == EXPECTED_CATEGORIES
     assert [c.label for c in nav_registry.CATEGORIES] == [
-        "PILOTAGE", "MODÈLES", "CLASSES D'ACTIFS", "SIMULATION", "PATRIMOINE",
+        "PILOTAGE", "MODÈLES", "CLASSES D'ACTIFS", "SIMULATION", "PATRIMOINE", "CONNAISSANCES",
     ]
 
 

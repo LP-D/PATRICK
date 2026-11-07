@@ -106,7 +106,7 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 | `NavEntry` | `slug` (unique), `label` (repli FR), `url`, `category`, `order`, `label_key` (i18n, optionnel), `child_routes` | Un lien de nav. `child_routes` = pages paramétrées rattachées à l'entrée mais non listées (ex. `/runs/{run_id}/detail`, `/targets/{ticker}`). |
 | `NON_PAGE_PREFIXES` / `NON_PAGE_ROUTES` | — | Routes GET qui ne sont pas des pages (`/api/*`, `/static`, `/set-lang/*`, statut/résultats/téléchargements de run). |
 
-**Taxonomie — 5 catégories fixes, dans cet ordre :**
+**Taxonomie — 6 catégories fixes, dans cet ordre :**
 
 | Clé | En-tête | Règle d'appartenance |
 |-----|---------|----------------------|
@@ -115,8 +115,9 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 | `classes_actifs` | CLASSES D'ACTIFS | Ce que PATRICK modélise, présenté par famille de sous-jacents (univers, matières premières, macro, actions…), y compris les vues cross-actifs sur l'univers PATRICK (`/portfolio` : agrégation de signaux par classe + allocation HRP). |
 | `simulation` | SIMULATION | Ouvrir des positions fictives (ticket d'ordres) et suivre les stratégies du fonds. |
 | `patrimoine` | PATRIMOINE | Gestion patrimoniale réelle ou fictive : comptes, mouvements. |
+| `connaissances` | CONNAISSANCES | Apprendre : parcours du débutant à l'avancé (`/connaissances`), cours détaillés (`/connaissances/cours`), dictionnaire du quant (`/connaissances/dictionnaire`). Contenu statique, aucun calcul. |
 
-Une page relève d'**une seule** catégorie (5 : `pilotage`, `modeles`, `classes_actifs`, `simulation`, `patrimoine`). En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
+Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes_actifs`, `simulation`, `patrimoine`, `connaissances`). En cas de doute, la catégorie est tranchée par Léon-Paul, pas par l'implémenteur. Ajouter une 5ᵉ catégorie est un amendement de ce fichier, pas un changement de code isolé. Une catégorie sans entrée n'est pas rendue (pas d'en-tête orphelin).
 
 **Arborescence (2026-10-24) :** `NavGroup` (`GROUPS`) = sous-dossier d'une catégorie ; `NavEntry.group` y range une entrée (vide = feuille posée sous la catégorie). Un dossier prend la place de sa première entrée (plus petit `order`). `nav_sections(path)` rend `entries` (liste plate : palette de commandes, état actif) et `nodes` (arbre : feuilles et dossiers, `active` = contient la page courante). Dossiers actuels : Pilotage → *Suivi des modèles*, *Signaux*, *Recherche*, *Données* ; Classes d'actifs → *Marchés*. Les pages en doublon se fusionnent dans une seule entrée (ex. `/data-freshness` redirige vers `/universe`, `/analyses` vers `/runs?vue=analyses` : l'Historique a deux vues, la liste des runs — avec un lien d'analyse détaillée par ligne — et les analyses transverses).
 
@@ -180,3 +181,5 @@ Une page relève d'**une seule** catégorie (5 : `pilotage`, `modeles`, `classes
 - [ ] Focus clavier visible ; palette utilisable au clavier seul
 - [ ] Graphiques : redessin au changement de thème, texte net en HiDPI
 - [ ] `pytest tests/test_nav_registry.py` vert
+
+**Amendement du 2026-11-07 — 6ᵉ catégorie `connaissances` (demandée par Léon).** Section d'apprentissage : parcours en trois niveaux, cours rendus depuis `docs/cours/` (Markdown, formules en MathML), dictionnaire de 750 notions (lexique des bulles « ? » inclus). Classes CSS dédiées `kb-*` dans `static/knowledge.css` ; les composants existants (`card`, `data-table`, `table-scroll`, `queue-action`, `primary`) sont réutilisés. Voir `docs/adr/0018-section-connaissances.md`.

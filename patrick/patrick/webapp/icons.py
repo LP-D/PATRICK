@@ -125,6 +125,9 @@ NAV_ICONS: dict[str, str] = {
     "risque": "gauge",
     "diagnostics": "activity",
     "vocabulary": "book",
+    "knowledge_hub": "compass",
+    "knowledge_courses": "book",
+    "knowledge_dictionary": "research",
 }
 
 

@@ -1,0 +1,68 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('kb_hub_title') }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('knowledge.css') }}">
+<h1 class="page-title">{{ t('kb_hub_title') }}</h1>
+<p class="page-subtitle">{{ t('kb_hub_subtitle', n=total) }}</p>
+
+<form class="kb-quick" action="{{ dictionary_url }}" method="get" role="search">
+    <input type="search" name="q" class="kb-search" placeholder="{{ t('kb_search_placeholder') }}" aria-label="{{ t('kb_search_placeholder') }}" autocomplete="off">
+    <button type="submit" class="primary">{{ t('kb_search_go') }}</button>
+</form>
+
+<section class="kb-levels" aria-labelledby="kb-levels-title">
+    <h2 id="kb-levels-title">{{ t('kb_levels_title') }}</h2>
+    <div class="kb-level-grid">
+        {% for lv in levels %}
+        <article class="card kb-level-card kb-level-card-{{ lv.key }}">
+            <span class="kb-level-num">{{ lv.key }}</span>
+            <h3>{{ lv.label }}</h3>
+            <p class="kb-level-desc">{{ lv.desc }}</p>
+            <p class="kb-level-count">{{ t('kb_level_entries', n=lv.count) }}</p>
+            <a class="queue-action" href="{{ dictionary_url }}?niveau={{ lv.key }}">{{ t('kb_open_dictionary') }}</a>
+        </article>
+        {% endfor %}
+    </div>
+    <p class="hint">{{ t('kb_path_hint') }}</p>
+</section>
+
+<section class="kb-courses-block" aria-labelledby="kb-courses-title">
+    <h2 id="kb-courses-title">{{ t('kb_courses_title') }}</h2>
+    <p class="hint">{{ t('kb_courses_hub_hint') }}</p>
+    <div class="kb-course-grid">
+        {% for c in courses %}
+        <article class="card kb-course-card">
+            <span class="kb-level kb-level-{{ c.level }}">{{ c.level_label }}</span>
+            <h3>{{ c.title }}</h3>
+            <p class="kb-text">{{ c.summary }}</p>
+            <p class="kb-meta">{% if c.available %}{{ t('kb_reading_time', n=c.minutes) }} · {% endif %}{{ t('kb_course_entries', n=c.n_terms) }}</p>
+            {% if c.available %}<a class="primary" href="/connaissances/cours/{{ c.slug }}">{{ t('kb_read_course') }}</a>{% else %}<p class="hint">{{ t('kb_course_unavailable') }}</p>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="card kb-matrix-block" aria-labelledby="kb-matrix-title">
+    <h2 id="kb-matrix-title">{{ t('kb_matrix_title') }}</h2>
+    <p class="hint">{{ t('kb_matrix_hint') }}</p>
+    <div class="table-scroll">
+        <table class="data-table kb-matrix">
+            <thead>
+                <tr>
+                    <th scope="col">{{ t('kb_matrix_theme') }}</th>
+                    {% for lv in levels %}<th scope="col" class="num">{{ lv.key }} · {{ lv.label }}</th>{% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <th scope="row"><a href="{{ dictionary_url }}?theme={{ r.key }}">{{ r.label }}</a></th>
+                    {% for n in r.cells %}<td class="num">{% if n %}<a href="{{ dictionary_url }}?theme={{ r.key }}&amp;niveau={{ loop.index }}">{{ n }}</a>{% else %}<span class="kb-zero">·</span>{% endif %}</td>{% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

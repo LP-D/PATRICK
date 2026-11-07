@@ -55,6 +55,7 @@ CATEGORIES: tuple[NavCategory, ...] = (
     NavCategory("classes_actifs", "CLASSES D'ACTIFS", "nav_cat_classes_actifs"),
     NavCategory("simulation", "SIMULATION", "nav_cat_simulation"),
     NavCategory("patrimoine", "PATRIMOINE", "nav_cat_patrimoine"),
+    NavCategory("connaissances", "CONNAISSANCES", "nav_cat_connaissances"),
 )
 
 # Sous-dossiers de l'arborescence. Un dossier prend la place de sa premiere entree (plus petit `order`) dans sa categorie ;
@@ -121,6 +122,11 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
              child_routes=("/patrimoine/comptes/{account_id}",)),
     NavEntry("mouvements", "Mouvements", "/mouvements", "patrimoine", 20, "nav_mouvements"),
     NavEntry("risque", "Risque", "/risque", "patrimoine", 30, "nav_risque"),
+    # CONNAISSANCES -- apprendre : parcours du debutant a l'avance, cours detailles, dictionnaire du quant.
+    NavEntry("knowledge_hub", "Parcours", "/connaissances", "connaissances", 10, "nav_knowledge_hub"),
+    NavEntry("knowledge_courses", "Cours", "/connaissances/cours", "connaissances", 20, "nav_knowledge_courses",
+             child_routes=("/connaissances/cours/{slug}",)),
+    NavEntry("knowledge_dictionary", "Dictionnaire", "/connaissances/dictionnaire", "connaissances", 30, "nav_knowledge_dictionary"),
 )
 
 # Pages d'USAGE de l'application (pas des classes d'analyse) : hors des 4 categories, elles ont leur propre

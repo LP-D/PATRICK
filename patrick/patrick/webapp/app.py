@@ -71,6 +71,7 @@ from patrick.webapp import (
     i18n_server,
     icons,
     instruments,
+    knowledge_routes,
     launch_batches,
     market_data,
     market_regime,
@@ -2184,6 +2185,8 @@ fund_routes.register(app, templates, lambda request: _i18n_context(request))
 exploration_routes.register(app, templates, lambda request: _i18n_context(request))
 # Page Économétrie (/econometrie) et API /api/econometrics/* : l'économétrie d'une série à la fois (patrick/econometrics/).
 econometrics_routes.register(app, templates, lambda request: _i18n_context(request))
+# Section Connaissances (/connaissances) : parcours, cours (docs/cours/) et dictionnaire du quant (patrick/knowledge/).
+knowledge_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page News (/news) et API /api/news/* : flux de nouvelles point-in-time, sentiment par actif (patrick/text/).
 news_routes.register(app, templates, lambda request: _i18n_context(request))

@@ -1,0 +1,35 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ title }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ asset('knowledge.css') }}">
+<p class="kb-back"><a href="/connaissances/cours">← {{ t('kb_course_back') }}</a></p>
+<h1 class="page-title">{{ title }}</h1>
+<p class="page-subtitle">{{ summary }}</p>
+{% if lang == 'en' %}<p class="hint" data-keep>{{ t('kb_course_french_only') }}</p>{% endif %}
+
+{% if not available %}
+<p class="banner banner-error" role="alert">{{ t('kb_course_unavailable') }}</p>
+{% else %}
+<div class="kb-reader">
+    <nav class="kb-toc" aria-label="{{ t('kb_course_toc') }}">
+        <h2 class="kb-toc-title">{{ t('kb_course_toc') }}</h2>
+        <p class="kb-meta">{{ t('kb_reading_time', n=minutes) }}</p>
+        <ol class="kb-toc-list">
+            {% for h in plan %}<li class="kb-toc-item kb-toc-indent-{{ h.indent }}"><a href="#{{ h.id }}" data-toc="{{ h.id }}">{{ h.text }}</a></li>{% endfor %}
+        </ol>
+    </nav>
+    <article class="kb-course-body" id="kb-course-body">
+        {{ body }}
+        {% if terms %}
+        <section class="kb-course-terms" aria-labelledby="kb-course-terms-title">
+            <h2 id="kb-course-terms-title">{{ t('kb_course_terms') }}</h2>
+            <p class="hint">{{ t('kb_course_terms_hint') }}</p>
+            <p class="kb-term-chips">{% for x in terms %}<a class="kb-ref" href="{{ dictionary_url }}#term-{{ x.key }}">{{ x.label }}</a>{% endfor %}</p>
+        </section>
+        {% endif %}
+    </article>
+</div>
+<script src="{{ asset('course.js') }}" defer></script>
+{% endif %}
+{% endblock %}
