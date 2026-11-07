@@ -23,6 +23,7 @@ KNOWLEDGE_STRINGS: dict[str, dict[str, str]] = {
     "kb_search_go": _s("Chercher", "Search"),
     "kb_levels_title": _s("Trois niveaux", "Three levels"),
     "kb_level_entries": _s("{n} notions", "{n} entries"),
+    "kb_level_unit": _s("notions", "entries"),
     "kb_open_dictionary": _s("Ouvrir le dictionnaire", "Open the dictionary"),
     "kb_courses_title": _s("Cours", "Courses"),
     "kb_courses_hub_hint": _s("Des cours rédigés pour aller au fond d'un sujet, avec les formules et des exemples chiffrés. Chaque notion du dictionnaire liée à un cours y renvoie.",
