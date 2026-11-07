@@ -14,24 +14,13 @@
 /* ---- parcours ---- */
 .kb-quick { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 22px; }
 .kb-search { flex: 1 1 320px; max-width: 560px; }
-.kb-levels h2, .kb-courses-block h2 { margin: 22px 0 10px; }
-.kb-level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.kb-level-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-top: 22px; }
-.kb-level-card h3 { margin: 0; font-size: 1.15rem; }
-.kb-level-num { position: absolute; top: 8px; right: 14px; font-size: 2.6rem; font-weight: 700; line-height: 1; opacity: .16; }
-.kb-level-card-1 { border-top: 3px solid var(--pos); }
-.kb-level-card-2 { border-top: 3px solid var(--warn); }
-.kb-level-card-3 { border-top: 3px solid var(--brand); }
-.kb-level-desc { margin: 2px 0; color: var(--text-2); }
-.kb-level-count { margin: 0 0 8px; font-size: .86rem; color: var(--text-3); }
+/* (niveaux, cours et carte thème × niveau de l'accueil : voir la section « .kb-hub » en bas de fichier) */
 .kb-course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
 .kb-course-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .kb-course-card h2, .kb-course-card h3 { margin: 6px 0 0; font-size: 1.1rem; }
 .kb-themes { margin: 4px 0; }
 .kb-matrix-block { margin-top: 22px; }
 .kb-matrix th[scope="row"] { font-weight: 500; text-align: left; }
-.kb-matrix td a { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 6px; text-decoration: none; background: var(--brand-soft); color: var(--brand); font-variant-numeric: tabular-nums; }
-.kb-matrix td a:hover { background: var(--brand); color: var(--on-brand); }
 
 /* ---- dictionnaire ---- */
 .kb-filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
@@ -103,3 +92,63 @@
 .tex-unknown { color: var(--neg); }
 .kb-course-terms { margin-top: 40px; padding-top: 16px; border-top: 2px solid var(--line-strong); }
 .kb-term-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* =====================================================================================================================
+   Page d'accueil de la section (/connaissances) — essai frontend-design.
+   Tout est rangé sous .kb-hub : les autres pages de la section (cours, dictionnaire) ne bougent pas.
+   Un seul geste fort : les trois niveaux forment un escalier dont la hauteur suit le nombre réel de notions.
+   Le reste est volontairement calme : une rampe de la couleur de marque (le vert et l'ambre restent réservés au sens), des filets au lieu
+   de cartes, des chiffres en JetBrains Mono. Variables posées par le gabarit : --share (0-1, marche), --step (rang), --heat (0-1, case).
+   ===================================================================================================================== */
+.kb-hub .kb-quick { margin: 8px 0 40px; }
+.kb-hub .kb-search { height: 48px; padding: 0 18px; max-width: 640px; font-size: 1rem; }
+.kb-hub .kb-quick button.primary { height: 48px; padding: 0 28px; }
+
+/* ---- l'escalier des niveaux ---- */
+.kb-hub .kb-levels { container-type: inline-size; }
+.kb-hub .kb-levels h2 { margin: 0 0 18px; }
+.kb-hub .kb-level-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; align-items: end; border-bottom: 2px solid var(--line-strong); }
+.kb-hub .kb-level-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 0; padding: 20px 22px 24px;
+  min-height: calc(220px + var(--share) * 200px);
+  border-bottom: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: none;
+  background: color-mix(in srgb, var(--brand) calc(5% + var(--share) * 22%), var(--surface));
+  border-color: color-mix(in srgb, var(--brand) calc(12% + var(--share) * 30%), var(--line));
+  animation: kb-grow 600ms var(--ease-out) calc(var(--step) * 120ms) both;
+}
+.kb-hub .kb-level-count { order: -1; display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; }
+.kb-hub .kb-level-figure { font-family: var(--mono); font-size: clamp(2.5rem, 5.2cqi, 3.75rem); font-weight: 600; line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; color: var(--text); }
+.kb-hub .kb-level-unit { font-size: .92rem; color: var(--text-2); }
+.kb-hub .kb-level-card h3 { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 1.2rem; font-weight: 650; }
+.kb-hub .kb-level-rank { font-family: var(--mono); font-size: .86rem; font-weight: 600; color: var(--text-2); }
+.kb-hub .kb-level-desc { max-width: 34ch; margin: 0 0 18px; color: var(--text-2); line-height: 1.5; }
+.kb-hub .kb-level-card .queue-action { margin-top: auto; }
+.kb-hub .kb-levels .hint { max-width: 78ch; margin-top: 14px; }
+@keyframes kb-grow { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+@container (max-width: 640px) {
+  .kb-hub .kb-level-grid { grid-template-columns: 1fr; gap: 12px; align-items: stretch; border-bottom: 0; }
+  .kb-hub .kb-level-card { min-height: 0; border-radius: var(--radius-lg); border-bottom: 1px solid color-mix(in srgb, var(--brand) calc(12% + var(--share) * 30%), var(--line)); }
+}
+
+/* ---- cours : une liste à filets (deux cours ne justifient pas une grille de cartes) ---- */
+.kb-hub .kb-courses-block { margin-top: 48px; }
+.kb-hub .kb-courses-block h2 { margin: 0 0 4px; }
+.kb-hub .kb-course-list { margin-top: 16px; border-top: 1px solid var(--line-strong); }
+.kb-hub .kb-course-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 32px; align-items: center; padding: 22px 2px; border-bottom: 1px solid var(--line); }
+.kb-hub .kb-course-card h3 { margin: 0; font-size: 1.2rem; font-weight: 650; }
+.kb-hub .kb-course-card .kb-text { max-width: 72ch; margin: 4px 0 10px; }
+.kb-hub .kb-course-facts { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; margin: 0; padding: 0; list-style: none; font-size: .86rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.kb-hub .kb-level { margin: 0; color: var(--text); border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line)); background: color-mix(in srgb, var(--brand) 20%, var(--surface)); }
+.kb-hub .kb-level-1 { background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
+.kb-hub .kb-level-2 { background: color-mix(in srgb, var(--brand) 14%, var(--surface)); }
+@media (max-width: 640px) { .kb-hub .kb-course-card { grid-template-columns: 1fr; } .kb-hub .kb-course-card .btn-secondary { justify-self: start; } }
+
+/* ---- carte thème × niveau : l'intensité de la case dit la densité ---- */
+.kb-hub .kb-matrix-block { margin-top: 48px; }
+.kb-hub .kb-matrix td.num { padding: 0; background: color-mix(in srgb, var(--brand) calc(var(--heat, 0) * 52%), transparent); }
+.kb-hub .kb-matrix td a, .kb-hub .kb-matrix td .kb-zero { display: block; min-width: 0; padding: 9px 16px; border-radius: 0; background: transparent; color: var(--text); font-weight: 600; text-align: right; }
+.kb-hub .kb-matrix td .kb-zero { font-weight: 400; color: var(--text-3); }
+.kb-hub .kb-matrix td a:hover, .kb-hub .kb-matrix td a:focus-visible { background: var(--brand); color: var(--on-brand); }
+.kb-hub .kb-col-rank { font-family: var(--mono); color: var(--text-2); margin-right: 4px; }
+
+@media (prefers-reduced-motion: reduce) { .kb-hub .kb-level-card { animation: none; } }
