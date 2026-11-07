@@ -168,3 +168,51 @@ def test_rate_near_the_zero_bound_is_screened_on_differences():
     after = s.loc["2020-03-30":].index
     s.loc[after] = np.clip(0.06 + np.cumsum(rng.normal(0, 0.005, len(after))), 0.01, None)
     assert quality.check_fred_series(s, "DTB6", requested_end=idx[-1]) is None
+
+
+# -- séries ALFRED : le trou se mesure entre les observations, pas entre les dates de sortie -----------
+
+def _batched_release_dates():
+    """Rendement mensuel dont janvier à août 2014 sont « sortis » ensemble le 2014-10-01 (OCDE sur FRED) : 171 jours ouvrés sans nouvelle date."""
+    obs = pd.date_range("2005-01-01", "2026-09-01", freq="MS")
+    release = pd.Series(obs.map(lambda d: d + pd.offsets.MonthBegin(1)), index=obs)
+    batch = (obs >= "2014-01-01") & (obs <= "2014-08-01")
+    release[batch] = pd.Timestamp("2014-10-01")
+    values = pd.Series(np.linspace(4.0, 1.0, len(obs)), index=obs)
+    published = pd.Series(values.to_numpy(), index=pd.DatetimeIndex(release.to_numpy()))
+    return obs, published[~published.index.duplicated(keep="last")].rename("DE10").sort_index()
+
+
+def test_a_batch_of_late_releases_is_not_a_hole_in_the_series():
+    obs, published = _batched_release_dates()
+    end = pd.Timestamp("2026-10-30")
+    old = quality.check_fred_series(published, "IRLTLT01DEM156N", end)
+    assert old is not None and old.reason == "trou_de_cotation"                       # ce que voyait la porte avant le correctif
+    assert quality.check_fred_series(published, "IRLTLT01DEM156N", end, reference_dates=obs) is None
+
+
+def test_a_real_hole_in_the_observations_is_still_caught_with_reference_dates():
+    obs, published = _batched_release_dates()
+    holed = obs.drop(pd.date_range("2014-01-01", "2014-11-01", freq="MS"))
+    issue = quality.check_fred_series(published, "IRLTLT01DEM156N", pd.Timestamp("2026-10-30"), reference_dates=holed)
+    assert issue is not None and issue.reason == "trou_de_cotation"
+
+
+def test_ingest_gives_the_observation_dates_to_the_gap_gate(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "cache"))
+    bidx = pd.bdate_range("2005-01-03", "2026-09-25")
+    monkeypatch.setattr(yfinance_source, "download_target",
+                        lambda symbol, start: pd.Series(np.linspace(100, 200, len(bidx)), index=bidx, name="IDX_TGT"))
+    obs, published = _batched_release_dates()
+
+    def fake_universe(series_map, start, **kw):
+        frame = published.rename("DE10").to_frame()
+        frame.attrs.update({"point_in_time": True, "alfred_modes": {"DE10": "hybrid"}, "last_obs": {"DE10": "2026-09-01"},
+                            "obs_index": {"DE10": obs}})
+        return frame
+
+    monkeypatch.setattr(fred_source, "download_fred_universe", fake_universe)
+    df = ingest_module.ingest(ObjectiveConfig(target_symbol="^TGT"),
+                              UniverseConfig(fred_series={"DE10": "IRLTLT01DEM156N"}, start_date="2005-01-01", fred_point_in_time="alfred"),
+                              store=DataStore(root=str(tmp_path / "store")), force=True, data_quality=DataQualityConfig())
+    assert "DE10" in df.columns

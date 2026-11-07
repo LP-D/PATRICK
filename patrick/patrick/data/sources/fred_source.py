@@ -124,13 +124,15 @@ def download_fred_universe(series_map: dict[str, str], start: str,
         # parce qu'ALFRED refuse (séries quotidiennes : trop de dates de vintage pour une seule requête).
         from patrick.data import alfred
 
-        cols, modes, last_obs = [], {}, {}
+        cols, modes, last_obs, obs_index = [], {}, {}, {}
         for name, sid in series_map.items():
             try:
                 result = alfred.alfred_series(sid, start, api_key, name=name)
                 s = result.series
                 modes[name] = result.mode
                 last_obs[name] = result.info.get("last_obs")
+                if result.obs_index is not None:
+                    obs_index[name] = result.obs_index
             except Exception as e:  # noqa: BLE001 -- provider boundary: one failing series never loses the others
                 print(f"  [WARN] ALFRED {sid}: {str(e)[:100]}")
                 s = None
@@ -144,6 +146,7 @@ def download_fred_universe(series_map: dict[str, str], start: str,
         frame.attrs["point_in_time"] = True
         frame.attrs["alfred_modes"] = modes
         frame.attrs["last_obs"] = last_obs
+        frame.attrs["obs_index"] = obs_index        # {colonne: dates des observations} : trous mesurés sur la série, pas sur ses dates de sortie
         return frame
     if not api_key:
         print("  [WARN] FRED_API_KEY not set: falling back to the public CSV scrape, which "

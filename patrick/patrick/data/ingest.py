@@ -71,7 +71,8 @@ def _attach_snapshot_context(df: pd.DataFrame, universe: UniverseConfig,
 
 def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp,
                                dq: DataQualityConfig, issues: list, *, prefilled: bool,
-                               fred_ids: dict[str, str] | None = None) -> list[str]:
+                               fred_ids: dict[str, str] | None = None,
+                               obs_index: dict | None = None) -> list[str]:
     """P6.5 checks BEYOND coverage (already handled by `download_universe`/
     `download_fred_universe` themselves, see their `issues` parameter).
 
@@ -92,7 +93,8 @@ def _run_extra_quality_checks(df_cols: pd.DataFrame, requested_end: pd.Timestamp
         if fred_ids is not None:
             issue = quality_module.check_fred_series(
                 s.rename(col), fred_ids.get(col, col), requested_end,
-                max_gap_bdays=dq.max_gap_bdays, max_robust_z=dq.max_robust_z)
+                max_gap_bdays=dq.max_gap_bdays, max_robust_z=dq.max_robust_z,
+                reference_dates=(obs_index or {}).get(col))
             if issue is not None:
                 issues.append(issue)
                 to_drop.append(col)
@@ -243,7 +245,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
         if dq.enabled and len(fred_df.columns):
             # FRED series not pre-filled at this stage: all 4 checks apply.
             to_drop = _run_extra_quality_checks(fred_df, requested_end, dq, issues, prefilled=False,
-                                                fred_ids=universe.fred_series)
+                                                fred_ids=universe.fred_series, obs_index=fred_df.attrs.get("obs_index"))
             fred_df = fred_df.drop(columns=to_drop)
         if len(fred_df):
             # F01: every observation enters on its availability date, series

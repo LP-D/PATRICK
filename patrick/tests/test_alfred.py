@@ -238,3 +238,15 @@ def test_relaunching_an_old_run_moves_it_to_alfred_but_never_touches_an_audit(tm
     modes = [json.loads(r[0])["universe"]["fred_point_in_time"] for r in conn.execute("SELECT config_json FROM job ORDER BY rowid")]
     conn.close()
     assert modes == ["alfred", "reference_date"]
+
+
+def test_assembled_series_carries_every_observation_date_even_when_releases_come_in_a_batch():
+    """Janvier à août 2014 sortis le même jour : la série publiée en perd (une valeur par date), pas la liste des observations."""
+    obs = pd.date_range("2013-09-01", "2014-12-01", freq="MS")
+    values = [1.0 + 0.1 * i for i in range(len(obs))]
+    release_dates = [pd.Timestamp("2014-10-01") if "2014-01-01" <= str(d.date()) <= "2014-08-01" else d + pd.offsets.MonthBegin(1) for d in obs]
+    releases = pd.DataFrame({"obs_date": obs, "release_date": release_dates, "value": values})
+    current = pd.Series(values, index=obs)
+    result = alfred.assemble("IRLTLT01DEM156N", releases, current, "2013-06-03")
+    assert len(result.series) < len(obs)                                  # le paquet du 2014-10-01 n'occupe qu'une date
+    assert list(result.obs_index) == list(obs)

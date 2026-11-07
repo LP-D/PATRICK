@@ -48,6 +48,9 @@ class AlfredResult:
     series: pd.Series                       # valeurs sur leur date de PUBLICATION (réelle ou estimée), triées
     mode: str                               # "alfred" | "hybrid" | "fred"
     info: dict = field(default_factory=dict)
+    # Dates des OBSERVATIONS (mois, jour mesuré), pas de publication : sert aux garde-fous de qualité, qui cherchent des trous dans la série
+    # elle-même. Les dates de publication, elles, arrivent parfois par paquets (voir `quality.check_fred_series`).
+    obs_index: pd.DatetimeIndex | None = None
 
 
 # ------------------------------------------------------------------------------------------------ appels API
@@ -161,7 +164,8 @@ def assemble(series_id: str, releases: pd.DataFrame, current: pd.Series, first_v
             "first_obs": None if releases.empty else str(releases["obs_date"].min().date()),
             "last_obs": str(max(current.index.max(), releases["obs_date"].max() if not releases.empty else current.index.max()).date())
             if len(current) or not releases.empty else None}
-    return AlfredResult(series=series, mode=mode, info=info)
+    obs_dates = current.index if releases.empty else current.index.union(pd.DatetimeIndex(releases["obs_date"]))
+    return AlfredResult(series=series, mode=mode, info=info, obs_index=pd.DatetimeIndex(obs_dates).sort_values())
 
 
 # ------------------------------------------------------------------------------------------------ cache

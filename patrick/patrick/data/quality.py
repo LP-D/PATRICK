@@ -198,7 +198,8 @@ EXPECTED_SPACING_BDAYS = {"daily": 1, "weekly": 5, "monthly": 23, "quarterly": 6
 
 def check_fred_series(s: pd.Series, series_id: str, requested_end: pd.Timestamp, *,
                       max_gap_bdays: int = DEFAULT_MAX_GAP_BDAYS,
-                      max_robust_z: float = DEFAULT_MAX_ROBUST_Z) -> QualityIssue | None:
+                      max_robust_z: float = DEFAULT_MAX_ROBUST_Z,
+                      reference_dates: pd.DatetimeIndex | None = None) -> QualityIssue | None:
     """Quality gates for a FRED series ON ITS OWN publication calendar
     (reference dates, before point-in-time alignment): gap and stale-tail
     thresholds scale with the series' frequency; no frozen-price gate --
@@ -219,20 +220,27 @@ def check_fred_series(s: pd.Series, series_id: str, requested_end: pd.Timestamp,
     from patrick.data import publication_lag
 
     clean = s.dropna()
-    freq = publication_lag.frequency_of(series_id, clean.index)
+    freq = publication_lag.frequency_of(series_id, clean.index if reference_dates is None else reference_dates)
     spacing = EXPECTED_SPACING_BDAYS[freq]
     if len(clean):
         release = publication_lag.availability_dates(clean.index[-1:], series_id)[0]
         lag_bdays = int(max(np.busday_count(clean.index[-1].date(), release.date()), 0))
     else:
         lag_bdays = 0
+    # `reference_dates` (séries ALFRED, déjà datées par leur PUBLICATION) : le trou se mesure entre les OBSERVATIONS. Les dates de sortie arrivent par
+    # paquets (rendements à 10 ans OCDE : janvier à août 2014 tous « publiés » le 2014-10-01, soit 171 jours ouvrés sans nouveauté), ce qui excluait
+    # Allemagne, Japon, Royaume-Uni, France et Italie de TOUS les runs, de même que Moody's Aaa/Baa et le taux préférentiel (mesuré le 07/11/2026 :
+    # aucun trou de plus de 22 jours ouvrés dans les observations elles-mêmes). Une publication en retard n'est pas une série cassée (voir
+    # `LOW_FREQUENCY_MIN_GAP_BDAYS`) : le report de la dernière valeur connue est exactement ce que le modèle savait. Un vrai trou d'observations,
+    # lui, reste attrapé ; la fin de série périmée aussi (contrôle suivant, sur les dates de sortie).
+    gap_series = s if reference_dates is None else pd.Series(1.0, index=pd.DatetimeIndex(reference_dates), name=s.name)
     checks = [
-        (check_quote_gaps, {"max_gap_bdays": max_gap_bdays, "expected_spacing_bdays": spacing}),
-        (check_stale_tail, {"requested_end": requested_end, "max_gap_bdays": max_gap_bdays,
-                            "allowed_extra_bdays": (2 * spacing + lag_bdays) if spacing > 1 else lag_bdays}),
+        (check_quote_gaps, gap_series, {"max_gap_bdays": max_gap_bdays, "expected_spacing_bdays": spacing}),
+        (check_stale_tail, s, {"requested_end": requested_end, "max_gap_bdays": max_gap_bdays,
+                               "allowed_extra_bdays": (2 * spacing + lag_bdays) if spacing > 1 else lag_bdays}),
     ]
-    for check, kwargs in checks:
-        issue = check(s, **kwargs)
+    for check, series, kwargs in checks:
+        issue = check(series, **kwargs)
         if issue is not None:
             return issue
     return None
