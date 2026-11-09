@@ -78,10 +78,12 @@ def test_back_to_top_button_is_hidden_until_the_page_scrolls(client):
 
 
 # ---------------------------------------------------------------- boutons, cartes, pastilles, onglets
-def test_buttons_have_two_levels_and_are_pills():
+def test_buttons_have_two_levels_and_share_the_control_radius():
+    # design v4 « Terminal » (ADR 0019) : boutons en rectangles arrondis de 6 px (--radius), comme les champs ; les pastilles restent aux filtres
     for selector in ("button.primary, .btn {", ".btn-secondary, button.secondary {"):
         block = CSS[CSS.index(selector):CSS.index("}", CSS.index(selector))]
-        assert "border-radius: var(--radius-pill)" in block, selector
+        assert "border-radius: var(--radius)" in block, selector
+    assert "--radius: 6px" in CSS
     assert ".btn-arrow::after" in CSS and "mask:" in CSS
 
 
@@ -90,10 +92,11 @@ def test_main_actions_carry_the_arrow(client):
     assert "primary btn-arrow" in client.get("/runs/run1").text
 
 
-def test_cards_use_the_large_radius_and_soft_shadow():
+def test_cards_use_the_panel_radius_and_the_shadow_token():
     card = CSS[CSS.index("\n.card {"):CSS.index("\n}", CSS.index("\n.card {"))]
     assert "var(--radius-card)" in card and "var(--shadow-card)" in card
-    assert "--radius-card: 20px" in CSS and CSS.count("--shadow-card:") == 3          # sombre, clair, clair automatique
+    # v4 : panneaux en aplat (ombre nulle dans les trois thèmes), rayon de 10 px
+    assert "--radius-card: 10px" in CSS and CSS.count("--shadow-card:") == 3          # sombre, clair, clair automatique
 
 
 def test_filter_tabs_are_independent_pills():

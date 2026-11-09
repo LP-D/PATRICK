@@ -297,3 +297,11 @@ def test_tree_labels_are_translated():
     side = _sidebar(TestClient(app).get("/?lang=en").text)
     for label in ("Model tracking", "Signals", "Research", "Data", "Markets"):
         assert f">{label}<" in side, label
+
+
+def test_a_course_page_lights_only_the_courses_entry():
+    """`/connaissances` (Parcours) est un préfixe de `/connaissances/cours/...` : seule l'entrée la plus précise est la page courante."""
+    from patrick.webapp.nav_registry import NAV_ENTRIES, is_active
+    for path, slug in (("/connaissances", "knowledge_hub"), ("/connaissances/cours/econometrie", "knowledge_courses"),
+                       ("/connaissances/dictionnaire", "knowledge_dictionary"), ("/runs/run1/detail", "runs")):
+        assert [e.slug for e in NAV_ENTRIES if is_active(e, path)] == [slug], path

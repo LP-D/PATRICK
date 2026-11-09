@@ -344,7 +344,7 @@
             };
             var series = [line(chart.value, labels.value, "--brand", 2)];
             if ((chart.net_invested || []).length > 1) series.push(line(chart.net_invested, labels.net, "--text-3", 1.25, [4, 4]));
-            if ((chart.benchmark_replica || []).length > 1) series.push(line(chart.benchmark_replica, labels.bench, "--warn", 1.25));
+            if ((chart.benchmark_replica || []).length > 1) series.push(line(chart.benchmark_replica, labels.bench, "--ra-c1", 1.25));   // bleu catégoriel : le jaune reste réservé aux alertes
             P.create(host, { type: "line", xKind: "time", series: series, yFmt: eur, ranges: true, legend: true, title: host.getAttribute("aria-label") || "", height: 280 });
         }
     }

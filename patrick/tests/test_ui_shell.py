@@ -104,4 +104,5 @@ def test_templates_keep_only_data_driven_inline_styles():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates"
     inline = {p.name: p.read_text(encoding="utf-8").count('style="') for p in root.glob("*.html")}
-    assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1}
+    # knowledge_hub.html : --share (hauteur d'une marche) et --heat (intensité d'une case) sont calculés à partir des nombres de notions
+    assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1, "knowledge_hub.html": 2}

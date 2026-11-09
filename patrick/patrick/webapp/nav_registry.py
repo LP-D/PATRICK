@@ -180,8 +180,14 @@ def is_active(entry: NavEntry, path: str) -> bool:
     `child_routes` allume aussi son entree (`/targets/^VIX` allume Univers, `/compare-runs` allume Historique)."""
     if entry.url == "/":
         return path == "/"
-    return (path == entry.url or path.startswith(entry.url + "/")
-            or any(_child_pattern(route).fullmatch(path) for route in entry.child_routes))
+    if path == entry.url or any(_child_pattern(route).fullmatch(path) for route in entry.child_routes):
+        return True
+    if not path.startswith(entry.url + "/"):
+        return False
+    # par préfixe seulement si aucune entrée plus précise ne couvre la page (`/connaissances/cours/x` allume Cours, pas aussi Parcours)
+    return not any(other.url != entry.url and other.url.startswith(entry.url + "/")
+                   and (path == other.url or path.startswith(other.url + "/"))
+                   for other in NAV_ENTRIES + UTILITY_ENTRIES)
 
 
 def utility_links(path: str) -> list[dict]:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
-COLORS = ("var(--brand)", "var(--warn)", "var(--pos)", "var(--text-2)")   # une couleur par colonne (4 runs au plus)
+COLORS = ("var(--ra-c1)", "var(--ra-c2)", "var(--ra-c3)", "var(--ra-c4)")   # une couleur par colonne (4 runs au plus) : séries catégorielles du design system, jamais les couleurs de sens
 _DASH = "—"
 
 
