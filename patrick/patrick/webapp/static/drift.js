@@ -27,11 +27,10 @@
 
     if (!host || !points.length) return;
 
-    // Palette cyclée par ordre de première apparition de la phase : 7 jetons
-    // distincts couvrent les 7 phases connues (migration 0017), aucune couleur
-    // n'est codée en dur.
-    var PALETTE_TOKENS = ["--accent-ink", "--error-ink", "--color-warning",
-                           "--ink-2", "--ink-text-2", "--color-border", "--color-foreground"];
+    // Une couleur par phase, dans l'ordre de première apparition : les 7 premières séries catégorielles du design system (--ra-c1..7,
+    // validées pour le daltonisme dans les deux thèmes) couvrent les 7 phases connues (migration 0017). Plus de vert, rouge ou ambre
+    // empruntés aux couleurs de sens.
+    var PALETTE_TOKENS = ["--ra-c1", "--ra-c2", "--ra-c3", "--ra-c4", "--ra-c5", "--ra-c6", "--ra-c7"];
 
     // --- Regroupement : un point par (run, phase) en entrée -> une série
     // temporelle par phase, alignée sur la liste chronologique des runs. ---

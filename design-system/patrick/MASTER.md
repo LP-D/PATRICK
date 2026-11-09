@@ -1,4 +1,4 @@
-# Design System Master File — v3 « Cockpit Pro »
+# Design System Master File — v4 « Terminal »
 
 > **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file.
@@ -7,77 +7,95 @@
 ---
 
 **Project:** PATRICK
-**v3 (refonte complète) :** 2026-09-25 — remplace v2 « Internal Cockpit » (2026-08-22 : sombre uniquement, Fira Code/Fira Sans, palette slate/vert). Historique v2 : `git log -- design-system/patrick/MASTER.md`.
+**v4 (refonte visuelle complète) :** 2026-11-09 — « très pro, style Bloomberg, avec la propreté d'Apple » (demande de Léon). Remplace v3 « Cockpit Pro » (2026-09-25 : bleu de marque, cartes à 20 px avec ombre douce, boutons en pilule à dégradé). Décision et mesures : `docs/adr/0019-design-v4-terminal.md`. Historique v3 : `git log -- design-system/patrick/MASTER.md`. Cartographie de l'existant faite avant la refonte : `design-system/patrick/v4/research/01…06`.
 **Category:** Financial Dashboard — outil interne de recherche quantitative, pas un produit commercial.
 
-**Fichiers :** `webapp/static/patrick.css` (seule feuille), `webapp/templates/base_v2.html` (shell ; nom conservé pour ne pas toucher les 16 gabarits enfants), `webapp/static/shell.js` (thème, rail, tiroir, palette), `webapp/icons.py` (icônes).
+**Fichiers :** `webapp/static/patrick.css` (feuille principale), `analysis.css` (pages d'analyse), `knowledge.css` (Connaissances), `webapp/templates/base_v2.html` (shell), `webapp/static/shell.js` (thème, rail, tiroir, palette), `webapp/icons.py` (icônes).
 
-**Contrat de migration :** tous les noms de classes utilisés par les gabarits et par le JS (`app.js`, `simulate.js`, `market.js`, `drift.js`, `asset_stats.js`, `shap_waterfall.js`, `glossary.js`) sont conservés. La v3 est un re-skin + un nouveau shell, jamais un changement du balisage des zones de données.
+**Contrat de migration (inchangé depuis la v3) :** tous les noms de classes, identifiants et attributs utilisés par les gabarits, le JS et les tests sont conservés ; les jetons lus par le JS (`--brand`, `--brand-soft`, `--mono`, `--text`, `--text-3`, `--bg`, `--chart-bg`, `--chart-grid`, `--line-strong`, `--pos`, `--neg`, `--warn`, `--neutral-soft`, `--ra-c1…8` et les alias hérités) gardent leur nom et une valeur `#rrggbb` / `rgba()`. La v4 est un re-skin : aucun balisage de zone de données ne change.
 
 ---
 
 ## Principes
 
-1. **La donnée d'abord.** Chiffres en JetBrains Mono tabulaire, alignés à droite dans les tableaux ; aucun ornement qui concurrence un nombre.
+1. **La donnée d'abord (Bloomberg).** Densité d'un terminal : corps à 13 px, lignes de tableau de 30 px, en-têtes courts en capitales, chiffres en JetBrains Mono tabulaire. Les KPI forment un **tableau d'affichage joint** (filets de 1 px), pas des cartes séparées.
 2. **Aucun chiffre sans sa fiabilité** (hérité de la Phase 7) : `metric(label, value, reliability)` impose le troisième argument.
-3. **Sobre, pas plat.** Profondeur par surfaces étagées (`--bg` < `--surface` < `--surface-2` < `--surface-3`) et filets fins (`--line`), ombres discrètes ; pas de translation au survol des panneaux statiques.
-4. **Deux thèmes de première classe.** Sombre par défaut, clair complet ; choix explicite persisté (`localStorage['patrick-theme']`), sinon préférence OS. Appliqué avant le premier rendu (script inline dans `<head>`) : pas de flash.
-5. **Une seule couleur de marque** (`--brand`, bleu) pour l'interaction et l'état actif ; vert/rouge/ambre réservés au **sens** (gain/perte/alerte), jamais décoratifs.
+3. **Propre, pas décoré (Apple).** Panneaux en aplat (`--shadow-card: none`), profondeur par surfaces étagées (`--bg` < `--surface` < `--surface-2` < `--surface-3`) et filets ; aucun dégradé, aucune animation d'entrée, aucune translation au survol. Les ombres restent aux couches flottantes (menus, bulles, fenêtres).
+4. **Une seule couleur d'identité : l'orange terminal** (`--brand`) pour la marque, la page active, l'action principale et l'anneau de focus. Vert / rouge / jaune réservés au **sens** (gain / perte / alerte), bleu `--info` à « en cours » ; jamais décoratifs.
+5. **Deux thèmes de première classe.** Noir pur par défaut (écran de terminal), clair sur le gris de macOS (`#F2F2F7`, panneaux blancs, orange brûlé). Choix persisté (`localStorage['patrick-theme']`), sinon préférence OS, appliqué avant le premier rendu.
+6. **Une échelle, pas des valeurs.** Tailles, rayons, hauteurs de contrôle et durées viennent des jetons ; une valeur en dur dans une règle de page est un défaut.
 
 ## Jetons
 
-Définis sur `:root` (sombre) et `:root[data-theme="light"]` (+ `@media (prefers-color-scheme: light)` pour `:root:not([data-theme])`). Contrastes WCAG mesurés (luminance relative) notés dans `patrick.css`.
+Définis sur `:root` (sombre) et `:root[data-theme="light"]` (+ `@media (prefers-color-scheme: light)` pour `:root:not([data-theme])`). Contrastes WCAG calculés (luminance relative), sur `--bg` / `--surface`.
 
 | Rôle | Sombre | Clair | Usage |
 |---|---|---|---|
-| `--bg` | `#0A0C10` | `#F5F6F8` | fond de page |
-| `--surface` | `#111419` | `#FFFFFF` | cartes, sidebar |
-| `--surface-2` | `#161A21` | `#F3F4F7` | en-têtes de tableau, survol |
-| `--surface-3` | `#1D222B` | `#E9EBF0` | pistes (progress), grilles |
-| `--line` / `--line-strong` | blanc 7.5 % / 14 % | `#E4E7EC` / `#CDD2DA` | filets / bordures de contrôles |
-| `--text` | `#E8EBF0` (16.3:1) | `#0F1419` (17.9:1) | texte |
-| `--text-2` | `#A3ABB9` (8.3:1) | `#4A5261` (8.0:1) | texte secondaire |
-| `--text-3` | `#7C8594` (5.1:1) | `#6A7282` (5.0:1) | métadonnées |
-| `--brand` | `#5B8DEF` (6.1:1) | `#2F5FD0` (6.0:1) | liens, actif, bouton primaire, courbe stratégie |
-| `--pos` | `#2FBF84` | `#0B7A55` | gain, significatif, OK |
-| `--neg` | `#F0616D` | `#C62834` | perte, erreur, drawdown |
-| `--warn` | `#E5A83B` | `#9A5B00` | à vérifier, biais signalé |
-| `--chart-bg` / `--chart-grid` | `#0D1015` / blanc 6 % | `#FBFBFC` / noir 7 % | fonds et grilles de graphiques |
+| `--bg` | `#000000` | `#F2F2F7` | fond de page, bandeau des variations |
+| `--surface` | `#111113` | `#FFFFFF` | panneaux, barre latérale |
+| `--surface-2` | `#18181B` | `#F7F7F9` | champs, en-têtes de tableau, survol |
+| `--surface-3` | `#222226` | `#EBEBF0` | boutons secondaires, pistes |
+| `--line` / `--line-strong` | blanc 8 % / 16 % | `rgba(60,60,67,.14)` / `.29` | filets / bordures de contrôles |
+| `--text` | `#F5F5F7` (19,3 / 17,3) | `#1D1D1F` (15,1 / 16,8) | texte |
+| `--text-2` | `#AEAEB2` (9,5 / 8,5) | `#48484A` (8,2 / 9,1) | texte secondaire, libellés |
+| `--text-3` | `#8E8E93` (6,4 / 5,8) | `#636368` (5,4 / 6,0) | métadonnées |
+| `--brand` | `#FF9F0A` (10,2 / 9,2) | `#A93A0B` (5,7 / 6,4) | identité, actif, bouton principal, focus ; texte posé dessus `--on-brand` (noir / blanc) |
+| `--pos` | `#30D158` | `#146C2E` | gain, significatif, OK |
+| `--neg` | `#FF453A` | `#C80014` | perte, erreur, drawdown |
+| `--warn` | `#FFD60A` | `#7F5300` | à vérifier, biais signalé (jaune : distinct de l'orange d'identité) |
+| `--info` | `#409CFF` | `#005BBF` | « en cours », bannière d'information |
+| `--chart-bg` / `--chart-grid` | `#0A0A0B` / blanc 7 % | `#FFFFFF` / noir 7 % | fonds et grilles de graphiques |
+| `--ra-c1…8` | bleu `#3987E5` … rouge `#E66767` | bleu `#2A78D6` … rouge `#E34948` | séries catégorielles des graphiques (voir *Graphiques*) |
 
-Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`--color-*`, `--accent-ink`, `--ok-ink`, `--error-ink`, `--ink-2`, `--ink-text-2`, `--mono`) pointent vers ces jetons : lus par le JS des graphiques, ne jamais y mettre une couleur littérale.
+Variantes `*-soft` (fonds teintés de badges et bannières). **Alias hérités** (`--color-*`, `--accent-ink`, `--ok-ink`, `--error-ink`, `--ink-2`, `--ink-text-2`) pointent vers ces jetons.
+
+**Échelles fixes** (communes aux deux thèmes) :
+
+| Famille | Jetons |
+|---|---|
+| Texte | `--fs-xs` 11 · `--fs-sm` 12 · `--fs-base` 13 · `--fs-md` 15 · `--fs-lg` 17 · `--fs-xl` 22 · `--fs-2xl` 28 (px) |
+| Rayons | `--radius-sm` 4 (pastilles internes) · `--radius` 6 (boutons, champs, onglets) · `--radius-lg` 8 (blocs internes, barres de filtres) · `--radius-card` 10 (panneaux, fenêtres, menu en blocs) · `--radius-pill` (pastilles de filtre, badges) |
+| Hauteurs | `--control-h` 30 · `--row-h` 30 · `--topbar-h` 48 · 44 en pointeur grossier |
+| Espacements | `--space-2xs` 2 · `xs` 4 · `sm` 8 · `12` · `md` 16 · `lg` 24 · `xl` 32 · `2xl` 48 |
+| Mouvement | `--ease-out` ; 120 ms pour les états, 140–220 ms pour une couche qui s'ouvre ; tout est coupé par `prefers-reduced-motion` |
 
 ## Typographie
 
-- **UI :** Inter (variable, vendorisée `static/fonts/inter-*.woff2`, OFL), 14px de base, `cv11/ss01/ss03`.
-- **Chiffres et code :** JetBrains Mono (variable, vendorisée, OFL), `tabular-nums`.
-- Titres : 24px/650 (`.page-title`), cartes 15px/600, libellés KPI 12px/500 `--text-2`, en-têtes de tableau 11.5px/600.
-- Aucune requête externe (pas de CDN de polices : cf. l'incident Chrome/Google Fonts de la v2).
+- **UI :** Inter (variable, vendorisée, OFL), **13 px** de base, interligne 1,5, `cv11/ss01/ss03` + `tnum`.
+- **Chiffres et code :** JetBrains Mono (variable, vendorisée, OFL), `tabular-nums`, poids 500 pour les grands chiffres (KPI, cours, comptes).
+- Titre de page 22/650 (−0,022 em) ; titre de panneau 15/600 ; sous-titre de panneau (`h3`) 13/600 ; libellé KPI 12/500 `--text-2` ; valeur KPI 22 mono ; en-tête de tableau 11/600 capitales (+0,05 em).
+- Lecture longue (cours de Connaissances) : 15 px, ligne ≤ 80 caractères.
+- Aucune requête externe (pas de CDN de polices).
 
 ## Shell
 
-- **Sidebar** 248px (rail 64px replié) : marque, **arborescence** du registre de navigation (catégories et dossiers repliables, style explorateur de VS Code, feuilles avec icônes), pied (langue + repli).
-- **Topbar** collante, translucide (`backdrop-filter`) : fil de localisation (catégorie › page, déduit du registre ; à défaut le `<title>` de la page), déclencheur de la **palette de commandes** (Ctrl K / ⌘K / `/`), bascule de thème. < 1024px : bouton menu (tiroir).
-- **Menu en blocs** (bouton « Parcourir » de la barre du haut, ≥ 1024 px) : toutes les pages d'un coup d'œil, généré depuis le registre de navigation comme la barre latérale (jamais de lien en dur). À gauche, la carte de la catégorie courante (phrase d'intro `nav_cat_desc_<catégorie>` + bouton « Ouvrir … » vers sa première page) ; à droite, une colonne par catégorie (les dossiers du registre en sous-titres), colonnes équilibrées en hauteur (`columns`). Bouton à bascule : clic, Entrée / Espace, ↓ (entre dans le menu), Échap (le focus revient au bouton), clic en dehors, sortie du focus ; ouverture au survol seulement sur souris, avec un délai.
-- **Palette de commandes** : entrées = registre de navigation (JSON rendu serveur), recherche insensible aux accents, préfixe > sous-chaîne > sous-séquence, ↑ ↓ ↵ Échap.
-- **Contenu** : colonne `max-width: 1480px`, marges 28px (16px mobile).
+- **Barre latérale** 232 px (rail 56 px replié), lignes de 26 px façon liste source macOS : marque (pastille orange pleine), **arborescence** du registre de navigation, pied (langue + repli). < 1024 px : tiroir, **hors de l'ordre de tabulation quand il est fermé** (`visibility: hidden`).
+- **Barre du haut** collante, 48 px, opaque : fil de localisation, menu en blocs (« Parcourir »), **ligne de commande** (déclencheur de la palette en monospace, icône orange, Ctrl K / ⌘K / `/`), raccourcis, cloche, thème. ≤ 480 px : Vocabulaire, Réglages et Diagnostics quittent la barre (ils restent dans la palette) pour tenir à 320 px.
+- **Bandeau des variations** au-dessus : bande noire (`--bg`), symboles en `--text-2`, variations colorées par le sens.
+- **Menu en blocs** : carte de la catégorie courante (aplat `--surface-2`, filet orange en haut), une colonne par catégorie ; comportement inchangé (clic, clavier, Échap, survol différé à la souris).
+- **Palette de commandes** : entrées = registre de navigation, recherche insensible aux accents.
+- **Contenu** : colonne `max-width: 1680px`, marges 20 × 24 px (16 px mobile). Lien d'évitement « Aller au contenu » visible au focus.
 
 ## Composants (classes stables)
 
 | Composant | Classes | Notes |
 |---|---|---|
-| KPI | `.metric-grid > .metric` (`.metric-label`, `.metric-value.status-*`, `.metric-reliability`) | apparition échelonnée 35ms, désactivée par `prefers-reduced-motion` |
-| Carte | `.card` (`h2`, `.card-head`) | rayon `--radius-card` (20px), bordure fine, dégradé léger et ombre douce `--shadow-card` ; seule une carte cliquable (`a.card`, `.card.is-link`) réagit au survol (bordure, ombre — jamais de déplacement) |
-| Tableau | `.table-scroll > .data-table` (`th.num`/`td.num`, `tr.best`) | en-tête collant dans son conteneur, survol de ligne |
-| Badge | `.status-badge.status-{ok,error,warning,pending,neutral,disabled}` | pastille + point coloré |
-| Bannière | `.banner.banner-{error,warning,info}` | filet gauche 3px |
-| Boutons | **deux niveaux** : `button.primary` / `.btn` (pastille à dégradé de la couleur de marque) et `.btn-secondary` (pastille translucide) ; `.btn-ghost`, `.icon-btn` et `.btn-danger` restent des variantes | 38px, rayon `--radius-pill`, transitions 300 ms (44px en pointeur grossier). Un seul bouton principal par page ; `.btn-arrow` ajoute la flèche de fin sur l'action principale (« Lancer le run », « Relancer », « Ouvrir … ») |
-| Formulaires | `.run-form`, `.form`, `.filter-bar`, `details.adv` | anneau de focus `--brand` 22 % |
-| Info-bulles | `.info-icon` (glossaire, `glossary.js`), `.tip[data-tip]` (CSS seul) | à utiliser sur toute surface régime/HRP/BL |
-| Pastilles de filtre | `.kind-tabs > .kind-tab` (+ `.kind-count`) | une pastille ronde par choix, la pastille active est pleine ; liens (`<a>`) qui rechargent la page filtrée |
-| Segments | `.segmented` / `.preview-range-buttons > .range-btn` | capsule de périodes (1M…Tout) |
-| Index de sections | `.section-index > a[href="#…"]` | numérotation `01`, `02`… par compteurs CSS (rien à écrire dans le gabarit) ; `shell.js` pose `aria-current="true"` sur la section en cours (soulignement) |
-| Retour en haut | `#to-top.to-top` (base_v2.html) | rond, en bas à droite au-dessus du bandeau d'aide ; apparaît après un écran de défilement, défilement doux sauf préférence « réduire les animations » |
-| Patrimoine | `.account-grid > .account-card[data-kind]`, `.drop-zone[data-over]`, `.draggable-row`, `.drop-target` | comptes réels/fictifs, glisser-déposer |
+| KPI | `.metric-grid > .metric` (`.metric-label`, `.metric-value.status-*`, `.metric-reliability`) | tableau d'affichage joint : `gap: 1px` sur fond `--line`, cadre et rayon communs ; aucune animation. Même dessin pour `.headline-metrics` (AUC / F1) |
+| Panneau | `.card` (`h2`, `.card-head`), `.dash-panel` (`.dash-panel-title`) | aplat `--surface`, filet `--line`, rayon `--radius-card` ; le titre forme un **en-tête séparé par un filet** (marges négatives) ; seul un panneau cliquable réagit au survol (bordure) |
+| Tableau | `.table-scroll > .data-table` (`th.num`/`td.num`, `tr.best`) | lignes `--row-h`, en-têtes 11 px capitales sur filet fort, chiffres mono à droite, en-tête collant ; tri ▲ ▼ |
+| Badge | `.status-badge.status-{ok,error,warning,pending,neutral,disabled}` | 20 px, pastille ; `pending` = bleu `--info` |
+| Bannière | `.banner.banner-{error,warning,info}` | filet gauche 3 px, rayon `--radius-lg` |
+| Boutons | `button.primary` / `.btn` (aplat orange, texte `--on-brand`) et `.btn-secondary` (`--surface-3` + filet) ; `.btn-ghost`, `.icon-btn`, `.btn-danger` (contour rouge) | `--control-h`, rayon `--radius`, 44 px en pointeur grossier. Un seul bouton principal par page ; `.btn-arrow` sur l'action principale |
+| Champs | `.run-form`, `.form`, `.filter-bar`, `:where(.card, .filter-bar, .dash-panel)` | `--control-h`, fond `--surface-2`, bordure `--line-strong` ; focus = bordure orange + anneau plein de 2 px |
+| Focus clavier | `:focus-visible` | anneau `--focus` de **3 px**, décalé de 2 px (−3 px à l'intérieur des lignes et onglets), partout |
+| Info-bulles | `.info-icon`, `.help-q`, `.tip[data-tip]`, `.help-pop`, `.glossary-popover` | couches flottantes : rayon `--radius-lg`, ombre `--shadow-lg` |
+| Pastilles de filtre | `.kind-tabs > .kind-tab` (+ `.kind-count`), `.vocab-chip`, `.kb-chip` | pilule de 28 px, la pastille active est pleine (orange) |
+| Segments | `.segmented` / `.preview-range-buttons > .range-btn`, `.ra-seg` | contrôle segmenté façon macOS : cadre `--radius-lg`, segments `--radius`, actif teinté orange avec filet |
+| Onglets | `.exp-tabs [role=tab]`, `.run-tabs a` | soulignés (filet orange de 2 px), même dessin |
+| Index de sections | `.section-index > a[href="#…"]` | barre collée opaque, onglets rectangulaires numérotés `01`, `02`… (compteurs CSS) ; section en cours soulignée en orange |
+| Barre de lancement | `.launch-bar` (`[data-confirm]`) | collée au bas du panneau, aplat ; confirmation en jaune `--warn` |
+| Retour en haut | `#to-top.to-top` | carré arrondi `--radius-card`, au-dessus du bandeau d'aide |
+| Patrimoine | `.account-grid > .account-card[data-kind]`, `.drop-zone[data-over]`, `.draggable-row`, `.drop-target` | comptes en aplat, valeur mono |
 
 ## Graphiques
 
@@ -88,6 +106,7 @@ Variantes `*-soft` (fonds teintés de badges/bannières). **Alias hérités** (`
 - **Lisibilité** : infobulle (date + valeur de chaque série, en nœuds texte), légende cliquable (masquer une série recalcule l'échelle), trous honnêtes (une valeur absente coupe le trait), décimation min/max par colonne de pixels au-delà de 2 points par pixel.
 - **Rendu « cotation »** (Yahoo Finance / Boursorama / Bloomberg), défaut des courbes (`finance: false` pour l'éteindre) : axe des valeurs à **droite**, grille horizontale en pointillés, **aire dégradée** sous une courbe seule, **étiquette du dernier point** sur l'axe (pastille de la couleur de la courbe, fil pointillé), **réticule** à pastilles (valeur sur l'axe, date en bas). Options : `trend: true` (vert / rouge selon la variation de la fenêtre + niveau de départ en pointillés), `quote: true` (en-tête : dernière valeur, variation absolue et en %, date ; suit le survol), `ohlc: {open, high, low}` (bascule **Courbe / Bougies**, infobulle O H L C), `volume: [...]` (barres sous la courbe, colorées selon le sens), `initialDays: N` (vue de départ sur les N derniers jours), `quoteTitle: false`. Périodes : 1M 3M 6M **YTD** 1A 5A Tout. Les couleurs restent des jetons (`--pos` / `--neg` ne servent qu'au sens du mouvement). Source des bougies : `market_data.price_history` (yfinance ; FRED n'a que des clôtures), transmises par `/api/preview/{symbol}` et `/api/asset-stats/{symbol}`.
 - **Contrat de toile** inchangé : couleurs lues dans les jetons au tracé, redessin sur `patrick:themechange` et au redimensionnement (`ResizeObserver`), buffer = boîte CSS × `devicePixelRatio`, `aria-label` régénéré avec les vraies bornes de la fenêtre visible, libellés via `window.I18N` (clés `chart_*`).
+- **Couleurs des séries** : une série seule prend `--brand` ; plusieurs séries prennent les **séries catégorielles `--ra-c1…8`** dans cet ordre fixe (bleu, orange, vert d'eau, jaune, magenta, vert, violet, rouge), définies dans `patrick.css` pour les deux thèmes et validées par `validate_palette.js` (skill dataviz) : bande de luminosité, chroma, écart daltonien adjacent ≥ 8,4, vision normale ≥ 17,4, contraste ≥ 3:1 sur `--chart-bg`. Une 9ᵉ série se replie dans « Autres » ; une couleur suit l'entité, jamais son rang. `--pos` / `--neg` / `--warn` ne servent jamais d'identité de série (dérive des phases, comparaison RL et référence du patrimoine corrigées en v4).
 - **Nouveau graphique** : créer un hôte `<div>` (jamais une `<canvas>`) et appeler `PatrickPlot.create`. Fonctions pures testées sous Node : `tests/js/chart_kit.test.js` (lancé par `tests/test_chart_kit_js.py`).
 
 ---
@@ -165,21 +184,25 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 - ❌ Couleur littérale dans un gabarit ou un script (hors `patrick.css` jetons)
 - ❌ Une `<canvas>` dessinée à la main dans une page : tout graphique passe par `PatrickPlot` (`chart_kit.js`)
 - ❌ Un texte français en dur dans un gabarit, un script ou un libellé d'erreur affiché tel quel
-- ❌ Vert/rouge décoratifs (réservés au sens gain/perte)
-- ❌ Plus de deux niveaux de boutons côte à côte (un principal, un secondaire) ; pas de bouton à angles droits ni de rayon propre à une page : `--radius-pill` / `--radius-card`
+- ❌ Vert / rouge / jaune décoratifs (réservés au sens) ; orange ailleurs que sur l'identité, l'actif, l'action principale et le focus
+- ❌ Dégradé, ombre sous un panneau posé, animation d'entrée, flou décoratif
+- ❌ Taille de police, rayon ou hauteur de contrôle en dur : utiliser les échelles (`--fs-*`, `--radius*`, `--control-h`)
+- ❌ Plus de deux niveaux de boutons côte à côte (un principal, un secondaire)
 - ❌ Translation/zoom au survol de panneaux statiques (décale la mise en page)
-- ❌ Changement d'état instantané (transitions 100–200ms) ; animation ignorant `prefers-reduced-motion`
+- ❌ Changement d'état instantané (transitions de 120 ms) ; animation ignorant `prefers-reduced-motion`
 - ❌ Focus invisible ; élément cliquable sans `cursor: pointer`
 - ❌ Hero, CTA commerciaux, logos clients, tunnels
 
 ## Pre-Delivery Checklist
 
 - [ ] Les deux thèmes vérifiés (capture sombre + clair)
-- [ ] 375px, 768px, 1024px, 1440px ; aucun défilement horizontal de page (`scrollWidth == clientWidth`)
+- [ ] 320px, 375px, 768px, 1024px, 1440px ; aucun défilement horizontal de page (`scrollWidth == clientWidth`)
 - [ ] Rail replié et tiroir mobile : aucun contenu masqué
-- [ ] Contraste texte ≥ 4.5:1 sur `--bg` et `--surface` dans les deux thèmes
+- [ ] Contraste texte ≥ 4.5:1 sur `--bg` et `--surface` dans les deux thèmes ; palette des graphiques revalidée (`validate_palette.js`) si une série change
 - [ ] Focus clavier visible ; palette utilisable au clavier seul
 - [ ] Graphiques : redessin au changement de thème, texte net en HiDPI
 - [ ] `pytest tests/test_nav_registry.py` vert
 
 **Amendement du 2026-11-07 — 6ᵉ catégorie `connaissances` (demandée par Léon).** Section d'apprentissage : parcours en trois niveaux, cours rendus depuis `docs/cours/` (Markdown, formules en MathML), dictionnaire de 750 notions (lexique des bulles « ? » inclus). Classes CSS dédiées `kb-*` dans `static/knowledge.css` ; les composants existants (`card`, `data-table`, `table-scroll`, `queue-action`, `primary`) sont réutilisés. Voir `docs/adr/0018-section-connaissances.md`.
+
+**Amendement du 2026-11-09 — v4 « Terminal ».** Refonte visuelle de toute l'application (jetons, coque, composants, CSS des pages, palette des graphiques) ; noms de classes et balisage inchangés. Voir `docs/adr/0019-design-v4-terminal.md`.
