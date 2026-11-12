@@ -197,3 +197,51 @@ def test_setup_marks_this_pc_as_the_wealth_reference(tmp_path, monkeypatch):
 
     runner.invoke(app, ["sync", "setup", "--folder", str(share), "--no-wealth-reference"])
     assert "adopté du PC de référence" in runner.invoke(app, ["sync", "status"]).output
+
+
+def test_push_reports_what_was_written_and_the_old_format_files_left_behind(tmp_path, monkeypatch):
+    from patrick import sync
+
+    share = tmp_path / "share"
+    pc1 = _pc_env(tmp_path, monkeypatch, "pc1")
+    _add_run(pc1, "run_a")
+    sync.push(str(share), db_path=pc1, store_root=str(tmp_path / "store"), models_roots=[], layout="zip")   # un ancien partage
+
+    pushed = CliRunner().invoke(app, ["sync", "push", "--to", str(share), "--force"])     # --force : ce PC n'a pas « fusionné » ce partage
+
+    assert pushed.exit_code == 0, pushed.output
+    assert "écrits" in pushed.output
+    assert "patrick.db.gz" in pushed.output and "supprimer" in pushed.output
+
+
+def test_auto_logs_an_os_error_from_the_shared_folder_instead_of_losing_it(tmp_path, monkeypatch):
+    """Le 10/11/2026 le lecteur de Google Drive a répondu `Errno 22` : rien n'en restait dans le journal de la tâche planifiée."""
+    from patrick import sync
+
+    share, log = tmp_path / "share", tmp_path / "logs" / "sync.log"
+    share.mkdir()
+
+    def broken(folder, **kw):
+        raise OSError(22, "Invalid argument", "F:\\Mon Drive\\x.part")
+
+    monkeypatch.setattr(sync, "auto", broken)
+
+    result = CliRunner().invoke(app, ["sync", "auto", "--folder", str(share), "--log-file", str(log)])
+
+    assert result.exit_code == 1 and "Refusé" in result.output
+    assert "Invalid argument" in log.read_text(encoding="utf-8")
+
+
+def test_auto_passes_the_minimum_push_interval_to_the_sync(tmp_path, monkeypatch):
+    from patrick import sync
+
+    share = tmp_path / "share"
+    share.mkdir()
+    seen: dict = {}
+    monkeypatch.setattr(sync, "auto", lambda folder, **kw: seen.update(kw) or {"actions": [], "skipped": []})
+    runner = CliRunner()
+
+    assert runner.invoke(app, ["sync", "auto", "--folder", str(share), "--min-push-hours", "6"]).exit_code == 0
+    assert seen["min_push_hours"] == 6
+    assert runner.invoke(app, ["sync", "auto", "--folder", str(share)]).exit_code == 0
+    assert seen["min_push_hours"] is None                                # rien de demandé : le réglage décide

@@ -733,9 +733,14 @@ def sync_push_cmd(
     except sync.SyncError as exc:
         typer.echo(f"Refusé : {exc}")
         raise typer.Exit(code=1) from exc
-    size_mb = sum(f["size"] for f in manifest["files"].values()) / 1e6
+    uploaded = manifest.get("uploaded")               # format 2 : seulement ce qui manquait dans le dossier
+    size_mb = (uploaded["bytes"] if uploaded else sum(f["size"] for f in manifest["files"].values())) / 1e6
     typer.echo(f"Publié vers {to} : {manifest['runs']} run(s), {manifest['models']['included']} modèle(s), "
-               f"{manifest['store']['files']} fichier(s) de données, {size_mb:.1f} Mo.")
+               f"{manifest['store']['files']} fichier(s) de données, {size_mb:.1f} Mo "
+               f"{'écrits' if uploaded else 'envoyés'}.")
+    if manifest.get("legacy_assets_left"):
+        typer.echo("Anciens fichiers du format précédent encore dans le dossier (à supprimer à la main) : "
+                   + ", ".join(manifest["legacy_assets_left"]))
     if manifest["excluded_tables"]:
         typer.echo("Tables perso vidées dans l'export : " + ", ".join(manifest["excluded_tables"]))
     if manifest["models"]["missing"]:
@@ -847,6 +852,8 @@ def sync_auto_cmd(
     folder: str = typer.Option(None, "--folder", help="Défaut : le dossier de `sync setup`"),
     only: str = typer.Option(None, "--only", help="'pull' (fusionner seulement) ou 'push' (publier seulement)"),
     log_file: str = typer.Option(None, "--log-file", help="Ajoute le compte rendu à ce fichier (tâche planifiée)"),
+    min_push_hours: float = typer.Option(None, "--min-push-hours", help="Heures minimales entre deux publications "
+                                         "(défaut : réglage sync_min_push_hours, sinon 24 ; 0 = sans délai)"),
 ) -> None:
     """Met ce PC et le partage à niveau : fusionne ce que l'autre PC a publié, publie ce que ce PC a de neuf.
     Sûr : n'écrase jamais un run, attend la fin d'un entraînement, demande que PATRICK soit fermé."""
@@ -855,8 +862,8 @@ def sync_auto_cmd(
     folder = _sync_folder(folder)
     lines: list[str] = []
     try:
-        out = sync.auto(folder, only=only)
-    except sync.SyncError as exc:
+        out = sync.auto(folder, only=only, min_push_hours=min_push_hours)
+    except (sync.SyncError, OSError) as exc:        # un OSError (dossier partagé illisible...) est écrit dans le journal, pas perdu
         lines.append(f"Refusé : {exc}")
         code = 1
     else:
