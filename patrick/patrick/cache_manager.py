@@ -18,6 +18,19 @@ def _cache_root() -> Path:
     return paths.cache_dir()
 
 
+# Un verrou par fichier, partagé par tous les `LocalCache` du processus. Sous Windows un fichier ouvert en lecture ne se remplace pas :
+# deux lecteurs qui se relaient gardaient le fichier ouvert plus longtemps que les reprises de `_replace` (2,25 s), et l'écriture levait
+# `PermissionError` (test `..._never_expose_a_torn_file` intermittent depuis octobre). Lecture et remplacement s'excluent maintenant.
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _path_lock(path: Path) -> threading.Lock:
+    key = os.path.normcase(os.path.abspath(path))
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(key, threading.Lock())
+
+
 class LocalCache:
     """Simple local cache for data, features and selections, with weekly refresh."""
 
@@ -36,9 +49,10 @@ class LocalCache:
         """`os.replace` avec reprises : sous Windows le fichier cible, ouvert en lecture un instant par un autre fil, refuse le remplacement."""
         for attempt in range(10):
             try:
-                os.replace(tmp, path)
+                with _path_lock(path):               # aucun fil de CE processus ne lit le fichier pendant son remplacement
+                    os.replace(tmp, path)
                 return
-            except PermissionError:
+            except PermissionError:                  # un AUTRE processus (worker, serveur) le lit : on réessaie
                 if attempt == 9:
                     raise
                 time.sleep(0.05 * (attempt + 1))
@@ -60,7 +74,7 @@ class LocalCache:
         if not path.exists():
             return {}
         try:
-            with open(path, encoding="utf-8") as f:
+            with _path_lock(path), open(path, encoding="utf-8") as f:
                 return json.load(f)
         except (OSError, ValueError):
             return {}
@@ -99,7 +113,8 @@ class LocalCache:
         if not path.exists() or not self._is_fresh(key, max_age_days=max_age_days):
             return None
         try:
-            return pd.read_parquet(path)
+            with _path_lock(path):
+                return pd.read_parquet(path)
         except (OSError, ValueError, pa.ArrowException):
             return None                          # fichier tronqué ou corrompu : traité comme absent (il sera retéléchargé et réécrit)
 
