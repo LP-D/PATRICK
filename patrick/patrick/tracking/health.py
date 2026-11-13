@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from patrick import paths
+from patrick.config.targets import is_macro_target
 from patrick.tracking import backup, pooled_signal, relaunch_stats
 
 TASK_PREFIX = "Patrick"                 # tâches planifiées installées par `scripts/schtasks_*.ps1` et par l'installeur
@@ -83,15 +84,22 @@ def _backup(now: datetime) -> dict:
     return _check("backup", _graded(hours, BACKUP_WARN_HOURS, BACKUP_ERROR_HOURS), None if hours is None else round(hours, 1))
 
 
+def _followed_champions(conn: sqlite3.Connection) -> list[tuple[int, str, int]]:
+    """`(essai, cible, horizon)` des champions SUIVIS : ceux dont la cible n'est pas une série macro."""
+    return [(int(t), target, int(h)) for t, target, h in conn.execute("SELECT trial_id, target, horizon FROM champion")
+            if not is_macro_target(target)]
+
+
 def _signals(conn: sqlite3.Connection, now: datetime) -> dict:
-    # la clé primaire (trial_id, ts) : un MAX par champion, jamais un parcours de toutes les lignes `live`
-    row = conn.execute(
-        "SELECT MAX((SELECT MAX(ts) FROM prediction p WHERE p.trial_id = c.trial_id AND p.split = 'live')), COUNT(*) FROM champion c").fetchone()
-    if not row[1]:
+    followed = _followed_champions(conn)
+    if not followed:
         return _check("signals", "unknown", None, 0)
-    hours = _hours_since(row[0], now)
+    # la clé primaire (trial_id, ts) : un MAX par champion, jamais un parcours de toutes les lignes `live`
+    latest = max((conn.execute("SELECT MAX(ts) FROM prediction WHERE trial_id = ? AND split = 'live'", (t,)).fetchone()[0] or "")
+                 for t, _, _ in followed) or None
+    hours = _hours_since(latest, now)
     # un signal porte la date de sa séance (minuit) : 48 h couvrent un week-end court sans alarme
-    return _check("signals", _graded(hours, SIGNAL_WARN_HOURS + 48, SIGNAL_ERROR_HOURS + 48), str(row[0])[:10] if row[0] else None, int(row[1]))
+    return _check("signals", _graded(hours, SIGNAL_WARN_HOURS + 48, SIGNAL_ERROR_HOURS + 48), str(latest)[:10] if latest else None, len(followed))
 
 
 def _live_failures(conn: sqlite3.Connection) -> dict:
@@ -117,8 +125,8 @@ def _pooled(conn: sqlite3.Connection, now: datetime) -> dict:
 
 
 def _drift(conn: sqlite3.Connection) -> dict:
-    champions = conn.execute("SELECT COUNT(*) FROM champion").fetchone()[0]
-    measured = conn.execute("SELECT COUNT(*) FROM (SELECT DISTINCT symbol, horizon FROM drift_psi_history)").fetchone()[0]
+    champions = len(_followed_champions(conn))
+    measured = sum(1 for symbol, _h in conn.execute("SELECT DISTINCT symbol, horizon FROM drift_psi_history") if not is_macro_target(symbol))
     if not champions:
         return _check("drift", "unknown", 0, 0)
     share = measured / champions

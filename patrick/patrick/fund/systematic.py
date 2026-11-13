@@ -30,8 +30,9 @@ from patrick.config import defaults as D
 from patrick.config import universe_extension as UX
 from patrick.config.schema import RunConfig
 from patrick.config.target_label import split_run_label
+from patrick.config.targets import is_macro_target
 from patrick.features import alpha_target
-from patrick.fund import instruments, prices, selection, service, store
+from patrick.fund import instruments, prices, service, store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
@@ -580,10 +581,9 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
         f"WHERE trial.is_best = 1 AND run.status = 'done' AND run.horizon NOT IN ({','.join('?' for _ in descriptive)}) "
         "ORDER BY 7 DESC, run.started_at DESC, trial.trial_id DESC", descriptive).fetchall()
     seen: set[tuple[str, int]] = set()
-    fred = selection._fred_symbols()                     # séries macro : pas négociables, jamais proposées
     cells = []
     for row in rows:                                     # un modèle par cellule : le premier (champion, sinon le plus récent)
-        if row[3] not in fred and (row[3], row[4]) not in seen:
+        if not is_macro_target(row[3]) and (row[3], row[4]) not in seen:               # séries macro : pas négociables, jamais proposées
             seen.add((row[3], row[4]))
             cells.append(row)
     cells = cells[:limit]

@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime
 from functools import partial
 
 from patrick.clock import utc_today
+from patrick.config.targets import is_macro_target
 from patrick.tracking import db as trackdb
 from patrick.tracking import relaunch_stats
 
@@ -95,6 +96,8 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
         key = (target, horizon)
         if key in latest_per_pair:
             continue  # déjà gardé le plus récent (lignes triées DESC par finished_at)
+        if is_macro_target(target):
+            continue                  # série macro : plus une cible (2026-10-31), son signal du jour serait de la fausse information
         resolved = artifact_path if os.path.isabs(artifact_path) else os.path.join(base_dir, artifact_path)
         if not os.path.exists(resolved):
             logger.debug("Ignoré (fichier introuvable) : target=%s horizon=%s run_id=%s artifact_path=%s "

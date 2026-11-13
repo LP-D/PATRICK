@@ -19,8 +19,8 @@ import sqlite3
 from collections import defaultdict
 
 from patrick.clock import utc_today
-from patrick.config import defaults as D
 from patrick.config.target_label import split_run_label
+from patrick.config.targets import is_macro_target
 from patrick.data.session_calendar import classify_asset_class
 
 _CHUNK = 500
@@ -40,20 +40,16 @@ def wilson(hits: int, n: int) -> tuple[float, float] | None:
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
-def _asset_class(symbol: str) -> str:
-    """Classe d'actifs d'une cible ; une série FRED (PIB, taux directeur…) est « macro », jamais une action américaine par défaut."""
-    fred = {sym for sym, _, src in D.DEFAULT_TARGET_CHOICES if src == "fred"}
-    return classify_asset_class(symbol, "fred" if symbol in fred else "yfinance")
-
-
 def _champions(conn: sqlite3.Connection) -> dict[int, dict]:
     out = {}
     for target, horizon, trial_id, algo in conn.execute(
             "SELECT champion.target, champion.horizon, champion.trial_id, trial.algo FROM champion "
             "LEFT JOIN trial ON trial.trial_id = champion.trial_id"):
+        if is_macro_target(target):
+            continue                  # série macro : plus une cible, son « résultat réel » serait de la fausse information
         symbol = split_run_label(target)[0]
         out[int(trial_id)] = {"target": target, "symbol": symbol, "horizon": int(horizon), "algo": algo or "?",
-                              "asset_class": _asset_class(symbol)}
+                              "asset_class": classify_asset_class(symbol)}
     return out
 
 
@@ -137,10 +133,7 @@ def _consensus(conn: sqlite3.Connection, champions: dict[int, dict], today: dt.d
         ups = sum(1 for _, _, y_pred, _ in signals if round(y_pred) >= 2)
         scores = [p for *_, p in signals if p is not None]
         score = sum(scores) / len(scores) if scores else ups / len(signals)
-        asset_class = _asset_class(split_run_label(target)[0])
-        if asset_class == "macro":
-            continue                                         # une série macro ne se négocie pas : pas d'avis
-        out.append({"target": target, "asset_class": asset_class, "n_horizons": len(signals), "n_up": ups,
+        out.append({"target": target, "asset_class": classify_asset_class(split_run_label(target)[0]), "n_horizons": len(signals), "n_up": ups,
                     "score": score, "direction": "UP" if score >= 0.5 else "DOWN",
                     "agreement": max(ups, len(signals) - ups) / len(signals),
                     "horizons": sorted(h for h, *_ in signals), "last": max(str(ts)[:10] for _, ts, *_ in signals)})

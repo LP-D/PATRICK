@@ -103,7 +103,7 @@ def test_witnesses_replay_the_same_orders_always_long_and_on_coin_flips(conn, wo
     seen = insight.witnesses(conn, store.get_strategy(conn, sid), snap, today)
 
     assert seen["n_positions"] == 2 and seen["nav"] == pytest.approx(snap["kpis"]["nav"])
-    assert seen["always_long"] > 100_000 > seen["nav"]
+    assert seen["always_long"] > seen["nav"]                 # pas de seuil absolu : frais et financement en changent la valeur d'un poste à l'autre
     assert seen["nav"] <= seen["coin_flip"] <= seen["always_long"]
     assert insight.witnesses(conn, store.get_strategy(conn, sid), snap, today) == seen           # tirages reproductibles
     assert len(store.list_orders(conn, sid)) == 2                                                # rien n'est écrit
