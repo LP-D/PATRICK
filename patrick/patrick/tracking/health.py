@@ -48,9 +48,10 @@ def _graded(hours: float | None, warn: float, error: float) -> str:
     return "ok" if hours < warn else ("warning" if hours < error else "error")
 
 
-def scheduled_tasks(run=subprocess.run) -> list[dict]:
+def scheduled_tasks(run=None) -> list[dict]:
     """Tâches planifiées Windows dont le nom commence par `TASK_PREFIX` : `[{name, status, last_run, last_result, next_run}]`.
     `[]` hors de Windows ou si `schtasks` ne répond pas. Les colonnes sont lues par position (leurs titres sont traduits par Windows)."""
+    run = run or subprocess.run              # lu à l'appel : une valeur par défaut figerait la fonction du moment de l'import
     try:
         done = run(["schtasks", "/Query", "/FO", "CSV", "/V", "/NH"], capture_output=True, timeout=20, check=False)
     except (OSError, subprocess.SubprocessError):
@@ -143,7 +144,7 @@ def _disk(db_file: str | None) -> dict:
     return _check("disk", status, round(free_gb, 1), round(size_gb, 1))
 
 
-def checks(conn: sqlite3.Connection, now: datetime | None = None, run=subprocess.run, db_file: str | None = None) -> list[dict]:
+def checks(conn: sqlite3.Connection, now: datetime | None = None, run=None, db_file: str | None = None) -> list[dict]:
     """Tous les contrôles, dans l'ordre de la page."""
     now = now or datetime.now(UTC)
     readers = (("tasks", lambda: _tasks(run)), ("backup", lambda: _backup(now)), ("signals", lambda: _signals(conn, now)),

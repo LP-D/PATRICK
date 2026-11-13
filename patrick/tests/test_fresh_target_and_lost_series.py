@@ -48,6 +48,18 @@ def test_a_forced_target_download_sees_the_bar_of_the_day_and_survives_an_outage
     assert len(yfinance_source.download_target("^TEST", "2025-01-01", fresh=True)) == 101     # panne : la copie en cache sert de secours
 
 
+def test_a_fresh_request_applies_once_to_the_next_download_with_the_usual_signature(monkeypatch):
+    """`ingest(force=True)` demande une cible fraîche puis appelle `download_target(symbole, début)` : deux arguments, comme toujours."""
+    provider = _provider(monkeypatch)
+    yfinance_source.download_target("^TEST", "2025-01-01")
+    provider.days = 102
+
+    yfinance_source.request_fresh("^TEST", "2025-01-01")
+    assert len(yfinance_source.download_target("^TEST", "2025-01-01")) == 102 and provider.calls == 2
+    provider.days = 105
+    assert len(yfinance_source.download_target("^TEST", "2025-01-01")) == 102 and provider.calls == 2     # la demande est consommée
+
+
 def _fail(conn, run_id: str, columns: list[str]) -> None:
     relaunch_stats.record_live_failure(conn, run_id, f"Training pool columns missing from the fresh data: {columns} -- the config may have changed")
 
