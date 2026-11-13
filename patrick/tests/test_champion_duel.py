@@ -325,3 +325,40 @@ def test_an_explicit_suspect_champion_is_replaced_without_re_evaluating_it(setup
     d = _duel(setup)
     assert d["decision"] == "challenger_wins"
     assert not [c for c in setup.calls if c["algo"] == "ChampAlgo"], "le titulaire suspect n'est pas rejoué"
+
+
+def _champion_live_rows(conn, trial_id: int, n: int, hits: int) -> None:
+    days = pd.bdate_range("2026-01-05", periods=n)
+    conn.executemany("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, ?, 'live', ?, 3, 0.6)",
+                     [(trial_id, str(day.date()), 1.0 if i < hits else 0.0) for i, day in enumerate(days)])
+    conn.commit()
+
+
+def test_a_champion_clearly_wrong_in_live_use_loses_the_title_to_a_lower_scored_challenger(setup):
+    setup.scores["ChalAlgo"] = 0.50                                            # moins bon sur le holdout
+    _champion_live_rows(setup.conn, setup.champ_tid, 40, 5)                  # 12,5 % de bonnes directions en réel
+
+    d = _duel(setup)
+
+    assert d["decision"] == "challenger_wins" and d["live_override"] is True
+    assert d["champion_live"] == {"n": 40, "hits": 5, "failing": True}
+    assert champions.current(setup.conn, "^TEST", H)["run_id"] == "chal_run"
+    duel = json.loads(champions.list_archive(setup.conn, "^TEST", H)[0]["duel_json"])
+    assert "live" in duel["rule"] and duel["champion_live"]["failing"] is True
+
+
+def test_a_champion_with_an_ordinary_live_record_is_still_judged_on_the_holdout(setup):
+    setup.scores["ChalAlgo"] = 0.50
+    _champion_live_rows(setup.conn, setup.champ_tid, 40, 19)                  # 48 % : dans le bruit
+
+    d = _duel(setup)
+
+    assert d["decision"] == "champion_wins" and "live_override" not in d
+
+
+def test_a_suspect_challenger_does_not_profit_from_a_failing_champion(setup):
+    setup.scores["ChalAlgo"] = 0.97
+    _champion_live_rows(setup.conn, setup.champ_tid, 40, 5)
+
+    assert _duel(setup)["decision"] == "suspect_not_promoted"
+    assert champions.list_champions(setup.conn) == [] and _run_exists(setup.conn, "champ_run")

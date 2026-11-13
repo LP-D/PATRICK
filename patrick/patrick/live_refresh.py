@@ -24,6 +24,7 @@ from datetime import UTC, date, datetime
 from functools import partial
 
 from patrick.clock import utc_today
+from patrick.config.targets import is_macro_target
 from patrick.tracking import db as trackdb
 from patrick.tracking import relaunch_stats
 
@@ -95,6 +96,8 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
         key = (target, horizon)
         if key in latest_per_pair:
             continue  # déjà gardé le plus récent (lignes triées DESC par finished_at)
+        if is_macro_target(target):
+            continue                  # série macro : plus une cible (2026-10-31), son signal du jour serait de la fausse information
         resolved = artifact_path if os.path.isabs(artifact_path) else os.path.join(base_dir, artifact_path)
         if not os.path.exists(resolved):
             logger.debug("Ignoré (fichier introuvable) : target=%s horizon=%s run_id=%s artifact_path=%s "
@@ -266,6 +269,25 @@ def refresh_pooled_signal(db_path: str | None = None) -> dict | None:
     return report
 
 
+def write_weekly_report(db_path: str | None = None) -> str | None:
+    """Écrit le rapport de la semaine écoulée s'il n'existe pas encore (`tracking/weekly_report.py`) ; renvoie son chemin. À lancer après
+    les prédictions du jour ; une panne est journalisée, jamais levée."""
+    from patrick.tracking import weekly_report
+
+    try:
+        conn = trackdb.connect(db_path)
+        try:
+            written = weekly_report.write_if_due(conn, folder=weekly_report.default_folder(db_path))
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("rapport hebdomadaire : écriture en échec")
+        return None
+    if written is not None:
+        logger.info("rapport hebdomadaire écrit : %s", written)
+    return str(written) if written is not None else None
+
+
 def refresh_status() -> dict:
     """Copie de l'état d'avancement (affiché en tête de /predictions)."""
     with _state_lock:
@@ -307,6 +329,7 @@ def _refresh_once(db_path: str | None = None) -> None:
         if rest:
             run_daily_predictions(rest, db_path=db_path, on_item=_progress)
         refresh_pooled_signal(db_path)
+        write_weekly_report(db_path)
     finally:
         with _state_lock:
             _state.update(running=False, finished_at=datetime.now(UTC).isoformat())

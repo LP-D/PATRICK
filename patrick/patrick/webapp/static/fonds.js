@@ -305,6 +305,8 @@
             if (el.type === "checkbox") out[el.name] = el.checked;
             else if (el.name === "gross") out.gross = Number(el.value) / 100;
             else if (el.name === "max_models") out.max_models = el.value.trim() === "" ? null : Number(el.value);   // vide : aucun plafond
+            else if (el.name === "max_class_share") out.max_class_share = Number(el.value) / 100;
+            else if (el.name === "max_drawdown") out.max_drawdown = el.value.trim() === "" ? null : Number(el.value) / 100;   // vide : pas d'arrêt
             else out[el.name] = el.value;
         });
         return out;

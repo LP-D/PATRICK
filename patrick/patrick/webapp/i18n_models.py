@@ -343,6 +343,12 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "batch_missing_name": _s("Horizons jamais lancés", "Never-run horizons"),
     "batch_missing_desc": _s("Pour les cibles déjà entraînées, seulement les horizons par défaut qui n'ont encore aucun run.",
                              "For targets already trained, only the default horizons that have no run yet."),
+    "batch_top_name": _s("Cibles les plus prévisibles", "Most predictable targets"),
+    "batch_top_desc": _s("Les cibles où un signal a déjà été mesuré (AUC regroupée, paires significatives d'abord) : le lot d'une campagne ciblée, "
+                         "deep learning ou réglage long, plutôt que tout l'univers.",
+                         "The targets where a signal has already been measured (pooled AUC, significant pairs first): the lot for a focused "
+                         "campaign, deep learning or long tuning, rather than the whole universe."),
+    "batch_top_meta": _s("{n} cible(s)", "{n} target(s)"),
     "batch_rec_name": _s("Runs conseillés", "Recommended runs"),
     "batch_rec_desc": _s("Le meilleur réentraînement proposé par le conseiller, pour chaque cible déjà entraînée.",
                          "The best retraining the advisor proposes, for every target already trained."),

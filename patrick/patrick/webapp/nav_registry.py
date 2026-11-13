@@ -82,6 +82,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("predictions", "Prédictions", "/predictions", "pilotage", 30, "nav_predictions", group="signaux"),
     NavEntry("drift", "Dérive", "/derive", "pilotage", 31, "nav_drift", group="signaux"),
     NavEntry("journal", "Journal", "/journal", "pilotage", 32, "nav_journal", group="signaux"),
+    NavEntry("live_board", "Résultat réel", "/reel", "pilotage", 33, "nav_live_board", group="signaux"),
     NavEntry("analysis", "Séries & modèles", "/analysis", "pilotage", 40, "nav_analysis", group="recherche"),
     NavEntry("variables", "Variables", "/variables", "pilotage", 41, "nav_variables", group="recherche"),
     NavEntry("exploration", "Exploration", "/exploration", "pilotage", 42, "nav_exploration", group="recherche"),
@@ -135,6 +136,7 @@ UTILITY_ENTRIES: tuple[NavEntry, ...] = (
     NavEntry("vocabulary", "Vocabulaire", "/vocabulary", "utility", 5, "nav_vocabulary"),
     NavEntry("settings", "Réglages", "/reglages", "utility", 10, "nav_settings"),
     NavEntry("diagnostics", "Diagnostics", "/diagnostics", "utility", 20, "nav_diagnostics"),
+    NavEntry("health", "Santé", "/sante", "utility", 15, "nav_health", child_routes=("/sante/rapport/{name}",)),
 )
 
 # Routes GET qui ne sont PAS des pages (JSON, fichiers, redirects).

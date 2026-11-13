@@ -52,6 +52,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     run_autopilots,
     run_daily_predictions,
     split_for_funds,
+    write_weekly_report,
 )
 from patrick.tracking import db as trackdb
 
@@ -211,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
     pooled = refresh_pooled_signal(args.db_path)
     if pooled and pooled["refreshed"]:
         print(f"AUC regroupée : {pooled['n_pairs']} paire(s) testée(s), {pooled['n_significant']} significative(s).")
+    report_path = write_weekly_report(args.db_path)
+    if report_path:
+        print(f"Rapport hebdomadaire écrit : {report_path}")
     return 1 if summary.failures else 0
 
 

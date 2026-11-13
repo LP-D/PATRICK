@@ -205,7 +205,8 @@ def _advice(conn: sqlite3.Connection, run_id: str, history: dict) -> dict | None
 
 def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     """Lot « runs conseillés » (ML) : par cible, le meilleur réentraînement proposé pour son dernier run terminé. Une ligne par
-    cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`. Les cibles déjà en
+    cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`, `signal`, `value` ;
+    classées par valeur attendue pour le temps de calcul (`expected_value`), plus par score seul. Les cibles déjà en
     file sont écartées, comme celles dont la configuration refaite serait refusée par le formulaire (cible retirée de l'univers,
     ex. `^EVZ` ; historique devenu trop court…) : un seul refus annulant tout le lot à la mise en file, aucun run conseillé ne
     partirait. Le calcul (~0,07 s par run) se fait à la demande, pas au chargement de la page."""
@@ -219,6 +220,7 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
                 and config_family(_loads(raw)) == "ml"):
             latest[target] = (run_id, int(horizon))
     busy = pending_targets(conn, "ml")
+    signals = target_signals(conn)
     out = []
     for target, (run_id, horizon) in latest.items():
         if target in busy:
@@ -229,9 +231,58 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
         config, _ = _ml_run_config(conn, run_id)
         if config is None or _refit(config, suggestion)[0] is None:
             continue
+        signal = signals.get(target)
         out.append({"run_id": run_id, "target": target, "horizon": horizon, "key": suggestion.key, "score": round(suggestion.score),
-                    "cost": suggestion.cost, "est_minutes": suggestion.est_minutes})
-    return sorted(out, key=lambda r: (-r["score"], r["target"]))
+                    "cost": suggestion.cost, "est_minutes": suggestion.est_minutes, "signal": signal,
+                    "value": round(expected_value(suggestion.score, suggestion.est_minutes, signal), 1)})
+    return sorted(out, key=lambda r: (-r["value"], -r["score"], r["target"]))
+
+
+SIGNAL_BOOST = {True: 1.25, False: 0.8, None: 1.0}      # cible à signal regroupé significatif / mesurée sans signal / jamais mesurée
+
+
+def expected_value(score: float, est_minutes: float | None, signal: bool | None) -> float:
+    """Ce qu'une relance vaut pour son temps de calcul : le score du conseiller (déjà pondéré par le taux de victoire au duel de sa
+    suggestion), relevé pour une cible dont le signal regroupé est significatif (`tracking/pooled_signal.py`), abaissé pour une cible
+    mesurée sans signal, puis divisé par la durée (une heure de calcul divise la valeur par deux). Un lot conseillé dépasse 300 h : il
+    n'est jamais mené au bout, l'ordre décide donc de ce qui tourne."""
+    return float(score) * SIGNAL_BOOST[signal] / (1.0 + max(0.0, float(est_minutes or 0.0)) / 60.0)
+
+
+TOP_SIGNAL_N = 50
+
+
+def top_signal(conn: sqlite3.Connection, candidates: Iterable[str], n: int = TOP_SIGNAL_N) -> list[str]:
+    """Les `n` cibles proposables les plus prévisibles d'après l'AUC regroupée (`tracking/pooled_signal.py`) : celles dont une paire est
+    significative d'abord, puis par meilleure AUC. C'est le lot d'une campagne ciblée (deep learning, réglage long) : dépenser le calcul
+    là où un signal a déjà été mesuré plutôt que sur tout l'univers. Vide tant que la table n'a pas été calculée."""
+    from patrick.tracking import pooled_signal
+
+    allowed = set(candidates)
+    best: dict[str, tuple[bool, float]] = {}
+    try:
+        rows = pooled_signal.load(conn)
+    except sqlite3.Error:
+        return []
+    for row in rows:
+        if row["target"] in allowed and row["auc"] is not None:
+            sig, auc = best.get(row["target"], (False, 0.0))
+            best[row["target"]] = (sig or bool(row["significant"]), max(auc, float(row["auc"])))
+    ranked = sorted(best, key=lambda t: (not best[t][0], -best[t][1], t))
+    return ranked[:n]
+
+
+def target_signals(conn: sqlite3.Connection) -> dict[str, bool]:
+    """`{cible: une de ses paires cible-horizon a un signal regroupé significatif}` ; une cible absente n'a jamais été mesurée."""
+    from patrick.tracking import pooled_signal
+
+    out: dict[str, bool] = {}
+    try:
+        for row in pooled_signal.load(conn):
+            out[row["target"]] = out.get(row["target"], False) or bool(row["significant"])
+    except sqlite3.Error:
+        return {}
+    return out
 
 
 def summarize(items: list[dict]) -> dict:

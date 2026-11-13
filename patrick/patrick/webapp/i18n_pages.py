@@ -76,6 +76,10 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                              "{n} run failure(s) in the last {d} days: review, then relaunch once the cause is fixed."),
     "hm_action_suspect": _s("{n} run(s) au score trop beau pour être vrai ou d'avant une correction d'alignement : jamais un signal à suivre.",
                             "{n} run(s) with a score too good to be true or from before an alignment fix: never a signal to follow."),
+    "hm_action_inputs_lost": _s("{n} modèle(s) ne savent plus prédire : une série d'entrée a disparu ({s}). Vérifier le fournisseur ; au-delà de "
+                                "trois jours, le conseiller proposera de les reconstruire.",
+                                "{n} model(s) can no longer predict: an input series is gone ({s}). Check the provider; after three days the "
+                                "advisor will propose rebuilding them."),
     "hm_action_queue": _s("File d'attente : {n} job(s) en attente, {r} en cours.", "Queue: {n} job(s) waiting, {r} running."),
     "hm_action_fx_legacy": _s("{n} champion(s) de change entraîné(s) avant la correction d'alignement : relancer des runs de change pour les remplacer.",
                               "{n} currency champion(s) trained before the alignment fix: launch new currency runs to replace them."),

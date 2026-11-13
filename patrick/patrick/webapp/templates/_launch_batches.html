@@ -10,6 +10,15 @@
         <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_class_count', n=c.symbols | length, never=c.never) }}</span>{% if c.auc is not none %}<span class="batch-count pk-mono">{{ t('batch_class_auc', auc="%.3f" | format(c.auc), n=c.n_significant) }}</span>{% endif %}</span>
     </div>
     {% endfor %}
+    {% if top_signal %}
+    <div class="profile-card batch-card" data-help-host>
+        <button type="button" class="profile-main batch-main" data-batch="class" data-symbols='{{ top_signal | tojson }}'>
+            <span class="profile-name">{{ t('batch_top_name') }}</span>
+        </button>
+        <span class="profile-desc">{{ t('batch_top_desc') }}</span>
+        <span class="profile-meta"><span class="batch-count pk-mono">{{ t('batch_top_meta', n=top_signal | length) }}</span></span>
+    </div>
+    {% endif %}
     {% if family != 'rl' %}
     <div class="profile-card batch-card{% if not missing %} is-empty{% endif %}" data-help-host>
         <button type="button" class="profile-main batch-main" data-batch="missing" data-gaps='{{ missing | tojson }}'{% if not missing %} disabled{% endif %}>

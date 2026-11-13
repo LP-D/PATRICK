@@ -1,0 +1,53 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import status_badge %}
+{% block title %}PATRICK — {{ t('hl_title') }}{% endblock %}
+
+{# Santé de la plateforme (`tracking/health.py`) et rapports hebdomadaires (`tracking/weekly_report.py`). Rendu serveur. #}
+{% block content %}
+<h1 class="page-title">{{ t('hl_title') }}</h1>
+<p class="page-subtitle">{{ t('hl_subtitle') }}</p>
+
+<section class="card">
+  <h2>{{ t('hl_s_checks') }} <span class="status-badge status-{{ overall }}">{{ t('hl_status_' ~ overall) }}</span></h2>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>{{ t('hl_c_check') }}</th><th>{{ t('hl_c_status') }}</th><th>{{ t('hl_c_fact') }}</th></tr></thead>
+      <tbody>
+        {% for c in checks %}
+        <tr>
+          <td>{{ t('hl_' ~ c.key) }}<div class="hint">{{ t('hl_' ~ c.key ~ '_why') }}</div></td>
+          <td><span class="status-badge status-{{ 'pending' if c.status == 'unknown' else c.status }}">{{ t('hl_status_' ~ c.status) }}</span></td>
+          <td>
+            {% if c.status == 'unknown' and c.detail is string %}<span class="hint">{{ c.detail }}</span>
+            {% elif c.key == 'tasks' %}
+              {% if c.detail %}{% for task in c.detail %}<div class="pk-mono">{{ task.name }} · {{ t('hl_task_last', when=task.last_run, code=task.last_result) }} · {{ t('hl_task_next', when=task.next_run) }}</div>{% endfor %}
+              {% else %}{{ t('hl_tasks_none') }}{% endif %}
+            {% elif c.key == 'backup' %}{{ t('hl_backup_fact', h=c.value) if c.value is not none else t('hl_backup_none') }}
+            {% elif c.key == 'signals' %}{{ t('hl_signals_fact', day=c.value or '—', n=c.detail) if c.detail else t('hl_signals_none') }}
+            {% elif c.key == 'live_failures' %}{{ t('hl_live_failures_fact', n=c.value) }}{% for s in c.detail %}<div class="pk-mono">{{ s.series }} · {{ t('hl_lost_models', n=s.n_models) }}</div>{% endfor %}
+            {% elif c.key == 'job_errors' %}{{ t('hl_job_errors_fact', n=c.value) }}
+            {% elif c.key == 'worker' %}{{ t('hl_worker_busy', n=c.detail, m=c.value if c.value is not none else '—') if c.detail else t('hl_worker_idle') }}
+            {% elif c.key == 'pooled' %}{{ t('hl_pooled_fact', d=c.value, n=c.detail.n_tested, s=c.detail.n_significant) if c.value is not none else t('hl_pooled_none') }}
+            {% elif c.key == 'drift' %}{{ t('hl_drift_fact', n=c.value, total=c.detail) }}
+            {% elif c.key == 'disk' %}{{ t('hl_disk_fact', free=c.value, db=c.detail) }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>{{ t('hl_s_reports') }} <span class="hint">({{ reports | length }})</span></h2>
+  <p class="hint">{{ t('hl_reports_hint') }}</p>
+  {% if reports %}
+  <ul>{% for name in reports %}<li><a href="/sante/rapport/{{ name }}">{{ name }}</a></li>{% endfor %}</ul>
+  {% else %}<p class="hint">{{ t('hl_reports_none') }}</p>{% endif %}
+  {% if report_text %}
+  <h3>{{ report_name }}</h3>
+  <pre class="log-tail">{{ report_text }}</pre>
+  {% endif %}
+</section>
+{% endblock %}

@@ -11,7 +11,7 @@ from datetime import timedelta
 from patrick.clock import utc_now
 from patrick.config import defaults as D
 from patrick.data.store import DataStore
-from patrick.tracking import class_overview, data_health
+from patrick.tracking import class_overview, data_health, relaunch_stats
 from patrick.tracking import db as trackdb
 
 RECENT_DAYS = 14
@@ -48,6 +48,10 @@ def action_items(conn: sqlite3.Connection, n_recent_failures: int, n_suspect: in
     legacy = len(trackdb.alignment_reasons(conn, champions)) if champions else 0
     if legacy:
         items.append({"key": "fx_legacy", "n": legacy, "href": "/a-faire/fx_legacy", "level": "warning"})
+    lost = relaunch_stats.lost_series(conn)
+    if lost:
+        items.append({"key": "inputs_lost", "n": sum(s["n_models"] for s in lost), "level": "error", "href": "/data-quality",
+                      "series": ", ".join(f"{s['series']} ({s['n_models']})" for s in lost[:3]) + ("…" if len(lost) > 3 else "")})
     return items
 
 

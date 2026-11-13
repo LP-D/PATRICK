@@ -446,3 +446,33 @@ def test_the_prefilled_form_carries_its_suggestion_to_the_launch(client, conn, s
     assert resp.status_code == 200, resp.text
     row = conn.execute("SELECT parent_run_id, suggestion_key, source FROM relaunch_log").fetchone()
     assert row == ("r1", "fix_leak", "form")
+
+
+def test_expected_value_weighs_the_score_by_the_pooled_signal_and_the_computing_time():
+    ev = launch_batches.expected_value
+    assert ev(60, 0, None) == 60 and ev(60, 60, None) == 30                 # une heure de calcul divise la valeur par deux
+    assert ev(60, 30, True) > ev(60, 30, None) > ev(60, 30, False)          # signal regroupé significatif, jamais mesuré, mesuré sans signal
+    assert ev(90, 240, None) < ev(50, 20, True)                             # un long run très bien noté passe après un court sur une cible à signal
+    assert ev(60, None, None) == 60
+
+
+def test_target_signals_reads_the_pooled_table_per_target(conn):
+    conn.executemany("INSERT INTO pooled_signal (target, horizon, n_runs, n_dates, auc, auc_run_mean, p_value, q_value, significant) "
+                     "VALUES (?, ?, 1, 300, 0.6, 0.6, 0.01, 0.05, ?)", [("^VIX", 1, 0), ("^VIX", 5, 1), ("AAPL", 1, 0)])
+    conn.commit()
+
+    assert launch_batches.target_signals(conn) == {"^VIX": True, "AAPL": False}
+
+
+def test_top_signal_ranks_significant_targets_first_then_by_pooled_auc(conn):
+    rows = [("^VIX", 1, 0.62, 1), ("AAPL", 1, 0.70, 0), ("AAPL", 5, 0.55, 0), ("MSFT", 1, 0.58, 1), ("RETIRED", 1, 0.9, 1), ("GC=F", 1, None, 0)]
+    conn.executemany("INSERT INTO pooled_signal (target, horizon, n_runs, n_dates, auc, auc_run_mean, p_value, q_value, significant) "
+                     "VALUES (?, ?, 1, 300, ?, 0.5, 0.01, 0.05, ?)", rows)
+    conn.commit()
+    candidates = ["^VIX", "AAPL", "MSFT", "GC=F", "NEVER"]
+
+    assert launch_batches.top_signal(conn, candidates) == ["^VIX", "MSFT", "AAPL"]      # hors univers et sans AUC : écartées
+    assert launch_batches.top_signal(conn, candidates, n=1) == ["^VIX"]
+    conn.execute("DELETE FROM pooled_signal")
+    conn.commit()
+    assert launch_batches.top_signal(conn, candidates) == []

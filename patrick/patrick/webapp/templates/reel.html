@@ -1,0 +1,72 @@
+{% extends "base_v2.html" %}
+{% from "_components.html" import metric, data_table, empty_state %}
+{% block title %}PATRICK — {{ t('lb_title') }}{% endblock %}
+
+{# Résultat réel des champions (`tracking/live_board.py`) : rendu serveur, aucune donnée chargée après coup. #}
+{% macro pct(v, digits=1) %}{% if v is none %}—{% else %}{{ (('%.' ~ digits ~ 'f') | format(v * 100)) | replace('.', ',' if lang == 'fr' else '.') }} %{% endif %}{% endmacro %}
+{% macro pts(v) %}{% if v is none %}—{% else %}{{ ('%+.1f' | format(v * 100)) | replace('.', ',' if lang == 'fr' else '.') }} pt{% endif %}{% endmacro %}
+
+{% block content %}
+<h1 class="page-title">{{ t('lb_title') }}</h1>
+<p class="page-subtitle">{{ t('lb_subtitle') }}</p>
+
+{% set total = board.total %}
+{% if not total.n %}
+{{ empty_state(t('lb_empty'), t('lb_empty_hint'), '/predictions', t('nav_predictions')) }}
+{% else %}
+<div class="metric-grid">
+  {{ metric(t('lb_k_rate'), pct(total.rate), t('lb_k_rate_hint', n=total.n, models=board.n_models_judged, low=pct(total.ci_low), high=pct(total.ci_high)),
+            'ok' if total.edge > 0 else 'warning') }}
+  {{ metric(t('lb_k_naive'), pct(total.up_rate if total.up_rate >= 0.5 else 1 - total.up_rate),
+            t('lb_k_naive_up') if total.up_rate >= 0.5 else t('lb_k_naive_down')) }}
+  {{ metric(t('lb_k_edge'), pts(total.edge), t('lb_k_edge_hint'), 'ok' if total.edge > 0 else 'warning') }}
+  {{ metric(t('lb_k_bias'), pct(total.pred_up_rate), t('lb_k_bias_hint', up=pct(total.up_rate))) }}
+</div>
+
+{% macro block(title, hint, rows, first_header, labeller) %}
+<section class="card">
+  <h2>{{ title }}</h2>
+  <p class="hint">{{ hint }}</p>
+  {% set ns = namespace(out=[]) %}
+  {% for r in rows %}
+    {% set ns.out = ns.out + [[labeller(r.key), r.n, pct(r.rate), (pct(r.ci_low) ~ ' – ' ~ pct(r.ci_high)) | replace(' ', ' '), pct(r.up_rate), pct(r.pred_up_rate), pts(r.edge)]] %}
+  {% endfor %}
+  {{ data_table([first_header, t('lb_c_n'), t('lb_c_rate'), t('lb_c_ci'), t('lb_c_up'), t('lb_c_pred_up'), t('lb_c_edge')], ns.out,
+                empty_message=t('lb_too_few'), num_cols=[1, 2, 3, 4, 5, 6], collapse_after=12) }}
+</section>
+{% endmacro %}
+
+{% macro plain(key) %}{{ key }}{% endmacro %}
+{% macro class_label(key) %}{{ t('mkt_' ~ key) }}{% endmacro %}
+{% macro horizon_label(key) %}{{ t('lb_horizon_days', h=key) }}{% endmacro %}
+
+{{ block(t('lb_s_week'), t('lb_h_week'), board.by_week, t('lb_c_week'), plain) }}
+{{ block(t('lb_s_class'), t('lb_h_class'), board.by_class, t('lb_c_class'), class_label) }}
+{{ block(t('lb_s_horizon'), t('lb_h_horizon'), board.by_horizon, t('lb_c_horizon'), horizon_label) }}
+{{ block(t('lb_s_algo'), t('lb_h_algo'), board.by_algo, t('lb_c_algo'), plain) }}
+
+<section class="card">
+  <h2>{{ t('lb_s_bias') }}</h2>
+  <p class="hint">{{ t('lb_h_bias') }}</p>
+  {% if board.bias %}
+  <div class="metric-grid">
+    {{ metric(t('lb_b_base'), pct(board.bias.rate), t('lb_b_n', n=board.bias.n)) }}
+    {{ metric(t('lb_b_shadow'), pct(board.bias.shadow_rate), t('lb_b_shadow_hint')) }}
+    {{ metric(t('lb_b_gain'), pts(board.bias.gain), t('lb_b_gain_hint'), 'ok' if board.bias.gain > 0 else 'neutral') }}
+  </div>
+  {% else %}<p class="hint">{{ t('lb_b_none') }}</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>{{ t('lb_s_consensus') }} <span class="hint">({{ board.consensus | length }})</span></h2>
+  <p class="hint">{{ t('lb_h_consensus') }}</p>
+  {% set ns = namespace(out=[]) %}
+  {% for c in board.consensus %}
+    {% set ns.out = ns.out + [[c.target, t('mkt_' ~ c.asset_class), t('lb_dir_up') if c.direction == 'UP' else t('lb_dir_down'), pct(c.score),
+                               c.n_up ~ ' / ' ~ c.n_horizons, c.horizons | join(', '), c.last]] %}
+  {% endfor %}
+  {{ data_table([t('lb_c_target'), t('lb_c_class'), t('lb_c_direction'), t('lb_c_score'), t('lb_c_votes'), t('lb_c_horizons'), t('lb_c_last')], ns.out,
+                empty_message=t('lb_consensus_none'), num_cols=[3, 4], collapse_after=25) }}
+</section>
+{% endblock %}
