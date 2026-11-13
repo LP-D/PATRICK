@@ -125,6 +125,7 @@ NAV_ICONS: dict[str, str] = {
     "donnees": "eye",
     "risque": "gauge",
     "diagnostics": "activity",
+    "health": "shield",
     "vocabulary": "book",
     "knowledge_hub": "compass",
     "knowledge_courses": "book",

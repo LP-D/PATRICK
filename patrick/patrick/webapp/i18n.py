@@ -22,6 +22,7 @@ from patrick.webapp.i18n_asset import ASSET_STRINGS
 from patrick.webapp.i18n_charts import CHART_JS_KEYS, CHART_STRINGS
 from patrick.webapp.i18n_earnings import EARN_JS_KEYS, EARN_STRINGS
 from patrick.webapp.i18n_fund import FUND_JS_KEYS, FUND_STRINGS
+from patrick.webapp.i18n_health import HEALTH_STRINGS
 from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_live import LIVE_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
@@ -708,6 +709,7 @@ STRINGS.update(TODO_STRINGS)
 # Fiche d'un actif et pages de classes d'actifs (webapp/i18n_asset.py).
 STRINGS.update(ASSET_STRINGS)
 STRINGS.update(LIVE_STRINGS)
+STRINGS.update(HEALTH_STRINGS)
 
 
 # Langue de la requête en cours, posée par `LangMiddleware` : les macros importées sans contexte (`_components.html`) ne voient pas `t()`,

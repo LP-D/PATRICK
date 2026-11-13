@@ -29,8 +29,8 @@ from patrick.analysis import (
     rl_sections,
 )
 from patrick.tracking import db as trackdb
+from patrick.tracking import health, live_board, research_notes, weekly_report
 from patrick.tracking import journal as journal_mod
-from patrick.tracking import live_board, research_notes
 from patrick.webapp import i18n
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -266,6 +266,27 @@ def register(app: FastAPI, templates, context) -> None:
             finally:
                 conn.close()
         return JSONResponse(await run_in_threadpool(_cached, "guardrails_summary", work))
+
+    def _health_page(request: Request, name: str | None = None):
+        conn = trackdb.connect()
+        try:
+            items = health.checks(conn)
+        finally:
+            conn.close()
+        text = weekly_report.read(name) if name else None
+        if name and text is None:
+            raise HTTPException(status_code=404, detail="Rapport introuvable")
+        return templates.TemplateResponse(request, "sante.html", {
+            **context(request), "checks": items, "overall": health.overall(items), "reports": weekly_report.list_reports(),
+            "report_name": name, "report_text": text})
+
+    @app.get("/sante", response_class=HTMLResponse)
+    def health_page(request: Request):
+        return _health_page(request)
+
+    @app.get("/sante/rapport/{name}", response_class=HTMLResponse)
+    def health_report_page(request: Request, name: str):
+        return _health_page(request, name)
 
     @app.get("/diagnostics")
     def diagnostics_page(request: Request):
