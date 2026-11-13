@@ -24,7 +24,7 @@ from math import comb
 from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import training_profiles as profiles
-from patrick.tracking import relaunch_stats
+from patrick.tracking import live_record, relaunch_stats
 
 # Seuils (AUC multiclasse un-contre-tous sur 4 classes : le hasard vaut 0,50).
 #
@@ -92,6 +92,9 @@ class Diagnosis:
     class_shares: dict[str, float] | None = None
     horizon_auc: dict[int, float] = field(default_factory=dict)   # AUC de test par horizon d'un même lancement
     duration_s: float | None = None
+    live_n: int = 0                         # prédictions réelles jugées de ce modèle, et celles dont la direction était la bonne
+    live_hits: int = 0
+    covered_horizons: frozenset[int] = frozenset()   # horizons de cette cible qui ont déjà un champion en titre
     live_failure: dict | None = None        # prédiction quotidienne en échec depuis des jours faute de colonnes d'entrée (`relaunch_stats.live_failure`)
     view: dict = field(default_factory=dict)  # valeurs actuelles des champs du formulaire
 
@@ -220,6 +223,13 @@ def _next_horizons(horizon: int) -> list[int]:
     return [20, 30] if horizon < 20 else [horizon]
 
 
+def _open_horizons(d: Diagnosis) -> list[int]:
+    """Les horizons plus longs que cette cible n'a PAS encore : relancer un horizon qui a déjà son champion refait le même modèle
+    avec les mêmes réglages et joue son remplacement à pile ou face. Le 2026-11-12, 152 des 198 relances « signal absent » d'un lot
+    visaient au moins un horizon déjà couvert, 86 ne visaient que cela."""
+    return [h for h in _next_horizons(d.horizon) if h not in d.covered_horizons]
+
+
 def _rule_fix_leak(d: Diagnosis) -> Suggestion | None:
     if not d.suspect:
         return None
@@ -234,10 +244,13 @@ def _rule_signal_absent(d: Diagnosis) -> Suggestion | None:
         return None
     if d.auc_holdout is not None and d.auc_holdout >= CHANCE_AUC + 0.02:
         return None
+    horizons = _open_horizons(d)
+    if not horizons:                                          # tous les horizons voisins ont déjà leur modèle : rien de neuf à apprendre
+        return None
     score = _clip(60 + (CHANCE_AUC - d.auc_test) * 500, 0, 85)
-    return Suggestion("signal_absent", score, {"horizons": _next_horizons(d.horizon)},
+    return Suggestion("signal_absent", score, {"horizons": horizons},
                       {"auc": d.auc_test, "auc_ho": d.auc_holdout, "horizon": d.horizon,
-                       "horizons": ", ".join(str(h) for h in _next_horizons(d.horizon))})
+                       "horizons": ", ".join(str(h) for h in horizons)})
 
 
 def _rule_no_edge(d: Diagnosis) -> Suggestion | None:
@@ -251,9 +264,12 @@ def _rule_no_edge(d: Diagnosis) -> Suggestion | None:
         return None
     if d.auc_holdout is not None and d.auc_holdout >= GOOD_AUC:
         return None
-    return Suggestion("no_edge", _clip(44 - edge * 300, 0, 64), {"horizons": _next_horizons(d.horizon)},
+    horizons = _open_horizons(d)
+    if not horizons:
+        return None
+    return Suggestion("no_edge", _clip(44 - edge * 300, 0, 64), {"horizons": horizons},
                       {"f1": d.f1_test, "persistence": d.persistence_f1, "edge": _signed(edge), "auc": d.auc_test,
-                       "horizons": ", ".join(str(h) for h in _next_horizons(d.horizon))})
+                       "horizons": ", ".join(str(h) for h in horizons)})
 
 
 def _rule_overfit(d: Diagnosis) -> Suggestion | None:
@@ -354,6 +370,17 @@ def _rule_inputs_lost(d: Diagnosis) -> Suggestion | None:
                       {"days": f["n"], "since": str(f.get("since") or "")[:10], "missing": ", ".join(missing[:3]) + ("…" if len(missing) > 3 else "")})
 
 
+def _rule_live_decay(d: Diagnosis) -> Suggestion | None:
+    """Le modèle se trompe de direction en réel, nettement plus qu'une pièce (`live_record.failing` : assez de jugements, écart franc
+    compte tenu du recouvrement des horizons). Le holdout ne le voit pas : il date de l'entraînement. Relancer avec les réglages
+    d'aujourd'hui réentraîne sur les données les plus récentes ; le duel dira si le nouveau modèle vaut mieux."""
+    if d.suspect or not live_record.failing(d.live_n, d.live_hits, d.horizon):
+        return None
+    rate = d.live_hits / d.live_n
+    return Suggestion("live_decay", _clip(70 + (0.5 - rate) * 100, 0, 88), {},
+                      {"n": d.live_n, "hits": d.live_hits, "rate": _pct(rate), "auc_ho": d.auc_holdout})
+
+
 def _rule_data_degraded(d: Diagnosis) -> Suggestion | None:
     if d.n_universe <= 0 or d.n_excluded / d.n_universe < EXCLUSION_FRAC:
         return None
@@ -445,7 +472,7 @@ def _rule_robustness_seed(d: Diagnosis) -> Suggestion | None:
 
 
 RULES = (_rule_fix_leak, _rule_signal_absent, _rule_no_edge, _rule_overfit, _rule_unstable_folds, _rule_unstable_features, _rule_more_capacity,
-         _rule_deep_learning, _rule_short_history, _rule_inputs_lost, _rule_data_degraded, _rule_class_balance, _rule_overconfident, _rule_calibrate, _rule_confirm_cpcv,
+         _rule_deep_learning, _rule_short_history, _rule_inputs_lost, _rule_live_decay, _rule_data_degraded, _rule_class_balance, _rule_overconfident, _rule_calibrate, _rule_confirm_cpcv,
          _rule_try_alpha, _rule_best_horizon, _rule_faster_iteration, _rule_robustness_seed)
 
 
@@ -550,6 +577,8 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
                 horizon_auc[int(h)] = auc
 
     dm = detail.get("dm_result") or {}
+    judged, hits = (live_record.records(conn, [best["trial_id"]]).get(best["trial_id"], (0, 0))) if best else (0, 0)
+    covered = frozenset(int(h) for (h,) in conn.execute("SELECT horizon FROM champion WHERE target = ?", (run["target"],)))
     return Diagnosis(
         run_id=run_id, target=run["target"], horizon=int(run["horizon"]),
         asset_class=classify_asset_class(symbol, obj.get("target_source", "yfinance")), kind=obj.get("target_kind", "raw"),
@@ -561,7 +590,7 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
         jaccard=stab.get("mean_jaccard"), rho_test_holdout=diag_ho.get("rho") if (diag_ho.get("n_trials") or 0) >= 3 else None,
         cumulative_trials=detail.get("cumulative_trials"), history_years=years, n_excluded=len(issues),
         n_universe=len(uni.get("yf_tickers") or []) + len(uni.get("fred_series") or {}), class_shares=shares,
-        horizon_auc=horizon_auc, duration_s=(detail.get("phase_breakdown") or {}).get("run_total_s"),
+        horizon_auc=horizon_auc, live_n=judged, live_hits=hits, covered_horizons=covered, duration_s=(detail.get("phase_breakdown") or {}).get("run_total_s"),
         live_failure=relaunch_stats.live_failure(conn, run_id), view=view)
 
 

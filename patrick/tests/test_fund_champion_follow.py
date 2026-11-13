@@ -7,7 +7,7 @@ import fund_support as fs
 import pytest
 from test_fund_selection import World
 
-from patrick.fund import store, systematic
+from patrick.fund import service, store, systematic
 
 TODAY = dt.date(2026, 1, 16)
 UP, DOWN = 3, 0
@@ -94,12 +94,45 @@ def test_a_better_champion_replaces_the_model_of_a_following_rule(conn, world):
     report = systematic.roll_to_champions(conn, TODAY)
 
     assert [(r["retired"], r["trial_id"]) for r in report] == [(old_rule, new_tid)]
-    rules = {r["rule_id"]: r for r in systematic.list_rules(conn, sid)}
-    assert rules[old_rule]["config"]["retired_on"] == "2026-01-15"
-    fresh = rules[report[0]["created"]]
+    (fresh,) = systematic.list_rules(conn, sid)                               # l'ancienne règle est supprimée, pas retirée
+    assert fresh["rule_id"] == report[0]["created"] != old_rule
     assert fresh["config"]["trial_id"] == new_tid and fresh["config"]["since"] == "2026-01-16" and fresh["name"] == "Ma règle"
     assert fresh["config"]["follow_champion"] is True and "retired_on" not in fresh["config"]
     assert systematic.roll_to_champions(conn, TODAY) == []                     # idempotent : la nouvelle règle suit déjà le champion
+
+
+def test_replacing_a_model_deletes_its_orders_and_nothing_else_in_the_fund(conn, world):
+    """Le P&L de l'ancien modèle sort du fonds avec lui ; les ordres des autres règles et les ordres manuels restent."""
+    sid, old_tid, old_rule = _rule(conn, world)
+    other_tid = world.cell("MC.PA", 3, live=SIGNALS)
+    other_rule = systematic.create_rule(conn, sid, "Autre modèle", {
+        "trial_id": other_tid, "segment": "live", "allow_short": False, "instrument": {"kind": "equity", "symbol": "MC.PA"},
+        "sizing": {"amount": 5000}, "signal": {"mode": "direction"}, "hold": {"mode": "horizon", "sessions": 3}})
+    manual = service.place_order(conn, {"strategy_id": sid, "action": "open", "instrument_kind": "equity", "symbol": "TTE.PA",
+                                        "side": "long", "amount": 3000, "date": "2026-01-12"}, TODAY)
+    for rule_id in (old_rule, other_rule):
+        assert len(systematic.apply(conn, rule_id, TODAY)["placed"]) == 2      # hausse du 14 (achat le 15), baisse du 15 (vente le 16)
+    auto = next(o for o in store.list_orders(conn, sid) if (o["note"] or "").startswith(f"auto:{old_rule}:"))
+    store.insert_order(conn, {**auto, "note": "saisi à la main"})              # un ordre manuel sur une position de la règle
+    assert len(store.list_orders(conn, sid)) == 6
+
+    new_tid = world.cell("AAPL", 3, live=SIGNALS, suffix="_b")
+    (report,) = systematic.roll_to_champions(conn, TODAY)
+
+    assert report["purged_orders"] == 3 and report["replaced_trial_id"] == old_tid and report["trial_id"] == new_tid
+    left = store.list_orders(conn, sid)                                        # les ordres auto ET le renfort manuel de la position sont partis
+    assert sorted(o["symbol"] for o in left) == ["MC.PA", "MC.PA", "TTE.PA"] and manual["order_id"] in {o["order_id"] for o in left}
+    assert {r["rule_id"] for r in systematic.list_rules(conn, sid)} == {other_rule, report["created"]}
+    snapshot = service.strategy_snapshot(conn, store.get_strategy(conn, sid), TODAY)   # le fonds se valorise toujours
+    assert snapshot["kpis"]["nav"] > 0
+
+
+def test_purging_an_unknown_rule_removes_nothing(conn, world):
+    sid, _, rule_id = _rule(conn, world)
+    systematic.apply(conn, rule_id, TODAY)
+
+    assert systematic.purge_rule(conn, "rule_inconnue") == 0
+    assert len(store.list_orders(conn, sid)) == 2 and systematic.get_rule(conn, rule_id) is not None
 
 
 def test_a_rule_that_does_not_follow_is_left_alone(conn, world):

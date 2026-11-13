@@ -475,6 +475,29 @@ def delete_rule(conn: sqlite3.Connection, rule_id: str) -> bool:
     return cur.rowcount > 0
 
 
+def purge_rule(conn: sqlite3.Connection, rule_id: str) -> int:
+    """Supprime la règle ET tout ce qu'elle a fait dans le fonds : ses ordres automatiques et les ordres passés à la main sur ses
+    positions (une fermeture manuelle d'une position de la règle n'a plus de sens sans son ouverture). C'est le P&L du modèle
+    qu'elle rejouait qui disparaît, lui seul : les autres règles et les ordres manuels de la stratégie ne bougent pas. Sert au
+    remplacement d'un modèle par un meilleur. Renvoie le nombre d'ordres supprimés (0 si la règle est inconnue)."""
+    rule = get_rule(conn, rule_id)
+    if rule is None:
+        return 0
+    prefix = f"{NOTE_PREFIX}:{rule_id}:"
+    with conn:
+        positions = [row[0] for row in conn.execute(
+            "SELECT DISTINCT position_id FROM fund_order WHERE strategy_id = ? AND substr(note, 1, ?) = ?",
+            (rule["strategy_id"], len(prefix), prefix))]
+        removed = 0
+        for chunk in _chunks(positions):
+            removed += conn.execute(
+                f"DELETE FROM fund_order WHERE strategy_id = ? AND position_id IN ({','.join('?' for _ in chunk)})",
+                (rule["strategy_id"], *chunk)).rowcount
+        conn.execute("DELETE FROM fund_rule WHERE rule_id = ?", (rule_id,))
+        store.touch_strategy(conn, rule["strategy_id"])
+    return removed
+
+
 def rule_summaries(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     """Règles d'une stratégie avec le modèle visé et le nombre d'ordres déjà générés."""
     notes = [o["note"] for o in store.list_orders(conn, strategy_id) if o.get("note")]
@@ -587,11 +610,11 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
 
 def roll_to_champions(conn: sqlite3.Connection, today: dt.date | None = None) -> list[dict]:
     """Remplace par le champion en titre le modèle de chaque règle `follow_champion` (segment live) quand un meilleur modèle a
-    été entraîné. Même principe que le pilote : l'ancienne règle est retirée (plus de signal après la veille, ses positions
-    se ferment) et une règle neuve, aux mêmes réglages, démarre aujourd'hui avec le champion. Si la règle neuve est refusée
-    (modèle suspect, pas de P(hausse) pour des seuils...), l'ancienne reste en place. Renvoie un compte rendu par règle."""
+    été entraîné. Même principe que le pilote : une règle neuve, aux mêmes réglages, démarre aujourd'hui avec le champion, et
+    l'ancienne est supprimée avec ses ordres (`purge_rule`) : le P&L de l'ancien modèle sort du fonds, celui des autres règles
+    reste. Si la règle neuve est refusée (modèle suspect, pas de P(hausse) pour des seuils...), l'ancienne reste en place avec
+    son historique. Renvoie un compte rendu par règle (`retired` : la règle remplacée, `purged_orders` : ses ordres supprimés)."""
     today = service._today(today)
-    yesterday = (today - dt.timedelta(days=1)).isoformat()
     out: list[dict] = []
     for strategy in store.list_strategies(conn):
         for rule in list_rules(conn, strategy["strategy_id"]):
@@ -610,9 +633,9 @@ def roll_to_champions(conn: sqlite3.Connection, today: dt.date | None = None) ->
             except store.FundError as exc:
                 out.append({"strategy_id": strategy["strategy_id"], "rule_id": rule["rule_id"], "error": str(exc)})
                 continue
-            retire_rule(conn, rule["rule_id"], yesterday)
+            purged = purge_rule(conn, rule["rule_id"])
             out.append({"strategy_id": strategy["strategy_id"], "retired": rule["rule_id"], "created": created,
-                        "trial_id": champion[0]})
+                        "trial_id": champion[0], "replaced_trial_id": cfg["trial_id"], "purged_orders": purged})
     return out
 
 

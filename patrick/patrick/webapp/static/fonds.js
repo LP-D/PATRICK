@@ -339,6 +339,7 @@
             var report = await call(base + "/run", "POST", {});
             say(fill(btn.getAttribute("data-done"), {
                 placed: report.placed, created: report.created.length, retired: report.retired.length,
+                replaced: (report.replaced || []).length,
                 pending: report.pending, refused: report.refused.length }), report.refused.length ? "error" : "info");
             setBusy(btn, false);
             open(current);

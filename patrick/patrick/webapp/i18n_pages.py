@@ -42,7 +42,9 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "es_launch_quick": _s("Lancer un run rapide", "Launch a quick run"),
     "es_launch_robust": _s("Lancer un run robuste (CPCV)", "Launch a robust run (CPCV)"),
     "es_launch_alpha": _s("Lancer un run alpha", "Launch an alpha run"),
-    "fr_title": _s("Premier lancement : trois gestes", "First launch: three steps"),
+    # `first_run_title` et non `fr_title` : cette clé existe déjà (« Fraîcheur des données », i18n_legacy) et gagnait la fusion,
+    # la carte du premier lancement s'affichait donc sous le titre de la fraîcheur des données.
+    "first_run_title": _s("Premier lancement : trois gestes", "First launch: three steps"),
     "fr_step_data": _s("1. Vérifier que les données du marché sont à jour (page Données).", "1. Check that market data is up to date (Data page)."),
     "fr_step_run": _s("2. Lancer un run rapide : quelques minutes, sans réglage à comprendre.", "2. Launch a quick run: a few minutes, no setting to understand."),
     "fr_step_read": _s("3. Quand le run est terminé, ouvrir sa page : les chiffres de tête disent d'abord si le score est digne de confiance.",

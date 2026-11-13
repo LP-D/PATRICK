@@ -14,6 +14,7 @@ from patrick.tracking import db as trackdb
 from patrick.validation import pooled_signal as core
 
 ALPHA = 0.10
+REFRESH_DAYS = 7.0          # âge au-delà duquel `refresh_if_stale` recalcule (les holdouts ne bougent qu'avec de nouveaux runs)
 
 
 def _good_run_ids(conn: sqlite3.Connection) -> dict[str, tuple[str, int]]:
@@ -64,6 +65,21 @@ def save(conn: sqlite3.Connection, rows: list[dict]) -> None:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(r["target"], r["horizon"], r["n_runs"], r["n_dates"], _num(r["auc"]), _num(r["auc_run_mean"]), _num(r["p_value"]),
               r["q_value"], int(r["significant"])) for r in rows])
+
+
+def refresh_if_stale(conn: sqlite3.Connection, max_age_days: float = REFRESH_DAYS) -> dict:
+    """Recalcule la table quand elle est vide ou plus vieille que `max_age_days` : la Synthèse et les cartes de lots la lisent, et elle
+    n'était écrite que par une commande à lancer à la main (vide le 2026-11-13, pour 3 375 champions). `{"refreshed", "n_pairs",
+    "n_significant"}`. Le calcul ne fait que lire ; l'écriture est une transaction courte."""
+    row = conn.execute("SELECT COUNT(*), MIN(computed_at) FROM pooled_signal").fetchone()
+    if row[0]:
+        age = conn.execute("SELECT julianday('now') - julianday(?)", (row[1],)).fetchone()[0]
+        if age is not None and age < max_age_days:
+            return {"refreshed": False, "n_pairs": int(row[0]), "n_significant": None}
+    rows = compute_all(conn)
+    if rows:                                         # rien de testable : on garde l'ancienne mesure plutôt qu'une table vide
+        save(conn, rows)
+    return {"refreshed": bool(rows), "n_pairs": len(rows), "n_significant": sum(1 for r in rows if r["significant"])}
 
 
 def _num(value):

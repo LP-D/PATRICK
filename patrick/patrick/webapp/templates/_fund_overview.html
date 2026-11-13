@@ -66,5 +66,6 @@
 </section>
 
 {% else %}
-{{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint')) }}
+{# le bouton mène au ticket d'ordres, où se crée une stratégie : sans lui la page vide ne disait pas où aller #}
+{{ empty_state(t('fund_no_strategy'), t('fund_no_strategy_hint'), '/simulate', t('fund_new_strategy')) }}
 {% endif %}

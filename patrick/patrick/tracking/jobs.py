@@ -206,17 +206,31 @@ def set_job_paused(conn: sqlite3.Connection, job_id: str, paused: bool) -> bool:
     return cur.rowcount == 1
 
 
+def _forget_unrun_relaunches(conn: sqlite3.Connection) -> None:
+    """Un job retiré de la file n'a jamais tourné : la note « ce job vient de telle suggestion » (`relaunch_log`) n'a plus d'objet. Sans ce
+    ménage elle restait pour toujours (1 248 notes orphelines sur 1 272 le 2026-11-13, deux lots conseillés vidés de la file). Les notes des
+    jobs qui ont tourné restent, même quand le run battu au duel a été élagué : `duel_outcome` les référence. Mesure : jamais bloquant."""
+    try:
+        conn.execute("DELETE FROM relaunch_log WHERE job_id NOT IN (SELECT job_id FROM job) "
+                     "AND job_id NOT IN (SELECT job_id FROM duel_outcome WHERE job_id IS NOT NULL)")
+    except sqlite3.Error:            # table absente (base pas encore migrée)
+        pass
+
+
 def delete_queued_job(conn: sqlite3.Connection, job_id: str) -> bool:
     with conn:
         cur = conn.execute(
             "DELETE FROM job WHERE job_id = ? AND status = 'queued'", (job_id,)
         )
+        if cur.rowcount:
+            _forget_unrun_relaunches(conn)
     return cur.rowcount == 1
 
 
 def clear_queued_jobs(conn: sqlite3.Connection) -> int:
     with conn:
         cur = conn.execute("DELETE FROM job WHERE status = 'queued'")
+        _forget_unrun_relaunches(conn)
     return cur.rowcount
 
 

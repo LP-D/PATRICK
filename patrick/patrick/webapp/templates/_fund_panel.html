@@ -218,7 +218,7 @@
       <button type="button" class="btn-ghost" data-act="auto-preview">{{ t('fund_auto_preview') }}</button>
       <button type="button" class="btn" data-act="auto-save" data-done="{{ t('fund_auto_saved') }}">{{ t('fund_auto_update') if autopilot.enabled else t('fund_auto_enable') }}</button>
       {% if autopilot.enabled %}
-      <button type="button" class="btn-ghost" data-act="auto-run" data-done="{{ t('fund_auto_done', placed='{placed}', created='{created}', retired='{retired}', pending='{pending}', refused='{refused}') }}">{{ t('fund_auto_run') }}</button>
+      <button type="button" class="btn-ghost" data-act="auto-run" data-done="{{ t('fund_auto_done', placed='{placed}', created='{created}', retired='{retired}', replaced='{replaced}', pending='{pending}', refused='{refused}') }}">{{ t('fund_auto_run') }}</button>
       <button type="button" class="btn-ghost" data-act="auto-off" data-confirm="{{ t('fund_auto_confirm_off') }}">{{ t('fund_auto_off_btn') }}</button>
       {% endif %}
     </div>
