@@ -119,6 +119,29 @@ def clear_live_failure(conn: sqlite3.Connection, run_id: str) -> bool:
         return False
 
 
+def lost_series(conn: sqlite3.Connection, days: int = 2) -> list[dict]:
+    """Séries d'entrée qui manquent aux prédictions quotidiennes de ces `days` derniers jours : `[{"series", "n_models"}]`, la plus
+    répandue d'abord. Dès le premier jour (la suggestion `inputs_lost`, elle, attend `MIN_FAILURES` jours) : une seule série perdue peut
+    arrêter des centaines de modèles (`OJ=F`, 300 modèles, 2026-11-12)."""
+    try:
+        rows = conn.execute("SELECT detail FROM live_failure WHERE reason = 'missing_columns' AND last_at >= datetime('now', ?)",
+                            (f"-{int(days)} days",)).fetchall()
+    except sqlite3.Error:
+        return []
+    counts: dict[str, int] = {}
+    for (detail,) in rows:
+        found = _MISSING.search(detail or "")
+        columns = re.findall(r"'([^']+)'", found.group(1)) if found else []
+        for series in {_series_of(c) for c in columns}:
+            counts[series] = counts.get(series, 0) + 1
+    return [{"series": s, "n_models": n} for s, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def _series_of(column: str) -> str:
+    """La série d'une variable : ce qui précède le premier suffixe en minuscules (`OJ=F_egarch_vol` -> `OJ=F`, `USD_CHF_vol_10d` -> `USD_CHF`)."""
+    return re.split(r"_(?=[a-z])", column, maxsplit=1)[0]
+
+
 def live_failure(conn: sqlite3.Connection, run_id: str) -> dict | None:
     """`{"reason", "n", "since", "missing": [colonnes…]}` si ce modèle échoue depuis au moins `MIN_FAILURES` jours de suite faute de colonnes, sinon `None`."""
     try:

@@ -200,7 +200,7 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
 
     t0 = time.time()
     if objective.target_source == "yfinance":
-        target = yfinance_source.download_target(objective.target_symbol, universe.start_date)
+        target = yfinance_source.download_target(objective.target_symbol, universe.start_date, fresh=force)
     else:
         target = None
         if universe.fred_point_in_time == "alfred" and os.environ.get(fred_source.FRED_API_KEY_ENV):

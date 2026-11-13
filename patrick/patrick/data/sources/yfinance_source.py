@@ -51,19 +51,19 @@ def _download_one_cached(ticker: str, start: str) -> pd.Series | None:
         return None
 
 
-def download_one(ticker: str, start: str) -> pd.Series | None:
+def download_one(ticker: str, start: str, fresh: bool = False) -> pd.Series | None:
+    """Une série, par le cache disque de 7 jours puis le cache du processus. `fresh=True` : retéléchargée quoi qu'il arrive (les deux
+    caches sont contournés, le cache disque est réécrit) ; si le fournisseur ne répond pas, la copie en cache sert de secours."""
     key = f"series_{_clean_col(ticker)}_{start}"
     cache = LocalCache()
     cached = cache.load_dataframe(key, max_age_days=7)
-    if cached is not None:
-        if cached.shape[1] == 1:
-            return cached.iloc[:, 0].copy()
+    if cached is not None and not fresh:
         return cached.iloc[:, 0].copy()
-    s = _download_one_cached(ticker, start)
-    if s is not None:
+    s = _download_one_cached.__wrapped__(ticker, start) if fresh else _download_one_cached(ticker, start)
+    if s is not None and (not fresh or not s.dropna().empty):
         cache.save_dataframe(key, s.to_frame(), max_age_days=7)
         return s.copy()
-    return None
+    return cached.iloc[:, 0].copy() if cached is not None else s
 
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
@@ -144,8 +144,11 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
     return raw
 
 
-def download_target(symbol: str, start: str) -> pd.Series:
-    s = download_one(symbol, start)
+def download_target(symbol: str, start: str, fresh: bool = False) -> pd.Series:
+    """`fresh=True` (ingestion forcée : prédiction du jour, relance) : la cible est retéléchargée. Sans cela elle sortait du cache de
+    7 jours de `download_one`, et un modèle pouvait rester jusqu'à une semaine sans voir la barre du jour : aucun nouveau signal, alors que
+    tout son univers, lui, était à jour (série `000001.SS` en cache depuis 7 jours le 2026-11-13)."""
+    s = download_one(symbol, start, fresh=fresh)
     if s is None or s.dropna().empty:
         raise RuntimeError(f"Could not fetch target '{symbol}' via yfinance.")
     return s.rename(_clean_col(symbol))
