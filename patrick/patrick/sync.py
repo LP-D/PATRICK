@@ -1220,7 +1220,7 @@ def _push_too_soon(state: dict, hours: float) -> str | None:
     if elapsed >= hours:
         return None
     return (f"publication reportée : dernière publication il y a {elapsed:.1f} h (au moins {hours:g} h entre deux publications, "
-            f"réglage « {KEY_MIN_PUSH_HOURS} » ; `patrick sync push` publie tout de suite)")
+            f"réglage « {KEY_MIN_PUSH_HOURS} » ; `patrick sync auto --min-push-hours 0` publie tout de suite)")
 
 
 def auto(folder: str, *, only: str | None = None, wealth_reference: bool | None = None, db_path: str | None = None,
@@ -1448,9 +1448,10 @@ def task_status() -> dict:
 
 def forget_exchange() -> None:
     """Oublie l'état d'échange avec le partage (empreintes de la dernière synchronisation). À appeler quand
-    le dossier de partage CHANGE : l'ancien état ne dit rien du nouveau dossier."""
+    le dossier de partage CHANGE : l'ancien état ne dit rien du nouveau dossier (ni la date de la dernière publication, qui ne
+    doit pas retarder la première publication vers ce dossier)."""
     state = load_state()
-    for key in ("remote_sha", "local_fp", "at"):
+    for key in ("remote_sha", "local_fp", "at", "pushed_at"):
         state.pop(key, None)
     path = state_path()
     path.parent.mkdir(parents=True, exist_ok=True)

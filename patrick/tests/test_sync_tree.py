@@ -334,3 +334,15 @@ def test_auto_merges_a_tree_share_including_models_under_the_new_ids(pcs, tmp_pa
     new_id = conn.execute("SELECT trial_id FROM trial WHERE run_id = 'a1' AND algo = 'lgbm'").fetchone()[0]
     conn.close()
     assert Path(path).read_bytes() == b"modele-a1" and Path(path).parent.name == str(new_id)
+
+
+def test_changing_the_shared_folder_also_forgets_the_last_publication_time(tmp_path, monkeypatch):
+    """Sinon la première publication vers le nouveau dossier (déjà occupé par l'autre PC) attendrait jusqu'à 24 h."""
+    monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    sync.save_state(remote_sha="x", local_fp="y", pushed_at="2026-11-12T10:00:00+00:00", funds_fp="f")
+
+    sync.forget_exchange()
+
+    state = sync.load_state()
+    assert "pushed_at" not in state and "remote_sha" not in state and "local_fp" not in state
+    assert state["funds_fp"] == "f"                                      # les fonds ont leur propre suivi : inchangé
