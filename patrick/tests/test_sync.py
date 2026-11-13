@@ -45,6 +45,7 @@ def _count(path: Path, table: str) -> int:
 def _push(dest: Path, src_db: Path, tmp_path: Path, **kw) -> dict:
     kw.setdefault("store_root", str(tmp_path / "no_store"))
     kw.setdefault("models_roots", [])
+    kw.setdefault("layout", "zip")          # format 1 (archives) : celui de GitHub et des anciens dossiers ; le format 2 est dans test_sync_tree.py
     return sync.push(str(dest), db_path=str(src_db), **kw)
 
 

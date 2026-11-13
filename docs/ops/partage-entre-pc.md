@@ -2,8 +2,10 @@
 
 > **Au quotidien, tout passe par l'application de bureau** : le dossier partagé se choisit au premier démarrage
 > (ou dans Réglages), la fusion se fait au démarrage, la publication à la fermeture et toutes les heures, sans
-> commande à taper. Voir [application-bureau.md](application-bureau.md). Les commandes ci-dessous restent
-> disponibles pour dépanner ou scripter.
+> commande à taper (une publication complète est faite **au plus toutes les 24 h** par PC : réglage `sync_min_push_hours`,
+> `0` = sans délai, ou `patrick sync auto --min-push-hours 0` pour publier tout de suite). Voir
+> [application-bureau.md](application-bureau.md) ; mise en service du format en clair : [passage-au-partage-en-clair.md](passage-au-partage-en-clair.md).
+> Les commandes ci-dessous restent disponibles pour dépanner ou scripter.
 
 ## Synchronisation automatique (dossier OneDrive / Drive)
 
@@ -14,7 +16,7 @@ niveau par **union** : aucun run n'est jamais perdu ni écrasé, quel que soit l
 |---|---|
 | `patrick sync setup --folder <dossier> [--schedule] [--wealth-reference]` | à faire **une fois par PC** : mémorise le dossier partagé (`--schedule` : crée aussi la tâche Windows `PATRICK-Sync`, publication toutes les heures s'il y a du neuf; `--wealth-reference` : ce PC est la référence du patrimoine, voir plus bas) |
 | `patrick sync status` | dit ce que `auto` ferait, sans rien modifier |
-| `patrick sync auto [--only pull\|push]` | fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de neuf |
+| `patrick sync auto [--only pull\|push] [--min-push-hours N]` | fusionne ce que l'autre PC a publié, puis publie ce que ce PC a de neuf (au plus toutes les N heures ; défaut : réglage `sync_min_push_hours`, sinon 24 ; `0` = sans délai) |
 | `patrick sync merge --from <dossier> [--dry-run-to f.db]` | fusion explicite (à blanc : écrit dans `f.db`, la base locale n'est pas touchée) |
 
 Avec le lanceur `PATRICK.lnk` : la fusion se fait au démarrage (avant le
@@ -73,9 +75,40 @@ stable, PATRICK fermé : `patrick sync setup --folder "<dossier OneDrive>" --sch
 
 ## Ce qui est partagé
 
-- `patrick.db` compressée (~110 Mo), modèles référencés par `trial.artifact_path`, parquet du magasin de données.
-- `manifest.json` : sha256 et taille de chaque fichier, version de schéma. `pull` refuse un fichier corrompu ou un
-  partage plus récent que le code (faire `git pull` d'abord).
+Deux mises en page, choisies par `patrick sync push` selon la destination (ADR 0020) :
+
+- **Format 2, en clair (dossier : Google Drive, OneDrive, disque réseau)** : `manifest.json` (écrit en dernier), `db/patrick.db`
+  (la recherche, SQLite lisible telle quelle, sans caches ni données perso, environ 3 Go), `models/index.json` et
+  `models/<empreinte>/<modèle>` (un modèle et son `_meta.json`, rangés par empreinte de contenu), `store/snapshot=<date>/*.parquet`
+  avec `store/_index.json` et `store/_series_observations.json`. Les modèles et les parquet sont **immuables** : un fichier déjà
+  présent avec la même taille n'est jamais recopié, donc une publication ne copie que le neuf, et une copie interrompue reprend
+  où elle s'est arrêtée. Aucun fichier temporaire `.part`. La base, elle, est réécrite en entier à chaque publication (d'où le
+  délai de 24 h).
+- **Format 1, archives (GitHub, anciens dossiers)** : `patrick.db.gz`, `models.zip`, `store.zip`. Toujours lu par `pull` et
+  `merge`, publié avec `patrick sync push --to github` (assets limités à 2 Go). Un PC sans le code du format 2 ne sait pas lire
+  un dossier en format 2 (erreur `KeyError` à la lecture du manifeste) : **mettre à jour les deux PC avant de publier en clair.**
+- `manifest.json` : taille et sha256 de la base et des petits fichiers, taille de chaque modèle et de chaque parquet, version de
+  schéma. `pull` refuse un fichier corrompu (« sha256 différent »), un fichier pas encore entièrement recopié (« pas entièrement
+  recopié par le dossier partagé » : réessayer plus tard) ou un partage plus récent que le code (faire `git pull` d'abord).
+- Après la première publication en format 2 sur un ancien partage, `patrick.db.gz`, `models.zip` et `store.zip` restent dans le
+  dossier (une trentaine de Go) : le programme les **signale** mais ne les supprime jamais ; à supprimer à la main.
+- Une publication s'arrête (sans rien changer au partage) quand le disque du dossier a moins de 5 Go libres, et reprend à la
+  suivante. Attention : avec Google Drive en mode « diffusion en continu » (lecteur `F:`), cet espace libre est celui de `C:`.
+
+## Google Drive pour ordinateur
+
+- **Mode « Miroir » recommandé** (Préférences de Drive, « Mes fichiers » : « Mettre en miroir les fichiers ») avec un dossier sur
+  un disque qui a de la place : le dossier partagé devient un vrai dossier NTFS, sans cache caché sur `C:`. En mode « diffusion
+  en continu », tout fichier écrit passe par le cache du Drive (`%LOCALAPPDATA%\Google\DriveFS`) qui peut occuper des dizaines de Go
+  sur `C:` ; et un fichier lu sur l'autre PC est d'abord téléchargé dans ce cache.
+- Le quota Google se lit sur <https://drive.google.com/drive/quota> ; le « libre » du lecteur `F:` ne le reflète pas.
+- **Jamais la base vivante** (`~/.patrick/patrick.db`) ni `feature_cache` dans un dossier synchronisé : une base SQLite ouverte
+  peut s'y corrompre, et le Drive garde les anciennes versions d'un fichier remplacé.
+- Incident du 10-12/11/2026 : l'ancien format reconstruisait `store.zip` (30 Go) dans le dossier temporaire à chaque publication ;
+  le cache du Drive a rempli `C:` (16 Go libres), le client Drive s'est figé (100 % d'un cœur, aucun réseau, lecture impossible sur
+  `F:`) et des `.part` vides restaient dans le dossier. Réparation : fermer Drive, mettre de côté son dossier `DriveFS`, rouvrir
+  Drive et se reconnecter. Les commandes qui modifient `%LOCALAPPDATA%` doivent être lancées dans **ton** PowerShell, pas depuis
+  l'application Claude (qui voit un `AppData` virtualisé).
 
 ## Listes de suivi, carnet et journal de prédictions (2026-11-02)
 

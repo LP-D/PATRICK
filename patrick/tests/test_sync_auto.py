@@ -26,7 +26,8 @@ class PC:
 
     def use(self) -> PC:
         self.monkeypatch.setenv("PATRICK_SETTINGS_PATH", str(self.dir / "settings.json"))
-        sync.settings_mod.save({sync.KEY_PC_NAME: self.name})      # deux PC de test ne portent pas le même nom d'hôte
+        # deux PC de test ne portent pas le même nom d'hôte ; plusieurs publications par test : pas de délai minimal entre deux
+        sync.settings_mod.save({sync.KEY_PC_NAME: self.name, sync.KEY_MIN_PUSH_HOURS: 0})
         return self
 
     def seed(self, runs, **kw) -> PC:
