@@ -119,6 +119,7 @@ NAV_ICONS: dict[str, str] = {
     "variables": "scale",
     "drift": "trending-down",
     "journal": "file",
+    "live_board": "activity",
     "carnet": "pencil",
     "models_registry": "briefcase",
     "donnees": "eye",

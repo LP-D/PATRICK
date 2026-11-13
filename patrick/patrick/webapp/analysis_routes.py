@@ -30,7 +30,7 @@ from patrick.analysis import (
 )
 from patrick.tracking import db as trackdb
 from patrick.tracking import journal as journal_mod
-from patrick.tracking import research_notes
+from patrick.tracking import live_board, research_notes
 from patrick.webapp import i18n
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -325,6 +325,17 @@ def register(app: FastAPI, templates, context) -> None:
         except research_notes.NoteError as exc:
             raise HTTPException(status_code=400 if str(exc) != "not_found" else 404, detail=str(exc)) from exc
         return JSONResponse({"ok": True})
+
+    @app.get("/reel", response_class=HTMLResponse)
+    async def live_board_page(request: Request):
+        def work():
+            conn = trackdb.connect()
+            try:
+                return live_board.board(conn)
+            finally:
+                conn.close()
+        board = await run_in_threadpool(_cached, "live_board", work)
+        return templates.TemplateResponse(request, "reel.html", {**context(request), "board": board})
 
     @app.get("/journal")
     def journal_page(request: Request):

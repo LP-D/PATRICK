@@ -136,6 +136,23 @@ def _read_holdout(purpose: str, run_id: str, *args, **kwargs):
     return read(*args, **kwargs)
 
 
+RULE_LIVE = ("champion clearly below chance on its judged live predictions (tracking/live_record.failing): the title goes to an "
+             "evaluable, non-suspect challenger whatever the holdout scores")
+
+
+def _champion_live(conn, champion: dict, horizon: int) -> dict | None:
+    """`{"n", "hits", "failing"}` du champion en réel, ou `None` sans prédiction jugée. Une panne de lecture ne fausse jamais un duel :
+    elle le laisse se jouer sur le holdout seul."""
+    try:
+        from patrick.tracking import live_record
+
+        n, hits = live_record.records(conn, [champion["trial_id"]]).get(champion["trial_id"], (0, 0))
+        return {"n": n, "hits": hits, "failing": live_record.failing(n, hits, horizon)} if n else None
+    except Exception:  # noqa: BLE001 -- mesure d'appoint
+        traceback.print_exc()
+        return None
+
+
 def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | None) -> dict:
     target = st.config.objective.run_label()
     run_id = st.run_ids[horizon]
@@ -188,9 +205,14 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
 
     judged_by = _judged_by(_duel_criterion(st), chal_eval, champ_eval)
     chal_score, champ_score = _metric(chal_eval, judged_by), _metric(champ_eval, judged_by)
-    challenger_wins = chal_score > champ_score
+    # Le holdout date de l'entraînement du champion ; son résultat RÉEL, lui, continue de s'écrire. Un champion nettement sous le hasard en
+    # réel (`live_record.failing`) cède le titre à un challenger évaluable et non suspect, même mieux noté que lui sur le holdout.
+    live = _champion_live(st.conn, champion, horizon)
+    live_override = bool(live and live["failing"]) and not chal_score > champ_score
+    challenger_wins = chal_score > champ_score or live_override
     duel = {
-        "rule": RULE_BY_CRITERION[judged_by],
+        "rule": RULE_LIVE if live_override else RULE_BY_CRITERION[judged_by],
+        "champion_live": live,
         "criterion": judged_by,
         "challenger_score": chal_score,
         "champion_score": champ_score,
@@ -214,7 +236,8 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         champions.prune_run(st.conn, run_id)
         loser = run_id
     return {"decision": duel["winner"] + "_wins", "challenger_f1_dir": chal_f1, "champion_f1_dir": champ_f1,
-            "criterion": judged_by, "challenger_score": chal_score, "champion_score": champ_score, "pruned_run": loser}
+            "criterion": judged_by, "challenger_score": chal_score, "champion_score": champ_score, "pruned_run": loser,
+            **({"live_override": True, "champion_live": live} if live_override else {})}
 
 
 def _restore_drift_reference(st, horizon: int) -> None:
