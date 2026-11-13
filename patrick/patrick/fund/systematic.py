@@ -498,6 +498,19 @@ def purge_rule(conn: sqlite3.Connection, rule_id: str) -> int:
     return removed
 
 
+def replace_model(conn: sqlite3.Connection, rule: dict, new_trial_id: int, today: dt.date | None = None) -> tuple[int, float | None]:
+    """Supprime la règle d'un modèle remplacé (`purge_rule`) et note le remplacement au journal du fonds (`fund/insight.py`) avec le
+    P&L qui sort du fonds, mesuré juste avant. Renvoie `(ordres supprimés, P&L retiré ou None)`."""
+    from patrick.fund import (
+        insight,  # import tardif : `insight` lit les règles par ce module
+    )
+
+    pnl = insight.rule_pnl(conn, rule["strategy_id"], rule["rule_id"], today)
+    removed = purge_rule(conn, rule["rule_id"])
+    insight.log_replacement(conn, rule, new_trial_id, removed, pnl)
+    return removed, pnl
+
+
 def rule_summaries(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     """Règles d'une stratégie avec le modèle visé et le nombre d'ordres déjà générés."""
     notes = [o["note"] for o in store.list_orders(conn, strategy_id) if o.get("note")]
@@ -633,7 +646,7 @@ def roll_to_champions(conn: sqlite3.Connection, today: dt.date | None = None) ->
             except store.FundError as exc:
                 out.append({"strategy_id": strategy["strategy_id"], "rule_id": rule["rule_id"], "error": str(exc)})
                 continue
-            purged = purge_rule(conn, rule["rule_id"])
+            purged, _pnl = replace_model(conn, rule, champion[0], today)
             out.append({"strategy_id": strategy["strategy_id"], "retired": rule["rule_id"], "created": created,
                         "trial_id": champion[0], "replaced_trial_id": cfg["trial_id"], "purged_orders": purged})
     return out

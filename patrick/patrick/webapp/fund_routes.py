@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from patrick.fund import (
     asset_classes,
     autopilot,
+    insight,
     instruments,
     service,
     store,
@@ -215,6 +216,19 @@ def register(app: FastAPI, templates, context) -> None:
         """Ancienne page « Simulateur patrimoine » : remplacée par /fonds."""
         return RedirectResponse("/fonds", status_code=308)
 
+    def _insight(conn, strategy_id: str, snap: dict, today) -> dict:
+        """Attribution, témoins et journal des remplacements du panneau. Une lecture en panne (cotation manquante pour un témoin)
+        n'empêche jamais le panneau de s'afficher : le bloc concerné est simplement absent."""
+        out = {"attribution": {"by_rule": [], "by_class": [], "by_side": []}, "witnesses": None, "replacements": []}
+        for key, read in (("attribution", lambda: insight.attribution(conn, strategy_id, snap)),
+                          ("witnesses", lambda: insight.witnesses(conn, snap["strategy"], snap, today)),
+                          ("replacements", lambda: insight.replacements(conn, strategy_id))):
+            try:
+                out[key] = read()
+            except Exception:
+                log.exception("fund insight %s failed for %s", key, strategy_id)
+        return out
+
     @app.get("/api/fund/strategies/{strategy_id}/panel")
     def api_strategy_panel(request: Request, strategy_id: str):
         """Fragment HTML (rendu serveur, échappé) du détail d'une stratégie pour /fonds."""
@@ -223,11 +237,11 @@ def register(app: FastAPI, templates, context) -> None:
         def run(conn):
             snap = service.strategy_snapshot(conn, _require_strategy(conn, strategy_id), today)
             rules = systematic.rule_summaries(conn, strategy_id)
-            return snap, rules, autopilot.status(conn, strategy_id, rules)
-        snap, rules, auto = _call(run)
+            return snap, rules, autopilot.status(conn, strategy_id, rules), _insight(conn, strategy_id, snap, today)
+        snap, rules, auto, seen = _call(run)
         manual = [r for r in rules if not (r["config"].get("managed") or {}).get("by")]     # celles du pilote : dans son bloc
         return templates.TemplateResponse(request, "_fund_panel.html", {
-            "snap": snap, "rules": manual, "autopilot": auto, "today": today.isoformat(), **context(request)})
+            "snap": snap, "rules": manual, "autopilot": auto, "insight": seen, "today": today.isoformat(), **context(request)})
 
     @app.get("/api/fund/strategies/{strategy_id}/rule-form")
     def api_rule_form(request: Request, strategy_id: str):

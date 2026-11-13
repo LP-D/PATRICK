@@ -24,7 +24,16 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from patrick.config import universe_extension as UX
-from patrick.fund import instruments, prices, selection, service, store, systematic
+from patrick.data.session_calendar import classify_asset_class
+from patrick.fund import (
+    insight,
+    instruments,
+    prices,
+    selection,
+    service,
+    store,
+    systematic,
+)
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.fund.autopilot")
@@ -49,6 +58,8 @@ class Settings:
     gross: float = 1.0
     allow_short: bool = True
     min_confidence: float = 0.0
+    max_class_share: float = 1.0                     # part maximale de l'exposition brute sur une même classe d'actifs (1 = sans plafond)
+    max_drawdown: float | None = None                # repli sous le plus haut au-delà duquel le pilote n'ouvre plus rien (None = sans arrêt)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Settings:
@@ -65,12 +76,20 @@ class Settings:
         confidence = _number(raw.get("min_confidence", base.min_confidence), "min_confidence")
         if not 0.0 <= confidence < 1.0:
             raise store.FundError("min_confidence invalide : entre 0 (inclus) et 1 (exclu) attendu")
+        share = _number(raw.get("max_class_share", base.max_class_share), "max_class_share")
+        if not 0.0 < share <= 1.0:
+            raise store.FundError("max_class_share invalide : entre 0 (exclu) et 1 (inclus) attendu")
+        drawdown = raw.get("max_drawdown", base.max_drawdown)
+        if drawdown is not None:
+            drawdown = _number(drawdown, "max_drawdown")
+            if not 0.0 < drawdown < 1.0:
+                raise store.FundError("max_drawdown invalide : entre 0 et 1 (exclus) attendu, ou vide")
         return cls(selection=selection.Policy.from_dict(raw), gross=gross, allow_short=allow_short,
-                   min_confidence=confidence)
+                   min_confidence=confidence, max_class_share=share, max_drawdown=drawdown)
 
     def to_dict(self) -> dict:
         return {**self.selection.to_dict(), "gross": self.gross, "allow_short": self.allow_short,
-                "min_confidence": self.min_confidence}
+                "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown}
 
 
 def _number(value, name: str) -> float:
@@ -185,9 +204,17 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
         priced.append({**model, "instrument": instrument, "allow_short": allow_short, "vol": vol, "unit_notional": unit})
     inverse = {target: 1.0 / next(m["vol"] for m in priced if m["target"] == target) for target in {m["target"] for m in priced}}
     total, per_target = sum(inverse.values()), {t: sum(1 for m in priced if m["target"] == t) for t in inverse}
+    weights = {id(m): inverse[m["target"]] / total / per_target[m["target"]] for m in priced}
+    # Plafond par classe d'actifs : le poids d'une classe au-dessus de `max_class_share` est ramené au plafond, sans être redistribué
+    # (l'exposition brute baisse d'autant : c'est le sens d'un plafond de risque).
+    classes = {id(m): classify_asset_class(m["target"]) for m in priced}
+    by_class: dict[str, float] = {}
+    for m in priced:
+        by_class[classes[id(m)]] = by_class.get(classes[id(m)], 0.0) + weights[id(m)]
+    scale = {c: min(1.0, settings.max_class_share / w) if w > 0 else 1.0 for c, w in by_class.items()}
     selected = []
     for model in priced:
-        weight = inverse[model["target"]] / total / per_target[model["target"]]
+        weight = weights[id(model)] * scale[classes[id(model)]]
         notional = settings.gross * capital * weight
         if model["instrument"]["kind"] == "cfd":
             quantity = round(notional / model["unit_notional"], 4)
@@ -255,7 +282,8 @@ def managed_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     return [r for r in systematic.list_rules(conn, strategy_id) if (r["config"].get("managed") or {}).get("by") == MANAGER]
 
 
-def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tuple, trial_id: int) -> list[dict]:
+def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tuple, trial_id: int,
+                           today: dt.date | None = None) -> list[dict]:
     """Un nouveau modèle prend la cellule `key` (cible, horizon) : les règles du pilote qui y rejouaient un AUTRE modèle (active
     ou déjà retirées) sont supprimées avec leurs ordres. Le P&L du modèle remplacé sort du fonds ; celui des autres cellules, des
     règles saisies à la main et des ordres manuels reste. Renvoie une ligne par règle supprimée."""
@@ -264,11 +292,11 @@ def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tupl
         cfg = rule["config"]
         if (cfg["managed"]["target"], cfg["managed"]["horizon"]) != key or cfg["trial_id"] == trial_id:
             continue
-        orders = systematic.purge_rule(conn, rule["rule_id"])
+        orders, pnl = systematic.replace_model(conn, rule, trial_id, today)
         logger.info("pilote %s : %s h%s passe de l'essai %s à l'essai %s, %d ordre(s) de l'ancien modèle supprimé(s)",
                     strategy_id, key[0], key[1], cfg["trial_id"], trial_id, orders)
         out.append({"rule_id": rule["rule_id"], "target": key[0], "horizon": key[1], "trial_id": cfg["trial_id"],
-                    "new_trial_id": trial_id, "orders": orders})
+                    "new_trial_id": trial_id, "orders": orders, "pnl_removed": pnl})
     return out
 
 
@@ -305,6 +333,14 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
     strategy, stored, settings = _enabled(conn, strategy_id)
     plan = build_plan(conn, strategy, settings, today)
     desired = {(m["target"], m["horizon"]): m for m in plan["selected"]}
+    # Arrêt sur perte : au-delà du repli maximal, plus aucun modèle n'est retenu. Les règles sont retirées (leurs positions se ferment à
+    # l'échéance), rien n'est effacé ; le pilote reste à l'arrêt tant que le repli dépasse le plafond (le relever ou le vider pour repartir).
+    halted = None
+    if settings.max_drawdown is not None:
+        drawdown = insight.current_drawdown(conn, strategy, today)
+        if drawdown is not None and drawdown >= settings.max_drawdown:
+            halted = {"drawdown": round(drawdown, 4), "limit": settings.max_drawdown}
+            desired = {}
     report: dict = {"day": today.isoformat(), "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                     "selected": len(desired), "created": [], "updated": [], "retired": [], "replaced": [], "failed": [],
                     "refused": [],
@@ -342,7 +378,7 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
         else:
             report["created"].append(rule_id)
             active[key] = {"rule_id": rule_id}
-            report["replaced"] += _purge_previous_models(conn, strategy_id, key, model["trial_id"])
+            report["replaced"] += _purge_previous_models(conn, strategy_id, key, model["trial_id"], today)
     report["rules"] = len(active)
 
     for rule in managed_rules(conn, strategy_id):                  # actives et retirées : une retirée finit de fermer
@@ -356,6 +392,7 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
         report["pending"] += len(result["pending"])
         report["refused"] += [{"target": meta["target"], "horizon": meta["horizon"], **r} for r in result["refused"]]
     report["excluded"] = plan["excluded_summary"]
+    report["halted"] = halted
 
     summary = {k: (len(v) if isinstance(v, list) else v) for k, v in report.items() if k != "excluded"}
     store.set_autopilot(conn, strategy_id, {**stored, "last_run": summary})

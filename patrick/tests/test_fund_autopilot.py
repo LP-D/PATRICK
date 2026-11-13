@@ -250,8 +250,10 @@ def test_a_champion_change_replaces_the_rule_and_removes_only_the_old_models_ord
     report = autopilot.run(conn, sid, DAY1)
 
     assert report["retired"] == [] and len(report["created"]) == 1
-    assert report["replaced"] == [{"rule_id": old["rule_id"], "target": "AAPL", "horizon": 3, "trial_id": old_tid,
-                                   "new_trial_id": new_tid, "orders": 1}]
+    (replaced,) = report["replaced"]
+    assert {k: v for k, v in replaced.items() if k != "pnl_removed"} == {
+        "rule_id": old["rule_id"], "target": "AAPL", "horizon": 3, "trial_id": old_tid, "new_trial_id": new_tid, "orders": 1}
+    assert isinstance(replaced["pnl_removed"], float)                         # le P&L de l'ancien modèle, mesuré avant de sortir du fonds
     rules = {r["config"]["managed"]["target"]: r for r in systematic.list_rules(conn, sid)}
     assert set(rules) == {"AAPL", "MC.PA"} and rules["AAPL"]["rule_id"] == report["created"][0]
     assert rules["AAPL"]["config"]["trial_id"] == new_tid and rules["AAPL"]["config"]["since"] == "2026-01-16"
