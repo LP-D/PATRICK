@@ -573,7 +573,6 @@ STRINGS: dict[str, dict[str, str]] = {
                      "en": "{symbol} price over {period}: {n} points, low {min} to high {max}, last {last}."},
 
     # Phase 4 — investment simulator
-    "nav_simulate": {"fr": "Simulateur", "en": "Simulator"},
     # Ex-"Kelly fractionnaire" : l'API n'accepte plus que `heuristic_leverage`
     # (ce n'est pas la formule de Kelly, cf. simulate/engine.py).
     # Simulator empty states at rest. Without them, `/simulate` opens on

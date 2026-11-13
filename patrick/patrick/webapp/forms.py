@@ -648,6 +648,10 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     # RunConfig.model_validate().
     if not (12 <= holdout_months <= 24):
         errors.append("« Holdout terminal (mois) » doit être compris entre 12 et 24.")
+    # Refusé ICI, à la soumission : le pipeline ne le disait qu'après l'ingestion (`pipeline/engine.run_pipeline`), et le job
+    # partait en erreur après plusieurs minutes (44 jobs le 2026-10-24).
+    if form.get("scheme", "walkforward") == "cpcv" and _checked(form, "staged_screening"):
+        errors.append("« Présélection progressive » : elle ne tourne qu'en walk-forward. Décoche-la ou choisis le walk-forward.")
 
     dl_selected = [a for a in algos if a in D.ALL_DL_ALGOS]
     optuna_bounds = _parse_optuna_bounds(form, errors, dl_selected)

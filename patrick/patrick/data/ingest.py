@@ -10,7 +10,7 @@ import pandas as pd
 
 from patrick.cache_manager import LocalCache
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
-from patrick.data import publication_lag
+from patrick.data import history_repair, publication_lag
 from patrick.data import quality as quality_module
 from patrick.data.session_calendar import session_lag_days, session_rule_tag
 from patrick.data.sources import fred_source, yfinance_source
@@ -44,6 +44,29 @@ def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: Objec
               f"(close later than the target's): {', '.join(lagged[:8])}"
               f"{'...' if len(lagged) > 8 else ''}")
     return out
+
+
+def _restore_lost_series(store: DataStore, cache_key: str, pit: str, lost: dict[str, str], partial: dict,
+                         objective: ObjectiveConfig, requested_end: pd.Timestamp, issues: list) -> dict[str, pd.Series]:
+    """Reprend dans les instantanés du magasin l'historique des séries que le fournisseur ne sert plus en entier
+    (`data/history_repair.py`) ; leurs exclusions sortent de `issues`. Une panne de la reprise ne casse jamais une ingestion :
+    les séries restent alors exclues, comme avant."""
+    lagged = set()
+    if not objective.disable_session_lag:
+        lagged = {c for c, t in lost.items() if session_lag_days(t, "yfinance", objective.target_symbol, objective.target_source,
+                                                                 rule=objective.session_rule)}
+    try:
+        restored, observed = history_repair.restore(store, cache_key, pit, lost, partial, lagged, requested_end)
+    except Exception as exc:  # noqa: BLE001 -- la reprise est un secours, jamais une cause d'échec
+        print(f"  [REPAIR] history repair failed ({type(exc).__name__}: {exc}) -- series stay excluded.")
+        return {}
+    if not restored:
+        return {}
+    store.record_series_observations(observed, source="yfinance")
+    issues[:] = [i for i in issues if not (i.series in restored and i.reason in history_repair.PROVIDER_REASONS)]
+    print(f"  [REPAIR] {len(restored)} series truncated by the provider restored from the data lake: "
+          f"{', '.join(sorted(restored)[:8])}{'...' if len(restored) > 8 else ''}")
+    return restored
 
 
 def _last_date(s: pd.Series) -> str | None:
@@ -208,11 +231,16 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     n_requested = len(universe.yf_tickers) + len(universe.fred_series)
     requested_end = pd.Timestamp(df.index.max()) if len(df) else pd.Timestamp.today()
 
+    repaired: dict[str, pd.Series] = {}
     if universe.yf_tickers:
+        partial: dict = {}
         yf_df, yf_reported = yfinance_source.download_universe(
             universe.yf_tickers, universe.start_date, universe.yf_coverage, t0=t0,
-            issues=issues if dq.enabled else None, return_unfilled=True)
+            issues=issues if dq.enabled else None, return_unfilled=True, rejected=partial)
         reverse = {yfinance_source.clean_symbol(t): t for t in universe.yf_tickers}
+        # Séries que le fournisseur ne sert plus (ou plus en entier) : relevées AVANT les portes de qualité, qui écartent pour une
+        # autre raison (contenu de la série) et dont les exclusions ne sont jamais reprises.
+        lost = {c: t for c, t in reverse.items() if c not in yf_df.columns and c != target.name}
         store.record_series_observations(
             {reverse.get(c, c): _last_date(yf_reported[c]) for c in yf_reported.columns}, source="yfinance")
         yf_df = _apply_session_lag(yf_df, universe.yf_tickers, objective)
@@ -223,6 +251,10 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
             # gaps are only visible before the fill.
             to_drop = _run_extra_quality_checks(yf_reported, requested_end, dq, issues, prefilled=False)
             yf_df = yf_df.drop(columns=[c for c in to_drop if c in yf_df.columns])
+        if lost:
+            repaired = _restore_lost_series(store, cache_key, pit, lost, partial, objective, requested_end, issues)
+            for series in repaired.values():
+                yf_df = yf_df.join(series, how="outer")
         df = df.join(yf_df, how="outer")
 
     if universe.fred_series:
@@ -288,4 +320,5 @@ def ingest(objective: ObjectiveConfig, universe: UniverseConfig,
     store.save(cache_key, df, meta={"pit_version": pit})
     local_cache.save_dataframe(f"{cache_key}_local", df, max_age_days=30, extra_meta={"pit_version": pit})
     _attach_snapshot_context(df, universe, quality_issues=issues if dq.enabled else None)
+    df.attrs["history_repaired"] = sorted(repaired)
     return df

@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from test_fund_selection import World
 
-from patrick.fund import autopilot, store, systematic
+from patrick.fund import autopilot, service, store, systematic
 
 TODAY = dt.date(2026, 1, 16)
 UP, DOWN = 3, 0
@@ -232,22 +232,56 @@ def test_a_model_that_drops_out_is_retired_and_its_position_dies_at_the_horizon(
     assert opens_after == [] and report["selected"] == 0                      # le signal du 22 n'ouvre plus rien
 
 
-def test_a_champion_change_retires_the_old_rule_and_starts_a_new_one_without_overlap(conn, world):
+def test_a_champion_change_replaces_the_rule_and_removes_only_the_old_models_orders(conn, world):
+    """Nouveau champion sur une cellule : la règle de l'ancien modèle part avec ses ordres (son P&L sort du fonds), les autres
+    cellules et les ordres manuels restent, la règle neuve démarre aujourd'hui."""
+    old_tid = world.cell("AAPL", 3, live=AAPL_SIGNALS)
+    world.cell("MC.PA", 3, live=AAPL_SIGNALS)
+    sid = _strategy(conn)
+    autopilot.configure(conn, sid, {})
+    autopilot.run(conn, sid, DAY0)
+    autopilot.run(conn, sid, DAY1)                                           # une position courte ouverte le 16 sur chaque cellule
+    old = next(r for r in systematic.list_rules(conn, sid) if r["config"]["managed"]["target"] == "AAPL")
+    manual = service.place_order(conn, {"strategy_id": sid, "action": "open", "instrument_kind": "cfd", "symbol": "CL=F",
+                                        "side": "long", "quantity": 1, "date": "2026-01-16"}, DAY1)
+    assert sorted(o["symbol"] for o in store.list_orders(conn, sid)) == ["AAPL", "CL=F", "MC.PA"]
+
+    new_tid = world.cell("AAPL", 3, live=AAPL_SIGNALS, suffix="_b")          # un nouveau champion, d'un autre essai
+    report = autopilot.run(conn, sid, DAY1)
+
+    assert report["retired"] == [] and len(report["created"]) == 1
+    assert report["replaced"] == [{"rule_id": old["rule_id"], "target": "AAPL", "horizon": 3, "trial_id": old_tid,
+                                   "new_trial_id": new_tid, "orders": 1}]
+    rules = {r["config"]["managed"]["target"]: r for r in systematic.list_rules(conn, sid)}
+    assert set(rules) == {"AAPL", "MC.PA"} and rules["AAPL"]["rule_id"] == report["created"][0]
+    assert rules["AAPL"]["config"]["trial_id"] == new_tid and rules["AAPL"]["config"]["since"] == "2026-01-16"
+    left = store.list_orders(conn, sid)
+    assert sorted(o["symbol"] for o in left) == ["CL=F", "MC.PA"] and manual["order_id"] in {o["order_id"] for o in left}
+    assert store.get_autopilot(conn, sid)["last_run"]["replaced"] == 1
+    assert autopilot.run(conn, sid, DAY1)["replaced"] == []                  # idempotent
+
+
+def test_a_refused_new_champion_retires_the_old_rule_and_keeps_its_orders(conn, world, monkeypatch):
     world.cell("AAPL", 3, live=AAPL_SIGNALS)
     sid = _strategy(conn)
     autopilot.configure(conn, sid, {})
     autopilot.run(conn, sid, DAY0)
+    autopilot.run(conn, sid, DAY1)
     (old,) = systematic.list_rules(conn, sid)
+    world.cell("AAPL", 3, live=AAPL_SIGNALS, suffix="_b")
+    create = systematic.create_rule
 
-    world.cell("AAPL", 3, live=AAPL_SIGNALS, suffix="_b")                    # un nouveau champion, d'un autre essai
-    report = autopilot.run(conn, sid, DAY0)
+    def refuse(conn_, strategy_id, name, config):
+        raise store.FundError("refusé pour le test")
+    monkeypatch.setattr(systematic, "create_rule", refuse)
 
-    rules = {r["rule_id"]: r for r in systematic.list_rules(conn, sid)}
-    assert len(rules) == 2 and report["retired"] == [old["rule_id"]] and len(report["created"]) == 1
-    assert rules[old["rule_id"]]["config"]["retired_on"] == "2026-01-14"
-    new = rules[report["created"][0]]
-    assert new["config"]["trial_id"] != old["config"]["trial_id"] and "retired_on" not in new["config"]
-    assert new["config"]["since"] == "2026-01-15"                              # l'ancienne règle s'arrête la veille
+    report = autopilot.run(conn, sid, DAY1)
+
+    monkeypatch.setattr(systematic, "create_rule", create)
+    (rule,) = systematic.list_rules(conn, sid)
+    assert rule["rule_id"] == old["rule_id"] and rule["config"]["retired_on"] == "2026-01-15"
+    assert report["replaced"] == [] and report["retired"] == [old["rule_id"]] and len(report["failed"]) == 1
+    assert _orders(conn, sid) == [("2026-01-16", "open", "short")]           # rien n'est effacé tant que le remplaçant n'existe pas
 
 
 def test_changing_a_behaviour_setting_replaces_the_rule_instead_of_rewriting_its_history(conn, world):

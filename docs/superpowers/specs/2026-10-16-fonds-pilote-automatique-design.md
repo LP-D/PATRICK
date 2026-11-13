@@ -72,8 +72,10 @@ exclus avec ce motif. Un future continu (`=F`) se négocie en CFD avec l'avertis
 
 Politique par stratégie dans `fund_strategy.autopilot_json` (migration 0044) : `enabled`, `tier`, `gross`, `max_models`,
 `allow_short`, `min_confidence`, `fresh_days`, dernière exécution. `run(strategy)` : sélectionne → complète/ajuste les règles
-**gérées** (`config.managed`) → retire (`retired_on`) celles dont le modèle n'est plus retenu ou dont le champion a changé →
-applique chaque règle → rend un compte rendu (créées, ajustées, retirées, ordres placés, refusés avec motifs). Les règles
+**gérées** (`config.managed`) → retire (`retired_on`) celles dont le modèle n'est plus retenu → remplace celles dont le champion
+a changé (depuis le 2026-11-13 : la règle de l'ancien modèle est supprimée avec ses ordres, `systematic.purge_rule` ; seul le P&L
+de ce modèle sort du fonds, celui des autres cellules et des ordres manuels reste) →
+applique chaque règle → rend un compte rendu (créées, ajustées, retirées, remplacées, ordres placés, refusés avec motifs). Les règles
 saisies à la main ne sont jamais touchées. Les règles gérées ne comptent pas comme « configuration essayée » (aucun seuil
 n'est cherché). Déclenchement : bouton, commande `patrick fund autopilot-run`, et après les prédictions du jour
 (`live_refresh`, tâche `Patrick-DailyPredict` et application ouverte) pour toutes les stratégies activées ; une erreur n'arrête
@@ -106,9 +108,9 @@ registre des essais.
   indice, devise, matière première, future continu, crypto, volatilité, taux) et le ticker.
 - **Deux modes de règle dans le formulaire** : seuils sur la P(hausse) (entrée, sortie) ou direction avec sortie à l'horizon du modèle.
 - **Suivi du champion.** Une règle sur le segment live peut suivre le champion (`follow_champion`, cochée par défaut) : quand un
-  entraînement produit un meilleur champion, la règle est retirée (plus de signal après la veille ; sa position se ferme, à
-  l'horizon ou, pour une règle à seuils, le lendemain) et une règle neuve aux mêmes réglages démarre avec le champion. Refusé
-  (modèle suspect, pas de P(hausse) pour des seuils) : l'ancienne règle reste. Le cycle quotidien le fait avant celui du pilote.
+  entraînement produit un meilleur champion, une règle neuve aux mêmes réglages démarre avec le champion et l'ancienne est
+  supprimée avec ses ordres (depuis le 2026-11-13 : le P&L de l'ancien modèle sort du fonds, lui seul ; avant, elle était
+  retirée et ses ordres restaient). Refusé (modèle suspect, pas de P(hausse) pour des seuils) : l'ancienne règle reste. Le cycle quotidien le fait avant celui du pilote.
 - **Périmètre du pilote** : `horizons` et `groups` (groupes de l'univers) bornent la sélection.
 - **Une stratégie par classe d'actifs** (`fund/asset_classes.py`, `patrick fund autopilot-classes`) : `Systematic <classe>`, pilote
   borné aux groupes de la classe et à l'horizon 1. Aperçu par défaut ; `--create` écrit.

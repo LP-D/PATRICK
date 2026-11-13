@@ -6,9 +6,11 @@ l'horizon » (`fund.systematic`) : une position par signal, fermée à l'horizon
 Un cycle (`run`) est idempotent et se relance chaque jour après les prédictions.
 
 Les règles du pilote (`config.managed`) sont à sens unique : une règle neuve démarre le jour de sa création (jamais de
-rejeu du passé avec une sélection faite aujourd'hui), et une règle dont le modèle, l'instrument ou un réglage de
-comportement change n'est pas réécrite : elle est retirée (elle ne prend plus de signal après la veille, ses positions
-ouvertes se ferment à leur échéance) et une règle neuve prend la suite. Les règles saisies à la main ne sont jamais touchées.
+rejeu du passé avec une sélection faite aujourd'hui), et une règle dont l'instrument ou un réglage de comportement change
+n'est pas réécrite : elle est retirée (elle ne prend plus de signal après la veille, ses positions ouvertes se ferment à leur
+échéance) et une règle neuve prend la suite. Quand c'est le MODÈLE d'une cellule qui change (nouveau champion), la règle de
+l'ancien modèle est supprimée avec ses ordres (`_purge_previous_models`) : son P&L sort du fonds, celui des autres cellules
+reste. Les règles saisies à la main ne sont jamais touchées.
 """
 from __future__ import annotations
 
@@ -253,7 +255,24 @@ def managed_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
     return [r for r in systematic.list_rules(conn, strategy_id) if (r["config"].get("managed") or {}).get("by") == MANAGER]
 
 
-_RUN_LOCK = threading.Lock()          # un seul cycle à la fois dans ce processus : deux cycles simultanés doubleraient les ordres
+def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tuple, trial_id: int) -> list[dict]:
+    """Un nouveau modèle prend la cellule `key` (cible, horizon) : les règles du pilote qui y rejouaient un AUTRE modèle (active
+    ou déjà retirées) sont supprimées avec leurs ordres. Le P&L du modèle remplacé sort du fonds ; celui des autres cellules, des
+    règles saisies à la main et des ordres manuels reste. Renvoie une ligne par règle supprimée."""
+    out: list[dict] = []
+    for rule in managed_rules(conn, strategy_id):
+        cfg = rule["config"]
+        if (cfg["managed"]["target"], cfg["managed"]["horizon"]) != key or cfg["trial_id"] == trial_id:
+            continue
+        orders = systematic.purge_rule(conn, rule["rule_id"])
+        logger.info("pilote %s : %s h%s passe de l'essai %s à l'essai %s, %d ordre(s) de l'ancien modèle supprimé(s)",
+                    strategy_id, key[0], key[1], cfg["trial_id"], trial_id, orders)
+        out.append({"rule_id": rule["rule_id"], "target": key[0], "horizon": key[1], "trial_id": cfg["trial_id"],
+                    "new_trial_id": trial_id, "orders": orders})
+    return out
+
+
+_RUN_LOCK = threading.Lock()        # un seul cycle à la fois dans ce processus : deux cycles simultanés doubleraient les ordres
 
 
 def run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None) -> dict:
@@ -287,7 +306,8 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
     plan = build_plan(conn, strategy, settings, today)
     desired = {(m["target"], m["horizon"]): m for m in plan["selected"]}
     report: dict = {"day": today.isoformat(), "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-                    "selected": len(desired), "created": [], "updated": [], "retired": [], "failed": [], "refused": [],
+                    "selected": len(desired), "created": [], "updated": [], "retired": [], "replaced": [], "failed": [],
+                    "refused": [],
                     "placed": 0, "pending": 0}
 
     active: dict[tuple, dict] = {}
@@ -295,9 +315,13 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
         if "retired_on" not in rule["config"]:
             active[(rule["config"]["managed"]["target"], rule["config"]["managed"]["horizon"])] = rule
     yesterday, since = (today - dt.timedelta(days=1)).isoformat(), today.isoformat()
+    outgoing: dict[tuple, dict] = {}                 # cellule gardée dont le modèle change : l'ancienne règle attend la neuve
     for key, rule in list(active.items()):
         want = desired.get(key)
-        if want is None or _signature(rule["config"]) != _signature(_rule_config(want, settings, since)):
+        if want is not None and rule["config"]["trial_id"] != want["trial_id"]:
+            outgoing[key] = rule
+            del active[key]
+        elif want is None or _signature(rule["config"]) != _signature(_rule_config(want, settings, since)):
             systematic.retire_rule(conn, rule["rule_id"], yesterday)
             report["retired"].append(rule["rule_id"])
             del active[key]
@@ -312,9 +336,13 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
                                              _rule_config(model, settings, since))
         except store.FundError as exc:
             report["failed"].append({"target": model["target"], "horizon": model["horizon"], "reason": str(exc)})
+            if key in outgoing:                      # le nouveau modèle est refusé : l'ancien s'arrête sans rien effacer
+                systematic.retire_rule(conn, outgoing[key]["rule_id"], yesterday)
+                report["retired"].append(outgoing[key]["rule_id"])
         else:
             report["created"].append(rule_id)
             active[key] = {"rule_id": rule_id}
+            report["replaced"] += _purge_previous_models(conn, strategy_id, key, model["trial_id"])
     report["rules"] = len(active)
 
     for rule in managed_rules(conn, strategy_id):                  # actives et retirées : une retirée finit de fermer

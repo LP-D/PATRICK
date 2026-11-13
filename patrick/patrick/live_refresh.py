@@ -79,11 +79,15 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
     `predict_live()` fait `joblib.load(artifact_path)` tel quel, donc c'est le
     cwd du PROCESS au moment de l'appel qui doit correspondre."""
     base_dir = base_dir or os.getcwd()
+    # Le champion en titre d'abord : un run plus récent qui n'a pas pu être comparé (CPCV de confirmation, run sans holdout) n'est pas
+    # le modèle de la cellule. Sans cela le champion ne recevait plus de signal du jour, alors que les fonds, la sélection du pilote
+    # et la page des prédictions lisent le sien (31 cellules dans ce cas le 2026-11-13).
     rows = conn.execute(
         "SELECT r.run_id, r.target, r.horizon, t.trial_id, t.artifact_path "
         "FROM run r JOIN trial t ON t.run_id = r.run_id AND t.is_best = 1 "
+        "LEFT JOIN champion c ON c.target = r.target AND c.horizon = r.horizon AND c.trial_id = t.trial_id "
         "WHERE r.status = 'done' AND t.artifact_path IS NOT NULL AND t.artifact_path != '' "
-        "ORDER BY r.target, r.horizon, r.finished_at DESC"
+        "ORDER BY r.target, r.horizon, (c.trial_id IS NOT NULL) DESC, r.finished_at DESC"
     ).fetchall()
 
     latest_per_pair: dict[tuple[str, int], PredictCandidate] = {}
@@ -227,8 +231,8 @@ def run_autopilots(db_path: str | None = None) -> list[dict]:
                 if "error" in rolled:
                     logger.warning("règle %s : le champion n'a pas pu la remplacer (%s)", rolled["rule_id"], rolled["error"])
                 else:
-                    logger.info("règle %s remplacée par %s (nouveau champion, essai %s)", rolled["retired"], rolled["created"],
-                                rolled["trial_id"])
+                    logger.info("règle %s remplacée par %s (nouveau champion, essai %s) : %s ordre(s) de l'ancien modèle supprimé(s)",
+                                rolled["retired"], rolled["created"], rolled["trial_id"], rolled.get("purged_orders", 0))
         except Exception:
             logger.exception("suivi du champion en échec")        # n'empêche pas le cycle du pilote
         reports = autopilot.run_all(conn)
@@ -241,6 +245,25 @@ def run_autopilots(db_path: str | None = None) -> list[dict]:
             logger.info("autopilot %s : %d modèle(s), %d ordre(s) placé(s), %d en attente", report["strategy_id"],
                         report["selected"], report["placed"], report["pending"])
     return reports
+
+
+def refresh_pooled_signal(db_path: str | None = None) -> dict | None:
+    """Tient à jour l'AUC regroupée par paire cible-horizon (`tracking/pooled_signal.py`), lue par la Synthèse et les cartes de lots.
+    À lancer après les prédictions du jour ; une panne est journalisée, jamais levée."""
+    from patrick.tracking import pooled_signal
+
+    try:
+        conn = trackdb.connect(db_path)
+        try:
+            report = pooled_signal.refresh_if_stale(conn)
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("AUC regroupée : recalcul en échec")
+        return None
+    if report["refreshed"]:
+        logger.info("AUC regroupée recalculée : %d paire(s), %d significative(s)", report["n_pairs"], report["n_significant"])
+    return report
 
 
 def refresh_status() -> dict:
@@ -283,6 +306,7 @@ def _refresh_once(db_path: str | None = None) -> None:
             logger.exception("autopilot cycle failed")
         if rest:
             run_daily_predictions(rest, db_path=db_path, on_item=_progress)
+        refresh_pooled_signal(db_path)
     finally:
         with _state_lock:
             _state.update(running=False, finished_at=datetime.now(UTC).isoformat())

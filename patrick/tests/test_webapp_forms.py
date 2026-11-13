@@ -487,3 +487,12 @@ def test_a_stored_first_fold_config_still_shows_the_box_checked():
     legacy = forms.default_config_dict()
     legacy["selection"]["screening_mode"] = "staged"
     assert forms.to_view(legacy)["staged_screening"] is True
+
+
+def test_build_config_dict_rejects_staged_screening_with_cpcv_at_submission():
+    """Le pipeline ne refusait cette combinaison qu'après l'ingestion : le job partait en erreur au bout de plusieurs minutes."""
+    _cfg, errors = forms.build_config_dict(_minimal_form(scheme="cpcv", staged_screening="on"), target_symbol="^VIX", name="VIX_CPCV_1")
+    assert any("walk-forward" in e for e in errors)
+    for ok in (_minimal_form(scheme="cpcv"), _minimal_form(scheme="walkforward", staged_screening="on")):
+        _cfg, errors = forms.build_config_dict(ok, target_symbol="^VIX", name="VIX_CPCV_2")
+        assert not any("Présélection progressive" in e for e in errors)

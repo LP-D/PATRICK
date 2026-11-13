@@ -48,6 +48,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     PredictOutcome,
     RunSummary,
     find_predictable_candidates,
+    refresh_pooled_signal,
     run_autopilots,
     run_daily_predictions,
     split_for_funds,
@@ -78,6 +79,9 @@ def remeasure_stale_drift(candidates: list[PredictCandidate], db_path: str | Non
     finally:
         conn.close()
     due = [c for c in candidates if drift_policy.needs_remeasure(latest.get((c.target, c.horizon)), today)]
+    # Jamais mesurés d'abord, puis la mesure la plus ancienne : dans l'ordre des candidats (alphabétique), les mêmes premières cibles
+    # redevenaient dues avant que les dernières aient été mesurées une seule fois (145 mesures pour 3 375 champions le 2026-11-13).
+    due.sort(key=lambda c: str(latest.get((c.target, c.horizon)) or ""))
     report = {"measured": 0, "failed": 0, "skipped_fresh": len(candidates) - len(due),
               "deferred": max(0, len(due) - limit)}
     for c in due[:limit]:
@@ -204,6 +208,9 @@ def main(argv: list[str] | None = None) -> int:
         drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
         print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "
               f"{drift_report['skipped_fresh']} à jour, {drift_report['deferred']} reportée(s) à demain.")
+    pooled = refresh_pooled_signal(args.db_path)
+    if pooled and pooled["refreshed"]:
+        print(f"AUC regroupée : {pooled['n_pairs']} paire(s) testée(s), {pooled['n_significant']} significative(s).")
     return 1 if summary.failures else 0
 
 

@@ -1428,7 +1428,7 @@ def fund_rule_roll_cmd(today: str = typer.Option(None, "--today", help="Date AAA
         if "error" in r:
             typer.echo(f"  {r['rule_id']} : conservée, le champion est refusé ({r['error']})")
         else:
-            typer.echo(f"  {r['retired']} retirée, {r['created']} créée avec le champion (essai {r['trial_id']}).")
+            typer.echo(f"  {r['retired']} supprimée avec {r['purged_orders']} ordre(s) de l'ancien modèle, {r['created']} créée avec le champion (essai {r['trial_id']}).")
 
 
 @fund_app.command(name="autopilot-off")

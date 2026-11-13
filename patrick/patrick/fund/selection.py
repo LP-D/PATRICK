@@ -25,6 +25,7 @@ from patrick.fund import store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.tracking import live_record
 from patrick.tracking import stats as trackstats
 from patrick.validation import suspicion
 
@@ -41,6 +42,7 @@ LABELS = {
     "alignment": "devise entraînée avant la correction d'alignement (signal du jour recouvrant le label)",
     "no_live": "aucun signal live",
     "stale": "signal live trop ancien",
+    "live": "résultat réel nettement sous le hasard",
     "bh": "cible écartée par la correction pour tests multiples (Benjamini-Hochberg)",
     "dm": "test de Diebold-Mariano non concluant",
     "cap": "au-delà du nombre maximal de modèles",
@@ -57,6 +59,7 @@ class Policy:
     max_models: int | None = 40                     # None = aucun plafond
     horizons: tuple[int, ...] | None = None          # périmètre : seulement ces horizons (None = tous)
     groups: tuple[str, ...] | None = None            # périmètre : seulement ces groupes de l'univers (classes d'actifs)
+    live_gate: bool = True                           # écarte un modèle dont le réel est nettement sous le hasard (`tracking/live_record.py`)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Policy:
@@ -73,10 +76,17 @@ class Policy:
                    fresh_days=_count(raw.get("fresh_days", base.fresh_days), "fresh_days", 365),
                    max_models=(None if "max_models" in raw and raw["max_models"] is None
                                else _count(raw.get("max_models", base.max_models), "max_models", 5000)),
-                   horizons=_scope(raw.get("horizons"), "horizons", int), groups=_scope(raw.get("groups"), "groups", str))
+                   horizons=_scope(raw.get("horizons"), "horizons", int), groups=_scope(raw.get("groups"), "groups", str),
+                   live_gate=_flag(raw.get("live_gate", base.live_gate), "live_gate"))
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _flag(value, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise store.FundError(f"{name} invalide : booléen attendu")
+    return value
 
 
 def _scope(value, name: str, kind: type) -> tuple | None:
@@ -160,6 +170,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     for chunk in _chunks(run_ids):
         metrics.update(trackdb.batch_best_metrics(conn, chunk))
     latest_live = _latest_live(conn, [c[3] for c in champions])
+    realised = live_record.records(conn, [c[3] for c in champions]) if policy.live_gate else {}
     legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     dm = _dm_results(conn, run_ids)
     fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier in BH_TIERS else {}
@@ -192,6 +203,10 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
                 reject(target, horizon, "no_live")
             elif str(last_ts)[:10] < freshest:
                 reject(target, horizon, "stale", f"dernier signal live le {str(last_ts)[:10]} (plus de {policy.fresh_days} jours)")
+            elif trial_id in realised and live_record.failing(*realised[trial_id], horizon):
+                judged, hits = realised[trial_id]
+                reject(target, horizon, "live", f"{hits} bonne(s) direction(s) sur {judged} prédictions réelles jugées "
+                                                 f"({hits / judged:.0%})".replace(".", ","))
             else:
                 evidence = fdr.get(target, {})
                 dm_row = dm.get(run_id)

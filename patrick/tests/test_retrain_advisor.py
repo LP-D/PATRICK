@@ -70,6 +70,20 @@ def test_chance_level_scores_suggest_longer_horizons():
     assert "signal_absent" not in keys(diag(auc_test=0.60, auc_holdout=0.60))
 
 
+def test_horizons_that_already_have_a_champion_are_not_relaunched():
+    """Relancer un horizon déjà couvert refait le même modèle et joue son remplacement à pile ou face : seuls les horizons neufs
+    sont proposés, et rien quand tous les voisins ont leur champion."""
+    chance = {"auc_test": 0.505, "auc_holdout": 0.50, "horizon": 1, "fold_auc": [0.5, 0.51, 0.5, 0.51, 0.5]}
+    inertia = {"auc_test": 0.55, "f1_test": 0.50, "persistence_f1": 0.53, "horizon": 1}
+
+    partly = next(s for s in advise(diag(**chance, covered_horizons=frozenset({1, 5})), limit=20) if s.key == "signal_absent")
+    assert partly.patch == {"horizons": [10]} and partly.facts["horizons"] == "10"
+    assert "signal_absent" not in keys(diag(**chance, covered_horizons=frozenset({1, 5, 10})))
+    assert "signal_absent" not in keys(diag(**{**chance, "horizon": 30}, covered_horizons=frozenset({30})))   # 30 jours : seul lui-même
+    assert next(s for s in advise(diag(**inertia, covered_horizons=frozenset({10})), limit=20) if s.key == "no_edge").patch == {"horizons": [5]}
+    assert "no_edge" not in keys(diag(**inertia, covered_horizons=frozenset({5, 10})))
+
+
 def test_a_test_to_holdout_gap_means_selection_overfitting():
     out = advise(diag(auc_test=0.62, auc_holdout=0.52, f1_test=0.60, f1_holdout=0.48))
     s = next(s for s in out if s.key == "overfit")
@@ -374,3 +388,23 @@ def test_a_suggestion_prefills_the_launch_form_from_the_run(client):
 
 def test_a_missing_suggestion_is_a_404(client):
     assert client.get("/ml?run_id=r1&suggest=calibrate").status_code == 404
+
+
+def test_a_model_clearly_wrong_in_live_use_is_proposed_for_retraining():
+    """Le holdout date de l'entraînement : seul le réel dit qu'un modèle ne marche plus. Peu de jugements, ou un écart que le
+    recouvrement des horizons explique, ne déclenchent rien."""
+    out = advise(diag(live_n=40, live_hits=12, horizon=1), limit=20)
+    s = next(s for s in out if s.key == "live_decay")
+    assert s.patch == {} and s.score >= 85 and s.facts["rate"] == "30 %" and s.facts["n"] == "40"
+    assert "live_decay" not in keys(diag(live_n=12, live_hits=2, horizon=1))              # trop peu de jugements
+    assert "live_decay" not in keys(diag(live_n=40, live_hits=17, horizon=1))             # 42 % : dans le bruit
+    assert "live_decay" not in keys(diag(live_n=40, live_hits=12, horizon=10))            # horizons recouvrants : 4 jugements indépendants
+    assert "live_decay" not in keys(diag(suspect="x", live_n=40, live_hits=5, horizon=1))
+    assert "live_decay" not in keys(diag())                                               # aucun réel : rien à dire
+
+
+def test_the_live_decay_suggestion_has_its_texts():
+    from patrick.webapp.i18n import STRINGS
+
+    for part in ("title", "why", "try"):
+        assert f"adv_live_decay_{part}" in STRINGS and f"adv_inputs_lost_{part}" in STRINGS

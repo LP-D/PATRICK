@@ -68,7 +68,7 @@ def download_one(ticker: str, start: str) -> pd.Series | None:
 
 def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85,
                        t0: float | None = None, issues: list | None = None,
-                       return_unfilled: bool = False):
+                       return_unfilled: bool = False, rejected: dict | None = None):
     """Downloads a universe of tickers with an individual fallback for
     failures/low coverage. Returns a DataFrame indexed by date, one column
     per retained ticker.
@@ -87,6 +87,10 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
     identical reported closes 2-3 on every liquid future/index, 4-12 once
     forward-filled -- GC=F, ^VIX, EURUSD=X excluded as "frozen" for that
     reason alone).
+
+    `rejected`: if provided, receives `{column: reported closes}` of every
+    ticker dropped for low coverage -- what the provider still serves of a
+    series whose history it truncated (`data/history_repair.py`).
     """
     from patrick.data.quality import QualityIssue
 
@@ -103,6 +107,9 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
             for col, cov in low_coverage.items():
                 issues.append(QualityIssue(col, "couverture_insuffisante",
                                             f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
+        if rejected is not None:
+            for col in low_coverage.index:
+                rejected[col] = raw[col].dropna()
         unfilled = raw.loc[:, coverage >= coverage_min].dropna(how="all")
         raw = unfilled.ffill()
     else:
@@ -123,9 +130,13 @@ def download_universe(tickers: list[str], start: str, coverage_min: float = 0.85
         if cov >= coverage_min:
             raw[s.name] = s
             unfilled[s.name] = s_reported
-        elif issues is not None:
-            issues.append(QualityIssue(s.name, "couverture_insuffisante",
-                                        f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
+        else:
+            if rejected is not None:
+                # jamais par-dessus les barres du lot : `download_one` relit un cache disque de 7 jours, le lot vient d'être téléchargé
+                rejected.setdefault(s.name, s_reported.dropna())
+            if issues is not None:
+                issues.append(QualityIssue(s.name, "couverture_insuffisante",
+                                            f"{cov:.1%} of business days populated (threshold {coverage_min:.0%})"))
     print(f"  [yfinance] {raw.shape[1] if len(raw) else 0}/{len(tickers)} tickers kept "
           f"(coverage>={coverage_min:.0%}) in {time.time()-t0:.1f}s")
     if return_unfilled:

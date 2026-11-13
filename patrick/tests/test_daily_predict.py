@@ -122,6 +122,29 @@ def test_find_predictable_candidates_keeps_most_recent_done_run_per_pair(tmp_pat
     assert candidates[0].run_id == "run_new"
 
 
+def test_find_predictable_candidates_prefers_the_champion_over_a_more_recent_run(tmp_path):
+    """Un run plus récent jamais comparé au champion (CPCV de confirmation, sans holdout) ne lui prend pas le signal du jour :
+    les fonds et la page des prédictions lisent celui du champion. Un champion sans fichier laisse la place au run le plus récent."""
+    db_path = str(tmp_path / "patrick.db")
+    conn = trackdb.connect(db_path)
+    for name in ("champ", "recent", "other_recent"):
+        (tmp_path / f"{name}.joblib").write_bytes(b"fake")
+    _make_run_with_trial(conn, "run_champ", "^GSPC", 1, artifact_path=str(tmp_path / "champ.joblib"), finished_at="2026-01-01 00:00:00")
+    _make_run_with_trial(conn, "run_recent", "^GSPC", 1, artifact_path=str(tmp_path / "recent.joblib"), finished_at="2026-06-01 00:00:00")
+    _make_run_with_trial(conn, "run_lost", "^VIX", 5, artifact_path="perdu.joblib", finished_at="2026-01-01 00:00:00")
+    _make_run_with_trial(conn, "run_other", "^VIX", 5, artifact_path=str(tmp_path / "other_recent.joblib"), finished_at="2026-06-01 00:00:00")
+    for target, horizon, run_id in (("^GSPC", 1, "run_champ"), ("^VIX", 5, "run_lost")):
+        trial_id = conn.execute("SELECT trial_id FROM trial WHERE run_id = ?", (run_id,)).fetchone()[0]
+        conn.execute("INSERT INTO champion (target, horizon, run_id, trial_id, reason) VALUES (?, ?, ?, ?, 'first')",
+                     (target, horizon, run_id, trial_id))
+    conn.commit()
+
+    candidates = {c.target: c.run_id for c in daily_predict.find_predictable_candidates(conn, base_dir=str(tmp_path))}
+    conn.close()
+
+    assert candidates == {"^GSPC": "run_champ", "^VIX": "run_other"}
+
+
 def test_find_predictable_candidates_resolves_relative_artifact_path_against_base_dir(tmp_path):
     db_path = str(tmp_path / "patrick.db")
     conn = trackdb.connect(db_path)
@@ -237,13 +260,13 @@ def test_nightly_drift_remeasures_only_stale_or_unmeasured_pairs(tmp_path):
 
     report = daily_predict.remeasure_stale_drift(cands, db_path=db_path, measure_fn=fake_measure,
                                                  today=dt.date(2026, 9, 26), limit=10)
-    assert measured == [("^VIX", 5), ("BTC-USD", 20), ("GC=F", 5)]      # ^GSPC measured 2 days ago
+    assert measured == [("BTC-USD", 20), ("GC=F", 5), ("^VIX", 5)]      # ^GSPC measured 2 days ago; never-measured pairs first
     assert report == {"measured": 2, "failed": 1, "skipped_fresh": 1, "deferred": 0}
 
     measured.clear()
     report = daily_predict.remeasure_stale_drift(cands, db_path=db_path, measure_fn=fake_measure,
                                                  today=dt.date(2026, 9, 26), limit=1)
-    assert len(measured) == 1 and report["deferred"] == 2
+    assert measured == [("BTC-USD", 20)] and report["deferred"] == 2    # a pair never measured is not starved by a re-due one
 
 
 def test_main_runs_the_fund_autopilots_after_the_predictions(tmp_path, monkeypatch):

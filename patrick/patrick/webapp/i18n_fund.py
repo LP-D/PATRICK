@@ -264,8 +264,8 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_rule_direction_hint": _s(
         "Le sens du signal décide ; la position se ferme à l'horizon du modèle et se renouvelle tant que le signal tient.",
         "The signal direction decides; the position closes at the model horizon and renews while the signal holds."),
-    "fund_rule_follow": _s("Remplacer le modèle quand un meilleur est entraîné (segment live)",
-                           "Replace the model when a better one is trained (live segment)"),
+    "fund_rule_follow": _s("Remplacer le modèle quand un meilleur est entraîné (segment live) : les ordres de l'ancien modèle sont supprimés",
+                           "Replace the model when a better one is trained (live segment): the old model's orders are deleted"),
     "fund_rule_follow_tag": _s("suit le champion", "follows the champion"),
 
     # /fonds : création rapide par classe d'actifs
@@ -315,8 +315,10 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
         "Disable the autopilot? Its rules are deleted; past orders and open positions stay."),
     "fund_auto_saved": _s("Réglages enregistrés : le pilote est actif.", "Settings saved: the autopilot is on."),
     "fund_auto_done": _s(
-        "{placed} ordre(s) placé(s), {created} règle(s) créée(s), {retired} retirée(s), {pending} en attente, {refused} refusé(s).",
-        "{placed} order(s) placed, {created} rule(s) created, {retired} retired, {pending} pending, {refused} refused."),
+        "{placed} ordre(s) placé(s), {created} règle(s) créée(s), {retired} retirée(s), {replaced} modèle(s) remplacé(s) (leurs ordres sont supprimés), "
+        "{pending} en attente, {refused} refusé(s).",
+        "{placed} order(s) placed, {created} rule(s) created, {retired} retired, {replaced} model(s) replaced (their orders are deleted), "
+        "{pending} pending, {refused} refused."),
     "fund_auto_last": _s(
         "Dernier cycle le {day} : {selected} modèle(s), {placed} ordre(s) placé(s), {pending} en attente, {refused} refusé(s).",
         "Last cycle on {day}: {selected} model(s), {placed} order(s) placed, {pending} pending, {refused} refused."),

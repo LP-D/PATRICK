@@ -98,3 +98,39 @@ def test_the_launch_batches_fragment_displays_the_class_auc(seeded):
     pooled_signal.save(seeded, pooled_signal.compute_all(seeded, n_shift=200))
     html = TestClient(app).get("/fragments/launch-batches?family=ml").text
     assert "AUC 0." in html
+
+
+def test_the_table_refreshes_itself_when_empty_or_old_and_only_then(seeded, monkeypatch):
+    calls = []
+    real = pooled_signal.compute_all
+    monkeypatch.setattr(pooled_signal, "compute_all", lambda conn, **kw: calls.append(1) or real(conn, n_shift=400))
+
+    first = pooled_signal.refresh_if_stale(seeded)
+    again = pooled_signal.refresh_if_stale(seeded)
+
+    assert first["refreshed"] is True and first["n_pairs"] == 26 and first["n_significant"] >= 1
+    assert again == {"refreshed": False, "n_pairs": 26, "n_significant": None} and len(calls) == 1
+    seeded.execute("UPDATE pooled_signal SET computed_at = datetime('now', '-8 days')")
+    seeded.commit()
+    assert pooled_signal.refresh_if_stale(seeded)["refreshed"] is True and len(calls) == 2
+    assert pooled_signal.summary(seeded)["n_tested"] == 26
+
+
+def test_a_refresh_with_nothing_testable_keeps_the_previous_measure(seeded, monkeypatch):
+    pooled_signal.save(seeded, pooled_signal.compute_all(seeded, n_shift=200))
+    seeded.execute("UPDATE pooled_signal SET computed_at = datetime('now', '-30 days')")
+    seeded.commit()
+    monkeypatch.setattr(pooled_signal, "compute_all", lambda conn, **kw: [])
+
+    assert pooled_signal.refresh_if_stale(seeded)["refreshed"] is False
+    assert len(pooled_signal.load(seeded)) == 26
+
+
+def test_the_daily_refresh_never_raises_when_the_pooled_signal_fails(tmp_path, monkeypatch):
+    from patrick import live_refresh
+
+    def boom(conn, **kw):
+        raise RuntimeError("panne")
+    monkeypatch.setattr(pooled_signal, "refresh_if_stale", boom)
+
+    assert live_refresh.refresh_pooled_signal(str(tmp_path / "patrick.db")) is None
