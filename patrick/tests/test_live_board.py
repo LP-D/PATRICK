@@ -106,4 +106,5 @@ def test_the_page_renders_empty_and_with_results_and_is_in_the_navigation(tmp_pa
     page = client.get("/reel")
     assert page.status_code == 200 and "Stratégie sans modèle" in page.text and "Semaine après semaine" in page.text
     assert "Actions US" in page.text and "2026-01-05" in page.text
+    assert " – " in page.text                                        # l'intervalle ne se coupe pas sur deux lignes
     assert client.get("/reel", headers={"Accept-Language": "en"}).status_code == 200

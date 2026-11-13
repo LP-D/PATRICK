@@ -29,7 +29,7 @@
   <p class="hint">{{ hint }}</p>
   {% set ns = namespace(out=[]) %}
   {% for r in rows %}
-    {% set ns.out = ns.out + [[labeller(r.key), r.n, pct(r.rate), pct(r.ci_low) ~ ' – ' ~ pct(r.ci_high), pct(r.up_rate), pct(r.pred_up_rate), pts(r.edge)]] %}
+    {% set ns.out = ns.out + [[labeller(r.key), r.n, pct(r.rate), (pct(r.ci_low) ~ ' – ' ~ pct(r.ci_high)) | replace(' ', ' '), pct(r.up_rate), pct(r.pred_up_rate), pts(r.edge)]] %}
   {% endfor %}
   {{ data_table([first_header, t('lb_c_n'), t('lb_c_rate'), t('lb_c_ci'), t('lb_c_up'), t('lb_c_pred_up'), t('lb_c_edge')], ns.out,
                 empty_message=t('lb_too_few'), num_cols=[1, 2, 3, 4, 5, 6], collapse_after=12) }}

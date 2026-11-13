@@ -23,6 +23,7 @@ import random
 import sys
 from pathlib import Path
 
+from patrick.clock import utc_today
 from patrick.config.schema import RunConfig
 from patrick.tracking import db as trackdb
 from patrick.tracking import relaunch_stats
@@ -45,7 +46,7 @@ def _business_days(end: dt.date, n: int) -> list[dt.date]:
 
 def build(db_path: str, today: dt.date | None = None, seed: int = 7) -> dict:
     """Crée (ou complète) la base `db_path`. Renvoie `{"runs", "champions", "live"}` (nombres de lignes écrites)."""
-    today = today or dt.date.today()
+    today = today or utc_today()
     rng = random.Random(seed)
     conn = trackdb.connect(db_path)
     try:
