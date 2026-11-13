@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from patrick import cache_eviction, paths
+from patrick import cache_eviction, feature_cache_share, paths, settings
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import prediction_archive as archive
@@ -160,6 +160,55 @@ def evict_cmd(
             typer.echo(f"vol_model_cache : {_n(n)} entrées de snapshots de plus de {vol_cache_days} jours")
         finally:
             conn.close()
+
+
+@storage_app.command(name="share-feature-cache")
+def share_feature_cache_cmd(
+    to: str = typer.Option(None, "--to", help="Dossier de la réserve partagée (ex. un dossier d'un Google Drive vu par les deux PC)"),
+    off: bool = typer.Option(False, "--off", help="Désactive la réserve de ce PC (rien n'est supprimé dans le dossier partagé)"),
+    max_gb: float = typer.Option(None, "--max-gb", help="Plafond de la réserve en Go, enregistré (défaut : réglage feature_cache_shared_max_gb, sinon 150)"),
+    min_free_gb: float = typer.Option(20.0, "--min-free-gb", help="Espace libre minimal du disque de la réserve : la copie attend, puis s'arrête sous ce seuil"),
+    seed: bool = typer.Option(True, "--seed/--no-seed", help="Copie aussi le cache local existant, les fichiers récents d'abord"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Compte seulement : ne règle rien, ne copie rien"),
+) -> None:
+    """Réserve partagée du cache de variables entre deux PC (ADR 0021) : règle le dossier de ce PC, puis y copie le cache local.
+
+    Les runs continuent de lire le cache LOCAL ; la réserve ne sert qu'aux défauts de cache et ne reçoit que du neuf. Reprenable : relancer
+    la même commande continue où elle s'est arrêtée. À lancer dans ta propre fenêtre PowerShell (la première copie dure des heures)."""
+    if off:
+        settings.save({paths.KEY_FEATURE_CACHE_SHARED: None})
+        typer.echo("Réserve partagée désactivée sur ce PC. Le dossier partagé n'a pas été touché.")
+        return
+    if not to:
+        typer.echo("Indique --to <dossier> (ou --off pour désactiver).")
+        raise typer.Exit(code=1)
+    shared, local = Path(to).resolve(), paths.feature_cache_dir().resolve()
+    if shared == local or local in shared.parents or shared in local.parents:
+        typer.echo("Refusé : la réserve partagée ne peut être ni le cache local ni un de ses dossiers.")
+        raise typer.Exit(code=1)
+    if max_gb is not None and not dry_run:
+        settings.save({feature_cache_share.KEY_MAX_GB: max_gb})
+    cap = int(max_gb * 1e9) if max_gb is not None else feature_cache_share.max_bytes()
+    if not dry_run:
+        try:
+            shared.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            typer.echo(f"Refusé : dossier inaccessible ({exc}).")
+            raise typer.Exit(code=1) from exc
+        settings.save({paths.KEY_FEATURE_CACHE_SHARED: str(shared)})
+        typer.echo(f"Réserve partagée de ce PC : {shared} (plafond {_gb(cap)}).")
+    if not seed or not local.is_dir():
+        return
+    result = feature_cache_share.seed(local, shared, max_bytes=cap, min_free_bytes=int(min_free_gb * 1e9), dry_run=dry_run,
+                                      progress=lambda n, b: typer.echo(f"  ... {_n(n)} fichiers, {_gb(b)}"))
+    typer.echo(f"{'À copier' if dry_run else 'Copié'} : {_n(result['copied_files'])} fichier(s), {_gb(result['copied_bytes'])} ; "
+               f"déjà présents : {_n(result['skipped_files'])} ; réserve : {_gb(result['shared_bytes'])} sur {_gb(cap)}.")
+    if result["stopped"] == "plafond":
+        typer.echo("Arrêt : le plafond de la réserve est atteint (les fichiers les plus anciens du cache local n'y sont pas).")
+    elif result["stopped"] == "espace":
+        typer.echo("Arrêt : pas assez d'espace libre sur le disque de la réserve. Attends que Google Drive ait fini d'envoyer, "
+                   "puis relance la même commande : elle reprend où elle s'est arrêtée.")
+        raise typer.Exit(code=1)
 
 
 @storage_app.command(name="vacuum")

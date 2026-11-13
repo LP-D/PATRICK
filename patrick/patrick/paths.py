@@ -95,6 +95,25 @@ def feature_cache_dir() -> Path:
     return _component("PATRICK_FEATURE_CACHE_ROOT", "feature_cache")
 
 
+ENV_FEATURE_CACHE_SHARED = "PATRICK_FEATURE_CACHE_SHARED_ROOT"
+KEY_FEATURE_CACHE_SHARED = "feature_cache_shared_root"
+
+
+def feature_cache_shared_dir() -> Path | None:
+    """Réserve PARTAGÉE du cache de variables (dossier d'un Google Drive vu par les deux PC, ADR 0021), si elle est réglée ET présente.
+
+    Jamais une racine de données : le cache local reste celui que les runs lisent, la réserve ne sert qu'aux défauts de cache. Réglée
+    mais absente (Drive débranché, figé) : `None`, sans exception : la recherche continue avec le cache local."""
+    value = os.environ.get(ENV_FEATURE_CACHE_SHARED) or settings.load().get(KEY_FEATURE_CACHE_SHARED)
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    try:
+        return path if path.is_dir() else None
+    except OSError:
+        return None
+
+
 def models_dir() -> Path:
     return _component(None, "models")
 

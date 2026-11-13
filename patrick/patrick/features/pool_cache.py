@@ -33,7 +33,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from patrick import paths
+from patrick import feature_cache_share, paths
 
 _FEATURE_SOURCES = (
     "technical.py", "spike.py", "vol_models.py", "macro.py", "guida.py",
@@ -129,11 +129,16 @@ def _path(key: str) -> Path:
 
 def load(key: str) -> pd.DataFrame | None:
     path = _path(key)
+    fetched = False
     if not path.exists():
-        return None
+        if not feature_cache_share.fetch(key, path):    # défaut local : la réserve partagée (autre PC) peut l'avoir
+            return None
+        fetched = True
     try:
         frame = pd.read_parquet(path)
     except (OSError, ValueError):
+        if fetched:                                     # fichier de la réserve coupé : écarté, le prochain calcul le republie
+            feature_cache_share.discard(key, path)
         return None
     try:
         os.utime(path)                      # « utilisé récemment » : l'éviction (`cache_eviction`) retire d'abord les moins récemment lus
@@ -158,6 +163,7 @@ def save(key: str, df: pd.DataFrame) -> None:
         except OSError:
             pass
         raise
+    feature_cache_share.publish(key, path)  # au mieux : le fichier neuf rejoint la réserve partagée (jamais d'exception)
 
 
 def cached(stage: str, raw: pd.DataFrame, payload: dict, compute: Callable[[], pd.DataFrame]) -> pd.DataFrame:

@@ -110,6 +110,30 @@ Deux mises en page, choisies par `patrick sync push` selon la destination (ADR 0
   Drive et se reconnecter. Les commandes qui modifient `%LOCALAPPDATA%` doivent être lancées dans **ton** PowerShell, pas depuis
   l'application Claude (qui voit un `AppData` virtualisé).
 
+## Cache de variables partagé : la réserve (ADR 0021)
+
+Les deux PC peuvent se partager le cache de variables (`feature_cache`, 250 Go sur le premier PC) : un fichier calculé par l'un évite à l'autre de
+le recalculer. Les runs continuent de lire le cache **local** ; une **réserve** dans le Drive ne sert qu'aux défauts de cache, ne reçoit que du neuf
+(jamais d'écrasement), est plafonnée à 150 Go et n'est **jamais purgée par le programme** (sauf un fichier cassé). Si le Drive est absent ou figé,
+PATRICK continue avec le cache local. Le dossier `cache` (séries téléchargées, 1,4 Go) n'est pas partagé : ses fichiers sont réécrits en place.
+
+Mise en place, sur **chaque PC**, une fois qu'il a le code à jour et que Drive est « Synchronisé » (dans **ta** fenêtre PowerShell, PATRICK fermé ; la
+première copie dure des heures, la commande est reprenable) :
+
+```text
+cd <dossier du projet>\patrick
+.venv\Scripts\patrick.exe storage share-feature-cache --to "<dossier du Drive>\Patrick Shared Folder\feature_cache" --max-gb 150
+```
+
+- Avant chaque copie, 20 Go doivent être libres sur le disque de la réserve (avec Drive en diffusion en continu, c'est l'espace libre de `C:`) ; sinon la
+  commande attend que Drive ait envoyé, puis s'arrête proprement : relancer la même commande.
+- `--dry-run` compte sans rien régler ni copier ; `--no-seed` règle seulement le dossier ; `--off` désactive la réserve sur ce PC (le dossier partagé n'est
+  pas touché).
+- Le deuxième PC peut lancer la même commande : il ne copie que ce qui manque. Pour **réutiliser** les calculs de l'autre PC, les deux doivent avoir la même
+  version de PATRICK (le code des variables fait partie de la clé) et les mêmes snapshots du magasin (donc la synchronisation à jour).
+- Purge : quand la réserve est pleine elle cesse de grossir. Pour la vider, supprimer des sous-dossiers de `feature_cache` dans le Drive, puis **vider la
+  corbeille de Google** (sinon le quota ne baisse pas pendant 30 jours).
+
 ## Listes de suivi, carnet et journal de prédictions (2026-11-02)
 
 - **Listes de suivi** (`watchlist`) : fusionnées par nom (insensible à la casse ASCII, comme leur contrainte d'unicité). Une liste déjà présente n'est jamais modifiée :
