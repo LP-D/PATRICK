@@ -526,15 +526,17 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
         from patrick.tracking import pooled_signal
 
         evidence = {c["class"]: c for c in pooled_signal.class_summary(pooled_signal.load(conn))}
-        overview = launch_batches.overview(conn, family, [sym for items in groups.values() for sym, _ in items],
-                                           data_health.depth_by_symbol_for_form(), utc_today(),
+        symbols = [sym for items in groups.values() for sym, _ in items]
+        overview = launch_batches.overview(conn, family, symbols, data_health.depth_by_symbol_for_form(), utc_today(),
                                            sources=forms.TARGET_SOURCE_BY_SYMBOL, evidence=evidence)
+        top_signal = [] if family == "rl" else launch_batches.top_signal(
+            conn, [s for s in symbols if forms.TARGET_SOURCE_BY_SYMBOL.get(s) not in D.NON_TARGET_SOURCES])
     finally:
         conn.close()
     missing = overview["missing"]
     return templates.TemplateResponse(
         request, "_launch_batches.html",
-        {"family": family, "by_class": overview["by_class"], "missing": missing,
+        {"family": family, "by_class": overview["by_class"], "missing": missing, "top_signal": top_signal,
          "missing_horizons": sorted({h for gaps in missing.values() for h in gaps}),
          "n_missing_pairs": sum(len(gaps) for gaps in missing.values()), **_i18n_context(request)},
     )
