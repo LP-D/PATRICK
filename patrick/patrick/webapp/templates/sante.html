@@ -47,7 +47,7 @@
   {% else %}<p class="hint">{{ t('hl_reports_none') }}</p>{% endif %}
   {% if report_text %}
   <h3>{{ report_name }}</h3>
-  <pre class="pk-mono" style="white-space: pre-wrap">{{ report_text }}</pre>
+  <pre class="log-tail">{{ report_text }}</pre>
   {% endif %}
 </section>
 {% endblock %}
