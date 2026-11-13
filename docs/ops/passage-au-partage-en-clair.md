@@ -39,7 +39,7 @@ Vérifier : au moins 100 Go libres sur `C:`. La suppression est définitive (pas
 Vérifier : les quatre tâches sont vertes, `promote` comprise. **Si une est rouge, ne rien mettre à jour** : le code reste dans `main`
 et personne ne le reçoit.
 
-## Étape 3 : préparer l'autre PC (avant toute publication)
+## Étape 3 : préparer l'autre PC (à faire AVANT l'étape 2, dès maintenant si possible)
 
 Sur l'autre PC, PATRICK fermé :
 
