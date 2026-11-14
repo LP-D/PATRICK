@@ -1,6 +1,6 @@
 # ADR 0020 — Partage entre PC en clair et incrémental (format 2)
 
-Date : 2026-11-12. Statut : codée et testée sur la branche `feat/sync-en-clair`, **non fusionnée** (le second PC doit recevoir le code en même temps). Demande de Léon : « on peut se permettre de tout mettre directement sur le Drive, sans zip ». Complète l'ADR 0009 (stockage) et la doc `docs/ops/partage-entre-pc.md`.
+Date : 2026-11-12. Statut : acceptée, fusionnée dans `main` le 2026-11-13 (PR 72, commit 75fe360) ; le premier PC publie en clair depuis le 13/11 au soir, le second PC doit recevoir le code avant de lire le dossier. Demande de Léon : « on peut se permettre de tout mettre directement sur le Drive, sans zip ». Complète l'ADR 0009 (stockage) et la doc `docs/ops/partage-entre-pc.md`.
 
 ## Contexte
 

@@ -25,4 +25,5 @@ contexte : pour qu'elle ne vive pas seulement dans la mémoire de quelqu'un. For
 | [0017](0017-page-econometrie.md) | Page Économétrie : une série à la fois, descriptif contre prévision, aucun modèle couronné | 2026-11-03 | Acceptée |
 | [0018](0018-section-connaissances.md) | Section Connaissances : cours intégrés à l'application et dictionnaire du quant (749 notions) | 2026-11-07 | Acceptée |
 | [0019](0019-design-v4-terminal.md) | Design v4 « Terminal » : densité de Bloomberg, propreté d'Apple (noir, orange terminal, échelles, palette de graphiques validée) | 2026-11-09 | Acceptée |
-| [0020](0020-partage-en-clair-et-incremental.md) | Partage entre PC en clair et incrémental (format 2) : plus de zip de 30 Go, plus de `.part`, délai de 24 h entre deux publications | 2026-11-12 | Codée (à fusionner avec la mise à jour des deux PC) |
+| [0020](0020-partage-en-clair-et-incremental.md) | Partage entre PC en clair et incrémental (format 2) : plus de zip de 30 Go, plus de `.part`, délai de 24 h entre deux publications | 2026-11-12 | Acceptée (fusionnée le 13/11, PR 72) |
+| [0021](0021-reserve-partagee-du-cache-de-variables.md) | Réserve partagée du cache de variables entre deux PC (cache à deux étages, réserve sur le Drive alimentée par du neuf seulement, plafonnée, jamais purgée par le programme) | 2026-11-13 | Codée (à fusionner) |
