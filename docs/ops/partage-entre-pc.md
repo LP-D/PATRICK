@@ -128,6 +128,10 @@ cd <dossier du projet>\patrick
 
 - Avant chaque copie, 20 Go doivent être libres sur le disque de la réserve (avec Drive en diffusion en continu, c'est l'espace libre de `C:`) ; sinon la
   commande attend que Drive ait envoyé, puis s'arrête proprement : relancer la même commande.
+- **Mémoire de l'ordinateur** : la commande attend (puis s'arrête proprement) si la mémoire allouable tombe sous 2 Go, et un `MemoryError` en pleine copie la
+  fait s'arrêter sans fichier coupé. Le 14/11/2026 l'**interface web de Google Drive** (processus `msedgewebview2` de `GoogleDriveFS.exe`) tenait 21 Go de
+  mémoire privée en suivant l'activité de 30 000 fichiers envoyés : la copie a échoué faute de mémoire. **Pendant une grosse copie, n'ouvre pas la fenêtre
+  d'activité de Drive** ; si la commande s'arrête sur la mémoire, cherche le processus le plus gourmand (Gestionnaire des tâches), quitte Drive puis rouvre-le.
 - `--dry-run` compte sans rien régler ni copier ; `--no-seed` règle seulement le dossier ; `--off` désactive la réserve sur ce PC (le dossier partagé n'est
   pas touché).
 - Le deuxième PC peut lancer la même commande : il ne copie que ce qui manque. Pour **réutiliser** les calculs de l'autre PC, les deux doivent avoir la même

@@ -11,12 +11,21 @@ import os
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from typer.testing import CliRunner
 
 from patrick import feature_cache_share as share
 from patrick import paths, settings
 from patrick.cli import app
 from patrick.features import pool_cache
+
+_REAL_AVAILABLE_MEMORY = share.available_memory_bytes
+
+
+@pytest.fixture(autouse=True)
+def _plenty_of_memory(monkeypatch):
+    """Ces tests ne dépendent pas de la mémoire libre de la machine qui les lance."""
+    monkeypatch.setattr(share, "available_memory_bytes", lambda: 10**12)
 
 
 def _df(n: int = 5) -> pd.DataFrame:
@@ -229,6 +238,73 @@ def test_seeding_stops_cleanly_when_the_space_never_comes_back(tmp_path):
     assert not list(shared.rglob("*.parquet"))
 
 
+def test_the_real_memory_probe_returns_a_positive_number():
+    assert _REAL_AVAILABLE_MEMORY() > 0
+
+
+def test_seeding_waits_for_memory_then_goes_on(tmp_path):
+    """Le 14/11/2026 l'interface web de Google Drive (16 Go de mémoire privée) a saturé la mémoire : `MemoryError` en pleine copie."""
+    local, shared = tmp_path / "local", tmp_path / "drive"
+    _local_files(local, 3)
+    calls = {"n": 0}
+    slept: list[float] = []
+
+    def free_memory():
+        calls["n"] += 1
+        return 10 if calls["n"] <= 2 else 10**12
+
+    result = share.seed(local, shared, max_bytes=10**6, min_free_bytes=0, free_memory=free_memory, min_free_memory_bytes=1000,
+                        sleep=slept.append, wait_max_s=3600)
+
+    assert result["copied_files"] == 3 and result["stopped"] is None and len(slept) == 2
+
+
+def test_seeding_stops_cleanly_when_the_memory_never_comes_back(tmp_path):
+    local, shared = tmp_path / "local", tmp_path / "drive"
+    _local_files(local, 3)
+
+    result = share.seed(local, shared, max_bytes=10**6, min_free_bytes=0, free_memory=lambda: 10, min_free_memory_bytes=1000,
+                        sleep=lambda _s: None, wait_max_s=60)
+
+    assert result["copied_files"] == 0 and result["stopped"] == "memoire"
+
+
+def test_a_memory_error_while_copying_stops_the_seeding_without_leaving_a_partial_file(tmp_path, monkeypatch):
+    local, shared = tmp_path / "local", tmp_path / "drive"
+    _local_files(local, 3)
+    real, state = share.shutil.copyfile, {"n": 0}
+
+    def flaky(src, dst, **kwargs):
+        state["n"] += 1
+        if state["n"] == 2:
+            Path(dst).write_bytes(b"coupe")                              # copie commencée, puis la mémoire manque
+            raise MemoryError
+        return real(src, dst, **kwargs)
+
+    monkeypatch.setattr(share.shutil, "copyfile", flaky)
+
+    result = share.seed(local, shared, max_bytes=10**6, min_free_bytes=0)
+
+    assert result["stopped"] == "memoire" and result["copied_files"] == 1
+    assert len(list(shared.rglob("*.parquet"))) == 1                     # le fichier coupé a été retiré
+
+
+def test_a_memory_error_in_the_shared_reserve_never_breaks_a_run(tmp_path, monkeypatch):
+    shared = _shared(tmp_path, monkeypatch)
+    already = _shared_file(shared, _key("k"))
+    already.parent.mkdir(parents=True)
+    _df().to_parquet(already)
+
+    def broken(*args, **kwargs):
+        raise MemoryError
+
+    monkeypatch.setattr(share.shutil, "copyfile", broken)
+
+    assert pool_cache.load(_key("k")) is None                            # copie depuis la réserve impossible : simple défaut de cache
+    pool_cache.save(_key("j"), _df())                                    # publication impossible : le cache local est écrit quand même
+    assert pool_cache._path(_key("j")).exists()
+
+
 def test_a_truncated_copy_is_replaced_on_the_next_seeding(tmp_path):
     local, shared = tmp_path / "local", tmp_path / "drive"
     (file,) = _local_files(local, 1)
@@ -255,6 +331,16 @@ def test_the_command_sets_the_reserve_and_seeds_it(tmp_path):
     assert settings.load()[paths.KEY_FEATURE_CACHE_SHARED] == str(shared)
     assert len(list(shared.rglob("*.parquet"))) == 3
     assert "3 fichier(s)" in result.output
+
+
+def test_the_command_explains_a_stop_for_lack_of_memory(tmp_path, monkeypatch):
+    _local_files(paths.feature_cache_dir(), 1)
+    stopped = {"copied_files": 0, "copied_bytes": 0, "skipped_files": 0, "shared_bytes": 0, "stopped": "memoire", "dry_run": False}
+    monkeypatch.setattr(share, "seed", lambda *args, **kwargs: stopped)
+
+    result = CliRunner().invoke(app, ["storage", "share-feature-cache", "--to", str(tmp_path / "drive" / "fc"), "--min-free-gb", "0"])
+
+    assert result.exit_code == 1 and "mémoire" in result.output and "relance" in result.output
 
 
 def test_the_command_refuses_the_local_cache_folder_itself(tmp_path):

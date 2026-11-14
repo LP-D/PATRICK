@@ -16,6 +16,7 @@ simplement recalculée. Aucun fichier temporaire dans la réserve : chaque fichi
 lecteur de l'autre PC ne le voit qu'une fois envoyé), et un fichier coupé est écarté à la lecture (`discard`)."""
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import shutil
@@ -46,6 +47,30 @@ def _free_bytes(path: Path) -> int:
     while not p.exists() and p != p.parent:
         p = p.parent
     return shutil.disk_usage(p).free
+
+
+def available_memory_bytes() -> int:
+    """Mémoire encore allouable. Windows : la limite « allouée » (RAM + fichier d'échange), celle qui a fait échouer l'amorçage du 14/11/2026
+    (`MemoryError` sur un tampon de 1 Mo : l'interface web de Google Drive tenait 21 Go de mémoire privée) ; ailleurs : la mémoire
+    disponible. Une mesure impossible ne bloque jamais (valeur énorme)."""
+    if os.name == "nt":
+        class _Status(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+        status = _Status()
+        status.dwLength = ctypes.sizeof(_Status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return int(status.ullAvailPageFile)
+    try:
+        import psutil
+
+        return int(psutil.virtual_memory().available)
+    except Exception:                         # noqa: BLE001 -- une mesure qui échoue ne doit jamais arrêter une copie
+        return 1 << 62
 
 
 def scan_bytes(shared: Path) -> int:
@@ -118,7 +143,7 @@ def fetch(key: str, local_path: Path) -> bool:
             Path(tmp).unlink(missing_ok=True)
             raise
         return True
-    except OSError:
+    except (OSError, MemoryError):
         return False
 
 
@@ -154,20 +179,23 @@ def publish(key: str, local_path: Path) -> bool:
             raise
         _add_bytes(shared, size)
         return True
-    except OSError:
+    except (OSError, MemoryError):
         return False
 
 
 def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
          free_bytes: Callable[[Path], int] = _free_bytes, sleep: Callable[[float], None] = time.sleep,
          wait_max_s: float = 3600.0, dry_run: bool = False,
-         progress: Callable[[int, int], None] | None = None) -> dict:
+         progress: Callable[[int, int], None] | None = None,
+         free_memory: Callable[[], int] | None = None, min_free_memory_bytes: int = 2 << 30) -> dict:
     """Copie le cache local vers la réserve, les fichiers les plus récents d'abord, jusqu'à `max_bytes` au total (déjà présent compris).
 
     Reprenable : un fichier présent avec la même taille est sauté, un fichier plus court (copie coupée) est recopié. Avant chaque copie,
     l'espace libre du disque de la réserve doit dépasser `min_free_bytes` (avec Google Drive « en streaming », c'est celui de `C:`, qui
-    sert de cache au Drive) ; sinon on attend (par pas de 30 s) jusqu'à `wait_max_s`, puis on s'arrête proprement.
-    Retourne `copied_files`, `copied_bytes`, `skipped_files`, `shared_bytes`, `stopped` (`None`, `"plafond"` ou `"espace"`)."""
+    sert de cache au Drive) et la mémoire allouable `min_free_memory_bytes` (2 Go : un `MemoryError` est survenu le 14/11/2026, la
+    mémoire de l'ordinateur étant saturée par l'interface web de Drive) ; sinon on attend (par pas de 30 s) jusqu'à `wait_max_s`,
+    puis on s'arrête proprement. Un `MemoryError` en pleine copie retire le fichier coupé et arrête de la même façon.
+    Retourne `copied_files`, `copied_bytes`, `skipped_files`, `shared_bytes`, `stopped` (`None`, `"plafond"`, `"espace"` ou `"memoire"`)."""
     local, shared = Path(local), Path(shared)
     entries = []
     for p in local.rglob("*.parquet"):
@@ -181,6 +209,15 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
     total = scan_bytes(shared) if shared.exists() else 0
     out = {"copied_files": 0, "copied_bytes": 0, "skipped_files": 0, "shared_bytes": total, "stopped": None, "dry_run": dry_run}
     waited = 0.0
+    memory = free_memory or available_memory_bytes             # relu à chaque appel (les tests le remplacent)
+
+    def blocker() -> str | None:
+        if free_bytes(shared) < min_free_bytes:
+            return "espace"
+        if memory() < min_free_memory_bytes:
+            return "memoire"
+        return None
+
     for _mtime, size, path in entries:
         dest = shared / path.relative_to(local)
         try:
@@ -193,9 +230,9 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
             out["stopped"] = "plafond"
             break
         if not dry_run:
-            while free_bytes(shared) < min_free_bytes:
+            while (why := blocker()) is not None:
                 if waited >= wait_max_s:
-                    out["stopped"] = "espace"
+                    out["stopped"] = why
                     break
                 sleep(WAIT_STEP_S)
                 waited += WAIT_STEP_S
@@ -204,6 +241,10 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 shutil.copyfile(path, dest)
+            except MemoryError:
+                dest.unlink(missing_ok=True)
+                out["stopped"] = "memoire"
+                break
             except BaseException:
                 dest.unlink(missing_ok=True)
                 raise
