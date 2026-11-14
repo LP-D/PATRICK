@@ -3,7 +3,8 @@
 > **Au quotidien, tout passe par l'application de bureau** : le dossier partagé se choisit au premier démarrage
 > (ou dans Réglages), la fusion se fait au démarrage, la publication à la fermeture et toutes les heures, sans
 > commande à taper (une publication complète est faite **au plus toutes les 24 h** par PC : réglage `sync_min_push_hours`,
-> `0` = sans délai, ou `patrick sync auto --min-push-hours 0` pour publier tout de suite). Voir
+> `0` = sans délai, ou `patrick sync auto --min-push-hours 0` pour publier tout de suite). Mise en service du PC 2, écrite pour une
+> session Claude Code : [mise-en-service-pc2.md](mise-en-service-pc2.md). Voir
 > [application-bureau.md](application-bureau.md) ; mise en service du format en clair : [passage-au-partage-en-clair.md](passage-au-partage-en-clair.md).
 > Les commandes ci-dessous restent disponibles pour dépanner ou scripter.
 
