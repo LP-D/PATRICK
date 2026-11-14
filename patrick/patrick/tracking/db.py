@@ -90,8 +90,8 @@ _COLUMN_REPAIRS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 # Sans `fund_deleted`, la fusion des fonds entre PC échoue à chaque passage (« no such table: fund_deleted »).
 # Chaque entrée : (table, table qui doit exister pour que la réparation ait un sens, instruction de création).
 _TABLE_REPAIRS: tuple[tuple[str, str, str], ...] = (
-    ("fund_deleted", "fund_strategy", "CREATE TABLE IF NOT EXISTS fund_deleted ("
-                                       "strategy_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)"),
+    ("fund_deleted", "fund_strategy", ("CREATE TABLE IF NOT EXISTS fund_deleted ("
+                                        "strategy_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)")),
 )
 _DRIFT_CHECKED: set[str] = set()
 
