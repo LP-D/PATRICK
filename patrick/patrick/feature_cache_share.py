@@ -17,6 +17,7 @@ lecteur de l'autre PC ne le voit qu'une fois envoyé), et un fichier coupé est 
 from __future__ import annotations
 
 import ctypes
+import errno
 import json
 import os
 import shutil
@@ -43,10 +44,19 @@ def max_bytes() -> int:
 
 
 def _free_bytes(path: Path) -> int:
+    """Espace libre du disque qui porte `path` (ou de son plus proche parent qui répond). Un lecteur qui n'est pas prêt (Google Drive
+    qui redémarre : le dossier existe mais `disk_usage` répond « chemin introuvable », 14/11/2026) lève une `OSError`, que l'appelant
+    traite comme « indisponible, on attend »."""
     p = Path(path).resolve()
-    while not p.exists() and p != p.parent:
+    while True:
+        try:
+            if p.exists():
+                return shutil.disk_usage(p).free
+        except OSError:
+            pass                              # pas prêt : on essaie le dossier parent
+        if p == p.parent:
+            raise FileNotFoundError(errno.ENOENT, "Disque introuvable ou pas prêt", str(path))
         p = p.parent
-    return shutil.disk_usage(p).free
 
 
 def available_memory_bytes() -> int:
@@ -187,15 +197,19 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
          free_bytes: Callable[[Path], int] = _free_bytes, sleep: Callable[[float], None] = time.sleep,
          wait_max_s: float = 3600.0, dry_run: bool = False,
          progress: Callable[[int, int], None] | None = None,
-         free_memory: Callable[[], int] | None = None, min_free_memory_bytes: int = 2 << 30) -> dict:
+         free_memory: Callable[[], int] | None = None, min_free_memory_bytes: int = 2 << 30,
+         on_wait: Callable[[str, float], None] | None = None) -> dict:
     """Copie le cache local vers la réserve, les fichiers les plus récents d'abord, jusqu'à `max_bytes` au total (déjà présent compris).
 
     Reprenable : un fichier présent avec la même taille est sauté, un fichier plus court (copie coupée) est recopié. Avant chaque copie,
     l'espace libre du disque de la réserve doit dépasser `min_free_bytes` (avec Google Drive « en streaming », c'est celui de `C:`, qui
     sert de cache au Drive) et la mémoire allouable `min_free_memory_bytes` (2 Go : un `MemoryError` est survenu le 14/11/2026, la
     mémoire de l'ordinateur étant saturée par l'interface web de Drive) ; sinon on attend (par pas de 30 s) jusqu'à `wait_max_s`,
-    puis on s'arrête proprement. Un `MemoryError` en pleine copie retire le fichier coupé et arrête de la même façon.
-    Retourne `copied_files`, `copied_bytes`, `skipped_files`, `shared_bytes`, `stopped` (`None`, `"plafond"`, `"espace"` ou `"memoire"`)."""
+    puis on s'arrête proprement. Un `MemoryError` en pleine copie retire le fichier coupé et arrête de la même façon. Un lecteur
+    qui ne répond pas (`OSError` sur la mesure d'espace : Drive qui démarre ou fermé) est attendu de la même façon. `on_wait(raison,
+    secondes déjà attendues)` annonce chaque attente (sans elle la commande semblerait figée).
+    Retourne `copied_files`, `copied_bytes`, `skipped_files`, `shared_bytes`, `stopped` (`None`, `"plafond"`, `"espace"`, `"memoire"`
+    ou `"indisponible"`)."""
     local, shared = Path(local), Path(shared)
     entries = []
     for p in local.rglob("*.parquet"):
@@ -212,8 +226,11 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
     memory = free_memory or available_memory_bytes             # relu à chaque appel (les tests le remplacent)
 
     def blocker() -> str | None:
-        if free_bytes(shared) < min_free_bytes:
-            return "espace"
+        try:
+            if free_bytes(shared) < min_free_bytes:
+                return "espace"
+        except OSError:
+            return "indisponible"
         if memory() < min_free_memory_bytes:
             return "memoire"
         return None
@@ -234,6 +251,8 @@ def seed(local: Path, shared: Path, *, max_bytes: int, min_free_bytes: int,
                 if waited >= wait_max_s:
                     out["stopped"] = why
                     break
+                if on_wait:
+                    on_wait(why, waited)
                 sleep(WAIT_STEP_S)
                 waited += WAIT_STEP_S
             if out["stopped"]:

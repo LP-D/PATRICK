@@ -35,4 +35,8 @@ Le dossier `cache` (`LocalCache` : séries téléchargées avec une fraîcheur d
   `msedgewebview2` lancé la veille à 23:38, pendant l'envoi de 31 000 fichiers). Ce n'est pas la copie qui fuyait. Désormais `seed` attend (par pas de 30 s, une heure
   au plus) tant que la mémoire allouable est sous 2 Go, retire le fichier coupé et s'arrête proprement sur un `MemoryError`, et `fetch` / `publish` traitent un
   `MemoryError` comme une réserve indisponible (un run ne s'arrête jamais à cause d'elle).
-- Tests : `tests/test_feature_cache_share.py` (26).
+- Lecteur indisponible (14/11/2026, deuxième essai d'amorçage) : Drive venait d'être quitté puis rouvert ; le dossier de la réserve existait mais `shutil.disk_usage` répondait
+  « chemin introuvable » (`FileNotFoundError`) et la commande a planté avant la première copie. `_free_bytes` essaie maintenant le dossier parent puis lève une `OSError` ;
+  `seed` traite cette `OSError` comme « indisponible » : il attend (par pas de 30 s, une heure au plus), annonce l'attente (`on_wait`, une ligne à la première attente puis toutes
+  les 5 minutes : sans elle la commande paraît figée), puis s'arrête proprement (`stopped == "indisponible"`) avec la consigne de relancer Google Drive.
+- Tests : `tests/test_feature_cache_share.py` (31).
