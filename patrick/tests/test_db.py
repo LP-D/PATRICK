@@ -570,3 +570,28 @@ def test_missing_migration_column_is_recreated(tmp_path):
     assert conn.execute("SELECT updated_at FROM fund_strategy").fetchone()[0] == "2026-01-02"
     assert db.repair_schema_drift(conn, path) == []                       # déjà contrôlée : rien à refaire
     conn.close()
+
+
+def test_missing_migration_table_is_recreated(tmp_path):
+    """Base en version 51 sans la table `fund_deleted` (migration 0033 jamais passée, numéro pris par une autre migration le 14/10) :
+    `connect` la recrée, vide, et la suppression d'une stratégie y laisse sa trace."""
+    path = str(tmp_path / "drift_table.db")
+    conn = db.connect(path)
+    conn.execute("DROP TABLE fund_deleted")
+    conn.commit()
+    assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] >= 33      # la version dit pourtant « appliquée »
+    conn.close()
+
+    db._DRIFT_CHECKED.discard(path)
+    conn = db.connect(path)
+    assert [r[1] for r in conn.execute("PRAGMA table_info(fund_deleted)")] == ["strategy_id", "deleted_at"]
+    assert conn.execute("SELECT COUNT(*) FROM fund_deleted").fetchone()[0] == 0
+    conn.execute("INSERT INTO fund_deleted(strategy_id, deleted_at) VALUES ('s1', '2026-11-14')")
+    conn.commit()
+    assert db.repair_schema_drift(conn, path) == []                       # déjà contrôlée : rien à refaire
+    conn.close()
+
+    db._DRIFT_CHECKED.discard(path)
+    conn = db.connect(path)                                               # base saine : la trace existante n'est pas touchée
+    assert conn.execute("SELECT strategy_id FROM fund_deleted").fetchall() == [("s1",)]
+    conn.close()

@@ -85,12 +85,21 @@ _COLUMN_REPAIRS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("fund_strategy", "updated_at", ("ALTER TABLE fund_strategy ADD COLUMN updated_at TEXT",
                                       "UPDATE fund_strategy SET updated_at = created_at WHERE updated_at IS NULL")),
 )
+# Tables de la même migration 0033 (`fund_share`), absentes de la même façon (constaté le 14/11/2026 sur le 2e PC, version 51) : le 14/10 deux migrations
+# portaient le numéro 0033 (`live_ref_price` est passée en 0034), et une base qui avait noté « 33 » pour l'ancienne n'a jamais joué `fund_share`.
+# Sans `fund_deleted`, la fusion des fonds entre PC échoue à chaque passage (« no such table: fund_deleted »).
+# Chaque entrée : (table, table qui doit exister pour que la réparation ait un sens, instruction de création).
+_TABLE_REPAIRS: tuple[tuple[str, str, str], ...] = (
+    ("fund_deleted", "fund_strategy", ("CREATE TABLE IF NOT EXISTS fund_deleted ("
+                                        "strategy_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)")),
+)
 _DRIFT_CHECKED: set[str] = set()
 
 
 def repair_schema_drift(conn: sqlite3.Connection, path: str) -> list[str]:
-    """Recrée les colonnes de `_COLUMN_REPAIRS` absentes d'une base dont la version de schéma est pourtant à jour ; renvoie `table.colonne` de celles
-    qui ont été recréées. Une fois par processus et par fichier ; une base verrouillée ou en lecture seule est laissée telle quelle."""
+    """Recrée les colonnes de `_COLUMN_REPAIRS` et les tables de `_TABLE_REPAIRS` absentes d'une base dont la version de schéma est pourtant à jour ;
+    renvoie `table.colonne` (ou `table`) de celles qui ont été recréées. Une fois par processus et par fichier ; une base verrouillée ou en lecture seule
+    est laissée telle quelle."""
     if path in _DRIFT_CHECKED:
         return []
     _DRIFT_CHECKED.add(path)
@@ -102,6 +111,11 @@ def repair_schema_drift(conn: sqlite3.Connection, path: str) -> list[str]:
                 for statement in statements:
                     conn.execute(statement)
                 repaired.append(f"{table}.{column}")
+        for table, anchor, statement in _TABLE_REPAIRS:
+            present = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)", (table, anchor))}
+            if anchor in present and table not in present:
+                conn.execute(statement)
+                repaired.append(table)
         if repaired:
             conn.commit()
     except sqlite3.Error:
