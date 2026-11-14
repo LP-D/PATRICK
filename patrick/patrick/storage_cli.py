@@ -205,6 +205,11 @@ def share_feature_cache_cmd(
                f"déjà présents : {_n(result['skipped_files'])} ; réserve : {_gb(result['shared_bytes'])} sur {_gb(cap)}.")
     if result["stopped"] == "plafond":
         typer.echo("Arrêt : le plafond de la réserve est atteint (les fichiers les plus anciens du cache local n'y sont pas).")
+    elif result["stopped"] == "memoire":
+        typer.echo("Arrêt : la mémoire de l'ordinateur est presque saturée. Cherche l'application qui en tient le plus (Gestionnaire des tâches, "
+                   "colonne Mémoire) ; si c'est l'interface de Google Drive (msedgewebview2), quitte Drive puis rouvre-le sans ouvrir sa "
+                   "fenêtre d'activité. Puis relance la même commande : elle reprend où elle s'est arrêtée.")
+        raise typer.Exit(code=1)
     elif result["stopped"] == "espace":
         typer.echo("Arrêt : pas assez d'espace libre sur le disque de la réserve. Attends que Google Drive ait fini d'envoyer, "
                    "puis relance la même commande : elle reprend où elle s'est arrêtée.")

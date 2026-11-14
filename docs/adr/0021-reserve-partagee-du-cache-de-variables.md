@@ -30,4 +30,9 @@ Le dossier `cache` (`LocalCache` : séries téléchargées avec une fraîcheur d
 - Quota : la réserve est bornée à 150 Go et n'est jamais purgée par le programme. Quand elle est pleine elle cesse de grossir : la purge est un geste de Léon (supprimer des sous-dossiers dans le Drive, puis vider la corbeille de Google). Pas de croissance de la corbeille entre-temps.
 - Lecture plus lente seulement sur un défaut de cache local ; tout ce qui est déjà en local se lit à la vitesse du disque. Déplacer le cache **local** de `D:` vers `C:` (plus rapide) est un chantier séparé : `patrick data move` ne le fait que pour les sept dossiers à la fois.
 - Limites : le plafond se mesure par un balayage quotidien et un compteur approché (deux PC qui publient en même temps peuvent le dépasser de quelques Go) ; un `parquet` coupé n'est détecté qu'à la lecture ; la réserve ne contient que les fichiers `.parquet` que lit `pool_cache` (pas de journal ni d'index).
-- Tests : `tests/test_feature_cache_share.py` (20).
+- Mémoire (14/11/2026, premier amorçage réel) : la copie s'est arrêtée sur un `MemoryError` après 6 500 fichiers (19,9 Go) alors que `C:` avait 131 Go libres : la mémoire
+  allouable de l'ordinateur (RAM 15,9 Go + fichier d'échange) était tombée à 1,9 Go, dont 21 Go de mémoire privée pour l'interface web de Google Drive (processus
+  `msedgewebview2` lancé la veille à 23:38, pendant l'envoi de 31 000 fichiers). Ce n'est pas la copie qui fuyait. Désormais `seed` attend (par pas de 30 s, une heure
+  au plus) tant que la mémoire allouable est sous 2 Go, retire le fichier coupé et s'arrête proprement sur un `MemoryError`, et `fetch` / `publish` traitent un
+  `MemoryError` comme une réserve indisponible (un run ne s'arrête jamais à cause d'elle).
+- Tests : `tests/test_feature_cache_share.py` (26).
