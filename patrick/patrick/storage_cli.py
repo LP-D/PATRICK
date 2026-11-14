@@ -199,12 +199,25 @@ def share_feature_cache_cmd(
         typer.echo(f"Réserve partagée de ce PC : {shared} (plafond {_gb(cap)}).")
     if not seed or not local.is_dir():
         return
+    waits = {"n": 0}
+
+    def on_wait(why: str, waited: float) -> None:      # une ligne à la première attente, puis toutes les 5 minutes
+        if waits["n"] % 10 == 0:
+            what = {"indisponible": "le disque de la réserve ne répond pas (Google Drive est-il lancé ?)", "memoire": "la mémoire de l'ordinateur est presque saturée",
+                    "espace": "pas assez d'espace libre sur le disque de la réserve"}.get(why, why)
+            typer.echo(f"  ... en attente ({int(waited // 60)} min) : {what} ; reprise automatique.")
+        waits["n"] += 1
+
     result = feature_cache_share.seed(local, shared, max_bytes=cap, min_free_bytes=int(min_free_gb * 1e9), dry_run=dry_run,
-                                      progress=lambda n, b: typer.echo(f"  ... {_n(n)} fichiers, {_gb(b)}"))
+                                      progress=lambda n, b: typer.echo(f"  ... {_n(n)} fichiers, {_gb(b)}"), on_wait=on_wait)
     typer.echo(f"{'À copier' if dry_run else 'Copié'} : {_n(result['copied_files'])} fichier(s), {_gb(result['copied_bytes'])} ; "
                f"déjà présents : {_n(result['skipped_files'])} ; réserve : {_gb(result['shared_bytes'])} sur {_gb(cap)}.")
     if result["stopped"] == "plafond":
         typer.echo("Arrêt : le plafond de la réserve est atteint (les fichiers les plus anciens du cache local n'y sont pas).")
+    elif result["stopped"] == "indisponible":
+        typer.echo("Arrêt : le disque de la réserve ne répond pas. Google Drive est-il lancé et connecté (menu Démarrer, Google Drive ; attends que "
+                   "le lecteur réapparaisse dans l'Explorateur) ? Puis relance la même commande : elle reprend où elle s'est arrêtée.")
+        raise typer.Exit(code=1)
     elif result["stopped"] == "memoire":
         typer.echo("Arrêt : la mémoire de l'ordinateur est presque saturée. Cherche l'application qui en tient le plus (Gestionnaire des tâches, "
                    "colonne Mémoire) ; si c'est l'interface de Google Drive (msedgewebview2), quitte Drive puis rouvre-le sans ouvrir sa "

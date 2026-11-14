@@ -238,6 +238,66 @@ def test_seeding_stops_cleanly_when_the_space_never_comes_back(tmp_path):
     assert not list(shared.rglob("*.parquet"))
 
 
+def test_the_free_space_probe_falls_back_to_a_parent_when_the_drive_is_not_ready(tmp_path, monkeypatch):
+    """Le 14/11/2026, Google Drive redémarrait : le dossier existait mais `disk_usage` répondait « chemin introuvable »."""
+    from types import SimpleNamespace
+
+    deep = tmp_path / "a" / "b"
+    deep.mkdir(parents=True)
+
+    def flaky(path):
+        if Path(path) == deep.resolve():
+            raise FileNotFoundError(3, "Le chemin d'accès spécifié est introuvable")
+        return SimpleNamespace(total=1, used=0, free=12345)
+
+    monkeypatch.setattr(share.shutil, "disk_usage", flaky)
+
+    assert share._free_bytes(deep) == 12345
+
+
+def test_the_free_space_probe_reports_an_unavailable_drive_as_an_os_error(tmp_path, monkeypatch):
+    def broken(path):
+        raise FileNotFoundError(3, "Le chemin d'accès spécifié est introuvable")
+
+    monkeypatch.setattr(share.shutil, "disk_usage", broken)
+
+    with pytest.raises(OSError):
+        share._free_bytes(tmp_path / "absent")
+
+
+def test_seeding_waits_for_a_drive_that_is_not_ready_then_goes_on(tmp_path):
+    local, shared = tmp_path / "local", tmp_path / "drive"
+    _local_files(local, 3)
+    calls = {"n": 0}
+    slept: list[float] = []
+    waits: list[str] = []
+
+    def free_bytes(_path):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise FileNotFoundError(3, "Le chemin d'accès spécifié est introuvable")
+        return 10**12
+
+    result = share.seed(local, shared, max_bytes=10**6, min_free_bytes=1000, free_bytes=free_bytes, sleep=slept.append,
+                        wait_max_s=3600, on_wait=lambda why, _waited: waits.append(why))
+
+    assert result["copied_files"] == 3 and result["stopped"] is None and len(slept) == 2
+    assert waits == ["indisponible", "indisponible"]                     # chaque attente est annoncée (sinon la commande semble figée)
+
+
+def test_seeding_stops_cleanly_when_the_drive_never_answers(tmp_path):
+    local, shared = tmp_path / "local", tmp_path / "drive"
+    _local_files(local, 3)
+
+    def free_bytes(_path):
+        raise FileNotFoundError(3, "Le chemin d'accès spécifié est introuvable")
+
+    result = share.seed(local, shared, max_bytes=10**6, min_free_bytes=1000, free_bytes=free_bytes, sleep=lambda _s: None,
+                        wait_max_s=60)
+
+    assert result["copied_files"] == 0 and result["stopped"] == "indisponible"
+
+
 def test_the_real_memory_probe_returns_a_positive_number():
     assert _REAL_AVAILABLE_MEMORY() > 0
 
@@ -341,6 +401,16 @@ def test_the_command_explains_a_stop_for_lack_of_memory(tmp_path, monkeypatch):
     result = CliRunner().invoke(app, ["storage", "share-feature-cache", "--to", str(tmp_path / "drive" / "fc"), "--min-free-gb", "0"])
 
     assert result.exit_code == 1 and "mémoire" in result.output and "relance" in result.output
+
+
+def test_the_command_explains_a_stop_when_the_drive_is_unavailable(tmp_path, monkeypatch):
+    _local_files(paths.feature_cache_dir(), 1)
+    stopped = {"copied_files": 0, "copied_bytes": 0, "skipped_files": 0, "shared_bytes": 0, "stopped": "indisponible", "dry_run": False}
+    monkeypatch.setattr(share, "seed", lambda *args, **kwargs: stopped)
+
+    result = CliRunner().invoke(app, ["storage", "share-feature-cache", "--to", str(tmp_path / "drive" / "fc"), "--min-free-gb", "0"])
+
+    assert result.exit_code == 1 and "Google Drive" in result.output and "relance" in result.output
 
 
 def test_the_command_refuses_the_local_cache_folder_itself(tmp_path):
