@@ -78,6 +78,13 @@ la base de 10 à 69 Go, et les trois sauvegardes conservées de 57 à 65 Go chac
 - `patrick storage evict --vol-cache-days N` fait la même chose à la main (`--dry-run` compte seulement ; refuse avec un worker vivant).
 - Conséquence : rejouer un snapshot de plus de trois jours (reprise d'un run interrompu) recalcule la volatilité paramétrique de ce snapshot.
 
+## Mise à jour du 15/11/2026 : le cache de variables ne dépend plus de la fin d'un entraînement
+
+`evict_feature_cache` n'était appelée que par `worker._tidy_storage` : le dossier a atteint 315 Go pour un plafond de 150 Go, `D:` s'est remplie et la tâche de nuit a enregistré
+2 985 échecs « No space left on device » sans s'arrêter. Elle est maintenant aussi appelée par `daily_predict.py` (fin de chaque exécution, et dès que l'espace libre de la racine de données passe
+sous `predict_min_free_gb`, 5 Go par défaut), toujours seule : `evict_vol_cache` et les suppressions de la base restent réservées à la fin d'un job et aux commandes manuelles. Détails, code de sortie et
+limites : `docs/ops/passage-de-nuit.md`. Code : `live_refresh.py` (`trim_feature_cache`, `_stop_for_low_space`), `data/store.py` (écriture atomique du Parquet) · Tests : `tests/test_nightly_disk_guard.py`.
+
 ## Conséquences
 
 - Gain attendu sur la base : `vol_model_cache` ~26 Go -> ~11 Go (compression), 15,7 M de lignes de prédiction en moins (~45 % des lignes de scan) ; l'espace

@@ -190,3 +190,68 @@ def test_series_index_survives_a_transient_permission_error(tmp_path, monkeypatc
 
     monkeypatch.setattr(store_mod, "open", flaky_open, raising=False)
     assert store.series_observation("AAA")["date_max"] == "2026-01-02"
+
+
+# --- Écriture atomique du fichier Parquet (disque plein du 14/11/2026) --------------------------------------------------------
+# Le 14/11/2026, D: pleine : `df.to_parquet(chemin)` avait laissé `raw_FCX__a09f723cf153.parquet` coupé à 986 828 octets (environ 1,4 Mo
+# attendus), non référencé par l'index (écrit après, de façon atomique). Un fichier qu'on n'a pas fini d'écrire ne doit jamais porter le nom
+# définitif : on écrit dans un fichier temporaire du même dossier, puis `os.replace`.
+
+def _fill_disk_halfway(monkeypatch):
+    """`DataFrame.to_parquet` qui écrit la moitié du fichier puis lève « No space left on device »."""
+    def half_write(self, path, *args, **kwargs):
+        with open(path, "wb") as handle:
+            handle.write(b"PAR1" + b"x" * 1000)
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", half_write)
+
+
+def test_save_on_a_full_disk_leaves_no_file_at_all(tmp_path, monkeypatch):
+    store = DataStore(root=str(tmp_path))
+    _fill_disk_halfway(monkeypatch)
+
+    with pytest.raises(OSError, match="No space left"):
+        store.save("mykey", _df())
+
+    assert glob.glob(os.path.join(str(tmp_path), "snapshot=*", "*")) == []      # ni fichier définitif tronqué, ni temporaire orphelin
+    assert not store.exists("mykey")                                            # l'index n'a rien enregistré
+
+
+def test_save_replaces_a_truncated_orphan_with_the_same_name(tmp_path):
+    """Le fichier tronqué de la nuit du 14/11 portait le nom qu'aura le prochain `save` du même contenu : il doit être remplacé, pas relu."""
+    store = DataStore(root=str(tmp_path))
+    df = _df()
+    snapshot_id = store.save("mykey", df)
+    store2 = DataStore(root=str(tmp_path / "autre"))
+    orphan = store2._snapshot_path("mykey", snapshot_id.split("__")[0], snapshot_id.split("__")[-1])
+    os.makedirs(os.path.dirname(orphan), exist_ok=True)
+    with open(orphan, "wb") as handle:
+        handle.write(b"PAR1" + b"x" * 100)                                       # orphelin tronqué, absent de l'index de `store2`
+
+    store2.save("mykey", df)
+
+    pd.testing.assert_frame_equal(store2.load("mykey"), df, check_freq=False)          # le fichier est complet : relisible
+
+
+def test_a_successful_save_leaves_no_temporary_file(tmp_path):
+    store = DataStore(root=str(tmp_path))
+    store.save("mykey", _df())
+
+    names = [os.path.basename(p) for p in glob.glob(os.path.join(str(tmp_path), "snapshot=*", "*"))]
+    assert len(names) == 1 and names[0].endswith(".parquet")
+
+
+def test_the_temporary_file_is_invisible_to_a_parquet_glob(tmp_path, monkeypatch):
+    """Pendant l'écriture, le fichier temporaire ne doit pas être pris pour un snapshot (`query()` lit `snapshot=*/*.parquet`)."""
+    store = DataStore(root=str(tmp_path))
+    seen = []
+    real = pd.DataFrame.to_parquet
+
+    def spy(self, path, *args, **kwargs):
+        seen.append(str(path))
+        return real(self, path, *args, **kwargs)
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", spy)
+
+    store.save("mykey", _df())
+
+    assert len(seen) == 1 and not seen[0].endswith(".parquet")                  # écrit sous un autre nom, renommé ensuite

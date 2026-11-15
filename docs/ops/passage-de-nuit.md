@@ -19,6 +19,38 @@ Tâche Windows `Patrick-Nightly` (`patrick/scripts/schtasks_nightly.ps1`), qui l
 
 Chaque étape est indépendante : une étape en échec est notée dans `runs\nightly.log` et n'empêche pas les suivantes.
 
+## Disque plein : la nuit s'arrête au lieu d'échouer 3 000 fois (15/11/2026)
+
+Le 15/11/2026, `D:` était pleine (0 Go libre) : `daily_predict.py` a tenté 2 984 prédictions et enregistré 2 985 échecs `[Errno 28] No space left
+on device` (« errno 28 » : le code d'erreur Windows/Python pour « plus de place »), sans rien arrêter ni prévenir. Le cache de variables
+(`feature_cache`) avait atteint 315 Go pour un plafond de 150 Go : son nettoyage (l'*éviction* : supprimer les fichiers les moins récemment
+lus) n'avait lieu qu'à la fin d'un entraînement.
+
+Désormais, dans `daily_predict.py` (donc dans les deux étapes de prédiction de la nuit) :
+
+- **avant la première prédiction, puis toutes les 25**, l'espace libre du disque de la racine de données est mesuré. Sous le **seuil** (5 Go),
+  le cache de variables est ramené sous son plafond (`feature_cache_max_gb`, 150 Go) ; **jamais la base** (elle ne se modifie pas pendant
+  qu'un worker vit). Si la place manque encore, les prédictions s'arrêtent avec **un seul message** dans `runs\daily_predict.log`
+  (espace libre, seuil, ce que l'éviction a retiré, combien de prédictions n'ont pas été tentées) et le script se termine avec le **code de
+  sortie 3** (visible dans `runs\nightly.log` : « termine (code 3) ») ; ni cycle du pilote automatique, ni dérive, ni rapport ne suivent
+  (ils liraient des signaux périmés). Les étapes suivantes de la nuit (sauvegarde, synchro) restent indépendantes ;
+- une erreur « disque plein » sur **une** prédiction arrête aussitôt la boucle (les suivantes échoueraient de même) ; elle n'est pas notée dans
+  la base comme un échec du modèle (elle fausserait la suggestion « entrées perdues » du conseiller de relance) ;
+- **à la fin de chaque exécution** de `daily_predict.py`, le cache de variables est ramené sous son plafond (une fois par exécution, donc deux
+  fois par nuit). Le geste manuel reste `patrick storage evict` (`--feature-cache-gb 100` pour un plafond plus bas ; `--vol-cache-days 0`
+  n'évince rien dans la base) ;
+- l'écriture d'un instantané du magasin de données (`store/snapshot=…/*.parquet`) passe par un fichier temporaire puis un renommage : un
+  disque plein ne laisse plus de fichier coupé sous le nom d'un vrai instantané. Les anciens fichiers coupés (par exemple
+  `snapshot=2026-11-14\raw_FCX__a09f723cf153.parquet`, 986 828 octets au lieu d'environ 1,4 Mo, absent de l'index) ne sont pas supprimés
+  automatiquement ; le prochain enregistrement du même contenu le remplace.
+
+Le seuil se règle dans le fichier de réglages de la machine (`predict_min_free_gb`, en Go ; `0` désactive la mesure ; une valeur illisible
+rend les 5 Go). Même idée que le plancher de 5 Go de la synchronisation entre PC (`FOLDER_MIN_FREE_BYTES`).
+
+Limite connue : seule la racine de données est mesurée. Un composant déplacé ailleurs par une variable d'environnement
+(`PATRICK_FEATURE_CACHE_ROOT`, `PATRICK_STORE_ROOT`) sur un autre disque n'est pas surveillé, mais une erreur « disque plein » y arrête
+quand même la boucle.
+
 ## Ce que Windows peut et ne peut pas faire
 
 | Fin choisie (`-End`) | Le PC se rallume tout seul demain ? |
