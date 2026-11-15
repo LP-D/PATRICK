@@ -113,6 +113,24 @@ class DataStore:
                 pass
             raise
 
+    @staticmethod
+    def _write_parquet(df: pd.DataFrame, path: str) -> None:
+        """Atomic like `_write_index`: the Parquet file goes to a temporary file of the SAME directory, then `os.replace()`. Written
+        straight to its final name, a full disk left `raw_FCX__a09f723cf153.parquet` cut at 986 828 bytes (14/11/2026) -- a truncated
+        file under the name of a real snapshot. The temporary name does not end in `.parquet` (`query()` globs `snapshot=*/*.parquet`)
+        and is removed on any failure."""
+        fd, tmp_path = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
+        os.close(fd)
+        try:
+            df.to_parquet(tmp_path)
+            _retry_locked(lambda: os.replace(tmp_path, path))
+        except BaseException:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
     def exists(self, key: str) -> bool:
         return bool(self._read_index().get(key, {}).get("snapshots"))
 
@@ -170,7 +188,7 @@ class DataStore:
         snapshot_id = f"{snapshot_date}__{self._safe_key(key)}__{content_hash}"
         path = self._snapshot_path(key, snapshot_date, content_hash)
         os.makedirs(self._partition_dir(snapshot_date), exist_ok=True)
-        df.to_parquet(path)
+        self._write_parquet(df, path)
 
         entries.append({
             "snapshot_id": snapshot_id,

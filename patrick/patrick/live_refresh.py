@@ -15,14 +15,17 @@ réécrit), et le signal affiché garde la date de sa dernière séance.
 from __future__ import annotations
 
 import dataclasses
+import errno
 import json
 import logging
 import os
+import shutil
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from functools import partial
 
+from patrick import cache_eviction, paths, settings
 from patrick.clock import utc_today
 from patrick.config.targets import is_macro_target
 from patrick.tracking import db as trackdb
@@ -54,8 +57,10 @@ class PredictOutcome:
 
 @dataclass
 class RunSummary:
-    """Agrégat succès/échecs d'une exécution complète (tous les candidats)."""
+    """Agrégat succès/échecs d'une exécution complète (tous les candidats). `aborted` : raison (déjà journalisée) d'un arrêt avant la fin,
+    disque plein ; les candidats restants n'ont alors pas été tentés."""
     outcomes: list[PredictOutcome] = field(default_factory=list)
+    aborted: str | None = None
 
     @property
     def successes(self) -> list[PredictOutcome]:
@@ -108,6 +113,104 @@ def find_predictable_candidates(conn, base_dir: str | None = None) -> list[Predi
     return list(latest_per_pair.values())
 
 
+# --- Disque plein : le 15/11/2026, D: pleine, 2 984 prédictions tentées pour 2 985 échecs « [Errno 28] » sans alerte ------------------
+
+KEY_MIN_FREE_GB = "predict_min_free_gb"
+DEFAULT_MIN_FREE_GB = 5.0           # comme `FOLDER_MIN_FREE_BYTES` de sync.py
+DISK_CHECK_EVERY = 25               # une prédiction dure une vingtaine de secondes : environ toutes les dix minutes
+_WINERROR_DISK_FULL = 112           # ERROR_DISK_FULL ; Python le traduit déjà en errno 28, gardé par prudence
+
+
+def min_free_bytes() -> int:
+    """Seuil d'espace libre (réglage `predict_min_free_gb`, 5 Go) sous lequel les prédictions s'arrêtent ; 0 désactive le garde-fou.
+    Un réglage illisible ou négatif ne le désactive pas : retour au défaut."""
+    value = settings.load().get(KEY_MIN_FREE_GB, DEFAULT_MIN_FREE_GB)
+    try:
+        gb = float(value)
+    except (TypeError, ValueError):
+        return int(DEFAULT_MIN_FREE_GB * 1e9)
+    return int(gb * 1e9) if gb >= 0 else int(DEFAULT_MIN_FREE_GB * 1e9)
+
+
+def data_root_free_bytes() -> int:
+    """Octets libres sur le disque de la racine de données (store, cache de variables, caches : tout ce que les prédictions écrivent)."""
+    return shutil.disk_usage(paths.data_root()).free
+
+
+def _gb(n: float) -> str:
+    return f"{n / 1e9:.1f}".replace(".", ",") + " Go"
+
+
+def _root_hint() -> str:
+    try:
+        return str(paths.data_root())
+    except paths.DataRootUnavailable:
+        return "dossier de données absent"
+
+
+def _is_disk_full(exc: BaseException) -> bool:
+    """`[Errno 28] No space left on device`, levée telle quelle, cause d'une autre exception, ou seulement dans le texte d'une
+    erreur re-levée par une bibliothèque."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and (current.errno == errno.ENOSPC or getattr(current, "winerror", None) == _WINERROR_DISK_FULL):
+            return True
+        current = current.__cause__ or current.__context__
+    return "No space left on device" in str(exc) or "[Errno 28]" in str(exc)
+
+
+def trim_feature_cache() -> dict | None:
+    """Ramène le cache de variables sous son plafond (réglage `feature_cache_max_gb`, 150 Go) : les fichiers les moins récemment lus
+    d'abord, jamais ceux d'une heure ou moins. Seul ce cache : jamais la base (`evict_vol_cache`, `prune_db_caches` : elle ne se modifie
+    pas pendant qu'un worker vit). Ne lève jamais ; renvoie le compte rendu de `evict_feature_cache`, ou `None` si l'éviction a échoué."""
+    try:
+        result = cache_eviction.evict_feature_cache()
+    except Exception as exc:  # noqa: BLE001 -- entretien : jamais bloquant (racine de données absente, lecteur qui redémarre...)
+        logger.warning("éviction du cache de variables non faite : %s: %s", type(exc).__name__, exc)
+        return None
+    logger.info("cache de variables : %d fichier(s) retiré(s) (%s), plafond %s", result.get("removed_files", 0),
+                _gb(result.get("removed_bytes", 0)), _gb(result.get("cap", 0)))
+    return result
+
+
+def _eviction_sentence(result: dict | None) -> str:
+    if result is None:
+        return "L'éviction du cache de variables n'a pas pu être faite."
+    n = result.get("removed_files", 0)
+    sentence = f"L'éviction du cache de variables a retiré {n} fichier{'s' if n > 1 else ''} ({_gb(result.get('removed_bytes', 0))})"
+    if "bytes" in result and "cap" in result:
+        sentence += f", il reste {_gb(result['bytes'] - result.get('removed_bytes', 0))} pour un plafond de {_gb(result['cap'])}"
+    return sentence + "."
+
+
+def _stop_for_low_space(free_bytes_fn, floor: int, remaining: int) -> str | None:
+    """Mesure l'espace libre ; sous `floor`, évince le cache de variables et mesure de nouveau. `None` : assez de place (ou mesure
+    impossible : elle ne doit jamais empêcher une prédiction, qui dira elle-même son erreur). Sinon le message d'arrêt, journalisé UNE fois."""
+    try:
+        free = free_bytes_fn()
+    except Exception as exc:  # noqa: BLE001 -- racine absente, lecteur qui redémarre : la mesure n'est pas un motif d'arrêt
+        logger.warning("espace libre non mesuré : %s: %s", type(exc).__name__, exc)
+        return None
+    if free >= floor:
+        return None
+    logger.warning("Disque presque plein : %s libres sur %s (seuil %s) : éviction du cache de variables.", _gb(free), _root_hint(), _gb(floor))
+    evicted = trim_feature_cache()
+    try:
+        free_after = free_bytes_fn()
+    except Exception:  # noqa: BLE001 -- idem
+        free_after = free
+    if free_after >= floor:
+        logger.info("Disque : %s libres après l'éviction, les prédictions continuent.", _gb(free_after))
+        return None
+    message = (f"Disque presque plein : {_gb(free_after)} libres sur {_root_hint()} (seuil {_gb(floor)}). {_eviction_sentence(evicted)} "
+               f"Prédictions arrêtées, {remaining} non tentée{'s' if remaining > 1 else ''} : libère de la place (`patrick storage evict --feature-cache-gb 100`, "
+               "anciennes sauvegardes) puis relance.")
+    logger.error(message)
+    return message
+
+
 def _open_failure_tracker(db_path: str | None):
     """Connexion qui sert à noter les échecs ; `None` si la base est inaccessible (la mesure ne doit jamais empêcher une prédiction)."""
     try:
@@ -117,11 +220,12 @@ def _open_failure_tracker(db_path: str | None):
 
 
 def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=None,
-                           db_path: str | None = None, on_item=None, track_failures: bool | None = None) -> RunSummary:
+                           db_path: str | None = None, on_item=None, track_failures: bool | None = None,
+                           free_bytes_fn=None, check_every: int = DISK_CHECK_EVERY) -> RunSummary:
     """Appelle `predict_live_fn(candidate.run_id, db_path=db_path)` pour
     chaque candidat, un par un. Une exception sur UN item ne doit JAMAIS
     interrompre le traitement des suivants -- try/except par item, erreur
-    loggée, boucle continue.
+    loggée, boucle continue. Seule exception : un disque plein (voir ci-dessous).
 
     `predict_live_fn` est injectable (mocké dans les tests) ; par défaut,
     `patrick.predict.predict_live` avec un cache de téléchargement partagé
@@ -129,9 +233,19 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
     progression (affichage de l'avancement dans l'app).
 
     `track_failures` : noter dans la base (`live_failure`) les modèles qui échouent et effacer la note de ceux qui réussissent ; le conseiller de relance s'en sert
-    (suggestion `inputs_lost`). Par défaut seulement avec la vraie prédiction : un `predict_live_fn` injecté (tests) n'écrit jamais dans la base."""
+    (suggestion `inputs_lost`). Par défaut seulement avec la vraie prédiction : un `predict_live_fn` injecté (tests) n'écrit jamais dans la base.
+
+    Disque plein (15/11/2026 : D: pleine, 2 984 prédictions tentées, 2 985 échecs « [Errno 28] »). `free_bytes_fn()` mesure l'espace libre, avant la
+    première prédiction puis toutes les `check_every` : sous le seuil (réglage `predict_min_free_gb`, 5 Go) le cache de variables est évincé d'abord
+    (jamais la base), puis, si la place manque encore, la boucle s'arrête avec UN message d'erreur (`RunSummary.aborted`). Une erreur « disque plein »
+    sur une prédiction arrête aussi la boucle : les suivantes échoueraient de même, et elle n'est pas notée comme un échec du modèle. Mesure par défaut
+    (disque de la racine de données) seulement avec la vraie prédiction, ou si `free_bytes_fn` est donnée, comme `track_failures`."""
     if track_failures is None:
         track_failures = predict_live_fn is None
+    guard = free_bytes_fn is not None or predict_live_fn is None
+    if free_bytes_fn is None:
+        free_bytes_fn = data_root_free_bytes
+    floor, check_every = min_free_bytes(), max(1, int(check_every))
     if predict_live_fn is None:
         from patrick import (
             predict as predict_module,  # chargé ici : tire sklearn / xgboost / le pipeline (~1 s)
@@ -141,7 +255,12 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
 
     summary = RunSummary()
     tracker = _open_failure_tracker(db_path) if track_failures else None
-    for candidate in candidates:
+    for index, candidate in enumerate(candidates):
+        if guard and index % check_every == 0:
+            stop = _stop_for_low_space(free_bytes_fn, floor, len(candidates) - index)
+            if stop:
+                summary.aborted = stop
+                break
         started_at = datetime.now(UTC).isoformat()
         logger.info("START target=%s horizon=%s run_id=%s", candidate.target, candidate.horizon,
                     candidate.run_id)
@@ -157,15 +276,25 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
                 relaunch_stats.clear_live_failure(tracker, candidate.run_id)
         except Exception as exc:
             finished_at = datetime.now(UTC).isoformat()
-            logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
-                             candidate.horizon, candidate.run_id)
+            disk_full = _is_disk_full(exc)
+            remaining = len(candidates) - index - 1
+            if disk_full:
+                summary.aborted = (f"Disque plein pendant la prédiction de {candidate.target} (horizon {candidate.horizon}) : {exc}. Les {remaining} "
+                                   f"prédiction(s) suivante(s) échoueraient de même : arrêt. Libère de la place sur {_root_hint()} "
+                                   "(`patrick storage evict --feature-cache-gb 100`, anciennes sauvegardes) puis relance.")
+                logger.error(summary.aborted)                       # un seul message, pas une traceback par cible
+            else:
+                logger.exception("FAIL  target=%s horizon=%s run_id=%s", candidate.target,
+                                 candidate.horizon, candidate.run_id)
             outcome = PredictOutcome(candidate=candidate, ok=False, error=str(exc),
                                      started_at=started_at, finished_at=finished_at)
-            if tracker is not None:
+            if tracker is not None and not disk_full:               # le disque n'est pas la faute du modèle : pas de note `live_failure`
                 relaunch_stats.record_live_failure(tracker, candidate.run_id, str(exc))
         summary.add(outcome)
         if on_item is not None:
             on_item(outcome)
+        if summary.aborted:
+            break
     if tracker is not None:
         tracker.close()
     return summary

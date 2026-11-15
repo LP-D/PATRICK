@@ -13,7 +13,11 @@ Ne ré-entraîne et ne resélectionne jamais rien (même garantie que
 
 Isolation des erreurs (exigence Phase 2) : une exception sur UN (ticker,
 horizon) est capturée, loggée, et n'empêche JAMAIS le traitement des autres
-candidats -- voir `run_daily_predictions`.
+candidats -- voir `run_daily_predictions`. Seule exception : un disque plein (espace libre
+sous `predict_min_free_gb` malgré l'éviction du cache de variables, ou erreur « No space left on
+device » sur une prédiction) arrête les prédictions avec UN message dans le journal et le code de
+sortie `EXIT_DISK_FULL` (3) ; le cache de variables est ramené sous son plafond à la fin de chaque
+exécution (`docs/ops/passage-de-nuit.md`).
 
 Chemins relatifs (`trial.artifact_path`) : ils ont été écrits par le pipeline
 avec, comme répertoire courant, le checkout de déploiement réel (typiquement
@@ -52,11 +56,14 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     run_autopilots,
     run_daily_predictions,
     split_for_funds,
+    trim_feature_cache,
     write_weekly_report,
 )
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.scripts.daily_predict")
+
+EXIT_DISK_FULL = 3          # disque plein : prédictions arrêtées (le message est dans le journal) ; 1 reste « des prédictions ont échoué »
 
 
 def remeasure_stale_drift(candidates: list[PredictCandidate], db_path: str | None = None,
@@ -182,6 +189,14 @@ def main(argv: list[str] | None = None) -> int:
         print("Aucun (ticker, horizon) exploitable trouvé -- rien à faire.")
         return 0
 
+    code = _predict_and_report(args, candidates)
+    trim_feature_cache()                                  # une fois par exécution : le cache de variables ne dépend plus de la fin d'un entraînement
+    return code
+
+
+def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandidate]) -> int:
+    """Prédictions (fonds d'abord), cycle du pilote automatique, dérive, AUC regroupée, rapport ; renvoie le code de sortie. Un disque plein
+    arrête tout ce qui suit les prédictions (un cycle du pilote lirait des signaux périmés) : `EXIT_DISK_FULL`, raison déjà dans le journal."""
     # Les modèles dont les fonds ont besoin d'abord, puis leur cycle, puis le reste (~2 000 prédictions, une douzaine d'heures) : une nuit
     # interrompue ne laisse plus les fonds sans cycle. Aucun fonds concerné : tout, puis le cycle (l'ordre d'avant).
     first, rest = split_for_funds(candidates, args.db_path)
@@ -192,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_funds:
         summary = run_daily_predictions(first, db_path=args.db_path)
         print_summary(summary)
+        if summary.aborted:
+            return EXIT_DISK_FULL
         try:
             for report in run_autopilots(args.db_path):
                 print(f"Pilote automatique {report['strategy_id']} : "
@@ -205,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         later = run_daily_predictions(rest, db_path=args.db_path)
         print_summary(later)
         summary.outcomes.extend(later.outcomes)
+        if later.aborted:
+            return EXIT_DISK_FULL
     if not args.no_drift:
         drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
         print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "
