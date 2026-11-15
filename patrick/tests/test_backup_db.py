@@ -7,13 +7,19 @@ non exécuté). Chaque test crée sa propre base SQLite légère sous `tmp_path`
 -- jamais la vraie base de production (`~/.patrick/patrick.db`, ~4 Go)."""
 from __future__ import annotations
 
+import importlib.util
+import inspect
 import json
+import logging
 import re
 import sqlite3
+from pathlib import Path
 
 import pytest
 
 from patrick.tracking import backup, db
+
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "backup_db.py"
 
 
 def _make_populated_db(path: str) -> sqlite3.Connection:
@@ -133,3 +139,38 @@ def test_backup_restoration_survives_concurrent_writer_on_source(tmp_path):
 
     assert count == 3
     assert run_ids == {"run_1", "run_2", "run_3"}
+
+
+# Du 2 au 13/11/2026 la tâche PATRICK-SauvegardeBase (limite d'une heure) a été tuée chaque nuit à 0,0 % sur la base de 71 Go :
+# copiée par lots de 100 pages, la sauvegarde repart de zéro dès que la source est écrite entre deux lots et dort 0,25 s par lot.
+# Le défaut doit rester une copie en un seul pas ; ces deux tests le figent pour la fonction et pour le script planifié.
+def test_backup_database_defaults_copy_in_a_single_step():
+    params = inspect.signature(backup.backup_database).parameters
+    assert params["pages"].default == -1
+    assert params["sleep_s"].default == 0.0
+
+
+def test_backup_script_defaults_copy_in_a_single_step(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("backup_db_script", SCRIPT_PATH)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+
+    produced = tmp_path / "patrick_backup_20260101_000000.db"
+    produced.write_bytes(b"x")
+    captured: dict = {}
+
+    def fake_backup_database(source, backup_dir, **kwargs):
+        captured.update(kwargs)
+        return produced
+
+    monkeypatch.setattr(script, "backup_database", fake_backup_database)
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    try:                                    # main() réinstalle les gestionnaires de journal (force=True) : on remet ceux de pytest
+        assert script.main([]) == 0
+    finally:
+        root.handlers[:] = saved_handlers
+        root.setLevel(saved_level)
+
+    assert captured["pages"] == -1
+    assert captured["sleep_s"] == 0.0
