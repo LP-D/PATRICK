@@ -50,12 +50,13 @@ def main(argv: list[str] | None = None) -> int:
              "voir `patrick data status`).",
     )
     parser.add_argument(
-        "--pages", type=int, default=100,
-        help="Nombre de pages copiees par lot par sqlite3.Connection.backup() (defaut : 100).",
+        "--pages", type=int, default=-1,
+        help="Pages copiees par lot par sqlite3.Connection.backup() (defaut : -1 = tout en un seul pas ; "
+             "par lots, la copie d'une grosse base repart de zero a chaque ecriture et ne finit pas).",
     )
     parser.add_argument(
-        "--sleep", type=float, default=0.25,
-        help="Pause en secondes entre deux lots de copie (defaut : 0.25).",
+        "--sleep", type=float, default=0.0,
+        help="Pause en secondes entre deux lots quand la source est occupee (defaut : 0, sans effet avec --pages -1).",
     )
     parser.add_argument(
         "--log-file", default=None,

@@ -16,11 +16,19 @@ concurrentes sur la source -- documenté comme tel par la doc SQLite/CPython
 `VACUUM INTO 'dest.db'` (SQLite >= 3.27), tout aussi cohérente et produisant
 en prime un fichier compacté/défragmenté -- mais exécutée comme une
 transaction unique, sans point de pause. `Connection.backup()` expose au
-contraire `pages`/`sleep`, ce qui permet de copier par petits lots en
-cédant la main régulièrement plutôt que de bloquer la connexion source
-pendant toute la durée de la copie -- important sur la vraie base
-(~4 Go), qui peut être activement écrite par un worker en cours
-d'exécution pendant la sauvegarde planifiée.
+contraire `pages`/`sleep`, ce qui permet de copier par petits lots.
+
+Mais le défaut est une copie en UN SEUL pas (`pages=-1`), pas par lots : sur la
+vraie base (71 Go en novembre 2026), la copie par lots de 100 pages n'a jamais
+fini. SQLite la recommence depuis le début dès qu'une autre connexion écrit dans
+la source entre deux lots, et Python dort `sleep` secondes à chaque lot où la
+source est occupée (400 pages/s, soit 13 h pour 18,7 millions de pages). La
+tâche planifiée, limitée à une heure, était tuée chaque nuit du 2 au 13/11
+(code 0xC000013A) sans jamais dépasser 0,0 %. En un seul pas, la copie est une
+unique transaction de lecture, donc un instantané cohérent qui ne peut pas être
+recommencé ; en mode WAL les écritures continuent pendant la copie (seul le
+fichier `-wal` grossit), et elle prend 13 à 20 minutes. La synchronisation
+entre PC (`sync.py`) copiait déjà ainsi.
 
 Ce module ne s'exécute jamais sur le fichier réel pendant son
 développement/ses tests : uniquement des bases SQLite légères créées par
@@ -231,8 +239,8 @@ def backup_database(
     source_path: str | None = None,
     backup_dir: str | None = None,
     *,
-    pages: int = 100,
-    sleep_s: float = 0.25,
+    pages: int = -1,
+    sleep_s: float = 0.0,
     timestamp: str | None = None,
     retention_days: int = DEFAULT_RETENTION_DAYS,
     keep: int = DEFAULT_KEEP_COUNT,
@@ -244,10 +252,11 @@ def backup_database(
     données, créé si absent -- volontairement hors du dépôt git).
 
     Utilise `sqlite3.Connection.backup()` (voir docstring du module pour la
-    justification vs. `shutil.copy` / `VACUUM INTO`). `pages`/`sleep_s`
-    sont transmis à `Connection.backup()` pour copier par lots plutôt qu'en
-    un seul bloc -- pertinent sur la vraie base (~4 Go), potentiellement
-    écrite pendant la sauvegarde.
+    justification vs. `shutil.copy` / `VACUUM INTO`). `pages=-1` (défaut)
+    copie en un seul pas ; une valeur positive copie par lots de `pages`
+    pages, avec `sleep_s` secondes de pause quand la source est occupée --
+    déconseillé sur une grosse base écrite pendant la copie : elle repart de
+    zéro à chaque écriture (voir le docstring du module).
 
     Lève `FileNotFoundError` si `source_path` n'existe pas (rien à
     sauvegarder -- mieux vaut échouer bruyamment qu'écrire une "sauvegarde"
