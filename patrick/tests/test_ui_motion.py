@@ -56,7 +56,7 @@ def test_exits_are_twenty_percent_shorter_than_entries(enter, leave):
 @pytest.mark.parametrize("name", ["--ease-enter", "--ease-exit", "--ease-move", "--ease-out"])
 def test_no_curve_overshoots_its_target(name):
     """Pas de ressort aux transitions : les ordonnées des points de contrôle restent dans [0, 1]."""
-    x1, y1, x2, y2 = (float(v) for v in re.fullmatch(r"cubic-bezier\(([^)]*)\)", _token(name)).group(1).split(","))
+    _x1, y1, _x2, y2 = (float(v) for v in re.fullmatch(r"cubic-bezier\(([^)]*)\)", _token(name)).group(1).split(","))
     assert 0 <= y1 <= 1 and 0 <= y2 <= 1, name
 
 
