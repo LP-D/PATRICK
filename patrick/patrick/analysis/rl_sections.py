@@ -114,7 +114,8 @@ def overview(run: RLRun) -> dict:
             "stats": res.get("stats"),
             "settings": {k: rl.get(k) for k in ("algo", "action_space", "n_levels", "allow_short", "max_leverage", "cost_bps", "slippage_bps",
                                                 "reward", "risk_aversion", "obs_lookback", "episode_length", "max_features",
-                                                "feature_selection", "total_timesteps", "learning_rate", "gamma")}}
+                                                "feature_selection", "total_timesteps", "learning_rate", "gamma", "rebalance_every",
+                                                "train_cost_mult", "val_frac", "gate", "engine_version")}}
 
 
 def folds(run: RLRun) -> dict:

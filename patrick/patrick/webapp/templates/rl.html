@@ -125,7 +125,7 @@
                 </label>
                 <label>{{ t('rlp_f_reward') }}{{ info('rl_reward', t('rlp_f_reward')) }}
                     <select name="rl_reward">
-                        {% for opt in ('log', 'pnl', 'dsr') %}
+                        {% for opt in rl_rewards %}
                         <option value="{{ opt }}" {% if view.rl_reward == opt %}selected{% endif %}>{{ t('rlp_o_reward_' ~ opt) }}</option>
                         {% endfor %}
                     </select>

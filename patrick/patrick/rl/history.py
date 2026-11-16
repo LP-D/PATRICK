@@ -109,3 +109,24 @@ def delete_rl_run(conn: sqlite3.Connection, job_id: str) -> dict:
     if changed != 1:
         raise ValueError("Ce run RL vient de changer d'état : réessaie.")
     return {"kept_as_trial": status == "done", "files_removed": _remove_files(conn, job_id, config_json, result_json)}
+
+
+FX_ALIGNMENT_WARNING = (
+    "Run d'avant la correction de l'alignement des devises (ADR 0007) : une barre Yahoo de change est datée du DÉBUT de la journée, et les "
+    "variables du jour (S&P 500, VIX, or, cuivre...) expliquaient déjà le mouvement que l'agent jouait. Ce résultat est un artefact, pas une "
+    "stratégie : décaler ses positions d'un jour efface son gain. Relancer le run (moteur 2, règle des séances appliquée) pour un résultat crédible.")
+
+
+def display_warnings(result: dict) -> dict:
+    """Résultat d'un run RL tel qu'affiché : avertissements de lecture ajoutés en tête (sans toucher à la base). Aujourd'hui : un run d'une paire
+    Yahoo `=X` entraîné sous la règle des séances 1 (tous les runs RL de change d'avant le 2026-11-16, moteur RL qui ne fixait pas la règle)."""
+    if not isinstance(result, dict) or result.get("kind") != "rl":
+        return result
+    from patrick.validation.suspicion import alignment_reason
+
+    config = result.get("config") if isinstance(result.get("config"), dict) else {}
+    target = result.get("target") or ((config.get("objective") or {}).get("target_symbol"))
+    if not alignment_reason(target, config):
+        return result
+    warnings = [w for w in (result.get("warnings") or []) if w != FX_ALIGNMENT_WARNING]
+    return {**result, "warnings": [FX_ALIGNMENT_WARNING, *warnings]}

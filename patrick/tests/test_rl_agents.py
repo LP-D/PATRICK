@@ -11,11 +11,12 @@ for _module in ("torch", "gymnasium", "stable_baselines3"):
     if importlib.util.find_spec(_module) is None:
         pytest.skip(f"{_module} non installé (extra optionnel rl)", allow_module_level=True)
 
+from patrick.config.defaults import RL_LEGACY_SETTINGS
 from patrick.rl import agents
 from patrick.rl.config import RLSettings
 from patrick.rl.core import TradingCore, rollout
 
-FAST = {"total_timesteps": 1500, "n_steps": 64, "batch_size": 32, "n_epochs": 2, "policy_units": 16, "policy_layers": 1,
+FAST = {**RL_LEGACY_SETTINGS, "total_timesteps": 1500, "n_steps": 64, "batch_size": 32, "n_epochs": 2, "policy_units": 16, "policy_layers": 1,
         "buffer_size": 3000, "learning_starts": 100, "train_freq": 4, "target_update_interval": 100, "episode_length": 60}
 
 
@@ -86,3 +87,22 @@ def test_a_missing_dependency_is_a_clear_error_not_an_import_crash(monkeypatch):
     core, _ = _core(s)
     with pytest.raises(agents.RLUnavailableError, match="pip install"):
         agents.train_agent(core, s, 1, 0, 100)
+
+
+def test_validation_keeps_the_best_checkpoint_not_the_last_one():
+    """Moteur 2 : `validate` est appelé pendant l'entraînement ; les poids du meilleur contrôle sont rechargés. Ici le score est fabriqué
+    pour culminer au troisième contrôle : l'agent rendu doit agir exactement comme à ce moment-là."""
+    s = RLSettings(**{**FAST, "action_space": "continuous", "total_timesteps": 1280, "n_steps": 128})
+    core, _ = _core(s)
+    probe = np.full(core.obs_dim, 0.3, dtype=np.float32)
+    seen: list[float] = []
+
+    def validate(policy):
+        seen.append(policy(probe))
+        return 1.0 if len(seen) == 3 else 0.0
+
+    model = agents.train_agent(core, s, seed=2, start=0, end=300, validate=validate)
+    info = agents.validation_info(model)
+    assert len(info["scores"]) >= 4 and info["best_score"] == 1.0 and info["best_step"] == info["scores"][2][0]
+    assert agents.policy_from_model(model, s)(probe) == pytest.approx(seen[2])
+    assert len({round(v, 6) for v in seen}) > 1                     # les contrôles ont bien vu des agents différents

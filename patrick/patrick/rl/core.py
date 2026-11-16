@@ -6,10 +6,16 @@ et sa position précédente ; il choisit une position cible ; le rendement qu'il
 coûts du changement de position. Aucune observation ne contient `fwd_ret`.
 
 Récompenses (échelonnées par `reward_scale = 1 / écart-type des rendements d'entraînement`, pour que l'ordre de grandeur soit ~1) :
+- `excess` : [log(1 + rendement net) − log(1 + rendement de l'actif)] · échelle, la croissance AU-DELÀ de l'achat-conservation. Le terme
+  retiré ne dépend pas des actions : la politique optimale est celle de `log`, mais la part imprévisible du rendement de l'actif (presque tout
+  le bruit d'un rendement quotidien) ne pollue plus l'estimation de l'avantage quand l'agent est investi (moteur 2, ADR 0022) ;
 - `pnl` : rendement net · échelle ;
 - `log` : log(1 + rendement net) · échelle (la croissance du capital) ;
 - `dsr` : ratio de Sharpe différentiel de Moody & Saffell (1998), la variation instantanée du Sharpe exponentiellement pondéré.
-Le terme `risk_aversion · (rendement net · échelle)²` est retiré aux récompenses `pnl` et `log`.
+Le terme `risk_aversion · (rendement net · échelle)²` est retiré aux récompenses `excess`, `pnl` et `log`.
+
+`fee_mult` multiplie les frais : l'environnement d'ENTRAÎNEMENT les gonfle (`train_cost_mult`) pour décourager la sur-rotation, l'évaluation
+paie les vrais frais. `rollout(..., rebalance_every=k)` ne consulte la politique qu'une barre sur k et tient la position entre deux.
 
 Ruine : on ne peut pas perdre plus que son capital. Une période dont le rendement net atteint -100 % (un short pendant une hausse de plus de
 100 %, un levier de 2 pendant une baisse de 50 %...) est plafonnée à -100 %, fait passer `ruined` à vrai et TERMINE l'épisode (vraie fin de partie,
@@ -29,7 +35,7 @@ OBS_CLIP = 5.0
 
 
 class TradingCore:
-    def __init__(self, features: np.ndarray, fwd_ret: np.ndarray, settings: RLSettings, reward_scale: float):
+    def __init__(self, features: np.ndarray, fwd_ret: np.ndarray, settings: RLSettings, reward_scale: float, fee_mult: float = 1.0):
         features = np.asarray(features, dtype=np.float32)
         fwd_ret = np.asarray(fwd_ret, dtype=np.float64)
         if features.ndim != 2 or len(features) != len(fwd_ret):
@@ -41,7 +47,7 @@ class TradingCore:
         self.n = len(fwd_ret)
         self.n_features = features.shape[1]
         self.obs_dim = self.n_features * int(settings.obs_lookback) + (1 if settings.include_position else 0)
-        self.fee = (float(settings.cost_bps) + float(settings.slippage_bps)) / 1e4
+        self.fee = (float(settings.cost_bps) + float(settings.slippage_bps)) / 1e4 * float(fee_mult)
         self.t = 0
         self.end = self.n
         self.pos = 0.0
@@ -88,6 +94,9 @@ class TradingCore:
         scaled = net * self.scale
         if self.s.reward == "dsr":
             reward = self._dsr(scaled)
+        elif self.s.reward == "excess":
+            reward = ((math.log1p(max(net, -0.999)) - math.log1p(max(float(self.fwd_ret[self.t]), -0.999))) * self.scale
+                      - self.s.risk_aversion * scaled * scaled)
         elif self.s.reward == "log":
             reward = math.log1p(max(net, -0.999)) * self.scale - self.s.risk_aversion * scaled * scaled
         else:
@@ -106,13 +115,15 @@ class TradingCore:
         return float(d)
 
 
-def rollout(core: TradingCore, policy, start: int, end: int, prev_pos: float = 0.0) -> dict:
-    """Rejoue `policy(obs) -> position cible` du début à la fin (déterministe, séquentiel) : positions, rendements nets, coûts."""
+def rollout(core: TradingCore, policy, start: int, end: int, prev_pos: float = 0.0, rebalance_every: int = 1) -> dict:
+    """Rejoue `policy(obs) -> position cible` du début à la fin (déterministe, séquentiel) : positions, rendements nets, coûts. La politique
+    n'est consultée qu'une barre sur `rebalance_every` (la première comprise) ; entre deux décisions la position est tenue, sans frais."""
     obs = core.reset(start, end, prev_pos)
     positions, net, costs = [], [], []
     done = False
+    every = max(1, int(rebalance_every))
     while not done:
-        target = float(policy(obs))
+        target = float(policy(obs)) if len(net) % every == 0 else core.pos
         _reward, cost, ret, done = core.step(target)
         positions.append(core.pos)
         net.append(ret)

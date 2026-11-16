@@ -9,13 +9,14 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from patrick.config.defaults import RL_LEGACY_SETTINGS
 from patrick.rl.config import RLRunConfig, RLSettings
 from patrick.rl.core import REWARD_CLIP, TradingCore, rollout
 
 
 def _core(n=60, k=3, seed=0, **over):
     rng = np.random.default_rng(seed)
-    s = RLSettings(**{"cost_bps": 10.0, "slippage_bps": 0.0, "reward": "pnl", **over})
+    s = RLSettings(**{**RL_LEGACY_SETTINGS, "cost_bps": 10.0, "slippage_bps": 0.0, "reward": "pnl", **over})       # mécanique du moteur 1
     return TradingCore(rng.normal(size=(n, k)), rng.normal(0, 0.01, n), s, reward_scale=100.0), s
 
 
@@ -23,11 +24,11 @@ def _core(n=60, k=3, seed=0, **over):
 
 
 @pytest.mark.parametrize("over, expected", [
-    ({"n_levels": 3}, [-1.0, 0.0, 1.0]),
-    ({"n_levels": 5}, [-1.0, -0.5, 0.0, 0.5, 1.0]),
-    ({"n_levels": 3, "allow_short": False}, [0.0, 0.5, 1.0]),
+    ({"n_levels": 3, "allow_short": True}, [-1.0, 0.0, 1.0]),
+    ({"n_levels": 5, "allow_short": True}, [-1.0, -0.5, 0.0, 0.5, 1.0]),
+    ({"n_levels": 3}, [0.0, 0.5, 1.0]),                                       # défaut du moteur 2 : longues seulement
     ({"n_levels": 2, "allow_short": False}, [0.0, 1.0]),
-    ({"n_levels": 3, "max_leverage": 2.0}, [-2.0, 0.0, 2.0]),
+    ({"n_levels": 3, "max_leverage": 2.0, "allow_short": True}, [-2.0, 0.0, 2.0]),
 ])
 def test_discrete_positions_follow_the_levels_the_shorting_flag_and_the_leverage(over, expected):
     assert RLSettings(**over).positions() == pytest.approx(expected)
@@ -263,9 +264,9 @@ def test_random_episode_starts_stay_inside_the_training_segment():
 @needs_gym
 def test_actions_map_to_positions_for_both_action_spaces():
     from patrick.rl.env import action_to_position
-    d = RLSettings(action_space="discrete", n_levels=3)
+    d = RLSettings(action_space="discrete", n_levels=3, allow_short=True)
     assert [action_to_position(a, d) for a in (0, 1, 2)] == [-1.0, 0.0, 1.0]
-    c_short = RLSettings(action_space="continuous", algo="SAC")
+    c_short = RLSettings(action_space="continuous", algo="SAC", allow_short=True)
     assert action_to_position(np.array([0.4]), c_short) == pytest.approx(0.4) and action_to_position(np.array([5.0]), c_short) == 1.0
     c_long = RLSettings(action_space="continuous", algo="SAC", allow_short=False, max_leverage=2.0)
     assert action_to_position(np.array([-1.0]), c_long) == 0.0 and action_to_position(np.array([1.0]), c_long) == pytest.approx(2.0)
