@@ -1,9 +1,10 @@
-"""Analyse d'un run de reinforcement learning (table `job`, `kind: rl`) : plis, courbes d'équité hors échantillon contre les références,
+"""Analyse d'un run de reinforcement learning (table `job`, `kind: rl`) : lecture du run (verdict, croissance au-delà d'acheter-garder,
+part de l'agent, frais : `rl.reading`), plis (validation et repli du moteur 2), courbes d'équité hors échantillon contre les références,
 drawdowns, positions, rendements, Sharpe glissant, statistiques de comparaison, graines, variables.
 
 Source : le résultat du job (`result_json`) et, pour le détail quotidien, `rl_oos.csv` (une ligne par date hors échantillon : position,
-rendement net, coût, rendements de acheter-garder et de momentum). Sans le CSV (supprimé, autre poste), les courbes amincies du résultat
-servent de repli. Tout est en lecture seule."""
+rendement net, coût, rendements d'acheter-garder, de momentum et -- moteur 2 -- de la tendance 200 j, de l'agent sans repli et qui avait
+la main). Sans le CSV (supprimé, autre poste), les courbes amincies du résultat servent de repli. Tout est en lecture seule."""
 from __future__ import annotations
 
 import contextlib
@@ -56,16 +57,17 @@ class RLRun:
         if path is not None:
             with contextlib.suppress(OSError, ValueError, pd.errors.ParserError):
                 df = pd.read_csv(path, parse_dates=["date"]).rename(columns={
-                    "net_return": "net", "buy_hold_return": "buy_hold", "momentum_return": "momentum"})
+                    "net_return": "net", "buy_hold_return": "buy_hold", "momentum_return": "momentum", "trend_return": "trend",
+                    "agent_net_return": "agent_raw"})
                 if len(df):
                     self._daily = df.set_index("date").sort_index()
                     return self._daily
         cur = (self.result or {}).get("curves") or {}
         if cur.get("dates"):
-            eq = pd.DataFrame({k: cur[k] for k in ("strategy", "buy_hold", "momentum", "position") if k in cur},
+            eq = pd.DataFrame({k: cur[k] for k in ("strategy", "buy_hold", "momentum", "trend", "position") if k in cur},
                               index=pd.to_datetime(cur["dates"]))
             out = pd.DataFrame(index=eq.index)
-            for name, col in (("net", "strategy"), ("buy_hold", "buy_hold"), ("momentum", "momentum")):
+            for name, col in (("net", "strategy"), ("buy_hold", "buy_hold"), ("momentum", "momentum"), ("trend", "trend")):
                 if col in eq:
                     out[name] = eq[col].pct_change().fillna(eq[col].iloc[0] - 1.0)
             out["position"] = eq.get("position", 0.0)
@@ -101,15 +103,21 @@ def _summ(net, pos, cost, dates) -> dict:
 
 # ----------------------------------------------------------------------------------------------------------- sections
 def overview(run: RLRun) -> dict:
+    from patrick.rl import reading as rl_reading
+    from patrick.rl.history import display_warnings
+
     res, cfg = run.result or {}, run.config
     rl = cfg.get("rl") or {}
     obj = cfg.get("objective") or {}
+    target = res.get("target") or obj.get("target_symbol")
+    warnings = display_warnings({**res, "kind": "rl"}).get("warnings") if res else []
     return {"available": run.ready, "reason": None if run.ready else "not_ready",
+            "reading": rl_reading.of_result(res, target) if res else None, "agent_ungated": res.get("agent_ungated"),
             "run": {"job_id": run.job_id, "name": res.get("name") or cfg.get("name"), "target": res.get("target") or obj.get("target_symbol"),
                     "algo": res.get("algo") or rl.get("algo"), "status": run.row["status"], "phase": run.row["phase"],
                     "started_at": run.row["started_at"], "finished_at": run.row["finished_at"], "error": run.row["error"]},
             "period": [res.get("start"), res.get("end")], "n_rows": res.get("n_rows"), "n_pool": res.get("n_features_pool"),
-            "n_folds": res.get("n_folds"), "elapsed_s": res.get("elapsed_s"), "warnings": res.get("warnings") or [],
+            "n_folds": res.get("n_folds"), "elapsed_s": res.get("elapsed_s"), "warnings": warnings or [],
             "strategy": res.get("strategy"), "baselines": res.get("baselines"), "seeds": res.get("seeds") or [],
             "stats": res.get("stats"),
             "settings": {k: rl.get(k) for k in ("algo", "action_space", "n_levels", "allow_short", "max_leverage", "cost_bps", "slippage_bps",
@@ -126,11 +134,15 @@ def folds(run: RLRun) -> dict:
         items.append({"fold": f.get("fold"), "train_start": f.get("train_start"), "train_end": f.get("train_end"),
                       "test_start": f.get("test_start"), "test_end": f.get("test_end"), "n_train": f.get("n_train"),
                       "n_test": f.get("n_test"), "strategy": s, "buy_hold": b, "momentum": f.get("momentum"),
+                      "agent": f.get("agent"), "fit_end": f.get("fit_end"), "val_start": f.get("val_start"), "n_fit": f.get("n_fit"),
+                      "n_val": f.get("n_val"), "val_score": f.get("val_score"), "gated": f.get("gated"),
                       "n_features": len(f.get("features") or []), "features": f.get("features") or []})
     if not items:
         return {"available": False, "reason": "no_folds"}
     wins = sum(1 for i in items if (i["strategy"].get("sharpe") or -9) > (i["buy_hold"].get("sharpe") or -9))
+    has_gate = any(i["gated"] is not None for i in items)
     return {"available": True, "folds": items, "wins_vs_buy_hold": wins, "n": len(items),
+            "n_gated": sum(1 for i in items if i["gated"]) if has_gate else None,
             "range": [min(i["train_start"] or i["test_start"] for i in items), max(i["test_end"] for i in items)]}
 
 
@@ -146,7 +158,10 @@ def equity(run: RLRun) -> dict:
     pos = d["position"].to_numpy(dtype=float) if "position" in d else np.zeros(len(d))
     cost = d["cost"].to_numpy(dtype=float) if "cost" in d else np.zeros(len(d))
     series = {"agent": net}
-    for k in ("buy_hold", "momentum"):
+    controls = d["agent_controls"].to_numpy(dtype=float) if "agent_controls" in d else None
+    if "agent_raw" in d and controls is not None and (controls < 0.5).any():      # l'agent sans repli, seulement si le repli a joué
+        series["agent_raw"] = d["agent_raw"].to_numpy(dtype=float)
+    for k in ("buy_hold", "trend", "momentum"):
         if k in d:
             series[k] = d[k].to_numpy(dtype=float)
     series["flat"] = np.zeros(len(d))
@@ -161,7 +176,10 @@ def equity(run: RLRun) -> dict:
     idx = sc.thin_indices(len(d), MAX_POINTS)
     folds_ = (run.result or {}).get("folds") or []
     stats = {"agent": _summ(net, pos, cost, dates)}
-    for k in ("buy_hold", "momentum"):
+    if "agent_raw" in series:
+        raw_pos = d["agent_position"].to_numpy(dtype=float) if "agent_position" in d else np.zeros(len(d))
+        stats["agent_raw"] = _summ(series["agent_raw"], raw_pos, np.zeros(len(d)), dates)
+    for k in ("buy_hold", "trend", "momentum"):
         if k in series:
             stats[k] = _summ(series[k], np.ones(len(d)) if k == "buy_hold" else np.sign(pos) * 0.0, np.zeros(len(d)), dates)
     r_a = pd.Series(net, index=dates)
@@ -177,6 +195,8 @@ def equity(run: RLRun) -> dict:
     return {"available": True, "dates": [iso(t) for t in dates[idx]], "idx": idx.tolist(), "n": len(d), "notes": run.notes,
             "curves": {k: v[idx] for k, v in curves.items()}, "drawdown": {k: v[idx] for k, v in dd.items()},
             "rolling_sharpe": {k: v[idx] for k, v in roll.items()}, "position": pos[idx], "stats": stats,
+            "controls": controls[idx] if controls is not None else None,
+            "agent_share": float(controls.mean()) if controls is not None and len(controls) else None,
             "months": [{"y": int(y), "m": int(m), "r": float(v)} for (y, m), v in monthly.items()],
             "folds": [{"fold": f.get("fold"), "start": f.get("test_start"), "end": f.get("test_end")} for f in folds_],
             "exposure": {"mean_abs": float(np.abs(pos).mean()), "share_long": float((pos > 0.05).mean()), "share_short": float((pos < -0.05).mean()),
@@ -209,8 +229,10 @@ def returns(run: RLRun) -> dict:
 
 def stats(run: RLRun) -> dict:
     res = run.result or {}
+    from patrick.rl import reading as rl_reading
     return {"available": run.ready, "stats": res.get("stats"), "seeds": res.get("seeds") or [], "baselines": res.get("baselines"),
-            "strategy": res.get("strategy"), "n_trials": (res.get("stats") or {}).get("n_trials")}
+            "strategy": res.get("strategy"), "n_trials": (res.get("stats") or {}).get("n_trials"),
+            "reading": rl_reading.of_result(res) if res else None}
 
 
 def features(run: RLRun) -> dict:

@@ -1,12 +1,23 @@
-/* Page /runs/{id}/analyse pour un run de reinforcement learning : plis, équité de l'agent contre acheter-garder / momentum / à plat,
-   drawdowns, positions, rendements, statistiques de comparaison, graines, variables. Chargement par `analysis_loader.js`. */
+/* Page /runs/{id}/analyse pour un run de reinforcement learning : lecture du run (verdict, écart annuel avec acheter-garder, part de
+   l'agent, frais), plis (validation et repli du moteur 2), équité de l'agent contre acheter-garder / tendance 200 j / à plat (momentum
+   pour les runs du moteur 1), drawdowns, positions, rendements, statistiques de comparaison, graines, variables. Chargement par
+   `analysis_loader.js`. */
 (function () {
     "use strict";
     var PK = window.PK, RA = window.RA;
     if (!PK || !RA) return;
     var T = PK.T, h = PK.h, num = PK.num, pct = PK.pct, int = PK.int, isNum = PK.isNum;
     var titled = RA.helpers.titled, row2 = RA.helpers.row2, nearestIdx = RA.helpers.nearestIdx;
-    var SERIES = [["agent", "ra_rl_agent", "var(--brand)"], ["buy_hold", "ra_rl_bh", "var(--text-3)"], ["momentum", "ra_rl_mom", "var(--ra-c2)"], ["flat", "ra_rl_flat", "var(--ra-c8)"]];
+    var SERIES = [["agent", "ra_rl_agent", "var(--brand)"], ["agent_raw", "ra_rl_agent_raw", "var(--pos)"], ["buy_hold", "ra_rl_bh", "var(--text-3)"],
+        ["trend", "ra_rl_trend", "var(--info)"], ["momentum", "ra_rl_mom", "var(--ra-c2)"], ["flat", "ra_rl_flat", "var(--ra-c8)"]];
+
+    // Lecture du run (`rl.reading`) : verdict et motif en une ligne, au-dessus des chiffres.
+    function readingLine(rd) {
+        if (!rd || !rd.verdict) return null;
+        var kind = rd.verdict_state === "error" ? "banner-error" : (rd.verdict_state === "pending" ? "banner-warning" : "banner-info");
+        var why = rd.leak ? T("ra_rl_rd_leak_" + rd.leak) : T("ra_rl_rd_" + rd.verdict + "_tip");
+        return h("p", { class: "banner " + kind, role: "status" }, [h("strong", { text: T("ra_rl_rd_" + rd.verdict) + " · " + T("ra_rl_rd_engine", { n: rd.engine }) }), " " + why]);
+    }
 
     function bars(items, o) {
         var max = Math.max.apply(null, items.map(function (i) { return i.value; }).concat([1e-12]));
@@ -25,20 +36,29 @@
 
     // ---------------------------------------------------------------- aperçu
     RA.render.overview = function (m, d) {
-        var s = d.strategy || {}, bh = (d.baselines || {}).buy_hold || {}, st = d.stats || {}, grid = h("div", { class: "metric-grid ra-kpis" });
-        grid.appendChild(PK.kpi(T("ra_rl_k_total"), PK.spct(s.total_return, 1), T("ra_rl_k_total_sub", { bh: PK.spct(bh.total_return, 1) }), isNum(s.total_return) && s.total_return > (bh.total_return || 0) ? "ok" : "warning"));
+        var s = d.strategy || {}, bh = (d.baselines || {}).buy_hold || {}, st = d.stats || {}, rd = d.reading || {}, grid = h("div", { class: "metric-grid ra-kpis" });
+        var line = readingLine(rd);
+        if (line) m.appendChild(line);
+        grid.appendChild(PK.kpi(T("ra_rl_k_excess"), isNum(rd.excess) ? PK.spct(rd.excess, 1) : "—", T("ra_rl_k_excess_sub", { t: PK.spct(s.total_return, 1), bh: PK.spct(bh.total_return, 1) }), isNum(rd.excess) && rd.excess > 0 ? "ok" : "warning"));
         grid.appendChild(PK.kpi("Sharpe", num(s.sharpe, 2), T("ra_rl_k_sharpe_sub", { bh: num(bh.sharpe, 2) }), isNum(s.sharpe) && s.sharpe > (bh.sharpe || 0) ? "ok" : "warning"));
-        grid.appendChild(PK.kpi(T("ra_eq_t_maxdd"), pct(s.max_drawdown, 1), T("ra_rl_k_dd_sub", { bh: pct(bh.max_drawdown, 1) }), "neutral"));
+        grid.appendChild(PK.kpi(T("ra_rl_k_share"), isNum(rd.agent_share) ? pct(rd.agent_share, 0) : "—", rd.engine >= 2 ? T("ra_rl_k_share_sub") : T("ra_rl_k_share_v1"), "neutral"));
+        grid.appendChild(PK.kpi(T("ra_rl_k_cost"), isNum(rd.cost_ann) ? pct(rd.cost_ann, 1) : "—", T("ra_rl_k_cost_sub", { t: isNum(rd.turnover) ? num(rd.turnover, 1) : "—" }), isNum(rd.cost_ann) && rd.cost_ann > 0.02 ? "warning" : "neutral"));
         var dsr = st.dsr || {};
         grid.appendChild(PK.kpi(T("ra_rl_k_dsr"), isNum(dsr.dsr) ? pct(dsr.dsr, 0) : "—", T("ra_rl_k_dsr_sub", { n: st.n_trials || "—", psr: isNum(st.psr) ? pct(st.psr, 0) : "—" }), isNum(dsr.p_value) && dsr.p_value < 0.1 ? "ok" : "warning"));
         var vb = st.vs_buy_hold || {};
         grid.appendChild(PK.kpi(T("ra_rl_k_vs_bh"), isNum(vb.diff) ? PK.signed(vb.diff, 2) : "—", isNum(vb.ci_low) ? T("ra_rl_k_vs_sub", { lo: PK.signed(vb.ci_low, 2), hi: PK.signed(vb.ci_high, 2), p: PK.pval(vb.p_one_sided) }) : T("ra_rl_k_vs_none"), isNum(vb.ci_low) && vb.ci_low > 0 ? "ok" : "warning"));
-        grid.appendChild(PK.kpi(T("ra_rl_k_folds"), int(d.n_folds), T("ra_rl_k_folds_sub", { s: (d.seeds || []).length }), "neutral"));
         m.appendChild(grid);
         (d.warnings || []).forEach(function (w) { m.appendChild(h("p", { class: "banner banner-warning", role: "status", text: w })); });
         if (d.run && d.run.error) m.appendChild(h("p", { class: "banner banner-error", role: "alert", text: d.run.error }));
-        var rows = [perfRow(T("ra_rl_agent"), s), perfRow(T("ra_rl_bh"), bh), perfRow(T("ra_rl_mom"), (d.baselines || {}).momentum), perfRow(T("ra_rl_flat"), (d.baselines || {}).flat)].filter(Boolean);
+        var base = d.baselines || {}, raw = isNum(rd.agent_share) && rd.agent_share < 1 ? d.agent_ungated : null;
+        var rows = [perfRow(T("ra_rl_agent"), s), perfRow(T("ra_rl_agent_raw"), raw), perfRow(T("ra_rl_bh"), bh),
+            base.trend ? perfRow(T("ra_rl_trend"), base.trend) : perfRow(T("ra_rl_mom"), base.momentum), perfRow(T("ra_rl_flat"), base.flat)].filter(Boolean);
         m.appendChild(titled(T("ra_rl_perf"), PK.table(PERF_HEAD.map(function (k) { return k.indexOf("ra_") === 0 ? T(k) : k; }), rows, { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }), T("ra_rl_perf_hint")));
+        if (isNum(s.gross_return_ann)) {
+            m.appendChild(titled(T("ra_rl_dec"), h("div", { class: "ra-chips" }, [PK.chip(T("ra_rl_dec_gross", { v: PK.spct(s.gross_return_ann, 1) })), PK.chip(T("ra_rl_dec_cost", { v: pct(s.cost_ann, 1) })),
+                PK.chip(T("ra_rl_dec_long", { v: PK.spct(s.long_contrib_ann, 1) })), PK.chip(T("ra_rl_dec_short", { v: PK.spct(s.short_contrib_ann, 1) })),
+                PK.chip(T("ra_rl_dec_bh", { v: PK.spct(bh.cagr, 1) }))]), T("ra_rl_dec_hint")));
+        }
         var r = d.run || {}, ident = [[T("ra_id_target"), PK.inst(r.target)], [T("ra_id_algo"), r.algo], [T("ra_id_period"), (d.period || []).join(" → ")], [T("ra_rl_rows"), int(d.n_rows)], [T("ra_rl_pool"), int(d.n_pool)],
             [T("ra_rl_elapsed"), isNum(d.elapsed_s) ? num(d.elapsed_s / 60, 1) + " min" : "—"], [T("ra_rl_started"), r.started_at]];
         var settings = d.settings || {};
@@ -57,12 +77,20 @@
                 var a = P.X(PK.dateMs(f.train_start)), b = P.X(PK.dateMs(f.train_end));
                 PK.hoverTip(P.add(PK.s("rect", { x: a, y: top, width: Math.max(1, b - a), height: hh, fill: "var(--line-strong)", "fill-opacity": 0.45, rx: 2 })), function () { return [T("ra_pr_train"), f.train_start + " → " + f.train_end, T("ra_pr_ntrain", { n: int(f.n_train), eff: int(f.n_train) })]; });
             }
+            if (f.val_start && f.train_end) {
+                var va = P.X(PK.dateMs(f.val_start)), vb = P.X(PK.dateMs(f.train_end));
+                PK.hoverTip(P.add(PK.s("rect", { x: va, y: top, width: Math.max(1, vb - va), height: hh, fill: "var(--info)", "fill-opacity": 0.45, rx: 2 })),
+                    function () { return [T("ra_rl_f_val"), f.val_start + " → " + f.train_end, T("ra_rl_f_val_t", { v: isNum(f.val_score) ? PK.spct(f.val_score, 1) : "—" })]; });
+            }
             var x0 = P.X(PK.dateMs(f.test_start)), x1 = P.X(PK.dateMs(f.test_end)), good = f.strategy && f.buy_hold && isNum(f.strategy.sharpe) && f.strategy.sharpe > f.buy_hold.sharpe;
-            PK.hoverTip(P.add(PK.s("rect", { x: x0, y: top, width: Math.max(2, x1 - x0), height: hh, fill: good ? "var(--pos)" : "var(--neg)", "fill-opacity": 0.8, rx: 2 })),
-                function () { return [T("ra_pr_fold", { n: f.fold }), f.test_start + " → " + f.test_end, T("ra_rl_f_t", { s: num((f.strategy || {}).sharpe, 2), b: num((f.buy_hold || {}).sharpe, 2) })]; });
+            var fill = f.gated ? "var(--text-3)" : (good ? "var(--pos)" : "var(--neg)");
+            PK.hoverTip(P.add(PK.s("rect", { x: x0, y: top, width: Math.max(2, x1 - x0), height: hh, fill: fill, "fill-opacity": 0.8, rx: 2 })),
+                function () { return [T("ra_pr_fold", { n: f.fold }), f.test_start + " → " + f.test_end, T("ra_rl_f_t", { s: num((f.strategy || {}).sharpe, 2), b: num((f.buy_hold || {}).sharpe, 2) })].concat(f.gated ? [T("ra_rl_f_t_gated")] : []); });
         });
         m.appendChild(P.node);
-        m.appendChild(PK.legend([{ color: "var(--line-strong)", label: T("ra_pr_train") }, { color: "var(--pos)", label: T("ra_rl_f_lg_win") }, { color: "var(--neg)", label: T("ra_rl_f_lg_lose") }]));
+        var hasGate = fs.some(function (f) { return f.gated !== null && f.gated !== undefined; });
+        m.appendChild(PK.legend([{ color: "var(--line-strong)", label: T("ra_pr_train") }].concat(hasGate ? [{ color: "var(--info)", label: T("ra_rl_f_val") }] : [])
+            .concat([{ color: "var(--pos)", label: T("ra_rl_f_lg_win") }, { color: "var(--neg)", label: T("ra_rl_f_lg_lose") }]).concat(hasGate ? [{ color: "var(--text-3)", label: T("ra_rl_f_lg_held") }] : [])));
         var X = fs.map(function (f) { return f.fold; }), ag = fs.map(function (f) { return (f.strategy || {}).sharpe; }), bhv = fs.map(function (f) { return (f.buy_hold || {}).sharpe; });
         var yr = PK.extent([ag, bhv, [0]], 0.12);
         var B = PK.plot({ w: 780, h: 240, x: { type: "linear", domain: [Math.min.apply(null, X) - 0.7, Math.max.apply(null, X) + 0.7], ticks: X, fmt: function (v) { return T("ra_pr_fold", { n: v }); } }, y: { domain: yr, fmt: function (v) { return num(v, 1); } }, title: T("ra_rl_f_bars") });
@@ -71,13 +99,19 @@
         PK.bars(B, X.map(function (x) { return x + 0.18; }), bhv, { color: "var(--text-3)", width: w, title: function (i) { return T("ra_rl_bh") + " " + num(bhv[i], 2); } });
         m.appendChild(titled(T("ra_rl_f_bars"), B.node, T("ra_rl_f_bars_hint", { w: d.wins_vs_buy_hold, n: d.n })));
         m.appendChild(PK.legend([{ color: "var(--brand)", label: T("ra_rl_agent") }, { color: "var(--text-3)", label: T("ra_rl_bh") }]));
-        m.appendChild(PK.table([T("ra_pr_h_fold"), T("ra_pr_h_test"), T("ra_pr_h_ntrain"), T("ra_rl_n_test"), T("ra_rl_agent") + " · " + T("ra_eq_t_total"), T("ra_rl_agent") + " Sharpe", T("ra_eq_t_maxdd"), T("ra_rl_bh") + " · " + T("ra_eq_t_total"), T("ra_rl_bh") + " Sharpe", T("ra_rl_nfeat_fold")],
-            fs.map(function (f) { var s = f.strategy || {}, b = f.buy_hold || {}; return [f.fold, f.test_start + " → " + f.test_end, int(f.n_train), int(f.n_test), PK.spct(s.total_return, 1), num(s.sharpe, 2), pct(s.max_drawdown, 1), PK.spct(b.total_return, 1), num(b.sharpe, 2), f.n_features]; }), { num: [0, 2, 3, 4, 5, 6, 7, 8, 9] }));
+        var head = [T("ra_pr_h_fold"), T("ra_pr_h_test"), T("ra_pr_h_ntrain"), T("ra_rl_n_test"), T("ra_rl_agent") + " · " + T("ra_eq_t_total"), T("ra_rl_agent") + " Sharpe", T("ra_eq_t_maxdd"), T("ra_rl_bh") + " · " + T("ra_eq_t_total"), T("ra_rl_bh") + " Sharpe", T("ra_rl_nfeat_fold")];
+        if (hasGate) head = head.concat([T("ra_rl_val"), T("ra_rl_held_by")]);
+        m.appendChild(PK.table(head,
+            fs.map(function (f) {
+                var s = f.strategy || {}, b = f.buy_hold || {}, row = [f.fold, f.test_start + " → " + f.test_end, int(f.n_train), int(f.n_test), PK.spct(s.total_return, 1), num(s.sharpe, 2), pct(s.max_drawdown, 1), PK.spct(b.total_return, 1), num(b.sharpe, 2), f.n_features];
+                return hasGate ? row.concat([isNum(f.val_score) ? PK.spct(f.val_score, 1) : "—", f.gated ? T("ra_rl_held_bh") : T("ra_rl_held_agent")]) : row;
+            }), { num: [0, 2, 3, 4, 5, 6, 7, 8, 9, 10] }));
     };
 
     // ---------------------------------------------------------------- équité
     RA.render.equity = function (m, d) {
         var ms = d.dates.map(PK.dateMs), N = ms.length, lo = ms[0], hi = ms[N - 1], pad = (hi - lo) * 0.01, off = {}, logScale = true, host = h("div", {});
+        if (d.curves.trend) off.momentum = true;            // moteur 2 : la tendance 200 j remplace le momentum 20 j, trop facile à battre
         m.appendChild(PK.segmented([{ value: "log", label: T("ra_eq_log") }, { value: "lin", label: T("ra_eq_lin") }], "log", function (v) { logScale = v === "log"; draw(); }));
         (d.notes || []).forEach(function (n) { m.appendChild(PK.info(PK.noteText(n))); });
         m.appendChild(host);
@@ -114,14 +148,16 @@
                 rsKeys.forEach(function (k) { PK.line(rs, ms, d.rolling_sharpe[k], { color: SERIES.filter(function (s) { return s[0] === k; })[0][2], width: 1.3 }); });
                 host.appendChild(titled(T("ra_eq_rs"), rs.node, T("ra_eq_rs_hint")));
             }
-            var ps = PK.plot({ w: 780, h: 150, x: { type: "time", domain: [lo - pad, hi + pad] }, y: { domain: [-1.15, 1.15], ticks: [-1, 0, 1], fmt: function (v) { return num(v, 0); } }, title: T("ra_rl_pos") });
+            var minPos = Math.min.apply(null, d.position.concat([0])), maxPos = Math.max.apply(null, d.position.concat([1]));
+            var ps = PK.plot({ w: 780, h: 150, x: { type: "time", domain: [lo - pad, hi + pad] }, y: { domain: [Math.min(minPos, 0) - 0.15, maxPos + 0.15], ticks: minPos < 0 ? [-1, 0, 1] : [0, 0.5, 1], fmt: function (v) { return num(v, minPos < 0 ? 0 : 1); } }, title: T("ra_rl_pos") });
             marks(ps);
             PK.line(ps, ms, d.position, { color: "var(--brand)", width: 1.2, step: true, area: true, areaOpacity: 0.15 });
             host.appendChild(titled(T("ra_rl_pos"), ps.node, T("ra_rl_pos_hint")));
             var rows = SERIES.filter(function (s) { return d.stats[s[0]]; }).map(function (s) { return perfRow(T(s[1]), d.stats[s[0]]); });
             host.appendChild(titled(T("ra_eq_stats"), PK.table(PERF_HEAD.map(function (k) { return k.indexOf("ra_") === 0 ? T(k) : k; }), rows, { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }), T("ra_rl_stats_hint")));
             var ex = d.exposure;
-            host.appendChild(h("div", { class: "ra-chips" }, [PK.chip(T("ra_rl_c_expo", { l: pct(ex.share_long, 0), s: pct(ex.share_short, 0), f: pct(ex.share_flat, 0) })), PK.chip(T("ra_rl_c_turn", { t: num(ex.turnover_per_year, 1), c: int(ex.n_changes) })),
+            host.appendChild(h("div", { class: "ra-chips" }, [isNum(d.agent_share) ? PK.chip(T("ra_rl_c_share", { p: pct(d.agent_share, 0) })) : null,
+                PK.chip(T("ra_rl_c_expo", { l: pct(ex.share_long, 0), s: pct(ex.share_short, 0), f: pct(ex.share_flat, 0) })), PK.chip(T("ra_rl_c_turn", { t: num(ex.turnover_per_year, 1), c: int(ex.n_changes) })),
                 ex.mean_holding ? PK.chip(T("ra_rl_c_hold", { d: num(ex.mean_holding, 1) })) : null, PK.chip(T("ra_rl_c_cost", { c: pct(ex.cost_total, 1) }))]));
             host.appendChild(titled(T("ra_rl_months"), monthHeat(d.months), T("ra_rl_months_hint")));
         }
@@ -154,7 +190,7 @@
     // ---------------------------------------------------------------- statistiques
     RA.render.stats = function (m, d) {
         var st = d.stats || {}, rows = [];
-        [["vs_buy_hold", "ra_rl_bh"], ["vs_momentum", "ra_rl_mom"]].forEach(function (p) {
+        [["vs_buy_hold", "ra_rl_bh"], ["vs_trend", "ra_rl_trend"], ["vs_momentum", "ra_rl_mom"]].forEach(function (p) {
             var s = st[p[0]];
             if (s) rows.push([T("ra_rl_s_vs", { b: T(p[1]) }), PK.signed(s.diff, 2), isNum(s.ci_low) ? "[" + PK.signed(s.ci_low, 2) + " ; " + PK.signed(s.ci_high, 2) + "]" : "—", PK.pval(s.p_one_sided), int(s.n), s.block]);
         });
@@ -164,6 +200,8 @@
         grid.appendChild(PK.kpi(T("ra_rl_k_dsr"), isNum(dsr.dsr) ? pct(dsr.dsr, 1) : "—", T("ra_rl_s_dsr_sub", { n: dsr.n_trials === undefined ? "—" : dsr.n_trials, b: isNum(dsr.benchmark_sr) ? num(dsr.benchmark_sr, 4) : "0" }), isNum(dsr.p_value) && dsr.p_value < 0.1 ? "ok" : "warning"));
         grid.appendChild(PK.kpi(T("ra_rl_s_sr"), isNum(dsr.sr_annualized) ? num(dsr.sr_annualized, 2) : "—", T("ra_rl_s_sr_sub", { n: int(dsr.n_obs) }), "neutral"));
         grid.appendChild(PK.kpi(T("ra_rl_s_moments"), isNum(dsr.kurtosis) ? num(dsr.kurtosis, 1) : "—", T("ra_rl_s_moments_sub", { s: num(dsr.skew, 2) }), "neutral"));
+        var dl = st.delay || (d.reading || {}).delay;      // moteur 1 : test rejoué sur le fichier hors échantillon
+        if (dl) grid.appendChild(PK.kpi(T("ra_rl_s_delay"), isNum(dl.lagged_sharpe) ? num(dl.lagged_sharpe, 2) : "—", T("ra_rl_s_delay_sub", { g: num(dl.gross_sharpe, 2) }), dl.suspect ? "error" : "neutral"));
         m.appendChild(grid);
         m.appendChild(PK.note(T("ra_rl_s_dsr_hint")));
         if ((d.seeds || []).length) {

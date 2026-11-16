@@ -255,19 +255,44 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
         "Neural networks (MLP, GRU, LSTM, CNN1D, Transformer). Same targets, same validation and same measures as machine learning: "
         "the runs are comparable with each other. A run mixing trees and networks is listed under machine learning."),
     "hist_fam_rl_hint": _s(
-        "Agent de reinforcement learning : il apprend à tenir une position (long, court ou à plat) par essais et récompenses. Évalué hors "
-        "échantillon en walk-forward contre acheter et garder, momentum et à plat. Pas d'AUC ni de F1 ici : le Sharpe (rendement par unité de "
-        "risque), le rendement total et la perte maximale. Le DSR (Sharpe déflaté) retire l'avantage d'avoir essayé plusieurs runs.",
-        "Reinforcement learning agent: it learns to hold a position (long, short or flat) by trial and reward. Evaluated out of sample in "
-        "walk-forward against buy and hold, momentum and flat. No AUC or F1 here: the Sharpe (return per unit of risk), the total return "
-        "and the maximum drawdown. The DSR (deflated Sharpe) removes the advantage of having tried several runs."),
-    "hist_scope_rl": _s("RUNS RL AU-DESSUS D'ACHETER ET GARDER", "RL RUNS ABOVE BUY AND HOLD"),
-    "hist_scope_rl_rel": _s("runs terminés affichés dont le Sharpe hors échantillon dépasse celui d'acheter et garder",
-                            "displayed finished runs whose out-of-sample Sharpe beats buy and hold"),
+        "Agent de reinforcement learning : il apprend à tenir une position par essais et récompenses, évalué hors échantillon en walk-forward. "
+        "À lire d'abord : la Lecture (bat-il acheter et garder, ou y a-t-il une alerte ?), la croissance par an au-delà d'acheter et garder, "
+        "la part des dates où l'agent décidait (moteur 2 : un pli que la validation juge perdant tient acheter et garder) et les frais. "
+        "Le DSR (Sharpe déflaté) retire l'avantage d'avoir essayé plusieurs runs.",
+        "Reinforcement learning agent: it learns to hold a position by trial and reward, evaluated out of sample in walk-forward. Read first: "
+        "the Reading (does it beat buy and hold, or is there a warning?), the growth per year beyond buy and hold, the share of dates where the "
+        "agent decided (engine 2: a fold that validation judges losing holds buy and hold) and the fees. The DSR (deflated Sharpe) removes "
+        "the advantage of having tried several runs."),
+    "hist_scope_rl": _s("RUNS RL QUI BATTENT ACHETER ET GARDER", "RL RUNS THAT BEAT BUY AND HOLD"),
+    "hist_scope_rl_rel": _s("runs terminés affichés au Sharpe significativement au-dessus (5 %), sans fuite ni cible non négociable ; "
+                            "{n} sont au-dessus sans preuve", "displayed finished runs with a Sharpe significantly above (5 %), without leak "
+                            "or untradable target; {n} are above without proof"),
     "hist_no_match": _s("Aucun run ne correspond aux filtres.", "No run matches the filters."),
     "rlh_col_bh": _s("Sharpe B&H", "Sharpe B&H"),
     "rlh_col_bh_tip": _s("Sharpe d'acheter et garder (buy and hold) sur la même période hors échantillon",
                          "Sharpe of buy and hold over the same out-of-sample period"),
+    "rlh_p_gated": _s("{n} repliés", "{n} fell back"),
+    "rlh_g_reading": _s("Lecture", "Reading"),
+    "rlh_c_p_bh": _s("p contre acheter et garder", "p vs buy and hold"),
+    "rlh_c_sharpe_trend": _s("Sharpe tendance 200 j", "200-day trend Sharpe"),
+    "rlh_p_folds_gated": _s("Plis repliés sur acheter et garder", "Folds that fell back to buy and hold"),
+    "rlh_col_algo": _s("Algo", "Algo"),
+    "rlh_col_engine": _s("Moteur", "Engine"),
+    "rlh_col_engine_tip": _s("Moteur 1 : avant le 16/11 (vente à découvert, décision quotidienne, sans validation). Moteur 2 : ADR 0022.",
+                             "Engine 1: before 16/11 (short selling, daily decision, no validation). Engine 2: ADR 0022."),
+    "rlh_engine_n": _s("v{n}", "v{n}"),
+    "rlh_col_verdict": _s("Lecture", "Reading"),
+    "rlh_col_verdict_tip": _s("Verdict sur le run : bat acheter et garder (significatif), au-dessus sans preuve, en dessous, ou alerte (fuite, non négociable).",
+                              "Verdict on the run: beats buy and hold (significant), above without proof, below, or warning (leak, untradable)."),
+    "rlh_col_excess": _s("Vs B&H / an", "Vs B&H / yr"),
+    "rlh_col_excess_tip": _s("Croissance par an au-delà d'acheter et garder, frais compris : négatif = rester investi rapportait plus.",
+                             "Growth per year beyond buy and hold, fees included: negative = staying invested earned more."),
+    "rlh_col_share": _s("Part agent", "Agent share"),
+    "rlh_col_share_tip": _s("Part des dates hors échantillon où l'agent décidait ; le reste, la validation l'a remplacé par acheter et garder.",
+                            "Share of out-of-sample dates where the agent decided; for the rest, validation replaced it with buy and hold."),
+    "rlh_col_cost": _s("Frais / an", "Fees / yr"),
+    "rlh_col_cost_tip": _s("Frais de transaction payés par an, en % du capital (le moteur 1 en payait 4,6 % en médiane).",
+                           "Transaction fees paid per year, in % of capital (engine 1 paid 4.6 % in median)."),
     "rlh_col_oos_tip": _s("Mesure hors échantillon (walk-forward), nette de coûts", "Out-of-sample measure (walk-forward), net of costs"),
     "rlh_del_confirm_done": _s(
         "Supprimer ce run RL et ses fichiers de résultats ? Il restera compté dans le Sharpe déflaté des prochains runs sur cette cible.",

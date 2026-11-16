@@ -35,6 +35,13 @@ séances de l'ADR 0007 (fuite des barres datées du début de journée).
 9. **Compatibilité** : `RLSettings.engine_version` (2). Une configuration COMPLÈTE du moteur 1 (tous ses réglages, aucun du moteur 2 ; les
    463 configurations RL en base le sont) reçoit `RL_LEGACY_SETTINGS` pour les réglages absents : relancer un ancien run rejoue le moteur 1.
    Un dictionnaire partiel reçoit les défauts du moteur 2. Profil « Moteur 1 (comparaison) » pour comparer sur une même cible.
+10. **Lecture d'un run dans l'interface** (`rl/reading.py`, ajout du 16/11 au soir) : toutes les pages qui affichent un run RL
+    (Historique et son panneau, /rl, comparaison, page d'analyse, nuage de /analyses, journal du run) montrent les mêmes chiffres : un
+    verdict (fuite probable, non négociable, = acheter-garder, bat acheter-garder à 5 %, au-dessus sans preuve, sous acheter-garder), le
+    moteur, la croissance par an au-delà d'acheter-garder, la part de l'agent et les frais par an. Pour le moteur 1, ces chiffres sont
+    reconstitués (log(1 + CAGR) − log(1 + CAGR de BH), part 100 %, coûts × 252 / séances) et le test du décalage d'un jour est rejoué
+    sur `rl_oos.csv` quand le run battrait acheter-garder. Le rendement total et le momentum 20 j quittent les vues de tête (le momentum
+    reste pour un run du moteur 1, qui n'a pas la tendance 200 j).
 
 ## Conséquences
 
@@ -42,6 +49,9 @@ séances de l'ADR 0007 (fuite des barres datées du début de journée).
   (+0,32 en moyenne, t = 5,8), rotation 56 → 4, frais 3,9 → 0,3 %/an, croissance face à BH −9,4 → −1,3 %/an. Le repli seul : +0,07.
   Aucune cible négociable ne bat BH de façon significative : le moteur 2 cesse de détruire de la valeur, il n'en crée pas.
 - Les runs du moteur 1 ne sont ni réécrits ni supprimés ; ils restent comparables (Historique, comparaison) avec leurs réglages effectifs.
+- Sur les 458 runs RL terminés de la base au 16/11, la lecture en retient 6 qui battent acheter-garder sans alerte (11 avant le test du
+  décalage rejoué : ^STI, ^TWII, ^KS11, ^AXJO et ^N225 perdent 70 à 95 % de leur Sharpe brut quand les positions sont décalées d'un jour).
+  Les 6 restants sont tous du moteur 1 (deux actions en chute, CO.PA et WLN.PA, jouées à la baisse ; ALI=F, HRC=F, ^NSEI, SHY).
 - Le Sharpe d'un run du moteur 2 se lit avec `agent_share` : un run entièrement replié EST acheter-garder (message dans les avertissements).
   Le Sharpe déflaté compte toujours les runs terminés de la cible, moteurs confondus.
 - Un pli coûte autant qu'avant : l'environnement fait 5 barres par pas (calcul NumPy négligeable), les 10 validations sont des rejeux

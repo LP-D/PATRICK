@@ -2401,11 +2401,18 @@ a.visually-hidden[href="#main"]:focus {
 .history-table-cls th:nth-child(4) { width: 76px; }
 .history-table-cls th:nth-child(5) { width: 100px; }
 .history-table-cls th:nth-child(6), .history-table-cls th:nth-child(7), .history-table-cls th:nth-child(8) { width: 74px; }
-/* tableau RL : case, nom, cible, algorithme, statut, Sharpe, Sharpe B&H, écart, rendement, perte max, DSR, date, actions */
+/* tableau RL (ADR 0022) : 1 case, 2 nom, 3 cible, 4 algorithme, 5 moteur, 6 lecture (l'état tant que le run n'est pas terminé),
+   7 Sharpe, 8 Sharpe B&H, 9 écart, 10 vs B&H / an, 11 part de l'agent, 12 frais / an, 13 DSR, 14 date, 15 actions. On masque d'abord ce
+   qui se déduit d'ailleurs (DSR, date, algorithme, Sharpe B&H : l'écart le porte), jamais la lecture ni l'écart annuel. */
 .history-table-rl th:nth-child(3) { width: 84px; }
-.history-table-rl th:nth-child(4) { width: 66px; }
-.history-table-rl th:nth-child(5) { width: 90px; }
-.history-table-rl th:nth-child(n+6):nth-child(-n+11) { width: 72px; }
+.history-table-rl th:nth-child(4) { width: 54px; }
+.history-table-rl th:nth-child(5) { width: 70px; }
+.history-table-rl th { white-space: normal; vertical-align: bottom; line-height: 1.25; }   /* en-têtes sur deux lignes plutôt que tronqués */
+.history-table-rl th:nth-child(6) { width: 170px; }
+.history-table-rl th:nth-child(n+7):nth-child(-n+9) { width: 66px; }
+.history-table-rl th:nth-child(10) { width: 78px; }
+.history-table-rl th:nth-child(n+11):nth-child(-n+12) { width: 66px; }
+.history-table-rl th:nth-child(13) { width: 58px; }
 .history-section-title { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 8px; font-size: var(--fs-md); }
 .history-section:first-of-type .history-section-title { margin-top: 8px; }
 .history-empty { margin: 4px 0 8px; }
@@ -2418,7 +2425,7 @@ a.visually-hidden[href="#main"]:focus {
 .history-table .icon-btn.danger:hover { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); }
 .has-run-panel .history-table-cls th:nth-child(8), .has-run-panel .history-table-cls td:nth-child(8),
 .has-run-panel .history-table-cls th:nth-child(9), .has-run-panel .history-table-cls td:nth-child(9),
-.has-run-panel .history-table-rl th:nth-child(n+10):nth-child(-n+12), .has-run-panel .history-table-rl td:nth-child(n+10):nth-child(-n+12) { display: none; }
+.has-run-panel .history-table-rl :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(8), :nth-child(12), :nth-child(13), :nth-child(14)) { display: none; }
 
 .history-dialog { border: 1px solid var(--line-strong); border-radius: var(--radius-card); background: var(--surface); color: var(--text); padding: 20px; width: min(420px, 92vw); box-shadow: var(--shadow-xl); }
 .history-dialog::backdrop { background: var(--overlay); }
@@ -2457,14 +2464,17 @@ a.visually-hidden[href="#main"]:focus {
   .run-panel { width: 100%; }
   .has-run-panel .main-column { margin-right: 0; }
 }
+@media (max-width: 1480px) {
+  .history-table-rl :is(th, td):nth-child(14) { display: none; }     /* date de lancement : lue dans le panneau du run */
+}
 @media (max-width: 1180px) {
   .history-table-cls th:nth-child(9), .history-table-cls td:nth-child(9) { display: none; }
   .history-table-cls th:nth-child(3) { width: 78px; }
-  .history-table-rl th:nth-child(n+11):nth-child(-n+12), .history-table-rl td:nth-child(n+11):nth-child(-n+12) { display: none; }
+  .history-table-rl :is(th, td):is(:nth-child(13), :nth-child(14)) { display: none; }
 }
 @media (max-width: 960px) {
   .history-table-cls th:nth-child(8), .history-table-cls td:nth-child(8) { display: none; }
-  .history-table-rl th:nth-child(10), .history-table-rl td:nth-child(10) { display: none; }
+  .history-table-rl :is(th, td):is(:nth-child(4), :nth-child(8)) { display: none; }
 }
 
 /* ============ /predictions : une ligne par actif, une case par horizon ============ */

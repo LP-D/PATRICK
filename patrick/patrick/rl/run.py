@@ -19,6 +19,7 @@ from patrick.data.session_calendar import CURRENT_SESSION_RULE
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.rl import data as rl_data
+from patrick.rl import reading as rl_reading
 from patrick.rl import walkforward
 from patrick.rl.config import RLRunConfig
 
@@ -135,4 +136,5 @@ def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | N
     with open(os.path.join(out_dir, "rl_result.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, allow_nan=False)
     progress(f"[RL-SAVE] terminé en {payload['elapsed_s']:.0f} s")
+    progress(f"[RL-RESULT] {rl_reading.log_line(payload)}")
     return payload

@@ -563,6 +563,12 @@ ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ah_rl_x": _s("Sharpe d'acheter-garder", "Buy-and-hold Sharpe"),
     "ah_rl_y": _s("Sharpe de l'agent", "Agent Sharpe"),
     "ah_rl_t": _s("agent {s} · achat-garde {b} · Sharpe déflaté {d}", "agent {s} · buy-and-hold {b} · deflated Sharpe {d}"),
+    "ah_rl_count2": _s("Sans alerte : {a} runs sur {n} au-dessus de la diagonale, {b} significativement (5 %). {x} runs écartés (fuite probable, cible non négociable).",
+                       "Without warning: {a} runs out of {n} above the diagonal, {b} significantly (5 %). {x} runs set aside (probable leak, untradable target)."),
+    "ah_rl_t_excess": _s("vs acheter-garder : {e} par an", "vs buy-and-hold: {e} per year"),
+    "ah_rl_lg_v1": _s("Moteur 1 (rond)", "Engine 1 (circle)"),
+    "ah_rl_lg_v2": _s("Moteur 2 (carré)", "Engine 2 (square)"),
+    "ah_rl_lg_alert": _s("Alerte (cercle vide)", "Warning (hollow)"),
     "ah_rl_count": _s("{a} runs sur {n} font mieux qu'acheter-garder (au-dessus de la diagonale).", "{a} runs out of {n} beat buy-and-hold (above the diagonal)."),
     "ah_rl_hint": _s("Au-dessus de la diagonale : l'agent bat acheter-garder sur sa période hors échantillon. Le Sharpe déflaté corrige du nombre d'essais.", "Above the diagonal: the agent beats buy-and-hold over its out-of-sample period. The deflated Sharpe corrects for the number of trials."),
 }

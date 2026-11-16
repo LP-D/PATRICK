@@ -89,15 +89,30 @@
         var dom = PK.extent([xs, ys], 0.08);
         var P = PK.plot({ w: 560, h: 380, x: { type: "linear", domain: dom, fmt: function (v) { return num(v, 1); }, label: T("ah_rl_x") }, y: { domain: dom, fmt: function (v) { return num(v, 1); }, label: T("ah_rl_y") }, title: T("ah_s_rl") });
         P.add(PK.s("line", { x1: P.X(dom[0]), y1: P.Y(dom[0]), x2: P.X(dom[1]), y2: P.Y(dom[1]), stroke: "var(--text-3)", "stroke-dasharray": "4 4" }));
+        // Une alerte (fuite probable, cible non négociable) = cercle vide : le point ne se lit pas comme une stratégie. Moteur 2 = carré.
+        var ALERT = { leak: 1, untradable: 1 };
         pts.forEach(function (p) {
-            var c = PK.s("circle", { cx: P.X(p.sharpe_bh), cy: P.Y(p.sharpe), r: 3.6, fill: p.sharpe > p.sharpe_bh ? "var(--pos)" : "var(--neg)", "fill-opacity": 0.6 });
+            var color = p.sharpe > p.sharpe_bh ? "var(--pos)" : "var(--neg)", alert = ALERT[p.verdict], x = P.X(p.sharpe_bh), y = P.Y(p.sharpe);
+            var style = alert ? { fill: "none", stroke: "var(--text-3)", "stroke-width": 1.2 } : { fill: color, "fill-opacity": p.verdict === "beats" ? 0.95 : 0.55 };
+            var c = p.engine >= 2 ? PK.s("rect", Object.assign({ x: x - 3.4, y: y - 3.4, width: 6.8, height: 6.8 }, style)) : PK.s("circle", Object.assign({ cx: x, cy: y, r: 3.6 }, style));
             c.style.cursor = "pointer";
             c.addEventListener("click", function () { window.location.href = "/runs/" + encodeURIComponent(p.id) + "/analyse"; });
-            PK.hoverTip(P.add(c), function () { return [PK.inst(p.target) + " · " + p.algo, T("ah_rl_t", { s: num(p.sharpe, 2), b: num(p.sharpe_bh, 2), d: isNum(p.dsr) ? pct(p.dsr, 0) : "—" })]; });
+            PK.hoverTip(P.add(c), function () {
+                return [PK.inst(p.target) + " · " + p.algo + " · " + T("ra_rl_rd_engine", { n: p.engine || 1 }), T("ah_rl_t", { s: num(p.sharpe, 2), b: num(p.sharpe_bh, 2), d: isNum(p.dsr) ? pct(p.dsr, 0) : "—" })]
+                    .concat(isNum(p.excess) ? [T("ah_rl_t_excess", { e: PK.spct(p.excess, 1) })] : []).concat(p.verdict ? [T("ra_rl_rd_" + p.verdict)] : []);
+            });
         });
-        var above = pts.filter(function (p) { return p.sharpe > p.sharpe_bh; }).length;
+        var clean = pts.filter(function (p) { return !ALERT[p.verdict]; });
+        var above = clean.filter(function (p) { return p.sharpe > p.sharpe_bh; }).length, beats = clean.filter(function (p) { return p.verdict === "beats"; }).length;
         host.appendChild(P.node);
-        host.appendChild(PK.info(T("ah_rl_count", { a: above, n: pts.length })));
+        function shapeKey(kind, label) {
+            var svg = PK.s("svg", { width: 12, height: 12, viewBox: "0 0 12 12", "aria-hidden": "true" });
+            svg.appendChild(kind === "square" ? PK.s("rect", { x: 2, y: 2, width: 8, height: 8, fill: "var(--text-2)" })
+                : PK.s("circle", kind === "hollow" ? { cx: 6, cy: 6, r: 4, fill: "none", stroke: "var(--text-3)", "stroke-width": 1.2 } : { cx: 6, cy: 6, r: 4, fill: "var(--text-2)" }));
+            return h("span", { class: "ra-legend-item" }, [svg, label]);
+        }
+        host.appendChild(h("div", { class: "ra-legend" }, [shapeKey("circle", T("ah_rl_lg_v1")), shapeKey("square", T("ah_rl_lg_v2")), shapeKey("hollow", T("ah_rl_lg_alert"))]));
+        host.appendChild(PK.info(T("ah_rl_count2", { a: above, b: beats, n: clean.length, x: pts.length - clean.length })));
         host.appendChild(PK.note(T("ah_rl_hint")));
     }
 
