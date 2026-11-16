@@ -46,10 +46,12 @@
         var runs = data.runs;
         function hd(split, key) { return function (r) { var s = (r.headline || {})[split]; return s ? s[key] : null; }; }
         var table = [
+            // Panneau (ADR 0023) d'abord : AUC de direction, Brier, MCC, exactitude ; test puis holdout. Le meilleur de chaque ligne est marqué.
+            [T("pm_AUC_dir") + " · " + T("ra_split_test"), hd("test", "auc"), "max", function (v) { return num(v, 3); }], [T("pm_AUC_dir") + " · " + T("ra_split_holdout"), hd("holdout", "auc"), "max", function (v) { return num(v, 3); }],
+            [T("ra_m_brier") + " · " + T("ra_split_test"), hd("test", "brier"), "min", function (v) { return num(v, 4); }], [T("ra_m_brier") + " · " + T("ra_split_holdout"), hd("holdout", "brier"), "min", function (v) { return num(v, 4); }],
+            [T("ra_m_mcc") + " · " + T("ra_split_test"), hd("test", "mcc"), "max", function (v) { return num(v, 3); }], [T("ra_m_mcc") + " · " + T("ra_split_holdout"), hd("holdout", "mcc"), "max", function (v) { return num(v, 3); }],
             [T("ra_k_acc_test"), hd("test", "acc"), "max", function (v) { return pct(v, 1); }], [T("ra_k_acc_holdout"), hd("holdout", "acc"), "max", function (v) { return pct(v, 1); }],
-            [T("ra_m_f1dir") + " · " + T("ra_split_test"), hd("test", "f1_dir"), "max", function (v) { return num(v, 3); }], [T("ra_m_f1dir") + " · " + T("ra_split_holdout"), hd("holdout", "f1_dir"), "max", function (v) { return num(v, 3); }],
-            [T("ra_m_auc") + " · " + T("ra_split_test"), hd("test", "auc"), "max", function (v) { return num(v, 3); }], [T("ra_m_balacc") + " · " + T("ra_split_test"), hd("test", "bal_acc"), "max", function (v) { return num(v, 3); }],
-            [T("ra_m_mcc") + " · " + T("ra_split_test"), hd("test", "mcc"), "max", function (v) { return num(v, 3); }], [T("ra_m_brier") + " · " + T("ra_split_test"), hd("test", "brier"), "min", function (v) { return num(v, 4); }],
+            [T("ra_m_balacc") + " · " + T("ra_split_test"), hd("test", "bal_acc"), "max", function (v) { return num(v, 3); }],
             [T("ra_m_n") + " · " + T("ra_split_test"), hd("test", "n"), null, int], [T("ra_m_predup") + " · " + T("ra_split_test"), hd("test", "share_pred_up"), null, function (v) { return pct(v, 0); }],
             [T("ac_eq_total"), function (r) { return r.equity ? r.equity.stats.total : null; }, "max", function (v) { return PK.spct(v, 1); }], [T("ac_eq_sharpe"), function (r) { return r.equity ? r.equity.stats.sharpe : null; }, "max", function (v) { return num(v, 2); }],
             [T("ac_eq_dd"), function (r) { return r.equity ? r.equity.stats.max_dd : null; }, "max", function (v) { return pct(v, 1); }],

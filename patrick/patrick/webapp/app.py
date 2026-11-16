@@ -53,7 +53,7 @@ from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import portfolio as trackportfolio
 from patrick.tracking import trial_budget as trialbudget
 from patrick.tracking import usage as trackusage
-from patrick.validation import equity_sufficiency, feasibility, suspicion
+from patrick.validation import equity_sufficiency, feasibility, metric_panel, suspicion
 from patrick.validation.placebo import placebo_verdict
 from patrick.webapp import (
     alerts,
@@ -200,6 +200,12 @@ templates.env.globals["nav_icon"] = icons.nav_icon
 templates.env.globals["descriptive_horizons"] = D.DESCRIPTIVE_HORIZONS
 # Bandeau « disque de données introuvable » (base_v2.html, sur toutes les pages) : relu à chaque affichage.
 templates.env.globals["data_root_missing"] = paths.data_root_missing
+# Panneau de métriques d'un modèle (ADR 0023) : AUC de direction · Brier · MCC · bonne direction, partout et dans cet ordre.
+templates.env.globals["PANEL_KEYS"] = metric_panel.PANEL_KEYS
+templates.env.globals["panel_cells"] = metric_panel.cells
+templates.env.globals["panel_heads"] = metric_panel.heads
+templates.env.globals["panel_best"] = metric_panel.best_of
+templates.env.filters["pmfmt"] = lambda value, key: metric_panel.fmt(key, value)
 
 
 def _horizon_label(h) -> str:
@@ -336,14 +342,15 @@ _METRIC_LABEL_KEYS = (
     "split_test", "split_test_path", "split_holdout", "split_valid", "fold", "folds_word", "mean", "test", "holdout",
     "more", "less",
 )
-_METRIC_NAMES = ("AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir", "BalAcc_4cls", "MCC_4cls", "F1_DOWN_FORT", "F1_UP_FORT",
-                 "Brier_up", "ECE_up")
+_METRIC_NAMES = ("AUC_dir", "Brier_up", "MCC_4cls", "Acc_dir_p", "F1_dir_p", "AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir",
+                 "BalAcc_4cls", "F1_DOWN_FORT", "F1_UP_FORT", "ECE_up")
 
 
 def _metric_labels(t) -> dict:
     """Traductions passées aux macros `fold_metrics_table` / `headline_metrics` (un macro importé ne voit pas `t()`)."""
     out = {k: t(f"m_{k}") if k not in ("more", "less") else t(f"rows_{k}") for k in _METRIC_LABEL_KEYS}
     out.update({f"metric_{m}": t(f"metric_{m}") for m in _METRIC_NAMES})
+    out.update({f"pm_{m}": t(f"pm_{m}") for m in metric_panel.PANEL_KEYS})
     return out
 
 

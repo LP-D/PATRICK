@@ -11,8 +11,8 @@
 
 <div class="metric-grid">
 {{ metric(t('an_kpi_models'), a.n_sane, t('an_kpi_models_rel', champions=a.n_champions, suspect=a.n_suspect), "ok") }}
-{{ metric(t('an_kpi_auc'), f3(a.auc_median), t('an_kpi_auc_rel'), "neutral") }}
-{{ metric(t('an_kpi_f1'), f3(a.f1_median), t('an_kpi_f1_rel'), "neutral") }}
+{{ metric(t('an_kpi_auc'), a.panel_median.AUC_dir | pmfmt('AUC_dir'), t('an_kpi_auc_rel'), "neutral") }}
+{{ metric(t('an_kpi_brier'), a.panel_median.Brier_up | pmfmt('Brier_up'), t('an_kpi_brier_rel', m=a.panel_median.MCC_4cls | pmfmt('MCC_4cls'), a=a.panel_median.Acc_dir_p | pmfmt('Acc_dir_p')), "neutral") }}
 {{ metric(t('an_kpi_features'), a.n_features_distinct, t('an_kpi_features_rel', n=a.n_with_features), "neutral") }}
 {{ metric(t('an_kpi_series'), a.series | length, t('an_kpi_series_rel', unused=a.unused_series | length), "neutral") }}
 </div>
@@ -40,9 +40,9 @@
 {% set body = [] %}
 {% for r in rows %}
 {% set label = (t('kind_alpha') if r.key == 'alpha' else (t('kind_directional') if r.key in ('directional', 'raw') else (r.key ~ ' j' if title == t('an_by_horizon') else r.key))) %}
-{% set _ = body.append([label, r.n, f3(r.auc), f3(r.f1), f3(r.best_f1), r.champions]) %}
+{% set _ = body.append([label, r.n] + panel_cells(r.panel) + [r.champions]) %}
 {% endfor %}
-{{ data_table([keytitle, t('an_col_n_models'), 'AUC', 'F1', t('an_col_best_f1'), t('an_col_champ')], body, num_cols=[1, 2, 3, 4, 5], collapse_after=5, more_label=more, less_label=less) }}
+{{ data_table([keytitle, t('an_col_n_models')] + panel_heads(m_labels) + [t('an_col_champ')], body, num_cols=[1, 2, 3, 4, 5, 6], collapse_after=5, more_label=more, less_label=less) }}
 </div>
 {% endfor %}
 </div>
@@ -56,7 +56,7 @@
 {% for f in a.features[:30] %}
 {% set _ = top.append(['<span class="pk-mono">' ~ (f.feature | e) ~ '</span>', t('an_fam_' ~ f.family), (f.series | join(', ') | e), f.n_models, f.n_targets,
     ('%.0f' | format(f.mean_freq * 100) ~ ' %') if f.mean_freq is not none else '—',
-    ((f3(f.best_auc) ~ ' / ' ~ f3(f.best_f1)) if f.best_f1 is not none else '—')]) %}
+    ((f.best_panel.AUC_dir | pmfmt('AUC_dir')) ~ ' · ' ~ (f.best_panel.Brier_up | pmfmt('Brier_up'))) if f.best_panel else '—']) %}
 {% endfor %}
 {{ data_table([t('an_col_feature'), t('an_col_family'), t('an_col_series'), t('an_col_n_models'), t('an_col_targets'), t('an_col_freq'), t('an_col_best')],
               top, num_cols=[3, 4, 5], collapse_after=5, more_label=more, less_label=less,
@@ -66,7 +66,7 @@
 {% for f in a.least_used %}
 {% set _ = low.append(['<span class="pk-mono">' ~ (f.feature | e) ~ '</span>', t('an_fam_' ~ f.family), (f.series | join(', ') | e), f.n_models, f.n_targets,
     ('%.0f' | format(f.mean_freq * 100) ~ ' %') if f.mean_freq is not none else '—',
-    ((f3(f.best_auc) ~ ' / ' ~ f3(f.best_f1)) if f.best_f1 is not none else '—')]) %}
+    ((f.best_panel.AUC_dir | pmfmt('AUC_dir')) ~ ' · ' ~ (f.best_panel.Brier_up | pmfmt('Brier_up'))) if f.best_panel else '—']) %}
 {% endfor %}
 {{ data_table([t('an_col_feature'), t('an_col_family'), t('an_col_series'), t('an_col_n_models'), t('an_col_targets'), t('an_col_freq'), t('an_col_best')],
               low, num_cols=[3, 4, 5], collapse_after=5, more_label=more, less_label=less,
@@ -78,9 +78,9 @@
 <p class="hint">{{ t('an_series_hint') }}</p>
 {% set srows = [] %}
 {% for s in a.series[:40] %}
-{% set _ = srows.append(['<span title="' ~ s.series ~ '">' ~ (s.series | iname_h) ~ '</span>', s.n_models, s.n_features, s.n_targets, f3(s.best_f1)]) %}
+{% set _ = srows.append(['<span title="' ~ s.series ~ '">' ~ (s.series | iname_h) ~ '</span>', s.n_models, s.n_features, s.n_targets, ((s.best_panel.AUC_dir | pmfmt('AUC_dir')) ~ ' · ' ~ (s.best_panel.Brier_up | pmfmt('Brier_up'))) if s.best_panel else '—']) %}
 {% endfor %}
-{{ data_table([t('dq_col_series'), t('an_col_n_models'), t('an_col_n_features'), t('an_col_targets'), t('an_col_best_f1')], srows,
+{{ data_table([t('dq_col_series'), t('an_col_n_models'), t('an_col_n_features'), t('an_col_targets'), t('an_col_best')], srows,
               num_cols=[1, 2, 3, 4], collapse_after=5, more_label=more, less_label=less) }}
 <h3>{{ t('an_unused') }} <span class="hint">({{ a.unused_series | length }})</span></h3>
 <p class="hint">{{ t('an_unused_hint') }}</p>
@@ -108,9 +108,9 @@
 {% for m in a.models %}
 {% set _ = mrows.append(['<a href="/runs/' ~ m.run_id ~ '/detail">' ~ m.run_id ~ '</a>',
     ('<span class="kind-badge kind-' ~ ('alpha' if m.kind == 'alpha' else 'directional') ~ '">' ~ (t('kind_alpha') if m.kind == 'alpha' else t('kind_directional')) ~ '</span>'),
-    ('<span title="' ~ m.asset ~ '">' ~ (m.asset | iname_h) ~ '</span>'), m.horizon ~ ' j', m.algo, m.n_features, f3(m.auc), f3(m.f1), ('★' if m.champion else '')]) %}
+    ('<span title="' ~ m.asset ~ '">' ~ (m.asset | iname_h) ~ '</span>'), m.horizon ~ ' j', m.algo, m.n_features] + panel_cells(m.panel) + [('★' if m.champion else '')]) %}
 {% endfor %}
-{{ data_table([t('dq_col_run'), t('kind_col'), t('dq_col_target'), t('dq_col_horizon'), t('an_col_algo'), t('an_col_n'), 'AUC', 'F1', t('an_col_champ')], mrows,
-              num_cols=[5, 6, 7], collapse_after=5, more_label=more, less_label=less) }}
+{{ data_table([t('dq_col_run'), t('kind_col'), t('dq_col_target'), t('dq_col_horizon'), t('an_col_algo'), t('an_col_n')] + panel_heads(m_labels) + [t('an_col_champ')], mrows,
+              num_cols=[5, 6, 7, 8, 9], collapse_after=5, more_label=more, less_label=less) }}
 </section>
 {% endblock %}

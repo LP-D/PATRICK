@@ -1,7 +1,7 @@
 {# Fragment des pages de classes d'actifs (`/fragments/asset-class/{classe}`, chargé par lazy.js) : compteurs, recherche, filtres et un tableau par
    groupe. `kpi`, `groups`, `cls`, `min_years` = `tracking/class_overview.class_page`. Un repère de signal par horizon est ajouté aux lignes par
    asset_class.js (`/api/class-signals/{classe}`). #}
-{% from "_components.html" import status_badge, metric %}
+{% from "_components.html" import status_badge, metric, panel_th, panel_td %}
 <div class="metric-grid">
 {{ metric(t('cls_kpi_targets'), kpi.n_targets, t('cls_kpi_groups', n=groups | length), "neutral") }}
 {{ metric(t('cls_kpi_trained'), kpi.n_trained ~ ' / ' ~ kpi.n_targets, t('cls_kpi_trained_rel'), "ok" if kpi.n_trained else "neutral") }}
@@ -31,7 +31,7 @@
     <table class="data-table cls-table">
         <thead><tr>
             <th>{{ t('dq_col_target') }}</th><th>{{ t('cls_col_history') }}</th>
-            <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th><th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
+            {{ panel_th(m_labels, 'headline') }}
             <th class="num">{{ t('kind_directional') }}</th><th class="num">{{ t('kind_alpha') }}</th>
             <th>{{ t('cls_col_champion') }}</th><th title="{{ t('cls_signals_hint') }}">{{ t('cls_col_signals') }}</th><th>{{ t('cls_col_last') }}</th><th></th>
         </tr></thead>
@@ -39,13 +39,12 @@
         {% for r in g.rows %}
         <tr class="cls-row" data-symbol="{{ r.symbol }}" data-search="{{ (r.symbol ~ ' ' ~ (r.symbol | iname)) | lower }}"
             data-trained="{{ 1 if r.n_dir else 0 }}" data-alpha="{{ 1 if r.n_alpha else 0 }}" data-short="{{ 1 if r.history == 'short' else 0 }}">
-            <td><a href="/targets/{{ r.symbol }}" title="{{ r.symbol }}">{{ r.symbol | iname }}</a>{% if r.suspects %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason='F1 ≥ 0,80') }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
+            <td><a href="/targets/{{ r.symbol }}" title="{{ r.symbol }}">{{ r.symbol | iname }}</a>{% if r.suspects %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=t('suspect_reason_generic')) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
             <td>{% if r.first %}<span class="pk-mono">{{ r.first }}</span> <span class="hint">· {{ r.years }} {{ t('cls_years') }}</span>
                 {% if r.history == 'short' %}{{ status_badge(t('dq_status_short'), 'warning') }}{% endif %}{% else %}—{% endif %}</td>
-            <td class="num pk-mono headline">{{ '%.3f' | format(r.auc) if r.auc is not none else '—' }}</td>
-            <td class="num pk-mono headline">{{ '%.3f' | format(r.f1) if r.f1 is not none else '—' }}</td>
+            {{ panel_td(r.panel, 'headline') }}
             <td class="num pk-mono">{{ r.n_dir if r.n_dir else '—' }}{% if r.n_dir_running %} <span class="hint" title="{{ t('cls_running') }}">+{{ r.n_dir_running }}</span>{% endif %}</td>
-            <td class="num pk-mono">{% if r.n_alpha %}{{ r.n_alpha }}{% if r.alpha_auc is not none %} <span class="hint">· {{ '%.3f' | format(r.alpha_auc) }}</span>{% endif %}{% else %}—{% endif %}</td>
+            <td class="num pk-mono">{% if r.n_alpha %}{{ r.n_alpha }}{% if r.alpha_panel and r.alpha_panel.AUC_dir is not none %} <span class="hint" title="{{ m_labels.metric_AUC_dir }}">· {{ r.alpha_panel.AUC_dir | pmfmt('AUC_dir') }}</span>{% endif %}{% else %}—{% endif %}</td>
             <td class="pk-mono">{% if r.champions %}{% for h in r.champions %}{{ h }}{{ t('day_suffix') }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
             <td class="cls-signals" data-symbol="{{ r.symbol }}"></td>
             <td class="hint">{{ r.last[:10] if r.last else t('cls_never') }}</td>

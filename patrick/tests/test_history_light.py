@@ -43,7 +43,7 @@ def _run(conn, run_id: str, name: str = "", algos=("RandomForest",), target: str
     for algo, folds in trials:
         trial_id = db.create_trial(conn, run_id, "GLOBAL", algo, "SMOTE", 8, "shap")
         for index, f1 in enumerate(folds, start=1):
-            db.add_fold_metrics(conn, trial_id, index, "test", {"F1_dir": f1, "AUC_ovr_4cls": 0.5 + f1 / 10})
+            db.add_fold_metrics(conn, trial_id, index, "test", {"F1_dir": f1, "AUC_ovr_4cls": 0.5 + f1 / 10, "MCC_4cls": f1 / 10})
     if status != "running":
         db.finish_run(conn, run_id, status=status, error=error)
 
@@ -157,7 +157,7 @@ def test_the_history_shows_a_stopped_run_with_its_scores_and_the_partial_tag(cli
     page = client.get("/runs?family=ml").text
     row = re.search(r'<tr class="history-row" data-run-id="r_stop".*?</tr>', page, re.DOTALL).group(0)
     assert "stopped" in row and "failed" not in row
-    assert ">0.620<" in row and "tag-partial" in row                  # F1 moyen des plis du meilleur essai déjà évalué
+    assert ">0.062<" in row and "tag-partial" in row                  # MCC moyen des plis du meilleur essai déjà évalué (panneau)
     only_stopped = client.get("/runs?family=ml&status=stopped").text
     only_failed = client.get("/runs?family=ml&status=failed&vides=1").text
     assert "r_stop" in _rows(only_stopped) and "r_stop" not in _rows(only_failed)
@@ -178,7 +178,7 @@ def test_stopped_runs_can_be_compared_and_deleted(client):
     _run(conn, "r_s2", "deux", status="failed", error=db.USER_STOPPED_ERROR, trials=[("RandomForest", [0.7])])
     conn.close()
     compare = client.get("/compare-runs?run_ids=r_s1&run_ids=r_s2")
-    assert compare.status_code == 200 and "stopped" in compare.text and "0.7000" in compare.text
+    assert compare.status_code == 200 and "stopped" in compare.text and ">0.070<" in compare.text
     assert client.post("/runs/r_s1/delete").status_code == 200
     assert client.get("/runs/r_s1/panel").status_code == 404
 

@@ -174,7 +174,7 @@ def test_text_report_lists_the_three_views(conn, staged):
 
     for heading in ("Par algorithme", "Par nombre de variables", "Classement", "Par horizon"):
         assert heading in text
-    assert "0.550" in text          # A's mean F1_dir
+    assert "0.055" in text          # A's mean MCC_4cls (panel column)
     assert "premier fold" in text   # the comparison window is stated
 
 

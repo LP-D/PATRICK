@@ -17,12 +17,20 @@ The best candidate's walk-forward score over ITS complete period (all the
 
 The grid is the untuned `global` scan: Optuna re-evaluations (params_json
 other than '{}') and the other model categories are not candidates.
+
+Every table reads the metric panel (ADR 0023: AUC_dir, Brier_up, MCC_4cls,
+Acc_dir_p) and is ranked like the champion duel: AUC_dir first, Brier_up as
+tie-break; MCC_4cls for a launch recorded before AUC_dir existed. F1 is kept
+in the rows (older reports, the per-horizon pick of a run selected by F1) but
+no longer ranks nor shows.
 """
 from __future__ import annotations
 
 import sqlite3
 
-METRICS = ("F1_dir", "Acc_dir", "MCC_4cls", "BalAcc_4cls", "AUC_dir")
+from patrick.validation import metric_panel
+
+METRICS = (*metric_panel.PANEL_KEYS, "F1_dir", "Acc_dir", "BalAcc_4cls")
 _CHUNK = 400
 _TOP_RANKING_IN_TEXT = 10
 
@@ -81,9 +89,16 @@ def _score(folds: dict[int, dict], which) -> dict[str, float | None]:
     return {m: _mean(folds[f].get(m) for f in which) for m in METRICS}
 
 
+def _rank_key(row: dict, by_auc: bool) -> tuple:
+    if by_auc:
+        return metric_panel.rank_key(row)
+    mcc = row.get("MCC_4cls")
+    return (mcc is None, -(mcc or 0.0))
+
+
 def _ranked(rows: list[dict]) -> list[dict]:
-    rows.sort(key=lambda r: (r["F1_dir"] is None, -(r["F1_dir"] or 0.0)) + tuple(
-        str(r.get(k, "")) for k in ("algo", "n_features", "sampler")))
+    by_auc = any(r.get("AUC_dir") is not None for r in rows)
+    rows.sort(key=lambda r: _rank_key(r, by_auc) + tuple(str(r.get(k, "")) for k in ("algo", "n_features", "sampler")))
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
@@ -109,12 +124,15 @@ def _final_model(conn: sqlite3.Connection, run_id: str) -> dict:
         "SELECT trial_id, algo, n_features FROM trial WHERE run_id = ? AND is_best = 1 "
         "ORDER BY trial_id DESC LIMIT 1", (run_id,)).fetchone()
     if row is None:
-        return {"final_algo": None, "final_n_features": None, "holdout_F1_dir": None, "holdout_Acc_dir": None}
+        return {"final_algo": None, "final_n_features": None, "holdout_F1_dir": None, "holdout_Acc_dir": None,
+                "holdout_panel": metric_panel.panel(None)}
+    marks = ",".join("?" * len(METRICS))
     holdout = dict(conn.execute(
         "SELECT metric, AVG(value) FROM fold_metric WHERE trial_id = ? AND split = 'holdout' "
-        "AND metric IN ('F1_dir', 'Acc_dir') GROUP BY metric", (row[0],)).fetchall())
+        f"AND metric IN ({marks}) GROUP BY metric", (row[0], *METRICS)).fetchall())
     return {"final_algo": row[1], "final_n_features": row[2],
-            "holdout_F1_dir": holdout.get("F1_dir"), "holdout_Acc_dir": holdout.get("Acc_dir")}
+            "holdout_F1_dir": holdout.get("F1_dir"), "holdout_Acc_dir": holdout.get("Acc_dir"),
+            "holdout_panel": metric_panel.panel(holdout)}
 
 
 def _holdout_diagnostic(conn: sqlite3.Connection, trial_id: int) -> dict:
@@ -122,10 +140,11 @@ def _holdout_diagnostic(conn: sqlite3.Connection, trial_id: int) -> dict:
     used to choose anything): the best config BEFORE Optuna, for every
     horizon -- the final holdout evaluation only covers the launch's best
     horizon."""
+    marks = ",".join("?" * len(METRICS))
     scores = dict(conn.execute(
-        "SELECT metric, value FROM holdout_diagnostic WHERE trial_id = ? AND metric IN ('F1_dir', 'Acc_dir')",
-        (trial_id,)).fetchall())
-    return {"diag_F1_dir": scores.get("F1_dir"), "diag_Acc_dir": scores.get("Acc_dir")}
+        f"SELECT metric, value FROM holdout_diagnostic WHERE trial_id = ? AND metric IN ({marks})",
+        (trial_id, *METRICS)).fetchall())
+    return {"diag_F1_dir": scores.get("F1_dir"), "diag_Acc_dir": scores.get("Acc_dir"), "diag_panel": metric_panel.panel(scores)}
 
 
 def _rank_metric(conn: sqlite3.Connection, run_ids: list[str]) -> str:
@@ -181,6 +200,8 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
     by_horizon = []
     for run_id, horizon in sorted(runs.items(), key=lambda kv: kv[1]):
         members = [t for t in trials if t["run_id"] == run_id]
+        # La configuration que CE lancement a retenue, par son propre critère (`selection.criterion` : AUC_dir, ou F1_dir pour un run
+        # d'avant l'ADR 0013) : c'est un constat, pas une comparaison refaite.
         metric = rank_by if any(t["score"].get(rank_by) is not None for t in members) else "F1_dir"
         best = min(members, key=lambda t: (-(t["score"].get(metric) or 0.0), t["algo"], t["n_features"]))
         full = _score(best["folds"], sorted(best["folds"])) if best["folds"] else dict.fromkeys(METRICS)
@@ -189,6 +210,7 @@ def summarize(conn: sqlite3.Connection, run_ids: list[str]) -> dict:
             "sampler": best["sampler"],
             "window_F1_dir": best["score"].get("F1_dir"), "window_Acc_dir": best["score"].get("Acc_dir"),
             "full_F1_dir": full["F1_dir"], "full_Acc_dir": full["Acc_dir"], "full_folds": len(best["folds"]),
+            "window_panel": metric_panel.panel(best["score"]), "full_panel": metric_panel.panel(full),
             **_holdout_diagnostic(conn, best["trial_id"]), **_final_model(conn, run_id)})
 
     return {
@@ -215,14 +237,14 @@ def format_text(summary: dict) -> str:
     title = (f"[KPI] Synthèse des modèles -- {summary['target']}, horizons {horizons} "
              f"({summary['n_candidates']} candidats testés)")
     out = [title, f"      {summary['window']['note']}", ""]
-    head = f"{'rang':>4}  {{label:<14}} {'n':>5}  {'F1_dir':>6}  {'Acc_dir':>7}  {'MCC_4cls':>8}  {'BalAcc_4cls':>11}"
+    head = (f"{'rang':>4}  {{label:<14}} {'n':>5}  " + "  ".join(f"{k:>9}" for k in metric_panel.PANEL_KEYS))
 
     def table(title: str, rows: list[dict], label_of):
         out.append(title)
         out.append(head.format(label=""))
         for r in rows:
-            out.append(f"{r['rank']:>4}  {label_of(r):<14} {r['n']:>5}  {_f(r['F1_dir']):>6}  "
-                       f"{_f(r['Acc_dir']):>7}  {_f(r['MCC_4cls']):>8}  {_f(r['BalAcc_4cls']):>11}")
+            out.append(f"{r['rank']:>4}  {label_of(r):<14} {r['n']:>5}  "
+                       + "  ".join(f"{metric_panel.fmt(k, r.get(k)):>9}" for k in metric_panel.PANEL_KEYS))
         out.append("")
 
     table("Par algorithme (moyenne sur les horizons et les nombres de variables) :",
@@ -234,12 +256,13 @@ def format_text(summary: dict) -> str:
           f"{len(summary['ranking'])} :", top, lambda r: f"{r['algo']} N={r['n_features']}")
     out.append("Par horizon -- meilleure configuration, sa performance sur toute sa période, son holdout "
                "(config du scan, avant Optuna), puis le modèle final :")
-    out.append(f"{'h':>4}  {'meilleure config':<20} {'F1 fenêtre':>10}  {'F1 période':>10} {'folds':>5}  "
-               f"{'F1 holdout':>10}  {'Acc holdout':>11}  {'modèle final':<18} {'F1 holdout final':>16}")
+    out.append(f"{'h':>4}  {'meilleure config':<20} {'AUC fenêtre':>11}  {'AUC période':>11} {'Brier pér.':>10} {'folds':>5}  "
+               f"{'AUC holdout':>11}  {'Brier hold.':>11}  {'modèle final':<18} {'AUC hold. final':>15} {'Brier final':>11}")
     for r in summary["by_horizon"]:
         final = f"{r['final_algo']} N={r['final_n_features']}" if r["final_algo"] else "—"
+        w, fu, d, ho = r["window_panel"], r["full_panel"], r["diag_panel"], r["holdout_panel"]
         out.append(f"{r['horizon']:>4}  {r['algo'] + ' N=' + str(r['n_features']):<20} "
-                   f"{_f(r['window_F1_dir']):>10}  {_f(r['full_F1_dir']):>10} {r['full_folds']:>5}  "
-                   f"{_f(r['diag_F1_dir']):>10}  {_f(r['diag_Acc_dir']):>11}  "
-                   f"{final:<18} {_f(r['holdout_F1_dir']):>16}")
+                   f"{_f(w['AUC_dir']):>11}  {_f(fu['AUC_dir']):>11} {_f(fu['Brier_up']):>10} {r['full_folds']:>5}  "
+                   f"{_f(d['AUC_dir']):>11}  {_f(d['Brier_up']):>11}  "
+                   f"{final:<18} {_f(ho['AUC_dir']):>15} {_f(ho['Brier_up']):>11}")
     return "\n".join(out)

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 from patrick.analysis import stats_core as sc
 from patrick.tracking import champions
+from patrick.validation import metric_panel
 
 STALE_MODEL_DAYS = 90
 MIN_LIVE_JUDGED = 30
@@ -42,9 +43,14 @@ def _metrics(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict]:
     out: dict[int, dict] = {}
     for tid, split, metric, v in conn.execute(
             f"SELECT trial_id, split, metric, AVG(value) FROM fold_metric WHERE trial_id IN ({ph}) AND split IN ('test','test_path','holdout') "
-            f"AND metric IN ('F1_dir','Acc_dir','AUC_ovr_4cls') GROUP BY trial_id, split, metric", trial_ids):
+            f"AND metric IN ('F1_dir','Acc_dir','AUC_ovr_4cls','AUC_dir','Brier_up','MCC_4cls','Acc_dir_p') GROUP BY trial_id, split, metric", trial_ids):
         out.setdefault(tid, {})[("holdout" if split == "holdout" else "test") + "_" + metric] = v
     return out
+
+
+def _panels(m: dict) -> dict:
+    """`{panel_test, panel_holdout}` (ADR 0023) à partir des clés `test_<métrique>` / `holdout_<métrique>` de `_metrics`."""
+    return {f"panel_{split}": metric_panel.panel({k: m.get(f"{split}_{k}") for k in metric_panel.PANEL_KEYS}) for split in ("test", "holdout")}
 
 
 def _live(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict]:
@@ -84,7 +90,7 @@ def overview(conn: sqlite3.Connection) -> dict:
                 age = None
         items.append({"target": key[0], "horizon": key[1], "run_id": v["run_id"], "algo": v["algo"], "sampler": v["sampler"], "n_features": v["n_features"],
                       "implicit": v["implicit"], "reason": v["reason"], "promoted_at": v["promoted_at"], "n_versions": len(versions[key]),
-                      "f1_test": m.get("test_F1_dir"), "f1_holdout": m.get("holdout_F1_dir"), "acc_holdout": m.get("holdout_Acc_dir"),
+                      **_panels(m),
                       "live_n": lv["n"], "live_judged": lv["judged"], "live_hit": (lv["hits"] / lv["judged"]) if lv["judged"] else None,
                       "drift": (badges.get(key) or {}).get("action"), "age_days": age, "artifact_exists": v["artifact_exists"], "finished_at": v.get("finished_at")})
     counts = {"pairs": len(items), "explicit": sum(1 for i in items if not i["implicit"]), "no_file": sum(1 for i in items if not i["artifact_exists"]),
@@ -149,7 +155,7 @@ def model_card(conn: sqlite3.Connection, target: str, horizon: int, db_key: str 
     for v in versions:
         m, lv = met.get(v["trial_id"], {}), live.get(v["trial_id"], {"judged": 0, "hits": 0})
         version_items.append({"run_id": v["run_id"], "started_at": v["started_at"], "algo": v["algo"], "sampler": v["sampler"], "n_features": v["n_features"],
-                              "f1_test": m.get("test_F1_dir"), "f1_holdout": m.get("holdout_F1_dir"), "live_judged": lv["judged"],
+                              **_panels(m), "live_judged": lv["judged"],
                               "live_hit": (lv["hits"] / lv["judged"]) if lv["judged"] else None, "current": v["run_id"] == cur["run_id"],
                               "artifact_exists": v["artifact_exists"]})
     archive = []
@@ -165,7 +171,7 @@ def model_card(conn: sqlite3.Connection, target: str, horizon: int, db_key: str 
         except ValueError:
             wf = {}
         archive.append({"archive_id": a["archive_id"], "run_id": a["run_id"], "role": a["role"], "decided_at": a["decided_at"], "algo": a["algo"],
-                        "n_features": a["n_features"], "f1_dir": wf.get("F1_dir"), "duel": duel})
+                        "n_features": a["n_features"], "panel": metric_panel.panel(wf), "duel": duel})
     parts = {"guide": guide, "guardrails": gr, "live": {"judged": cur["live_judged"]}, "drift": badge.get("action"), "age_days": cur["age_days"],
              "stability": stab[0] if stab else None, "artifact_exists": cur["artifact_exists"]}
     return sc.jsonable({

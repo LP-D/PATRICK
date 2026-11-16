@@ -1,5 +1,6 @@
 """Vue « classe d'actifs » : pour chaque cible d'une classe, ce que l'application sait déjà d'elle -- profondeur d'historique,
-modèles directionnels et alpha entraînés (meilleure AUC / F1, jamais un score suspect), champions, dernier run.
+modèles directionnels et alpha entraînés (panneau du meilleur modèle -- AUC de direction, puis Brier, ADR 0023 -- jamais un score
+suspect), champions, dernier run.
 
 Une seule lecture de `run` pour toute la page (`tracking/db.py::list_all_runs`, requêtes groupées) : le coût ne dépend pas du
 nombre de cibles affichées, une classe de 320 actions se rend aussi vite qu'une classe de 6 cryptos.
@@ -15,6 +16,7 @@ from patrick.config.target_label import split_run_label
 from patrick.data.store import DataStore
 from patrick.tracking import data_health
 from patrick.tracking import db as trackdb
+from patrick.validation import metric_panel
 
 
 def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = None) -> dict[str, dict]:
@@ -27,8 +29,8 @@ def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = Non
     for run in (trackdb.list_all_runs(conn, with_balance=False) if runs is None else runs):
         asset, kind, _bench = split_run_label(html.unescape(run["target"] or ""))
         entry = stats.setdefault(asset, {
-            "directional": {"n": 0, "n_done": 0, "best_auc": None, "best_f1": None, "last": None},
-            "alpha": {"n": 0, "n_done": 0, "best_auc": None, "best_f1": None, "last": None},
+            "directional": {"n": 0, "n_done": 0, "best": None, "best_run": None, "last": None},
+            "alpha": {"n": 0, "n_done": 0, "best": None, "best_run": None, "last": None},
             "champions": sorted(champions.get(asset, ())), "suspects": 0})
         side = entry["alpha" if kind == "alpha" else "directional"]
         side["n"] += 1
@@ -40,9 +42,9 @@ def model_stats_by_asset(conn: sqlite3.Connection, runs: list[dict] | None = Non
         if run.get("suspect"):
             entry["suspects"] += 1
             continue                      # un score impossible n'est jamais « le meilleur »
-        for key, metric in (("best_auc", run.get("best_auc")), ("best_f1", run.get("best_f1_dir"))):
-            if metric is not None and (side[key] is None or metric > side[key]):
-                side[key] = metric
+        panel = run.get("panel")
+        if metric_panel.has_any(panel) and (side["best"] is None or metric_panel.rank_key(panel) < metric_panel.rank_key(side["best"])):
+            side["best"], side["best_run"] = panel, run["run_id"]
     return stats
 
 
@@ -67,8 +69,8 @@ def class_page(conn: sqlite3.Connection, class_key: str, all_groups: dict[str, l
             row = {"symbol": symbol, "label": label, "group": group, "first": h["first"], "years": h["years"],
                    "history": h["status"], "history_source": h["source"],
                    "n_dir": directional.get("n_done", 0), "n_dir_running": directional.get("n", 0) - directional.get("n_done", 0),
-                   "auc": directional.get("best_auc"), "f1": directional.get("best_f1"),
-                   "n_alpha": alpha.get("n_done", 0), "alpha_auc": alpha.get("best_auc"), "alpha_f1": alpha.get("best_f1"),
+                   "panel": directional.get("best"), "best_run": directional.get("best_run"),
+                   "n_alpha": alpha.get("n_done", 0), "alpha_panel": alpha.get("best"),
                    "champions": (s or {}).get("champions", []), "suspects": (s or {}).get("suspects", 0),
                    "last": max(filter(None, [directional.get("last"), alpha.get("last")]), default=None)}
             rows.append(row)

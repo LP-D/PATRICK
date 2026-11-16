@@ -293,9 +293,11 @@ EXTRA_GLOSSARY: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------------ suivi et application
     "champion": _g(
         "Champion : le modèle en titre pour une cible et un horizon. Un challenger (nouveau run) ne le remplace que s'il "
-        "fait strictement mieux en F1 directionnel sur le même holdout ; un champion suspect est remplacé d'office.",
-        "Champion: the model in title for a target and horizon. A challenger (new run) replaces it only if it does "
-        "strictly better in directional F1 on the same holdout; a suspect champion is replaced outright."),
+        "classe mieux les hausses et les baisses (AUC de direction strictement plus haute sur le même holdout) sans "
+        "probabilités nettement moins fiables (Brier au plus 0,005 au-dessus) ; un champion suspect est remplacé d'office.",
+        "Champion: the model in title for a target and horizon. A challenger (new run) replaces it only if it ranks ups "
+        "and downs better (strictly higher direction AUC on the same holdout) without clearly less reliable probabilities "
+        "(Brier at most 0.005 above); a suspect champion is replaced outright."),
     "live_tracking": _g(
         "Suivi live : à chaque lancement de l'app, chaque modèle entraîné prédit sur les données du jour. Les prédictions "
         "sont ensuite comparées à la réalité une fois l'horizon écoulé, sans jamais être réécrites.",

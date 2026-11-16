@@ -18,11 +18,9 @@
             return PK.kpi(label, pct(s.acc), T("ra_k_acc_sub", { lo: pct(s.acc_lo, 1), hi: pct(s.acc_hi, 1), maj: pct(maj, 1), n: int(s.n) }),
                 s.acc_lo !== null && maj !== null && s.acc_lo > maj ? "ok" : stateFor(edge));
         }
-        grid.appendChild(accTile(T("ra_k_acc_test"), t));
-        grid.appendChild(accTile(T("ra_k_acc_holdout"), ho));
+        [accTile(T("ra_k_acc_test"), t), accTile(T("ra_k_acc_holdout"), ho)].forEach(function (tile) { if (tile) grid.appendChild(tile); });
         if (t) {
             grid.appendChild(PK.kpi(T("ra_k_auc"), num(t.auc, 3), T("ra_k_auc_sub"), isNum(t.auc) ? (t.auc >= 0.55 ? "ok" : (t.auc < 0.52 ? "warning" : "neutral")) : "disabled"));
-            grid.appendChild(PK.kpi(T("ra_k_f1dir"), num(t.f1_dir, 3), T("ra_k_f1dir_sub"), "neutral"));
             grid.appendChild(PK.kpi(T("ra_k_balacc"), num(t.bal_acc, 3), T("ra_k_balacc_sub"), "neutral"));
             grid.appendChild(PK.kpi(T("ra_k_mcc"), num(t.mcc, 3), T("ra_k_mcc_sub"), isNum(t.mcc) && t.mcc > 0.05 ? "ok" : "neutral"));
             grid.appendChild(PK.kpi(T("ra_k_brier"), num(t.brier, 4), T("ra_k_brier_sub", { base: num(t.base_up * (1 - t.base_up), 4) }), isNum(t.brier) && t.brier < t.base_up * (1 - t.base_up) ? "ok" : "warning"));
