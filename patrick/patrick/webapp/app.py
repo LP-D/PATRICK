@@ -1190,7 +1190,9 @@ def run_results(run_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Résultat introuvable")
     if isinstance(result, dict) and result.get("kind") == "rl":
-        from patrick.rl.history import display_warnings          # run RL de change d'avant la règle des séances : signalé à la lecture
+        # Run RL de change d'avant la règle des séances : signalé à la lecture.
+        from patrick.rl.history import display_warnings
+
         result = display_warnings(result)
     return result
 

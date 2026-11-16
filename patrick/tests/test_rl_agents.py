@@ -105,4 +105,4 @@ def test_validation_keeps_the_best_checkpoint_not_the_last_one():
     info = agents.validation_info(model)
     assert len(info["scores"]) >= 4 and info["best_score"] == 1.0 and info["best_step"] == info["scores"][2][0]
     assert agents.policy_from_model(model, s)(probe) == pytest.approx(seen[2])
-    assert len(set(round(v, 6) for v in seen)) > 1                     # les contrôles ont bien vu des agents différents
+    assert len({round(v, 6) for v in seen}) > 1                     # les contrôles ont bien vu des agents différents

@@ -68,7 +68,7 @@ def split_validation(n_train: int, s: RLSettings) -> int:
     (`val_frac` nul, validation de moins de `MIN_VAL_ROWS` lignes ou partie apprise de moins de `MIN_TRAIN_ROWS`) : `n_train`."""
     if s.val_frac <= 0:
         return n_train
-    n_val = int(round(n_train * float(s.val_frac)))
+    n_val = round(n_train * float(s.val_frac))
     n_fit = n_train - n_val - 1
     if n_val < MIN_VAL_ROWS or n_fit < MIN_TRAIN_ROWS:
         return n_train
