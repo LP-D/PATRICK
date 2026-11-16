@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from patrick.data.ingest import ingest
+from patrick.data.session_calendar import CURRENT_SESSION_RULE
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
 from patrick.rl import data as rl_data
@@ -82,6 +83,10 @@ def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | N
     agents.require_rl()
     t0 = time.time()
     store = store or DataStore()
+    # Règle des séances d'aujourd'hui (ADR 0007), comme un run ML neuf : sans elle une paire Yahoo `=X` (barre datée du DÉBUT de la journée)
+    # voyait les clôtures du jour (or, S&P 500...) qui expliquent son propre mouvement. Les 21 runs RL de change du moteur 1 en tiraient des
+    # Sharpe de 2 à 5, nuls dès qu'on décale les positions d'un jour (analyse du 2026-11-16).
+    config.objective.session_rule = CURRENT_SESSION_RULE
     run_cfg = config.to_run_config()
     progress(f"[RL-DATA] ingestion de {config.objective.target_symbol} et de son univers")
     raw = ingest(config.objective, config.universe, store, force=force_ingest, data_quality=config.data_quality)
@@ -112,12 +117,16 @@ def run_rl(config: RLRunConfig, store: DataStore | None = None, db_path: str | N
     progress(f"[RL-SAVE] écriture des résultats dans {out_dir}")
     csv_path = os.path.join(out_dir, "rl_oos.csv")
     pd.DataFrame({"date": oos["dates"], "position": oos["position"], "net_return": oos["net"], "cost": oos["cost"],
-                  "buy_hold_return": oos["buy_hold"], "momentum_return": oos["momentum"]}).to_csv(csv_path, index=False)
+                  "buy_hold_return": oos["buy_hold"], "momentum_return": oos["momentum"], "trend_return": oos["trend"],
+                  "agent_position": oos["agent_position"], "agent_net_return": oos["agent_net"],
+                  "agent_controls": oos["agent_controls"].astype(int)}).to_csv(csv_path, index=False)
+    diagnostics = result.pop("diagnostics", [])
     payload = {
         "kind": "rl", "name": config.name, "target": config.objective.target_symbol, "algo": config.rl.algo,
+        "engine_version": int(config.rl.engine_version), "session_rule": int(config.objective.session_rule),
         "start": f"{data.dates[0]:%Y-%m-%d}", "end": f"{data.dates[-1]:%Y-%m-%d}", "n_rows": data.n,
         "n_features_pool": int(data.features.shape[1]),
-        "warnings": [*data.warnings, *filter(None, [ruin_warning(result, float(config.rl.max_leverage))])], **result,
+        "warnings": [*data.warnings, *diagnostics, *filter(None, [ruin_warning(result, float(config.rl.max_leverage))])], **result,
         "elapsed_s": time.time() - t0, "config": json.loads(config.model_dump_json()),
         "artifacts": {"result_json": os.path.join(out_dir, "rl_result.json"), "oos_csv": csv_path,
                       **{f"model_seed{i + 1}": p for i, p in enumerate(saved)}},

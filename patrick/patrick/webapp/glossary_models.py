@@ -259,10 +259,13 @@ GLOSSARY_RL: dict[str, dict[str, str]] = {
         "SAC (Soft Actor-Critic): learns a CONTINUOUS position (a fraction of capital) by maximizing reward and entropy (curiosity), "
         "with an experience buffer. Continuous action only."),
     "rl_reward": _g(
-        "Récompense : le signal qui guide l'apprentissage. « Croissance du capital (log) » : le logarithme du rendement net, ce qui compte "
+        "Récompense : le signal qui guide l'apprentissage. « Croissance au-delà d'acheter et garder » (défaut) : la log-croissance moins "
+        "celle de l'actif ; même stratégie optimale que la log-croissance, mais le bruit du marché, que l'agent ne contrôle pas, est retiré "
+        "du signal. « Croissance du capital (log) » : le logarithme du rendement net, ce qui compte "
         "composé dans le temps. « P&L net » : le gain brut moins les frais. « Sharpe différentiel » : la variation instantanée du ratio de "
         "Sharpe (Moody & Saffell), qui récompense la RÉGULARITÉ du rendement et pas seulement son niveau.",
-        "Reward: the signal that guides learning. \"Capital growth (log)\": the log of the net return, which is what compounds over time. "
+        "Reward: the signal that guides learning. \"Growth beyond buy and hold\" (default): log growth minus the asset's; same optimal "
+        "strategy as log growth, but the market noise the agent does not control is removed from the signal. \"Capital growth (log)\": the log of the net return, which is what compounds over time. "
         "\"Net P&L\": gross gain minus fees. \"Differential Sharpe\": the instantaneous change of the Sharpe ratio (Moody & Saffell), "
         "rewarding the REGULARITY of return rather than just its level."),
     "rl_action_space": _g(
@@ -388,11 +391,30 @@ GLOSSARY_RL: dict[str, dict[str, str]] = {
         "over 50 times a year: fees matter a lot."),
     "rl_baselines": _g(
         "Références : « acheter et garder » (position 1 en permanence, sans frais), « momentum 20 j » (long si l'actif a monté sur les 20 "
-        "derniers jours, vendeur sinon, mêmes frais que l'agent) et « à plat » (jamais investi). Un agent qui ne bat pas ces règles "
+        "derniers jours, vendeur sinon, mêmes frais que l'agent), « tendance 200 j » (investi quand le cours dépasse sa moyenne des 200 "
+        "derniers jours, à plat sinon) et « à plat » (jamais investi). Un agent qui ne bat pas ces règles "
         "simples n'apporte rien.",
         "Baselines: \"buy and hold\" (position 1 permanently, no fees), \"20-day momentum\" (long if the asset rose over the last 20 "
-        "days, short otherwise, same fees as the agent) and \"flat\" (never invested). An agent that does not beat these simple rules "
+        "days, short otherwise, same fees as the agent), \"200-day trend\" (invested when the price is above its 200-day average, flat "
+        "otherwise) and \"flat\" (never invested). An agent that does not beat these simple rules "
         "adds nothing."),
+    "rl_rebalance": _g(
+        "Barres entre deux décisions : l'agent ne choisit sa position qu'une barre sur N et la garde entre deux. Moins de rotation, donc "
+        "moins de frais, et une récompense par décision qui couvre N jours, donc moins bruitée. Le moteur 1 décidait chaque jour et "
+        "renouvelait 66 fois son capital par an. « Frais × à l'entraînement » gonfle les frais pendant l'apprentissage seulement, pour "
+        "que l'agent n'échange que s'il y gagne nettement ; le test paie les vrais frais.",
+        "Bars between decisions: the agent picks its position only every N bars and holds it in between. Less turnover, so fewer fees, "
+        "and a per-decision reward covering N days, so less noisy. Engine 1 decided every day and turned its capital over 66 times a year. "
+        "\"Training fee multiplier\" inflates fees during learning only, so the agent trades only when it clearly gains; the test pays "
+        "the real fees."),
+    "rl_gate": _g(
+        "Validation et repli : la fin de chaque fenêtre d'entraînement n'est pas apprise. Elle sert à garder le meilleur moment de "
+        "l'entraînement de chaque agent (pas le dernier : sur un signal faible, trop d'entraînement apprend le bruit) et, si l'ensemble des "
+        "agents ne bat pas acheter et garder sur cette validation, frais compris, le pli tient simplement acheter et garder. La courbe de "
+        "l'agent sans repli reste affichée.",
+        "Validation and fallback: the end of each training window is not learned. It keeps the best moment of each agent's training (not "
+        "the last one: on a weak signal, too much training learns noise) and, if the agents' ensemble does not beat buy and hold on that "
+        "validation, fees included, the fold simply holds buy and hold. The curve of the agent without fallback stays displayed."),
 }
 
 CATEGORY_RL: dict[str, str] = {k: "models" for k in GLOSSARY_RL}
@@ -406,6 +428,7 @@ LABELS_RL: dict[str, str] = {
     "rl_buffer": "rlp_f_buffer_size", "rl_exploration": "rlp_f_exploration_fraction", "rl_seeds": "rlp_f_n_seeds",
     "rl_walkforward": "rlp_sec_validation", "rl_retrain": "rlp_f_retrain", "rl_bootstrap": "rlp_f_bootstrap_samples",
     "rl_psr": "rlp_stat_psr", "rl_turnover": "rlp_k_turnover", "rl_baselines": "rlp_leg_buy_hold",
+    "rl_rebalance": "rlp_f_rebalance_every", "rl_gate": "rlp_f_gate",
 }
 LABELS_RL = {k: v for k, v in LABELS_RL.items() if v}      # PPO, A2C, DQN, SAC : le terme est son propre libellé
 

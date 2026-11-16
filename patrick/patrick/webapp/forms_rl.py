@@ -26,8 +26,10 @@ RL_FIELD_LABELS: dict[str, str] = {
     "tau": "Tau (mise à jour douce)", "n_seeds": "Agents moyennés (graines)", "device": "Appareil de calcul",
     "threads": "Fils de calcul", "n_folds": "Plis walk-forward", "min_train_frac": "Part minimale d'entraînement",
     "retrain": "Fenêtre d'entraînement", "rolling_bars": "Barres (fenêtre glissante)", "bootstrap_samples": "Tirages du bootstrap",
+    "rebalance_every": "Barres entre deux décisions", "train_cost_mult": "Frais × à l'entraînement", "val_frac": "Part de validation",
+    "gate": "Repli sur acheter et garder",
 }
-_BOOL_KEYS = ("allow_short", "include_position", "random_start")
+_BOOL_KEYS = ("allow_short", "include_position", "random_start", "gate")
 _CHOICES = {"action_space": D.RL_ACTION_SPACES, "reward": D.RL_REWARDS, "feature_selection": D.RL_FEATURE_SELECTION,
             "algo": D.RL_ALGOS, "activation": D.RL_ACTIVATIONS, "device": ("auto", "cpu", "cuda"), "retrain": D.RL_RETRAIN}
 _INT_KEYS = tuple(k for k, v in D.DEFAULT_RL.items() if isinstance(v, int) and not isinstance(v, bool))

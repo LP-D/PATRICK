@@ -63,7 +63,13 @@ def summarize(net_returns: np.ndarray, positions: np.ndarray, costs: np.ndarray,
     max_dd, dd_days = sim_metrics.max_drawdown(eq)
     changes = np.abs(np.diff(np.concatenate([[0.0], pos])))
     active = pos != 0
+    gross = net + costs
     return {
+        # Décomposition annualisée (analyse du 2026-11-16) : rendement brut = net + frais, et ce qu'en apportent les jambes longue et courte.
+        "gross_return_ann": float(gross.mean() * PERIODS) if len(gross) else float("nan"),
+        "cost_ann": float(costs.mean() * PERIODS) if len(costs) else float("nan"),
+        "long_contrib_ann": float(np.where(pos > 0, gross, 0.0).mean() * PERIODS) if len(gross) else float("nan"),
+        "short_contrib_ann": float(np.where(pos < 0, gross, 0.0).mean() * PERIODS) if len(gross) else float("nan"),
         "n": len(r),
         "total_return": float(eq.iloc[-1] - 1.0) if len(eq) else float("nan"),
         "cagr": sim_metrics.cagr(eq),

@@ -285,17 +285,26 @@ RL_ALGOS = ["PPO", "A2C", "DQN", "SAC"]
 RL_DISCRETE_ONLY = ("DQN",)                 # exigent des actions discrètes
 RL_CONTINUOUS_ONLY = ("SAC",)               # exigent une action continue
 RL_ACTION_SPACES = ("discrete", "continuous")
-RL_REWARDS = ("log", "pnl", "dsr")          # log-croissance, P&L net de coûts, ratio de Sharpe différentiel (Moody & Saffell)
+# excess : log-croissance AU-DELÀ de l'achat-conservation (même politique optimale que « log », la part du rendement que l'action ne change
+# pas est retirée : bien moins de bruit dans le signal d'apprentissage) ; log-croissance ; P&L net de coûts ; Sharpe différentiel (Moody & Saffell)
+RL_REWARDS = ("excess", "log", "pnl", "dsr")
 RL_FEATURE_SELECTION = ("correlation", "none")
 RL_ACTIVATIONS = ("tanh", "relu")
 RL_RETRAIN = ("expanding", "rolling")
 RL_FEATURE_FAMILIES = ("technical", "spike", "macro", "long_cycle")   # familles CAUSALES (fenêtres glissantes) ; pas d'EGARCH/HMM/interactions
 
+# Moteur 2 (refonte du 2026-11-16, ADR 0022, analyse `docs/modelisation/analyse-rl-2026-11-16.md`) : sur 456 runs du moteur 1 (tous PPO, court
+# autorisé, décision quotidienne), le RL battait l'achat-conservation 1 fois sur 5. Le signal de timing existait (+4 %/an brut) mais la rotation
+# (66 fois le capital par an) le rendait en frais, et la jambe courte perdait la dérive des actions. D'où : positions longues seulement, une
+# décision tous les 5 jours, des frais doublés à l'entraînement, un point de contrôle choisi sur une validation et le repli sur
+# l'achat-conservation quand l'agent ne la bat pas en validation.
 DEFAULT_RL: dict = {
     # --- environnement
-    "action_space": "discrete", "n_levels": 3, "allow_short": True, "max_leverage": 1.0,
-    "cost_bps": 5.0, "slippage_bps": 2.0, "reward": "log", "risk_aversion": 0.0, "dsr_eta": 0.01,
+    "action_space": "discrete", "n_levels": 3, "allow_short": False, "max_leverage": 1.0,
+    "cost_bps": 5.0, "slippage_bps": 2.0, "reward": "excess", "risk_aversion": 0.0, "dsr_eta": 0.01,
     "obs_lookback": 1, "include_position": True, "episode_length": 252, "random_start": True,
+    "rebalance_every": 5,          # une décision toutes les 5 barres, position tenue entre deux (moins de rotation, récompense moins bruitée)
+    "train_cost_mult": 2.0,        # frais multipliés à l'ENTRAÎNEMENT seulement (régularise contre la sur-rotation) ; évaluation aux vrais frais
     "max_features": 20, "feature_selection": "correlation",
     # --- agent
     "algo": "PPO", "policy_layers": 2, "policy_units": 64, "activation": "tanh",
@@ -308,7 +317,13 @@ DEFAULT_RL: dict = {
     "n_seeds": 3, "device": "auto", "threads": 1,
     # --- validation
     "n_folds": 4, "min_train_frac": 0.5, "retrain": "expanding", "rolling_bars": 1500, "bootstrap_samples": 1000,
+    "val_frac": 0.2,               # fin de la fenêtre d'entraînement réservée à la validation (choix du point de contrôle, garde-fou) ; 0 = aucune
+    "gate": True,                  # pli où l'agent ne bat pas l'achat-conservation en validation : on tient l'achat-conservation
 }
+# Valeurs du moteur 1, appliquées aux réglages ABSENTS d'une configuration enregistrée avant la refonte (`RLSettings._legacy`) : relancer un
+# ancien run rejoue son moteur, pas le nouveau.
+RL_LEGACY_SETTINGS: dict = {"allow_short": True, "reward": "log", "rebalance_every": 1, "train_cost_mult": 1.0, "val_frac": 0.0, "gate": False}
+RL_ENGINE_VERSION = 2
 # (min, max) permis : appliqués par `RLSettings` (schéma) et par le formulaire.
 RL_BOUNDS: dict[str, tuple[float, float]] = {
     "n_levels": (2, 9), "max_leverage": (0.1, 5.0), "cost_bps": (0.0, 200.0), "slippage_bps": (0.0, 200.0),
@@ -319,7 +334,7 @@ RL_BOUNDS: dict[str, tuple[float, float]] = {
     "buffer_size": (1000, 2_000_000), "learning_starts": (0, 100_000), "train_freq": (1, 1000),
     "target_update_interval": (1, 100_000), "exploration_fraction": (0.01, 1.0), "tau": (0.0001, 1.0),
     "n_seeds": (1, 10), "threads": (1, 64), "n_folds": (1, 12), "min_train_frac": (0.2, 0.9), "rolling_bars": (200, 20000),
-    "bootstrap_samples": (200, 20000),
+    "bootstrap_samples": (200, 20000), "rebalance_every": (1, 63), "train_cost_mult": (1.0, 10.0), "val_frac": (0.0, 0.4),
 }
 DEFAULT_RL_START_DATE = "2005-01-01"
 RL_MIN_ROWS = 600            # lignes minimales après les fenêtres de calcul des variables (sinon refus avant tout entraînement)

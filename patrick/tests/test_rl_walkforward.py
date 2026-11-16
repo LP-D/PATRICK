@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from patrick.config.defaults import RL_LEGACY_SETTINGS
 from patrick.rl import data as rl_data
 from patrick.rl import metrics as rl_metrics
 from patrick.rl import walkforward as wf
@@ -30,7 +31,7 @@ def _data(n=1200, k=12, seed=0, signal=False) -> rl_data.RLData:
 
 def _cfg(**rl) -> RLRunConfig:
     return RLRunConfig.model_validate({"objective": {"target_symbol": "^GSPC"}, "output": {"seed": 7},
-                                       "rl": {"n_folds": 3, "min_train_frac": 0.5, "max_features": 4, "bootstrap_samples": 300,
+                                       "rl": {**RL_LEGACY_SETTINGS, "n_folds": 3, "min_train_frac": 0.5, "max_features": 4, "bootstrap_samples": 300,
                                               "total_timesteps": 1000, "n_seeds": 1, **rl}})
 
 

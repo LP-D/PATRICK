@@ -49,6 +49,18 @@ def _rows(t: Callable[[str], str]):
     def cfg(path):
         return lambda m: _dig(m["cfg"], *path)
 
+    def effective(key):
+        """Réglage du moteur 2 : absent d'une configuration du moteur 1, il vaut sa valeur d'alors (`RL_LEGACY_SETTINGS`)."""
+        from patrick.config.defaults import RL_LEGACY_SETTINGS
+
+        def get(m):
+            rl = _dig(m["cfg"], "rl")
+            if not isinstance(rl, dict):
+                return None
+            value = rl.get(key, RL_LEGACY_SETTINGS.get(key))
+            return t("adv_yes" if value else "adv_no") if isinstance(value, bool) else value
+        return get
+
     return (
         ("rlh_g_result", "rlp_k_sharpe", lambda m: _dig(m["strategy"], "sharpe"), _f2, "max"),
         ("rlh_g_result", "rlh_c_sharpe_bh", lambda m: _dig(m["baselines"], "buy_hold", "sharpe"), _f2, None),
@@ -75,6 +87,10 @@ def _rows(t: Callable[[str], str]):
         ("rlh_g_settings", "rlp_f_allow_short", bool_(("rl", "allow_short")), _text, None),
         ("rlh_g_settings", "rlp_f_max_leverage", cfg(("rl", "max_leverage")), _g, None),
         ("rlh_g_settings", "rlp_f_reward", option("rlp_o_reward", ("rl", "reward")), _text, None),
+        ("rlh_g_settings", "rlp_f_rebalance_every", effective("rebalance_every"), _int, None),
+        ("rlh_g_settings", "rlp_f_train_cost_mult", effective("train_cost_mult"), _g, None),
+        ("rlh_g_settings", "rlp_f_val_frac", effective("val_frac"), _g, None),
+        ("rlh_g_settings", "rlp_f_gate", effective("gate"), _text, None),
         ("rlh_g_settings", "rlp_f_cost_bps", cfg(("rl", "cost_bps")), _g, None),
         ("rlh_g_settings", "rlp_f_slippage_bps", cfg(("rl", "slippage_bps")), _g, None),
         ("rlh_g_settings", "rlp_f_policy_layers", lambda m: _policy(m), _text, None),

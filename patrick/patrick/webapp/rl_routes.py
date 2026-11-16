@@ -49,13 +49,13 @@ def field_groups() -> list[dict]:
         return {"key": key, "kind": "int" if is_int else "float", "min": lo, "max": hi, "step": "1" if is_int else "any"}
 
     groups = (
-        ("env", ("n_levels", "max_leverage", "slippage_bps", "risk_aversion", "dsr_eta", "obs_lookback", "include_position", "episode_length",
-                 "random_start")),
+        ("env", ("rebalance_every", "train_cost_mult", "n_levels", "max_leverage", "slippage_bps", "risk_aversion", "dsr_eta", "obs_lookback",
+                 "include_position", "episode_length", "random_start")),
         ("features", ("max_features", "feature_selection")),
         ("policy", ("policy_layers", "policy_units", "activation")),
         ("learning", ("learning_rate", "gamma", "n_steps", "batch_size", "n_epochs", "ent_coef", "clip_range", "gae_lambda", "buffer_size",
                       "learning_starts", "train_freq", "target_update_interval", "exploration_fraction", "tau")),
-        ("validation", ("min_train_frac", "retrain", "rolling_bars", "n_seeds", "bootstrap_samples")),
+        ("validation", ("val_frac", "gate", "min_train_frac", "retrain", "rolling_bars", "n_seeds", "bootstrap_samples")),
         ("compute", ("device", "threads")),
     )
     return [{"key": name, "fields": [spec(k) for k in keys]} for name, keys in groups]
@@ -70,7 +70,8 @@ FIELD_TERMS: dict[str, str] = {
     "clip_range": "rl_clip_range", "gae_lambda": "rl_gae_lambda", "buffer_size": "rl_buffer", "learning_starts": "rl_buffer",
     "train_freq": "rl_buffer", "target_update_interval": "rl_exploration", "exploration_fraction": "rl_exploration", "tau": "rl_exploration",
     "min_train_frac": "rl_walkforward", "retrain": "rl_retrain", "rolling_bars": "rl_retrain", "n_seeds": "rl_seeds",
-    "bootstrap_samples": "rl_bootstrap", "turnover": "rl_turnover",
+    "bootstrap_samples": "rl_bootstrap", "turnover": "rl_turnover", "rebalance_every": "rl_rebalance", "train_cost_mult": "rl_rebalance",
+    "val_frac": "rl_gate", "gate": "rl_gate",
 }
 
 # Réglages qui n'ont de sens que pour certains algorithmes : le formulaire masque les autres (`data-algos`).
@@ -194,7 +195,8 @@ def _panel_view(result: dict) -> dict:
     return {
         "done": bool(result.get("strategy")),
         "lines": [("rlh_p_strategy", result.get("strategy") or {}), ("rlh_p_buyhold", baselines.get("buy_hold") or {}),
-                  ("rlh_p_momentum", baselines.get("momentum") or {}), ("rlh_p_flat", baselines.get("flat") or {})],
+                  ("rlh_p_momentum", baselines.get("momentum") or {}), ("rlp_leg_trend", baselines.get("trend") or {}),
+                  ("rlh_p_flat", baselines.get("flat") or {})],
         "dsr": sub(stats, "dsr", "dsr"), "psr": stats.get("psr"), "n_trials": stats.get("n_trials"),
         "gap": sub(stats, "vs_buy_hold", "diff"), "gap_low": sub(stats, "vs_buy_hold", "ci_low"), "gap_high": sub(stats, "vs_buy_hold", "ci_high"),
         "n_folds": result.get("n_folds"), "n_seeds": len(result.get("seeds") or []) or None, "elapsed_s": result.get("elapsed_s"),
@@ -210,7 +212,7 @@ def register(app: FastAPI, templates, context) -> None:
         return templates.TemplateResponse(request, "rl.html", {
             **ctx, "view": view, "errors": errors or [], "applied": applied, "initial_run_id": run_id,
             "target_groups": forms_rl.rl_target_groups(), "untradable": forms_rl.untradable_targets(), "rl_ready": agents.rl_available(), "deps_error": _deps_error(),
-            "field_groups": field_groups(), "algo_fields": ALGO_FIELDS, "rl_terms": FIELD_TERMS, "rl_algos": D.RL_ALGOS, "rl_families": D.RL_FEATURE_FAMILIES,
+            "field_groups": field_groups(), "algo_fields": ALGO_FIELDS, "rl_terms": FIELD_TERMS, "rl_algos": D.RL_ALGOS, "rl_rewards": D.RL_REWARDS, "rl_families": D.RL_FEATURE_FAMILIES,
             "rl_profiles": rl_profiles.gallery(forms_rl.to_view_rl(forms_rl.default_rl_config_dict())),
             "recent_runs": list_rl_jobs(), "bounds": D.RL_BOUNDS,
         })

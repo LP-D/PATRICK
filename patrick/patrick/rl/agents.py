@@ -66,11 +66,21 @@ def build_model(env, settings: RLSettings, seed: int):
     raise ValueError(f"Algorithme inconnu : {algo}")
 
 
+VAL_CHECKS = 10          # contrôles de validation pendant l'entraînement (le meilleur point de contrôle est gardé)
+
+
 def train_agent(core: TradingCore, settings: RLSettings, seed: int, start: int, end: int,
-                on_progress: Callable[[int, int], None] | None = None):
+                on_progress: Callable[[int, int], None] | None = None,
+                validate: Callable[[Callable[[np.ndarray], float]], float] | None = None):
     """Entraîne un agent sur les lignes [start, end) de `core` pendant `settings.total_timesteps` pas. `on_progress(fait, total)` est
-    appelé périodiquement (nombre de pas)."""
+    appelé périodiquement (nombre de pas).
+
+    `validate(politique) -> score` (plus haut = meilleur), s'il est fourni, est appelé `VAL_CHECKS` fois pendant l'entraînement et à la fin ;
+    les poids du meilleur contrôle sont rechargés avant de rendre le modèle (arrêt précoce sans couper l'entraînement : sur un signal faible,
+    plus d'entraînement apprend le bruit -- moteur 1 : 80 000 pas faisaient pire que 30 000). Le détail est dans `model.patrick_validation`."""
     require_rl()
+    import copy
+
     from stable_baselines3.common.callbacks import BaseCallback
 
     from patrick.rl.env import TradingEnv
@@ -78,19 +88,37 @@ def train_agent(core: TradingCore, settings: RLSettings, seed: int, start: int, 
     env = TradingEnv(core, settings, start=start, end=end, seed=seed)
     model = build_model(env, settings, seed)
     total = int(settings.total_timesteps)
+    every = max(total // VAL_CHECKS, 1)
+    track: dict = {"best_score": None, "best_step": None, "scores": [], "state": None}
+
+    def check(step: int) -> None:
+        score = float(validate(policy_from_model(model, settings)))
+        track["scores"].append([int(step), score if np.isfinite(score) else None])
+        if np.isfinite(score) and (track["best_score"] is None or score > track["best_score"]):
+            track.update(best_score=score, best_step=int(step), state=copy.deepcopy(model.policy.state_dict()))
 
     class _Progress(BaseCallback):
         def __init__(self):
             super().__init__()
             self._next = 0
+            self._next_check = every
 
         def _on_step(self) -> bool:
             if on_progress is not None and self.num_timesteps >= self._next:
                 on_progress(self.num_timesteps, total)
                 self._next = self.num_timesteps + max(total // 20, 500)
+            if validate is not None and self.num_timesteps >= self._next_check:
+                check(self.num_timesteps)
+                self._next_check += every
             return True
 
     model.learn(total_timesteps=total, callback=_Progress())
+    if validate is not None:
+        if not track["scores"] or track["scores"][-1][0] < model.num_timesteps:
+            check(model.num_timesteps)
+        if track["state"] is not None:
+            model.policy.load_state_dict(track["state"])
+    model.patrick_validation = {k: v for k, v in track.items() if k != "state"}
     return model
 
 
@@ -103,6 +131,11 @@ def policy_from_model(model, settings: RLSettings) -> Callable[[np.ndarray], flo
         return action_to_position(action, settings)
 
     return policy
+
+
+def validation_info(model) -> dict | None:
+    """Détail de la validation d'un agent entraîné par `train_agent` (meilleur score, pas du meilleur contrôle, scores), ou None."""
+    return getattr(model, "patrick_validation", None)
 
 
 def ensemble_policy(policies: list[Callable[[np.ndarray], float]]) -> Callable[[np.ndarray], float]:

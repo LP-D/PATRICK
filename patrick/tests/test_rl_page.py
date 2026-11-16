@@ -90,7 +90,9 @@ def test_defaults_match_the_engine_defaults(client):
     html = client.get("/rl").text
     assert re.search(r'name="rl_algo".*?<option value="PPO" selected', html, re.DOTALL)
     assert 'name="rl_total_timesteps"' in html and 'value="30000"' in html and 'value="4"' in html
-    assert re.search(r'name="rl_allow_short"\s+checked', html)
+    assert re.search(r'name="rl_allow_short"\s+>', html)                       # moteur 2 : longues seulement par défaut
+    assert re.search(r'name="rl_gate"\s+checked', html) and 'name="rl_rebalance_every"' in html
+    assert re.search(r'name="rl_reward".*?<option value="excess" selected', html, re.DOTALL)
 
 
 def test_the_glossary_explains_the_algorithms_and_the_settings(client):

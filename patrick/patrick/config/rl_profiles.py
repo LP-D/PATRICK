@@ -14,7 +14,7 @@ PROFILES: tuple[TrainingProfile, ...] = (
         "rl_total_timesteps": 10000, "rl_n_folds": 3, "rl_policy_units": 32, "rl_policy_layers": 1, "rl_n_steps": 256,
         "rl_max_features": 10, "families": ["technical", "spike"]}, icon="zap"),
     TrainingProfile("rl_standard", "medium", {}, icon="layers"),
-    TrainingProfile("rl_long_only", "medium", {"rl_allow_short": False}, icon="trending-up"),
+    TrainingProfile("rl_long_short", "medium", {"rl_allow_short": True}, icon="trending-up"),
     TrainingProfile("rl_risk_aware", "medium", {"rl_reward": "dsr", "rl_dsr_eta": 0.02}, icon="shield"),
     TrainingProfile("rl_costly", "medium", {
         "rl_cost_bps": 15.0, "rl_slippage_bps": 5.0, "rl_risk_aversion": 0.1, "rl_episode_length": 504}, icon="coins"),
@@ -27,6 +27,10 @@ PROFILES: tuple[TrainingProfile, ...] = (
     TrainingProfile("rl_ensemble", "high", {"rl_n_seeds": 3, "rl_total_timesteps": 30000}, icon="layers"),
     TrainingProfile("rl_memory", "high", {
         "rl_obs_lookback": 20, "rl_policy_units": 128, "rl_policy_layers": 2, "rl_total_timesteps": 80000, "rl_max_features": 12},
+        icon="clock"),
+    # Moteur 1 (avant la refonte du 2026-11-16, ADR 0022) : pour comparer sur une même cible, pas pour exploiter.
+    TrainingProfile("rl_legacy", "low", {
+        "rl_allow_short": True, "rl_reward": "log", "rl_rebalance_every": 1, "rl_train_cost_mult": 1.0, "rl_val_frac": 0.0, "rl_gate": False},
         icon="clock"),
     TrainingProfile("rl_prudent", "medium", {"rl_n_folds": 6, "rl_bootstrap_samples": 3000, "rl_retrain": "rolling", "rl_rolling_bars": 1500},
                     icon="eye"),
