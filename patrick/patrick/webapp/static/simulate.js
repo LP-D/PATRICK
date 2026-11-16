@@ -17,6 +17,7 @@
         if (!flash) return;
         flash.textContent = text;
         flash.className = "banner " + (kind === "error" ? "banner-error" : "banner-info");
+        if (kind !== "error" && window.patrickMotion) window.patrickMotion.success(flash);    // pulsation de réussite
         flash.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
     async function call(url, method, body) {

@@ -46,6 +46,11 @@
         }
         var el = document.createElement("div");
         el.className = "run-toast run-toast-" + (kind || "ok");
+        // Bandeaux arrivés ensemble : 30 ms d'écart entre eux (`--i`, patrick.css) ; un bandeau de réussite pulse une fois arrivé.
+        var now = Date.now();
+        burst = now - burstAt < 50 ? burst + 1 : 0;
+        burstAt = now;
+        el.style.setProperty("--i", String(Math.min(burst, 6)));
         var span = document.createElement("span");
         span.textContent = text;
         el.appendChild(span);
@@ -60,10 +65,23 @@
         x.className = "run-toast-close";
         x.setAttribute("aria-label", T("nt_close"));
         x.textContent = "×";
-        x.addEventListener("click", function () { el.remove(); });
+        x.addEventListener("click", function () { leave(el); });
         el.appendChild(x);
         host.appendChild(el);
-        setTimeout(function () { if (el.parentNode) el.remove(); }, 15000);
+        if (kind !== "error" && window.patrickMotion) {
+            setTimeout(function () { window.patrickMotion.success(el); }, 320 + burst * 30);
+        }
+        setTimeout(function () { leave(el); }, 15000);
+    }
+    var burst = 0, burstAt = 0;
+    // Sortie animée (plus courte que l'entrée), puis retrait du DOM ; sans animation possible, retrait immédiat.
+    function leave(el) {
+        if (!el.parentNode || el.classList.contains("is-leaving")) return;
+        var still = window.patrickMotion ? window.patrickMotion.reduced() : true;
+        if (still) { el.remove(); return; }
+        el.classList.add("is-leaving");
+        el.addEventListener("animationend", function () { if (el.parentNode) el.remove(); });
+        setTimeout(function () { if (el.parentNode) el.remove(); }, 400);
     }
     function system(title, body, href) {
         if (typeof Notification === "undefined" || Notification.permission !== "granted") return;

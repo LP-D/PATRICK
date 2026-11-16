@@ -64,7 +64,7 @@ script below (no flash), otherwise the OS preference applies.
                MASTER.md "Navigation Registry") -- jamais de <a> en dur ici. Categories et dossiers sont des boutons
                repliables (aria-expanded) ; l'etat est range dans localStorage['patrick-nav-tree'] par shell.js et rejoue
                par le petit script juste apres la navigation (pas d'eclair au chargement). #}
-            {% macro nav_leaf(item) %}{% set label = t(item.label_key) if (t and item.label_key) else item.label %}<li class="nav-leaf"><a href="{{ item.url }}" title="{{ label }}" {% if item.active %}aria-current="page"{% endif %}>{{ nav_icon(item.slug) }}<span class="nav-label">{{ label }}</span></a></li>{% endmacro %}
+            {% macro nav_leaf(item) %}{% set label = t(item.label_key) if (t and item.label_key) else item.label %}<li class="nav-leaf"><a href="{{ item.url }}" title="{{ label }}" {% if item.active %}aria-current="page"{% endif %}>{% if item.active %}<span class="nav-ink" aria-hidden="true"></span>{% endif %}{{ nav_icon(item.slug) }}<span class="nav-label">{{ label }}</span></a></li>{% endmacro %}
             <div class="sidebar-tree-head">
                 <span class="sidebar-tree-title">{{ t('nav_tree_title') }}</span>
                 <span class="sidebar-tree-tools">
@@ -280,6 +280,7 @@ script below (no flash), otherwise the OS preference applies.
     <button type="button" class="to-top" id="to-top" aria-label="{{ t('to_top') }}" title="{{ t('to_top') }}" hidden>{{ icon('arrow-up', 18) }}</button>
     <script src="{{ asset('confirm.js') }}"></script>
     <script src="{{ asset('shell.js') }}"></script>
+    <script src="{{ asset('motion.js') }}" defer></script>
     <script src="{{ asset('run_notify.js') }}" defer></script>
     <script src="{{ asset('rows.js') }}"></script>
     <script src="{{ asset('table_tools.js') }}" defer></script>

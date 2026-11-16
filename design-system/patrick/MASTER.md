@@ -20,7 +20,7 @@
 
 1. **La donnée d'abord (Bloomberg).** Densité d'un terminal : corps à 13 px, lignes de tableau de 30 px, en-têtes courts en capitales, chiffres en JetBrains Mono tabulaire. Les KPI forment un **tableau d'affichage joint** (filets de 1 px), pas des cartes séparées.
 2. **Aucun chiffre sans sa fiabilité** (hérité de la Phase 7) : `metric(label, value, reliability)` impose le troisième argument.
-3. **Propre, pas décoré (Apple).** Panneaux en aplat (`--shadow-card: none`), profondeur par surfaces étagées (`--bg` < `--surface` < `--surface-2` < `--surface-3`) et filets ; aucun dégradé, aucune animation d'entrée, aucune translation au survol. Les ombres restent aux couches flottantes (menus, bulles, fenêtres).
+3. **Propre, pas décoré (Apple).** Panneaux en aplat (`--shadow-card: none`), profondeur par surfaces étagées (`--bg` < `--surface` < `--surface-2` < `--surface-3`) et filets ; aucun dégradé, aucune animation d'entrée des panneaux au chargement, aucune translation au survol. Les ombres restent aux couches flottantes (menus, bulles, fenêtres) ; seules elles, et ce que l'utilisateur fait apparaître, bougent (section « Mouvement »).
 4. **Une seule couleur d'identité : l'orange terminal** (`--brand`) pour la marque, la page active, l'action principale et l'anneau de focus. Vert / rouge / jaune réservés au **sens** (gain / perte / alerte), bleu `--info` à « en cours » ; jamais décoratifs.
 5. **Deux thèmes de première classe.** Noir pur par défaut (écran de terminal), clair sur le gris de macOS (`#F2F2F7`, panneaux blancs, orange brûlé). Choix persisté (`localStorage['patrick-theme']`), sinon préférence OS, appliqué avant le premier rendu.
 6. **Une échelle, pas des valeurs.** Tailles, rayons, hauteurs de contrôle et durées viennent des jetons ; une valeur en dur dans une règle de page est un défaut.
@@ -178,6 +178,30 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 - **Nouveau symbole dans l'univers** : l'ajouter au registre (`tests/test_instrument_names.py` échoue sinon). Symbole inconnu (Patrimoine, Simulation) : genre deviné d'après la forme (`=F`, `=X`, `-USD`, `^`), puis nom appris en arrière-plan chez Yahoo (`~/.patrick/instrument_names.json`, coupé par `PATRICK_INSTRUMENT_LOOKUP=0`).
 - **Exceptions assumées** : les messages composés par le domaine (phrases traduites par `i18n_server`) et les noms de runs enregistrés gardent le symbole tel qu'il a été écrit.
 
+## Mouvement
+
+Dix-huit règles (ADR 0023), toutes portées par les jetons de `:root` et par `static/motion.js` ; aucune durée ni courbe en dur dans une règle de page.
+
+| Règle | Jeton / mécanisme | Où |
+|---|---|---|
+| Entrées en ease-out ; déplacements en ease-in-out ; sorties en ease-in | `--ease-enter`, `--ease-move`, `--ease-exit` | partout |
+| Pas de ressort aux transitions | aucune courbe ne dépasse [0, 1] (test) | partout |
+| Menus déroulants 150-250 ms, sorties 20 % plus courtes | `--dur-menu` 200 / `--dur-menu-out` 160 (idem `--dur-pop`, `--dur-icon`, `--dur-page`) | menu « Parcourir », palette, popovers, boîtes |
+| Popovers à 0,95, entrée depuis le déclencheur, sortie vers lui | `--pop-scale`, `--origin-x/y` posés par motion.js | glossaire, « ? », bulles des prédictions, boîtes de dialogue |
+| Boutons à 0,97 à l'appui | `--press-scale` (propriété `scale`) | boutons, onglets, pastilles (pas les rangs de l'arborescence) |
+| Lignes décalées de 30 ms | `--stagger`, `--i` | colonnes du menu, résultats de la palette, dossier ouvert, lignes dépliées, bandeaux |
+| Du poids aux révélations | `--dur-reveal`, durée selon la hauteur, flou 4 px → 0 | panneau d'onglet, options avancées |
+| Étire de 12 % ce qui bouge, même identifiant partagé | `--stretch` ; `.tab-ink`, `.nav-ink` (view-transition-name) | trait des onglets, repère de la barre latérale d'une page à l'autre |
+| Ancien et nouvel état mêlés | `@view-transition` (fondu entre pages), cercle depuis le bouton de thème | navigation, changement de thème |
+| Fondu d'icônes + flou | opacité + échelle 0,8 + flou 4 px | lune / soleil, cloche |
+| Mouvements en courbe | axes x et y sur deux courbes | bandeaux de fin de run, bouton « haut de page » |
+| Élastique aux limites | `--elastic` (propriété enregistrée), plafonné à 48 px | tableaux et barres d'onglets qui défilent, palette, menu |
+| Pulsation de réussite | `patrickMotion.success(el)` (une fois, jamais en boucle) | bandeaux de confirmation, run terminé |
+
+Garde-fous : un geste au clavier n'anime rien (`<html data-input="keyboard">`) ; `prefers-reduced-motion` coupe tout, y compris les transitions de page ; seules `opacity`, `transform`/`scale`/`translate` et `filter` sont animées (la colonne latérale repliée excepté).
+
+**Onglets.** Une barre d'onglets tient sur une ligne qui défile (bords estompés quand des onglets sont hors champ, onglet courant ramené dans le champ) ; les onglets d'analyse (`.exp-tabs`) restent collés sous la barre du haut pendant qu'on lit un panneau long. Les onglets d'un run ne collent pas : l'index des sections (`.section-index`) occupe déjà cette place.
+
 ## Anti-Patterns (Do NOT Use)
 
 - ❌ Emojis comme icônes — icônes Lucide via `icon()` uniquement (un seul jeu, trait 2px)
@@ -185,7 +209,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 - ❌ Une `<canvas>` dessinée à la main dans une page : tout graphique passe par `PatrickPlot` (`chart_kit.js`)
 - ❌ Un texte français en dur dans un gabarit, un script ou un libellé d'erreur affiché tel quel
 - ❌ Vert / rouge / jaune décoratifs (réservés au sens) ; orange ailleurs que sur l'identité, l'actif, l'action principale et le focus
-- ❌ Dégradé, ombre sous un panneau posé, animation d'entrée, flou décoratif
+- ❌ Dégradé, ombre sous un panneau posé, animation d'entrée d'un panneau au chargement, flou décoratif (le flou ne sert qu'à faire passer un état à un autre : icône, popover, révélation)
 - ❌ Taille de police, rayon ou hauteur de contrôle en dur : utiliser les échelles (`--fs-*`, `--radius*`, `--control-h`)
 - ❌ Plus de deux niveaux de boutons côte à côte (un principal, un secondaire)
 - ❌ Translation/zoom au survol de panneaux statiques (décale la mise en page)
