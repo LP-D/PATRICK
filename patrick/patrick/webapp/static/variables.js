@@ -84,8 +84,8 @@
             PK.clear(host);
             host.appendChild(h("h3", { class: "pk-mono", text: d.feature }));
             host.appendChild(h("div", { class: "ra-chips" }, [PK.chip(T("ra_fam_" + d.family)), PK.chip(T("av_c_series") + " : " + PK.inst(d.series)), PK.chip(T("av_d_runs", { n: int(d.n_runs), t: int(d.targets.length) }))]));
-            host.appendChild(PK.table([T("ah_c_name"), T("ah_c_target"), T("ah_c_horizon"), T("ah_c_algo"), T("ah_c_nfeat"), T("av_c_freq"), T("ah_c_f1_test").split(" · ")[0]],
-                d.runs.map(function (r) { return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", text: r.run_id }) }, PK.inst(r.target), r.horizon, r.algo || "—", r.n_features === null ? "—" : r.n_features, pct(r.freq, 0), isNum(r.f1) ? num(r.f1, 3) : "—"]; }), { num: [2, 4, 5, 6] }));
+            host.appendChild(PK.table([T("ah_c_name"), T("ah_c_target"), T("ah_c_horizon"), T("ah_c_algo"), T("ah_c_nfeat"), T("av_c_freq"), T("pm_AUC_dir"), T("pm_Brier_up")],
+                d.runs.map(function (r) { return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(r.run_id) + "/analyse", text: r.run_id }) }, PK.inst(r.target), r.horizon, r.algo || "—", r.n_features === null ? "—" : r.n_features, pct(r.freq, 0), isNum(r.auc_dir) ? num(r.auc_dir, 3) : "—", isNum(r.brier) ? num(r.brier, 3) : "—"]; }), { num: [2, 4, 5, 6, 7] }));
             host.dispatchEvent(new CustomEvent("patrick:content", { bubbles: true }));
             host.scrollIntoView({ block: "nearest" });
         }).catch(function (e) { PK.clear(host).appendChild(PK.empty(T("ra_error") + " " + e.message)); });

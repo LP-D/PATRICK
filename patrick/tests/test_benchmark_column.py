@@ -1,7 +1,9 @@
 """Roadmap bloc 4 -- "benchmark column everywhere": every run row shows the
 common reference (persistence baseline, fixed across asset classes, same
-test-fold aggregation as the model's F1_dir) and the model's gap to it.
-A model score alone does not say whether it beats doing nothing clever."""
+test-fold aggregation as the model's score) and the model's gap to it.
+A model score alone does not say whether it beats doing nothing clever.
+Since ADR 0023 the gap is read on the MCC (the persistence has no probability,
+hence no AUC nor Brier), no longer on the F1."""
 from __future__ import annotations
 
 import json
@@ -20,9 +22,9 @@ def _seed(tmp_path, monkeypatch):
                   "c", "s", 42)
     tid = db.create_trial(conn, "r1", "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
     db.mark_best_trial(conn, tid)
-    db.add_fold_metrics(conn, tid, 1, "test", {"F1_dir": 0.60})
-    db.add_fold_metrics(conn, tid, 2, "test", {"F1_dir": 0.62})
-    db.add_baseline_metrics(conn, "r1", "BASELINE_persistence", "test", {"F1_dir": 0.55})
+    db.add_fold_metrics(conn, tid, 1, "test", {"F1_dir": 0.60, "MCC_4cls": 0.04})
+    db.add_fold_metrics(conn, tid, 2, "test", {"F1_dir": 0.62, "MCC_4cls": 0.06})
+    db.add_baseline_metrics(conn, "r1", "BASELINE_persistence", "test", {"F1_dir": 0.55, "MCC_4cls": 0.02})
     db.add_baseline_metrics(conn, "r1", "BASELINE_majority", "test", {"F1_dir": 0.70})
     db.finish_run(conn, "r1", status="done", n_trials=1)
     db.create_run(conn, "r2", "^VIX", 10, "snap", json.dumps({"name": "no_baseline"}), "c", "s", 42)
@@ -43,15 +45,15 @@ def test_run_panel_shows_the_benchmark_and_the_gap(tmp_path, monkeypatch):
     _seed(tmp_path, monkeypatch)
     client = TestClient(app)
     html = client.get("/runs/r1/panel").text
-    assert "Persistance" in html
-    assert "0.5500" in html
-    assert "+0.0600" in html
+    assert "Persistance (MCC)" in html
+    assert "0.020" in html
+    assert "+0.030" in html
     # a run without baseline shows neither a benchmark nor a gap
     bare = client.get("/runs/r2/panel").text
-    assert "Persistance" in bare and "0.5500" not in bare and "+0.0600" not in bare
+    assert "Persistance" in bare and "0.020" not in bare and "+0.030" not in bare
 
 
 def test_target_page_shows_the_benchmark_and_the_gap(tmp_path, monkeypatch):
     _seed(tmp_path, monkeypatch)
     html = TestClient(app).get("/targets/^VIX").text
-    assert "Persistance (F1_dir)" in html and "+0.0600" in html
+    assert "Écart MCC" in html and "+0.030" in html and "Persistance (F1_dir)" not in html

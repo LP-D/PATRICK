@@ -379,6 +379,27 @@ def run_autopilots(db_path: str | None = None) -> list[dict]:
     return reports
 
 
+def refresh_metric_panel(db_path: str | None = None) -> dict | None:
+    """Rattrape le panneau de métriques (ADR 0023 : AUC_dir, Brier_up, MCC_4cls, Acc_dir_p) des modèles évalués avant qu'il existe, à partir de
+    leurs prédictions en base (`tracking/metric_backfill.py`, ajout seulement). Ne fait rien une fois tout rattrapé ; une panne est journalisée,
+    jamais levée."""
+    from patrick.tracking import metric_backfill
+
+    try:
+        conn = trackdb.connect(db_path)
+        try:
+            report = metric_backfill.backfill(conn)
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("panneau de métriques : rattrapage en échec")
+        return None
+    if report["n_rows"]:
+        logger.info("panneau de métriques rattrapé : %d essai(s), %d mesure(s) ajoutée(s) en %.0f s", report["n_touched"], report["n_rows"],
+                    report["seconds"])
+    return report
+
+
 def refresh_pooled_signal(db_path: str | None = None) -> dict | None:
     """Tient à jour l'AUC regroupée par paire cible-horizon (`tracking/pooled_signal.py`), lue par la Synthèse et les cartes de lots.
     À lancer après les prédictions du jour ; une panne est journalisée, jamais levée."""
@@ -458,6 +479,7 @@ def _refresh_once(db_path: str | None = None) -> None:
         if rest:
             run_daily_predictions(rest, db_path=db_path, on_item=_progress)
         refresh_pooled_signal(db_path)
+        refresh_metric_panel(db_path)
         write_weekly_report(db_path)
     finally:
         with _state_lock:

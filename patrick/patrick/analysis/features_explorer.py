@@ -86,11 +86,15 @@ def feature_detail(conn: sqlite3.Connection, feature: str, limit: int = 120) -> 
     meta = {}
     if ids:
         ph = ",".join("?" for _ in ids)
-        for rid, algo, n, f1 in conn.execute(
-                f"SELECT t.run_id, t.algo, t.n_features, (SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') "
-                f"AND metric = 'F1_dir') FROM trial t WHERE t.is_best = 1 AND t.run_id IN ({ph})", ids):
-            meta[rid] = (algo, n, f1)
-    items = [{"run_id": rid, "target": runs[rid][0], "horizon": runs[rid][1], "freq": freq, "algo": (meta.get(rid) or (None,))[0],
-              "n_features": (meta.get(rid) or (None, None))[1], "f1": (meta.get(rid) or (None, None, None))[2]} for rid, freq in rows if rid in runs][:limit]
+        # Panneau du meilleur essai (ADR 0023) : AUC de direction et Brier, moyennes des plis de test.
+        for rid, algo, n, auc, brier in conn.execute(
+                f"SELECT t.run_id, t.algo, t.n_features, "
+                f"(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'AUC_dir'), "
+                f"(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'Brier_up') "
+                f"FROM trial t WHERE t.is_best = 1 AND t.run_id IN ({ph})", ids):
+            meta[rid] = (algo, n, auc, brier)
+    items = [{"run_id": rid, "target": runs[rid][0], "horizon": runs[rid][1], "freq": freq, "algo": (meta.get(rid) or (None,) * 4)[0],
+              "n_features": (meta.get(rid) or (None,) * 4)[1], "auc_dir": (meta.get(rid) or (None,) * 4)[2],
+              "brier": (meta.get(rid) or (None,) * 4)[3]} for rid, freq in rows if rid in runs][:limit]
     return sc.jsonable({"feature": feature, "family": feature_family(feature), "series": base_series(feature), "runs": items,
                         "n_runs": sum(1 for r in rows if r[0] in runs), "targets": sorted({i["target"] for i in items})})

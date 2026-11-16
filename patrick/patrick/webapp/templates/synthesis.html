@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, lazy_block %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, lazy_block, panel_th, panel_td %}
 {% block title %}PATRICK — {{ t('nav_home') }}{% endblock %}
 
 {# Synthèse : l'état de l'application d'un coup d'œil, puis le détail repliable. Le haut répond à trois questions -- les
@@ -42,7 +42,7 @@
 <div class="metric-grid">
 {{ metric(t('home_kpi_models'), home.n_sane, t('home_kpi_models_rel', d=home.kinds.directional.n, a=home.kinds.alpha.n), "ok" if home.n_sane else "neutral") }}
 {{ metric(t('home_kpi_champions'), home.n_champions, t('home_kpi_champions_rel', total=coverage.total), "neutral") }}
-{{ metric(t('home_kpi_auc'), f3(home.auc_median), t('home_kpi_auc_rel', f1=f3(home.f1_median)), "neutral") }}
+{{ metric(t('home_kpi_auc'), home.panel_median.AUC_dir | pmfmt('AUC_dir'), t('home_kpi_auc_rel', b=home.panel_median.Brier_up | pmfmt('Brier_up'), m=home.panel_median.MCC_4cls | pmfmt('MCC_4cls'), a=home.panel_median.Acc_dir_p | pmfmt('Acc_dir_p')), "neutral") }}
 {{ metric(t('home_kpi_data'), (home.n_recent_failures + home.n_suspect), t('home_kpi_data_rel', f=home.n_recent_failures, s=home.n_suspect, d=home.recent_days), "error" if home.n_suspect else ("warning" if home.n_recent_failures else "ok")) }}
 {{ metric(t('home_kpi_short'), home.n_short, t('home_kpi_short_rel', y=home.min_years, n=home.n_targets), "warning" if home.n_short else "ok") }}
 {# Date seule quand l'heure est minuit (signal de clôture) ; sinon date et heure, sans le « T » ni les secondes. #}
@@ -75,13 +75,15 @@
 </section>
 <section class="card home-card">
     <h2>{{ t('home_q_models') }}</h2>
+    <div class="table-scroll">
     <table class="data-table home-mini">
-        <thead><tr><th>{{ t('kind_col') }}</th><th class="num">{{ t('an_col_n_models') }}</th><th class="num">AUC</th><th class="num">F1</th></tr></thead>
+        <thead><tr><th>{{ t('kind_col') }}</th><th class="num">{{ t('an_col_n_models') }}</th>{{ panel_th(m_labels) }}</tr></thead>
         <tbody>
-        <tr><td><span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></td><td class="num pk-mono">{{ home.kinds.directional.n }}</td><td class="num pk-mono">{{ f3(home.kinds.directional.auc) }}</td><td class="num pk-mono">{{ f3(home.kinds.directional.f1) }}</td></tr>
-        <tr><td><span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span></td><td class="num pk-mono">{{ home.kinds.alpha.n }}</td><td class="num pk-mono">{{ f3(home.kinds.alpha.auc) }}</td><td class="num pk-mono">{{ f3(home.kinds.alpha.f1) }}</td></tr>
+        <tr><td><span class="kind-badge kind-directional">{{ t('kind_directional') }}</span></td><td class="num pk-mono">{{ home.kinds.directional.n }}</td>{{ panel_td(home.kinds.directional.panel) }}</tr>
+        <tr><td><span class="kind-badge kind-alpha">{{ t('kind_alpha') }}</span></td><td class="num pk-mono">{{ home.kinds.alpha.n }}</td>{{ panel_td(home.kinds.alpha.panel) }}</tr>
         </tbody>
     </table>
+    </div>
     <p class="hint">{{ t('home_q_models_hint') }}</p>
     <p class="home-links"><a href="/runs">{{ t('nav_runs') }} →</a> <a href="/analysis">{{ t('nav_analysis') }} →</a></p>
 </section>

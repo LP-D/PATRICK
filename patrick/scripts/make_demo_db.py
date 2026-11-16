@@ -65,10 +65,13 @@ def build(db_path: str, today: dt.date | None = None, seed: int = 7) -> dict:
                 for fold in range(1, 6):
                     trackdb.add_fold_metrics(conn, trial_id, fold, "test", {
                         "AUC_ovr_4cls": auc + rng.uniform(-0.03, 0.03), "F1_dir": 0.5 + skill / 2 + rng.uniform(-0.03, 0.03),
-                        "AUC_dir": auc + rng.uniform(-0.03, 0.03), "Acc_dir": 0.5 + skill / 2 + rng.uniform(-0.03, 0.03)})
+                        "AUC_dir": auc + rng.uniform(-0.03, 0.03), "Acc_dir": 0.5 + skill / 2 + rng.uniform(-0.03, 0.03),
+                        # panneau de métriques (ADR 0023)
+                        "Brier_up": 0.25 - skill / 10 + rng.uniform(-0.004, 0.004), "MCC_4cls": skill / 2 + rng.uniform(-0.02, 0.02),
+                        "Acc_dir_p": 0.5 + skill / 2 + rng.uniform(-0.03, 0.03)})
                 trackdb.add_fold_metrics(conn, trial_id, 0, "holdout", {
                     "AUC_ovr_4cls": auc - 0.01, "F1_dir": 0.5 + skill / 2, "AUC_dir": auc - 0.01, "Acc_dir": 0.5 + skill / 2,
-                    "Brier_up": 0.25 - skill / 10, "ECE_up": 0.05})
+                    "Brier_up": 0.25 - skill / 10, "ECE_up": 0.05, "MCC_4cls": skill / 2 - 0.005, "Acc_dir_p": 0.5 + skill / 2 - 0.005})
                 trackdb.finish_run(conn, run_id, "done", n_trials=20)
                 conn.execute("INSERT OR REPLACE INTO champion (target, horizon, run_id, trial_id, reason, holdout_f1_dir) "
                              "VALUES (?, ?, ?, ?, 'first', ?)", (target, horizon, run_id, trial_id, 0.5 + skill / 2))
@@ -88,9 +91,9 @@ def build(db_path: str, today: dt.date | None = None, seed: int = 7) -> dict:
                              (target, horizon, auc, auc, 0.01 if skill > 0.05 else 0.4, 0.04 if skill > 0.05 else 0.6, int(skill > 0.05)))
         conn.commit()
         relaunch_stats.record_duel(conn, job_id="demo_job_1", run_id="demo_AAPL_1", target="AAPL", horizon=1,
-                                   decision={"decision": "challenger_wins", "criterion": "AUC_dir", "challenger_score": 0.58, "champion_score": 0.54})
+                                   decision={"decision": "challenger_wins", "criterion": "AUC_dir+Brier_up", "challenger_score": 0.58, "champion_score": 0.54})
         relaunch_stats.record_duel(conn, job_id="demo_job_2", run_id="demo_MSFT_1", target="MSFT", horizon=1,
-                                   decision={"decision": "champion_wins", "criterion": "AUC_dir", "challenger_score": 0.51, "champion_score": 0.55})
+                                   decision={"decision": "champion_wins", "criterion": "AUC_dir+Brier_up", "challenger_score": 0.51, "champion_score": 0.55})
         relaunch_stats.record_live_failure(
             conn, "demo_CL_F_5", "Training pool columns missing from the fresh data: ['OJ=F_vol_10d'] -- the config may have changed since export.")
         n_runs = conn.execute("SELECT COUNT(*) FROM run").fetchone()[0]

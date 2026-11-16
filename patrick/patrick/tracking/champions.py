@@ -224,14 +224,37 @@ def apply_initialization(conn: sqlite3.Connection, plan: list[dict]) -> dict:
     return {"promoted": promoted, "superseded": superseded}
 
 
-def list_champions(conn: sqlite3.Connection) -> list[dict]:
+def holdout_panels(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict]:
+    """`{trial_id: panneau du holdout}` (ADR 0023 : AUC_dir, Brier_up, MCC_4cls, Acc_dir_p), en une requête par lot de 400 essais."""
+    from patrick.validation import metric_panel
+
+    raw: dict[int, dict[str, float]] = {}
+    ids = [t for t in trial_ids if t is not None]
+    m_ph = ",".join("?" for _ in metric_panel.PANEL_KEYS)
+    for i in range(0, len(ids), 400):
+        chunk = ids[i:i + 400]
+        t_ph = ",".join("?" for _ in chunk)
+        for trial_id, metric, value in conn.execute(
+                f"SELECT trial_id, metric, AVG(value) FROM fold_metric WHERE trial_id IN ({t_ph}) AND split = 'holdout' "
+                f"AND metric IN ({m_ph}) GROUP BY trial_id, metric", [*chunk, *metric_panel.PANEL_KEYS]):
+            raw.setdefault(trial_id, {})[metric] = value
+    return {trial_id: metric_panel.panel(raw.get(trial_id)) for trial_id in ids}
+
+
+def list_champions(conn: sqlite3.Connection, with_panel: bool = False) -> list[dict]:
+    """Le modèle en titre de chaque (cible, horizon). `with_panel` : ajoute `holdout_panel`, le panneau de métriques de son holdout."""
     rows = conn.execute(
         "SELECT c.target, c.horizon, c.run_id, c.trial_id, c.reason, c.promoted_at, c.holdout_f1_dir, "
         "t.algo, t.n_features FROM champion c LEFT JOIN trial t ON t.trial_id = c.trial_id "
         "ORDER BY c.target, c.horizon").fetchall()
     keys = ("target", "horizon", "run_id", "trial_id", "reason", "promoted_at", "holdout_f1_dir",
             "algo", "n_features")
-    return [dict(zip(keys, r)) for r in rows]
+    out = [dict(zip(keys, r)) for r in rows]
+    if with_panel:
+        panels = holdout_panels(conn, [c["trial_id"] for c in out])
+        for c in out:
+            c["holdout_panel"] = panels.get(c["trial_id"])
+    return out
 
 
 def list_archive(conn: sqlite3.Connection, target: str | None = None, horizon: int | None = None) -> list[dict]:

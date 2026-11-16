@@ -140,10 +140,17 @@ def trials(ctx: Ctx) -> dict:
         "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'F1_dir'), "
         "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'Acc_dir'), "
         "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split = 'holdout' AND metric = 'F1_dir'), "
-        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'AUC_ovr_4cls') "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'AUC_ovr_4cls'), "
+        # Panneau (ADR 0023) : AUC_dir, Brier_up, MCC_4cls, Acc_dir_p sur le test, AUC_dir et Brier_up sur le holdout.
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'AUC_dir'), "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'Brier_up'), "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'MCC_4cls'), "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split IN ('test','test_path') AND metric = 'Acc_dir_p'), "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split = 'holdout' AND metric = 'AUC_dir'), "
+        "(SELECT AVG(value) FROM fold_metric WHERE trial_id = t.trial_id AND split = 'holdout' AND metric = 'Brier_up') "
         "FROM trial t WHERE t.run_id = ? ORDER BY t.is_best DESC, t.trial_id", (run_id,)).fetchall()
     keys = ("trial_id", "regime", "algo", "sampler", "n_features", "selector", "is_best", "category", "f1_dir", "acc_dir", "holdout_f1",
-            "auc")
+            "auc", "auc_dir", "brier", "mcc", "acc_dir_p", "holdout_auc_dir", "holdout_brier")
     items = [dict(zip(keys, r, strict=True)) for r in rows]
     for it in items:
         it["is_best"] = bool(it["is_best"])

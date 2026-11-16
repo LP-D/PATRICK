@@ -553,7 +553,7 @@
     {# Au repos, cette colonne n'avait rien à montrer sur toute la hauteur du
        premier viewport. La base a de quoi la remplir : les derniers runs,
        avec la seule contrepartie de fiabilité qui tienne sur une ligne — le
-       nombre d'essais dont le F1_dir affiché est le maximum. #}
+       nombre d'essais dont le meilleur est affiché, lu sur son AUC de direction et son Brier (ADR 0023). #}
     {% if recent_runs %}
     <div id="recent-runs" class="recent-runs {% if initial_run_id %}hidden{% endif %}">
         <ol class="recent-runs-list">
@@ -561,7 +561,7 @@
             <li>
                 <a href="/runs/{{ r.run_id }}">{{ r.name or r.run_id }}</a>
                 <span class="recent-runs-meta" title="{{ r.target }}">{{ r.target | iname }}/{{ r.horizon }}{{ t('day_suffix') }} · {{ r.status }}</span>
-                <span class="recent-runs-value">{% if r.best_f1_dir is not none %}{{ "%.4f" | format(r.best_f1_dir) }}{% else %}<span class="na">—</span>{% endif %}</span>
+                <span class="recent-runs-value" title="{{ t('pm_AUC_dir') }} · {{ t('pm_Brier_up') }}">{% if r.panel and r.panel.AUC_dir is not none %}{{ r.panel.AUC_dir | pmfmt('AUC_dir') }} · {{ r.panel.Brier_up | pmfmt('Brier_up') }}{% else %}<span class="na">—</span>{% endif %}</span>
                 {# « meilleur de 0 essai(s) » sur un run en cours était une
                    contrepartie de fiabilité qui affirmait une fausseté : il n'y
                    a pas de meilleur essai tant qu'aucun n'est fini. #}

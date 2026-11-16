@@ -18,7 +18,7 @@ def _seed(tmp_path, monkeypatch):
         db.create_run(conn, run_id, target, 5, "snap", json.dumps({"name": run_id, "validation": {"scheme": "walkforward"}}), "c", "s", 42)
         tid = db.create_trial(conn, run_id, "GLOBAL", "XGBoost", "SMOTE", 8, "shap")
         db.mark_best_trial(conn, tid)
-        db.add_fold_metrics(conn, tid, 1, "test", {"F1_dir": f1, "AUC_ovr_4cls": 0.60 if f1 < 0.9 else 0.97})
+        db.add_fold_metrics(conn, tid, 1, "test", {"F1_dir": f1, "AUC_ovr_4cls": 0.60 if f1 < 0.9 else 0.97, "AUC_dir": 0.60})
         db.finish_run(conn, run_id, status="done", n_trials=1)
     return conn
 
@@ -29,7 +29,7 @@ def test_target_page_lists_alpha_models_apart_from_directional(tmp_path, monkeyp
     assert 'id="alpha-models"' in html
     section = html[html.index('id="alpha-models"'):]
     assert "^GSPC" in section and "QQQ" in section
-    assert "0.600" in section                      # AUC puis F1 du modèle alpha sain
+    assert "0.600" in section                      # AUC de direction du modèle alpha sain (panneau)
     assert "suspect" in section                    # le modèle à F1 = 0,99 est signalé
     assert "d1" not in section.split("</section>")[0]   # le run directionnel n'est pas dans la section alpha
 

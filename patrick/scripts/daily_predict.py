@@ -52,6 +52,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     PredictOutcome,
     RunSummary,
     find_predictable_candidates,
+    refresh_metric_panel,
     refresh_pooled_signal,
     run_autopilots,
     run_daily_predictions,
@@ -231,6 +232,9 @@ def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandid
     pooled = refresh_pooled_signal(args.db_path)
     if pooled and pooled["refreshed"]:
         print(f"AUC regroupée : {pooled['n_pairs']} paire(s) testée(s), {pooled['n_significant']} significative(s).")
+    panel = refresh_metric_panel(args.db_path)
+    if panel and panel["n_rows"]:
+        print(f"Panneau de métriques rattrapé : {panel['n_touched']} essai(s), {panel['n_rows']} mesure(s) ajoutée(s).")
     report_path = write_weekly_report(args.db_path)
     if report_path:
         print(f"Rapport hebdomadaire écrit : {report_path}")

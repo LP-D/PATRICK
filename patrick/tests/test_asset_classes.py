@@ -98,7 +98,7 @@ def _run(conn, run_id, target, status="done", f1=0.52, auc=0.55, started="2026-1
     tid = trackdb.create_trial(conn, run_id, "GLOBAL", "XGBoost", "SMOTE", 5, "shap")
     trackdb.mark_best_trial(conn, tid, artifact_path=None)
     with conn:
-        for metric, value in (("F1_dir", f1), ("AUC_ovr_4cls", auc)):
+        for metric, value in (("F1_dir", f1), ("AUC_ovr_4cls", auc), ("AUC_dir", auc), ("Brier_up", 0.25)):
             conn.execute("INSERT INTO fold_metric VALUES (?, 0, 'test', ?, ?)", (tid, metric, value))
     return tid
 
@@ -109,12 +109,15 @@ def test_class_overview_separates_directional_and_alpha_and_never_credits_a_susp
     _run(conn, "b", "BTC-USD", f1=0.99, auc=0.60)                  # suspect : ignoré comme « meilleur »
     _run(conn, "c", "ETH-USD__alpha_BTC-USD", f1=0.53, auc=0.56)
     stats = class_overview.model_stats_by_asset(conn)
-    assert stats["BTC-USD"]["directional"]["n_done"] == 2 and stats["BTC-USD"]["directional"]["best_f1"] == pytest.approx(0.51)
+    # meilleur modèle = panneau (ADR 0023) du meilleur run sain par AUC de direction, jamais le run suspect (F1 0,99)
+    best = stats["BTC-USD"]["directional"]
+    assert best["n_done"] == 2 and best["best_run"] == "a" and best["best"]["AUC_dir"] == pytest.approx(0.54)
     assert stats["BTC-USD"]["suspects"] == 1
     assert stats["ETH-USD"]["alpha"]["n_done"] == 1 and stats["ETH-USD"]["directional"]["n_done"] == 0
     page = class_overview.class_page(conn, "crypto", forms.TARGET_GROUPS, 10)
     rows = {r["symbol"]: r for g in page["groups"] for r in g["rows"]}
-    assert rows["BTC-USD"]["n_dir"] == 2 and rows["BTC-USD"]["f1"] == pytest.approx(0.51) and rows["BTC-USD"]["suspects"] == 1
+    assert rows["BTC-USD"]["n_dir"] == 2 and rows["BTC-USD"]["panel"]["AUC_dir"] == pytest.approx(0.54) and rows["BTC-USD"]["suspects"] == 1
+    assert rows["ETH-USD"]["alpha_panel"]["AUC_dir"] == pytest.approx(0.56)
     assert rows["ETH-USD"]["n_alpha"] == 1 and rows["ETH-USD"]["n_dir"] == 0
     assert page["kpi"]["n_alpha"] == 1 and page["kpi"]["n_suspect"] == 1
 

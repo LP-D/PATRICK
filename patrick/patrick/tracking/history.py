@@ -27,7 +27,7 @@ from patrick.tracking import class_balance
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout
 from patrick.tracking import stats as trackstats
-from patrick.validation import suspicion
+from patrick.validation import metric_panel, suspicion
 from patrick.validation.cpcv import n_paths as cpcv_n_paths
 from patrick.validation.cpcv import path_performance_distribution
 
@@ -121,9 +121,10 @@ def _avg_metric(conn: sqlite3.Connection, trial_id: int, splits: tuple[str, ...]
     return row[0] if row and row[0] is not None else None
 
 
-# Display order of the fold-level metrics: the two headline ones first (AUC, then F1), then the rest by family.
-METRIC_ORDER = ("AUC_ovr_4cls", "F1_dir", "F1_4cls", "Acc_dir", "BalAcc_4cls", "MCC_4cls", "F1_DOWN_FORT", "F1_UP_FORT",
-                "Brier_up", "ECE_up")
+# Display order of the fold-level metrics: the metric panel first (ADR 0023: AUC_dir, Brier_up, MCC_4cls, Acc_dir_p), then the rest by family.
+METRIC_ORDER = (*metric_panel.PANEL_KEYS, "F1_dir_p", "ECE_up", "AUC_ovr_4cls", "BalAcc_4cls", "Acc_dir", "F1_dir", "F1_4cls",
+                "F1_DOWN_FORT", "F1_UP_FORT")
+N_HEADLINE = len(metric_panel.PANEL_KEYS)
 SPLIT_ORDER = ("test", "test_path", "holdout", "valid")
 
 
@@ -144,7 +145,8 @@ def evaluation_sizes(conn: sqlite3.Connection, trial_id: int, horizon: int) -> d
 
 
 def _headline_for_trial(conn: sqlite3.Connection, trial_id: int) -> dict:
-    """`{"test": {AUC, F1_dir}, "holdout": {AUC, F1_dir}}` of one trial -- what every list and card shows first."""
+    """`{"test": {metric: value}, "holdout": {...}}` of one trial for `trackdb.HEADLINE_METRICS` (the metric panel first) -- what every
+    list and card shows first."""
     out: dict[str, dict[str, float]] = {}
     for split in ("test", "test_path", "holdout"):
         for metric in trackdb.HEADLINE_METRICS:
@@ -314,6 +316,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
     ).fetchall()
 
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, [r[0] for r in rows])
+    headline_by_run = trackdb.batch_best_metrics(conn, [r[0] for r in rows])
 
     out = []
     for run_id, tgt, horizon, status_, started_at, finished_at, n_trials, config_json, dm_p, dm_sample in rows:
@@ -326,6 +329,7 @@ def list_runs(conn: sqlite3.Connection, *, target: str | None = None,
             "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials,
             "name": _run_name(config_json), "scheme": run_scheme,
             "best_f1_dir": best_f1_by_run.get(run_id), "dm_p_value": dm_p, "dm_sample": dm_sample,
+            "panel": metric_panel.panel((headline_by_run.get(run_id) or {}).get("test")),
         })
     return out
 
@@ -536,7 +540,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
 
 def alpha_runs_for_asset(conn: sqlite3.Connection, symbol: str) -> list[dict]:
     """Runs alpha (rendement relatif à un benchmark) de `symbol`, du plus récent au plus ancien : la page d'un actif ne mélange pas
-    ces modèles avec les directionnels, mais les signale à part avec leurs chiffres d'en-tête (AUC puis F1) et le drapeau « suspect »."""
+    ces modèles avec les directionnels, mais les signale à part avec leur panneau de métriques (ADR 0023) et le drapeau « suspect »."""
     from patrick.config.target_label import ALPHA_SEP, split_run_label
 
     prefix = symbol + ALPHA_SEP
@@ -551,8 +555,7 @@ def alpha_runs_for_asset(conn: sqlite3.Connection, symbol: str) -> list[dict]:
         out.append({
             "run_id": run_id, "label": label, "benchmark": split_run_label(label)[2], "horizon": horizon, "status": status_,
             "started_at": started_at, "name": _run_name(config_json),
-            "auc": test.get("AUC_ovr_4cls"), "f1": test.get("F1_dir"),
-            "holdout_auc": holdout.get("AUC_ovr_4cls"), "holdout_f1": holdout.get("F1_dir"),
+            "panel": metric_panel.panel(test), "holdout_panel": metric_panel.panel(holdout),
             "suspect": suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test")),
         })
     return out
@@ -579,6 +582,8 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
     best_f1_by_run = trackdb.batch_best_f1_dir(conn, run_ids)
     dm_by_run = trackdb.batch_dm_results(conn, run_ids)
     benchmark_by_run = trackdb.batch_baseline_f1_dir(conn, run_ids)
+    headline_by_run = trackdb.batch_best_metrics(conn, run_ids)
+    benchmark_mcc_by_run = trackdb.batch_baseline_metric(conn, run_ids, "MCC_4cls")
     balance_by_run = class_balance.for_runs(conn, run_ids)
 
     run_rows = []
@@ -592,6 +597,9 @@ def target_detail(conn: sqlite3.Connection, target: str, fdr_alpha: float = 0.10
             "n_trials": n_trials,
             "best_f1_dir": best_f1_by_run.get(run_id), "dm_result": dm_by_run.get(run_id),
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
+            "panel": metric_panel.panel((headline_by_run.get(run_id) or {}).get("test")),
+            "holdout_panel": metric_panel.panel((headline_by_run.get(run_id) or {}).get("holdout")),
+            "benchmark_mcc": benchmark_mcc_by_run.get(run_id),
             "class_balance": balance_by_run.get(run_id),
         })
 

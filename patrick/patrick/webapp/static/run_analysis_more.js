@@ -23,7 +23,7 @@
         var all = {};
         d.blocks.forEach(function (b) { b.metrics.forEach(function (x) { all[x] = 1; }); });
         var metrics = d.metric_order.filter(function (x) { return all[x]; }).concat(Object.keys(all).filter(function (x) { return d.metric_order.indexOf(x) < 0 && x !== "n_train" && x !== "effective_n_train" && x !== "n_test"; }));
-        var cur = metrics.indexOf("F1_dir") >= 0 ? "F1_dir" : metrics[0], host = h("div", {});
+        var cur = metrics.indexOf("AUC_dir") >= 0 ? "AUC_dir" : metrics[0], host = h("div", {});
         m.appendChild(PK.select(metrics.map(function (x) { return { value: x, label: x }; }), cur, function (v) { cur = v; draw(); }, T("ra_fo_metric")));
         m.appendChild(host);
         draw();
@@ -265,23 +265,26 @@
     RA.render.trials = function (m, d) {
         var algos = Array.from(new Set(d.trials.map(function (t) { return t.algo; }))), col = {};
         algos.forEach(function (a, i) { col[a] = PK.CAT_COLORS[i % 8]; });
-        var pts = d.trials.filter(function (t) { return isNum(t.f1_dir); });
+        // Panneau (ADR 0023) : l'AUC de direction quand les essais l'ont, sinon le MCC (essais d'avant le 2026-10-31, sans P(hausse) mesurée).
+        var withAuc = d.trials.filter(function (t) { return isNum(t.auc_dir); }).length, yKey = withAuc * 2 >= d.trials.length && withAuc ? "auc_dir" : "mcc";
+        var chance = yKey === "auc_dir" ? 0.5 : 0;
+        var pts = d.trials.filter(function (t) { return isNum(t[yKey]); });
         if (pts.length) {
-            var xs = pts.map(function (t) { return t.n_features; }), ys = pts.map(function (t) { return t.f1_dir; });
-            var xr = PK.extent([xs], 0.08), yr = PK.extent([ys, [0.5]], 0.1);
-            var P = PK.plot({ w: 780, h: 280, x: { type: "linear", domain: xr, fmt: function (v) { return int(v); }, label: T("ra_tr_x") }, y: { domain: yr, fmt: function (v) { return num(v, 2); }, label: T("ra_tr_y") }, title: T("ra_tr_title") });
-            PK.hline(P, 0.5, { color: "var(--text-3)" });
+            var xs = pts.map(function (t) { return t.n_features; }), ys = pts.map(function (t) { return t[yKey]; });
+            var xr = PK.extent([xs], 0.08), yr = PK.extent([ys, [chance]], 0.1);
+            var P = PK.plot({ w: 780, h: 280, x: { type: "linear", domain: xr, fmt: function (v) { return int(v); }, label: T("ra_tr_x") }, y: { domain: yr, fmt: function (v) { return num(v, 2); }, label: T(yKey === "auc_dir" ? "ra_tr_y" : "ra_tr_y_mcc") }, title: T("ra_tr_title") });
+            PK.hline(P, chance, { color: "var(--text-3)" });
             pts.forEach(function (t) {
-                var c = PK.hoverTip(P.add(PK.s("circle", { cx: P.X(t.n_features), cy: P.Y(t.f1_dir), r: t.is_best ? 6.5 : 4.2, fill: col[t.algo], "fill-opacity": 0.7, stroke: t.is_best ? "var(--text)" : col[t.algo], "stroke-width": t.is_best ? 2 : 1 })),
-                    function () { return ["#" + t.trial_id + " · " + t.algo + " · " + t.sampler, T("ra_tr_t", { n: t.n_features, f: num(t.f1_dir, 4), a: num(t.acc_dir, 4), h: num(t.holdout_f1, 4) })]; });
+                var c = PK.hoverTip(P.add(PK.s("circle", { cx: P.X(t.n_features), cy: P.Y(t[yKey]), r: t.is_best ? 6.5 : 4.2, fill: col[t.algo], "fill-opacity": 0.7, stroke: t.is_best ? "var(--text)" : col[t.algo], "stroke-width": t.is_best ? 2 : 1 })),
+                    function () { return ["#" + t.trial_id + " · " + t.algo + " · " + t.sampler, T("ra_tr_t", { n: t.n_features, auc: num(t.auc_dir, 3), b: num(t.brier, 3), m: num(t.mcc, 3), a: isNum(t.acc_dir_p) ? pct(t.acc_dir_p, 1) : "—", h: num(t.holdout_auc_dir, 3) })]; });
                 return c;
             });
             m.appendChild(P.node);
             m.appendChild(PK.legend(algos.map(function (a) { return { color: col[a], label: a }; })));
             m.appendChild(PK.note(T("ra_tr_hint")));
         }
-        var rows = d.trials.map(function (t) { return [{ cell: "#" + t.trial_id + (t.is_best ? " ★" : ""), cls: t.is_best ? "pos" : "" }, t.algo, t.sampler, t.n_features, t.selector, t.regime, num(t.f1_dir, 4), num(t.acc_dir, 4), num(t.auc, 3), num(t.holdout_f1, 4)]; });
-        m.appendChild(titled(T("ra_tr_table", { n: d.n_in_run }), PK.table(["#", "Algo", "Sampler", "N", T("ra_tr_selector"), T("ra_tr_regime"), "F1_dir", "Acc_dir", "AUC", "F1_dir " + T("ra_pr_holdout")], rows, { num: [3, 6, 7, 8, 9] })));
+        var rows = d.trials.map(function (t) { return [{ cell: "#" + t.trial_id + (t.is_best ? " ★" : ""), cls: t.is_best ? "pos" : "" }, t.algo, t.sampler, t.n_features, t.selector, t.regime, num(t.auc_dir, 3), num(t.brier, 3), num(t.mcc, 3), isNum(t.acc_dir_p) ? pct(t.acc_dir_p, 1) : "—", num(t.holdout_auc_dir, 3), num(t.holdout_brier, 3)]; });
+        m.appendChild(titled(T("ra_tr_table", { n: d.n_in_run }), PK.table(["#", "Algo", "Sampler", "N", T("ra_tr_selector"), T("ra_tr_regime"), T("pm_AUC_dir"), T("pm_Brier_up"), T("pm_MCC_4cls"), T("pm_Acc_dir_p"), T("pm_AUC_dir") + " " + T("ra_pr_holdout"), T("pm_Brier_up") + " " + T("ra_pr_holdout")], rows, { num: [3, 6, 7, 8, 9, 10, 11] })));
         if (d.registry && d.registry.length) {
             var ch = h("div", { class: "ra-chips" }, d.registry.map(function (r) { return PK.chip(r.source + " : " + int(r.n)); }));
             m.appendChild(titled(T("ra_tr_registry"), ch, T("ra_tr_registry_hint")));
@@ -402,7 +405,7 @@
 
     // ---------------------------------------------------------------- chemins CPCV
     RA.render.paths = function (m, d) {
-        var metrics = d.metrics, cur = metrics.indexOf("F1_dir") >= 0 ? "F1_dir" : metrics[0], host = h("div", {});
+        var metrics = d.metrics, cur = metrics.indexOf("AUC_dir") >= 0 ? "AUC_dir" : metrics[0], host = h("div", {});
         m.appendChild(PK.select(metrics.map(function (x) { return { value: x, label: x }; }), cur, function (v) { cur = v; draw(); }, T("ra_fo_metric")));
         m.appendChild(host);
         draw();
