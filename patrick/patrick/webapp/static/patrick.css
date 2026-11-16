@@ -200,6 +200,27 @@
   --radius-pill: 999px;        /* pastilles de filtre, badges, onglets segmentés */
 
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  /* Mouvement (ADR 0022) : une seule source pour les durées et les courbes. Entrées en ease-out, sorties en ease-in et 20 %
+     plus courtes, déplacements à l'écran en ease-in-out ; aucune courbe ne dépasse sa cible (pas de ressort). Tout tombe à
+     zéro avec prefers-reduced-motion et pour un geste fait au clavier (`<html data-input="keyboard">`, posé par motion.js). */
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);     /* ce qui arrive : départ vif, arrivée douce */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);         /* ce qui part : accélère en s'en allant */
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);     /* ce qui est déjà à l'écran et se déplace */
+  --dur-press: 120ms;
+  --dur-icon: 180ms;
+  --dur-icon-out: 144ms;
+  --dur-menu: 200ms;                               /* menus déroulants : dans la fenêtre 150-250 ms */
+  --dur-menu-out: 160ms;
+  --dur-pop: 180ms;
+  --dur-pop-out: 144ms;
+  --dur-move: 260ms;
+  --dur-reveal: 320ms;                             /* une révélation a du poids : plus lente qu'un menu */
+  --dur-page: 200ms;
+  --dur-page-out: 160ms;
+  --stagger: 30ms;                                 /* décalage entre deux lignes qui entrent */
+  --press-scale: 0.97;                             /* bouton à l'appui */
+  --pop-scale: 0.95;                               /* popover, menu, boîte : taille de départ */
+  --stretch: 1.12;                                 /* étirement de ce qui se déplace, au milieu du trajet */
   --sidebar-width: 232px;
   --sidebar-collapsed: 56px;
   --topbar-h: 48px;
@@ -277,7 +298,7 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns 200ms var(--ease-out);
+  transition: grid-template-columns var(--dur-move) var(--ease-move);   /* la colonne est déjà à l'écran : elle se déplace */
 }
 :root[data-sidebar="collapsed"] .app-shell { grid-template-columns: var(--sidebar-collapsed) minmax(0, 1fr); }
 
@@ -438,6 +459,30 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   border-radius: 0 2px 2px 0;
   background: var(--brand);
 }
+/* Repère de la page courante porté par un élément à part (`.nav-ink`, base_v2.html) : d'une page à l'autre, le navigateur le fait
+   glisser de l'ancienne entrée vers la nouvelle (même identifiant partagé, view-transition-name). Fond et filet passent sur lui. */
+.sidebar-nav a[aria-current="page"]:has(> .nav-ink) { background: transparent; isolation: isolate; }
+.sidebar-nav a[aria-current="page"]:has(> .nav-ink)::after { content: none; }
+.nav-ink {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+  pointer-events: none;
+  view-transition-name: nav-ink;
+}
+.nav-ink::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--brand);
+}
+:root[data-sidebar="collapsed"] .nav-ink::before { left: -10px; top: 8px; bottom: 8px; width: 3px; }
 .nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 .sidebar-footer {
@@ -567,12 +612,26 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   font-weight: 600;
 }
 
-.theme-toggle .icon-sun { display: none; }
-:root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
-:root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+/* Fondu d'icônes + flou : les deux icônes occupent la même case ; celle qui part s'estompe, rétrécit et se floute pendant que
+   l'autre fait l'inverse (jamais un simple échange display, qu'on ne voit pas passer). */
+.theme-toggle > span, .notify-toggle > span { display: grid; grid-area: 1 / 1; }
+.theme-toggle > span, .notify-toggle > span {
+  transition: opacity var(--dur-icon) var(--ease-enter), scale var(--dur-icon) var(--ease-enter), filter var(--dur-icon) var(--ease-enter);
+}
+.theme-toggle .icon-sun,
+:root[data-theme="light"] .theme-toggle .icon-moon,
+.notify-toggle .icon-bell-on[hidden], .notify-toggle .icon-bell-off[hidden] {
+  display: grid;
+  opacity: 0;
+  scale: 0.8;
+  filter: blur(4px);
+  transition-duration: var(--dur-icon-out);
+  transition-timing-function: var(--ease-exit);
+}
+:root[data-theme="light"] .theme-toggle .icon-sun { opacity: 1; scale: 1; filter: none; transition-duration: var(--dur-icon); transition-timing-function: var(--ease-enter); }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .theme-toggle .icon-sun { display: block; }
-  :root:not([data-theme]) .theme-toggle .icon-moon { display: none; }
+  :root:not([data-theme]) .theme-toggle .icon-sun { opacity: 1; scale: 1; filter: none; }
+  :root:not([data-theme]) .theme-toggle .icon-moon { opacity: 0; scale: 0.8; filter: blur(4px); }
 }
 
 .mobile-only { display: none; }
@@ -599,7 +658,18 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   background: var(--overlay);
   backdrop-filter: blur(3px);
 }
-.cmdk[hidden] { display: none; }
+/* Palette : le voile et le panneau entrent en 200 ms (ease-out) depuis le champ de recherche qui l'ouvre, et repartent vers lui
+   en 160 ms (ease-in). `display` est transité en discret : la palette reste peinte le temps de sa sortie. */
+.cmdk {
+  opacity: 1;
+  transition: opacity var(--dur-menu) var(--ease-enter), display var(--dur-menu) allow-discrete;
+}
+.cmdk[hidden] {
+  display: none;
+  opacity: 0;
+  transition: opacity var(--dur-menu-out) var(--ease-exit), display var(--dur-menu-out) allow-discrete;
+}
+@starting-style { .cmdk:not([hidden]) { opacity: 0; } }
 .cmdk-panel {
   width: min(620px, 100%);
   overflow: hidden;
@@ -607,9 +677,17 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   border-radius: var(--radius-card);
   background: var(--surface);
   box-shadow: var(--shadow-xl);
-  animation: cmdk-in 140ms var(--ease-out);
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 0%);
+  transition: opacity var(--dur-menu) var(--ease-enter), scale var(--dur-menu) var(--ease-enter), filter var(--dur-menu) var(--ease-enter);
 }
-@keyframes cmdk-in { from { opacity: 0; transform: translateY(-6px) scale(0.985); } to { opacity: 1; transform: none; } }
+.cmdk[hidden] .cmdk-panel {
+  opacity: 0;
+  scale: var(--pop-scale);
+  filter: blur(2px);
+  transition-duration: var(--dur-menu-out);
+  transition-timing-function: var(--ease-exit);
+}
+@starting-style { .cmdk:not([hidden]) .cmdk-panel { opacity: 0; scale: var(--pop-scale); filter: blur(2px); } }
 .cmdk-input-row { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
 .cmdk-input-row .icon { color: var(--text-3); }
 .cmdk-input {
@@ -791,6 +869,7 @@ a.card:hover, .card.is-link:hover { border-color: color-mix(in srgb, var(--brand
 
 .table-scroll {
   overflow: auto;
+  overscroll-behavior-x: contain;   /* au bout du défilement latéral : l'élastique (motion.js), jamais le « page précédente » du pavé */
   max-width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -944,7 +1023,7 @@ button.primary, .btn {
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 button.primary:hover, .btn:hover { background: var(--brand-strong); color: var(--on-brand); }
-button.primary:active, .btn:active { transform: translateY(0.5px); }
+/* Appui : tous les boutons se tassent à 0,97 (règle commune, section « Mouvement » en fin de fichier). */
 button.primary:disabled, .btn:disabled {
   filter: none;
   background: var(--surface-2);
@@ -1260,16 +1339,17 @@ legend {
   color: var(--text);
   font-size: var(--fs-base);
   opacity: 1;
-  transform: none;
-  transition: opacity 140ms linear, transform 160ms var(--ease-out), display 160ms allow-discrete;
+  /* Popover : naît du « ? » qui l'ouvre (origine calculée par motion.js) à 0,95, y retourne en sortant, 20 % plus vite. */
+  transform-origin: var(--origin-x, 0%) var(--origin-y, 0%);
+  transition: opacity var(--dur-pop) var(--ease-enter), scale var(--dur-pop) var(--ease-enter), display var(--dur-pop) allow-discrete;
 }
 .glossary-popover.hidden {
   display: none;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 100ms linear, transform 100ms linear, display 100ms allow-discrete;
+  scale: var(--pop-scale);
+  transition: opacity var(--dur-pop-out) var(--ease-exit), scale var(--dur-pop-out) var(--ease-exit), display var(--dur-pop-out) allow-discrete;
 }
-@starting-style { .glossary-popover:not(.hidden) { opacity: 0; transform: translateY(-4px); } }
+@starting-style { .glossary-popover:not(.hidden) { opacity: 0; scale: var(--pop-scale); } }
 .glossary-popover-title { margin-bottom: 6px; font-weight: 650; font-size: var(--fs-base); color: var(--text); }
 .glossary-popover-body { color: var(--text-2); line-height: 1.6; max-height: min(55vh, 420px); overflow-y: auto; }
 /* « ? » fusionné (glossary.js, mergeIcons) : une définition par terme, le terme en gras. */
@@ -1367,10 +1447,15 @@ legend {
   white-space: normal;
   pointer-events: none;
   opacity: 0;
-  transform: translate(-50%, 4px);
-  transition: opacity 120ms linear, transform 140ms var(--ease-out);
+  transform: translate(-50%, 0) scale(var(--pop-scale));
+  transform-origin: 50% 100%;                       /* la bulle sort du mot souligné, juste en dessous d'elle */
+  transition: opacity var(--dur-pop-out) var(--ease-exit), transform var(--dur-pop-out) var(--ease-exit);
 }
-.tip:hover::after, .tip:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+.tip:hover::after, .tip:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity var(--dur-pop) var(--ease-enter), transform var(--dur-pop) var(--ease-enter);
+}
 
 /* ============ /launch ============ */
 
@@ -2154,6 +2239,28 @@ dialog.modal {
   box-shadow: var(--shadow-xl);
 }
 dialog.modal::backdrop { background: var(--overlay); backdrop-filter: blur(2px); }
+/* Boîtes de dialogue : entrée à 0,95 depuis le bouton qui les ouvre (origine posée par motion.js), sortie vers lui 20 % plus
+   courte. `overlay` et `display` en discret : la boîte reste dans la couche du dessus pendant qu'elle repart. */
+dialog.modal, .history-dialog {
+  opacity: 0;
+  scale: var(--pop-scale);
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 50%);
+  transition: opacity var(--dur-pop-out) var(--ease-exit), scale var(--dur-pop-out) var(--ease-exit),
+              overlay var(--dur-pop-out) allow-discrete, display var(--dur-pop-out) allow-discrete;
+}
+dialog.modal[open], .history-dialog[open] {
+  opacity: 1;
+  scale: 1;
+  transition-duration: var(--dur-pop);
+  transition-timing-function: var(--ease-enter);
+}
+@starting-style { dialog.modal[open], .history-dialog[open] { opacity: 0; scale: var(--pop-scale); } }
+dialog.modal::backdrop, .history-dialog::backdrop {
+  opacity: 0;
+  transition: opacity var(--dur-pop-out) var(--ease-exit), overlay var(--dur-pop-out) allow-discrete, display var(--dur-pop-out) allow-discrete;
+}
+dialog.modal[open]::backdrop, .history-dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-pop); transition-timing-function: var(--ease-enter); }
+@starting-style { dialog.modal[open]::backdrop, .history-dialog[open]::backdrop { opacity: 0; } }
 dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
 .draggable-row { cursor: grab; }
 .draggable-row[data-dragging] { opacity: 0.5; }
@@ -2385,8 +2492,15 @@ a.visually-hidden[href="#main"]:focus {
   background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text);
   font-family: var(--sans); font-size: var(--fs-sm); font-weight: 400; line-height: 1.5;
   text-align: left; white-space: normal; pointer-events: none;
+  transform-origin: var(--origin-x, 0%) var(--origin-y, 0%);
+  transition: opacity var(--dur-pop) var(--ease-enter), scale var(--dur-pop) var(--ease-enter), display var(--dur-pop) allow-discrete;
 }
-.pred-pop[hidden] { display: none; }
+.pred-pop[hidden] {
+  display: none; opacity: 0; scale: var(--pop-scale);
+  transition: opacity var(--dur-pop-out) var(--ease-exit), scale var(--dur-pop-out) var(--ease-exit), display var(--dur-pop-out) allow-discrete;
+}
+@starting-style { .pred-pop:not([hidden]) { opacity: 0; scale: var(--pop-scale); } }
+.pred-pop[data-warm]:not([hidden]) { transition-duration: 0s; }      /* bulle suivante dans la foulée : sans animation */
 .pred-pop .pop-title { display: block; margin-bottom: 6px; font-size: var(--fs-base); }
 .pred-pop .pop-line { display: block; }
 .pred-pop .hint { display: inline; font-size: var(--fs-xs); }
@@ -2732,7 +2846,15 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
   max-height: min(60vh, 440px);
   overflow-y: auto;
 }
-.help-pop.hidden { display: none; }
+.help-pop {
+  transform-origin: var(--origin-x, 0%) var(--origin-y, 0%);
+  transition: opacity var(--dur-pop) var(--ease-enter), scale var(--dur-pop) var(--ease-enter), display var(--dur-pop) allow-discrete;
+}
+.help-pop.hidden {
+  display: none; opacity: 0; scale: var(--pop-scale);
+  transition: opacity var(--dur-pop-out) var(--ease-exit), scale var(--dur-pop-out) var(--ease-exit), display var(--dur-pop-out) allow-discrete;
+}
+@starting-style { .help-pop:not(.hidden) { opacity: 0; scale: var(--pop-scale); } }
 .help-pop p { margin: 0; }
 .help-pop p + p { margin-top: 8px; }
 .help-pop a { color: var(--brand); }
@@ -2755,9 +2877,15 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .exp-status { margin: 10px 0 0; color: var(--text-2); font-size: var(--fs-sm); font-family: var(--mono); }
 .exp-warnings { margin: 6px 0 0; padding: 0 0 0 18px; color: var(--warn); font-size: var(--fs-sm); }
 .exp-warnings:empty { display: none; }
-.exp-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 18px 0 12px; border-bottom: 1px solid var(--line); }
-.exp-tabs [role="tab"] { margin-bottom: -1px; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2);
-  font: 550 var(--fs-base) var(--sans); cursor: pointer; }
+/* Onglets d'analyse : une seule ligne qui défile latéralement (jamais deux rangées sous un même filet), collée sous la barre du haut
+   pendant qu'on descend dans un panneau long, pour changer d'onglet sans remonter. Le filet est une ombre intérieure (le défilement
+   rognerait une bordure) ; le trait orange est un élément à part posé par motion.js (`.tab-ink`), qui glisse d'un onglet à l'autre. */
+.exp-tabs { position: sticky; top: var(--stick-top); z-index: 20; display: flex; flex-wrap: nowrap; gap: 2px; margin: 18px 0 12px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding-inline: 32px;
+  background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(8px); box-shadow: inset 0 -1px 0 var(--line); }
+.exp-tabs::-webkit-scrollbar { display: none; }
+.exp-tabs [role="tab"] { flex: none; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2);
+  font: 550 var(--fs-base) var(--sans); white-space: nowrap; cursor: pointer; transition: color 120ms var(--ease-out); }
 .exp-tabs [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--brand); font-weight: 600; }
 .exp-tabs [role="tab"]:hover { color: var(--text); }
 .exp-tabs [role="tab"]:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; border-radius: var(--radius-sm); }
@@ -2799,9 +2927,18 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 
 /* Notification de fin de run : bouton cloche (barre supérieure) et bandeaux dans la page (run_notify.js). */
 .notify-toggle[aria-pressed="true"] { color: var(--brand); }
-.notify-toggle .icon-bell-on[hidden], .notify-toggle .icon-bell-off[hidden] { display: none; }
+/* Les icônes cloche allumée / éteinte se fondent l'une dans l'autre (règle commune avec le bouton de thème, plus haut). */
 .run-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
-.run-toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font-size: var(--fs-base); box-shadow: var(--shadow-lg); }
+.run-toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font-size: var(--fs-base); box-shadow: var(--shadow-lg);
+  /* Arrivée en courbe : l'axe horizontal et l'axe vertical n'ont pas la même courbe, le bandeau décrit un arc depuis le coin
+     au lieu d'une ligne droite ; les bandeaux arrivés ensemble entrent à 30 ms d'écart (`--i`, posé par motion.js). */
+  animation: toast-in-x var(--dur-reveal) var(--ease-enter) both, toast-in-y var(--dur-reveal) var(--ease-move) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.run-toast.is-leaving { animation: toast-out-x var(--dur-menu) var(--ease-exit) both, toast-out-y var(--dur-menu) var(--ease-enter) both; pointer-events: none; }
+@keyframes toast-in-x { from { translate: 32px 0; opacity: 0; } to { translate: 0 0; opacity: 1; } }
+@keyframes toast-in-y { from { transform: translateY(18px); } to { transform: none; } }
+@keyframes toast-out-x { to { translate: 24px 0; opacity: 0; } }
+@keyframes toast-out-y { to { transform: translateY(-6px); } }
 .run-toast span { flex: 1; }
 .run-toast a { color: var(--brand); font-weight: 600; white-space: nowrap; }
 .run-toast-ok { border-left: 3px solid var(--pos); }
@@ -2822,10 +2959,35 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .data-table th:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 
 /* Onglets d'un run (`_run_tabs.html`) : détail, analyse, comparateur. */
-.run-tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
-.run-tabs a { padding: 7px 12px; font-size: var(--fs-base); font-weight: 550; color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.run-tabs { display: flex; flex-wrap: nowrap; gap: 2px; margin: 0 0 14px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  overscroll-behavior-x: contain; box-shadow: inset 0 -1px 0 var(--line); }
+.run-tabs a { position: relative; flex: none; padding: 7px 12px; font-size: var(--fs-base); font-weight: 550; color: var(--text-2); white-space: nowrap;
+  border-bottom: 2px solid transparent; transition: color 120ms var(--ease-out); }
 .run-tabs a:hover { color: var(--text); }
 .run-tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--brand); font-weight: 600; }
+/* Trait de l'onglet courant porté par un élément à part (`.tab-ink`) : d'une page du run à l'autre, il glisse de l'ancien onglet au
+   nouveau (même identifiant partagé) au lieu de disparaître ici pour réapparaître là. */
+.run-tabs a[aria-current="page"]:has(> .tab-ink) { border-bottom-color: transparent; }
+.tab-ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--brand);
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+.run-tabs .tab-ink { view-transition-name: run-tab-ink; }
+.exp-tabs.has-ink [role="tab"][aria-selected="true"] { border-bottom-color: transparent; }
+.exp-tabs .tab-ink { width: 0; }
+/* Bords estompés quand il reste des onglets hors champ (motion.js tient `data-overflow` à jour au défilement). */
+.exp-tabs[data-overflow~="end"], .run-tabs[data-overflow~="end"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+.exp-tabs[data-overflow~="start"], .run-tabs[data-overflow~="start"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 40px); mask-image: linear-gradient(to right, transparent, #000 40px); }
+.exp-tabs[data-overflow~="start"][data-overflow~="end"], .run-tabs[data-overflow~="start"][data-overflow~="end"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
 
 /* Synthèse : bloc « À faire » (`synthesis.html`). */
 .home-actions { margin-bottom: 16px; }
@@ -2960,10 +3122,24 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
   border-radius: var(--radius-card);
   background: var(--surface);
   box-shadow: var(--shadow-xl);
-  animation: rise 140ms var(--ease-out) both;
+  overscroll-behavior: contain;
+  /* Menu déroulant : 200 ms à l'entrée, 160 ms à la sortie ; il part du bouton « Toutes les pages » et y retourne. */
+  transform-origin: var(--origin-x, 64px) var(--origin-y, 0px);
+  transition: opacity var(--dur-menu) var(--ease-enter), scale var(--dur-menu) var(--ease-enter), display var(--dur-menu) allow-discrete;
 }
 :root[data-sidebar="collapsed"] .mega-panel { width: min(1040px, calc(100vw - var(--sidebar-collapsed) - 56px)); }
-.mega-panel[hidden] { display: none; }
+.mega-panel[hidden] {
+  display: none;
+  opacity: 0;
+  scale: var(--pop-scale);
+  transition: opacity var(--dur-menu-out) var(--ease-exit), scale var(--dur-menu-out) var(--ease-exit), display var(--dur-menu-out) allow-discrete;
+}
+@starting-style { .mega-panel:not([hidden]) { opacity: 0; scale: var(--pop-scale); } }
+/* Les colonnes entrent l'une après l'autre, à 30 ms d'écart. */
+.mega-panel:not([hidden]) :is(.mega-feature, .mega-col) { animation: item-in var(--dur-menu) var(--ease-enter) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.mega-cols > :nth-child(1) { --i: 1; } .mega-cols > :nth-child(2) { --i: 2; } .mega-cols > :nth-child(3) { --i: 3; }
+.mega-cols > :nth-child(4) { --i: 4; } .mega-cols > :nth-child(5) { --i: 5; } .mega-cols > :nth-child(6) { --i: 6; }
+.mega-cols > :nth-child(n+7) { --i: 7; }
 .mega-feature {
   display: flex;
   flex-direction: column;
@@ -3015,14 +3191,102 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
   box-shadow: var(--shadow-md);
   cursor: pointer;
   opacity: 0;
-  transform: translateY(6px);
+  /* Arrive en courbe depuis le coin : axes horizontal et vertical sur deux courbes différentes ; repart 20 % plus vite. */
+  translate: 8px 0;
+  transform: translateY(10px);
   pointer-events: none;
-  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
+  transition: opacity var(--dur-menu-out) var(--ease-exit), translate var(--dur-menu-out) var(--ease-exit), transform var(--dur-menu-out) var(--ease-exit),
+              border-color 120ms var(--ease-out), color 120ms var(--ease-out), scale var(--dur-press) var(--ease-out);
 }
 .to-top[hidden] { display: none; }
-.to-top.is-visible { opacity: 1; transform: none; pointer-events: auto; }
+.to-top.is-visible {
+  opacity: 1; translate: 0 0; transform: none; pointer-events: auto;
+  transition: opacity var(--dur-menu) var(--ease-enter), translate var(--dur-menu) var(--ease-enter), transform var(--dur-menu) var(--ease-move),
+              border-color 120ms var(--ease-out), color 120ms var(--ease-out), scale var(--dur-press) var(--ease-out);
+}
 .to-top:hover { border-color: var(--brand); color: var(--brand); }
 .to-top:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .to-top, .mega-panel, .btn-arrow::after, .mega-caret { transition: none; animation: none; }
+}
+
+/* ============ Mouvement (ADR 0022) ============
+   Les 18 règles, appliquées avec les jetons de `:root` (--ease-*, --dur-*, --stagger, --press-scale, --pop-scale, --stretch).
+   Popovers, menus, boîtes, palette et bandeaux ont leur entrée et leur sortie à côté de leur style ; ici, ce qui est commun. */
+
+/* Boutons à 0,97 à l'appui : retour immédiat sous le doigt, sans déplacer la mise en page (propriété `scale`, indépendante
+   des `transform` déjà posés). La liste des propriétés transitées est réécrite pour y ajouter `scale` sans perdre le reste. */
+.btn, button.primary, .btn-secondary, button.secondary, .btn-ghost, .icon-btn, .kind-tab, .mega-trigger, .search-trigger, .run-tabs a, .exp-tabs [role="tab"] {
+  transition-property: background-color, border-color, color, box-shadow, scale;
+}
+/* Les lignes pleine largeur de l'arborescence ne se tassent pas (un rang entier qui rétrécit se lit comme un saut). */
+:is(button, .btn, .kind-tab, .run-tabs a, [role="button"]):not(:disabled):not(.sidebar-nav-heading, .nav-folder-btn):active {
+  scale: var(--press-scale);
+  transition-duration: 80ms;
+}
+
+/* Lignes décalées de 30 ms et révélations qui ont du poids : quand un bloc caché apparaît sous la main de l'utilisateur
+   (dossier de l'arborescence, panneau d'onglet, lignes repliées, options avancées), motion.js pose `.is-revealing` et numérote
+   les enfants (`--i`, plafonné à 10) ; un grand bloc reçoit une durée plus longue (`--reveal-dur`). Jamais au chargement. */
+@keyframes item-in { from { opacity: 0; translate: 0 -4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes reveal-in { from { opacity: 0; translate: 0 8px; filter: blur(4px); } to { opacity: 1; translate: 0 0; filter: none; } }
+.is-revealing > * { animation: item-in var(--dur-menu) var(--ease-enter) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.is-revealing.reveal-block { animation: reveal-in var(--reveal-dur, var(--dur-reveal)) var(--ease-enter) both; }
+.is-revealing.reveal-block > * { animation: none; }
+tr.is-revealing { animation: item-in var(--dur-menu) var(--ease-enter) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+tr.is-revealing > * { animation: none; }
+details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(--ease-enter) both; }
+
+/* Palette de commande : à l'ouverture seulement (pas à chaque frappe), les premières lignes entrent à 30 ms d'écart. */
+.cmdk[data-opening] .cmdk-list > li { animation: item-in var(--dur-menu) var(--ease-enter) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.cmdk-list > li:nth-child(2) { --i: 1; } .cmdk-list > li:nth-child(3) { --i: 2; } .cmdk-list > li:nth-child(4) { --i: 3; }
+.cmdk-list > li:nth-child(5) { --i: 4; } .cmdk-list > li:nth-child(6) { --i: 5; } .cmdk-list > li:nth-child(7) { --i: 6; }
+.cmdk-list > li:nth-child(8) { --i: 7; } .cmdk-list > li:nth-child(n+9) { --i: 8; }
+
+/* Élastique aux limites : une liste ou une barre qui défile, poussée au-delà de son bout, cède un peu puis revient (motion.js
+   pose `--elastic` sur le conteneur ; propriété enregistrée pour pouvoir la transiter au retour, en ease-out, sans rebond). */
+@property --elastic { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.cmdk-list, .glossary-popover-body, .help-pop { overscroll-behavior: contain; }
+[data-elastic="x"].is-stretched > * { translate: var(--elastic) 0; }     /* posé seulement pendant le geste : au repos, aucun */
+[data-elastic="y"].is-stretched > * { translate: 0 var(--elastic); }     /* `translate` ne crée de contexte d'empilement */
+[data-elastic].is-releasing { transition: --elastic 360ms var(--ease-out); }
+
+/* Ancien et nouvel état mêlés, d'une page à l'autre : le navigateur fond l'ancienne page dans la nouvelle (200 ms, la sortie
+   20 % plus courte), et les repères qui portent le même identifiant (`nav-ink`, `run-tab-ink`) glissent de leur ancienne place
+   à la nouvelle en ease-in-out, étirés de 12 % au milieu du trajet. Le bandeau défilant garde sa propre vie (aucun fondu). */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}
+::view-transition-old(root) { animation: vt-fade-out var(--dur-page-out) var(--ease-exit) both; }
+::view-transition-new(root) { animation: vt-fade-in var(--dur-page) var(--ease-enter) both; }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+::view-transition-group(nav-ink), ::view-transition-group(run-tab-ink) { animation-duration: var(--dur-move); animation-timing-function: var(--ease-move); }
+::view-transition-image-pair(nav-ink) { animation: stretch-y var(--dur-move) var(--ease-move); }
+::view-transition-image-pair(run-tab-ink) { animation: stretch-x var(--dur-move) var(--ease-move); }
+@keyframes stretch-x { 50% { scale: var(--stretch) 1; } }
+@keyframes stretch-y { 50% { scale: 1 var(--stretch); } }
+.ticker { view-transition-name: ticker; }
+::view-transition-old(ticker) { display: none; }
+::view-transition-new(ticker) { animation: none; }
+/* Changement de thème : la nouvelle palette se révèle en cercle depuis le bouton (révélation rare, donc plus lente : elle a du
+   poids), l'ancienne reste dessous jusqu'au bout. */
+:root[data-vt="theme"]::view-transition-old(root) { animation: none; }
+:root[data-vt="theme"]::view-transition-new(root) { animation: theme-reveal 420ms var(--ease-move) both; }
+@keyframes theme-reveal { from { clip-path: circle(0 at var(--vt-x, 100%) var(--vt-y, 0%)); } to { clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 100%) var(--vt-y, 0%)); } }
+
+/* Geste au clavier : jamais d'animation pour ce qu'un raccourci, Entrée ou Échap ouvre ou ferme (motion.js tient
+   `<html data-input>` à jour dès la touche ou le clic). */
+:root[data-input="keyboard"] :is(.glossary-popover, .help-pop, .pred-pop, .mega-panel, .mega-col, .mega-feature, .cmdk, .cmdk-panel, .cmdk-list > li, dialog.modal, .history-dialog),
+:root[data-input="keyboard"] :is(dialog.modal, .history-dialog)::backdrop {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*), ::view-transition-image-pair(*) { animation: none !important; }
+  .run-toast, .is-revealing, .is-revealing > *, details.adv[open] > :not(summary) { animation: none !important; }
+  [data-elastic] > * { translate: none !important; }
+  .theme-toggle > span, .notify-toggle > span { filter: none !important; }
 }

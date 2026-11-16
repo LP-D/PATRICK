@@ -26,12 +26,30 @@
         window.dispatchEvent(new CustomEvent("patrick:themechange", { detail: { theme: effectiveTheme() } }));
     }
     var themeBtn = document.getElementById("theme-toggle");
+    var themeSwaps = 0;
     if (themeBtn) {
-        themeBtn.addEventListener("click", function () {
+        themeBtn.addEventListener("click", function (e) {
             var next = effectiveTheme() === "dark" ? "light" : "dark";
-            root.setAttribute("data-theme", next);
-            store("patrick-theme", next);
-            announceTheme();
+            var apply = function () {
+                root.setAttribute("data-theme", next);
+                store("patrick-theme", next);
+                announceTheme();
+            };
+            // Ancien et nouveau thème mêlés : la nouvelle palette se révèle en cercle depuis le bouton (patrick.css,
+            // `data-vt="theme"`). Jamais au clavier (`detail === 0`) ni avec prefers-reduced-motion.
+            var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            if (!document.startViewTransition || still || e.detail === 0) { apply(); return; }
+            var r = themeBtn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+            var radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+            root.style.setProperty("--vt-x", x.toFixed(0) + "px");
+            root.style.setProperty("--vt-y", y.toFixed(0) + "px");
+            root.style.setProperty("--vt-r", radius.toFixed(0) + "px");
+            root.setAttribute("data-vt", "theme");
+            var mine = ++themeSwaps;
+            var done = function () { if (mine === themeSwaps) root.removeAttribute("data-vt"); };
+            window.setTimeout(done, 1200);              // filet : une transition jamais terminée ne fige pas l'attribut
+            try { document.startViewTransition(apply).finished.then(done, done); }
+            catch (err) { done(); apply(); }
         });
     }
     if (window.matchMedia) {
@@ -52,7 +70,7 @@
             store("patrick-sidebar", collapsed ? null : "collapsed");
             // Canvas charts size themselves on resize: the content column
             // just changed width.
-            window.setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 220);
+            window.setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 280);    // après la transition de 260 ms
         });
     }
     var openBtn = document.getElementById("nav-open");
@@ -215,12 +233,17 @@
     function open() {
         if (!dialog) return;
         lastFocus = document.activeElement;
+        // Les premières lignes entrent à 30 ms d'écart à l'ouverture seulement : jamais pendant la frappe (patrick.css).
+        dialog.setAttribute("data-opening", "");
+        window.clearTimeout(openingTimer);
+        openingTimer = window.setTimeout(function () { dialog.removeAttribute("data-opening"); }, 500);
         dialog.hidden = false;
         input.value = "";
         active = 0;
         render();
         input.focus();
     }
+    var openingTimer = null;
     function close() {
         if (!dialog || dialog.hidden) return;
         dialog.hidden = true;
@@ -228,7 +251,7 @@
     }
     if (dialog && input && list) {
         if (trigger) trigger.addEventListener("click", open);
-        input.addEventListener("input", function () { active = 0; render(); });
+        input.addEventListener("input", function () { dialog.removeAttribute("data-opening"); active = 0; render(); });
         dialog.addEventListener("click", function (e) { if (e.target === dialog) close(); });
         input.addEventListener("keydown", function (e) {
             if (e.key === "ArrowDown") { e.preventDefault(); if (shown.length) { active = (active + 1) % shown.length; highlight(); } }

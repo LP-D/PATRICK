@@ -27,6 +27,7 @@
         var box = $("app-flash");
         box.textContent = text;
         box.className = "banner banner-" + (kind || "info");
+        if (kind !== "error" && window.patrickMotion) window.patrickMotion.success(box);      // pulsation de réussite
         clearTimeout(flashTimer);
         if (kind !== "error") { flashTimer = setTimeout(function () { box.className = "banner hidden"; }, 6000); }
     }
