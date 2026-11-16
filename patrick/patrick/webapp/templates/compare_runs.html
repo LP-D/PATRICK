@@ -24,8 +24,12 @@
         <tr><th>{{ t('col_status') }}</th>{% for run in runs %}<td>{{ run.status_label or run.status }}</td>{% endfor %}</tr>
         <tr><th>{{ t('rp_duration') }}</th>{% for run in runs %}<td>{{ '%.0f s' | format(run.duration_s) if run.duration_s is not none else t('cmp_running') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('col_trials') }}</th>{% for run in runs %}<td>{{ run.n_trials if run.n_trials is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>{{ t('cmp_f1') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.best_f1_dir) if run.best_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
-        <tr><th>{{ t('cmp_f1_base') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.benchmark_f1_dir) if run.benchmark_f1_dir is not none else '—' }}</td>{% endfor %}</tr>
+        {# Panneau de métriques (ADR 0023), test puis holdout ; la meilleure valeur de chaque ligne est marquée (min pour le Brier). #}
+        {% for split, attr in (('test', 'panel'), ('holdout', 'holdout_panel')) %}{% for key in PANEL_KEYS %}
+        {% set vals = [] %}{% for run in runs %}{% set _ = vals.append((run[attr] or {}).get(key)) %}{% endfor %}
+        {% set best = panel_best(key, vals) %}
+        <tr><th title="{{ m_labels.get('metric_' ~ key, key) }}">{{ m_labels.get('pm_' ~ key, key) }} · {{ m_labels['split_' ~ split] }}</th>{% for v in vals %}<td class="pk-mono{% if v is not none and v == best and vals | select('ne', none) | list | length > 1 %} pos{% endif %}">{{ v | pmfmt(key) }}</td>{% endfor %}</tr>
+        {% endfor %}{% endfor %}
         <tr><th>{{ t('col_dm_p') }}</th>{% for run in runs %}<td>{{ '%.4f' | format(run.dm_p_value) if run.dm_p_value is not none else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_algos') }}</th>{% for run in runs %}<td>{{ run.algorithms | join(', ') if run.algorithms else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('cmp_samplers') }}</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>

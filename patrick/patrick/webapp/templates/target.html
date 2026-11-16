@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb, asset_panel, lazy_block %}
+{% from "_components.html" import status_badge, data_table, metric, empty_state, up_down, crumb, asset_panel, lazy_block, mcc_gap %}
 {% block title %}PATRICK — {{ target | iname }}{% endblock %}
 
 {% block crumb_trail %}{{ crumb(target | iname) }}{% endblock %}
@@ -137,10 +137,8 @@
     ('CPCV' if r.scheme == 'cpcv' else 'walk-forward'),
     status_badge(r.status, state),
     r.started_at or '—',
-    r.n_trials if r.n_trials is not none else '<span class="na">—</span>',
-    ('%.4f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '<span class="na">—</span>'),
-    ('%.4f' | format(r.benchmark_f1_dir) if r.benchmark_f1_dir is not none else '<span class="na">—</span>'),
-    (('<span class="' ~ ('pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg') ~ '">' ~ ('%+.4f' | format(r.best_f1_dir - r.benchmark_f1_dir)) ~ '</span>') if (r.best_f1_dir is not none and r.benchmark_f1_dir is not none) else '<span class="na">—</span>'),
+    r.n_trials if r.n_trials is not none else '<span class="na">—</span>'] + panel_cells(r.panel) + [
+    mcc_gap(r.panel, r.benchmark_mcc),
     dm_cell,
     up_down(r.class_balance.test if r.class_balance else none, 'true'),
     up_down(r.class_balance.test if r.class_balance else none, 'pred'),
@@ -148,8 +146,8 @@
     relaunch_cell,
 ]) %}
 {% endfor %}
-{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials'), t('tg_col_f1best'), t('tg_col_persist'), t('hist_gap'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('ra_col_analysis'), t('tg_col_relaunch')],
-              rows, num_cols=[1, 5, 6, 7, 8, 9, 10, 11],
+{{ data_table([t('col_run'), t('col_horizon'), t('col_scheme'), t('col_status'), t('tg_col_started'), t('col_trials')] + panel_heads(m_labels) + [t('hist_gap_mcc'), t('col_dm_p'), t('cb_col_true'), t('cb_col_pred'), t('ra_col_analysis'), t('tg_col_relaunch')],
+              rows, num_cols=[1, 5, 6, 7, 8, 9, 10, 11, 12, 13],
               footer=t('tg_runs_foot', n=detail.runs | length)) }}
 </section>
 
@@ -205,15 +203,13 @@
     (('<span title="' ~ r.benchmark ~ '">' ~ (r.benchmark | iname_h) ~ '</span>') if r.benchmark else '—'),
     r.horizon | hlabel,
     status_badge(r.status, state),
-    r.started_at or '—',
-    ('%.3f' | format(r.auc)) if r.auc is not none else '<span class="na">—</span>',
-    ('%.3f' | format(r.f1)) if r.f1 is not none else '<span class="na">—</span>',
-    ('%.3f' | format(r.holdout_auc)) if r.holdout_auc is not none else '<span class="na">—</span>',
-    ('%.3f' | format(r.holdout_f1)) if r.holdout_f1 is not none else '<span class="na">—</span>',
+    r.started_at or '—'] + panel_cells(r.panel) + [
+    r.holdout_panel.AUC_dir | pmfmt('AUC_dir'),
+    r.holdout_panel.Brier_up | pmfmt('Brier_up'),
 ]) %}
 {% endfor %}
-{{ data_table([t('col_run'), t('tg_alpha_bench'), t('col_horizon'), t('col_status'), t('tg_col_started'), 'AUC', 'F1_dir', t('tg_alpha_h_auc'), t('tg_alpha_h_f1')],
-              arows, num_cols=[2, 5, 6, 7, 8], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
+{{ data_table([t('col_run'), t('tg_alpha_bench'), t('col_horizon'), t('col_status'), t('tg_col_started')] + panel_heads(m_labels) + [t('tg_alpha_h_auc'), t('tg_alpha_h_brier')],
+              arows, num_cols=[2, 5, 6, 7, 8, 9, 10], collapse_after=5, more_label=t('rows_more'), less_label=t('rows_less'),
               footer=t('tg_alpha_foot', n=alpha_runs | length)) }}
 </section>
 {% endif %}

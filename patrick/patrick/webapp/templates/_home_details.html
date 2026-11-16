@@ -58,8 +58,8 @@
 {% set _ = metric_rows_fmt.append([
     '<a href="/targets/' ~ r.target ~ '" title="' ~ r.target ~ '">' ~ (r.target | iname_h) ~ '</a>',
     ("%.4f" | format(m.auc_overall)) if m.auc_overall is not none else '<span class="na">—</span>',
-    (down.n ~ " · P " ~ ("%.2f"|format(down.precision)) ~ " · R " ~ ("%.2f"|format(down.recall)) ~ " · F1 " ~ ("%.2f"|format(down.f1))) if down else ('<span class="na">—</span> (' ~ m.n_down ~ ' obs., min 10)'),
-    (up.n ~ " · P " ~ ("%.2f"|format(up.precision)) ~ " · R " ~ ("%.2f"|format(up.recall)) ~ " · F1 " ~ ("%.2f"|format(up.f1))) if up else ('<span class="na">—</span> (' ~ m.n_up ~ ' obs., min 10)'),
+    (down.n ~ " · P " ~ ("%.2f"|format(down.precision)) ~ " · R " ~ ("%.2f"|format(down.recall))) if down else ('<span class="na">—</span> (' ~ m.n_down ~ ' obs., min 10)'),
+    (up.n ~ " · P " ~ ("%.2f"|format(up.precision)) ~ " · R " ~ ("%.2f"|format(up.recall))) if up else ('<span class="na">—</span> (' ~ m.n_up ~ ' obs., min 10)'),
     '<a href="/runs/' ~ r.metrics.run_id ~ '">' ~ r.metrics.split_used ~ ', n=' ~ r.metrics.n ~ '</a>',
 ]) %}
 {% endfor %}
@@ -76,10 +76,9 @@
 {% for r in overview.recent_runs %}
 {% set _ = recent_rows.append([
     '<a href="/runs/' ~ r.run_id ~ '">' ~ (r.name or r.run_id) ~ '</a>', (r.target | iname_h), r.horizon | hlabel,
-    status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending")),
-    ("%.4f" | format(r.best_f1_dir)) if r.best_f1_dir is not none else '<span class="na">—</span>', r.started_at,
+    status_badge(r.status, "ok" if r.status == "done" else ("error" if r.status == "failed" else "pending"))] + panel_cells(r.panel) + [r.started_at,
 ]) %}
 {% endfor %}
-{{ data_table([t('dq_col_run'), t('dq_col_target'), t('dq_col_horizon'), t('dq_col_status'), 'F1', t('hist_started')], recent_rows, t('home_no_runs'), num_cols=[4],
+{{ data_table([t('dq_col_run'), t('dq_col_target'), t('dq_col_horizon'), t('dq_col_status')] + panel_heads(m_labels) + [t('hist_started')], recent_rows, t('home_no_runs'), num_cols=[4, 5, 6, 7],
               collapse_after=5, more_label=more, less_label=less, footer='<a href="/runs">' ~ t('home_full_history') ~ ' →</a>') }}
 </section>

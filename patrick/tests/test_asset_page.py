@@ -34,6 +34,7 @@ def _train_vix(conn) -> None:
     db.mark_best_trial(conn, trial)
     db.add_predictions(conn, trial, fold_index=None, split="live", ts=["2024-06-01T00:00:00"], y_true=[None], y_pred=[3], y_proba=[0.71])
     db.add_fold_metrics(conn, trial, 1, "test", {"F1_dir": 0.6})
+    db.add_fold_metrics(conn, trial, 0, "holdout", {"F1_dir": 0.61, "AUC_dir": 0.57, "Brier_up": 0.24, "MCC_4cls": 0.03, "Acc_dir_p": 0.53})
     db.add_predictions(conn, trial, fold_index=1, split="test", ts=["2024-01-01", "2024-01-02"], y_true=[3, 0], y_pred=[3, 0], y_proba=[0.7, 0.7])
     db.finish_run(conn, "run1", status="done", n_trials=1)
     trackchampions.promote(conn, "^VIX", 5, "run1", trial, "test", 0.61)
@@ -58,7 +59,8 @@ def test_the_signals_fragment_gives_one_signal_per_horizon_with_the_champion(con
     _train_vix(conn)
     html = FullPageClient(app).get("/fragments/asset-signals/%5EVIX").text
     assert "Hausse forte" in html and "5j" in html                         # le signal du jour, à 5 jours
-    assert 'href="/runs/run1/detail"' in html and "RandomForest" in html and "F1 0.610" in html
+    assert 'href="/runs/run1/detail"' in html and "RandomForest" in html
+    assert "AUC dir. 0.570" in html and "Brier 0.240" in html and "Bonne dir. 53.0 %" in html and "F1 0.610" not in html   # panneau du holdout
     assert "1j" not in html.split("<tbody>")[1].split("</tbody>")[0].split("5j")[0]      # seuls les horizons qui ont un signal ou un champion
 
 

@@ -244,9 +244,11 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "hist_kind_aria": _s("Type de modèle : directionnel ou alpha", "Model type: directional or alpha"),
     "hist_fam_ml_hint": _s(
         "Arbres, forêts et boosting (XGBoost, LightGBM, RandomForest, GradientBoosting, CatBoost). Un run classe le mouvement futur du prix ; "
-        "il est jugé sur l'AUC (capacité à bien classer les cas, 0,5 = hasard) et le F1 (équilibre entre précision et rappel).",
+        "il est jugé sur un panneau de quatre mesures : AUC de direction (classe-t-il bien les hausses avant les baisses, 0,5 = hasard), "
+        "Brier (fiabilité de ses probabilités), MCC et bonne direction.",
         "Trees, forests and boosting (XGBoost, LightGBM, RandomForest, GradientBoosting, CatBoost). A run classifies the future price move; "
-        "it is judged on AUC (ability to rank cases well, 0.5 = chance) and F1 (balance between precision and recall)."),
+        "it is judged on a panel of four measures: direction AUC (does it rank ups above downs, 0.5 = chance), Brier (reliability of "
+        "its probabilities), MCC and right direction."),
     "hist_fam_dl_hint": _s(
         "Réseaux de neurones (MLP, GRU, LSTM, CNN1D, Transformer). Mêmes cibles, même validation et mêmes mesures que le machine learning : "
         "les runs sont comparables entre eux. Un run qui mêle arbres et réseaux est classé dans le machine learning.",
@@ -326,7 +328,11 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "suspect_tag": _s("suspect", "suspect"),
     "rp_remove": _s("Retirer ce run du panneau", "Remove this run from the panel"),
     "rp_scheme": _s("Schéma", "Scheme"),
-    "rp_persistence": _s("Persistance (F1)", "Persistence (F1)"),
+    "rp_persistence": _s("Persistance (MCC)", "Persistence (MCC)"),
+    "rp_gap_mcc": _s("Écart MCC à la persistance", "MCC gap to persistence"),
+    "hist_gap_mcc": _s("Écart MCC", "MCC gap"),
+    "hist_gap_mcc_tip": _s("MCC du modèle moins MCC de la persistance (le prochain mouvement répète le dernier), sur les mêmes folds de test.",
+                           "Model MCC minus persistence MCC (the next move repeats the last one), on the same test folds."),
     "rp_dm": _s("DM p-value", "DM p-value"),
     "rp_dm_biased": _s("calculé sur le fold de sélection : biaisé, exclu de la correction entre cibles",
                        "computed on the selection fold: biased, excluded from the across-target correction"),
@@ -598,10 +604,10 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
         "contribution, and the characteristics of the models themselves."),
     "an_kpi_models": _s("Modèles finaux", "Final models"),
     "an_kpi_models_rel": _s("{champions} champions · {suspect} suspects écartés des comptes", "{champions} champions · {suspect} suspect ones left out of the counts"),
-    "an_kpi_auc": _s("AUC médiane", "Median AUC"),
+    "an_kpi_auc": _s("AUC de direction médiane", "Median direction AUC"),
     "an_kpi_auc_rel": _s("sur les folds de test, 0,5 = hasard", "over the test folds, 0.5 = chance"),
-    "an_kpi_f1": _s("F1 directionnel médian", "Median directional F1"),
-    "an_kpi_f1_rel": _s("sur les folds de test, ~0,5 = hasard", "over the test folds, ~0.5 = chance"),
+    "an_kpi_brier": _s("Brier médian", "Median Brier"),
+    "an_kpi_brier_rel": _s("0,25 = pile ou face · MCC {m} · bonne direction {a}", "0.25 = coin flip · MCC {m} · right direction {a}"),
     "an_kpi_features": _s("Features distinctes", "Distinct features"),
     "an_kpi_features_rel": _s("retenues par {n} modèles dont le détail est disponible", "kept by {n} models whose detail is available"),
     "an_kpi_series": _s("Séries utilisées", "Series used"),
@@ -617,10 +623,10 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "an_by_horizon": _s("Par horizon", "By horizon"), "an_by_n": _s("Par nombre de features", "By number of features"),
     "an_by_sampler": _s("Par rééchantillonnage", "By resampling"), "an_by_regime": _s("Par régime", "By regime"),
     "an_col_algo": _s("Algorithme", "Algorithm"), "an_col_n": _s("N", "N"), "an_col_sampler": _s("Méthode", "Method"),
-    "an_col_regime": _s("Régime", "Regime"), "an_col_n_models": _s("Modèles", "Models"), "an_col_best_f1": _s("Meilleur F1", "Best F1"),
+    "an_col_regime": _s("Régime", "Regime"), "an_col_n_models": _s("Modèles", "Models"), "an_col_best_f1": _s("Meilleure AUC dir.", "Best dir. AUC"),
     "an_col_champ": _s("Champions", "Champions"), "an_col_feature": _s("Feature", "Feature"), "an_col_family": _s("Famille", "Family"),
     "an_col_series": _s("Séries", "Series"), "an_col_targets": _s("Cibles", "Targets"), "an_col_freq": _s("Sélection moy.", "Mean selection"),
-    "an_col_best": _s("Meilleur AUC / F1", "Best AUC / F1"), "an_col_n_features": _s("Features", "Features"),
+    "an_col_best": _s("Meilleur modèle : AUC dir. · Brier", "Best model: dir. AUC · Brier"), "an_col_n_features": _s("Features", "Features"),
     "an_features": _s("Features", "Features"),
     "an_features_hint": _s(
         "Une feature est une transformation d'une série (rendement, z-score, volatilité conditionnelle…) ou le croisement de deux. "
@@ -654,8 +660,10 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "home_kpi_models_rel": _s("{d} directionnels · {a} alpha (scores suspects exclus)", "{d} directional · {a} alpha (suspect scores excluded)"),
     "home_kpi_champions": _s("Champions", "Champions"),
     "home_kpi_champions_rel": _s("modèles en titre, sur {total} cibles", "models in title, out of {total} targets"),
-    "home_kpi_auc": _s("AUC médiane", "Median AUC"),
-    "home_kpi_auc_rel": _s("F1 médian {f1} · 0,5 = hasard", "median F1 {f1} · 0.5 = chance"),
+    "home_kpi_auc": _s("AUC de direction médiane", "Median direction AUC"),
+    "home_kpi_auc_rel": _s("Brier {b} · MCC {m} · bonne direction {a} (médianes du test)",
+                           "Brier {b} · MCC {m} · right direction {a} (test medians)"),
+    "suspect_reason_generic": _s("score au-delà du plausible (fuite de données probable)", "implausibly high score (likely data leak)"),
     "home_kpi_data": _s("Alertes données", "Data alerts"),
     "home_kpi_data_rel": _s("{f} échec(s) sur {d} j · {s} résultat(s) suspect(s)", "{f} failure(s) over {d} d · {s} suspect result(s)"),
     "home_kpi_short": _s("Historique court", "Short history"),
@@ -712,10 +720,11 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "lazy_retry": _s("Réessayer", "Retry"),
     "m_section_title": _s("Métriques par fold", "Metrics per fold"),
     "m_section_intro": _s(
-        "L'AUC puis le F1 d'abord. Chaque ligne est un fold de test (une période jamais vue à l'entraînement) ; la moyenne "
-        "est la première ligne. Les 5 premiers folds sont affichés, le reste se déplie.",
-        "AUC first, then F1. Each row is a test fold (a period never seen in training); the mean is the first row. The "
-        "first 5 folds are shown, the rest unfolds."),
+        "Le panneau d'abord : AUC de direction, Brier, MCC, bonne direction ; les autres mesures ensuite. Chaque ligne est un fold "
+        "de test (une période jamais vue à l'entraînement) ; la moyenne est la première ligne. Les 5 premiers folds sont affichés, "
+        "le reste se déplie.",
+        "The panel first: direction AUC, Brier, MCC, right direction; the other measures next. Each row is a test fold (a period "
+        "never seen in training); the mean is the first row. The first 5 folds are shown, the rest unfolds."),
     "metric_AUC_ovr_4cls": _s("AUC : aire sous la courbe ROC, une classe contre les trois autres, moyennée sur les 4 mouvements. 0,5 = hasard.",
                               "AUC: area under the ROC curve, one class against the other three, averaged over the 4 moves. 0.5 = chance."),
     "metric_F1_dir": _s("F1 directionnel : hausse contre baisse, intensité ignorée. Moyenne harmonique de la précision et du rappel.",
@@ -729,8 +738,24 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                           "Matthews coefficient: correlation between prediction and outcome, -1 to 1, 0 = chance."),
     "metric_F1_DOWN_FORT": _s("F1 de la seule classe « baisse forte ».", "F1 of the 'strong down' class alone."),
     "metric_F1_UP_FORT": _s("F1 de la seule classe « hausse forte ».", "F1 of the 'strong up' class alone."),
-    "metric_Brier_up": _s("Score de Brier de la probabilité de hausse : plus bas = mieux calibrée (0,25 = pile ou face).",
-                          "Brier score of the up probability: lower = better calibrated (0.25 = coin flip)."),
+    "metric_AUC_dir": _s("AUC de direction : le modèle classe-t-il les jours de hausse avant les jours de baisse ? P(hausse) contre la direction "
+                         "réelle, sans seuil. 0,5 = hasard. Première mesure du duel champion / challenger.",
+                         "Direction AUC: does the model rank up days above down days? P(up) against the actual direction, no threshold. "
+                         "0.5 = chance. First measure of the champion / challenger duel."),
+    "metric_Acc_dir_p": _s("Bonne direction : part des jours où la direction annoncée (P(hausse) au-dessus de la médiane de ses prédictions récentes) "
+                           "était la bonne. 50 % = hasard.",
+                           "Right direction: share of days where the announced direction (P(up) above the median of its recent predictions) "
+                           "was right. 50% = chance."),
+    "metric_F1_dir_p": _s("F1 de la direction tirée de P(hausse) (même décision que « bonne direction »).",
+                          "F1 of the direction taken from P(up) (same decision as 'right direction')."),
+    "pm_AUC_dir": _s("AUC dir.", "Dir. AUC"),
+    "pm_Brier_up": _s("Brier", "Brier"),
+    "pm_MCC_4cls": _s("MCC", "MCC"),
+    "pm_Acc_dir_p": _s("Bonne dir.", "Right dir."),
+    "metric_Brier_up": _s("Score de Brier de la probabilité de hausse : plus bas = mieux calibrée (0,25 = pile ou face). Seconde mesure du "
+                          "duel : un challenger aux probabilités nettement moins fiables ne prend pas le titre.",
+                          "Brier score of the up probability: lower = better calibrated (0.25 = coin flip). Second measure of the duel: a "
+                          "challenger with clearly less reliable probabilities does not take the title."),
     "metric_ECE_up": _s("Erreur de calibration attendue : écart moyen entre probabilité annoncée et fréquence réelle.",
                         "Expected calibration error: mean gap between announced probability and actual frequency."),
     # Répartition haut / bas des classes réelles et prédites (`tracking/class_balance.py`)

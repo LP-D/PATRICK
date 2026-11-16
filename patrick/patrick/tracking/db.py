@@ -28,7 +28,7 @@ from patrick.config.target_label import ALPHA_SEP
 from patrick.numeric import is_nan
 from patrick.tracking import class_balance
 from patrick.tracking.manifest import launch_manifest
-from patrick.validation import suspicion
+from patrick.validation import metric_panel, suspicion
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
@@ -997,20 +997,24 @@ def best_trials(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, int]:
 
 def partial_best_trials(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, int]:
     """`{run_id: trial_id}` du MEILLEUR ESSAI PROVISOIRE d'un run interrompu (arrêté à la main, worker disparu) : il n'a jamais exporté de
-    modèle, donc aucun essai n'est `is_best`, mais ses essais et leurs métriques sont en base. Même critère que le classement final (F1_dir
-    moyen sur les plis de test), restreint aux essais évalués sur le plus de plis : sans cela un essai de dépistage n'ayant vu qu'un pli,
-    et chanceux, passerait devant les finalistes. Rien n'est écrit : c'est une lecture, pour l'affichage."""
+    modèle, donc aucun essai n'est `is_best`, mais ses essais et leurs métriques sont en base. Même critère que le classement final (AUC_dir
+    moyenne sur les plis de test depuis l'ADR 0013 ; F1_dir pour un essai d'avant, qui n'a pas d'AUC_dir), restreint aux essais évalués sur
+    le plus de plis : sans cela un essai de dépistage n'ayant vu qu'un pli, et chanceux, passerait devant les finalistes. Rien n'est écrit :
+    c'est une lecture, pour l'affichage."""
     out: dict[str, int] = {}
     for chunk in _chunks(run_ids, 200):
         marks = ",".join("?" for _ in chunk)
-        best: dict[str, tuple[int, float, int]] = {}
-        for run_id, trial_id, n_folds, avg in conn.execute(
-                "SELECT t.run_id, t.trial_id, COUNT(DISTINCT fm.fold_index), AVG(fm.value) FROM trial t "
+        best: dict[str, tuple[int, int, float, int]] = {}
+        for run_id, trial_id, n_folds, auc, f1 in conn.execute(
+                "SELECT t.run_id, t.trial_id, COUNT(DISTINCT fm.fold_index), "
+                "AVG(CASE WHEN fm.metric = 'AUC_dir' THEN fm.value END), AVG(CASE WHEN fm.metric = 'F1_dir' THEN fm.value END) FROM trial t "
                 "JOIN fold_metric fm ON fm.trial_id = t.trial_id "
-                f"WHERE t.run_id IN ({marks}) AND fm.split IN ('test', 'test_path') AND fm.metric = 'F1_dir' GROUP BY t.trial_id", chunk):
-            if run_id not in best or (n_folds, avg) > best[run_id][:2]:
-                best[run_id] = (n_folds, avg, trial_id)
-        out.update({run_id: trial_id for run_id, (_n, _avg, trial_id) in best.items()})
+                f"WHERE t.run_id IN ({marks}) AND fm.split IN ('test', 'test_path') AND fm.metric IN ('AUC_dir', 'F1_dir') "
+                "GROUP BY t.trial_id", chunk):
+            key = (n_folds, int(auc is not None), auc if auc is not None else (f1 if f1 is not None else float("-inf")))
+            if run_id not in best or key > best[run_id][:3]:
+                best[run_id] = (*key, trial_id)
+        out.update({run_id: trial_id for run_id, (*_key, trial_id) in best.items()})
     return out
 
 
@@ -1042,12 +1046,14 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
     return {run_id: best_f1_by_trial.get(trial_id) for run_id, trial_id in best_trial_by_run.items()}
 
 
-HEADLINE_METRICS = ("AUC_ovr_4cls", "F1_dir")
+# Le panneau d'un modèle (ADR 0023, `validation/metric_panel.py`), puis l'AUC à 4 classes et le F1 : ces deux-là ne s'affichent plus dans
+# les aperçus mais servent encore à repérer un score impossible (`suspicion.suspect_reason`).
+HEADLINE_METRICS = (*metric_panel.PANEL_KEYS, "AUC_ovr_4cls", "F1_dir")
 
 
 def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str], metrics: tuple[str, ...] = HEADLINE_METRICS,
                        best_trial_by_run: dict[str, int] | None = None) -> dict[str, dict[str, dict[str, float]]]:
-    """Headline metrics (AUC first, then F1) of each run's best trial, in TWO fixed queries whatever `len(run_ids)`:
+    """Headline metrics (the metric panel, then AUC 4 classes and F1 for the suspicion check) of each run's best trial, in TWO fixed queries whatever `len(run_ids)`:
     `{run_id: {"test": {metric: mean over the walk-forward test folds / CPCV paths}, "holdout": {metric: value}}}`.
     A run without a best trial, or a best trial without these rows, is simply absent / has an empty dict. `best_trial_by_run` : voir
     `batch_best_f1_dir`."""
@@ -1071,6 +1077,18 @@ def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str], metrics: tu
 
 
 BENCHMARK_BASELINE = "BASELINE_persistence"
+
+
+def batch_baseline_metric(conn: sqlite3.Connection, run_ids: list[str], metric: str,
+                          baseline: str = BENCHMARK_BASELINE) -> dict[str, float]:
+    """La mesure `metric` de la référence `baseline` (persistance par défaut) sur les plis de test, par run ; une requête par lot."""
+    out: dict[str, float] = {}
+    for chunk in _chunks(run_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        out.update({run_id: float(value) for run_id, value in conn.execute(
+            f"SELECT run_id, value FROM baseline_metric WHERE run_id IN ({placeholders}) "
+            "AND baseline = ? AND split = 'test' AND metric = ?", (*chunk, baseline, metric))})
+    return out
 
 
 def batch_baseline_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
@@ -1183,6 +1201,7 @@ def enrich_runs(conn: sqlite3.Connection, index_rows: list[dict], with_balance: 
     best_f1_by_run = batch_best_f1_dir(conn, run_ids, chosen)
     dm_by_run = batch_dm_results(conn, run_ids)
     benchmark_by_run = batch_baseline_f1_dir(conn, run_ids)
+    benchmark_mcc_by_run = batch_baseline_metric(conn, run_ids, "MCC_4cls")
     headline_by_run = batch_best_metrics(conn, run_ids, best_trial_by_run=chosen)
     balance_by_run = class_balance.for_runs(conn, run_ids, best_trial_by_run=chosen) if with_balance else {}
 
@@ -1205,12 +1224,14 @@ def enrich_runs(conn: sqlite3.Connection, index_rows: list[dict], with_balance: 
             "suspect": (suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m)
                         or suspicion.alignment_reason(target, cfg)),
             "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
+            "panel": metric_panel.panel(test_m), "holdout_panel": metric_panel.panel(holdout_m),
             "holdout_f1_dir": holdout_m.get("F1_dir"),
             "config_json": config_json,
             "best_f1_dir": best_f1_by_run.get(run_id),
             "dm_p_value": dm_result["p_value"] if dm_result else None,
             "dm_sample": dm_result["sample"] if dm_result else None,
             "benchmark_f1_dir": benchmark_by_run.get(run_id),
+            "benchmark_mcc": benchmark_mcc_by_run.get(run_id),
             "class_balance": balance_by_run.get(run_id),
             "partial": run_id in provisional,
         })

@@ -53,8 +53,10 @@ def fund_usage(conn: sqlite3.Connection, symbol: str) -> list[dict]:
 
 
 def champions_by_horizon(conn: sqlite3.Connection, symbol: str) -> dict[int, dict]:
-    """Le champion de chaque horizon de `symbol` : `{horizon: {run_id, algo, n_features, holdout_f1_dir, promoted_at}}`."""
-    return {c["horizon"]: c for c in trackchampions.list_champions(conn) if c["target"] == symbol}
+    """Le champion de chaque horizon de `symbol` : `{horizon: {run_id, algo, n_features, holdout_panel, promoted_at}}`."""
+    mine = [c for c in trackchampions.list_champions(conn) if c["target"] == symbol]
+    panels = trackchampions.holdout_panels(conn, [c["trial_id"] for c in mine])
+    return {c["horizon"]: {**c, "holdout_panel": panels.get(c["trial_id"])} for c in mine}
 
 
 def market_context(symbol: str) -> dict | None:

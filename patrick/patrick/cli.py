@@ -442,6 +442,26 @@ def audit_signal_cmd(
         typer.echo(f"  q={row['q_value']:.3f}  AUC {row['auc']:.3f}  {row['target']} h={row['horizon']}  ({row['n_runs']} run(s))")
 
 
+@audit_app.command(name="panel-backfill")
+def audit_panel_backfill_cmd(
+    limit: int = typer.Option(0, "--limit", help="Nombre maximal d'essais traités (0 = tous)"),
+) -> None:
+    """Rattrape le panneau de métriques (ADR 0023 : AUC_dir, Brier_up, MCC_4cls, Acc_dir_p) des meilleurs essais et des champions évalués
+    avant qu'il existe, recalculé pli par pli depuis leurs prédictions en base. Ajoute des lignes à `fold_metric`, n'en modifie aucune ;
+    une deuxième passe ne fait rien. Lancé aussi chaque nuit après les prédictions du jour."""
+    from patrick.tracking import db as trackdb
+    from patrick.tracking import metric_backfill
+
+    conn = trackdb.connect()
+    try:
+        report = metric_backfill.backfill(conn, limit=limit or None,
+                                          progress=lambda done, total: typer.echo(f"  {done}/{total} essais..."))
+    finally:
+        conn.close()
+    typer.echo(f"[PANNEAU] {report['n_trials']} essai(s) à compléter, {report['n_touched']} complété(s), "
+               f"{report['n_rows']} mesure(s) ajoutée(s) en {report['seconds']:.0f} s.")
+
+
 @audit_app.command(name="placebo-panel")
 def audit_placebo_panel_cmd(
     group: str = typer.Option("asia", "--group", help="asia | controls | all (Asie + témoins) | fx | futures | us | europe | americas | crypto | volatility | every_class (toutes les classes)"),
@@ -633,15 +653,18 @@ def research_alpha_campaign_report_cmd(
 def champions_list_cmd() -> None:
     """Le modèle en titre de chaque (cible, horizon) déjà départagé."""
     from patrick.tracking import champions
+    from patrick.validation import metric_panel
 
     conn = trackdb.connect()
     try:
-        rows = champions.list_champions(conn)
+        rows = champions.list_champions(conn, with_panel=True)
         if not rows:
             typer.echo("Aucun modèle en titre enregistré (lance `patrick champions init`).")
             return
         for r in rows:
-            score = f"F1_dir holdout={r['holdout_f1_dir']:.4f}" if r["holdout_f1_dir"] is not None else "sans duel"
+            panel = r.get("holdout_panel") or {}
+            score = ("holdout " + " · ".join(f"{k} {metric_panel.fmt(k, panel.get(k))}" for k in metric_panel.PANEL_KEYS)
+                     if metric_panel.has_any(panel) else "sans duel")
             typer.echo(f"{r['target']:<12} h={r['horizon']:<4} {r['run_id']:<32} {r['algo'] or '?':<13} "
                        f"N={r['n_features'] or '?':<3} {r['reason']:<15} {score}")
     finally:

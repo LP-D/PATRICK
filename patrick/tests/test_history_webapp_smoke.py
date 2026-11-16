@@ -27,8 +27,8 @@ def _seed_db(tmp_path, monkeypatch) -> None:
     db.create_run(conn, "run1", "^VIX", 5, "snap1", json.dumps(config), "cfghash", "sha", 42)
     trial_id = db.create_trial(conn, "run1", "GLOBAL", "RandomForest", "SMOTE", 8, "shap")
     db.mark_best_trial(conn, trial_id)
-    db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6})
-    db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.62})
+    db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.6, "AUC_dir": 0.60})
+    db.add_fold_metrics(conn, trial_id, 2, "test", {"F1_dir": 0.62, "AUC_dir": 0.62})
     db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.55})
     db.add_baseline_metrics(conn, "run1", "majority", "test", {"F1_dir": 0.5})
     db.save_dm_result(conn, "run1", {"baseline": "majority", "dm_stat": 2.1, "p_value": 0.03}, sample="holdout")
@@ -156,7 +156,7 @@ def test_run_comparison_renders_metrics_and_configuration(tmp_path, monkeypatch)
     assert "Comparaison de runs" in response.text
     assert "vix_smoke" in response.text
     assert "RandomForest" in response.text
-    assert "0.6100" in response.text
+    assert ">0.610<" in response.text            # AUC de direction moyenne des plis de test (panneau, ADR 0023)
     assert "XGBoost" in response.text
 
 

@@ -26,7 +26,7 @@ from patrick import paths
 from patrick.config.target_label import split_run_label
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.tracking import db as trackdb
-from patrick.validation import suspicion
+from patrick.validation import metric_panel, suspicion
 
 _OPERATORS = re.compile(r"__(?:prod|ratio|sum|minus|zrel)__")
 ARTIFACT_BASE_ENV = "PATRICK_ARTIFACT_BASE"
@@ -135,8 +135,7 @@ def final_models(conn: sqlite3.Connection) -> list[dict]:
             "n_features": (meta or {}).get("N", n_features), "category": category or "global",
             "features": list((meta or {}).get("feature_names") or []), "universe": _universe_series(cfg_json, asset),
             "has_meta": meta is not None, "champion": run_id in champions,
-            "auc": test.get("AUC_ovr_4cls"), "f1": test.get("F1_dir"),
-            "holdout_auc": hold.get("AUC_ovr_4cls"), "holdout_f1": hold.get("F1_dir"),
+            "panel": metric_panel.panel(test), "holdout_panel": metric_panel.panel(hold),
             "suspect": suspicion.suspect_reason(hold) or suspicion.suspect_reason(test),
         })
     return out
@@ -147,13 +146,17 @@ def _mean(values) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
+def _better_model(panel: dict | None, best: dict | None) -> bool:
+    """`panel` passe devant `best` selon l'ordre du panneau (AUC_dir, puis Brier_up : `metric_panel.rank_key`)."""
+    return metric_panel.has_any(panel) and (best is None or metric_panel.rank_key(panel) < metric_panel.rank_key(best))
+
+
 def group_models(models: list[dict], key) -> list[dict]:
-    """Tableau par modalité (`key(model) -> str`) : effectif, AUC et F1 moyens, meilleur F1, champions."""
+    """Tableau par modalité (`key(model) -> str`) : effectif, moyenne de chaque mesure du panneau (ADR 0023), champions."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for m in models:
         groups[str(key(m))].append(m)
-    rows = [{"key": k, "n": len(v), "auc": _mean(m["auc"] for m in v), "f1": _mean(m["f1"] for m in v),
-             "best_f1": max((m["f1"] for m in v if m["f1"] is not None), default=None),
+    rows = [{"key": k, "n": len(v), "panel": {pk: _mean(m["panel"].get(pk) for m in v) for pk in metric_panel.PANEL_KEYS},
              "champions": sum(1 for m in v if m["champion"])} for k, v in groups.items()]
     return sorted(rows, key=lambda r: (-r["n"], r["key"]))
 
@@ -179,24 +182,23 @@ def analyse(conn: sqlite3.Connection) -> dict:
         for name in m["features"]:
             series = feature_series(name, known)
             rec = feat.setdefault(name, {"feature": name, "family": feature_family(name, series[0] if series else None),
-                                         "series": series, "n_models": 0, "targets": set(), "best_auc": None, "best_f1": None,
-                                         "best_run": None})
+                                         "series": series, "n_models": 0, "targets": set(), "best_panel": None, "best_run": None})
             rec["n_models"] += 1
             rec["targets"].add(m["asset"])
-            if m["f1"] is not None and (rec["best_f1"] is None or m["f1"] > rec["best_f1"]):
-                rec["best_f1"], rec["best_auc"], rec["best_run"] = m["f1"], m["auc"], m["run_id"]
+            if _better_model(m["panel"], rec["best_panel"]):
+                rec["best_panel"], rec["best_run"] = m["panel"], m["run_id"]
             own = clean_symbol(m["asset"])
             for s in series:
                 if s == own:                      # la cible elle-même n'est pas une série « explicative »
                     own_features.add(name)
                     continue
                 u = series_use.setdefault(s, {"series": s, "n_models": 0, "features": set(), "targets": set(),
-                                              "best_f1": None, "best_run": None})
+                                              "best_panel": None, "best_run": None})
                 u["n_models"] += 1
                 u["features"].add(name)
                 u["targets"].add(m["asset"])
-                if m["f1"] is not None and (u["best_f1"] is None or m["f1"] > u["best_f1"]):
-                    u["best_f1"], u["best_run"] = m["f1"], m["run_id"]
+                if _better_model(m["panel"], u["best_panel"]):
+                    u["best_panel"], u["best_run"] = m["panel"], m["run_id"]
     stability = stability_by_feature(conn)
     for name, rec in feat.items():
         rec["n_targets"] = len(rec.pop("targets"))
@@ -215,7 +217,7 @@ def analyse(conn: sqlite3.Connection) -> dict:
     return {
         "n_models": len(models), "n_sane": len(sane), "n_suspect": len(suspects), "n_with_features": len(with_features),
         "n_champions": sum(1 for m in sane if m["champion"]),
-        "auc_median": _median([m["auc"] for m in sane]), "f1_median": _median([m["f1"] for m in sane]),
+        "panel_median": {pk: _median([m["panel"].get(pk) for m in sane]) for pk in metric_panel.PANEL_KEYS},
         "by_algo": group_models(sane, lambda m: m["algo"]),
         "by_sampler": group_models(sane, lambda m: m["sampler"]),
         "by_kind": group_models(sane, lambda m: m["kind"]),
@@ -225,7 +227,7 @@ def analyse(conn: sqlite3.Connection) -> dict:
         "features": features, "least_used": least_used, "n_single": len(single), "series": series_rows, "unused_series": unused, "n_own_features": len(own_features),
         "families": [(f, families.get(f, 0)) for f in FAMILY_ORDER if families.get(f)],
         "n_features_distinct": len(features), "suspects": suspects,
-        "models": sorted(sane, key=lambda m: (-(m["f1"] or 0), m["run_id"])),
+        "models": sorted(sane, key=lambda m: (metric_panel.rank_key(m["panel"]), m["run_id"])),
     }
 
 

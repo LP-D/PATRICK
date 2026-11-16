@@ -11,6 +11,7 @@ from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
+from patrick.validation import metric_panel
 from patrick.webapp import instruments, stats_help
 from patrick.webapp.app import app
 from patrick.webapp.glossary import GLOSSARY
@@ -140,7 +141,10 @@ def test_headline_metrics_come_first_and_folds_are_collapsed_after_five(seeded):
     detail = trackhistory.run_detail(trackdb.connect(), "XLI_1_h1_a")
     assert detail["headline"]["test"]["AUC_ovr_4cls"] == pytest.approx(0.58)
     test_block = detail["fold_metrics"][0]
-    assert test_block["split"] == "test" and test_block["metrics"][:2] == ["AUC_ovr_4cls", "F1_dir"]
+    # le panneau d'abord (ADR 0023) : les mesures présentes parmi AUC_dir, Brier_up, MCC_4cls, Acc_dir_p, puis les autres ; le F1 après
+    present = [m for m in ("AUC_dir", "Brier_up", "MCC_4cls", "Acc_dir_p") if m in test_block["metrics"]]
+    assert test_block["split"] == "test" and test_block["metrics"][:len(present)] == present
+    assert test_block["metrics"].index("AUC_ovr_4cls") < test_block["metrics"].index("F1_dir")
     html = TestClient(app).get("/runs/XLI_1_h1_a/detail").text
     assert html.index("headline-metrics") < html.index('id="resume"') < html.index('id="folds"')
     assert html.count("data-extra hidden") >= 2           # 7 folds : 5 visibles, 2 repliés
@@ -150,7 +154,9 @@ def test_headline_metrics_come_first_and_folds_are_collapsed_after_five(seeded):
 def test_collapsible_rows_only_when_they_are_worth_hiding():
     components = (Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates" / "_components.html").read_text(encoding="utf-8")
     env = Environment(loader=DictLoader({"c.html": components}))
-    env.filters.update({"iname": instruments.display, "iname_h": instruments.display_html, "iname_tip": instruments.display_with_tip})
+    env.filters.update({"iname": instruments.display, "iname_h": instruments.display_html, "iname_tip": instruments.display_with_tip,
+                        "pmfmt": lambda value, key: metric_panel.fmt(key, value)})
+    env.globals["PANEL_KEYS"] = metric_panel.PANEL_KEYS
     tpl = env.from_string('{% from "c.html" import data_table %}{{ data_table(h, rows, collapse_after=5, more_label="{n} de plus") }}')
     few = tpl.render(h=["a"], rows=[[i] for i in range(6)])
     many = tpl.render(h=["a"], rows=[[i] for i in range(9)])
@@ -170,10 +176,11 @@ def test_the_history_separates_alpha_and_directional_models(seeded):
     assert "XLI_1_h1_a" in both and "MC_1_h1_b" in both and "kind-badge kind-alpha" in both
 
 
-def test_the_history_table_leads_with_auc_then_f1(seeded):
+def test_the_history_table_leads_with_the_metric_panel_and_no_f1(seeded):
     html = TestClient(app).get("/runs").text
     head = re.search(r"<thead>.*?</thead>", html, re.DOTALL).group(0)
-    assert head.index(">AUC<") < head.index(">F1<") < head.index("DM p")
+    assert head.index(">AUC dir.<") < head.index(">Brier<") < head.index(">MCC<") < head.index(">Bonne dir.<") < head.index("DM p")
+    assert ">F1<" not in head and ">AUC<" not in head
 
 
 def test_a_perfect_score_is_flagged_in_the_history(seeded):

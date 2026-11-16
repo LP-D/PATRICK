@@ -13,6 +13,7 @@ from patrick.config import defaults as D
 from patrick.data.store import DataStore
 from patrick.tracking import class_overview, data_health, relaunch_stats
 from patrick.tracking import db as trackdb
+from patrick.validation import metric_panel
 
 RECENT_DAYS = 14
 
@@ -23,6 +24,12 @@ def _median(values) -> float | None:
         return None
     mid = len(vals) // 2
     return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
+
+
+def panel_median(runs) -> dict[str, float | None]:
+    """Médiane de chaque mesure du panneau (ADR 0023) sur les plis de test des runs donnés, chaque mesure sur les runs qui l'ont."""
+    runs = list(runs)
+    return {key: _median((r.get("panel") or {}).get(key) for r in runs) for key in metric_panel.PANEL_KEYS}
 
 
 def recent_failures(failures: list[dict]) -> list[dict]:
@@ -60,14 +67,11 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
     runs = trackdb.list_all_runs(conn, with_balance=False)          # ni la page ni les classes n'affichent la répartition haut / bas
     done = [r for r in runs if r["status"] == "done"]
     sane = [r for r in done if not r.get("suspect")]
-    kinds = {"directional": {"n": 0, "auc": [], "f1": []}, "alpha": {"n": 0, "auc": [], "f1": []}}
+    kinds = {"directional": {"n": 0, "panel": {}}, "alpha": {"n": 0, "panel": {}}}
     for r in sane:
-        k = kinds[r["kind"]]
-        k["n"] += 1
-        k["auc"].append(r.get("best_auc"))
-        k["f1"].append(r.get("best_f1_dir"))
-    for k in kinds.values():
-        k["auc"], k["f1"] = _median(k["auc"]), _median(k["f1"])
+        kinds[r["kind"]]["n"] += 1
+    for kind, k in kinds.items():
+        k["panel"] = panel_median(r for r in sane if r["kind"] == kind)
 
     failures = data_health.failures(conn)
     recent = recent_failures(failures)
@@ -78,7 +82,7 @@ def home_summary(conn: sqlite3.Connection, groups: dict[str, list[tuple[str, str
     return {
         "pooled": pooled_signal.summary(conn),
         "n_done": len(done), "n_sane": len(sane), "n_suspect": len(done) - len(sane), "n_champions": n_champions,
-        "kinds": kinds, "auc_median": _median(r.get("best_auc") for r in sane), "f1_median": _median(r.get("best_f1_dir") for r in sane),
+        "kinds": kinds, "panel_median": panel_median(sane),
         "n_failures": len(failures), "n_recent_failures": len(recent), "recent_days": RECENT_DAYS,
         "n_short": sum(c["n_short"] for c in classes), "n_targets": sum(c["n_targets"] for c in classes),
         "classes": classes, "min_years": min_years,

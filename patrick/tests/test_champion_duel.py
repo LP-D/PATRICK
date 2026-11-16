@@ -13,6 +13,7 @@ from patrick.config.schema import RunConfig
 from patrick.pipeline import champion_duel, engine
 from patrick.tracking import champions
 from patrick.tracking import db as trackdb
+from patrick.validation import metric_panel
 
 H = 5
 
@@ -47,7 +48,8 @@ def _run_with_best(conn, tmp_path, run_id: str, config: RunConfig, algo: str, st
 @pytest.fixture
 def setup(conn, tmp_path, monkeypatch):
     """An incumbent (older run, algo 'ChampAlgo') and this run's challenger
-    ('ChalAlgo'); `scores` sets what each side scores on the holdout."""
+    ('ChalAlgo'); `scores` sets what each side scores on the holdout (AUC_dir and F1_dir alike, unless `aucs` / `f1s` override one),
+    `briers` its Brier_up (0.245 for both by default), `mccs` its MCC_4cls. A value of None in `aucs` / `briers` drops the metric."""
     # The incumbent was trained with another target threshold and holdout
     # length: the duel must score it with THIS run's definitions.
     champ_tid = _run_with_best(conn, tmp_path, "champ_run", _config("old", flat_thr=0.01, holdout_months=12),
@@ -55,18 +57,23 @@ def setup(conn, tmp_path, monkeypatch):
     chal_config = _config("new")
     chal_tid = _run_with_best(conn, tmp_path, "chal_run", chal_config, "ChalAlgo", "-1 hours")
     scores = {"ChampAlgo": 0.55, "ChalAlgo": 0.60}
-    aucs: dict[str, float] = {}      # AUC_dir per algo, absent unless a test sets it (an evaluation without p_up has none)
+    aucs: dict[str, float | None] = {}
+    f1s: dict[str, float] = {}
+    briers: dict[str, float | None] = {"ChampAlgo": 0.245, "ChalAlgo": 0.245}
+    mccs: dict[str, float] = {"ChampAlgo": 0.05, "ChalAlgo": 0.05}
     calls = []
 
     def fake_evaluate(conn_, snapshot_id, pool_builder, target_col, feature_pool, config, all_dates_full,
                       n_wf, best_cfg, seed, universe=None):
         calls.append({"algo": best_cfg["algo"], "config": config, "pool_builder": pool_builder,
                       "n_wf": n_wf, "best_cfg": best_cfg})
-        f1 = scores[best_cfg["algo"]]
-        if f1 is None:
+        algo = best_cfg["algo"]
+        score = scores[algo]
+        if score is None:
             return None
-        metrics = {"F1_dir": f1, **({"AUC_dir": aucs[best_cfg["algo"]]} if best_cfg["algo"] in aucs else {})}
-        return {"metrics": metrics, "n_test": 300}
+        metrics = {"F1_dir": f1s.get(algo, score), "AUC_dir": aucs.get(algo, score), "Brier_up": briers.get(algo),
+                   "MCC_4cls": mccs.get(algo)}
+        return {"metrics": {k: v for k, v in metrics.items() if v is not None}, "n_test": 300}
 
     monkeypatch.setattr(engine, "_evaluate_holdout", fake_evaluate)
     monkeypatch.setattr(engine, "_FoldUniverse", lambda raw, target_col, config: "universe")
@@ -79,7 +86,7 @@ def setup(conn, tmp_path, monkeypatch):
     best_h = {"horizon": H, "regime": "GLOBAL", "N": 4, "sampler": "SMOTE", "algo": "ChalAlgo",
               "best_params": "{}"}
     return SimpleNamespace(st=st, best_h=best_h, champ_tid=champ_tid, chal_tid=chal_tid,
-                           scores=scores, aucs=aucs, calls=calls, conn=conn)
+                           scores=scores, aucs=aucs, f1s=f1s, briers=briers, mccs=mccs, calls=calls, conn=conn)
 
 
 def _duel(s):
@@ -127,42 +134,71 @@ def test_a_tie_keeps_the_champion(setup):
     assert champions.current(setup.conn, "^TEST", H)["run_id"] == "champ_run"
 
 
-def test_the_duel_follows_the_runs_criterion_auc_dir_when_both_sides_have_it(setup):
-    # The challenger has the better F1 but the worse AUC: the run ranks its candidates by AUC_dir (default), so the champion stays.
+def test_the_f1_takes_no_part_a_better_f1_with_a_worse_auc_loses(setup):
+    # ADR 0023 : le challenger a le meilleur F1 mais classe moins bien (AUC_dir) : le champion reste.
+    setup.f1s.update({"ChampAlgo": 0.50, "ChalAlgo": 0.60})
     setup.aucs.update({"ChampAlgo": 0.58, "ChalAlgo": 0.54})
 
     d = _duel(setup)
 
-    assert d["decision"] == "champion_wins"
-    assert (d["criterion"], d["challenger_score"], d["champion_score"]) == ("AUC_dir", 0.54, 0.58)
+    assert (d["decision"], d["reason"]) == ("champion_wins", "auc_not_better")
+    assert (d["criterion"], d["challenger_score"], d["champion_score"]) == ("AUC_dir+Brier_up", 0.54, 0.58)
     duel = json.loads(champions.list_archive(setup.conn, "^TEST", H)[0]["duel_json"])
-    assert duel["criterion"] == "AUC_dir" and duel["rule"].startswith("AUC_dir")
+    assert duel["criterion"] == "AUC_dir+Brier_up" and duel["rule"].startswith("AUC_dir strictly greater")
+    assert duel["challenger"]["panel"] == {"AUC_dir": 0.54, "Brier_up": 0.245, "MCC_4cls": 0.05, "Acc_dir_p": None}
 
 
 def test_a_better_auc_takes_the_title_even_with_a_lower_f1(setup):
-    setup.scores.update({"ChampAlgo": 0.60, "ChalAlgo": 0.55})
+    setup.f1s.update({"ChampAlgo": 0.60, "ChalAlgo": 0.55})
     setup.aucs.update({"ChampAlgo": 0.52, "ChalAlgo": 0.57})
-
-    assert _duel(setup)["decision"] == "challenger_wins"
-    assert champions.current(setup.conn, "^TEST", H)["run_id"] == "chal_run"
-
-
-def test_the_duel_falls_back_to_f1_when_one_side_has_no_auc(setup):
-    setup.aucs.update({"ChalAlgo": 0.40})            # the champion's replay carries no AUC_dir
 
     d = _duel(setup)
 
-    assert (d["decision"], d["criterion"]) == ("challenger_wins", "F1_dir")
+    assert (d["decision"], d["reason"]) == ("challenger_wins", "better")
+    assert champions.current(setup.conn, "^TEST", H)["run_id"] == "chal_run"
 
 
-def test_a_run_recorded_with_the_f1_criterion_keeps_judging_by_f1(setup):
+def test_a_better_auc_with_clearly_less_reliable_probabilities_does_not_take_the_title(setup):
+    setup.briers.update({"ChampAlgo": 0.245, "ChalAlgo": 0.245 + metric_panel.BRIER_TOLERANCE + 0.001})
+
+    d = _duel(setup)
+
+    assert (d["decision"], d["reason"]) == ("champion_wins", "brier_worse")
+    assert champions.current(setup.conn, "^TEST", H)["run_id"] == "champ_run"
+
+
+def test_a_brier_within_the_tolerance_does_not_block_a_better_auc(setup):
+    setup.briers.update({"ChampAlgo": 0.245, "ChalAlgo": 0.245 + metric_panel.BRIER_TOLERANCE / 2})
+
+    assert _duel(setup)["decision"] == "challenger_wins"
+
+
+def test_the_auc_alone_decides_when_a_side_has_no_brier(setup):
+    setup.briers["ChampAlgo"] = None
+
+    d = _duel(setup)
+
+    assert (d["decision"], d["criterion"]) == ("challenger_wins", "AUC_dir")
+
+
+def test_the_mcc_decides_when_a_side_has_no_up_probability(setup):
+    setup.aucs["ChampAlgo"] = None                   # ni P(hausse) ni AUC_dir ni Brier pour la reprise du champion
+    setup.briers["ChampAlgo"] = None
+    setup.mccs.update({"ChampAlgo": 0.02, "ChalAlgo": 0.06})
+
+    d = _duel(setup)
+
+    assert (d["decision"], d["criterion"]) == ("challenger_wins", "MCC_4cls")
+
+
+def test_a_run_recorded_with_the_f1_criterion_is_judged_like_the_others(setup):
     setup.st.config = setup.st.config.model_copy(update={
         "selection": setup.st.config.selection.model_copy(update={"criterion": "F1_dir"})})
     setup.aucs.update({"ChampAlgo": 0.58, "ChalAlgo": 0.54})
 
     d = _duel(setup)
 
-    assert (d["decision"], d["criterion"]) == ("challenger_wins", "F1_dir")
+    assert (d["decision"], d["criterion"]) == ("champion_wins", "AUC_dir+Brier_up")
 
 
 def test_both_sides_are_scored_on_the_same_split_with_the_challengers_target_definition(setup):
@@ -242,7 +278,7 @@ def test_a_failing_duel_keeps_the_status_quo_and_does_not_raise(setup, monkeypat
 
 
 def test_the_challengers_known_holdout_evaluation_is_reused(setup):
-    known = {"metrics": {"F1_dir": 0.70}, "n_test": 300}
+    known = {"metrics": {"F1_dir": 0.70, "AUC_dir": 0.61, "Brier_up": 0.244, "MCC_4cls": 0.04}, "n_test": 300}
     d = champion_duel.duel_and_promote(setup.st, {H: setup.best_h}, {H: setup.chal_tid}, {H: known})[H]
     assert d["challenger_f1_dir"] == pytest.approx(0.70)
     assert [c["algo"] for c in setup.calls] == ["ChampAlgo"]

@@ -1,10 +1,10 @@
 """Champion / challenger duel (option A, 2026-09-28), run at the end of a
 walk-forward run, once per exported horizon.
 
-Rule: the new run's model (challenger) replaces the model in title
-(champion) only if it scores a strictly better criterion -- `AUC_dir` since ADR 0013 (the criterion that ranks
-the candidates inside the run), `F1_dir` for a run recorded before it or when a side has no AUC -- on the SAME holdout,
-both configurations being retrained on the SAME pre-holdout data. The
+Rule (ADR 0023, `validation/metric_panel.py`): the new run's model (challenger) replaces the model in title
+(champion) only if it RANKS better -- `AUC_dir` strictly greater -- WITHOUT less reliable probabilities -- `Brier_up` at most
+`BRIER_TOLERANCE` above the champion's -- on the SAME holdout (the AUC alone when a side has no Brier, `MCC_4cls` when a side has
+no P(up) at all; F1 no longer takes part), both configurations being retrained on the SAME pre-holdout data. The
 champion's exported model cannot be scored as-is: it was retrained on its
 whole history (`tracking/export.py`), which may overlap this holdout. Its
 CONFIGURATION is replayed instead -- feature families and settings,
@@ -33,15 +33,9 @@ from patrick.config.schema import RunConfig
 from patrick.pipeline import engine
 from patrick.tracking import champions, relaunch_stats
 from patrick.tracking import db as trackdb
-from patrick.validation import suspicion
+from patrick.validation import metric_panel, suspicion
 
-RULE = ("F1_dir strictly greater on the same holdout, both configurations retrained on the "
-        "same pre-holdout data; tie -> the champion stays")
-RULE_BY_CRITERION = {
-    "F1_dir": RULE,
-    "AUC_dir": ("AUC_dir strictly greater on the same holdout (the criterion that ranks the candidates inside the run, ADR 0013), "
-                "both configurations retrained on the same pre-holdout data; tie -> the champion stays"),
-}
+RULE = metric_panel.RULES[metric_panel.CRITERION_AUC_BRIER]
 
 
 def _metric(evaluation: dict | None, name: str) -> float | None:
@@ -52,22 +46,14 @@ def _metric(evaluation: dict | None, name: str) -> float | None:
 
 
 def _f1(evaluation: dict | None) -> float | None:
+    """F1_dir du holdout : n'intervient plus dans la décision (ADR 0023), seulement dans la détection d'un score impossible
+    (`suspicion.f1_suspect`) et dans la colonne `champion.holdout_f1_dir` qui la sert."""
     return _metric(evaluation, "F1_dir")
 
 
-def _duel_criterion(st) -> str:
-    """The criterion that ranks the candidates inside this run (`engine._criterion`: `selection.criterion` in walk-forward). `getattr`: a worker
-    started before the update keeps the old `engine` in memory but loads this module at the end of the run."""
-    criterion = getattr(engine, "_criterion", None)
-    return criterion(st.config) if criterion is not None else "F1_dir"
-
-
-def _judged_by(criterion: str, chal_eval: dict | None, champ_eval: dict | None) -> str:
-    """The metric the duel compares: the run's criterion when BOTH sides carry it (an evaluation without it, e.g. a model with no `p_up`,
-    cannot be compared on it), `F1_dir` otherwise -- the rule before ADR 0013."""
-    if criterion != "F1_dir" and _metric(chal_eval, criterion) is not None and _metric(champ_eval, criterion) is not None:
-        return criterion
-    return "F1_dir"
+def _evaluable(evaluation: dict | None) -> bool:
+    """Le holdout a produit au moins une mesure du panneau (AUC_dir, Brier_up, MCC_4cls, Acc_dir_p) : on peut comparer."""
+    return evaluation is not None and metric_panel.has_any(metric_panel.panel(evaluation.get("metrics")))
 
 
 def _champion_setup(st, champion: dict, horizon: int):
@@ -103,9 +89,10 @@ def _champion_setup(st, champion: dict, horizon: int):
 
 
 def _describe(side_run_id: str, trial_id: int, cfg: dict, evaluation: dict | None) -> dict:
+    metrics = (evaluation or {}).get("metrics")
     return {"run_id": side_run_id, "trial_id": trial_id, "algo": cfg["algo"], "N": int(cfg["N"]),
             "sampler": cfg["sampler"], "regime": cfg["regime"], "f1_dir": _f1(evaluation),
-            "metrics": (evaluation or {}).get("metrics")}
+            "panel": metric_panel.panel(metrics), "metrics": metrics}
 
 
 def _replace_suspect_champion(st, target: str, horizon: int, run_id: str, trial_id: int, champion: dict,
@@ -187,7 +174,7 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     if suspicion.f1_suspect(champion.get("holdout_f1_dir")):
         return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1,
                                          float(champion["holdout_f1_dir"]))
-    if chal_f1 is None:
+    if not _evaluable(chal_eval):
         return {"decision": "not_compared", "why": "challenger not evaluable on the holdout",
                 "champion": champion["run_id"]}
 
@@ -197,23 +184,28 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         st.conn, st.snapshot_id, pool_builder, st.target_col, feature_pool, duel_config,
         st.all_dates_full, st.n_wf, champ_cfg, st.seed, universe=universe)
     champ_f1 = _f1(champ_eval)
-    if champ_f1 is None:
+    if not _evaluable(champ_eval):
         return {"decision": "not_compared", "why": "champion configuration not evaluable on this holdout",
                 "champion": champion["run_id"]}
     if suspicion.f1_suspect(champ_f1):
         return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1)
 
-    judged_by = _judged_by(_duel_criterion(st), chal_eval, champ_eval)
-    chal_score, champ_score = _metric(chal_eval, judged_by), _metric(champ_eval, judged_by)
+    verdict = metric_panel.duel_verdict(chal_eval.get("metrics"), champ_eval.get("metrics"))
+    if verdict is None:
+        return {"decision": "not_compared", "why": "no common metric on this holdout", "champion": champion["run_id"]}
+    chal_score, champ_score = verdict["challenger_score"], verdict["champion_score"]
+    holdout_wins = verdict["winner"] == "challenger"
     # Le holdout date de l'entraînement du champion ; son résultat RÉEL, lui, continue de s'écrire. Un champion nettement sous le hasard en
     # réel (`live_record.failing`) cède le titre à un challenger évaluable et non suspect, même mieux noté que lui sur le holdout.
     live = _champion_live(st.conn, champion, horizon)
-    live_override = bool(live and live["failing"]) and not chal_score > champ_score
-    challenger_wins = chal_score > champ_score or live_override
+    live_override = bool(live and live["failing"]) and not holdout_wins
+    challenger_wins = holdout_wins or live_override
     duel = {
-        "rule": RULE_LIVE if live_override else RULE_BY_CRITERION[judged_by],
+        "rule": RULE_LIVE if live_override else verdict["rule"],
         "champion_live": live,
-        "criterion": judged_by,
+        "criterion": verdict["criterion"],
+        "reason": verdict["reason"],
+        "brier_tolerance": metric_panel.BRIER_TOLERANCE,
         "challenger_score": chal_score,
         "champion_score": champ_score,
         "holdout_start": str(st.all_dates_full[st.n_wf].date()),
@@ -236,7 +228,8 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
         champions.prune_run(st.conn, run_id)
         loser = run_id
     return {"decision": duel["winner"] + "_wins", "challenger_f1_dir": chal_f1, "champion_f1_dir": champ_f1,
-            "criterion": judged_by, "challenger_score": chal_score, "champion_score": champ_score, "pruned_run": loser,
+            "criterion": verdict["criterion"], "reason": verdict["reason"], "challenger_score": chal_score, "champion_score": champ_score,
+            "challenger_panel": verdict["challenger"], "champion_panel": verdict["champion"], "pruned_run": loser,
             **({"live_override": True, "champion_live": live} if live_override else {})}
 
 
@@ -294,9 +287,11 @@ def duel_and_promote(st, final_best_by_horizon: dict[int, dict], trial_id_by_hor
         d = decisions[horizon]
         _note_duel(st, horizon, job_id, d, time.time() - t_start)
         scores = ""
-        if "champion_score" in d:
+        if "challenger_panel" in d:
+            scores = " (" + " · ".join(
+                f"{key} {metric_panel.fmt(key, d['challenger_panel'].get(key))} vs {metric_panel.fmt(key, d['champion_panel'].get(key))}"
+                for key in metric_panel.PANEL_KEYS) + f" ; {d['criterion']} -> {d.get('reason')})"
+        elif "champion_score" in d and d["champion_score"] is not None and d["challenger_score"] is not None:
             scores = f" (challenger {d['criterion']}={d['challenger_score']:.4f} vs champion {d['champion_score']:.4f})"
-        elif "champion_f1_dir" in d:
-            scores = f" (challenger F1_dir={d['challenger_f1_dir']:.4f} vs champion {d['champion_f1_dir']:.4f})"
         print(f"[CHAMPION] h={horizon}d: {d['decision']}{scores} [{time.time() - t_start:.0f}s]")
     return decisions

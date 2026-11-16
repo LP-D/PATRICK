@@ -1,5 +1,6 @@
 """Vues inter-runs de la page `/analyses` : liste de TOUS les entraînements (ML, DL, RL), carte cible × horizon, distribution des scores
-par algorithme. Lecture seule, quelques requêtes groupées (aucune requête par run)."""
+par algorithme. Lecture seule, quelques requêtes groupées (aucune requête par run). Les scores sont ceux du panneau d'un modèle (ADR 0023 :
+AUC de direction, Brier, MCC, bonne direction), test et holdout."""
 from __future__ import annotations
 
 import contextlib
@@ -9,6 +10,7 @@ import sqlite3
 import numpy as np
 
 from patrick.analysis import stats_core as sc
+from patrick.validation import metric_panel
 
 
 def _rl_rows(conn: sqlite3.Connection) -> list[dict]:
@@ -30,7 +32,7 @@ def _rl_rows(conn: sqlite3.Connection) -> list[dict]:
         out.append({"id": job_id, "kind": "rl", "family": "rl", "target": obj.get("target_symbol"), "horizon": (obj.get("horizons") or [1])[0],
                     "name": cfg.get("name"), "status": status, "phase": phase, "started_at": started or created, "finished_at": finished,
                     "scheme": "walkforward", "algo": rl.get("algo"), "n_features": rl.get("max_features"), "f1_test": None, "f1_holdout": None,
-                    "auc_test": None, "dm_p": None, "suspect": None, "n_trials": n_trials if done else None,
+                    "auc_test": None, "panel_test": None, "panel_holdout": None, "dm_p": None, "suspect": None, "n_trials": n_trials if done else None,
                     "sharpe": sharpe if done else None, "sharpe_bh": sh_bh if done else None, "total_return": total if done else None,
                     "max_dd": mdd if done else None, "dsr": dsr if done else None, "url": f"/runs/{job_id}/analyse"})
     return out
@@ -61,7 +63,8 @@ def _ml_rows(conn: sqlite3.Connection) -> list[dict]:
                     "status": status, "phase": None, "started_at": started, "finished_at": finished,
                     "scheme": (cfg.get("validation") or {}).get("scheme", "walkforward"), "algo": algo, "sampler": sampler,
                     "n_features": n_feat, "f1_test": f1.get(run_id), "f1_holdout": hold_m.get("F1_dir"), "auc_test": test_m.get("AUC_ovr_4cls"),
-                    "auc_holdout": hold_m.get("AUC_ovr_4cls"), "dm_p": (dm.get(run_id) or {}).get("p_value"),
+                    "auc_holdout": hold_m.get("AUC_ovr_4cls"), "panel_test": metric_panel.panel(test_m), "panel_holdout": metric_panel.panel(hold_m),
+                    "dm_p": (dm.get(run_id) or {}).get("p_value"),
                     "dm_sample": (dm.get(run_id) or {}).get("sample"), "suspect": bool(suspicion.suspect_reason(hold_m) or suspicion.suspect_reason(test_m)),
                     "n_trials": n_trials, "benchmark_f1": bench.get(run_id), "alpha": trackdb.ALPHA_SEP in (target or ""),
                     "url": f"/runs/{run_id}/analyse"})
@@ -87,18 +90,19 @@ def maps(conn: sqlite3.Connection, index: dict | None = None) -> dict:
     for r in done:                                        # rows triées du plus récent au plus ancien : le premier de chaque couple gagne
         key = (r["target"], r["horizon"])
         if key not in cells:
-            cells[key] = {"target": r["target"], "horizon": r["horizon"], "run_id": r["id"], "f1_test": r["f1_test"],
-                          "f1_holdout": r["f1_holdout"], "algo": r["algo"], "suspect": r["suspect"]}
+            cells[key] = {"target": r["target"], "horizon": r["horizon"], "run_id": r["id"], "panel_test": r["panel_test"],
+                          "panel_holdout": r["panel_holdout"], "algo": r["algo"], "suspect": r["suspect"]}
     horizons = sorted({c["horizon"] for c in cells.values()})
     targets = sorted({c["target"] for c in cells.values()})
-    by_algo: dict[str, dict[str, list[float]]] = {}
+    by_algo: dict[str, dict[str, dict[str, list[float]]]] = {}
     for r in done:
         a = r["algo"] or "?"
-        d = by_algo.setdefault(a, {"test": [], "holdout": []})
-        if r["f1_test"] is not None:
-            d["test"].append(r["f1_test"])
-        if r["f1_holdout"] is not None:
-            d["holdout"].append(r["f1_holdout"])
+        d = by_algo.setdefault(a, {key: {"test": [], "holdout": []} for key in metric_panel.PANEL_KEYS})
+        for key in metric_panel.PANEL_KEYS:
+            for split in ("test", "holdout"):
+                v = (r[f"panel_{split}"] or {}).get(key)
+                if v is not None:
+                    d[key][split].append(v)
 
     def box(v: list[float]) -> dict | None:
         if not v:
@@ -107,8 +111,10 @@ def maps(conn: sqlite3.Connection, index: dict | None = None) -> dict:
         return {"n": len(a), "min": float(a.min()), "q1": float(np.percentile(a, 25)), "median": float(np.median(a)),
                 "q3": float(np.percentile(a, 75)), "max": float(a.max()), "mean": float(a.mean())}
 
-    algos = [{"algo": a, "test": box(d["test"]), "holdout": box(d["holdout"])} for a, d in by_algo.items()]
-    algos.sort(key=lambda x: -(x["holdout"]["median"] if x["holdout"] else -1))
+    algos = [{"algo": a, "metrics": {key: {"test": box(d[key]["test"]), "holdout": box(d[key]["holdout"])} for key in metric_panel.PANEL_KEYS}}
+             for a, d in by_algo.items()]
+    algos.sort(key=lambda x: -(x["metrics"]["AUC_dir"]["holdout"]["median"] if x["metrics"]["AUC_dir"]["holdout"] else -1))
     rl = [{"id": r["id"], "target": r["target"], "algo": r["algo"], "sharpe": r["sharpe"], "sharpe_bh": r["sharpe_bh"], "dsr": r["dsr"]}
           for r in rows if r["kind"] == "rl" and r["sharpe"] is not None]
-    return sc.jsonable({"cells": list(cells.values()), "horizons": horizons, "targets": targets, "algos": algos, "rl": rl})
+    panel = [{"key": m.key, "higher": m.higher_is_better, "chance": m.chance, "percent": m.percent} for m in metric_panel.PANEL]
+    return sc.jsonable({"cells": list(cells.values()), "horizons": horizons, "targets": targets, "algos": algos, "rl": rl, "panel": panel})

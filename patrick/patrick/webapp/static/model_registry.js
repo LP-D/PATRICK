@@ -12,6 +12,8 @@
     function driftChip(a) { return a ? PK.chip(T("ad_a_" + a), DRIFT_KIND[a] || "neutral") : "—"; }
 
     // ================================================================ liste
+    function pv(r, split, key) { var p = r && r["panel_" + split]; return p && isNum(p[key]) ? p[key] : null; }
+    function tH(r, key) { var t = pv(r, "test", key), ho = pv(r, "holdout", key); return t === null && ho === null ? "—" : (t === null ? "—" : num(t, 3)) + " / " + (ho === null ? "—" : num(ho, 3)); }
     var listRoot = document.getElementById("am-root");
     if (listRoot) {
         var st = { items: [], q: "", status: "", sortKey: "target", sortDir: 1, page: 0, per: 50 };
@@ -21,7 +23,10 @@
             { key: "algo", label: "ah_c_algo", cell: function (r) { return (r.algo || "—") + (r.n_features ? " · N=" + r.n_features : ""); }, sort: function (r) { return r.algo || ""; } },
             { key: "implicit", label: "am_c_title", cell: function (r) { return PK.chip(r.implicit ? T("am_implicit") : T("am_explicit"), r.implicit ? "neutral" : "ok"); }, sort: function (r) { return r.implicit ? 1 : 0; } },
             { key: "n_versions", label: "am_c_versions", num: true, cell: function (r) { return String(r.n_versions); }, sort: function (r) { return r.n_versions; } },
-            { key: "f1_test", label: "ra_m_f1dir", num: true, cell: function (r) { return isNum(r.f1_test) ? num(r.f1_test, 3) + " / " + (isNum(r.f1_holdout) ? num(r.f1_holdout, 3) : "—") : "—"; }, sort: function (r) { return r.f1_holdout; } },
+            // Panneau (ADR 0023) : test / holdout pour l'AUC de direction, le Brier et le MCC.
+            { key: "auc_dir", label: "pm_AUC_dir", num: true, cell: function (r) { return tH(r, "AUC_dir"); }, sort: function (r) { return pv(r, "holdout", "AUC_dir"); } },
+            { key: "brier", label: "pm_Brier_up", num: true, cell: function (r) { return tH(r, "Brier_up"); }, sort: function (r) { return pv(r, "holdout", "Brier_up"); } },
+            { key: "mcc", label: "pm_MCC_4cls", num: true, cell: function (r) { return tH(r, "MCC_4cls"); }, sort: function (r) { return pv(r, "holdout", "MCC_4cls"); } },
             { key: "live_judged", label: "am_c_live", num: true, cell: function (r) { return r.live_judged ? r.live_judged + " · " + pct(r.live_hit, 0) : "—"; }, sort: function (r) { return r.live_judged; } },
             { key: "drift", label: "nav_drift", cell: function (r) { return driftChip(r.drift); }, sort: function (r) { return r.drift || ""; } },
             { key: "age_days", label: "am_c_age", num: true, cell: function (r) { return r.age_days === null || r.age_days === undefined ? "—" : T("ad_days", { n: r.age_days }); }, sort: function (r) { return r.age_days; } },
@@ -124,16 +129,20 @@
             var vrows = d.versions.map(function (v) {
                 var btn = v.current ? PK.chip(T("am_current"), "ok") : h("button", { type: "button", class: "btn-secondary", text: T("am_promote"), disabled: !v.artifact_exists });
                 if (!v.current) btn.addEventListener("click", function () { promote(v); });
-                return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(v.run_id) + "/analyse", text: v.run_id }) }, (v.started_at || "").slice(0, 16), v.algo || "—", v.n_features, isNum(v.f1_test) ? num(v.f1_test, 3) : "—", isNum(v.f1_holdout) ? num(v.f1_holdout, 3) : "—", v.live_judged ? v.live_judged + " · " + pct(v.live_hit, 0) : "—", PK.chip(v.artifact_exists ? T("am_file_ok") : T("am_file_missing"), v.artifact_exists ? "ok" : "warn"), { cell: btn }];
+                return [{ cell: h("a", { href: "/runs/" + encodeURIComponent(v.run_id) + "/analyse", text: v.run_id }) }, (v.started_at || "").slice(0, 16), v.algo || "—", v.n_features, tH(v, "AUC_dir"), tH(v, "Brier_up"), tH(v, "MCC_4cls"), v.live_judged ? v.live_judged + " · " + pct(v.live_hit, 0) : "—", PK.chip(v.artifact_exists ? T("am_file_ok") : T("am_file_missing"), v.artifact_exists ? "ok" : "warn"), { cell: btn }];
             });
-            cardRoot.appendChild(section(T("am_s_versions"), PK.table([T("ah_c_name"), T("ah_c_started"), T("ah_c_algo"), T("ah_c_nfeat"), T("ah_c_f1_test").split(" · ")[0], T("ah_c_f1_hold").split(" · ")[0], T("am_c_live"), T("am_c_file"), ""], vrows, { num: [3, 4, 5] }), T("am_h_versions")));
+            cardRoot.appendChild(section(T("am_s_versions"), PK.table([T("ah_c_name"), T("ah_c_started"), T("ah_c_algo"), T("ah_c_nfeat"), T("pm_AUC_dir") + " " + T("am_test_holdout"), T("pm_Brier_up") + " " + T("am_test_holdout"), T("pm_MCC_4cls") + " " + T("am_test_holdout"), T("am_c_live"), T("am_c_file"), ""], vrows, { num: [3, 4, 5, 6] }), T("am_h_versions")));
 
             if (d.archive.length) {
                 var arows = d.archive.map(function (a) {
-                    var duel = a.duel || {}, ch = duel.challenger && isNum(duel.challenger.f1_dir) ? num(duel.challenger.f1_dir, 3) : "—", cp = duel.champion && isNum(duel.champion.f1_dir) ? num(duel.champion.f1_dir, 3) : "—";
-                    return [a.decided_at, T("am_role_" + a.role), a.run_id, a.algo || "—", a.n_features === null ? "—" : a.n_features, isNum(a.f1_dir) ? num(a.f1_dir, 3) : "—", cp + " / " + ch];
+                    // Le duel se lit sur sa propre mesure (`criterion` : AUC_dir+Brier_up depuis l'ADR 0023, AUC_dir ou F1_dir pour un duel plus ancien).
+                    var duel = a.duel || {}, crit = duel.criterion || (duel.champion && isNum(duel.champion.f1_dir) ? "F1_dir" : null);
+                    var cs = isNum(duel.champion_score) ? duel.champion_score : (duel.champion ? duel.champion.f1_dir : null), xs = isNum(duel.challenger_score) ? duel.challenger_score : (duel.challenger ? duel.challenger.f1_dir : null);
+                    var duelCell = crit ? crit + " : " + (isNum(cs) ? num(cs, 3) : "—") + " / " + (isNum(xs) ? num(xs, 3) : "—") : "—";
+                    var wf = a.panel || {};
+                    return [a.decided_at, T("am_role_" + a.role), a.run_id, a.algo || "—", a.n_features === null ? "—" : a.n_features, isNum(wf.AUC_dir) ? num(wf.AUC_dir, 3) : "—", isNum(wf.Brier_up) ? num(wf.Brier_up, 3) : "—", duelCell];
                 });
-                cardRoot.appendChild(section(T("am_s_archive"), PK.table([T("ra_hl_a_when"), T("am_c_role"), T("ra_hl_a_run"), T("ah_c_algo"), T("ah_c_nfeat"), "F1 WF", T("am_c_duel")], arows, { num: [4, 5] }), T("am_h_archive")));
+                cardRoot.appendChild(section(T("am_s_archive"), PK.table([T("ra_hl_a_when"), T("am_c_role"), T("ra_hl_a_run"), T("ah_c_algo"), T("ah_c_nfeat"), T("pm_AUC_dir") + " WF", T("pm_Brier_up") + " WF", T("am_c_duel")], arows, { num: [4, 5, 6] }), T("am_h_archive")));
             }
             cardRoot.dispatchEvent(new CustomEvent("patrick:content", { bubbles: true }));
         };

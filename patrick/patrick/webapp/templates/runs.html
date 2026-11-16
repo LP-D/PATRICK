@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import status_badge, empty_state, up_down %}
+{% from "_components.html" import status_badge, empty_state, up_down, panel_th, panel_td, mcc_gap %}
 {% block title %}PATRICK — {{ t('rl_title') }}{% endblock %}
 
 {% block content %}
@@ -215,9 +215,8 @@
             <th>{{ t('dq_col_target') }}</th>
             <th>{{ t('dq_col_horizon') }}</th>
             <th>{{ t('dq_col_status') }}</th>
-            <th class="num headline" title="{{ m_labels.metric_AUC_ovr_4cls }}">AUC</th>
-            <th class="num headline" title="{{ m_labels.metric_F1_dir }}">F1</th>
-            <th class="num">{{ t('hist_gap') }}</th>
+            {{ panel_th(m_labels, 'headline') }}
+            <th class="num" title="{{ t('hist_gap_mcc_tip') }}">{{ t('hist_gap_mcc') }}</th>
             <th class="num">DM p</th>
             <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_true') }}</th>
             <th class="num" title="{{ t('cb_col_tip') }}">{{ t('cb_col_pred') }}</th>
@@ -236,9 +235,8 @@
             <td title="{{ r.target }}">{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
             <td>{{ status_badge(shown_status, state) }}</td>
-            <td class="num pk-mono headline">{{ '%.3f' | format(r.best_auc) if r.best_auc is not none else '—' }}</td>
-            <td class="num pk-mono headline">{{ '%.3f' | format(r.best_f1_dir) if r.best_f1_dir is not none else '—' }}</td>
-            <td class="num pk-mono">{% if r.best_f1_dir is not none and r.benchmark_f1_dir is not none %}<span class="{{ 'pos' if r.best_f1_dir >= r.benchmark_f1_dir else 'neg' }}">{{ '%+.3f' | format(r.best_f1_dir - r.benchmark_f1_dir) }}</span>{% else %}—{% endif %}</td>
+            {{ panel_td(r.panel, 'headline') }}
+            <td class="num pk-mono">{{ mcc_gap(r.panel, r.benchmark_mcc) }}</td>
             <td class="num pk-mono">{{ '%.3f' | format(r.dm_p_value) if r.dm_p_value is not none else '—' }}</td>
             <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'true') }}</td>
             <td class="num">{{ up_down(r.class_balance.test if r.class_balance else none, 'pred') }}</td>

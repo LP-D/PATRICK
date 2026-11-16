@@ -28,6 +28,8 @@ ASSET_STRINGS: dict[str, dict[str, str]] = {
     "as_col_live": _s("Réussite en direct", "Live hit rate"),
     "as_col_dm": _s("Test DM (p)", "DM test (p)"),
     "as_champ_line": _s("{algo} · {n} variables", "{algo} · {n} features"),
+    "as_champ_panel_tip": _s("Panneau du holdout du champion : AUC de direction, Brier, MCC, bonne direction (ADR 0023).",
+                             "Holdout panel of the champion: direction AUC, Brier, MCC, right direction (ADR 0023)."),
     "as_no_signal": _s("Aucun signal : cet actif n'a pas encore de modèle entraîné.", "No signal: this asset has no trained model yet."),
     "as_no_signal_hint": _s("Un run rapide suffit à obtenir un premier signal par horizon.", "A quick run is enough to get a first signal per horizon."),
     "as_signals_foot": _s("Un signal par horizon, issu du champion si l'horizon en a un. Survole une case pour le détail (confiance, test DM, fiabilité en direct, dérive).",
