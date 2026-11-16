@@ -86,5 +86,57 @@ Autres constats :
 
 ## 6. Banc d'essai moteur 1 contre moteur 2
 
-Mêmes cibles, mêmes données (au 16/11), même graine, une graine par agent (comme 431 des 456 runs). Voir la section suivante, remplie à
-la fin du banc d'essai.
+Mêmes cibles, mêmes données (au 16/11), même graine, une graine par agent (comme 431 des 456 runs), 4 plis, 30 000 pas. Les deux moteurs
+tournent sous la règle des séances corrigée. 21 cibles, 20 exploitables (CL=F refusé : cours négatif en avril 2020).
+
+| Cible | BH | Tendance 200 j | Moteur 1 | Moteur 2 | Agent sans repli | Ancien run stocké |
+|---|---|---|---|---|---|---|
+| AAPL | 0,99 | 0,91 | 0,39 | 0,99 | 0,92 | 0,49 |
+| MSFT | 0,93 | 0,74 | 0,34 | 0,89 | 0,58 | 0,22 |
+| JPM | 0,77 | 0,69 | 0,19 | 0,65 | 0,61 | 0,32 |
+| XOM | 0,44 | 0,43 | −0,38 | 0,12 | 0,26 | 0,07 |
+| ^GSPC | 0,79 | 0,71 | 0,35 | 0,71 | 0,72 | 0,19 |
+| ^NDX | 0,82 | 0,89 | 0,53 | 0,78 | 0,64 | 0,20 |
+| ^FCHI | 0,40 | 0,30 | 0,06 | 0,36 | 0,35 | −0,56 |
+| ^GDAXI | 0,56 | 0,40 | −0,05 | 0,26 | 0,22 | −0,03 |
+| ^STOXX50E | 0,45 | 0,24 | 0,20 | 0,32 | 0,24 | −0,52 |
+| ^N225 | 0,64 | 0,29 | 0,00 | 0,61 | 0,40 | 1,83 |
+| MC.PA | 0,49 | 0,30 | 0,40 | 0,40 | 0,42 | 0,15 |
+| SAN.PA | 0,35 | −0,08 | −0,30 | 0,34 | 0,37 | −0,37 |
+| AIR.PA | 0,54 | 0,40 | 0,35 | 0,52 | 0,52 | −0,03 |
+| GC=F | 0,73 | 0,60 | 0,08 | 0,76 | 0,70 | −0,34 |
+| ZN=F | −0,21 | −0,34 | −0,07 | −0,35 | −0,55 | — |
+| XLE | 0,36 | 0,32 | −0,14 | 0,08 | −0,16 | −0,11 |
+| EEM | 0,37 | 0,36 | 0,31 | 0,37 | 0,37 | 0,41 |
+| EURUSD=X | 0,02 | 0,09 | −0,38 | −0,14 | −0,21 | 2,14 |
+| USDJPY=X | 0,39 | 0,12 | −0,17 | 0,04 | −0,02 | 3,70 |
+| ^VIX | 0,63 | −0,56 | 0,76 | 1,12 | 1,12 | 1,31 |
+
+Synthèse (20 cibles) :
+
+| | Moteur 1 | Moteur 2 |
+|---|---|---|
+| Sharpe médian (BH 0,51, tendance 0,34) | 0,14 | 0,38 |
+| Le moteur 2 fait mieux que le moteur 1 | — | 18 cibles sur 20, +0,32 de Sharpe en moyenne (t = 5,8) |
+| Croissance au-delà de BH, médiane | −9,4 %/an | −1,3 %/an |
+| Rotation médiane | 56 | 4 |
+| Frais, médiane | 3,9 %/an | 0,3 %/an |
+| Drawdown maximal, médiane | −51 % | −37 % |
+| Bat BH en Sharpe | 2 sur 20 | 3 sur 20 |
+| Bat BH à 5 % (bootstrap) | 0 | 1 (^VIX, non négociable) |
+
+- **Le repli seul** vaut +0,07 de Sharpe en moyenne (aide sur 13 cibles, nuit sur 4, t = 2,8) ; 39 plis sur 80 ont été repliés. Le reste du
+  gain (+0,25) vient des positions longues, de la décision tous les 5 jours, des frais gonflés et du point de contrôle choisi en validation.
+- **Fuite des devises confirmée et corrigée** : EURUSD et USDJPY passent de 2,14 et 3,70 (anciens runs, règle 1) à −0,38 et −0,17 (moteur 1,
+  règle 2). Aucun test du décalage d'un jour ne se déclenche sur le banc d'essai.
+- **Ce que le moteur 2 ne fait pas** : battre acheter-garder sur les actions. Il ne détruit plus de valeur (−1,3 %/an au lieu de −9,4 %/an
+  face à BH, drawdown plus faible), mais il n'en crée pas : avec ces variables quotidiennes, aucun signal de timing ne survit aux frais sur
+  les actifs testés. Seul le VIX (retour à la moyenne réel mais non négociable) bat nettement la référence.
+- Le moteur 2 rejoint la règle de tendance 200 j (0,38 contre 0,34) : c'est le niveau d'une règle simple, pas un avantage.
+- Sur ZN=F (Treasury 10 ans, actif baissier sur la période), le moteur 2 fait pire que le moteur 1 : se replier sur acheter-garder ne
+  protège pas quand la référence perd elle-même, et les positions longues seules interdisent de profiter de la baisse.
+
+**Conclusion** : la refonte corrige ce qui faisait perdre de l'argent (frais, jambe courte, sur-apprentissage, fuite). Le moteur rend
+désormais un résultat honnête, proche d'acheter-garder quand il n'y a rien à trouver. Elle ne crée pas un signal qui n'est pas dans les
+données : pour battre le marché, il faudra d'autres informations que les variables techniques et macro quotidiennes, ou des horizons
+plus longs, pas un meilleur agent.

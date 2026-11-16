@@ -38,6 +38,9 @@ séances de l'ADR 0007 (fuite des barres datées du début de journée).
 
 ## Conséquences
 
+- **Banc d'essai** (20 cibles, mêmes données, analyse section 6) : Sharpe médian 0,14 → 0,38 (BH 0,51), mieux sur 18 cibles sur 20
+  (+0,32 en moyenne, t = 5,8), rotation 56 → 4, frais 3,9 → 0,3 %/an, croissance face à BH −9,4 → −1,3 %/an. Le repli seul : +0,07.
+  Aucune cible négociable ne bat BH de façon significative : le moteur 2 cesse de détruire de la valeur, il n'en crée pas.
 - Les runs du moteur 1 ne sont ni réécrits ni supprimés ; ils restent comparables (Historique, comparaison) avec leurs réglages effectifs.
 - Le Sharpe d'un run du moteur 2 se lit avec `agent_share` : un run entièrement replié EST acheter-garder (message dans les avertissements).
   Le Sharpe déflaté compte toujours les runs terminés de la cible, moteurs confondus.
