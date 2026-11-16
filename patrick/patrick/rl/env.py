@@ -20,7 +20,8 @@ def action_to_position(action, settings: RLSettings) -> float:
 
 
 class TradingEnv(gym.Env):
-    """Un épisode = un segment d'historique rejoué dans l'ordre. En entraînement, de longueur `episode_length` à un point de départ
+    """Un épisode = un segment d'historique rejoué dans l'ordre, une décision toutes les `rebalance_every` barres. En entraînement, de
+    longueur `episode_length` (en barres) à un point de départ
     tiré au hasard (diversité), ou tout le segment si `episode_length = 0` ; la fin d'un épisode est une TRONCATURE (limite de temps),
     pas une fin de partie : la valeur future est donc estimée, jamais forcée à zéro. Seule la RUINE (perte de 100 % du capital) termine
     vraiment l'épisode (`terminated`)."""
@@ -54,6 +55,17 @@ class TradingEnv(gym.Env):
         return self.core.reset(start, end, prev_pos=0.0), {}
 
     def step(self, action):
-        reward, cost, net, done = self.core.step(action_to_position(action, self.s))
+        """Une décision tient `rebalance_every` barres (moins s'il reste moins de barres dans l'épisode) : la récompense est la somme des
+        récompenses par barre (pour `excess` et `log`, la log-croissance de tout le bloc), le coût n'est payé qu'à la première barre."""
+        target = action_to_position(action, self.s)
+        reward, cost, growth, done = 0.0, 0.0, 1.0, False
+        for _ in range(max(1, int(self.s.rebalance_every))):
+            r, c, net, done = self.core.step(target)
+            reward += r
+            cost += c
+            growth *= 1.0 + net
+            if done:
+                break
         ruined = bool(self.core.ruined)          # perte totale : vraie fin de partie (valeur future nulle), pas une troncature
-        return self.core.observation(), reward, ruined, bool(done and not ruined), {"cost": cost, "net_return": net, "ruined": ruined}
+        return (self.core.observation(), float(reward), ruined, bool(done and not ruined),
+                {"cost": cost, "net_return": growth - 1.0, "ruined": ruined})

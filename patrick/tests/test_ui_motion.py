@@ -1,4 +1,4 @@
-"""Mouvement de l'interface (ADR 0022) : les 18 règles tiennent dans des jetons de patrick.css, un script (motion.js) et deux repères
+"""Mouvement de l'interface (ADR 0023) : les 18 règles tiennent dans des jetons de patrick.css, un script (motion.js) et deux repères
 partagés d'une page à l'autre (barre latérale, onglets d'un run). Ces tests figent les valeurs et les contrats, pas l'aspect."""
 from __future__ import annotations
 

@@ -180,7 +180,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 
 ## Mouvement
 
-Dix-huit règles (ADR 0022), toutes portées par les jetons de `:root` et par `static/motion.js` ; aucune durée ni courbe en dur dans une règle de page.
+Dix-huit règles (ADR 0023), toutes portées par les jetons de `:root` et par `static/motion.js` ; aucune durée ni courbe en dur dans une règle de page.
 
 | Règle | Jeton / mécanisme | Où |
 |---|---|---|

@@ -214,7 +214,8 @@
             .catch(function () { $("rl-results").replaceChildren(h("p", { class: "banner banner-error", role: "alert", text: tr("rlp_status_lost") })); $("rl-results-panel").hidden = false; });
     }
 
-    var LEGS = [["strategy", "rlp_leg_strategy"], ["buy_hold", "rlp_leg_buy_hold"], ["momentum", "rlp_leg_momentum"], ["flat", "rlp_leg_flat"]];
+    var LEGS = [["strategy", "rlp_leg_strategy"], ["agent_ungated", "rlp_leg_agent_raw"], ["buy_hold", "rlp_leg_buy_hold"],
+                ["trend", "rlp_leg_trend"], ["momentum", "rlp_leg_momentum"], ["flat", "rlp_leg_flat"]];
     var KPIS = [
         ["total_return", "rlp_k_total", function (v) { return pct(v, 1); }], ["cagr", "rlp_k_cagr", function (v) { return pct(v, 1); }],
         ["vol", "rlp_k_vol", function (v) { return pct(v, 1); }], ["sharpe", "rlp_k_sharpe", function (v) { return num(v, 2); }],
@@ -222,7 +223,15 @@
         ["turnover", "rlp_k_turnover", function (v) { return num(v, 1); }], ["exposure", "rlp_k_exposure", function (v) { return pct(v, 0); }],
         ["hit_rate", "rlp_k_hit", function (v) { return pct(v, 0); }], ["n_trades", "rlp_k_trades", function (v) { return num(v, 0); }],
         ["cost_drag", "rlp_k_costs", function (v) { return pct(v, 1); }],
+        ["gross_return_ann", "rlp_k_gross", function (v) { return pct(v, 1); }], ["cost_ann", "rlp_k_cost_ann", function (v) { return pct(v, 1); }],
+        ["long_contrib_ann", "rlp_k_long", function (v) { return pct(v, 1); }], ["short_contrib_ann", "rlp_k_short", function (v) { return pct(v, 1); }],
     ];
+    // Ligne de résultat : la stratégie, l'agent sans repli (seulement si le repli a joué) ou une référence.
+    function legMetrics(r, key) {
+        if (key === "strategy") return r.strategy;
+        if (key === "agent_ungated") return (r.folds || []).some(function (f) { return f.gated; }) ? r.agent_ungated : null;
+        return (r.baselines || {})[key] || null;
+    }
 
     function verdict(stat) {
         if (!stat || stat.ci_low === null || stat.ci_high === null) return chip("—", "neutral");
@@ -249,12 +258,15 @@
             fmtStr(tr("rlp_n_obs"), { n: r.strategy.n, start: r.curves.dates[0], end: r.curves.dates[r.curves.dates.length - 1] }),
             fmtStr(tr("rlp_elapsed"), { t: fmtDuration(r.elapsed_s) })].join(" · ") }));
         (r.warnings || []).forEach(function (w) { box.appendChild(h("p", { class: "banner banner-warning", role: "status", text: w })); });
+        if (typeof r.strategy.agent_share === "number") {
+            box.appendChild(h("p", { class: "exp-meta", "data-keep": "", text: fmtStr(tr("rlp_agent_share"), { p: pct(r.strategy.agent_share, 0) }) }));
+        }
 
         // chiffres clés : une colonne par ligne de base
-        var legs = LEGS.filter(function (l) { return l[0] === "strategy" || r.baselines[l[0]]; });
-        var rows = KPIS.map(function (k) {
+        var legs = LEGS.filter(function (l) { return legMetrics(r, l[0]); });
+        var rows = KPIS.filter(function (k) { return r.strategy[k[0]] !== undefined; }).map(function (k) {
             return [k[1] === undefined ? "" : tr(k[1])].concat(legs.map(function (l) {
-                var m = l[0] === "strategy" ? r.strategy : r.baselines[l[0]];
+                var m = legMetrics(r, l[0]);
                 var v = m[k[0]];
                 return { cell: v === null || v === undefined ? "—" : k[2](v), cls: "num pk-mono" + (l[0] === "strategy" ? " rl-agent-col" : "") };
             }));
@@ -264,31 +276,51 @@
         // l'agent bat-il vraiment la référence ?
         box.appendChild(h("h3", { text: tr("rlp_stats_title") }));
         var st = r.stats;
-        box.appendChild(table(["", "Δ Sharpe", "", ""], [gapRow(tr("rlp_stat_vs_bh"), st.vs_buy_hold), gapRow(tr("rlp_stat_vs_mom"), st.vs_momentum)]));
-        box.appendChild(table(["", "", ""], [
+        var gaps = [gapRow(tr("rlp_stat_vs_bh"), st.vs_buy_hold)];
+        if (st.vs_trend) gaps.push(gapRow(tr("rlp_stat_vs_trend"), st.vs_trend));
+        gaps.push(gapRow(tr("rlp_stat_vs_mom"), st.vs_momentum));
+        box.appendChild(table(["", "Δ Sharpe", "", ""], gaps));
+        var extra = [];
+        if (typeof st.excess_log_growth === "number") extra.push([tr("rlp_stat_excess"), numCell(pct(st.excess_log_growth, 1), st.excess_log_growth), ""]);
+        if (st.delay) extra.push([tr("rlp_stat_delay"), { cell: num(st.delay.lagged_sharpe, 2), cls: "num pk-mono" },
+            fmtStr(tr("rlp_delay"), { g: num(st.delay.gross_sharpe, 2), l: num(st.delay.lagged_sharpe, 2) })]);
+        box.appendChild(table(["", "", ""], extra.concat([
             [tr("rlp_stat_psr"), { cell: pct(st.psr, 0), cls: "num pk-mono" }, ""],
             [tr("rlp_stat_dsr"), { cell: st.dsr && st.dsr.dsr !== null ? pct(st.dsr.dsr, 0) : "—", cls: "num pk-mono" },
                 fmtStr(tr("rlp_stat_dsr_detail"), { n: st.n_trials, bench: st.dsr && st.dsr.benchmark_sr !== null ? num(st.dsr.benchmark_sr, 3) : "—" })],
-        ]));
+        ])));
 
         // courbes
         box.appendChild(h("h3", { text: tr("rlp_c_equity") }));
         box.appendChild(lineChart({
             dates: r.curves.dates, title: tr("rlp_c_equity"),
-            series: [{ values: r.curves.buy_hold, color: "var(--text-3)" }, { values: r.curves.momentum, color: "var(--warn)" },
-                     { values: r.curves.strategy, color: "var(--brand)" }],
+            series: [{ values: r.curves.buy_hold, color: "var(--text-3)" }, { values: r.curves.momentum, color: "var(--warn)" }]
+                .concat(r.curves.trend ? [{ values: r.curves.trend, color: "var(--info)" }] : [])
+                .concat(r.curves.agent && legMetrics(r, "agent_ungated") ? [{ values: r.curves.agent, color: "var(--pos)" }] : [])
+                .concat([{ values: r.curves.strategy, color: "var(--brand)" }]),
             hlines: [{ y: 1, dash: "2 4" }], yFmt: function (v) { return num(v, 2); } }));
-        box.appendChild(legend([[tr("rlp_leg_strategy"), "var(--brand)"], [tr("rlp_leg_buy_hold"), "var(--text-3)"], [tr("rlp_leg_momentum"), "var(--warn)"]]));
+        box.appendChild(legend([[tr("rlp_leg_strategy"), "var(--brand)"]]
+            .concat(r.curves.agent && legMetrics(r, "agent_ungated") ? [[tr("rlp_leg_agent_raw"), "var(--pos)"]] : [])
+            .concat([[tr("rlp_leg_buy_hold"), "var(--text-3)"]])
+            .concat(r.curves.trend ? [[tr("rlp_leg_trend"), "var(--info)"]] : [])
+            .concat([[tr("rlp_leg_momentum"), "var(--warn)"]])));
         box.appendChild(h("h3", { text: tr("rlp_c_position") }));
         box.appendChild(lineChart({ dates: r.curves.dates, series: [{ values: r.curves.position, color: "var(--pos)" }], title: tr("rlp_c_position"),
             yMin: -1, yMax: 1, hlines: [{ y: 0, dash: "0", color: "var(--line-strong)" }], yFmt: function (v) { return num(v, 1); }, height: 150 }));
 
         // plis
         box.appendChild(h("h3", { text: tr("rlp_folds_title") }));
-        box.appendChild(table([tr("rlp_col_fold"), tr("rlp_col_train"), tr("rlp_col_test"), tr("rlp_col_n"), tr("rlp_col_agent") + " · Sharpe", tr("rlp_col_bh") + " · Sharpe"],
+        var withVal = r.folds.some(function (f) { return f.val_score !== undefined && f.val_score !== null; });
+        box.appendChild(table([tr("rlp_col_fold"), tr("rlp_col_train"), tr("rlp_col_test"), tr("rlp_col_n")]
+                .concat(withVal ? [tr("rlp_col_val"), tr("rlp_col_used")] : [])
+                .concat([tr("rlp_col_agent") + " · Sharpe", tr("rlp_col_bh") + " · Sharpe"]),
             r.folds.map(function (f) {
+                var used = f.gated ? chip(tr("rlp_used_bench"), "neutral") : chip(tr("rlp_used_agent"), "pos");
+                var agent = f.agent || f.strategy;
                 return [{ cell: String(f.fold), cls: "num" }, f.train_start + " → " + f.train_end, f.test_start + " → " + f.test_end,
-                    { cell: String(f.n_test), cls: "num" }, numCell(num(f.strategy.sharpe, 2), f.strategy.sharpe), numCell(num(f.buy_hold.sharpe, 2), f.buy_hold.sharpe)];
+                    { cell: String(f.n_test), cls: "num" }]
+                    .concat(withVal ? [numCell(f.val_score === null ? "—" : pct(f.val_score, 1), f.val_score), { cell: used }] : [])
+                    .concat([numCell(num(agent.sharpe, 2), agent.sharpe), numCell(num(f.buy_hold.sharpe, 2), f.buy_hold.sharpe)]);
             })));
 
         if (r.seeds && r.seeds.length > 1) {

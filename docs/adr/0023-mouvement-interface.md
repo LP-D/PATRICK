@@ -1,4 +1,4 @@
-# ADR 0022 — Mouvement de l'interface : dix-huit règles
+# ADR 0023 — Mouvement de l'interface : dix-huit règles
 
 Date : 2026-11-16. Statut : codée et testée sur la branche `feat/mouvements-interface`. Demande de Léon : appliquer une liste de dix-huit règles de mouvement (ease-out pour les entrées, menus en 150-250 ms, lignes décalées de 30 ms, boutons à 0,97, étirement de 12 %, mouvements en courbe, pulsation de réussite, ease-in-out pour bouger, popovers à 0,95, entrée depuis et sortie vers le déclencheur, pas de ressort, sorties 20 % plus courtes, ancien et nouvel état mêlés, poids aux révélations, fondu d'icônes avec flou, élastique aux limites, identifiant de mise en page partagé), et revoir la place des onglets.
 
