@@ -444,13 +444,18 @@ def meta_labeling_for_trial(conn: sqlite3.Connection, trial_id: int, horizon: in
             **{k: res[k] for k in ("n_evaluated", "n_kept", "accuracy_all", "accuracy_kept", "kept_share")}}
 
 
-def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, with_meta_labeling: bool = True) -> dict | None:
+def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, with_meta_labeling: bool = True,
+               lite: bool = False) -> dict | None:
     """P7.2 -- `/runs/{id}` detail page: same components as `report.py`
     (never recomputed differently), but returned as a Python structure for
     a Jinja template rather than pre-formatted HTML.
 
     `with_meta_labeling=False` laisse `meta_labeling` à `None` : le méta-étiquetage ajuste ~170 régressions logistiques (2 à 4 s) ;
-    la page d'un run le demande à part (`/fragments/run-meta/{run_id}`) pour s'ouvrir sans l'attendre."""
+    la page d'un run le demande à part (`/fragments/run-meta/{run_id}`) pour s'ouvrir sans l'attendre.
+
+    `lite=True` (le conseiller de relance, appelé pour des centaines de runs) saute ce que son diagnostic ne lit pas : intervalles conformes, tailles
+    d'évaluation, équilibre des classes, FDR entre cibles, lectures du holdout, décisions de criblage, décompte des ajustements : environ un tiers du coût.
+    Les clés restent présentes (vides) ; la page d'un run ne passe jamais `lite`."""
     run = trackdb.get_run(conn, run_id)
     if run is None:
         return None
@@ -462,7 +467,7 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
     trials = _trials_for_run(conn, run_id)
     best_trial = next((t for t in trials if t["is_best"]), None)
     path_distributions = ({t["trial_id"]: _path_distribution_for_trial(conn, t["trial_id"])
-                            for t in trials} if is_cpcv else {})
+                            for t in trials} if is_cpcv and not lite else {})
 
     cpcv_info = None
     if is_cpcv:
@@ -479,25 +484,26 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
     dm_result = None if is_cpcv else _dm_result_for_run(conn, run_id)
     holdout_metrics = None if is_cpcv else (best_trial["holdout_f1_dir"] if best_trial else None)
     holdout_diag = trackholdout.spearman_test_vs_holdout(conn, run_id, metric="F1_dir")
-    holdout_reads = trackstats.holdout_reads(conn, run["target"], run["horizon"])
+    holdout_reads = None if lite else trackstats.holdout_reads(conn, run["target"], run["horizon"])
 
-    fdr_result = trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(run["target"]))
-    target_fdr = fdr_result["results"].get(run["target"])
+    fdr_result = None if lite else trackstats.fdr_across_targets(conn, alpha=fdr_alpha, family=trackstats.family_of(run["target"]))
+    target_fdr = None if lite else fdr_result["results"].get(run["target"])
 
     # Les avis (série conservée : contrat à terme continu non ajusté) ne sont pas des exclusions.
     quality_issues = [i for i in trackdb.list_data_quality_issues(conn, run["snapshot_id"])
                       if i["reason"] != quality_module.CONTINUOUS_FUTURE_REASON]
     feature_stability = trackdb.get_feature_stability(conn, run_id)
     phase_breakdown = phase_breakdown_for_run(conn, run_id)
-    phase_breakdown["scan_model_fits"] = conn.execute(
-        "SELECT COUNT(*) FROM (SELECT DISTINCT fm.trial_id, fm.fold_index FROM fold_metric fm "
-        "JOIN trial t ON t.trial_id = fm.trial_id WHERE t.run_id = ? "
-        "AND fm.split IN ('test', 'test_path', 'valid') AND fm.metric = 'F1_dir')", (run_id,)
-    ).fetchone()[0]
-    phase_breakdown["optuna_trials"] = conn.execute(
-        "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE run_id = ? "
-        "AND source IN ('optuna', 'backfill_optuna')", (run_id,)
-    ).fetchone()[0]
+    if not lite:
+        phase_breakdown["scan_model_fits"] = conn.execute(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT fm.trial_id, fm.fold_index FROM fold_metric fm "
+            "JOIN trial t ON t.trial_id = fm.trial_id WHERE t.run_id = ? "
+            "AND fm.split IN ('test', 'test_path', 'valid') AND fm.metric = 'F1_dir')", (run_id,)
+        ).fetchone()[0]
+        phase_breakdown["optuna_trials"] = conn.execute(
+            "SELECT COALESCE(SUM(n_trials), 0) FROM trial_registry WHERE run_id = ? "
+            "AND source IN ('optuna', 'backfill_optuna')", (run_id,)
+        ).fetchone()[0]
 
     headline = _headline_for_trial(conn, best_trial["trial_id"]) if best_trial else {}
     return {
@@ -526,15 +532,15 @@ def run_detail(conn: sqlite3.Connection, run_id: str, fdr_alpha: float = 0.10, w
         "min_mean_jaccard_warning": stability_module.MIN_MEAN_JACCARD_WARNING,
         "fold_metrics": fold_metrics(conn, best_trial["trial_id"]) if best_trial else [],
         "headline": headline,
-        "sizes": evaluation_sizes(conn, best_trial["trial_id"], int(run["horizon"])) if best_trial else {},
+        "sizes": evaluation_sizes(conn, best_trial["trial_id"], int(run["horizon"])) if best_trial and not lite else {},
         "class_balance": (class_balance.for_trials(conn, [best_trial["trial_id"]]).get(best_trial["trial_id"])
-                          if best_trial else None),
+                          if best_trial and not lite else None),
         "suspect": (suspicion.suspect_reason(headline.get("holdout")) or suspicion.suspect_reason(headline.get("test"))),
-        "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial else None,
+        "conformal": conformal_for_trial(conn, best_trial["trial_id"]) if best_trial and not lite else None,
         "meta_labeling": (meta_labeling_for_trial(conn, best_trial["trial_id"], int(run["horizon"]))
                           if best_trial and with_meta_labeling else None),
         "phase_breakdown": phase_breakdown,
-        "screening_decisions": trackdb.list_screening_decisions(conn, run_id),
+        "screening_decisions": [] if lite else trackdb.list_screening_decisions(conn, run_id),
     }
 
 

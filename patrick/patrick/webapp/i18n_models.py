@@ -363,6 +363,8 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
     "batch_js_none": _s("Rien à sélectionner : historique trop court ou rien à lancer.",
                         "Nothing to select: history too short or nothing to launch."),
     "batch_js_analysing": _s("Analyse des runs terminés…", "Analysing the finished runs…"),
+    "batch_js_progress": _s("Analyse des runs terminés : {done} / {total} cibles. Quelques minutes au premier passage, puis c'est immédiat.",
+                            "Analysing the finished runs: {done} / {total} targets. A few minutes the first time, then instant."),
     "batch_js_rec_none": _s("Aucun run conseillé pour le moment.", "No recommended run for now."),
     "batch_js_rec_confirm": _s(
         "Mettre en file {n} runs conseillés ? Chacun reprend la configuration du dernier run de sa cible avec le réentraînement proposé. "
@@ -370,6 +372,8 @@ MODELS_STRINGS: dict[str, dict[str, str]] = {
         "Queue {n} recommended runs? Each reuses its target's latest run configuration with the proposed retraining. "
         "Durations: {costs}. Proposals: {lines}."),
     "batch_js_rec_launch": _s("Lancer {n} runs", "Launch {n} runs"),
+    "batch_js_rec_queueing": _s("Mise en file de {n} runs : chaque configuration est reconstruite, environ une minute…",
+                                "Queuing {n} runs: each configuration is rebuilt, about a minute…"),
     "batch_js_rec_done": _s("{n} runs conseillés mis en file.", "{n} recommended runs queued."),
     "batch_js_error": _s("Échec du lot : {msg}", "Batch failed: {msg}"),
 }

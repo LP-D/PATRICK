@@ -549,6 +549,12 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
     )
 
 
+@app.get("/api/launch-batches/recommended/progress")
+def launch_batches_recommended_progress():
+    """`{"running", "done", "total"}` : où en est l'analyse du lot « runs conseillés » (la page la montre pendant l'attente de la réponse)."""
+    return JSONResponse(launch_batches.analysis_progress())
+
+
 @app.get("/api/launch-batches/recommended")
 async def launch_batches_recommended(request: Request):
     """Lot « runs conseillés » : l'analyse (conseiller de réentraînement sur le dernier run terminé de chaque cible), à la demande.
@@ -558,7 +564,7 @@ async def launch_batches_recommended(request: Request):
     def analyse() -> dict:
         conn = trackdb.connect()
         try:
-            items = launch_batches.recommended(conn, data_health.history_depths())
+            items = launch_batches.recommended(conn, data_health.history_depths(), workers=launch_batches.ADVICE_WORKERS)
         finally:
             conn.close()
         summary = launch_batches.summarize(items)

@@ -338,6 +338,38 @@ def test_the_recommended_lot_takes_the_best_proposal_for_each_target(conn):
     assert launch_batches.summarize(items)["by_key"] == {"fix_leak": 1}
 
 
+def test_the_parallel_analysis_gives_the_same_lot_and_reports_its_progress(conn):
+    """Le lot analyse chaque cible (plusieurs minutes sur la vraie base) : en plusieurs fils, avec un avancement lisible par la page."""
+    for i, target in enumerate(("^VIX", "GC=F", "^GSPC", "CL=F")):
+        _suspect_run(conn, f"r{i}", target)
+    launch_batches._advice_cache.clear()
+    alone = launch_batches.recommended(conn, {})
+    launch_batches._advice_cache.clear()
+    together = launch_batches.recommended(conn, {}, workers=3)
+    assert together == alone and len(together) == 4
+    assert launch_batches.analysis_progress() == {"running": False, "done": 4, "total": 4}
+    launch_batches._advice_cache.clear()
+
+
+def test_the_progress_endpoint_answers_while_nothing_runs(client):
+    body = client.get("/api/launch-batches/recommended/progress").json()
+    assert set(body) == {"running", "done", "total"} and body["running"] is False
+
+
+def test_the_light_run_detail_keeps_what_the_advisor_reads(conn):
+    """`lite=True` saute ce que le diagnostic ne lit pas (intervalles conformes, tailles, FDR…), sans changer le diagnostic."""
+    from patrick.tracking import history, retrain_advisor
+
+    _suspect_run(conn)
+    full = history.run_detail(conn, "r1", with_meta_labeling=False)
+    light = history.run_detail(conn, "r1", with_meta_labeling=False, lite=True)
+    assert set(light) == set(full)
+    assert light["conformal"] is None and light["sizes"] == {} and light["screening_decisions"] == [] and light["fdr_result"] is None
+    for key in ("headline", "fold_metrics", "pbo", "baselines", "best_trial", "dm_result", "suspect", "cumulative_trials"):
+        assert json.dumps(light[key], sort_keys=True, default=str) == json.dumps(full[key], sort_keys=True, default=str), key   # (NaN != NaN)
+    assert retrain_advisor.diagnose_run(conn, "r1", detail=light) == retrain_advisor.diagnose_run(conn, "r1", detail=full)
+
+
 def test_a_target_no_longer_in_the_launchable_universe_is_not_recommended(conn):
     """`^EVZ` a d'anciens runs terminés mais n'est plus lançable : le proposer ferait refuser tout le lot à la mise en file."""
     assert "^EVZ" not in forms.TARGET_SOURCE_BY_SYMBOL

@@ -135,6 +135,41 @@ def test_index_read_survives_a_transient_permission_error(tmp_path, monkeypatch)
     assert calls["n"] == 3
 
 
+def test_reading_methods_decode_the_index_once_until_the_file_changes(tmp_path, monkeypatch):
+    """17/11/2026 : `_index.json` pèse 21 Mo et se décode en 0,13 s ; `exists`/`load` le relisaient à chaque appel (400 s pour le lot « runs conseillés »)."""
+    from patrick.data import store as store_mod
+
+    store = DataStore(root=str(tmp_path))
+    store.save("mykey", _df())
+    reads = {"n": 0}
+    real = store_mod._read_json
+
+    def counting(path):
+        reads["n"] += 1
+        return real(path)
+
+    monkeypatch.setattr(store_mod, "_read_json", counting)
+    for _ in range(5):
+        assert store.exists("mykey") and store.latest_snapshot_id("mykey") and len(store.load("mykey")) == len(_df())
+        assert store.latest_entry("mykey")["rows"] == len(_df())
+    assert reads["n"] == 1
+
+    other = DataStore(root=str(tmp_path))                      # un autre processus enregistre : le fichier change, le cachet aussi
+    other.save("second", _df().iloc[:5])
+    reads["n"] = 0                                             # (la lecture fraîche de `save` n'est pas celle qu'on mesure)
+    assert store.exists("second") and not store.exists("absent") and store.exists("mykey")
+    assert reads["n"] == 1
+
+
+def test_a_save_starts_from_a_fresh_index_and_never_corrupts_the_shared_one(tmp_path):
+    store = DataStore(root=str(tmp_path))
+    store.save("a", _df())
+    assert store.exists("a")                                   # peuple le cache
+    store.save("b", _df().iloc[:7])
+    assert store.exists("a") and store.exists("b")
+    assert [e["rows"] for e in store.list_snapshots("b")] == [7]
+
+
 def test_index_read_gives_up_when_the_lock_never_lifts(tmp_path, monkeypatch):
     from patrick.data import store as store_mod
 

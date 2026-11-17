@@ -61,17 +61,32 @@
         if (n) reveal(select);
     }
 
+    // L'analyse de toutes les cibles dure plusieurs minutes : sans avancement affiché, le clic semblait ne rien faire.
+    function watchProgress() {
+        return setInterval(async function () {
+            try {
+                var res = await fetch("/api/launch-batches/recommended/progress", { credentials: "same-origin", cache: "no-store" });
+                var p = await res.json();
+                if (p.running && p.total) say(fmt(I18N.batch_js_progress, { done: p.done, total: p.total }));
+            } catch (err) { /* le suivi n'est qu'un confort */ }
+        }, 1500);
+    }
+
     async function recommended(button) {
         button.disabled = true;
         say(I18N.batch_js_analysing);
+        status.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        var timer = watchProgress();
         try {
             var res = await fetch(withLang("/api/launch-batches/recommended"), { credentials: "same-origin" });
             var plan = await res.json();
+            clearInterval(timer);
             if (!res.ok) throw new Error((plan.errors || [res.status]).join(" · "));
             if (!plan.n) { say(I18N.batch_js_rec_none); return; }
             var yes = await window.patrickDialog.confirm(
                 fmt(I18N.batch_js_rec_confirm, { n: plan.n, costs: plan.costs, lines: plan.lines }), fmt(I18N.batch_js_rec_launch, { n: plan.n }));
             if (!yes) { say(""); return; }
+            say(fmt(I18N.batch_js_rec_queueing, { n: plan.n }));          // reconstruire chaque configuration prend environ une minute
             var post = await fetch("/api/launch-batches/recommended", {
                 method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ items: plan.items.map(function (i) { return { run_id: i.run_id, key: i.key }; }) }),
@@ -83,6 +98,7 @@
         } catch (err) {
             say(fmt(I18N.batch_js_error, { msg: err.message }), "error");
         } finally {
+            clearInterval(timer);
             button.disabled = false;
         }
     }

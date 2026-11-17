@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 from patrick.config import defaults as D
@@ -181,8 +183,11 @@ def note_relaunch(job_id: str, parent_run_id: str, key: str, source: str) -> Non
         conn.close()
 
 
-_ADVICE_TTL_S = 600.0
+_ADVICE_TTL_S = 1800.0
 _advice_cache: dict[tuple[str, str], tuple[float, dict | None]] = {}
+ADVICE_WORKERS = 4                  # analyses menées en parallèle par le lot conseillé (SQLite lit en parallèle, chaque fil a sa connexion)
+_analysis_lock = threading.Lock()   # une seule analyse du lot à la fois : un second clic attend la première (puis lit son cache) au lieu d'en lancer une autre
+_progress: dict = {"running": False, "done": 0, "total": 0}
 
 
 def _advice(conn: sqlite3.Connection, run_id: str, history: dict) -> dict | None:
@@ -203,7 +208,39 @@ def _advice(conn: sqlite3.Connection, run_id: str, history: dict) -> dict | None
     return result
 
 
-def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
+def analysis_progress() -> dict:
+    """`{"running", "done", "total"}` de l'analyse du lot conseillé en cours (la page l'affiche pendant l'attente)."""
+    return dict(_progress)
+
+
+def _warm_advice(conn: sqlite3.Connection, run_ids: list[str], history: dict, workers: int) -> None:
+    """Remplit `_advice_cache` pour `run_ids` (le conseiller analyse chaque run, 0,3 à 1,5 s sur la vraie base : 505 cibles font plusieurs minutes
+    d'un seul fil), en `workers` fils quand `workers > 1`, et tient `_progress` à jour. Chaque fil lit avec sa propre connexion."""
+    _progress.update(done=0, total=len(run_ids))
+    if workers <= 1 or len(run_ids) < 2:
+        for run_id in run_ids:
+            _advice(conn, run_id, history)
+            _progress["done"] += 1
+        return
+    from patrick.tracking import db as trackdb
+
+    db_file = conn.execute("PRAGMA database_list").fetchone()[2]
+    guard = threading.Lock()
+
+    def work(run_id: str) -> None:
+        own = trackdb.connect(db_file)          # une connexion SQLite ne sert que dans le fil qui l'a ouverte ; en ouvrir une coûte quelques millisecondes
+        try:
+            _advice(own, run_id, history)
+        finally:
+            own.close()
+        with guard:
+            _progress["done"] += 1
+
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="advice") as pool:
+        list(pool.map(work, run_ids))
+
+
+def recommended(conn: sqlite3.Connection, history: dict, workers: int = 1) -> list[dict]:
     """Lot « runs conseillés » (ML) : par cible, le meilleur réentraînement proposé pour son dernier run terminé. Une ligne par
     cible : `run_id`, `target`, `horizons` (ceux du lancement d'origine), `key`, `score`, `cost`, `est_minutes`, `signal`, `value` ;
     classées par valeur attendue pour le temps de calcul (`expected_value`), plus par score seul. Les cibles déjà en
@@ -222,6 +259,12 @@ def recommended(conn: sqlite3.Connection, history: dict) -> list[dict]:
     busy = pending_targets(conn, "ml")
     signals = target_signals(conn)
     out = []
+    with _analysis_lock:
+        _progress["running"] = True
+        try:
+            _warm_advice(conn, [run_id for target, (run_id, _) in latest.items() if target not in busy], history, workers)
+        finally:
+            _progress["running"] = False
     for target, (run_id, horizon) in latest.items():
         if target in busy:
             continue

@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 import time
 from datetime import UTC, datetime
 
@@ -64,6 +65,10 @@ def _read_json(path: str) -> dict:
     return _retry_locked(_load)
 
 
+_INDEX_CACHE: dict[str, tuple[tuple[int, int], dict]] = {}
+_INDEX_CACHE_LOCK = threading.Lock()
+
+
 def _content_hash(df: pd.DataFrame) -> str:
     """Deterministic hash of the CONTENT (values + index), not the write
     date -- two DataFrames with the same data produce the same hash
@@ -92,6 +97,25 @@ class DataStore:
 
     def _read_index(self) -> dict:
         return _read_json(self._index_path())
+
+    def _read_index_shared(self) -> dict:
+        """L'index pour LIRE (`exists`, `latest_snapshot_id`, `load`, `latest_entry`) : relu seulement quand le fichier a changé (date de modification et taille),
+        sinon le dict déjà décodé. `_index.json` pèse 21 Mo sur la vraie base et le décoder coûte 0,13 s : `exists` et `load` l'ont relu à chaque appel, soit
+        400 s sur les 655 s du lot « runs conseillés » (17/11/2026, `refit` de 465 cibles = 3 000 lectures). Le dict renvoyé est partagé : ne jamais le modifier
+        (`save` repart d'une lecture fraîche, `_read_index`)."""
+        path = self._index_path()
+        try:
+            stat = _retry_locked(lambda: os.stat(path))
+        except FileNotFoundError:
+            return {}
+        stamp = (stat.st_mtime_ns, stat.st_size)
+        hit = _INDEX_CACHE.get(path)
+        if hit is not None and hit[0] == stamp:
+            return hit[1]
+        idx = _read_json(path)
+        with _INDEX_CACHE_LOCK:
+            _INDEX_CACHE[path] = (stamp, idx)       # lu après le `stat` : au pire un fichier plus récent que son cachet, relu au prochain appel
+        return idx
 
     def _write_index(self, idx: dict) -> None:
         """Atomic write (worker process and web process both touch
@@ -132,14 +156,14 @@ class DataStore:
             raise
 
     def exists(self, key: str) -> bool:
-        return bool(self._read_index().get(key, {}).get("snapshots"))
+        return bool(self._read_index_shared().get(key, {}).get("snapshots"))
 
     def latest_snapshot_id(self, key: str) -> str | None:
-        entries = self._read_index().get(key, {}).get("snapshots", [])
+        entries = self._read_index_shared().get(key, {}).get("snapshots", [])
         return entries[-1]["snapshot_id"] if entries else None
 
     def load(self, key: str, snapshot_id: str | None = None) -> pd.DataFrame:
-        entries = self._read_index().get(key, {}).get("snapshots", [])
+        entries = self._read_index_shared().get(key, {}).get("snapshots", [])
         # Kept in French: these messages are interpolated verbatim into
         # webapp/app.py's French HTTPException detail (f"Données de la
         # cible introuvables : {exc}") -- an English message here would
@@ -156,7 +180,7 @@ class DataStore:
         return df
 
     def latest_entry(self, key: str) -> dict | None:
-        entries = self._read_index().get(key, {}).get("snapshots", [])
+        entries = self._read_index_shared().get(key, {}).get("snapshots", [])
         return dict(entries[-1]) if entries else None
 
     def save(self, key: str, df: pd.DataFrame, meta: dict | None = None) -> str:

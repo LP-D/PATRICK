@@ -526,7 +526,7 @@ def diagnose_run(conn, run_id: str, *, detail: dict | None = None, history: dict
     from patrick.tracking import history as trackhistory
     from patrick.webapp import forms
 
-    detail = detail or trackhistory.run_detail(conn, run_id, with_meta_labeling=False)    # le diagnostic n'utilise pas le méta-étiquetage (2 à 4 s)
+    detail = detail or trackhistory.run_detail(conn, run_id, with_meta_labeling=False, lite=True)    # ni le méta-étiquetage (2 à 4 s) ni le reste de la page d'un run
     if detail is None:
         return None
     run, cfg = detail["run"], detail.get("config") or {}
