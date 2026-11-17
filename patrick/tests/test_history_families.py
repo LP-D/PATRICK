@@ -42,8 +42,8 @@ def _add_run(conn, run_id: str, name: str, algos: list[str], target: str = "^VIX
 
 _RL_RESULT = {
     "kind": "rl", "n_folds": 4, "elapsed_s": 125.0,
-    "strategy": {"sharpe": 0.8, "total_return": 0.2, "max_drawdown": -0.1},
-    "baselines": {"buy_hold": {"sharpe": 0.5, "total_return": 0.12, "max_drawdown": -0.25},
+    "strategy": {"sharpe": 0.8, "total_return": 0.2, "max_drawdown": -0.1, "cagr": 0.10, "cost_drag": 0.05, "n": 1260},
+    "baselines": {"buy_hold": {"sharpe": 0.5, "total_return": 0.12, "max_drawdown": -0.25, "cagr": 0.05},
                   "momentum": {"sharpe": 0.3, "total_return": 0.05, "max_drawdown": -0.2},
                   "flat": {"sharpe": 0.0, "total_return": 0.0, "max_drawdown": 0.0}},
     "stats": {"psr": 0.91, "dsr": {"dsr": 0.64, "p_value": 0.36}, "n_trials": 3,
@@ -136,7 +136,8 @@ def test_the_rl_table_has_strategy_columns_instead_of_classification_ones(client
     assert "agent_ppo" in rl and "agent_dqn" in rl and "arbre_vix" not in rl
     assert "history-table-rl" in rl and "history-table-cls" not in rl
     assert ">0.80<" in rl and ">0.50<" in rl and "+0.30" in rl     # Sharpe, Sharpe B&H, écart
-    assert "+20.0 %" in rl and "-10.0 %" in rl and "64.0 %" in rl  # rendement, perte maximale, DSR
+    assert "+4.7 %" in rl and ">100 %<" in rl and ">1.0 %<" in rl and "64.0 %" in rl   # vs B&H / an, part de l'agent, frais / an, DSR
+    assert ">v1<" in rl and "Au-dessus, sans preuve" in rl     # moteur 1 (aucun `engine_version`), écart non significatif (p = 0,2)
     assert ">AUC<" not in rl and "DM p" not in rl
     assert "compare-runs-form" not in rl and "compare-rl-form" in rl         # la comparaison RL a son propre formulaire
     assert "hint kind-hint" in rl and "kind=directional" not in rl           # pas de type directionnel/alpha pour le RL
@@ -179,7 +180,8 @@ def test_an_unknown_family_falls_back_to_the_full_page(client, seeded):
 def test_the_scope_lines_count_each_family_on_its_own_measure(client, seeded):
     page = client.get("/runs").text
     assert re.search(r'scope-value">0 / 3<', page)                  # ML + DL : aucun résultat Diebold-Mariano dans cette base
-    assert re.search(r'scope-value">1 / 1<', page)                  # RL : le seul run terminé bat acheter et garder (0,8 > 0,5)
+    assert re.search(r'scope-value">0 / 1<', page)                  # RL : au-dessus d'acheter et garder (0,8 > 0,5) mais p = 0,2
+    assert "1 sont au-dessus sans preuve" in page
     assert 'scope-value">0 / 3<' not in client.get("/runs?family=rl").text
 
 
@@ -188,7 +190,9 @@ def test_the_side_panel_of_an_rl_run_reads_its_result(client, seeded):
     assert panel.status_code == 200
     text = panel.text
     assert "agent_ppo" in text and "PPO" in text and f"/rl?open={seeded['done']}" in text
-    assert ">0.80<" in text and ">0.50<" in text and "+20.0 %" in text and "64.0 %" in text and "91.0 %" in text
+    assert ">0.80<" in text and ">0.50<" in text and "+20.0 %" in text and "64.0 %" in text
+    assert "Moteur 1" in text and "Au-dessus, sans preuve" in text and "+4.7 %" in text and ">100 %<" in text   # lecture du run
+    assert "p = 0.200" in text and "Tendance 200 j" not in text and "Momentum" in text   # moteur 1 : pas de tendance, le momentum reste
     assert "2021-01-04" in text and "2024-06-28" in text and "2 min 05 s" in text
 
 

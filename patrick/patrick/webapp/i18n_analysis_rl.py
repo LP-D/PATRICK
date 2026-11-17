@@ -1,6 +1,8 @@
 """Chaînes FR/EN de l'analyse d'un run de reinforcement learning (`static/rl_analysis.js`). Fusionnées dans `ANALYSIS_STRINGS`."""
 from __future__ import annotations
 
+from patrick.webapp.i18n_rl import RL_VERDICT_STRINGS
+
 
 def _s(fr: str, en: str) -> dict[str, str]:
     return {"fr": fr, "en": en}
@@ -8,11 +10,11 @@ def _s(fr: str, en: str) -> dict[str, str]:
 
 RL_ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_s_rl_overview": _s("Résumé", "Summary"),
-    "ra_h_rl_overview": _s("Résultats hors échantillon de l'agent contre les références, et ses réglages.", "The agent's out-of-sample results against the references, and its settings."),
+    "ra_h_rl_overview": _s("Le verdict, l'écart avec acheter-garder, la part de l'agent et les frais, puis le détail et les réglages.", "The verdict, the gap to buy and hold, the agent share and the fees, then the detail and the settings."),
     "ra_s_rl_folds": _s("Plis walk-forward", "Walk-forward folds"),
     "ra_h_rl_folds": _s("L'agent est ré-entraîné à chaque pli puis jugé sur la période suivante, jamais vue.", "The agent is retrained at each fold then judged on the next period, never seen."),
     "ra_s_rl_equity": _s("Équité, drawdown et positions", "Equity, drawdown and positions"),
-    "ra_h_rl_equity": _s("Valeur du compte de l'agent contre acheter-garder, momentum et rester à plat, coûts déduits.", "The agent's account value against buy-and-hold, momentum and staying flat, costs deducted."),
+    "ra_h_rl_equity": _s("Valeur du compte de l'agent contre acheter-garder, la tendance 200 j et rester à plat, coûts déduits.", "The agent's account value against buy-and-hold, the 200-day trend and staying flat, costs deducted."),
     "ra_s_rl_returns": _s("Rendements quotidiens", "Daily returns"),
     "ra_h_rl_returns": _s("La forme des gains et des pertes de l'agent, et s'il suit la tendance de la veille.", "The shape of the agent's gains and losses, and whether it follows the previous day's trend."),
     "ra_s_rl_stats": _s("Statistiques et graines", "Statistics and seeds"),
@@ -20,20 +22,43 @@ RL_ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_s_rl_features": _s("Variables de l'agent", "Agent features"),
     "ra_h_rl_features": _s("Les variables retenues dans l'observation à chaque pli.", "The features kept in the observation at each fold."),
     "ra_rl_agent": _s("Agent", "Agent"),
+    "ra_rl_agent_raw": _s("Agent sans repli", "Agent without fallback"),
+    "ra_rl_trend": _s("Tendance 200 j", "200-day trend"),
+    "ra_rl_k_excess": _s("Vs acheter-garder / an", "Vs buy and hold / yr"),
+    "ra_rl_k_excess_sub": _s("croissance par an au-delà, frais compris · total {t} contre {bh}", "growth per year beyond it, fees included · total {t} vs {bh}"),
+    "ra_rl_k_share": _s("Part de l'agent", "Agent share"),
+    "ra_rl_k_share_sub": _s("dates où l'agent décidait ; ailleurs, la validation l'a remplacé par acheter-garder", "dates where the agent decided; elsewhere, validation replaced it with buy and hold"),
+    "ra_rl_k_share_v1": _s("moteur 1 : pas de repli, l'agent décidait toujours", "engine 1: no fallback, the agent always decided"),
+    "ra_rl_k_cost": _s("Frais / an", "Fees / yr"),
+    "ra_rl_k_cost_sub": _s("rotation : {t} fois le capital par an", "turnover: {t} times the capital per year"),
+    "ra_rl_dec": _s("D'où vient le résultat (par an)", "Where the result comes from (per year)"),
+    "ra_rl_dec_hint": _s("Brut = avant frais ; jambes = jours acheteurs et vendeurs ; à comparer à ce que rapportait l'actif.", "Gross = before fees; legs = long and short days; compare with what the asset returned."),
+    "ra_rl_dec_gross": _s("Brut {v}", "Gross {v}"),
+    "ra_rl_dec_cost": _s("Frais −{v}", "Fees −{v}"),
+    "ra_rl_dec_long": _s("Jambe longue {v}", "Long leg {v}"),
+    "ra_rl_dec_short": _s("Jambe courte {v}", "Short leg {v}"),
+    "ra_rl_dec_bh": _s("Actif (acheter-garder) {v}", "Asset (buy and hold) {v}"),
+    "ra_rl_f_val": _s("Validation", "Validation"),
+    "ra_rl_f_val_t": _s("score : {v} par an au-delà d'acheter-garder", "score: {v} per year beyond buy and hold"),
+    "ra_rl_f_t_gated": _s("validation ≤ 0 : ce pli a tenu acheter-garder", "validation ≤ 0: this fold held buy and hold"),
+    "ra_rl_f_lg_held": _s("Pli tenu par acheter-garder", "Fold held by buy and hold"),
+    "ra_rl_val": _s("Validation / an", "Validation / yr"),
+    "ra_rl_held_by": _s("Tenu par", "Held by"),
+    "ra_rl_held_agent": _s("agent", "agent"),
+    "ra_rl_held_bh": _s("acheter-garder", "buy and hold"),
+    "ra_rl_c_share": _s("Agent aux commandes {p} des dates", "Agent in control on {p} of dates"),
+    "ra_rl_s_delay": _s("Décalé d'un jour", "Delayed by one day"),
+    "ra_rl_s_delay_sub": _s("Sharpe brut {g} ; décalé, il doit garder l'essentiel, sinon fuite", "gross Sharpe {g}; delayed, it must keep most of it, otherwise leak"),
+
     "ra_rl_bh": _s("Achat-garde", "Buy and hold"),
     "ra_rl_mom": _s("Momentum", "Momentum"),
     "ra_rl_flat": _s("À plat", "Flat"),
-    "ra_rl_k_total": _s("Rendement total", "Total return"),
-    "ra_rl_k_total_sub": _s("achat-garde : {bh}", "buy-and-hold: {bh}"),
     "ra_rl_k_sharpe_sub": _s("achat-garde : {bh}", "buy-and-hold: {bh}"),
-    "ra_rl_k_dd_sub": _s("achat-garde : {bh}", "buy-and-hold: {bh}"),
     "ra_rl_k_dsr": _s("Sharpe déflaté", "Deflated Sharpe"),
     "ra_rl_k_dsr_sub": _s("parmi {n} essais · PSR {psr}", "among {n} trials · PSR {psr}"),
     "ra_rl_k_vs_bh": _s("Écart de Sharpe / achat-garde", "Sharpe gap vs buy-and-hold"),
     "ra_rl_k_vs_sub": _s("IC 90 % [{lo} ; {hi}] · p = {p}", "90 % CI [{lo} ; {hi}] · p = {p}"),
     "ra_rl_k_vs_none": _s("échantillon trop court", "sample too short"),
-    "ra_rl_k_folds": _s("Plis", "Folds"),
-    "ra_rl_k_folds_sub": _s("{s} graine(s)", "{s} seed(s)"),
     "ra_rl_perf": _s("Performance hors échantillon", "Out-of-sample performance"),
     "ra_rl_perf_hint": _s("Tout est net de coûts. L'agent doit battre acheter-garder ET le hasard déflaté du nombre d'essais pour valoir quelque chose.", "Everything is net of costs. The agent must beat buy-and-hold AND the chance level deflated for the number of trials to be worth anything."),
     "ra_rl_t_name": _s("Série", "Series"),
@@ -103,3 +128,5 @@ RL_ANALYSIS_STRINGS: dict[str, dict[str, str]] = {
     "ra_rl_fe_usage": _s("Plis où chaque variable est utilisée", "Folds where each feature is used"),
     "ra_rl_fe_usage_hint": _s("100 % = présente dans l'observation de l'agent à tous les plis.", "100 % = present in the agent's observation at every fold."),
 }
+# Verdict de lecture d'un run (`rl.reading`) : mêmes textes que la page /rl, sous le préfixe envoyé aux pages d'analyse.
+RL_ANALYSIS_STRINGS.update({key.replace("rlp_", "ra_rl_", 1): text for key, text in RL_VERDICT_STRINGS.items()})

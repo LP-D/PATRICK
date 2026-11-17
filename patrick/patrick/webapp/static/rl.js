@@ -226,10 +226,12 @@
         ["gross_return_ann", "rlp_k_gross", function (v) { return pct(v, 1); }], ["cost_ann", "rlp_k_cost_ann", function (v) { return pct(v, 1); }],
         ["long_contrib_ann", "rlp_k_long", function (v) { return pct(v, 1); }], ["short_contrib_ann", "rlp_k_short", function (v) { return pct(v, 1); }],
     ];
-    // Ligne de résultat : la stratégie, l'agent sans repli (seulement si le repli a joué) ou une référence.
+    // Ligne de résultat : la stratégie, l'agent sans repli (seulement si le repli a joué) ou une référence. Le momentum 20 j (trop facile
+    // à battre : Sharpe médian négatif) ne sert plus que pour un run du moteur 1, qui n'a pas la tendance 200 j.
     function legMetrics(r, key) {
         if (key === "strategy") return r.strategy;
         if (key === "agent_ungated") return (r.folds || []).some(function (f) { return f.gated; }) ? r.agent_ungated : null;
+        if (key === "momentum" && (r.baselines || {}).trend) return null;
         return (r.baselines || {})[key] || null;
     }
 
@@ -252,12 +254,28 @@
         }));
     }
 
+    // Lecture du run (`rl.reading`, calculée par le serveur) : verdict, motif, puis les quatre chiffres qui le justifient.
+    var VERDICT_CHIP = { ok: "pos", error: "neg", pending: "warn", neutral: "neutral" };
+    function verdictChip(rd) { return rd && rd.verdict ? chip(tr("rlp_rd_" + rd.verdict), VERDICT_CHIP[rd.verdict_state] || "neutral") : null; }
+    function readingBlock(rd) {
+        if (!rd || !rd.verdict) return h("div", {});
+        var why = rd.leak ? tr("rlp_rd_leak_" + rd.leak) : tr("rlp_rd_" + rd.verdict + "_tip");
+        var facts = [fmtStr(tr("rlp_rd_engine"), { n: rd.engine })];
+        if (typeof rd.excess === "number") facts.push(tr("rlp_rd_excess") + " " + (rd.excess > 0 ? "+" : "") + pct(rd.excess, 1));
+        if (typeof rd.cost_ann === "number") facts.push(tr("rlp_k_cost_ann") + " " + pct(rd.cost_ann, 1));
+        if (typeof rd.p_vs_buy_hold === "number") facts.push(fmtStr(tr("rlp_stat_p"), { p: pval(rd.p_vs_buy_hold) }));
+        return h("div", { class: "rl-reading" }, [
+            h("p", { class: "rl-reading-verdict" }, [verdictChip(rd), h("span", { class: "hint", text: " " + why })]),
+            h("p", { class: "exp-meta", text: facts.join(" · ") })]);
+    }
+
     function renderResults(r, runId) {
         var box = h("div", { class: "rl-results" });
         box.appendChild(h("p", { class: "exp-meta", text: [r.name + " · " + (window.PatrickNames ? window.PatrickNames.label(r.target) : r.target) + " · " + r.algo,
             fmtStr(tr("rlp_n_obs"), { n: r.strategy.n, start: r.curves.dates[0], end: r.curves.dates[r.curves.dates.length - 1] }),
             fmtStr(tr("rlp_elapsed"), { t: fmtDuration(r.elapsed_s) })].join(" · ") }));
         (r.warnings || []).forEach(function (w) { box.appendChild(h("p", { class: "banner banner-warning", role: "status", text: w })); });
+        box.appendChild(readingBlock(r.reading));
         if (typeof r.strategy.agent_share === "number") {
             box.appendChild(h("p", { class: "exp-meta", "data-keep": "", text: fmtStr(tr("rlp_agent_share"), { p: pct(r.strategy.agent_share, 0) }) }));
         }
@@ -278,12 +296,13 @@
         var st = r.stats;
         var gaps = [gapRow(tr("rlp_stat_vs_bh"), st.vs_buy_hold)];
         if (st.vs_trend) gaps.push(gapRow(tr("rlp_stat_vs_trend"), st.vs_trend));
-        gaps.push(gapRow(tr("rlp_stat_vs_mom"), st.vs_momentum));
+        if (!st.vs_trend && st.vs_momentum) gaps.push(gapRow(tr("rlp_stat_vs_mom"), st.vs_momentum));
         box.appendChild(table(["", "Δ Sharpe", "", ""], gaps));
         var extra = [];
         if (typeof st.excess_log_growth === "number") extra.push([tr("rlp_stat_excess"), numCell(pct(st.excess_log_growth, 1), st.excess_log_growth), ""]);
-        if (st.delay) extra.push([tr("rlp_stat_delay"), { cell: num(st.delay.lagged_sharpe, 2), cls: "num pk-mono" },
-            fmtStr(tr("rlp_delay"), { g: num(st.delay.gross_sharpe, 2), l: num(st.delay.lagged_sharpe, 2) })]);
+        var dl = st.delay || (r.reading || {}).delay;       // moteur 1 : test rejoué sur le fichier hors échantillon
+        if (dl) extra.push([tr("rlp_stat_delay"), { cell: num(dl.lagged_sharpe, 2), cls: "num pk-mono" },
+            fmtStr(tr("rlp_delay"), { g: num(dl.gross_sharpe, 2), l: num(dl.lagged_sharpe, 2) })]);
         box.appendChild(table(["", "", ""], extra.concat([
             [tr("rlp_stat_psr"), { cell: pct(st.psr, 0), cls: "num pk-mono" }, ""],
             [tr("rlp_stat_dsr"), { cell: st.dsr && st.dsr.dsr !== null ? pct(st.dsr.dsr, 0) : "—", cls: "num pk-mono" },
@@ -294,19 +313,19 @@
         box.appendChild(h("h3", { text: tr("rlp_c_equity") }));
         box.appendChild(lineChart({
             dates: r.curves.dates, title: tr("rlp_c_equity"),
-            series: [{ values: r.curves.buy_hold, color: "var(--text-3)" }, { values: r.curves.momentum, color: "var(--warn)" }]
-                .concat(r.curves.trend ? [{ values: r.curves.trend, color: "var(--info)" }] : [])
+            series: [{ values: r.curves.buy_hold, color: "var(--text-3)" }]
+                .concat(r.curves.trend ? [{ values: r.curves.trend, color: "var(--info)" }] : [{ values: r.curves.momentum, color: "var(--warn)" }])
                 .concat(r.curves.agent && legMetrics(r, "agent_ungated") ? [{ values: r.curves.agent, color: "var(--pos)" }] : [])
                 .concat([{ values: r.curves.strategy, color: "var(--brand)" }]),
             hlines: [{ y: 1, dash: "2 4" }], yFmt: function (v) { return num(v, 2); } }));
         box.appendChild(legend([[tr("rlp_leg_strategy"), "var(--brand)"]]
             .concat(r.curves.agent && legMetrics(r, "agent_ungated") ? [[tr("rlp_leg_agent_raw"), "var(--pos)"]] : [])
             .concat([[tr("rlp_leg_buy_hold"), "var(--text-3)"]])
-            .concat(r.curves.trend ? [[tr("rlp_leg_trend"), "var(--info)"]] : [])
-            .concat([[tr("rlp_leg_momentum"), "var(--warn)"]])));
+            .concat(r.curves.trend ? [[tr("rlp_leg_trend"), "var(--info)"]] : [[tr("rlp_leg_momentum"), "var(--warn)"]])));
         box.appendChild(h("h3", { text: tr("rlp_c_position") }));
+        var shortable = (r.curves.position || []).some(function (v) { return v < 0; });
         box.appendChild(lineChart({ dates: r.curves.dates, series: [{ values: r.curves.position, color: "var(--pos)" }], title: tr("rlp_c_position"),
-            yMin: -1, yMax: 1, hlines: [{ y: 0, dash: "0", color: "var(--line-strong)" }], yFmt: function (v) { return num(v, 1); }, height: 150 }));
+            yMin: shortable ? -1 : 0, yMax: 1, hlines: [{ y: 0, dash: "0", color: "var(--line-strong)" }], yFmt: function (v) { return num(v, 1); }, height: 150 }));
 
         // plis
         box.appendChild(h("h3", { text: tr("rlp_folds_title") }));
@@ -361,11 +380,13 @@
                 else track(run.run_id);
             });
             var kind = run.status === "done" ? "ok" : (run.status === "error" ? "neg" : "warn");
-            return [{ cell: run.name || run.run_id, cls: "pk-mono" }, (run.target ? (window.PatrickNames ? window.PatrickNames.label(run.target) : run.target) : "—"), run.algo || "—", { cell: chip(run.status, kind) },
+            var state = run.status === "done" && run.verdict ? verdictChip(run) : chip(run.status, kind);
+            return [{ cell: run.name || run.run_id, cls: "pk-mono" }, (run.target ? (window.PatrickNames ? window.PatrickNames.label(run.target) : run.target) : "—"), run.algo || "—", { cell: state },
                 run.sharpe === undefined || run.sharpe === null ? "—" : { cell: num(run.sharpe, 2) + " / " + num(run.sharpe_buy_hold, 2), cls: "num pk-mono" },
+                typeof run.excess === "number" ? numCell((run.excess > 0 ? "+" : "") + pct(run.excess, 1), run.excess) : "—",
                 { cell: open }];
         });
-        box.replaceChildren(table(["", tr("rlp_f_target"), tr("rlp_f_algo"), "", tr("rlp_k_sharpe"), ""], rows));
+        box.replaceChildren(table(["", tr("rlp_f_target"), tr("rlp_f_algo"), tr("rlp_rd_title"), tr("rlp_k_sharpe") + " / B&H", tr("rlp_rd_excess"), ""], rows));
     }
     function refreshRuns() {
         fetch("/api/rl/runs").then(function (r) { return r.json(); }).then(function (b) { renderRuns(b.runs || []); }).catch(function () { /* la liste garde son contenu */ });

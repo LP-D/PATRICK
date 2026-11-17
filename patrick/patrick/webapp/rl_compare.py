@@ -10,13 +10,17 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
+from patrick.rl import reading as rl_reading
+
 COLORS = ("var(--ra-c1)", "var(--ra-c2)", "var(--ra-c3)", "var(--ra-c4)")   # une couleur par colonne (4 runs au plus) : séries catégorielles du design system, jamais les couleurs de sens
 _DASH = "—"
 
 
 def _f2(v): return f"{v:.2f}"
 def _sf2(v): return f"{v:+.2f}"
+def _p0(v): return f"{v * 100:.0f} %"
 def _p1(v): return f"{v * 100:.1f} %"
+def _p3(v): return f"{v:.3f}"
 def _sp1(v): return f"{v * 100:+.1f} %"
 def _int(v): return str(int(v))
 def _g(v): return f"{v:g}"
@@ -39,7 +43,7 @@ def _minutes(v):
 
 
 def _rows(t: Callable[[str], str]):
-    """(groupe, clé de libellé, extracteur, formateur, meilleure valeur : « max » ou None)."""
+    """(groupe, clé de libellé, extracteur, formateur, meilleure valeur : « max », « min » ou None)."""
     def bool_(path):
         return lambda m: None if _dig(m["cfg"], *path) is None else t("adv_yes" if _dig(m["cfg"], *path) else "adv_no")
 
@@ -61,16 +65,43 @@ def _rows(t: Callable[[str], str]):
             return t("adv_yes" if value else "adv_no") if isinstance(value, bool) else value
         return get
 
+    def verdict(m):
+        v = m["reading"].get("verdict")
+        return t(f"rlp_rd_{v}") if v else None
+
+    def gated(m):
+        folds = [f for f in m["result"].get("folds") or [] if isinstance(f, dict)]
+        return sum(1 for f in folds if f.get("gated")) if any("gated" in f for f in folds) else None
+
+    def delay(m):
+        d = m["reading"].get("delay")                   # enregistré (moteur 2) ou rejoué sur le fichier hors échantillon (moteur 1)
+        if not isinstance(d, dict) or _num(d.get("gross_sharpe")) is None or _num(d.get("lagged_sharpe")) is None:
+            return None
+        return t("rlp_delay", g=f"{d['gross_sharpe']:.2f}", l=f"{d['lagged_sharpe']:.2f}")
+
     return (
+        ("rlh_g_reading", "rlp_rd_title", verdict, _text, None),
+        ("rlh_g_reading", "rlh_col_engine", lambda m: t("rlp_rd_engine", n=m["reading"]["engine"]), _text, None),
+        ("rlh_g_reading", "rlh_col_excess", lambda m: m["reading"].get("excess"), _sp1, "max"),
+        ("rlh_g_reading", "rlh_c_p_bh", lambda m: m["reading"].get("p_vs_buy_hold"), _p3, "min"),
+        ("rlh_g_reading", "rlh_col_share", lambda m: m["reading"].get("agent_share"), _p0, None),
+        ("rlh_g_reading", "rlh_col_cost", lambda m: m["reading"].get("cost_ann"), _p1, "min"),
+        ("rlh_g_reading", "rlh_p_folds_gated", gated, _int, None),
+        ("rlh_g_reading", "rlp_stat_delay", delay, _text, None),
         ("rlh_g_result", "rlp_k_sharpe", lambda m: _dig(m["strategy"], "sharpe"), _f2, "max"),
         ("rlh_g_result", "rlh_c_sharpe_bh", lambda m: _dig(m["baselines"], "buy_hold", "sharpe"), _f2, None),
         ("rlh_g_result", "hist_gap", lambda m: _dig(m["stats"], "vs_buy_hold", "diff"), _sf2, "max"),
         ("rlh_g_result", "rlh_c_gap_ci", lambda m: _ci(m), _text, None),
+        ("rlh_g_result", "rlh_c_sharpe_trend", lambda m: _dig(m["baselines"], "trend", "sharpe"), _f2, None),
+        ("rlh_g_result", "rlp_stat_vs_trend", lambda m: _dig(m["stats"], "vs_trend", "diff"), _sf2, "max"),
         ("rlh_g_result", "rlp_k_total", lambda m: _dig(m["strategy"], "total_return"), _sp1, "max"),
         ("rlh_g_result", "rlp_k_cagr", lambda m: _dig(m["strategy"], "cagr"), _sp1, "max"),
         ("rlh_g_result", "rlp_k_maxdd", lambda m: _dig(m["strategy"], "max_drawdown"), _p1, "max"),
         ("rlh_g_result", "rlh_c_turnover", lambda m: _dig(m["strategy"], "turnover"), _f2, None),
         ("rlh_g_result", "rlh_c_trades", lambda m: _dig(m["strategy"], "n_trades"), _int, None),
+        ("rlh_g_result", "rlp_k_gross", lambda m: _dig(m["strategy"], "gross_return_ann"), _sp1, "max"),
+        ("rlh_g_result", "rlp_k_long", lambda m: _dig(m["strategy"], "long_contrib_ann"), _sp1, None),
+        ("rlh_g_result", "rlp_k_short", lambda m: _dig(m["strategy"], "short_contrib_ann"), _sp1, None),
         ("rlh_g_stats", "rlp_stat_psr", lambda m: _dig(m["stats"], "psr"), _p1, "max"),
         ("rlh_g_stats", "rlp_stat_dsr", lambda m: _dig(m["stats"], "dsr", "dsr"), _p1, "max"),
         ("rlh_g_stats", "rlh_p_trials", lambda m: _dig(m["stats"], "n_trials"), _int, None),
@@ -154,7 +185,7 @@ def build(runs: list[dict], t: Callable[[str], str]) -> dict:
     """`runs` : sorties de `rl_routes.get_rl_run`, dans l'ordre choisi par l'utilisateur."""
     models = [{"row": r["row"], "result": r["result"], "config": r["config"], "cfg": r["config"] if isinstance(r["config"], dict) else {},
                "strategy": r["result"].get("strategy") or {}, "baselines": r["result"].get("baselines") or {},
-               "stats": r["result"].get("stats") or {}} for r in runs]
+               "stats": r["result"].get("stats") or {}, "reading": rl_reading.of_result(r["result"], r["row"].get("target"))} for r in runs]
     rows = []
     for group, label, extract, fmt, best in _rows(t):
         values = [extract(m) for m in models]
@@ -162,8 +193,8 @@ def build(runs: list[dict], t: Callable[[str], str]) -> dict:
         top = None
         numeric = [_num(v) for v in values]
         known = [v for v in numeric if v is not None]
-        if best == "max" and len(known) > 1 and max(known) > min(known):      # des valeurs toutes égales : pas de gagnant à signaler
-            top = max(known)
+        if best in ("max", "min") and len(known) > 1 and max(known) > min(known):      # valeurs toutes égales : pas de gagnant à signaler
+            top = max(known) if best == "max" else min(known)
         cells = [{"text": text, "best": top is not None and num == top} for text, num in zip(texts, numeric, strict=True)]
         rows.append({"group": group, "label": label, "cells": cells, "differs": len(set(texts)) > 1})
     targets = {m["row"].get("target") for m in models}

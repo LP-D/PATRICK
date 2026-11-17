@@ -243,3 +243,36 @@ RL_STRINGS: dict[str, dict[str, str]] = {
     "prof_rl_prudent_desc": _s("6 plis, entraînement sur fenêtre glissante, 3 000 tirages de bootstrap : plus de périodes de test, incertitude mieux mesurée.",
                                "6 folds, rolling training window, 3,000 bootstrap draws: more test periods, better-measured uncertainty."),
 }
+
+
+# Lecture d'un run (`rl.reading`) : verdict et motif, mêmes textes sur /rl, l'Historique, la comparaison (`rlp_rd_*`) et les pages
+# d'analyse (copiés en `ra_rl_rd_*` par `i18n_analysis_rl`).
+RL_VERDICT_STRINGS: dict[str, dict[str, str]] = {
+    "rlp_rd_title": _s("Lecture", "Reading"),
+    "rlp_rd_leak": _s("Fuite probable", "Probable leak"),
+    "rlp_rd_leak_tip": _s("Le gain ne survit pas au décalage des positions d'un jour, ou paire de change d'avant la règle des séances : artefact.",
+                         "The gain does not survive delaying positions by one day, or a currency pair from before the session rule: artefact."),
+    "rlp_rd_untradable": _s("Non négociable", "Not tradable"),
+    "rlp_rd_untradable_tip": _s("Indice de volatilité ou de taux : aucun instrument ne rapporte le rendement simulé.",
+                               "Volatility or rate index: no instrument earns the simulated return."),
+    "rlp_rd_held_bh": _s("= acheter-garder", "= buy and hold"),
+    "rlp_rd_held_bh_tip": _s("L'agent n'a battu acheter et garder dans aucune validation : tous les plis l'ont tenu à sa place.",
+                            "The agent beat buy and hold in no validation: every fold held it instead."),
+    "rlp_rd_beats": _s("Bat acheter-garder", "Beats buy and hold"),
+    "rlp_rd_beats_tip": _s("Sharpe au-dessus d'acheter et garder, écart significatif à 5 % (bootstrap).",
+                          "Sharpe above buy and hold, gap significant at 5 % (bootstrap)."),
+    "rlp_rd_better": _s("Au-dessus, sans preuve", "Above, unproven"),
+    "rlp_rd_better_tip": _s("Sharpe au-dessus d'acheter et garder, mais un tel écart arrive aussi par hasard.",
+                           "Sharpe above buy and hold, but such a gap also happens by chance."),
+    "rlp_rd_worse": _s("Sous acheter-garder", "Below buy and hold"),
+    "rlp_rd_worse_tip": _s("Sharpe inférieur à celui de rester investi tout le temps.", "Sharpe below that of staying invested all the time."),
+    "rlp_rd_leak_delay": _s("Test du décalage d'un jour : le Sharpe brut s'effondre quand les positions arrivent un jour plus tard.",
+                           "One-day delay test: the gross Sharpe collapses when positions arrive one day later."),
+    "rlp_rd_leak_fx_rule1": _s("Paire de change entraînée avant la règle des séances (ADR 0007) : les variables du jour expliquaient déjà le mouvement joué.",
+                              "Currency pair trained before the session rule (ADR 0007): the day's features already explained the move played."),
+    "rlp_rd_excess": _s("Vs acheter et garder / an", "Vs buy and hold / yr"),
+    "rlp_rd_engine": _s("Moteur {n}", "Engine {n}"),
+    "rlp_rd_engine_tip": _s("Moteur 1 : avant le 16/11 (vente à découvert, décision quotidienne, sans validation). Moteur 2 : ADR 0022.",
+                         "Engine 1: before 16/11 (short selling, daily decision, no validation). Engine 2: ADR 0022."),
+}
+RL_STRINGS.update(RL_VERDICT_STRINGS)

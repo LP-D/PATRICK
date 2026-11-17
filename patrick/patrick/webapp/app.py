@@ -1203,10 +1203,11 @@ def run_results(run_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Résultat introuvable")
     if isinstance(result, dict) and result.get("kind") == "rl":
-        # Run RL de change d'avant la règle des séances : signalé à la lecture.
+        # Run RL de change d'avant la règle des séances : signalé à la lecture ; chiffres de lecture (verdict, moteur...) ajoutés.
+        from patrick.rl import reading as rl_reading
         from patrick.rl.history import display_warnings
 
-        result = display_warnings(result)
+        result = {**display_warnings(result), "reading": rl_reading.of_result(result)}
     return result
 
 
@@ -1298,7 +1299,10 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         conn.close()
     rl_done = [r for r in filtered_rl if r.get("sharpe") is not None and r.get("sharpe_buy_hold") is not None]
     scope_dm = {"with": with_dm, "total": len(filtered_classif)}
-    scope_rl = {"with": sum(1 for r in rl_done if r["sharpe"] > r["sharpe_buy_hold"]), "total": len(rl_done)}
+    # RL : les runs qui battent acheter-garder de façon significative, sans alerte de fuite ni cible non négociable (`rl.reading`) ;
+    # ceux qui sont au-dessus en Sharpe sans écart significatif sont comptés à part (le hasard en met une part au-dessus).
+    scope_rl = {"with": sum(1 for r in rl_done if r.get("verdict") == "beats"), "total": len(rl_done),
+                "above": sum(1 for r in rl_done if r.get("verdict") == "better")}
     n_listed = sum(s["total"] for s in sections)
 
     # Count runs per target for the dropdown filter

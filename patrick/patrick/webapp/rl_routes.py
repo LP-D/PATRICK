@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from patrick.config import defaults as D
 from patrick.config import rl_profiles
 from patrick.rl import agents
+from patrick.rl import reading as rl_reading
 from patrick.rl.config import RLRunConfig
 from patrick.rl.history import DELETED_PHASE, RL_JOB_FILTER, is_deleted_rl_job
 from patrick.tracking import db as trackdb
@@ -82,27 +83,30 @@ ALGO_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _with_reading(row: dict, fields: dict) -> dict:
+    """Ligne de liste complétée par les chiffres de lecture (`rl.reading`) : moteur, verdict, croissance au-delà d'acheter-garder, part de
+    l'agent, frais par an..., et les mesures de tête du résultat."""
+    done = row["status"] == "done"
+    shown = {k: (fields.get(k) if done else None) for k in ("sharpe", "sharpe_buy_hold", "total_return", "max_drawdown", "dsr")}
+    return {**row, **shown, **rl_reading.derive(fields if done else dict.fromkeys(rl_reading.FIELD_KEYS), row.get("target"), done=done)}
+
+
 def _summary(job: dict) -> dict:
-    """Une ligne de la liste des runs RL : nom, cible, algorithme, état et, si terminé, les chiffres clés."""
+    """Une ligne de la liste des runs RL : nom, cible, algorithme, état et, si terminé, les chiffres de lecture."""
     try:
         config = json.loads(job["config_json"])
     except (TypeError, ValueError):
         config = {}
     row = {"run_id": job["job_id"], "name": config.get("name"), "target": (config.get("objective") or {}).get("target_symbol"),
            "algo": (config.get("rl") or {}).get("algo"), "status": job["status"], "created_at": job.get("created_at"),
-           "started_at": job.get("started_at"), "finished_at": job.get("finished_at"), "error": job.get("error"),
-           "sharpe": None, "sharpe_buy_hold": None, "total_return": None, "max_drawdown": None, "dsr": None}
+           "started_at": job.get("started_at"), "finished_at": job.get("finished_at"), "error": job.get("error")}
+    result = None
     if job["status"] == "done" and job.get("result_json"):
         try:
             result = json.loads(job["result_json"])
-            row.update({"sharpe": (result.get("strategy") or {}).get("sharpe"),
-                        "sharpe_buy_hold": ((result.get("baselines") or {}).get("buy_hold") or {}).get("sharpe"),
-                        "total_return": (result.get("strategy") or {}).get("total_return"),
-                        "max_drawdown": (result.get("strategy") or {}).get("max_drawdown"),
-                        "dsr": ((result.get("stats") or {}).get("dsr") or {}).get("dsr")})
         except ValueError:
-            pass
-    return row
+            result = None
+    return _with_reading(row, rl_reading.from_result(result if isinstance(result, dict) else None))
 
 
 def list_rl_jobs(limit: int | None = LIST_LIMIT) -> list[dict]:
@@ -128,12 +132,7 @@ def list_rl_history() -> list[dict]:
         rows = conn.execute(
             "SELECT job_id, status, created_at, started_at, finished_at, error, "
             "json_extract(config_json, '$.name'), json_extract(config_json, '$.objective.target_symbol'), json_extract(config_json, '$.rl.algo'), "
-            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.sharpe') END, "
-            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.baselines.buy_hold.sharpe') END, "
-            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.total_return') END, "
-            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.strategy.max_drawdown') END, "
-            "CASE WHEN status = 'done' THEN json_extract(result_json, '$.stats.dsr.dsr') END "
-            "FROM job WHERE config_json LIKE ? AND phase != ? ORDER BY created_at DESC, rowid DESC",
+            f"{rl_reading.sql_columns()} FROM job WHERE config_json LIKE ? AND phase != ? ORDER BY created_at DESC, rowid DESC",
             (RL_JOB_FILTER, DELETED_PHASE)).fetchall()
     except sqlite3.Error:
         rows = None
@@ -141,9 +140,12 @@ def list_rl_history() -> list[dict]:
         conn.close()
     if rows is None:
         return list_rl_jobs(None)
-    keys = ("run_id", "status", "created_at", "started_at", "finished_at", "error", "name", "target", "algo",
-            "sharpe", "sharpe_buy_hold", "total_return", "max_drawdown", "dsr")
-    return [dict(zip(keys, row, strict=True)) for row in rows]
+    keys = ("run_id", "status", "created_at", "started_at", "finished_at", "error", "name", "target", "algo")
+    out = []
+    for row in rows:
+        base = dict(zip(keys, row[:len(keys)], strict=True))
+        out.append(_with_reading(base, dict(zip(rl_reading.FIELD_KEYS, row[len(keys):], strict=True))))
+    return out
 
 
 def _is_deleted(job_id: str) -> bool:
@@ -184,21 +186,32 @@ def get_rl_run(run_id: str) -> dict | None:
 
 def _panel_view(result: dict) -> dict:
     """Les chiffres du panneau de l'Historique, tous présents (`None` quand le run n'est pas terminé ou que la mesure manque) pour que le
-    gabarit n'ait aucune clé absente à gérer."""
+    gabarit n'ait aucune clé absente à gérer. Lignes : la stratégie, l'agent sans repli (moteur 2, s'il a été replié), acheter-garder, la
+    tendance 200 j (le momentum pour un run du moteur 1, qui n'avait pas cette référence), rester à plat."""
     def sub(d, *path):
         for key in path:
             d = d.get(key) if isinstance(d, dict) else None
         return d
 
     stats, dates = result.get("stats") or {}, sub(result, "curves", "dates") or []
-    baselines = result.get("baselines") or {}
+    baselines, strategy = result.get("baselines") or {}, result.get("strategy") or {}
+    lines = [("rlh_p_strategy", strategy)]
+    raw = result.get("agent_ungated")
+    if isinstance(raw, dict) and raw and sub(strategy, "agent_share") not in (None, 1, 1.0):
+        lines.append(("rlp_leg_agent_raw", raw))
+    lines.append(("rlh_p_buyhold", baselines.get("buy_hold") or {}))
+    lines.append(("rlp_leg_trend", baselines["trend"]) if baselines.get("trend") else ("rlh_p_momentum", baselines.get("momentum") or {}))
+    lines.append(("rlh_p_flat", baselines.get("flat") or {}))
+    folds = [f for f in result.get("folds") or [] if isinstance(f, dict)]
     return {
-        "done": bool(result.get("strategy")),
-        "lines": [("rlh_p_strategy", result.get("strategy") or {}), ("rlh_p_buyhold", baselines.get("buy_hold") or {}),
-                  ("rlh_p_momentum", baselines.get("momentum") or {}), ("rlp_leg_trend", baselines.get("trend") or {}),
-                  ("rlh_p_flat", baselines.get("flat") or {})],
+        "done": bool(strategy),
+        "lines": lines,
+        "reading": rl_reading.of_result(result),
         "dsr": sub(stats, "dsr", "dsr"), "psr": stats.get("psr"), "n_trials": stats.get("n_trials"),
         "gap": sub(stats, "vs_buy_hold", "diff"), "gap_low": sub(stats, "vs_buy_hold", "ci_low"), "gap_high": sub(stats, "vs_buy_hold", "ci_high"),
+        "gap_trend": sub(stats, "vs_trend", "diff"),
+        "gross_ann": strategy.get("gross_return_ann"), "long_ann": strategy.get("long_contrib_ann"), "short_ann": strategy.get("short_contrib_ann"),
+        "n_gated": sum(1 for f in folds if f.get("gated")) if any("gated" in f for f in folds) else None,
         "n_folds": result.get("n_folds"), "n_seeds": len(result.get("seeds") or []) or None, "elapsed_s": result.get("elapsed_s"),
         "start": dates[0] if dates else None, "end": dates[-1] if dates else None,
     }

@@ -55,10 +55,11 @@
 </p>
 {% endif %}
 {% if filter_family in ('', 'rl') and scope_rl.total %}
-<p class="scope-line">
+{# Une donnée (combien de runs battent vraiment acheter-garder), pas une aide : jamais repliée derrière un « ? » (`data-keep`). #}
+<p class="scope-line" data-keep>
     <b>{{ t('hist_scope_rl') }}</b>
     <span class="scope-value">{{ scope_rl.with }} / {{ scope_rl.total }}</span>
-    <span class="scope-rel">{{ t('hist_scope_rl_rel') }}</span>
+    <span class="scope-rel">{{ t('hist_scope_rl_rel', n=scope_rl.above) }}</span>
 </p>
 {% endif %}
 
@@ -162,13 +163,15 @@
             <th class="hc-check"><span class="visually-hidden">{{ t('hist_compare') }}</span></th>
             <th>{{ t('dq_col_run') }}</th>
             <th>{{ t('dq_col_target') }}</th>
-            <th>{{ t('rd_c_algo') }}</th>
-            <th>{{ t('dq_col_status') }}</th>
-            <th class="num headline" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_sharpe') }}</th>
+            <th title="{{ t('rd_c_algo') }}">{{ t('rlh_col_algo') }}</th>
+            <th title="{{ t('rlh_col_engine_tip') }}">{{ t('rlh_col_engine') }}</th>
+            <th title="{{ t('rlh_col_verdict_tip') }}">{{ t('rlh_col_verdict') }}</th>
+            <th class="num" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_sharpe') }}</th>
             <th class="num" title="{{ t('rlh_col_bh_tip') }}">{{ t('rlh_col_bh') }}</th>
             <th class="num">{{ t('hist_gap') }}</th>
-            <th class="num" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_total') }}</th>
-            <th class="num" title="{{ t('rlh_col_oos_tip') }}">{{ t('rlp_k_maxdd') }}</th>
+            <th class="num headline" title="{{ t('rlh_col_excess_tip') }}">{{ t('rlh_col_excess') }}</th>
+            <th class="num" title="{{ t('rlh_col_share_tip') }}">{{ t('rlh_col_share') }}</th>
+            <th class="num" title="{{ t('rlh_col_cost_tip') }}">{{ t('rlh_col_cost') }}</th>
             <th class="num" title="{{ t('rlp_stat_dsr') }}">DSR</th>
             <th>{{ t('hist_started') }}</th>
             <th class="hc-actions"><span class="visually-hidden">{{ t('rn_actions') }}</span></th>
@@ -184,12 +187,15 @@
             <td class="hc-name" title="{{ r.run_id }}">{{ r.name or r.run_id }}</td>
             <td title="{{ r.target }}">{{ (r.target | iname) if r.target else '—' }}</td>
             <td>{{ r.algo or '—' }}</td>
-            <td>{{ status_badge(shown_status, state) }}</td>
-            <td class="num pk-mono headline">{{ '%.2f' | format(r.sharpe) if r.sharpe is not none else '—' }}</td>
+            <td class="pk-mono">{{ t('rlh_engine_n', n=r.engine) if r.engine else '—' }}</td>
+            {# Un run terminé montre son verdict (`rl.reading`) ; les autres, leur état (en file, en cours, échoué...). #}
+            <td>{% if r.status == 'done' and r.verdict %}<span title="{{ t('rlp_rd_' ~ r.verdict ~ '_tip') }}">{{ status_badge(t('rlp_rd_' ~ r.verdict), r.verdict_state) }}</span>{% else %}{{ status_badge(shown_status, state) }}{% endif %}</td>
+            <td class="num pk-mono">{{ '%.2f' | format(r.sharpe) if r.sharpe is not none else '—' }}</td>
             <td class="num pk-mono">{{ '%.2f' | format(r.sharpe_buy_hold) if r.sharpe_buy_hold is not none else '—' }}</td>
             <td class="num pk-mono">{% if has_gap %}<span class="{{ 'pos' if r.sharpe >= r.sharpe_buy_hold else 'neg' }}">{{ '%+.2f' | format(r.sharpe - r.sharpe_buy_hold) }}</span>{% else %}—{% endif %}</td>
-            <td class="num pk-mono">{{ '%+.1f %%' | format(r.total_return * 100) if r.total_return is not none else '—' }}</td>
-            <td class="num pk-mono">{{ '%.1f %%' | format(r.max_drawdown * 100) if r.max_drawdown is not none else '—' }}</td>
+            <td class="num pk-mono headline">{% if r.excess is not none %}<span class="{{ 'pos' if r.excess > 0 else 'neg' }}">{{ '%+.1f %%' | format(r.excess * 100) }}</span>{% else %}—{% endif %}</td>
+            <td class="num pk-mono">{{ '%.0f %%' | format(r.agent_share * 100) if r.agent_share is not none else '—' }}</td>
+            <td class="num pk-mono">{{ '%.1f %%' | format(r.cost_ann * 100) if r.cost_ann is not none else '—' }}</td>
             <td class="num pk-mono">{{ '%.1f %%' | format(r.dsr * 100) if r.dsr is not none else '—' }}</td>
             <td class="hc-date">{{ (r.started_at or '—')[:16] }}</td>
             <td class="hc-actions">{% if r.status == 'done' %}
