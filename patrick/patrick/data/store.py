@@ -179,6 +179,20 @@ class DataStore:
         df.attrs["data_hash"] = entry["content_hash"]
         return df
 
+    def history_span(self, key: str) -> tuple[int, pd.Timestamp | None] | None:
+        """`(nombre de lignes, première date)` de la dernière version de `key`, ou `None` si elle n'existe pas : lus dans l'index (`rows`, `date_min`, notés à
+        l'enregistrement) au lieu de charger tout le parquet. Les contrôles de faisabilité et d'historique minimal ne veulent que ces deux chiffres, et les
+        refaisaient pour chaque cible d'un lot (0,16 s la lecture, 1 000 lectures pour le lot « runs conseillés »). Une entrée sans ces champs
+        (ancien index) retombe sur la lecture du fichier."""
+        entry = self.latest_entry(key)
+        if entry is None:
+            return None
+        rows, first = entry.get("rows"), entry.get("date_min")
+        if isinstance(rows, int) and (first or rows == 0):
+            return rows, (pd.Timestamp(first) if first and first != "None" else None)
+        df = self.load(key)
+        return len(df), (df.index.min() if len(df) else None)
+
     def latest_entry(self, key: str) -> dict | None:
         entries = self._read_index_shared().get(key, {}).get("snapshots", [])
         return dict(entries[-1]) if entries else None

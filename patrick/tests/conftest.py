@@ -90,6 +90,8 @@ def _isolated_machine_settings(tmp_path, monkeypatch):
     # vide : un test qui lit l'état d'une file ne doit pas faire démarrer un vrai processus. Les tests de la reprise retirent cette variable.
     monkeypatch.setenv("PATRICK_NO_AUTO_WORKER", "1")
     monkeypatch.setenv("PATRICK_INSTRUMENT_LOOKUP", "0")             # un affichage n'apprend jamais un nom par le réseau (webapp/instruments.py)
+    # Le fragment des lots préchauffe l'analyse des runs conseillés dans un fil d'arrière-plan : un test de page ne doit pas en laisser un derrière lui.
+    monkeypatch.setenv("PATRICK_ADVICE_PREWARM", "0")
 
 
 class FakeScheduledTask:

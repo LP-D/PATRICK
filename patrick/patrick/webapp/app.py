@@ -541,6 +541,8 @@ def launch_batches_fragment(request: Request, family: str = "ml"):
     finally:
         conn.close()
     missing = overview["missing"]
+    if family == "ml":
+        launch_batches.prewarm()           # l'analyse des runs conseillés (~70 s) se fait pendant que la page est lue, pas au clic
     return templates.TemplateResponse(
         request, "_launch_batches.html",
         {"family": family, "by_class": overview["by_class"], "missing": missing, "top_signal": top_signal,

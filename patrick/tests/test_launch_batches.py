@@ -508,3 +508,88 @@ def test_top_signal_ranks_significant_targets_first_then_by_pooled_auc(conn):
     conn.execute("DELETE FROM pooled_signal")
     conn.commit()
     assert launch_batches.top_signal(conn, candidates) == []
+
+
+# --------------------------------------------------------------------------- vitesse du lot (17/11/2026)
+
+
+def test_history_span_reads_the_index_not_the_parquet(tmp_path, monkeypatch):
+    """Faisabilité et historique minimal ne veulent que la taille et le premier jour : pas de lecture du parquet (0,16 s pour chaque cible du lot)."""
+    import pandas as pd
+
+    from patrick.data.store import DataStore
+
+    store = DataStore(root=str(tmp_path))
+    df = pd.DataFrame({"x": range(30)}, index=pd.bdate_range("2015-03-02", periods=30))
+    store.save("raw_ABC", df)
+    monkeypatch.setattr(DataStore, "load", lambda *a, **k: pytest.fail("le parquet ne doit pas être lu"))
+    assert store.history_span("raw_ABC") == (30, pd.Timestamp("2015-03-02"))
+    assert store.history_span("raw_ABSENT") is None
+    from patrick.validation import feasibility, history_length
+
+    assert feasibility.check_feasibility("ABC", 1, store=store).n_obs == 30
+    assert history_length.check_min_history("ABC", 5, store=store).earliest == "2015-03-02"
+
+
+def test_history_span_falls_back_on_an_old_index_entry(tmp_path):
+    import json
+
+    import pandas as pd
+
+    from patrick.data.store import DataStore
+
+    store = DataStore(root=str(tmp_path))
+    store.save("raw_OLD", pd.DataFrame({"x": range(12)}, index=pd.bdate_range("2020-01-01", periods=12)))
+    index = tmp_path / "_index.json"
+    data = json.loads(index.read_text())
+    for field in ("rows", "date_min"):
+        data["raw_OLD"]["snapshots"][-1].pop(field)                       # un index écrit avant que ces champs existent
+    index.write_text(json.dumps(data))
+    assert store.history_span("raw_OLD") == (12, pd.Timestamp("2020-01-01"))
+
+
+def test_the_trial_averages_come_from_one_query_and_match_the_old_ones(conn):
+    from patrick.tracking import history
+
+    _suspect_run(conn)
+    run_id = "r1"
+    extra = db.create_trial(conn, run_id, "GLOBAL", "LightGBM", "SMOTE", 6, "shap")           # un essai sans aucune métrique
+    db.add_fold_metrics(conn, extra, 1, "holdout", {"F1_dir": 0.4})
+    trials = history._trials_for_run(conn, run_id)
+    assert len(trials) == 2
+    for trial in trials:
+        assert trial["test_f1_dir"] == history._avg_metric(conn, trial["trial_id"], ("test", "test_path"))
+        assert trial["holdout_f1_dir"] == history._avg_metric(conn, trial["trial_id"], ("holdout",))
+    only_holdout = next(t for t in trials if t["trial_id"] == extra)
+    assert only_holdout["test_f1_dir"] is None and only_holdout["holdout_f1_dir"] == pytest.approx(0.4)
+
+
+def test_validating_a_batch_does_not_look_up_run_names(conn, monkeypatch):
+    """La reconstruction de chaque configuration cherchait le prochain numéro de la cible (0,07 s) ; la validation d'un lot n'en a pas besoin."""
+    from patrick.webapp import run_manager
+
+    _suspect_run(conn)
+    asked: list[str] = []
+    real = run_manager.next_run_name
+    monkeypatch.setattr(run_manager, "next_run_name", lambda symbol: asked.append(symbol) or real(symbol))
+    assert [i["target"] for i in launch_batches.recommended(conn, {})] == ["^VIX"]
+    assert asked == []
+    config, errs = launch_batches.build_recommended_config(conn, "r1", "fix_leak", {})        # le lancement, lui, prend un vrai numéro
+    assert config is not None and not errs and asked == ["^VIX"]
+
+
+def test_the_ml_fragment_prewarms_the_analysis_once_and_the_switch_turns_it_off(client, conn, monkeypatch):
+    started: list[str | None] = []
+    monkeypatch.setattr(launch_batches.threading, "Thread", lambda target, args, name, daemon: type(
+        "T", (), {"start": lambda self: started.append(name)})())
+    monkeypatch.setattr(launch_batches, "_prewarm_at", None)
+    monkeypatch.setenv("PATRICK_ADVICE_PREWARM", "0")
+    client.get("/fragments/launch-batches?family=ml")
+    assert started == []                                                   # inhibé (réglage des tests)
+    monkeypatch.setenv("PATRICK_ADVICE_PREWARM", "1")
+    client.get("/fragments/launch-batches?family=dl")
+    assert started == []                                                   # seule la page ML a un lot conseillé
+    client.get("/fragments/launch-batches?family=ml")
+    client.get("/fragments/launch-batches?family=ml")
+    assert started == ["advice-prewarm"]                                   # une seule fois par durée de validité
+    monkeypatch.setattr(launch_batches, "_prewarm_at", None)

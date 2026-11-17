@@ -125,7 +125,7 @@ def check_feasibility(symbol: str, horizon: int, store: DataStore | None = None,
                     f"pour un horizon de {horizon}j."),
         )
 
-    n_obs = len(store.load(cache_key))
+    n_obs = store.history_span(cache_key)[0]       # index du magasin : pas de lecture du parquet
     feasible = is_feasible(n_obs, horizon, n_wf_folds, min_train_frac)
     if feasible:
         reason = (f"Historique suffisant pour {symbol} : {n_obs}j disponibles, "

@@ -40,8 +40,8 @@ def check_min_history(symbol: str, min_history_years: int,
                     "-- anciennete non verifiee avant lancement."),
         )
 
-    df = store.load(cache_key)
-    earliest = df.index.min() if len(df) else pd.Timestamp.today()
+    span = store.history_span(cache_key)           # index du magasin : pas de lecture du parquet
+    earliest = span[1] if span and span[1] is not None else pd.Timestamp.today()
     threshold = pd.Timestamp.today() - pd.Timedelta(days=min_history_years * 365.25)
     feasible = earliest <= threshold
 

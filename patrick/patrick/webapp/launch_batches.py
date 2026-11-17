@@ -15,6 +15,8 @@ le formulaire les grise. Rien n'est lancé ici : les lots 1 et 2 pré-remplissen
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sqlite3
 import threading
 import time
@@ -24,6 +26,8 @@ from datetime import date, timedelta
 
 from patrick.config import defaults as D
 from patrick.rl.history import DELETED_PHASE, RL_JOB_FILTER
+
+logger = logging.getLogger(__name__)
 
 PENDING_STATUSES = ("queued", "running")
 EXECUTED_RUN_STATUSES = ("done", "running")
@@ -208,6 +212,41 @@ def _advice(conn: sqlite3.Connection, run_id: str, history: dict) -> dict | None
     return result
 
 
+_prewarm_lock = threading.Lock()
+_prewarm_at: float | None = None
+
+
+def prewarm(db_path: str | None = None) -> bool:
+    """Lance en arrière-plan l'analyse du lot conseillé (une fois par durée de validité du cache, jamais deux en même temps) : la page Modèles la
+    déclenche en chargeant ses lots, et le clic sur « Runs conseillés » tombe alors sur des analyses déjà faites (ou en cours : il attend la fin
+    au lieu de tout refaire). 70 s sur une machine au repos, davantage quand l'application démarre. `PATRICK_ADVICE_PREWARM=0` l'inhibe.
+    Renvoie `True` si une analyse a été lancée."""
+    global _prewarm_at
+    if os.environ.get("PATRICK_ADVICE_PREWARM", "1") == "0":
+        return False
+    now = time.monotonic()
+    with _prewarm_lock:
+        if _progress["running"] or (_prewarm_at is not None and now - _prewarm_at < _ADVICE_TTL_S - 120):
+            return False
+        _prewarm_at = now
+    threading.Thread(target=_prewarm_run, args=(db_path,), name="advice-prewarm", daemon=True).start()
+    return True
+
+
+def _prewarm_run(db_path: str | None) -> None:
+    from patrick.tracking import data_health
+    from patrick.tracking import db as trackdb
+
+    try:
+        conn = trackdb.connect(db_path)
+        try:
+            recommended(conn, data_health.history_depths(), workers=2)         # 2 fils : l'application reste réactive pendant ce temps
+        finally:
+            conn.close()
+    except Exception:  # un préchauffage raté ne doit jamais gêner la page ; le clic refera l'analyse
+        logger.exception("préchauffage de l'analyse des runs conseillés")
+
+
 def analysis_progress() -> dict:
     """`{"running", "done", "total"}` de l'analyse du lot conseillé en cours (la page l'affiche pendant l'attente)."""
     return dict(_progress)
@@ -272,7 +311,7 @@ def recommended(conn: sqlite3.Connection, history: dict, workers: int = 1) -> li
         if suggestion is None:
             continue
         config, _ = _ml_run_config(conn, run_id)
-        if config is None or _refit(config, suggestion)[0] is None:
+        if config is None or _refit(config, suggestion, name="validation")[0] is None:
             continue
         signal = signals.get(target)
         out.append({"run_id": run_id, "target": target, "horizon": horizon, "key": suggestion.key, "score": round(suggestion.score),
@@ -379,9 +418,10 @@ def _ml_run_config(conn: sqlite3.Connection, run_id: str):
     return config, errors
 
 
-def refit(config, patch: dict):
+def refit(config, patch: dict, name: str | None = None):
     """`(RunConfig, [])` ou `(None, [erreurs])` : `config` refaite avec `patch` (champs du formulaire de lancement ; `{}` = les mêmes
-    réglages), par le chemin du formulaire. Un nouveau nom de run est pris à chaque appel."""
+    réglages), par le chemin du formulaire. Un nouveau nom de run est pris à chaque appel, sauf si `name` est donné (la validation d'un lot
+    n'en a pas besoin : chercher le prochain numéro de chaque cible coûtait 0,07 s, un tiers du temps de la reconstruction)."""
     from pydantic import ValidationError
 
     from patrick.config.schema import RunConfig
@@ -392,7 +432,7 @@ def refit(config, patch: dict):
     view = forms.to_view(cfg)
     view = {**view, **{k: v for k, v in patch.items() if k in view}}
     symbol = view["target_symbol"]
-    config_dict, errors = forms.build_config_dict(forms.FormFromView(view), target_symbol=symbol, name=run_manager.next_run_name(symbol))
+    config_dict, errors = forms.build_config_dict(forms.FormFromView(view), target_symbol=symbol, name=name or run_manager.next_run_name(symbol))
     if not errors:
         try:
             return RunConfig.model_validate(config_dict), []
@@ -401,9 +441,9 @@ def refit(config, patch: dict):
     return None, [f"{symbol} : {e}" for e in errors]
 
 
-def _refit(config, suggestion):
+def _refit(config, suggestion, name: str | None = None):
     """`refit` avec la modification d'une proposition du conseiller."""
-    return refit(config, suggestion.patch)
+    return refit(config, suggestion.patch, name)
 
 
 def pending_pairs(conn: sqlite3.Connection) -> dict[str, set[int]]:

@@ -351,13 +351,24 @@ def _trials_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
         "SELECT trial_id, regime, algo, sampler, n_features, selector, is_best "
         "FROM trial WHERE run_id = ? ORDER BY is_best DESC, trial_id", (run_id,),
     ).fetchall()
+    # Une requête pour tous les essais du run (73 en moyenne, jusqu'à plusieurs centaines) : deux requêtes par essai faisaient 34 000 appels pour le
+    # lot « runs conseillés ». AVG sur zéro ligne vaut NULL, comme l'ancien `_avg_metric` qui rendait alors `None`.
+    averages: dict[int, tuple[float | None, float | None]] = {}
+    ids = [r[0] for r in rows]
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        marks = ",".join("?" for _ in chunk)
+        averages.update({tid: (test, holdout) for tid, test, holdout in conn.execute(
+            f"SELECT trial_id, AVG(CASE WHEN split IN ('test', 'test_path') THEN value END), "
+            f"AVG(CASE WHEN split = 'holdout' THEN value END) FROM fold_metric "
+            f"WHERE trial_id IN ({marks}) AND metric = 'F1_dir' GROUP BY trial_id", chunk)})
     trials = []
     for trial_id, regime, algo, sampler, n_features, selector, is_best in rows:
+        test, holdout = averages.get(trial_id, (None, None))
         trials.append({
             "trial_id": trial_id, "regime": regime, "algo": algo, "sampler": sampler,
             "n_features": n_features, "selector": selector, "is_best": bool(is_best),
-            "test_f1_dir": _avg_metric(conn, trial_id, ("test", "test_path")),
-            "holdout_f1_dir": _avg_metric(conn, trial_id, ("holdout",)),
+            "test_f1_dir": test, "holdout_f1_dir": holdout,
         })
     return trials
 
