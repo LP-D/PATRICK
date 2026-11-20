@@ -371,5 +371,8 @@ def test_only_one_study_per_kind_at_a_time(tmp_path, monkeypatch):
     monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path))
     first = jobs.start("event", lambda progress: time.sleep(0.5) or {"kind": "event"})
     assert jobs.start("event", lambda progress: {"kind": "event"}).id == first.id
-    time.sleep(0.9)
+    for _ in range(240):                                 # attente bornée plutôt qu'un délai fixe (machine chargée)
+        if jobs.get(first.id).status != "running":
+            break
+        time.sleep(0.25)
     assert jobs.get(first.id).status == "done" and jobs.load_last("event") == {"kind": "event"}

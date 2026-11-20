@@ -318,5 +318,8 @@ def test_only_one_analysis_runs_per_dataset(data_root, monkeypatch):
     monkeypatch.setattr(service, "analyse", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")) if gate["go"] else time.sleep(0.6) or {"portfolios": []})
     first = jobs.start(ds, _quick_params())
     assert jobs.start(ds, _quick_params()).id == first.id
-    time.sleep(1.0)
+    for _ in range(240):                                 # attente bornée : sur une machine chargée l'analyse simulée met plus que ses 0,6 s
+        if jobs.get(first.id).status != "running":
+            break
+        time.sleep(0.25)
     assert jobs.get(first.id).status == "done"
