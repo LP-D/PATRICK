@@ -15,7 +15,14 @@
     <a href="/predictions" class="kind-tab{% if kind != 'alpha' %} active{% endif %}">{{ t('kind_directional') }}</a>
     <a href="/predictions?kind=alpha" class="kind-tab{% if kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ n_alpha }}</span></a>
 </nav>
-<p class="hint kind-hint">{{ t('kind_alpha_hint') if kind == 'alpha' else t('kind_directional_hint') }}</p>
+{# Vue du tableau : un actif par ligne (défaut) ou regroupé par horizon puis par classe, avec l'avantage mesuré sur les signaux jugés. #}
+{% if kind != 'alpha' %}
+<nav class="kind-tabs view-tabs" aria-label="{{ t('pv_tabs_label') }}">
+    <a href="/predictions" class="kind-tab{% if view != 'horizon' %} active{% endif %}">{{ t('pv_tab_asset') }}</a>
+    <a href="/predictions?view=horizon" class="kind-tab{% if view == 'horizon' %} active{% endif %}">{{ t('pv_tab_horizon') }}</a>
+</nav>
+{% endif %}
+<p class="hint kind-hint">{{ t('kind_alpha_hint') if kind == 'alpha' else t('kind_directional_hint') }}{% if view == 'horizon' %} {{ t('pv_horizon_hint') }}{% endif %}</p>
 <p class="page-subtitle">{{ t('pred_subtitle', a=('%.2f' | format(dm_significance_alpha)) | replace('.', t('dec_sep'))) }}</p>
 
 {% if live_refresh.running %}
@@ -38,6 +45,10 @@
     {% endif %}
 </p>
 
+{% if view == 'horizon' %}
+{{ lazy_block('/fragments/predictions-horizon?dm_alpha=' ~ dm_significance_alpha, 10, t('sb_loading'), t('lazy_retry')) }}
+{% else %}
 {{ lazy_block('/fragments/predictions?kind=' ~ kind ~ '&dm_alpha=' ~ dm_significance_alpha, 10, t('sb_loading'), t('lazy_retry')) }}
+{% endif %}
 <script src="{{ asset('predictions_pop.js') }}" defer></script>
 {% endblock %}

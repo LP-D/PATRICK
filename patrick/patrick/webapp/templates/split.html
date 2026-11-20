@@ -1,0 +1,35 @@
+{% extends "base_v2.html" %}
+{% block title %}PATRICK — {{ t('sp_title') }}{% endblock %}
+
+{# Écrans côte à côte : plusieurs pages de l'application dans des volets, comme les dispositions d'écran de Windows. Tout est côté navigateur
+   (static/split.js) : le serveur ne fournit que la liste des pages et les libellés ; l'état de la vue vit dans l'adresse (#l=…&p=…). #}
+{% block content %}
+{% set glyphs = {
+    's1':  '<rect x="1.5" y="1.5" width="13" height="13" rx="1.5"/>',
+    'c2':  '<rect x="1.5" y="1.5" width="6" height="13" rx="1"/><rect x="8.5" y="1.5" width="6" height="13" rx="1"/>',
+    'c3':  '<rect x="1.5" y="1.5" width="3.8" height="13" rx="1"/><rect x="6.1" y="1.5" width="3.8" height="13" rx="1"/><rect x="10.7" y="1.5" width="3.8" height="13" rx="1"/>',
+    'r2':  '<rect x="1.5" y="1.5" width="13" height="6" rx="1"/><rect x="1.5" y="8.5" width="13" height="6" rx="1"/>',
+    'g4':  '<rect x="1.5" y="1.5" width="6" height="6" rx="1"/><rect x="8.5" y="1.5" width="6" height="6" rx="1"/><rect x="1.5" y="8.5" width="6" height="6" rx="1"/><rect x="8.5" y="8.5" width="6" height="6" rx="1"/>',
+    'l12': '<rect x="1.5" y="1.5" width="7.5" height="13" rx="1"/><rect x="10" y="1.5" width="4.5" height="6" rx="1"/><rect x="10" y="8.5" width="4.5" height="6" rx="1"/>',
+    't12': '<rect x="1.5" y="1.5" width="13" height="7.5" rx="1"/><rect x="1.5" y="10" width="6" height="4.5" rx="1"/><rect x="8.5" y="10" width="6" height="4.5" rx="1"/>'} %}
+<div class="split-app" id="split-app">
+    <div class="split-toolbar" role="toolbar" aria-label="{{ t('sp_layouts') }}">
+        <h1 class="split-title">{{ t('sp_title') }}</h1>
+        <div class="split-layouts">
+            {% for key in layouts %}
+            <button type="button" class="split-layout-btn" data-layout="{{ key }}" aria-pressed="false" title="{{ t('sp_layout_' ~ key) }}" aria-label="{{ t('sp_layout_' ~ key) }}">
+                <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" focusable="false">{{ glyphs[key] | safe }}</svg>
+            </button>
+            {% endfor %}
+        </div>
+        <span class="split-hint hint">{{ t('sp_hint') }}</span>
+        <span class="split-toolbar-tools">
+            <button type="button" class="btn-secondary" id="split-copy" data-label="{{ t('sp_copy') }}">{{ t('sp_copy') }}</button>
+            <button type="button" class="btn-secondary" id="split-reset">{{ t('sp_reset') }}</button>
+        </span>
+    </div>
+    <div class="split-stage" id="split-stage"></div>
+</div>
+<script id="split-pages" type="application/json">{{ pages | tojson }}</script>
+<script src="{{ asset('split.js') }}" defer></script>
+{% endblock %}

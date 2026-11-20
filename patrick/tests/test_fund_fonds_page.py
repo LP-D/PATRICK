@@ -59,7 +59,7 @@ def test_the_old_wealth_simulator_url_redirects_to_the_fund_page(client):
 
 def test_navigation_lists_fonds_in_the_simulation_category_and_lights_it_up(client):
     entries = [e.slug for e in nav_registry.entries_for("simulation")]
-    assert entries == ["simulate", "fonds"]
+    assert entries == ["simulate", "fonds", "placements", "strategies"]
     side = fonds_html(client, "/fonds")
     assert 'href="/fonds"' in side and 'href="/patrimoine-simulation"' not in side
     sidebar = re.search(r'<aside class="sidebar".*?</aside>', side, re.DOTALL).group(0)           # le menu en blocs marque aussi la page courante

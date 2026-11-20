@@ -27,10 +27,13 @@ from patrick.webapp.i18n_legacy import LEGACY_STRINGS
 from patrick.webapp.i18n_live import LIVE_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
+from patrick.webapp.i18n_placements import PLACEMENTS_STRINGS
+from patrick.webapp.i18n_strategies import STRATEGIES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 from patrick.webapp.i18n_text import TEXT_JS_KEYS, TEXT_STRINGS
 from patrick.webapp.i18n_todo import TODO_JS_KEYS, TODO_STRINGS
 from patrick.webapp.i18n_ui import UI_JS_KEYS, UI_STRINGS
+from patrick.webapp.i18n_workbench import WORKBENCH_JS_KEYS, WORKBENCH_STRINGS
 
 LANG_COOKIE = "patrick_lang"
 SUPPORTED_LANGS = ("fr", "en")
@@ -468,7 +471,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "confirm_title": {"fr": "Confirmation", "en": "Confirmation"},
     "confirm_cancel": {"fr": "Annuler", "en": "Cancel"},
     "confirm_ok": {"fr": "Confirmer", "en": "Confirm"},
-    "cmdk_placeholder": {"fr": "Rechercher une page…", "en": "Search pages…"},
+    "cmdk_placeholder": {"fr": "Rechercher une page ou un actif…", "en": "Search a page or an asset…"},
     "cmdk_move": {"fr": "naviguer", "en": "move"},
     "cmdk_open": {"fr": "ouvrir", "en": "open"},
     "cmdk_empty": {"fr": "Aucun résultat", "en": "No results"},
@@ -710,6 +713,12 @@ STRINGS.update(TODO_STRINGS)
 STRINGS.update(ASSET_STRINGS)
 STRINGS.update(LIVE_STRINGS)
 STRINGS.update(HEALTH_STRINGS)
+# Vue « Par horizon » de /predictions, recherche d'actifs, écrans côte à côte (webapp/i18n_workbench.py).
+STRINGS.update(WORKBENCH_STRINGS)
+# Page Placements (webapp/i18n_placements.py).
+STRINGS.update(PLACEMENTS_STRINGS)
+# Page Stratégies (webapp/i18n_strategies.py).
+STRINGS.update(STRATEGIES_STRINGS)
 
 
 # Langue de la requête en cours, posée par `LangMiddleware` : les macros importées sans contexte (`_components.html`) ne voient pas `t()`,
@@ -765,7 +774,7 @@ def js_strings(lang: str, path: str = "") -> dict[str, str]:
     """Sous-ensemble des chaînes nécessaires côté JS (app.js/market.js),
     aplati sur la langue courante — évite d'embarquer les deux langues."""
     keys = [
-        "cmdk_empty", "pm_AUC_dir", "pm_Brier_up", "pm_MCC_4cls", "pm_Acc_dir_p", *NOTIFY_JS_KEYS, *CHART_JS_KEYS, *UI_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
+        "cmdk_empty", "pm_AUC_dir", "pm_Brier_up", "pm_MCC_4cls", "pm_Acc_dir_p", *NOTIFY_JS_KEYS, *CHART_JS_KEYS, *UI_JS_KEYS, *FUND_JS_KEYS, *SETTINGS_JS_KEYS, *PAGES_JS_KEYS, *MODELS_JS_KEYS, *WORKBENCH_JS_KEYS, "wealth_import_preview", "wealth_import_done", "wealth_transfer_moved", "wealth_transfer_copied",
         "phase_ingestion", "phase_features", "phase_scan", "phase_tuning", "phase_export", "phase_done", "phase_other",
         "status_connection_lost", "status_running", "status_progress_units", "status_running_progress",
         "status_running_eta", "eta_confidence_low", "eta_confidence_moderate", "status_progress_stalled",

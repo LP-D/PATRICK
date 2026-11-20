@@ -73,10 +73,12 @@ from patrick.webapp import (
     instruments,
     knowledge_routes,
     launch_batches,
+    live_edge_view,
     market_data,
     market_regime,
     nav_registry,
     news_routes,
+    placements_routes,
     progress_steps,
     risk_routes,
     rl_compare,
@@ -86,8 +88,10 @@ from patrick.webapp import (
     settings_routes,
     shap_chart,
     stats_help,
+    strategies_routes,
     todo_actions,
     wealth_routes,
+    workbench_routes,
 )
 from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
 from patrick.webapp.glossary_extra import CATEGORIES as GLOSSARY_CATEGORIES
@@ -1991,7 +1995,7 @@ def _tally_view(tally: dict | None) -> dict | None:
 
 @app.get("/predictions")
 def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA,
-                     kind: str = "directional"):
+                     kind: str = "directional", view: str = "asset"):
     """feature/predictions-overview: tableau universel (cible x horizon) -- signal, significativité Diebold-Mariano, fiabilité
     live. La page n'envoie que son cadre (titre, onglets, légende) ; le tableau, qui lit ~24 millions de prédictions
     (3 s sur la vraie base), arrive par `/fragments/predictions` après l'affichage et est mémorisé tant que la base ne change pas.
@@ -1999,9 +2003,13 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     `live_hit_rate_window`/`live_hit_rate_warning_threshold` (Phase 3): passés au fragment pour nommer la fenêtre et le seuil
     plutôt que de coder un nombre qui pourrait diverger de `tracking/history.py`.
 
-    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`, défaut `tracking.history.DM_SIGNIFICANCE_ALPHA` = 0.05)."""
+    flexibility-gaps Gap 2: `dm_significance_alpha` (`?dm_alpha=`, défaut `tracking.history.DM_SIGNIFICANCE_ALPHA` = 0.05).
+
+    `view=horizon` : les mêmes signaux regroupés par horizon puis par classe d'actifs, avec l'avantage mesuré sur les signaux live
+    déjà jugés (`tracking/live_edge.py`) ; réservé aux modèles directionnels (un modèle alpha prédit un écart, pas un sens)."""
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     kind = "alpha" if kind == "alpha" else "directional"
+    view = "horizon" if (view == "horizon" and kind != "alpha") else "asset"
     conn = trackdb.connect()
     try:
         n_alpha = len(_alpha_run_labels(conn))
@@ -2009,7 +2017,7 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
         conn.close()
     return templates.TemplateResponse(
         request, "predictions.html",
-        {"kind": kind, "n_alpha": n_alpha, "live_refresh": live_refresh.refresh_status(),
+        {"kind": kind, "view": view, "n_alpha": n_alpha, "live_refresh": live_refresh.refresh_status(),
          "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
@@ -2093,6 +2101,25 @@ def predictions_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIG
         request, "_predictions_body.html",
         {**overview, "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
          "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
+         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+    )
+
+
+@app.get("/fragments/predictions-horizon")
+def predictions_horizon_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+    """Vue « Par horizon » de `/predictions` : signaux du jour regroupés par horizon puis par classe d'actifs, et avantage live mesuré
+    (`tracking/live_edge.py`). Réutilise le tableau mémorisé de `/fragments/predictions` (même clé) ; l'avantage a sa propre mémoïsation."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    day = utc_today().isoformat()
+    conn = trackdb.connect()
+    try:
+        overview = memo.memoize(conn, ("predictions", "directional", day), lambda: _predictions_overview("directional"))
+        edge = memo.memoize(conn, ("predictions-edge", day), lambda: live_edge_view.compute_edge(conn, overview))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(
+        request, "_predictions_horizon.html",
+        {**live_edge_view.build(overview, edge), "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
          "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )
 
@@ -2231,6 +2258,15 @@ risk_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Page Données (/donnees) et API /api/donnees/* : data lake, vue point dans le temps, révisions, calendrier, listes de suivi, import (patrick/analysis/data_explorer.py).
 data_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Recherche d'actifs de la palette (/api/asset-index) et page Écrans côte à côte (/split).
+workbench_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Placements (/placements) et API /api/placements/* : simulation complète à partir de VL importées (patrick/placements/).
+placements_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Stratégies (/strategies) et API /api/strategies/* : laboratoire acheter avant / vendre après un événement, straddles (patrick/strategylab/).
+strategies_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _check_min_history_years(min_history_years: int) -> None:
