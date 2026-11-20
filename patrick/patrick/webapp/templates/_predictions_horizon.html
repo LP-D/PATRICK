@@ -61,7 +61,7 @@
 
 {# Détail : un bloc par horizon, une table par classe. #}
 {% for b in blocks %}
-<details class="card edge-horizon" id="edge-h{{ b.horizon }}"{% if loop.first %} open{% endif %}>
+<details class="card edge-horizon" id="edge-h{{ b.horizon }}">
     <summary><h2>{{ t('eh_horizon_title', h=(b.horizon | hlabel)) }}</h2> <span class="hint">{{ t('eh_horizon_sub', n=b.n_signals) }}</span></summary>
     {% for c in b.classes %}
     <div class="group-block">
