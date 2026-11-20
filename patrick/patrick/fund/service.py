@@ -475,12 +475,16 @@ def _breakdown(snaps: list[dict], nav: float) -> list[dict]:
              "nav": s["kpis"]["nav"], "share": s["kpis"]["nav"] / nav if nav > 0 else None} for s in snaps]
 
 
-def overview(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
+def overview(conn: sqlite3.Connection, today: dt.date | None = None, on_step=None) -> dict:
     """Toutes les stratégies non archivées. `fund` : total consolidé (API). `categories` : l'arborescence de la page (ADR 0026), une entrée par
     catégorie non vide, dans l'ordre de `store.CATEGORIES` : `category`, `fund` (total de la catégorie), `breakdown` (parts relatives à la
     catégorie : mélanger un capital virtuel de 10 M€ et un fonds réel de 5 000 € ne dirait rien), `groups` (les stratégies, par enveloppe pour
-    les fonds réels, en un seul groupe `wrapper = None` pour les fonds quant)."""
-    snaps = [strategy_snapshot(conn, s, today) for s in store.list_strategies(conn)]
+    les fonds réels, en un seul groupe `wrapper = None` pour les fonds quant). `on_step(i)` (facultatif) est appelée avant chaque stratégie."""
+    snaps = []
+    for index, strategy in enumerate(store.list_strategies(conn)):
+        if on_step is not None:
+            on_step(index)          # avancement du calcul (barre de chargement de /fonds et /simulate) : la stratégie `index` commence
+        snaps.append(strategy_snapshot(conn, strategy, today))
     total = _totals(snaps)
     categories = []
     for category in store.CATEGORIES:

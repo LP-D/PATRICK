@@ -3,6 +3,7 @@
    cadre de la page, le panneau de détail et les listes qui ne dépendent pas des cotations restent dans fonds.html.
    `strategies` / `fund` = `fund.service.overview`. Les clics sont gérés par `static/fonds.js` (délégation sur #fund-overview). #}
 {% from "_components.html" import metric, empty_state %}
+{% include "_snapshot_line.html" %}
 {% if strategies %}
 {# Une section par catégorie (`categories` = fund.service.overview, ADR 0026) : fonds quant, puis fonds réels (PEA, CTO). Les totaux et les parts sont
    ceux de la catégorie : un capital virtuel de 10 M€ et un fonds réel de 5 000 € ne se somment pas. #}

@@ -1,6 +1,7 @@
 {# Fragment de la synthèse (`/fragments/home`) : les tableaux qui lisent les prédictions. Mêmes données et mêmes macros que la
    page ; chargé après l'affichage du cadre. #}
 {% from "_components.html" import status_badge, data_table, metric, empty_state %}
+{% include "_snapshot_line.html" %}
 {% macro f3(v) %}{{ ('%.3f' | format(v)) if v is not none else '—' }}{% endmacro %}
 {% set more = t('rows_more') %}{% set less = t('rows_less') %}
 {# ---- Détail ---- #}

@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import threading
-import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -29,6 +27,7 @@ from patrick.fund import (
 )
 from patrick.tracking import db as trackdb
 from patrick.wealth import symbols
+from patrick.webapp import cached_views
 from patrick.webapp import instruments as display_names
 from patrick.webapp.wealth_routes import fmt_eur, fmt_pct, fmt_qty, symbol_groups
 
@@ -93,52 +92,40 @@ def _labelled(models: list[dict]) -> list[dict]:
     return sorted(models, key=lambda m: (m["kind"] != "raw", m["label"].lower(), m["horizon"]))
 
 
-# Liste des modèles du sélecteur : une requête par cellule sur la table `prediction` (18 millions de lignes), 3 à 10 s sur la vraie base.
-# Elle est donc gardée en mémoire. Invalidée tout de suite quand l'ensemble des runs ou des champions change ; sinon, passé
-# `MODELS_SOFT_TTL`, on sert l'ancienne liste et on la recalcule en arrière-plan (de nouveaux signaux live ne changent que les
-# segments proposés).
-MODELS_SOFT_TTL = 120.0
-_MODELS_CACHE: dict[str, dict] = {}
-_MODELS_LOCK = threading.Lock()
-
-
 def _models_signature(conn: sqlite3.Connection) -> tuple:
+    """Ce qui change la liste des modèles : un run terminé, un champion promu, un essai de plus."""
     return tuple(conn.execute(
         "SELECT (SELECT COUNT(*) FROM champion), (SELECT COALESCE(MAX(promoted_at), '') FROM champion), "
         "(SELECT COUNT(*) FROM run), (SELECT COALESCE(MAX(finished_at), '') FROM run), "
         "(SELECT COALESCE(MAX(trial_id), 0) FROM trial)").fetchone())
 
 
-def _refresh_models(key: str, signature: tuple) -> None:
-    conn = trackdb.connect()
-    try:
-        models = _labelled(systematic.available_models(conn))
-    except Exception:
-        log.exception("liste des modèles : recalcul en échec")
-        with _MODELS_LOCK:
-            if key in _MODELS_CACHE:
-                _MODELS_CACHE[key]["refreshing"] = False
-        return
-    finally:
-        conn.close()
-    with _MODELS_LOCK:
-        _MODELS_CACHE[key] = {"sig": signature, "at": time.monotonic(), "models": models, "refreshing": False}
-
-
 def _cached_models(conn: sqlite3.Connection) -> list[dict]:
-    key = conn.execute("PRAGMA database_list").fetchone()[2]
-    signature = _models_signature(conn)
-    with _MODELS_LOCK:
-        entry = _MODELS_CACHE.get(key)
-        if entry and entry["sig"] == signature:
-            if time.monotonic() - entry["at"] > MODELS_SOFT_TTL and not entry["refreshing"]:
-                entry["refreshing"] = True
-                threading.Thread(target=_refresh_models, args=(key, signature), name="models-refresh", daemon=True).start()
-            return entry["models"]
-    models = _labelled(systematic.available_models(conn))
-    with _MODELS_LOCK:
-        _MODELS_CACHE[key] = {"sig": signature, "at": time.monotonic(), "models": models, "refreshing": False}
-    return models
+    """Liste des modèles du sélecteur, lue dans le cache persistant (`cached_views.FUND_MODELS`) : 3 à 10 s à calculer sur la vraie base, jamais
+    à l'ouverture d'une page. Vide tant que le tout premier calcul n'est pas fini."""
+    snap = cached_views.FUND_MODELS.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S)
+    return [] if snap is None else snap.value
+
+
+_OPTIONS: dict[tuple, object] = {}
+
+
+def _model_options(templates, models: list[dict], t, lang: str):
+    """Les options du sélecteur de modèle, rendues UNE fois par liste de modèles et par langue (~4 400 `<option>` : 2 s de rendu à chaque ouverture
+    de /simulate sinon). La liste est la même tant que la vue n'a pas été recalculée : `id(models)` change avec elle."""
+    key = (id(models), lang)
+    cached = _OPTIONS.get(key)
+    if cached is None:
+        from markupsafe import Markup
+
+        directional = [m for m in models if m["kind"] == "raw"]
+        alphas = [m for m in models if m["kind"] == "alpha"]
+        html_ = templates.get_template("_fund_model_options.html").render(directional=sorted(directional, key=lambda m: m["label"]),
+                                                                          alphas=sorted(alphas, key=lambda m: m["label"]), t=t)
+        if len(_OPTIONS) > 8:
+            _OPTIONS.clear()
+        cached = _OPTIONS[key] = (Markup(html_), models)       # `models` gardée : son `id` ne peut pas être réutilisé tant que l'entrée existe
+    return cached[0]
 
 
 def _call(fn, *args, **kwargs):
@@ -176,25 +163,49 @@ def _require_strategy(conn: sqlite3.Connection, strategy_id: str) -> dict:
     return strategy
 
 
+def _overview_snapshot():
+    """La valeur de chaque stratégie, lue dans le cache (`cached_views.FUND_OVERVIEW`) : instantanée tant qu'on n'a rien modifié dans les fonds ;
+    après une modification (stratégie, ordre, règle) la page attend le nouveau calcul pour montrer le résultat, sinon on affiche l'ancien et
+    le recalcul (cotations) tourne en tâche de fond. None : premier calcul pas encore fini."""
+    return cached_views.FUND_OVERVIEW.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S, hard_wait=HARD_WAIT_S)
+
+
+def _view_ctx(snap) -> dict:
+    """Ce que la page dit de son instantané (de quand, recalcul en cours) et la barre de chargement qui suit le calcul."""
+    view = cached_views.FUND_OVERVIEW
+    return {"snapshot_at": None if snap is None else snap.computed_at.astimezone().strftime("%Y-%m-%d %H:%M"),
+            "snapshot_refreshing": view.status()["running"], "refresh_views": [view.name], "refresh_live": False}
+
+
+HARD_WAIT_S = 180.0                      # attente maximale d'une page après une modification des fonds (le calcul prend 15 à 40 s)
+
+
 def register(app: FastAPI, templates, context) -> None:
     """`context(request)` = constructeur de contexte i18n/glossaire de l'application."""
     templates.env.filters.setdefault("eur", fmt_eur)
     templates.env.filters.setdefault("pct", fmt_pct)
     templates.env.filters.setdefault("qty", fmt_qty)
 
+    def _preparing(request: Request, ctx: dict):
+        """Premier calcul des fonds (aucun instantané) : le cadre, un message et la barre de chargement ; la page se recharge toute seule."""
+        return templates.TemplateResponse(request, "_preparing_page.html", {**_view_ctx(None), "auto_reload": True, **ctx}, status_code=202)
+
     # -------------------------------------------------------------- pages
 
     @app.get("/simulate")
     def simulate_page(request: Request, strategy: str | None = None, placed: int = 0):
         today = service.current_date()
-        data = _call(service.overview, today)
+        data = _overview_snapshot()
         ctx = context(request)
+        if data is None:
+            return _preparing(request, ctx)
+        models = _call(_cached_models)
         return templates.TemplateResponse(request, "simulate.html", {
-            "models": _call(_cached_models),
-            "strategies": data["strategies"], "selected_id": strategy, "placed": bool(placed),
+            "models": models, "model_options_html": _model_options(templates, models, ctx["t"], ctx["lang"]),
+            "strategies": data.value["strategies"], "selected_id": strategy, "placed": bool(placed),
             "today": today.isoformat(), "futures": futures_payload(today),
             "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),
-            "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **ctx})
+            "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **_view_ctx(data), **ctx})
 
     def _category(value: str | None) -> str | None:
         """Filtre `?categorie=` de /fonds : `quant` ou `real` ; toute autre valeur (ou rien) = toutes les catégories."""
@@ -219,11 +230,15 @@ def register(app: FastAPI, templates, context) -> None:
     def fund_overview_fragment(request: Request, strategy: str | None = None, categorie: str | None = None):
         """Total, répartition et tableau des stratégies de /fonds, une section par catégorie (chargé par `static/lazy.js`) ;
         `?categorie=quant|real` n'en garde qu'une."""
-        data = _call(service.overview, service.current_date())
+        snap = _overview_snapshot()
+        if snap is None:
+            return templates.TemplateResponse(request, "_view_preparing.html", {**_view_ctx(None), **context(request)}, status_code=202)
+        data = snap.value
         wanted = _category(categorie)
         shown = [c for c in data["categories"] if wanted in (None, c["category"])]
         return templates.TemplateResponse(request, "_fund_overview.html", {
-            "strategies": data["strategies"], "fund": data["fund"], "categories": shown, "selected_id": strategy, **context(request)})
+            "strategies": data["strategies"], "fund": data["fund"], "categories": shown, "selected_id": strategy,
+            **_view_ctx(snap), **context(request)})
 
     @app.get("/patrimoine-simulation")
     def legacy_wealth_simulation_page():
@@ -265,8 +280,10 @@ def register(app: FastAPI, templates, context) -> None:
             _require_strategy(conn, strategy_id)
             return _cached_models(conn)
         models = _call(run)
+        ctx = context(request)
         return templates.TemplateResponse(request, "_fund_rule_form_block.html", {
-            "models": models, "strategy_id": strategy_id, "today": service.current_date().isoformat(), **context(request)})
+            "models": models, "strategy_id": strategy_id, "today": service.current_date().isoformat(),
+            "model_options_html": _model_options(templates, models, ctx["t"], ctx["lang"]), **ctx})
 
     # ---------------------------------------------------------------- API
 
