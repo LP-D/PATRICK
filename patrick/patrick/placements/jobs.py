@@ -49,7 +49,7 @@ def _run(job: Job, params: service.Params) -> None:
         job.status, job.fraction, job.message = "done", 1.0, ""
     except (service.AnalysisError, store.StoreError) as exc:
         job.status, job.error = "error", str(exc)
-    except Exception as exc:  # noqa: BLE001 -- une analyse ne doit jamais faire tomber le serveur ; l'erreur est montrée à l'utilisateur
+    except Exception as exc:
         log.exception("analyse de placements en échec")
         job.status, job.error = "error", f"Erreur de calcul : {type(exc).__name__}: {exc}"
     finally:

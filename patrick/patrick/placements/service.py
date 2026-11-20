@@ -110,7 +110,7 @@ def candidate_windows(r_all: pd.DataFrame, cash: str, min_months: int = 24) -> l
         if panel is None:
             continue
         risky = [c for c in panel.columns if c != cash]
-        out.append({"start": s.date().isoformat(), "months": int(len(panel)), "funds": len(risky), "excluded": sorted(set(r_all.columns) - set(panel.columns))})
+        out.append({"start": s.date().isoformat(), "months": len(panel), "funds": len(risky), "excluded": sorted(set(r_all.columns) - set(panel.columns))})
     return out
 
 
@@ -290,7 +290,7 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
                    "end": navs[c].dropna().index[-1].date().isoformat()} for c in risky_all],
         "cash": {"key": cash, "label": labels.get(cash, cash), "fixed": cash == CASH_FIXED, "rf_trailing": scenarios.rf_trailing(windows[-1][1], cash)},
         "last_common": last_common.date().isoformat(),
-        "windows": [{"id": wl, "start": panel.index[0].date().isoformat(), "end": panel.index[-1].date().isoformat(), "months": int(len(panel)),
+        "windows": [{"id": wl, "start": panel.index[0].date().isoformat(), "end": panel.index[-1].date().isoformat(), "months": len(panel),
                      "funds": [c for c in panel.columns if c != cash], "excluded": sorted(set(risky_all) - set(panel.columns))} for wl, panel in windows],
         "fund_stats": fund_stats, "stat_windows": list(stat_windows),
         "correlation": {"window": windows[-1][0], "keys": risky_corr, "matrix": corr.values.tolist()},

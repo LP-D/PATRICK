@@ -71,7 +71,7 @@ def _run(job: Job, runner: Callable[[Callable[[float, str], None]], dict]) -> No
         job.status, job.fraction, job.message = "done", 1.0, ""
     except (core.StrategyError, events.EventsError, prices.PricesError) as exc:
         job.status, job.error = "error", str(exc)
-    except Exception as exc:  # noqa: BLE001 -- une étude ne doit jamais faire tomber le serveur ; l'erreur est montrée à l'utilisateur
+    except Exception as exc:
         log.exception("étude de stratégie en échec")
         job.status, job.error = "error", f"Erreur de calcul : {type(exc).__name__}: {exc}"
     finally:

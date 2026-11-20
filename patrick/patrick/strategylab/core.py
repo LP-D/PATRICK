@@ -174,12 +174,12 @@ def split_validation(V: np.ndarray, frac: float, n_boot: int, seed: int) -> dict
     cut = int(len(C) * frac)
     train, test = C[:cut], C[cut:]
     if len(train) < MIN_COMPLETE or len(test) < 5:
-        return {"available": False, "n_train": int(len(train)), "n_test": int(len(test))}
+        return {"available": False, "n_train": len(train), "n_test": len(test)}
     k = int(np.argmax(train.mean(axis=0)))
     rng = np.random.default_rng(seed)
     t = test[:, k]
     boots = np.array([t[rng.integers(0, len(t), len(t))].mean() for _ in range(n_boot)])
-    return {"available": True, "n_train": int(len(train)), "n_test": int(len(test)), "k": k + 1, "train_mean": float(train[:, k].mean()),
+    return {"available": True, "n_train": len(train), "n_test": len(test), "k": k + 1, "train_mean": float(train[:, k].mean()),
             "train_win": float((train[:, k] > 0).mean()), "test_mean": float(t.mean()), "test_win": float((t > 0).mean()),
             "test_ci_low": float(np.percentile(boots, 2.5)), "test_ci_high": float(np.percentile(boots, 97.5)),
             "test_last_mean": float(test[:, -1].mean()), "holds": bool(t.mean() > 0 and (t > 0).mean() > 0.5)}
@@ -198,13 +198,13 @@ def trade_metrics(r: np.ndarray, stake: float) -> dict:
     for v in pnl:
         streak = streak + 1 if v <= 0 else 0
         best = max(best, streak)
-    return {"n": int(len(r)), "win_rate": float((pnl > 0).mean()), "mean": float(r.mean()), "median": float(np.median(r)),
+    return {"n": len(r), "win_rate": float((pnl > 0).mean()), "mean": float(r.mean()), "median": float(np.median(r)),
             "total_pnl": float(pnl.sum()), "mean_pnl": float(pnl.mean()),
             "profit_factor": float(wins.sum() / abs(losses.sum())) if losses.sum() != 0 else None,
             "payoff": float(wins.mean() / abs(losses.mean())) if len(wins) and len(losses) and losses.mean() != 0 else None,
             "best": float(r.max()), "worst": float(r.min()), "var95": float(q05), "cvar95": float(r[r <= q05].mean()),
             "sharpe_trade": float(r.mean() / r.std(ddof=1)) if len(r) > 1 and r.std(ddof=1) > 0 else None,
-            "sortino_trade": float(r.mean() / down) if down and down == down and down > 0 else None,
+            "sortino_trade": float(r.mean() / down) if down and down > 0 else None,
             "max_drawdown": float((equity - peak).min()) if len(equity) else 0.0, "max_losing_streak": int(best)}
 
 
@@ -213,7 +213,7 @@ def concentration(r: np.ndarray, symbols: np.ndarray, years: np.ndarray, top_sha
     rentables, et résultat par année."""
     r = np.asarray(r, dtype=float)
     order = np.argsort(r)
-    n_cut = max(1, int(round(len(r) * top_share)))
+    n_cut = max(1, round(len(r) * top_share))
     trimmed = float(r[order[:-n_cut]].mean()) if len(r) > n_cut else float("nan")
     by_symbol = pd.Series(r).groupby(symbols).sum().sort_values(ascending=False)
     gains = by_symbol[by_symbol > 0].sum()
@@ -238,7 +238,7 @@ def extremes(table: pd.DataFrame, k: int, top: int = 8) -> dict:
     col = f"k{k}"
     sub = table.dropna(subset=[col])
     cols = ["symbol", "day0", "group", col]
-    fmt = lambda df: [{"symbol": r.symbol, "date": r.day0.date().isoformat(), "group": r.group, "ret": float(getattr(r, col))} for r in df[cols].itertuples()]  # noqa: E731
+    fmt = lambda df: [{"symbol": r.symbol, "date": r.day0.date().isoformat(), "group": r.group, "ret": float(getattr(r, col))} for r in df[cols].itertuples()]
     return {"best": fmt(sub.nlargest(top, col)), "worst": fmt(sub.nsmallest(top, col))}
 
 

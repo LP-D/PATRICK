@@ -109,7 +109,7 @@ def add_fund(dataset_id: str, parsed: loader.ParsedFund) -> dict:
     _write_atomic(path, out.to_csv(index=False))
     previous = meta["funds"].get(parsed.key, {})
     entry = {"label": previous.get("label") or parsed.label, "source": parsed.source, "kind": parsed.kind,
-             "start": merged.index[0].date().isoformat(), "end": merged.index[-1].date().isoformat(), "points": int(len(merged)),
+             "start": merged.index[0].date().isoformat(), "end": merged.index[-1].date().isoformat(), "points": len(merged),
              "excluded": bool(previous.get("excluded", False)), "checks": (previous.get("checks", []) + [{"fichier": parsed.source, **check}])[-5:]}
     meta["funds"][parsed.key] = entry
     if meta.get("cash") is None:

@@ -116,7 +116,7 @@ def read_xlsx_nav(data: bytes, source: str = "fichier.xlsx") -> tuple[pd.Series,
     première ligne dont la première cellule est une date (3 lignes d'en-tête dans les exports de PEE)."""
     try:
         raw = pd.read_excel(io.BytesIO(data), header=None)
-    except Exception as exc:  # noqa: BLE001 -- openpyxl lève des types variés (zip invalide, classeur protégé…)
+    except Exception as exc:
         raise LoaderError(f"{source} : classeur Excel illisible ({exc}).") from exc
     if raw.shape[1] < 2 or raw.empty:
         raise LoaderError(f"{source} : il faut une colonne de dates et une colonne de VL.")
@@ -154,11 +154,11 @@ def merge_series(old: pd.Series | None, new: pd.Series) -> tuple[pd.Series, dict
     """Fusionne deux séries du même fonds (l'ancienne l'emporte sur les dates communes, comme le notebook) et contrôle leur cohérence :
     `{points_communs, ecart_max, nouveaux_points}`. Un écart important sur les dates communes signale deux fonds différents sous le même nom."""
     if old is None or old.empty:
-        return new, {"points_communs": 0, "ecart_max": 0.0, "nouveaux_points": int(len(new))}
+        return new, {"points_communs": 0, "ecart_max": 0.0, "nouveaux_points": len(new)}
     both = pd.concat([new.rename("new"), old.rename("old")], axis=1, sort=True).dropna()
     gap = float((both["new"] - both["old"]).abs().max()) if len(both) else 0.0
     merged = old.combine_first(new).rename(old.name)
-    return merged, {"points_communs": int(len(both)), "ecart_max": gap, "nouveaux_points": int((~new.index.isin(old.index)).sum())}
+    return merged, {"points_communs": len(both), "ecart_max": gap, "nouveaux_points": int((~new.index.isin(old.index)).sum())}
 
 
 # Alias publics : les autres modules d'import (événements des stratégies) lisent des dates et des nombres de la même façon.

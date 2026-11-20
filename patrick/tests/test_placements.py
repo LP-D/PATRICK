@@ -25,7 +25,7 @@ def _nav_series(mu: float, sigma: float, seed: int, start: str = "2012-01-02", e
 
 
 def _csv(series: pd.Series, decimal: str = ".", sep: str = ",", fmt: str = "%Y-%m-%d") -> bytes:
-    lines = ["date" + sep + "nav"] + [f"{d.strftime(fmt)}{sep}{('%.4f' % v).replace('.', decimal)}" for d, v in series.items()]
+    lines = ["date" + sep + "nav"] + [f"{d.strftime(fmt)}{sep}{format(v, '.4f').replace('.', decimal)}" for d, v in series.items()]
     return "\n".join(lines).encode("utf-8")
 
 
@@ -185,7 +185,7 @@ def test_fan_has_one_point_per_year():
 
 # ------------------------------------------------------------------ analyse complète
 def _quick_params(**kw) -> service.Params:
-    base = dict(objectives=("max_sharpe", "min_vol"), caps=(1.0, 0.5), methods=("bootstrap blocs 6 mois", "GARCH résidus"), n_sims=1000, k_starts=3, horizon_years=3)
+    base = {"objectives": ("max_sharpe", "min_vol"), "caps": (1.0, 0.5), "methods": ("bootstrap blocs 6 mois", "GARCH résidus"), "n_sims": 1000, "k_starts": 3, "horizon_years": 3}
     base.update(kw)
     return service.Params(**base)
 
