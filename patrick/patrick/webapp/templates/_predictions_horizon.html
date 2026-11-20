@@ -1,0 +1,101 @@
+{# Fragment de la vue « Par horizon » de /predictions (`/fragments/predictions-horizon`) : une matrice classe × horizon qui dit où les signaux
+   live battent le hasard, puis, horizon par horizon et classe par classe, le signal du jour de chaque actif avec son suivi jugé.
+   Les statistiques viennent de `tracking/live_edge.py` ; ce gabarit ne calcule rien d'autre que des pourcentages d'affichage. #}
+{% from "_components.html" import status_badge, empty_state %}
+{% from "_pred_cell.html" import pred_cell, q with context %}
+{% set verdict_state = {'edge': 'ok', 'lean': 'warning', 'none': 'neutral', 'below': 'error', 'early': 'disabled'} %}
+
+{% macro class_name(key) %}{% if key == 'all' %}{{ t('eh_all') }}{% elif key == 'other' %}{{ t('eh_other') }}{% else %}{{ t('nav_' ~ key) }}{% endif %}{% endmacro %}
+
+{# Une case de la matrice : le taux de réussite jugé, le verdict en dessous, le détail au survol. #}
+{% macro edge_cell(s) %}
+{% if not s or not s.n %}<span class="na">—</span>
+{% else %}
+<span class="pop-trigger edge-cell" tabindex="0">
+<span class="status-badge status-{{ verdict_state[s.verdict] }}">{{ (s.hit_rate * 100) | round | int }} %</span>
+<span class="hint edge-verdict">{{ t('eh_v_' ~ s.verdict) }}</span>
+<span class="pop-content">
+<strong class="pop-title">{{ t('eh_v_' ~ s.verdict) }}</strong>
+<dl class="pop-grid">
+<dt>{{ t('eh_pop_hit') }}</dt><dd>{{ '%.1f' | format(s.hit_rate * 100) }} %{% if s.ci %} <span class="hint">({{ t('eh_pop_ci') }} {{ (s.ci[0] * 100) | round | int }}–{{ (s.ci[1] * 100) | round | int }} %)</span>{% endif %}</dd>
+<dt>{{ t('eh_pop_naive') }}</dt><dd>{{ '%.1f' | format(s.naive * 100) }} %</dd>
+<dt>{{ t('eh_pop_sample') }}</dt><dd>{{ t('eh_pop_sample_v', n=s.n, d=s.days, e=s.n_eff) }}</dd>
+<dt>{{ t('eh_pop_p') }}</dt><dd>{% if s.p_value is not none %}{{ '%.3f' | format(s.p_value) }}{% else %}—{% endif %}</dd>
+</dl>
+{% if s.verdict == 'early' %}<span class="hint">{{ t('eh_pop_need', m=min_effective | int) }}</span>{% endif %}
+</span>
+</span>
+{% endif %}
+{% endmacro %}
+
+{% if not n_judged %}
+{{ empty_state(t('eh_empty'), t('eh_empty_hint'), '/ml?profile=quick', t('es_launch_quick')) }}
+{% else %}
+<p class="scope-line">
+    <b>{{ t('eh_scope') }}</b>
+    <span class="scope-value">{{ t('eh_scope_value', n=n_judged, a=first_day, b=last_day) }}</span>
+    {% if excluded_backfill %}<span class="scope-rel">{{ t('eh_excluded', n=excluded_backfill) }}</span>{% endif %}
+</p>
+
+{# Matrice : où est l'avantage ? Lignes = classes, colonnes = horizons. #}
+<section class="group-block" id="edge-matrix">
+    <h2 class="group-title">{{ t('eh_matrix_h') }} {{ q(t('eh_rules')) }}</h2>
+    <div class="table-scroll">
+    <table class="data-table edge-table">
+        <thead><tr>
+            <th>{{ t('eh_col_class') }}</th>
+            {% for h in horizons %}<th class="n">{{ h | hlabel }}</th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for row in matrix_rows %}
+        <tr{% if row.key == 'all' %} class="edge-all"{% endif %}>
+            <td>{{ class_name(row.key) }}</td>
+            {% for h in horizons %}<td class="n">{{ edge_cell(row.cells.get(h)) }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <p class="table-footer">{{ t('eh_matrix_foot', m=min_effective | int) }}</p>
+</section>
+
+{# Détail : un bloc par horizon, une table par classe. #}
+{% for b in blocks %}
+<details class="card edge-horizon" id="edge-h{{ b.horizon }}"{% if loop.first %} open{% endif %}>
+    <summary><h2>{{ t('eh_horizon_title', h=(b.horizon | hlabel)) }}</h2> <span class="hint">{{ t('eh_horizon_sub', n=b.n_signals) }}</span></summary>
+    {% for c in b.classes %}
+    <div class="group-block">
+        <h3 class="group-title">{{ class_name(c.key) }}
+            {% if c.stats and c.stats.n %}<span class="hint">{{ t('eh_class_line', p=((c.stats.hit_rate * 100) | round | int), e=c.stats.n_eff) }}</span>
+            {{ edge_cell(c.stats) }}{% endif %}</h3>
+        <div class="table-scroll">
+        <table class="data-table pred-table">
+            <thead><tr>
+                <th>{{ t('mv_col_asset') }}</th><th>{{ t('eh_col_signal') }}</th><th class="n">{{ t('eh_col_hit') }}</th><th>{{ t('eh_col_vs') }}</th>
+            </tr></thead>
+            <tbody>
+            {% for a in c.assets %}
+            <tr>
+                <td><a href="/targets/{{ a.symbol | urlencode }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a></td>
+                <td>{{ pred_cell(a.cell, a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol) }}</td>
+                {% if a.edge %}
+                <td class="n">{{ (a.edge.hit_rate * 100) | round | int }} % <span class="hint">({{ a.edge.n }})</span></td>
+                <td>
+                    {# Écart descriptif d'un actif isolé : ± dit seulement que l'intervalle de Wilson (observations indépendantes) exclut 50 %. #}
+                    {% if a.edge.ci and a.edge.ci[0] > 0.5 %}{{ status_badge(t('eh_above'), 'ok') }}
+                    {% elif a.edge.ci and a.edge.ci[1] < 0.5 %}{{ status_badge(t('eh_below'), 'error') }}
+                    {% else %}{{ status_badge(t('eh_within'), 'neutral') }}{% endif %}
+                </td>
+                {% else %}
+                <td class="n"><span class="na">—</span></td><td><span class="hint">{{ t('eh_not_judged') }}</span></td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endfor %}
+{% endif %}

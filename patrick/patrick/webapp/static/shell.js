@@ -165,8 +165,51 @@
     function normalize(s) {
         return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     }
+
+    /* ---- Actifs : la palette ouvre aussi la fiche d'un actif (/targets/{symbole}) ----
+       L'index (symbole, nom affiché, classe) vient de /api/asset-index, chargé une seule fois à la première ouverture (ou au survol du
+       bouton) puis gardé dans sessionStorage 10 minutes. Sans saisie, la liste reste celle des pages : les actifs n'apparaissent que
+       quand on tape (il y en a plusieurs centaines). */
+    var ASSET_LIMIT = 30, ASSET_TTL_MS = 600000;
+    var assets = null, assetsLoading = false;
+    function toAssetItems(rows) {
+        return rows.map(function (a) {
+            var shown = a.n || a.s, cut = shown.indexOf(" · ");
+            return { url: "/targets/" + encodeURIComponent(a.s), label: shown, group: a.g, slug: "asset", asset: true, hint: a.s + " · " + a.g,
+                     sym: normalize(a.s), full: normalize(shown), bare: normalize(cut >= 0 ? shown.slice(cut + 3) : shown) };
+        });
+    }
+    function loadAssets() {
+        if (assets !== null || assetsLoading) return;
+        var key = "patrick.asset-index." + (document.documentElement.lang || "fr");
+        try {
+            var saved = JSON.parse(window.sessionStorage.getItem(key) || "null");
+            if (saved && Date.now() - saved.at < ASSET_TTL_MS && saved.rows && saved.rows.length) { assets = toAssetItems(saved.rows); return; }
+        } catch (e) { /* stockage indisponible : on recharge */ }
+        assetsLoading = true;
+        fetch("/api/asset-index", { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (rows) {
+                assets = toAssetItems(rows);
+                try { window.sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), rows: rows })); } catch (e) { /* quota ou mode privé */ }
+                if (dialog && !dialog.hidden) render();
+            })
+            .catch(function () { assets = []; })
+            .then(function () { assetsLoading = false; });
+    }
+    // Un actif correspond par son symbole (exact > début > contient) ou par son nom ; pas de correspondance « sous-suite » (trop de bruit).
+    function assetScore(item, q) {
+        if (item.sym === q) return 5;
+        if (item.sym.indexOf(q) === 0) return 4.5;
+        if (item.bare.indexOf(q) === 0) return 4;
+        if (item.full.indexOf(q) >= 0) return 3;
+        if (item.sym.indexOf(q) >= 0) return 2.5;
+        return 0;
+    }
+
     function score(item, q) {
         if (!q) return 1;
+        if (item.asset) return assetScore(item, q);
         var label = normalize(item.label), group = normalize(item.group), url = normalize(item.url);
         if (label.indexOf(q) === 0) return 4;
         if (label.indexOf(q) >= 0) return 3;
@@ -179,10 +222,13 @@
     }
     function render() {
         var q = normalize(input.value.trim());
-        shown = items
+        var pool = (q && assets) ? items.concat(assets) : items;
+        var assetCount = 0;
+        shown = pool
             .map(function (it, idx) { return { it: it, s: score(it, q), idx: idx }; })
             .filter(function (r) { return r.s > 0; })
             .sort(function (a, b) { return b.s - a.s || a.idx - b.idx; })
+            .filter(function (r) { return !r.it.asset || ++assetCount <= ASSET_LIMIT; })
             .map(function (r) { return r.it; });
         if (active >= shown.length) active = Math.max(0, shown.length - 1);
         list.innerHTML = "";
@@ -214,7 +260,7 @@
             label.textContent = it.label;
             var hint = document.createElement("span");
             hint.className = "cmdk-item-hint";
-            hint.textContent = it.url;
+            hint.textContent = it.hint || it.url;
             li.appendChild(label);
             li.appendChild(hint);
             li.addEventListener("mousemove", function () { if (active !== i) { active = i; highlight(); } });
@@ -240,6 +286,7 @@
         dialog.hidden = false;
         input.value = "";
         active = 0;
+        loadAssets();
         render();
         input.focus();
     }
@@ -250,7 +297,10 @@
         if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
     if (dialog && input && list) {
-        if (trigger) trigger.addEventListener("click", open);
+        if (trigger) {
+            trigger.addEventListener("click", open);
+            trigger.addEventListener("pointerenter", loadAssets, { once: true });   // l'index est prêt avant la première frappe
+        }
         input.addEventListener("input", function () { dialog.removeAttribute("data-opening"); active = 0; render(); });
         dialog.addEventListener("click", function (e) { if (e.target === dialog) close(); });
         input.addEventListener("keydown", function (e) {
