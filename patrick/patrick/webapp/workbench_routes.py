@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from patrick.config import asset_classes
-from patrick.webapp import forms, i18n, instruments
+from patrick.webapp import forms, i18n, instruments, nav_registry
 from patrick.webapp.live_edge_view import OTHER_CLASS
 
 
@@ -32,8 +32,33 @@ def asset_index(lang: str) -> list[dict[str, str]]:
     return out
 
 
+SPLIT_LAYOUTS: tuple[str, ...] = ("s1", "c2", "c3", "r2", "g4", "l12", "t12")
+
+
+def split_pages(lang: str) -> list[dict[str, str]]:
+    """Les pages proposées dans le sélecteur d'un volet : celles de la navigation (pas /split lui-même) et les pages d'usage."""
+    t = i18n.translator(lang)
+    pages = []
+    for section in nav_registry.nav_sections("/split"):
+        for entry in section["entries"]:
+            if entry["url"] != "/split":
+                pages.append({"url": entry["url"], "label": t(entry["label_key"]) if entry["label_key"] else entry["label"],
+                              "group": t(section["label_key"])})
+    for entry in nav_registry.utility_links("/split"):
+        pages.append({"url": entry["url"], "label": t(entry["label_key"]) if entry["label_key"] else entry["label"], "group": "PATRICK"})
+    return pages
+
+
 def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Request], dict]) -> None:
     @app.get("/api/asset-index")
     def asset_index_api(request: Request):
         """Index de recherche de la palette (Ctrl K) : chargé une seule fois à la première ouverture, puis gardé par le navigateur."""
         return JSONResponse(asset_index(i18n.get_lang(request)), headers={"Cache-Control": "private, max-age=600"})
+
+    @app.get("/split")
+    def split_page(request: Request):
+        """Écrans côte à côte : cadre seul (aucune lecture de la base), les volets chargent les autres pages dans des `<iframe>` (static/split.js)."""
+        return templates.TemplateResponse(
+            request, "split.html",
+            {"layouts": SPLIT_LAYOUTS, "pages": split_pages(i18n.get_lang(request)), **i18n_ctx(request)},
+        )

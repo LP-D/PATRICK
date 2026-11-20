@@ -23,6 +23,8 @@ script below (no flash), otherwise the OS preference applies.
                 if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
                 if (localStorage.getItem("patrick-sidebar") === "collapsed") root.setAttribute("data-sidebar", "collapsed");
             } catch (e) { /* storage blocked: OS theme, expanded sidebar */ }
+            /* Page affichée dans un volet de /split : sans barre latérale ni barre du haut (l'adresse de la fenêtre parente est lisible : même origine). */
+            try { if (window.self !== window.top && window.top.location.pathname === "/split") document.documentElement.setAttribute("data-embed", ""); } catch (e) { /* autre origine : page complète */ }
             document.documentElement.classList.add("help-pending");   /* levé par help.js une fois les aides repliées */
         })();
     </script>

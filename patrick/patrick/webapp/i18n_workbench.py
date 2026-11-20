@@ -63,6 +63,34 @@ WORKBENCH_STRINGS: dict[str, dict[str, str]] = {
     "eh_empty": _s("Aucun signal live jugé pour l'instant.", "No live signal judged yet."),
     "eh_empty_hint": _s("Les signaux sont jugés une fois leur horizon écoulé ; ils apparaissent après la première actualisation des prédictions.",
                         "Signals are judged once their horizon has elapsed; they appear after the first predictions refresh."),
+
+    # ------------------------------------------------------------------ Écrans côte à côte (/split)
+    "nav_split": _s("Côte à côte", "Side by side"),
+    "sp_title": _s("Écrans côte à côte", "Side-by-side screens"),
+    "sp_layouts": _s("Disposition des volets", "Pane layout"),
+    "sp_layout_s1": _s("Un seul volet", "Single pane"),
+    "sp_layout_c2": _s("Deux colonnes", "Two columns"),
+    "sp_layout_c3": _s("Trois colonnes", "Three columns"),
+    "sp_layout_r2": _s("Deux lignes", "Two rows"),
+    "sp_layout_g4": _s("Grille 2 × 2", "2 × 2 grid"),
+    "sp_layout_l12": _s("Grand volet à gauche, deux à droite", "Large pane left, two on the right"),
+    "sp_layout_t12": _s("Grand volet en haut, deux en bas", "Large pane on top, two below"),
+    "sp_hint": _s("Glissez un séparateur pour redimensionner (double-clic : remise à zéro).",
+                  "Drag a divider to resize (double-click: reset)."),
+    "sp_copy": _s("Copier le lien de cette vue", "Copy this view's link"),
+    "sp_copied": _s("Lien copié", "Link copied"),
+    "sp_reset": _s("Réinitialiser", "Reset"),
+    "sp_nested": _s("Cette page ne peut pas s'afficher dans un volet.", "This page cannot be shown inside a pane."),
+    "sp_search_ph": _s("Page ou actif…", "Page or asset…"),
+    "sp_open_path": _s("Ouvrir cette adresse", "Open this address"),
+    "sp_empty": _s("Choisissez une page ou un actif à afficher ici.", "Choose a page or an asset to show here."),
+    "sp_untitled": _s("Volet vide", "Empty pane"),
+    "sp_reload": _s("Recharger", "Reload"),
+    "sp_maximize": _s("Agrandir", "Maximise"),
+    "sp_open_tab": _s("Ouvrir en pleine page", "Open full page"),
+    "sp_close": _s("Vider ce volet", "Empty this pane"),
 }
 
-WORKBENCH_JS_KEYS: tuple[str, ...] = ()
+WORKBENCH_JS_KEYS: tuple[str, ...] = (
+    "sp_copied", "sp_nested", "sp_search_ph", "sp_open_path", "sp_empty", "sp_untitled", "sp_reload", "sp_maximize", "sp_open_tab", "sp_close",
+)

@@ -93,6 +93,8 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
              child_routes=("/resultats/titre/{symbol}", "/resultats/evenement")),
     NavEntry("donnees", "Données", "/donnees", "pilotage", 50, "nav_donnees", group="donnees",
              child_routes=("/data-quality",)),
+    # Écrans côte à côte : plusieurs pages de l'application affichées en même temps, dans des volets (dispositions de type Windows).
+    NavEntry("split", "Côte à côte", "/split", "pilotage", 60, "nav_split"),
     # MODELES -- cadrer et lancer l'entrainement, une page par famille : machine learning (arbres, boosting),
     # deep learning (reseaux de neurones, memes runs que le ML), reinforcement learning (agent qui apprend une position).
     NavEntry("ml", "Machine learning", "/ml", "modeles", 10, "nav_ml"),

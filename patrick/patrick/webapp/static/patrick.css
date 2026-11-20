@@ -3314,3 +3314,68 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
   [data-elastic] > * { translate: none !important; }
   .theme-toggle > span, .notify-toggle > span { filter: none !important; }
 }
+
+/* ---- Ecrans cote a cote (/split) ---------------------------------------------------------------------------------- */
+/* Page affichee dans un volet : ni barre laterale, ni bandeau, ni barre du haut (le petit script de base_v2.html pose data-embed). */
+:root[data-embed] { --ticker-h: 0px; --topbar-h: 0px; --stick-top: 0px; }
+:root[data-embed] .sidebar, :root[data-embed] .nav-scrim, :root[data-embed] .ticker, :root[data-embed] .topbar,
+:root[data-embed] .stats-bar, :root[data-embed] .to-top, :root[data-embed] .cmdk, :root[data-embed] .data-root-banner { display: none !important; }
+:root[data-embed] .app-shell { display: block; min-height: 0; }
+:root[data-embed] .main-content { max-width: none; padding: 14px 16px 28px; }
+
+/* La page /split occupe toute la zone de contenu : pas de marge, hauteur de la fenetre moins les barres. */
+.main-content:has(.split-app) { max-width: none; padding: 0; }
+.split-app { display: flex; flex-direction: column; height: calc(100vh - var(--stick-top)); min-height: 420px; }
+.split-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.split-title { margin: 0; font-size: var(--fs-md); font-weight: 650; }
+.split-layouts { display: inline-flex; gap: 4px; }
+.split-layout-btn { display: inline-flex; align-items: center; justify-content: center; width: var(--control-h); height: var(--control-h); padding: 0;
+    border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: transparent; color: var(--text-2); cursor: pointer; }
+.split-layout-btn:hover { background: var(--surface-2); color: var(--text); }
+.split-layout-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.split-layout-btn[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.split-hint { margin: 0; flex: 1 1 220px; }
+.split-toolbar-tools { display: inline-flex; gap: 8px; margin-left: auto; }
+
+.split-stage { position: relative; flex: 1 1 auto; min-height: 0; padding: 6px; background: var(--bg); }
+.split-pane { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+    border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.split-pane[hidden] { display: none; }
+.split-pane-bar { display: flex; align-items: center; gap: 6px; height: 30px; flex: 0 0 auto; padding: 0 4px 0 2px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.split-pane-title { flex: 1 1 auto; min-width: 0; height: 100%; padding: 0 8px; border: 0; background: transparent; color: var(--text); font: inherit;
+    font-size: var(--fs-sm); font-weight: 600; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.split-pane-title:hover { color: var(--brand); }
+.split-pane-title:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.split-pane-tools { display: inline-flex; gap: 2px; }
+.split-tool { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-2); font-size: var(--fs-base); line-height: 1; text-decoration: none; cursor: pointer; }
+.split-tool:hover { background: var(--surface-3); color: var(--text); }
+.split-tool:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.split-tool[hidden] { display: none; }
+.split-pane-body { position: relative; flex: 1 1 auto; min-height: 0; }
+.split-pane-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.split-pane-body.is-empty { overflow: auto; padding: 14px; }
+.split-stage.is-dragging iframe { pointer-events: none; }                       /* sans cela, la page du volet avale la souris pendant le glissement */
+.split-stage.is-dragging { cursor: col-resize; user-select: none; }
+
+.split-gutter { position: absolute; z-index: 5; border-radius: var(--radius-sm); background: transparent; touch-action: none; }
+.split-gutter-x { cursor: col-resize; }
+.split-gutter-y { cursor: row-resize; }
+.split-gutter:hover, .split-gutter:focus-visible { background: var(--brand-soft); outline: 0; }
+
+.split-picker { display: flex; flex-direction: column; gap: 6px; width: min(100%, 420px); }
+.split-picker-pop { position: absolute; z-index: 20; width: 340px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--surface); box-shadow: 0 8px 28px rgba(0, 0, 0, .35); }
+.split-picker-input { width: 100%; height: var(--control-h); padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--surface-2); color: var(--text); font: inherit; font-size: var(--fs-base); }
+.split-picker-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.split-picker-list { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; }
+.split-picker-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: var(--fs-base); cursor: pointer; }
+.split-picker-item.is-active { background: var(--brand-soft); }
+.split-picker-hint { color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Petit ecran : les volets s empilent, chacun a une hauteur lisible, et la page defile. */
+.split-stage.is-stacked { display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.split-stage.is-stacked .split-pane { position: relative; flex: 0 0 auto; height: 78vh; }
+.split-stage.is-stacked .split-gutter { display: none; }
+@media (max-width: 899px) { .split-app { height: auto; min-height: 0; } .split-hint { display: none; } }
