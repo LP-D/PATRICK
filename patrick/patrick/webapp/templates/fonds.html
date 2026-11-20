@@ -37,7 +37,7 @@
 <section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
 
 {# Fonds réels : un PEA et un CTO fictifs (fund/real_funds.py), 5 000 €, 1 € par ordre, tous les signaux. Création ou reprise en un clic. #}
-<details class="card fund-real" id="fund-real"{% if category == 'real' or not real_existing %} open{% endif %}>
+<details class="card fund-real" id="fund-real">
   <summary>{{ t('fund_real_title') }}</summary>
   <p class="hint">{{ t('fund_real_hint', capital=(real_defaults.capital | eur(0)), fee=(real_defaults.fee_flat | eur), min=(real_defaults.min_position | eur(0))) }}</p>
   <ul class="fund-real-rules">
