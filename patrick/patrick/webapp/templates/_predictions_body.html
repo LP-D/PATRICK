@@ -8,6 +8,7 @@
 {% set ns.total = ns.total + 1 %}
 {% if a.cells[h].direction %}{% set ns.with_pred = ns.with_pred + 1 %}{% endif %}
 {% endfor %}{% endfor %}{% endfor %}
+{% include "_snapshot_line.html" %}
 <p class="scope-line">
     <b>{{ t('pf_coverage') }}</b>
     <span class="scope-value">{{ ns.with_pred }} / {{ ns.total }}</span>
@@ -32,7 +33,7 @@
         {% for a in g.assets %}
         <tr>
             <td>{% if kind == 'alpha' %}<span title="{{ a.symbol }}">{{ a.symbol | iname }}</span>{% else %}<a href="/targets/{{ a.symbol }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a>{% endif %}</td>
-            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol) }}</td>{% endfor %}
+            {% for h in horizons %}<td>{{ pred_cell(a.cells[h], a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol, '/fragments/pred-pop?kind=' ~ kind ~ '&symbol=' ~ (a.symbol | urlencode) ~ '&h=' ~ h ~ '&dm_alpha=' ~ dm_significance_alpha) }}</td>{% endfor %}
         </tr>
         {% endfor %}
         </tbody>

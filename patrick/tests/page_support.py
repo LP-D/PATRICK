@@ -9,6 +9,7 @@ import re
 from fastapi.testclient import TestClient
 
 _LAZY = re.compile(r'data-lazy-url="([^"]+)"')
+_POP = re.compile(r'data-pop-url="([^"]+)"')
 
 
 class FullPageClient(TestClient):
@@ -16,6 +17,9 @@ class FullPageClient(TestClient):
         response = super().get(url, *args, **kwargs)
         if response.status_code == 200 and "text/html" in response.headers.get("content-type", ""):
             extra = b"".join(super(FullPageClient, self).get(html.unescape(u)).content for u in _LAZY.findall(response.text))
+            # Les bulles chargées au survol (grand tableau de /predictions) : lues aussi, comme le fait le navigateur quand on survole une case.
+            fragments = response.text + extra.decode("utf-8", "replace")
+            extra += b"".join(super(FullPageClient, self).get(html.unescape(u)).content for u in dict.fromkeys(_POP.findall(fragments)))
             if extra:
                 response._content = response.content + extra
                 response.__dict__.pop("_text", None)

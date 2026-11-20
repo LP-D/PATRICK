@@ -34,7 +34,7 @@ from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
 
-from patrick import cache_eviction, paths, settings
+from patrick import cache_eviction, paths, priority, settings
 from patrick.clock import parse_utc, utc_now, utc_today
 from patrick.config.targets import is_macro_target
 from patrick.tracking import db as trackdb
@@ -231,11 +231,14 @@ def _open_failure_tracker(db_path: str | None):
 
 def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=None,
                            db_path: str | None = None, on_item=None, track_failures: bool | None = None,
-                           free_bytes_fn=None, check_every: int = DISK_CHECK_EVERY) -> RunSummary:
+                           free_bytes_fn=None, check_every: int = DISK_CHECK_EVERY, pace=None) -> RunSummary:
     """Appelle `predict_live_fn(candidate.run_id, db_path=db_path)` pour
     chaque candidat, un par un. Une exception sur UN item ne doit JAMAIS
     interrompre le traitement des suivants -- try/except par item, erreur
     loggée, boucle continue. Seule exception : un disque plein (voir ci-dessous).
+
+    `pace()` (facultatif) est appelée avant chaque modèle : l'app y met `priority.wait_for_idle`, pour que la navigation passe avant une passe de
+    plusieurs heures ; la tâche de nuit n'en met pas.
 
     `predict_live_fn` est injectable (mocké dans les tests) ; par défaut,
     `patrick.predict.predict_live` avec un cache de téléchargement partagé
@@ -266,6 +269,8 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
     summary = RunSummary()
     tracker = _open_failure_tracker(db_path) if track_failures else None
     for index, candidate in enumerate(candidates):
+        if pace is not None:
+            pace()                      # passe lancée dans l'app : la navigation passe d'abord (`priority.wait_for_idle`)
         if guard and index % check_every == 0:
             stop = _stop_for_low_space(free_bytes_fn, floor, len(candidates) - index)
             if stop:
@@ -559,6 +564,21 @@ def write_weekly_report(db_path: str | None = None) -> str | None:
     return str(written) if written is not None else None
 
 
+def refresh_predictions_snapshot(db_path: str | None = None, background: bool = True) -> None:
+    """Les signaux sont écrits : recalcule le tableau de /predictions maintenant, pour qu'il soit prêt à l'ouverture de la page
+    (`webapp/predictions_snapshot.py`). `background=True` : fil séparé (l'app) ; sinon dans ce processus (tâche de nuit). Une erreur
+    est journalisée, jamais propagée."""
+    try:
+        from patrick.webapp import predictions_snapshot
+
+        if background:
+            predictions_snapshot.request_refresh(db_path)
+        else:
+            predictions_snapshot.refresh_if_stale_sync(db_path)
+    except Exception:
+        logger.exception("instantané de /predictions non recalculé")
+
+
 def refresh_status() -> dict:
     """Copie de l'état d'avancement (affiché en tête de /predictions)."""
     with _state_lock:
@@ -608,18 +628,19 @@ def _refresh_once(db_path: str | None = None) -> None:
         first, rest = candidates, []             # aucun fonds concerné : tout, puis le cycle (l'ordre d'avant)
     try:
         with tracked_pass("app") as figures:
-            aborted = getattr(run_daily_predictions(first, db_path=db_path, on_item=_progress), "aborted", None)
+            aborted = getattr(run_daily_predictions(first, db_path=db_path, on_item=_progress, pace=priority.wait_for_idle), "aborted", None)
             try:
                 run_autopilots(db_path)          # les signaux utiles aux fonds sont écrits : le pilote automatique les traite sans attendre le reste
             except Exception:
                 logger.exception("autopilot cycle failed")
             if rest and not aborted:
-                aborted = getattr(run_daily_predictions(rest, db_path=db_path, on_item=_progress), "aborted", None)
+                aborted = getattr(run_daily_predictions(rest, db_path=db_path, on_item=_progress, pace=priority.wait_for_idle), "aborted", None)
             with _state_lock:
                 figures.update({k: _state[k] for k in _FIGURES}, completed=not aborted)      # un disque plein ne compte pas comme une passe faite
         refresh_pooled_signal(db_path)
         refresh_metric_panel(db_path)
         write_weekly_report(db_path)
+        refresh_predictions_snapshot(db_path)
     finally:
         with _state_lock:
             _state.update(running=False, finished_at=datetime.now(UTC).isoformat())

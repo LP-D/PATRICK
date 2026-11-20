@@ -5,14 +5,10 @@
    le tableau défile dans son propre conteneur, un tooltip CSS y serait rogné). #}
 {% macro q(text) %}<span class="pop-trigger q-mark" tabindex="0" aria-label="{{ text }}">?<span class="pop-content">{{ text }}</span></span>{% endmacro %}
 
-{# Une case = la prédiction seule ; tout le détail est dans le popover au survol. #}
-{% macro pred_cell(c, name, alpha, warn_thr, _t, symbol='') %}
+{# Le détail d'une case (contenu du popover) : en ligne dans la case, ou servi à la demande par `/fragments/pred-pop` quand le tableau est grand
+   (500 actifs x 9 horizons : 14 Mo de HTML si chaque case l'embarque). #}
+{% macro pred_pop_body(c, name, alpha, warn_thr, _t) %}
 {% set s = c.signal %}
-{# `data-rel-*` : `predictions_pop.js` ajoute au popover le diagramme de fiabilité de P(hausse) de ce modèle (`/api/predictions/reliability`). #}
-<span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0"{% if symbol and s %} data-rel-target="{{ symbol }}" data-rel-horizon="{{ c.horizon }}"{% endif %}>
-{% if c.suspect %}<span class="status-badge status-error">{{ _t('suspect_tag') }}</span>
-{% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ _t.tx(s[0]) }}</span>{% else %}<span class="na">—</span>{% endif %}
-<span class="pop-content">
 <strong class="pop-title">{{ name }} · {{ c.horizon | hlabel }}</strong>
 {% if c.suspect %}
 <span class="pop-line">{{ status_badge(_t('suspect_banner_title'), 'error') }}</span>
@@ -119,6 +115,15 @@
 {% endif %}
 </div>
 {% endif %}
-</span>
+{% endmacro %}
+
+{# Une case = la prédiction seule ; son détail est dans le popover au survol (`pop_url` : chargé à la demande au lieu d'être embarqué). #}
+{% macro pred_cell(c, name, alpha, warn_thr, _t, symbol='', pop_url='') %}
+{% set s = c.signal %}
+{# `data-rel-*` : `predictions_pop.js` ajoute au popover le diagramme de fiabilité de P(hausse) de ce modèle (`/api/predictions/reliability`). #}
+<span class="pop-trigger pred{% if not s %} pred-none{% endif %}" tabindex="0"{% if pop_url %} data-pop-url="{{ pop_url }}"{% endif %}{% if symbol and s %} data-rel-target="{{ symbol }}" data-rel-horizon="{{ c.horizon }}"{% endif %}>
+{% if c.suspect %}<span class="status-badge status-error">{{ _t('suspect_tag') }}</span>
+{% elif s %}<span class="status-badge status-{{ s[2] }}"><span class="pred-arrows" aria-hidden="true">{{ s[1] }}</span> {{ _t.tx(s[0]) }}</span>{% else %}<span class="na">—</span>{% endif %}
+{% if not pop_url %}<span class="pop-content">{{ pred_pop_body(c, name, alpha, warn_thr, _t) }}</span>{% endif %}
 </span>
 {% endmacro %}

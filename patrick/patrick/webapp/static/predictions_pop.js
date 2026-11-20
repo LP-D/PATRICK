@@ -81,14 +81,35 @@
         });
     }
 
-    function show(el) {
-        var content = el.querySelector(".pop-content");
-        if (!content) return;
-        pop.innerHTML = content.innerHTML;
+    function render(el, html) {
+        pop.innerHTML = html;
         pop.hidden = false;
         current = el;
         place(el);
         loadReliability(el);
+    }
+
+    /* Le détail d'une case du grand tableau n'est pas embarqué dans la page (500 actifs x 9 horizons = des dizaines de Mo) : il est demandé au
+       survol (`data-pop-url`, lu dans l'instantané côté serveur : quelques ms) puis gardé, la langue de la page en plus. */
+    var popCache = {};
+
+    function popUrl(el) {
+        var url = el.dataset.popUrl;
+        var lang = new URLSearchParams(window.location.search).get("lang");
+        if (lang && url.indexOf("lang=") === -1) url += "&lang=" + encodeURIComponent(lang);
+        return url;
+    }
+
+    function show(el) {
+        var content = el.querySelector(".pop-content");
+        if (content) { render(el, content.innerHTML); return; }
+        if (!el.dataset.popUrl) return;
+        var url = popUrl(el);
+        current = el;                               // la bulle n'apparaît que si le pointeur est encore sur cette case à l'arrivée du détail
+        var ready = popCache[url] || (popCache[url] = fetch(url, { credentials: "same-origin" })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .catch(function () { delete popCache[url]; return null; }));
+        ready.then(function (html) { if (html !== null && current === el) render(el, html); });
     }
 
     function hide() {

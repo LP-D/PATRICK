@@ -57,6 +57,7 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     recent_pass,
     refresh_metric_panel,
     refresh_pooled_signal,
+    refresh_predictions_snapshot,
     run_autopilots,
     run_daily_predictions,
     split_for_funds,
@@ -199,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     code = _predict_and_report(args, candidates)
+    refresh_predictions_snapshot(args.db_path, background=False)   # le tableau de /predictions est prêt le matin, calculé ici et non à l'ouverture de la page
     trim_feature_cache()                                  # une fois par exécution : le cache de variables ne dépend plus de la fin d'un entraînement
     return code
 

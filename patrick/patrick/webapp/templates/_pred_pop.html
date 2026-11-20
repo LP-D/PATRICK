@@ -1,0 +1,4 @@
+{# Contenu du popover d'une case de /predictions, servi à la demande (`/fragments/pred-pop`) : le tableau n'embarque plus le détail de ses
+   milliers de cases. Même contenu que lorsqu'il est en ligne (macro `pred_pop_body`). #}
+{% from "_pred_cell.html" import pred_pop_body with context %}
+{{ pred_pop_body(cell, symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t) }}
