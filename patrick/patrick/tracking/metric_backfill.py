@@ -26,6 +26,13 @@ DIRECTION_METRICS = (direction_lib.METRIC_AUC, direction_lib.METRIC_F1, directio
 BACKFILLED = (*DIRECTION_METRICS, "Brier_up", "MCC_4cls")
 MIN_ROWS = 20            # un pli plus court ne donne pas une AUC lisible
 
+# `+path_id` : sans le plus unaire, SQLite choisit `idx_pred_path` (presque toutes les lignes valent -1) et balaie la table `prediction`
+# entière (76 Go le 2026-11-20 : ~23 min PAR essai, 1 450 essais) au lieu de la clé primaire (trial_id, ts, path_id) : 0,02 s. La
+# transaction d'écriture restait ouverte pendant ce balayage, la base verrouillée des jours durant, et chaque worker mourait sur
+# « database is locked ».
+PREDICTIONS_SQL = ("SELECT split, COALESCE(fold_index, 0), y_true, y_pred, p_up FROM prediction WHERE trial_id = ? AND split IN ({s_ph}) "
+                   "AND +path_id = -1 ORDER BY split, fold_index, ts")
+
 
 def candidate_trials(conn: sqlite3.Connection) -> list[int]:
     """Essais qui portent des prédictions : meilleurs essais (`is_best`) et champions en titre."""
@@ -79,9 +86,7 @@ def backfill_trial(conn: sqlite3.Connection, trial_id: int, present: dict[str, s
     if not missing_splits:
         return 0
     s_ph = ",".join("?" for _ in missing_splits)
-    rows = conn.execute(
-        f"SELECT split, COALESCE(fold_index, 0), y_true, y_pred, p_up FROM prediction WHERE trial_id = ? AND split IN ({s_ph}) "
-        "AND path_id = -1 ORDER BY split, fold_index, ts", [trial_id, *missing_splits]).fetchall()
+    rows = conn.execute(PREDICTIONS_SQL.format(s_ph=s_ph), [trial_id, *missing_splits]).fetchall()
     folds: dict[tuple[str, int], list[tuple]] = {}
     for split, fold, y_true, y_pred, p_up in rows:
         folds.setdefault((split, int(fold)), []).append((y_true, y_pred, p_up))
@@ -98,8 +103,10 @@ def backfill_trial(conn: sqlite3.Connection, trial_id: int, present: dict[str, s
 
 
 def backfill(conn: sqlite3.Connection, trial_ids: list[int] | None = None, limit: int | None = None,
-             progress: Callable[[int, int], None] | None = None, commit_every: int = 200) -> dict:
-    """Rattrape le panneau des essais `trial_ids` (par défaut `candidate_trials`). Renvoie `{n_trials, n_touched, n_rows, seconds}`."""
+             progress: Callable[[int, int], None] | None = None, commit_every: int = 25) -> dict:
+    """Rattrape le panneau des essais `trial_ids` (par défaut `candidate_trials`). Renvoie `{n_trials, n_touched, n_rows, seconds}`.
+    Un commit tous les `commit_every` essais : la transaction d'écriture reste courte, un worker n'attend jamais le verrou plus que
+    son `busy_timeout` (30 s)."""
     started = time.time()
     ids = candidate_trials(conn) if trial_ids is None else sorted(set(trial_ids))
     present = _present(conn, ids)
