@@ -2,6 +2,8 @@
 évalués avant lui (`tracking/metric_backfill.py`), et panneau dans les lignes des listes (`tracking/db.py::enrich_runs`)."""
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -146,6 +148,41 @@ def test_backfill_leaves_a_recent_trial_alone(conn):
     report = metric_backfill.backfill(conn)
 
     assert report["n_trials"] == 0 and _metrics(conn, tid) == before
+
+
+def test_the_prediction_query_reads_by_trial_not_by_path_id_index(conn):
+    """Régression 2026-11-20 : `path_id = -1` seul faisait choisir `idx_pred_path` (balayage de toute la table, 23 min par essai sur 76 Go),
+    transaction d'écriture ouverte : la base restait verrouillée et les workers mouraient. La requête doit passer par la clé primaire."""
+    for run_id in ("old_run_a", "old_run_b", "old_run_c"):
+        _trial_with_predictions(conn, run_id=run_id)           # sans ANALYZE : l'ancienne requête choisit alors `idx_pred_path`, comme en production
+    plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + metric_backfill.PREDICTIONS_SQL.format(s_ph="?,?"),
+                                                 [1, "test", "holdout"]))
+    assert "idx_pred_path" not in plan and "trial_id=?" in plan, plan
+
+
+def test_backfill_releases_the_write_lock_between_batches(tmp_path):
+    """Un worker qui écrit (30 s de `busy_timeout`) ne doit jamais attendre un rattrapage : le verrou est rendu à chaque lot."""
+    path = str(tmp_path / "patrick.db")
+    conn = trackdb.connect(path)
+    for run_id in ("old_run_a", "old_run_b", "old_run_c"):
+        _trial_with_predictions(conn, run_id=run_id)
+    locked_at: list[int] = []
+
+    def other_writer_gets_in(done: int, total: int) -> None:
+        other = trackdb.connect(path)
+        try:
+            other.execute("PRAGMA busy_timeout = 0")
+            other.execute("BEGIN IMMEDIATE")
+            other.execute("ROLLBACK")
+        except Exception:                                       # noqa: BLE001 -- sqlite3.OperationalError : base verrouillée
+            locked_at.append(done)
+        finally:
+            other.close()
+
+    report = metric_backfill.backfill(conn, commit_every=1, progress=other_writer_gets_in)
+
+    assert report["n_touched"] == 3 and not locked_at, f"base verrouillée après {locked_at} essai(s)"
+    assert inspect.signature(metric_backfill.backfill).parameters["commit_every"].default <= 50     # le lot par défaut reste court
 
 
 def test_the_backfilled_panel_reaches_the_run_lists(conn):
