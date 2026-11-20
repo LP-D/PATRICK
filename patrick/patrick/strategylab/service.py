@@ -22,7 +22,7 @@ def _groups(table: pd.DataFrame, col: str) -> list[dict]:
     for name, sub in table.groupby("group"):
         v = sub[col].dropna().to_numpy(float)
         if len(v):
-            out.append({"group": str(name), "n": int(len(v)), "mean": float(v.mean()), "median": float(np.median(v)), "win": float((v > 0).mean())})
+            out.append({"group": str(name), "n": len(v), "mean": float(v.mean()), "median": float(np.median(v)), "win": float((v > 0).mean())})
     return sorted(out, key=lambda g: -g["n"])
 
 
@@ -63,7 +63,7 @@ def run_event(events: pd.DataFrame, source, params: core.EventParams, progress: 
     say(0.78, "Bootstrap et stabilité du meilleur jour")
     boot = core.bootstrap(C, params.n_boot, params.seed)
     k = boot["best_k"]
-    best = {**curve[k - 1], "k": k, "ci_low": boot["ci_low"][k - 1], "ci_high": boot["ci_high"][k - 1], "n_complete": int(len(C))}
+    best = {**curve[k - 1], "k": k, "ci_low": boot["ci_low"][k - 1], "ci_high": boot["ci_high"][k - 1], "n_complete": len(C)}
     say(0.86, "Validation chronologique")
     split = core.split_validation(V, params.split_frac, params.n_boot, params.seed)
     col = f"k{k}"
@@ -73,12 +73,12 @@ def run_event(events: pd.DataFrame, source, params: core.EventParams, progress: 
     result = {
         "kind": "event", "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "params": {"entry": params.entry, "max_exit": K, "cost_bps": params.cost_bps, "split_frac": params.split_frac, "n_boot": params.n_boot, "stake": params.stake},
-        "n_events_in": int(len(events)), "n_events": int(len(table)), "n_complete": int(len(C)), "n_symbols": int(table["symbol"].nunique()),
+        "n_events_in": len(events), "n_events": len(table), "n_complete": len(C), "n_symbols": int(table["symbol"].nunique()),
         "dropped_rows": int(events.attrs.get("dropped", 0)), "failed_symbols": list(events.attrs.get("failed", [])), "skipped": skipped,
         "first_date": table["day0"].min().date().isoformat(), "last_date": table["day0"].max().date().isoformat(),
         "curve": curve, "bootstrap": boot, "best": best, "split": split, "last_metrics": last,
         "extremes": core.extremes(table, k), **detail,
-        "verdict": core.verdict(int(len(C)), best, boot, split, detail["concentration"]),
+        "verdict": core.verdict(len(C), best, boot, split, detail["concentration"]),
     }
     say(1.0, "Terminé")
     return _num(result)
@@ -97,7 +97,7 @@ def run_straddle(events: pd.DataFrame, source, params: straddle.StraddleParams, 
         raise core.StrategyError(f"Seulement {len(V)} straddles évaluables (au moins {core.MIN_COMPLETE} sont nécessaires).")
     boot = core.bootstrap(V, params.n_boot, params.seed)
     curve = core.curve(V)[0]
-    best = {**curve, "k": 1, "ci_low": boot["ci_low"][0], "ci_high": boot["ci_high"][0], "n_complete": int(len(V))}
+    best = {**curve, "k": 1, "ci_low": boot["ci_low"][0], "ci_high": boot["ci_high"][0], "n_complete": len(V)}
     split = core.split_validation(V, params.split_frac, params.n_boot, params.seed)
     detail = evaluate_trades(table, "k1", params.stake)
     say(0.80, "Sensibilité maturité x volatilité de sortie")
@@ -106,12 +106,12 @@ def run_straddle(events: pd.DataFrame, source, params: straddle.StraddleParams, 
         "kind": "straddle", "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "params": {k: getattr(params, k) for k in ("maturity_days", "strike_factor", "entry_iv_mult", "exit_iv_ratio", "lookback", "rate", "commission",
                                                    "half_spread", "slippage", "stake", "split_frac", "n_boot")},
-        "n_events_in": int(len(events)), "n_events": int(len(table)), "n_symbols": int(table["symbol"].nunique()),
+        "n_events_in": len(events), "n_events": len(table), "n_symbols": int(table["symbol"].nunique()),
         "dropped_rows": int(events.attrs.get("dropped", 0)), "failed_symbols": list(events.attrs.get("failed", [])), "skipped": skipped,
         "first_date": table["day0"].min().date().isoformat(), "last_date": table["day0"].max().date().isoformat(),
         "cost_per_contract": straddle.trade_cost(params), "mean_premium": float(table["premium"].mean()), "mean_move": float(table["move"].abs().mean()),
         "best": best, "bootstrap": boot, "split": split, "sensitivity": grid, "extremes": core.extremes(table, 1), **detail,
-        "verdict": core.verdict(int(len(V)), best, boot, split, detail["concentration"]),
+        "verdict": core.verdict(len(V), best, boot, split, detail["concentration"]),
     }
     say(1.0, "Terminé")
     return _num(result)

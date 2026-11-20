@@ -40,6 +40,7 @@ affiche seulement ce qu'il ferait).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import sys
@@ -51,12 +52,16 @@ from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le packag
     PredictCandidate,
     PredictOutcome,
     RunSummary,
+    describe_pass,
     find_predictable_candidates,
+    recent_pass,
     refresh_metric_panel,
     refresh_pooled_signal,
     run_autopilots,
     run_daily_predictions,
     split_for_funds,
+    summary_figures,
+    tracked_pass,
     trim_feature_cache,
     write_weekly_report,
 )
@@ -154,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--drift-limit", type=int, default=10,
                          help="Nombre maximal de (ticker, horizon) dont le PSI est re-mesuré par exécution "
                               "(~30 s chacun ; les suivants sont reportés).")
+    parser.add_argument("--force-predictions", action="store_true",
+                         help="Refait les prédictions même si l'app ou une exécution précédente a terminé une passe complète depuis moins de "
+                              "PATRICK_LIVE_REFRESH_MIN_GAP_H heures (12 par défaut) ou en fait une en ce moment.")
     only = parser.add_mutually_exclusive_group()
     only.add_argument("--funds-only", action="store_true",
                       help="Seulement les prédictions utiles aux fonds, puis leur cycle de pilote automatique (pas le reste, pas la dérive).")
@@ -204,27 +212,40 @@ def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandid
     if not first:
         first, rest = candidates, []
     logger.info("%d prédiction(s) utiles aux fonds d'abord, %d ensuite", len(first), len(rest))
+    # Une passe complète = une douzaine d'heures de processeur, déjà faite par l'app (ou par la nuit d'avant) : pas refaite (elle n'écrirait aucune
+    # nouvelle ligne), mais le pilote automatique et la suite (dérive, AUC regroupée, rapport) tournent comme d'habitude. Seul le passage complet
+    # est concerné : `--funds-only` et `--skip-funds` sont des moitiés de passe, toujours faites.
+    full_pass = not (args.funds_only or args.skip_funds)
+    other = recent_pass() if full_pass and not args.force_predictions else None
+    if other is not None:
+        message = f"Prédictions non refaites : une autre passe complète est {describe_pass(other)} (--force-predictions pour les refaire)."
+        logger.info(message)
+        print(message)
+    tracking = tracked_pass("nightly") if full_pass and other is None else contextlib.nullcontext({"completed": False})
     summary = RunSummary()
-    if not args.skip_funds:
-        summary = run_daily_predictions(first, db_path=args.db_path)
-        print_summary(summary)
-        if summary.aborted:
-            return EXIT_DISK_FULL
-        try:
-            for report in run_autopilots(args.db_path):
-                print(f"Pilote automatique {report['strategy_id']} : "
-                      + (f"ERREUR {report['error']}" if "error" in report else
-                         f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
-        except Exception:
-            logger.exception("AUTOPILOT FAIL")           # n'arrête rien et ne change pas le code de sortie
-    if args.funds_only:
-        return 1 if summary.failures else 0
-    if rest or args.skip_funds:
-        later = run_daily_predictions(rest, db_path=args.db_path)
-        print_summary(later)
-        summary.outcomes.extend(later.outcomes)
-        if later.aborted:
-            return EXIT_DISK_FULL
+    with tracking as figures:
+        if not args.skip_funds:
+            if other is None:
+                summary = run_daily_predictions(first, db_path=args.db_path)
+                print_summary(summary)
+                if summary.aborted:
+                    return EXIT_DISK_FULL
+            try:
+                for report in run_autopilots(args.db_path):
+                    print(f"Pilote automatique {report['strategy_id']} : "
+                          + (f"ERREUR {report['error']}" if "error" in report else
+                             f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
+            except Exception:
+                logger.exception("AUTOPILOT FAIL")           # n'arrête rien et ne change pas le code de sortie
+        if args.funds_only:
+            return 1 if summary.failures else 0
+        if other is None and (rest or args.skip_funds):
+            later = run_daily_predictions(rest, db_path=args.db_path)
+            print_summary(later)
+            summary.outcomes.extend(later.outcomes)
+            if later.aborted:
+                return EXIT_DISK_FULL
+        figures.update(summary_figures(summary, len(candidates)), completed=True)
     if not args.no_drift:
         drift_report = remeasure_stale_drift(candidates, db_path=args.db_path, limit=args.drift_limit)
         print(f"Dérive (PSI) : {drift_report['measured']} re-mesurée(s), {drift_report['failed']} échec(s), "

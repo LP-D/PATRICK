@@ -11,6 +11,12 @@ suivant (`predict.py`, `live_backfill=1`).
 Jour de marché fermé : `predict_live` lit la dernière barre de la série de
 l'actif lui-même. Pas de nouvelle barre = pas de nouvelle ligne (rien n'est
 réécrit), et le signal affiché garde la date de sa dernière séance.
+
+Une passe complète coûte une douzaine d'heures de processeur (~15 s par modèle : le pool de variables est reconstruit même quand aucune
+nouvelle barre n'est à écrire). L'app et la tâche de nuit en faisaient chacune une, l'une après l'autre ou en même temps (2026-11-20 : le
+serveur à 90 % du processeur, la base disputée par deux écrivains). Un marqueur partagé (`live_pass.json`, dossier maison) dit qui a
+fini une passe et quand, ou qui en fait une : une autre passe complète terminée depuis moins de `PATRICK_LIVE_REFRESH_MIN_GAP_H` heures
+(12 par défaut, 0 = toujours refaire), ou en cours dans un processus vivant, dispense de refaire les prédictions.
 """
 from __future__ import annotations
 
@@ -21,14 +27,18 @@ import logging
 import os
 import shutil
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from functools import partial
+from pathlib import Path
 
 from patrick import cache_eviction, paths, settings
-from patrick.clock import utc_today
+from patrick.clock import parse_utc, utc_now, utc_today
 from patrick.config.targets import is_macro_target
 from patrick.tracking import db as trackdb
+from patrick.tracking import jobs as jobs_db
 from patrick.tracking import relaunch_stats
 
 logger = logging.getLogger("patrick.live_refresh")
@@ -300,6 +310,117 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
     return summary
 
 
+# --- Marqueur de passe : une passe complète par jour, pas une par processus ---------------------------------------------
+
+PASS_STATE_FILE = "live_pass.json"
+ENV_MIN_GAP_H = "PATRICK_LIVE_REFRESH_MIN_GAP_H"
+DEFAULT_MIN_GAP_H = 12.0
+MAX_RUNNING_H = 24.0                 # une passe « en cours » plus vieille est une passe morte, quoi qu'en dise le numéro de processus
+_FIGURES = ("total", "done", "failed", "judged", "judged_right")
+_LAST_PASS = ("finished_at", "finished_source", *_FIGURES)      # les champs de la dernière passe TERMINÉE : gardés pendant la suivante
+
+
+def pass_state_path() -> Path:
+    return paths.home_dir() / PASS_STATE_FILE
+
+
+def read_pass_state() -> dict:
+    try:
+        data = json.loads(pass_state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_pass_state(state: dict) -> None:
+    """Écriture atomique (fichier temporaire puis remplacement) ; une panne est journalisée, jamais levée : le marqueur ne doit pas arrêter
+    une prédiction (sans lui, la passe suivante se fait, comme avant)."""
+    path = pass_state_path()
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        logger.warning("marqueur de passe live non écrit : %s", path, exc_info=True)
+
+
+def min_gap_hours() -> float:
+    try:
+        return max(0.0, float(os.environ.get(ENV_MIN_GAP_H, DEFAULT_MIN_GAP_H)))
+    except ValueError:
+        return DEFAULT_MIN_GAP_H
+
+
+def _pass_is_alive(state: dict, now: datetime) -> bool:
+    started = parse_utc(state["started_at"])
+    if (now - started).total_seconds() > MAX_RUNNING_H * 3600:
+        return False
+    return jobs_db.worker_process_alive(state.get("pid"), started.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+def recent_pass(now: datetime | None = None) -> dict | None:
+    """La passe d'un AUTRE processus qui rend celle-ci inutile : `{**marqueur, "why": "running"}` si elle tourne dans un processus vivant,
+    `{**marqueur, "why": "recent"}` si une passe complète a fini depuis moins de `min_gap_hours()` heures ; sinon `None` (il faut la faire).
+    Un marqueur illisible, absent ou incohérent ne dispense jamais de rien."""
+    gap = min_gap_hours()
+    if gap <= 0:
+        return None
+    state, now = read_pass_state(), now or utc_now()
+    try:
+        if state.get("running") and state.get("pid") != os.getpid() and _pass_is_alive(state, now):
+            return {**state, "why": "running"}
+        finished = state.get("finished_at")
+        if finished and 0 <= (now - parse_utc(finished)).total_seconds() < gap * 3600:
+            return {**state, "why": "recent"}
+    except (KeyError, TypeError, ValueError):
+        return None
+    return None
+
+
+def begin_pass(source: str) -> None:
+    previous = read_pass_state()
+    state = {k: previous[k] for k in _LAST_PASS if k in previous}
+    state.update(running=True, pid=os.getpid(), started_at=utc_now().isoformat(), source=source)
+    _write_pass_state(state)
+
+
+def end_pass(source: str, completed: bool, figures: dict) -> None:
+    """Une passe interrompue (disque plein, exception) ne compte pas : `finished_at` garde la valeur de la dernière passe terminée."""
+    previous = read_pass_state()
+    state = {k: previous[k] for k in _LAST_PASS if k in previous}
+    if completed:
+        state.update(finished_at=utc_now().isoformat(), finished_source=source, **{k: int(figures.get(k) or 0) for k in _FIGURES})
+    state.update(running=False, pid=os.getpid(), source=source)
+    _write_pass_state(state)
+
+
+@contextmanager
+def tracked_pass(source: str) -> Iterator[dict]:
+    """`with tracked_pass("nightly") as figures:` : marque la passe en cours, puis terminée si le corps a posé `figures["completed"] = True`
+    (avec les chiffres `total`, `done`, `failed`, `judged`, `judged_right`) ; une sortie par exception ou par retour anticipé ne la marque pas."""
+    begin_pass(source)
+    figures: dict = {"completed": False}
+    try:
+        yield figures
+    finally:
+        end_pass(source, bool(figures["completed"]), figures)
+
+
+def describe_pass(other: dict) -> str:
+    """La passe d'un autre processus, en une proposition de journal (`recent_pass`)."""
+    if other.get("why") == "running":
+        return f"en cours dans le processus {other.get('pid')} ({other.get('source')})"
+    return f"terminée à {other.get('finished_at')} ({other.get('finished_source')})"
+
+
+def summary_figures(summary: RunSummary, total: int) -> dict:
+    details = [o.detail or {} for o in summary.outcomes]
+    return {"total": total, "done": len(summary.outcomes), "failed": len(summary.failures),
+            "judged": sum(int(d.get("n_outcomes_updated") or 0) for d in details),
+            "judged_right": sum(int(d.get("n_outcomes_right") or 0) for d in details)}
+
+
 # --- Actualisation au lancement de l'app --------------------------------
 
 _state_lock = threading.Lock()
@@ -449,7 +570,22 @@ def refresh_due(last_day: date | None, today: date) -> bool:
     return last_day is None or today > last_day
 
 
+def _adopt_pass(other: dict) -> None:
+    """Une autre passe (tâche de nuit, ou l'app lancée avant) a déjà fait, ou fait, le travail : la page montre SES chiffres au lieu de
+    « 0 / 0 », et ce processus ne recalcule rien."""
+    with _state_lock:
+        if other.get("why") == "recent":
+            _state.update(running=False, finished_at=other.get("finished_at"), **{k: int(other.get(k) or 0) for k in _FIGURES})
+        else:
+            _state.update(running=False)
+
+
 def _refresh_once(db_path: str | None = None) -> None:
+    other = recent_pass()
+    if other is not None:
+        logger.info("passe live non refaite : une autre passe est %s ; %s=0 pour forcer.", describe_pass(other), ENV_MIN_GAP_H)
+        _adopt_pass(other)
+        return
     conn = trackdb.connect(db_path)
     try:
         candidates = find_predictable_candidates(conn)
@@ -471,13 +607,16 @@ def _refresh_once(db_path: str | None = None) -> None:
     if not first:
         first, rest = candidates, []             # aucun fonds concerné : tout, puis le cycle (l'ordre d'avant)
     try:
-        run_daily_predictions(first, db_path=db_path, on_item=_progress)
-        try:
-            run_autopilots(db_path)              # les signaux utiles aux fonds sont écrits : le pilote automatique les traite sans attendre le reste
-        except Exception:
-            logger.exception("autopilot cycle failed")
-        if rest:
-            run_daily_predictions(rest, db_path=db_path, on_item=_progress)
+        with tracked_pass("app") as figures:
+            aborted = getattr(run_daily_predictions(first, db_path=db_path, on_item=_progress), "aborted", None)
+            try:
+                run_autopilots(db_path)          # les signaux utiles aux fonds sont écrits : le pilote automatique les traite sans attendre le reste
+            except Exception:
+                logger.exception("autopilot cycle failed")
+            if rest and not aborted:
+                aborted = getattr(run_daily_predictions(rest, db_path=db_path, on_item=_progress), "aborted", None)
+            with _state_lock:
+                figures.update({k: _state[k] for k in _FIGURES}, completed=not aborted)      # un disque plein ne compte pas comme une passe faite
         refresh_pooled_signal(db_path)
         refresh_metric_panel(db_path)
         write_weekly_report(db_path)

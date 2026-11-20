@@ -161,5 +161,5 @@ def sensitivity(events: pd.DataFrame, source, base: StraddleParams) -> list[dict
             if table.empty:
                 continue
             r = table["ret"].to_numpy(float)
-            out.append({"maturity": maturity, "exit_ratio": ratio, "n": int(len(r)), "mean": float(r.mean()), "median": float(np.median(r)), "win": float((r > 0).mean())})
+            out.append({"maturity": maturity, "exit_ratio": ratio, "n": len(r), "mean": float(r.mean()), "median": float(np.median(r)), "win": float((r > 0).mean())})
     return out

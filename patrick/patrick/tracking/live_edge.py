@@ -88,7 +88,9 @@ def _wilson(hits: float, n: float, z: float = 1.96) -> tuple[float, float]:
 
 
 def _t_sf(t_stat: float, df: float) -> float:
-    from scipy import stats  # chargé à la demande : scipy coûte à l'import (démarrage de l'application)
+    from scipy import (
+        stats,  # chargé à la demande : scipy coûte à l'import (démarrage de l'application)
+    )
     return float(stats.t.sf(t_stat, df))
 
 

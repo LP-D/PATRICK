@@ -55,7 +55,7 @@ def window_stats(nav: pd.Series, start: pd.Timestamp, end: pd.Timestamp, cash_na
     vol = float(r.std() * np.sqrt(TRADING_DAYS)) if len(r) > 1 else float("nan")
     return {
         "start": nav.index[0].date().isoformat(), "years": round(years, 2), "cagr": float(cagr), "vol": vol,
-        "sharpe": float((r - cash_r).mean() * TRADING_DAYS / vol) if vol and vol == vol else float("nan"),
+        "sharpe": float((r - cash_r).mean() * TRADING_DAYS / vol) if vol and not np.isnan(vol) else float("nan"),
         "max_dd": mdd, "peak": peak.date().isoformat(), "trough": trough.date().isoformat(),
         "recovery": recovery.date().isoformat() if recovery is not None else None,
         "worst_day": float(r.min()) if len(r) else float("nan"), "best_day": float(r.max()) if len(r) else float("nan"),

@@ -9,6 +9,7 @@ import functools
 import json
 from collections.abc import Callable
 from dataclasses import fields
+from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -120,8 +121,8 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
 
     @app.post("/api/strategies/run")
     async def run(kind: str = Form(...), source: str = Form("file"), params: str = Form("{}"), tickers: str = Form(""), preset: str = Form(""),
-                  quarters: int = Form(40), fallback: bool = Form(False), events_file: UploadFile | None = File(default=None),
-                  prices_file: UploadFile | None = File(default=None)):
+                  quarters: int = Form(40), fallback: bool = Form(False), events_file: Annotated[UploadFile | None, File()] = None,
+                  prices_file: Annotated[UploadFile | None, File()] = None):
         events_data, prices_data = await _read(events_file), await _read(prices_file)
 
         @_guard

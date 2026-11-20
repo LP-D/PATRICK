@@ -193,7 +193,6 @@ def test_black_scholes_put_call_parity_and_atm_approximation():
 
 
 def test_straddle_wins_on_big_moves_and_loses_on_quiet_days():
-    big, calm = _synthetic_world(effect=0.0)[0], None
     dates = _every(30, start="2010-03-01")
     jumps_big = {d: 0.12 * (1 if i % 2 else -1) for i, d in enumerate(dates)}
     big_src = FakePrices({"AAA": _prices(31, jumps_big)})

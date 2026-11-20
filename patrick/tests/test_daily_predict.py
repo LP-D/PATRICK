@@ -372,3 +372,73 @@ def test_funds_only_and_skip_funds_exclude_each_other(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit):
         mod.main(["--db-path", db_path, "--funds-only", "--skip-funds"])
+
+
+# --- une passe complète par jour : la nuit ne refait pas ce que l'app vient de faire (2026-11-20) ----------------------
+
+def _app_finished_a_pass(hours_ago: float = 3) -> None:
+    import datetime as dt
+
+    from patrick import live_refresh
+
+    finished = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours_ago)).isoformat()
+    live_refresh.pass_state_path().write_text(json.dumps(
+        {"running": False, "finished_at": finished, "finished_source": "app", "total": 2, "done": 2}), encoding="utf-8")
+
+
+def test_the_night_skips_the_predictions_the_app_just_made_but_still_runs_the_fund_cycle_and_the_rest(tmp_path, monkeypatch, capsys):
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+    _app_finished_a_pass()
+
+    assert mod.main(["--db-path", db_path]) == 0
+
+    assert events == ["autopilot", "drift"]
+    assert "Prédictions non refaites" in capsys.readouterr().out
+
+
+def test_force_predictions_redoes_them_despite_a_recent_pass(tmp_path, monkeypatch):
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+    _app_finished_a_pass()
+
+    assert mod.main(["--db-path", db_path, "--force-predictions"]) == 0
+
+    assert events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB"]), "drift"]
+
+
+def test_an_old_app_pass_does_not_stop_the_night_and_the_night_leaves_its_marker(tmp_path, monkeypatch):
+    from patrick import live_refresh
+
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+    _app_finished_a_pass(hours_ago=20)
+
+    assert mod.main(["--db-path", db_path]) == 0
+
+    marker = live_refresh.read_pass_state()
+    assert events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB"]), "drift"]
+    assert marker["running"] is False and marker["finished_source"] == "nightly" and marker["total"] == 2
+    assert live_refresh.recent_pass() is not None                                # l'app lancée ce matin ne refera pas la passe
+
+
+def test_the_halves_of_a_pass_are_always_made_and_never_mark_a_complete_pass(tmp_path, monkeypatch):
+    from patrick import live_refresh
+
+    mod, db_path, events = _two_batches(tmp_path, monkeypatch)
+    _app_finished_a_pass()
+    before = live_refresh.read_pass_state()
+
+    assert mod.main(["--db-path", db_path, "--funds-only"]) == 0
+    assert mod.main(["--db-path", db_path, "--skip-funds"]) == 0
+
+    assert events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB"]), "drift"]
+    assert live_refresh.read_pass_state() == before
+
+
+def test_a_disk_full_night_is_not_marked_as_a_complete_pass(tmp_path, monkeypatch):
+    from patrick import live_refresh
+
+    mod, db_path, _ = _two_batches(tmp_path, monkeypatch)
+    monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: mod.RunSummary(aborted="Disque plein"))
+
+    assert mod.main(["--db-path", db_path]) == mod.EXIT_DISK_FULL
+
+    assert "finished_at" not in live_refresh.read_pass_state() and live_refresh.read_pass_state()["running"] is False

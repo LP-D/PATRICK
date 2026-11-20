@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -62,7 +63,7 @@ def _guard(fn):
     return wrapper
 
 
-async def _read_files(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+async def _read_files(files: list[UploadFile] | None) -> list[tuple[str, bytes]]:
     if not files or len(files) > MAX_FILES:
         raise HTTPException(status_code=400, detail=f"Importez entre 1 et {MAX_FILES} fichiers.")
     out = []
@@ -119,7 +120,7 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
         return store.list_datasets()
 
     @app.post("/api/placements/datasets")
-    async def create_dataset(name: str = Form(""), files: list[UploadFile] = File(default=[])):
+    async def create_dataset(name: str = Form(""), files: Annotated[list[UploadFile] | None, File()] = None):
         uploads = await _read_files(files)
 
         @_guard
@@ -133,7 +134,7 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
         return await run_in_threadpool(work)
 
     @app.post("/api/placements/datasets/{dataset_id}/files")
-    async def add_files(dataset_id: str, files: list[UploadFile] = File(default=[])):
+    async def add_files(dataset_id: str, files: Annotated[list[UploadFile] | None, File()] = None):
         uploads = await _read_files(files)
 
         @_guard

@@ -151,7 +151,7 @@ def walk_forward(R: pd.DataFrame, cash: str, fn: Callable[..., pd.Series], cap: 
     sr_wf = float(np.mean([x[1] for x in scores]))
     sr_1n = float(np.mean([x[1] for x in benchmarks]))
     years = n_oos / 12
-    se = lambda sr: float(np.sqrt((1 + 0.5 * sr ** 2) / years))  # noqa: E731 -- Lo (2002)
+    se = lambda sr: float(np.sqrt((1 + 0.5 * sr ** 2) / years))
     se_wf, se_1n = se(sr_wf), se(sr_1n)
     return {**base, "rdt": float(np.mean([x[0] for x in scores])), "sharpe": sr_wf,
             "rdt_1n": float(np.mean([x[0] for x in benchmarks])), "sharpe_1n": sr_1n, "se": se_wf, "se_1n": se_1n,

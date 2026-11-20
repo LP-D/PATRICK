@@ -50,7 +50,7 @@ def hist_windows(p: pd.Series, cash: pd.Series, months: int) -> dict:
     cum = (1 + p).rolling(months).apply(np.prod, raw=True).dropna() - 1
     cc = (1 + cash).rolling(months).apply(np.prod, raw=True).dropna() - 1
     ann = (1 + cum) ** (12 / months) - 1
-    return {"fenetres": int(len(cum)), "blocs_indep": round((len(cum) + months) / months, 1), "pire": float(ann.min()), "moyen": float(ann.mean()),
+    return {"fenetres": len(cum), "blocs_indep": round((len(cum) + months) / months, 1), "pire": float(ann.min()), "moyen": float(ann.mean()),
             "median": float(ann.median()), "meilleur": float(ann.max()), "part_negative": float((cum < 0).mean()),
             "part_sous_monetaire": float((cum < cc.reindex(cum.index)).mean())}
 
