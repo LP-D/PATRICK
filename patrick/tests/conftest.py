@@ -1,6 +1,8 @@
 """Shared pytest fixtures/helpers across `patrick/tests/`."""
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import pytest
 
@@ -17,6 +19,11 @@ def shutdown_loky_workers() -> None:
     executor = getattr(reusable_executor, "_executor", None)
     if executor is not None:
         executor.shutdown(wait=True, kill_workers=True)
+
+
+def pytest_configure(config):
+    # Les tests lancent la boucle du worker dans le processus de pytest : sans cela elle le passerait en priorité basse (`priority.lower_for_training`).
+    os.environ.setdefault("PATRICK_NO_PRIORITY", "1")
 
 
 def pytest_sessionfinish(session, exitstatus):

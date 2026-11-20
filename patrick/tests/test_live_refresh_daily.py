@@ -51,14 +51,16 @@ def test_progress_counts_the_signals_judged_and_the_ones_with_the_right_directio
     cand = live_refresh.PredictCandidate("^VIX", 5, "r1", 1, "a.joblib")
     monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [cand, cand])
     details = iter([{"n_outcomes_updated": 3, "n_outcomes_right": 2}, {"n_outcomes_updated": 1, "n_outcomes_right": 0}])
+    paces = []
     monkeypatch.setattr(live_refresh, "run_daily_predictions",
-                        lambda candidates, db_path=None, on_item=None: [
+                        lambda candidates, db_path=None, on_item=None, pace=None: paces.append(pace) or [
                             on_item(live_refresh.PredictOutcome(c, True, detail=next(details))) for c in candidates])
 
     live_refresh._refresh_once(db_path)
 
     status = live_refresh.refresh_status()
     assert (status["done"], status["judged"], status["judged_right"]) == (2, 4, 2)
+    assert paces and all(p is live_refresh.priority.wait_for_idle for p in paces)    # la passe de l'app laisse la main à la navigation
 
 
 def test_page_says_what_the_latest_refresh_judged_and_how_many_were_right(tmp_path, monkeypatch):
@@ -95,7 +97,7 @@ def test_autopilots_run_after_the_predictions_and_a_failure_never_breaks_the_ref
     order: list[str] = []
     monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [])
     monkeypatch.setattr(live_refresh, "run_daily_predictions",
-                        lambda candidates, db_path=None, on_item=None: order.append("predictions"))
+                        lambda candidates, db_path=None, on_item=None, pace=None: order.append("predictions"))
 
     def failing(path=None):
         order.append("autopilot")
@@ -205,7 +207,7 @@ def test_the_refresh_runs_the_fund_cycle_between_the_two_batches(monkeypatch, tm
     monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: first + rest)
     monkeypatch.setattr(live_refresh, "split_for_funds", lambda candidates, path=None: (first, rest))
     monkeypatch.setattr(live_refresh, "run_daily_predictions",
-                        lambda candidates, db_path=None, on_item=None: events.append(("predictions", [c.target for c in candidates])))
+                        lambda candidates, db_path=None, on_item=None, pace=None: events.append(("predictions", [c.target for c in candidates])))
     monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: events.append("autopilot") or [])
 
     live_refresh._refresh_once(db_path)
@@ -297,7 +299,7 @@ def test_a_finished_app_pass_leaves_its_marker_and_a_second_one_is_skipped(monke
     monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [cand])
     runs: list = []
     monkeypatch.setattr(live_refresh, "run_daily_predictions",
-                        lambda candidates, db_path=None, on_item=None: runs.append(1) or [
+                        lambda candidates, db_path=None, on_item=None, pace=None: runs.append(1) or [
                             on_item(live_refresh.PredictOutcome(c, True, detail={"n_outcomes_updated": 2, "n_outcomes_right": 1})) for c in candidates])
     monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: [])
     for name in ("refresh_pooled_signal", "refresh_metric_panel", "write_weekly_report"):

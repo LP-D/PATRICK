@@ -4,6 +4,7 @@
 {% from "_components.html" import status_badge, empty_state %}
 {% from "_pred_cell.html" import pred_cell, q with context %}
 {% set verdict_state = {'edge': 'ok', 'lean': 'warning', 'none': 'neutral', 'below': 'error', 'early': 'disabled'} %}
+{% include "_snapshot_line.html" %}
 
 {% macro class_name(key) %}{% if key == 'all' %}{{ t('eh_all') }}{% elif key == 'other' %}{{ t('eh_other') }}{% else %}{{ t('nav_' ~ key) }}{% endif %}{% endmacro %}
 
@@ -77,7 +78,7 @@
             {% for a in c.assets %}
             <tr>
                 <td><a href="/targets/{{ a.symbol | urlencode }}" title="{{ a.symbol }}">{{ a.symbol | iname }}</a></td>
-                <td>{{ pred_cell(a.cell, a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol) }}</td>
+                <td>{{ pred_cell(a.cell, a.symbol | iname, dm_significance_alpha, live_hit_rate_warning_threshold, t, a.symbol, '/fragments/pred-pop?kind=directional&symbol=' ~ (a.symbol | urlencode) ~ '&h=' ~ a.cell.horizon ~ '&dm_alpha=' ~ dm_significance_alpha) }}</td>
                 {% if a.edge %}
                 <td class="n">{{ (a.edge.hit_rate * 100) | round | int }} % <span class="hint">({{ a.edge.n }})</span></td>
                 <td>

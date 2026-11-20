@@ -1,0 +1,3 @@
+{# Ligne « tableau calculé le … » des fragments de /predictions : dit de quand date ce qu'on voit (le tableau est lu dans un instantané,
+   jamais recalculé à l'ouverture de la page) et si un nouveau calcul tourne. #}
+{% if snapshot_at %}<p class="hint snapshot-line">{{ t('pred_snapshot_at', d=snapshot_at) }}{% if snapshot_refreshing %} · {{ t('pred_snapshot_refreshing') }}{% endif %}</p>{% endif %}

@@ -6,6 +6,7 @@ web interface.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import html
 import json
@@ -30,7 +31,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from patrick import amplitude, live_refresh, paths
+from patrick import amplitude, live_refresh, paths, priority
 from patrick import settings as settings_store
 from patrick.clock import utc_now, utc_today
 from patrick.config import asset_classes, dl_profiles, training_profiles
@@ -79,6 +80,7 @@ from patrick.webapp import (
     nav_registry,
     news_routes,
     placements_routes,
+    predictions_snapshot,
     progress_steps,
     risk_routes,
     rl_compare,
@@ -140,6 +142,8 @@ app.add_middleware(security.LocalGuardMiddleware)
 app.add_middleware(i18n.LangMiddleware)
 # Pages de 100 à 700 Ko de HTML : compressées (le navigateur décompresse en quelques ms).
 app.add_middleware(GZipMiddleware, minimum_size=2000)
+# Chaque page demandée est notée : la passe live de l'app (des heures de calcul) attend qu'on ait fini de naviguer (`priority.wait_for_idle`).
+app.add_middleware(priority.NavigationActivity)
 
 
 class _RevalidatedStaticFiles(StaticFiles):
@@ -306,6 +310,9 @@ def _on_startup() -> None:
         alerts.start_background_refresh()
         live_refresh.start_background_refresh()
         market_regime.start_background_refresh()
+        if os.environ.get("PATRICK_LIVE_REFRESH", "1") != "0":
+            # Tableau de /predictions : calculé ici, en tâche de fond, s'il manque ou date de plus de 24 h -- jamais à l'ouverture de la page.
+            predictions_snapshot.get(live_running=True)
 
     if delay == 0:
         start_background_jobs()
@@ -1763,9 +1770,49 @@ def _market_view(asset_class: str, session: date, now: datetime, bar_final: bool
                       "updated": updated.astimezone().strftime("%Y-%m-%d %H:%M")}
     return {"class": asset_class, "session": session.isoformat(),
             "open_now": session_calendar.market_open_now(asset_class, now, last_session, updated),
+            # De quoi recalculer `open_now` à l'affichage : l'instantané de /predictions date de plusieurs heures (`_refresh_time_dependent`).
+            "open_args": (None if last_session is None else last_session.isoformat(), None if updated is None else updated.isoformat()),
             "bar_final": bar_final, "last_value": last_value,
             "price": None if ref_price is None else f"{ref_price:.6g}",
             "target": _approx_target_session(session, horizon, round_the_clock).isoformat()}
+
+
+def _refresh_time_dependent(overview: dict, now: datetime) -> dict:
+    """Remet à l'heure ce qui dépend de MAINTENANT dans un tableau lu depuis l'instantané (calculé il y a des heures) : marché ouvert /
+    fermé (vert / rouge) et « marché fermé » d'une case. Le reste du tableau est volontairement celui du dernier calcul."""
+    for group in overview["groups"]:
+        for asset in group["assets"]:
+            for cell in asset["cells"].values():
+                _refresh_cell(cell, now)
+    return overview
+
+
+def _refresh_cell(cell: dict, now: datetime) -> dict:
+    """`_refresh_time_dependent` pour une seule case (le popover servi à la demande)."""
+    if cell["ts"]:
+        with contextlib.suppress(ValueError):
+            cell["market_closed"] = date.fromisoformat(str(cell["ts"])[:10]) < now.date()
+    market = cell["market"]
+    if market:
+        last_session, updated = market["open_args"]
+        market["open_now"] = session_calendar.market_open_now(
+            market["class"], now, None if last_session is None else date.fromisoformat(last_session),
+            None if updated is None else datetime.fromisoformat(updated))
+    return cell
+
+
+def _snapshot_context(payload: dict) -> dict:
+    """Ce que la page dit de l'instantané qu'elle affiche : quand il a été calculé, et si un nouveau calcul est en cours."""
+    computed = datetime.fromisoformat(payload["computed_at"])
+    return {"snapshot_at": computed.astimezone().strftime("%Y-%m-%d %H:%M"),
+            "snapshot_refreshing": predictions_snapshot.status()["running"]}
+
+
+def _predictions_snapshot() -> dict | None:
+    """L'instantané de /predictions, jamais un calcul à l'ouverture : le dernier connu (même vieux), recalculé en tâche de fond ; sans
+    aucun instantané, attend quelques secondes le premier calcul (`predictions_snapshot.get`)."""
+    return predictions_snapshot.get(live_running=live_refresh.refresh_status()["running"],
+                                    wait_first=predictions_snapshot.FIRST_BUILD_WAIT_S)
 
 
 def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
@@ -1789,7 +1836,7 @@ def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[t
     return groups
 
 
-def _predictions_overview(kind: str = "directional", only: str | None = None) -> dict:
+def _predictions_overview(kind: str = "directional", only: str | None = None, db_path: str | None = None) -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
     grouping `/universe` already uses) plus every other trained asset of the
@@ -1818,7 +1865,7 @@ def _predictions_overview(kind: str = "directional", only: str | None = None) ->
     convention as `universe.html`'s own inline `{% set state = ... %}`, not
     precomputed here as HTML strings."""
     alpha = kind == "alpha"
-    conn = trackdb.connect()
+    conn = trackdb.connect(db_path)
     try:
         if alpha:
             alpha_labels = _alpha_run_labels(conn)
@@ -2022,6 +2069,52 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     )
 
 
+_CELL_INDEX: dict = {"key": None, "cells": {}}
+
+
+def _snapshot_cell(payload: dict, kind: str, symbol: str, horizon: int) -> dict | None:
+    """Une case de l'instantané, retrouvée par (kind, actif, horizon) ; l'index se refait quand l'instantané change."""
+    if _CELL_INDEX["key"] != payload["computed_at"]:
+        _CELL_INDEX["cells"] = {(k, a["symbol"], h): c for k in ("directional", "alpha") for g in payload[k]["groups"]
+                                for a in g["assets"] for h, c in a["cells"].items()}
+        _CELL_INDEX["key"] = payload["computed_at"]
+    return _CELL_INDEX["cells"].get((kind, symbol, horizon))
+
+
+@app.get("/fragments/pred-pop")
+def prediction_popover_fragment(request: Request, symbol: str, h: int, kind: str = "directional",
+                                dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
+    """Détail (popover) d'une case de /predictions, lu dans l'instantané : le tableau est trop grand pour embarquer le détail de chaque case
+    (500 actifs x 9 horizons), le navigateur le demande au survol."""
+    dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
+    kind = "alpha" if kind == "alpha" else "directional"
+    payload = predictions_snapshot.load()
+    cell = None if payload is None else _snapshot_cell(payload, kind, symbol, h)
+    if cell is None:
+        raise HTTPException(status_code=404, detail="Case inconnue")
+    _refresh_cell(cell, utc_now())               # l'état ouvert / fermé est celui de MAINTENANT, pas celui du calcul de l'instantané
+    return templates.TemplateResponse(
+        request, "_pred_pop.html",
+        {"cell": cell, "symbol": symbol, "dm_significance_alpha": dm_alpha,
+         "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD, **_i18n_context(request)})
+
+
+def _asset_overview_from_snapshot(symbol: str) -> dict | None:
+    """Les cases d'un actif lues dans l'instantané de /predictions (rien à recalculer à l'ouverture de sa fiche) ; None si l'instantané
+    n'existe pas encore ou ne connaît pas cet actif : la fiche calcule alors sa seule ligne."""
+    payload = predictions_snapshot.load()
+    if payload is None:
+        return None
+    overview = payload["directional"]
+    for group in overview["groups"]:
+        for asset in group["assets"]:
+            if asset["symbol"] == symbol:
+                single = {"groups": [{"group": group["group"], "assets": [asset]}], "horizons": overview["horizons"],
+                          "kind": overview["kind"], "n_alpha": overview["n_alpha"]}
+                return _refresh_time_dependent(single, utc_now())
+    return None
+
+
 @app.get("/fragments/asset-signals/{symbol}")
 def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """Fiche d'un actif : ses signaux du jour, un par horizon (même cellule et même bulle que `/predictions`), avec le champion de
@@ -2029,7 +2122,7 @@ def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trac
     if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
-    overview = _predictions_overview("directional", only=symbol)
+    overview = _asset_overview_from_snapshot(symbol) or _predictions_overview("directional", only=symbol)
     cells = overview["groups"][0]["assets"][0]["cells"] if overview["groups"] else {}
     conn = trackdb.connect()
     try:
@@ -2092,16 +2185,15 @@ def predictions_fragment(request: Request, dm_alpha: float = trackhistory.DM_SIG
     """Fragment HTML du tableau des prédictions (chargé par `static/lazy.js`)."""
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
     kind = "alpha" if kind == "alpha" else "directional"
-    conn = trackdb.connect()
-    try:
-        overview = memo.memoize(conn, ("predictions", kind, utc_today().isoformat()), lambda: _predictions_overview(kind))
-    finally:
-        conn.close()
+    payload = _predictions_snapshot()
+    if payload is None:
+        return templates.TemplateResponse(request, "_predictions_preparing.html", _i18n_context(request), status_code=202)
+    overview = _refresh_time_dependent(payload[kind], utc_now())
     return templates.TemplateResponse(
         request, "_predictions_body.html",
         {**overview, "live_hit_rate_window": trackhistory.LIVE_HIT_RATE_WINDOW,
          "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
-         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+         "dm_significance_alpha": dm_alpha, **_snapshot_context(payload), **_i18n_context(request)},
     )
 
 
@@ -2110,17 +2202,14 @@ def predictions_horizon_fragment(request: Request, dm_alpha: float = trackhistor
     """Vue « Par horizon » de `/predictions` : signaux du jour regroupés par horizon puis par classe d'actifs, et avantage live mesuré
     (`tracking/live_edge.py`). Réutilise le tableau mémorisé de `/fragments/predictions` (même clé) ; l'avantage a sa propre mémoïsation."""
     dm_alpha = _validate_alpha(dm_alpha, "dm_alpha")
-    day = utc_today().isoformat()
-    conn = trackdb.connect()
-    try:
-        overview = memo.memoize(conn, ("predictions", "directional", day), lambda: _predictions_overview("directional"))
-        edge = memo.memoize(conn, ("predictions-edge", day), lambda: live_edge_view.compute_edge(conn, overview))
-    finally:
-        conn.close()
+    payload = _predictions_snapshot()
+    if payload is None:
+        return templates.TemplateResponse(request, "_predictions_preparing.html", _i18n_context(request), status_code=202)
+    overview = _refresh_time_dependent(payload["directional"], utc_now())
     return templates.TemplateResponse(
         request, "_predictions_horizon.html",
-        {**live_edge_view.build(overview, edge), "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
-         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+        {**live_edge_view.build(overview, payload["edge"]), "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
+         "dm_significance_alpha": dm_alpha, **_snapshot_context(payload), **_i18n_context(request)},
     )
 
 

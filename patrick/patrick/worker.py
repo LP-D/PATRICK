@@ -24,7 +24,7 @@ import traceback
 
 import numpy as np
 
-from patrick import cache_eviction
+from patrick import cache_eviction, priority
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.features import pool_cache
@@ -466,6 +466,8 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
     the process was killed from outside."""
     pid = os.getpid()
     db_path = trackdb.default_db_path()
+    # L'entraînement passe après la navigation dans l'app : priorité basse (processeur et disque), héritée par les processus de calcul qu'il lance.
+    priority_set = priority.lower_for_training()
     log = _open_worker_log(db_path, pid)
     old_stdout, old_stderr = sys.stdout, sys.stderr
     faulthandler_was_enabled = faulthandler.is_enabled()
@@ -473,6 +475,7 @@ def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> 
     faulthandler.enable(file=log, all_threads=True)  # native crashes (C extensions) too
     heartbeat = _HeartbeatThread(db_path, pid)
     heartbeat.start()
+    print(f"[WORKER] priority: {priority_set or 'unchanged'}")
     try:
         _worker_loop(pid, db_path, poll_interval, idle_timeout)
     except BaseException:

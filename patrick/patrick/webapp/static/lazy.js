@@ -11,8 +11,21 @@
         if (lang && url.indexOf("lang=") === -1) url += (url.indexOf("?") === -1 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
         el.setAttribute("aria-busy", "true");
         fetch(url, { headers: { "Accept": "text/html" }, credentials: "same-origin" })
-            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (r) {
+                if (!r.ok) throw new Error(r.status);
+                // 202 : le serveur prépare encore ce bloc (premier calcul du tableau de /predictions) -- on montre son message
+                // et on redemande toutes les 10 s, sans passer par le bouton « Réessayer ».
+                if (r.status === 202) {
+                    return r.text().then(function (html) {
+                        el.innerHTML = html;
+                        setTimeout(function () { load(el); }, 10000);
+                        return null;
+                    });
+                }
+                return r.text();
+            })
             .then(function (html) {
+                if (html === null) return;
                 el.innerHTML = html;
                 el.removeAttribute("data-lazy-url");
                 el.setAttribute("aria-busy", "false");
