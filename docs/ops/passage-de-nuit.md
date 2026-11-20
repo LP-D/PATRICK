@@ -51,6 +51,26 @@ Limite connue : seule la racine de données est mesurée. Un composant déplacé
 (`PATRICK_FEATURE_CACHE_ROOT`, `PATRICK_STORE_ROOT`) sur un autre disque n'est pas surveillé, mais une erreur « disque plein » y arrête
 quand même la boucle.
 
+## Une passe de prédictions par jour, pas une par processus (20/11/2026)
+
+Une passe complète (les ~3 000 prédictions live) coûte une douzaine d'heures de processeur : le pool de variables est reconstruit (~15 s par
+modèle) même quand aucune nouvelle barre n'est à écrire. L'app (au lancement, puis une fois par jour UTC) et la tâche `daily_predict.py` en
+faisaient chacune une : le serveur restait à ~90 % du processeur, la base disputée par deux écrivains (journal : `serve-stable.log`).
+
+Un marqueur partagé, `~/.patrick/live_pass.json` (qui, quand, avec quels chiffres), dit qui a terminé une passe complète ou qui en fait une :
+
+- l'app ne refait pas la passe si une autre, terminée depuis moins de **12 h** ou en cours dans un processus vivant, existe ; la page
+  Prédictions montre alors les chiffres de cette passe-là. Le journal du serveur dit `passe live non refaite` ;
+- `daily_predict.py` (sans `--funds-only` ni `--skip-funds`) fait de même et affiche `Prédictions non refaites`, **mais le cycle du pilote
+  automatique, la dérive, l'AUC regroupée, le rattrapage et le rapport tournent comme d'habitude**. `--force-predictions` les refait quand
+  même ;
+- une passe interrompue (disque plein, exception, tâche tuée) ne compte pas : le marqueur « en cours » d'un processus mort est ignoré, et
+  `finished_at` garde la dernière passe terminée.
+
+Réglage : `PATRICK_LIVE_REFRESH_MIN_GAP_H` (12 par défaut ; `0` = toujours refaire, comme avant). Limite : les deux moitiés
+`--funds-only` / `--skip-funds` de la tâche `Patrick-Nightly` ne marquent pas de passe complète ; un PC qui utilise ce découpage garde la passe
+de l'app au lancement.
+
 ## Ce que Windows peut et ne peut pas faire
 
 | Fin choisie (`-End`) | Le PC se rallume tout seul demain ? |

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+import os
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from test_fund_selection import World
@@ -211,3 +212,135 @@ def test_the_refresh_runs_the_fund_cycle_between_the_two_batches(monkeypatch, tm
 
     assert events == [("predictions", ["AAA"]), "autopilot", ("predictions", ["BBB", "CCC"])]
     assert live_refresh.refresh_status()["total"] == 3 and live_refresh.refresh_status()["running"] is False
+
+
+# --- une passe complète par jour : l'app et la tâche de nuit ne refont pas le travail l'une de l'autre ------------------
+
+def _write_pass(**fields) -> None:
+    live_refresh.pass_state_path().write_text(json.dumps(fields), encoding="utf-8")
+
+
+def _hours_ago(hours: float) -> str:
+    return (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
+
+
+def test_a_complete_pass_finished_a_few_hours_ago_makes_a_new_one_pointless():
+    _write_pass(running=False, finished_at=_hours_ago(3), finished_source="nightly", total=10, done=10)
+
+    other = live_refresh.recent_pass()
+
+    assert other is not None and other["why"] == "recent" and other["finished_source"] == "nightly"
+
+
+def test_an_old_pass_a_missing_marker_or_a_broken_one_never_dispense_from_predicting(monkeypatch):
+    assert live_refresh.recent_pass() is None                                    # aucun marqueur : le premier lancement prédit
+    _write_pass(running=False, finished_at=_hours_ago(13))
+    assert live_refresh.recent_pass() is None                                    # au-delà de 12 h
+    live_refresh.pass_state_path().write_text("{pas du json", encoding="utf-8")
+    assert live_refresh.recent_pass() is None
+    _write_pass(running=False, finished_at="pas une date")
+    assert live_refresh.recent_pass() is None
+    _write_pass(running=False, finished_at=_hours_ago(-3))                       # horloge qui recule : on ne se fie pas à la date
+    assert live_refresh.recent_pass() is None
+
+
+def test_the_gap_is_a_setting_and_zero_always_predicts(monkeypatch):
+    _write_pass(running=False, finished_at=_hours_ago(3))
+    monkeypatch.setenv(live_refresh.ENV_MIN_GAP_H, "2")
+    assert live_refresh.recent_pass() is None                                    # 3 h > 2 h
+    monkeypatch.setenv(live_refresh.ENV_MIN_GAP_H, "0")
+    assert live_refresh.recent_pass() is None                                    # 0 : toujours refaire
+    monkeypatch.setenv(live_refresh.ENV_MIN_GAP_H, "n'importe quoi")
+    assert live_refresh.recent_pass() is not None                                # valeur illisible : le défaut (12 h)
+
+
+def test_a_pass_running_in_another_live_process_is_waited_for_never_doubled(monkeypatch):
+    other_pid = os.getpid() + 1
+    _write_pass(running=True, pid=other_pid, started_at=_hours_ago(2), source="nightly")
+    monkeypatch.setattr(live_refresh.jobs_db, "worker_process_alive", lambda pid, started_at=None: pid == other_pid)
+
+    assert live_refresh.recent_pass()["why"] == "running"
+
+    monkeypatch.setattr(live_refresh.jobs_db, "worker_process_alive", lambda pid, started_at=None: False)
+    assert live_refresh.recent_pass() is None                                    # processus mort (tâche tuée) : on la refait
+
+
+def test_a_running_marker_of_this_very_process_or_older_than_a_day_is_ignored(monkeypatch):
+    monkeypatch.setattr(live_refresh.jobs_db, "worker_process_alive", lambda pid, started_at=None: True)
+    _write_pass(running=True, pid=os.getpid(), started_at=_hours_ago(1))
+    assert live_refresh.recent_pass() is None
+    _write_pass(running=True, pid=os.getpid() + 1, started_at=_hours_ago(live_refresh.MAX_RUNNING_H + 1))
+    assert live_refresh.recent_pass() is None                                    # numéro de processus réutilisé après un redémarrage du PC
+
+
+def test_the_app_does_not_redo_a_pass_the_nightly_task_just_finished_and_shows_its_figures(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    _write_pass(running=False, finished_at=_hours_ago(3), finished_source="nightly", total=2958, done=2950, failed=8, judged=40, judged_right=24)
+    calls: list = []
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: calls.append("candidates") or [])
+    monkeypatch.setattr(live_refresh, "run_daily_predictions", lambda *a, **k: calls.append("predictions"))
+    monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: calls.append("autopilot") or [])
+
+    live_refresh._refresh_once(db_path)
+
+    status = live_refresh.refresh_status()
+    assert calls == []
+    assert (status["running"], status["total"], status["done"], status["failed"], status["judged"], status["judged_right"]) == (False, 2958, 2950, 8, 40, 24)
+    assert status["finished_at"] == live_refresh.read_pass_state()["finished_at"]
+
+
+def test_a_finished_app_pass_leaves_its_marker_and_a_second_one_is_skipped(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    cand = live_refresh.PredictCandidate("^VIX", 5, "r1", 1, "a.joblib")
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [cand])
+    runs: list = []
+    monkeypatch.setattr(live_refresh, "run_daily_predictions",
+                        lambda candidates, db_path=None, on_item=None: runs.append(1) or [
+                            on_item(live_refresh.PredictOutcome(c, True, detail={"n_outcomes_updated": 2, "n_outcomes_right": 1})) for c in candidates])
+    monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: [])
+    for name in ("refresh_pooled_signal", "refresh_metric_panel", "write_weekly_report"):
+        monkeypatch.setattr(live_refresh, name, lambda path=None: None)
+
+    live_refresh._refresh_once(db_path)
+    marker = live_refresh.read_pass_state()
+    live_refresh._refresh_once(db_path)
+
+    assert runs == [1]                                                           # la seconde passe n'a rien refait
+    assert marker["running"] is False and marker["finished_source"] == "app" and marker["pid"] == os.getpid()
+    assert (marker["total"], marker["done"], marker["judged"], marker["judged_right"]) == (1, 1, 2, 1)
+
+
+def test_an_aborted_or_crashed_pass_does_not_count_as_done(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    cand = live_refresh.PredictCandidate("^VIX", 5, "r1", 1, "a.joblib")
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [cand])
+    monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: [])
+    monkeypatch.setattr(live_refresh, "run_daily_predictions", lambda *a, **k: live_refresh.RunSummary(aborted="Disque plein"))
+
+    live_refresh._refresh_once(db_path)
+    assert "finished_at" not in live_refresh.read_pass_state() and live_refresh.recent_pass() is None      # disque plein : à refaire
+
+    def crash(*a, **k):
+        raise RuntimeError("réseau coupé")
+    monkeypatch.setattr(live_refresh, "run_daily_predictions", crash)
+    with pytest.raises(RuntimeError):
+        live_refresh._refresh_once(db_path)
+    assert live_refresh.read_pass_state()["running"] is False and live_refresh.recent_pass() is None        # plantage : pas bloquée « en cours »
+
+
+def test_an_aborted_pass_keeps_the_previous_completed_one_for_the_page(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "p.db")
+    trackdb.connect(db_path).close()
+    old = _hours_ago(20)
+    _write_pass(running=False, finished_at=old, finished_source="nightly", total=5, done=5)
+    cand = live_refresh.PredictCandidate("^VIX", 5, "r1", 1, "a.joblib")
+    monkeypatch.setattr(live_refresh, "find_predictable_candidates", lambda conn: [cand])
+    monkeypatch.setattr(live_refresh, "run_autopilots", lambda path=None: [])
+    monkeypatch.setattr(live_refresh, "run_daily_predictions", lambda *a, **k: live_refresh.RunSummary(aborted="Disque plein"))
+
+    live_refresh._refresh_once(db_path)
+
+    assert live_refresh.read_pass_state()["finished_at"] == old
