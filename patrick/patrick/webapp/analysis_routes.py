@@ -65,6 +65,8 @@ def _cached(name: str, fn):
 
 
 def _forget(name: str) -> None:
+    if name == "live_board":                                  # « Résultat réel » est une vue persistante : on la supprime, la page suivante la recalcule
+        cached_views.LIVE_BOARD.forget()
     with _cache_lock:
         for key in [k for k in _cache if k[0] == name]:
             del _cache[key]
@@ -435,6 +437,7 @@ def register(app: FastAPI, templates, context) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         _forget("models_overview")
+        _forget("live_board")                                   # le champion a changé : le résultat réel se relit tout de suite
         return JSONResponse(result)
 
     @app.get("/derive")

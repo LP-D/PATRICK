@@ -3319,6 +3319,8 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
   .run-toast, .is-revealing, .is-revealing > *, details.adv[open] > :not(summary) { animation: none !important; }
   [data-elastic] > * { translate: none !important; }
   .theme-toggle > span, .notify-toggle > span { filter: none !important; }
+  .refresh-bar-fill { transition: none; }
+  .refresh-bar-indeterminate .refresh-bar-fill { animation: none; width: 100%; opacity: .4; }
 }
 
 /* ---- Ecrans cote a cote (/split) ---------------------------------------------------------------------------------- */
@@ -3458,4 +3460,3 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .refresh-bar-done .refresh-bar-fill { background: var(--pos); }
 .refresh-bar-reload { margin-top: 8px; }
 @keyframes refresh-bar-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
-@media (prefers-reduced-motion: reduce) { .refresh-bar-fill { transition: none; } .refresh-bar-indeterminate .refresh-bar-fill { animation: none; width: 100%; opacity: .4; } }

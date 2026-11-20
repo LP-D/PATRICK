@@ -573,10 +573,10 @@ def refresh_predictions_snapshot(db_path: str | None = None, background: bool = 
 
         if background:
             predictions_snapshot.request_refresh(db_path)
-            cached_views.request_all_refresh(db_path)            # les autres pages lourdes (accueil, fonds, analyse...) : vues en cache, une par une
+            cached_views.request_all_refresh(db_path, force=True)  # les autres pages lourdes (accueil, fonds, analyse...) : vues en cache, une par une
         else:
             predictions_snapshot.refresh_if_stale_sync(db_path)
-            cached_views.refresh_all_sync(db_path)
+            cached_views.refresh_all_sync(db_path, force=True)
     except Exception:
         logger.exception("instantanés des pages non recalculés")
 

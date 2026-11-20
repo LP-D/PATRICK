@@ -74,19 +74,24 @@ def test_synthesis_page_renders_with_real_data(tmp_path, monkeypatch):
     assert "min 10" not in resp.text
 
 
-def test_synthesis_page_no_page_cache_reflects_new_run(tmp_path, monkeypatch):
-    """B4 -- no caching layer: a run added between two requests must show up
-    on the very next load, no restart/invalidation needed."""
-    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
-    db.connect(str(tmp_path / "patrick.db")).close()
+def test_synthesis_page_reads_its_cache_and_reflects_a_new_run_once_refreshed(tmp_path, monkeypatch):
+    """B4 -- les tableaux de la page sont lus dans un cache persistant (`webapp/cached_views.py`), jamais calculés à l'ouverture : un run ajouté
+    entre deux requêtes apparaît quand les vues sont rafraîchies (nuit, fin d'une actualisation, recalcul de fond), sans redémarrage."""
+    from patrick.webapp import cached_views
+
+    path = str(tmp_path / "patrick.db")
+    monkeypatch.setenv("PATRICK_DB_PATH", path)
+    db.connect(path).close()
     client = TestClient(app)
     first = client.get("/")
     assert "0.0150" not in first.text
 
-    conn = db.connect(str(tmp_path / "patrick.db"))
+    conn = db.connect(path)
     _seed_run_with_predictions(conn)
     conn.close()
 
+    assert "0.0150" not in client.get("/").text                    # servi tout de suite depuis le cache : rien n'est calculé à l'ouverture
+    cached_views.refresh_all_sync(path)                             # ce que font la nuit et la fin d'une actualisation
     second = client.get("/")
     assert "0.0150" in second.text
 

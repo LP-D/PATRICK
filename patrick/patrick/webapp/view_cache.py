@@ -204,6 +204,15 @@ class CachedView:
             with contextlib.suppress(OSError):
                 os.remove(tmp)
 
+    def forget(self, key: Hashable = None, db_path: str | None = None) -> None:
+        """Supprime l'instantané : la prochaine lecture recalcule et la page attend (une promotion de modèle, un test)."""
+        path = self.path(key, db_path)
+        with contextlib.suppress(OSError):
+            os.remove(path)
+        with _lock:
+            for cache_key in [k for k in _loaded if k.startswith(f"{path}|")]:
+                del _loaded[cache_key]
+
     # ------------------------------------------------------------------ état et avancement
 
     def _state(self, key: Hashable, db_path: str | None) -> dict:

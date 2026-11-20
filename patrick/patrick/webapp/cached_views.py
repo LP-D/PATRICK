@@ -210,27 +210,32 @@ DEFAULT_KEYS = ((HOME_SUMMARY, None), (HOME_OVERVIEW, 0.10), (CLASS_STATS, None)
 logger = logging.getLogger("patrick.cached_views")
 
 
-def refresh_all_sync(db_path: str | None = None) -> list[str]:
+def refresh_all_sync(db_path: str | None = None, force: bool = False) -> list[str]:
     """Tâche de nuit : recalcule, dans CE processus et l'une après l'autre, les vues par défaut qui manquent, sont trop vieilles ou dont la base a
-    bougé. Une vue en échec est journalisée et n'arrête pas les suivantes. Renvoie les noms des vues recalculées."""
+    bougé (`force` : toutes, même si rien n'a bougé : des fichiers que le signal de changement ne voit pas, comme les signaux regroupés, viennent
+    d'être réécrits). Une vue en échec est journalisée et n'arrête pas les suivantes. Renvoie les noms des vues recalculées."""
     done = []
     for view, key in DEFAULT_KEYS:
         try:
-            if view.refresh_if_stale_sync(key, db_path):
+            if force:
+                view.refresh_sync(key, db_path)
+                done.append(view.name)
+            elif view.refresh_if_stale_sync(key, db_path):
                 done.append(view.name)
         except Exception:
             logger.exception("vue %s non recalculée", view.name)
     return done
 
 
-def request_all_refresh(db_path: str | None = None) -> None:
-    """Fin d'une actualisation live (dans l'app) : relance, en tâche de fond et une par une, les vues par défaut que la nouvelle base rend périmées."""
+def request_all_refresh(db_path: str | None = None, force: bool = False) -> None:
+    """Fin d'une actualisation live (dans l'app) : relance, en tâche de fond et une par une, les vues par défaut que la nouvelle base rend périmées
+    (`force` : toutes, voir `refresh_all_sync`)."""
     def run() -> None:
         for view, key in DEFAULT_KEYS:
             try:
                 soft, hard = view.markers(db_path)
                 snap = view.load(key, db_path)
-                if snap is not None and snap.marker == soft and snap.hard_marker == hard:
+                if not force and snap is not None and snap.marker == soft and snap.hard_marker == hard:
                     continue
                 view.request_refresh(key, db_path, rerun_if_running=False)
                 deadline = time.monotonic() + 1800

@@ -206,7 +206,7 @@ script below (no flash), otherwise the OS preference applies.
                 {# Barre de chargement : où en est l'actualisation des données de CETTE page (`refresh_views`, posé par les routes qui lisent un cache). #}
                 {% if refresh_views %}
                 <div class="refresh-bar" id="refresh-bar" data-views="{{ refresh_views | join(',') }}"{% if refresh_live %} data-live="1"{% endif %}{% if auto_reload %} data-auto-reload="1"{% endif %}
-                     data-t-title="{{ t('rb_title') }}" data-t-live="{{ t('rb_live') }}" data-t-done="{{ t('rb_done') }}" hidden>
+                     data-t-title="{{ t('rb_title', v='{v}') }}" data-t-live="{{ t('rb_live', d='{d}', n='{n}') }}" data-t-done="{{ t('rb_done') }}" hidden>
                     <div class="refresh-bar-text"><span class="refresh-bar-label"></span><span class="refresh-bar-pct"></span></div>
                     <div class="refresh-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="refresh-bar-fill"></div></div>
                     <button type="button" class="btn-secondary refresh-bar-reload" hidden>{{ t('rb_reload') }}</button>
