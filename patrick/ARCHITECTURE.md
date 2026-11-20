@@ -118,6 +118,10 @@ Sous `patrick/patrick/` :
 | `earnings/` | Événements de résultats : parseur de newsletter, résolution nom → ligne (alias, Yahoo, confirmation), calendrier BMO/AMC et jour de réaction J0, event study (modèles marché / ajusté / facteurs / secteur, AR, CAR, BHAR, overnight/intraday, liquidité), tests (BMP, Patell, Kolari-Pynnönen, Corrado, signes, bootstrap par blocs), 54 cartes d'études `studies/` cachées par hash, registre FDR, modèle prédictif en panel, score composite, instantanés quotidiens. Tables `earn_*` créées par `store.ensure_schema` (jamais `db.migrate()`) ; page `/resultats`, commande `patrick earnings`, ADR 0016, `docs/ops/evenements-resultats.md`. |
 | `tracking/black_litterman.py` | Black-Litterman v2 sur P(hausse) calibrées (`prediction.p_up_calibrated`, migration 0037) ; section de `/portfolio`. |
 | `webapp/security.py` | Garde globale des requêtes : hôte local obligatoire, requêtes venues d'un autre site refusées (CSRF, DNS rebinding). |
+| `tracking/live_edge.py`, `webapp/live_edge_view.py` | Avantage prédictif des signaux live par classe x horizon (hors barres reconstituées, moyenné par date, observations indépendantes = jours / horizon, BH, règle naïve) ; vue « Par horizon » de `/predictions` (ADR 0025). |
+| `webapp/workbench_routes.py` | `/api/asset-index` (recherche d'actifs de la palette Ctrl K) et `/split` (écrans côte à côte : volets en iframes, mode intégré `data-embed`, état dans l'adresse). |
+| `placements/` | Simulation de placements à partir de VL importées (port du notebook PEE) : `loader` (CSV/Excel), `store` (jeux de données sous `<racine>/placements`), `stats`, `optimize` (4 objectifs, walk-forward vs 1/N), `scenarios` (5 méthodes, historique et prudent), `service`, `jobs` ; page `/placements`, API `/api/placements/*`. |
+| `strategylab/` | Laboratoire de stratégies autour d'événements : `events`, `prices`, `core` (rendements par jour de sortie, bootstrap, validation chronologique, verdict), `straddle` (Black-Scholes), `service`, `jobs` ; page `/strategies`, API `/api/strategies/*`. |
 
 ## 4. Le pipeline walk-forward en détail
 
