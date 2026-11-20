@@ -1435,6 +1435,38 @@ def fund_autopilot_tiers_cmd(
         typer.echo(f"  {r['name']:<32} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
 
 
+@fund_app.command(name="real-setup")
+def fund_real_setup_cmd(
+    create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les fonds réels et active leur pilote ; sans cette option : aperçu"),
+    only: list[str] = typer.Option(None, "--only", help="Seulement ce fonds : PEA ou CTO (répétable ; défaut : les deux)"),  # noqa: B008 -- liste : valeur par défaut de typer
+    capital: float = typer.Option(5_000.0, "--capital", help="Capital de chaque fonds, en euros"),
+    fee: float = typer.Option(1.0, "--fee", help="Frais forfaitaires par ordre, en euros, tout compris"),
+    min_position: float = typer.Option(200.0, "--min-position", help="Taille minimale d'une position en euros (0 : aucune)"),
+    max_models: int = typer.Option(60, "--max-models", help="Nombre maximal de modèles examinés par fonds (0 : aucun plafond)"),
+    tier: str = typer.Option("auc", "--tier", help="Niveau de sélection (défaut auc : AUC de direction au-dessus du hasard, testés en premier)"),
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Les deux fonds réels (ADR 0026) : `Systematic PEA` et `Systematic CTO`, 5 000 € et 1 € par ordre, qui suivent tous les signaux.
+    Le PEA ne prend que des actions de l'UE/EEE en euro, à l'achat ; le CTO prend tout l'univers, vente à découvert comprise."""
+    from patrick.fund import real_funds
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        rows = real_funds.setup(conn, today=_fund_day(today), only=only or None, capital=capital, fee_flat=fee, tier=tier, gross=gross,
+                                max_models=max_models or None, min_position=min_position or None, dry_run=not create)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(("Fonds réels" if create else "Aperçu (rien n'est écrit)") + f" — niveau {tier}, {capital:,.0f} €, {fee:g} € par ordre :".replace(",", " "))
+    for r in rows:
+        state = "créé" if r["created"] else ("repris" + (", capital mis à jour" if r["capital_changed"] else "") if r["strategy_id"] else "à créer")
+        typer.echo(f"  {r['name']:<20} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
+
+
 @fund_app.command(name="rule-roll")
 def fund_rule_roll_cmd(today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)")) -> None:
     """Remplace par le champion en titre le modèle des règles qui le suivent, quand un meilleur modèle a été entraîné."""

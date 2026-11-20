@@ -299,3 +299,18 @@ def test_the_loser_is_saved_in_the_data_root_backups_when_no_folder_is_given(pcs
 
     assert out["replaced"] == [sid]
     assert len(list(paths.backups_dir().glob("*.json"))) == 1
+
+
+def test_a_real_fund_keeps_its_category_and_flat_fee_when_the_other_pc_receives_it(tmp_path):
+    """ADR 0026 : `category` et `fee_flat` sont des colonnes de la stratégie, elles voyagent avec elle ; un fonds quant garde son défaut."""
+    a, b = PC(tmp_path, "a"), PC(tmp_path, "b")
+    real = store.create_strategy(a.conn, "Systematic PEA", "PEA", 5_000, "2026-01-05", category="real", fee_flat=1.0)
+    quant = a.strategy("Quant")
+
+    report = b.merge(a)
+
+    assert sorted(report["imported"]) == sorted([real, quant])
+    got = {s["name"]: s for s in store.list_strategies(b.conn)}
+    assert (got["Systematic PEA"]["category"], got["Systematic PEA"]["fee_flat"]) == ("real", 1.0)
+    assert (got["Quant"]["category"], got["Quant"]["fee_flat"]) == ("quant", None)
+    assert got["Systematic PEA"]["strategy_id"] == real and got["Quant"]["strategy_id"] == quant

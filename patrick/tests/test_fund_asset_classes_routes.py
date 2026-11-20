@@ -52,7 +52,7 @@ def test_the_quick_creation_offers_every_selection_level(client):
     html = client.get("/fonds").text
 
     select = html.split('<select name="tier" data-cls-field>', 1)[1].split("</select>", 1)[0]
-    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["bh", "dm", "large", "strict"]
+    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["auc", "bh", "dm", "large", "strict"]
 
 
 def test_the_class_list_shows_the_strategy_each_class_already_has(client):

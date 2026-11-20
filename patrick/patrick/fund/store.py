@@ -14,10 +14,12 @@ from patrick.clock import utc_today
 from patrick.wealth.ledger import PEA_DEPOSIT_CAP_EUR
 
 WRAPPERS = ("PEA", "CTO")
+CATEGORIES = ("quant", "real")        # fonds fictifs d'étude (capital virtuel) / fonds fictifs « réels » (PEA et CTO d'un particulier), ADR 0026
+MAX_FLAT_FEE = 100.0                  # € par ordre : au-delà, c'est une faute de saisie
 ACTIONS = ("open", "increase", "reduce", "close", "modify")
 INSTRUMENT_KINDS = ("equity", "etf", "future", "cfd")
 _STRATEGY_COLUMNS = ("strategy_id", "name", "wrapper", "base_currency", "initial_capital", "opened_on",
-                     "archived", "created_at")
+                     "archived", "created_at", "category", "fee_flat")
 _ORDER_COLUMNS = ("order_id", "strategy_id", "position_id", "ts", "action", "instrument_kind", "symbol", "side",
                   "quantity", "price", "price_source", "currency", "fx_rate", "fees", "fees_source", "fee_seed",
                   "spec_json", "note")
@@ -56,7 +58,8 @@ def _iso(value) -> str:
 # -------------------------------------------------------------- strategies
 
 def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_capital, opened_on,
-                    base_currency: str = "EUR") -> str:
+                    base_currency: str = "EUR", category: str = "quant", fee_flat=None) -> str:
+    """`category` : `quant` ou `real` (ADR 0026). `fee_flat` : frais forfaitaire par ordre en euros (None : frais estimés)."""
     if name is not None and not isinstance(name, str):
         raise FundError("nom de stratégie invalide : texte attendu")
     name = (name or "").strip()
@@ -64,16 +67,32 @@ def create_strategy(conn: sqlite3.Connection, name: str, wrapper: str, initial_c
         raise FundError("nom de stratégie manquant")
     if wrapper not in WRAPPERS:
         raise FundError(f"enveloppe inconnue : {wrapper!r} ({WRAPPERS})")
+    if category not in CATEGORIES:
+        raise FundError(f"catégorie inconnue : {category!r} ({CATEGORIES})")
     capital = _check_capital(initial_capital, wrapper)
+    flat = check_flat_fee(fee_flat)
     opened = _iso(opened_on)
     if opened > utc_today().isoformat():
         raise FundError("la date d'ouverture ne peut pas être dans le futur")
     strategy_id = new_id("str")
     with conn:
         conn.execute("INSERT INTO fund_strategy (strategy_id, name, wrapper, base_currency, initial_capital, "
-                     f"opened_on, updated_at) VALUES (?, ?, ?, ?, ?, ?, {_NOW})",
-                     (strategy_id, name[:120], wrapper, (base_currency or "EUR").upper()[:3], capital, opened))
+                     f"opened_on, category, fee_flat, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, {_NOW})",
+                     (strategy_id, name[:120], wrapper, (base_currency or "EUR").upper()[:3], capital, opened, category, flat))
     return strategy_id
+
+
+def check_flat_fee(value) -> float | None:
+    """Frais forfaitaire par ordre : None (frais estimés) ou un nombre fini entre 0 et `MAX_FLAT_FEE` euros."""
+    if value is None or value == "":
+        return None
+    try:
+        fee = float(str(value).replace(",", ".").replace(" ", ""))
+    except ValueError as exc:
+        raise FundError(f"frais forfaitaires invalides : {value!r}") from exc
+    if isinstance(value, bool) or not math.isfinite(fee) or not 0 <= fee <= MAX_FLAT_FEE:
+        raise FundError(f"frais forfaitaires invalides : entre 0 et {MAX_FLAT_FEE:g} € par ordre attendu ({value!r})")
+    return fee
 
 
 def _check_capital(initial_capital, wrapper: str) -> float:

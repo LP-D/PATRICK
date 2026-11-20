@@ -262,7 +262,7 @@ def simulate(strategy: dict, orders: list[dict], market: MarketData, end=None) -
         fc = pos.spec.get("fee_ctx", {})
         notional = pos.qty * pos.multiplier * price * fx
         ctx = fees_mod.FeeContext(kind=pos.kind, notional_base=notional, quantity=pos.qty,
-                                  currency=pos.currency, base_currency=base, **fc)
+                                  currency=pos.currency, base_currency=base, flat_fee=strategy.get("fee_flat"), **fc)
         amount = fees_mod.estimate_fees(ctx, fees_mod.make_seed(pos.position_id, reason)).total
         apply_reduce(pos, {"price": price}, fx, iso, whole=True)
         charge_fees(pos, amount)

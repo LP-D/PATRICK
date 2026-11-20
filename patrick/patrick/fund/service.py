@@ -278,7 +278,8 @@ def _prepare(conn: sqlite3.Connection, req: dict, today: dt.date, replace_order_
                 raise store.FundError("frais manuels : montant >= 0 requis")
             return typed, "manual", None
         ctx = fees_mod.FeeContext(kind=kind, notional_base=qty * mult * price * fx, quantity=qty,
-                                  currency=currency, base_currency=base, adv_notional_base=adv, **fee_ctx)
+                                  currency=currency, base_currency=base, adv_notional_base=adv,
+                                  flat_fee=strategy.get("fee_flat"), **fee_ctx)
         breakdown = fees_mod.estimate_fees(ctx, fee_seed)
         return breakdown.total, "estimated", breakdown
 
@@ -462,14 +463,33 @@ def strategy_snapshot(conn: sqlite3.Connection, strategy: dict, today: dt.date |
             "alert_days": result.alert_days}
 
 
-def overview(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
-    snaps = [strategy_snapshot(conn, s, today) for s in store.list_strategies(conn)]
+def _totals(snaps: list[dict]) -> dict:
     capital = sum(s["kpis"]["capital"] for s in snaps)
     nav = sum(s["kpis"]["nav"] for s in snaps)
-    breakdown = [{"strategy_id": s["strategy"]["strategy_id"], "name": s["strategy"]["name"],
-                  "wrapper": s["strategy"]["wrapper"], "nav": s["kpis"]["nav"],
-                  "share": s["kpis"]["nav"] / nav if nav > 0 else None} for s in snaps]
-    return {"strategies": snaps,
-            "fund": {"nav": nav, "capital": capital, "pnl": nav - capital,
-                     "pnl_pct": (nav - capital) / capital if capital else None, "n_strategies": len(snaps),
-                     "breakdown": breakdown}}
+    return {"nav": nav, "capital": capital, "pnl": nav - capital, "pnl_pct": (nav - capital) / capital if capital else None,
+            "n_strategies": len(snaps)}
+
+
+def _breakdown(snaps: list[dict], nav: float) -> list[dict]:
+    return [{"strategy_id": s["strategy"]["strategy_id"], "name": s["strategy"]["name"], "wrapper": s["strategy"]["wrapper"],
+             "nav": s["kpis"]["nav"], "share": s["kpis"]["nav"] / nav if nav > 0 else None} for s in snaps]
+
+
+def overview(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
+    """Toutes les stratégies non archivées. `fund` : total consolidé (API). `categories` : l'arborescence de la page (ADR 0026), une entrée par
+    catégorie non vide, dans l'ordre de `store.CATEGORIES` : `category`, `fund` (total de la catégorie), `breakdown` (parts relatives à la
+    catégorie : mélanger un capital virtuel de 10 M€ et un fonds réel de 5 000 € ne dirait rien), `groups` (les stratégies, par enveloppe pour
+    les fonds réels, en un seul groupe `wrapper = None` pour les fonds quant)."""
+    snaps = [strategy_snapshot(conn, s, today) for s in store.list_strategies(conn)]
+    total = _totals(snaps)
+    categories = []
+    for category in store.CATEGORIES:
+        mine = [s for s in snaps if s["strategy"].get("category", "quant") == category]
+        if not mine:
+            continue
+        totals = _totals(mine)
+        wrappers = [w for w in store.WRAPPERS if any(s["strategy"]["wrapper"] == w for s in mine)] if category == "real" else [None]
+        groups = [{"wrapper": w, "strategies": [s for s in mine if w is None or s["strategy"]["wrapper"] == w]} for w in wrappers]
+        categories.append({"category": category, "fund": totals, "breakdown": _breakdown(mine, totals["nav"]), "groups": groups})
+    return {"strategies": snaps, "categories": categories,
+            "fund": {**total, "breakdown": _breakdown(snaps, total["nav"])}}

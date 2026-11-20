@@ -6,6 +6,7 @@
     <thead>
       <tr>
         <th>{{ t('fund_auto_col_model') }}</th>
+        {% if plan.settings.tier == 'auc' %}<th class="num pk-mono">{{ t('fund_auto_col_auc') }}</th><th>{{ t('fund_auto_col_evidence') }}</th>{% endif %}
         <th class="num pk-mono">{{ t('fund_auto_col_dm') }}</th><th class="num pk-mono">{{ t('fund_auto_col_bh') }}</th>
         <th>{{ t('fund_auto_col_signal') }}</th><th class="num pk-mono">{{ t('fund_auto_col_hit') }}</th>
         <th>{{ t('fund_auto_col_instr') }}</th><th class="num pk-mono">{{ t('fund_auto_col_weight') }}</th>
@@ -16,6 +17,8 @@
       {% for m in plan.selected %}
       <tr data-model="{{ m.target }} {{ m.horizon }}">
         <td class="pk-mono"><span title="{{ m.target }}">{{ m.target | iname }}</span> h{{ m.horizon }} · {{ m.algo }}</td>
+        {% if plan.settings.tier == 'auc' %}<td class="num pk-mono">{{ '%.3f' | format(m.auc_dir) if m.auc_dir is not none else '—' }}</td>
+        <td><span class="tag">{{ t('fund_auto_evidence_' ~ m.evidence) if m.evidence else '—' }}</span></td>{% endif %}
         <td class="num pk-mono">{{ '%.3f' | format(m.dm_p) if m.dm_p is not none else '—' }}</td>
         <td class="num pk-mono">{{ '%.3f' | format(m.bh_p) if m.bh_p is not none else '—' }}</td>
         <td class="pk-mono">{{ m.last_signal.ts }} <span class="tag">{{ t('fund_auto_dir_up') if m.last_signal.direction == 'UP' else t('fund_auto_dir_down') }}</span></td>

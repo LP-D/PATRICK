@@ -84,6 +84,8 @@ def connect(path: str | None = None) -> sqlite3.Connection:
 _COLUMN_REPAIRS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("fund_strategy", "updated_at", ("ALTER TABLE fund_strategy ADD COLUMN updated_at TEXT",
                                       "UPDATE fund_strategy SET updated_at = created_at WHERE updated_at IS NULL")),
+    ("fund_strategy", "category", ("ALTER TABLE fund_strategy ADD COLUMN category TEXT NOT NULL DEFAULT 'quant'",)),
+    ("fund_strategy", "fee_flat", ("ALTER TABLE fund_strategy ADD COLUMN fee_flat REAL",)),
 )
 # Tables de la même migration 0033 (`fund_share`), absentes de la même façon (constaté le 14/11/2026 sur le 2e PC, version 51) : le 14/10 deux migrations
 # portaient le numéro 0033 (`live_ref_price` est passée en 0034), et une base qui avait noté « 33 » pour l'ancienne n'a jamais joué `fund_share`.

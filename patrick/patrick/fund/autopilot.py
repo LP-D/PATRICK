@@ -26,6 +26,7 @@ import pandas as pd
 from patrick.config import universe_extension as UX
 from patrick.data.session_calendar import classify_asset_class
 from patrick.fund import (
+    envelopes,
     insight,
     instruments,
     prices,
@@ -44,9 +45,13 @@ VOL_WINDOW = 60                  # séances de la volatilité qui pondère les c
 SIZING_TOLERANCE = 0.10          # une taille ne change que si le budget a bougé de plus de 10 %
 
 LABELS = {
-    "pea": "PEA : seulement des actions et ETF au comptant",
+    "pea": "PEA : seulement des actions cotées au comptant (ni indice, ni devise, ni matière première, ni crypto, ni future)",
+    "pea_etf": "PEA : ETF exclus (seuls certains ETF sont éligibles, la base ne dit pas lesquels)",
+    "pea_zone": "PEA : action hors UE/EEE (États-Unis, Asie, Royaume-Uni, Suisse...)",
+    "pea_devise": "PEA : action de l'UE/EEE cotée hors euro (refusée par la règle « euro seulement »)",
     "no_quotes": "cotation indisponible",
     "too_small": "budget trop petit pour une position",
+    "min_size": "capital insuffisant pour une position d'au moins la taille minimale (les frais forfaitaires la rongeraient)",
 }
 
 
@@ -60,6 +65,7 @@ class Settings:
     min_confidence: float = 0.0
     max_class_share: float = 1.0                     # part maximale de l'exposition brute sur une même classe d'actifs (1 = sans plafond)
     max_drawdown: float | None = None                # repli sous le plus haut au-delà duquel le pilote n'ouvre plus rien (None = sans arrêt)
+    min_position: float | None = None                # € : taille minimale d'une position ; les modèles les moins bien classés qui n'y atteignent pas sont écartés (None = aucune)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Settings:
@@ -84,12 +90,18 @@ class Settings:
             drawdown = _number(drawdown, "max_drawdown")
             if not 0.0 < drawdown < 1.0:
                 raise store.FundError("max_drawdown invalide : entre 0 et 1 (exclus) attendu, ou vide")
+        minimum = raw.get("min_position", base.min_position)
+        if minimum is not None:
+            minimum = _number(minimum, "min_position")
+            if minimum <= 0:
+                raise store.FundError("min_position invalide : montant strictement positif attendu, ou vide")
         return cls(selection=selection.Policy.from_dict(raw), gross=gross, allow_short=allow_short,
-                   min_confidence=confidence, max_class_share=share, max_drawdown=drawdown)
+                   min_confidence=confidence, max_class_share=share, max_drawdown=drawdown, min_position=minimum)
 
     def to_dict(self) -> dict:
         return {**self.selection.to_dict(), "gross": self.gross, "allow_short": self.allow_short,
-                "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown}
+                "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown,
+                "min_position": self.min_position}
 
 
 def _number(value, name: str) -> float:
@@ -134,14 +146,16 @@ def _enabled(conn: sqlite3.Connection, strategy_id: str) -> tuple[dict, dict, Se
 # --------------------------------------------------------------------------- instrument et taille
 
 def _instrument_for(symbol: str, wrapper: str, settings: Settings, groups: dict[str, str]) -> tuple[dict | None, bool, str | None]:
-    """`(instrument, allow_short, motif d'exclusion)`. Comptant (action ou ETF, achat seulement) quand c'est possible et
-    que la vente à découvert n'est pas demandée, sinon CFD ; en PEA, comptant et achat seulement."""
+    """`(instrument, allow_short, code du motif d'exclusion)`. Comptant (action ou ETF, achat seulement) quand c'est possible et
+    que la vente à découvert n'est pas demandée, sinon CFD ; en PEA, seulement des actions de l'UE/EEE en euro, au comptant et à l'achat
+    (`envelopes.pea_eligibility` rend le motif de chaque exclusion)."""
     sym = symbol.upper()
     cash_ok = instruments.classify_cfd_underlying(sym) == "equity" and not sym.endswith(".NYB")
     kind = "etf" if "ETF" in groups.get(symbol, "") else "equity"
     if wrapper == "PEA":
-        if not cash_ok:
-            return None, False, LABELS["pea"]
+        why = envelopes.pea_eligibility(symbol, groups)
+        if why is not None:
+            return None, False, why
         return {"kind": kind, "symbol": sym, "spec": {}}, False, None
     if cash_ok and not settings.allow_short:
         return {"kind": kind, "symbol": sym, "spec": {}}, False, None
@@ -182,6 +196,21 @@ def _reject(excluded: list[dict], model: dict, code: str, detail: str | None = N
                      "detail": detail or LABELS[code]})
 
 
+def _weights(priced: list[dict], settings: Settings) -> dict[int, float]:
+    """Poids de chaque modèle (clé : `id(modèle)`) : volatilité inverse de sa cible, partagée entre les horizons de la cible, puis plafond par
+    classe d'actifs : le poids d'une classe au-dessus de `max_class_share` est ramené au plafond, sans être redistribué (l'exposition brute baisse
+    d'autant : c'est le sens d'un plafond de risque)."""
+    inverse = {target: 1.0 / next(m["vol"] for m in priced if m["target"] == target) for target in {m["target"] for m in priced}}
+    total, per_target = sum(inverse.values()), {t: sum(1 for m in priced if m["target"] == t) for t in inverse}
+    weights = {id(m): inverse[m["target"]] / total / per_target[m["target"]] for m in priced}
+    classes = {id(m): classify_asset_class(m["target"]) for m in priced}
+    by_class: dict[str, float] = {}
+    for m in priced:
+        by_class[classes[id(m)]] = by_class.get(classes[id(m)], 0.0) + weights[id(m)]
+    scale = {c: min(1.0, settings.max_class_share / w) if w > 0 else 1.0 for c, w in by_class.items()}
+    return {id(m): weights[id(m)] * scale[classes[id(m)]] for m in priced}
+
+
 def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, today: dt.date) -> dict:
     """Sélection, instruments, volatilités et tailles : tout ce que le cycle appliquera, sans rien écrire (hors cache des
     cotations). `selected` : modèles retenus avec `instrument`, `allow_short`, `sizing`, `notional`, `weight`, `vol` ;
@@ -194,7 +223,7 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
     for model in chosen["selected"]:
         instrument, allow_short, why = _instrument_for(model["target"], strategy["wrapper"], settings, groups)
         if instrument is None:
-            _reject(excluded, model, "pea", why)
+            _reject(excluded, model, why)
             continue
         vol = _volatility(conn, model["target"], today)
         unit = _unit_notional(conn, strategy["strategy_id"], instrument["symbol"], today) if instrument["kind"] == "cfd" else None
@@ -202,19 +231,23 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
             _reject(excluded, model, "no_quotes")
             continue
         priced.append({**model, "instrument": instrument, "allow_short": allow_short, "vol": vol, "unit_notional": unit})
-    inverse = {target: 1.0 / next(m["vol"] for m in priced if m["target"] == target) for target in {m["target"] for m in priced}}
-    total, per_target = sum(inverse.values()), {t: sum(1 for m in priced if m["target"] == t) for t in inverse}
-    weights = {id(m): inverse[m["target"]] / total / per_target[m["target"]] for m in priced}
-    # Plafond par classe d'actifs : le poids d'une classe au-dessus de `max_class_share` est ramené au plafond, sans être redistribué
-    # (l'exposition brute baisse d'autant : c'est le sens d'un plafond de risque).
-    classes = {id(m): classify_asset_class(m["target"]) for m in priced}
-    by_class: dict[str, float] = {}
-    for m in priced:
-        by_class[classes[id(m)]] = by_class.get(classes[id(m)], 0.0) + weights[id(m)]
-    scale = {c: min(1.0, settings.max_class_share / w) if w > 0 else 1.0 for c, w in by_class.items()}
+    weights = _weights(priced, settings)
+    if settings.min_position is not None and priced:
+        # Taille minimale d'une position (frais forfaitaires par ordre : un fonds de quelques milliers d'euros ne peut pas suivre tous les signaux).
+        # D'abord le plafond arithmétique (budget / minimum), puis, les poids n'étant pas égaux, on retire le modèle le moins bien classé
+        # tant qu'une position reste sous le minimum. L'ordre de `priced` est celui de la sélection : preuves d'abord, p de Diebold-Mariano croissante.
+        budget = settings.gross * capital
+        keep = max(1, int(budget // settings.min_position))
+        for model in priced[keep:]:
+            _reject(excluded, model, "min_size", f"{keep} position(s) au plus de {settings.min_position:g} € au moins avec {budget:,.0f} €".replace(",", " "))
+        priced = priced[:keep]
+        weights = _weights(priced, settings)
+        while len(priced) > 1 and any(budget * w < settings.min_position for w in weights.values()):
+            _reject(excluded, priced.pop(), "min_size", f"poids trop faible pour atteindre {settings.min_position:g} € (budget {budget:,.0f} €)".replace(",", " "))
+            weights = _weights(priced, settings)
     selected = []
     for model in priced:
-        weight = weights[id(model)] * scale[classes[id(model)]]
+        weight = weights[id(model)]
         notional = settings.gross * capital * weight
         if model["instrument"]["kind"] == "cfd":
             quantity = round(notional / model["unit_notional"], 4)

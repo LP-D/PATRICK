@@ -308,6 +308,7 @@
             else if (el.name === "max_models") out.max_models = el.value.trim() === "" ? null : Number(el.value);   // vide : aucun plafond
             else if (el.name === "max_class_share") out.max_class_share = Number(el.value) / 100;
             else if (el.name === "max_drawdown") out.max_drawdown = el.value.trim() === "" ? null : Number(el.value) / 100;   // vide : pas d'arrêt
+            else if (el.name === "min_position") out.min_position = el.value.trim() === "" ? null : Number(el.value);   // vide : aucune taille minimale
             else out[el.name] = el.value;
         });
         return out;
@@ -401,6 +402,34 @@
             setBusy(btn, true);
             try {
                 await classesAct(btn, btn.getAttribute("data-act"));
+            } catch (err) {
+                say((err.blocking || [err.message]).join(" · "), "error");
+                setBusy(btn, false);
+            }
+        });
+    }
+
+    /* ---- fonds réels (PEA et CTO) : réglages lus dans la section, création ou reprise des deux fonds ---- */
+    var real = document.getElementById("fund-real");
+    function realOptions() {
+        var out = {};
+        real.querySelectorAll("[data-real-field]").forEach(function (el) {
+            if (el.type === "checkbox") out[el.name] = el.checked;
+            else out[el.name] = el.value.trim() === "" ? null : Number(el.value);
+        });
+        return out;
+    }
+    if (real) {
+        real.addEventListener("click", async function (e) {
+            var btn = e.target.closest("[data-act='real-create']");
+            if (!btn || btn.disabled) return;
+            setBusy(btn, true);
+            try {
+                var done = await call("/api/fund/real", "POST", realOptions());
+                var created = done.rows.filter(function (r) { return r.created; }).length;
+                var text = fill(btn.getAttribute("data-done"), { created: created, reused: done.rows.length - created });
+                say(done.cycle_started ? text + " " + btn.getAttribute("data-cycle") : text, "info");
+                setTimeout(function () { window.location.href = "/fonds?categorie=real"; }, 1500);
             } catch (err) {
                 say((err.blocking || [err.message]).join(" · "), "error");
                 setBusy(btn, false);
