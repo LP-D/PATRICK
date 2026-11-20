@@ -19,8 +19,10 @@ from starlette.concurrency import run_in_threadpool
 from patrick.fund import (
     asset_classes,
     autopilot,
+    envelopes,
     insight,
     instruments,
+    real_funds,
     service,
     store,
     systematic,
@@ -194,22 +196,34 @@ def register(app: FastAPI, templates, context) -> None:
             "cfd_classes": list(instruments.CFD_LEVERAGE_CAPS),
             "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **ctx})
 
+    def _category(value: str | None) -> str | None:
+        """Filtre `?categorie=` de /fonds : `quant` ou `real` ; toute autre valeur (ou rien) = toutes les catégories."""
+        return value if value in store.CATEGORIES else None
+
     @app.get("/fonds")
-    def fonds_page(request: Request, strategy: str | None = None):
+    def fonds_page(request: Request, strategy: str | None = None, categorie: str | None = None):
         """Le cadre seul (titre, panneau, listes sans cotations) : la valeur de chaque stratégie se calcule en 3 à 5 s sur la vraie
         base ; elle arrive par `/fragments/fund-overview` après l'affichage. Seules les stratégies archivées, une lecture de table,
         se lisent ici."""
-        archived = _call(lambda conn: [s for s in store.list_strategies(conn, include_archived=True) if s["archived"]])
+        def run(conn):
+            every = store.list_strategies(conn, include_archived=True)
+            return [s for s in every if s["archived"]], [s for s in every if s["category"] == "real" and not s["archived"]]
+        archived, real_existing = _call(run)
         return templates.TemplateResponse(request, "fonds.html", {
             "selected_id": strategy, "archived": archived, "class_names": list(asset_classes.CLASSES),
-            "class_defaults": asset_classes.DEFAULTS, **context(request)})
+            "class_defaults": asset_classes.DEFAULTS, "category": _category(categorie), "categories": store.CATEGORIES,
+            "real_existing": real_existing, "real_defaults": real_funds.DEFAULTS, "pea_groups": envelopes.PEA_GROUPS,
+            **context(request)})
 
     @app.get("/fragments/fund-overview")
-    def fund_overview_fragment(request: Request, strategy: str | None = None):
-        """Total consolidé, répartition et tableau des stratégies de /fonds (chargé par `static/lazy.js`)."""
+    def fund_overview_fragment(request: Request, strategy: str | None = None, categorie: str | None = None):
+        """Total, répartition et tableau des stratégies de /fonds, une section par catégorie (chargé par `static/lazy.js`) ;
+        `?categorie=quant|real` n'en garde qu'une."""
         data = _call(service.overview, service.current_date())
+        wanted = _category(categorie)
+        shown = [c for c in data["categories"] if wanted in (None, c["category"])]
         return templates.TemplateResponse(request, "_fund_overview.html", {
-            "strategies": data["strategies"], "fund": data["fund"], "selected_id": strategy, **context(request)})
+            "strategies": data["strategies"], "fund": data["fund"], "categories": shown, "selected_id": strategy, **context(request)})
 
     @app.get("/patrimoine-simulation")
     def legacy_wealth_simulation_page():
@@ -270,7 +284,8 @@ def register(app: FastAPI, templates, context) -> None:
     async def api_create_strategy(request: Request):
         b = await _json_body(request)
         strategy_id = await run_in_threadpool(_call, store.create_strategy, b.get("name"), b.get("wrapper"),
-                                              b.get("initial_capital"), b.get("opened_on"))
+                                              b.get("initial_capital"), b.get("opened_on"), "EUR", b.get("category") or "quant",
+                                              b.get("fee_flat"))
         return {"strategy_id": strategy_id}
 
     @app.patch("/api/fund/strategies/{strategy_id}")
@@ -368,8 +383,11 @@ def register(app: FastAPI, templates, context) -> None:
     def _query_settings(params) -> dict:
         """Réglages passés dans l'adresse de l'aperçu (`?tier=large&gross=0.5&max_models=10&allow_short=0`)."""
         raw: dict = {}
-        for key in ("gross", "min_confidence", "alpha_dm", "alpha_bh"):
+        for key in ("gross", "min_confidence", "alpha_dm", "alpha_bh", "auc_floor", "min_position"):
             if key in params:
+                if key == "min_position" and params[key].strip() == "":
+                    raw[key] = None                                  # vide : aucune taille minimale
+                    continue
                 try:
                     raw[key] = float(params[key])
                 except ValueError as exc:
@@ -512,6 +530,44 @@ def register(app: FastAPI, templates, context) -> None:
             return asset_classes.setup(conn, today=service.current_date(), dry_run=True, **options)
         rows = await run_in_threadpool(_call, run)
         return templates.TemplateResponse(request, "_fund_classes_preview.html", {"rows": rows, **context(request)})
+
+    # ------------------------------------------------- fonds réels : un PEA et un CTO fictifs, 5 000 €, 1 € par ordre (ADR 0026)
+
+    def _real_options(raw: dict) -> dict:
+        """Réglages d'une création des fonds réels (`only`, `capital`, `fee_flat`, `tier`, `gross`, `max_models`, `min_position`, `run`, `dry_run`),
+        les absents prenant `real_funds.DEFAULTS`. La validation fine (capital, plafond du PEA, réglages du pilote) est celle de `real_funds.setup`."""
+        merged = {**real_funds.DEFAULTS, **{k: v for k, v in raw.items() if k in (*real_funds.DEFAULTS, "only", "run", "dry_run")}}
+        only = merged.get("only")
+        if only is not None and (not isinstance(only, list) or not all(isinstance(k, str) for k in only)):
+            raise store.FundError("only invalide : liste de fonds (PEA, CTO) attendue")
+        return {"only": only, "capital": merged["capital"], "fee_flat": merged["fee_flat"], "tier": merged["tier"], "gross": merged["gross"],
+                "max_models": merged["max_models"], "min_position": merged["min_position"], "run": bool(merged.get("run")),
+                "dry_run": bool(merged.get("dry_run"))}
+
+    @app.get("/api/fund/real")
+    def api_real_funds():
+        """Les deux fonds réels (créés ou non), leurs réglages par défaut et ce que le PEA exclut."""
+        def run(conn):
+            existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn) if s["category"] == "real"}
+            return [{"kind": k, "name": real_funds.fund_name(k), "strategy_id": existing.get(real_funds.fund_name(k))} for k in real_funds.KINDS]
+        return {"funds": _call(run), "defaults": real_funds.DEFAULTS,
+                "pea": {"groups": list(envelopes.PEA_GROUPS), "euro_suffixes": list(envelopes.PEA_EURO_SUFFIXES),
+                        "non_euro_suffixes": list(envelopes.PEA_NON_EURO_SUFFIXES)}}
+
+    @app.post("/api/fund/real")
+    async def api_real_funds_create(request: Request):
+        """Crée (ou reprend) le fonds PEA et le fonds CTO en pilote automatique, puis, si `run`, un premier cycle en arrière-plan.
+        `dry_run` : rien n'est écrit, seuls les modèles candidats sont comptés."""
+        body = await _json_body(request)
+
+        def run(conn):
+            options = _real_options(body)
+            start = options.pop("run")
+            return real_funds.setup(conn, today=service.current_date(), **options), start and not options["dry_run"]
+        rows, start = await run_in_threadpool(_call, run)
+        if start:
+            autopilot.start_cycles([r["strategy_id"] for r in rows])
+        return {"rows": rows, "cycle_started": bool(start)}
 
     @app.post("/api/fund/asset-classes")
     async def api_asset_classes_create(request: Request):

@@ -242,7 +242,7 @@ def test_snapshot_and_overview_are_consistent_across_instruments(conn):
 
 
 def test_overview_of_an_empty_fund_and_a_strategy_without_orders(conn):
-    assert service.overview(conn, TODAY) == {"strategies": [], "fund": {
+    assert service.overview(conn, TODAY) == {"strategies": [], "categories": [], "fund": {
         "nav": 0, "capital": 0, "pnl": 0, "pnl_pct": None, "n_strategies": 0, "breakdown": []}}
     cto(conn)
     snap = service.overview(conn, TODAY)["strategies"][0]

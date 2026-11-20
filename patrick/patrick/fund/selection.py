@@ -5,7 +5,10 @@ Les critères, dans l'ordre (le premier échec est le motif d'exclusion) : pas u
 un horizon descriptif, score non suspect, signal live frais ; puis, au niveau `strict`, la cible survit à la correction
 de Benjamini-Hochberg et le test de Diebold-Mariano de la cellule conclut (p < `alpha_dm`). Au niveau `large`, seuls les
 quatre premiers critères comptent ; au niveau `dm`, les quatre premiers plus le seul test de Diebold-Mariano ; au niveau `bh`,
-les quatre premiers plus la seule correction de Benjamini-Hochberg. Spécification : `docs/superpowers/specs/2026-10-16-fonds-pilote-automatique-design.md`.
+les quatre premiers plus la seule correction de Benjamini-Hochberg. Au niveau `auc` (fonds réels PEA et CTO, ADR 0026), les critères communs
+plus une AUC de direction du holdout strictement au-dessus de `auc_floor` (0,5 = le hasard) : tous les signaux qui classent mieux que le hasard, sans
+preuve exigée. Chaque modèle retenu porte alors `evidence` : `tested` s'il passe en plus la correction de Benjamini-Hochberg ET le test de
+Diebold-Mariano, `auc` sinon ; les modèles testés passent devant (ils prennent les premières places quand le capital n'en laisse pas pour tous). Spécification : `docs/superpowers/specs/2026-10-16-fonds-pilote-automatique-design.md`.
 
 Ce module ne regarde ni les cotations ni l'instrument : ce qui rend une cellule négociable (cotation disponible,
 instrument possible dans l'enveloppe) se vérifie dans `fund.autopilot`, qui ajoute ses propres motifs d'exclusion.
@@ -29,9 +32,11 @@ from patrick.tracking import live_record
 from patrick.tracking import stats as trackstats
 from patrick.validation import suspicion
 
-TIERS = ("strict", "large", "dm", "bh")
+TIERS = ("strict", "large", "dm", "bh", "auc")
 BH_TIERS = ("strict", "bh")            # niveaux qui exigent la correction de Benjamini-Hochberg (cible)
 DM_TIERS = ("strict", "dm")            # niveaux qui exigent le test de Diebold-Mariano (cellule)
+AUC_TIERS = ("auc",)                   # niveaux qui exigent une AUC de direction au-dessus du hasard (holdout) ; la preuve statistique ne sert qu'à classer
+EVIDENCE_TESTED, EVIDENCE_AUC = "tested", "auc"
 _CHUNK = 500
 
 LABELS = {
@@ -43,6 +48,8 @@ LABELS = {
     "no_live": "aucun signal live",
     "stale": "signal live trop ancien",
     "live": "résultat réel nettement sous le hasard",
+    "auc": "AUC de direction du holdout pas au-dessus du hasard",
+    "no_auc": "AUC de direction non mesurée (rattrapage des mesures en cours)",
     "bh": "cible écartée par la correction pour tests multiples (Benjamini-Hochberg)",
     "dm": "test de Diebold-Mariano non concluant",
     "cap": "au-delà du nombre maximal de modèles",
@@ -60,6 +67,7 @@ class Policy:
     horizons: tuple[int, ...] | None = None          # périmètre : seulement ces horizons (None = tous)
     groups: tuple[str, ...] | None = None            # périmètre : seulement ces groupes de l'univers (classes d'actifs)
     live_gate: bool = True                           # écarte un modèle dont le réel est nettement sous le hasard (`tracking/live_record.py`)
+    auc_floor: float = 0.5                           # niveau `auc` : AUC de direction (holdout) strictement au-dessus de ce seuil
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Policy:
@@ -77,10 +85,21 @@ class Policy:
                    max_models=(None if "max_models" in raw and raw["max_models"] is None
                                else _count(raw.get("max_models", base.max_models), "max_models", 5000)),
                    horizons=_scope(raw.get("horizons"), "horizons", int), groups=_scope(raw.get("groups"), "groups", str),
-                   live_gate=_flag(raw.get("live_gate", base.live_gate), "live_gate"))
+                   live_gate=_flag(raw.get("live_gate", base.live_gate), "live_gate"),
+                   auc_floor=_auc_floor(raw.get("auc_floor", base.auc_floor)))
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _auc_floor(value) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise store.FundError(f"auc_floor invalide : nombre attendu ({value!r})") from exc
+    if isinstance(value, bool) or not math.isfinite(out) or not 0.5 <= out < 1.0:
+        raise store.FundError("auc_floor invalide : entre 0,5 (inclus : le hasard) et 1 (exclu) attendu")
+    return out
 
 
 def _flag(value, name: str) -> bool:
@@ -173,7 +192,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     realised = live_record.records(conn, [c[3] for c in champions]) if policy.live_gate else {}
     legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     dm = _dm_results(conn, run_ids)
-    fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier in BH_TIERS else {}
+    fdr = trackstats.fdr_across_targets(conn, alpha=policy.alpha_bh)["results"] if policy.tier in (*BH_TIERS, *AUC_TIERS) else {}
     fred = _fred_symbols()
     freshest = (today - dt.timedelta(days=policy.fresh_days)).isoformat()
 
@@ -207,9 +226,15 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
                 judged, hits = realised[trial_id]
                 reject(target, horizon, "live", f"{hits} bonne(s) direction(s) sur {judged} prédictions réelles jugées "
                                                  f"({hits / judged:.0%})".replace(".", ","))
+            elif policy.tier in AUC_TIERS and (auc := scores.get("holdout", {}).get("AUC_dir")) is None:
+                reject(target, horizon, "no_auc")
+            elif policy.tier in AUC_TIERS and auc <= policy.auc_floor:
+                reject(target, horizon, "auc", f"AUC de direction du holdout : {auc:.3f} (seuil {policy.auc_floor:.2f})".replace(".", ","))
             else:
                 evidence = fdr.get(target, {})
                 dm_row = dm.get(run_id)
+                tested = (bool(evidence.get("significant")) and dm_row is not None and dm_row["p_value"] is not None
+                          and dm_row["p_value"] < policy.alpha_dm)
                 if policy.tier in BH_TIERS and not evidence.get("significant"):
                     reject(target, horizon, "bh", f"p corrigé de la cible : {_p(evidence.get('p_value'))}")
                 elif policy.tier in DM_TIERS and (dm_row is None or dm_row["p_value"] is None
@@ -222,11 +247,15 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
                                      "dm_p": dm_row["p_value"] if dm_row else None,
                                      "dm_sample": dm_row["sample"] if dm_row else None,
                                      "bh_p": evidence.get("p_value"), "bh_significant": evidence.get("significant"),
+                                     "auc_dir": scores.get("holdout", {}).get("AUC_dir"),
+                                     "evidence": (EVIDENCE_TESTED if tested else EVIDENCE_AUC) if policy.tier in AUC_TIERS else None,
                                      "live_hit_rate": None, "live_n": None})
 
     selected.sort(key=lambda m: (m["target"], m["horizon"]))                    # trois tris stables : le dernier prime
     selected.sort(key=lambda m: m["last_signal"]["ts"], reverse=True)
     selected.sort(key=lambda m: 1.0 if m["dm_p"] is None else m["dm_p"])
+    if policy.tier in AUC_TIERS:
+        selected.sort(key=lambda m: m["evidence"] != EVIDENCE_TESTED)         # les modèles qui passent les tests d'abord, puis le classement ci-dessus
     if policy.max_models is not None:
         for over in selected[policy.max_models:]:
             reject(over["target"], over["horizon"], "cap", f"au-delà de {policy.max_models} modèles")

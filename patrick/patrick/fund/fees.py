@@ -39,6 +39,7 @@ class FeeContext:
     adv_notional_base: float | None = None        # volume moyen 20 j en devise de base (action/ETF)
     commission_per_contract_base: float = 0.0     # future : commission fixe par contrat, devise de base
     tick_bps: float = 0.0                          # future : demi-tick en points de base du notionnel
+    flat_fee: float | None = None                  # fonds « réel » : € par ordre, tout compris (remplace commission, spread et change ; ADR 0026)
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,8 @@ def make_seed(*parts) -> int:
 
 
 def estimate_fees(ctx: FeeContext, seed: int) -> FeeBreakdown:
+    if ctx.flat_fee is not None:
+        return FeeBreakdown(round(ctx.flat_fee, 6), 0.0, 0.0)
     z = float(np.random.default_rng(seed).standard_normal())
     notional = abs(ctx.notional_base)
     if ctx.kind in ("equity", "etf"):

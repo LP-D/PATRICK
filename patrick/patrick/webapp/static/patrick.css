@@ -2545,6 +2545,12 @@ a.visually-hidden[href="#main"]:focus {
 /* ---- Fonds (refonte chantier 1) : tableau des stratégies et panneau de détail ---- */
 .fund-form-row[hidden], .fund-form-error[hidden], .fund-inline-form label[hidden] { display: none; }
 .fund-row { cursor: pointer; }
+/* classification quant / réel (ADR 0026) : onglets de catégorie, titre de section, liste des règles des fonds réels */
+.fund-cat-tabs [role="tab"] { text-decoration: none; }
+.fund-category { margin-top: var(--space-lg); }
+.fund-category-title { margin: 0 0 var(--space-xs); }
+.fund-group-title { margin: var(--space-md) 0 var(--space-xs); }
+.fund-real-rules { margin: 0 0 var(--space-md); padding-left: var(--space-lg); color: var(--text-2); }
 .fund-row:hover, .fund-row.is-selected { background: var(--surface-2); }
 .fund-row:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 .fund-panel { margin-top: var(--space-lg); }

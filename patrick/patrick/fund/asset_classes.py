@@ -81,10 +81,13 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
 
 
 def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: float, wrapper: str, today: dt.date,
-               dry_run: bool) -> dict:
+               dry_run: bool, category: str = "quant", fee_flat: float | None = None) -> dict:
     """Retrouve (par son nom) ou crée la stratégie `name` et y active le pilote avec `settings` ; `dry_run` : rien n'est écrit.
+    `category` et `fee_flat` ne servent qu'à la création (une stratégie reprise garde les siens, mais doit être de la même catégorie).
     Renvoie `name`, `strategy_id` (None si elle n'existe pas encore), `created`, `capital_changed`, `candidates`."""
     existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
+    if name in existing and store.get_strategy(conn, existing[name])["category"] != category:
+        raise store.FundError(f"une stratégie « {name} » existe déjà et n'est pas de la catégorie {category!r} : la renommer ou la supprimer d'abord")
     policy = autopilot.Settings.from_dict(settings)
     chosen = selection.select_models(conn, policy.selection, today)["selected"]
     row = {"name": name, "strategy_id": existing.get(name), "created": False, "capital_changed": False,
@@ -96,7 +99,7 @@ def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: 
         for model in chosen:
             trackdb.register_trials(conn, model["target"], model["horizon"], "simulation", 1, detail=f"fund_selection:{name}")
         if row["strategy_id"] is None:
-            row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat())
+            row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat(), category=category, fee_flat=fee_flat)
             row["created"] = True
         elif abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - float(capital)) > 0.005:
             try:                                  # une stratégie reprise sans ordre prend le capital demandé

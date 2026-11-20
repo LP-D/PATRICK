@@ -5,7 +5,7 @@
 {% set open_positions = snap.positions | selectattr('status', 'equalto', 'open') | list %}
 {% set closed_positions = snap.positions | rejectattr('status', 'equalto', 'open') | list %}
 <div class="card-head">
-  <h2>{{ s.name }} <span class="tag">{{ s.wrapper }}</span></h2>
+  <h2>{{ s.name }} <span class="tag">{{ s.wrapper }}</span> <span class="tag">{{ t('fund_cat_' ~ s.category ~ '_short') }}</span>{% if s.fee_flat is not none %} <span class="tag" title="{{ t('fund_flat_fee_hint') }}">{{ t('fund_flat_fee', fee=(s.fee_flat | eur)) }}</span>{% endif %}</h2>
   <div class="row">
     <button type="button" class="btn-ghost" data-act="rename" data-strategy-id="{{ s.strategy_id }}" data-name="{{ s.name }}">{{ t('fund_act_rename') }}</button>
     <button type="button" class="btn-ghost" data-act="archive" data-strategy-id="{{ s.strategy_id }}"
@@ -249,6 +249,7 @@
           <option value="large"{% if autopilot.settings.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
           <option value="dm"{% if autopilot.settings.tier == 'dm' %} selected{% endif %}>{{ t('fund_auto_tier_dm') }}</option>
           <option value="bh"{% if autopilot.settings.tier == 'bh' %} selected{% endif %}>{{ t('fund_auto_tier_bh') }}</option>
+          <option value="auc"{% if autopilot.settings.tier == 'auc' %} selected{% endif %}>{{ t('fund_auto_tier_auc') }}</option>
         </select>
       </label>
       <label>{{ t('fund_auto_gross') }}
@@ -259,6 +260,9 @@
       </label>
       <label>{{ t('fund_auto_class_cap') }}
         <input type="number" name="max_class_share" min="5" max="100" step="5" value="{{ (autopilot.settings.max_class_share * 100) | round(0) | int }}" data-auto-field>
+      </label>
+      <label>{{ t('fund_auto_min_position') }}
+        <input type="number" name="min_position" min="1" step="10" value="{{ autopilot.settings.min_position | int if autopilot.settings.min_position is not none else '' }}" placeholder="{{ t('fund_auto_min_position_none') }}" data-auto-field>
       </label>
       <label>{{ t('fund_auto_dd_stop') }}
         <input type="number" name="max_drawdown" min="1" max="90" step="1" value="{{ ((autopilot.settings.max_drawdown * 100) | round(0) | int) if autopilot.settings.max_drawdown is not none else '' }}" placeholder="{{ t('fund_auto_dd_none') }}" data-auto-field>

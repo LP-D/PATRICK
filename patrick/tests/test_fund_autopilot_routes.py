@@ -190,7 +190,7 @@ def test_the_panel_offers_the_autopilot_and_keeps_manual_rules_apart(client, wor
     assert on.count('class="fund-rule"') == 0                              # et pas dans le tableau des règles manuelles
 
 
-@pytest.mark.parametrize("tier", ["strict", "large", "dm", "bh"])
+@pytest.mark.parametrize("tier", ["strict", "large", "dm", "bh", "auc"])
 def test_the_panel_keeps_the_tier_of_the_strategy_selected(client, tier):
     """Un niveau absent de la liste ferait revenir la stratégie à « strict » au premier clic sur Appliquer."""
     sid = fs.make_strategy(client)
@@ -200,7 +200,7 @@ def test_the_panel_keeps_the_tier_of_the_strategy_selected(client, tier):
 
     select = html.split('name="tier"', 1)[1].split("</select>", 1)[0]
     assert re.findall(r'<option value="(\w+)" selected', select) == [tier]
-    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["bh", "dm", "large", "strict"]
+    assert sorted(re.findall(r'<option value="(\w+)"', select)) == ["auc", "bh", "dm", "large", "strict"]
 
 
 def test_the_model_selector_lists_every_model_by_name_with_its_p_value(client, world):
