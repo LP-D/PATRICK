@@ -117,6 +117,8 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # SIMULATION -- ouvrir des positions fictives (ticket d'ordres) puis suivre les strategies du fonds.
     NavEntry("simulate", "Simulation", "/simulate", "simulation", 10, "nav_simulate"),
     NavEntry("fonds", "Fonds", "/fonds", "simulation", 20, "nav_fonds"),
+    # Placements : import de VL de fonds, allocations optimales, test hors échantillon et scénarios à plusieurs années (patrick/placements/).
+    NavEntry("placements", "Placements", "/placements", "simulation", 30, "nav_placements"),
     # PATRIMOINE -- comptes reels et fictifs (PEA, CTO, AV, livret, DAT) et
     # leurs mouvements (roadmap bloc 4, webapp/wealth_routes.py). URLs a plat
     # (`/mouvements`, pas `/patrimoine/mouvements`) : l'etat actif est par

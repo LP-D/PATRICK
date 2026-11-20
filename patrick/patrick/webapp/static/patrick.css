@@ -3379,3 +3379,52 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .split-stage.is-stacked .split-pane { position: relative; flex: 0 0 auto; height: 78vh; }
 .split-stage.is-stacked .split-gutter { display: none; }
 @media (max-width: 899px) { .split-app { height: auto; min-height: 0; } .split-hint { display: none; } }
+
+/* ---- Placements (/placements) ------------------------------------------------------------------------------------- */
+.pl-card { margin-bottom: var(--space-lg); }
+.pl-card h3 { margin: 0 0 8px; font-size: var(--fs-md); }
+.pl-card h4, .pl-detail h4 { margin: 16px 0 6px; font-size: var(--fs-base); color: var(--text-2); }
+.pl-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin: 10px 0; }
+.pl-row-end { justify-content: space-between; align-items: center; }
+.pl-row-between { justify-content: space-between; align-items: center; }
+.pl-label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--text-2); }
+.pl-input { height: var(--control-h); padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; font-size: var(--fs-base); }
+.pl-input:focus-visible, .pl-range:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.pl-narrow { width: 90px; }
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px 24px; margin: 10px 0; }
+.pl-grid-2 { grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
+.pl-fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pl-fieldset legend { padding: 0; margin-bottom: 4px; font-size: var(--fs-sm); color: var(--text-2); }
+.pl-import { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pl-file { font: inherit; font-size: var(--fs-sm); color: var(--text-2); }
+.pl-off { opacity: .55; }
+.pl-badge { margin-left: 8px; }
+.pl-small { min-height: 24px; padding: 0 8px; }
+.pl-progress { width: 220px; height: 8px; accent-color: var(--brand); }
+.pl-status { margin: 0; }
+.pl-result-title { margin: var(--space-lg) 0 var(--space-sm); font-size: var(--fs-lg); }
+.pl-metrics { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 0 0 12px; }
+.pl-metrics dt { color: var(--text-2); font-size: var(--fs-sm); }
+.pl-metrics dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pl-bar { display: inline-block; width: calc(var(--w) * 1.2); max-width: 120px; height: 8px; margin-right: 6px; border-radius: var(--radius-sm); background: var(--brand); vertical-align: middle; }
+.pl-chart { margin: 6px 0 14px; }
+.pl-wf { margin: 6px 0; }
+.pl-wf.is-weak { color: var(--warn); }
+.pl-seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); overflow: hidden; margin-right: 12px; }
+.pl-seg-btn { border: 0; background: transparent; color: var(--text-2); padding: 4px 12px; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.pl-seg-btn:hover { background: var(--surface-2); }
+.pl-seg-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.pl-seg-btn[aria-pressed="true"] { background: var(--brand-soft); color: var(--brand); }
+.pl-pick { cursor: pointer; }
+.pl-pick:hover, .pl-pick.is-on { background: var(--brand-soft); }
+.pl-warnings { margin: 8px 0 14px; padding-left: 18px; color: var(--warn); font-size: var(--fs-sm); }
+.pl-range-row { display: flex; align-items: center; gap: 10px; }
+.pl-range { width: 200px; accent-color: var(--brand); }
+.pl-out { min-width: 7ch; font-variant-numeric: tabular-nums; color: var(--text); }
+.pl-corrtable { border-collapse: collapse; font-size: var(--fs-xs); }
+.pl-corr { text-align: center; min-width: 38px; padding: 3px 5px; font-variant-numeric: tabular-nums; }
+.pl-corr.is-pos { background: color-mix(in srgb, var(--brand) calc(var(--v) * 60%), transparent); }
+.pl-corr.is-neg { background: color-mix(in srgb, var(--info) calc(var(--v) * 60%), transparent); }
+.pl-corr-h, .pl-corr-row { padding: 3px 6px; font-weight: 500; color: var(--text-2); text-align: left; white-space: nowrap; }
+.pl-disclaimer { max-width: 80ch; margin-top: var(--space-lg); }
+.pl-weights td { white-space: nowrap; }

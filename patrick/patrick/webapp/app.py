@@ -78,6 +78,7 @@ from patrick.webapp import (
     market_regime,
     nav_registry,
     news_routes,
+    placements_routes,
     progress_steps,
     risk_routes,
     rl_compare,
@@ -2259,6 +2260,9 @@ data_routes.register(app, templates, lambda request: _i18n_context(request))
 
 # Recherche d'actifs de la palette (/api/asset-index) et page Écrans côte à côte (/split).
 workbench_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Placements (/placements) et API /api/placements/* : simulation complète à partir de VL importées (patrick/placements/).
+placements_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _check_min_history_years(min_history_years: int) -> None:
