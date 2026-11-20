@@ -48,17 +48,34 @@ def _to_number(values: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce")
 
 
+def _sane(dates: pd.Series) -> pd.Series:
+    """Une date hors de 1900-2200 est une erreur de saisie (« 120-11-01 ») : elle devient NaT au lieu de casser la conversion en nanosecondes."""
+    return dates.where((dates.dt.year >= 1900) & (dates.dt.year <= 2200))
+
+
+def _one_date(value: str) -> pd.Timestamp:
+    try:
+        ts = pd.to_datetime(value, dayfirst=True, errors="coerce", format="mixed")
+    except (pd.errors.OutOfBoundsDatetime, OverflowError, ValueError):
+        return pd.NaT
+    return ts if ts is not pd.NaT and 1900 <= ts.year <= 2200 else pd.NaT
+
+
 def _to_dates(values: pd.Series) -> pd.Series:
-    """Dates ISO (`2026-09-17`) ou françaises (`17/09/2026`) ; une cellule illisible devient NaT (ligne écartée)."""
+    """Dates ISO (`2026-09-17`) ou françaises (`17/09/2026`) ; une cellule illisible ou aberrante devient NaT (ligne écartée)."""
     if pd.api.types.is_datetime64_any_dtype(values):
         return values
     text = values.astype(str).str.strip()
     iso = text.str.match(r"^\d{4}-\d{2}-\d{2}")
     out = pd.Series(pd.NaT, index=values.index, dtype="datetime64[ns]")
     if iso.any():
-        out[iso] = pd.to_datetime(text[iso].str.slice(0, 10), format="%Y-%m-%d", errors="coerce")
+        out[iso] = _sane(pd.to_datetime(text[iso].str.slice(0, 10), format="%Y-%m-%d", errors="coerce")).astype("datetime64[ns]")
     if (~iso).any():
-        out[~iso] = pd.to_datetime(text[~iso], dayfirst=True, errors="coerce", format="mixed")
+        rest = text[~iso]
+        try:
+            out[~iso] = _sane(pd.to_datetime(rest, dayfirst=True, errors="coerce", format="mixed")).astype("datetime64[ns]")
+        except (pd.errors.OutOfBoundsDatetime, OverflowError, ValueError, TypeError):
+            out[~iso] = pd.Series([_one_date(v) for v in rest], index=rest.index).astype("datetime64[ns]")
     return out
 
 
@@ -142,3 +159,8 @@ def merge_series(old: pd.Series | None, new: pd.Series) -> tuple[pd.Series, dict
     gap = float((both["new"] - both["old"]).abs().max()) if len(both) else 0.0
     merged = old.combine_first(new).rename(old.name)
     return merged, {"points_communs": int(len(both)), "ecart_max": gap, "nouveaux_points": int((~new.index.isin(old.index)).sum())}
+
+
+# Alias publics : les autres modules d'import (événements des stratégies) lisent des dates et des nombres de la même façon.
+to_dates = _to_dates
+to_number = _to_number

@@ -28,6 +28,7 @@ from patrick.webapp.i18n_live import LIVE_STRINGS
 from patrick.webapp.i18n_models import MODELS_JS_KEYS, MODELS_STRINGS, PAGE_JS_KEYS
 from patrick.webapp.i18n_pages import PAGES_JS_KEYS, PAGES_STRINGS
 from patrick.webapp.i18n_placements import PLACEMENTS_STRINGS
+from patrick.webapp.i18n_strategies import STRATEGIES_STRINGS
 from patrick.webapp.i18n_settings import SETTINGS_JS_KEYS, SETTINGS_STRINGS
 from patrick.webapp.i18n_text import TEXT_JS_KEYS, TEXT_STRINGS
 from patrick.webapp.i18n_todo import TODO_JS_KEYS, TODO_STRINGS
@@ -716,6 +717,8 @@ STRINGS.update(HEALTH_STRINGS)
 STRINGS.update(WORKBENCH_STRINGS)
 # Page Placements (webapp/i18n_placements.py).
 STRINGS.update(PLACEMENTS_STRINGS)
+# Page Stratégies (webapp/i18n_strategies.py).
+STRINGS.update(STRATEGIES_STRINGS)
 
 
 # Langue de la requête en cours, posée par `LangMiddleware` : les macros importées sans contexte (`_components.html`) ne voient pas `t()`,

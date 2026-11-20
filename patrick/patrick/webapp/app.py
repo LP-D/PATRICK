@@ -88,6 +88,7 @@ from patrick.webapp import (
     settings_routes,
     shap_chart,
     stats_help,
+    strategies_routes,
     todo_actions,
     wealth_routes,
     workbench_routes,
@@ -2263,6 +2264,9 @@ workbench_routes.register(app, templates, lambda request: _i18n_context(request)
 
 # Page Placements (/placements) et API /api/placements/* : simulation complète à partir de VL importées (patrick/placements/).
 placements_routes.register(app, templates, lambda request: _i18n_context(request))
+
+# Page Stratégies (/strategies) et API /api/strategies/* : laboratoire acheter avant / vendre après un événement, straddles (patrick/strategylab/).
+strategies_routes.register(app, templates, lambda request: _i18n_context(request))
 
 
 def _check_min_history_years(min_history_years: int) -> None:

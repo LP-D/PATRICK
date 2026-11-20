@@ -3428,3 +3428,13 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .pl-corr-h, .pl-corr-row { padding: 3px 6px; font-weight: 500; color: var(--text-2); text-align: left; white-space: nowrap; }
 .pl-disclaimer { max-width: 80ch; margin-top: var(--space-lg); }
 .pl-weights td { white-space: nowrap; }
+
+/* ---- Stratégies (/strategies) : verdict et drapeaux ---------------------------------------------------------------- */
+.st-verdict { border-left: 4px solid var(--line-strong); }
+.st-verdict.st-ok { border-left-color: var(--pos); }
+.st-verdict.st-warning { border-left-color: var(--warn); }
+.st-verdict.st-error { border-left-color: var(--neg); }
+.st-flags { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.st-flag.is-ok { color: var(--pos); }
+.st-flag.is-ko { color: var(--neg); }
+.st-flag.is-na { color: var(--text-3); }
