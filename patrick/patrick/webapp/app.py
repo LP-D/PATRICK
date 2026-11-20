@@ -43,17 +43,14 @@ from patrick.features import equity_context, guida, parametric_parallel
 from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
 from patrick.rl import history as rl_history
-from patrick.tracking import black_litterman as trackbl
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import class_overview, data_health, memo, retrain_advisor
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
 from patrick.tracking import home as trackhome
-from patrick.tracking import hrp as trackhrp
 from patrick.tracking import kpi_summary as trackkpi
 from patrick.tracking import portfolio as trackportfolio
 from patrick.tracking import trial_budget as trialbudget
-from patrick.tracking import usage as trackusage
 from patrick.validation import equity_sufficiency, feasibility, metric_panel, suspicion
 from patrick.validation.placebo import placebo_verdict
 from patrick.webapp import (
@@ -61,6 +58,7 @@ from patrick.webapp import (
     analysis_routes,
     asset_stats,
     asset_view,
+    cached_views,
     data_routes,
     earnings_routes,
     econometrics_routes,
@@ -92,6 +90,7 @@ from patrick.webapp import (
     stats_help,
     strategies_routes,
     todo_actions,
+    view_cache,
     wealth_routes,
     workbench_routes,
 )
@@ -313,6 +312,7 @@ def _on_startup() -> None:
         if os.environ.get("PATRICK_LIVE_REFRESH", "1") != "0":
             # Tableau de /predictions : calculé ici, en tâche de fond, s'il manque ou date de plus de 24 h -- jamais à l'ouverture de la page.
             predictions_snapshot.get(live_running=True)
+            cached_views.warm_async()                    # les autres pages lourdes : prêtes avant leur première ouverture
 
     if delay == 0:
         start_background_jobs()
@@ -718,15 +718,16 @@ def synthesis_page(request: Request, fdr_alpha: float = 0.10):
     is one click away on this same page, `/targets/{ticker}`, and
     `/runs/{run_id}/detail` -- all three now support `?fdr_alpha=`."""
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
-    conn = trackdb.connect()
-    try:
-        coverage = {**trackhistory.universe_coverage(conn), "last_inference_at": trackhistory.last_inference_at(conn)}
-        home = trackhome.home_summary(conn, forms.TARGET_GROUPS)
-    finally:
-        conn.close()
+    summary = cached_views.HOME_SUMMARY.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S)     # lu dans le cache : jamais calculé à l'ouverture
+    if summary is None:
+        return _preparing_page(request, (cached_views.HOME_SUMMARY, None, None), (cached_views.HOME_OVERVIEW, fdr_alpha, None))
+    overview = cached_views.HOME_OVERVIEW.load(fdr_alpha)                # le tableau lourd (chargé après) : prépare son calcul sans l'attendre
+    if overview is None:
+        cached_views.HOME_OVERVIEW.request_refresh(fdr_alpha, rerun_if_running=False)
     return templates.TemplateResponse(
         request, "synthesis.html",
-        {"coverage": coverage, "home": home, "fdr_alpha": fdr_alpha,
+        {"coverage": summary.value["coverage"], "home": summary.value["home"], "fdr_alpha": fdr_alpha,
+         **_view_context((cached_views.HOME_SUMMARY, None, summary), (cached_views.HOME_OVERVIEW, fdr_alpha, overview)),
          **_i18n_context(request, fdr_alpha=fdr_alpha, with_verdict=True)},
     )
 
@@ -773,13 +774,12 @@ async def todo_launch(request: Request, key: str):
 def home_fragment(request: Request, fdr_alpha: float = 0.10):
     """Fragment de la synthèse : les tableaux qui lisent les prédictions (6 s sur la vraie base), chargés après le cadre."""
     fdr_alpha = _validate_alpha(fdr_alpha, "fdr_alpha")
-    conn = trackdb.connect()
-    try:
-        overview = memo.memoize(conn, ("home-overview", fdr_alpha), lambda: trackhistory.synthesis_overview(conn, alpha=fdr_alpha))
-    finally:
-        conn.close()
+    snap = cached_views.HOME_OVERVIEW.get(fdr_alpha, wait_first=cached_views.FIRST_BUILD_WAIT_S)     # 22-25 s à froid : lu, jamais calculé ici
+    if snap is None:
+        return _preparing_fragment(request, (cached_views.HOME_OVERVIEW, fdr_alpha, None))
     return templates.TemplateResponse(
-        request, "_home_details.html", {"overview": overview, **_i18n_context(request, fdr_alpha=fdr_alpha)},
+        request, "_home_details.html",
+        {"overview": snap.value, **_view_context((cached_views.HOME_OVERVIEW, fdr_alpha, snap)), **_i18n_context(request, fdr_alpha=fdr_alpha)},
     )
 
 
@@ -1700,12 +1700,11 @@ def analysis_page(request: Request):
     """Séries, features et modèles, vus de haut : lesquels reviennent le plus dans les modèles finaux, lesquels ne servent
     jamais, leur meilleure contribution, et les caractéristiques des modèles (algorithme, nombre de features, horizon, type).
     Lecture seule : base de suivi et fichiers méta des modèles exportés (`tracking/usage.py`)."""
-    conn = trackdb.connect()
-    try:
-        analysis = trackusage.analyse(conn)
-    finally:
-        conn.close()
-    return templates.TemplateResponse(request, "analysis.html", {"a": analysis, **_i18n_context(request)})
+    snap = cached_views.ANALYSIS_USAGE.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S)
+    if snap is None:
+        return _preparing_page(request, (cached_views.ANALYSIS_USAGE, None, None))
+    return templates.TemplateResponse(
+        request, "analysis.html", {"a": snap.value, **_view_context((cached_views.ANALYSIS_USAGE, None, snap)), **_i18n_context(request)})
 
 
 def _asset_group_view(group_key: str) -> list[dict]:
@@ -1808,6 +1807,28 @@ def _snapshot_context(payload: dict) -> dict:
             "snapshot_refreshing": predictions_snapshot.status()["running"]}
 
 
+def _view_context(*views, live: bool = False) -> dict:
+    """Ce qu'une page lue dans des vues en cache dit d'elle-même : de quand datent ses chiffres (la plus ancienne vue), si un recalcul tourne, et
+    les vues dont la barre de chargement suit l'avancement. `views` = triplets (vue, clé, instantané) ; `live` : la barre suit aussi la
+    passe de prédictions de l'app."""
+    oldest = min((s.computed_at for _, _, s in views if s is not None), default=None)
+    return {"snapshot_at": None if oldest is None else oldest.astimezone().strftime("%Y-%m-%d %H:%M"),
+            "snapshot_refreshing": any(view.status(key)["running"] for view, key, _ in views),
+            "refresh_views": [view.name for view, _, _ in views], "refresh_live": live}
+
+
+def _preparing_page(request: Request, *views, live: bool = False) -> HTMLResponse:
+    """Premier calcul d'une page (aucun instantané) : le cadre, un message et la barre de chargement ; la page se recharge toute seule quand
+    le calcul est fini (202 : accepté, pas encore prêt)."""
+    return templates.TemplateResponse(request, "_preparing_page.html", {**_view_context(*views, live=live), "auto_reload": True,
+                                                                          **_i18n_context(request)}, status_code=202)
+
+
+def _preparing_fragment(request: Request, *views) -> HTMLResponse:
+    """Idem pour un bloc chargé après la page : `static/lazy.js` redemande toutes les 10 s sur un 202."""
+    return templates.TemplateResponse(request, "_view_preparing.html", {**_view_context(*views), **_i18n_context(request)}, status_code=202)
+
+
 def _predictions_snapshot() -> dict | None:
     """L'instantané de /predictions, jamais un calcul à l'ouverture : le dernier connu (même vieux), recalculé en tâche de fond ; sans
     aucun instantané, attend quelques secondes le premier calcul (`predictions_snapshot.get`)."""
@@ -1836,7 +1857,8 @@ def _directional_prediction_groups(conn: sqlite3.Connection) -> dict[str, list[t
     return groups
 
 
-def _predictions_overview(kind: str = "directional", only: str | None = None, db_path: str | None = None) -> dict:
+def _predictions_overview(kind: str = "directional", only: str | None = None, db_path: str | None = None,
+                          report: bool = False) -> dict:
     """feature/predictions-overview: universe-wide (target x horizon) table
     -- one row per pair, grouped by `DEFAULT_TARGET_GROUPS` category (same
     grouping `/universe` already uses) plus every other trained asset of the
@@ -1887,10 +1909,17 @@ def _predictions_overview(kind: str = "directional", only: str | None = None, db
             trained = {int(r[0]) for r in (conn.execute("SELECT DISTINCT horizon FROM run WHERE target = ?", (only,)) if only is not None
                                            else conn.execute("SELECT DISTINCT horizon FROM run"))}
             horizons = sorted(set(D.DEFAULT_HORIZONS) | (trained & set(D.SELECTABLE_HORIZONS)))
+        # `report` : calcul d'une vue en tâche de fond -- chaque lecture annonce son étape à la barre de chargement (`view_cache.current_progress`).
+        step = view_cache.current_progress().step if report else (lambda label: None)
+        step("Derniers signaux")
         preds = trackhistory.latest_predictions_by_target_and_horizon(conn, all_symbols, horizons)
+        step("Mesures de direction")
         metrics = trackhistory.direction_metrics_by_target_and_horizon(conn, all_symbols, horizons)
+        step("Fiabilité live")
         live_hit_rates = trackhistory.live_hit_rate_by_target_and_horizon(conn, all_symbols, horizons)
+        step("Suivi par mouvement")
         tallies = trackhistory.live_class_tally_by_target_and_horizon(conn, all_symbols, horizons)
+        step("Dérive et métriques")
         last_values = trackdb.asset_last_values(conn, all_symbols)
         drift = trackhistory.drift_badges(conn, all_symbols, horizons)
         # Un modèle au score impossible (fuite de données) n'affiche pas de signal : `validation/suspicion.py`.
@@ -1898,6 +1927,7 @@ def _predictions_overview(kind: str = "directional", only: str | None = None, db
         n_alpha = len(_alpha_run_labels(conn)) if not alpha else len(all_symbols)
     finally:
         conn.close()
+    step("Assemblage du tableau")
 
     now = utc_now()
     today = now.date()
@@ -2065,7 +2095,8 @@ def predictions_page(request: Request, dm_alpha: float = trackhistory.DM_SIGNIFI
     return templates.TemplateResponse(
         request, "predictions.html",
         {"kind": kind, "view": view, "n_alpha": n_alpha, "live_refresh": live_refresh.refresh_status(),
-         "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
+         "dm_significance_alpha": dm_alpha, "refresh_views": [predictions_snapshot.VIEW.name], "refresh_live": True,
+         **_i18n_context(request)},
     )
 
 
@@ -2166,9 +2197,12 @@ async def class_signals_api(request: Request, class_key: str):
     t = i18n.translator(i18n.get_lang(request))
 
     def compute() -> dict[str, list]:
+        snap = cached_views.CLASS_STATS.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S)
+        if snap is None:
+            return {}
+        stats = snap.value
         conn = trackdb.connect()
         try:
-            stats = memo.memoize(conn, ("class-stats",), lambda: class_overview.model_stats_by_asset(conn))
             symbols = [sym for g in cls.groups for sym, *_ in forms.TARGET_GROUPS.get(g, [])
                        if stats.get(sym, {}).get("directional", {}).get("n_done", 0) > 0]
             return memo.memoize(conn, ("class-signals", class_key), lambda: _class_signal_rows(conn, symbols))
@@ -2177,6 +2211,21 @@ async def class_signals_api(request: Request, class_key: str):
 
     rows = await run_in_threadpool(compute)
     return {sym: [[h, arrows, state, t.tx(label)] for h, arrows, state, label in row] for sym, row in rows.items()}
+
+
+@app.get("/api/refresh-status")
+def refresh_status_api(request: Request, views: str = "", live: int = 0):
+    """Où en est l'actualisation des vues de la page ouverte (`static/refresh_bar.js`, toutes les 2 s) : pour chaque vue demandée (`?views=a,b`)
+    si elle se recalcule, l'étape et l'avancement (None = indéterminé), et avec `?live=1` la passe de prédictions de l'app. Lecture en mémoire,
+    jamais de calcul."""
+    t = i18n.translator(i18n.get_lang(request))
+    wanted = {v for v in views.split(",") if v}
+    out = []
+    for state in view_cache.all_status():
+        if state["name"] in wanted:
+            out.append({**state, "title": t(f"rb_view_{state['name']}"), "label": None if not state["label"] else t.tx(state["label"])})
+    passe = live_refresh.refresh_status()
+    return {"views": out, "live": ({"running": passe["running"], "done": passe["done"], "total": passe["total"]} if live else None)}
 
 
 @app.get("/fragments/predictions")
@@ -2226,15 +2275,13 @@ def portfolio_bl_fragment(request: Request, horizon: int = BL_DEFAULT_HORIZON):
     """Portefeuille Black-Litterman de /portfolio (prix déjà en cache, P(hausse) calibrées), chargé après la page."""
     if horizon not in _bl_horizons():
         raise HTTPException(status_code=400, detail=f"horizon inconnu : {horizon}")
-    conn = trackdb.connect()
-    try:
-        overview = trackbl.bl_overview(conn, horizon)
-    except Exception:  # noqa: BLE001 -- robustesse de page : un échec de calcul devient un panneau vide, jamais un 500
-        overview = {"n_assets": 0, "n_views": 0}
-    finally:
-        conn.close()
-    rows = trackbl.table_rows(overview) if overview.get("n_views") else []
-    return templates.TemplateResponse(request, "_portfolio_bl.html", {"bl": overview, "rows": rows, **_i18n_context(request)})
+    snap = cached_views.PORTFOLIO_BL.get(horizon, wait_first=cached_views.FIRST_BUILD_WAIT_S)
+    if snap is None:
+        return _preparing_fragment(request, (cached_views.PORTFOLIO_BL, horizon, None))
+    return templates.TemplateResponse(
+        request, "_portfolio_bl.html",
+        {"bl": snap.value["overview"], "rows": snap.value["rows"], **_view_context((cached_views.PORTFOLIO_BL, horizon, snap)),
+         **_i18n_context(request)})
 
 
 @app.get("/portfolio")
@@ -2263,31 +2310,25 @@ def portfolio_page(request: Request, pairs: str | None = None, bl_horizon: int =
     `tracking.portfolio.parse_correlated_pairs`) is this route's only 400;
     missing/blank keeps the 3 defaults."""
     try:
-        parsed_pairs = trackportfolio.parse_correlated_pairs(pairs)
+        trackportfolio.parse_correlated_pairs(pairs)             # saisie invalide : 400 tout de suite, avant tout calcul
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    conn = trackdb.connect()
-    try:
-        overview = trackportfolio.portfolio_overview(conn, pairs=parsed_pairs)
-    finally:
-        conn.close()
-    # CHANTIER D (feature/hrp-portfolio): s'ajoute a la synthese ci-dessus,
-    # ne la remplace pas -- calcul independant (prix caches localement, pas
-    # `latest_predictions_by_target_and_horizon`), echoue silencieusement
-    # vers une liste de poids vide plutot que de faire echouer toute la page
-    # (meme esprit read-only-avec-avertissement que le reste de cette route).
-    try:
-        hrp = trackhrp.hrp_overview()
-    except Exception:  # noqa: BLE001 -- page robustness: HRP failure degrades to an empty panel, never a 500
-        hrp = {"weights": None, "skipped": [], "as_of": None, "n_assets": 0}
+    key = (pairs or "").strip()                                   # le texte saisi est la clé de la vue : chaque jeu de paires a son instantané
+    snap = cached_views.PORTFOLIO.get(key, wait_first=cached_views.FIRST_BUILD_WAIT_S)
+    if snap is None:
+        return _preparing_page(request, (cached_views.PORTFOLIO, key, None))
+    # La synthèse des signaux et les poids HRP (calcul indépendant, prix en cache local) viennent du même instantané ; un échec du panneau
+    # HRP y est déjà devenu un panneau vide (`cached_views._portfolio`).
+    overview = snap.value["overview"]
     return templates.TemplateResponse(
         request, "portfolio.html",
         {
             "overview": overview,
             "pairs_text": trackportfolio.format_correlated_pairs(overview["pairs_used"]),
-            "hrp": hrp,
+            "hrp": snap.value["hrp"],
             "bl_horizon": bl_horizon if bl_horizon in _bl_horizons() else BL_DEFAULT_HORIZON,
             "bl_horizons": _bl_horizons(),
+            **_view_context((cached_views.PORTFOLIO, key, snap)),
             **_i18n_context(request),
         },
     )
@@ -2382,15 +2423,18 @@ def asset_class_fragment(request: Request, class_key: str, min_history_years: in
     if class_key not in asset_classes.BY_KEY:
         raise HTTPException(status_code=404, detail="Classe inconnue")
     _check_min_history_years(min_history_years)
+    stats = cached_views.CLASS_STATS.get(None, wait_first=cached_views.FIRST_BUILD_WAIT_S)     # la lecture de tous les runs : en cache
+    if stats is None:
+        return _preparing_fragment(request, (cached_views.CLASS_STATS, None, None))
     conn = trackdb.connect()
     try:
-        stats = memo.memoize(conn, ("class-stats",), lambda: class_overview.model_stats_by_asset(conn))
-        page = class_overview.class_page(conn, class_key, forms.TARGET_GROUPS, min_history_years, stats=stats)
+        page = class_overview.class_page(conn, class_key, forms.TARGET_GROUPS, min_history_years, stats=stats.value)
     finally:
         conn.close()
     return templates.TemplateResponse(
         request, "_asset_class_body.html",
-        {"cls": page["class"], "groups": page["groups"], "kpi": page["kpi"], "min_years": min_history_years, **_i18n_context(request)})
+        {"cls": page["class"], "groups": page["groups"], "kpi": page["kpi"], "min_years": min_history_years,
+         **_view_context((cached_views.CLASS_STATS, None, stats)), **_i18n_context(request)})
 
 
 def _register_asset_class_pages() -> None:

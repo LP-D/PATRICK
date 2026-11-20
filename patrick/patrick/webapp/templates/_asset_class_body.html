@@ -2,6 +2,7 @@
    groupe. `kpi`, `groups`, `cls`, `min_years` = `tracking/class_overview.class_page`. Un repère de signal par horizon est ajouté aux lignes par
    asset_class.js (`/api/class-signals/{classe}`). #}
 {% from "_components.html" import status_badge, metric, panel_th, panel_td %}
+{% include "_snapshot_line.html" %}
 <div class="metric-grid">
 {{ metric(t('cls_kpi_targets'), kpi.n_targets, t('cls_kpi_groups', n=groups | length), "neutral") }}
 {{ metric(t('cls_kpi_trained'), kpi.n_trained ~ ' / ' ~ kpi.n_targets, t('cls_kpi_trained_rel'), "ok" if kpi.n_trained else "neutral") }}

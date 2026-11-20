@@ -1,0 +1,16 @@
+{# Les options du sélecteur de modèle (groupes directionnels et alpha) de `_fund_rule_form.html` : ~4 400 lignes, 2 s de rendu. Le serveur les rend une
+   seule fois par liste de modèles et par langue (`fund_routes._model_options`) et les passe en `model_options_html`. Variables : `directional`, `alphas`. #}
+        {% if directional %}
+        <optgroup label="{{ t('kind_directional') }} — {{ t('ml_kind_directional_short') }}">
+          {% for m in directional | sort(attribute='label') %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-pup='{{ m.pup_segments | tojson }}' data-horizon="{{ m.horizon }}" data-symbol="{{ m.instrument_hint.symbol }}" data-kind-hint="{{ m.instrument_hint.kind }}" data-kind="raw" data-asset="{{ m.asset }}" data-benchmark="">{{ m.label }} · h{{ m.horizon }}{% if m.dm_p is not none %} ({{ t('fund_model_p', p='%.3f' | format(m.dm_p)) }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+        {% if alphas %}
+        <optgroup label="{{ t('kind_alpha') }} — {{ t('ml_kind_alpha_short') }}">
+          {% for m in alphas | sort(attribute='label') %}
+          <option value="{{ m.trial_id }}"{% if m.suspect %} disabled{% endif %} data-segments='{{ m.segments | tojson }}' data-pup='{{ m.pup_segments | tojson }}' data-horizon="{{ m.horizon }}" data-symbol="{{ m.instrument_hint.symbol }}" data-kind-hint="{{ m.instrument_hint.kind }}" data-kind="alpha" data-asset="{{ m.asset }}" data-benchmark="{{ m.benchmark or '' }}">{{ m.label }} · h{{ m.horizon }}{% if m.dm_p is not none %} ({{ t('fund_model_p', p='%.3f' | format(m.dm_p)) }}){% endif %}{% if m.suspect %} · {{ t('suspect_tag') }}{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}

@@ -3319,6 +3319,8 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
   .run-toast, .is-revealing, .is-revealing > *, details.adv[open] > :not(summary) { animation: none !important; }
   [data-elastic] > * { translate: none !important; }
   .theme-toggle > span, .notify-toggle > span { filter: none !important; }
+  .refresh-bar-fill { transition: none; }
+  .refresh-bar-indeterminate .refresh-bar-fill { animation: none; width: 100%; opacity: .4; }
 }
 
 /* ---- Ecrans cote a cote (/split) ---------------------------------------------------------------------------------- */
@@ -3444,3 +3446,17 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .st-flag.is-ok { color: var(--pos); }
 .st-flag.is-ko { color: var(--neg); }
 .st-flag.is-na { color: var(--text-3); }
+
+
+/* ---- Barre de chargement de l'actualisation d'une page (static/refresh_bar.js) --------------------------------------------------------- */
+.refresh-bar { position: sticky; top: 0; z-index: 20; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, .12)); }
+.refresh-bar[hidden] { display: none; }
+.refresh-bar-text { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+.refresh-bar-pct { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+.refresh-bar-track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.refresh-bar-fill { height: 100%; width: 0; border-radius: 3px; background: var(--brand); transition: width .6s ease; }
+.refresh-bar-indeterminate .refresh-bar-fill { width: 35%; animation: refresh-bar-slide 1.4s ease-in-out infinite; }
+.refresh-bar-done .refresh-bar-fill { background: var(--pos); }
+.refresh-bar-reload { margin-top: 8px; }
+@keyframes refresh-bar-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }

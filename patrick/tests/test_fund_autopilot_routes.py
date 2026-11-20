@@ -243,7 +243,7 @@ def test_the_panel_does_not_compute_the_model_list(client, world, monkeypatch):
     assert client.get(f"/api/fund/strategies/{sid}/panel").status_code == 200
 
 
-def test_the_model_list_is_cached_until_the_runs_or_champions_change(client, world, monkeypatch):
+def test_the_model_list_is_cached_until_the_runs_or_champions_change_and_refreshed(client, world, monkeypatch):
     world.cell("AAPL", 1, live=SIGNALS)
     sid = fs.make_strategy(client)
     calls: list[int] = []
@@ -258,7 +258,11 @@ def test_the_model_list_is_cached_until_the_runs_or_champions_change(client, wor
     second = client.get(f"/api/fund/strategies/{sid}/rule-form").text
     assert len(calls) == 1 and first == second                                 # la deuxième ouverture ne recalcule rien
 
-    world.cell("GC=F", 1, live=SIGNALS)                                       # un nouveau champion : liste recalculée tout de suite
+    world.cell("GC=F", 1, live=SIGNALS)                                       # un nouveau champion : la liste est recalculée (vue en cache)
+    from patrick.tracking import db as trackdb
+    from patrick.webapp import cached_views
+
+    assert cached_views.FUND_MODELS.refresh_if_stale_sync(None, trackdb.default_db_path()) is True      # la base a bougé : recalcul
     third = client.get(f"/api/fund/strategies/{sid}/rule-form").text
     assert len(calls) == 2 and "Future · Or" in third
 

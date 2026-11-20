@@ -29,9 +29,9 @@ from patrick.analysis import (
     rl_sections,
 )
 from patrick.tracking import db as trackdb
-from patrick.tracking import health, live_board, research_notes, weekly_report
+from patrick.tracking import health, research_notes, weekly_report
 from patrick.tracking import journal as journal_mod
-from patrick.webapp import i18n
+from patrick.webapp import cached_views, i18n
 
 STATIC = Path(__file__).resolve().parent / "static"
 _ML_SCRIPTS = ("analysis_kit.js", "analysis_loader.js", "run_analysis.js", "run_analysis_more.js")
@@ -65,6 +65,8 @@ def _cached(name: str, fn):
 
 
 def _forget(name: str) -> None:
+    if name == "live_board":                                  # « Résultat réel » est une vue persistante : on la supprime, la page suivante la recalcule
+        cached_views.LIVE_BOARD.forget()
     with _cache_lock:
         for key in [k for k in _cache if k[0] == name]:
             del _cache[key]
@@ -349,14 +351,13 @@ def register(app: FastAPI, templates, context) -> None:
 
     @app.get("/reel", response_class=HTMLResponse)
     async def live_board_page(request: Request):
-        def work():
-            conn = trackdb.connect()
-            try:
-                return live_board.board(conn)
-            finally:
-                conn.close()
-        board = await run_in_threadpool(_cached, "live_board", work)
-        return templates.TemplateResponse(request, "reel.html", {**context(request), "board": board})
+        view = cached_views.LIVE_BOARD
+        snap = await run_in_threadpool(view.get, None, None, False, cached_views.FIRST_BUILD_WAIT_S)     # lu dans le cache, jamais calculé ici
+        info = {"snapshot_at": None if snap is None else snap.computed_at.astimezone().strftime("%Y-%m-%d %H:%M"),
+                "snapshot_refreshing": view.status()["running"], "refresh_views": [view.name], "refresh_live": True}
+        if snap is None:
+            return templates.TemplateResponse(request, "_preparing_page.html", {**context(request), **info, "auto_reload": True}, status_code=202)
+        return templates.TemplateResponse(request, "reel.html", {**context(request), **info, "board": snap.value})
 
     @app.get("/journal")
     def journal_page(request: Request):
@@ -436,6 +437,7 @@ def register(app: FastAPI, templates, context) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         _forget("models_overview")
+        _forget("live_board")                                   # le champion a changé : le résultat réel se relit tout de suite
         return JSONResponse(result)
 
     @app.get("/derive")

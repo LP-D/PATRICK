@@ -80,6 +80,10 @@ def test_the_synthesis_page_shows_the_pooled_signals_card(seeded):
     client = TestClient(app)
     assert "Signaux regroupés" not in client.get("/").text
     pooled_signal.save(seeded, pooled_signal.compute_all(seeded, n_shift=200))
+    from patrick.webapp import cached_views
+
+    db_file = seeded.execute("PRAGMA database_list").fetchone()[2]
+    cached_views.HOME_SUMMARY.refresh_sync(None, db_file)           # la page lit un cache : la fin d'une passe le recalcule après avoir écrit les signaux regroupés
     html = client.get("/").text
     assert "Signaux regroupés" in html and "26" in html
 

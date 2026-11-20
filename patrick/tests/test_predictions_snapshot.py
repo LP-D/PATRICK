@@ -53,13 +53,13 @@ def test_no_snapshot_always_needs_a_refresh():
     assert snap.needs_refresh(None, (0, None), NOW, live_running=True) is True
 
 
-def test_snapshot_roundtrip_and_other_versions_are_ignored(tmp_path):
+def test_snapshot_roundtrip_and_other_versions_are_ignored(tmp_path, monkeypatch):
     path = str(tmp_path / "patrick.db")
     assert snap.load(path) is None
     snap.save({**_payload(), "directional": {"groups": [], "horizons": [1, 5]}}, path)
     assert snap.load(path)["directional"]["horizons"] == [1, 5]
     assert snap.snapshot_path(path).parent == tmp_path                 # à côté de la base qu'il résume
-    snap.save({**_payload(), "version": snap.VERSION + 1}, path)       # forme du tableau changée : l'ancien instantané ne sert plus
+    monkeypatch.setattr(snap.VIEW, "version", snap.VIEW.version + 1)    # forme du tableau changée : l'ancien instantané ne sert plus
     assert snap.load(path) is None
 
 
@@ -80,12 +80,13 @@ def test_a_request_during_a_refresh_triggers_exactly_one_more_pass(tmp_path, mon
     path = str(tmp_path / "patrick.db")
     started, release, runs = threading.Event(), threading.Event(), []
 
-    def slow_refresh(db_path=None):
+    def slow_compute(db_path=None):
         runs.append(1)
         started.set()
         release.wait(5)
+        return {"directional": {"groups": [], "horizons": []}}
 
-    monkeypatch.setattr(snap, "refresh_sync", slow_refresh)
+    monkeypatch.setattr(snap, "compute", slow_compute)
     snap.request_refresh(path)
     assert started.wait(5)
     snap.request_refresh(path)                                          # les données ont bougé pendant le calcul
@@ -101,12 +102,13 @@ def test_a_page_request_does_not_stack_a_second_pass_on_a_running_one(tmp_path, 
     path = str(tmp_path / "patrick.db")
     started, release, runs = threading.Event(), threading.Event(), []
 
-    def slow_refresh(db_path=None):
+    def slow_compute(db_path=None):
         runs.append(1)
         started.set()
         release.wait(5)
+        return {"directional": {"groups": [], "horizons": []}}
 
-    monkeypatch.setattr(snap, "refresh_sync", slow_refresh)
+    monkeypatch.setattr(snap, "compute", slow_compute)
     monkeypatch.setenv("PATRICK_DB_PATH", path)
     db.connect(path).close()
     snap.get(path)                                                      # aucun instantané : lance le premier calcul
@@ -133,7 +135,7 @@ def test_the_fragment_is_served_from_the_snapshot_and_never_computes_on_open(tmp
         response = client.get(url)
         assert response.status_code == 200, url
     html = client.get("/fragments/predictions").text
-    assert "^VIX" in html or "VIX" in html and "Tableau calculé le" in html
+    assert "^VIX" in html or "VIX" in html and "Données calculées le" in html
 
 
 def test_a_stale_snapshot_is_served_at_once_and_refreshed_in_the_background(tmp_path, monkeypatch):
@@ -142,12 +144,12 @@ def test_a_stale_snapshot_is_served_at_once_and_refreshed_in_the_background(tmp_
     payload["computed_at"] = (datetime.now(UTC) - timedelta(days=2)).isoformat()   # vieux de deux jours
     snap.save(payload, path)
     requested = []
-    monkeypatch.setattr(snap, "request_refresh", lambda db_path=None, rerun_if_running=True: requested.append(1) or True)
+    monkeypatch.setattr(snap.VIEW, "request_refresh", lambda key=None, db_path=None, rerun_if_running=True: requested.append(1) or True)
     monkeypatch.setattr(webapp, "_predictions_overview", lambda *a, **k: (_ for _ in ()).throw(AssertionError("calcul à l'ouverture")))
 
     response = TestClient(webapp.app).get("/fragments/predictions")
 
-    assert response.status_code == 200 and "Tableau calculé le" in response.text
+    assert response.status_code == 200 and "Données calculées le" in response.text
     assert requested == [1]
 
 
@@ -156,7 +158,7 @@ def test_first_computation_answers_202_with_a_message_instead_of_blocking(tmp_pa
     monkeypatch.setenv("PATRICK_DB_PATH", path)
     db.connect(path).close()
     release = threading.Event()
-    monkeypatch.setattr(snap, "refresh_sync", lambda db_path=None: release.wait(5))
+    monkeypatch.setattr(snap, "compute", lambda db_path=None: release.wait(5) or {"directional": {"groups": [], "horizons": []}})
     monkeypatch.setattr(snap, "FIRST_BUILD_WAIT_S", 0.0)
 
     response = TestClient(webapp.app).get("/fragments/predictions")

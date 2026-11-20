@@ -1,6 +1,7 @@
 {# Fragment `/fragments/portfolio-bl` : portefeuille Black-Litterman (`tracking/black_litterman.py`), lu sur les prix déjà en cache
    et sur les P(hausse) calibrées les plus récentes. Calculé après l'affichage de /portfolio. #}
 {% from "_components.html" import data_table, empty_state %}
+{% include "_snapshot_line.html" %}
 {% if bl.n_assets == 0 %}
 {{ empty_state(t('pf_bl_no_prices'), t('pf_hrp_empty_hint')) }}
 {% elif bl.n_views == 0 %}

@@ -127,6 +127,10 @@ _RULES: list[tuple[str, str]] = [
     (r"Base de données occupée \(un run écrit \?\) : réessaie dans un instant\.", "Database busy (a run is writing?): try again in a moment."),
     (r"(?P<name>\w+) doit être strictement compris entre 0 et 1 \(reçu (?P<v>.+)\)\.", "{name} must be strictly between 0 and 1 (got {v})."),
     # --- webapp/app.py : les quatre mouvements du modèle et les directions (libellés produits côté Python)
+    # --- webapp/view_cache.py : étapes annoncées à la barre de chargement
+    (r"Derniers signaux", "Latest signals"), (r"Mesures de direction", "Direction metrics"), (r"Fiabilité live", "Live reliability"),
+    (r"Suivi par mouvement", "Tally by move"), (r"Dérive et métriques", "Drift and metrics"), (r"Assemblage du tableau", "Assembling the table"),
+    (r"Modèles alpha", "Alpha models"), (r"Avantage par horizon", "Edge by horizon"), (r"Fonds (?P<n>.+)", "Fund {n}"),
     (r"Hausse forte", "Strong up"), (r"Hausse faible", "Slight up"), (r"Baisse faible", "Slight down"), (r"Baisse forte", "Strong down"),
     (r"Hausse prédite", "Predicted up"), (r"Baisse prédite", "Predicted down"), (r"Hausse", "Up"), (r"Baisse", "Down"),
     (r"Surperformance forte", "Strong outperformance"), (r"Surperformance faible", "Slight outperformance"),

@@ -27,6 +27,7 @@
             .then(function (html) {
                 if (html === null) return;
                 el.innerHTML = html;
+                el.dataset.lazySrc = el.dataset.lazyUrl;          // gardée pour `patrickReloadLazy` (barre de chargement : nouvelles données prêtes)
                 el.removeAttribute("data-lazy-url");
                 el.setAttribute("aria-busy", "false");
                 el.classList.add("lazy-ready");
@@ -39,5 +40,12 @@
                 el.querySelector(".lazy-retry").addEventListener("click", function () { load(el); });
             });
     }
+    /* Redemande tous les blocs déjà chargés (les chiffres ont été recalculés en tâche de fond : `static/refresh_bar.js`). */
+    window.patrickReloadLazy = function () {
+        document.querySelectorAll("[data-lazy-src]").forEach(function (el) {
+            el.dataset.lazyUrl = el.dataset.lazySrc;
+            load(el);
+        });
+    };
     document.querySelectorAll("[data-lazy-url]").forEach(load);
 })();

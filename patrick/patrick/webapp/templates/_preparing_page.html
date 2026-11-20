@@ -1,0 +1,7 @@
+{# Premier calcul d'une page lourde (aucun instantané n'existe encore) : le cadre, un message, et la barre de chargement qui dit où en est le calcul ;
+   la page se recharge toute seule quand il est fini (`auto_reload`, `static/refresh_bar.js`). #}
+{% extends "base_v2.html" %}
+{% block title %}PATRICK{% endblock %}
+{% block content %}
+<p class="banner banner-info" role="status">{{ t('view_preparing') }}</p>
+{% endblock %}

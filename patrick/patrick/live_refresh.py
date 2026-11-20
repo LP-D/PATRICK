@@ -565,18 +565,20 @@ def write_weekly_report(db_path: str | None = None) -> str | None:
 
 
 def refresh_predictions_snapshot(db_path: str | None = None, background: bool = True) -> None:
-    """Les signaux sont écrits : recalcule le tableau de /predictions maintenant, pour qu'il soit prêt à l'ouverture de la page
-    (`webapp/predictions_snapshot.py`). `background=True` : fil séparé (l'app) ; sinon dans ce processus (tâche de nuit). Une erreur
+    """Les signaux sont écrits : recalcule le tableau de /predictions (`webapp/predictions_snapshot.py`) et les autres vues lourdes
+    (`webapp/cached_views.py`) maintenant, pour qu'elles soient prêtes à l'ouverture des pages. `background=True` : fil séparé (l'app) ; sinon dans ce processus (tâche de nuit). Une erreur
     est journalisée, jamais propagée."""
     try:
-        from patrick.webapp import predictions_snapshot
+        from patrick.webapp import cached_views, predictions_snapshot
 
         if background:
             predictions_snapshot.request_refresh(db_path)
+            cached_views.request_all_refresh(db_path, force=True)  # les autres pages lourdes (accueil, fonds, analyse...) : vues en cache, une par une
         else:
             predictions_snapshot.refresh_if_stale_sync(db_path)
+            cached_views.refresh_all_sync(db_path, force=True)
     except Exception:
-        logger.exception("instantané de /predictions non recalculé")
+        logger.exception("instantanés des pages non recalculés")
 
 
 def refresh_status() -> dict:

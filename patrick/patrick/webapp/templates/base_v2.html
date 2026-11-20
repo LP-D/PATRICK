@@ -203,6 +203,16 @@ script below (no flash), otherwise the OS preference applies.
                    parent verrait son contenu disparaitre sans erreur Jinja. #}
                 {% set missing_data_root = data_root_missing() %}
                 {% if missing_data_root %}<p class="banner banner-error data-root-banner" role="alert">{{ t('app_status_data_missing', path=missing_data_root) }}</p>{% endif %}
+                {# Barre de chargement : où en est l'actualisation des données de CETTE page (`refresh_views`, posé par les routes qui lisent un cache). #}
+                {% if refresh_views %}
+                <div class="refresh-bar" id="refresh-bar" data-views="{{ refresh_views | join(',') }}"{% if refresh_live %} data-live="1"{% endif %}{% if auto_reload %} data-auto-reload="1"{% endif %}
+                     data-t-title="{{ t('rb_title', v='{v}') }}" data-t-live="{{ t('rb_live', d='{d}', n='{n}') }}" data-t-done="{{ t('rb_done') }}" hidden>
+                    <div class="refresh-bar-text"><span class="refresh-bar-label"></span><span class="refresh-bar-pct"></span></div>
+                    <div class="refresh-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="refresh-bar-fill"></div></div>
+                    <button type="button" class="btn-secondary refresh-bar-reload" hidden>{{ t('rb_reload') }}</button>
+                </div>
+                <script src="{{ asset('refresh_bar.js') }}" defer></script>
+                {% endif %}
                 {% block session_context %}{% endblock %}
                 {% block content %}{% endblock %}
             </main>
