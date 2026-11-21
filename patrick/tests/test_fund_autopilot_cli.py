@@ -175,6 +175,30 @@ def test_enable_on_a_class_strategy_changes_the_tier_but_keeps_its_scope(setup):
     assert settings["tier"] == "dm" and settings["horizons"] == [1] and settings["groups"]       # le périmètre de la classe reste
 
 
+def test_classes_and_tiers_take_a_family_with_its_wrapper_its_capital_and_its_classes(setup):
+    _, runner = setup
+
+    out = run(runner, "autopilot-classes", "--create", "--family", "pea", "--tier", "large", "--today", "2026-01-16")
+    run(runner, "autopilot-tiers", "--create", "--family", "cto", "--tier", "dm", "--today", "2026-01-16")
+
+    assert "PEA Actions France" in out and "PEA Actions Europe" in out and "Future" not in out
+    conn = trackdb.connect()
+    made = {s["name"]: s for s in store.list_strategies(conn)}
+    cto_settings = store.get_autopilot(conn, made["CTO Diebold-Mariano"]["strategy_id"])["settings"]
+    conn.close()
+    assert (made["PEA Actions France"]["wrapper"], made["PEA Actions France"]["initial_capital"]) == ("PEA", store.PEA_DEPOSIT_CAP_EUR)
+    assert (made["CTO Diebold-Mariano"]["wrapper"], made["CTO Diebold-Mariano"]["initial_capital"]) == ("CTO", 10_000_000)
+    assert cto_settings["allow_short"] is False
+
+
+def test_an_unknown_family_is_refused_on_the_command_line(setup):
+    _, runner = setup
+
+    for command in ("autopilot-classes", "autopilot-tiers"):
+        result = runner.invoke(app, ["fund", command, "--family", "assurance-vie"])
+        assert result.exit_code == 1 and "gamme" in result.output
+
+
 def test_classes_refuses_an_unknown_class(setup):
     _, runner = setup
 

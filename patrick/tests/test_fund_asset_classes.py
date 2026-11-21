@@ -7,7 +7,7 @@ import pytest
 from test_fund_selection import World
 
 from patrick.config import universe_extension as UX
-from patrick.fund import asset_classes, autopilot, store
+from patrick.fund import asset_classes, autopilot, envelopes, store
 
 TODAY = dt.date(2026, 1, 16)
 
@@ -177,3 +177,74 @@ def test_setup_tiers_refuses_an_unknown_tier_and_writes_nothing(conn):
     with pytest.raises(store.FundError, match="niveau"):
         asset_classes.setup_tiers(conn, today=TODAY, tiers=("dm", "large"))
     assert store.list_strategies(conn) == []
+
+
+# --- gammes : Systematic (CTO, vente à découvert), CTO (achat seulement), PEA (achat seulement, actions de l'UE/EEE en euro) -------
+
+
+def test_each_family_has_its_own_names_wrapper_capital_and_short_rule(conn):
+    rows = {f: asset_classes.setup(conn, today=TODAY, family=f, tier="large", only=["Actions France"])[0] for f in ("systematic", "cto", "pea")}
+
+    assert {f: r["name"] for f, r in rows.items()} == {
+        "systematic": "Systematic Actions France", "cto": "CTO Actions France", "pea": "PEA Actions France"}
+    for family, wrapper, short, capital in (("systematic", "CTO", True, 10_000_000), ("cto", "CTO", False, 10_000_000),
+                                            ("pea", "PEA", False, store.PEA_DEPOSIT_CAP_EUR)):
+        strategy = store.get_strategy(conn, rows[family]["strategy_id"])
+        settings = store.get_autopilot(conn, rows[family]["strategy_id"])["settings"]
+        assert (strategy["wrapper"], strategy["initial_capital"], strategy["category"]) == (wrapper, capital, "quant")
+        assert settings["allow_short"] is short and settings["groups"] == list(asset_classes.CLASSES["Actions France"])
+    assert len(store.list_strategies(conn)) == 3                    # aucune gamme ne reprend la stratégie d'une autre
+
+
+def test_the_pea_family_offers_only_the_european_share_classes(conn):
+    pea = asset_classes.FAMILIES["pea"]
+
+    assert list(pea.classes) == ["Actions France", "Actions Europe"]
+    assert set(pea.classes["Actions Europe"]) | set(pea.classes["Actions France"]) == set(envelopes.PEA_GROUPS)    # pas le Royaume-Uni
+    out = asset_classes.setup(conn, today=TODAY, family="pea", tier="large")
+    assert [(r["class"], r["name"]) for r in out] == [("Actions France", "PEA Actions France"), ("Actions Europe", "PEA Actions Europe")]
+    with pytest.raises(store.FundError, match="gamme"):
+        asset_classes.setup(conn, today=TODAY, family="pea", only=["Future"])
+
+
+def test_a_pea_above_the_deposit_ceiling_and_an_unknown_family_are_refused_before_any_write(conn):
+    with pytest.raises(store.FundError, match="plafond"):
+        asset_classes.setup(conn, today=TODAY, family="pea", capital=10_000_000)
+    with pytest.raises(store.FundError, match="gamme"):
+        asset_classes.setup(conn, today=TODAY, family="assurance-vie")
+    with pytest.raises(store.FundError, match="gamme"):
+        asset_classes.setup_tiers(conn, today=TODAY, family="assurance-vie")
+    assert store.list_strategies(conn) == []
+
+
+def test_each_family_has_its_evidence_strategies_with_its_own_scope(conn):
+    rows = {f: asset_classes.setup_tiers(conn, today=TODAY, family=f) for f in ("cto", "pea")}
+
+    assert [r["name"] for r in rows["cto"]] == ["CTO Diebold-Mariano", "CTO Benjamini-Hochberg"]
+    assert [r["name"] for r in rows["pea"]] == ["PEA Diebold-Mariano", "PEA Benjamini-Hochberg"]
+    cto = store.get_autopilot(conn, rows["cto"][0]["strategy_id"])["settings"]
+    pea = store.get_autopilot(conn, rows["pea"][1]["strategy_id"])["settings"]
+    assert (cto["allow_short"], cto["groups"]) == (False, None)                                 # tout l'univers, achat seulement
+    assert (pea["allow_short"], pea["groups"], pea["tier"]) == (False, list(envelopes.PEA_GROUPS), "bh")
+    assert store.get_strategy(conn, rows["pea"][0]["strategy_id"])["wrapper"] == "PEA"
+
+
+def test_a_cto_family_strategy_buys_shares_in_cash_and_never_sells_short(conn, monkeypatch):
+    world = World(conn, monkeypatch)
+    world.cell("AAPL", 1, live=[("2026-01-15", 0, 0.6)])                  # signal de baisse : ni vente à découvert, ni CFD
+    sid = asset_classes.setup(conn, today=TODAY, family="cto", tier="large", only=["Actions US"])[0]["strategy_id"]
+
+    model = autopilot.preview(conn, sid, TODAY)["selected"][0]
+
+    assert model["target"] == "AAPL" and model["instrument"]["kind"] == "equity" and model["allow_short"] is False
+
+
+def test_class_rows_show_the_strategy_of_the_requested_family(conn):
+    asset_classes.setup(conn, today=TODAY, family="pea", tier="large", only=["Actions France"])
+
+    pea = {r["name"]: r for r in asset_classes.class_rows(conn, family="pea")}
+    systematic = {r["name"]: r for r in asset_classes.class_rows(conn)}
+
+    assert list(pea) == ["Actions France", "Actions Europe"] and pea["Actions France"]["strategy_id"] is not None
+    assert systematic["Actions France"]["strategy_id"] is None
+

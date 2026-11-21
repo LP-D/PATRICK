@@ -36,76 +36,105 @@
 
 <section id="fund-panel" class="card fund-panel" hidden aria-live="polite"></section>
 
-{# Fonds réels : un PEA et un CTO fictifs (fund/real_funds.py), 5 000 €, 1 € par ordre, tous les signaux. Création ou reprise en un clic. #}
-<details class="card fund-real" id="fund-real">
-  <summary>{{ t('fund_real_title') }}</summary>
-  <p class="hint">{{ t('fund_real_hint', capital=(real_defaults.capital | eur(0)), fee=(real_defaults.fee_flat | eur), min=(real_defaults.min_position | eur(0))) }}</p>
-  <ul class="fund-real-rules">
-    <li>{{ t('fund_real_rule_pea') }}</li>
-    <li>{{ t('fund_real_rule_cto') }}</li>
-    <li>{{ t('fund_real_rule_fees', fee=(real_defaults.fee_flat | eur)) }}</li>
-    <li>{{ t('fund_real_rule_signals', min=(real_defaults.min_position | eur(0))) }}</li>
-    <li>{{ t('fund_real_rule_heuristic') }}</li>
-  </ul>
-  <p class="hint" data-keep><strong>{{ t('fund_real_pea_scope') }}</strong> {{ pea_groups | join(' · ') }}</p>
-  {% if real_existing %}
-  <p class="hint">{{ t('fund_real_existing') }}
-    {% for s in real_existing %}<a href="/fonds?categorie=real&amp;strategy={{ s.strategy_id | urlencode }}">{{ s.name }}</a> <span class="tag">{{ s.wrapper }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</p>
-  {% endif %}
+{# Création des fonds : une seule carte (ADR 0028). La gamme fixe l'enveloppe et ses règles (fund/asset_classes.FAMILIES) : Systematic (CTO, vente
+   à découvert en CFD), CTO (achat seulement), PEA (achat seulement, actions de l'UE/EEE en euro, plafond de versements) ; le découpage : une
+   stratégie par classe d'actifs ou une par preuve statistique. La gamme « Réels » : le PEA et le CTO de 5 000 €, 1 € par ordre (fund/real_funds.py,
+   ADR 0026). fonds.js ne montre que le bloc et les classes de la gamme choisie ; aperçu = fragment rendu serveur. #}
+<details class="card fund-create" id="fund-create">
+  <summary>{{ t('fund_create_title') }}</summary>
+  <p class="hint">{{ t('fund_create_hint') }}</p>
   <div class="form fund-inline-form">
     <div class="subgrid">
-      <label>{{ t('fund_real_capital') }} <input type="number" name="capital" min="100" max="150000" step="100" value="{{ real_defaults.capital | int }}" data-real-field></label>
-      <label>{{ t('fund_real_fee') }} <input type="number" name="fee_flat" min="0" max="100" step="0.1" value="{{ real_defaults.fee_flat }}" data-real-field></label>
-      <label>{{ t('fund_real_min') }} <input type="number" name="min_position" min="1" step="10" value="{{ real_defaults.min_position | int }}" data-real-field></label>
-      <label class="fund-check"><input type="checkbox" name="run" data-real-field checked> {{ t('fund_cls_run_now') }}</label>
+      <label>{{ t('fund_family') }}
+        <select name="family" id="fund-family">
+          <option value="systematic" data-capital="{{ families.systematic.capital | int }}" selected>{{ t('fund_family_systematic') }}</option>
+          <option value="cto" data-capital="{{ families.cto.capital | int }}">{{ t('fund_family_cto') }}</option>
+          <option value="pea" data-capital="{{ families.pea.capital | int }}">{{ t('fund_family_pea') }}</option>
+          <option value="real">{{ t('fund_family_real') }}</option>
+        </select>
+      </label>
     </div>
-    <div class="fund-actions">
-      <button type="button" class="btn" data-act="real-create"
-              data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_real_create') }}</button>
-    </div>
-    <div class="fund-real-result" data-real-result hidden aria-live="polite"></div>
+    <ul class="fund-real-rules">
+      <li data-family-rule="systematic">{{ t('fund_family_rule_systematic') }}</li>
+      <li data-family-rule="cto" hidden>{{ t('fund_family_rule_cto') }}</li>
+      <li data-family-rule="pea" hidden>{{ t('fund_real_rule_pea') }}</li>
+      <li data-family-rule="pea" hidden>{{ t('fund_family_rule_pea_cap', cap=(families.pea.capital | eur(0))) }}</li>
+    </ul>
   </div>
-</details>
 
-{# Création rapide : une stratégie en pilote automatique par classe d'actifs (fund/asset_classes.py). Aperçu = fragment rendu serveur. #}
-<details class="card fund-classes" id="fund-classes">
-  <summary>{{ t('fund_cls_title') }}</summary>
-  <p class="hint">{{ t('fund_cls_hint') }}</p>
-  <div class="form fund-inline-form">
-    <fieldset class="fund-cls-list">
-      <legend>{{ t('fund_cls_classes') }}</legend>
-      {% for name in class_names %}
-      <label class="fund-check"><input type="checkbox" name="class" value="{{ name }}" data-cls-field checked> {{ name }}</label>
-      {% endfor %}
-    </fieldset>
-    <div class="subgrid">
-      <label>{{ t('fund_cls_horizons') }} <input type="text" name="horizons" value="{{ class_defaults.horizons | join(', ') }}" data-cls-field></label>
-      <label>{{ t('fund_auto_tier') }}
-        <select name="tier" data-cls-field>
-          <option value="large"{% if class_defaults.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
-          <option value="strict"{% if class_defaults.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
-          <option value="dm"{% if class_defaults.tier == 'dm' %} selected{% endif %}>{{ t('fund_auto_tier_dm') }}</option>
-          <option value="bh"{% if class_defaults.tier == 'bh' %} selected{% endif %}>{{ t('fund_auto_tier_bh') }}</option>
-          <option value="auc"{% if class_defaults.tier == 'auc' %} selected{% endif %}>{{ t('fund_auto_tier_auc') }}</option>
-        </select>
-      </label>
-      <label>{{ t('fund_cls_capital') }} <input type="number" name="capital" min="1000" step="1000" value="{{ class_defaults.capital }}" data-cls-field></label>
-      <label>{{ t('fund_cls_wrapper') }}
-        <select name="wrapper" data-cls-field>
-          <option value="CTO"{% if class_defaults.wrapper == 'CTO' %} selected{% endif %}>CTO</option>
-          <option value="PEA"{% if class_defaults.wrapper == 'PEA' %} selected{% endif %}>PEA</option>
-        </select>
-      </label>
-      <label>{{ t('fund_auto_gross') }} <input type="number" name="gross" min="10" max="200" step="5" value="{{ (class_defaults.gross * 100) | round(0) | int }}" data-cls-field></label>
-      <label>{{ t('fund_auto_max') }} <input type="number" name="max_models" min="1" max="5000" step="1" value="" placeholder="{{ t('fund_auto_max_none') }}" data-cls-field></label>
-      <label class="fund-check"><input type="checkbox" name="run" data-cls-field checked> {{ t('fund_cls_run_now') }}</label>
+  <div id="fund-classes" data-create-block="quant">
+    <div class="form fund-inline-form">
+      <div class="subgrid">
+        <label>{{ t('fund_split') }}
+          <select name="split" data-cls-field>
+            <option value="classes" selected>{{ t('fund_split_classes') }}</option>
+            <option value="tiers">{{ t('fund_split_tiers') }}</option>
+          </select>
+        </label>
+      </div>
+      <fieldset class="fund-cls-list" data-split="classes">
+        <legend>{{ t('fund_cls_classes') }}</legend>
+        {% for name in class_names %}
+        <label class="fund-check" data-families="{{ class_families[name] | join(' ') }}"><input type="checkbox" name="class" value="{{ name }}" data-cls-field checked> {{ name }}</label>
+        {% endfor %}
+      </fieldset>
+      <fieldset class="fund-cls-list" data-split="tiers" hidden>
+        <legend>{{ t('fund_split_tiers_list') }}</legend>
+        <label class="fund-check"><input type="checkbox" name="tier_pick" value="dm" data-cls-field checked> {{ t('fund_auto_tier_dm') }}</label>
+        <label class="fund-check"><input type="checkbox" name="tier_pick" value="bh" data-cls-field checked> {{ t('fund_auto_tier_bh') }}</label>
+      </fieldset>
+      <div class="subgrid">
+        <label>{{ t('fund_cls_horizons') }} <input type="text" name="horizons" value="{{ class_defaults.horizons | join(', ') }}" data-cls-field></label>
+        <label data-split="classes">{{ t('fund_auto_tier') }}
+          <select name="tier" data-cls-field>
+            <option value="large"{% if class_defaults.tier == 'large' %} selected{% endif %}>{{ t('fund_auto_tier_large') }}</option>
+            <option value="strict"{% if class_defaults.tier == 'strict' %} selected{% endif %}>{{ t('fund_auto_tier_strict') }}</option>
+            <option value="dm"{% if class_defaults.tier == 'dm' %} selected{% endif %}>{{ t('fund_auto_tier_dm') }}</option>
+            <option value="bh"{% if class_defaults.tier == 'bh' %} selected{% endif %}>{{ t('fund_auto_tier_bh') }}</option>
+            <option value="auc"{% if class_defaults.tier == 'auc' %} selected{% endif %}>{{ t('fund_auto_tier_auc') }}</option>
+          </select>
+        </label>
+        <label>{{ t('fund_cls_capital') }} <input type="number" name="capital" min="1000" step="1000" value="{{ class_defaults.capital }}" data-cls-field></label>
+        <label>{{ t('fund_auto_gross') }} <input type="number" name="gross" min="10" max="200" step="5" value="{{ (class_defaults.gross * 100) | round(0) | int }}" data-cls-field></label>
+        <label>{{ t('fund_auto_max') }} <input type="number" name="max_models" min="1" max="5000" step="1" value="" placeholder="{{ t('fund_auto_max_none') }}" data-cls-field></label>
+        <label class="fund-check"><input type="checkbox" name="run" data-cls-field checked> {{ t('fund_cls_run_now') }}</label>
+      </div>
+      <div class="fund-actions">
+        <button type="button" class="btn-ghost" data-act="classes-preview">{{ t('fund_cls_preview') }}</button>
+        <button type="button" class="btn" data-act="classes-create"
+                data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_cls_create') }}</button>
+      </div>
+      <div class="fund-cls-result" data-cls-result hidden aria-live="polite"></div>
     </div>
-    <div class="fund-actions">
-      <button type="button" class="btn-ghost" data-act="classes-preview">{{ t('fund_cls_preview') }}</button>
-      <button type="button" class="btn" data-act="classes-create"
-              data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_cls_create') }}</button>
+  </div>
+
+  <div id="fund-real" class="fund-real" data-create-block="real" hidden>
+    <p class="hint">{{ t('fund_real_hint', capital=(real_defaults.capital | eur(0)), fee=(real_defaults.fee_flat | eur), min=(real_defaults.min_position | eur(0))) }}</p>
+    <ul class="fund-real-rules">
+      <li>{{ t('fund_real_rule_pea') }}</li>
+      <li>{{ t('fund_real_rule_cto') }}</li>
+      <li>{{ t('fund_real_rule_fees', fee=(real_defaults.fee_flat | eur)) }}</li>
+      <li>{{ t('fund_real_rule_signals', min=(real_defaults.min_position | eur(0))) }}</li>
+      <li>{{ t('fund_real_rule_heuristic') }}</li>
+    </ul>
+    <p class="hint" data-keep><strong>{{ t('fund_real_pea_scope') }}</strong> {{ pea_groups | join(' · ') }}</p>
+    {% if real_existing %}
+    <p class="hint">{{ t('fund_real_existing') }}
+      {% for s in real_existing %}<a href="/fonds?categorie=real&amp;strategy={{ s.strategy_id | urlencode }}">{{ s.name }}</a> <span class="tag">{{ s.wrapper }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+    <div class="form fund-inline-form">
+      <div class="subgrid">
+        <label>{{ t('fund_real_capital') }} <input type="number" name="capital" min="100" max="150000" step="100" value="{{ real_defaults.capital | int }}" data-real-field></label>
+        <label>{{ t('fund_real_fee') }} <input type="number" name="fee_flat" min="0" max="100" step="0.1" value="{{ real_defaults.fee_flat }}" data-real-field></label>
+        <label>{{ t('fund_real_min') }} <input type="number" name="min_position" min="1" step="10" value="{{ real_defaults.min_position | int }}" data-real-field></label>
+        <label class="fund-check"><input type="checkbox" name="run" data-real-field checked> {{ t('fund_cls_run_now') }}</label>
+      </div>
+      <div class="fund-actions">
+        <button type="button" class="btn" data-act="real-create"
+                data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_real_create') }}</button>
+      </div>
+      <div class="fund-real-result" data-real-result hidden aria-live="polite"></div>
     </div>
-    <div class="fund-cls-result" data-cls-result hidden aria-live="polite"></div>
   </div>
 </details>
 

@@ -353,12 +353,37 @@
         }
     }
 
-    /* ---- stratégies par classe d'actifs : réglages lus dans la section, aperçu = fragment HTML rendu serveur ---- */
+    /* ---- carte de création : la gamme choisit le bloc (simulation ou fonds réels), les classes proposées et le capital par défaut ---- */
     var classes = document.getElementById("fund-classes");
+    var family = document.getElementById("fund-family");
+    function applySplit() {
+        var mode = classes.querySelector("[name='split']").value;
+        classes.querySelectorAll("[data-split]").forEach(function (el) { el.hidden = el.getAttribute("data-split") !== mode; });
+    }
+    function applyFamily() {
+        var key = family.value, real = key === "real";
+        document.querySelectorAll("[data-create-block]").forEach(function (el) {
+            el.hidden = (el.getAttribute("data-create-block") === "real") !== real;
+        });
+        document.querySelectorAll("[data-family-rule]").forEach(function (el) { el.hidden = el.getAttribute("data-family-rule") !== key; });
+        if (real) return;
+        classes.querySelectorAll("[data-families]").forEach(function (el) {
+            el.hidden = el.getAttribute("data-families").split(" ").indexOf(key) < 0;
+        });
+        var capital = classes.querySelector("[name='capital']"), wanted = family.selectedOptions[0].getAttribute("data-capital");
+        if (capital && wanted) capital.value = wanted;           // 10 M€ d'étude, le plafond de versements pour un PEA
+    }
+    if (family && classes) {
+        family.addEventListener("change", applyFamily);
+        classes.querySelector("[name='split']").addEventListener("change", applySplit);
+        applyFamily();
+        applySplit();
+    }
     function classOptions() {
-        var out = { classes: [] };
+        var out = { classes: [], tiers: [], family: family ? family.value : "systematic" };
         classes.querySelectorAll("[data-cls-field]").forEach(function (el) {
-            if (el.name === "class") { if (el.checked) out.classes.push(el.value); }
+            if (el.name === "class") { if (el.checked && !el.closest("label").hidden) out.classes.push(el.value); }     // classes de la gamme seulement
+            else if (el.name === "tier_pick") { if (el.checked) out.tiers.push(el.value); }
             else if (el.type === "checkbox") out[el.name] = el.checked;
             else if (el.name === "horizons") {
                 out.horizons = el.value.split(",").map(function (h) { return Number(h.trim()); }).filter(function (h) { return h > 0; });
@@ -375,8 +400,9 @@
         if (act === "classes-preview") {
             var query = new URLSearchParams();
             query.set("classes", options.classes.join(","));
+            query.set("tiers", options.tiers.join(","));
             query.set("horizons", options.horizons.join(","));
-            ["tier", "wrapper", "capital", "gross"].forEach(function (k) { query.set(k, String(options[k])); });
+            ["family", "split", "tier", "capital", "gross"].forEach(function (k) { query.set(k, String(options[k])); });
             query.set("max_models", options.max_models === null ? "" : String(options.max_models));
             var res = await fetch("/api/fund/asset-classes/preview.html?" + query.toString());
             if (!res.ok) {

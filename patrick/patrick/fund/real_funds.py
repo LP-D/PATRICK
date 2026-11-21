@@ -4,7 +4,8 @@ Deux stratégies en pilote automatique (`Systematic PEA`, `Systematic CTO`), de 
 tout compris (`fee_flat`), niveau de sélection `auc` (tous les modèles dont l'AUC de direction du holdout dépasse le hasard, ceux qui passent
 en plus la correction de Benjamini-Hochberg et le test de Diebold-Mariano en tête), taille minimale d'une position (`REAL_MIN_POSITION`) pour que
 les frais forfaitaires ne rongent pas des positions de quelques euros. Le PEA est borné aux actions de l'UE/EEE en euro, à l'achat
-(`fund/envelopes.py`) ; le CTO prend tout l'univers, vente à découvert comprise (CFD).
+(`fund/envelopes.py`) ; le CTO prend tout l'univers, à l'achat seulement (ADR 0028 : ni l'un ni l'autre ne vend à découvert ; actions et ETF
+au comptant, le reste en CFD à l'achat).
 
 Même logique que `asset_classes` : une stratégie qui porte déjà le nom est reprise, jamais dupliquée ; tout est validé avant la première écriture ;
 `dry_run` n'écrit rien et compte les modèles candidats.
@@ -29,9 +30,9 @@ def fund_name(kind: str) -> str:
 def pilot_settings(kind: str, *, tier: str = "auc", gross: float = 1.0, max_models: int | None = envelopes.REAL_MAX_MODELS,
                    min_position: float | None = envelopes.REAL_MIN_POSITION) -> dict:
     """Réglages du pilote d'un fonds réel. Tous les horizons (un modèle par cellule cible x horizon). PEA : bornes d'enveloppe, achat seulement,
-    groupes d'actions européennes ; CTO : tout l'univers, vente à découvert permise."""
+    groupes d'actions européennes ; CTO : tout l'univers, achat seulement (ADR 0028)."""
     return {"tier": tier, "gross": gross, "max_models": max_models, "min_position": min_position, "horizons": None,
-            "allow_short": kind == "CTO", "groups": list(envelopes.PEA_GROUPS) if kind == "PEA" else None}
+            "allow_short": False, "groups": list(envelopes.PEA_GROUPS) if kind == "PEA" else None}
 
 
 def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[str] | None = None,

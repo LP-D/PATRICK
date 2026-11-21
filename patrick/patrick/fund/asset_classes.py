@@ -1,15 +1,21 @@
-"""Fonds, pilote automatique : une stratégie par classe d'actifs.
+"""Fonds, pilote automatique : une stratégie par classe d'actifs, ou par preuve statistique, dans une gamme.
 
 Une classe regroupe des groupes de l'univers (`config/universe_extension.all_target_groups`). `setup` crée (ou retrouve, par son
-nom `Systematic <classe>`) une stratégie par classe et y active le pilote automatique, borné à ces groupes et à un horizon
-(1 jour par défaut). La série macro FRED n'est dans aucune classe : elle n'est pas négociable.
+nom `<gamme> <classe>`) une stratégie par classe et y active le pilote automatique, borné à ces groupes et à un horizon
+(1 jour par défaut) ; `setup_tiers` fait de même avec une stratégie par niveau de preuve (`<gamme> Diebold-Mariano`...). La série
+macro FRED n'est dans aucune classe : elle n'est pas négociable.
+
+Trois gammes (`FAMILIES`) : `Systematic` (CTO, vente à découvert en CFD, tout l'univers), `CTO` (achat seulement : actions et ETF au
+comptant, le reste en CFD à l'achat) et `PEA` (achat seulement, au comptant, actions de l'UE/EEE cotées en euro : `fund/envelopes.py`,
+capital au plus le plafond de versements). Une gamme ne reprend jamais la stratégie d'une autre : le préfixe du nom les sépare.
 """
 from __future__ import annotations
 
 import datetime as dt
 import sqlite3
+from dataclasses import dataclass
 
-from patrick.fund import autopilot, selection, service, store
+from patrick.fund import autopilot, envelopes, selection, service, store
 from patrick.tracking import db as trackdb
 
 UNTRADABLE_GROUP = "Macro (FRED)"
@@ -34,47 +40,82 @@ CLASSES: dict[str, tuple[str, ...]] = {
 # ET test de Diebold-Mariano de la cellule concluant), aucun plafond de modèles. Le niveau « large » (tous les signaux non suspects, sans preuve
 # statistique) reste disponible mais n'est plus le défaut (critique du 28/10 : on tradait sans preuve, puis on classait les classes sur leur P&L
 # fictif, une sélection non corrigée).
-DEFAULTS = {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO", "max_models": None}
+DEFAULTS = {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "family": "systematic", "max_models": None}
 
 
-# Stratégies globales par preuve statistique : le niveau de sélection -> le nom de la stratégie (toutes les classes d'actifs réunies).
-TIER_STRATEGIES = {"dm": "Systematic Diebold-Mariano", "bh": "Systematic Benjamini-Hochberg"}
+# Stratégies globales par preuve statistique : le niveau de sélection -> la fin du nom de la stratégie (toutes les classes de la gamme réunies).
+TIER_STRATEGIES = {"dm": "Diebold-Mariano", "bh": "Benjamini-Hochberg"}
 
 
-def strategy_name(asset_class: str) -> str:
-    return f"Systematic {asset_class}"
+@dataclass(frozen=True)
+class Family:
+    """Une gamme de fonds : préfixe des noms, enveloppe, vente à découvert, capital par défaut, classes proposées et périmètre des
+    stratégies par preuve (`scope`, groupes de l'univers ; None : tout l'univers)."""
+    key: str
+    prefix: str
+    wrapper: str
+    allow_short: bool
+    capital: float
+    classes: dict[str, tuple[str, ...]]
+    scope: tuple[str, ...] | None
 
 
-def class_rows(conn: sqlite3.Connection) -> list[dict]:
-    """Les classes avec leurs groupes et la stratégie qui porte déjà leur nom (`strategy_id`, sinon None)."""
+# Le PEA ne détient que des actions de l'UE/EEE en euro : deux classes, la France et le reste de l'Europe éligible (sans le Royaume-Uni).
+PEA_CLASSES = {"Actions France": CLASSES["Actions France"],
+               "Actions Europe": tuple(g for g in envelopes.PEA_GROUPS if g not in CLASSES["Actions France"])}
+
+FAMILIES = {
+    "systematic": Family("systematic", "Systematic", "CTO", True, 10_000_000, CLASSES, None),
+    "cto": Family("cto", "CTO", "CTO", False, 10_000_000, CLASSES, None),
+    "pea": Family("pea", "PEA", "PEA", False, store.PEA_DEPOSIT_CAP_EUR, PEA_CLASSES, envelopes.PEA_GROUPS),
+}
+
+
+def family_of(key: str) -> Family:
+    if key not in FAMILIES:
+        raise store.FundError(f"gamme inconnue : {key!r} ({', '.join(FAMILIES)})")
+    return FAMILIES[key]
+
+
+def strategy_name(asset_class: str, family: str = "systematic") -> str:
+    return f"{family_of(family).prefix} {asset_class}"
+
+
+def tier_strategy_name(tier: str, family: str = "systematic") -> str:
+    return f"{family_of(family).prefix} {TIER_STRATEGIES[tier]}"
+
+
+def class_rows(conn: sqlite3.Connection, family: str = "systematic") -> list[dict]:
+    """Les classes de la gamme avec leurs groupes et la stratégie qui porte déjà leur nom (`strategy_id`, sinon None)."""
     existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
-    return [{"name": name, "groups": list(groups), "strategy_id": existing.get(strategy_name(name))}
-            for name, groups in CLASSES.items()]
+    return [{"name": name, "groups": list(groups), "strategy_id": existing.get(strategy_name(name, family))}
+            for name, groups in family_of(family).classes.items()]
 
 
 def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[str] | None = None,
-          horizons: tuple[int, ...] = (1,), tier: str = "strict", gross: float = 1.0, capital: float = 10_000_000,
-          wrapper: str = "CTO", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
-    """Une stratégie en pilote automatique par classe (toutes, ou `only`). Une stratégie qui porte déjà le nom
-    `Systematic <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est
-    écrit, seul le nombre de modèles candidats est compté. Une stratégie reprise sans ordre prend le capital demandé (`capital_changed`) ; avec des ordres elle garde le sien.
-    Renvoie, par classe : `class`, `name`, `strategy_id`, `created`, `capital_changed`, `candidates`."""
+          horizons: tuple[int, ...] = (1,), tier: str = "strict", gross: float = 1.0, capital: float | None = None,
+          family: str = "systematic", max_models: int | None = None, dry_run: bool = False) -> list[dict]:
+    """Une stratégie en pilote automatique par classe de la gamme (toutes, ou `only`). Une stratégie qui porte déjà le nom
+    `<gamme> <classe>` est reprise, jamais dupliquée ; ses réglages sont remplacés par ceux-ci. `dry_run` : rien n'est
+    écrit, seul le nombre de modèles candidats est compté. `capital` : celui de la gamme par défaut. Une stratégie reprise sans ordre prend le capital
+    demandé (`capital_changed`) ; avec des ordres elle garde le sien. Renvoie, par classe : `class`, `name`, `strategy_id`, `created`,
+    `capital_changed`, `candidates`."""
     today = service._today(today)
-    unknown = [c for c in (only or []) if c not in CLASSES]
+    fam = family_of(family)
+    unknown = [c for c in (only or []) if c not in fam.classes]
     if unknown:
-        raise store.FundError(f"classe inconnue : {', '.join(unknown)} (classes : {', '.join(CLASSES)})")
-    if wrapper not in store.WRAPPERS:
-        raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
-    store._check_capital(capital, wrapper)                  # tout est validé AVANT la première écriture
+        raise store.FundError(f"classe inconnue dans la gamme {fam.prefix} : {', '.join(unknown)} (classes : {', '.join(fam.classes)})")
+    capital = fam.capital if capital is None else capital
+    store._check_capital(capital, fam.wrapper)              # tout est validé AVANT la première écriture (le plafond du PEA compris)
     autopilot.Settings.from_dict({"tier": tier, "gross": gross, "max_models": max_models, "horizons": list(horizons),
                                   "groups": ["x"]})
     out = []
-    for asset_class, groups in CLASSES.items():
+    for asset_class, groups in fam.classes.items():
         if only and asset_class not in only:
             continue
-        settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": True,
+        settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": fam.allow_short,
                     "horizons": list(horizons), "groups": list(groups)}
-        row = _provision(conn, name=strategy_name(asset_class), settings=settings, capital=capital, wrapper=wrapper,
+        row = _provision(conn, name=strategy_name(asset_class, family), settings=settings, capital=capital, wrapper=fam.wrapper,
                          today=today, dry_run=dry_run)
         out.append({"class": asset_class, **row})
     return out
@@ -112,23 +153,23 @@ def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: 
 
 
 def setup_tiers(conn: sqlite3.Connection, *, today: dt.date | None = None, tiers: tuple[str, ...] = tuple(TIER_STRATEGIES),
-                horizons: tuple[int, ...] = (1,), gross: float = 1.0, capital: float = 10_000_000, wrapper: str = "CTO",
+                horizons: tuple[int, ...] = (1,), gross: float = 1.0, capital: float | None = None, family: str = "systematic",
                 max_models: int | None = None, dry_run: bool = False) -> list[dict]:
-    """Une stratégie globale (toutes les classes d'actifs) par niveau de preuve statistique : `dm` (test de Diebold-Mariano seul)
+    """Une stratégie globale (toutes les classes de la gamme) par niveau de preuve statistique : `dm` (test de Diebold-Mariano seul)
     et `bh` (correction de Benjamini-Hochberg seule). Même logique que `setup` : reprise par le nom, jamais dupliquée, essais comptés,
     tout validé avant la première écriture. Renvoie, par niveau : `tier`, `name`, `strategy_id`, `created`, `capital_changed`, `candidates`."""
     today = service._today(today)
+    fam = family_of(family)
     unknown = [t for t in tiers if t not in TIER_STRATEGIES]
     if unknown:
         raise store.FundError(f"niveau inconnu : {', '.join(unknown)} (niveaux : {', '.join(TIER_STRATEGIES)})")
-    if wrapper not in store.WRAPPERS:
-        raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
-    store._check_capital(capital, wrapper)                  # tout est validé AVANT la première écriture
+    capital = fam.capital if capital is None else capital
+    store._check_capital(capital, fam.wrapper)              # tout est validé AVANT la première écriture (le plafond du PEA compris)
     out = []
     for tier in tiers:
-        settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": True,
-                    "horizons": list(horizons), "groups": None}
-        row = _provision(conn, name=TIER_STRATEGIES[tier], settings=settings, capital=capital, wrapper=wrapper,
+        settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": fam.allow_short,
+                    "horizons": list(horizons), "groups": list(fam.scope) if fam.scope else None}
+        row = _provision(conn, name=tier_strategy_name(tier, family), settings=settings, capital=capital, wrapper=fam.wrapper,
                          today=today, dry_run=dry_run)
         out.append({"tier": tier, **row})
     return out

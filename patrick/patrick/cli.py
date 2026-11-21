@@ -1377,19 +1377,20 @@ def fund_autopilot_classes_cmd(
     horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
     tier: str = typer.Option("strict", "--tier", help="strict (tests multiples + Diebold-Mariano, défaut), large (sans preuve statistique), dm (Diebold-Mariano seul) ou bh (tests multiples seuls)"),
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
-    capital: float = typer.Option(100_000, "--capital", help="Capital d'une stratégie créée"),
+    capital: float = typer.Option(None, "--capital", help="Capital d'une stratégie créée (défaut : celui de la gamme, 10 M€ ; PEA : son plafond de versements)"),
     max_models: int = typer.Option(0, "--max-models", help="Nombre maximal de modèles par stratégie (0 : aucun plafond)"),
-    wrapper: str = typer.Option("CTO", "--wrapper", help="Enveloppe d'une stratégie créée (CTO ou PEA)"),
+    family: str = typer.Option("systematic", "--family", help="Gamme : systematic (CTO, vente à découvert en CFD), cto (achat seulement) ou pea (achat seulement, actions de l'UE/EEE en euro)"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
-    """Une stratégie `Systematic <classe>` par classe d'actifs, en pilote automatique à l'horizon voulu (1 jour par défaut)."""
+    """Une stratégie `<gamme> <classe>` par classe d'actifs de la gamme (`Systematic Future`, `CTO Actions US`, `PEA Actions France`...), en pilote
+    automatique à l'horizon voulu (1 jour par défaut)."""
     from patrick.fund import asset_classes
     from patrick.fund import store as fund_store
 
     conn = trackdb.connect()
     try:
         rows = asset_classes.setup(conn, today=_fund_day(today), only=only or None, horizons=tuple(horizon), tier=tier,
-                                   gross=gross, capital=capital, wrapper=wrapper, max_models=max_models or None, dry_run=not create)
+                                   gross=gross, capital=capital, family=family, max_models=max_models or None, dry_run=not create)
     except fund_store.FundError as exc:
         typer.echo(f"Refusé : {exc}")
         raise typer.Exit(code=1) from exc
@@ -1408,13 +1409,13 @@ def fund_autopilot_tiers_cmd(
     tiers: list[str] = typer.Option(None, "--tier", help="Seulement ce niveau : dm ou bh (répétable ; défaut : les deux)"),  # noqa: B008 -- liste : valeur par défaut de typer
     horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital de chaque stratégie"),
-    capital: float = typer.Option(10_000_000, "--capital", help="Capital d'une stratégie créée"),
+    capital: float = typer.Option(None, "--capital", help="Capital d'une stratégie créée (défaut : celui de la gamme, 10 M€ ; PEA : son plafond de versements)"),
     max_models: int = typer.Option(0, "--max-models", help="Nombre maximal de modèles par stratégie (0 : aucun plafond)"),
-    wrapper: str = typer.Option("CTO", "--wrapper", help="Enveloppe d'une stratégie créée (CTO ou PEA)"),
+    family: str = typer.Option("systematic", "--family", help="Gamme : systematic (CTO, vente à découvert en CFD), cto (achat seulement) ou pea (achat seulement, actions de l'UE/EEE en euro)"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
-    """Une stratégie globale (toutes les classes d'actifs) par preuve statistique : `Systematic Diebold-Mariano` (test de
-    Diebold-Mariano seul) et `Systematic Benjamini-Hochberg` (correction pour tests multiples seule)."""
+    """Une stratégie globale (toutes les classes de la gamme) par preuve statistique : `<gamme> Diebold-Mariano` (test de
+    Diebold-Mariano seul) et `<gamme> Benjamini-Hochberg` (correction pour tests multiples seule)."""
     from patrick.fund import asset_classes
     from patrick.fund import store as fund_store
 
@@ -1422,7 +1423,7 @@ def fund_autopilot_tiers_cmd(
     try:
         kwargs = {"tiers": tuple(tiers)} if tiers else {}
         rows = asset_classes.setup_tiers(conn, today=_fund_day(today), horizons=tuple(horizon), gross=gross, capital=capital,
-                                         wrapper=wrapper, max_models=max_models or None, dry_run=not create, **kwargs)
+                                         family=family, max_models=max_models or None, dry_run=not create, **kwargs)
     except fund_store.FundError as exc:
         typer.echo(f"Refusé : {exc}")
         raise typer.Exit(code=1) from exc
@@ -1448,7 +1449,7 @@ def fund_real_setup_cmd(
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
     """Les deux fonds réels (ADR 0026) : `Systematic PEA` et `Systematic CTO`, 5 000 € et 1 € par ordre, qui suivent tous les signaux.
-    Le PEA ne prend que des actions de l'UE/EEE en euro, à l'achat ; le CTO prend tout l'univers, vente à découvert comprise."""
+    Le PEA ne prend que des actions de l'UE/EEE en euro, à l'achat ; le CTO prend tout l'univers, à l'achat seulement."""
     from patrick.fund import real_funds
     from patrick.fund import store as fund_store
 

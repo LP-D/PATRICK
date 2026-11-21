@@ -37,7 +37,7 @@ def test_setup_creates_the_pea_and_the_cto_with_their_envelope_fees_and_pilot(co
     assert (pea_pilot["settings"]["tier"], pea_pilot["settings"]["allow_short"], pea_pilot["settings"]["min_position"]) == ("auc", False, 200.0)
     assert pea_pilot["settings"]["groups"] == list(envelopes.PEA_GROUPS) and pea_pilot["settings"]["horizons"] is None
     cto_pilot = store.get_autopilot(conn, cto["strategy_id"])["settings"]
-    assert (cto_pilot["tier"], cto_pilot["allow_short"], cto_pilot["groups"], cto_pilot["horizons"]) == ("auc", True, None, None)
+    assert (cto_pilot["tier"], cto_pilot["allow_short"], cto_pilot["groups"], cto_pilot["horizons"]) == ("auc", False, None, None)   # pas de vente à découvert
 
 
 def test_setup_reuses_the_funds_it_already_made_and_never_duplicates(conn):

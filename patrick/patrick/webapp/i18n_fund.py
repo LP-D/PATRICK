@@ -268,6 +268,32 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
                            "Replace the model when a better one is trained (live segment): the old model's orders are deleted"),
     "fund_rule_follow_tag": _s("suit le champion", "follows the champion"),
 
+    # /fonds : une seule carte de création (gamme, découpage), ADR 0028
+    "fund_create_title": _s("Créer des fonds", "Create funds"),
+    "fund_create_hint": _s(
+        "Choisis une gamme, puis le découpage : une stratégie en pilote automatique par classe d'actifs, ou une par preuve statistique "
+        "(Diebold-Mariano, Benjamini-Hochberg). Une stratégie qui porte déjà le nom est reprise, jamais dupliquée.",
+        "Pick a range, then the split: one autopilot strategy per asset class, or one per statistical evidence "
+        "(Diebold-Mariano, Benjamini-Hochberg). A strategy that already has the name is reused, never duplicated."),
+    "fund_family": _s("Gamme", "Range"),
+    "fund_family_systematic": _s("Systematic : CTO, vente à découvert", "Systematic: CTO, short selling"),
+    "fund_family_cto": _s("CTO : achat seulement", "CTO: long only"),
+    "fund_family_pea": _s("PEA : achat seulement, actions européennes", "PEA: long only, European shares"),
+    "fund_family_real": _s("Fonds réels : PEA et CTO, 5 000 €", "Real funds: PEA and CTO, €5,000"),
+    "fund_family_rule_systematic": _s(
+        "Systematic : tout l'univers, vente à découvert par CFD, capital fictif d'étude.",
+        "Systematic: the whole universe, short selling through CFDs, notional study capital."),
+    "fund_family_rule_cto": _s(
+        "CTO : tout l'univers, à l'achat seulement (un signal de baisse ferme la position, sans vendre à découvert) : actions et ETF au comptant, "
+        "le reste (matières premières, devises, indices, crypto...) en CFD à l'achat.",
+        "CTO: the whole universe, long only (a down signal closes the position, no short selling): shares and ETFs in cash, "
+        "the rest (commodities, currencies, indices, crypto...) through long CFDs."),
+    "fund_family_rule_pea_cap": _s("Capital au plus le plafond de versements du PEA ({cap}).", "Capital at most the PEA deposit cap ({cap})."),
+    "fund_split": _s("Découpage", "Split"),
+    "fund_split_classes": _s("Une stratégie par classe d'actifs", "One strategy per asset class"),
+    "fund_split_tiers": _s("Une stratégie par preuve statistique", "One strategy per statistical evidence"),
+    "fund_split_tiers_list": _s("Preuves", "Evidence"),
+
     # /fonds : création rapide par classe d'actifs
     "fund_cls_title": _s("Stratégies par classe d'actifs", "Strategies by asset class"),
     "fund_cls_hint": _s(
@@ -433,7 +459,8 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_real_rule_pea": _s(
         "PEA : seulement des actions de l'UE/EEE cotées en euro, au comptant et à l'achat. Exclus : matières premières, crypto, devises, indices, futures, CFD, ETF, actions américaines, asiatiques, britanniques et suisses, actions cotées hors euro (Suède, Danemark, Norvège, Pologne...), vente à découvert et levier.",
         "PEA: only EU/EEA shares listed in euro, cash and long only. Excluded: commodities, crypto, currencies, indices, futures, CFDs, ETFs, US, Asian, UK and Swiss shares, shares listed in other currencies (Sweden, Denmark, Norway, Poland...), short selling and leverage."),
-    "fund_real_rule_cto": _s("CTO : tout l'univers, vente à découvert (par CFD) comprise.", "CTO: the whole universe, short selling (through CFDs) included."),
+    "fund_real_rule_cto": _s("CTO : tout l'univers, à l'achat seulement (actions et ETF au comptant, le reste en CFD à l'achat).",
+                             "CTO: the whole universe, long only (shares and ETFs in cash, the rest through long CFDs)."),
     "fund_real_rule_fees": _s("Frais : {fee} par ordre, tout compris (ni spread ni frais de change modélisés : un coût réel serait plus élevé).",
                               "Fees: {fee} per order, all-in (no spread or currency fee modelled: a real cost would be higher)."),
     "fund_real_rule_signals": _s(

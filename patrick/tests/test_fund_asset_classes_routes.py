@@ -63,7 +63,7 @@ def test_the_class_list_shows_the_strategy_each_class_already_has(client):
     classes = {c["name"]: c for c in body["classes"]}
     assert set(classes) == set(asset_classes.CLASSES) and classes["Future"]["strategy_id"] == mine
     assert classes["Devises"]["strategy_id"] is None and classes["Future"]["groups"] == list(asset_classes.CLASSES["Future"])
-    assert body["defaults"] == {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "wrapper": "CTO",
+    assert body["defaults"] == {"horizons": [1], "tier": "strict", "gross": 1.0, "capital": 10_000_000, "family": "systematic",
                                 "max_models": None}
 
 
@@ -123,8 +123,9 @@ def test_create_without_run_starts_no_cycle(client, world, monkeypatch):
 
 def test_create_validates_its_input_and_requires_json(client):
     assert client.post("/api/fund/asset-classes", content="{}", headers={"Content-Type": "text/plain"}).status_code == 415
-    for bad in ({"classes": ["Nulle part"]}, {"capital": -1}, {"tier": "folle"}, {"horizons": [0]}, {"wrapper": "AV"},
-                {"gross": 9}, {"max_models": 0}):
+    for bad in ({"classes": ["Nulle part"]}, {"capital": -1}, {"tier": "folle"}, {"horizons": [0]}, {"family": "AV"},
+                {"gross": 9}, {"max_models": 0}, {"split": "partout"}, {"family": "pea", "classes": ["Future"]},
+                {"split": "tiers", "tiers": ["large"]}, {"family": "pea", "capital": 10_000_000}):
         res = client.post("/api/fund/asset-classes", json=bad)
         assert res.status_code == 400, (bad, res.text)
     assert strategies() == {}
@@ -145,3 +146,55 @@ def test_start_cycles_runs_each_strategy_one_after_the_other_and_survives_an_err
     thread.join(timeout=30)
 
     assert seen == ["str_a", "str_b", "str_c"] and not thread.is_alive()
+
+
+# --- une seule carte de création : gamme (Systematic, CTO, PEA, réels) et découpage (par classe, par preuve) ---------------
+
+
+def test_the_page_has_one_creation_card_with_every_family_and_the_pea_classes_marked(client):
+    html = client.get("/fonds").text
+
+    card = html.split('id="fund-create"', 1)[1].split("</details>", 1)[0]
+    family = card.split('<select name="family" id="fund-family">', 1)[1].split("</select>", 1)[0]
+    assert re.findall(r'<option value="(\w+)"', family) == ["systematic", "cto", "pea", "real"]
+    assert 'data-capital="150000"' in family and 'data-capital="10000000"' in family
+    assert 'id="fund-classes"' in card and 'id="fund-real"' in card and 'data-act="real-create"' in card       # les fonds réels dans la même carte
+    assert 'name="split"' in card and 'value="tiers"' in card and 'name="tier_pick" value="dm"' in card
+    assert 'data-families="systematic cto pea"><input type="checkbox" name="class" value="Actions France"' in card
+    assert 'data-families="systematic cto"><input type="checkbox" name="class" value="Future"' in card
+    assert html.count("<details class=\"card") == html.count("<details class=\"card fund-create\"")         # plus de carte à part
+
+
+def test_the_classes_api_lists_the_classes_of_a_family(client):
+    body = client.get("/api/fund/asset-classes?family=pea").json()
+
+    assert [c["name"] for c in body["classes"]] == ["Actions France", "Actions Europe"]
+    assert body["families"]["pea"] == {"prefix": "PEA", "wrapper": "PEA", "allow_short": False, "capital": store.PEA_DEPOSIT_CAP_EUR,
+                                       "classes": ["Actions France", "Actions Europe"]}
+    assert client.get("/api/fund/asset-classes?family=AV").status_code == 400
+
+
+def test_create_follows_the_family_with_its_capital_and_its_short_rule(client, world, monkeypatch):
+    monkeypatch.setattr(autopilot, "start_cycles", lambda ids, db_path=None: None)
+
+    out = client.post("/api/fund/asset-classes", json={"family": "pea", "tier": "large", "run": False})
+
+    assert out.status_code == 200, out.text
+    made = strategies()
+    assert set(made) == {"PEA Actions France", "PEA Actions Europe"}
+    assert made["PEA Actions France"]["wrapper"] == "PEA" and made["PEA Actions France"]["initial_capital"] == store.PEA_DEPOSIT_CAP_EUR
+
+
+def test_the_split_by_evidence_creates_one_strategy_per_tier_in_the_family(client, world, monkeypatch):
+    monkeypatch.setattr(autopilot, "start_cycles", lambda ids, db_path=None: None)
+
+    preview = client.get("/api/fund/asset-classes/preview.html?family=cto&split=tiers&tiers=dm,bh").text
+    out = client.post("/api/fund/asset-classes", json={"family": "cto", "split": "tiers", "tiers": ["dm"], "run": False}).json()
+
+    assert "CTO Diebold-Mariano" in preview and "CTO Benjamini-Hochberg" in preview and 'data-class="Future"' not in preview
+    assert [(r["tier"], r["name"], r["created"]) for r in out["rows"]] == [("dm", "CTO Diebold-Mariano", True)]
+    conn = trackdb.connect()
+    settings = store.get_autopilot(conn, out["rows"][0]["strategy_id"])["settings"]
+    conn.close()
+    assert (settings["tier"], settings["allow_short"], settings["groups"]) == ("dm", False, None)
+

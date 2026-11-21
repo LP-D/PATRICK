@@ -222,6 +222,8 @@ def register(app: FastAPI, templates, context) -> None:
         archived, real_existing = _call(run)
         return templates.TemplateResponse(request, "fonds.html", {
             "selected_id": strategy, "archived": archived, "class_names": list(asset_classes.CLASSES),
+            "class_families": {name: [f.key for f in asset_classes.FAMILIES.values() if name in f.classes] for name in asset_classes.CLASSES},
+            "families": asset_classes.FAMILIES,
             "class_defaults": asset_classes.DEFAULTS, "category": _category(categorie), "categories": store.CATEGORIES,
             "real_existing": real_existing, "real_defaults": real_funds.DEFAULTS, "pea_groups": envelopes.PEA_GROUPS,
             **context(request)})
@@ -477,24 +479,40 @@ def register(app: FastAPI, templates, context) -> None:
     # ------------------------------------------------- stratégies par classe d'actifs (création rapide)
 
     def _class_options(raw: dict) -> dict:
-        """Réglages d'une création par classe, validés AVANT toute écriture : `classes` (liste, toutes si absent), `horizons`,
-        `tier`, `gross` (fraction du capital), `capital`, `wrapper`, `max_models` (None : aucun plafond), `run`."""
-        merged = {**asset_classes.DEFAULTS, **{k: v for k, v in raw.items() if k in (*asset_classes.DEFAULTS, "classes", "run")}}
-        classes = merged.get("classes") or list(asset_classes.CLASSES)
+        """Réglages d'une création, validés AVANT toute écriture : `family` (gamme), `split` (`classes` : une stratégie par classe ;
+        `tiers` : une par preuve statistique), `classes` (celles de la gamme, toutes si absent), `tiers` (dm, bh ; les deux si absent),
+        `horizons`, `tier` (niveau des stratégies par classe), `gross` (fraction du capital), `capital` (celui de la gamme si absent),
+        `max_models` (None : aucun plafond), `run`."""
+        keys = (*asset_classes.DEFAULTS, "classes", "run", "split", "tiers")
+        merged = {**asset_classes.DEFAULTS, **{k: v for k, v in raw.items() if k in keys}}
+        family = asset_classes.family_of(merged["family"])
+        if "capital" not in raw:
+            merged["capital"] = family.capital
+        split = merged.get("split") or "classes"
+        if split not in ("classes", "tiers"):
+            raise store.FundError(f"découpage inconnu : {split!r} (classes, tiers)")
+        classes = merged.get("classes") or list(family.classes)
         if not isinstance(classes, list) or not all(isinstance(c, str) for c in classes):
             raise store.FundError("classes invalides : liste de noms attendue")
-        unknown = [c for c in classes if c not in asset_classes.CLASSES]
-        if unknown:
-            raise store.FundError(f"classe inconnue : {', '.join(unknown)}")
-        wrapper = merged["wrapper"]
-        if wrapper not in store.WRAPPERS:
-            raise store.FundError(f"enveloppe inconnue : {wrapper!r} ({store.WRAPPERS})")
-        store._check_capital(merged["capital"], wrapper)
+        unknown = [c for c in classes if c not in family.classes]
+        if unknown and split == "classes":
+            raise store.FundError(f"classe inconnue dans la gamme {family.prefix} : {', '.join(unknown)}")
+        tiers = merged.get("tiers") or list(asset_classes.TIER_STRATEGIES)
+        if not isinstance(tiers, list) or any(t not in asset_classes.TIER_STRATEGIES for t in tiers):
+            raise store.FundError(f"preuves inconnues : {tiers!r} ({', '.join(asset_classes.TIER_STRATEGIES)})")
+        store._check_capital(merged["capital"], family.wrapper)
         autopilot.Settings.from_dict({"tier": merged["tier"], "gross": merged["gross"], "max_models": merged["max_models"],
                                       "horizons": merged["horizons"], "groups": ["x"]})
-        return {"only": classes, "horizons": tuple(merged["horizons"]), "tier": merged["tier"], "gross": float(merged["gross"]),
-                "capital": merged["capital"], "wrapper": wrapper, "max_models": merged["max_models"],
-                "run": bool(merged.get("run"))}
+        common = {"family": family.key, "horizons": tuple(merged["horizons"]), "gross": float(merged["gross"]),
+                  "capital": merged["capital"], "max_models": merged["max_models"]}
+        if split == "tiers":
+            return {"split": split, "run": bool(merged.get("run")), "args": {**common, "tiers": tuple(tiers)}}
+        return {"split": split, "run": bool(merged.get("run")), "args": {**common, "only": classes, "tier": merged["tier"]}}
+
+    def _class_setup(conn, options: dict, *, dry_run: bool) -> list[dict]:
+        """La création (ou l'aperçu) que `_class_options` décrit : par classe ou par preuve, dans la gamme choisie."""
+        make = asset_classes.setup_tiers if options["split"] == "tiers" else asset_classes.setup
+        return make(conn, today=service.current_date(), dry_run=dry_run, **options["args"])
 
     def _class_query(params) -> dict:
         """Les mêmes réglages passés dans l'adresse (`?classes=Future,Devises&horizons=1,5&tier=large&capital=1e7`)."""
@@ -512,9 +530,11 @@ def register(app: FastAPI, templates, context) -> None:
                     raw[key] = float(params[key])
                 except ValueError as exc:
                     raise store.FundError(f"{key} invalide : nombre attendu ({params[key]!r})") from exc
-        for key in ("tier", "wrapper"):
+        for key in ("tier", "family", "split"):
             if key in params:
                 raw[key] = params[key]
+        if "tiers" in params:
+            raw["tiers"] = [t for t in params["tiers"].split(",") if t]
         if "max_models" in params:
             try:
                 raw["max_models"] = int(params["max_models"]) if params["max_models"].strip() else None
@@ -523,17 +543,18 @@ def register(app: FastAPI, templates, context) -> None:
         return raw
 
     @app.get("/api/fund/asset-classes")
-    def api_asset_classes():
-        return {"classes": _call(asset_classes.class_rows), "defaults": asset_classes.DEFAULTS}
+    def api_asset_classes(family: str = "systematic"):
+        """Les classes de la gamme (et la stratégie qui porte déjà leur nom), les réglages par défaut et la description des gammes."""
+        families = {f.key: {"prefix": f.prefix, "wrapper": f.wrapper, "allow_short": f.allow_short, "capital": f.capital,
+                            "classes": list(f.classes)} for f in asset_classes.FAMILIES.values()}
+        return {"classes": _call(asset_classes.class_rows, family), "defaults": asset_classes.DEFAULTS, "families": families}
 
     @app.post("/api/fund/asset-classes/preview")
     async def api_asset_classes_preview(request: Request):
         body = await _json_body(request)
 
         def run(conn):
-            options = _class_options(body)
-            options.pop("run")
-            return {"rows": asset_classes.setup(conn, today=service.current_date(), dry_run=True, **options)}
+            return {"rows": _class_setup(conn, _class_options(body), dry_run=True)}
         return await run_in_threadpool(_call, run)
 
     @app.get("/api/fund/asset-classes/preview.html")
@@ -542,11 +563,10 @@ def register(app: FastAPI, templates, context) -> None:
         params = dict(request.query_params)
 
         def run(conn):
-            options = _class_options(_class_query(params))
-            options.pop("run")
-            return asset_classes.setup(conn, today=service.current_date(), dry_run=True, **options)
+            return _class_setup(conn, _class_options(_class_query(params)), dry_run=True)
         rows = await run_in_threadpool(_call, run)
-        return templates.TemplateResponse(request, "_fund_classes_preview.html", {"rows": rows, **context(request)})
+        return templates.TemplateResponse(request, "_fund_classes_preview.html",
+                                          {"rows": rows, "tier_labels": asset_classes.TIER_STRATEGIES, **context(request)})
 
     # ------------------------------------------------- fonds réels : un PEA et un CTO fictifs, 5 000 €, 1 € par ordre (ADR 0026)
 
@@ -593,9 +613,7 @@ def register(app: FastAPI, templates, context) -> None:
 
         def run(conn):
             options = _class_options(body)
-            start = options.pop("run")
-            rows = asset_classes.setup(conn, today=service.current_date(), **options)
-            return rows, start
+            return _class_setup(conn, options, dry_run=False), options["run"]
         rows, start = await run_in_threadpool(_call, run)
         if start:
             autopilot.start_cycles([r["strategy_id"] for r in rows])
