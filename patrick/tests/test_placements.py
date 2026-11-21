@@ -323,3 +323,160 @@ def test_only_one_analysis_runs_per_dataset(data_root, monkeypatch):
             break
         time.sleep(0.25)
     assert jobs.get(first.id).status == "done"
+
+
+# ------------------------------------------------------------------ page générale : enveloppes, épargne réelle, contraintes
+from patrick.placements import envelopes, projection
+from patrick.tabular import detect
+
+
+def test_life_insurance_exit_tax_after_eight_years_uses_the_allowance():
+    av = envelopes.normalise("av")
+    young = envelopes.exit_tax(10_000, 50_000, 5, av)
+    old = envelopes.exit_tax(10_000, 50_000, 9, av)
+    assert young["ir"] == pytest.approx(1_280) and young["ps"] == pytest.approx(1_720)
+    assert old["ir"] == pytest.approx((10_000 - 4_600) * 0.075) and old["ps"] == pytest.approx(1_720)
+    assert envelopes.exit_tax(10_000, 50_000, 9, av, couple=True)["ir"] == pytest.approx(800 * 0.075)
+    assert envelopes.exit_tax(10_000, 50_000, 9, av, already_taxed=4_000)["ps"] == pytest.approx(6_000 * 0.172)
+    per = envelopes.normalise("per", {"tmi_out": 11})
+    assert envelopes.exit_tax(1_000, 20_000, 10, per)["ir"] == pytest.approx(128 + 2_200)
+    with pytest.raises(envelopes.EnvelopeError):
+        envelopes.normalise("av", {"mgmt_fee": 12})
+    with pytest.raises(envelopes.EnvelopeError):
+        envelopes.contributions({"initial": 0, "monthly": 0})
+
+
+def test_category_guess_by_name_then_volatility():
+    assert envelopes.guess_category("Fonds euros Generali") == "euro"
+    assert envelopes.guess_category("Dnca Eurose", 0.05) == "bond"          # « eurose » n'est pas un fonds en euros
+    assert envelopes.guess_category("Amundi MSCI World") == "equity"
+    assert envelopes.guess_category("SCPI Primopierre") == "real_estate"
+    assert envelopes.guess_category("Fonds X", 0.002) == "money"
+
+
+def _flat_panel(rate_monthly: float, months: int = 120) -> pd.DataFrame:
+    idx = pd.date_range("2010-01-31", periods=months, freq="ME")
+    return pd.DataFrame({"sur": rate_monthly, "cash": 0.0}, index=idx)
+
+
+def test_projection_matches_closed_form_with_contributions_fees_and_match():
+    panel = _flat_panel(0.004)
+    w = pd.Series({"sur": 1.0, "cash": 0.0})
+    contrib = {"initial": 1_000.0, "monthly": 100.0, "yearly": 0.0, "growth": 0.0, "goal": 0.0}
+    none = envelopes.normalise("none")
+    pr = projection.project(panel, w, [], none, contrib, 2, n=50)
+    expected = 1_000 * 1.004 ** 24 + sum(100 * 1.004 ** (24 - m) for m in range(1, 25))
+    assert pr["gross"]["p05"] == pytest.approx(expected) and pr["gross"]["p95"] == pytest.approx(expected)
+    assert pr["invested"] == pytest.approx(3_400) and pr["taxes_median"] == 0
+    pee = envelopes.normalise("pee", {"abond_rate": 100, "abond_cap": 500, "abond_csg": 10, "ps_exit": 0})
+    pr2 = projection.project(panel, w, [], pee, contrib, 2, n=20)
+    assert pr2["abondement"] == pytest.approx(2 * 500 * 0.9)                # plafond annuel atteint chaque année
+    fees = envelopes.normalise("none", {"mgmt_fee": 1.2, "entry_fee": 2})
+    pr3 = projection.project(panel, w, [], fees, contrib, 2, n=20)
+    assert pr3["gross"]["p50"] < pr["gross"]["p50"] and pr3["fee_drag_median"] == pytest.approx(pr["gross"]["p50"] - pr3["gross"]["p50"])
+
+
+def test_replay_irr_equals_the_constant_return():
+    panel = _flat_panel(0.005, months=60)
+    w = pd.Series({"sur": 1.0, "cash": 0.0})
+    contrib = {"initial": 5_000.0, "monthly": 200.0, "yearly": 1_000.0, "growth": 0.0, "goal": 0.0}
+    rp = projection.replay(panel, w, [], envelopes.normalise("none"), contrib)
+    assert rp["irr"] == pytest.approx(1.005 ** 12 - 1, abs=1e-6) and rp["max_dd"] == 0.0
+    assert projection.irr_constant(contrib, 5, rp["final"]) == pytest.approx(rp["irr"], abs=1e-6)
+
+
+def test_frontier_rises_and_risk_contributions_sum_to_one():
+    navs = _navs().dropna()
+    panel = stats.monthly_navs(navs, navs.index[-1]).pct_change().dropna()
+    fr = projection.frontier(panel, "monetaire_euro", points=8)
+    vols = [p["vol"] for p in fr["points"]]
+    rets = [p["ret"] for p in fr["points"]]
+    assert len(fr["points"]) >= 6 and vols == sorted(vols) and rets[-1] >= rets[0]
+    rc = projection.risk_contributions(panel, pd.Series(1 / panel.shape[1], index=panel.columns))
+    assert sum(x["risk"] for x in rc) == pytest.approx(1.0)
+
+
+def test_optimizers_respect_bounds_and_group_constraints():
+    navs = _navs().dropna()
+    panel = stats.monthly_navs(navs, navs.index[-1]).pct_change().dropna()
+    bounds = {"alpha_actions": (0.0, 0.25), "beta_obligations": (0.10, 1.0)}
+    groups = [(["gamma_mixte", "delta_recent"], 0.3, 0.6)]
+    for name in ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity"):
+        w = optimize.clean_weights(optimize.OPTIMIZERS[name](panel, "monetaire_euro", 1.0, k=4, bounds=bounds, groups=groups))
+        assert w["alpha_actions"] <= 0.25 + 1e-6 and w["beta_obligations"] >= 0.10 - 1e-6, name
+        assert 0.3 - 1e-6 <= w[["gamma_mixte", "delta_recent"]].sum() <= 0.6 + 1e-6, name
+    floor = optimize.opt_max_sharpe(panel, "monetaire_euro", 1.0, k=3, bounds={"monetaire_euro": (0.4, 1.0)})
+    assert floor["monetaire_euro"] == pytest.approx(0.4) and floor.sum() == pytest.approx(1.0)
+    with pytest.raises(ValueError):
+        optimize.opt_min_vol(panel, "monetaire_euro", 1.0, k=2, bounds={"alpha_actions": (0.7, 1.0), "beta_obligations": (0.7, 1.0)})
+
+
+def test_store_keeps_raw_values_and_recomputes_levels_when_the_kind_changes(data_root):
+    ds = store.create_dataset("Souple")
+    idx = pd.date_range("2018-01-31", periods=36, freq="ME")
+    perf = pd.DataFrame({"Date": idx.strftime("%d/%m/%Y"), "Rendement": np.full(36, 0.5)})
+    found, _ = detect.detect("perf.csv", perf.to_csv(index=False, sep=";").encode())
+    key, entry = store.add_found(ds, found[0], "perf.csv")
+    assert entry["kind"] in ("return_pct", "return_dec")
+    store.update_fund(ds, key, kind="return_pct")
+    navs, _ = store.load_navs(ds)
+    assert navs[key].iloc[-1] == pytest.approx(100 * 1.005 ** 36)
+    with pytest.raises(store.StoreError):
+        store.update_fund(ds, key, min_w=0.6, max_w=0.2)
+    store.update_fund(ds, key, min_w=0.1, max_w=0.5, category="bond", role="uc", label="Mon support")
+    f = store.get_meta(ds)["funds"][key]
+    assert (f["min"], f["max"], f["category"], f["label"]) == (0.1, 0.5, "bond", "Mon support")
+    _rkey, rentry = store.add_rates(ds, "Fonds euros", "2020 1,2\n2021 1,1\nnote\n2022 2 %")
+    assert rentry["role"] == "euro" and rentry["kind"] == "annual_rate"
+    with pytest.raises(store.StoreError):
+        store.add_rates(ds, "Vide", "pas de taux")
+
+
+def test_profile_validation_and_analysis_with_envelope(data_root):
+    ds = store.create_dataset("Profil")
+    for key, s in FUNDS.items():
+        store.add_fund(ds, loader.ParsedFund(key, key, s.rename(key), f"{key}.csv", "csv"))
+    euro, _ = store.add_rates(ds, "Fonds euros", "\n".join(f"{y} 2" for y in range(2011, 2027)))
+    with pytest.raises(store.StoreError):
+        store.update_profile(ds, envelope={"kind": "nope"})
+    with pytest.raises(store.StoreError):
+        store.update_profile(ds, groups=[{"category": "euro", "min": 0.8, "max": 0.2}])
+    store.update_profile(ds, envelope={"kind": "av", "overrides": {"mgmt_fee": 0.5}}, contributions={"initial": 5000, "monthly": 100, "goal": 20000},
+                         holdings={"alpha_actions": 3000, euro: 2000, "inconnu": 5}, groups=[{"category": "euro", "min": 0.2, "max": 0.7}])
+    navs, meta = store.load_navs(ds)
+    params = _quick_params(objectives=("max_return", "min_vol"), caps=(1.0,), methods=("bootstrap blocs 6 mois",))
+    jobs.apply_profile(params, meta)
+    assert params.envelope["mgmt_fee"] == 0.5 and params.euro_keys == (euro,) and params.holdings == {"alpha_actions": 3000.0, euro: 2000.0}
+    res = service.analyse(navs, {k: f["label"] for k, f in meta["funds"].items()}, meta["cash"], params)
+    json.dumps(res, allow_nan=False)
+    for pf in res["portfolios"]:
+        window_funds = next(w["funds"] for w in res["windows"] if w["id"] == pf["window"])
+        if euro in window_funds:
+            share = sum(x["weight"] for x in pf["weights"] if x["key"] == euro)
+            assert 0.2 - 1e-3 <= share <= 0.7 + 1e-3, pf["id"]
+        assert pf["projection"]["prudent"]["invested"] == pytest.approx(5000 + 100 * 36) and pf["replay"]["irr"] is not None and pf["risk"]
+    assert res["current"] and res["envelope_compare"] and {e["kind"] for e in res["envelope_compare"]} >= {"av", "pea", "cto", "pee"}
+    assert res["charts"][res["windows"][-1]["id"]]["frontier"]["points"]
+
+
+def test_routes_catalog_import_report_fund_rates_profile(client):
+    cat = client.get("/api/placements/catalog").json()
+    assert "av" in cat["envelopes"] and "annual_rate" in cat["kinds"] and cat["max_horizon"] == service.MAX_HORIZON
+    idx = pd.date_range("2015-01-31", periods=60, freq="ME")
+    rng = np.random.default_rng(9)
+    wide = pd.DataFrame({"Date": idx.strftime("%d/%m/%Y"), "Fonds Actions Monde": 100 * np.cumprod(1 + rng.normal(0.006, 0.04, 60)),
+                         "Fonds Obligataire": 100 * np.cumprod(1 + rng.normal(0.002, 0.01, 60))})
+    files = [("files", ("multi.csv", wide.to_csv(index=False, sep=";", decimal=",").encode(), "text/csv")), ("files", ("vide.csv", b"a;b\nx;y\n", "text/csv"))]
+    created = client.post("/api/placements/datasets", data={"name": "Multi"}, files=files).json()
+    rep = created["report"]
+    assert rep[0]["ok"] and len(rep[0]["series"]) == 2 and not rep[1]["ok"]
+    ds = created["id"]
+    key = rep[0]["series"][0]["key"]
+    upd = client.post(f"/api/placements/datasets/{ds}/funds/{key}", json={"set_bounds": True, "min": 0.1, "max": 0.6, "category": "equity"}).json()
+    assert upd["funds"][key]["max"] == 0.6
+    assert client.post(f"/api/placements/datasets/{ds}/funds/{key}", json={"kind": "inconnu"}).status_code == 400
+    rates = client.post(f"/api/placements/datasets/{ds}/rates", json={"name": "Livret", "text": "2015 1\n2016 0,75", "category": "money"}).json()
+    assert any(f["category"] == "money" for f in rates["funds"].values())
+    prof = client.post(f"/api/placements/datasets/{ds}/profile", json={"envelope": {"kind": "pea"}, "contributions": {"initial": 1000, "monthly": 50}}).json()
+    assert prof["envelope"]["kind"] == "pea" and prof["contributions"]["monthly"] == 50
+    assert client.post(f"/api/placements/datasets/{ds}/profile", json={"contributions": {"initial": -5}}).status_code == 400

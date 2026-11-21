@@ -16,23 +16,58 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from patrick import paths
-from patrick.placements import jobs, loader, optimize, scenarios, service, stats, store
+from patrick.placements import (
+    envelopes,
+    jobs,
+    loader,
+    optimize,
+    scenarios,
+    service,
+    stats,
+    store,
+)
+from patrick.tabular import detect, reader
 from patrick.webapp import i18n
 from patrick.webapp.i18n_placements import PLACEMENTS_JS_KEYS
 
-MAX_FILE_BYTES = 25 * 1024 * 1024
-MAX_FILES = 40
+MAX_FILE_BYTES = 60 * 1024 * 1024
+MAX_FILES = 80
 
 
 class AnalyseBody(BaseModel):
-    horizon_years: int = Field(5, ge=1, le=10)
-    objectives: list[str] = list(optimize.OBJECTIVES)
+    horizon_years: int = Field(5, ge=1, le=service.MAX_HORIZON)
+    objectives: list[str] = list(optimize.DEFAULT_OBJECTIVES)
     caps: list[float] = [1.0, 0.4]
     methods: list[str] = list(scenarios.METHODS)
     n_sims: int = Field(scenarios.N_SIMS, ge=1000, le=100_000)
     windows: list[str] = []
     reopt_months: int = Field(12, ge=1, le=60)
     min_train: int = Field(60, ge=12, le=240)
+
+
+class FundBody(BaseModel):
+    label: str | None = None
+    kind: str | None = None
+    category: str | None = None
+    role: str | None = None
+    min: float | None = None
+    max: float | None = None
+    set_bounds: bool = False                     # distingue « ne pas toucher aux bornes » de « bornes effacées » (null)
+    excluded: bool | None = None
+
+
+class RatesBody(BaseModel):
+    name: str = "Fonds en euros"
+    text: str
+    category: str = "euro"
+
+
+class ProfileBody(BaseModel):
+    envelope: dict | None = None
+    contributions: dict | None = None
+    holdings: dict[str, float | None] | None = None
+    groups: list[dict] | None = None
+    couple: bool | None = None
 
 
 class SettingsBody(BaseModel):
@@ -58,7 +93,7 @@ def _guard(fn):
             raise _problem(exc, 503) from exc
         except store.StoreError as exc:
             raise _problem(exc, 404 if "introuvable" in str(exc) else 400) from exc
-        except (loader.LoaderError, service.AnalysisError) as exc:
+        except (loader.LoaderError, service.AnalysisError, envelopes.EnvelopeError, detect.DetectError, reader.TabularError) as exc:
             raise _problem(exc) from exc
     return wrapper
 
@@ -76,15 +111,20 @@ async def _read_files(files: list[UploadFile] | None) -> list[tuple[str, bytes]]
 
 
 def _ingest(dataset_id: str, uploads: list[tuple[str, bytes]]) -> list[dict]:
-    """Importe chaque fichier ; un fichier illisible n'arrête pas les autres (il est rapporté avec son erreur)."""
+    """Importe chaque fichier avec le lecteur universel (toutes les séries de toutes les feuilles) ; un fichier illisible n'arrête pas les
+    autres : il est rapporté avec son erreur. Chaque série dit ce qui a été deviné (type, fréquence, nom) et avec quelle confiance."""
     report = []
     for name, data in uploads:
         try:
-            parsed = loader.parse_upload(name, data)
-            entry = store.add_fund(dataset_id, parsed)
-            report.append({"file": name, "ok": True, "key": parsed.key, "label": entry["label"], "points": entry["points"],
-                           "start": entry["start"], "end": entry["end"], "check": entry["checks"][-1]})
-        except loader.LoaderError as exc:
+            found, remarks = detect.detect(name, data)
+            series = []
+            for f in found:
+                key, entry = store.add_found(dataset_id, f, name)
+                series.append({"key": key, "label": entry["label"], "kind": entry["kind"], "frequency": entry["frequency"], "points": entry["points"],
+                               "start": entry["start"], "end": entry["end"], "notes": entry["notes"], "confidence": entry["confidence"],
+                               "category": entry["category"], "check": entry["checks"][-1]})
+            report.append({"file": name, "ok": True, "series": series, "remarks": remarks[:6]})
+        except (detect.DetectError, loader.LoaderError, store.StoreError) as exc:
             report.append({"file": name, "ok": False, "error": str(exc)})
     return report
 
@@ -153,6 +193,33 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
     def update_settings(dataset_id: str, body: SettingsBody):
         store.update_settings(dataset_id, name=body.name, amount=body.amount, rf_annual=body.rf_annual,
                               cash=(body.cash if body.set_cash else False), excluded=body.excluded)
+        return dataset_view(dataset_id)
+
+    @app.get("/api/placements/catalog")
+    def catalog():
+        """Enveloppes et leurs paramètres par défaut, catégories, rôles et types de valeurs reconnus (pour les formulaires de la page)."""
+        return {"envelopes": envelopes.ENVELOPES, "bounds": envelopes.BOUNDS, "categories": list(envelopes.CATEGORIES), "roles": list(envelopes.ROLES),
+                "kinds": list(detect.KINDS), "objectives": list(optimize.OBJECTIVES), "default_objectives": list(optimize.DEFAULT_OBJECTIVES),
+                "max_horizon": service.MAX_HORIZON, "contrib_defaults": envelopes.CONTRIB_DEFAULTS}
+
+    @app.post("/api/placements/datasets/{dataset_id}/funds/{key}")
+    @_guard
+    def update_fund(dataset_id: str, key: str, body: FundBody):
+        store.update_fund(dataset_id, key, label=body.label, kind=body.kind, category=body.category, role=body.role,
+                          min_w=body.min if body.set_bounds else False, max_w=body.max if body.set_bounds else False, excluded=body.excluded)
+        return dataset_view(dataset_id)
+
+    @app.post("/api/placements/datasets/{dataset_id}/rates")
+    @_guard
+    def add_rates(dataset_id: str, body: RatesBody):
+        store.add_rates(dataset_id, body.name, body.text, body.category)
+        return dataset_view(dataset_id)
+
+    @app.post("/api/placements/datasets/{dataset_id}/profile")
+    @_guard
+    def update_profile(dataset_id: str, body: ProfileBody):
+        store.update_profile(dataset_id, envelope=body.envelope, contributions=body.contributions, holdings=body.holdings, groups=body.groups,
+                             couple=body.couple)
         return dataset_view(dataset_id)
 
     @app.delete("/api/placements/datasets/{dataset_id}/funds/{key}")

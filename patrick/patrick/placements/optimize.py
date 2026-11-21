@@ -21,57 +21,131 @@ from scipy.optimize import minimize
 
 from patrick.placements.stats import FREQ
 
-OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino")
+OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity", "equal")
+DEFAULT_OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity")
 N_STARTS = 25
 WEIGHT_TOLERANCE = 1e-8
 
 
-def _multistart(fun: Callable, n: int, bounds: list[tuple[float, float]], k: int = N_STARTS, seed: int = 0) -> np.ndarray:
-    if n < 1 or sum(upper for _, upper in bounds) < 1 - 1e-12:
-        raise ValueError("Contraintes incompatibles : la somme des plafonds doit couvrir 100 %.")
+def _multistart(fun: Callable, n: int, bounds: list[tuple[float, float]], k: int = N_STARTS, seed: int = 0, constraints: list | tuple = ()) -> np.ndarray:
+    lower = np.asarray([b[0] for b in bounds], dtype=float)
     upper = np.asarray([b[1] for b in bounds], dtype=float)
+    if n < 1 or upper.sum() < 1 - 1e-12:
+        raise ValueError("Contraintes incompatibles : la somme des plafonds doit couvrir 100 %.")
+    if lower.sum() > 1 + 1e-12:
+        raise ValueError("Contraintes incompatibles : la somme des minimums dépasse 100 %.")
     rng, best = np.random.default_rng(seed), None
+    cons = [{"type": "eq", "fun": lambda w: w.sum() - 1}, *constraints]
     for i in range(k):
-        x0 = np.minimum(rng.dirichlet(np.ones(n)), upper) if i else np.minimum(np.full(n, 1 / n), upper)
-        while x0.sum() < 1 - 1e-12:
+        room = upper - lower
+        draw = rng.dirichlet(np.ones(n)) if i else np.full(n, 1 / n)
+        x0 = lower + np.minimum(draw * (1 - lower.sum()), room)
+        for _ in range(50):
+            if x0.sum() >= 1 - 1e-12:
+                break
             capacity = upper - x0
+            if capacity.sum() <= 1e-15:
+                break
             x0 = x0 + (1 - x0.sum()) * capacity / capacity.sum()
-        res = minimize(fun, x0, bounds=bounds, method="SLSQP", constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1}],
-                       options={"maxiter": 1000, "ftol": 1e-14})
-        if res.success and (best is None or res.fun < best.fun):
+        if constraints:      # point de départ rendu admissible (contraintes de groupe) : SLSQP part mal d'un point qui les viole
+            start = x0.copy()
+            proj = minimize(lambda x, s0=start: float(((x - s0) ** 2).sum()), x0, bounds=bounds, method="SLSQP", constraints=cons,
+                            options={"maxiter": 300, "ftol": 1e-12})
+            if _feasible(proj.x, lower, upper, cons):
+                x0 = proj.x
+        res = minimize(fun, x0, bounds=bounds, method="SLSQP", constraints=cons, options={"maxiter": 1000, "ftol": 1e-14})
+        ok = res.success or _feasible(res.x, lower, upper, cons)      # « limite d'itérations » sur un point admissible : on le garde
+        if ok and np.isfinite(res.fun) and (best is None or res.fun < best.fun):
             best = res
     if best is None:
-        raise ValueError("L'optimiseur n'a trouvé aucune solution valide.")
+        raise ValueError("L'optimiseur n'a trouvé aucune solution valide (contraintes trop serrées ?).")
     return best.x
+
+
+def _feasible(x: np.ndarray, lower: np.ndarray, upper: np.ndarray, cons: list, tol: float = 1e-6) -> bool:
+    if not np.all(np.isfinite(x)) or (x < lower - tol).any() or (x > upper + tol).any():
+        return False
+    for c in cons:
+        v = c["fun"](x)
+        if (c["type"] == "eq" and abs(v) > tol) or (c["type"] == "ineq" and v < -tol):
+            return False
+    return True
+
+
+def _bounds(cols: list[str], cash: str, cap: float, bounds: dict | None, scale: float = 1.0) -> list[tuple[float, float]]:
+    """Bornes par support : plafond général (le monétaire n'en a pas), puis bornes propres au support. `scale` : part du portefeuille
+    optimisée quand une part minimale est imposée au monétaire (les bornes sont alors exprimées sur la part restante)."""
+    out = []
+    for c in cols:
+        lo, hi = 0.0, (1.0 if c == cash else cap)
+        if bounds and c in bounds:
+            lo, hi = max(lo, float(bounds[c][0])), min(hi, float(bounds[c][1]))
+        if scale < 1.0 and c != cash:
+            lo, hi = lo / scale, min(1.0, hi / scale)
+        if lo > hi + 1e-12:
+            raise ValueError(f"Contraintes incompatibles pour {c} : minimum supérieur au maximum.")
+        out.append((lo, hi))
+    return out
+
+
+def _groups(cols: list[str], groups: list | None, scale: float = 1.0, offset: dict | None = None) -> list[dict]:
+    """Contraintes de groupe `(supports, minimum, maximum)` (« fonds en euros au moins 30 % », « actions au plus 60 % »)."""
+    out = []
+    for keys, lo, hi in groups or []:
+        mask = np.array([c in keys for c in cols])
+        extra = sum((offset or {}).get(k, 0.0) for k in keys)
+        if not mask.any() and not extra:
+            continue
+        out.append({"type": "ineq", "fun": lambda w, mk=mask, lo=float(lo), e=extra: w[mk].sum() * scale + e - lo})
+        out.append({"type": "ineq", "fun": lambda w, mk=mask, hi=float(hi), e=extra: hi - (w[mk].sum() * scale + e)})
+    return out
+
+
+def _risky_setup(R: pd.DataFrame, cash: str, cap: float, bounds: dict | None, groups: list | None):
+    """Objectifs « 100 % risqués » (Sharpe, volatilité, Sortino) : une part minimale imposée au monétaire est mise de côté, le reste est optimisé."""
+    risky = _risky(R, cash)
+    floor = float(bounds[cash][0]) if bounds and cash in bounds else 0.0
+    scale = 1.0 - floor
+    if scale <= 0:
+        raise ValueError("Contraintes incompatibles : le monétaire occupe tout le portefeuille.")
+    bnds = _bounds(risky, cash, cap, bounds, scale)
+    cons = _groups(risky, groups, scale, {cash: floor})
+    return risky, floor, scale, bnds, cons
+
+
+def _assemble(R: pd.DataFrame, risky: list[str], w: np.ndarray, cash: str, floor: float, scale: float) -> pd.Series:
+    out = pd.Series(w * scale, index=risky).reindex(R.columns).fillna(0.0)
+    out[cash] = out.get(cash, 0.0) + floor
+    return out
 
 
 def _risky(R: pd.DataFrame, cash: str) -> list[str]:
     return [c for c in R.columns if c != cash]
 
 
-def opt_max_return(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS) -> pd.Series:
+def opt_max_return(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
     cols, X = list(R.columns), R.values
-    w = _multistart(lambda w: -np.log1p(X @ w).mean() * FREQ, len(cols), [(0, 1.0 if c == cash else cap) for c in cols], k=k)
+    w = _multistart(lambda w: -np.log1p(X @ w).mean() * FREQ, len(cols), _bounds(cols, cash, cap, bounds), k=k, constraints=_groups(cols, groups))
     return pd.Series(w, index=cols)
 
 
-def opt_max_sharpe(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS) -> pd.Series:
-    risky = _risky(R, cash)
+def opt_max_sharpe(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    risky, floor, scale, bnds, cons = _risky_setup(R, cash, cap, bounds, groups)
     ex = R[risky].sub(R[cash], axis=0)
     m_, C = ex.mean().values * FREQ, ex.cov().values * FREQ
-    w = _multistart(lambda w: -(w @ m_) / np.sqrt(max(w @ C @ w, 1e-14)), len(risky), [(0, cap)] * len(risky), k=k)
-    return pd.Series(w, index=risky).reindex(R.columns).fillna(0.0)
+    w = _multistart(lambda w: -(w @ m_) / np.sqrt(max(w @ C @ w, 1e-14)), len(risky), bnds, k=k, constraints=cons)
+    return _assemble(R, risky, w, cash, floor, scale)
 
 
-def opt_min_vol(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS) -> pd.Series:
-    risky = _risky(R, cash)
+def opt_min_vol(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    risky, floor, scale, bnds, cons = _risky_setup(R, cash, cap, bounds, groups)
     C = R[risky].cov().values * FREQ
-    w = _multistart(lambda w: w @ C @ w, len(risky), [(0, cap)] * len(risky), k=k)
-    return pd.Series(w, index=risky).reindex(R.columns).fillna(0.0)
+    w = _multistart(lambda w: w @ C @ w, len(risky), bnds, k=k, constraints=cons)
+    return _assemble(R, risky, w, cash, floor, scale)
 
 
-def opt_max_sortino(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS) -> pd.Series:
-    risky = _risky(R, cash)
+def opt_max_sortino(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    risky, floor, scale, bnds, cons = _risky_setup(R, cash, cap, bounds, groups)
     rf, X = R[cash].values, R[risky].values
 
     def objective(w):
@@ -79,12 +153,37 @@ def opt_max_sortino(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STA
         downside = np.minimum(excess, 0)
         return -(excess.mean() * FREQ) / max(np.sqrt(np.mean(downside ** 2) * FREQ), 1e-12)
 
-    w = _multistart(objective, len(risky), [(0, cap)] * len(risky), k=k)
-    return pd.Series(w, index=risky).reindex(R.columns).fillna(0.0)
+    w = _multistart(objective, len(risky), bnds, k=k, constraints=cons)
+    return _assemble(R, risky, w, cash, floor, scale)
+
+
+def opt_risk_parity(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    """Parité de risque : chaque support risqué apporte la même part de la variance (contributions égales)."""
+    risky, floor, scale, bnds, cons = _risky_setup(R, cash, cap, bounds, groups)
+    C = R[risky].cov().values * FREQ
+
+    def objective(w):
+        var = max(w @ C @ w, 1e-14)
+        rc = w * (C @ w) / var
+        return float(((rc - 1 / len(w)) ** 2).sum())
+
+    w = _multistart(objective, len(risky), bnds, k=min(k, 8), constraints=cons)
+    return _assemble(R, risky, w, cash, floor, scale)
+
+
+def opt_equal(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    """1/N sur les supports risqués (la référence naïve, souvent difficile à battre hors échantillon), part minimale du monétaire respectée."""
+    risky = _risky(R, cash)
+    floor = float(bounds[cash][0]) if bounds and cash in bounds else 0.0
+    out = pd.Series(0.0, index=R.columns)
+    out[risky] = (1 - floor) / len(risky)
+    out[cash] = floor
+    return out
 
 
 OPTIMIZERS: dict[str, Callable[..., pd.Series]] = {
     "max_return": opt_max_return, "max_sharpe": opt_max_sharpe, "min_vol": opt_min_vol, "max_sortino": opt_max_sortino,
+    "risk_parity": opt_risk_parity, "equal": opt_equal,
 }
 
 
@@ -126,7 +225,7 @@ def evaluate(w: pd.Series, R: pd.DataFrame, cash: str, daily: pd.DataFrame) -> d
 
 
 def walk_forward(R: pd.DataFrame, cash: str, fn: Callable[..., pd.Series], cap: float, freq: int = 12, min_train: int = 60,
-                 k: int = N_STARTS) -> dict:
+                 k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> dict:
     """Réoptimisation tous les `freq` mois après `min_train` mois d'apprentissage, 1/N calculé sur les mêmes mois de test.
 
     Le rendement annualisé est celui du rendement BRUT (pas de l'excédent) ; le Sharpe est celui de l'excédent sur le monétaire (définition
@@ -134,7 +233,7 @@ def walk_forward(R: pd.DataFrame, cash: str, fn: Callable[..., pd.Series], cap: 
     scores, benchmarks = [], []
     for end in range(min_train, len(R) - (freq - 1), freq):
         train, test = R.iloc[:end], R.iloc[end:end + freq]
-        w = clean_weights(fn(train, cash, cap, k=k))
+        w = clean_weights(fn(train, cash, cap, k=k, bounds=bounds, groups=groups))
         p_raw = (test * w).sum(axis=1)
         p_excess = p_raw - test[cash]
         risky = _risky(test, cash)

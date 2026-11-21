@@ -128,3 +128,33 @@ def parse_symbols(text: str) -> list[str]:
         if token and SYMBOL_RE.match(token):
             seen.setdefault(token)
     return list(seen)[:MAX_SYMBOLS]
+
+
+def parse_events_any(filename: str, data: bytes) -> pd.DataFrame:
+    """Événements d'un fichier de n'importe quel format lisible (CSV, Excel, ODS) : la première feuille qui a une colonne de symbole et une
+    colonne de date. Mêmes colonnes en sortie que `parse_events_csv`."""
+    from patrick.tabular import parse, reader
+    try:
+        sheets = reader.read_tables(filename, data)
+    except reader.TabularError as exc:
+        raise EventsError(f"{filename} : {exc}") from exc
+    for _sheet, grid in sheets:
+        for r in range(min(len(grid), 30)):
+            labels = {c: str(grid.iat[r, c]).strip().lower() for c in grid.columns if isinstance(grid.iat[r, c], str)}
+            sym = next((c for c, lab in labels.items() if lab in SYMBOL_NAMES), None)
+            day = next((c for c, lab in labels.items() if lab in DATE_NAMES), None)
+            if sym is None or day is None:
+                continue
+            body = grid.iloc[r + 1:]
+            dates, _ = parse.to_dates(list(body[day]))
+            out = pd.DataFrame({"symbol": body[sym].astype(str).str.strip().str.upper().to_numpy(), "at": dates.to_numpy(),
+                                "entry_price": float("nan"), "group": "tous"})
+            valid = out["symbol"].str.match(SYMBOL_RE) & out["at"].notna()
+            out = out[valid].sort_values("at", kind="stable").reset_index(drop=True)
+            if out.empty:
+                continue
+            if len(out) > MAX_EVENTS:
+                raise EventsError(f"{filename} : {len(out)} événements, au plus {MAX_EVENTS} sont acceptés.")
+            out.attrs["dropped"] = int((~valid).sum())
+            return out
+    raise EventsError(f"{filename} : colonnes `symbol` (ou ticker) et `date` introuvables.")
