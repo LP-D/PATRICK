@@ -52,6 +52,8 @@ séances de l'ADR 0007 (fuite des barres datées du début de journée).
 - Sur les 458 runs RL terminés de la base au 16/11, la lecture en retient 6 qui battent acheter-garder sans alerte (11 avant le test du
   décalage rejoué : ^STI, ^TWII, ^KS11, ^AXJO et ^N225 perdent 70 à 95 % de leur Sharpe brut quand les positions sont décalées d'un jour).
   Les 6 restants sont tous du moteur 1 (deux actions en chute, CO.PA et WLN.PA, jouées à la baisse ; ALI=F, HRC=F, ^NSEI, SHY).
+  Cause de la fuite d'Asie trouvée le 21/11 (séries FRED du jour avant l'alignement version 2, ADR 0007 complément) : ^NSEI sort aussi.
+  Au 21/11, 7 runs sur 602 : SHY, HRC=F, ALI=F, CO.PA, WLN.PA (moteur 1), WLN.PA et NOKIA.HE (moteur 2).
 - Le Sharpe d'un run du moteur 2 se lit avec `agent_share` : un run entièrement replié EST acheter-garder (message dans les avertissements).
   Le Sharpe déflaté compte toujours les runs terminés de la cible, moteurs confondus.
 - Un pli coûte autant qu'avant : l'environnement fait 5 barres par pas (calcul NumPy négligeable), les 10 validations sont des rejeux

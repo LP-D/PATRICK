@@ -53,3 +53,22 @@ ALFRED leur première publication tombe le soir même, donc la valeur du jour d 
 - L'audit de non-régression sur les 506 snapshots est dans `docs/modelisation/triage-critique-2026-10-28.md`.
 - Limite : la règle 2 vaut pour les paires Yahoo `=X`. Les contrats à terme de change (`6E=F`) et le DXY ont un cours de clôture réel et ne sont
   pas concernés. Les classes États-Unis, futures, crypto et volatilité sont au niveau du bruit : aucune règle n'y a été ajoutée.
+
+## Complément du 2026-11-21 : les runs d'Asie d'avant la garde v2
+
+« Les runs déjà faits ne sont pas réécrits » laissait un trou : les runs d'Asie-Pacifique entraînés avant le 28/10 (alignement version 1)
+restaient crédibles, champions et candidats du fonds, alors qu'ils voyaient les séries FRED du jour.
+
+- **Mesure** (tables brutes du 16/11, corrélation de rang de la variation du jour d avec le rendement de d à d+1, puis retardée d'un jour) :
+  VIX FRED −0,195 → −0,016 (^N225), −0,146 → −0,053 (^KS11), −0,162 → −0,025 (^NSEI) ; ^GSPC et ^VIX de Yahoo, déjà alignés à l'ingestion,
+  autour de 0. Europe : −0,04 à −0,08 (sous le seuil d'audit) ; États-Unis, futures, change sous la règle 2 : autour de 0.
+- **Effet** : AUC de direction médiane des runs ML d'Asie à 1 jour 0,650 (27 runs, version 1) contre 0,529 (5 runs, version 2) ; les agents
+  RL d'Asie perdent 70 à 95 % de leur Sharpe brut quand leurs positions sont décalées d'un jour. C'était l'« Asie » non expliquée de
+  l'analyse F1 du 31/10.
+- **Décision** : `validation/suspicion.py::fred_day_reason` marque non crédible (motif « séries FRED du jour ») un run dont la cible est
+  d'Asie-Pacifique, l'alignement < 2, le mode FRED `alfred` ou `reference_date`, avec au moins une série FRED quotidienne. Même traitement
+  que les runs de change sous la règle 1 : lisible, jamais champion crédible ni modèle du fonds, hors des moyennes ; `trackdb.alignment_reasons`
+  le voit, la page « À faire » propose de refaire ces champions (groupe « Champions d'Asie à remplacer »). L'Europe n'est pas marquée.
+- **Portée au 21/11** : 168 runs ML (151 champions sur 23 cibles d'Asie), 9 runs RL. Le fonds « Systematic Actions Asie » a 34 règles sur ces
+  modèles : le pilote automatique les retire au cycle suivant (retrait daté, historique gardé), jusqu'à ce que des runs réalignés deviennent
+  champions.

@@ -51,8 +51,7 @@ def action_items(conn: sqlite3.Connection, n_recent_failures: int, n_suspect: in
     running = conn.execute("SELECT COUNT(*) FROM job WHERE status = 'running'").fetchone()[0]
     if queued or running:
         items.append({"key": "queue", "n": queued, "running": running, "href": "/a-faire/queue", "level": "neutral"})
-    champions = [r[0] for r in conn.execute("SELECT run_id FROM champion WHERE target LIKE '%=X%'")]
-    legacy = len(trackdb.alignment_reasons(conn, champions)) if champions else 0
+    legacy = len(trackdb.legacy_alignment_champions(conn))      # devises (règle 1) et Asie (séries FRED du jour)
     if legacy:
         items.append({"key": "fx_legacy", "n": legacy, "href": "/a-faire/fx_legacy", "level": "warning"})
     lost = relaunch_stats.lost_series(conn)

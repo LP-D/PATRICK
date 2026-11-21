@@ -81,8 +81,8 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
                                 "{n} model(s) can no longer predict: an input series is gone ({s}). Check the provider; after three days the "
                                 "advisor will propose rebuilding them."),
     "hm_action_queue": _s("File d'attente : {n} job(s) en attente, {r} en cours.", "Queue: {n} job(s) waiting, {r} running."),
-    "hm_action_fx_legacy": _s("{n} champion(s) de change entraîné(s) avant la correction d'alignement : relancer des runs de change pour les remplacer.",
-                              "{n} currency champion(s) trained before the alignment fix: launch new currency runs to replace them."),
+    "hm_action_fx_legacy": _s("{n} champion(s) entraîné(s) avant une correction d'alignement (devises, Asie) : les relancer pour les remplacer.",
+                              "{n} champion(s) trained before an alignment fix (currencies, Asia): relaunch them to replace them."),
     "rt_label": _s("Pages de ce run", "Pages of this run"),
     "rt_detail": _s("Détail", "Detail"),
     "rt_analysis": _s("Analyse", "Analysis"),

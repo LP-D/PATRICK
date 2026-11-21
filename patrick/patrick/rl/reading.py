@@ -47,6 +47,11 @@ SQL_FIELDS: tuple[tuple[str, str], ...] = (
     ("delay_suspect", "$.stats.delay.suspect"),
     ("dsr", "$.stats.dsr.dsr"),
     ("oos_csv", "$.artifacts.oos_csv"),
+    # Alignement du run (fuite des séries FRED du jour pour une cible d'Asie d'avant l'alignement version 2 : `suspicion.fred_day_reason`).
+    ("target_source", "$.config.objective.target_source"),
+    ("alignment_version", "$.config.objective.alignment.version"),
+    ("fred_point_in_time", "$.config.universe.fred_point_in_time"),
+    ("fred_series", "$.config.universe.fred_series"),
 )
 FIELD_KEYS: tuple[str, ...] = tuple(key for key, _path in SQL_FIELDS)
 
@@ -112,14 +117,40 @@ def delay_from_csv(oos_csv) -> dict | None:
     return None
 
 
-def leak_reason(target: str | None, session_rule, delay_suspect) -> str | None:
-    """« delay » si le test du décalage d'un jour s'est déclenché, « fx_rule1 » pour une paire Yahoo `=X` entraînée sous la règle des
-    séances 1 (tous les runs RL de change d'avant le 2026-11-16), sinon None."""
+def alignment_config(fields: dict) -> dict:
+    """Configuration minimale que lit `validation.suspicion` (objectif et champs FRED), rebâtie depuis `fields` (lecture SQL : la liste
+    des séries FRED arrive en texte JSON)."""
+    import json
+
+    rule = fields.get("session_rule")
+    rule = rule if isinstance(rule, int) and not isinstance(rule, bool) else 1
+    version = fields.get("alignment_version")
+    series = fields.get("fred_series")
+    if isinstance(series, str):
+        try:
+            series = json.loads(series)
+        except ValueError:
+            series = None
+    return {"objective": {"session_rule": rule, "target_source": fields.get("target_source") or "yfinance",
+                          "alignment": {"version": version} if isinstance(version, int) and not isinstance(version, bool) else None},
+            "universe": {"fred_point_in_time": fields.get("fred_point_in_time"), "fred_series": series if isinstance(series, dict) else {}}}
+
+
+def leak_reason(target: str | None, fields: dict, delay_suspect) -> str | None:
+    """« delay » si le test du décalage d'un jour s'est déclenché ; « fx_rule1 » pour une paire Yahoo `=X` entraînée sous la règle des
+    séances 1 (tous les runs RL de change d'avant le 2026-11-16) ; « fred_day » pour une cible d'Asie d'avant l'alignement version 2
+    qui voyait les séries FRED du jour (VIX, écarts de crédit clos à New York après elle) ; sinon None."""
     if delay_suspect in (True, 1):
         return "delay"
-    from patrick.validation.suspicion import alignment_reason
-    rule = session_rule if isinstance(session_rule, int) and not isinstance(session_rule, bool) else 1
-    return "fx_rule1" if alignment_reason(target, {"objective": {"session_rule": rule}}) else None
+    from patrick.config.target_label import split_run_label
+    from patrick.data.session_calendar import is_yahoo_fx_pair
+    from patrick.validation import suspicion
+    if not isinstance(target, str):
+        return None
+    config = alignment_config(fields)
+    if not suspicion.alignment_reason(target, config):
+        return None
+    return "fx_rule1" if is_yahoo_fx_pair(split_run_label(target)[0]) else "fred_day"
 
 
 def derive(fields: dict, target: str | None, done: bool = True, delay: dict | None = None) -> dict:
@@ -151,7 +182,7 @@ def derive(fields: dict, target: str | None, done: bool = True, delay: dict | No
           and p_value is not None and p_value < SIGNIFICANCE):
         delay = delay_from_csv(fields.get("oos_csv"))
         suspect = delay.get("suspect") if delay else None
-    leak = leak_reason(target, fields.get("session_rule"), suspect) if done else None
+    leak = leak_reason(target, fields, suspect) if done else None
     verdict = None
     if done and sharpe is not None:
         from patrick.data.session_calendar import untradable_kind

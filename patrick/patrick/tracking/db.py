@@ -1277,18 +1277,52 @@ def list_all_runs(conn: sqlite3.Connection, include_archived: bool = False, with
     return enrich_runs(conn, list_run_index(conn, include_archived), with_balance)
 
 
+def legacy_alignment_champions(conn: sqlite3.Connection) -> list[tuple[str, int, str, str]]:
+    """Champions à refaire pour l'alignement : `(cible, horizon, run_id, motif)` des champions de change entraînés sous la règle des séances
+    1 et des champions d'Asie d'avant l'alignement version 2 (séries FRED du jour). Les cibles macro retirées ont leur propre traitement.
+    Seuls les champions de change ou d'Asie voient leur config relue."""
+    from patrick.config.target_label import split_run_label
+    from patrick.data.session_calendar import classify_asset_class, is_yahoo_fx_pair
+
+    def candidate(target) -> bool:
+        symbol = split_run_label(target)[0] if isinstance(target, str) else None
+        return bool(symbol) and (is_yahoo_fx_pair(symbol) or classify_asset_class(symbol) in suspicion.FRED_DAY_CLASSES)
+
+    rows = [r for r in conn.execute("SELECT target, horizon, run_id FROM champion").fetchall() if candidate(r[0])]
+    reasons = alignment_reasons(conn, [r[2] for r in rows])
+    return [(target, horizon, run_id, reasons[run_id]) for target, horizon, run_id in rows
+            if run_id in reasons and reasons[run_id] != suspicion.MACRO_TARGET_REASON]
+
+
 def alignment_reasons(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, str]:
-    """`{run_id: motif}` des runs de change entraînés avant la règle d'alignement 2 et des runs à cible macro retirée
-    (`validation/suspicion.py::alignment_reason`). Seuls les runs `=X` ou FRED parmi `run_ids` voient leur config relue."""
+    """`{run_id: motif}` des runs de change entraînés avant la règle d'alignement 2, des runs à cible macro retirée et des cibles d'Asie
+    d'avant l'alignement version 2 qui voyaient les séries FRED du jour (`validation/suspicion.py::alignment_reason`). Seuls les candidats
+    (`=X`, source FRED, ou alignement < 2 en mode FRED du jour) sont relus, et seulement l'objectif et les champs FRED de leur config."""
+    from patrick.config.target_label import split_run_label
+    from patrick.data.session_calendar import classify_asset_class, is_yahoo_fx_pair
+
+    def candidate(target, source) -> bool:
+        if source == "fred":
+            return True
+        symbol = split_run_label(target)[0] if isinstance(target, str) else None
+        return bool(symbol) and (is_yahoo_fx_pair(symbol) or classify_asset_class(symbol) in suspicion.FRED_DAY_CLASSES)
+
     out: dict[str, str] = {}
     for start in range(0, len(run_ids), 500):
         chunk = run_ids[start:start + 500]
         marks = ",".join("?" for _ in chunk)
-        for run_id, target, config_json in conn.execute(
-                f"SELECT run_id, target, config_json FROM run WHERE run_id IN ({marks}) AND (target LIKE '%=X%' "
-                f"OR json_extract(config_json, '$.objective.target_source') = 'fred')", chunk):
+        wanted = [run_id for run_id, target, source in conn.execute(
+            f"SELECT run_id, target, json_extract(config_json, '$.objective.target_source') FROM run WHERE run_id IN ({marks})", chunk)
+            if candidate(target, source)]
+        if not wanted:
+            continue
+        marks = ",".join("?" for _ in wanted)
+        for run_id, target, objective, fpit, fred_series in conn.execute(
+                f"SELECT run_id, target, json_extract(config_json, '$.objective'), json_extract(config_json, '$.universe.fred_point_in_time'), "
+                f"json_extract(config_json, '$.universe.fred_series') FROM run WHERE run_id IN ({marks})", wanted):
             try:
-                cfg = json.loads(config_json) if config_json else {}
+                cfg = {"objective": json.loads(objective) if objective else {},
+                       "universe": {"fred_point_in_time": fpit, "fred_series": json.loads(fred_series) if fred_series else {}}}
             except (TypeError, ValueError):
                 cfg = {}
             reason = suspicion.alignment_reason(target, cfg)

@@ -70,8 +70,11 @@ Autres constats :
   pas ; le résultat ne se négocie pas (avertissement déjà affiché).
 - **Actions d'Asie : fuite confirmée par le test du décalage d'un jour** (rejoué sur les fichiers hors échantillon, 16/11 au soir) : ^STI
   1,68 → 0,50, ^TWII 2,46 → 0,47, ^KS11 1,73 → 0,09, ^AXJO 1,45 → 0,08, ^N225 2,30 → 0,30 (Sharpe brut, puis positions décalées). ^NSEI
-  garde 60 % (1,60 → 0,96) et n'est pas signalé. La cause exacte reste à trouver : ces indices sont bien classés « Asie » dans la règle des
-  séances, qui retarde les variables qui clôturent après eux. L'interface les affiche désormais en « Fuite probable » (ADR 0022, point 10).
+  garde 60 % (1,60 → 0,96). **Cause trouvée le 21/11** : ces runs du 20/10 précèdent l'alignement version 2 (28/10), qui retarde d'un jour
+  les séries FRED quotidiennes pour une cible qui clôture avant New York. Le VIX FRED du jour (leur variable favorite : `VIX_ret_1d`,
+  `VIX_zscore_10d`, `VIX_level`) se fixe douze heures après la clôture de Tokyo et annonce la séance suivante (corrélation de rang −0,195
+  sur ^N225, environ 0 une fois retardé). Les 9 runs RL d'Asie, ^NSEI compris, et 168 runs ML sont marqués « séries FRED du jour »
+  (ADR 0007, complément du 21/11).
 - **Leçon positive** : quand un signal existe (même une fuite), PPO le trouve vite et fort. La mécanique RL fonctionne ; le problème est
   le rapport signal/bruit, les frais et le cadre (vendeur sur des actifs haussiers, aucun garde-fou).
 

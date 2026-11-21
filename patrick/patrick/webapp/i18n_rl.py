@@ -271,6 +271,8 @@ RL_VERDICT_STRINGS: dict[str, dict[str, str]] = {
     "rlp_rd_leak_fx_rule1": _s("Paire de change entraînée avant la règle des séances (ADR 0007) : les variables du jour expliquaient déjà le mouvement joué.",
                               "Currency pair trained before the session rule (ADR 0007): the day's features already explained the move played."),
     "rlp_rd_excess": _s("Vs acheter et garder / an", "Vs buy and hold / yr"),
+    "rlp_rd_leak_fred_day": _s("Indice d'Asie entraîné avant l'alignement des séries FRED (28/10) : le VIX FRED du jour, clos à New York après lui, annonçait sa séance suivante.",
+                               "Asian index trained before FRED series alignment (28/10): the day's FRED VIX, closing in New York after it, foretold its next session."),
     "rlp_rd_engine": _s("Moteur {n}", "Engine {n}"),
     "rlp_rd_engine_tip": _s("Moteur 1 : avant le 16/11 (vente à découvert, décision quotidienne, sans validation). Moteur 2 : ADR 0022.",
                          "Engine 1: before 16/11 (short selling, daily decision, no validation). Engine 2: ADR 0022."),

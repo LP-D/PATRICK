@@ -117,16 +117,28 @@ FX_ALIGNMENT_WARNING = (
     "stratégie : décaler ses positions d'un jour efface son gain. Relancer le run (moteur 2, règle des séances appliquée) pour un résultat crédible.")
 
 
+FRED_DAY_WARNING = (
+    "Run d'avant l'alignement des séries FRED (ADR 0007, 28/10) : pour un indice d'Asie, le VIX et les écarts de crédit FRED datés du jour "
+    "se fixent à New York douze heures APRÈS sa clôture, et annonçaient sa séance suivante (corrélation de rang -0,15 à -0,20). Ce résultat "
+    "est un artefact, pas une stratégie : décaler ses positions d'un jour efface l'essentiel de son gain. Relancer le run pour un résultat "
+    "crédible (l'alignement actuel retarde ces séries d'un jour).")
+_WARNINGS = (FX_ALIGNMENT_WARNING, FRED_DAY_WARNING)
+
+
 def display_warnings(result: dict) -> dict:
-    """Résultat d'un run RL tel qu'affiché : avertissements de lecture ajoutés en tête (sans toucher à la base). Aujourd'hui : un run d'une paire
-    Yahoo `=X` entraîné sous la règle des séances 1 (tous les runs RL de change d'avant le 2026-11-16, moteur RL qui ne fixait pas la règle)."""
+    """Résultat d'un run RL tel qu'affiché : avertissement de lecture ajouté en tête (sans toucher à la base) quand l'alignement du run
+    laissait passer une fuite : paire Yahoo `=X` entraînée sous la règle des séances 1 (tous les runs RL de change d'avant le 2026-11-16),
+    ou cible d'Asie d'avant l'alignement version 2 qui voyait les séries FRED du jour (`suspicion.fred_day_reason`)."""
     if not isinstance(result, dict) or result.get("kind") != "rl":
         return result
+    from patrick.config.target_label import split_run_label
+    from patrick.data.session_calendar import is_yahoo_fx_pair
     from patrick.validation.suspicion import alignment_reason
 
     config = result.get("config") if isinstance(result.get("config"), dict) else {}
     target = result.get("target") or ((config.get("objective") or {}).get("target_symbol"))
-    if not alignment_reason(target, config):
+    if not isinstance(target, str) or not alignment_reason(target, config):
         return result
-    warnings = [w for w in (result.get("warnings") or []) if w != FX_ALIGNMENT_WARNING]
-    return {**result, "warnings": [FX_ALIGNMENT_WARNING, *warnings]}
+    warning = FX_ALIGNMENT_WARNING if is_yahoo_fx_pair(split_run_label(target)[0]) else FRED_DAY_WARNING
+    warnings = [w for w in (result.get("warnings") or []) if w not in _WARNINGS]
+    return {**result, "warnings": [warning, *warnings]}

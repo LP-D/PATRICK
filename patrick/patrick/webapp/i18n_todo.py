@@ -11,7 +11,7 @@ TODO_STRINGS: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------------ cadre des pages
     "td_title_failures": _s("Échecs de run récents", "Recent run failures"),
     "td_title_suspect": _s("Runs à ne pas suivre", "Runs not to follow"),
-    "td_title_fx_legacy": _s("Champions de change d'avant la correction", "Currency champions from before the fix"),
+    "td_title_fx_legacy": _s("Champions d'avant une correction d'alignement", "Champions from before an alignment fix"),
     "td_title_queue": _s("File d'attente", "Queue"),
     "td_sub_failures": _s("Les échecs des {d} derniers jours (hors runs arrêtés à la main), groupés par cause. Chaque cause propose le réentraînement qui la "
                           "répare ; ce qui est déjà remplacé ou déjà en file n'est pas reproposé.",
@@ -21,10 +21,11 @@ TODO_STRINGS: dict[str, dict[str, str]] = {
                          "signal à suivre. Ceux qu'on peut refaire proprement sont proposés ci-dessous.",
                          "Runs with a score too good to be true, from before the currency alignment rule, or on a retired macro target: never a signal "
                          "to follow. The ones that can be redone cleanly are proposed below."),
-    "td_sub_fx_legacy": _s("Champions de devise entraînés avec l'ancienne règle d'alignement : leur exactitude est un nowcast, pas une prévision. Les refaire "
-                           "avec la règle d'aujourd'hui ; le nouveau modèle remplace le champion dès qu'il gagne le duel.",
-                           "Currency champions trained with the old alignment rule: their accuracy is a nowcast, not a forecast. Redo them with today's "
-                           "rule; the new model replaces the champion as soon as it wins the duel."),
+    "td_sub_fx_legacy": _s("Champions entraînés avec un ancien alignement (devises, et cibles d'Asie qui voyaient les séries FRED du jour) : leur exactitude "
+                           "est un nowcast, pas une prévision. Les refaire avec l'alignement d'aujourd'hui ; le nouveau modèle remplace le champion dès qu'il "
+                           "gagne le duel.",
+                           "Champions trained with an old alignment (currencies, and Asian targets that saw the day's FRED series): their accuracy is a "
+                           "nowcast, not a forecast. Redo them with today's alignment; the new model replaces the champion as soon as it wins the duel."),
     "td_sub_queue": _s("Les jobs en cours et ceux qui attendent un worker. Rien à relancer ici.",
                        "Running jobs and jobs waiting for a worker. Nothing to relaunch here."),
     "td_kpi_total": _s("Concernés", "Concerned"),
@@ -133,6 +134,13 @@ TODO_STRINGS: dict[str, dict[str, str]] = {
                          "Nothing to relaunch."),
     # ------------------------------------------------------------------ groupes : champions de change, file
     "td_g_fx_champions_title": _s("Champions de change à remplacer", "Currency champions to replace"),
+    "td_g_fred_day_champions_title": _s("Champions d'Asie à remplacer", "Asian champions to replace"),
+    "td_g_fred_day_champions_why": _s("Chaque ligne est un lancement dont un modèle est encore champion d'une cible d'Asie, entraîné avant le 28/10 : le VIX et les "
+                                      "écarts de crédit FRED du jour, clos à New York après la séance asiatique, annonçaient la séance suivante (AUC de direction "
+                                      "médiane 0,65 à 1 jour, 0,53 après correction). Le réentraînement les retarde d'un jour.",
+                                      "Each line is a launch whose model is still a champion of an Asian target, trained before 28/10: the day's FRED VIX and "
+                                      "credit spreads, closing in New York after the Asian session, foretold the next session (median direction AUC 0.65 at one "
+                                      "day, 0.53 after the fix). The retraining delays them by one day."),
     "td_g_fx_champions_why": _s("Chaque ligne est un lancement dont un modèle est encore champion d'une paire de devises. Le réentraînement le refait avec les mêmes "
                                 "réglages et la règle d'alignement d'aujourd'hui ; le nouveau modèle remplace le champion quand il gagne le duel.",
                                 "Each line is a launch whose model is still a champion of a currency pair. The retraining redoes it with the same settings and "
