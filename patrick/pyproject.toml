@@ -45,6 +45,8 @@ web = ["fastapi", "httpx", "uvicorn[standard]", "jinja2", "python-multipart"]
 # Pages Deep learning (/dl) et Reinforcement learning (/rl) : PyTorch, Gymnasium et Stable-Baselines3 ne sont importés qu'à l'usage.
 deep = ["torch"]
 rl = ["torch", "gymnasium", "stable-baselines3"]
+# Lecture des anciens classeurs Excel (.xls), des pages HTML enregistrées en .xls et des tableurs LibreOffice (.ods) par `patrick.tabular`.
+imports = ["xlrd", "odfpy", "lxml"]
 
 [project.scripts]
 patrick = "patrick.cli:app"
