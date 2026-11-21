@@ -1,8 +1,9 @@
 {% extends "base_v2.html" %}
 {% block title %}PATRICK — {{ t('st_title') }}{% endblock %}
 
-{# Laboratoire de stratégies : acheter avant / vendre après un événement, ou straddle autour des résultats. Le cadre s'affiche tout de suite ;
-   formulaires, avancement et résultats sont dessinés par static/strategies.js à partir de /api/strategies/*. #}
+{# Laboratoire de stratégies général : n'importe quels instruments, dates, règles (modèle ou constructeur), pondération, risque et frais ;
+   résultats en onglets et historique comparable. Le cadre s'affiche tout de suite ; tout le reste est dessiné par static/strategies.js
+   à partir de /api/strategies/*. #}
 {% block content %}
 <div class="page-header">
     <div>
@@ -12,18 +13,18 @@
 </div>
 
 <div id="st-app">
-    <nav class="kind-tabs" id="st-tabs" aria-label="{{ t('st_tabs_label') }}">
-        <a href="#event" class="kind-tab" data-kind="event">{{ t('st_tab_event') }}</a>
-        <a href="#straddle" class="kind-tab" data-kind="straddle">{{ t('st_tab_straddle') }}</a>
-    </nav>
-    <section class="card pl-card" id="st-form" aria-labelledby="st-form-h">
-        <h2 id="st-form-h">{{ t('st_events_h') }}</h2>
-        <div id="st-form-body"></div>
+    <section class="card" id="st-form" aria-labelledby="st-form-h">
+        <div class="st-head-row">
+            <h2 id="st-form-h">{{ t('st_s1') }}</h2>
+            <div id="st-history-body"></div>
+        </div>
+        <div id="st-form-body"><p class="hint" data-keep>{{ t('sb_loading') }}</p></div>
     </section>
-    <section id="st-result" hidden><div id="st-result-body"></div></section>
+    <section class="card" id="st-result" aria-label="{{ t('st_s2') }}" hidden>
+        <div id="st-result-body"></div>
+    </section>
     <p class="hint pl-disclaimer" data-keep>{{ t('st_disclaimer') }}</p>
 </div>
 <script id="st-i18n" type="application/json">{{ st_i18n | tojson }}</script>
-<script id="st-presets" type="application/json">{{ presets | tojson }}</script>
 <script src="{{ asset('strategies.js') }}" defer></script>
 {% endblock %}

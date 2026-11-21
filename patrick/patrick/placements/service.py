@@ -6,7 +6,13 @@
 3. pour chaque fenêtre x objectif x plafond : allocation optimale, indicateurs, validation walk-forward face au 1/N, scénarios à N ans ;
 4. scénarios à N ans de chaque fonds pris seul ;
 5. un classement des allocations (par défaut sur le Sharpe HORS ÉCHANTILLON : le seul critère qui ne récompense pas le sur-ajustement) ;
-6. les mises en garde (historique court, fonds périmé, GARCH non fiable…).
+6. pour chaque allocation, l'épargne RÉELLE dans l'enveloppe choisie : versements programmés, abondement, frais, prélèvements sociaux et impôts
+   de sortie, projetés (bootstrap des mois observés) et rejoués sur l'histoire (TRI) ; contribution de chaque support au risque ;
+7. la frontière efficiente sous contraintes, l'allocation actuelle (avoirs saisis) placée sur la même carte, la même épargne comparée d'une
+   enveloppe à l'autre ;
+8. les mises en garde (historique court, fonds périmé, GARCH non fiable…).
+
+Contraintes : bornes de poids par support, parts minimales ou maximales par catégorie (« fonds en euros au moins 30 % »), plafond général.
 
 Le résultat est un dictionnaire JSON (nombres Python, NaN -> None). Rien ici ne recommande d'acheter ou de vendre : ce sont des allocations
 historiquement optimales selon un critère, avec la façon dont elles se comportent hors échantillon.
@@ -22,7 +28,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from patrick.placements import optimize, scenarios, stats
+from patrick.placements import envelopes, optimize, projection, scenarios, stats
 
 CASH_FIXED = "cash_fixe"
 MIN_RISKY = 2
@@ -30,7 +36,9 @@ MIN_WINDOW_MONTHS = 36
 RECENT_MIN_MONTHS = 72         # fenêtre récente par défaut : 5 ans d'apprentissage + au moins 1 an de test
 STALE_DAYS = 60
 MAX_WINDOWS = 3
-RESULT_VERSION = 1
+RESULT_VERSION = 2
+MAX_HORIZON = 40
+PROJECTION_PATHS = 3000
 
 
 class AnalysisError(ValueError):
@@ -41,7 +49,7 @@ class AnalysisError(ValueError):
 class Params:
     amount: float = 10_000.0
     horizon_years: int = 5
-    objectives: tuple[str, ...] = optimize.OBJECTIVES
+    objectives: tuple[str, ...] = optimize.DEFAULT_OBJECTIVES
     caps: tuple[float, ...] = (1.0, 0.4)
     methods: tuple[str, ...] = tuple(scenarios.METHODS)
     n_sims: int = scenarios.N_SIMS
@@ -53,10 +61,17 @@ class Params:
     daily_from: str = "2015-01-01"             # les VL hebdomadaires des premières années fausseraient le drawdown quotidien
     rf_annual: float = 0.02                    # taux sans risque de repli si aucun fonds monétaire n'est désigné
     labels: dict[str, str] = field(default_factory=dict)
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)     # bornes de poids par support
+    groups: list[tuple[list[str], float, float, str]] = field(default_factory=list)   # (supports, min, max, libellé)
+    envelope: dict = field(default_factory=lambda: envelopes.normalise("none"))
+    contrib: dict | None = None                # versements ; None = un seul versement initial du montant
+    euro_keys: tuple[str, ...] = ()
+    holdings: dict[str, float] = field(default_factory=dict)
+    couple: bool = False
 
     def validate(self) -> None:
-        if not 1 <= self.horizon_years <= 10:
-            raise AnalysisError("L'horizon doit être compris entre 1 et 10 ans.")
+        if not 1 <= self.horizon_years <= MAX_HORIZON:
+            raise AnalysisError(f"L'horizon doit être compris entre 1 et {MAX_HORIZON} ans.")
         if not self.objectives or any(o not in optimize.OPTIMIZERS for o in self.objectives):
             raise AnalysisError("Objectif d'optimisation inconnu.")
         if not self.caps or any(not 0.05 <= c <= 1.0 for c in self.caps):
@@ -178,8 +193,9 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
     warnings_out: list[str] = []
 
     last_common = min(navs[c].dropna().index.max() for c in risky_all)
-    newest = max(navs[c].dropna().index.max() for c in risky_all)
-    stale = [labels.get(c, c) for c in risky_all if (newest - navs[c].dropna().index.max()).days > STALE_DAYS]
+    priced = [c for c in risky_all if c not in params.euro_keys] or risky_all      # un fonds en euros saisi va jusqu'au mois courant
+    newest = max(navs[c].dropna().index.max() for c in priced)
+    stale = [labels.get(c, c) for c in priced if (newest - navs[c].dropna().index.max()).days > STALE_DAYS]
     if stale:
         warnings_out.append(f"Dernière VL ancienne (plus de {STALE_DAYS} jours avant la plus récente) : {', '.join(stale)}. Toute l'analyse s'arrête à la dernière "
                             f"date commune ({last_common.date().isoformat()}) ; retirez ces fonds pour étudier une période plus récente.")
@@ -220,12 +236,21 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
         cap_label = "aucun" if cap >= 1 else f"{round(cap * 100)} %"
         say(0.12 + 0.70 * i / len(todo), f"Portefeuille {i + 1}/{len(todo)} : {obj}, plafond {cap_label}, depuis {wl}")
         fn = optimize.OPTIMIZERS[obj]
-        w = optimize.clean_weights(fn(panel, cash, cap, k=params.k_starts))
+        bounds, groups = _constraints_for(panel, params)
+        try:
+            w = optimize.clean_weights(fn(panel, cash, cap, k=params.k_starts, bounds=bounds, groups=groups))
+        except ValueError as exc:
+            raise AnalysisError(f"{obj}, plafond {cap_label}, depuis {wl} : {exc}") from exc
         p = (panel * w).sum(axis=1).rename(f"{wl}|{obj}|{cap_label}")
         metrics = optimize.evaluate(w, panel, cash, daily)
         rf = scenarios.rf_trailing(panel, cash)
         expected = scenarios.e_target(p, rf)
-        wf = optimize.walk_forward(panel, cash, fn, cap, freq=params.reopt_months, min_train=params.min_train, k=min(params.k_starts, 25))
+        try:
+            wf = optimize.walk_forward(panel, cash, fn, cap, freq=params.reopt_months, min_train=params.min_train, k=min(params.k_starts, 25),
+                                       bounds=bounds, groups=groups)
+        except ValueError:
+            wf = {"reoptimisation_mois": params.reopt_months, "apprentissage_min_mois": params.min_train, "mois_hors_echantillon": 0, "peu_fiable": True,
+                  "rdt": None, "sharpe": None, "rdt_1n": None, "sharpe_1n": None, "se": None, "se_1n": None, "significatif": False}
         try:
             hist = scenarios.hist_windows(p, panel[cash], horizon)
         except ValueError:
@@ -237,8 +262,48 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
             "history": hist, "scenarios": sims, "garch": garch,
             "fan": {"historique": scenarios.fan(p, params.horizon_years, None, n=min(params.n_sims, 20000)),
                     "prudent": scenarios.fan(p, params.horizon_years, expected, n=min(params.n_sims, 20000))},
+            **_savings(panel, w, expected, params),
         })
         curves[portfolios[-1]["id"]] = _growth(p)
+
+    # -- allocation actuelle (avoirs saisis), frontière efficiente de chaque fenêtre
+    say(0.80, "Allocation actuelle et frontière")
+    current = []
+    frontiers = {}
+    for wl, panel in windows:
+        bounds, groups = _constraints_for(panel, params)
+        fr = projection.frontier(panel, cash, bounds, [(g[0], g[1], g[2]) for g in groups], cap=max(params.caps))
+        for pf in portfolios:
+            if pf["window"] == wl:
+                pf["point"] = projection.point(panel, _weights_series(pf, panel))
+        held = {k: v for k, v in params.holdings.items() if k in panel.columns and v > 0}
+        cur = None
+        if held:
+            total = sum(held.values())
+            w_cur = pd.Series({k: v / total for k, v in held.items()}).reindex(panel.columns).fillna(0.0)
+            p_cur = (panel * w_cur).sum(axis=1)
+            rf = scenarios.rf_trailing(panel, cash)
+            cur = {"window": wl, "weights": _weights_view(w_cur, labels, total), "total": total,
+                   "missing": sorted(set(params.holdings) - set(panel.columns)), "metrics": optimize.evaluate(w_cur, panel, cash, daily),
+                   "point": projection.point(panel, w_cur), **_savings(panel, w_cur, scenarios.e_target(p_cur, rf), params)}
+            current.append(cur)
+            curves[f"{wl}|current"] = _growth(p_cur)
+        frontiers[wl] = {**fr, "current": cur["point"] if cur else None}
+
+    # -- la même épargne d'une enveloppe à l'autre (meilleure allocation hors échantillon de la fenêtre récente)
+    say(0.82, "Comparaison des enveloppes")
+    envelope_compare = []
+    last_wl, last_panel = windows[-1]
+    best_id = rank(portfolios).get(last_wl, {}).get("wf_sharpe")
+    best = next((pf for pf in portfolios if pf["id"] == best_id), None)
+    if best is not None:
+        w_best = _weights_series(best, last_panel)
+        for kind in envelopes.ENVELOPES:
+            env = params.envelope if kind == params.envelope.get("kind") else envelopes.normalise(kind)
+            pr = projection.project(last_panel, w_best, list(params.euro_keys), env, _contrib(params), params.horizon_years,
+                                    target_annual=best["expected"], n=1500, couple=params.couple)
+            envelope_compare.append({"kind": kind, "net": pr["net"], "taxes_median": pr["taxes_median"], "fees_median": pr["fees_median"],
+                                     "abondement": pr["abondement"], "tax_saving_entry": pr["tax_saving_entry"], "prob_goal": pr["prob_goal"]})
 
     # -- courbes des fenêtres (base 100) : fonds, 1/N et portefeuilles
     say(0.84, "Courbes")
@@ -252,7 +317,7 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
             dd[c] = [float(v) for v in (g / g.cummax() - 1)]
         charts[wl] = {"dates": [(panel.index[0] - pd.offsets.MonthEnd(1)).date().isoformat(), *[d.date().isoformat() for d in panel.index]],
                       "funds": growth, "drawdown": dd, "one_over_n": _growth(equal), "cash": cash,
-                      "portfolios": {pid: curves[pid] for pid in curves if pid.startswith(f"{wl}|")}}
+                      "portfolios": {pid: curves[pid] for pid in curves if pid.startswith(f"{wl}|")}, "frontier": frontiers.get(wl)}
 
     # -- scénarios de chaque fonds pris seul
     say(0.90, "Scénarios de chaque fonds")
@@ -284,7 +349,7 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
 
     result = {
         "version": RESULT_VERSION, "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "params": {"amount": params.amount, "horizon_years": params.horizon_years, "objectives": list(params.objectives), "caps": list(params.caps),
+        "params": {"amount": params.amount, "horizon_years": params.horizon_years, "objectives": list(params.objectives), "caps": list(params.caps), "couple": params.couple,
                    "methods": list(params.methods), "n_sims": params.n_sims, "reopt_months": params.reopt_months, "min_train": params.min_train},
         "funds": [{"key": c, "label": labels.get(c, c), "start": navs[c].dropna().index[0].date().isoformat(),
                    "end": navs[c].dropna().index[-1].date().isoformat()} for c in risky_all],
@@ -295,9 +360,45 @@ def analyse(navs: pd.DataFrame, labels: dict[str, str], cash: str | None, params
         "fund_stats": fund_stats, "stat_windows": list(stat_windows),
         "correlation": {"window": windows[-1][0], "keys": risky_corr, "matrix": corr.values.tolist()},
         "portfolios": portfolios, "fund_scenarios": fund_scenarios, "charts": charts, "ranking": ranking, "warnings": warnings_out,
+        "envelope": params.envelope, "contributions": _contrib(params), "current": current, "envelope_compare": envelope_compare,
+        "envelope_best": best_id, "constraints": {"bounds": {k: list(v) for k, v in params.bounds.items()},
+                                                   "groups": [{"keys": g[0], "min": g[1], "max": g[2], "label": g[3]} for g in params.groups]},
+        "euro_keys": list(params.euro_keys),
     }
     say(1.0, "Terminé")
     return _num(result)
+
+
+def _contrib(params: Params) -> dict:
+    return params.contrib or {**envelopes.CONTRIB_DEFAULTS, "initial": float(params.amount)}
+
+
+def _constraints_for(panel: pd.DataFrame, params: Params) -> tuple[dict, list]:
+    """Bornes et groupes restreints aux supports présents dans la fenêtre (un groupe vide est ignoré)."""
+    bounds = {k: v for k, v in params.bounds.items() if k in panel.columns}
+    groups = []
+    for keys, lo, hi, _label in params.groups:
+        present = [k for k in keys if k in panel.columns]
+        if present:
+            groups.append((present, lo, hi))
+    return bounds, groups
+
+
+def _weights_series(pf: dict, panel: pd.DataFrame) -> pd.Series:
+    w = pd.Series({x["key"]: x["weight"] for x in pf["weights"]}).reindex(panel.columns).fillna(0.0)
+    return w / w.sum() if w.sum() > 0 else w
+
+
+def _savings(panel: pd.DataFrame, w: pd.Series, expected: float, params: Params) -> dict:
+    """L'épargne réelle d'une allocation dans l'enveloppe : projection (historique et prudente), rejeu sur l'histoire, contributions au risque."""
+    contrib = _contrib(params)
+    euro = list(params.euro_keys)
+    return {
+        "projection": {"historique": projection.project(panel, w, euro, params.envelope, contrib, params.horizon_years, None, n=PROJECTION_PATHS, couple=params.couple),
+                       "prudent": projection.project(panel, w, euro, params.envelope, contrib, params.horizon_years, expected, n=PROJECTION_PATHS, couple=params.couple)},
+        "replay": projection.replay(panel, w, euro, params.envelope, contrib),
+        "risk": projection.risk_contributions(panel, w),
+    }
 
 
 RANK_CRITERIA = ("wf_sharpe", "sharpe", "cagr", "vol")

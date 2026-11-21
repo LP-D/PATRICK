@@ -1,6 +1,9 @@
-"""Laboratoire de stratégies (`patrick/strategylab/`, `/strategies`) : construction des rendements, évaluation, straddle, événements, routes."""
+"""Laboratoire de stratégies général (`patrick/strategylab/`, `/strategies`) : indicateurs, règles, moteur de backtest (délai d'exécution, frais,
+sélection, sorties de risque, paire, événements), métriques, robustesse, modèles, étude complète, historique et routes."""
 from __future__ import annotations
 
+import io
+import json
 import math
 import time
 
@@ -9,262 +12,295 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.strategylab import core, events, jobs, prices, service, straddle
+from patrick.strategylab import (
+    backtest,
+    data,
+    events,
+    indicators,
+    jobs,
+    metrics,
+    robustness,
+    rules,
+    service,
+    templates,
+)
 from patrick.tracking import db
 from patrick.webapp.app import app
 
 
 # ------------------------------------------------------------------ cours synthétiques
-def _prices(seed: int, jumps: dict | None = None, start="2006-01-02", end="2025-06-30", sigma=0.012) -> pd.DataFrame:
-    """Marche aléatoire quotidienne ; `jumps` : `{date ISO: rendement}` ajoutés ce jour-là (le jour 0 des événements)."""
-    days = pd.bdate_range(start, end)
+def _ohlc(seed: int, drift=0.0003, vol=0.012, start="2004-01-01", end="2024-12-31") -> pd.DataFrame:
+    idx = pd.bdate_range(start, end)
     rng = np.random.default_rng(seed)
-    rets = rng.normal(0.0002, sigma, len(days))
-    for d, j in (jumps or {}).items():
-        if pd.Timestamp(d) in days:
-            rets[days.get_loc(pd.Timestamp(d))] += j
-    close = 100 * np.cumprod(1 + rets)
-    opn = np.concatenate([[100.0], close[:-1]]) * (1 + rng.normal(0, 0.002, len(days)))
-    return pd.DataFrame({"open": opn, "high": np.maximum(opn, close) * 1.002, "low": np.minimum(opn, close) * 0.998, "close": close}, index=days)
+    close = 100 * np.exp(np.cumsum(rng.normal(drift, vol, len(idx))))
+    opn = np.concatenate([[100.0], close[:-1]]) * (1 + rng.normal(0, 0.002, len(idx)))
+    return pd.DataFrame({"open": opn, "high": np.maximum(opn, close) * 1.003, "low": np.minimum(opn, close) * 0.997, "close": close, "volume": 1e6}, index=idx)
 
 
-class FakePrices:
-    def __init__(self, frames: dict[str, pd.DataFrame]):
-        self.frames, self.calls = frames, []
-
-    def ohlc(self, symbol: str, start: str):
-        self.calls.append(symbol)
-        return self.frames.get(symbol)
-
-
-def _events(symbol: str, dates: list[str], group="tous", entry_price=float("nan")) -> pd.DataFrame:
-    df = pd.DataFrame({"symbol": symbol, "at": pd.to_datetime(dates), "entry_price": entry_price, "group": group})
-    df.attrs["dropped"] = 0
-    return df
+def _line(values, start="2020-01-01", tail=30) -> pd.DataFrame:
+    """Cours imposé séance par séance (ouverture = clôture précédente), prolongé de `tail` séances au dernier cours (un marché a au moins 30 séances)."""
+    close = np.concatenate([np.asarray(values, dtype=float), np.full(tail, float(values[-1]))])
+    idx = pd.bdate_range(start, periods=len(close))
+    opn = np.concatenate([[close[0]], close[:-1]])
+    return pd.DataFrame({"open": opn, "high": np.maximum(opn, close), "low": np.minimum(opn, close), "close": close, "volume": np.nan}, index=idx)
 
 
-def _every(n: int, start="2008-03-03", step_days=45) -> list[str]:
-    return [(pd.Timestamp(start) + pd.Timedelta(days=step_days * i)).strftime("%Y-%m-%d") for i in range(n)]
+def _market(frames: dict, traded: list[str], aux: list[str] | None = None, pair=False) -> indicators.Market:
+    m, missing, _ = data.build_market(traded, aux or [], data.PriceBook(frames, allow_yahoo=False), pair=pair)
+    assert not missing
+    return m
 
 
-# ------------------------------------------------------------------ rendements : calculs exacts
-def test_entry_modes_compute_exact_returns():
-    px = _prices(1)
-    day = pd.Timestamp("2015-06-10")
-    i0 = px.index.get_loc(day)
-    ev = _events("AAA", ["2015-06-10"], entry_price=50.0)
-    src = FakePrices({"AAA": px})
-    cases = {
-        "close_prev": px["close"].iloc[i0 + 0] / px["close"].iloc[i0 - 1] - 1,          # k = 1 : clôture du jour 0
-        "open_day0": px["close"].iloc[i0] / px["open"].iloc[i0] - 1,                    # k = 1 : le soir même
-        "close_day0": px["close"].iloc[i0 + 1] / px["close"].iloc[i0] - 1,
-    }
-    for entry, expected in cases.items():
-        table, skipped = core.build_returns(ev, src, core.EventParams(entry=entry, max_exit=5, cost_bps=0))
-        assert not skipped and table.loc[0, "day0"] == day
-        assert table.loc[0, "k1"] == pytest.approx(expected), entry
-    # k = 3 en close_prev : trois séances après la clôture de la veille
-    table, _ = core.build_returns(ev, src, core.EventParams(entry="close_prev", max_exit=5, cost_bps=0))
-    assert table.loc[0, "k3"] == pytest.approx(px["close"].iloc[i0 + 2] / px["close"].iloc[i0 - 1] - 1)
+ZERO = backtest.Costs(commission=0, min_fee=0, fixed=0, slippage=0, borrow=0, cash_rate=0, financing_spread=0)
 
 
-def test_costs_are_subtracted_from_every_exit_day():
-    px = _prices(2)
-    ev = _events("AAA", ["2012-05-15"])
-    free, _ = core.build_returns(ev, FakePrices({"AAA": px}), core.EventParams(max_exit=3, cost_bps=0))
-    paid, _ = core.build_returns(ev, FakePrices({"AAA": px}), core.EventParams(max_exit=3, cost_bps=25))
-    assert [free.loc[0, f"k{k}"] - paid.loc[0, f"k{k}"] for k in (1, 2, 3)] == pytest.approx([0.0025] * 3)
+# ------------------------------------------------------------------ indicateurs et règles
+def test_indicators_are_causal_and_exact():
+    px = _line(list(range(100, 160)))
+    m = _market({"A": px}, ["A"])
+    sma = indicators.compute(m, {"ind": "sma", "n": 5})["A"]
+    assert math.isnan(sma.iloc[3]) and sma.iloc[4] == pytest.approx(102.0)
+    high = indicators.compute(m, {"ind": "high", "n": 3})["A"]
+    assert high.iloc[5] == pytest.approx(px["high"].iloc[2:5].max())        # la séance du jour est exclue du canal
+    ret = indicators.compute(m, {"ind": "ret", "n": 2})["A"]
+    assert ret.iloc[10] == pytest.approx(110 / 108 - 1)
+    rsi = indicators.compute(m, {"ind": "rsi", "n": 14})["A"]
+    assert rsi.dropna().iloc[-1] == pytest.approx(100.0)                     # que des hausses
+    shifted = indicators.compute(m, {"ind": "price", "shift": 2, "mult": 2})["A"]
+    assert shifted.iloc[5] == pytest.approx(2 * px["close"].iloc[3])
+    with pytest.raises(indicators.IndicatorError):
+        indicators.compute(m, {"ind": "sma", "n": 1})
 
 
-def test_after_close_timestamp_moves_day_zero_to_the_next_session():
-    px = _prices(3)
-    ev = _events("AAA", ["2015-06-10 16:00:00", "2015-06-10 09:00:00"])
-    table, _ = core.build_returns(ev, FakePrices({"AAA": px}), core.EventParams(max_exit=2, cost_bps=0))
-    assert sorted(table["day0"].tolist()) == [pd.Timestamp("2015-06-10"), pd.Timestamp("2015-06-11")]
+def test_calendar_and_event_indicators():
+    px = _ohlc(1, start="2024-01-01", end="2024-03-29")
+    m = _market({"A": px}, ["A"])
+    dom = indicators.compute(m, {"ind": "dom"})["A"]
+    dte = indicators.compute(m, {"ind": "dte"})["A"]
+    assert dom.loc["2024-02-01"] == 1 and dte.loc["2024-01-31"] == 0 and dte.loc["2024-01-30"] == 1
+    m.events = {"A": [pd.Timestamp("2024-02-15")]}
+    ev = indicators.compute(m, {"ind": "event"})["A"]
+    assert ev.loc["2024-02-15"] == 0 and ev.loc["2024-02-13"] == -2 and ev.loc["2024-02-19"] == 2
 
 
-def test_price_entry_uses_the_file_price_and_drops_implausible_ones():
-    px = _prices(4)
-    first_close = float(px["close"].loc["2015-06-10"])
-    ok = _events("AAA", ["2015-06-10"], entry_price=first_close / 1.2)          # première clôture à +20 % : plausible
-    absurd = _events("AAA", ["2015-06-10"], entry_price=first_close / 10_000)    # unités différentes : +999 900 % -> écarté
-    missing = _events("AAA", ["2015-06-10"])
-    src = FakePrices({"AAA": px})
-    table, _ = core.build_returns(ok, src, core.EventParams(entry="price", max_exit=3, cost_bps=0))
-    assert table.loc[0, "k1"] == pytest.approx(0.2)
-    for ev, reason in ((absurd, "incohérent"), (missing, "absent")):
-        table, skipped = core.build_returns(ev, src, core.EventParams(entry="price", max_exit=3))
-        assert table.empty and any(reason in why for why in skipped)
+def test_rules_combine_and_treat_missing_values_as_false():
+    m = _market({"A": _line(list(range(100, 130)))}, ["A"])
+    grp = {"all": [{"left": {"ind": "price"}, "op": ">", "right": {"ind": "sma", "n": 10}}, {"left": {"ind": "dom"}, "op": "<=", "right": {"value": 31}}]}
+    out = rules.group(m, grp)["A"]
+    assert not out.iloc[:9].any() and out.iloc[9:30].all() and not out.iloc[40:].any()     # cours plat ensuite : rejoint par sa moyenne
+    cross = rules.group(m, {"all": [{"left": {"ind": "price"}, "op": "crosses_above", "right": {"value": 110.5}}]})["A"]
+    assert cross.sum() == 1 and cross.idxmax() == m.index[11]
+    between = rules.group(m, {"any": [{"left": {"ind": "price"}, "op": "between", "low": {"value": 105}, "high": {"value": 107}}]})["A"]
+    assert between.sum() == 3
+    with pytest.raises(rules.RuleError):
+        rules.group(m, {"all": [{"left": {"ind": "price"}, "op": "~", "right": {"value": 1}}]})
 
 
-def test_events_without_prices_or_beyond_the_data_are_counted_not_fatal():
-    px = _prices(5, end="2020-12-31")
-    ev = pd.concat([_events("AAA", ["2015-03-02", "2030-01-02"]), _events("ZZZ", ["2015-03-02"])], ignore_index=True)
-    table, skipped = core.build_returns(ev, FakePrices({"AAA": px}), core.EventParams(max_exit=3))
-    assert len(table) == 1 and skipped == {"hors des cours disponibles": 1, "cours introuvables": 1}
+# ------------------------------------------------------------------ moteur
+def test_buy_and_hold_without_costs_follows_the_price_exactly():
+    px = _ohlc(3)
+    m = _market({"A": px}, ["A"])
+    res = backtest.run(m, backtest.Strategy(rebalance="never"), ZERO, pd.Timestamp("2010-01-04"), pd.Timestamp("2020-12-31"), 10_000, lag=0)
+    eq = res.daily["equity"]
+    expected = 10_000 * px["close"].loc[eq.index] / px["close"].loc[eq.index[0]]
+    assert np.allclose(eq.to_numpy(), expected.to_numpy(), rtol=1e-9)
+    assert res.costs_total == 0 and len(res.trades) == 1 and res.trades[0]["reason"] == "fin de période"
 
 
-def test_recent_events_keep_nan_for_sessions_not_yet_elapsed():
-    px = _prices(6, end="2021-06-30")
-    ev = _events("AAA", ["2021-06-24"])                                          # 4 séances de données seulement
-    table, _ = core.build_returns(ev, FakePrices({"AAA": px}), core.EventParams(entry="close_prev", max_exit=10, cost_bps=0))
-    assert not math.isnan(table.loc[0, "k1"]) and math.isnan(table.loc[0, "k9"])
+def test_signal_is_executed_one_session_later_and_costs_are_charged():
+    values = [100] * 5 + [110] * 3 + [121] * 3 + [121] * 5
+    m = _market({"A": _line(values)}, ["A"])
+    strat = backtest.Strategy(long_entry={"all": [{"left": {"ind": "price"}, "op": ">", "right": {"value": 105}}]}, rebalance="never")
+    res = backtest.run(m, strat, ZERO, m.index[0], m.index[-1], 1000, lag=1)
+    # signal vrai à la clôture de la séance 5 (110), achat à la clôture de la séance 6 (110) : seule la hausse 110 -> 121 est gagnée
+    assert res.daily["equity"].iloc[-1] == pytest.approx(1100.0)
+    assert res.trades[0]["entry"] == m.index[6].date().isoformat() and res.trades[0]["entry_price"] == pytest.approx(110)
+    paid = backtest.Costs(commission=0.01, min_fee=0, fixed=2.0, slippage=0.0, borrow=0, cash_rate=0, financing_spread=0)
+    res2 = backtest.run(m, strat, paid, m.index[0], m.index[-1], 1000, lag=1)
+    assert res2.costs_total == pytest.approx(1000 * 0.01 + 2.0)
+    assert res2.daily["equity"].iloc[-1] == pytest.approx(1000 * 1.1 - 12)        # frais prélevés sur les liquidités, position à 100 % de la valeur
 
 
-# ------------------------------------------------------------------ évaluation
-def _synthetic_world(effect: float, n=24, seed=10):
-    """Trois titres, `n` événements chacun ; `effect` = hausse moyenne du jour 0."""
-    dates = _every(n)
-    frames, ev = {}, []
-    for i, sym in enumerate(("AAA", "BBB", "CCC")):
-        shifted = [(pd.Timestamp(d) + pd.Timedelta(days=3 * i)).strftime("%Y-%m-%d") for d in dates]
-        jumps = {d: effect for d in shifted}
-        frames[sym] = _prices(seed + i, jumps)
-        ev.append(_events(sym, shifted, group=("A" if i == 0 else "B")))
-    return pd.concat(ev, ignore_index=True), FakePrices(frames)
+def test_execution_at_the_open_splits_the_session():
+    values = [100, 100, 100, 100, 110, 110, 110]
+    px = _line(values)
+    px["open"] = [100, 100, 100, 100, 104, 108, 110] + [110] * 30
+    m = _market({"A": px}, ["A"])
+    strat = backtest.Strategy(long_entry={"all": [{"left": {"ind": "dom"}, "op": ">=", "right": {"value": 4}}]}, rebalance="never")
+    res = backtest.run(m, strat, ZERO, m.index[0], m.index[-1], 1000, lag=1, at="open")
+    # signal le 4e jour du mois (séance 3), achat à l'ouverture de la séance 4 à 104, clôture finale 110
+    assert res.trades[0]["entry_price"] == pytest.approx(104)
+    assert res.daily["equity"].iloc[-1] == pytest.approx(1000 * 110 / 104)
+    with pytest.raises(backtest.BacktestError):
+        backtest.run(m, strat, ZERO, m.index[0], m.index[-1], 1000, lag=0, at="open")
 
 
-def test_a_real_one_day_effect_is_found_validated_and_declared_robust():
-    ev, src = _synthetic_world(effect=0.03)
-    res = service.run_event(ev, src, core.EventParams(entry="close_prev", max_exit=10, cost_bps=0, n_boot=500))
-    assert res["curve"][0]["mean"] > 0.02 and res["best"]["mean"] > 0.02          # le saut du jour 0 est visible dès J+1, la dérive l'allonge ensuite
-    assert res["bootstrap"]["ci_low"][0] > 0 and res["split"]["available"] and res["split"]["holds"]
-    assert res["verdict"]["label"] == "robust" and all(res["verdict"]["flags"][f] for f in ("enough_events", "ci_above_zero", "oos_holds", "not_concentrated"))
-    assert {g["group"] for g in res["groups"]} == {"A", "B"}
-    assert res["n_events"] == 72 and res["n_complete"] == 72 and res["n_symbols"] == 3
+def test_stop_loss_exits_and_waits_for_a_fresh_signal():
+    values = [100] * 3 + [100, 90, 85, 84, 83] + [100] * 5
+    m = _market({"A": _line(values)}, ["A"])
+    strat = backtest.Strategy(rebalance="never", risk={"stop_loss": 0.08})
+    res = backtest.run(m, strat, ZERO, m.index[0], m.index[-1], 1000, lag=0)
+    first = res.trades[0]
+    assert first["reason"] == "stop" and first["exit"] == m.index[4].date().isoformat()
+    assert len(res.trades) == 1                       # « toujours investi » ne lâche jamais : pas de ré-entrée après le stop
 
 
-def test_pure_noise_is_not_declared_robust():
-    ev, src = _synthetic_world(effect=0.0, seed=21)
-    res = service.run_event(ev, src, core.EventParams(entry="close_prev", max_exit=15, cost_bps=10, n_boot=500))
-    assert res["verdict"]["label"] != "robust"
+def test_selection_keeps_the_top_n_and_rotates():
+    frames = {"UP": _line(np.linspace(100, 200, 300), tail=0), "FLAT": _line(np.full(300, 100.0), tail=0), "DOWN": _line(np.linspace(100, 50, 300), tail=0)}
+    m = _market(frames, ["UP", "FLAT", "DOWN"])
+    strat = backtest.Strategy(selection={"rank_by": {"ind": "ret", "n": 20}, "order": "desc", "top": 1, "bottom": 1}, decision="monthly", rebalance="monthly")
+    res = backtest.run(m, strat, ZERO, m.index[30], m.index[-1], 1000, lag=1)
+    w = res.weights.iloc[-1]
+    assert w["UP"] > 0.4 and w["DOWN"] < -0.4 and abs(w["FLAT"]) < 1e-9
+    assert res.daily["equity"].iloc[-1] > 1000
 
 
-def test_best_day_chosen_in_sample_can_fail_out_of_sample():
-    # 40 événements anciens à +10 % au jour 3, 20 récents à -8 % : le jour 3 gagne sur l'apprentissage et s'effondre ensuite.
-    V = np.vstack([np.tile([0.0, 0.0, 0.10, 0.02], (40, 1)), np.tile([0.0, 0.0, -0.08, -0.02], (20, 1))])
-    s = core.split_validation(V, 0.67, 500, 1)
-    assert s["available"] and s["k"] == 3 and s["train_mean"] > 0.09 and s["test_mean"] < 0 and s["holds"] is False
-    assert core.split_validation(V[:8], 0.67, 200, 1)["available"] is False
+def test_pair_trades_the_ratio_and_events_place_the_window():
+    a, b = _ohlc(5), _ohlc(6)
+    m = _market({"A": a, "B": b}, ["A", "B"], pair=True)
+    assert m.traded == ["A/B"]
+    ratio = (a["close"] / b["close"])
+    assert m.close["A/B"].iloc[10] == pytest.approx(100 * ratio.iloc[10] / ratio.iloc[0])
+    m2 = _market({"A": _ohlc(7, start="2020-01-01", end="2020-12-31")}, ["A"])
+    data.attach_events(m2, "dates", ["A"], dates_text="2020-03-16\n2020-06-15")
+    strat = backtest.Strategy(long_entry={"all": [{"left": {"ind": "event"}, "op": "between", "low": {"value": -2}, "high": {"value": 1}}]}, rebalance="never")
+    res = backtest.run(m2, strat, ZERO, m2.index[0], m2.index[-1], 1000, lag=0)
+    assert len(res.trades) == 2 and all(t["days"] == 4 for t in res.trades)       # de J-2 à la clôture de J+2, où la condition devient fausse
 
 
-def test_trade_metrics_known_values():
-    m = core.trade_metrics(np.array([0.10, -0.05, 0.20, -0.10]), 100)
-    assert m["win_rate"] == 0.5 and m["total_pnl"] == pytest.approx(15.0) and m["profit_factor"] == pytest.approx(2.0)
-    assert m["max_drawdown"] == pytest.approx(-10.0) and m["max_losing_streak"] == 1 and m["best"] == 0.20 and m["worst"] == -0.10
+def test_fixed_weights_and_inverse_vol_sizing():
+    calm, wild = _ohlc(8, vol=0.005), _ohlc(9, vol=0.03)
+    m = _market({"CALM": calm, "WILD": wild}, ["CALM", "WILD"])
+    fixed = backtest.Strategy(rebalance="monthly", sizing={"method": "fixed", "weights": {"CALM": 60, "WILD": 40}})
+    res = backtest.run(m, fixed, ZERO, pd.Timestamp("2010-01-04"), pd.Timestamp("2010-12-31"), 1000, lag=1)
+    assert res.weights.iloc[1]["CALM"] == pytest.approx(0.6, abs=0.02)
+    inv = backtest.Strategy(rebalance="monthly", sizing={"method": "inverse_vol", "n": 60, "allocation": "active"})
+    res2 = backtest.run(m, inv, ZERO, pd.Timestamp("2010-01-04"), pd.Timestamp("2010-12-31"), 1000, lag=1)
+    assert res2.weights.iloc[1]["CALM"] > 0.7
 
 
-def test_curve_bootstrap_and_concentration_basics():
-    V = np.array([[0.05, 0.10], [-0.02, 0.01], [0.03, 0.06], [np.nan, 0.02]])
-    c = core.curve(V)
-    assert c[0]["n"] == 3 and c[1]["n"] == 4 and c[0]["mean"] == pytest.approx(0.02) and c[0]["win"] == pytest.approx(2 / 3)
-    C = core.complete_rows(V)
-    assert C.shape == (3, 2)
-    b = core.bootstrap(np.tile(C, (20, 1)), 300, 1)
-    assert b["best_k"] == 2 and sum(b["best_freq"]) == pytest.approx(1.0) and b["ci_low"][1] <= b["ci_high"][1]
-    # un seul coup d'éclat porte la moyenne : sans lui elle devient négative
-    r = np.array([-0.01] * 19 + [0.5])
-    conc = core.concentration(r, np.array(["A"] * 19 + ["B"]), np.array([2020] * 20))
-    assert conc["trimmed_mean"] < 0 < r.mean() and conc["top5_symbols"][0]["symbol"] == "B"
-    camp = core.campaign(r, 100, n_trades=10, n=2000)
-    assert camp["p05"] <= camp["p50"] <= camp["p95"]
+# ------------------------------------------------------------------ métriques et robustesse
+def test_metrics_match_hand_computation():
+    idx = pd.bdate_range("2020-01-01", periods=253)
+    eq = pd.Series(100 * 1.0004 ** np.arange(253), index=idx)
+    eq.iloc[100:110] = eq.iloc[99] * 0.9
+    ret = eq.pct_change().fillna(0.0)
+    core = metrics.core(ret, eq)
+    assert core["max_dd"] == pytest.approx(-0.1, abs=1e-9)
+    years = (idx[-1] - idx[0]).days / 365.25
+    assert core["cagr"] == pytest.approx((eq.iloc[-1] / eq.iloc[0]) ** (1 / years) - 1)
+    dd = metrics.drawdown_periods(eq, top=1)
+    assert dd[0]["depth"] == pytest.approx(-0.1) and dd[0]["recovered"]
+    stats = metrics.trade_stats([{"return": 0.1, "pnl": 100, "side": 1, "days": 5}, {"return": -0.05, "pnl": -50, "side": 1, "days": 3}])
+    assert stats["win_rate"] == 0.5 and stats["profit_factor"] == pytest.approx(2.0)
 
 
-def test_parameter_validation_messages():
-    for kwargs, message in [({"entry": "x"}, "Mode d'entrée"), ({"max_exit": 0}, "jour de sortie"), ({"cost_bps": 900}, "frais"),
-                            ({"split_frac": 0.1}, "anciens"), ({"n_boot": 5}, "rééchantillonnages"), ({"stake": 0}, "mise")]:
-        with pytest.raises(core.StrategyError, match=message):
-            core.EventParams(**kwargs).validate()
+def test_random_timing_does_not_reward_luckless_signals_and_spots_real_timing():
+    px = _ohlc(11)
+    m = _market({"A": px}, ["A"])
+    r = m.returns()["A"]
+    weights = pd.DataFrame({"A": (np.random.default_rng(1).random(len(r)) > 0.5).astype(float)}, index=r.index)
+    noise = robustness.random_timing(weights, m.returns(), n=200)
+    assert noise["p_value"] > 0.05
+    clairvoyant = pd.DataFrame({"A": (r.shift(-1) > 0).astype(float)}, index=r.index)        # connaît le lendemain : doit écraser le hasard
+    perfect = robustness.random_timing(clairvoyant, m.returns(), n=200)
+    assert perfect["p_value"] < 0.01
 
 
-def test_too_few_complete_events_gives_a_clear_error():
-    ev = _events("AAA", ["2015-03-02", "2015-06-02", "2015-09-01"])
-    with pytest.raises(core.StrategyError, match="trajectoire complète"):
-        service.run_event(ev, FakePrices({"AAA": _prices(7)}), core.EventParams(max_exit=5))
+def test_cost_sensitivity_breakeven_and_walk_forward_use_only_the_past():
+    idx = pd.bdate_range("2015-01-01", periods=1500)
+    gross = pd.Series(0.0004, index=idx) + np.random.default_rng(2).normal(0, 0.0002, len(idx))
+    cost = pd.Series(0.0001, index=idx)
+    cs = robustness.cost_sensitivity(gross, cost, 0.0)
+    assert 3.0 < cs["breakeven_sharpe"] < 5.0                  # 0,0004 de rendement brut quotidien mangé à 4 x 0,0001
+    rng = np.random.default_rng(4)
+    good_then_bad = pd.Series(np.where(idx.year < 2018, 0.001, -0.001), index=idx) + rng.normal(0, 0.001, len(idx))
+    steady = pd.Series(0.0003, index=idx) + rng.normal(0, 0.001, len(idx))
+    wf = robustness.walk_forward(pd.DataFrame({"a": good_then_bad, "b": steady}), ["a", "b"], min_train_years=2)
+    assert wf["chosen"][0]["label"] == "a"                     # 2017 jugé sur 2015-2016 seulement : « a » paraissait meilleur
+    assert any(c["label"] == "b" for c in wf["chosen"][2:])    # puis on bascule quand le passé le dit, jamais avant
 
 
-# ------------------------------------------------------------------ straddle
-def test_black_scholes_put_call_parity_and_atm_approximation():
-    s, k, t, v, r = 100.0, 100.0, 7 / 365, 0.4, 0.04
-    call, put = straddle.bs(s, k, t, v, "call", r), straddle.bs(s, k, t, v, "put", r)
-    assert call - put == pytest.approx(s - k * math.exp(-r * t), abs=1e-9)
-    assert straddle.straddle_value(s, k, t, v, r) == pytest.approx(0.8 * s * v * math.sqrt(t), rel=0.05)
-    assert straddle.bs(120, 100, 0, 0.3, "call", r) == 20 and straddle.bs(80, 100, 0, 0.3, "put", r) == 20
+def test_deflated_sharpe_penalises_many_trials():
+    r = np.random.default_rng(5).normal(0.0004, 0.01, 2500)
+    psr = robustness.psr(r)
+    few = robustness.deflated(r, np.array([0.0, 0.01]))
+    many = robustness.deflated(r, np.random.default_rng(6).normal(0.0, 0.02, 200))
+    assert few["dsr"] > many["dsr"] and psr >= few["dsr"]
 
 
-def test_straddle_wins_on_big_moves_and_loses_on_quiet_days():
-    dates = _every(30, start="2010-03-01")
-    jumps_big = {d: 0.12 * (1 if i % 2 else -1) for i, d in enumerate(dates)}
-    big_src = FakePrices({"AAA": _prices(31, jumps_big)})
-    calm_src = FakePrices({"AAA": _prices(31, None, sigma=0.004)})
-    ev = _events("AAA", dates)
-    p = straddle.StraddleParams(n_boot=300)
-    big_res = service.run_straddle(ev, big_src, p)
-    calm_res = service.run_straddle(ev, calm_src, p)
-    assert big_res["best"]["mean"] > 0 and calm_res["best"]["mean"] < 0
-    assert big_res["mean_move"] > calm_res["mean_move"] and big_res["cost_per_contract"] == pytest.approx(4 * (0.65 + 2.5 + 0.5))
-    assert len(big_res["sensitivity"]) == len(straddle.MATURITIES) * len(straddle.EXIT_RATIOS)
-    # un écrasement de volatilité plus fort réduit le rendement moyen à maturité fixée
-    row = sorted((c for c in big_res["sensitivity"] if c["maturity"] == 7), key=lambda c: c["exit_ratio"])
-    assert row[0]["mean"] < row[-1]["mean"]
+# ------------------------------------------------------------------ modèles et étude complète
+def test_templates_resolve_validate_and_compile():
+    with pytest.raises(templates.TemplateError):
+        templates.resolve("sma_cross", {"fast": 200, "slow": 100})
+    with pytest.raises(templates.TemplateError):
+        templates.resolve("sma_cross", {"unknown": 1})
+    built = templates.compile_template("rsi", {"trend": 0})
+    assert built["long_entry"]["all"][0]["left"] == {"ind": "rsi", "n": 2} and len(built["long_entry"]["all"]) == 1
+    assert {t["key"] for t in templates.catalog()} >= {"buy_hold", "sma_cross", "xs_momentum", "pairs", "event", "custom"}
 
 
-def test_straddle_skips_events_without_enough_history():
-    px = _prices(8, start="2015-01-01")
-    res = straddle.price_event(px["close"].to_numpy(), px.index, 10, straddle.StraddleParams())
-    assert res is None
+def _book():
+    frames = {s: _ohlc(i, drift=0.0001 * (i + 1)) for i, s in enumerate(["AAA", "BBB", "CCC", "^VIX"])}
+    return data.PriceBook(frames, allow_yahoo=False)
 
 
-def test_straddle_parameter_validation():
-    for kwargs, message in [({"maturity_days": 0}, "maturité"), ({"strike_factor": 2}, "strike"), ({"entry_iv_mult": 9}, "volatilité d'entrée"),
-                            ({"exit_iv_ratio": 5}, "ratio"), ({"lookback": 5}, "fenêtre")]:
-        with pytest.raises(core.StrategyError, match=message):
-            straddle.StraddleParams(**kwargs).validate()
+def test_full_study_is_json_ready_and_deterministic():
+    spec = {"symbols": ["AAA", "BBB", "CCC"], "start": "2008-01-01", "end": "2022-12-31", "oos_start": "2018-01-01", "template": "sma_cross",
+            "params": {"fast": 40, "slow": 160}, "costs": {"commission": 0.1, "slippage": 5}, "robustness": {"grid": {"x": {"param": "fast", "min": 20, "max": 80, "steps": 3}}}}
+    a = service.run(spec, _book())
+    b = service.run(spec, _book())
+    json.dumps(a, allow_nan=False)
+    assert a["summary"] == b["summary"] and a["robustness"]["random"]["p_value"] == b["robustness"]["random"]["p_value"]
+    assert a["verdict"]["state"] in ("robust", "fragile", "none") and len(a["robustness"]["grid"]["cells"]) == 3
+    assert a["robustness"]["split"]["out_of_sample"]["years"] > 4 and a["summary"]["costs_total"] > 0
+    assert a["series"]["benchmark"] and a["benchmark"]["label"].startswith("équipondéré")
 
 
-# ------------------------------------------------------------------ événements et cours importés
-def test_events_csv_accepts_the_ipo_study_columns_and_drops_bad_rows():
-    raw = ("trade_date,issuer,symbol,offer_price,open_price\n2000-05-12,Sequoia,SQSW,8.0,10.25\n120-11-01,Alon,ALDW,16.0,17.0\n"
-           "2001-03-02,Foo,bad symbol!,5,6\n2003-04-04,Bar,BAR,12,13\n")
-    ev = events.parse_events_csv(raw.encode(), "iposcoop.csv")
-    assert list(ev["symbol"]) == ["SQSW", "BAR"] and ev["entry_price"].tolist() == [8.0, 12.0] and ev.attrs["dropped"] == 2
-    assert ev["group"].unique().tolist() == ["tous"]
+def test_custom_rules_with_a_regime_filter_load_the_auxiliary_instrument():
+    spec = {"symbols": ["AAA"], "start": "2010-01-01", "end": "2015-12-31", "template": "custom", "benchmark": "BBB",
+            "rules": {"long_entry": {"all": [{"left": {"ind": "price", "symbol": "^VIX"}, "op": "<", "right": {"value": 1e9}}]}}}
+    res = service.run(spec, _book())
+    assert "^VIX" in res["aux"] and res["summary"]["time_invested"] > 0.95 and res["benchmark"]["label"] == "BBB"
+    with pytest.raises(service.StudyError):
+        service.normalise({"symbols": ["AAA"], "start": "2020-01-01", "end": "2010-01-01"})
+    with pytest.raises(service.StudyError):
+        service.normalise({"symbols": ["AAA"], "costs": {"commission": 50}})
 
 
-@pytest.mark.parametrize("raw, message", [("a,b\n1,2", "introuvables"), ("symbol\nAAPL", "au moins une colonne"), ("symbol,date\nbad!,x", "aucun événement exploitable")])
-def test_events_csv_errors(raw, message):
-    with pytest.raises(events.EventsError, match=message):
-        events.parse_events_csv(raw.encode(), "e.csv")
+# ------------------------------------------------------------------ historique des études
+def test_runs_are_saved_listed_pinned_and_pruned(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(jobs, "KEEP_RUNS", 2)
+    res = service.run({"symbols": ["AAA"], "start": "2015-01-01", "end": "2016-12-31", "template": "buy_hold"}, _book())
+    first = jobs.save_run(res)
+    jobs.update_run(first, pinned=True, name="Gardée")
+    for _ in range(3):
+        jobs.save_run(res)
+    listed = jobs.list_runs()
+    assert len(listed) == 3 and any(r["id"] == first and r["pinned"] and r["name"] == "Gardée" for r in listed)
+    assert jobs.load_run(first)["spec"]["template"] == "buy_hold" and jobs.load_run("../x") is None
+    jobs.delete_run(first)
+    assert all(r["id"] != first for r in jobs.list_runs())
 
 
-def test_apple_keynotes_are_converted_to_new_york_time_and_fall_in_session():
-    ev = events.apple_keynotes()
-    assert len(ev) == 18 and set(ev["symbol"]) == {"AAPL"}
-    assert ev["at"].iloc[0] == pd.Timestamp("2007-01-09 12:00") and ev["at"].iloc[1] == pd.Timestamp("2008-06-09 13:00")
-    assert (ev["at"].dt.hour < 16).all()
+def test_only_one_study_runs_at_a_time(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path))
+    res = service.run({"symbols": ["AAA"], "start": "2015-01-01", "end": "2016-12-31", "template": "buy_hold"}, _book())
+    first = jobs.start(lambda progress: time.sleep(0.5) or res)
+    assert jobs.start(lambda progress: res).id == first.id
+    for _ in range(240):
+        if jobs.get(first.id).status != "running":
+            break
+        time.sleep(0.25)
+    assert jobs.get(first.id).status == "done" and jobs.load_run(jobs.get(first.id).run_id) is not None
 
 
-def test_symbols_and_download_budget():
-    assert events.parse_symbols("aapl, MSFT ; ^GSPC  bad! AAPL") == ["AAPL", "MSFT", "^GSPC"]
-    csv = b"symbol,date,open,high,low,close\n" + b"\n".join(f"AAA,2020-01-{d:02d},10,11,9,10.5".encode() for d in range(1, 10))
-    uploaded = prices.UploadedPrices(csv, "p.csv")
-    assert prices.downloads_needed(["AAA", "BBB"], uploaded) == []                       # sans repli : rien à télécharger
-    assert prices.downloads_needed(["AAA", "BBB"], prices.UploadedPrices(csv, "p.csv", fallback=FakePrices({}))) == ["BBB"]
-    assert prices.downloads_needed(["AAA", "BBB"], FakePrices({})) == ["AAA", "BBB"]
-    assert len(uploaded.ohlc("AAA", "2020-01-01")) == 9 and uploaded.ohlc("ZZZ", "2020-01-01") is None
-    with pytest.raises(prices.PricesError, match="introuvables"):
-        prices.UploadedPrices(b"foo,bar\n1,2", "x.csv")
-
-
-def test_yahoo_earnings_events_ignore_failed_symbols():
-    def fetch(symbol, limit):
-        if symbol == "BAD":
-            raise RuntimeError("réseau")
-        return pd.DataFrame({"published_at": pd.to_datetime(["2024-02-01 21:30:00+00:00", "2024-05-02 21:30:00+00:00"]), "label": ["a", "b"], "group": ["beat", "miss"]})
-    ev = events.yahoo_earnings_events(["AAA", "BAD"], 10, fetch)
-    assert len(ev) == 2 and ev.attrs["failed"] == ["BAD"] and ev["at"].iloc[0] == pd.Timestamp("2024-02-01 16:30:00")     # New York, après la clôture : 16 h 30
-    with pytest.raises(events.EventsError, match="Aucun résultat"):
-        events.yahoo_earnings_events(["BAD"], 10, fetch)
+# ------------------------------------------------------------------ fichiers
+def test_events_from_any_table_format():
+    csv = b"Ticker;Date\nAAPL;31/01/2024\nmsft;2024-02-15\n;2024-03-01\n"
+    ev = events.parse_events_any("ev.csv", csv)
+    assert list(ev["symbol"]) == ["AAPL", "MSFT"] and ev.attrs["dropped"] == 1
 
 
 # ------------------------------------------------------------------ routes
@@ -274,9 +310,15 @@ def client(tmp_path, monkeypatch):
     (tmp_path / "data").mkdir()
     monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
     db.connect(str(tmp_path / "patrick.db")).close()
-    frames = {"AAPL": _prices(41), "MSFT": _prices(42), "AAA": _prices(43)}
-    monkeypatch.setattr(prices, "YahooPrices", lambda: FakePrices(frames))
     return TestClient(app)
+
+
+def _price_file() -> bytes:
+    frames = {s: _ohlc(20 + i, start="2012-01-01", end="2020-12-31") for i, s in enumerate(["AAA", "BBB"])}
+    wide = pd.DataFrame({s: f["close"] for s, f in frames.items()})
+    out = io.StringIO()
+    wide.rename_axis("Date").reset_index().assign(Date=lambda d: d["Date"].dt.strftime("%d/%m/%Y")).to_csv(out, sep=";", decimal=",", index=False)
+    return out.getvalue().encode()
 
 
 def _wait(client, job_id):
@@ -288,90 +330,37 @@ def _wait(client, job_id):
     raise AssertionError("l'étude ne se termine pas")
 
 
-def test_page_is_a_frame_and_listed_in_the_simulation_menu(client):
+def test_page_catalog_and_compile(client):
     html = client.get("/strategies").text
-    assert 'id="st-app"' in html and 'id="st-i18n"' in html and "apple_keynotes" in html
-    assert 'href="/strategies"' in client.get("/").text
-    assert "Strategies" in client.get("/strategies", cookies={"patrick_lang": "en"}).text
+    assert 'id="st-app"' in html and "strategies.js" in html and "st-i18n" in html
+    cat = client.get("/api/strategies/catalog").json()
+    assert "sma" in cat["indicators"] and any(t["key"] == "donchian" for t in cat["templates"]) and cat["cost_presets"]["none"]["commission"] == 0
+    built = client.post("/api/strategies/compile", json={"template": "price_sma", "params": {"n": 150}}).json()
+    assert built["long_entry"]["all"][0]["right"] == {"ind": "sma", "n": 150}
+    assert client.post("/api/strategies/compile", json={"template": "nope"}).status_code == 400
 
 
-def test_preset_study_end_to_end_and_last_result_is_kept(client):
-    assert client.get("/api/strategies/last/event").json() == {"result": None}
-    params = '{"entry": "close_prev", "max_exit": 10, "n_boot": 300}'
-    job = client.post("/api/strategies/run", data={"kind": "event", "source": "preset", "preset": "apple_keynotes", "params": params}).json()
+def test_inspect_and_run_with_an_uploaded_file(client):
+    files = {"prices_file": ("cours.csv", _price_file(), "text/csv")}
+    ins = client.post("/api/strategies/inspect", files=files).json()
+    assert {s["symbol"] for s in ins["symbols"]} == {"AAA", "BBB"}
+    spec = {"symbols": ["AAA", "BBB"], "start": "2013-01-01", "end": "2020-12-31", "template": "xs_momentum", "params": {"top": 1, "n": 126, "skip": 0},
+            "allow_yahoo": False}
+    job = client.post("/api/strategies/run", data={"spec": json.dumps(spec)}, files={"prices_file": ("cours.csv", _price_file(), "text/csv")}).json()
     status = _wait(client, job["id"])
     assert status["status"] == "done", status
-    res = client.get("/api/strategies/last/event").json()["result"]
-    assert res["kind"] == "event" and res["n_events"] == 18 and res["n_symbols"] == 1 and len(res["curve"]) == 10
-    assert res["verdict"]["label"] in ("robust", "fragile", "none")
+    detail = client.get(f"/api/strategies/runs/{status['run_id']}").json()
+    assert detail["universe"][0]["source"] == "fichier" and detail["trade_stats"]["count"] > 0
+    runs = client.get("/api/strategies/runs").json()
+    assert runs[0]["id"] == status["run_id"]
+    assert client.post(f"/api/strategies/runs/{status['run_id']}", json={"pinned": True}).json()["pinned"] is True
+    assert client.delete(f"/api/strategies/runs/{status['run_id']}").json() == {"ok": True}
 
 
-def test_file_upload_study_with_uploaded_prices_and_straddle_kind(client):
-    ev_csv = "symbol,date,group\n" + "\n".join(f"AAA,{d},g{i % 2}" for i, d in enumerate(_every(40, "2010-03-01"))) + "\n"
-    px = _prices(44)
-    px_csv = "symbol,date,open,high,low,close\n" + "\n".join(f"AAA,{d:%Y-%m-%d},{r.open},{r.high},{r.low},{r.close}" for d, r in px.iterrows())
-    files = {"events_file": ("ev.csv", ev_csv.encode(), "text/csv"), "prices_file": ("px.csv", px_csv.encode(), "text/csv")}
-    job = client.post("/api/strategies/run", data={"kind": "straddle", "source": "file", "params": '{"n_boot": 300}'}, files=files).json()
-    assert _wait(client, job["id"])["status"] == "done"
-    res = client.get("/api/strategies/last/straddle").json()["result"]
-    assert res["kind"] == "straddle" and res["n_events"] == 40 and res["sensitivity"] and {g["group"] for g in res["groups"]} == {"g0", "g1"}
-
-
-def test_uploaded_prices_do_not_fall_back_to_yahoo_unless_asked(client):
-    dates = _every(30, "2010-03-01")
-    ev_csv = ("symbol,date\n" + "\n".join(f"AAA,{d}\nAAPL,{d}" for d in dates) + "\n").encode()          # AAPL est absent du fichier de cours, présent chez Yahoo (faux)
-    px = _prices(45)
-    px_csv = ("symbol,date,open,high,low,close\n" + "\n".join(f"AAA,{d:%Y-%m-%d},{r.open},{r.high},{r.low},{r.close}" for d, r in px.iterrows())).encode()
-    files = {"events_file": ("ev.csv", ev_csv, "text/csv"), "prices_file": ("px.csv", px_csv, "text/csv")}
-    params = '{"max_exit": 5, "n_boot": 300}'
-    job = client.post("/api/strategies/run", data={"kind": "event", "source": "file", "params": params}, files=files).json()
-    assert _wait(client, job["id"])["status"] == "done"
-    res = client.get("/api/strategies/last/event").json()["result"]
-    assert res["n_symbols"] == 1 and res["skipped"] == {"cours introuvables": 30}                      # AAPL écarté, jamais téléchargé
-    job = client.post("/api/strategies/run", data={"kind": "event", "source": "file", "params": params, "fallback": "true"}, files=files).json()
-    assert _wait(client, job["id"])["status"] == "done"
-    assert client.get("/api/strategies/last/event").json()["result"]["n_symbols"] == 2
-
-
-def test_yahoo_earnings_source_runs_in_the_job(client, monkeypatch):
-    def fake(symbol, limit):
-        return pd.DataFrame({"published_at": pd.to_datetime([f"{y}-{m:02d}-15 13:00:00+00:00" for y in range(2010, 2024) for m in (2, 5, 8, 11)]),
-                             "label": "x", "group": ["beat", "miss"] * 28})
-    monkeypatch.setattr("patrick.research.event_sources.yahoo_earnings", fake)
-    job = client.post("/api/strategies/run", data={"kind": "event", "source": "yahoo", "tickers": "AAPL, MSFT", "quarters": "40", "params": '{"max_exit": 5, "n_boot": 300}'}).json()
-    assert _wait(client, job["id"])["status"] == "done"
-    res = client.get("/api/strategies/last/event").json()["result"]
-    assert res["n_symbols"] == 2 and {g["group"] for g in res["groups"]} == {"beat", "miss"}
-
-
-def test_bad_inputs_are_rejected_immediately(client):
-    def run(**data):
-        return client.post("/api/strategies/run", data=data, files=data.pop("files", None))
-    assert run(kind="nope", source="preset", preset="apple_keynotes").status_code == 400
-    assert run(kind="event", source="preset", preset="inconnu").status_code == 400
-    assert run(kind="event", source="file").status_code == 400                                       # fichier manquant
-    assert run(kind="event", source="yahoo", tickers="").status_code == 400
-    bad = client.post("/api/strategies/run", data={"kind": "event", "source": "preset", "preset": "apple_keynotes", "params": '{"max_exit": 0}'})
-    assert bad.status_code == 400 and "jour de sortie" in bad.json()["detail"]
-    unknown = client.post("/api/strategies/run", data={"kind": "event", "source": "preset", "preset": "apple_keynotes", "params": '{"pirate": 1}'})
-    assert unknown.status_code == 400 and "inconnu" in unknown.json()["detail"]
-    assert client.get("/api/strategies/last/inconnu").status_code == 400
-    assert client.get("/api/strategies/jobs/nope").status_code == 404
-
-
-def test_a_failing_study_reports_its_error_without_crashing(client):
-    ev_csv = b"symbol,date\nZZZ,2015-03-02\nZZZ,2015-06-02\n"
-    job = client.post("/api/strategies/run", data={"kind": "event", "source": "file", "params": "{}"}, files={"events_file": ("e.csv", ev_csv, "text/csv")}).json()
-    status = _wait(client, job["id"])
-    assert status["status"] == "error" and "Aucun événement exploitable" in status["error"]
-
-
-def test_only_one_study_per_kind_at_a_time(tmp_path, monkeypatch):
-    monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path))
-    first = jobs.start("event", lambda progress: time.sleep(0.5) or {"kind": "event"})
-    assert jobs.start("event", lambda progress: {"kind": "event"}).id == first.id
-    for _ in range(240):                                 # attente bornée plutôt qu'un délai fixe (machine chargée)
-        if jobs.get(first.id).status != "running":
-            break
-        time.sleep(0.25)
-    assert jobs.get(first.id).status == "done" and jobs.load_last("event") == {"kind": "event"}
+def test_run_rejects_bad_input_before_starting(client):
+    bad = client.post("/api/strategies/run", data={"spec": "{not json"})
+    assert bad.status_code == 400
+    missing = client.post("/api/strategies/run", data={"spec": json.dumps({"symbols": ["AAA"], "template": "event", "events": {"source": "file"}})})
+    assert missing.status_code == 400 and "fichier d'événements" in missing.json()["detail"]
+    assert client.get("/api/strategies/jobs/inconnu").status_code == 404
+    assert client.get("/api/strategies/runs/zzz").status_code == 404

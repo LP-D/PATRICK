@@ -1,7 +1,9 @@
 {% extends "base_v2.html" %}
 {% block title %}PATRICK — {{ t('pl_title') }}{% endblock %}
 
-{# Placements : import de valeurs liquidatives, simulation complète (statistiques, allocations optimales, walk-forward, scénarios à N ans).
+{# Placements : import souple de valeurs (tout tableau de VL, cours, performances, taux), profil d'épargne (enveloppe PEE / assurance vie / PER / PEA /
+   CTO, versements, abondement, frais, fiscalité, avoirs, contraintes), simulation complète (statistiques, allocations optimales sous contraintes,
+   walk-forward, scénarios, épargne projetée et rejouée, frontière efficiente, comparaison des enveloppes).
    Le cadre s'affiche tout de suite ; tout le reste est dessiné par static/placements.js à partir de /api/placements/*. #}
 {% block content %}
 <div class="page-header">
@@ -15,6 +17,10 @@
     <section class="card pl-card" id="pl-data" aria-labelledby="pl-data-h">
         <h2 id="pl-data-h">{{ t('pl_s1') }}</h2>
         <div id="pl-data-body"><p class="hint" data-keep>{{ t('sb_loading') }}</p></div>
+    </section>
+    <section class="card pl-card" id="pl-profile" aria-labelledby="pl-profile-h" hidden>
+        <h2 id="pl-profile-h">{{ t('pl_s_profile') }}</h2>
+        <div id="pl-profile-body"></div>
     </section>
     <section class="card pl-card" id="pl-run" aria-labelledby="pl-run-h" hidden>
         <h2 id="pl-run-h">{{ t('pl_s2') }}</h2>

@@ -1,14 +1,14 @@
-"""Page `/strategies` (laboratoire de stratégies autour d'événements) et API `/api/strategies/*`.
+"""Page `/strategies` (laboratoire de stratégies général) et API `/api/strategies/*`.
 
-Le serveur valide les fichiers importés tout de suite (une erreur arrive en 400, pas après une minute de calcul) puis lance l'étude en tâche de fond
-(`patrick.strategylab.jobs`) ; la page lit l'avancement et le dernier résultat. Les cours viennent d'abord du fichier importé, puis de Yahoo.
+Le serveur valide la description de l'étude et lit les fichiers importés tout de suite (une erreur arrive en 400, pas après une minute de
+téléchargement), puis lance l'étude en tâche de fond (`patrick.strategylab.jobs`). Les études terminées restent dans un historique : la page les
+rouvre, les renomme, les épingle et les superpose pour les comparer.
 """
 from __future__ import annotations
 
 import functools
 import json
 from collections.abc import Callable
-from dataclasses import fields
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -17,12 +17,28 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 from patrick import paths
-from patrick.strategylab import core, events, jobs, prices, service, straddle
+from patrick.strategylab import (
+    backtest,
+    data,
+    events,
+    indicators,
+    jobs,
+    rules,
+    service,
+    templates,
+)
+from patrick.tabular import detect, reader
 from patrick.webapp import i18n
 from patrick.webapp.i18n_strategies import STRATEGIES_JS_KEYS
 
-MAX_FILE_BYTES = 40 * 1024 * 1024
-SOURCES = ("file", "yahoo", "preset")
+MAX_FILE_BYTES = reader.MAX_BYTES
+COST_PRESETS = {
+    "online": {"commission": 0.10, "min_fee": 1.0, "fixed": 0.0, "slippage": 5.0},
+    "bank": {"commission": 0.50, "min_fee": 8.0, "fixed": 0.0, "slippage": 10.0},
+    "etf_zero": {"commission": 0.0, "min_fee": 0.0, "fixed": 0.0, "slippage": 3.0},
+    "institutional": {"commission": 0.02, "min_fee": 0.0, "fixed": 0.0, "slippage": 2.0},
+    "none": {"commission": 0.0, "min_fee": 0.0, "fixed": 0.0, "slippage": 0.0},
+}
 
 
 def _guard(fn):
@@ -33,103 +49,94 @@ def _guard(fn):
             return fn(*args, **kwargs)
         except paths.DataRootUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except (core.StrategyError, events.EventsError, prices.PricesError) as exc:
+        except (jobs.USER_ERRORS + (detect.DetectError, reader.TabularError)) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     return wrapper
-
-
-def _params(kind: str, raw: str):
-    """Les paramètres JSON de la page -> `EventParams` ou `StraddleParams` (clés inconnues refusées, valeurs validées)."""
-    try:
-        data = json.loads(raw or "{}")
-    except json.JSONDecodeError as exc:
-        raise core.StrategyError("Paramètres illisibles.") from exc
-    cls = core.EventParams if kind == "event" else straddle.StraddleParams
-    allowed = {f.name for f in fields(cls)}
-    unknown = sorted(set(data) - allowed)
-    if unknown:
-        raise core.StrategyError(f"Paramètre inconnu : {', '.join(unknown)}.")
-    try:
-        params = cls(**data)
-    except TypeError as exc:
-        raise core.StrategyError(f"Paramètres invalides : {exc}") from exc
-    params.validate()
-    return params
 
 
 async def _read(upload: UploadFile | None) -> bytes | None:
     if upload is None or not upload.filename:
         return None
-    data = await upload.read(MAX_FILE_BYTES + 1)
-    if len(data) > MAX_FILE_BYTES:
+    data_ = await upload.read(MAX_FILE_BYTES + 1)
+    if len(data_) > MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail=f"{upload.filename} dépasse {MAX_FILE_BYTES // (1024 * 1024)} Mo.")
-    return data
+    return data_
 
 
-def prepare(kind: str, source: str, params_raw: str, tickers: str, preset: str, quarters: int, events_file: tuple[str, bytes] | None,
-            prices_file: tuple[str, bytes] | None, fallback: bool = False) -> Callable[[Callable[[float, str], None]], dict]:
-    """Valide toutes les entrées et retourne la fonction à exécuter en tâche de fond. Les résultats trimestriels Yahoo (réseau) sont chargés dans la tâche."""
-    if kind not in jobs.KINDS:
-        raise core.StrategyError("Type d'étude inconnu.")
-    if source not in SOURCES:
-        raise core.StrategyError("Source d'événements inconnue.")
-    params = _params(kind, params_raw)
-    ev = None
-    symbols: list[str] = []
-    if source == "file":
-        if events_file is None:
-            raise core.StrategyError("Importez un fichier d'événements.")
-        ev = events.parse_events_csv(events_file[1], events_file[0])
-        symbols = list(ev["symbol"].unique())
-    elif source == "preset":
-        if preset not in events.PRESETS:
-            raise core.StrategyError("Préréglage inconnu.")
-        ev = events.PRESETS[preset]()
-        symbols = list(ev["symbol"].unique())
-    else:
-        symbols = events.parse_symbols(tickers)
-        if not symbols:
-            raise core.StrategyError("Indiquez au moins un symbole (ex. AAPL, MSFT).")
-        if not 4 <= quarters <= 80:
-            raise core.StrategyError("Le nombre de trimestres doit être compris entre 4 et 80.")
-    price_source = prices.YahooPrices()
+def prepare(spec_raw: str, prices_file: tuple[str, bytes] | None, events_file: tuple[str, bytes] | None) -> Callable[[Callable[[float, str], None]], dict]:
+    """Valide tout (description, fichiers, nombre de téléchargements) et retourne la fonction à exécuter en tâche de fond."""
+    try:
+        spec = json.loads(spec_raw or "{}")
+    except json.JSONDecodeError as exc:
+        raise service.StudyError("Description de l'étude illisible.") from exc
+    if not isinstance(spec, dict):
+        raise service.StudyError("Description de l'étude illisible.")
+    s = service.normalise(spec)
+    strat, readable = service.compile_strategy(s)
+    uploaded = None
     if prices_file is not None:
-        # Un fichier de cours importé est la seule source, sauf demande explicite : ses symboles absents (titres disparus d'une étude IPO) ne se téléchargent pas,
-        # et il serait absurde d'en réclamer des milliers à Yahoo. Ils sont comptés dans les événements écartés.
-        price_source = prices.UploadedPrices(prices_file[1], prices_file[0], fallback=price_source if fallback else None)
-    needed = prices.downloads_needed(symbols, price_source)
-    if len(needed) > events.MAX_SYMBOLS:
-        raise core.StrategyError(f"{len(needed)} symboles à télécharger chez Yahoo, au plus {events.MAX_SYMBOLS} : importez un fichier de cours ou réduisez la liste.")
+        uploaded, _notes = detect.detect_prices(prices_file[0], prices_file[1])
+    book = data.PriceBook(uploaded, allow_yahoo=s["allow_yahoo"])
+    needed = book.downloads_needed(list(dict.fromkeys(s["symbols"] + service.aux_symbols(strat, s["benchmark"]))))
+    if len(needed) > data.MAX_DOWNLOADS:
+        raise service.StudyError(f"{len(needed)} instruments à télécharger chez Yahoo, au plus {data.MAX_DOWNLOADS}.")
+    file_events = None
+    if readable["events"] and s["events"]["source"] == "file":
+        if events_file is None:
+            raise service.StudyError("Importez un fichier d'événements (symbole et date).")
+        file_events = events.parse_events_any(events_file[0], events_file[1])
 
     def runner(progress: Callable[[float, str], None]) -> dict:
-        nonlocal ev
-        if ev is None:
-            progress(0.02, "Résultats trimestriels")
-            ev = events.yahoo_earnings_events(symbols, limit=quarters)
-        if kind == "event":
-            return service.run_event(ev, price_source, params, progress)
-        return service.run_straddle(ev, price_source, params, progress)
+        return service.run(spec, book, progress, file_events=file_events)
     return runner
 
 
-def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Request], dict]) -> None:
+def catalog(lang: str) -> dict:
+    return {"templates": templates.catalog(), "families": list(templates.FAMILIES), "indicators": indicators.INDICATORS, "ops": list(rules.OPS),
+            "cost_presets": COST_PRESETS, "cost_defaults": service.COST_DEFAULTS, "freqs": list(backtest.FREQS), "sizing": list(backtest.SIZING),
+            "max_symbols": data.MAX_TRADED, "max_grid": service.MAX_GRID}
+
+
+def register(app: FastAPI, templates_: Jinja2Templates, i18n_ctx: Callable[[Request], dict]) -> None:
     @app.get("/strategies")
     def strategies_page(request: Request):
-        """Cadre seul : formulaires et dernier résultat arrivent par l'API."""
+        """Cadre seul : catalogue, formulaires et résultats arrivent par l'API."""
         t = i18n.translator(i18n.get_lang(request))
-        return templates.TemplateResponse(request, "strategies.html", {"st_i18n": {k: t(k) for k in STRATEGIES_JS_KEYS}, "presets": list(events.PRESETS), **i18n_ctx(request)})
+        return templates_.TemplateResponse(request, "strategies.html", {"st_i18n": {k: t(k) for k in STRATEGIES_JS_KEYS}, **i18n_ctx(request)})
 
-    @app.post("/api/strategies/run")
-    async def run(kind: str = Form(...), source: str = Form("file"), params: str = Form("{}"), tickers: str = Form(""), preset: str = Form(""),
-                  quarters: int = Form(40), fallback: bool = Form(False), events_file: Annotated[UploadFile | None, File()] = None,
-                  prices_file: Annotated[UploadFile | None, File()] = None):
-        events_data, prices_data = await _read(events_file), await _read(prices_file)
+    @app.get("/api/strategies/catalog")
+    def catalog_api(request: Request):
+        return JSONResponse(catalog(i18n.get_lang(request)), headers={"Cache-Control": "private, max-age=300"})
+
+    @app.post("/api/strategies/compile")
+    @_guard
+    def compile_api(body: dict):
+        """Les règles d'un modèle et de ses paramètres, pour les afficher et les modifier dans le constructeur."""
+        built = templates.compile_template(str(body.get("template") or "custom"), body.get("params") or {})
+        return {k: v for k, v in built.items() if k != "build"}
+
+    @app.post("/api/strategies/inspect")
+    async def inspect(prices_file: Annotated[UploadFile, File()]):
+        """Ce que contient un fichier de cours (symboles, premières et dernières dates), avant de lancer l'étude."""
+        raw = await _read(prices_file)
 
         @_guard
         def work():
-            runner = prepare(kind, source, params, tickers, preset, quarters, (events_file.filename, events_data) if events_data else None,
-                             (prices_file.filename, prices_data) if prices_data else None, fallback)
-            return jobs.snapshot(jobs.start(kind, runner))
+            if raw is None:
+                raise service.StudyError("Fichier vide.")
+            found, notes = detect.detect_prices(prices_file.filename, raw)
+            return {"symbols": [{"symbol": k, "first": v.index[0].date().isoformat(), "last": v.index[-1].date().isoformat(), "points": len(v)}
+                                for k, v in list(found.items())[:500]], "count": len(found), "notes": notes[:6]}
+        return await run_in_threadpool(work)
+
+    @app.post("/api/strategies/run")
+    async def run(spec: Annotated[str, Form()], prices_file: Annotated[UploadFile | None, File()] = None, events_file: Annotated[UploadFile | None, File()] = None):
+        prices_data, events_data = await _read(prices_file), await _read(events_file)
+
+        @_guard
+        def work():
+            runner = prepare(spec, (prices_file.filename, prices_data) if prices_data else None, (events_file.filename, events_data) if events_data else None)
+            return jobs.snapshot(jobs.start(runner))
         return await run_in_threadpool(work)
 
     @app.get("/api/strategies/jobs/{job_id}")
@@ -139,7 +146,26 @@ def register(app: FastAPI, templates: Jinja2Templates, i18n_ctx: Callable[[Reque
             raise HTTPException(status_code=404, detail="Étude inconnue (le serveur a redémarré ?).")
         return jobs.snapshot(job)
 
-    @app.get("/api/strategies/last/{kind}")
+    @app.get("/api/strategies/runs")
     @_guard
-    def last(kind: str):
-        return JSONResponse({"result": jobs.load_last(kind)})
+    def runs():
+        return jobs.list_runs()
+
+    @app.get("/api/strategies/runs/{run_id}")
+    @_guard
+    def run_detail(run_id: str):
+        result = jobs.load_run(run_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Étude introuvable.")
+        return JSONResponse(result)
+
+    @app.post("/api/strategies/runs/{run_id}")
+    @_guard
+    def run_update(run_id: str, body: dict):
+        return jobs.update_run(run_id, name=body.get("name"), pinned=body.get("pinned"))
+
+    @app.delete("/api/strategies/runs/{run_id}")
+    @_guard
+    def run_delete(run_id: str):
+        jobs.delete_run(run_id)
+        return {"ok": True}

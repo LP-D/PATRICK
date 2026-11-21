@@ -52,3 +52,15 @@ assert.equal(P.corrIntensity(null), 0);
 assert.equal(P.corrIntensity(NaN), 0);
 
 console.log("placements.test.js : ok");
+
+// ---- page générale : nuage risque / rendement (SVG échappé), saisie des taux
+{
+    const svg = P.scatterSvg({ funds: [{ label: "A<script>", vol: 0.1, ret: 0.05 }], line: [{ vol: 0.02, ret: 0.01 }, { vol: 0.1, ret: 0.06 }],
+                               marks: [{ label: "retenue", vol: 0.05, ret: 0.03, kind: "chosen" }] }, 400, 300);
+    assert.ok(svg.startsWith("<svg") && svg.endsWith("</svg>"));
+    assert.ok(svg.includes("A&lt;script&gt;") && !svg.includes("<script>"));
+    assert.ok(svg.includes("pl-sc-chosen") && svg.includes("<polyline"));
+    assert.equal(P.scatterSvg({ funds: [], line: [], marks: [] }, 400, 300), "");
+    assert.equal(P.esc("a\"b&"), "a&quot;b&amp;");
+    assert.equal(P.countRateLines("2023 2,6\n2024;2.7 %\nnotes\n24 1"), 2);
+}
