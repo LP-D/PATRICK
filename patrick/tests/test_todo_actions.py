@@ -187,6 +187,24 @@ def test_the_currency_champions_of_before_the_fix_are_listed_once_per_launch(con
     assert page["n"] == 2 and group["n"] == 1 and group["lines"][0]["n_runs"] == 2 and group["n_todo"] == 1
 
 
+def test_the_asian_champions_that_saw_the_day_fred_series_have_their_own_group(conn):
+    import json
+    cfg = json.loads(_cfg("^N225", (1,), rule=2))
+    cfg["objective"]["alignment"] = {"version": 1}                     # avant le 28/10 : séries FRED du jour non retardées
+    cfg["universe"].update(fred_point_in_time="alfred", fred_series={"VIX": "VIXCLS"})
+    _done_run(conn, "jp_h1", "^N225", 1, json.dumps(cfg))
+    cfg["objective"]["alignment"] = {"version": 2}
+    _done_run(conn, "jp_new", "^N225", 5, json.dumps(cfg))
+    for run_id, horizon in (("jp_h1", 1), ("jp_new", 5)):
+        trial = trackdb.create_trial(conn, run_id, "GLOBAL", "XGBoost", "none", 5, "shap")
+        conn.execute("INSERT INTO champion (target, horizon, run_id, trial_id, promoted_at, reason) "
+                     "VALUES ('^N225', ?, ?, ?, datetime('now'), 'first')", (horizon, run_id, trial))
+    conn.commit()
+    page = todo_actions.detail(conn, "fx_legacy")
+    assert page["n"] == 1 and [g["id"] for g in page["groups"]] == ["fred_day_champions"]
+    assert _group(page, "fred_day_champions")["lines"][0]["n_runs"] == 1
+
+
 # --------------------------------------------------------------------------- file d'attente et pages
 
 def test_the_queue_page_lists_the_jobs_and_proposes_nothing(conn):
@@ -216,7 +234,7 @@ def test_the_home_page_links_each_line_to_its_page(conn, client):
 
 def test_every_group_the_pages_can_show_has_its_title_and_its_explanation():
     ids = {kind[0] for kind in data_health.ERROR_KINDS if kind[0] != "stopped"} | {"other"}
-    ids |= {"fx_rule1", "fix_leak", "derived_target", "manual", "macro", "fx_champions", "running", "queued"}
+    ids |= {"fx_rule1", "fix_leak", "derived_target", "manual", "macro", "fx_champions", "fred_day_champions", "running", "queued"}
     missing = sorted(k for gid in ids for k in (f"td_g_{gid}_title", f"td_g_{gid}_why") if k not in STRINGS)
     assert not missing
     assert set(todo_actions.FAILURE_PATCH) <= ids and todo_actions.KEYS == ("failures", "suspect", "fx_legacy", "queue")

@@ -196,19 +196,24 @@ def _suspect(ctx: _Ctx) -> tuple[int, list[dict]]:
 # ---------------------------------------------------------------------------------------------------------------- champions de change
 
 def _fx_legacy(ctx: _Ctx) -> tuple[int, list[dict]]:
-    rows = ctx.conn.execute("SELECT target, horizon, run_id FROM champion WHERE target LIKE '%=X%'").fetchall()
-    reasons = trackdb.alignment_reasons(ctx.conn, [r[2] for r in rows])
-    legacy = [r for r in rows if r[2] in reasons]
-    merged: dict[str, dict] = {}                                           # un lancement porte plusieurs horizons : une seule ligne
-    for target, horizon, run_id in legacy:
-        item = _resolve(ctx, run_id, {}, at="", detail=reasons[run_id], is_replaced=lambda config: False)
-        key = item["name"] or run_id
-        if key in merged:
-            merged[key]["n_runs"] += 1
-        else:
-            merged[key] = item
-    items = sorted(merged.values(), key=lambda i: i["target"])
-    return len(legacy), [_group("fx_champions", items, True)] if items else []
+    """Champions d'avant une correction d'alignement (clé historique `fx_legacy`) : devises sous la règle des séances 1, et cibles d'Asie
+    d'avant l'alignement version 2 qui voyaient les séries FRED du jour (complément de l'ADR 0007, 2026-11-21)."""
+    from patrick.validation.suspicion import FRED_DAY_REASON
+    legacy = trackdb.legacy_alignment_champions(ctx.conn)
+    groups = []
+    for gid, rows in (("fx_champions", [r for r in legacy if r[3] != FRED_DAY_REASON]),
+                      ("fred_day_champions", [r for r in legacy if r[3] == FRED_DAY_REASON])):
+        merged: dict[str, dict] = {}                                       # un lancement porte plusieurs horizons : une seule ligne
+        for _target, _horizon, run_id, reason in rows:
+            item = _resolve(ctx, run_id, {}, at="", detail=reason, is_replaced=lambda config: False)
+            key = item["name"] or run_id
+            if key in merged:
+                merged[key]["n_runs"] += 1
+            else:
+                merged[key] = item
+        if merged:
+            groups.append(_group(gid, sorted(merged.values(), key=lambda i: i["target"]), True))
+    return len(legacy), groups
 
 
 # ---------------------------------------------------------------------------------------------------------------- file d'attente
