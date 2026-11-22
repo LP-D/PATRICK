@@ -262,7 +262,7 @@ def run_daily_predictions(candidates: list[PredictCandidate], predict_live_fn=No
         free_bytes_fn = data_root_free_bytes
     floor, check_every = min_free_bytes(), max(1, int(check_every))
     if predict_live_fn is None:
-        from patrick import (
+        from patrick.live import (
             predict as predict_module,  # chargé ici : tire sklearn / xgboost / le pipeline (~1 s)
         )
 

@@ -2685,7 +2685,7 @@ def target_shap_waterfall(ticker: str, horizon: int):
     if ticker not in forms.TARGET_SOURCE_BY_SYMBOL:
         raise HTTPException(status_code=404, detail="Cible inconnue")
     try:
-        from patrick import (
+        from patrick.live import (
             explain,  # chargé à la demande : shap + pipeline coûtent ~3,5 s à l'import (démarrage de l'app)
         )
 

@@ -45,7 +45,7 @@ import logging
 import os
 import sys
 
-from patrick import (
+from patrick.live import (
     predict as predict_module,  # noqa: F401  (re-exporté pour compatibilité)
 )
 from patrick.live.refresh import (  # noqa: F401  (la logique vit dans le package, partagée avec l'app web)
