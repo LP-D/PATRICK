@@ -57,7 +57,7 @@ revue ou de publication.
 ## Gardes git (dépôt public)
 
 - **`.gitignore`** : ni `.env`, ni bases SQLite (`*.db`, `-wal`, `-shm`), ni `runs/`, ni l'état local des outils
-  d'agent (`.claude/`, sauf `.claude/settings.json`, versionné exprès). `patrick/tests/test_repo_hygiene.py`
+  d'agent (`.claude/`, sauf `.claude/settings.json`, versionné exprès). `patrick/tests/repo/test_repo_hygiene.py`
   vérifie ce que git fait de ces chemins.
 - **Hook `pre-push`** (`.githooks/pre-push`) : refuse la suppression d'une branche ou d'une étiquette et la
   réécriture d'un historique publié (push forcé, étiquette déplacée), sauf sur `wip/`, `tmp/`, `golden-regen/`, `mutation-check/`.
@@ -69,7 +69,7 @@ revue ou de publication.
 - **Historique** : une donnée personnelle déjà poussée reste dans l'historique public même après suppression du
   fichier ; la retirer demande de réécrire l'historique (décision à prendre explicitement).
 - **Test de validité statistique** : `pytest -m validity` (≈ 15 min) fait tourner le pipeline sur des marches aléatoires et des
-  mondes à signal (`patrick/tests/test_null_world_validity.py`) ; exclu de `pytest` et de la CI poussée, il tourne chaque
+  mondes à signal (`patrick/tests/pipeline/test_null_world_validity.py`) ; exclu de `pytest` et de la CI poussée, il tourne chaque
   lundi (`.github/workflows/validity.yml`). `PATRICK_WORLD_CACHE_DIR=<dossier>` conserve les mondes calculés (reprise possible).
 - **Test de mutation** : mutmut ne tourne pas sous Windows ; `.github/workflows/mutation.yml` l'exécute sur GitHub (Linux). Sans `gh` :
   pousser une branche `mutation-check/<nom>` (tous les modules statistiques, quelques minutes), puis lire le résultat dans les annotations

@@ -26,8 +26,8 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from patrick import paths
-from patrick.clock import utc_today
+from patrick.core import paths
+from patrick.core.clock import utc_today
 
 
 def _default_store_dir() -> str:
@@ -35,7 +35,7 @@ def _default_store_dir() -> str:
     call (not frozen at import time) so the worker (separate process) shares
     the same data lake as the web process that launched it, and for test
     isolation (`PATRICK_STORE_ROOT` set before instantiating `DataStore()`).
-    Resolution (component variable, then the data root): `patrick.paths.store_dir`."""
+    Resolution (component variable, then the data root): `patrick.core.paths.store_dir`."""
     return str(paths.store_dir())
 
 

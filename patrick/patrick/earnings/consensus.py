@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from patrick.clock import local_now
+from patrick.core.clock import local_now
 from patrick.earnings import store
 
 

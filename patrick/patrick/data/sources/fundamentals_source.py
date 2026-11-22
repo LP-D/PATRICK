@@ -28,7 +28,7 @@ from __future__ import annotations
 import pandas as pd
 import yfinance as yf
 
-from patrick.cache_manager import LocalCache
+from patrick.storage.cache_manager import LocalCache
 
 FUNDAMENTALS_COLUMNS = ["fiscalDateEnding", "metric", "value"]
 

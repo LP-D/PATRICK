@@ -2,8 +2,8 @@
 Inference live quotidienne planifiee : tache Windows "Patrick-DailyPredict" pour `scripts/daily_predict.py`.
 
 Chaque jour, chaque modele deja entraine fait sa nouvelle prediction ET juge celles dont l'horizon est
-ecoule (`patrick.predict.predict_live`) -- meme app fermee. Sans cette tache, l'evaluation ne tourne que
-quand l'app est ouverte (`patrick.live_refresh`) ; un jour manque est reconstitue au lancement suivant.
+ecoule (`patrick.live.predict.predict_live`) -- meme app fermee. Sans cette tache, l'evaluation ne tourne que
+quand l'app est ouverte (`patrick.live.refresh`) ; un jour manque est reconstitue au lancement suivant.
 
 Utilisation (PowerShell, depuis n'importe ou) :
     .\schtasks_daily_predict.ps1            # n'installe RIEN : affiche la tache qui serait creee

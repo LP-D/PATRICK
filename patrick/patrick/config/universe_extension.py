@@ -25,7 +25,7 @@ Les actions (US, France, Allemagne, Royaume-Uni, Europe, Asie) vivent toutes dan
 (contexte de marche : indice de leur place, zone euro) sont decrites dans `config/equity_context.py`.
 
 Noms de groupes : ceux de l'ancien univers quand ils existent (traductions
-deja presentes, `webapp/i18n.py::TARGET_GROUP_LABEL_KEYS`), sinon nouveaux ;
+deja presentes, `webapp/i18n/core.py::TARGET_GROUP_LABEL_KEYS`), sinon nouveaux ;
 jamais un nom deja utilise par `DEFAULT_TARGET_GROUPS` (une fusion de dict
 ecraserait le groupe existant).
 """
@@ -576,7 +576,7 @@ ADDED_ON_2026_10_07_GROUPS = (
 )
 
 # Candidats FEATURES de feature/replay-cache-universe (Phase 3), tous dans
-# `EXTENDED_TARGET_GROUPS` ci-dessus (verifie par tests/test_universe_reduction.py).
+# `EXTENDED_TARGET_GROUPS` ci-dessus (verifie par tests/data/test_universe_reduction.py).
 EXTENDED_FEATURE_CANDIDATES: tuple[str, ...] = (
     # Indices actions
     "^DJI", "^IXIC", "^RUT", "^FTSE", "^GDAXI", "^FCHI", "^N225", "^HSI", "^STOXX50E",

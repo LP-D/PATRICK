@@ -5,7 +5,7 @@ type et une validation ; `update()` refuse en bloc une valeur invalide (rien n'e
 """
 from __future__ import annotations
 
-from patrick import settings
+from patrick.core import settings
 
 KEY_SETUP_DONE = "setup_done"          # l'assistant de premier démarrage a été traité (dossier choisi ou « aucun »)
 KEY_AUTO_UPDATE = "auto_update"        # chercher une nouvelle version au démarrage

@@ -29,17 +29,17 @@ Ordre proposé confirmé (aucun doute réel, structure alignée sur ce qui exist
 
 #### `regime_summary` / `classify_regime_daily`
 
-Confirmé par recherche exhaustive (`grep` sur tout `patrick/patrick/`) : **jamais appelée en dehors de `phase9.py` et de ses propres tests**. Aucune ligne de code de production (`pipeline/engine.py`, `worker.py`, `predict.py`, `cli.py`) ne l'invoque, aucune table de la base ne stocke de classification de régime.
+Confirmé par recherche exhaustive (`grep` sur tout `patrick/patrick/`) : **jamais appelée en dehors de `research/phase9.py` et de ses propres tests**. Aucune ligne de code de production (`pipeline/engine.py`, `worker.py`, `predict.py`, `cli.py`) ne l'invoque, aucune table de la base ne stocke de classification de régime.
 
 Ce n'est pas une donnée qui existe et que j'aurais dû aller chercher ailleurs : **elle n'a jamais tourné en production, point final**. Conformément à l'anti-pattern explicite de la consigne, je ne la branche pas — section en état vide explicite (B3) :
 
-> « Classification de régime jamais exécutée en production — fonctionnalité disponible (`patrick.phase9.classify_regime_daily`) mais non intégrée au pipeline. »
+> « Classification de régime jamais exécutée en production — fonctionnalité disponible (`patrick.research.phase9.classify_regime_daily`) mais non intégrée au pipeline. »
 
 #### `determine_signal_quality_status` / `signal_dm_summary`
 
-Écart à signaler avant de continuer : ces deux fonctions `phase9.py` ne sont **pas** le chemin réel de production. Le vrai chemin, déjà câblé et déjà utilisé par `/runs/{id}` et `/targets/{ticker}`, est :
+Écart à signaler avant de continuer : ces deux fonctions `research/phase9.py` ne sont **pas** le chemin réel de production. Le vrai chemin, déjà câblé et déjà utilisé par `/runs/{id}` et `/targets/{ticker}`, est :
 
-- `dm_result` (table réelle, peuplée par `pipeline/engine.py` via le vrai `diebold_mariano()`, **pas** la copie de `phase9.py`) ;
+- `dm_result` (table réelle, peuplée par `pipeline/engine.py` via le vrai `diebold_mariano()`, **pas** la copie de `research/phase9.py`) ;
 - `tracking/stats.py::fdr_across_targets()` — MIN(p-value) par cible × `benjamini_hochberg()` (même fonction de correction que `signal_dm_summary` appelle en interne) → `{target: {p_value, adjusted_p_value, rank, significant}}`.
 
 Utiliser `phase9.signal_dm_summary` littéralement obligerait à recharger les tableaux de prédictions bruts et à recalculer le DM — redondant, et risque réel d'obtenir une p-value différente de celle déjà affichée sur `/runs/{id}`/`/targets/{ticker}` (incohérence au clic, contraire à B4).
@@ -75,7 +75,7 @@ Branche : `feature/degradation-badge` (HEAD au moment de l'audit :
 
 ### 1. Ce que fait reellement `patrick audit degradation`
 
-Source : `patrick/patrick/audit.py` (module docstring, lignes 1-22) et
+Source : `patrick/patrick/audit/degradation.py` (module docstring, lignes 1-22) et
 `patrick/patrick/cli.py::audit_degradation_cmd` (lignes 198-213).
 
 - **Nature** : un rapport de correction ponctuel ("Correction report, C7"),
@@ -165,7 +165,7 @@ couteux, pas de reseau) sont, par ordre de pertinence :
   `/runs/{run_id}` (via `tracking/history.py::run_detail`, ligne 261).
   Explicitement documente comme jamais utilise pour la selection de
   modele (isolation garantie par
-  `tests/test_holdout_diagnostic_isolation.py`), donc un candidat "propre"
+  `tests/tracking/test_holdout_diagnostic_isolation.py`), donc un candidat "propre"
   pour un badge de risque de surapprentissage par run/cible.
 - `patrick/patrick/tracking/history.py::target_detail` (lignes 295-337) :
   calcule deja `pbo_by_horizon` (probability of backtest overfitting, par
@@ -203,7 +203,7 @@ seulement, non implementee dans cette branche.
 
 Constat de faisabilité (feature/shap-waterfall) : **implémenté**, coût jugé
 acceptable pour un affichage à la demande. Ce document consigne les chiffres
-réels mesurés, référencés depuis `patrick/explain.py` et `tests/test_explain.py`.
+réels mesurés, référencés depuis `patrick/live/explain.py` et `tests/live/test_explain.py`.
 
 ### Où les valeurs SHAP existaient déjà — et pourquoi elles ne sont pas réutilisées
 

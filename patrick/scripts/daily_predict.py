@@ -1,5 +1,5 @@
 """Phase 2 -- inférence programmée quotidienne : appelle `patrick predict
---live` (`patrick.predict.predict_live`) pour CHAQUE (ticker, horizon) qui a
+--live` (`patrick.live.predict.predict_live`) pour CHAQUE (ticker, horizon) qui a
 aujourd'hui un modèle réellement exploitable -- un run `status='done'` en
 base ET dont le trial gagnant (`is_best=1`) a un `artifact_path` qui pointe
 vers un fichier `.joblib` qui existe VRAIMENT sur disque (l'audit préalable
@@ -45,10 +45,10 @@ import logging
 import os
 import sys
 
-from patrick import (
+from patrick.live import (
     predict as predict_module,  # noqa: F401  (re-exporté pour compatibilité)
 )
-from patrick.live_refresh import (  # noqa: F401  (la logique vit dans le package, partagée avec l'app web)
+from patrick.live.refresh import (  # noqa: F401  (la logique vit dans le package, partagée avec l'app web)
     PredictCandidate,
     PredictOutcome,
     RunSummary,
@@ -81,11 +81,11 @@ def remeasure_stale_drift(candidates: list[PredictCandidate], db_path: str | Non
     reconstruction complète du pool de features). Une erreur sur un item est
     loggée et n'arrête jamais les suivants ; elle ne change pas le code de
     sortie du script (celui-ci reste celui des prédictions)."""
-    from patrick.clock import utc_today
+    from patrick.core.clock import utc_today
     from patrick.validation import drift_policy
 
     if measure_fn is None:
-        from patrick.explain import compute_drift_for_ticker_horizon as measure_fn
+        from patrick.live.explain import compute_drift_for_ticker_horizon as measure_fn
     today = today or utc_today()
     conn = trackdb.connect(db_path)
     try:

@@ -10,7 +10,7 @@ ARMA/ARIMA from vol_models.py, particle filter from spike.py) estimate global
 parameters before producing a causal recursive output — estimating them once
 over the whole history (as before this fix) leaks information from one
 fold's test into another fold's train, even though the point-by-point output
-is itself causal (see `tests/test_leakage.py`, future-corruption test). The
+is itself causal (see `tests/pipeline/test_leakage.py`, future-corruption test). The
 feature pool is therefore split in two:
 - `build_base_feature_pool`: technical/spike(excluding the particle
   filter)/macro — pure rolling windows, no global parameter, computed once.
@@ -48,11 +48,12 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.equity_universe import is_equity_symbol
 from patrick.config.schema import RunConfig
 from patrick.config.targets import refuse_non_target
+from patrick.core.clock import utc_today
+from patrick.core.numeric import is_nan
 from patrick.data import alignment
 from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
@@ -94,7 +95,6 @@ from patrick.models.uniqueness import (
     build_indicator_matrix,
     effective_sample_size,
 )
-from patrick.numeric import is_nan
 from patrick.pipeline import early_stop_shadow, parallel, pause
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
@@ -142,7 +142,7 @@ def _sanitize_lookback_windows(windows: list[int], min_allowed: int, label: str)
     passes SILENTLY for `returns()` specifically -- `safe_pct_change(series,
     w<0)` never raises; pandas' `Series.pct_change(periods=negative)` shifts
     the OTHER direction and silently returns a forward-looking (look-ahead
-    leak) value instead (measured, see tests/test_technical_lookbacks.py).
+    leak) value instead (measured, see tests/features/test_technical_lookbacks.py).
     `min_allowed=2` (ohlc_vol_windows): `yang_zhang_vol` divides by
     `(window - 1)`, so window=1 raises ZeroDivisionError deep in the
     pipeline. Same discipline as `_finite_features` above: invalid entries
@@ -1530,7 +1530,7 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
 @dataclass
 class _RunState:
     """Everything the phases of one `run_pipeline` call share. Before the
-    golden-master refactor (`tests/test_run_pipeline_golden.py`) these were
+    golden-master refactor (`tests/pipeline/test_run_pipeline_golden.py`) these were
     ~30 locals of a single 532-line function."""
     config: RunConfig
     conn: object
@@ -2332,7 +2332,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
     CPCV) -> stability -> holdout diagnostic -> Optuna -> CSV exports ->
     final selection -> per-horizon model export -> holdout / Diebold-Mariano
     / cumulative trials / PBO -> finish. Each phase is a function of
-    `_RunState`; the sequence is pinned by `tests/test_run_pipeline_golden.py`.
+    `_RunState`; the sequence is pinned by `tests/pipeline/test_run_pipeline_golden.py`.
 
     `snapshot_id` (`patrick resume`): replays exactly that snapshot from the
     local data lake (`data.ingest.load_snapshot`) instead of `ingest()` --

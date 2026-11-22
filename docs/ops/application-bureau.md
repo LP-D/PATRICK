@@ -42,7 +42,7 @@ doit être local (contre le « DNS rebinding » : un site hostile ne peut pas li
 toute écriture (ou lecture d'API `/api/`) dont l'`Origin` / `Sec-Fetch-Site` désigne un autre site est refusée en 403
 (contre le CSRF : une page web ouverte dans le navigateur ne peut ni lancer un run, ni passer un ordre, ni changer un
 réglage). `curl` et les scripts, qui n'envoient pas ces en-têtes, passent. `PATRICK_EXTRA_HOSTS` déclare d'autres noms
-d'hôte (reverse proxy). Tests : `tests/test_webapp_csrf.py` (chaque route d'écriture de l'application y est essayée
+d'hôte (reverse proxy). Tests : `tests/webapp/test_webapp_csrf.py` (chaque route d'écriture de l'application y est essayée
 depuis un autre site : une route ajoutée demain est couverte sans y penser).
 
 ## Installer sur un autre PC
@@ -71,9 +71,9 @@ patrimoine » : il adopte le patrimoine publié par le PC de référence.
 
 ## Développement
 
-- Le lanceur n'importe que la bibliothèque standard, `psutil` et `patrick.settings/sync` : `import patrick` ne charge
+- Le lanceur n'importe que la bibliothèque standard, `psutil` et `patrick.core.settings/sync` : `import patrick` ne charge
   plus pandas (`patrick/__init__.py` charge les ré-exports de `phase9` à la demande), ce qui garde le démarrage rapide.
-- Tests : `tests/test_desktop_*.py`, `tests/test_settings_routes.py`, `tests/test_package_lazy_import.py`.
+- Tests : `tests/test_desktop_*.py`, `tests/webapp/test_settings_routes.py`, `tests/repo/test_package_lazy_import.py`.
   La fixture `fake_task` (conftest) remplace la tâche planifiée Windows : un test ne doit jamais toucher la vraie.
 - Essai à blanc d'un lanceur complet sans toucher à ses vraies données : définir `PATRICK_SETTINGS_PATH`,
   `PATRICK_DB_PATH`, `PATRICK_STORE_ROOT` et `PATRICK_CACHE_ROOT` vers un dossier temporaire, puis

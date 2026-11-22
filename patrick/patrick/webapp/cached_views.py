@@ -12,7 +12,7 @@ Mesures à froid sur la vraie base (76 Go) avant ce cache, ce que la page attend
 | Portefeuille | `portfolio`, `portfolio-bl` | 3-6 s, 1-3 s |
 | Résultat réel | `live-board` | 2 s |
 
-Les routes (`app.py`, `fund_routes.py`, `analysis_routes.py`) ne calculent plus rien : elles lisent la vue. Le tableau de `/predictions` a la sienne
+Les routes (`app.py`, `routes/fund.py`, `routes/analysis.py`) ne calculent plus rien : elles lisent la vue. Le tableau de `/predictions` a la sienne
 (`webapp/predictions_snapshot.py`). Deux familles de signal pour recalculer :
 
 - `marker` : la base a bougé (un run terminé, de nouveaux signaux) -> recalcul en tâche de fond, la page garde l'ancien en attendant ;
@@ -26,7 +26,7 @@ import threading
 import time
 from datetime import timedelta
 
-from patrick.clock import utc_now
+from patrick.core.clock import utc_now
 from patrick.tracking import memo
 from patrick.webapp import view_cache
 from patrick.webapp.view_cache import CachedView, Progress
@@ -148,7 +148,7 @@ def _live_board(db_path, key, progress: Progress):
 
 
 def _models_marker(conn) -> tuple:
-    from patrick.webapp import fund_routes
+    from patrick.webapp.routes import fund as fund_routes
 
     return fund_routes._models_signature(conn)
 
@@ -157,7 +157,7 @@ def _fund_models(db_path, key, progress: Progress) -> list[dict]:
     """La liste des modèles du sélecteur de règles (une requête par cellule de la table `prediction` : 3 à 10 s sur la vraie base)."""
     from patrick.fund import systematic
     from patrick.tracking.db import connect
-    from patrick.webapp import fund_routes
+    from patrick.webapp.routes import fund as fund_routes
 
     conn = connect(db_path)
     try:

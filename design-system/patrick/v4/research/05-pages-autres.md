@@ -14,22 +14,22 @@ Modes de rendu : **S** tout serveur · **L** serveur + `lazy_block` (`_component
 | Indices, Cryptos, Devises, Taux, Mat. premières, ETF | URL de `config/asset_classes.py:28-35`, routes créées en boucle (`app.py:2245-2259`) | `asset_class.html` + `_asset_class_body` (`app.py:2227`) | L | `asset_class.js` |
 | Equity | `/equity` (`app.py:2322`) | `equity.html` ⊂ `asset_class.html` | L | idem |
 | Macro (FRED) | `/macro` (`app.py:2275`) | `macro.html` + `_macro_alfred` (`app.py:2286`) | L | `macro_alfred.js` |
-| Simulation | `/simulate` (`fund_routes.py:184`) | `simulate.html` + `_fund_rule_form` | F | `simulate.js`, `ml_rule.js` |
-| Fonds | `/fonds` (`fund_routes.py:196`) | `fonds.html` + `_fund_overview` (`:206`), `_fund_panel` (`:218`), `_fund_rule_form_block` (`:240`), `_fund_autopilot_preview` (`:426`), `_fund_classes_preview` (`:500`) | L + F | `fonds.js` |
-| Comptes (patrimoine) | `/patrimoine` (`wealth_routes.py:164`) | `patrimoine.html` | S | `wealth.js` |
-| ↳ Compte | `/patrimoine/comptes/{id}` (`wealth_routes.py:174`) | `patrimoine_account.html` | S | `wealth.js` |
-| Mouvements | `/mouvements` (`wealth_routes.py:189`) | `mouvements.html` | S | `wealth.js` |
-| Risque | `/risque` (`risk_routes.py:63`) | `risque.html` | K | `analysis_kit.js`, `risque.js` |
-| Parcours (connaissances) | `/connaissances` (`knowledge_routes.py:82`) | `knowledge_hub.html` | S | — |
-| Cours / un cours | `/connaissances/cours`, `/{slug}` (`knowledge_routes.py:91,96`) | `knowledge_courses.html`, `knowledge_course.html` | S | `course.js` |
-| Dictionnaire | `/connaissances/dictionnaire` (`knowledge_routes.py:110`) | `knowledge_dictionary.html` | S | `dictionary.js` |
-| Vocabulaire, Réglages, Diagnostics (usage) | `/vocabulary` (`app.py:1640`), `/reglages` (`settings_routes.py:93`), `/diagnostics` (`analysis_routes.py:270`) | `vocabulary.html`, `reglages.html`, `diagnostics.html` | S / F / K | `vocabulary.js`, `reglages.js`, `diagnostics.js` |
-| Résultats (+ titre, événement) | `/resultats`, `/resultats/titre/{s}`, `/resultats/evenement` (`earnings_routes.py:118,351,366`) | `earnings*.html` + 7 `_earn_*` | L + F | `earnings.js` |
-| Économétrie / Exploration | `/econometrie` (`econometrics_routes.py:306`), `/exploration` (`exploration_routes.py:218`) | `econometrics.html`, `exploration.html` | F | `charts.js` + `econometrics.js` / `exploration.js` |
-| News | `/news` (`news_routes.py:77`) | `news.html` + 4 `_news_*` | L | `news.js` |
-| Données / Qualité | `/donnees` (`data_routes.py:55`), `/data-quality` (`app.py:1618`) | `donnees.html`, `data_quality.html` | K / S | `analysis_kit.js`, `donnees.js` |
+| Simulation | `/simulate` (`routes/fund.py:184`) | `simulate.html` + `_fund_rule_form` | F | `simulate.js`, `ml_rule.js` |
+| Fonds | `/fonds` (`routes/fund.py:196`) | `fonds.html` + `_fund_overview` (`:206`), `_fund_panel` (`:218`), `_fund_rule_form_block` (`:240`), `_fund_autopilot_preview` (`:426`), `_fund_classes_preview` (`:500`) | L + F | `fonds.js` |
+| Comptes (patrimoine) | `/patrimoine` (`routes/wealth.py:164`) | `patrimoine.html` | S | `wealth.js` |
+| ↳ Compte | `/patrimoine/comptes/{id}` (`routes/wealth.py:174`) | `patrimoine_account.html` | S | `wealth.js` |
+| Mouvements | `/mouvements` (`routes/wealth.py:189`) | `mouvements.html` | S | `wealth.js` |
+| Risque | `/risque` (`routes/risk.py:63`) | `risque.html` | K | `analysis_kit.js`, `risque.js` |
+| Parcours (connaissances) | `/connaissances` (`routes/knowledge.py:82`) | `knowledge_hub.html` | S | — |
+| Cours / un cours | `/connaissances/cours`, `/{slug}` (`routes/knowledge.py:91,96`) | `knowledge_courses.html`, `knowledge_course.html` | S | `course.js` |
+| Dictionnaire | `/connaissances/dictionnaire` (`routes/knowledge.py:110`) | `knowledge_dictionary.html` | S | `dictionary.js` |
+| Vocabulaire, Réglages, Diagnostics (usage) | `/vocabulary` (`app.py:1640`), `/reglages` (`routes/settings.py:93`), `/diagnostics` (`routes/analysis.py:270`) | `vocabulary.html`, `reglages.html`, `diagnostics.html` | S / F / K | `vocabulary.js`, `reglages.js`, `diagnostics.js` |
+| Résultats (+ titre, événement) | `/resultats`, `/resultats/titre/{s}`, `/resultats/evenement` (`routes/earnings.py:118,351,366`) | `earnings*.html` + 7 `_earn_*` | L + F | `earnings.js` |
+| Économétrie / Exploration | `/econometrie` (`routes/econometrics.py:306`), `/exploration` (`routes/exploration.py:218`) | `econometrics.html`, `exploration.html` | F | `charts.js` + `econometrics.js` / `exploration.js` |
+| News | `/news` (`routes/news.py:77`) | `news.html` + 4 `_news_*` | L | `news.js` |
+| Données / Qualité | `/donnees` (`routes/data.py:55`), `/data-quality` (`app.py:1618`) | `donnees.html`, `data_quality.html` | K / S | `analysis_kit.js`, `donnees.js` |
 
-Registre : catégories `nav_registry.py:52-59`, dossier *Marchés* `:68`, entrées `:101-129`, pages d'usage hors catégories (pied de barre latérale) `:134-138`. Exploration → Données sont rangées sous **Pilotage** (`:87-94`), pas dans une catégorie de ce rapport. Redirections 308 (non-pages, `:148-152`) : `/launch`→`/ml`, `/patrimoine-simulation`→`/fonds` (`fund_routes.py:213`), `/equities`→`/equity` (`app.py:2316`), `/data-freshness`→`/universe` (`app.py:1612`), `/analyses`→`/runs?vue=analyses`.
+Registre : catégories `nav_registry.py:52-59`, dossier *Marchés* `:68`, entrées `:101-129`, pages d'usage hors catégories (pied de barre latérale) `:134-138`. Exploration → Données sont rangées sous **Pilotage** (`:87-94`), pas dans une catégorie de ce rapport. Redirections 308 (non-pages, `:148-152`) : `/launch`→`/ml`, `/patrimoine-simulation`→`/fonds` (`routes/fund.py:213`), `/equities`→`/equity` (`app.py:2316`), `/data-freshness`→`/universe` (`app.py:1612`), `/analyses`→`/runs?vue=analyses`.
 
 Volumes réels (mesurés par import de `forms.TARGET_GROUPS` et `config.defaults`) : 488 symboles en 23 groupes ; Equity 320 (8 groupes), ETF 47, Indices 37, Mat. premières 30, Devises 20, Taux 20, Cryptos 14 ; Macro 109 séries en 14 sections ; dictionnaire ≈ 750 notions (`MASTER.md:185`).
 
@@ -106,7 +106,7 @@ Volumes réels (mesurés par import de `forms.TARGET_GROUPS` et `config.defaults
 
 ### 5.1 Comptes `/patrimoine`
 - **Structure** : en-tête + lien Mouvements + `.btn` nouveau compte (`patrimoine.html:11-22`), flash, alertes (`:26-31`), 4 KPI dont la volatilité avec une phrase de fiabilité assemblée de 5 morceaux (`:35-46`), cartes de comptes `a.account-card.drop-target` (lien et cible de dépôt à la fois, `:48-73`), positions consolidées 5 colonnes (`:75-93`), dialogue (`:95-119`, exemple en dur « PEA Boursorama » `:98`).
-- **Rendu** synchrone avec cotations (`wealth_routes.py:164-172`). États vides : `:71`, `pat_c_none`.
+- **Rendu** synchrone avec cotations (`routes/wealth.py:164-172`). États vides : `:71`, `pat_c_none`.
 - **Piste** : bandeau à deux totaux bien séparés (réel / fictif), comptes en lignes denses (TWR, écart au benchmark), positions en tableau.
 
 ### 5.2 Compte `/patrimoine/comptes/{id}`

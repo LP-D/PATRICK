@@ -146,9 +146,9 @@ def _new_terms() -> list[Term]:
 
 def _legacy_terms() -> list[Term]:
     """Le lexique existant (`GLOSSARY`), libellés résolus dans les deux langues, classé par thème et niveau."""
-    from patrick.webapp import i18n
-    from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
-    from patrick.webapp.glossary_extra import TERM_CATEGORY
+    from patrick.webapp.glossary.core import GLOSSARY, TERM_LABEL_KEYS
+    from patrick.webapp.glossary.extra import TERM_CATEGORY
+    from patrick.webapp.i18n import core as i18n
 
     tr = {"fr": i18n.translator("fr"), "en": i18n.translator("en")}
     out = []

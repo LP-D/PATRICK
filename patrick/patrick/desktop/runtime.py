@@ -13,7 +13,7 @@ from pathlib import Path
 
 import psutil
 
-from patrick import settings
+from patrick.core import settings
 
 CREATE_NO_WINDOW = 0x08000000
 DETACHED_PROCESS = 0x00000008

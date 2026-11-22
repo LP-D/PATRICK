@@ -1,6 +1,6 @@
 """Phase 8 (feature/portfolio-view) -- `/portfolio`: cross-asset aggregated
 view over the WHOLE universe. Two pieces of PURE Python logic, deliberately
-kept DB-free and unit-tested without a sqlite fixture (`tests/test_portfolio.py`):
+kept DB-free and unit-tested without a sqlite fixture (`tests/tracking/test_portfolio.py`):
 
 1. `aggregate_signals_by_group` -- counts bullish (UP) / bearish (DOWN)
    signals per `DEFAULT_TARGET_GROUPS` category, from an already-fetched

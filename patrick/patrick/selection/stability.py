@@ -5,7 +5,7 @@ to the regime, but an unstable selection procedure -- the identified signal
 is only as reproducible as the retained features are.
 
 `MIN_MEAN_JACCARD_WARNING = 0.40` -- MEASURED, not chosen by convention (see
-`tests/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`
+`tests/models/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`
 for the reproducible measurement): on synthetic data with NO real link
 between X and y (pure-noise target, features correlated with each other the
 way the real pipeline's technical/interactions families are), the REAL SHAP

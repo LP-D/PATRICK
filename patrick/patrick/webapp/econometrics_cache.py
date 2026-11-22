@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from patrick import paths
+from patrick.core import paths
 
 CODE_VERSION = "1"            # à incrémenter quand le calcul d'une étude change de façon visible
 MAX_ENTRIES = 600

@@ -15,7 +15,7 @@ builds this dict from `dm_result`/`run`.
 """
 from __future__ import annotations
 
-from patrick.numeric import is_nan
+from patrick.core.numeric import is_nan
 
 
 def benjamini_hochberg(p_values: dict[str, float], alpha: float = 0.10) -> dict:

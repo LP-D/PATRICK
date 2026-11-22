@@ -1,6 +1,6 @@
 # ADR 0009 — Stockage : archivage des prédictions du scan, caches comprimés et évincés
 
-Date : 2026-10-29 · Statut : acceptée · Code : `tracking/prediction_archive.py`, `cache_eviction.py`, `storage_cli.py` (commande `patrick storage`), `tracking/db.py` (`encode_cached_json`, `decode_cached_json`), `features/pool_cache.py`, `worker.py` (`_tidy_storage`), `tracking/journal.py` (`live_index_hint`) · Tests : `tests/test_storage.py`
+Date : 2026-10-29 · Statut : acceptée · Code : `tracking/prediction_archive.py`, `storage/cache_eviction.py`, `storage/cli.py` (commande `patrick storage`), `tracking/db.py` (`encode_cached_json`, `decode_cached_json`), `features/pool_cache.py`, `worker.py` (`_tidy_storage`), `tracking/journal.py` (`live_index_hint`) · Tests : `tests/system/test_storage.py`
 
 ## Contexte
 
@@ -83,7 +83,7 @@ la base de 10 à 69 Go, et les trois sauvegardes conservées de 57 à 65 Go chac
 `evict_feature_cache` n'était appelée que par `worker._tidy_storage` : le dossier a atteint 315 Go pour un plafond de 150 Go, `D:` s'est remplie et la tâche de nuit a enregistré
 2 985 échecs « No space left on device » sans s'arrêter. Elle est maintenant aussi appelée par `daily_predict.py` (fin de chaque exécution, et dès que l'espace libre de la racine de données passe
 sous `predict_min_free_gb`, 5 Go par défaut), toujours seule : `evict_vol_cache` et les suppressions de la base restent réservées à la fin d'un job et aux commandes manuelles. Détails, code de sortie et
-limites : `docs/ops/passage-de-nuit.md`. Code : `live_refresh.py` (`trim_feature_cache`, `_stop_for_low_space`), `data/store.py` (écriture atomique du Parquet) · Tests : `tests/test_nightly_disk_guard.py`.
+limites : `docs/ops/passage-de-nuit.md`. Code : `live/refresh.py` (`trim_feature_cache`, `_stop_for_low_space`), `data/store.py` (écriture atomique du Parquet) · Tests : `tests/system/test_nightly_disk_guard.py`.
 
 ## Conséquences
 

@@ -1,7 +1,7 @@
 """Lightweight job-queue client (Phase 3.1) on the web process side.
 
 The pipeline's actual execution happens in a separate worker process
-(`patrick worker`, see `patrick/worker.py`); this module now only reads and
+(`patrick worker`, see `patrick/system/worker.py`); this module now only reads and
 writes the `job` table (see `tracking/jobs.py`) and ensures a worker is
 running. Replaces the old web-process-internal `RunState`/thread
 (BackgroundTasks-like): killing the web process during a run no longer

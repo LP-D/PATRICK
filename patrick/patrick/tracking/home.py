@@ -8,8 +8,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import timedelta
 
-from patrick.clock import utc_now
 from patrick.config import defaults as D
+from patrick.core.clock import utc_now
 from patrick.data.store import DataStore
 from patrick.tracking import class_overview, data_health, relaunch_stats
 from patrick.tracking import db as trackdb

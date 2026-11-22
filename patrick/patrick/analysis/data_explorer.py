@@ -196,8 +196,8 @@ def release_calendar(store, as_of=None) -> dict:
 
     Ce n'est pas un calendrier officiel (les dates réelles bougent : jours fériés, arrêts administratifs) ; c'est la règle que le pipeline
     applique pour ne pas lire une valeur avant sa publication. Une série dont la date estimée est dépassée de plus de la marge est « en retard »."""
-    from patrick.clock import utc_today
     from patrick.config import defaults as D
+    from patrick.core.clock import utc_today
     from patrick.data import freshness, publication_lag
 
     today = pd.Timestamp(as_of).normalize() if as_of else pd.Timestamp(utc_today()).normalize()

@@ -1,9 +1,9 @@
 # ADR 0028 — Gammes de fonds : Systematic, CTO et PEA, une seule carte de création
 
 Date : 2026-11-22. Statut : acceptée. Code : `fund/asset_classes.py` (`Family`, `FAMILIES`, `family_of`, `setup`, `setup_tiers`, `class_rows`),
-`fund/real_funds.py` (`pilot_settings`), `webapp/fund_routes.py` (`_class_options`, `_class_setup`, `/api/fund/asset-classes*`),
+`fund/real_funds.py` (`pilot_settings`), `webapp/routes/fund.py` (`_class_options`, `_class_setup`, `/api/fund/asset-classes*`),
 `webapp/templates/fonds.html` (carte `#fund-create`), `webapp/static/fonds.js`, `cli.py` (`autopilot-classes|autopilot-tiers --family`).
-Tests : `tests/test_fund_asset_classes.py`, `tests/test_fund_asset_classes_routes.py`, `tests/test_fund_autopilot_cli.py`, `tests/test_fund_real_funds.py`.
+Tests : `tests/fund/test_fund_asset_classes.py`, `tests/fund/test_fund_asset_classes_routes.py`, `tests/fund/test_fund_autopilot_cli.py`, `tests/fund/test_fund_real_funds.py`.
 
 ## Contexte
 

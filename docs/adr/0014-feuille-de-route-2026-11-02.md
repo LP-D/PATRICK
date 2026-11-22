@@ -12,13 +12,13 @@ et pourquoi. Mesures sur la base locale (64,8 Gio, 3 173 runs terminés, lecture
 1. **Le duel champion/challenger suit le critère du run** (`pipeline/champion_duel.py`). `AUC_dir` quand le run le classe ainsi (défaut des runs neufs, ADR 0013) et que les deux côtés
    l'ont ; `F1_dir` pour un run enregistré avant le champ ou quand un côté n'a pas d'AUC. Le duel enregistre le critère et les deux scores. Le duel reste une sélection sur le holdout
    (ADR 0005) : seul le critère est aligné, pas la rigueur.
-2. **Placebo sur toutes les classes d'actifs** (`audit_placebo.py`). Mesure : 113 runs sur 3 173 ont un placebo, aucun pour les indices de volatilité, aucun à horizon court (<= 3 j) pour
+2. **Placebo sur toutes les classes d'actifs** (`audit/placebo.py`). Mesure : 113 runs sur 3 173 ont un placebo, aucun pour les indices de volatilité, aucun à horizon court (<= 3 j) pour
    l'Asie, les futures, les Amériques hors États-Unis et la crypto, un seul pour le change. Nouveaux panels (`fx`, `futures`, `us`, `europe`, `americas`, `crypto`, `volatility`,
    `every_class`), `patrick audit placebo-report --coverage`. 37 runs légers mis en file (sans worker : ils attendent le prochain passage de nuit).
 3. **Cible de volatilité : non branchée, mesurée** (`docs/modelisation/cible-volatilite-faisabilite-2026-11-02.md`). AUC de la direction de σ : 0,77 (h = 5) et 0,73 (h = 20), contre 0,51 pour
    la direction du prix, mais le simple retour à la moyenne en donne 0,771 et 0,731 : le modèle HAR n'ajoute que +0,007 et +0,003. Une telle cible mettrait des AUC de 0,75 dans des tableaux
    qui lisent 0,52 comme un signal. Si l'objectif est le dimensionnement, la bonne cible est le NIVEAU de σ (HAR-RV, QLIKE), à brancher sur la taille à volatilité inverse du fonds.
-4. **Tests de validité du DM et du DSR.** Monde à pertes égales par construction (`tests/test_dm_equal_loss_world.py`) : le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5, ~8 % à
+4. **Tests de validité du DM et du DSR.** Monde à pertes égales par construction (`tests/validation/test_dm_equal_loss_world.py`) : le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5, ~8 % à
    15 blocs (h = 30), ce que dit déjà le seuil de 15 blocs. Le « 3 mondes sur 12 à p < 5 % » de l'audit du 20/10 (toujours du côté « le modèle fait pire ») ne vient donc pas d'un test mal
    dimensionné à h = 5 : un modèle choisi sur du bruit coûte de la variance face à sa baseline (lecture (a) de `KNOWN_ISSUES.md`). Valeurs exactes ajoutées pour `diebold_mariano`
    (poids de Bartlett, signe, arrondis, frontières 9/10 lignes, écart constant) et `dsr` (formule du papier recalculée, annualisation, un essai, 19/20 observations, erreur-type, maximum espéré).

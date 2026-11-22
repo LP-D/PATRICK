@@ -16,8 +16,8 @@ import os
 import sqlite3
 from datetime import UTC, datetime
 
-from patrick import paths
-from patrick.numeric import is_nan
+from patrick.core import paths
+from patrick.core.numeric import is_nan
 from patrick.selection import stability as stability_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import holdout_diagnostic as trackholdout

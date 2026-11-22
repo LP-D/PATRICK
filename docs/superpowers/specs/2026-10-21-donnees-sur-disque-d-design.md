@@ -95,7 +95,7 @@ Ma décision pour les journaux : ils restent dans le dossier maison, car la tâc
 
 ## 4. Résolution des emplacements
 
-Nouveau module `patrick/paths.py` (nom : mon choix), **seul endroit** où `~/.patrick` est écrit. Fonctions lues **à chaque appel** (comme
+Nouveau module `patrick/core/paths.py` (nom : mon choix), **seul endroit** où `~/.patrick` est écrit. Fonctions lues **à chaque appel** (comme
 `settings.py`, pour qu'un worker déjà lancé voie un changement de réglage) : `home_dir()`, `data_root()`, `store_dir()`, `models_dir()`,
 `feature_cache_dir()`, `cache_dir()`, `backups_dir()`, `archive_dir()`, `reports_dir()`, `db_path()`, `logs_dir()`.
 
@@ -125,13 +125,13 @@ garde-fou, §8) :
 - `tracking/report.py` : `DEFAULT_REPORTS_DIR` (même piège de constante à l'import) ; `cli.py` (`--output`).
 - `sync.py` : `_default_store_root`, `_default_models_roots`, les deux `~/.patrick/models` (pull et merge), `~/.patrick/logs/sync.log`,
   messages d'espace disque qui citent `~/.patrick/feature_cache` et `patrick.db.backup*`.
-- `data/store.py`, `cache_manager.py`, `features/pool_cache.py` : déjà par variable ; les rattacher à la racine.
+- `data/store.py`, `storage/cache_manager.py`, `features/pool_cache.py` : déjà par variable ; les rattacher à la racine.
 - `analysis/diagnostics.py::home()` : aujourd'hui `Path(PATRICK_DB_PATH).parent` ; la liste des dossiers (cache, feature_cache, store,
   models, backups) doit venir de `paths`, car **la base et les données n'ont plus le même parent**.
 - `tracking/usage.py::artifact_roots()` : ajouter `models_dir()` aux dossiers de recherche des modèles.
 - `desktop/share.py` : refuse un dossier de partage identique au dossier de données ; **ajouter** : refuser un dossier de partage situé
   dans la racine de données (et l'inverse).
-- `webapp/i18n_settings.py` (`app_status_disk_low`) : l'espace libre se vérifie sur **les deux volumes** (base et données) et nomme le volume ;
+- `webapp/i18n/settings.py` (`app_status_disk_low`) : l'espace libre se vérifie sur **les deux volumes** (base et données) et nomme le volume ;
   le texte ne cite plus `~/.patrick/…` en dur.
 - Page Réglages : afficher la racine de données, son volume, l'espace libre des deux volumes et la taille par sous-dossier (lecture seule).
 - Docs : `ARCHITECTURE.md`, `METHODOLOGY.md`, `README.md`, `NEXT_STEPS.md` citent `~/.patrick/…` ; mise à jour par une phrase renvoyant à `paths`.

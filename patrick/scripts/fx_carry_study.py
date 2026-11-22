@@ -13,7 +13,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from patrick import paths
+from patrick.core import paths
 from patrick.data.sources import fred_source
 from patrick.features import fx_carry as fc
 from patrick.validation.dsr import deflated_sharpe_ratio

@@ -1,6 +1,6 @@
 # ADR 0006 — Règle de parcimonie « une erreur-type » activée par défaut
 
-Date : 2026-10-20 · Statut : acceptée · Code : `pipeline/leaderboard.py::Leaderboard.best/top_k`, `pipeline/engine.py::_tuning_candidates/_best_tuned/_select_finals`, `config/schema.py` (`SelectionConfig.one_se_rule`, `RunConfig.from_stored_json`), `pipeline/engine.py::_config_hash` · Tests : `tests/test_one_se_rule.py`, `tests/test_stored_config_legacy.py`
+Date : 2026-10-20 · Statut : acceptée · Code : `pipeline/leaderboard.py::Leaderboard.best/top_k`, `pipeline/engine.py::_tuning_candidates/_best_tuned/_select_finals`, `config/schema.py` (`SelectionConfig.one_se_rule`, `RunConfig.from_stored_json`), `pipeline/engine.py::_config_hash` · Tests : `tests/pipeline/test_one_se_rule.py`, `tests/data/test_stored_config_legacy.py`
 
 ## Contexte
 

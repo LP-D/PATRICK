@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Pinned numeric environment -- the golden master of `run_pipeline`
-    # (patrick/tests/test_run_pipeline_golden.py) is bit-exact only in the
+    # (patrick/tests/pipeline/test_run_pipeline_golden.py) is bit-exact only in the
     # environment that generated it. Unpinned, it failed or passed depending
     # on the day's releases and on the runner's CPU (measured 2026-09-28:
     # another OpenBLAS kernel alone moves 23 CPCV values). Hence exact

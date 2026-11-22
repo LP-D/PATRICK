@@ -9,7 +9,7 @@ dans l'ADR 0014 : le carry de CHANGE n'a pas besoin d'une courbe de futures, seu
 
 ## Décisions
 
-1. **Journal de prédictions fusionné** (migration 0050, `tracking/journal.py`, `sync_merge.py`). Chaque PC garde SA chaîne d'empreintes. Les lignes de l'autre PC sont recopiées TELLES QUELLES
+1. **Journal de prédictions fusionné** (migration 0050, `tracking/journal.py`, `sync/merge.py`). Chaque PC garde SA chaîne d'empreintes. Les lignes de l'autre PC sont recopiées TELLES QUELLES
    (`prev_hash`, `entry_hash` et `trial_id` compris : ils sont dans la charge utile hachée, on ne peut pas les décaler comme dans `sync_merge`) et marquées `imported_from`. Conséquences de
    conception :
    - un `trial_id` importé désigne un essai de l'AUTRE base : toutes les lectures par `trial_id` (`record_signals`, `record_outcome`, `seal_existing`, la dernière empreinte de la chaîne) filtrent
@@ -22,7 +22,7 @@ dans l'ADR 0014 : le carry de CHANGE n'a pas besoin d'une courbe de futures, seu
      porte la colonne `imported_from`.
    Limite : insérer une ligne FAUSSE bien chaînée reste indétectable (il faudrait un ancrage externe de la dernière empreinte). Un PC dont le code n'a pas la migration 0050 est refusé par la
    fusion (« mets le code à jour sur les deux PC »), comme pour toute autre table.
-2. **Dimensionnement appris : mesuré, pas adopté** (`simulate/sizing_bandit.py`, `scripts/bandit_sizing_bench.py`, `tests/test_sizing_bandit.py`). Deux politiques, une configuration chacune, fixées avant
+2. **Dimensionnement appris : mesuré, pas adopté** (`simulate/sizing_bandit.py`, `scripts/bandit_sizing_bench.py`, `tests/fund/test_sizing_bandit.py`). Deux politiques, une configuration chacune, fixées avant
    la mesure : un bandit LinUCB (taille ∈ {0 ; 0,25 ; 0,5 ; 1}, retour de bandit) et un Kelly fractionnaire appris par ridge en ligne (information complète : dans un rejeu l'action ne change pas les
    prix). Contexte : force du signal, rapport de volatilités 20 j / 250 j. Préchauffage sur le segment `test` (antérieur au holdout), évaluation sur le holdout, mêmes frais (5 pb par unité de rotation)
    que les trois heuristiques de `/simulate` (seuil 0,55, proportionnel, levier moitié). **Résultat sur 459 champions à 1 jour de la vraie base** : Sharpe net moyen bandit 0,045, Kelly ridge 0,095,
@@ -30,7 +30,7 @@ dans l'ADR 0014 : le carry de CHANGE n'a pas besoin d'une courbe de futures, seu
    −0,080 ([−0,152 ; −0,010]). **Le critère d'entrée du cadrage (battre le dimensionnement heuristique après coûts sur le holdout) n'est pas atteint.** Dans un monde synthétique construit pour
    que la conviction compte, les deux apprentis retrouvent l'avantage mais ne battent pas le dimensionnement proportionnel : le rapport signal/bruit quotidien (~0,05) est trop faible pour qu'un
    apprentissage de 1 000 observations fasse mieux qu'une règle fixe. Les champions étant choisis sur le holdout (ADR 0005), le biais joue pour toutes les politiques à la fois. Rien n'est branché au fonds.
-3. **Carry de change : mesuré, pas adopté** (`features/fx_carry.py`, `scripts/fx_carry_study.py`, `tests/test_fx_carry.py`). Sept devises contre le dollar, taux interbancaires à 3 mois de l'OCDE (FRED,
+3. **Carry de change : mesuré, pas adopté** (`features/fx_carry.py`, `scripts/fx_carry_study.py`, `tests/features/test_fx_carry.py`). Sept devises contre le dollar, taux interbancaires à 3 mois de l'OCDE (FRED,
    `IR3TIB01<pays>M156N`), valeur d'un mois utilisée seulement deux mois plus tard, rebalancement mensuel, 2 pb de frais, avril 2000 à novembre 2025 (la série de la zone euro s'arrête fin 2025).
    Deux stratégies : séries chronologiques et coupe transversale (3 longues, 3 courtes). **Sharpe 0,17 et 0,18, t de la moyenne +0,87 et +0,92, Sharpe déflaté (2 essais) 0,64 et 0,65** (seuil
    habituel 0,95) ; 2013-2025 : 0,00 et 0,07. Le change seul (sans le portage) rend −0,15 et −0,22 : tout le gain vient du portage et le change le reprend presque en entier. Ce n'est pas une preuve

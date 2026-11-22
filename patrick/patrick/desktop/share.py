@@ -10,8 +10,9 @@ import os
 import time
 from pathlib import Path
 
-from patrick import paths, settings, sync
+from patrick.core import paths, settings
 from patrick.desktop import prefs
+from patrick.sync import core as sync
 
 MANIFEST = sync.MANIFEST
 _ONEDRIVE_VARS = ("OneDrive", "OneDriveCommercial", "OneDriveConsumer")

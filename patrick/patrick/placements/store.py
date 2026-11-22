@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from patrick import paths
+from patrick.core import paths
 from patrick.placements import envelopes, loader
 from patrick.tabular import detect
 

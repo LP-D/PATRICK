@@ -7,7 +7,7 @@
 
 - **Périmètre** : `patrick.css` l. 1350 (« /launch ») → 2972 (fin) = 1 623 lignes, 83 Ko sur 134 Ko ; `analysis.css` (102 lignes, préfixe `ra-`) ; `knowledge.css` (154 lignes, préfixe `kb-`).
 - **Méthode** : sélecteurs extraits par script (commentaires retirés) → 684 classes distinctes (562 dans la plage de patrick.css ; 56 et 66 de plus dans analysis.css et knowledge.css, qui restylent aussi `card`, `section-index`, `metric-value`, `primary`, `btn-secondary`, `queue-action`, `data-table`) + 15 ids. Chaque nom cherché comme jeton exact dans `templates/*.html` (89), `static/*.js` (58) et tous les `.py` de `patrick/patrick/` ; sinon, préfixe dynamique cherché (`x-{{ … }}`, `"x-" + v`) ; noms génériques (`.n`, `.err`…) vérifiés à la main.
-- **Chargement** : `patrick.css` dans `base_v2.html:31` (toutes les pages). `analysis.css` par `<link>` dans le corps de 12 gabarits (`_runs_analyses:3`, `analyses_compare:7`, `carnet:5`, `derive:5`, `diagnostics:5`, `donnees:5`, `garde_fous:5`, `journal:5`, `modeles:7`, `risque:5`, `run_analysis:17`, `variables:5`) et recopiée dans l'export (`analysis_routes.py:217` relit `patrick.css` + `analysis.css` par leur nom). `knowledge.css` dans les 4 gabarits `knowledge_*.html:5`.
+- **Chargement** : `patrick.css` dans `base_v2.html:31` (toutes les pages). `analysis.css` par `<link>` dans le corps de 12 gabarits (`_runs_analyses:3`, `analyses_compare:7`, `carnet:5`, `derive:5`, `diagnostics:5`, `donnees:5`, `garde_fous:5`, `journal:5`, `modeles:7`, `risque:5`, `run_analysis:17`, `variables:5`) et recopiée dans l'export (`routes/analysis.py:217` relit `patrick.css` + `analysis.css` par leur nom). `knowledge.css` dans les 4 gabarits `knowledge_*.html:5`.
 - **Écarts avec MASTER** : `MASTER.md:13` dit « `patrick.css` (seule feuille) » ; `MASTER.md:15` protège les classes de `simulate.js`, or ces classes `sim-*` sont mortes (§6).
 
 ## 1. patrick.css l. 1350–2972, section par section
@@ -116,7 +116,7 @@ Zéro occurrence du jeton dans les gabarits, les scripts et les `.py`, et aucun 
 
 | Sélecteur(s) | Lignes | Preuve |
 |---|---|---|
-| `nav.breadcrumb` + 4 descendants | 1836–1848 | hors CSS : commentaire `i18n.py:448` et clé inutilisée `breadcrumb_aria` (`i18n_legacy.py:380`), aucune classe ; `tests/test_ui_shell.py:69-71` interdit `class="breadcrumb"` |
+| `nav.breadcrumb` + 4 descendants | 1836–1848 | hors CSS : commentaire `i18n.py:448` et clé inutilisée `breadcrumb_aria` (`i18n/legacy.py:380`), aucune classe ; `tests/webapp/test_ui_shell.py:69-71` interdit `class="breadcrumb"` |
 | `.history-model-actions` (+ `form`, `input`) | 1524–1526 | 0 |
 | `.asset-panel-symbol` | 1987 | 0 (la macro `asset_panel` ne l'émet pas) |
 | `.sim-title`, `.sim-grid`, `.sim-panel-*`, `.sim-empty`, `.sim-graph-*`, `body[data-sim-loaded]`, `#sim-{equity,drawdown,dist}-canvas`, `#sim-{metrics,trades}-table`, `#sim-trades-download`, `.metric-row`, `.metric-help` | 2008–2076, 2145–2147 | 0 ; `simulate.html` est un ticket d'ordre ; `simulate.js` ne contient aucun `sim-` (en-tête l. 1-6). Seul `.sim-guard` (2032) vit (`feature_drift.js:31,63`) |
@@ -144,7 +144,7 @@ Volume mort ≈ 100 lignes, ≈ 6 % de la plage.
 9. **Couleurs de sens en décor** (contraire à MASTER l. 25) : `.kind-alpha` en `--pos` (2467), `.cmp-s1/-s2` (2485), `.kb-level-1/-2`, `cls-sig-warning` pour une baisse (`app.py:1879-1882`).
 10. **En-têtes trompeurs** : « /launch », « /commodities, /macro », « /simulate », « Exploration » ; préfixes `adv-` et `kind-` à double sens.
 11. **Couplages fragiles** : marges négatives de `.launch-bar` (1405) = padding de `.dash-panel` (1365) ; `nth-child` de `.history-table-cls/-rl` (2241-2262, 2301-2309) liés à l'ordre des colonnes de `runs.html` ; styles par id (2396, 2404, 2649, 2743).
-12. **Test rouge sur `main`** : `tests/test_ui_shell.py::test_templates_keep_only_data_driven_inline_styles` échoue à cause de `knowledge_hub.html:22,69` (relancé : `1 failed`).
+12. **Test rouge sur `main`** : `tests/webapp/test_ui_shell.py::test_templates_keep_only_data_driven_inline_styles` échoue à cause de `knowledge_hub.html:22,69` (relancé : `1 failed`).
 
 ## 8. Contrat à ne pas casser
 
@@ -160,7 +160,7 @@ Volume mort ≈ 100 lignes, ≈ 6 % de la plage.
 
 **Crochets d'état et variables** : `.run-form[data-mode="simple"]`, `.launch-bar[data-confirm]`, `.progress-bar[data-progress-mode="measuring"]`, `.pp-stage[data-zoomed="true"]`, `.drop-zone[data-over]`, `.drop-target[data-over]`, `.draggable-row[data-dragging]`, `.account-card[data-kind="fictive"]`, `.stats-bar[data-open="true"]`, `[data-kinds][hidden]`, `[data-help-host]`, `[data-help="fold"]`, `[data-keep]`, états ARIA `aria-current/-pressed/-expanded/-selected/-sort` ; variables `--share`, `--step`, `--heat`, `--enter-delay`, `--ra-c1…8` ; jetons lus par chart_kit.js : `--bg`, `--brand`, `--brand-soft`, `--chart-bg`, `--chart-grid`, `--line-strong`, `--mono`, `--neg`, `--neutral-soft`, `--pos`, `--text`, `--text-3`.
 
-**Noms de fichiers** : `patrick.css` + `analysis.css` relus par `analysis_routes.py:217` ; `analysis.css` et `knowledge.css` liés par nom dans 16 gabarits.
+**Noms de fichiers** : `patrick.css` + `analysis.css` relus par `routes/analysis.py:217` ; `analysis.css` et `knowledge.css` liés par nom dans 16 gabarits.
 
 ## 9. Synthèse : 14 motifs de mise en page récurrents
 

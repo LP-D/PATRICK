@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from math import comb
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import training_profiles as profiles
+from patrick.core.clock import utc_today
 from patrick.tracking import live_record, relaunch_stats
 
 # Seuils (AUC multiclasse un-contre-tous sur 4 classes : le hasard vaut 0,50).

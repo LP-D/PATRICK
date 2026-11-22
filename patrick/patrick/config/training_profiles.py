@@ -13,8 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
+from patrick.core.clock import utc_today
 
 ALL_ALGOS = list(D.ALL_ML_ALGOS)
 

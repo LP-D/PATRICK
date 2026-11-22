@@ -1,5 +1,5 @@
 // Tests des fonctions pures de la page « Écrans côte à côte » (static/split.js) : géométrie des dispositions, bornes des séparateurs,
-// état <-> fragment d'adresse, filtrage des adresses. Lancé par tests/test_split_page.py ; sans DOM.
+// état <-> fragment d'adresse, filtrage des adresses. Lancé par tests/webapp/test_split_page.py ; sans DOM.
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");

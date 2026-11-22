@@ -15,7 +15,7 @@ de correction dédiée (voir « Résolus » ci-dessous).
 Cause confirmée : fixture à date absolue `2018-01-01`. Corrigé en remplaçant
 par `_OLD_ENOUGH_START`, une date calculée relativement à l'exécution
 (`pd.Timestamp.today() - 30 ans`, marge de 10 ans au-delà du seuil de 20 ans
-testé) — `patrick/tests/test_data_quality.py`. Voir l'historique git de ce
+testé) — `patrick/tests/data/test_data_quality.py`. Voir l'historique git de ce
 fichier / le commit associé sur la PR #41 pour le diff exact.
 
 ### 2. `test_data_quality.py::test_data_quality_disabled_restores_pre_p6_5_behavior` — résolu 2026-08-08
@@ -151,7 +151,7 @@ non fiables sous charge partagée) plutôt qu'un ajustement de constante
 
 ---
 
-## Code mort — traité (audit phase9.py, D1-D4)
+## Code mort — traité (audit research/phase9.py, D1-D4)
 
 ### 1. `patrick/patrick/features/vol_models.py::build_vol_model_features` — identifié 2026-08-09, supprimé 2026-08-11
 
@@ -165,29 +165,29 @@ concaténées, en plus ancien -- sans le cache (`conn`/`snapshot_id`,
 migration 0015) ni l'instrumentation de profilage (P1) ajoutés depuis aux
 deux fonctions séparées. Supprimée, ainsi que `_VOL_MODEL_BUILDERS` (dict
 de fusion qui n'existait que pour l'alimenter). Les 3 tests de
-`tests/test_features_robustness.py` qui l'utilisaient (régression zero-
+`tests/features/test_features_robustness.py` qui l'utilisaient (régression zero-
 crossing/infini, cf. en-tête du fichier) ont été portés sur un helper de
 test local qui appelle les deux fonctions séparées et concatène -- la
 couverture réelle (le bug historique testé) est préservée, seul le point
 d'entrée mort a disparu.
 
-### 2. `patrick/patrick/phase9.py::signal_strength` — identifié et supprimé 2026-08-11
+### 2. `patrick/patrick/research/phase9.py::signal_strength` — identifié et supprimé 2026-08-11
 
 Orpheline totale (même pas exportée dans `__init__.py`, contrairement au
-reste de `phase9.py`). Enveloppe triviale `{signal: score} -> DataFrame`
+reste de `research/phase9.py`). Enveloppe triviale `{signal: score} -> DataFrame`
 à 2 colonnes ; son rôle (poser une colonne `signal` en entrée
 d'`aggregate_signals`) est déjà rempli en production par la sortie
 (bien plus riche : `dm_stat`/`p_value`/`testable`/`significant`...) de
 `signal_dm_summary`, qui alimente réellement `aggregate_signals`.
 Supprimée sans réécriture de test (aucun test n'y faisait référence).
 
-### 3. `patrick/patrick/phase9.py::reconstruct_state` — identifié et supprimé 2026-08-11
+### 3. `patrick/patrick/research/phase9.py::reconstruct_state` — identifié et supprimé 2026-08-11
 
 Fonction libre, strictement orpheline : aucun appelant, y compris depuis
 `StrategyEngine` (qui n'a jamais utilisé `take_snapshot`/`reconstruct_state`
 comme une paire symétrique malgré les noms). Supprimée.
 
-### 4. `patrick/patrick/phase9.py::DecisionJournal`/`DecisionJournalEntry`/`take_snapshot` — **conservées**, décision révisée 2026-08-11
+### 4. `patrick/patrick/research/phase9.py::DecisionJournal`/`DecisionJournalEntry`/`take_snapshot` — **conservées**, décision révisée 2026-08-11
 
 Identifiées dans l'audit comme redondantes avec la vraie persistance
 (`tracking/db.py::save_phase9_journal_entry`/`save_phase9_snapshot`,
@@ -200,7 +200,7 @@ révélé une dépendance structurelle non anticipée : `StrategyEngine`
 `StrategyEngine.snapshot_state` appelle directement `take_snapshot`.
 Supprimer ces trois symboles aurait cassé `StrategyEngine`, ce que D1
 (même audit) demande explicitement de ne pas toucher. Rôle clarifié en
-commentaire de module (`phase9.py`, juste avant `StrategyRule`) : ce ne
+commentaire de module (`research/phase9.py`, juste avant `StrategyRule`) : ce ne
 sont pas des concurrentes de `tracking/db.py` mais l'audit trail interne,
 en mémoire, du futur moteur de stratégie -- gardées pour cette seule
 raison, pas pour un usage autonome.
@@ -215,7 +215,7 @@ Jamais appelées hors de leurs propres tests -- blocs 5-7 du plan PATRICK
 original en 9 blocs (stratégie, backtest, exécution), jamais commencés en
 pratique puisque l'univers reste limité à `^VIX`. Pas du code mort par
 accident : plomberie préparée pour cette phase future, documentée en
-commentaire de module dans `phase9.py` plutôt que supprimée et à
+commentaire de module dans `research/phase9.py` plutôt que supprimée et à
 réécrire plus tard.
 
 ---
@@ -234,7 +234,7 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 - **Corrigé** : une section obsolète de ce fichier (« mode clair non implémenté » : il l'est depuis `base_v2.html`), une regex de test
   vide (caractères backspace au lieu de `\b`), l'idiome NaN `v == v`.
 - **Conservé volontairement** (voir aussi « Plomberie future volontaire » ci-dessus) :
-  - `phase9.py` (`StrategyEngine`…) : plomberie documentée pour la phase stratégie/exécution ;
+  - `research/phase9.py` (`StrategyEngine`…) : plomberie documentée pour la phase stratégie/exécution ;
   - `pipeline/model_categories_training.py` et `tracking/model_categories.py` : **retirés le 2026-11-02** (avec leurs deux fichiers de tests et trois termes de glossaire).
     Le stacking est devenu un vrai algorithme de la grille (`models/stacking.py`, 2026-10-23) et la grille compare déjà un modèle global à des modèles par régime
     (`objective.regimes`) : la comparaison en trois catégories n'avait plus de rôle. La colonne `trial.category` et la source `category` du registre d'essais restent
@@ -296,7 +296,7 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 
 ## Validité statistique mesurée sur des marches aléatoires — 2026-10-20
 
-`patrick/tests/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
+`patrick/tests/pipeline/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
 pipeline complet sur 12 marches aléatoires indépendantes (walk-forward 6 plis, holdout de 12 mois, horizon 5) et sur 3 mondes à
 signal (contrôle positif). Résultats du 2026-10-19 :
 
@@ -312,7 +312,7 @@ signal (contrôle positif). Résultats du 2026-10-19 :
   du holdout et la taille est gonflée. La famille BH est protégée dans les deux cas : elle ne lit que le sens « meilleur ». Pour
   trancher : un monde où modèle et baseline ont la même perte espérée par construction (deux prédicteurs indépendants du même
   bruit), ou beaucoup plus de mondes.
-  **Tranché le 2026-11-02** (`tests/test_dm_equal_loss_world.py`, ADR 0014) : dans un monde à pertes égales par construction, le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5
+  **Tranché le 2026-11-02** (`tests/validation/test_dm_equal_loss_world.py`, ADR 0014) : dans un monde à pertes égales par construction, le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5
   (~8 % à 15 blocs, h = 30, ce que dit déjà le seuil de 15 blocs). La taille du test n'est donc pas en cause à h = 5 (lecture (b) écartée) ; reste la lecture (a) : le modèle
   choisi sur du bruit coûte de la variance face à sa baseline. Probabilité de >= 3 rejets sur 12 mondes à 5,5 % : ~2,7 %.
 - **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240

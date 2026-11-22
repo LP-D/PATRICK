@@ -11,7 +11,7 @@ import pandas as pd
 
 from patrick.config.defaults import DESCRIPTIVE_HORIZONS
 from patrick.config.target_label import is_alpha_label
-from patrick.numeric import is_nan
+from patrick.core.numeric import is_nan
 from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
 from patrick.validation.pbo_reliability import pbo_reliability

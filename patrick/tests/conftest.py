@@ -2,11 +2,22 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from patrick.tracking import db as trackdb
+
+# Les tests sont rangés par domaine (`tests/fund/`, `tests/webapp/`...) mais certains réutilisent les aides d'un autre fichier de
+# test (`from test_fund_selection import World`). Chaque dossier de domaine est donc importable, quel que soit l'ordre dans lequel
+# pytest (ou un processus pytest-xdist) les découvre. `golden/` et `js/` ne contiennent que des données.
+_TESTS_DIR = Path(__file__).resolve().parent
+for _domain in sorted(_TESTS_DIR.iterdir()):
+    if (_domain.is_dir() and _domain.name not in ("golden", "js") and not _domain.name.startswith(("_", "."))
+            and str(_domain) not in sys.path):
+        sys.path.append(str(_domain))
 
 
 def shutdown_loky_workers() -> None:
@@ -58,7 +69,7 @@ def _isolated_feature_pool_cache(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolated_local_cache(tmp_path, monkeypatch):
-    """The local download cache (`patrick/cache_manager.py`, `~/.patrick/cache`) is per test: `ingest()` and the
+    """The local download cache (`patrick/storage/cache_manager.py`, `~/.patrick/cache`) is per test: `ingest()` and the
     downloaders write there, so a test's synthetic frame for a REAL symbol (e.g. `MC.PA`) would otherwise sit in the
     user's cache and be served to a real run for the next 30 days."""
     monkeypatch.setenv("PATRICK_CACHE_ROOT", str(tmp_path / "local_cache"))
@@ -66,7 +77,7 @@ def _isolated_local_cache(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolated_data_root(tmp_path_factory, monkeypatch):
-    """The data root (`patrick/paths.py`: store, models, backups, archive, reports) is per test: nothing a test writes may
+    """The data root (`patrick/core/paths.py`: store, models, backups, archive, reports) is per test: nothing a test writes may
     land in the machine's real data folder. A test that wants an unconfigured PC removes `PATRICK_DATA_ROOT`. Created next
     to `tmp_path`, not inside it: some tests inspect `tmp_path` as an empty folder."""
     monkeypatch.setenv("PATRICK_DATA_ROOT", str(tmp_path_factory.mktemp("data_root")))
@@ -131,7 +142,7 @@ def _testclient_host(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fake_task(monkeypatch):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     fake = FakeScheduledTask()
     monkeypatch.setattr(sync, "register_task", fake.register)

@@ -98,7 +98,7 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     excluding `d` itself. This is a leak distinct from the one
     `validation/purge.py` fixes (which only acts downstream, on already-
     built train ROWS, not on the threshold computation itself) -- detected
-    by the future-corruption test (`tests/test_leakage.py`). `ret_tr`
+    by the future-corruption test (`tests/pipeline/test_leakage.py`). `ret_tr`
     therefore also excludes these last `horizon` points: only label windows
     entirely before `cut_date` contribute to the threshold fit."""
     s = series.ffill().bfill()

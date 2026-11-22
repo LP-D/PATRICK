@@ -22,8 +22,8 @@ import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from patrick import paths
 from patrick.config.target_label import split_run_label
+from patrick.core import paths
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.tracking import db as trackdb
 from patrick.validation import metric_panel, suspicion

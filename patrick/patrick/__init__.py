@@ -1,6 +1,6 @@
 __version__ = "0.1.0"
 
-# Ré-exports de `patrick.phase9`, chargés À LA DEMANDE (PEP 562) : un `import patrick` ne doit pas tirer
+# Ré-exports de `patrick.research.phase9`, chargés À LA DEMANDE (PEP 562) : un `import patrick` ne doit pas tirer
 # pandas/scikit-learn (~1,7 s) pour le lanceur de bureau (`patrick.desktop`) et les réglages, qui n'en ont
 # pas besoin. `from patrick import DecisionJournal` fonctionne comme avant. Aucun de ces symboles n'a
 # d'appelant réel dans le code applicatif (rapport d'audit, lot 2, item C) : la surface reste large par
@@ -36,7 +36,7 @@ _PHASE9_EXPORTS = (
 
 def __getattr__(name: str):
     if name in _PHASE9_EXPORTS:
-        from patrick import phase9
+        from patrick.research import phase9
 
         value = getattr(phase9, name)
         globals()[name] = value

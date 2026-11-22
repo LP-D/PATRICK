@@ -26,10 +26,10 @@ import time
 
 from markupsafe import Markup, escape
 
-from patrick import paths
 from patrick.config.instrument_names import INSTRUMENTS
 from patrick.config.target_label import split_run_label
-from patrick.webapp import i18n
+from patrick.core import paths
+from patrick.webapp.i18n import core as i18n
 
 log = logging.getLogger("patrick.instruments")
 

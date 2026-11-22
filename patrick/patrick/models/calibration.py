@@ -9,7 +9,7 @@ calibration and threshold slices are REAL rows: resampling (SMOTE...)
 touches the fit rows only. The Phase 5.3 path calibrated on the resampled
 array (wrong class priors) and took the "most recent 15%" of it, which is
 where imblearn appends its SYNTHETIC rows; `CalibratedClassifierCV(cv=3)`
-also split stratified, not in time. `tests/test_calibration_wf.py`.
+also split stratified, not in time. `tests/models/test_calibration_wf.py`.
 
 Also here: P(up) from class probabilities (classes 2 and 3 = slight and
 strong up), Brier score and expected calibration error of that P(up) --

@@ -1,6 +1,6 @@
 # ADR 0007 — Alignement des cibles de change et audit statistique des fuites de date
 
-Date : 2026-10-28 · Statut : acceptée · Code : `data/session_calendar.py` (`CURRENT_SESSION_RULE`, `session_lag_days(rule=)`, `target_close_hour`), `data/ingest.py` (`_apply_session_lag`, version de cache), `data/alignment.py` (`audit_threshold`, `fred_columns`, règle FRED, `ALIGNMENT_VERSION = 2`), `config/schema.py` (`ObjectiveConfig.session_rule`), `pipeline/engine.py` (`run_pipeline`, `_config_hash`), `validation/suspicion.py` (`alignment_reason`), `tracking/db.py` (`alignment_reasons`), `fund/selection.py` · Tests : `tests/test_fx_alignment.py`, `tests/test_alignment.py`
+Date : 2026-10-28 · Statut : acceptée · Code : `data/session_calendar.py` (`CURRENT_SESSION_RULE`, `session_lag_days(rule=)`, `target_close_hour`), `data/ingest.py` (`_apply_session_lag`, version de cache), `data/alignment.py` (`audit_threshold`, `fred_columns`, règle FRED, `ALIGNMENT_VERSION = 2`), `config/schema.py` (`ObjectiveConfig.session_rule`), `pipeline/engine.py` (`run_pipeline`, `_config_hash`), `validation/suspicion.py` (`alignment_reason`), `tracking/db.py` (`alignment_reasons`), `fund/selection.py` · Tests : `tests/data/test_fx_alignment.py`, `tests/data/test_alignment.py`
 
 ## Contexte
 

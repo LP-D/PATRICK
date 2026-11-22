@@ -9,7 +9,7 @@ STRUCTURAL, NON-NEGOTIABLE CONSTRAINT: this module must NEVER be imported
 by `patrick/selection/*`, `patrick/pipeline/leaderboard.py`, or
 `patrick/tuning/*` -- the holdout must never influence a config choice,
 only document it after the fact. Guaranteed by
-`tests/test_holdout_diagnostic_isolation.py` (static inspection of these
+`tests/tracking/test_holdout_diagnostic_isolation.py` (static inspection of these
 modules' imports), not just by convention.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ import sqlite3
 import numpy as np
 from scipy import stats
 
-from patrick.numeric import is_nan
+from patrick.core.numeric import is_nan
 
 
 def write_holdout_diagnostic(conn: sqlite3.Connection, trial_id: int, metrics: dict) -> None:

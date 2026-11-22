@@ -59,7 +59,7 @@ pour deux utilitaires réutilisés tels quels : `wealth.symbols.yahoo_search`
 | `fund/kpis.py` | KPI d'une stratégie à partir de la série de valeur. |
 | `fund/service.py` | Agrégats pour les pages et l'API (une fonction par écran). |
 | `fund/store.py` | Persistance des stratégies et des ordres ; validation de la création d'une stratégie. |
-| `webapp/fund_routes.py` | Routes de pages et API, même motif que `wealth_routes.py`. |
+| `webapp/routes/fund.py` | Routes de pages et API, même motif que `routes/wealth.py`. |
 | `templates/simulate.html` (réécrit), `templates/fonds.html` | Pages. |
 | `static/simulate.js` (réécrit), `static/fonds.js` | Interactions et graphiques canvas. |
 | `tracking/migrations/0029_fund.sql` | Tables. |

@@ -1,6 +1,6 @@
 # ADR 0012 — Les actions dans leur vrai groupe, features de contexte de marché
 
-Date : 2026-10-30 · Statut : acceptée · Code : `config/equity_universe.py`, `config/equity_context.py`, `features/equity_context.py`, `pipeline/engine.py` (`_build_base_feature_pool`, `_config_hash`), `webapp/forms.py` (`universe_excluding`), `config/defaults.py` (`MACRO_ONLY_FRED_SERIES`) · Tests : `tests/test_equity_context.py`, `tests/test_equity_asset_class.py`, `tests/test_extended_fred_series.py`
+Date : 2026-10-30 · Statut : acceptée · Code : `config/equity_universe.py`, `config/equity_context.py`, `features/equity_context.py`, `pipeline/engine.py` (`_build_base_feature_pool`, `_config_hash`), `webapp/forms.py` (`universe_excluding`), `config/defaults.py` (`MACRO_ONLY_FRED_SERIES`) · Tests : `tests/features/test_equity_context.py`, `tests/data/test_equity_asset_class.py`, `tests/data/test_extended_fred_series.py`
 
 ## Contexte
 

@@ -1,5 +1,5 @@
 // Tests des fonctions pures de la page Placements (static/placements.js) : choix de la meilleure allocation, CSV, couleurs de corrélation.
-// Lancé par tests/test_placements_page.py ; sans DOM.
+// Lancé par tests/webapp/test_placements_page.py ; sans DOM.
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");

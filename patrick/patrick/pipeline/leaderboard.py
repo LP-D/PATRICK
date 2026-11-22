@@ -2,7 +2,7 @@
 "push every checkpoint to a Git branch" with a plain disk write, now that the
 machine is persistent.
 
-Ranking rules (see `tests/test_selection_determinism.py`):
+Ranking rules (see `tests/models/test_selection_determinism.py`):
 - a configuration is ranked on its walk-forward MEAN over the folds it was
   evaluated on, never on its single best fold (F07: ranking on the max of
   noisy per-fold scores selects the luckiest configuration and inflates the

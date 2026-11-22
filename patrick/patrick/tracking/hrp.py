@@ -6,7 +6,7 @@ Aucun rendement espere requis (contrairement a Markowitz) ; par construction,
 n'inverse jamais la matrice de covariance globale (seulement des IVP locaux
 par sous-cluster), d'ou sa robustesse au bruit d'estimation sur une matrice
 quasi-singuliere (cluster fortement correle) -- voir
-`tests/test_hrp.py::test_hrp_does_not_concentrate_extremely_on_a_near_singular_covariance`
+`tests/tracking/test_hrp.py::test_hrp_does_not_concentrate_extremely_on_a_near_singular_covariance`
 pour la comparaison directe avec un Markowitz min-variance classique sur la
 meme matrice.
 

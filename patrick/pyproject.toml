@@ -103,11 +103,11 @@ only_mutate = [
     "patrick/validation/embargo.py",
 ]
 pytest_add_cli_args_test_selection = [
-    "tests/test_dsr.py",
-    "tests/test_fdr.py",
-    "tests/test_diebold_mariano.py",
-    "tests/test_pbo.py",
-    "tests/test_cpcv.py",
-    "tests/test_purge.py",
-    "tests/test_splitters_properties.py",
+    "tests/validation/test_dsr.py",
+    "tests/validation/test_fdr.py",
+    "tests/validation/test_diebold_mariano.py",
+    "tests/validation/test_pbo.py",
+    "tests/validation/test_cpcv.py",
+    "tests/validation/test_purge.py",
+    "tests/validation/test_splitters_properties.py",
 ]

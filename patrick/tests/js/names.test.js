@@ -1,4 +1,4 @@
-// Tests de static/names.js (noms d'affichage des instruments côté navigateur). Lancé par tests/test_instrument_names.py ;
+// Tests de static/names.js (noms d'affichage des instruments côté navigateur). Lancé par tests/webapp/test_instrument_names.py ;
 // sans DOM : un faux `document` ne sait servir que le bloc JSON `instrument-names`.
 "use strict";
 const assert = require("node:assert/strict");

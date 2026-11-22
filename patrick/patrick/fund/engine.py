@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.fund import fees as fees_mod
 
 EPS = 1e-9

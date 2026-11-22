@@ -1,7 +1,7 @@
 """Prints the runner's numeric environment as a GitHub annotation (readable on
 the run page and through the check-runs API): the CPU and what it selects,
 the OpenBLAS kernel and numpy's SIMD level -- what the golden master of
-`run_pipeline` depends on (patrick/tests/test_run_pipeline_golden.py)."""
+`run_pipeline` depends on (patrick/tests/pipeline/test_run_pipeline_golden.py)."""
 import platform
 
 import scipy.linalg  # noqa: F401 -- loads scipy's own OpenBLAS

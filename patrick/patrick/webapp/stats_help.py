@@ -3,7 +3,7 @@
 `build` transforme le détail d'un run (`tracking/history.py::run_detail`) en une liste d'éléments prêts à afficher : pour
 chaque résultat statistique, sa valeur sur CE run, ce qu'elle signifie et la réserve à garder en tête ; puis la procédure
 réellement appliquée (données, validation, holdout, test, correction). Aucun texte ici : seulement des clés de traduction
-(`i18n_pages.py`) et leurs arguments."""
+(`i18n/pages.py`) et leurs arguments."""
 from __future__ import annotations
 
 DEFAULT_DM_ALPHA = 0.05

@@ -12,16 +12,16 @@ import os
 
 import typer
 
-from patrick import paths
-from patrick import predict as predict_module
-from patrick import worker as worker_module
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
+from patrick.core import paths
 from patrick.data.ingest import ingest
 from patrick.data.store import DataStore
-from patrick.keep_awake import keep_awake
+from patrick.live import predict as predict_module
 from patrick.pipeline.engine import run_pipeline
-from patrick.storage_cli import storage_app
+from patrick.storage.cli import storage_app
+from patrick.system import worker as worker_module
+from patrick.system.keep_awake import keep_awake
 from patrick.tracking import db as trackdb
 from patrick.tracking import report as report_module
 
@@ -322,7 +322,7 @@ def serve_cmd(
 def amplitude_test_cmd() -> None:
     """Envoie à Amplitude l'événement `app_started` (même code que le démarrage de l'interface web) et affiche
     la réponse. Nécessite la variable d'environnement AMPLITUDE_API_KEY (AMPLITUDE_REGION=eu pour l'Europe)."""
-    from patrick import amplitude
+    from patrick.webapp import amplitude
     if not amplitude.enabled():
         typer.echo(f"{amplitude.ENV_API_KEY} est absente : rien n'est envoyé.")
         raise typer.Exit(code=1)
@@ -337,7 +337,7 @@ def audit_degradation_cmd(
     targets: str = typer.Option(
         None, "--targets",
         help="Symboles cibles séparés par des virgules (défaut : 1 indice US, 1 action "
-             "europe, 1 paire FX, 1 matière première, 1 crypto -- cf. patrick/audit.py::DEFAULT_TARGETS)"),
+             "europe, 1 paire FX, 1 matière première, 1 crypto -- cf. patrick/audit/degradation.py::DEFAULT_TARGETS)"),
     seed: int = typer.Option(42, "--seed", help="Seed unique, identique aux 4 configurations"),
     output_dir: str = typer.Option(
         "runs/audit_degradation", "--output-dir", help="Dossier de sortie des runs + du CSV/markdown"),
@@ -348,7 +348,7 @@ def audit_degradation_cmd(
     on the same target/seed universe. Runs the real pipeline (yfinance/FRED
     network access required); fails explicitly if FRED_API_KEY is not set
     (the +vintages configuration is meaningless without it)."""
-    from patrick import audit as audit_module
+    from patrick.audit import degradation as audit_module
 
     target_list = None
     if targets:
@@ -382,7 +382,7 @@ def audit_speed_cmd(
     part des features retenues par les modèles exportés, fréquences de
     sélection walk-forward et coût mesuré, par famille de features. Lecture
     seule : n'entraîne ni n'exporte aucun modèle."""
-    from patrick import audit_speed
+    from patrick.audit import speed as audit_speed
     from patrick.config.schema import RunConfig
     from patrick.data.store import DataStore
     from patrick.pipeline.engine import build_base_feature_pool, build_parametric_pool
@@ -472,7 +472,7 @@ def audit_placebo_panel_cmd(
     """Met en file un petit panel de runs légers pour obtenir leur placebo de décalage (ADR 0008, 0013) : les mêmes réglages sur le
     holdout avec toutes les variables retardées d'un jour de plus. Un signal qui s'effondre repose sur l'information du jour même.
     Les runs passent par la file ordinaire (un worker est lancé si besoin) ; lis le résultat avec `audit placebo-report`."""
-    from patrick import audit_placebo
+    from patrick.audit import placebo as audit_placebo
 
     try:
         hs = tuple(sorted({int(h) for h in horizons.split(",") if h.strip()}))
@@ -494,7 +494,7 @@ def audit_placebo_report_cmd(
 ) -> None:
     """Résultat du placebo de décalage : par run puis par classe d'actifs et horizon, AUC réelle contre AUC avec les variables retardées d'un jour
     de plus, et part des runs au verdict « jour même » (signal qui repose sur l'information du jour)."""
-    from patrick import audit_placebo
+    from patrick.audit import placebo as audit_placebo
     from patrick.tracking import db as trackdb
 
     conn = trackdb.connect()
@@ -742,7 +742,7 @@ def sync_push_cmd(
     force: bool = typer.Option(False, "--force", help="Écraser un partage dont ce PC n'a pas fusionné le contenu"),
 ) -> None:
     """Publie la base (sans patrimoine ni fonds perso), les modèles et le magasin de données."""
-    from patrick import sync
+    from patrick.sync import core as sync
 
     if to != "github" and not force:
         stamp = sync.remote_stamp(to)
@@ -778,7 +778,7 @@ def sync_pull_cmd(
 ) -> None:
     """Restaure le partage sur ce PC : la recherche vient du partage, le patrimoine local est conservé
     (la base locale est sauvegardée avant remplacement)."""
-    from patrick import sync
+    from patrick.sync import core as sync
     from patrick.tracking import jobs as jobs_db
 
     db_path = trackdb.default_db_path()
@@ -806,7 +806,7 @@ def sync_pull_cmd(
 
 
 def _sync_folder(folder: str | None) -> str:
-    from patrick import sync
+    from patrick.sync import core as sync
 
     folder = folder or sync.configured_folder()
     if not folder:
@@ -826,7 +826,8 @@ def sync_setup_cmd(
                                                "Défaut : inchangé (aucun PC n'est référence)"),
 ) -> None:
     """Enregistre le dossier de partage de CE PC (à faire une fois par PC) : `sync auto` s'en sert."""
-    from patrick import settings, sync
+    from patrick.core import settings
+    from patrick.sync import core as sync
 
     if not os.path.isdir(folder):
         typer.echo(f"Dossier introuvable : {folder}")
@@ -851,7 +852,7 @@ def sync_setup_cmd(
 @sync_app.command(name="status")
 def sync_status_cmd(folder: str = typer.Option(None, "--folder", help="Défaut : le dossier de `sync setup`")) -> None:
     """Dit ce que `sync auto` ferait, sans rien modifier."""
-    from patrick import sync
+    from patrick.sync import core as sync
 
     folder = _sync_folder(folder)
     try:
@@ -880,7 +881,7 @@ def sync_auto_cmd(
 ) -> None:
     """Met ce PC et le partage à niveau : fusionne ce que l'autre PC a publié, publie ce que ce PC a de neuf.
     Sûr : n'écrase jamais un run, attend la fin d'un entraînement, demande que PATRICK soit fermé."""
-    from patrick import sync
+    from patrick.sync import core as sync
 
     folder = _sync_folder(folder)
     lines: list[str] = []
@@ -915,7 +916,7 @@ def sync_merge_cmd(
                                                               "sans toucher à la base locale"),
 ) -> None:
     """Importe la recherche du partage dans la base locale (union : aucun run local n'est perdu)."""
-    from patrick import sync
+    from patrick.sync import core as sync
 
     try:
         res = sync.merge(source, dry_run_to=dry_run_to)
@@ -1058,7 +1059,7 @@ def news_lexicon_cmd(
     clear: bool = typer.Option(False, "--clear", help="Revenir au lexique réduit intégré"),
 ) -> None:
     """Affiche le lexique de sentiment actif et ce qu'il couvre ; avec un fichier, le valide, le branche et renote les nouvelles."""
-    from patrick import settings as machine_settings
+    from patrick.core import settings as machine_settings
     from patrick.text import lexicon, service
 
     if clear:
@@ -1104,7 +1105,7 @@ def news_summary_cmd() -> None:
 @data_app.command(name="status")
 def data_status_cmd() -> None:
     """Où sont les données de ce PC (dossier maison, racine de données), l'espace libre et les chemins qui ne se résolvent plus."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     s = data_move.status()
     if s["data_root"] is None:
@@ -1130,7 +1131,7 @@ def data_status_cmd() -> None:
 @data_app.command(name="init")
 def data_init_cmd(folder: str = typer.Argument(..., help="Racine de données à créer, par exemple \"D:\\PATRICK DATA\"")) -> None:
     """Crée la racine de données et ses sous-dossiers (ne déplace rien et ne change aucun réglage)."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     try:
         root = data_move.init_root(folder)
@@ -1148,7 +1149,7 @@ def data_move_cmd(
     """Déplace les données de ce PC (magasin, modèles, caches, sauvegardes…) vers une nouvelle racine : copie vérifiée, puis
     bascule. La base reste où elle est. À lancer PATRICK fermé, aucun entraînement en cours, dans ton propre terminal (la
     copie peut durer une heure). L'ancien emplacement n'est supprimé que par `--finalize`."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     if finalize:
         if folder:
@@ -1205,7 +1206,7 @@ def data_move_cmd(
 @data_app.command(name="rollback")
 def data_rollback_cmd(force: bool = typer.Option(False, "--force", help="Même si l'application a créé des fichiers sur la nouvelle racine")) -> None:
     """Annule la bascule d'un déplacement (réglage et chemins d'origine rétablis). Impossible après `--finalize`."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     try:
         data_move.rollback(force=force)
@@ -1222,7 +1223,7 @@ def data_use_cmd(
 ) -> None:
     """Change la racine de données SANS rien déplacer (disque mort, dossier déplacé à la main). Refusé si un déplacement est en
     attente (finalise-le ou annule-le d'abord)."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     if bool(folder) == bool(none):
         typer.echo("Refusé : indique un dossier, ou --none (pas les deux, pas aucun).", err=True)

@@ -33,7 +33,7 @@ pipeline d'entraînement : hachage de configuration, golden master et worker son
 |---|---|---|
 | Préréglages Rapide / Standard / Exhaustif | déjà présent | 16 profils dans `config/training_profiles.py` |
 | File d'attente, pause, reprise, ordre, retrait | déjà présent | `/api/jobs/*`, `/api/queue/*` |
-| Estimation de durée, anti-veille | déjà présent | `run_manager._estimated_remaining_s`, `keep_awake.py` |
+| Estimation de durée, anti-veille | déjà présent | `run_manager._estimated_remaining_s`, `system/keep_awake.py` |
 | Divulgation progressive | déjà présent | mode simple / expert du poste de lancement |
 | Notification de fin de run | fait | cloche de la barre supérieure (`run_notify.js`) ; opt-in ; notification du système si le navigateur l'autorise, bandeau dans la page sinon |
 | Modèles de configuration versionnés et différences | fait en partie | les profils du poste de lancement gardent leurs 8 dernières versions et affichent les réglages modifiés à l'enregistrement et au chargement. Pas de menu de versions ni de restauration ; stockage dans le navigateur, donc non partagé entre PC |

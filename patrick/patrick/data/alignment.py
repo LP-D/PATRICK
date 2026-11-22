@@ -33,8 +33,8 @@ import math
 import numpy as np
 import pandas as pd
 
-from patrick.clock import utc_today
 from patrick.config.schema import AlignmentSpec, ObjectiveConfig, UniverseConfig
+from patrick.core.clock import utc_today
 from patrick.data import publication_lag
 from patrick.data.freshness import fred_periodicity
 from patrick.data.session_calendar import FRED_MARKET_CLOSE_UTC_HOUR, target_close_hour

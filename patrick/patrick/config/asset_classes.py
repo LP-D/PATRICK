@@ -4,7 +4,7 @@
 Avant la refonte du 2026-10-09 seules trois classes avaient une page (matières premières, macro, « Actions
 individuelles »), alors que le sélecteur de cibles en propose 474 réparties en 22 groupes : indices, cryptos, devises, taux
 et ETF n'avaient aucune page. Chaque groupe appartient maintenant à une classe, et un test vérifie qu'aucun groupe n'est
-oublié (`tests/test_asset_classes.py`) : un groupe ajouté demain sans classe fait échouer la suite.
+oublié (`tests/webapp/test_asset_classes.py`) : un groupe ajouté demain sans classe fait échouer la suite.
 """
 from __future__ import annotations
 

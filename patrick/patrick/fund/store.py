@@ -10,7 +10,7 @@ import uuid
 
 import pandas as pd
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.wealth.ledger import PEA_DEPOSIT_CAP_EUR
 
 WRAPPERS = ("PEA", "CTO")

@@ -22,4 +22,4 @@ Le test de Diebold-Mariano (DM) compare un modèle à sa meilleure baseline sur 
 - Avec un holdout de 15 mois, le DM n'est plus calculé dès h ≈ 21 (donc pas à 252, ni aux horizons « descriptifs » 504 et 756).
 - Le DM est peu puissant (aucune p-value « meilleur » < 5 % sur trois mondes à signal fort) : il protège, il ne démontre pas.
   Un score continu (Brier, log-loss) serait plus puissant ; non fait.
-- Le seuil de 15 n'est pas une convention : il vient de la simulation, et `tests/test_diebold_mariano.py` en garde la frontière.
+- Le seuil de 15 n'est pas une convention : il vient de la simulation, et `tests/validation/test_diebold_mariano.py` en garde la frontière.

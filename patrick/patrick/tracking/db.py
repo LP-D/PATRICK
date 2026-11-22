@@ -22,10 +22,10 @@ import zlib
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
-from patrick import paths
 from patrick.config.defaults import ALL_DL_ALGOS
 from patrick.config.target_label import ALPHA_SEP
-from patrick.numeric import is_nan
+from patrick.core import paths
+from patrick.core.numeric import is_nan
 from patrick.tracking import class_balance
 from patrick.tracking.manifest import launch_manifest
 from patrick.validation import metric_panel, suspicion

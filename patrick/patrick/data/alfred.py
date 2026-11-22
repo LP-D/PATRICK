@@ -29,8 +29,8 @@ import numpy as np
 import pandas as pd
 import requests
 
-from patrick.cache_manager import LocalCache
 from patrick.data import publication_lag
+from patrick.storage.cache_manager import LocalCache
 
 API_BASE = "https://api.stlouisfed.org/fred"
 OBSERVATIONS_URL = f"{API_BASE}/series/observations"
@@ -189,7 +189,7 @@ def _from_payload(payload: dict) -> tuple[pd.DataFrame, pd.Series, str | None]:
 
 
 def _fresh(meta: dict, ttl_hours: float) -> bool:
-    from patrick.clock import parse_utc, utc_now
+    from patrick.core.clock import parse_utc, utc_now
     try:
         return (utc_now() - parse_utc(meta["updated_at"])).total_seconds() < ttl_hours * 3600
     except (KeyError, TypeError, ValueError):

@@ -9,27 +9,27 @@ dans ce chantier), **Bloqué** (dépend d'une donnée ou d'une licence absente),
 | Item | Statut | Preuve / raison |
 |---|---|---|
 | Rebase de `feature/replay-cache-universe` | Obsolète | Branche fusionnée et supprimée : cache SHAP (`ad5ff07`) et réduction d'univers par pli (`1c2b49a`) sont sur `main`. |
-| Preuve TDD rétroactive du cache (phase 2) | Fait | `ad5ff07` : « ported with mutation proof » ; `tests/test_selection_cache.py`, `tests/test_vol_model_cache.py`. |
-| Qualification de `repro_gspc_isinf.py` | Obsolète | Script absent de l'historique. Le défaut ±inf est couvert par `tests/test_inf_features.py`, `tests/test_inf_export_predict.py` et `METHODOLOGY.md` §13. |
+| Preuve TDD rétroactive du cache (phase 2) | Fait | `ad5ff07` : « ported with mutation proof » ; `tests/models/test_selection_cache.py`, `tests/features/test_vol_model_cache.py`. |
+| Qualification de `repro_gspc_isinf.py` | Obsolète | Script absent de l'historique. Le défaut ±inf est couvert par `tests/features/test_inf_features.py`, `tests/tracking/test_inf_export_predict.py` et `METHODOLOGY.md` §13. |
 
 ## Intégrité statistique
 
 | Item | Statut | Preuve / raison |
 |---|---|---|
-| F01 lag de publication FRED (point-in-time) | Fait | `data/publication_lag.py`, ALFRED par défaut (`74e3ffe`), `tests/test_fred_point_in_time.py`. |
+| F01 lag de publication FRED (point-in-time) | Fait | `data/publication_lag.py`, ALFRED par défaut (`74e3ffe`), `tests/data/test_fred_point_in_time.py`. |
 | F09/F10 et violations DTZ | Fait (partiel) | `ruff check` passe, DTZ explicite (`52713b6`). Les identifiants F09/F10 n'existent pas dans le dépôt : rien à traiter sans l'audit d'origine. |
-| F02 purge/embargo dans la CV d'Optuna | Fait | `tests/test_optuna_inner_cv_purge.py`. |
-| F03 registre d'essais persistant (DSR) | Fait | `trial_registry`, `tests/test_trial_registry.py`. |
+| F02 purge/embargo dans la CV d'Optuna | Fait | `tests/models/test_optuna_inner_cv_purge.py`. |
+| F03 registre d'essais persistant (DSR) | Fait | `trial_registry`, `tests/tracking/test_trial_registry.py`. |
 | F04 correction HLN de Diebold-Mariano | Fait | `validation/diebold_mariano.py`, `docs/ways-of-working.md`. |
-| Diebold-Mariano aux horizons longs (audit externe, 19/10) | **Livré 19/10** | Mesuré par simulation : le test à 5 % rejetait H0 ~22 % du temps à h=120 et plus de 80 % à h=504 (holdout de 15 mois), HLN compris. Sous 15 blocs indépendants (n/h) le DM est non testable ; `validation/diebold_mariano.py`, `METHODOLOGY.md` §4, `tests/test_diebold_mariano.py`. |
-| Fuite CPCV des interactions (audit externe, 19/10) | **Livré 19/10** | Les formules étaient découvertes une fois sur le groupe 0 (groupe de test de 6 combinaisons sur 21). Une découverte par combinaison, sur ses barres d'entraînement purgées ; le modèle exporté a la sienne (tout l'historique). `pipeline/engine.py::_cpcv_interaction_formulas`, `tests/test_cpcv_interaction_leak.py`. Golden CPCV à régénérer (`golden-regen/…`). Reste approximé : seuils de classes et régimes fixés sur le groupe 0. |
+| Diebold-Mariano aux horizons longs (audit externe, 19/10) | **Livré 19/10** | Mesuré par simulation : le test à 5 % rejetait H0 ~22 % du temps à h=120 et plus de 80 % à h=504 (holdout de 15 mois), HLN compris. Sous 15 blocs indépendants (n/h) le DM est non testable ; `validation/diebold_mariano.py`, `METHODOLOGY.md` §4, `tests/validation/test_diebold_mariano.py`. |
+| Fuite CPCV des interactions (audit externe, 19/10) | **Livré 19/10** | Les formules étaient découvertes une fois sur le groupe 0 (groupe de test de 6 combinaisons sur 21). Une découverte par combinaison, sur ses barres d'entraînement purgées ; le modèle exporté a la sienne (tout l'historique). `pipeline/engine.py::_cpcv_interaction_formulas`, `tests/validation/test_cpcv_interaction_leak.py`. Golden CPCV à régénérer (`golden-regen/…`). Reste approximé : seuils de classes et régimes fixés sur le groupe 0. |
 | Registre d'accès au holdout (audit externe, 19/10) | **Livré 19/10** | Table `holdout_access` (migration 0038) écrite par `_evaluate_holdout`, seule fonction qui lit le holdout : évaluation finale, diagnostic, duel champion / challenger. Compte par cible / horizon (`trackstats.holdout_reads`), affiché sur la page d'un run, fusionné entre PC. Démarre à sa création ; le simulateur (relecture des prédictions holdout stockées) n'y est pas encore compté. |
 | Garde-fous git (audit externe, 19/10) | **Livré 20/10** | `.gitignore` (`.env`, bases SQLite, `runs/`, `.claude/` sauf `settings.json`), hook `.githooks/pre-push` (ni suppression, ni push forcé hors `wip/`, `tmp/`, `golden-regen/`), `scripts/git_facts.sh` (faits bruts), fixture `test_wealth_importer` rendue synthétique. L'historique public garde l'ancienne fixture : sa purge demande de réécrire l'historique, non fait. |
-| Test de validité sur marche aléatoire (audit externe, 19/10) | **Livré 20/10** | `tests/test_null_world_validity.py` : 12 mondes nuls + 3 mondes à signal. BH 0 rejet, PBO moyen 0,59, DSR bas ; mais DM bilatéral à surveiller (3/12 côté « pire ») et DM peu puissant : `KNOWN_ISSUES.md`. |
-| F05 famille BH avec cibles CPCV | Fait | `tests/test_fdr_family.py::test_cpcv_only_targets_count_in_the_bh_family`. |
-| F06 test / holdout / live séparés dans `/simulate` | Fait | `tests/test_simulate_segments.py`. |
-| Reproductibilité de la sélection entre OS | Fait | `tests/test_selection_determinism.py` (tri stable, graine). |
-| Bug de snapshot dans `explain.py` | Fait | `tests/test_explain_snapshot.py`. |
+| Test de validité sur marche aléatoire (audit externe, 19/10) | **Livré 20/10** | `tests/pipeline/test_null_world_validity.py` : 12 mondes nuls + 3 mondes à signal. BH 0 rejet, PBO moyen 0,59, DSR bas ; mais DM bilatéral à surveiller (3/12 côté « pire ») et DM peu puissant : `KNOWN_ISSUES.md`. |
+| F05 famille BH avec cibles CPCV | Fait | `tests/validation/test_fdr_family.py::test_cpcv_only_targets_count_in_the_bh_family`. |
+| F06 test / holdout / live séparés dans `/simulate` | Fait | `tests/fund/test_simulate_segments.py`. |
+| Reproductibilité de la sélection entre OS | Fait | `tests/models/test_selection_determinism.py` (tri stable, graine). |
+| Bug de snapshot dans `explain.py` | Fait | `tests/live/test_explain_snapshot.py`. |
 | Réduction d'univers dans chaque pli | Fait | `selection/universe_reduction.py`, `METHODOLOGY.md` §3. |
 | Relance des runs de référence (GSPC) | Fait | 12 champions refaits les 9-10/10 après la fuite ; `docs/research/fuite-f1-parfait-2026-10-09.md`. |
 
@@ -42,9 +42,9 @@ dans ce chantier), **Bloqué** (dépend d'une donnée ou d'une licence absente),
 | ruff local et 159 violations | Fait | `ruff check patrick tests` : All checks passed. |
 | Fraîcheur sur tous les tickers | Fait | `b458d5a` ; page `/data-freshness`. |
 | Cache « calculer une fois » par (vintage, fold) | Fait | `features/pool_cache.py` (clé = hash du contenu × coupe du pli × code). |
-| Refactor de `run_pipeline` par golden master | Fait | Étapes `_scan_*`, `_tune`, `_export_tables` ; `tests/test_run_pipeline_golden.py` (lié à l'environnement). |
-| Audit de vitesse | Fait | `docs/audits/audit-vitesse-2026-09-25.md`, `patrick/audit_speed.py`. |
-| `n_jobs` borné | Fait | `MODEL_N_JOBS = 1`, `resource_budget.py`. |
+| Refactor de `run_pipeline` par golden master | Fait | Étapes `_scan_*`, `_tune`, `_export_tables` ; `tests/pipeline/test_run_pipeline_golden.py` (lié à l'environnement). |
+| Audit de vitesse | Fait | `docs/audits/audit-vitesse-2026-09-25.md`, `patrick/audit/speed.py`. |
+| `n_jobs` borné | Fait | `MODEL_N_JOBS = 1`, `system/resource_budget.py`. |
 | Enquête sur la tâche planifiée autonome | Fait | `docs/ops/taches-planifiees-agents.md` (origine non localisée, garde-fou posé). |
 | `ways-of-working` et `MASTER.md` (levée DL / stacking) | Fait / Obsolète | `docs/ways-of-working.md` à jour ; `MASTER.md` est le système de design, sans rapport avec la levée. |
 
@@ -111,8 +111,8 @@ mot ne dépend pas de l'actif ; le lexique intégré est réduit.
 | Gestion réelle et fictive | Fait | `wealth/` + `fund/` (page `/fonds`). |
 | `/simulate` étendu au patrimoine | Obsolète | Remplacé par la refonte Simulation/Fonds (`docs/superpowers/specs/2026-10-03-fonds-simulation-socle-design.md`). |
 | Covariance Ledoit-Wolf, IPO sans historique (D.A.T.E) | Fait | `tracking/covariance.py`, `wealth/performance.py` (proxy `history_proxies`). |
-| Benchmark en colonne | Fait | `tests/test_benchmark_column.py`. |
+| Benchmark en colonne | Fait | `tests/webapp/test_benchmark_column.py`. |
 | Univers massivement élargi | Fait | `config/universe_extension.py`. |
 | Prétraitement par corrélations avant entraînement | Fait | `selection/universe_reduction.py`. |
-| Infobulles régime, HRP, BL, sentiment | Fait + **Livré 18/10** | Régime et HRP existaient ; BL et sentiment ajoutés (`webapp/glossary_text.py`). |
+| Infobulles régime, HRP, BL, sentiment | Fait + **Livré 18/10** | Régime et HRP existaient ; BL et sentiment ajoutés (`webapp/glossary/text.py`). |
 | Page de flux de news et de sentiment par actif | **Livré 18/10** | `/news`. |

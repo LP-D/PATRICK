@@ -8,7 +8,7 @@ Statut : approuvé (design), en attente de plan d'implémentation
 Un run = un target (ex. `^VIX`), multi-horizons dans le run, mais un seul
 target par soumission de formulaire aujourd'hui. La queue de jobs
 (`patrick/tracking/jobs.py`, table `job`) est déjà strictement FIFO,
-consommée par un unique worker (`patrick/worker.py`) : soumettre N jobs les
+consommée par un unique worker (`patrick/system/worker.py`) : soumettre N jobs les
 enchaîne automatiquement, sans rien construire de neuf côté orchestration.
 
 Univers configuré = 550 tickers possibles (`DEFAULT_TARGET_GROUPS`), à ~9h+

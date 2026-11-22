@@ -286,8 +286,8 @@ def validate_output_dir(raw: str, errors: list[str]) -> bool:
     `PATRICK_STORE_ROOT` already accept an arbitrary absolute path the same
     way, by design), and an explicit absolute path is an intentional,
     already-tested feature of this field
-    (`tests/test_webapp_forms.py::test_build_config_dict_respects_explicit_output_dir`,
-    `tests/test_webapp_smoke.py::test_batch_submit_queues_one_job_per_target`
+    (`tests/webapp/test_webapp_forms.py::test_build_config_dict_respects_explicit_output_dir`,
+    `tests/webapp/test_webapp_smoke.py::test_batch_submit_queues_one_job_per_target`
     both submit an absolute `tmp_path`-based `output_dir` and expect it
     honored verbatim) -- restricting `output_dir` to a single allowed root
     would break that already-tested, intended behavior. The real, narrower
@@ -609,7 +609,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
     # gate still reported it as feasible. Moved here (after both parsing
     # blocks above) and threaded through explicitly so the check always
     # reflects the ACTUAL walk-forward split this run will use --
-    # see tests/test_webapp_forms.py::
+    # see tests/webapp/test_webapp_forms.py::
     # test_build_config_dict_rejects_horizon_infeasible_under_the_actually_submitted_n_wf_folds.
     if target_symbol in TARGET_SOURCE_BY_SYMBOL:
         for h in dict.fromkeys(horizons):

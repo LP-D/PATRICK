@@ -33,7 +33,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from patrick import feature_cache_share, paths
+from patrick.core import paths
+from patrick.sync import feature_cache_share
 
 _FEATURE_SOURCES = (
     "technical.py", "spike.py", "vol_models.py", "macro.py", "guida.py",
@@ -96,7 +97,7 @@ def float32_enabled() -> bool:
     env = os.environ.get("PATRICK_FEATURE_CACHE_FLOAT32")
     if env is not None:
         return env == "1"
-    from patrick import settings
+    from patrick.core import settings
     return bool(settings.load().get("feature_cache_float32", False))
 
 

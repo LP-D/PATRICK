@@ -4,7 +4,7 @@
 servent-ils à quelque chose ?
 
 **Outil** : `patrick audit speed --db <base> --target <ticker> --output <md>`
-(`patrick/audit_speed.py`). Il croise trois sources :
+(`patrick/audit/speed.py`). Il croise trois sources :
 
 1. **Usage** — les features des modèles exportés (`drift_reference`, une ligne
    par feature retenue par le modèle final de chaque horizon) et la somme des

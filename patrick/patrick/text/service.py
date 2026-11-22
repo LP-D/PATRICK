@@ -12,7 +12,7 @@ import sqlite3
 
 import pandas as pd
 
-from patrick import settings as machine_settings
+from patrick.core import settings as machine_settings
 from patrick.text import (
     central_bank,
     events,

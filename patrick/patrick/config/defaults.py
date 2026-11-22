@@ -59,7 +59,7 @@ GUIDA_LOOKBACKS: tuple[int, ...] = (10, 22, 44, 66, 88, 130, 200, 252, 300, 382,
 
 # Global opt-in switch (`FeaturesConfig.enable_guida_features`, config/schema.py):
 # False by default -- the scan-cost impact of the 14-lookback grid (measured in
-# `tests/test_guida_scan_cost.py`) has not been judged against a default-on
+# `tests/features/test_guida_scan_cost.py`) has not been judged against a default-on
 # activation; this is a research-platform toggle, not a production default.
 DEFAULT_ENABLE_GUIDA_FEATURES = False
 DEFAULT_POOL_PREFILTER = 450
@@ -203,7 +203,7 @@ OPTUNA_PARAM_SPECS: dict[str, dict[str, dict]] = {
 # in `tuning/optuna_runner.py::suggest_params` (VIX_FINAL_OPTUNA methodology):
 # a run that does not customize `tuning.optuna_bounds` must search EXACTLY
 # the same space as before this config surface existed (see
-# `tests/test_optuna_bounds.py::
+# `tests/models/test_optuna_bounds.py::
 # test_default_bounds_match_the_ranges_historically_hardcoded_in_suggest_params`).
 DEFAULT_OPTUNA_BOUNDS: dict[str, dict[str, list[float]]] = {
     "XGBoost": {
@@ -386,7 +386,7 @@ DEFAULT_REGIME_THRESHOLD_VALUES = (1 / 3, 2 / 3)
 # there only as "deeper plumbing, left to a separate phase"). Defaults below
 # are IDENTICAL to those hardcoded function defaults -- an unmodified run
 # computes exactly the same technical features as before this field existed
-# (see tests/test_technical_lookbacks.py::
+# (see tests/features/test_technical_lookbacks.py::
 # test_default_lookback_windows_match_technical_py_hardcoded_defaults).
 DEFAULT_RETURNS_WINDOWS = [1, 5, 10, 20]
 DEFAULT_ZSCORE_WINDOWS = [10, 20, 60]
@@ -404,7 +404,7 @@ DEFAULT_OHLC_VOL_WINDOWS = [10, 20]
 # `Series.pct_change(periods=w)` accepts a NEGATIVE w with NO error at all --
 # it silently shifts the OTHER direction and returns a forward-looking
 # (look-ahead leak) value instead of raising (measured, see
-# tests/test_technical_lookbacks.py::
+# tests/features/test_technical_lookbacks.py::
 # test_returns_silently_looks_ahead_on_negative_window_undocumented_bug).
 # The other three functions use `.rolling(w)`, which pandas already rejects
 # for w<0 (ValueError) but lets w=0 through silently as an all-NaN
@@ -413,7 +413,7 @@ DEFAULT_OHLC_VOL_WINDOWS = [10, 20]
 # `min_allowed=2` for ohlc_vol_windows specifically: `yang_zhang_vol` divides
 # by `(window - 1)`, so window=1 raises ZeroDivisionError deep in the
 # pipeline instead of a clean validation error at config time (measured, see
-# tests/test_technical_lookbacks.py::test_yang_zhang_vol_crashes_on_window_of_one).
+# tests/features/test_technical_lookbacks.py::test_yang_zhang_vol_crashes_on_window_of_one).
 # `max_allowed` is a generous typo guard only (same role as
 # `OPTUNA_PARAM_SPECS`'s envelope) -- an overly large window is already
 # harmless on its own (rolling window just produces NaN for insufficient
@@ -471,7 +471,7 @@ DEFAULT_TARGET_GROUPS = {
     # univers (550 cibles, 13 groupes) retire -- aucune dependance technique
     # trouvee (UniverseConfig est un pool dynamique par run, "tout sauf la
     # cible", pas un graphe de dependances entre tickers precis ; verifie par
-    # grep sur data/session_calendar.py et patrick/audit.py, cf. rapport de
+    # grep sur data/session_calendar.py et patrick/audit/degradation.py, cf. rapport de
     # cette phase). Les groupes retires en integralite : Actions France &
     # Europe (80), ETFs larges & style (31), ETFs sectoriels & thematiques
     # (27), Obligataire & taux ETFs (18), Matieres premieres & devises ETFs
@@ -601,7 +601,7 @@ DEFAULT_FRED_POINT_IN_TIME = "alfred"
 # below). Each id was checked against the FRED API
 # (exists, still published, history back to 2008 at the latest) and its
 # publication delay is in `data/publication_lag.py` (point-in-time alignment,
-# no look-ahead); `tests/test_extended_fred_series.py` keeps the three tables
+# no look-ahead); `tests/data/test_extended_fred_series.py` keeps the three tables
 # (this one, `data/freshness.py`, `data/publication_lag.py`) in sync.
 # Rejected on purpose: ICE BofA sub-indices (FRED serves 3 years of history
 # only), EVZCLS (discontinued 2025-03), and anything already covered by a
@@ -698,7 +698,7 @@ MACRO_ONLY_COLUMNS = frozenset(MACRO_ONLY_FRED_SERIES)
 # inside a section, series are ordered the same way). Every FRED series of the
 # universe -- targetable ("Macro (FRED)" group), feature-only or macro-only --
 # appears in exactly one section, listed by FRED id
-# (`tests/test_extended_fred_series.py` enforces it). Display only: being
+# (`tests/data/test_extended_fred_series.py` enforces it). Display only: being
 # listed here never makes a series a target.
 MACRO_PAGE_SECTIONS: list[tuple[str, list[str]]] = [
     ("key", ["GDP", "A191RL1Q225SBEA", "UNRATE", "PAYEMS", "CPIAUCSL", "PCEPILFE",

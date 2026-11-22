@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 
 MIN_OBS = 750           # ~3 years of sessions: >= 3 walk-forward folds + a 12-month holdout
 MAX_STALE_BDAYS = 7

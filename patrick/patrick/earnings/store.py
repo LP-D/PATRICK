@@ -21,7 +21,7 @@ import math
 import sqlite3
 from datetime import UTC, date, datetime
 
-from patrick.clock import local_now
+from patrick.core.clock import local_now
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS earn_alias (

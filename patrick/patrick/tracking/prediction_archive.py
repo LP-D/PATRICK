@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from patrick import paths
+from patrick.core import paths
 
 SCAN_SPLITS = ("test", "test_path", "valid")
 DEFAULT_TOP_K = 5

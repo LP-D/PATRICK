@@ -775,7 +775,7 @@ Chemins relatifs à `patrick/`.
 | Prévision | `econometrics/forecast_eval.py` (`variance_forecasts`, `compare_forecasts`, `kupiec_pof`, `christoffersen`, `evaluate_forecasts`) | `test_econometrics_forecast.py` |
 | Multivarié | `econometrics/multivariate.py` (`var_analysis`, `johansen`, `vecm`) | `test_econometrics_multivariate.py`, `test_exploration_multivariate.py` |
 | Cache des résultats | `webapp/econometrics_cache.py` | `test_econometrics_routes.py` |
-| Routes et page | `webapp/econometrics_routes.py`, `templates/econometrics.html`, `static/econometrics.js`, `webapp/i18n_econometrics.py` ; multivarié : `webapp/exploration_routes.py`, `static/exploration.js` | `test_econometrics_routes.py`, `test_exploration_multivariate.py` |
+| Routes et page | `webapp/routes/econometrics.py`, `templates/econometrics.html`, `static/econometrics.js`, `webapp/i18n/econometrics.py` ; multivarié : `webapp/routes/exploration.py`, `static/exploration.js` | `test_econometrics_routes.py`, `test_exploration_multivariate.py` |
 | Comparaison et correction | `validation/diebold_mariano.py`, `validation/fdr.py` (existants, réutilisés) | tests existants |
 
 Cadrage de la conception : `docs/superpowers/specs/2026-11-03-econometrie-serie-design.md`.

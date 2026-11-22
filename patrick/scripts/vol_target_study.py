@@ -19,7 +19,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
-from patrick import paths
+from patrick.core import paths
 
 warnings.filterwarnings("ignore")
 CACHE = str(paths.cache_dir())
