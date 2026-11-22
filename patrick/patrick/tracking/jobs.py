@@ -1,6 +1,6 @@
 """Job queue (Phase 3.1) — persisted in the `job` table (see migration
 `0002_jobs.sql`), consumed by a worker in a separate process
-(`patrick/worker.py`) that polls this table in a loop, rather than a thread
+(`patrick/system/worker.py`) that polls this table in a loop, rather than a thread
 internal to the web process (BackgroundTasks-like, the old `run_manager.py`):
 killing the web process during a run no longer loses the run.
 """

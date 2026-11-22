@@ -7,8 +7,8 @@ import fund_support as fs
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.webapp import fund_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import fund as fund_routes
 
 
 @pytest.fixture

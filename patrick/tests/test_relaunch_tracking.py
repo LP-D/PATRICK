@@ -128,7 +128,7 @@ def test_the_advisor_proposes_a_rebuild_when_input_series_are_gone():
 
 
 def test_the_texts_of_the_new_suggestion_exist_in_both_languages():
-    from patrick.webapp import i18n
+    from patrick.webapp.i18n import core as i18n
 
     for lang in ("fr", "en"):
         t = i18n.translator(lang)
@@ -137,7 +137,7 @@ def test_the_texts_of_the_new_suggestion_exist_in_both_languages():
 
 
 def test_daily_predictions_note_and_clear_failures(tmp_path):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     db_path = str(tmp_path / "live.db")
     db.connect(db_path).close()
@@ -159,7 +159,7 @@ def test_the_failure_tracker_never_holds_the_write_lock_between_predictions(tmp_
     de suivi ; le worker et le serveur recevaient « database is locked » tant que la boucle des prédictions du jour tournait."""
     import sqlite3
 
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     db_path = str(tmp_path / "lock.db")
     db.connect(db_path).close()
@@ -183,7 +183,7 @@ def test_the_failure_tracker_never_holds_the_write_lock_between_predictions(tmp_
 
 
 def test_an_injected_prediction_function_never_writes_to_the_database(tmp_path):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     db_path = str(tmp_path / "never.db")
     cand = live_refresh.PredictCandidate(target="X", horizon=1, run_id="r1", trial_id=1, artifact_path="a")

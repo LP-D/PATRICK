@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from patrick.core.numeric import is_nan
 from patrick.data.store import DataStore
-from patrick.numeric import is_nan
 from patrick.simulate import engine as sim
 from patrick.tracking import db as trackdb
 

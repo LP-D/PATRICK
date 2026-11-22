@@ -16,9 +16,9 @@ import sqlite3
 from collections import defaultdict
 from datetime import UTC, date, datetime
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import universe_extension as UX
+from patrick.core.clock import utc_today
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion

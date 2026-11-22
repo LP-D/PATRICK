@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from patrick import sync_merge
+from patrick.sync import merge as sync_merge
 from patrick.tracking import db
 
 

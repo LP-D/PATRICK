@@ -19,9 +19,10 @@ from pathlib import Path
 
 import psutil
 
-from patrick import paths, sync
+from patrick.core import paths
 from patrick.desktop import prefs, runtime, share, update
 from patrick.desktop.ui import Reporter
+from patrick.sync import core as sync
 
 SERVER_START_TIMEOUT_S = 120
 WINDOW_APPEAR_TIMEOUT_S = 30

@@ -153,7 +153,7 @@ def test_launch_page_uses_clickable_notes_for_long_setup_explanations(tmp_path, 
     assert resp.status_code == 200
     for term in ("universe", "reduction", "data_quality_enabled", "staged_screening", "optuna_bounds"):
         assert f'class="info-icon" data-term="{term}"' in resp.text
-    from patrick.webapp.glossary import GLOSSARY
+    from patrick.webapp.glossary.core import GLOSSARY
     assert GLOSSARY["reduction"]["fr"]
 
 

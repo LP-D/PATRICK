@@ -62,7 +62,7 @@ def test_extended_candidates_are_verified_extension_symbols_outside_the_default_
 def test_individual_equity_groups_added_on_2026_10_07_are_selectable_translated_and_unique():
     """Actions individuelles de l'extension : ciblables au lancement,
     traduites, sans doublon ni cotation double, jamais dans le pool de features."""
-    from patrick.webapp import i18n
+    from patrick.webapp.i18n import core as i18n
 
     groups = {g: items for g, items in UX.EXTENDED_TARGET_GROUPS.items() if g in UX.ADDED_ON_2026_10_07_GROUPS}
     assert set(groups) == set(UX.ADDED_ON_2026_10_07_GROUPS)

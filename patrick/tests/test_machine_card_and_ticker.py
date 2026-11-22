@@ -9,8 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from patrick.tracking import db, jobs
-from patrick.webapp import alerts, i18n
+from patrick.webapp import alerts
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
 
 LAUNCH_PAGES = ("/ml", "/dl", "/rl")
 

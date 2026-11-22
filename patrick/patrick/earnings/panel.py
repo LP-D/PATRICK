@@ -13,7 +13,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from patrick.clock import local_now
+from patrick.core.clock import local_now
 from patrick.earnings import engine, exchanges, store
 from patrick.earnings.config import EarningsConfig
 from patrick.earnings.engine import arr, bhar, rel_index, window_sum

@@ -379,7 +379,7 @@ def test_funds_only_and_skip_funds_exclude_each_other(tmp_path, monkeypatch):
 def _app_finished_a_pass(hours_ago: float = 3) -> None:
     import datetime as dt
 
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     finished = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=hours_ago)).isoformat()
     live_refresh.pass_state_path().write_text(json.dumps(
@@ -406,7 +406,7 @@ def test_force_predictions_redoes_them_despite_a_recent_pass(tmp_path, monkeypat
 
 
 def test_an_old_app_pass_does_not_stop_the_night_and_the_night_leaves_its_marker(tmp_path, monkeypatch):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     mod, db_path, events = _two_batches(tmp_path, monkeypatch)
     _app_finished_a_pass(hours_ago=20)
@@ -420,7 +420,7 @@ def test_an_old_app_pass_does_not_stop_the_night_and_the_night_leaves_its_marker
 
 
 def test_the_halves_of_a_pass_are_always_made_and_never_mark_a_complete_pass(tmp_path, monkeypatch):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     mod, db_path, events = _two_batches(tmp_path, monkeypatch)
     _app_finished_a_pass()
@@ -434,7 +434,7 @@ def test_the_halves_of_a_pass_are_always_made_and_never_mark_a_complete_pass(tmp
 
 
 def test_a_disk_full_night_is_not_marked_as_a_complete_pass(tmp_path, monkeypatch):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     mod, db_path, _ = _two_batches(tmp_path, monkeypatch)
     monkeypatch.setattr(mod, "run_daily_predictions", lambda candidates, db_path=None, on_item=None: mod.RunSummary(aborted="Disque plein"))

@@ -8,7 +8,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from patrick import worker
+from patrick.system import worker
 from patrick.tracking import db, jobs
 from patrick.webapp import run_manager
 from patrick.webapp.app import app

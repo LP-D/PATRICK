@@ -14,10 +14,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
+from patrick.system import worker as worker_module
 
 # Rapport de correction, D1 : tous les tests de ce fichier lancent un run
 # pipeline complet (16-120s mesurés selon le test) -- exclus par défaut,

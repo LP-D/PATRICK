@@ -8,9 +8,9 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from test_fund_selection import World
 
-from patrick import live_refresh
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.fund import autopilot, store
+from patrick.live import refresh as live_refresh
 from patrick.tracking import db as trackdb
 
 

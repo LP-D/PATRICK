@@ -96,7 +96,7 @@ déjà lancé ou un enfant `joblib` qui importerait le nouveau code se comporte 
   `_config_hash` d'un run de machine learning sont identiques à ceux d'avant (reprise des runs, noms d'études Optuna).
 - **Optuna des réseaux** : structure et bornes dans `DL_OPTUNA_PARAM_SPECS` / `DL_DEFAULT_OPTUNA_BOUNDS` (pas dans les dictionnaires ML) ;
   `suggest_params` lit les deux ; le formulaire n'écrit que les bornes des réseaux choisis.
-- **RL** : le formulaire est `webapp/forms_rl.py`, les routes `webapp/rl_routes.py` (`/rl`, `/api/rl/runs`) ; l'avancement, la pause, l'arrêt
+- **RL** : le formulaire est `webapp/forms_rl.py`, les routes `webapp/routes/rl.py` (`/rl`, `/api/rl/runs`) ; l'avancement, la pause, l'arrêt
   et les fichiers passent par les routes génériques des jobs. `/runs/<id>` d'un job RL redirige vers `/rl?open=<id>`. Le Sharpe déflaté compte
   les runs RL terminés sur la cible (le job courant exclu).
 - **Exploration** : `exploration_routes.get_panel` construit un panneau par sélection une seule fois même si plusieurs études le demandent

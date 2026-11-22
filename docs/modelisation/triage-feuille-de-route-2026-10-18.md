@@ -43,8 +43,8 @@ dans ce chantier), **Bloqué** (dépend d'une donnée ou d'une licence absente),
 | Fraîcheur sur tous les tickers | Fait | `b458d5a` ; page `/data-freshness`. |
 | Cache « calculer une fois » par (vintage, fold) | Fait | `features/pool_cache.py` (clé = hash du contenu × coupe du pli × code). |
 | Refactor de `run_pipeline` par golden master | Fait | Étapes `_scan_*`, `_tune`, `_export_tables` ; `tests/test_run_pipeline_golden.py` (lié à l'environnement). |
-| Audit de vitesse | Fait | `docs/audits/audit-vitesse-2026-09-25.md`, `patrick/audit_speed.py`. |
-| `n_jobs` borné | Fait | `MODEL_N_JOBS = 1`, `resource_budget.py`. |
+| Audit de vitesse | Fait | `docs/audits/audit-vitesse-2026-09-25.md`, `patrick/audit/speed.py`. |
+| `n_jobs` borné | Fait | `MODEL_N_JOBS = 1`, `system/resource_budget.py`. |
 | Enquête sur la tâche planifiée autonome | Fait | `docs/ops/taches-planifiees-agents.md` (origine non localisée, garde-fou posé). |
 | `ways-of-working` et `MASTER.md` (levée DL / stacking) | Fait / Obsolète | `docs/ways-of-working.md` à jour ; `MASTER.md` est le système de design, sans rapport avec la levée. |
 
@@ -114,5 +114,5 @@ mot ne dépend pas de l'actif ; le lexique intégré est réduit.
 | Benchmark en colonne | Fait | `tests/test_benchmark_column.py`. |
 | Univers massivement élargi | Fait | `config/universe_extension.py`. |
 | Prétraitement par corrélations avant entraînement | Fait | `selection/universe_reduction.py`. |
-| Infobulles régime, HRP, BL, sentiment | Fait + **Livré 18/10** | Régime et HRP existaient ; BL et sentiment ajoutés (`webapp/glossary_text.py`). |
+| Infobulles régime, HRP, BL, sentiment | Fait + **Livré 18/10** | Régime et HRP existaient ; BL et sentiment ajoutés (`webapp/glossary/text.py`). |
 | Page de flux de news et de sentiment par actif | **Livré 18/10** | `/news`. |

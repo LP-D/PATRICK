@@ -7,7 +7,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import settings
+from patrick.core import settings
 from patrick.features import parametric_parallel
 from patrick.webapp.app import app
 
@@ -33,7 +33,7 @@ def test_corrupt_file_falls_back_to_one(tmp_path):
 
 def test_resolve_jobs_uses_setting_then_env_wins(monkeypatch):
     # le plafond de mémoire (`resource_budget.cap_workers`) ne doit pas dépendre de la mémoire libre de la machine qui lance les tests
-    monkeypatch.setattr("patrick.resource_budget.psutil.virtual_memory", lambda: type("M", (), {"available": 16 * 1024**3})())
+    monkeypatch.setattr("patrick.system.resource_budget.psutil.virtual_memory", lambda: type("M", (), {"available": 16 * 1024**3})())
     cpu = os.cpu_count() or 1
     settings.save({settings.KEY_PARAMETRIC_JOBS: 2})
     assert parametric_parallel.resolve_jobs(10) == min(2, cpu)

@@ -94,7 +94,7 @@ def _raw_with_snapshot(snapshot_id: str) -> pd.DataFrame:
 def test_explain_uses_shap_cache_on_second_call(tmp_path, monkeypatch):
     """Second page open for the same (trial, ts, snapshot, code) returns the
     persisted explanation without rebuilding the feature pool."""
-    from patrick import explain as explain_module
+    from patrick.live import explain as explain_module
 
     db_path = str(tmp_path / "patrick.db")
     conn = trackdb.connect(db_path)
@@ -109,7 +109,7 @@ def test_explain_uses_shap_cache_on_second_call(tmp_path, monkeypatch):
 
 
 def test_explain_ignores_a_payload_cached_for_another_snapshot(tmp_path, monkeypatch):
-    from patrick import explain as explain_module
+    from patrick.live import explain as explain_module
 
     db_path = str(tmp_path / "patrick.db")
     conn = trackdb.connect(db_path)
@@ -130,8 +130,8 @@ def test_explain_ignores_a_payload_cached_for_another_snapshot(tmp_path, monkeyp
 
 
 def test_explanation_code_hash_covers_the_feature_code():
-    from patrick import explain as explain_module
     from patrick.features import pool_cache
+    from patrick.live import explain as explain_module
 
     assert explain_module._explanation_code_hash() == explain_module.EXPLANATION_CODE_HASH
     original = pool_cache.FEATURE_CODE_HASH

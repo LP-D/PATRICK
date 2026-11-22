@@ -7,8 +7,10 @@ import fund_support as fs
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.webapp import i18n, i18n_fund, nav_registry
+from patrick.webapp import nav_registry
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.i18n import fund as i18n_fund
 
 XSS = "<script>alert(1)</script>"
 XSS_ESCAPED = "&lt;script&gt;alert(1)&lt;/script&gt;"

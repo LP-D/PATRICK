@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 
 from patrick.fund import service, store
 from patrick.tracking import db as trackdb
-from patrick.webapp import i18n, i18n_fund
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.i18n import fund as i18n_fund
 
 
 @pytest.fixture

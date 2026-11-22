@@ -287,7 +287,7 @@ def test_the_exported_file_holds_only_the_funds(pcs):
 
 
 def test_the_loser_is_saved_in_the_data_root_backups_when_no_folder_is_given(pcs):
-    from patrick import paths
+    from patrick.core import paths
 
     a, b = pcs
     sid = a.strategy("Version ancienne", stamp=OLD, orders=1)

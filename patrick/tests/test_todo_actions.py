@@ -13,7 +13,7 @@ from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.webapp import forms, run_manager, todo_actions
 from patrick.webapp.app import app
-from patrick.webapp.i18n import STRINGS
+from patrick.webapp.i18n.core import STRINGS
 
 STAGED_ERROR = "ValueError: La présélection progressive nécessite le schéma walk-forward."
 

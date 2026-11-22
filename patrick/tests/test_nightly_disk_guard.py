@@ -20,8 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from patrick import cache_eviction, live_refresh, paths, settings
-from patrick.live_refresh import PredictCandidate
+from patrick.core import paths, settings
+from patrick.live import refresh as live_refresh
+from patrick.live.refresh import PredictCandidate
+from patrick.storage import cache_eviction
 from patrick.tracking import db as trackdb
 
 GB = 10**9
@@ -74,7 +76,7 @@ def test_a_disk_full_error_stops_the_loop_after_the_first_failure(error, caplog)
         calls.append(run_id)
         raise error
 
-    with caplog.at_level(logging.INFO, logger="patrick.live_refresh"):
+    with caplog.at_level(logging.INFO, logger="patrick.live.refresh"):
         summary = live_refresh.run_daily_predictions(_candidates(5), predict_live_fn=predict)
 
     assert calls == ["run_0"]                                                   # pas 5 tentatives, ni 2 984
@@ -135,7 +137,7 @@ def test_it_checks_before_the_first_prediction(monkeypatch, caplog):
     monkeypatch.setattr(cache_eviction, "evict_feature_cache", lambda *a, **k: {"removed_files": 0, "removed_bytes": 0})
     calls = []
 
-    with caplog.at_level(logging.INFO, logger="patrick.live_refresh"):
+    with caplog.at_level(logging.INFO, logger="patrick.live.refresh"):
         summary = live_refresh.run_daily_predictions(
             _candidates(3), predict_live_fn=lambda r, db_path=None: calls.append(r) or _ok(r), free_bytes_fn=lambda: 1 * GB)
 
@@ -163,7 +165,7 @@ def test_it_stops_with_one_clear_message_when_eviction_is_not_enough(monkeypatch
     monkeypatch.setattr(cache_eviction, "evict_feature_cache", lambda *a, **k: {"removed_files": 3, "removed_bytes": 2 * GB})
     calls = []
 
-    with caplog.at_level(logging.INFO, logger="patrick.live_refresh"):
+    with caplog.at_level(logging.INFO, logger="patrick.live.refresh"):
         summary = live_refresh.run_daily_predictions(
             _candidates(3), predict_live_fn=lambda r, db_path=None: calls.append(r) or _ok(r), free_bytes_fn=lambda: int(1.5 * GB))
 

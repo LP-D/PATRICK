@@ -14,10 +14,10 @@ import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
-from patrick import feature_cache_share as share
-from patrick import paths, settings
 from patrick.cli import app
+from patrick.core import paths, settings
 from patrick.features import pool_cache
+from patrick.sync import feature_cache_share as share
 
 _REAL_AVAILABLE_MEMORY = share.available_memory_bytes
 
@@ -438,7 +438,7 @@ def test_the_command_can_switch_the_reserve_off_without_deleting_anything(tmp_pa
 
 def test_the_data_move_tool_ignores_the_shared_reserve(tmp_path, monkeypatch):
     """La réserve partagée n'appartient pas à la racine de données de ce PC : `patrick data move` ne la déplace jamais."""
-    from patrick import data_move
+    from patrick.storage import data_move
 
     shared = _shared(tmp_path, monkeypatch)
     assert data_move.component_path("feature_cache") != shared

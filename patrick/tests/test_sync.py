@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from patrick import sync
+from patrick.sync import core as sync
 from patrick.tracking import db
 
 

@@ -179,8 +179,8 @@ def market_state(ctx: Ctx) -> pd.DataFrame:
     """Régime HMM (calme / normal / stress) de l'indice local et tercile du VIX AVANT la réaction, par événement du panel complet."""
     if "market_state" in ctx.memo:
         return ctx.memo["market_state"]
-    from patrick.cache_manager import LocalCache
     from patrick.features.regime_detection import detect_regime
+    from patrick.storage.cache_manager import LocalCache
     full = ctx.full.frame
     cache = LocalCache()
     labels: dict[str, pd.Series] = {}

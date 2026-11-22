@@ -1,5 +1,5 @@
 """Partage des fonds entre deux PC : chaque PC publie ses fonds dans un petit fichier à lui, et fusionne ceux
-des autres (voir `patrick.sync`, étape « fonds »).
+des autres (voir `patrick.sync.core`, étape « fonds »).
 
 Contrairement au patrimoine (un PC de référence que les autres adoptent), les fonds se FUSIONNENT : chaque
 stratégie a un identifiant unique (`str_xxxxxxxxxx`), donc deux PC qui en créent chacun de leur côté se
@@ -24,7 +24,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from patrick import paths
+from patrick.core import paths
 from patrick.tracking import db as trackdb
 
 # Parents avant enfants. Les enfants d'une stratégie sont recopiés avec elle.

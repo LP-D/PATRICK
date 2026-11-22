@@ -1,5 +1,5 @@
 """Critère de sortie Phase 3.1 : tuer le process web pendant un run ne perd
-pas le run — le worker (`patrick/worker.py`), process séparé qui ne parle au
+pas le run — le worker (`patrick/system/worker.py`), process séparé qui ne parle au
 process web qu'à travers la table `job` (SQLite), le termine tout seul.
 
 Vérifié ici sans jamais démarrer de process web/FastAPI/TestClient : un job
@@ -18,10 +18,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
+from patrick.system import worker as worker_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 

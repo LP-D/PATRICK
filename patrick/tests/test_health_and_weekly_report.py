@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from test_fund_selection import World
 
-from patrick import live_refresh
+from patrick.live import refresh as live_refresh
 from patrick.tracking import db as trackdb
 from patrick.tracking import health, relaunch_stats, weekly_report
 from patrick.webapp.app import app

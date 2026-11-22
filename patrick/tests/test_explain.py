@@ -18,10 +18,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import explain as explain_module
 from patrick.config.schema import RunConfig
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
+from patrick.live import explain as explain_module
 from patrick.pipeline import engine as engine_module
 
 TARGET_SYMBOL = "^TEST_SHAP"

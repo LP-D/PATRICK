@@ -10,7 +10,7 @@
 
 ## 0. L'essentiel
 
-- **Trois feuilles aux noms figés** : `patrick.css` (lue en texte par 4 fichiers de tests), `analysis.css`, `knowledge.css`. `patrick.css` + `analysis.css` sont recopiées dans le rapport d'analyse autonome (`analysis_routes.py:216`).
+- **Trois feuilles aux noms figés** : `patrick.css` (lue en texte par 4 fichiers de tests), `analysis.css`, `knowledge.css`. `patrick.css` + `analysis.css` sont recopiées dans le rapport d'analyse autonome (`routes/analysis.py:216`).
 - **Une trentaine de fragments de `patrick.css` exigés mot pour mot** (§2.2) : réécrire la feuille, même à rendu égal, casse ces tests.
 - **Nombreuses assertions sensibles à l'ordre des attributs et à l'imbrication** (regex non gourmandes jusqu'au premier `</div>`, `</nav>`, `</aside>`) : §6, premier risque d'un nouveau balisage de coque.
 - **Le JS (56 des 58 scripts) dépend d'environ 200 ids, 140 attributs `data-*` et jusqu'à 338 classes** (§4) ; il **crée** ~200 classes (`pp-*`, `ra-*`, `exp-*`, `cmdk-*`, `queue-*`…) que le CSS doit continuer de styler.
@@ -168,9 +168,9 @@ Globaux `PatrickPlot PatrickCharts PatrickNames PK patrickDialog PatrickHelp Pat
 | `shap_chart.py:13-127` | SVG `shap-waterfall`, `role="img"`, couleurs **alias** `--color-accent --color-destructive --color-border --color-foreground --color-muted-foreground` (testées, `shap_chart:26,54`) |
 | `_components.html` | `status-badge status-*`, `metric*`, `info-icon`, `data-table`, `num pk-mono`, `nowrap`, `rows-toggle*`, `headline-*`, `sparkline` (défaut `var(--accent)`, `:130`), `empty-state`, `asset-panel`, `lazy-block`, `skeleton-line sk-*`, `na` |
 | `knowledge/markdown_lite.py:149-201`, `latex_lite.py:270-277` | `a.anchor`, `pre.code-block`, `div.math-block`, `div.table-scroll > table.data-table`, MathML, `tex-boxed`, `tex-unknown` |
-| `analysis_routes.py:37-38,214-223` | export : concatène `patrick.css` + `analysis.css` et 4 scripts (ML) / 3 (RL) |
+| `routes/analysis.py:37-38,214-223` | export : concatène `patrick.css` + `analysis.css` et 4 scripts (ML) / 3 (RL) |
 | Gabarits (valeur du domaine) | `status-{{ state }}`, `kind-{{ r.kind }}`, `adv-cost-{{ p.cost }}`, `td-state-…`, `sh-…`, `home-action-…`, `jr-…`, `kb-level-…` : le CSS doit couvrir chaque valeur |
-| i18n | **aucun balisage** dans les textes (`<…>` = groupes de regex, `i18n_server.py:23,84,96`) |
+| i18n | **aucun balisage** dans les textes (`<…>` = groupes de regex, `i18n/server.py:23,84,96`) |
 | Hors interface | `tracking/report.py:406-407` : rapport CLI, `<style>` propre, palette en dur |
 
 ---

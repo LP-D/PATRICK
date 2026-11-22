@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from patrick import settings
+from patrick.core import settings
 from patrick.desktop import prefs
 
 

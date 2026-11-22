@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from conftest import OLD_ENOUGH_START
 
-from patrick import audit as audit_module
+from patrick.audit import degradation as audit_module
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.store import DataStore
 

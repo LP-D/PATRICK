@@ -1,6 +1,6 @@
-"""Garde-fou (spec 2026-10-21, §5) : `~/.patrick` n'est écrit en dur qu'à un seul endroit, `patrick/paths.py`.
+"""Garde-fou (spec 2026-10-21, §5) : `~/.patrick` n'est écrit en dur qu'à un seul endroit, `patrick/core/paths.py`.
 
-Tout autre module passe par `patrick.paths` pour la base, les journaux, le magasin, les modèles, les caches, les sauvegardes, les
+Tout autre module passe par `patrick.core.paths` pour la base, les journaux, le magasin, les modèles, les caches, les sauvegardes, les
 archives et les rapports. Sinon, déplacer la racine de données laisserait des écritures silencieuses sur l'ancien disque.
 Les docstrings et commentaires, qui expliquent l'emplacement par défaut, ne comptent pas : seul le code construit un chemin."""
 from __future__ import annotations
@@ -51,7 +51,7 @@ def test_no_data_component_is_built_from_the_settings_folder():
             if ".venv" in path.parts:
                 continue
             for line, name in _builds_a_component_from_the_settings_folder(path.read_text(encoding="utf-8")):
-                offenders.append(f"{path.relative_to(PACKAGE)}:{line}: data_dir() / {name!r} (utiliser patrick.paths)")
+                offenders.append(f"{path.relative_to(PACKAGE)}:{line}: data_dir() / {name!r} (utiliser patrick.core.paths)")
     assert not offenders, "dossiers de la racine de données bâtis sur le dossier maison :\n" + "\n".join(offenders)
 
 

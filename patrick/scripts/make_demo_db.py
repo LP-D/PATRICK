@@ -23,8 +23,8 @@ import random
 import sys
 from pathlib import Path
 
-from patrick.clock import utc_today
 from patrick.config.schema import RunConfig
+from patrick.core.clock import utc_today
 from patrick.tracking import db as trackdb
 from patrick.tracking import relaunch_stats
 

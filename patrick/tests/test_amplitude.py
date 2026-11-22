@@ -1,4 +1,4 @@
-"""`patrick/amplitude.py` : inerte sans clé, événement anonyme et bien formé avec, jamais d'exception vers l'appelant.
+"""`patrick/webapp/amplitude.py` : inerte sans clé, événement anonyme et bien formé avec, jamais d'exception vers l'appelant.
 Aucun test ne touche le réseau : `requests.post` est remplacé."""
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ import pytest
 import requests
 from typer.testing import CliRunner
 
-from patrick import __version__, amplitude
+from patrick import __version__
 from patrick.cli import app
+from patrick.webapp import amplitude
 
 
 class _Reponse:

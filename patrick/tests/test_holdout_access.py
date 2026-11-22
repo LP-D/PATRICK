@@ -80,7 +80,7 @@ def test_an_unknown_purpose_is_refused(conn):
 def test_the_merge_unites_the_registries_without_duplicates(tmp_path):
     from test_sync_merge import _pair
 
-    from patrick import sync_merge
+    from patrick.sync import merge as sync_merge
 
     local, remote = _pair(tmp_path, ["a1"], ["b1"])
     insert = ("INSERT INTO holdout_access (accessed_at, target, horizon, purpose, run_id, holdout_start, "

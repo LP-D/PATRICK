@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.webapp import i18n
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
 
-WEBAPP = Path(i18n.__file__).resolve().parent
+WEBAPP = Path(i18n.__file__).resolve().parents[1]
 JS = (WEBAPP / "static" / "help.js").read_text(encoding="utf-8")
 GLOSSARY_JS = (WEBAPP / "static" / "glossary.js").read_text(encoding="utf-8")
 CSS = (WEBAPP / "static" / "patrick.css").read_text(encoding="utf-8")

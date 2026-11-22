@@ -19,7 +19,7 @@ import time
 SYMBOL = sys.argv[1] if len(sys.argv) > 1 else "^GSPC"
 HORIZON = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 
-from patrick import paths
+from patrick.core import paths
 
 REAL_DB_PATH = paths.db_path()                      # la vraie base, lue en lecture seule : relevée avant la redirection ci-dessous
 tmp = tempfile.mkdtemp(prefix="methods_")

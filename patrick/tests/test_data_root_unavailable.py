@@ -7,10 +7,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from patrick import paths
 from patrick.cli import app as cli_app
-from patrick.webapp import i18n
+from patrick.core import paths
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def needs_data_routes():
 def test_serve_and_worker_refuse_to_start_without_the_data_disk(absent, command, monkeypatch):
     import uvicorn
 
-    from patrick import worker as worker_module
+    from patrick.system import worker as worker_module
 
     started: list[str] = []                                  # sans garde, ces deux appels bloqueraient le test
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: started.append("serve"))

@@ -8,9 +8,9 @@ import pytest
 from test_daily_predict import _make_run_with_trial
 from test_fund_selection import World
 
-from patrick import live_refresh
 from patrick.config import targets
 from patrick.fund import systematic
+from patrick.live import refresh as live_refresh
 from patrick.tracking import db as trackdb
 from patrick.tracking import health, live_board
 

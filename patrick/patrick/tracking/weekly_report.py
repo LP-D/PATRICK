@@ -11,8 +11,8 @@ import os
 import sqlite3
 from pathlib import Path
 
-from patrick import paths
-from patrick.clock import utc_today
+from patrick.core import paths
+from patrick.core.clock import utc_today
 from patrick.tracking import health, live_board, pooled_signal, relaunch_stats
 
 PREFIX = "hebdo-"

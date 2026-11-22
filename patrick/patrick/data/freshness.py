@@ -33,7 +33,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.data.store import DataStore
 
 # ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ def _pool(n: int = 400, seed: int = 0) -> pd.DataFrame:
 
 
 def test_predict_live_accepts_a_2d_predict_output(tmp_path, monkeypatch):
-    from patrick import predict as predict_module
+    from patrick.live import predict as predict_module
     from patrick.tracking import db as trackdb
 
     # Aucune écriture hors de tmp_path : base, magasin de données et caches sont temporaires.

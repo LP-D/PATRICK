@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import audit_speed
+from patrick.audit import speed as audit_speed
 from patrick.tracking import db as trackdb
 
 

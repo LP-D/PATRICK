@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import brentq
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.wealth.ledger import (
     EXTERNAL_FLOW_KINDS,
     LedgerState,

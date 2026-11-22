@@ -141,7 +141,7 @@ def test_create_rule_counts_the_thresholds_as_a_configuration_tried(conn):
 
 
 def test_fund_rule_is_a_personal_table_never_synced_to_github(conn):
-    from patrick import sync
+    from patrick.sync import core as sync
     assert "fund_rule" in sync.personal_tables(conn)
 
 

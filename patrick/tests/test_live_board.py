@@ -9,8 +9,8 @@ from test_fund_selection import World
 
 from patrick.tracking import db as trackdb
 from patrick.tracking import live_board
-from patrick.webapp import analysis_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import analysis as analysis_routes
 
 TODAY = dt.date(2026, 3, 2)
 DAYS = [d.isoformat() for d in (dt.date(2026, 1, 5) + dt.timedelta(days=i) for i in range(40)) if d.weekday() < 5]

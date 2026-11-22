@@ -12,8 +12,8 @@ from page_support import FullPageClient
 
 from patrick.text import service, sources, store
 from patrick.tracking import db
-from patrick.webapp import news_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import news as news_routes
 
 NOW = pd.Timestamp.now(tz="UTC").floor("s")
 

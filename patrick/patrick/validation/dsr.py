@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats
 
-from patrick.numeric import is_nan
+from patrick.core.numeric import is_nan
 
 _EULER_MASCHERONI = 0.5772156649015329
 

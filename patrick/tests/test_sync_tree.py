@@ -16,7 +16,7 @@ import pytest
 from test_sync import _count, _make_db
 from test_sync_auto import PC
 
-from patrick import sync
+from patrick.sync import core as sync
 from patrick.tracking import db as trackdb
 
 

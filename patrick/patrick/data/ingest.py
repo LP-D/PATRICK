@@ -8,7 +8,6 @@ import time
 
 import pandas as pd
 
-from patrick.cache_manager import LocalCache
 from patrick.config.schema import DataQualityConfig, ObjectiveConfig, UniverseConfig
 from patrick.data import history_repair, publication_lag
 from patrick.data import quality as quality_module
@@ -16,6 +15,7 @@ from patrick.data.session_calendar import session_lag_days, session_rule_tag
 from patrick.data.sources import fred_source, yfinance_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 from patrick.data.store import DataStore
+from patrick.storage.cache_manager import LocalCache
 
 
 def _apply_session_lag(yf_df: pd.DataFrame, tickers: list[str], objective: ObjectiveConfig) -> pd.DataFrame:

@@ -7,7 +7,7 @@ def test_to_native_maps_infinities_to_null_for_strict_json():
 
     import numpy as np
 
-    from patrick.worker import _to_native
+    from patrick.system.worker import _to_native
 
     out = _to_native({"a": float("inf"), "b": np.float64(-np.inf), "c": [np.nan, 1.5], "d": np.int64(3)})
     assert out == {"a": None, "b": None, "c": [None, 1.5], "d": 3}

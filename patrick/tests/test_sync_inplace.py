@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 from test_sync_auto import PC, pcs  # noqa: F401  (fixture)
 
-from patrick import sync, sync_merge
+from patrick.sync import core as sync
+from patrick.sync import merge as sync_merge
 
 
 def _two_pcs_with_a_share(pcs):  # noqa: F811

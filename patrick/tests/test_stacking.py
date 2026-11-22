@@ -164,7 +164,7 @@ def test_optuna_never_tunes_the_stack():
 
 
 def test_the_estimate_of_the_progress_bar_counts_the_stack():
-    from patrick import worker
+    from patrick.system import worker
     base = worker._estimate_total(_config(algos=["XGBoost", "LightGBM"]))
     assert worker._estimate_total(_config(algos=["XGBoost", "LightGBM"], stacking=True)) > base
 
@@ -325,7 +325,7 @@ def test_a_whole_run_scans_the_stack_skips_optuna_for_it_and_exports_a_working_m
 def test_a_stack_is_explained_by_permutation_shapley_not_by_a_tree_explainer():
     from sklearn.preprocessing import RobustScaler
 
-    from patrick import explain
+    from patrick.live import explain
 
     X, y = _data(500, p=6)
     names = [f"f{i}" for i in range(6)]

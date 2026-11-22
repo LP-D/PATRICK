@@ -14,8 +14,8 @@ from test_data_move import (  # noqa: F401  (fixtures et aides)
 )
 from typer.testing import CliRunner
 
-from patrick import data_move
 from patrick.cli import app as cli_app
+from patrick.storage import data_move
 
 
 def test_status_does_not_call_a_finished_copy_in_progress(pc):  # noqa: F811

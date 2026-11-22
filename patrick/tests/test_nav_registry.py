@@ -17,8 +17,9 @@ from fastapi.testclient import TestClient
 
 from patrick.data.sources import fundamentals_source
 from patrick.validation import equity_sufficiency
-from patrick.webapp import i18n, nav_registry
+from patrick.webapp import nav_registry
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
 
 TEMPLATES_DIR = Path(nav_registry.__file__).resolve().parent / "templates"
 

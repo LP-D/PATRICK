@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.webapp import exploration_routes as E
 from patrick.webapp.app import app
+from patrick.webapp.routes import exploration as E
 
 SYMS = ["^GSPC", "^NDX", "XLK"]
 

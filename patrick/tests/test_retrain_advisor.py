@@ -9,8 +9,8 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.clock import utc_today
 from patrick.config import training_profiles as profiles
+from patrick.core.clock import utc_today
 from patrick.tracking import db, retrain_advisor
 from patrick.tracking.retrain_advisor import Diagnosis, advise
 from patrick.webapp import forms
@@ -211,7 +211,7 @@ def test_the_best_horizon_of_a_multi_horizon_launch_is_singled_out():
 def test_every_suggestion_gives_its_texts_all_the_figures_they_name():
     """Un texte « pourquoi / à essayer » qui cite une variable absente des chiffres de sa règle faisait échouer toute la page du run
     (`KeyError: 'best_h'`, règle du meilleur horizon)."""
-    from patrick.webapp import i18n
+    from patrick.webapp.i18n import core as i18n
 
     t = i18n.translator("fr")
     seen = set()
@@ -276,7 +276,7 @@ def test_every_suggestion_changes_only_fields_the_form_can_represent():
 
 
 def test_every_profile_patch_uses_form_fields_and_every_text_exists():
-    from patrick.webapp.i18n import STRINGS
+    from patrick.webapp.i18n.core import STRINGS
 
     assert retrain_advisor.validate_patches() == []
     assert len(profiles.PROFILES) >= 12 and len({p.key for p in profiles.PROFILES}) == len(profiles.PROFILES)
@@ -404,7 +404,7 @@ def test_a_model_clearly_wrong_in_live_use_is_proposed_for_retraining():
 
 
 def test_the_live_decay_suggestion_has_its_texts():
-    from patrick.webapp.i18n import STRINGS
+    from patrick.webapp.i18n.core import STRINGS
 
     for part in ("title", "why", "try"):
         assert f"adv_live_decay_{part}" in STRINGS and f"adv_inputs_lost_{part}" in STRINGS

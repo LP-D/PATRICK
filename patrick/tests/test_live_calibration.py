@@ -102,7 +102,7 @@ class _FixedCalibrator:
 
 
 def _live(tmp_path, monkeypatch, with_calibrator: bool):
-    from patrick import predict as predict_module
+    from patrick.live import predict as predict_module
 
     pool = _pool()
     feature_pool = [c for c in pool.columns if c != "TGT"]

@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from test_sync_merge import _seed
 
-from patrick import sync
 from patrick.fund import store as fund_store
+from patrick.sync import core as sync
 from patrick.tracking import db as trackdb
 
 

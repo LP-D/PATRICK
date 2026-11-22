@@ -20,10 +20,10 @@ import math
 import sqlite3
 from dataclasses import asdict, dataclass
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config import universe_extension as UX
 from patrick.config.target_label import is_alpha_label, split_run_label
+from patrick.core.clock import utc_today
 from patrick.fund import store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb

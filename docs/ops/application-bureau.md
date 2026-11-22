@@ -71,7 +71,7 @@ patrimoine » : il adopte le patrimoine publié par le PC de référence.
 
 ## Développement
 
-- Le lanceur n'importe que la bibliothèque standard, `psutil` et `patrick.settings/sync` : `import patrick` ne charge
+- Le lanceur n'importe que la bibliothèque standard, `psutil` et `patrick.core.settings/sync` : `import patrick` ne charge
   plus pandas (`patrick/__init__.py` charge les ré-exports de `phase9` à la demande), ce qui garde le démarrage rapide.
 - Tests : `tests/test_desktop_*.py`, `tests/test_settings_routes.py`, `tests/test_package_lazy_import.py`.
   La fixture `fake_task` (conftest) remplace la tâche planifiée Windows : un test ne doit jamais toucher la vraie.

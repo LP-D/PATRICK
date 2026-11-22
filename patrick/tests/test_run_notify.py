@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from patrick.webapp.app import app
-from patrick.webapp.i18n_notify import NOTIFY_STRINGS
+from patrick.webapp.i18n.notify import NOTIFY_STRINGS
 
 
 @pytest.fixture

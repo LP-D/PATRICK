@@ -9,9 +9,9 @@ import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
-from patrick import cache_eviction
 from patrick.features import pool_cache
-from patrick.storage_cli import storage_app
+from patrick.storage import cache_eviction
+from patrick.storage.cli import storage_app
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import prediction_archive as archive

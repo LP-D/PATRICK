@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 
-from patrick.clock import local_now
+from patrick.core.clock import local_now
 from patrick.data.sources.yfinance_source import download_one
 from patrick.tracking import market_state
 

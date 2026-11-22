@@ -13,9 +13,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import predict as predict_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
+from patrick.live import predict as predict_module
 from patrick.pipeline import engine as engine_module
 
 TARGET_SYMBOL = "^TEST"

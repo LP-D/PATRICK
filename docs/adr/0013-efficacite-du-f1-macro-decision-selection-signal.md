@@ -34,7 +34,7 @@ Analyse de 3 431 runs terminés (base locale, holdout = 15 derniers mois, jamais
    runs d'une paire sur leur holdout, un test de permutation par décalage circulaire (qui garde l'autocorrélation due au chevauchement des horizons) et
    la correction de Benjamini-Hochberg sur l'ensemble des paires. Affiché sur la Synthèse ; l'AUC regroupée par classe d'actifs classe les cartes de lots
    (la classe où le signal est mesuré passe en tête). Recalculé chaque nuit.
-5. **Placebo de l'Asie** (`audit_placebo.py`, `patrick audit placebo-panel` / `placebo-report`) : un panel de runs légers (huit indices asiatiques, trois
+5. **Placebo de l'Asie** (`audit/placebo.py`, `patrick audit placebo-panel` / `placebo-report`) : un panel de runs légers (huit indices asiatiques, trois
    témoins) pour obtenir le placebo de décalage existant (ADR 0008) sur la classe dont l'AUC à 1 jour (0,59) retombe à 0,52 dès 3 jours.
 
 ## Conséquences

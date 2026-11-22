@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from patrick import paths
+from patrick.core import paths
 from patrick.strategylab import (
     backtest,
     data,

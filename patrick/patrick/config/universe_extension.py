@@ -25,7 +25,7 @@ Les actions (US, France, Allemagne, Royaume-Uni, Europe, Asie) vivent toutes dan
 (contexte de marche : indice de leur place, zone euro) sont decrites dans `config/equity_context.py`.
 
 Noms de groupes : ceux de l'ancien univers quand ils existent (traductions
-deja presentes, `webapp/i18n.py::TARGET_GROUP_LABEL_KEYS`), sinon nouveaux ;
+deja presentes, `webapp/i18n/core.py::TARGET_GROUP_LABEL_KEYS`), sinon nouveaux ;
 jamais un nom deja utilise par `DEFAULT_TARGET_GROUPS` (une fusion de dict
 ecraserait le groupe existant).
 """

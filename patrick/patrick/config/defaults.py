@@ -471,7 +471,7 @@ DEFAULT_TARGET_GROUPS = {
     # univers (550 cibles, 13 groupes) retire -- aucune dependance technique
     # trouvee (UniverseConfig est un pool dynamique par run, "tout sauf la
     # cible", pas un graphe de dependances entre tickers precis ; verifie par
-    # grep sur data/session_calendar.py et patrick/audit.py, cf. rapport de
+    # grep sur data/session_calendar.py et patrick/audit/degradation.py, cf. rapport de
     # cette phase). Les groupes retires en integralite : Actions France &
     # Europe (80), ETFs larges & style (31), ETFs sectoriels & thematiques
     # (27), Obligataire & taux ETFs (18), Matieres premieres & devises ETFs

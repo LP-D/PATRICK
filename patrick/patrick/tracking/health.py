@@ -1,7 +1,7 @@
 """Santé de la plateforme en une page (`/sante`) : ce qui doit tourner tout seul tourne-t-il ?
 
 Chaque contrôle rend `{"key", "status", "value", "detail"}` avec `status` parmi `ok`, `warning`, `error`, `unknown`. Lecture seule ; un
-contrôle en panne devient `unknown`, il n'empêche jamais les autres de s'afficher. Les libellés sont dans `webapp/i18n_health.py`
+contrôle en panne devient `unknown`, il n'empêche jamais les autres de s'afficher. Les libellés sont dans `webapp/i18n/health.py`
 (`hl_<key>`), les valeurs sont des faits bruts (dates, nombres) mis en forme par le gabarit.
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from patrick import paths
 from patrick.config.targets import is_macro_target
+from patrick.core import paths
 from patrick.tracking import backup, pooled_signal, relaunch_stats
 
 TASK_PREFIX = "Patrick"                 # tâches planifiées installées par `scripts/schtasks_*.ps1` et par l'installeur

@@ -331,7 +331,7 @@ def _spy_pool_builds(monkeypatch, module) -> list[list[str]]:
 
 
 def test_predict_live_rebuilds_only_the_models_series_and_matches_the_full_path(_exported, monkeypatch):
-    from patrick import predict as predict_module
+    from patrick.live import predict as predict_module
 
     ex = _exported
     monkeypatch.setattr(predict_module, "ingest", lambda *a, **k: ex["raw"])
@@ -347,7 +347,7 @@ def test_predict_live_rebuilds_only_the_models_series_and_matches_the_full_path(
 def test_explain_rebuilds_only_the_models_series_and_matches_the_full_path(_exported, monkeypatch):
     import shap
 
-    from patrick import explain as explain_module
+    from patrick.live import explain as explain_module
 
     ex = _exported
     y_pred = int(ex["bundle"]["model"].predict(ex["X_sel"])[0])

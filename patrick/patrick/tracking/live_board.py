@@ -18,9 +18,9 @@ import math
 import sqlite3
 from collections import defaultdict
 
-from patrick.clock import utc_today
 from patrick.config.target_label import split_run_label
 from patrick.config.targets import is_macro_target
+from patrick.core.clock import utc_today
 from patrick.data.session_calendar import classify_asset_class
 
 _CHUNK = 500

@@ -7,8 +7,8 @@ from test_portfolio_risk import _prices
 
 from patrick.tracking import db as trackdb
 from patrick.wealth import ledger
-from patrick.webapp import risk_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import risk as risk_routes
 
 
 @pytest.fixture

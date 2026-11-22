@@ -15,7 +15,7 @@ plan : [`docs/superpowers/plans/2026-10-21-donnees-sur-disque-d.md`](../superpow
 
 ## Ce que le code fait maintenant
 
-- `patrick/paths.py` est le seul module qui connaît `~/.patrick`. La racine se règle par `data_root` dans `settings.json` (réglage
+- `patrick/core/paths.py` est le seul module qui connaît `~/.patrick`. La racine se règle par `data_root` dans `settings.json` (réglage
   **propre à chaque PC, jamais partagé**) ou par la variable `PATRICK_DATA_ROOT` (elle prime). Les variables par composant
   (`PATRICK_STORE_ROOT`, `PATRICK_CACHE_ROOT`, `PATRICK_FEATURE_CACHE_ROOT`, `PATRICK_DB_PATH`) priment sur tout.
 - Dossiers de la racine : `store`, `models`, `feature_cache`, `cache`, `backups`, `archive`, `reports`.

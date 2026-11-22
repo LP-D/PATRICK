@@ -12,8 +12,9 @@ import pytest
 from page_support import FullPageClient as TestClient
 
 from patrick.tracking import db
-from patrick.webapp import i18n, nav_registry
+from patrick.webapp import nav_registry
 from patrick.webapp.app import BASE_DIR, app
+from patrick.webapp.i18n import core as i18n
 
 STATIC = BASE_DIR / "static"
 CSS = (STATIC / "patrick.css").read_text(encoding="utf-8")

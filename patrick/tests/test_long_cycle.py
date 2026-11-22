@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick.audit_speed import classify_feature
+from patrick.audit.speed import classify_feature
 from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.features import long_cycle

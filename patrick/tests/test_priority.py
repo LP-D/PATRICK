@@ -11,13 +11,14 @@ import psutil
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import live_refresh, priority
+from patrick.live import refresh as live_refresh
+from patrick.system import priority
 from patrick.webapp.app import app
 
 CHILD = textwrap.dedent("""
     import subprocess, sys
     import psutil
-    from patrick import priority
+    from patrick.system import priority
 
     done = priority.lower_for_training()
     own = psutil.Process().nice()

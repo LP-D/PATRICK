@@ -13,7 +13,7 @@ import pandas as pd
 import pandas_datareader.data as web
 import yfinance as yf
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.data.sources import fred_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
 

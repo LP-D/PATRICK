@@ -32,7 +32,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from patrick.clock import utc_now
+from patrick.core.clock import utc_now
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.view_cache")

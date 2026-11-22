@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 from page_support import FullPageClient as TestClient
 
-from patrick import predict as predict_module
 from patrick.data import session_calendar as sc
+from patrick.live import predict as predict_module
 from patrick.tracking import db
 from patrick.webapp.app import _market_view, app
 

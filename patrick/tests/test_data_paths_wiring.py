@@ -1,4 +1,4 @@
-"""Les composants de données lisent leur emplacement par `patrick.paths` (spec 2026-10-21, §5).
+"""Les composants de données lisent leur emplacement par `patrick.core.paths` (spec 2026-10-21, §5).
 
 Chaque test pose une racine de données `R` et retire les variables propres à un composant : sans elles, le composant doit
 tomber sous `R`. La base active, elle, ne suit jamais la racine de données."""
@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from test_sync_auto import pcs  # noqa: F401  (fixture)
 
-from patrick import paths
+from patrick.core import paths
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def test_datastore_default_root_follows_the_data_root(root):
 
 
 def test_local_cache_default_root_follows_the_data_root(root):
-    from patrick import cache_manager
+    from patrick.storage import cache_manager
 
     assert cache_manager.LocalCache().root == root / "cache"
 
@@ -81,14 +81,14 @@ def test_default_reports_dir_follows_the_data_root(root):
 # --- sync.py : emplacements, messages, statut, autre PC -------------------------------------------------------
 
 def test_sync_default_folders_follow_the_data_root(root):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     assert sync._default_store_root() == str(root / "store")
     assert str(root / "models") in sync._default_models_roots()
 
 
 def test_the_disk_full_message_names_the_real_folders(root):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     message = sync._disk_full_message(root)
 
@@ -97,7 +97,7 @@ def test_the_disk_full_message_names_the_real_folders(root):
 
 
 def test_status_reports_the_data_root_and_its_free_space(root, tmp_path):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     out = sync.status(str(tmp_path / "share"), db_path=str(tmp_path / "x.db"))
 
@@ -105,7 +105,7 @@ def test_status_reports_the_data_root_and_its_free_space(root, tmp_path):
 
 
 def test_status_and_auto_do_not_crash_when_the_data_disk_is_missing(monkeypatch, tmp_path):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     absent = tmp_path / "absent"
     monkeypatch.setenv("PATRICK_DATA_ROOT", str(absent))
@@ -121,7 +121,7 @@ def test_a_second_pc_restores_models_and_backup_under_its_own_data_root(pcs, tmp
     import sqlite3
     from pathlib import Path
 
-    from patrick import sync
+    from patrick.sync import core as sync
 
     pc1, pc2, share = pcs
     pc1.seed(["a1"])

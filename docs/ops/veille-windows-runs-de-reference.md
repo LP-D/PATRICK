@@ -7,7 +7,7 @@ récupéré comme « abandonné » (`reap_stale_running_jobs`).
 
 ## Ce que le code fait désormais
 
-`patrick/keep_awake.py` : chaque run (`patrick run`, `patrick resume`, chaque job du worker lancé depuis
+`patrick/system/keep_awake.py` : chaque run (`patrick run`, `patrick resume`, chaque job du worker lancé depuis
 l'interface) s'exécute dans `keep_awake()`, qui appelle `SetThreadExecutionState(ES_CONTINUOUS |
 ES_SYSTEM_REQUIRED)` — Windows ne se met pas en veille tant que le run tourne ; l'écran peut s'éteindre.
 La demande est levée à la fin du run, y compris en cas d'échec. Sans effet sous Linux/macOS.

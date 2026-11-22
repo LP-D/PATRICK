@@ -9,10 +9,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import paths, sync
+from patrick.core import paths
 from patrick.desktop import launcher, prefs, runtime, share, update
-from patrick.webapp import i18n, nav_registry, settings_routes
+from patrick.sync import core as sync
+from patrick.webapp import nav_registry
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.routes import settings as settings_routes
 
 TEMPLATES = Path(nav_registry.__file__).resolve().parent / "templates"
 STATIC = Path(nav_registry.__file__).resolve().parent / "static"

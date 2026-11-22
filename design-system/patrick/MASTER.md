@@ -152,7 +152,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 **Procédure obligatoire pour toute nouvelle page :**
 1. Déclarer la route FastAPI dans `webapp/app.py` (le template étend `base_v2.html`).
 2. Ajouter **une** `NavEntry` dans `NAV_ENTRIES` (slug unique, catégorie parmi les 4, `order` libre dans la catégorie) — ou, pour une page paramétrée non listée, l'ajouter à `child_routes` de l'entrée parente.
-3. Ajouter la clé i18n `nav_<slug>` (fr + en) dans `webapp/i18n.py` si le libellé doit être traduit.
+3. Ajouter la clé i18n `nav_<slug>` (fr + en) dans `webapp/i18n/core.py` si le libellé doit être traduit.
 4. `pytest tests/test_nav_registry.py` doit rester vert : une route GET absente du registre et non déclarée non-page fait échouer `test_no_orphan_page_route`.
 
 ❌ **Interdit :** tout lien de navigation latérale écrit en dur dans un template, toute seconde liste de nav, toute logique d'état actif hors `nav_registry.is_active`. Les liens contextuels dans le contenu des pages ne sont pas de la nav latérale et restent hors registre.
@@ -167,7 +167,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 ## Textes et traductions
 
 - **Aucun texte visible en dur** : gabarits `t('clé')` (FR + EN dans `webapp/i18n*.py`) ; scripts `window.I18N` (clés à lister dans `i18n.js_strings` ou dans le `*_JS_KEYS` du module) ; macros importées sans contexte (`_components.html`) `ui_t('clé')` (langue de la requête, posée par `LangMiddleware`).
-- **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n_server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/test_i18n_server.py`.
+- **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n/server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/test_i18n_server.py`.
 - **Vocabulaire commun** (un terme = une traduction) : *Hausse forte / faible, Baisse forte / faible* (jamais « Forte baisse »), *Drawdown max*, *Tuning Optuna*, *Derniers runs*, *Stacking*, *Fonds / Fund*, *Ticket d'ordres / Order ticket*. Nombres, dates et devises suivent la langue de la page (`Intl`, pas de `fr-FR` en dur).
 
 ## Noms des instruments
@@ -180,7 +180,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 
 ## Mouvement
 
-Dix-huit règles (ADR 0023), toutes portées par les jetons de `:root` et par `static/motion.js` ; aucune durée ni courbe en dur dans une règle de page.
+Dix-huit règles (ADR 0024), toutes portées par les jetons de `:root` et par `static/motion.js` ; aucune durée ni courbe en dur dans une règle de page.
 
 | Règle | Jeton / mécanisme | Où |
 |---|---|---|

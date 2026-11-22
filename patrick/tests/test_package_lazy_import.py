@@ -1,5 +1,5 @@
 """`import patrick` doit rester léger : le lanceur de bureau l'importe à chaque démarrage et ne doit pas charger
-pandas (≈ 1,7 s) avant d'afficher son écran de démarrage. Les ré-exports de `patrick.phase9` restent disponibles."""
+pandas (≈ 1,7 s) avant d'afficher son écran de démarrage. Les ré-exports de `patrick.research.phase9` restent disponibles."""
 from __future__ import annotations
 
 import subprocess
@@ -29,7 +29,7 @@ def test_desktop_package_stays_light():
 
 def test_phase9_reexports_still_work():
     code = ("import patrick; from patrick import DecisionJournal, take_snapshot; "
-            "import patrick.phase9 as p; print(patrick.DecisionJournal is p.DecisionJournal)")
+            "import patrick.research.phase9 as p; print(patrick.DecisionJournal is p.DecisionJournal)")
     assert _run(code) == "True"
 
 

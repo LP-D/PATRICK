@@ -8,11 +8,11 @@ import pandas as pd
 import pytest
 from test_predict_live import HORIZON, TARGET_SYMBOL, _extend_raw, _synthetic_raw
 
-from patrick import predict as predict_module
 from patrick.config.schema import RunConfig
 from patrick.data.store import DataStore
 from patrick.features import alpha_target as at
 from patrick.features.target import build_target, classify_return, live_class_thresholds
+from patrick.live import predict as predict_module
 from patrick.pipeline import engine as engine_module
 from patrick.tracking import db
 
@@ -113,7 +113,7 @@ def test_live_outcome_stays_pending_while_the_alpha_horizon_has_not_elapsed(tmp_
 
 
 def test_daily_prediction_now_includes_alpha_runs(conn, tmp_path):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
     db.upsert_snapshot(conn, "snap", "h", 0, 0, "api")
     db.create_run(conn, "ra", target="AAA__alpha_BBB", horizon=HORIZON, snapshot_id="snap", config_json="{}",
                   config_hash="h", git_sha="s", seed=0)

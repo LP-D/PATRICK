@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from patrick import keep_awake as ka
-from patrick import worker
+from patrick.system import keep_awake as ka
+from patrick.system import worker
 
 
 class _FakeKernel32:

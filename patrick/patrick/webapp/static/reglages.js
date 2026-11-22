@@ -1,4 +1,4 @@
-/* Page Réglages (/reglages) : tout passe par /api/app/*, voir webapp/settings_routes.py. */
+/* Page Réglages (/reglages) : tout passe par /api/app/*, voir webapp/routes/settings.py. */
 (function () {
     "use strict";
     var I18N = window.I18N || {};

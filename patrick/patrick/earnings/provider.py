@@ -22,7 +22,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from patrick.cache_manager import LocalCache
+from patrick.storage.cache_manager import LocalCache
 
 FRENCH_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/{name}"
 FRENCH_FILES = {

@@ -1,4 +1,4 @@
-"""`patrick.cache_manager.LocalCache` n'avait aucun test : cache local
+"""`patrick.storage.cache_manager.LocalCache` n'avait aucun test : cache local
 parquet/json avec rafraîchissement hebdomadaire (`max_age_days`, défaut 7),
 basé sur un fichier de métadonnées JSON à côté de chaque entrée
 (`<key>.json`, champ `updated_at`). Style de fixtures aligné sur
@@ -11,9 +11,9 @@ from datetime import timedelta
 import pandas as pd
 import pytest
 
-import patrick.cache_manager as cache_manager_module
-from patrick.cache_manager import LocalCache
-from patrick.clock import utc_now
+import patrick.storage.cache_manager as cache_manager_module
+from patrick.core.clock import utc_now
+from patrick.storage.cache_manager import LocalCache
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def _df() -> pd.DataFrame:
 
 def _freeze_utcnow(monkeypatch, days_from_now: float) -> None:
     """Freezes `cache_manager.utc_now()` (the package's single, timezone-
-    aware clock, `patrick/clock.py`) `days_from_now` days ahead -- a cache
+    aware clock, `patrick/core/clock.py`) `days_from_now` days ahead -- a cache
     written "now" then looks exactly that old to `_is_fresh`."""
     future = utc_now() + timedelta(days=days_from_now)
     monkeypatch.setattr(cache_manager_module, "utc_now", lambda: future)

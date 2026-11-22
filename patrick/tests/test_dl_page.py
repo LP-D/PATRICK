@@ -16,8 +16,9 @@ from patrick.config.schema import RunConfig
 from patrick.data.sources import fundamentals_source
 from patrick.models import deep as deep_models
 from patrick.validation import equity_sufficiency
-from patrick.webapp import forms, i18n, run_manager
+from patrick.webapp import forms, run_manager
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
 
 
 @pytest.fixture(autouse=True)
@@ -101,7 +102,7 @@ def test_the_page_names_the_glossary_terms_of_every_network_and_setting(client):
     html = client.get("/dl").text
     for term in ("MLP", "GRU", "LSTM", "CNN1D", "Transformer", "dl_hidden_size", "dl_dropout", "dl_lookback", "dl_patience", "dl_networks"):
         assert f'data-term="{term}"' in html, term
-    from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
+    from patrick.webapp.glossary.core import GLOSSARY, TERM_LABEL_KEYS
     for key in D.DEFAULT_DEEP:
         assert GLOSSARY[f"dl_{key}"]["fr"] and GLOSSARY[f"dl_{key}"]["en"]
         assert TERM_LABEL_KEYS[f"dl_{key}"] in i18n.STRINGS

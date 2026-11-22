@@ -10,12 +10,13 @@ from pathlib import Path
 from patrick import webapp
 
 WEBAPP = Path(webapp.__file__).parent
-MODULES = sorted(p.stem for p in WEBAPP.glob("i18n*.py")) + ["glossary_earnings"]
+# Modules relatifs à `patrick.webapp` : toutes les tables de traduction (`i18n/`) et les libellés du glossaire des résultats.
+MODULES = sorted(f"i18n.{p.stem}" for p in (WEBAPP / "i18n").glob("*.py") if p.stem != "__init__") + ["glossary.earnings"]
 
 
 def _literal_dicts(module: str) -> list[tuple[str, dict[str, object]]]:
     """Les dictionnaires `*STRINGS` écrits en toutes lettres au niveau du module : `(nom, {clé: texte français})`."""
-    tree = ast.parse((WEBAPP / f"{module}.py").read_text(encoding="utf-8"))
+    tree = ast.parse((WEBAPP / f"{module.replace('.', '/')}.py").read_text(encoding="utf-8"))
     values = vars(importlib.import_module(f"patrick.webapp.{module}"))
     out = []
     for node in tree.body:
@@ -46,7 +47,7 @@ def test_no_key_has_two_different_texts():
 
 
 def test_the_first_launch_card_has_its_own_title():
-    from patrick.webapp.i18n import STRINGS
+    from patrick.webapp.i18n.core import STRINGS
 
     assert STRINGS["first_run_title"]["fr"].startswith("Premier lancement")
     assert STRINGS["fr_title"]["fr"] == "Fraîcheur des données"

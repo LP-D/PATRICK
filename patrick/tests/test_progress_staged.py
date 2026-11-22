@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from patrick import worker
 from patrick.config.schema import RunConfig
+from patrick.system import worker
 
 
 def _config(mode: str, finalists: int = 8, horizons=(1, 5), regimes=("GLOBAL",), n_grid=11, algos=4,

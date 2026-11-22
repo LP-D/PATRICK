@@ -109,7 +109,7 @@ def test_the_macro_page_is_still_there_and_every_series_is_marked_training_only(
     response = client.get("/macro")
     assert response.status_code == 200
     from patrick.webapp.app import _macro_sections_view
-    from patrick.webapp.i18n import translator
+    from patrick.webapp.i18n.core import translator
 
     sections = _macro_sections_view(translator("fr"))
     assets = [a for s in sections for a in s["assets"]]

@@ -1,4 +1,4 @@
-"""Traduction des messages produits côté serveur (`webapp/i18n_server.py`), gestionnaire d'erreurs HTTP traduit, macros qui suivent la
+"""Traduction des messages produits côté serveur (`webapp/i18n/server.py`), gestionnaire d'erreurs HTTP traduit, macros qui suivent la
 langue de la requête, et deux garde-fous de l'audit d'interface : aucun lien mort vers une page de cible, aucune erreur 500 sur la
 configuration d'un ancien run."""
 from __future__ import annotations
@@ -14,7 +14,7 @@ from patrick.tracking import db
 from patrick.validation import pbo_reliability
 from patrick.webapp import forms
 from patrick.webapp.app import app
-from patrick.webapp.i18n_server import translate
+from patrick.webapp.i18n.server import translate
 
 _FRENCH_LETTERS = re.compile(r"[àâçéèêëîïôùûœ]")
 

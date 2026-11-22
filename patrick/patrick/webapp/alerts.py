@@ -16,8 +16,8 @@ import datetime as dt
 import threading
 import time
 
-from patrick.clock import local_now, utc_today
 from patrick.config import defaults as D
+from patrick.core.clock import local_now, utc_today
 from patrick.data.sources.yfinance_source import clean_symbol, download_batch
 from patrick.tracking import db as trackdb
 from patrick.webapp import forms

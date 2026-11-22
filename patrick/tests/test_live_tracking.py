@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from page_support import FullPageClient as TestClient
 
-from patrick import predict as predict_module
 from patrick.features.target import classify_return, live_class_thresholds
+from patrick.live import predict as predict_module
 from patrick.tracking import db
 from patrick.tracking import history as trackhistory
 from patrick.webapp.app import app

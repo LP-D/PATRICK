@@ -24,9 +24,9 @@ from __future__ import annotations
 import pandas as pd
 import yfinance as yf
 
-from patrick.cache_manager import LocalCache
 from patrick.data.sources.yfinance_source import clean_symbol
 from patrick.data.store import DataStore
+from patrick.storage.cache_manager import LocalCache
 
 HISTORY_START = "2000-01-01"
 PRICE_MAX_AGE_DAYS = 0.25  # 6 h

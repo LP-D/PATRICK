@@ -18,7 +18,7 @@ from pathlib import Path
 
 import psutil
 
-from patrick import paths
+from patrick.core import paths
 
 SIZE_BUDGET_S = 6.0
 SIZE_TTL_S = 120.0

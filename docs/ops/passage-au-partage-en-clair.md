@@ -64,7 +64,7 @@ git log --oneline -3
 ```
 
 Vérifier : `git status` ne montre aucun fichier modifié avant le `pull` (sinon s'arrêter), le `pull` annonce `Fast-forward` et
-`sync_tree.py` dans la liste, et `git log` affiche le commit « feat(sync): partage en clair et incrémental (format 2) ».
+`sync/tree.py` dans la liste, et `git log` affiche le commit « feat(sync): partage en clair et incrémental (format 2) ».
 
 ## Étape 5 : vider l'ancien partage dans Google Drive
 

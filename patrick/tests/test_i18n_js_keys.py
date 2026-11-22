@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from patrick.webapp import i18n
-from patrick.webapp.i18n import STRINGS
-from patrick.webapp.i18n_models import PAGE_JS_KEYS
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.i18n.core import STRINGS
+from patrick.webapp.i18n.models import PAGE_JS_KEYS
 
 STATIC = Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "static"
 _USES = [

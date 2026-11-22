@@ -15,7 +15,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from patrick.clock import local_now
+from patrick.core.clock import local_now
 
 DAY_INDEX = {"lundi": 0, "mardi": 1, "mercredi": 2, "jeudi": 3, "vendredi": 4, "samedi": 5, "dimanche": 6,
              "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,

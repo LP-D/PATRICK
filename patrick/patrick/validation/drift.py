@@ -17,7 +17,7 @@ A badge therefore has three possible states, not two: `insufficient_data`
 (not even data drift is computable yet -- too few recent feature
 observations), `provisional` (data drift available, concept drift not yet
 -- target not realized in enough volume), `confirmed` (both signals
-available). Deliberately NOT built on `patrick.audit.run_degradation_audit`:
+available). Deliberately NOT built on `patrick.audit.degradation.run_degradation_audit`:
 that is a one-time comparative validator over 4 fixed leakage-fix
 configurations and 5 hardcoded targets (see its module docstring), a
 different tool for a different question -- not a per-ticker/horizon

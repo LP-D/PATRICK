@@ -11,7 +11,7 @@ import threading
 
 import pandas as pd
 
-from patrick.clock import utc_today
+from patrick.core.clock import utc_today
 from patrick.fund import engine, instruments, kpis, prices, rules, store
 from patrick.fund import fees as fees_mod
 

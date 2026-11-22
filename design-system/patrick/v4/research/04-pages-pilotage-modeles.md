@@ -15,17 +15,17 @@ Modes : **S** serveur · **L** serveur + `lazy_block` (`_components.html:187-195
 | Historique | `/runs` (`app.py:1209`) → `runs.html` ; `?vue=analyses` → `_runs_analyses.html` ; `/runs/{id}/panel` (`:1530`) → `_run_panel` / `_rl_run_panel` | S (+K) | 1 tableau par famille (14 ou 13 col.) |
 | ↳ Run | `/runs/{id}` (`app.py:1120`) : job RL → 303 `/rl?open=` ; job web → `ml.html`/`dl.html` ; sinon `run_detail.html` (`:1149-1171`) | — | — |
 | ↳ Détail | `/runs/{id}/detail` (`app.py:2478`) → `run_detail.html` + `_run_tabs`, `_retrain_advice` (`:2540`), `_run_meta_labeling` (`:2554`) | L | ~18 KPI, 10 cartes, 9 `data_table` + plis |
-| ↳ Analyse | `/runs/{id}/analyse` (`analysis_routes.py:131`) → `run_analysis.html` | K | ML : 19 `PK.kpi`, 23 `PK.table`, 20 `PK.plot` |
-| ↳ Comparaisons | `/compare-runs` (`app.py:1420`) → `compare_runs.html` / `compare_rl.html` ; `/analyses/comparer` (`analysis_routes.py:225`) → `analyses_compare.html` ; `_compare_tabs` | S / K | 1 tableau ; 3 graphiques + 3 tableaux |
-| Registre | `/modeles`, `/modeles/fiche` (`analysis_routes.py:363,367`) → `modeles.html` | K | 4 KPI ; 5 KPI (fiche) |
-| Garde-fous, Dérive, Journal, Variables, Carnet | `/garde-fous`, `/derive`, `/journal`, `/variables`, `/carnet` (`analysis_routes.py:256,409,329,433,299`) | K | 3 à 5 KPI |
+| ↳ Analyse | `/runs/{id}/analyse` (`routes/analysis.py:131`) → `run_analysis.html` | K | ML : 19 `PK.kpi`, 23 `PK.table`, 20 `PK.plot` |
+| ↳ Comparaisons | `/compare-runs` (`app.py:1420`) → `compare_runs.html` / `compare_rl.html` ; `/analyses/comparer` (`routes/analysis.py:225`) → `analyses_compare.html` ; `_compare_tabs` | S / K | 1 tableau ; 3 graphiques + 3 tableaux |
+| Registre | `/modeles`, `/modeles/fiche` (`routes/analysis.py:363,367`) → `modeles.html` | K | 4 KPI ; 5 KPI (fiche) |
+| Garde-fous, Dérive, Journal, Variables, Carnet | `/garde-fous`, `/derive`, `/journal`, `/variables`, `/carnet` (`routes/analysis.py:256,409,329,433,299`) | K | 3 à 5 KPI |
 | Prédictions | `/predictions` (`app.py:1966`) → `predictions.html` + `_predictions_body` (`:2055`), `_pred_cell` | L | 1 matrice par groupe |
 | Séries & modèles | `/analysis` (`app.py:1661`) → `analysis.html` | S | 5 KPI, 10 tableaux |
-| Exploration / Économétrie | `/exploration` (`exploration_routes.py:218`), `/econometrie` (`econometrics_routes.py:306`) | F | 8 / 6 onglets |
-| News / Résultats | `/news` (`news_routes.py:77`) + 4 `_news_*` ; `/resultats`, `/resultats/titre/{symbol}`, `/resultats/evenement` (`earnings_routes.py:118,351,366`) + 7 `_earn_*` | L | 5 KPI ; 3 KPI + 54 cartes |
-| Données | `/donnees` (`data_routes.py:55`), `/data-quality` (`app.py:1618`) | K / S | 6 panneaux ; 5 KPI |
+| Exploration / Économétrie | `/exploration` (`routes/exploration.py:218`), `/econometrie` (`routes/econometrics.py:306`) | F | 8 / 6 onglets |
+| News / Résultats | `/news` (`routes/news.py:77`) + 4 `_news_*` ; `/resultats`, `/resultats/titre/{symbol}`, `/resultats/evenement` (`routes/earnings.py:118,351,366`) + 7 `_earn_*` | L | 5 KPI ; 3 KPI + 54 cartes |
+| Données | `/donnees` (`routes/data.py:55`), `/data-quality` (`app.py:1618`) | K / S | 6 panneaux ; 5 KPI |
 | ML / DL | `/ml`, `/dl` (`app.py:650,658`) → `ml.html`/`dl.html` ⊂ `launch_base.html` + `_batch_gallery`, `_profile_gallery`, `_machine_card`, `_run_controls`, `_launch_macros` | F + L | 12 accordéons |
-| RL | `/rl` (`rl_routes.py:218`) → `rl.html` ⊂ `base_v2.html` | F + L | 6 accordéons |
+| RL | `/rl` (`routes/rl.py:218`) → `rl.html` ⊂ `base_v2.html` | F + L | 6 accordéons |
 
 ## 2. Constats transverses
 
@@ -71,7 +71,7 @@ Fil = libellé du registre (`base_v2.html:171-176`) ; h1 et `<title>` = autres c
 
 ### 2.7 Différé, erreurs, rafraîchissement
 - **Bug d'état d'erreur** : `lazy_block` range le libellé d'*attente* dans `data-label-error` (`_components.html:188,190`) et tous les appels passent `t('sb_loading')` ou `t('batch_loading')` : l'échec affiche « Chargement… » + « Réessayer » (`static/lazy.js:22-25`).
-- Latences notées : `/fragments/home` ~6 s (`app.py:746`), `/fragments/predictions` ~3 s (`:1969-1971`), méta-étiquetage 2-4 s (`:2497`), vues d'analyse 1-5 s, cache 60 s (`analysis_routes.py:45-47`). Interrogations : file 4 s (`static/machine.js:20`), run 1,5 s (`app.js:304`), RL 2-4 s (`rl.js:188,192`), notifications 15/60 s (`run_notify.js:8`).
+- Latences notées : `/fragments/home` ~6 s (`app.py:746`), `/fragments/predictions` ~3 s (`:1969-1971`), méta-étiquetage 2-4 s (`:2497`), vues d'analyse 1-5 s, cache 60 s (`routes/analysis.py:45-47`). Interrogations : file 4 s (`static/machine.js:20`), run 1,5 s (`app.js:304`), RL 2-4 s (`rl.js:188,192`), notifications 15/60 s (`run_notify.js:8`).
 - **Colonne phare masquée** (Historique ML/DL) : panneau ouvert → colonnes 8-9 = **F1 et Écart** cachées (`patrick.css:2260-2262`, `runs.html:219-220`) ; ≤ 1180 px → colonne 9 ; ≤ 960 px → colonne 8 (`:2301-2309`). Colonne Cible de 76 px avec ellipse (`:2235-2242`) pour des noms comme « Indice · S&P 500 » (à vérifier).
 
 ## 3. Fiches — Pilotage
@@ -96,12 +96,12 @@ Fil = libellé du registre (`base_v2.html:171-176`) ; h1 et `<title>` = autres c
 - **UX** : `#repartition`, `#conforme` et Phase 6 (sans `id`) absents de l'index ; l'ancre « Conseil » vise un bloc vide sans suggestion (`_retrain_advice.html:6`) ; deux `h2` dans la carte Essais (`:327,347`) ; baselines en `clé=valeur` (`:350`). **Piste** : en-tête d'identité figé (nom, cible, statut, une action + menu), index vertical collant, KPI en tableau valeur | fiabilité, config dans un tiroir.
 
 ### 3.5 Analyse d'un run `/runs/{id}/analyse`
-- Même contexte, fil et onglets ; 3 à 5 `btn-secondary` (`run_analysis.html:28-37`) ; une `section.card.ra-section` à squelette par section (`:45-53`) : 17 ML (+ `paths` en CPCV, `analysis_routes.py:40-41,100-101`) ou 7 RL (`patrick/analysis/rl_sections.py:21`), chargées à l'approche (`static/analysis_loader.js:91`).
+- Même contexte, fil et onglets ; 3 à 5 `btn-secondary` (`run_analysis.html:28-37`) ; une `section.card.ra-section` à squelette par section (`:45-53`) : 17 ML (+ `paths` en CPCV, `routes/analysis.py:40-41,100-101`) ou 7 RL (`patrick/analysis/rl_sections.py:21`), chargées à l'approche (`static/analysis_loader.js:91`).
 - **Piste** : panneaux 2 colonnes (graphique | chiffres), sommaire latéral, exports dans un menu.
 
 ### 3.6 Comparaisons
 - `/compare-runs` ML/DL (2 à 4 runs, `app.py:1423-1424`) : onglets (`compare_runs.html:9`), bannières de mélange (`:11,13`), tableau hors carte, chiffres sans `num pk-mono` (`:25-29`), meilleur non signalé. RL : courbes (`compare_rl.html:14-23`), tableau `cmp-diff`/`best` (`:25-43`), sans onglets.
-- `/analyses/comparer` : contrôles + 5 cartes JS (`analyses_compare.html:12-20`) ; runs RL refusés (404, `analysis_routes.py:236`).
+- `/analyses/comparer` : contrôles + 5 cartes JS (`analyses_compare.html:12-20`) ; runs RL refusés (404, `routes/analysis.py:236`).
 - **Piste** : une page à colonnes figées (mesure | runs), meilleur et écarts surlignés, graphiques au-dessus.
 
 ### 3.7 Registre `/modeles` (+ `/modeles/fiche`)
@@ -143,8 +143,8 @@ Fil = libellé du registre (`base_v2.html:171-176`) ; h1 et `<title>` = autres c
 - **UX** : réglage machine au milieu du formulaire (`:497-515`, bouton sans classe, script en ligne `:629-653`) ; 3 styles de boutons dans un panneau. **DL** : bannière et bouton désactivé sans torch (`dl.html:8-10`) ; `sec_models` = réseaux + `section_deep_{arch,train,compute}` + extra (`dl.html:15-66`).
 - **Piste** : formulaire en colonnes (Cible / Méthode / Calcul) au lieu de 12 accordéons, récapitulatif façon ticket d'ordre toujours visible, file et run actif en barre d'état basse.
 
-### 4.2 RL `/rl` — `rl.html` (`rl_routes.py:205-242`)
-- N'étend pas `launch_base.html` : galerie de profils recopiée (`rl.html:56-72`) ; agent (`:111-147`) + 6 sections `rl_<groupe>` (`rl_routes.py:51-60`) aux champs masqués selon l'algorithme (`data-algos`, `data-actions`) ; lancement sans `btn-arrow` (`:188`) ; à droite Avancement, File, Résultats (caché), Runs RL, 3 sections de classe `dash-progress` (`:197-226`) ; pas d'aperçu marché.
+### 4.2 RL `/rl` — `rl.html` (`routes/rl.py:205-242`)
+- N'étend pas `launch_base.html` : galerie de profils recopiée (`rl.html:56-72`) ; agent (`:111-147`) + 6 sections `rl_<groupe>` (`routes/rl.py:51-60`) aux champs masqués selon l'algorithme (`data-algos`, `data-actions`) ; lancement sans `btn-arrow` (`:188`) ; à droite Avancement, File, Résultats (caché), Runs RL, 3 sections de classe `dash-progress` (`:197-226`) ; pas d'aperçu marché.
 - **Piste** : même gabarit que ML/DL : trois pages Modèles identiques à la grammaire près.
 
 ## 5. Fiche cible `/targets/{ticker}` (enfant d'Univers)

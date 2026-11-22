@@ -19,8 +19,10 @@ from patrick.rl.config import RLRunConfig
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.validation import equity_sufficiency
-from patrick.webapp import forms, forms_rl, i18n, rl_routes, run_manager
+from patrick.webapp import forms, forms_rl, run_manager
 from patrick.webapp.app import app
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.routes import rl as rl_routes
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +101,7 @@ def test_the_glossary_explains_the_algorithms_and_the_settings(client):
     html = client.get("/rl").text
     for term in ("PPO", "rl_agent", "rl_reward", "rl_cost", "rl_timesteps", "rl_walkforward", "rl_gamma", "rl_seeds", "rl_policy"):
         assert f'data-term="{term}"' in html, term
-    from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
+    from patrick.webapp.glossary.core import GLOSSARY, TERM_LABEL_KEYS
     for term in rl_routes.FIELD_TERMS.values():
         if term in GLOSSARY:
             assert GLOSSARY[term]["fr"] and GLOSSARY[term]["en"]

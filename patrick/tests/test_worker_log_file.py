@@ -12,8 +12,8 @@ import sys
 
 import pytest
 
-from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
+from patrick.system import worker as worker_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 

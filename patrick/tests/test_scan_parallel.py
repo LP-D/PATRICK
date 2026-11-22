@@ -7,9 +7,9 @@ import os
 import numpy as np
 import pytest
 
-from patrick import settings
 from patrick.benchmark import artifacts, reference, runner
 from patrick.config.schema import RunConfig
+from patrick.core import settings
 from patrick.pipeline import engine, parallel
 from patrick.tracking import db as trackdb
 
@@ -22,7 +22,7 @@ def _isolated_settings(tmp_path, monkeypatch):
 
 def test_resolve_jobs_precedence(monkeypatch):
     # le plafond de mémoire (`resource_budget.cap_workers`) ne doit pas dépendre de la mémoire libre de la machine qui lance les tests
-    monkeypatch.setattr("patrick.resource_budget.psutil.virtual_memory", lambda: type("M", (), {"available": 16 * 1024**3})())
+    monkeypatch.setattr("patrick.system.resource_budget.psutil.virtual_memory", lambda: type("M", (), {"available": 16 * 1024**3})())
     assert parallel.resolve_jobs() == 1
     settings.save({settings.KEY_SCAN_JOBS: 2})
     assert parallel.resolve_jobs() == min(2, os.cpu_count() or 1)

@@ -23,10 +23,11 @@ from test_data_move import (  # noqa: F401  (fixtures et aides)
 )
 from typer.testing import CliRunner
 
-from patrick import data_move, paths, settings
 from patrick.cli import app as cli_app
+from patrick.core import paths, settings
 from patrick.desktop import runtime, update
-from patrick.webapp import settings_routes
+from patrick.storage import data_move
+from patrick.webapp.routes import settings as settings_routes
 
 
 def _newer(target: Path, than: Path, seconds: int = 10) -> None:

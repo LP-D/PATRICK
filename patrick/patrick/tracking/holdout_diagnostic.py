@@ -19,7 +19,7 @@ import sqlite3
 import numpy as np
 from scipy import stats
 
-from patrick.numeric import is_nan
+from patrick.core.numeric import is_nan
 
 
 def write_holdout_diagnostic(conn: sqlite3.Connection, trial_id: int, metrics: dict) -> None:

@@ -14,8 +14,8 @@ from patrick.analysis import data_explorer as dx
 from patrick.data.store import DataStore
 from patrick.tracking import db as trackdb
 from patrick.tracking import watchlists as wl
-from patrick.webapp import data_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import data as data_routes
 
 
 def _frame(n=400, seed=1, shift=0.0):

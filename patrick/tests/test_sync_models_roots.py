@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from patrick import sync
+from patrick.sync import core as sync
 
 
 def test_relative_model_paths_resolve_whatever_the_working_directory(tmp_path, monkeypatch):
@@ -30,4 +30,4 @@ def test_relative_model_paths_resolve_whatever_the_working_directory(tmp_path, m
 def test_the_project_folder_is_the_one_that_holds_the_patrick_package():
     project = sync._project_dir()
 
-    assert (project / "patrick" / "sync.py").is_file() and Path(sync.__file__).resolve().parents[1] == project
+    assert (project / "patrick" / "sync" / "core.py").is_file() and Path(sync.__file__).resolve().parents[2] == project

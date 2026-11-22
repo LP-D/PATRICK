@@ -1,0 +1,292 @@
+"""Roadmap bloc 4 -- PATRIMOINE pages and JSON API.
+
+Pages (nav_registry, category `patrimoine`):
+- `/patrimoine`: accounts (real and fictive), consolidated real holdings,
+  ex-ante risk; child route `/patrimoine/comptes/{account_id}`;
+- `/mouvements`: every movement, drag-and-drop between accounts, CSV drop
+  zone. (Flat URL on purpose: `/patrimoine/mouvements` would also light the
+  `/patrimoine` entry, whose active state is prefix-based.)
+
+API (`/api/wealth/*`): create/update/delete accounts, clone as fictive,
+add/delete/transfer movements, CSV import with a mandatory preview step
+(`commit=false` returns the parsed rows and per-line errors, `commit=true`
+writes only the valid rows; symbols resolved to Yahoo quotes, the file's
+account column mapped onto accounts, internal transfers and duplicates
+skipped). Every write goes through `wealth.ledger`,
+whose validation errors become 400s.
+
+Prices: `price_provider()` (`wealth.prices`: yfinance with a short cache,
+the local data lake as offline fallback) -- module-level so tests can
+replace it.
+
+Add-movement form: the asset is picked from a dropdown (`symbol_groups`)
+rather than typed, so every position carries a Yahoo symbol the price
+provider can value -- a typo ("ALDAT" for "ALDAT.PA") used to leave the
+position without a price, hence without P&L.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from jinja2 import pass_context
+
+from patrick.config import defaults as D
+from patrick.config import universe_extension as UX
+from patrick.core.numeric import is_nan
+from patrick.tracking import db as trackdb
+from patrick.wealth import importer, ledger, service, symbols
+from patrick.wealth import prices as wealth_prices
+from patrick.webapp.i18n import server as i18n_server
+
+
+def price_provider():
+    return wealth_prices.make_provider()
+
+
+def symbol_resolver(currency: str):
+    """Symbols of an imported CSV -> Yahoo quotes (module-level so tests can
+    replace the network search)."""
+    return symbols.make_resolver(currency)
+
+
+HELD_GROUP = "Positions du compte"
+
+
+def symbol_groups(held: list[str]) -> list[tuple[str, list[tuple[str, str]]]]:
+    """Choices of the add-movement "Actif" dropdown, as (group, [(symbol,
+    label)]): the account's own symbols first (kept even when absent from
+    the ticker bank, e.g. imported from a CSV), then every Yahoo symbol of
+    the bank, grouped as on the launch page. FRED series are left out: no
+    Yahoo quote, nothing to hold."""
+    fred = {sym for sym, _, src in D.DEFAULT_TARGET_CHOICES if src == "fred"}
+    bank = [(g, [(sym, label.replace("_", " ")) for sym, label in items if sym not in fred])
+            for g, items in UX.all_target_groups().items()]
+    bank = [(g, items) for g, items in bank if items]
+    label_of = {sym: label for _, items in bank for sym, label in items}
+    own = [(sym, label_of.get(sym, "hors banque de tickers")) for sym in held]
+    return ([(HELD_GROUP, own)] if own else []) + bank
+
+
+def _held_symbols(movements: list[dict]) -> list[str]:
+    return sorted({m["symbol"] for m in movements if m["symbol"] and not m["symbol"].startswith("DAT:")})
+
+
+def _json_body(raw: bytes) -> dict:
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="corps JSON invalide") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="objet JSON attendu")
+    return body
+
+
+def _ledger_call(fn, *args, **kwargs):
+    conn = trackdb.connect()
+    try:
+        return fn(conn, *args, **kwargs)
+    except ledger.LedgerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail=f"contrainte violée : {exc}") from exc
+    finally:
+        conn.close()
+
+
+def _fmt_number(value, digits: int) -> str:
+    return f"{value:,.{digits}f}".replace(",", "\u202f").replace(".", ",")
+
+
+def _en_number(value: float, digits: int) -> str:
+    return f"{value:,.{digits}f}"
+
+
+def fmt_eur(value, digits: int = 2) -> str:
+    """French money format (narrow no-break space thousands, decimal comma)."""
+    if value is None or is_nan(value):
+        return "—"
+    return _fmt_number(float(value), digits) + "\u00a0€"
+
+
+def fmt_pct(value, digits: int = 1, signed: bool = False) -> str:
+    if value is None or is_nan(value):
+        return "—"
+    v = float(value) * 100
+    sign = "+" if signed and v > 0 else ""
+    return sign + _fmt_number(v, digits) + "\u00a0%"
+
+
+def fmt_qty(value) -> str:
+    if value is None or is_nan(value):
+        return "—"
+    v = float(value)
+    return _fmt_number(v, 0 if abs(v - round(v)) < 1e-9 else 4)
+
+
+def register(app: FastAPI, templates, context) -> None:
+    """`context(request)` = the app's i18n/glossary context builder."""
+    # Filtres de gabarit : séparateurs et symbole selon la langue de la page (« 1 234,56 € » en français, « €1,234.56 » en anglais).
+    def _english(context) -> bool:
+        return context.get("lang") == "en"
+
+    @pass_context
+    def _eur(context, value, digits: int = 2) -> str:
+        text = fmt_eur(value, digits)
+        if not _english(context) or text == "—":
+            return text
+        return "€" + _en_number(float(value), digits)
+
+    @pass_context
+    def _pct(context, value, digits: int = 1, signed: bool = False) -> str:
+        text = fmt_pct(value, digits, signed)
+        if not _english(context) or text == "—":
+            return text
+        v = float(value) * 100
+        return ("+" if signed and v > 0 else "") + _en_number(v, digits) + "%"
+
+    @pass_context
+    def _qty(context, value) -> str:
+        text = fmt_qty(value)
+        if not _english(context) or text == "—":
+            return text
+        v = float(value)
+        return _en_number(v, 0 if abs(v - round(v)) < 1e-9 else 4)
+
+    templates.env.filters["eur"] = _eur
+    templates.env.filters["pct"] = _pct
+    templates.env.filters["qty"] = _qty
+    templates.env.filters["mvkind"] = pass_context(
+        lambda context, kind: i18n_server.translate(ledger.MOVEMENT_LABELS_FR.get(kind, kind), context.get("lang") or "fr"))
+
+    @app.get("/patrimoine")
+    def patrimoine_page(request: Request):
+        conn = trackdb.connect()
+        try:
+            data = service.overview(conn, price_provider())
+        finally:
+            conn.close()
+        return templates.TemplateResponse(request, "patrimoine.html",
+                                          {"data": data, "kinds": ledger.ACCOUNT_KINDS, **context(request)})
+
+    @app.get("/patrimoine/comptes/{account_id}")
+    def patrimoine_account_page(request: Request, account_id: str):
+        conn = trackdb.connect()
+        try:
+            detail = service.account_detail(conn, account_id, price_provider())
+            accounts = ledger.list_accounts(conn)
+        finally:
+            conn.close()
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Compte introuvable")
+        return templates.TemplateResponse(request, "patrimoine_account.html", {
+            "detail": detail, "accounts": accounts, "chart": service.chart_payload(detail),
+            "movement_kinds": ledger.MOVEMENT_KINDS,
+            "symbol_groups": symbol_groups(_held_symbols(detail["movements"])), **context(request)})
+
+    @app.get("/mouvements")
+    def movements_page(request: Request):
+        conn = trackdb.connect()
+        try:
+            accounts = ledger.list_accounts(conn)
+            by_id = {a["account_id"]: a for a in accounts}
+            movements = [m for m in ledger.list_movements(conn) if m["account_id"] in by_id]
+        finally:
+            conn.close()
+        movements.sort(key=lambda m: (m["ts"], m["movement_id"]), reverse=True)
+        return templates.TemplateResponse(request, "mouvements.html", {
+            "accounts": accounts, "by_id": by_id, "movements": movements,
+            "movement_kinds": ledger.MOVEMENT_KINDS, **context(request)})
+
+    # ---------------------------------------------------------------- API
+
+    @app.post("/api/wealth/accounts")
+    async def api_create_account(request: Request):
+        b = _json_body(await request.body())
+        # Absent -> the wrapper's default benchmark; "" -> explicitly none.
+        benchmark = (b.get("benchmark") or None) if "benchmark" in b else "__default__"
+        account_id = _ledger_call(ledger.create_account, b.get("name"), b.get("kind"), b.get("mode", "real"),
+                                  b.get("currency") or "EUR", benchmark, b.get("opened_on") or None)
+        return {"account_id": account_id}
+
+    @app.patch("/api/wealth/accounts/{account_id}")
+    async def api_update_account(request: Request, account_id: str):
+        b = _json_body(await request.body())
+        _ledger_call(ledger.update_account, account_id, **b)
+        return {"ok": True}
+
+    @app.delete("/api/wealth/accounts/{account_id}")
+    def api_delete_account(account_id: str):
+        _ledger_call(ledger.delete_account, account_id)
+        return {"ok": True}
+
+    @app.post("/api/wealth/accounts/{account_id}/clone")
+    async def api_clone_account(request: Request, account_id: str):
+        b = _json_body(await request.body())
+        return {"account_id": _ledger_call(ledger.clone_as_fictive, account_id, b.get("name") or None)}
+
+    @app.post("/api/wealth/accounts/{account_id}/movements")
+    async def api_add_movement(request: Request, account_id: str):
+        b = _json_body(await request.body())
+        return {"movement_id": _ledger_call(ledger.add_movement, account_id, b)}
+
+    @app.delete("/api/wealth/movements/{movement_id}")
+    def api_delete_movement(movement_id: int):
+        _ledger_call(ledger.delete_movement, movement_id)
+        return {"ok": True}
+
+    @app.post("/api/wealth/movements/{movement_id}/transfer")
+    async def api_transfer_movement(request: Request, movement_id: int):
+        b = _json_body(await request.body())
+        return _ledger_call(ledger.transfer_movement, movement_id, str(b.get("account_id") or ""))
+
+    @app.post("/api/wealth/accounts/{account_id}/import")
+    async def api_import(request: Request, account_id: str):
+        """`{"csv": "<text>", "commit": false, "accounts": {source:
+        account_id | ""}}` -> preview; `commit: true` writes the rows whose
+        status is empty (errors, skipped sources, internal transfers and
+        duplicates are returned again, never silently dropped). `accounts`
+        maps the values of the file's account column (Trade Republic:
+        DEFAULT / PEA) onto accounts, "" skipping one; unmapped -> this
+        account."""
+        b = _json_body(await request.body())
+        text = b.get("csv")
+        if not isinstance(text, str):
+            raise HTTPException(status_code=400, detail="champ csv (texte) manquant")
+        mapping = b.get("accounts") or {}
+        if not isinstance(mapping, dict):
+            raise HTTPException(status_code=400, detail="accounts : objet {source: compte} attendu")
+        conn = trackdb.connect()
+        try:
+            target = ledger.get_account(conn, account_id)
+            if target is None:
+                raise HTTPException(status_code=404, detail="Compte introuvable")
+            accounts = ledger.list_accounts(conn)
+            known = {a["account_id"] for a in accounts}
+            unknown = sorted(str(v) for v in mapping.values() if v and v not in known)
+            if unknown:
+                raise HTTPException(status_code=400, detail=f"compte(s) introuvable(s) : {unknown}")
+            try:
+                parsed = importer.parse_csv(text.encode("utf-8"), resolve=symbol_resolver(target["currency"]))
+            except ledger.LedgerError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            targets = {account_id, *(v for v in mapping.values() if v)}
+            plan = importer.plan_import(parsed["rows"], mapping, account_id,
+                                        {acc: ledger.list_movements(conn, acc) for acc in targets})
+            written = 0
+            if b.get("commit"):
+                for row in plan:
+                    if row["status"] == "":
+                        ledger.add_movement(conn, row["target"], row)
+                        written += 1
+        finally:
+            conn.close()
+        return JSONResponse({
+            "rows": plan,
+            "errors": parsed["errors"], "warnings": parsed["warnings"], "columns": parsed["columns"],
+            "sources": parsed["sources"],
+            "accounts": [{"account_id": a["account_id"], "name": a["name"], "kind": a["kind"], "mode": a["mode"]}
+                         for a in accounts],
+            "to_write": sum(1 for row in plan if row["status"] == ""), "written": written})

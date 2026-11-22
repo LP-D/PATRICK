@@ -1,4 +1,4 @@
-"""Pages et API d'analyse (`webapp/analysis_routes.py`) sur un run synthétique : le cadre s'affiche tout de suite, les sections arrivent par
+"""Pages et API d'analyse (`webapp/routes/analysis.py`) sur un run synthétique : le cadre s'affiche tout de suite, les sections arrivent par
 l'API JSON, les identifiants inconnus répondent 404, les textes JS existent dans les deux langues."""
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from analysis_support import seed_run
 from fastapi.testclient import TestClient
 
 from patrick.analysis import registry
-from patrick.webapp import analysis_routes
 from patrick.webapp.app import app
-from patrick.webapp.i18n import STRINGS, js_strings
+from patrick.webapp.i18n.core import STRINGS, js_strings
+from patrick.webapp.routes import analysis as analysis_routes
 
 STATIC = Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "static"
 
@@ -216,7 +216,7 @@ def test_standalone_report_survives_a_hostile_run_name(client):
 
 def test_heavy_overviews_are_cached_for_a_minute_per_database(client, monkeypatch):
     from patrick.analysis import guardrails
-    from patrick.webapp import analysis_routes
+    from patrick.webapp.routes import analysis as analysis_routes
     analysis_routes._cache.clear()
     calls = []
     real = guardrails.summary

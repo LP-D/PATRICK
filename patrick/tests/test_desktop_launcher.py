@@ -9,9 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from patrick import settings, sync
+from patrick.core import settings
 from patrick.desktop import launcher, prefs, runtime, share, update
 from patrick.desktop.ui import Reporter
+from patrick.sync import core as sync
 
 
 class FakeReporter(Reporter):

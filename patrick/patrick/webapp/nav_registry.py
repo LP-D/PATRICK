@@ -122,7 +122,7 @@ NAV_ENTRIES: tuple[NavEntry, ...] = (
     # Stratégies : laboratoire « acheter avant / vendre après un événement » et straddles autour des résultats (patrick/strategylab/).
     NavEntry("strategies", "Stratégies", "/strategies", "simulation", 40, "nav_strategies"),
     # PATRIMOINE -- comptes reels et fictifs (PEA, CTO, AV, livret, DAT) et
-    # leurs mouvements (roadmap bloc 4, webapp/wealth_routes.py). URLs a plat
+    # leurs mouvements (roadmap bloc 4, webapp/routes/wealth.py). URLs a plat
     # (`/mouvements`, pas `/patrimoine/mouvements`) : l'etat actif est par
     # prefixe, une page enfant allumerait aussi `/patrimoine`.
     NavEntry("patrimoine", "Comptes", "/patrimoine", "patrimoine", 10, "nav_patrimoine",

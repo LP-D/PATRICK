@@ -10,8 +10,9 @@ from datetime import date, timedelta
 import pytest
 from typer.testing import CliRunner
 
-from patrick import cache_eviction, worker
-from patrick.storage_cli import storage_app
+from patrick.storage import cache_eviction
+from patrick.storage.cli import storage_app
+from patrick.system import worker
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 

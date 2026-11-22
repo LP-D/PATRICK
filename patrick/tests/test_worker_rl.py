@@ -7,10 +7,10 @@ import json
 import numpy as np
 import pytest
 
-from patrick import worker as worker_module
 from patrick.rl import agents
 from patrick.rl import run as rl_run
 from patrick.rl.config import RLRunConfig
+from patrick.system import worker as worker_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 

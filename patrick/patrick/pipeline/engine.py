@@ -48,11 +48,12 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
-from patrick.clock import utc_today
 from patrick.config import defaults as D
 from patrick.config.equity_universe import is_equity_symbol
 from patrick.config.schema import RunConfig
 from patrick.config.targets import refuse_non_target
+from patrick.core.clock import utc_today
+from patrick.core.numeric import is_nan
 from patrick.data import alignment
 from patrick.data import quality as quality_module
 from patrick.data.ingest import ingest, load_snapshot
@@ -94,7 +95,6 @@ from patrick.models.uniqueness import (
     build_indicator_matrix,
     effective_sample_size,
 )
-from patrick.numeric import is_nan
 from patrick.pipeline import early_stop_shadow, parallel, pause
 from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction

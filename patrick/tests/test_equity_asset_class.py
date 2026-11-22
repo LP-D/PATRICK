@@ -580,7 +580,7 @@ def test_equities_page_returns_200_and_lists_every_stock_under_its_name():
 
 def test_launch_page_badge_suffix_is_scoped_to_the_insufficient_equity_option(monkeypatch):
     """Etape e : l'ancienne assertion `"insuffisant" in resp.text` etait
-    inoperante -- `webapp/i18n.py:356` ("Historique insuffisant pour
+    inoperante -- `webapp/i18n/core.py:356` ("Historique insuffisant pour
     calculer ces statistiques...") est injectee en JSON sur TOUTE page via
     `base_v2.html` (`i18n_js`), donc la chaine est presente meme quand le
     badge actions est correct. Cette version cible l'element <option> exact

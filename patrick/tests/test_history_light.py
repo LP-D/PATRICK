@@ -315,7 +315,7 @@ _RESULT = json.dumps({"strategy": {"sharpe": 0.8, "total_return": 0.2, "max_draw
 
 
 def test_the_light_rl_history_gives_the_same_rows_as_the_full_reading(tmp_path):
-    from patrick.webapp import rl_routes
+    from patrick.webapp.routes import rl as rl_routes
     conn = db.connect(db.default_db_path())
     _rl_job(conn, "agent_done", "done", _RESULT)
     _rl_job(conn, "agent_err", "error", error=db.USER_STOPPED_ERROR)
@@ -329,7 +329,7 @@ def test_the_light_rl_history_gives_the_same_rows_as_the_full_reading(tmp_path):
 
 
 def test_an_unreadable_rl_result_does_not_break_the_history(client):
-    from patrick.webapp import rl_routes
+    from patrick.webapp.routes import rl as rl_routes
     conn = db.connect(db.default_db_path())
     _rl_job(conn, "agent_ok", "done", _RESULT)
     broken = _rl_job(conn, "agent_broken", "done", "{not json")

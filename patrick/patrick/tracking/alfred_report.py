@@ -10,10 +10,10 @@ import os
 import threading
 import time
 
-from patrick.cache_manager import LocalCache
-from patrick.clock import utc_now
 from patrick.config import defaults as D
+from patrick.core.clock import utc_now
 from patrick.data import alfred
+from patrick.storage.cache_manager import LocalCache
 
 CACHE_KEY = "alfred_vs_fred_report"
 _lock = threading.Lock()

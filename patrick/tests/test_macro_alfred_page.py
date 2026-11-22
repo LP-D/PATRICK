@@ -7,7 +7,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.cache_manager import LocalCache
+from patrick.storage.cache_manager import LocalCache
 from patrick.tracking import alfred_report
 from patrick.webapp.app import app
 

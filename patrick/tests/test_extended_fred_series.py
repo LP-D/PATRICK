@@ -53,7 +53,7 @@ def test_macro_page_opens_with_the_headline_indicators():
     assert sections[0][0] == "key"
     assert {"GDP", "UNRATE", "CPIAUCSL", "FEDFUNDS"} <= {sid for sid, _ in sections[0][1]}
     # Each section's title exists in both languages.
-    from patrick.webapp import i18n
+    from patrick.webapp.i18n import core as i18n
     for key, _ in sections:
         assert i18n.STRINGS[f"macro_section_{key}"]["fr"] and i18n.STRINGS[f"macro_section_{key}"]["en"]
 

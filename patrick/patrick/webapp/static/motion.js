@@ -1,4 +1,4 @@
-/* Mouvement (ADR 0023) : ce que le CSS seul ne sait pas faire. Les durées et les courbes viennent des jetons de patrick.css.
+/* Mouvement (ADR 0024) : ce que le CSS seul ne sait pas faire. Les durées et les courbes viennent des jetons de patrick.css.
    - Popovers, menus, boîtes et palette entrent depuis leur déclencheur et y retournent : l'origine de la transformation
      (`--origin-x/y`) est posée au moment où ils apparaissent.
    - Un geste au clavier n'anime jamais rien : `<html data-input="keyboard">` coupe les transitions de ce qu'il ouvre.

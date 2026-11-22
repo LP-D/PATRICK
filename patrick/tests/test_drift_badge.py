@@ -11,7 +11,7 @@ monitor per (ticker, horizon). Two independent signals:
   -- only computable once outcomes are known, i.e. never before `horizon`
   days after each prediction.
 
-Deliberately NOT built on `patrick.audit.run_degradation_audit`: that is a
+Deliberately NOT built on `patrick.audit.degradation.run_degradation_audit`: that is a
 one-time comparative validator over 4 fixed leakage-fix configurations and
 5 hardcoded targets (see its module docstring) -- a different tool for a
 different question, not a per-ticker/horizon continuous monitor.

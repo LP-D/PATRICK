@@ -31,7 +31,7 @@ def test_system_has_cpu_memory_disks_and_data_disk_flag(home):
 
 
 def test_home_and_data_folders_come_from_paths(home):
-    from patrick import paths
+    from patrick.core import paths
 
     assert dg.home() == paths.home_dir() == home
     by = {i["name"]: i["path"] for i in dg.storage()["items"]}

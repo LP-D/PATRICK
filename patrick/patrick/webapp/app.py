@@ -31,18 +31,20 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from patrick import amplitude, live_refresh, paths, priority
-from patrick import settings as settings_store
-from patrick.clock import utc_now, utc_today
 from patrick.config import asset_classes, dl_profiles, training_profiles
 from patrick.config import defaults as D
 from patrick.config import equity_universe as EQ
 from patrick.config.schema import RunConfig
+from patrick.core import paths
+from patrick.core import settings as settings_store
+from patrick.core.clock import utc_now, utc_today
 from patrick.data import session_calendar
 from patrick.features import equity_context, guida, parametric_parallel
+from patrick.live import refresh as live_refresh
 from patrick.models import deep as deep_models
 from patrick.pipeline import parallel as scan_parallel
 from patrick.rl import history as rl_history
+from patrick.system import priority
 from patrick.tracking import champions as trackchampions
 from patrick.tracking import class_overview, data_health, memo, retrain_advisor
 from patrick.tracking import db as trackdb
@@ -55,48 +57,79 @@ from patrick.validation import equity_sufficiency, feasibility, metric_panel, su
 from patrick.validation.placebo import placebo_verdict
 from patrick.webapp import (
     alerts,
-    analysis_routes,
+    amplitude,
     asset_stats,
     asset_view,
     cached_views,
-    data_routes,
-    earnings_routes,
-    econometrics_routes,
-    exploration_routes,
     forms,
     forms_rl,
-    fund_routes,
-    i18n,
-    i18n_server,
     icons,
     instruments,
-    knowledge_routes,
     launch_batches,
     live_edge_view,
     market_data,
     market_regime,
     nav_registry,
-    news_routes,
-    placements_routes,
     predictions_snapshot,
     progress_steps,
-    risk_routes,
     rl_compare,
-    rl_routes,
     run_manager,
     security,
-    settings_routes,
     shap_chart,
     stats_help,
-    strategies_routes,
     todo_actions,
     view_cache,
-    wealth_routes,
-    workbench_routes,
 )
-from patrick.webapp.glossary import GLOSSARY, TERM_LABEL_KEYS
-from patrick.webapp.glossary_extra import CATEGORIES as GLOSSARY_CATEGORIES
-from patrick.webapp.glossary_extra import TERM_CATEGORY
+from patrick.webapp.glossary.core import GLOSSARY, TERM_LABEL_KEYS
+from patrick.webapp.glossary.extra import CATEGORIES as GLOSSARY_CATEGORIES
+from patrick.webapp.glossary.extra import TERM_CATEGORY
+from patrick.webapp.i18n import core as i18n
+from patrick.webapp.i18n import server as i18n_server
+from patrick.webapp.routes import (
+    analysis as analysis_routes,
+)
+from patrick.webapp.routes import (
+    data as data_routes,
+)
+from patrick.webapp.routes import (
+    earnings as earnings_routes,
+)
+from patrick.webapp.routes import (
+    econometrics as econometrics_routes,
+)
+from patrick.webapp.routes import (
+    exploration as exploration_routes,
+)
+from patrick.webapp.routes import (
+    fund as fund_routes,
+)
+from patrick.webapp.routes import (
+    knowledge as knowledge_routes,
+)
+from patrick.webapp.routes import (
+    news as news_routes,
+)
+from patrick.webapp.routes import (
+    placements as placements_routes,
+)
+from patrick.webapp.routes import (
+    risk as risk_routes,
+)
+from patrick.webapp.routes import (
+    rl as rl_routes,
+)
+from patrick.webapp.routes import (
+    settings as settings_routes,
+)
+from patrick.webapp.routes import (
+    strategies as strategies_routes,
+)
+from patrick.webapp.routes import (
+    wealth as wealth_routes,
+)
+from patrick.webapp.routes import (
+    workbench as workbench_routes,
+)
 
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
 # `/commodities` and `/macro` -- named once here rather than re-typed at
@@ -229,7 +262,7 @@ templates.env.filters["hlabel"] = _horizon_label
 
 @pass_context
 def _tx_filter(context, text):
-    """`{{ message | tx }}` : message produit côté serveur, traduit dans la langue de la page (voir `i18n_server.py`)."""
+    """`{{ message | tx }}` : message produit côté serveur, traduit dans la langue de la page (voir `i18n/server.py`)."""
     return i18n_server.translate(text, context.get("lang") or i18n.DEFAULT_LANG)
 
 
@@ -2340,7 +2373,7 @@ def api_measure_drift(target: str, horizon: int):
     ONE (target, horizon) (`explain.compute_drift_for_ticker_horizon`, which
     records it in `drift_psi_history`, read by the /predictions badge).
     Rebuilds the feature pool: an explicit user action, never a page loop."""
-    from patrick import explain as explain_module
+    from patrick.live import explain as explain_module
     from patrick.validation.drift import data_drift_status
 
     try:
@@ -2644,7 +2677,7 @@ def target_page(request: Request, ticker: str, fdr_alpha: float = 0.10):
 def target_shap_waterfall(ticker: str, horizon: int):
     """feature/shap-waterfall (Phase 7): on-demand SHAP explanation of the
     most recent RECORDED prediction for (ticker, horizon) -- see
-    `patrick.explain.explain_last_prediction` for the feasibility rationale
+    `patrick.live.explain.explain_last_prediction` for the feasibility rationale
     (cost measured on a real exported model, why the selection-time SHAP
     cache is not reused) and `docs/historique/rapports-de-chantier.md` for the
     numbers. Computed synchronously on request (button-triggered from

@@ -17,7 +17,7 @@ nombre de workers.
   l'utilisateur : réglage « workers » + variables OMP_NUM_THREADS).
 
 Activation : `PATRICK_SCAN_JOBS=<n>` ou réglage de la page « Lancer »
-(`patrick.settings`) ; défaut 1 = code séquentiel d'origine.
+(`patrick.core.settings`) ; défaut 1 = code séquentiel d'origine.
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from typing import Any
 
 from joblib import Parallel, delayed, parallel_config
 
-from patrick import settings
-from patrick.resource_budget import cap_workers
+from patrick.core import settings
+from patrick.system.resource_budget import cap_workers
 
 ENV_JOBS = "PATRICK_SCAN_JOBS"
 

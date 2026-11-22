@@ -172,7 +172,8 @@ def _model(trial_id: int, label: str, kind: str = "raw") -> dict:
 
 
 def test_the_model_options_are_rendered_once_per_list_of_models_and_language():
-    from patrick.webapp import fund_routes, i18n
+    from patrick.webapp.i18n import core as i18n
+    from patrick.webapp.routes import fund as fund_routes
 
     models = [_model(1, "B"), _model(2, "A"), _model(3, "C", "alpha")]
     fr, en = i18n.translator("fr"), i18n.translator("en")
@@ -189,7 +190,7 @@ def test_the_simulation_page_uses_the_pre_rendered_options(seeded, monkeypatch):
     conn = db.connect(seeded)
     store.create_strategy(conn, "Alpha", "PEA", 10000, "2025-06-02")
     conn.close()
-    from patrick.webapp import fund_routes
+    from patrick.webapp.routes import fund as fund_routes
 
     models = [_model(7, "ZZMODEL")]
     monkeypatch.setattr(fund_routes, "_cached_models", lambda conn: models)
@@ -204,7 +205,7 @@ def test_the_nightly_refresh_prepares_every_default_view_then_only_what_changed(
 
 
 def test_the_end_of_a_live_pass_refreshes_the_other_pages_too(seeded):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     live_refresh.refresh_predictions_snapshot(seeded, background=False)
     assert cached_views.HOME_SUMMARY.load(None, seeded) is not None

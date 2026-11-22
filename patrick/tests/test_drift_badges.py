@@ -70,7 +70,7 @@ def test_predictions_page_shows_the_badge(tmp_path, monkeypatch):
 
 
 def test_measure_route(monkeypatch):
-    from patrick import explain
+    from patrick.live import explain
     monkeypatch.setattr(explain, "compute_drift_for_ticker_horizon",
                         lambda t, h: {"a": {"psi": 0.3, "status": "significant"}, "b": {"psi": 0.01, "status": "stable"}})
     resp = TestClient(app).post("/api/drift/^VIX/5")

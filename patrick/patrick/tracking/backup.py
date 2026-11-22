@@ -48,7 +48,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from patrick import paths
+from patrick.core import paths
 from patrick.tracking.db import default_db_path
 
 logger = logging.getLogger("patrick.tracking.backup")

@@ -131,7 +131,7 @@ def test_a_refresh_with_nothing_testable_keeps_the_previous_measure(seeded, monk
 
 
 def test_the_daily_refresh_never_raises_when_the_pooled_signal_fails(tmp_path, monkeypatch):
-    from patrick import live_refresh
+    from patrick.live import refresh as live_refresh
 
     def boom(conn, **kw):
         raise RuntimeError("panne")

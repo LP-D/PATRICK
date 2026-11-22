@@ -11,7 +11,7 @@ from functools import lru_cache
 import pandas as pd
 import yfinance as yf
 
-from patrick.cache_manager import LocalCache
+from patrick.storage.cache_manager import LocalCache
 
 
 def _clean_col(ticker: str) -> str:

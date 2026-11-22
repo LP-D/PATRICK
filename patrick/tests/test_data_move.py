@@ -12,8 +12,9 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from patrick import data_move, paths, settings
 from patrick.cli import app as cli_app
+from patrick.core import paths, settings
+from patrick.storage import data_move
 from patrick.tracking import db as trackdb
 
 

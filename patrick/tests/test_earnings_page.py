@@ -11,8 +11,8 @@ from page_support import FullPageClient
 
 from patrick.earnings import store
 from patrick.tracking import db
-from patrick.webapp import earnings_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import earnings as earnings_routes
 
 NEWSLETTER = "Lundi : Alpha, Bravo (ADR), <script>alert(1)</script>\nMardi : Charlie\nSamedi : Inconnue SA"
 

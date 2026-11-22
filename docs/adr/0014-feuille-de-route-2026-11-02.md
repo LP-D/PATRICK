@@ -12,7 +12,7 @@ et pourquoi. Mesures sur la base locale (64,8 Gio, 3 173 runs terminés, lecture
 1. **Le duel champion/challenger suit le critère du run** (`pipeline/champion_duel.py`). `AUC_dir` quand le run le classe ainsi (défaut des runs neufs, ADR 0013) et que les deux côtés
    l'ont ; `F1_dir` pour un run enregistré avant le champ ou quand un côté n'a pas d'AUC. Le duel enregistre le critère et les deux scores. Le duel reste une sélection sur le holdout
    (ADR 0005) : seul le critère est aligné, pas la rigueur.
-2. **Placebo sur toutes les classes d'actifs** (`audit_placebo.py`). Mesure : 113 runs sur 3 173 ont un placebo, aucun pour les indices de volatilité, aucun à horizon court (<= 3 j) pour
+2. **Placebo sur toutes les classes d'actifs** (`audit/placebo.py`). Mesure : 113 runs sur 3 173 ont un placebo, aucun pour les indices de volatilité, aucun à horizon court (<= 3 j) pour
    l'Asie, les futures, les Amériques hors États-Unis et la crypto, un seul pour le change. Nouveaux panels (`fx`, `futures`, `us`, `europe`, `americas`, `crypto`, `volatility`,
    `every_class`), `patrick audit placebo-report --coverage`. 37 runs légers mis en file (sans worker : ils attendent le prochain passage de nuit).
 3. **Cible de volatilité : non branchée, mesurée** (`docs/modelisation/cible-volatilite-faisabilite-2026-11-02.md`). AUC de la direction de σ : 0,77 (h = 5) et 0,73 (h = 20), contre 0,51 pour

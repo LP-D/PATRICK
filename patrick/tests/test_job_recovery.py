@@ -18,8 +18,8 @@ import optuna
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick import worker as worker_module
 from patrick.pipeline import engine, pause
+from patrick.system import worker as worker_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tuning.optuna_runner import tune_config

@@ -52,7 +52,7 @@ def test_export_best_model_survives_an_infinite_feature_cell(tmp_path):
 def test_predict_live_row_with_an_infinite_feature_is_scored(tmp_path, monkeypatch):
     import joblib
 
-    from patrick import predict as predict_module
+    from patrick.live import predict as predict_module
     from patrick.tracking import db as trackdb
 
     pool = _pool_with_inf()

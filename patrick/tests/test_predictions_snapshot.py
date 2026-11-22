@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import patrick.webapp.app as webapp
-from patrick import live_refresh
+from patrick.live import refresh as live_refresh
 from patrick.tracking import db
 from patrick.webapp import predictions_snapshot as snap
 

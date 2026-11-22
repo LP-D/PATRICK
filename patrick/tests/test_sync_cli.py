@@ -200,7 +200,7 @@ def test_setup_marks_this_pc_as_the_wealth_reference(tmp_path, monkeypatch):
 
 
 def test_push_reports_what_was_written_and_the_old_format_files_left_behind(tmp_path, monkeypatch):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     share = tmp_path / "share"
     pc1 = _pc_env(tmp_path, monkeypatch, "pc1")
@@ -216,7 +216,7 @@ def test_push_reports_what_was_written_and_the_old_format_files_left_behind(tmp_
 
 def test_auto_logs_an_os_error_from_the_shared_folder_instead_of_losing_it(tmp_path, monkeypatch):
     """Le 10/11/2026 le lecteur de Google Drive a répondu `Errno 22` : rien n'en restait dans le journal de la tâche planifiée."""
-    from patrick import sync
+    from patrick.sync import core as sync
 
     share, log = tmp_path / "share", tmp_path / "logs" / "sync.log"
     share.mkdir()
@@ -233,7 +233,7 @@ def test_auto_logs_an_os_error_from_the_shared_folder_instead_of_losing_it(tmp_p
 
 
 def test_auto_passes_the_minimum_push_interval_to_the_sync(tmp_path, monkeypatch):
-    from patrick import sync
+    from patrick.sync import core as sync
 
     share = tmp_path / "share"
     share.mkdir()

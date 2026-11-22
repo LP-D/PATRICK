@@ -64,7 +64,7 @@ def test_strategy_names_are_escaped(client):
 def test_the_page_script_uses_only_exposed_and_defined_strings(client):
     import re
 
-    from patrick.webapp import i18n
+    from patrick.webapp.i18n import core as i18n
 
     js = client.get("/static/simulate.js").text
     used = set(re.findall(r"""['"](fund_[a-z_]+)['"]""", js))

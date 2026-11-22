@@ -8,7 +8,7 @@ import pytest
 
 from patrick.knowledge import courses as C
 from patrick.knowledge import dictionary as D
-from patrick.webapp.glossary import GLOSSARY
+from patrick.webapp.glossary.core import GLOSSARY
 
 
 def test_the_dictionary_is_internally_consistent():

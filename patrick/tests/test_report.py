@@ -10,11 +10,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from patrick import worker as worker_module
 from patrick.config.schema import RunConfig
 from patrick.data.publication_lag import PIT_VERSION
 from patrick.data.store import DataStore
 from patrick.pipeline import engine as engine_module
+from patrick.system import worker as worker_module
 from patrick.tracking import db as trackdb
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import report as report_module

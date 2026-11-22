@@ -316,4 +316,4 @@ Tout ce qui suit est **hypothèse ou recommandation**, à valider par comparaiso
 4. En CPCV, la sélection SHAP domine : 60 calculs pour 240 lookups. Toute réduction du nombre de sélections distinctes est méthodologique (hors Sprint 2 exact).
 5. Le temps mural est extrêmement bruité sur cette machine (515 s à 5095 s pour le même run) : les comparaisons de sprints doivent se faire sur les **compteurs** et le **temps CPU**, avec plusieurs répétitions et la médiane ou le minimum, jamais sur un seul temps mural.
 
-**Recommandations pour le Sprint 2 (optimisations exactes uniquement)** : voir `NEXT_STEPS.md`.
+**Recommandations pour le Sprint 2 (optimisations exactes uniquement)** : voir `docs/NEXT_STEPS.md`.

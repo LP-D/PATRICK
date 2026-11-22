@@ -14,7 +14,7 @@ colonne par colonne, dans le même ordre :
   telles quelles par les workers : `n_jobs` x threads BLAS ne doit pas dépasser
   le nombre de cœurs (à la charge de l'appelant, voir `resolve_jobs`).
 
-Activation : `PATRICK_PARAMETRIC_JOBS=<n>` ou réglage de la page « Lancer » (`patrick.settings`) ;
+Activation : `PATRICK_PARAMETRIC_JOBS=<n>` ou réglage de la page « Lancer » (`patrick.core.settings`) ;
 défaut 1 = code séquentiel d'origine.
 """
 from __future__ import annotations
@@ -24,16 +24,16 @@ import os
 import pandas as pd
 from joblib import Parallel, delayed
 
-from patrick import settings
+from patrick.core import settings
 from patrick.features import spike, vol_models
-from patrick.resource_budget import cap_workers
+from patrick.system.resource_budget import cap_workers
 
 ENV_JOBS = "PATRICK_PARAMETRIC_JOBS"
 
 
 def resolve_jobs(n_columns: int, input_bytes: int = 0) -> int:
     """1 (séquentiel) sauf demande explicite : `PATRICK_PARAMETRIC_JOBS` (prioritaire),
-    sinon le réglage de l'interface (`patrick.settings`, relu à chaque appel).
+    sinon le réglage de l'interface (`patrick.core.settings`, relu à chaque appel).
     Plafonné au nombre de colonnes et au nombre de cœurs logiques."""
     env = os.environ.get(ENV_JOBS)
     if env is not None:

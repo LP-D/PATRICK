@@ -1011,7 +1011,7 @@ def drift_badges(conn: sqlite3.Connection, targets: list[str], horizons: list[in
     `provisional` (PSI, concept drift not testable yet), `confirmed` (both)
     -- the three states of `validation.drift.DriftBadge`. `min_hits` is kept
     for callers; the policy's threshold applies to INDEPENDENT calls."""
-    from patrick.clock import utc_today
+    from patrick.core.clock import utc_today
     from patrick.validation import drift as drift_lib
     from patrick.validation import drift_policy
 
@@ -1507,7 +1507,7 @@ def synthesis_overview(conn: sqlite3.Connection, alpha: float = 0.10) -> dict:
 
     Regime classification (`phase9.classify_regime_daily`) is deliberately
     ABSENT from this structure: confirmed by exhaustive search to never run
-    in production (no caller anywhere outside `phase9.py`'s own tests, no
+    in production (no caller anywhere outside `research/phase9.py`'s own tests, no
     table stores a regime label) -- the template renders its own explicit
     empty state rather than this function simulating a value that does not
     exist. See docs/historique/rapports-de-chantier.md."""

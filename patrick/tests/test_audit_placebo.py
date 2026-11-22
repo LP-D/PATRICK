@@ -1,10 +1,10 @@
-"""Panel de runs placebo (`patrick/audit_placebo.py`) : configuration légère, rapport, commandes."""
+"""Panel de runs placebo (`patrick/audit/placebo.py`) : configuration légère, rapport, commandes."""
 from __future__ import annotations
 
 import pytest
 from typer.testing import CliRunner
 
-from patrick import audit_placebo
+from patrick.audit import placebo as audit_placebo
 from patrick.cli import app as cli_app
 from patrick.data.session_calendar import classify_asset_class
 from patrick.tracking import db

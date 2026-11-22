@@ -85,5 +85,5 @@ def test_the_home_page_lists_the_lost_series_among_what_needs_action(conn):
     (item,) = trackhome.action_items(conn, 0, 0)
 
     assert (item["key"], item["n"], item["level"], item["series"]) == ("inputs_lost", 2, "error", "OJ=F (2)")
-    from patrick.webapp.i18n import STRINGS
+    from patrick.webapp.i18n.core import STRINGS
     assert "{s}" in STRINGS["hm_action_inputs_lost"]["fr"] and "{s}" in STRINGS["hm_action_inputs_lost"]["en"]

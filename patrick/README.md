@@ -4,7 +4,7 @@ Multi-asset ML/DL/RL walk-forward pipeline: ingest, engineer features, select
 via SHAP, grid-search sampler×algo, tune with Optuna, validate against
 leakage/overfitting, and track everything in SQLite — configurable per
 target via YAML or from the web interface. Structure and current state:
-[`ARCHITECTURE.md`](./ARCHITECTURE.md); all documentation: [`../docs/index.md`](../docs/index.md).
+[`ARCHITECTURE.md`](../docs/ARCHITECTURE.md); all documentation: [`../docs/index.md`](../docs/index.md).
 
 On Windows, PATRICK is used as a desktop application (icon, automatic updates, folder shared between PCs,
 Réglages page): see the [root README](../README.md) and `../docs/ops/application-bureau.md`. This file is the
@@ -149,7 +149,7 @@ Pages (nav: Synthèse · Machine learning · Deep learning · Reinforcement lear
 
 ### Amplitude usage event (optional)
 `patrick serve` can send one anonymous `app_started` event to [Amplitude](https://amplitude.com)
-(HTTP API v2, `patrick/amplitude.py`): PATRICK version, OS, Python version, entry point and a random
+(HTTP API v2, `patrick/webapp/amplitude.py`): PATRICK version, OS, Python version, entry point and a random
 device id kept in `~/.patrick/amplitude_device_id` — never a symbol, figure, path or run name.
 It is off unless `AMPLITUDE_API_KEY` is set in the environment (the key never goes in the repository);
 `AMPLITUDE_REGION=eu` selects the European server (default `us`; a project in the other region answers
@@ -186,7 +186,7 @@ N grid), `sampler`, `models` (algos, calibration, stacking + `stacking_n_models`
 
 ## Architecture
 
-See **`METHODOLOGY.md`** for the full detail of the anti-leakage/anti-overfitting
+See **`docs/METHODOLOGY.md`** for the full detail of the anti-leakage/anti-overfitting
 guarantees (walk-forward, purge/embargo, point-in-time vintages, multi-testing
 correction, holdout, baselines), the specific bugs found and fixed along the
 way, and the SQLite/Parquet persistence architecture — not duplicated here.
@@ -196,7 +196,7 @@ default); `patrick/pipeline/engine.py` runs the walk-forward grid scan and
 calls into `patrick/tuning` (Optuna) and `patrick/validation` (leakage
 guards, statistical validity — DM, PBO, FDR); `patrick/tracking` persists
 everything to SQLite (`~/.patrick/patrick.db`; every data location is resolved by
-`patrick/paths.py`, and `patrick data status` prints them) and exports Parquet snapshots;
+`patrick/core/paths.py`, and `patrick data status` prints them) and exports Parquet snapshots;
 `patrick/simulate` turns predictions into a backtested position/P&L curve;
 `patrick/webapp` and `patrick/cli.py` are the two front doors to the same
 `run_pipeline()`.
@@ -227,7 +227,7 @@ ingestion.
 
 The assumed limits of each part of the product (deep learning, reinforcement learning, exploration, optional
 extras) and the plumbing kept on purpose are documented in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md). The
-methodological guarantees and their measured effect are in [`METHODOLOGY.md`](./METHODOLOGY.md).
+methodological guarantees and their measured effect are in [`METHODOLOGY.md`](../docs/METHODOLOGY.md).
 
 - **Test suite**: `pytest` runs the fast suite (about 3,500 tests; `@pytest.mark.slow` tests are excluded)
   during development, in about 17 minutes serially or about 5 with `pytest -n 5` (pytest-xdist; every test has

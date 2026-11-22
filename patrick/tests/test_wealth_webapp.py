@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 
 from patrick.config import defaults as D
 from patrick.wealth import performance, symbols
-from patrick.webapp import wealth_routes
 from patrick.webapp.app import app
+from patrick.webapp.routes import wealth as wealth_routes
 
 DAYS = pd.bdate_range("2024-01-01", periods=200)
 

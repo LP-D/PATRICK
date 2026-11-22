@@ -5,7 +5,7 @@ from patrick.config import asset_classes
 from patrick.config import universe_extension as UX
 from patrick.data.session_calendar import classify_asset_class
 from patrick.webapp import forms
-from patrick.webapp.i18n import TARGET_GROUP_LABEL_KEYS
+from patrick.webapp.i18n.core import TARGET_GROUP_LABEL_KEYS
 
 
 def test_every_added_symbol_is_a_selectable_target_and_has_a_unique_label():

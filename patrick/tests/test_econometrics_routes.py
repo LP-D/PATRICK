@@ -13,9 +13,9 @@ from fastapi.testclient import TestClient
 from patrick.econometrics import mean_models as M
 from patrick.econometrics import simulate as SIM
 from patrick.webapp import econometrics_cache as EC
-from patrick.webapp import econometrics_routes as ER
-from patrick.webapp import exploration_routes as E
 from patrick.webapp.app import app
+from patrick.webapp.routes import econometrics as ER
+from patrick.webapp.routes import exploration as E
 
 SYM = "^GSPC"
 FRED = "CPIAUCSL"

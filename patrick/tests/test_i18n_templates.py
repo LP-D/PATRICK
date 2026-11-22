@@ -10,7 +10,7 @@ import re
 import string
 from pathlib import Path
 
-from patrick.webapp.i18n import STRINGS
+from patrick.webapp.i18n.core import STRINGS
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "patrick" / "webapp" / "templates"
 _FILLED_BY_MACRO = {"rows_more", "vocab_count"}   # `{n}` remplacé par data_table, resp. par vocabulary.js
@@ -116,5 +116,5 @@ def test_no_new_hardcoded_french_in_templates():
         found = _hardcoded_french(source)
         budget = _BUDGET.get(path.name, 0)
         if found > budget:
-            over.append(f"{path.name}: {found} texte(s) français en dur (budget {budget}) -> utiliser t('clé') + i18n_legacy.py / i18n_pages.py")
+            over.append(f"{path.name}: {found} texte(s) français en dur (budget {budget}) -> utiliser t('clé') + i18n/legacy.py / i18n/pages.py")
     assert not over, "\n".join(over)

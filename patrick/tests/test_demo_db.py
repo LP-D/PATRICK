@@ -11,8 +11,9 @@ from fastapi.testclient import TestClient
 
 from patrick.tracking import db as trackdb
 from patrick.tracking import live_board
-from patrick.webapp import analysis_routes, nav_registry
+from patrick.webapp import nav_registry
 from patrick.webapp.app import app
+from patrick.webapp.routes import analysis as analysis_routes
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "make_demo_db.py"
 TODAY = dt.date(2026, 11, 13)

@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from patrick import settings, sync
+from patrick.core import settings
 from patrick.desktop import prefs, share
+from patrick.sync import core as sync
 
 
 @pytest.fixture(autouse=True)

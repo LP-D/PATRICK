@@ -14,9 +14,9 @@ from patrick.tracking import history as trackhistory
 from patrick.validation import metric_panel
 from patrick.webapp import instruments, stats_help
 from patrick.webapp.app import app
-from patrick.webapp.glossary import GLOSSARY
-from patrick.webapp.glossary_extra import CATEGORIES, TERM_CATEGORY
-from patrick.webapp.i18n import STRINGS
+from patrick.webapp.glossary.core import GLOSSARY
+from patrick.webapp.glossary.extra import CATEGORIES, TERM_CATEGORY
+from patrick.webapp.i18n.core import STRINGS
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from patrick import paths
+from patrick.core import paths
 from patrick.desktop import update
 from patrick.tracking import backup
 from patrick.tracking import db as trackdb

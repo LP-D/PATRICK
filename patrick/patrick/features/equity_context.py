@@ -131,6 +131,6 @@ def context_dependencies(feature: str, raw_columns) -> frozenset[str] | None:
     return frozenset({owner} | (wanted & cols))
 
 
-# Pour la page Equity : (clé de texte, famille) de ce que reçoit une action ; les textes sont dans `webapp/i18n_pages.py` (`eq_ctx_<clé>`).
+# Pour la page Equity : (clé de texte, famille) de ce que reçoit une action ; les textes sont dans `webapp/i18n/pages.py` (`eq_ctx_<clé>`).
 def describe() -> list[str]:
     return ["relative", "beta", "idio", "strength", "euro_stress"]

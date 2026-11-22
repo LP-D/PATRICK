@@ -1,9 +1,9 @@
-"""`patrick/paths.py` : où vivent la base, les journaux et la racine de données (spec 2026-10-21, §3 et §4)."""
+"""`patrick/core/paths.py` : où vivent la base, les journaux et la racine de données (spec 2026-10-21, §3 et §4)."""
 from __future__ import annotations
 
 import pytest
 
-from patrick import paths, settings
+from patrick.core import paths, settings
 
 _ENV = ("PATRICK_DATA_ROOT", "PATRICK_DB_PATH", "PATRICK_STORE_ROOT", "PATRICK_CACHE_ROOT", "PATRICK_FEATURE_CACHE_ROOT")
 

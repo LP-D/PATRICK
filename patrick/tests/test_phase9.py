@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from patrick.phase9 import (
+from patrick.research.phase9 import (
     DecisionJournal,
     ExecutionOrder,
     StrategyEngine,

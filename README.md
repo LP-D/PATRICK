@@ -10,7 +10,7 @@ Ce que le projet fait :
   grille échantillonneur × algorithme, réglage Optuna, validation walk-forward ou CPCV, holdout terminal, export du modèle ;
 - une chaîne de validité intégrée, non contournable : purge et embargo, holdout jamais utilisé pour choisir, compteur d'essais
   cumulé, Sharpe déflaté (DSR), probabilité de surapprentissage (PBO), test de Diebold-Mariano contre des baselines, correction
-  du taux de fausses découvertes (BH) entre cibles ; méthodologie dans [`patrick/METHODOLOGY.md`](patrick/METHODOLOGY.md),
+  du taux de fausses découvertes (BH) entre cibles ; méthodologie dans [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md),
   limites mesurées dans [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) ;
 - une application web locale « Cockpit Pro » (FastAPI + Jinja2) : lancer des runs (`/ml`, `/dl`, `/rl`), explorer des séries
   (`/exploration`), comparer l'historique, simuler le rendement après frictions, suivre les prédictions du jour, le patrimoine et
@@ -45,8 +45,8 @@ Installation du paquet et référence des commandes : [`patrick/README.md`](patr
 
 | Pour | Document |
 |---|---|
-| Comprendre l'état du code | [`patrick/ARCHITECTURE.md`](patrick/ARCHITECTURE.md) |
-| Comprendre la méthode et ses garde-fous | [`patrick/METHODOLOGY.md`](patrick/METHODOLOGY.md) |
+| Comprendre l'état du code | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Comprendre la méthode et ses garde-fous | [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) |
 | Savoir ce qui est limité ou ouvert | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) |
 | Savoir pourquoi une décision a été prise | [`docs/adr/`](docs/adr/README.md) |
 | Tout le reste (exploitation, recherche, audits) | [`docs/index.md`](docs/index.md) |

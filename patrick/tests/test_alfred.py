@@ -9,10 +9,10 @@ import pandas as pd
 import pytest
 import requests
 
-from patrick.cache_manager import LocalCache
 from patrick.config.schema import UniverseConfig
 from patrick.data import alfred
 from patrick.data.sources import fred_source
+from patrick.storage.cache_manager import LocalCache
 
 
 class FakeResponse:

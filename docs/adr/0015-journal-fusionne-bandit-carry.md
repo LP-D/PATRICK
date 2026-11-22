@@ -9,7 +9,7 @@ dans l'ADR 0014 : le carry de CHANGE n'a pas besoin d'une courbe de futures, seu
 
 ## Décisions
 
-1. **Journal de prédictions fusionné** (migration 0050, `tracking/journal.py`, `sync_merge.py`). Chaque PC garde SA chaîne d'empreintes. Les lignes de l'autre PC sont recopiées TELLES QUELLES
+1. **Journal de prédictions fusionné** (migration 0050, `tracking/journal.py`, `sync/merge.py`). Chaque PC garde SA chaîne d'empreintes. Les lignes de l'autre PC sont recopiées TELLES QUELLES
    (`prev_hash`, `entry_hash` et `trial_id` compris : ils sont dans la charge utile hachée, on ne peut pas les décaler comme dans `sync_merge`) et marquées `imported_from`. Conséquences de
    conception :
    - un `trial_id` importé désigne un essai de l'AUTRE base : toutes les lectures par `trial_id` (`record_signals`, `record_outcome`, `seal_existing`, la dernière empreinte de la chaîne) filtrent
