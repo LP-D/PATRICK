@@ -3,7 +3,7 @@ SQLite de suivi (`patrick.db`).
 
 La logique de sauvegarde elle-même (choix de la méthode, gestion du mode
 WAL) vit dans `patrick.tracking.backup` -- testée par
-`tests/test_backup_db.py` sur des bases légères sous `tmp_path`, jamais sur
+`tests/repo/test_backup_db.py` sur des bases légères sous `tmp_path`, jamais sur
 le fichier réel. Ce script n'est qu'un habillage CLI/logging autour de
 `backup_database()`, destiné à être invoqué directement par le
 Planificateur de tâches Windows (voir `schtasks_daily_dbbackup.ps1` pour la

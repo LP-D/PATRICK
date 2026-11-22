@@ -34,7 +34,7 @@ Deux fuites distinctes, deux mécanismes distincts :
   label "propre" (déjà géré par la purge).
 
 Vérifié par un test de corruption du futur bout-en-bout
-(`tests/test_leakage.py::test_corrupting_the_future_does_not_change_train_features_or_model`)
+(`tests/pipeline/test_leakage.py::test_corrupting_the_future_does_not_change_train_features_or_model`)
 qui modifie délibérément les données post-coupure et vérifie que les
 features/le modèle du train n'en sont pas affectés, et par un test de
 décalage de cible
@@ -161,7 +161,7 @@ via quatre garde-fous dans `patrick/validation/` :
   la famille BH avec p = 1. Avec un holdout de 15 mois (~315 lignes), cela
   rend le DM non testable dès h ≈ 21 (h=30 et au-delà, dont 252).
 
-**Preuve empirique du protocole** : `tests/test_null_world_validity.py` fait tourner le pipeline complet sur des marches
+**Preuve empirique du protocole** : `tests/pipeline/test_null_world_validity.py` fait tourner le pipeline complet sur des marches
 aléatoires (BH sans rejet, PBO élevé, DSR bas) et sur des mondes à signal (contrôle positif) ; limites mesurées dans
 `KNOWN_ISSUES.md` (DM bilatéral à surveiller, faible puissance).
 
@@ -396,7 +396,7 @@ FRED) passe six contrôles avant d'entrer dans l'univers de features :
    0.85 par défaut), pas un nouveau seuil inventé.
 
 **Seuils mesurés, pas choisis par convention** (cf. docstring de module et
-`tests/test_data_quality.py::test_thresholds_measured_not_arbitrary_*`) :
+`tests/data/test_data_quality.py::test_thresholds_measured_not_arbitrary_*`) :
 simulation de centaines de séries synthétiques à queues épaisses réalistes
 (Student-t, df=5) — le seuil de prix figés (4) et le seuil de rendement
 aberrant (40 écarts-types robustes) ne se déclenchent JAMAIS sur ces séries
@@ -442,7 +442,7 @@ par fréquence de sélection, et un avertissement explicite si le Jaccard moyen
 tombe sous `MIN_MEAN_JACCARD_WARNING = 0.40`.
 
 **Seuil mesuré, pas choisi par convention** (cf.
-`tests/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`) :
+`tests/models/test_feature_stability.py::test_warning_threshold_is_measured_not_arbitrary`) :
 sur des données synthétiques SANS lien réel entre X et y (cible pur bruit),
 avec des features corrélées entre elles comme le sont les familles
 technical/interactions du pipeline réel, la sélection SHAP RÉELLE (pas une
@@ -483,7 +483,7 @@ Toggle `sampling.uniqueness_weights` (défaut `true`, jamais un défaut
 silencieux).
 
 **Mesure sur cible synthétique** (déliverable P6.2, observations
-consécutives, une par barre — cf. `tests/test_uniqueness.py::
+consécutives, une par barre — cf. `tests/models/test_uniqueness.py::
 test_effective_sample_size_matches_1_over_horizon_plus_1`) : `n_eff/n`
 converge vers `1/(horizon+1)` (résultat analytique, confirmé numériquement) :
 
@@ -506,7 +506,7 @@ explicitement.
 PAR ARBRE (contre O(n_obs) pour un bootstrap uniforme) — `n_estimators`
 réduit à 100 par défaut pour la variante séquentielle (200 pour la forêt
 standard, `models/registry.py`), compromis documenté dans
-`models/sequential_forest.py`. Mesuré sur `tests/test_uniqueness.py` (config
+`models/sequential_forest.py`. Mesuré sur `tests/models/test_uniqueness.py` (config
 minuscule, walk-forward à 2 folds) : ~70s pour un run complet avec
 `sampler="none"`+RandomForest+bootstrap séquentiel, contre quelques secondes
 en configuration standard (SMOTE, bootstrap uniforme) — l'écart grandit avec
@@ -597,14 +597,14 @@ comportement inchangé) ; `fold_metric.split='test_path'` (migration 0008,
 CHECK élargi) pour les métriques par chemin, distinctes de `split='test'`
 (par combinaison).
 
-**Tests** (`tests/test_cpcv.py`, 14 tests) : sur données synthétiques,
+**Tests** (`tests/validation/test_cpcv.py`, 14 tests) : sur données synthétiques,
 vérifient qu'aucun chemin ne contient d'observation à la fois en train et en
 test, que le purge est appliqué aux deux frontières de chaque groupe de test
 intérieur (et à une seule pour un groupe en bord d'historique), que le
 nombre de chemins correspond exactement à la formule combinatoire, et que
 `path_performance_distribution` renvoie bien médiane/quantiles/écart-type
 (jamais un point) y compris sur des cas dégénérés (NaN, vide).
-`tests/test_pipeline_smoke.py::test_cpcv_scheme_runs_end_to_end_and_reports_a_path_distribution`
+`tests/pipeline/test_pipeline_smoke.py::test_cpcv_scheme_runs_end_to_end_and_reports_a_path_distribution`
 exerce `run_pipeline` bout-en-bout en mode CPCV (y compris le chemin d'export
 du modèle final, qui référence des variables `None` en walk-forward pur —
 `pool_builder`/`ctx`/`last_fold` — et devait donc être branché explicitement) ;
@@ -661,7 +661,7 @@ correction BH, et le statut de LA cible de ce run (p brute, p ajustée, rang)
 resitué parmi toutes les autres — jamais un chiffre isolé, même principe que
 l'intervalle de confiance bootstrap du PBO (C5).
 
-**Tests** (`tests/test_fdr.py`, 7 tests) : exemple calculé à la main (m=5,
+**Tests** (`tests/validation/test_fdr.py`, 7 tests) : exemple calculé à la main (m=5,
 q-values vérifiées terme à terme), monotonie des p-values ajustées par rang,
 équivalence `significant ⟺ q≤alpha`. Déliverable explicitement demandé :
 sur des p-values simulées Uniform(0,1) pour TOUTES les cibles (vrai null
@@ -673,7 +673,7 @@ un mélange (moitié cibles à vrai null Uniform(0,1), moitié à vraie
 alternative Beta(0.5,8) concentrée près de 0, simulant un DM réellement
 significatif), BH retrouve une puissance substantielle (>40% de vrais
 positifs détectés) tout en bornant la proportion de fausses découvertes.
-`tests/test_fdr_integration.py` (2 tests lents) : `run_pipeline` sur deux
+`tests/validation/test_fdr_integration.py` (2 tests lents) : `run_pipeline` sur deux
 cibles distinctes écrit bien deux lignes `dm_result`, agrégées correctement
 par `fdr_across_targets` ; contre-épreuve — un run CPCV n'écrit jamais de
 `dm_result` (jamais une p-value walk-forward réutilisée par erreur pour une
@@ -753,9 +753,9 @@ nombre de runs et le dernier lancé, ou « jamais lancée » sinon.
 
 ### 12.6 Tests
 
-`tests/test_history.py` (11 tests) : requêtes de `tracking/history.py` sur
+`tests/tracking/test_history.py` (11 tests) : requêtes de `tracking/history.py` sur
 base SQLite directe (filtre, tri, agrégation par cible, structure
-walk-forward vs CPCV, cas vide). `tests/test_history_webapp_smoke.py` (8
+walk-forward vs CPCV, cas vide). `tests/webapp/test_history_webapp_smoke.py` (8
 tests) : rendu FastAPI réel des 4 nouvelles pages (base pré-remplie
 directement, sans run pipeline complet — rapide, contrairement à
 `test_webapp_smoke.py`), y compris le cas 404 et les états vides.
@@ -800,7 +800,7 @@ reproduit en production.
   `INTERACTION_TYPES`, pour que la garde ne puisse plus être oubliée par un
   appelant — la cause de l'asymétrie d'origine.
 
-**Tests** (`tests/test_inf_features.py`, 7 tests) : reproduction explicite de
+**Tests** (`tests/features/test_inf_features.py`, 7 tests) : reproduction explicite de
 la cause racine (verrou anti-retrait du correctif : si `nan_to_num` seul
 cessait de réintroduire l'inf, le test le signale), équivalence inf/NaN,
 non-silence, débordement depuis une valeur finie, garde d'interaction sur
@@ -809,7 +809,7 @@ matrice nettoyée là où il rejette la matrice naïve.
 
 ## 14. Fuites trouvées en écrivant le test de corruption du futur (Phase 0)
 
-Le test de corruption du futur (`tests/test_leakage.py`, cf. section 1) n'a
+Le test de corruption du futur (`tests/pipeline/test_leakage.py`, cf. section 1) n'a
 pas seulement validé purge/embargo : il a révélé trois fuites plus fines,
 antérieures à ces mécanismes, dans des modules qui semblaient causaux en
 sortie mais ne l'étaient pas dans leur AJUSTEMENT.
@@ -845,7 +845,7 @@ en overflow après mise à l'échelle (`RobustScaler`) et fait planter XGBoost
 (`Input data contains inf`) — même famille de bug que la correction N2
 (section 13), trouvée plus tôt et par un autre chemin (fenêtre de données
 synthétique sans l'artefact de plancher habituel, cf.
-`tests/test_pipeline_smoke.py::_synthetic_raw_no_floor`). Corrigé par un
+`tests/pipeline/test_pipeline_smoke.py::_synthetic_raw_no_floor`). Corrigé par un
 clip à +/-1000% par période — au-delà, jamais un signal exploitable, quel
 que soit l'actif.
 

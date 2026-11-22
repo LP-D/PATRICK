@@ -2,7 +2,7 @@
 
 > Recherche préalable à la v4. Constat factuel, aucune décision. Worktree `C:/Users/leonp/PATRICK-wt-v4`, branche `feat/design-v4` (= `main`, `da5cdea`). Aucun fichier du code modifié.
 
-**Abréviations.** Tests : `fichier:ligne` dans `patrick/tests/`, préfixe `test_` omis (`ui_shell:98` = `tests/test_ui_shell.py` l. 98). JS : `nom.js:ligne` dans `webapp/static/`. `css:N` = `static/patrick.css`. Dans les tableaux, `a/b` = « a ou b ».
+**Abréviations.** Tests : `fichier:ligne` dans `patrick/tests/`, préfixe `test_` omis (`ui_shell:98` = `tests/webapp/test_ui_shell.py` l. 98). JS : `nom.js:ligne` dans `webapp/static/`. `css:N` = `static/patrick.css`. Dans les tableaux, `a/b` = « a ou b ».
 
 **Méthode.** grep des assertions de `tests/*.py` (balises, `class=`, `id=`, `data-*`, `aria-*`, `.css`/`.js`, noms kebab-case) et lecture des 14 fichiers de garde-fous ; extraction scriptée des sélecteurs, `classList`, `className`, `dataset`, `*Attribute` et jetons de chaque script ; grep du HTML produit en Python ; croisement des 766 classes CSS avec JS, tests, Python, gabarits (§7). Limite : un sélecteur concaténé n'est vu que par son préfixe.
 

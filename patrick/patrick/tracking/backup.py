@@ -32,7 +32,7 @@ entre PC (`sync.py`) copiait déjà ainsi.
 
 Ce module ne s'exécute jamais sur le fichier réel pendant son
 développement/ses tests : uniquement des bases SQLite légères créées par
-l'appelant (voir `tests/test_backup_db.py`, `tmp_path`). Le point d'entrée
+l'appelant (voir `tests/repo/test_backup_db.py`, `tmp_path`). Le point d'entrée
 CLI planifiable est `scripts/backup_db.py`; la commande de planification
 Windows (`schtasks`) est documentée (non exécutée) dans
 `scripts/schtasks_daily_dbbackup.ps1`.

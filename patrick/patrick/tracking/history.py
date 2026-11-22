@@ -771,7 +771,7 @@ def latest_predictions_by_target(conn: sqlite3.Connection, targets: list[str]) -
     a small dev DB, but O(n_targets) round trips against the real ~2.2 GB /
     12M-row-`prediction` database made `/` hang (regression test:
     `test_synthesis_overview_latest_prediction_lookup_is_not_n_plus_1` in
-    `tests/test_history.py`).
+    `tests/tracking/test_history.py`).
 
     A first version used `ROW_NUMBER() OVER (PARTITION BY run.target ORDER
     BY ...)` -- correct, and cheap on the test-scale DB, but MEASURABLY
@@ -1066,7 +1066,7 @@ def live_hit_rate_by_target_and_horizon(conn: sqlite3.Connection, targets: list[
     already exists and is NOT reimplemented here: `predict.py::predict_live`
     writes each live call with `y_true=None` (outcome unknown yet), then
     `predict.py::_update_live_outcomes` -> `tracking.db.update_prediction_outcome`
-    fills it in once the horizon has elapsed (`tests/test_predict_live.py::
+    fills it in once the horizon has elapsed (`tests/live/test_predict_live.py::
     test_predict_live_writes_then_backfills_outcome` covers that mechanism
     end to end) -- this function only ever READS rows where that backfill
     already happened (`y_true IS NOT NULL`).

@@ -34,7 +34,7 @@ def _env(values: dict[str, str]):
 @contextmanager
 def _offline_ohlc():
     """`download_ohlc` (réseau Yahoo) est remplacé par un no-op déterministe,
-    exactement comme `tests/test_run_pipeline_golden.py` : le téléchargement
+    exactement comme `tests/pipeline/test_run_pipeline_golden.py` : le téléchargement
     n'est donc PAS mesuré (documenté dans le rapport)."""
     orig = engine.download_ohlc
     engine.download_ohlc = lambda *a, **k: None

@@ -21,5 +21,5 @@ PATRICK est un outil de travail utilisé tous les jours : la règle de fréquenc
 
 - Navigateur visé : Chrome / Edge récents (transitions de vue entre documents, `@starting-style`, `allow-discrete`, propriété enregistrée `--elastic`). Ailleurs, tout s'affiche sans animation : rien ne dépend du mouvement.
 - Un nouveau popover ou menu reprend le motif (`--origin-x/y`, `--pop-scale`, `-out` à 80 %) et s'ajoute à la liste `POPS` de motion.js ; une nouvelle barre d'onglets entre dans `initStrip`.
-- `MASTER.md` § Mouvement tient le tableau des règles ; `tests/test_ui_motion.py` fige jetons et contrats.
+- `MASTER.md` § Mouvement tient le tableau des règles ; `tests/webapp/test_ui_motion.py` fige jetons et contrats.
 - Non vérifié en conditions réelles depuis la session : la vue intégrée de l'app ne produit pas d'images hors écran, les durées ont été contrôlées par l'état des animations (`getAnimations`, `currentTime`), pas à l'œil.

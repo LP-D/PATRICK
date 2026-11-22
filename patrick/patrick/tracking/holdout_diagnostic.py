@@ -9,7 +9,7 @@ STRUCTURAL, NON-NEGOTIABLE CONSTRAINT: this module must NEVER be imported
 by `patrick/selection/*`, `patrick/pipeline/leaderboard.py`, or
 `patrick/tuning/*` -- the holdout must never influence a config choice,
 only document it after the fact. Guaranteed by
-`tests/test_holdout_diagnostic_isolation.py` (static inspection of these
+`tests/tracking/test_holdout_diagnostic_isolation.py` (static inspection of these
 modules' imports), not just by convention.
 """
 from __future__ import annotations

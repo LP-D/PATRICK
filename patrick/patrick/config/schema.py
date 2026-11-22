@@ -145,7 +145,7 @@ class TechnicalLookbacksConfig(BaseModel):
     window (pandas `Series.pct_change(periods=negative)` never raises), and
     `ohlc_vol_windows` values below 2 raise `ZeroDivisionError` inside
     `yang_zhang_vol` (`(window - 1)` in its denominator) -- see
-    `tests/test_technical_lookbacks.py` for both measured behaviors."""
+    `tests/features/test_technical_lookbacks.py` for both measured behaviors."""
     returns_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_RETURNS_WINDOWS))
     zscore_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_ZSCORE_WINDOWS))
     ma_ratio_windows: list[int] = Field(default_factory=lambda: list(D.DEFAULT_MA_RATIO_WINDOWS))

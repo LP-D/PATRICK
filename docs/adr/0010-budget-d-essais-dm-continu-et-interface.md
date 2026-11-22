@@ -1,6 +1,6 @@
 # ADR 0010 — Budget d'essais, test de Diebold-Mariano sur le Brier, runs sans évaluation, interface
 
-Date : 2026-10-29 · Statut : acceptée · Code : `tracking/trial_budget.py` (+ `GET /api/trial-budget`, `patrick budget`), `pipeline/engine.py` (`dm_brier`, `_final_dm_brier`, `_finish_runs`), `tracking/db.py` (`save_dm_brier`, `get_dm_brier`), `fund/asset_classes.py`, `validation/placebo.py`, `webapp/` (`static/table_tools.js`, `_run_tabs.html`, bloc « À faire » de la synthèse, méthode/placebo/Brier sur la page d'un run, `nav_registry.py`), migration 0048 · Tests : `tests/test_trial_budget.py`, `tests/test_method_v2.py`, `tests/test_run_detail_method.py`, `tests/test_fund_asset_classes.py`
+Date : 2026-10-29 · Statut : acceptée · Code : `tracking/trial_budget.py` (+ `GET /api/trial-budget`, `patrick budget`), `pipeline/engine.py` (`dm_brier`, `_final_dm_brier`, `_finish_runs`), `tracking/db.py` (`save_dm_brier`, `get_dm_brier`), `fund/asset_classes.py`, `validation/placebo.py`, `webapp/` (`static/table_tools.js`, `_run_tabs.html`, bloc « À faire » de la synthèse, méthode/placebo/Brier sur la page d'un run, `nav_registry.py`), migration 0048 · Tests : `tests/webapp/test_trial_budget.py`, `tests/pipeline/test_method_v2.py`, `tests/webapp/test_run_detail_method.py`, `tests/fund/test_fund_asset_classes.py`
 
 ## Contexte
 

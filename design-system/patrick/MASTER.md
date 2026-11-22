@@ -107,7 +107,7 @@ Variantes `*-soft` (fonds teintés de badges et bannières). **Alias hérités**
 - **Rendu « cotation »** (Yahoo Finance / Boursorama / Bloomberg), défaut des courbes (`finance: false` pour l'éteindre) : axe des valeurs à **droite**, grille horizontale en pointillés, **aire dégradée** sous une courbe seule, **étiquette du dernier point** sur l'axe (pastille de la couleur de la courbe, fil pointillé), **réticule** à pastilles (valeur sur l'axe, date en bas). Options : `trend: true` (vert / rouge selon la variation de la fenêtre + niveau de départ en pointillés), `quote: true` (en-tête : dernière valeur, variation absolue et en %, date ; suit le survol), `ohlc: {open, high, low}` (bascule **Courbe / Bougies**, infobulle O H L C), `volume: [...]` (barres sous la courbe, colorées selon le sens), `initialDays: N` (vue de départ sur les N derniers jours), `quoteTitle: false`. Périodes : 1M 3M 6M **YTD** 1A 5A Tout. Les couleurs restent des jetons (`--pos` / `--neg` ne servent qu'au sens du mouvement). Source des bougies : `market_data.price_history` (yfinance ; FRED n'a que des clôtures), transmises par `/api/preview/{symbol}` et `/api/asset-stats/{symbol}`.
 - **Contrat de toile** inchangé : couleurs lues dans les jetons au tracé, redessin sur `patrick:themechange` et au redimensionnement (`ResizeObserver`), buffer = boîte CSS × `devicePixelRatio`, `aria-label` régénéré avec les vraies bornes de la fenêtre visible, libellés via `window.I18N` (clés `chart_*`).
 - **Couleurs des séries** : une série seule prend `--brand` ; plusieurs séries prennent les **séries catégorielles `--ra-c1…8`** dans cet ordre fixe (bleu, orange, vert d'eau, jaune, magenta, vert, violet, rouge), définies dans `patrick.css` pour les deux thèmes et validées par `validate_palette.js` (skill dataviz) : bande de luminosité, chroma, écart daltonien adjacent ≥ 8,4, vision normale ≥ 17,4, contraste ≥ 3:1 sur `--chart-bg`. Une 9ᵉ série se replie dans « Autres » ; une couleur suit l'entité, jamais son rang. `--pos` / `--neg` / `--warn` ne servent jamais d'identité de série (dérive des phases, comparaison RL et référence du patrimoine corrigées en v4).
-- **Nouveau graphique** : créer un hôte `<div>` (jamais une `<canvas>`) et appeler `PatrickPlot.create`. Fonctions pures testées sous Node : `tests/js/chart_kit.test.js` (lancé par `tests/test_chart_kit_js.py`).
+- **Nouveau graphique** : créer un hôte `<div>` (jamais une `<canvas>`) et appeler `PatrickPlot.create`. Fonctions pures testées sous Node : `tests/js/chart_kit.test.js` (lancé par `tests/webapp/test_chart_kit_js.py`).
 
 ---
 
@@ -115,7 +115,7 @@ Variantes `*-soft` (fonds teintés de badges et bannières). **Alias hérités**
 
 > **Introduit par :** commit `6b5a0bd` (branche `feature/nav-categories-registry`). Étend le pattern *Internal Cockpit* ci-dessus : la « fixed left sidebar navigation » n'est plus une liste de liens écrite à la main, c'est le rendu d'un registre unique.
 
-**Source unique :** `patrick/patrick/webapp/nav_registry.py`. `templates/base_v2.html` itère `nav_sections(request.url.path)` (global Jinja enregistré dans `webapp/app.py`) et ne contient **aucun** `<a href>` de nav en dur — garanti par `tests/test_nav_registry.py::test_base_template_has_no_hardcoded_nav_link`.
+**Source unique :** `patrick/patrick/webapp/nav_registry.py`. `templates/base_v2.html` itère `nav_sections(request.url.path)` (global Jinja enregistré dans `webapp/app.py`) et ne contient **aucun** `<a href>` de nav en dur — garanti par `tests/webapp/test_nav_registry.py::test_base_template_has_no_hardcoded_nav_link`.
 
 **Structure :**
 
@@ -153,7 +153,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 1. Déclarer la route FastAPI dans `webapp/app.py` (le template étend `base_v2.html`).
 2. Ajouter **une** `NavEntry` dans `NAV_ENTRIES` (slug unique, catégorie parmi les 4, `order` libre dans la catégorie) — ou, pour une page paramétrée non listée, l'ajouter à `child_routes` de l'entrée parente.
 3. Ajouter la clé i18n `nav_<slug>` (fr + en) dans `webapp/i18n/core.py` si le libellé doit être traduit.
-4. `pytest tests/test_nav_registry.py` doit rester vert : une route GET absente du registre et non déclarée non-page fait échouer `test_no_orphan_page_route`.
+4. `pytest tests/webapp/test_nav_registry.py` doit rester vert : une route GET absente du registre et non déclarée non-page fait échouer `test_no_orphan_page_route`.
 
 ❌ **Interdit :** tout lien de navigation latérale écrit en dur dans un template, toute seconde liste de nav, toute logique d'état actif hors `nav_registry.is_active`. Les liens contextuels dans le contenu des pages ne sont pas de la nav latérale et restent hors registre.
 
@@ -167,7 +167,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 ## Textes et traductions
 
 - **Aucun texte visible en dur** : gabarits `t('clé')` (FR + EN dans `webapp/i18n*.py`) ; scripts `window.I18N` (clés à lister dans `i18n.js_strings` ou dans le `*_JS_KEYS` du module) ; macros importées sans contexte (`_components.html`) `ui_t('clé')` (langue de la requête, posée par `LangMiddleware`).
-- **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n/server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/test_i18n_server.py`.
+- **Messages produits par le domaine** (`validation/`, `tracking/`, `fund/`… : français pour la ligne de commande) : traduits à l'affichage par `webapp/i18n/server.py` — `{{ message | tx }}` ou `t.tx(message)` dans un gabarit, gestionnaire d'erreurs HTTP et listes d'erreurs de formulaire déjà branchés. Un message sans règle reste en français (jamais perdu) : ajouter la règle + un cas dans `tests/webapp/test_i18n_server.py`.
 - **Vocabulaire commun** (un terme = une traduction) : *Hausse forte / faible, Baisse forte / faible* (jamais « Forte baisse »), *Drawdown max*, *Tuning Optuna*, *Derniers runs*, *Stacking*, *Fonds / Fund*, *Ticket d'ordres / Order ticket*. Nombres, dates et devises suivent la langue de la page (`Intl`, pas de `fr-FR` en dur).
 
 ## Noms des instruments
@@ -175,7 +175,7 @@ Une page relève d'**une seule** catégorie (6 : `pilotage`, `modeles`, `classes
 - **L'interface montre le nom, jamais le symbole** : société et ETF → le nom seul (*Apple*, *LVMH*) ; futures, CFD, indices, volatilité, devises, cryptos, taux, séries macro → le genre en tête (*Future · Or*, *CFD · Apple*, *Indice · S&P 500*, *Devise · EUR/USD*, *Crypto · Bitcoin*, *Taux · Trésor US 10 ans*, *Macro · …*). Cible d'alpha : *Apple · α vs S&P 500*.
 - **Le symbole reste l'identifiant** (URL, `value`, API, base) et se lit au survol : `title="{{ symbole }}"`. Registre : `config/instrument_names.py` (symbole → genre, nom FR, nom EN) ; règle serveur `webapp/instruments.py` ; navigateur `static/names.js` (`PatrickNames.label/name/tip`, `PK.inst` dans `analysis_kit.js`), alimenté par `<script id="instrument-names">` posé dans l'en-tête de `base_v2.html`, avant tout script de page.
 - **Gabarits** : `{{ s | iname }}` (texte), `{{ s | iname_tip }}` (avec bulle), `{{ s | iname_h }}` pour une cellule assemblée par `~` puis `| safe` (déjà échappé, `str` ordinaire — voir le piège Markup). Position de fonds : `{{ p.symbol | iname(none, p.kind) }}` impose le genre ; instrument de règle : `instr_name(c.instrument)`.
-- **Nouveau symbole dans l'univers** : l'ajouter au registre (`tests/test_instrument_names.py` échoue sinon). Symbole inconnu (Patrimoine, Simulation) : genre deviné d'après la forme (`=F`, `=X`, `-USD`, `^`), puis nom appris en arrière-plan chez Yahoo (`~/.patrick/instrument_names.json`, coupé par `PATRICK_INSTRUMENT_LOOKUP=0`).
+- **Nouveau symbole dans l'univers** : l'ajouter au registre (`tests/webapp/test_instrument_names.py` échoue sinon). Symbole inconnu (Patrimoine, Simulation) : genre deviné d'après la forme (`=F`, `=X`, `-USD`, `^`), puis nom appris en arrière-plan chez Yahoo (`~/.patrick/instrument_names.json`, coupé par `PATRICK_INSTRUMENT_LOOKUP=0`).
 - **Exceptions assumées** : les messages composés par le domaine (phrases traduites par `i18n_server`) et les noms de runs enregistrés gardent le symbole tel qu'il a été écrit.
 
 ## Mouvement
@@ -225,7 +225,7 @@ Garde-fous : un geste au clavier n'anime rien (`<html data-input="keyboard">`) ;
 - [ ] Contraste texte ≥ 4.5:1 sur `--bg` et `--surface` dans les deux thèmes ; palette des graphiques revalidée (`validate_palette.js`) si une série change
 - [ ] Focus clavier visible ; palette utilisable au clavier seul
 - [ ] Graphiques : redessin au changement de thème, texte net en HiDPI
-- [ ] `pytest tests/test_nav_registry.py` vert
+- [ ] `pytest tests/webapp/test_nav_registry.py` vert
 
 **Amendement du 2026-11-07 — 6ᵉ catégorie `connaissances` (demandée par Léon).** Section d'apprentissage : parcours en trois niveaux, cours rendus depuis `docs/cours/` (Markdown, formules en MathML), dictionnaire de 750 notions (lexique des bulles « ? » inclus). Classes CSS dédiées `kb-*` dans `static/knowledge.css` ; les composants existants (`card`, `data-table`, `table-scroll`, `queue-action`, `primary`) sont réutilisés. Voir `docs/adr/0018-section-connaissances.md`.
 

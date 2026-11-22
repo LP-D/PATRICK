@@ -39,4 +39,4 @@ Le dossier `cache` (`LocalCache` : séries téléchargées avec une fraîcheur d
   « chemin introuvable » (`FileNotFoundError`) et la commande a planté avant la première copie. `_free_bytes` essaie maintenant le dossier parent puis lève une `OSError` ;
   `seed` traite cette `OSError` comme « indisponible » : il attend (par pas de 30 s, une heure au plus), annonce l'attente (`on_wait`, une ligne à la première attente puis toutes
   les 5 minutes : sans elle la commande paraît figée), puis s'arrête proprement (`stopped == "indisponible"`) avec la consigne de relancer Google Drive.
-- Tests : `tests/test_feature_cache_share.py` (31).
+- Tests : `tests/system/test_feature_cache_share.py` (31).

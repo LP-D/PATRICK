@@ -1,7 +1,7 @@
 name: golden-regen
 
 # Regenerates the golden master of `run_pipeline`
-# (patrick/tests/golden/, see patrick/tests/test_run_pipeline_golden.py) in
+# (patrick/tests/golden/, see patrick/tests/pipeline/test_run_pipeline_golden.py) in
 # the pinned numeric environment of `tests.yml`'s slow-suite -- the only one
 # where the committed golden is checked. Trigger: push a branch named
 # `golden-regen/<anything>` (after a deliberate change of the pipeline's
@@ -33,7 +33,7 @@ jobs:
       - name: Numeric environment
         run: python .github/scripts/numeric_env.py
       - name: Generate the golden master
-        run: PATRICK_UPDATE_GOLDEN=1 pytest patrick/tests/test_run_pipeline_golden.py -q -m ""
+        run: PATRICK_UPDATE_GOLDEN=1 pytest patrick/tests/pipeline/test_run_pipeline_golden.py -q -m ""
       - uses: actions/upload-artifact@v7
         with:
           name: golden
@@ -62,7 +62,7 @@ jobs:
           name: golden
           path: patrick/tests/golden
       - name: Reproduce the golden master
-        run: pytest patrick/tests/test_run_pipeline_golden.py -q -m ""
+        run: pytest patrick/tests/pipeline/test_run_pipeline_golden.py -q -m ""
 
   commit:
     needs: verify

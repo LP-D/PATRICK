@@ -2,11 +2,22 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from patrick.tracking import db as trackdb
+
+# Les tests sont rangés par domaine (`tests/fund/`, `tests/webapp/`...) mais certains réutilisent les aides d'un autre fichier de
+# test (`from test_fund_selection import World`). Chaque dossier de domaine est donc importable, quel que soit l'ordre dans lequel
+# pytest (ou un processus pytest-xdist) les découvre. `golden/` et `js/` ne contiennent que des données.
+_TESTS_DIR = Path(__file__).resolve().parent
+for _domain in sorted(_TESTS_DIR.iterdir()):
+    if (_domain.is_dir() and _domain.name not in ("golden", "js") and not _domain.name.startswith(("_", "."))
+            and str(_domain) not in sys.path):
+        sys.path.append(str(_domain))
 
 
 def shutdown_loky_workers() -> None:

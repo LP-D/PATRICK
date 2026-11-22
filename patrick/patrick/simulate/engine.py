@@ -297,7 +297,7 @@ def solve_break_even_cost_bps(gross_returns: pd.Series, turnover: pd.Series,
     `total_gross_return / total_turnover` strongly underestimates the real
     cost as soon as the position is held over multiple periods (see audit
     report, section F.3 -- exact reconciliation verified by
-    `tests/test_simulate.py::test_break_even_cost_reconciles_...`).
+    `tests/fund/test_simulate.py::test_break_even_cost_reconciles_...`).
     """
     total_turnover = float(turnover.sum())
     if total_turnover <= 1e-9:

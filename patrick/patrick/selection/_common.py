@@ -3,7 +3,7 @@ feature pool to `prefilter` columns by XGBoost importance, before applying
 the final method (SHAP/RFE/LASSO) -- identical across the 3, to isolate the
 effect of the final method (VIX_FEATURE_SELECTION).
 
-Cross-platform reproducibility (see `tests/test_selection_determinism.py`):
+Cross-platform reproducibility (see `tests/models/test_selection_determinism.py`):
 every ranking in `selection/` and `features/interactions.py` goes through
 `rank_top` (score descending, ties broken by ascending column index -- never
 `np.argsort`'s default quicksort, whose tie order follows the CPU's SIMD

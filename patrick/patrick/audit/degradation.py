@@ -4,7 +4,7 @@ alignment, FRED/ALFRED vintages) by comparing 4 stacked configurations on
 the same target universe and the same seed. Runs the REAL pipeline
 (`ingest()`/`run_pipeline()`, no monkeypatching) -- therefore requires real
 network access (yfinance/FRED), never available in this sandbox. Validated
-here via `tests/test_audit_degradation.py` (sources monkeypatched at the
+here via `tests/analysis/test_audit_degradation.py` (sources monkeypatched at the
 `yfinance.download`/`requests.get` level, not `ingest()` itself, so the real
 `ingest()`/`_attach_snapshot_context` code still runs).
 

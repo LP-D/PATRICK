@@ -36,7 +36,7 @@
 
 ### Tâche 1 : `patrick/core/paths.py` et isolation des tests
 
-**Fichiers :** créer `patrick/patrick/core/paths.py` ; modifier `patrick/tests/conftest.py` ; test `patrick/tests/test_paths.py`.
+**Fichiers :** créer `patrick/patrick/core/paths.py` ; modifier `patrick/tests/conftest.py` ; test `patrick/tests/system/test_paths.py`.
 
 **Interfaces — produit (utilisé par T2 à T12) :**
 ```python
@@ -61,14 +61,14 @@ Toutes relisent l'environnement et `settings.load()` à chaque appel (jamais fig
   - `test_db_and_logs_stay_in_home_with_a_data_root` : racine existante → `db_path()` et `logs_dir()` restent sous `home_dir()`.
   - `test_setting_is_reread_on_every_call` : changer `data_root` entre deux appels change `backups_dir()`.
   - `test_no_problem_when_unconfigured` : `data_root_problem() is None`, `data_root_missing() is None`.
-- [ ] **Étape 2 : lancer `python -m pytest tests/test_paths.py -q` ; attendu : échec (module absent).**
+- [ ] **Étape 2 : lancer `python -m pytest tests/system/test_paths.py -q` ; attendu : échec (module absent).**
 - [ ] **Étape 3 : créer `paths.py`** avec les signatures ci-dessus (importe seulement `patrick.core.settings`). Message de `DataRootUnavailable` : « Le disque de données {racine} est introuvable. Branche-le ou change le réglage `data_root`. »
 - [ ] **Étape 4 : `conftest.py`** : ajouter une fixture autouse `_isolated_data_root(tmp_path, monkeypatch)` qui crée `tmp_path/"data_root"` et pose `PATRICK_DATA_ROOT` dessus (même style que `_isolated_local_cache`).
-- [ ] **Étape 5 : `python -m pytest tests/test_paths.py -q` passe ; commit** `feat(paths): racine de données réglable, base active dans le dossier maison`.
+- [ ] **Étape 5 : `python -m pytest tests/system/test_paths.py -q` passe ; commit** `feat(paths): racine de données réglable, base active dans le dossier maison`.
 
 ### Tâche 2 : composants de données lus par `paths`
 
-**Fichiers :** modifier `data/store.py:35` (`_default_store_dir`), `storage/cache_manager.py:17`, `features/pool_cache.py:56-57`, `tracking/db.py:48` (`default_db_path`), `tracking/usage.py:51` (`artifact_roots`) ; test `patrick/tests/test_data_paths_wiring.py` (créé ici, complété par T3 et T4).
+**Fichiers :** modifier `data/store.py:35` (`_default_store_dir`), `storage/cache_manager.py:17`, `features/pool_cache.py:56-57`, `tracking/db.py:48` (`default_db_path`), `tracking/usage.py:51` (`artifact_roots`) ; test `patrick/tests/system/test_data_paths_wiring.py` (créé ici, complété par T3 et T4).
 
 **Interfaces — consomme :** `paths.store_dir/cache_dir/feature_cache_dir/models_dir/db_path` (T1). **Produit :** les mêmes fonctions publiques qu'avant, même type de retour (`str` pour `_default_store_dir`).
 
@@ -79,14 +79,14 @@ Toutes relisent l'environnement et `settings.load()` à chaque appel (jamais fig
 
 ### Tâche 3 : sauvegardes, rapports, scripts
 
-**Fichiers :** modifier `tracking/backup.py:46,129` (supprimer la constante `DEFAULT_BACKUP_DIR`), `tracking/report.py:28,477-478`, `fund/share.py:160`, `scripts/backup_db.py:33,49`, `scripts/schtasks_daily_dbbackup.ps1` ; adapter `tests/test_sync_cli.py:91` ; compléter `test_data_paths_wiring.py`.
+**Fichiers :** modifier `tracking/backup.py:46,129` (supprimer la constante `DEFAULT_BACKUP_DIR`), `tracking/report.py:28,477-478`, `fund/share.py:160`, `scripts/backup_db.py:33,49`, `scripts/schtasks_daily_dbbackup.ps1` ; adapter `tests/sync/test_sync_cli.py:91` ; compléter `test_data_paths_wiring.py`.
 
 **Interfaces — produit :** `report.default_reports_dir() -> str` (remplace `DEFAULT_REPORTS_DIR`). `backup_database(..., backup_dir=None)` écrit dans `paths.backups_dir()`.
 
 - [ ] **Étape 1 : tests** : `backup_database(src)` sans `backup_dir` crée le fichier dans `R/"backups"` ; `report.default_reports_dir() == str(R/"reports")` ; `merge_funds(..., backup_dir=None)` utilise `R/"backups"` (test existant de `test_fund_share.py` à étendre d'une assertion).
 - [ ] **Étape 2 : lancer, attendu : échec.**
 - [ ] **Étape 3 : implémenter** : `backup.py` et `fund/share.py` appellent `paths.backups_dir()` à l'usage ; `report.py` définit `default_reports_dir()` ; `scripts/backup_db.py` n'importe plus la constante (aide : « défaut : dossier backups de la racine de données ») ; le `.ps1` écrit son journal dans `%USERPROFILE%\.patrick\logs\backup.log` (non enregistré comme tâche aujourd'hui). `test_sync_cli.py::_pc_env` : remplacer `monkeypatch.setattr(backup, "DEFAULT_BACKUP_DIR", …)` par `PATRICK_DATA_ROOT` sur `tmp_path/f"{name}_data"` (créé).
-- [ ] **Étape 4 : `tests/test_backup_db.py tests/test_sync_cli.py tests/test_fund_share.py tests/test_data_paths_wiring.py` verts ; commit** `refactor(paths): sauvegardes et rapports via paths`.
+- [ ] **Étape 4 : `tests/repo/test_backup_db.py tests/sync/test_sync_cli.py tests/fund/test_fund_share.py tests/system/test_data_paths_wiring.py` verts ; commit** `refactor(paths): sauvegardes et rapports via paths`.
 
 ### Tâche 4 : `sync.py` — emplacements, messages, statut
 
@@ -97,42 +97,42 @@ Toutes relisent l'environnement et `settings.load()` à chaque appel (jamais fig
 - [ ] **Étape 1 : tests** : `_default_store_root() == str(R/"store")` ; `R/"models"` figure dans `_default_models_roots()` ; `_disk_full_message(p)` cite `str(R/"feature_cache")` et `str(R/"backups")` et ne contient plus `~/.patrick` ; `status()` renvoie `data_root == str(R)`, `data_available is True` ; **autre PC** : `sync.merge(partage, db_path=…)` sans `models_dir` explicite restaure dans `R/"models"` et écrit des `trial.artifact_path` absolus sous `R/"models"` (réutiliser le scénario de `test_sync_inplace.py`) ; racine absente → `status()["data_available"] is False` sans lever.
 - [ ] **Étape 2 : lancer, attendu : échec.**
 - [ ] **Étape 3 : implémenter** ; le journal de `register_task` reste `paths.logs_dir()/"sync.log"` (même emplacement qu'aujourd'hui, tâche existante inchangée).
-- [ ] **Étape 4 : `tests/test_sync*.py tests/test_data_paths_wiring.py` verts ; commit** `refactor(sync): emplacements via paths, statut de la racine de données`.
+- [ ] **Étape 4 : `tests/test_sync*.py tests/system/test_data_paths_wiring.py` verts ; commit** `refactor(sync): emplacements via paths, statut de la racine de données`.
 
 ### Tâche 5 : diagnostics et page Réglages
 
-**Fichiers :** modifier `analysis/diagnostics.py` (`home()` l.30, `logs_dir()` l.35, `system()` l.53, `storage()` l.141-146), `webapp/static/reglages.js:119-121`, `webapp/i18n/settings.py:73-75,150` ; tests `tests/test_analysis_diagnostics.py`, `tests/test_settings_routes.py`.
+**Fichiers :** modifier `analysis/diagnostics.py` (`home()` l.30, `logs_dir()` l.35, `system()` l.53, `storage()` l.141-146), `webapp/static/reglages.js:119-121`, `webapp/i18n/settings.py:73-75,150` ; tests `tests/webapp/test_analysis_diagnostics.py`, `tests/webapp/test_settings_routes.py`.
 
 **Interfaces — consomme :** `paths.home_dir/logs_dir/*_dir`, `sync.status()` (T4).
 
 - [ ] **Étape 1 : tests** : `dg.home() == paths.home_dir()` ; `storage()` : les dossiers `models`, `backups`, `archive` viennent de `paths` (sous `R`), `logs` du dossier maison ; `system()` : `holds_data` est vrai pour le volume du dossier maison ET celui de la racine de données ; la route de statut de `routes/settings.py` expose `data_root`, `data_free_gb`, `data_available` ; une clé `app_status_data_disk` et une clé `app_status_data_missing` existent en FR et EN (le test garde-fou `test_i18n_js_keys.py` doit rester vert).
 - [ ] **Étape 2 : lancer, attendu : échec.**
 - [ ] **Étape 3 : implémenter.** `diagnostics.home()` = `paths.home_dir()`. Chaînes : `app_status_disk_low` sans `~/.patrick` (« … libère de la place (caches de variables, anciennes sauvegardes). ») ; `app_status_data_disk` : « Données : {path}, {free} Go libres. » ; `app_status_data_missing` : « Disque de données introuvable : {path}. » ; `reglages.js` affiche la ligne de données sous la ligne du disque de la base, et le seuil « presque plein » s'applique à chaque volume séparément. Ajouter les deux clés à `SETTINGS_JS_KEYS`.
-- [ ] **Étape 4 : `tests/test_analysis_diagnostics.py tests/test_settings_routes.py tests/test_i18n_*.py` verts ; commit** `feat(reglages): racine de données et espace libre des deux volumes`.
+- [ ] **Étape 4 : `tests/webapp/test_analysis_diagnostics.py tests/webapp/test_settings_routes.py tests/test_i18n_*.py` verts ; commit** `feat(reglages): racine de données et espace libre des deux volumes`.
 
 ### Tâche 6 : dossier de partage vs racine de données
 
-**Fichiers :** modifier `desktop/share.py` (`validate_folder` l.84-103) ; test `tests/test_desktop_share.py`.
+**Fichiers :** modifier `desktop/share.py` (`validate_folder` l.84-103) ; test `tests/desktop/test_desktop_share.py`.
 
 - [ ] **Étape 1 : tests** : `validate_folder(R/"partage")` lève `ShareError` ; `validate_folder(parent_de_R)` lève `ShareError` ; un dossier sans lien avec `R` reste accepté ; sans racine configurée, comportement inchangé.
 - [ ] **Étape 2 : lancer, attendu : échec.**
 - [ ] **Étape 3 : implémenter** avec `_is_inside` dans les deux sens contre `paths.configured_data_root()` (message : « Choisis un dossier différent de la racine de données de PATRICK ({racine}). »).
-- [ ] **Étape 4 : `tests/test_desktop_share.py` vert ; commit** `fix(share): le partage ne peut pas chevaucher la racine de données`.
+- [ ] **Étape 4 : `tests/desktop/test_desktop_share.py` vert ; commit** `fix(share): le partage ne peut pas chevaucher la racine de données`.
 
 ### Tâche 7 : disque de données absent (lanceur, serve, worker, pages)
 
-**Fichiers :** modifier `desktop/launcher.py:262` (avant `start_and_wait_for_server`), `cli.py` (`serve` l.266, `worker` l.251), `webapp/app.py` (gestionnaire d'exception + `templates.env.globals`), `webapp/templates/base_v2.html` (bandeau), chaînes serveur (clé `data_root_banner`, motif des clés `app_*`) ; tests `tests/test_desktop_launcher.py`, nouveau `tests/test_data_root_unavailable.py`.
+**Fichiers :** modifier `desktop/launcher.py:262` (avant `start_and_wait_for_server`), `cli.py` (`serve` l.266, `worker` l.251), `webapp/app.py` (gestionnaire d'exception + `templates.env.globals`), `webapp/templates/base_v2.html` (bandeau), chaînes serveur (clé `data_root_banner`, motif des clés `app_*`) ; tests `tests/desktop/test_desktop_launcher.py`, nouveau `tests/webapp/test_data_root_unavailable.py`.
 
 **Interfaces — consomme :** `paths.data_root_problem()`, `paths.data_root_missing()`, `paths.DataRootUnavailable`.
 
 - [ ] **Étape 1 : tests** (racine configurée absente) : `launcher.run(rep)` renvoie 1, appelle `rep.error` avec le chemin, et ne démarre pas le serveur (monkeypatcher `start_and_wait_for_server` pour échouer s'il est appelé) ; `CliRunner().invoke(app, ["serve"])` et `["worker"]` sortent en code 1 avec le message sur `stderr` ; `TestClient` : une route `/api/…` qui lit le magasin renvoie 503 et `{"error": <message>}` ; une page HTML renvoie 503 avec le message ; `GET /reglages` renvoie 200 et contient `data-root-banner` ; avec la racine présente, aucun bandeau.
 - [ ] **Étape 2 : lancer, attendu : échec.**
 - [ ] **Étape 3 : implémenter** : lanceur et commandes `serve`/`worker` vérifient `data_root_problem()` en tête ; `app.add_exception_handler(paths.DataRootUnavailable, …)` (JSON pour `/api/`, HTML court sinon, statut 503) ; global Jinja `data_root_missing` et bloc `<div class="data-root-banner" role="alert">{{ t('data_root_banner', path=…) }}</div>` en haut de `base_v2.html` quand il renvoie un chemin.
-- [ ] **Étape 4 : `tests/test_data_root_unavailable.py tests/test_desktop_launcher.py tests/test_i18n_templates.py` verts ; commit** `feat(app): arrêt clair et bandeau quand le disque de données est absent`.
+- [ ] **Étape 4 : `tests/webapp/test_data_root_unavailable.py tests/desktop/test_desktop_launcher.py tests/webapp/test_i18n_templates.py` verts ; commit** `feat(app): arrêt clair et bandeau quand le disque de données est absent`.
 
 ### Tâche 8 : `patrick data status` et `init`
 
-**Fichiers :** créer `patrick/patrick/storage/data_move.py` ; modifier `cli.py` (nouveau `data_app = typer.Typer(...)`, `app.add_typer(data_app, name="data")`, à côté de `sync_app` l.35) ; test `tests/test_data_move.py`.
+**Fichiers :** créer `patrick/patrick/storage/data_move.py` ; modifier `cli.py` (nouveau `data_app = typer.Typer(...)`, `app.add_typer(data_app, name="data")`, à côté de `sync_app` l.35) ; test `tests/system/test_data_move.py`.
 
 **Interfaces — produit (utilisé par T9 à T11) :**
 ```python
@@ -152,7 +152,7 @@ def init_root(folder: str) -> Path   # crée la racine, ses 7 sous-dossiers et R
 
 ### Tâche 9 : `move` — préconditions et phase 1 (copie)
 
-**Fichiers :** modifier `storage/data_move.py`, `cli.py` (`data move <dossier>`) ; test `tests/test_data_move.py`.
+**Fichiers :** modifier `storage/data_move.py`, `cli.py` (`data move <dossier>`) ; test `tests/system/test_data_move.py`.
 
 **Interfaces — produit :**
 ```python
@@ -168,7 +168,7 @@ def copy_components(target: str, *, source_root: Path | None = None, progress=No
 
 ### Tâche 10 : `move` — phase 2 (bascule et journal)
 
-**Fichiers :** modifier `storage/data_move.py` ; test `tests/test_data_move.py`.
+**Fichiers :** modifier `storage/data_move.py` ; test `tests/system/test_data_move.py`.
 
 **Interfaces — produit :**
 ```python
@@ -184,7 +184,7 @@ Journal (`JOURNAL_NAME`) : `{"source_root","target","artifact_paths": [[trial_id
 
 ### Tâche 11 : `move` — phase 3 (contrôle, rollback, finalisation)
 
-**Fichiers :** modifier `storage/data_move.py`, `cli.py` (`data move <dossier> [--finalize]`, `data rollback`) ; test `tests/test_data_move.py`.
+**Fichiers :** modifier `storage/data_move.py`, `cli.py` (`data move <dossier> [--finalize]`, `data rollback`) ; test `tests/system/test_data_move.py`.
 
 **Interfaces — produit :**
 ```python
@@ -200,7 +200,7 @@ def finalize(*, source_root: Path | None = None) -> dict  # supprime les 7 compo
 
 ### Tâche 12 : garde-fou, docs, isolation des vrais dossiers
 
-**Fichiers :** créer `tests/test_no_hardcoded_home.py` ; modifier `ARCHITECTURE.md`, `METHODOLOGY.md`, `README.md`, `NEXT_STEPS.md` (phrases citant `~/.patrick/…`).
+**Fichiers :** créer `tests/repo/test_no_hardcoded_home.py` ; modifier `ARCHITECTURE.md`, `METHODOLOGY.md`, `README.md`, `NEXT_STEPS.md` (phrases citant `~/.patrick/…`).
 
 - [ ] **Étape 1 : test** : parcourir `patrick/patrick/**/*.py` et `patrick/scripts/**/*.py` ; échec si `.patrick` apparaît dans un chemin construit (`expanduser("~/.patrick`, `/ ".patrick"`, `\.patrick\`) hors de `paths.py`, des commentaires/docstrings et d'une liste blanche explicite de deux entrées : `settings.py` (emplacement de `settings.json`) et `storage/data_move.py` (messages). Modèle : `test_repo_hygiene.py`.
 - [ ] **Étape 2 : lancer ; corriger les oublis révélés** (candidats : `explain.py`, `desktop/runtime.py`, `desktop/prefs.py`, `webapp/*`) en les passant par `paths` ; relancer jusqu'au vert.

@@ -6,7 +6,7 @@ quand l'interface est en anglais ; un message inconnu reste inchangé (jamais de
 Exposé aux gabarits par le filtre Jinja `tx` et au code Python par `translate`.
 
 Chaque entrée est `(motif regex, gabarit anglais)` ; les groupes nommés du motif remplissent les `{champs}` du gabarit.
-`rest` désigne une suite traduite récursivement. Un test (`tests/test_i18n_server.py`) vérifie chaque motif sur un message réel.
+`rest` désigne une suite traduite récursivement. Un test (`tests/webapp/test_i18n_server.py`) vérifie chaque motif sur un message réel.
 """
 from __future__ import annotations
 

@@ -576,7 +576,7 @@ ADDED_ON_2026_10_07_GROUPS = (
 )
 
 # Candidats FEATURES de feature/replay-cache-universe (Phase 3), tous dans
-# `EXTENDED_TARGET_GROUPS` ci-dessus (verifie par tests/test_universe_reduction.py).
+# `EXTENDED_TARGET_GROUPS` ci-dessus (verifie par tests/data/test_universe_reduction.py).
 EXTENDED_FEATURE_CANDIDATES: tuple[str, ...] = (
     # Indices actions
     "^DJI", "^IXIC", "^RUT", "^FTSE", "^GDAXI", "^FCHI", "^N225", "^HSI", "^STOXX50E",

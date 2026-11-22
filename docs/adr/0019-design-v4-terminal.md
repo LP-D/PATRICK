@@ -19,6 +19,6 @@ La v3 avait un bleu de marque, des cartes de 20 px avec dégradé et ombre douce
 
 ## Conséquences
 
-- Deux tests figeaient la v3 et sont mis à jour : boutons à `var(--radius)` au lieu de la pilule, `--radius-card: 10px` au lieu de 20 px (`tests/test_ui_lot_a.py`). `tests/test_ui_shell.py` accepte les deux styles en ligne de l'accueil Connaissances (`--share`, `--heat`, calculés à partir des données) : ce test échouait déjà sur main depuis la fusion de l'accueil.
+- Deux tests figeaient la v3 et sont mis à jour : boutons à `var(--radius)` au lieu de la pilule, `--radius-card: 10px` au lieu de 20 px (`tests/webapp/test_ui_lot_a.py`). `tests/webapp/test_ui_shell.py` accepte les deux styles en ligne de l'accueil Connaissances (`--share`, `--heat`, calculés à partir des données) : ce test échouait déjà sur main depuis la fusion de l'accueil.
 - La branche `feat/ml-refonte` (refonte de `/ml` seule, 2026-11-08) est rendue caduque par la v4 ; ses deux corrections utiles (pastille active, barre d'outils du graphique qui débordait vers 350 px) sont reprises dans `patrick.css`.
 - Limites connues : le contenu reste à la largeur de la colonne (pas d'espace de travail multi-panneaux redimensionnables à la Bloomberg) ; les défauts de balisage relevés par la cartographie (libellé « Chargement… » d'un fragment en erreur, statuts bruts en anglais, symboles au lieu des noms dans six gabarits, quatre composants d'onglets) ne relèvent pas du style et sont laissés à des chantiers séparés.

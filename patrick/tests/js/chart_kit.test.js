@@ -1,5 +1,5 @@
 // Tests des fonctions pures du moteur de graphiques (static/chart_kit.js) : échelles, graduations, décimation, bornes de zoom.
-// Lancé par tests/test_chart_kit_js.py (`node tests/js/chart_kit.test.js`) ; sans DOM : seul `create` en a besoin.
+// Lancé par tests/webapp/test_chart_kit_js.py (`node tests/js/chart_kit.test.js`) ; sans DOM : seul `create` en a besoin.
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");

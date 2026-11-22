@@ -165,7 +165,7 @@ couteux, pas de reseau) sont, par ordre de pertinence :
   `/runs/{run_id}` (via `tracking/history.py::run_detail`, ligne 261).
   Explicitement documente comme jamais utilise pour la selection de
   modele (isolation garantie par
-  `tests/test_holdout_diagnostic_isolation.py`), donc un candidat "propre"
+  `tests/tracking/test_holdout_diagnostic_isolation.py`), donc un candidat "propre"
   pour un badge de risque de surapprentissage par run/cible.
 - `patrick/patrick/tracking/history.py::target_detail` (lignes 295-337) :
   calcule deja `pbo_by_horizon` (probability of backtest overfitting, par
@@ -203,7 +203,7 @@ seulement, non implementee dans cette branche.
 
 Constat de faisabilité (feature/shap-waterfall) : **implémenté**, coût jugé
 acceptable pour un affichage à la demande. Ce document consigne les chiffres
-réels mesurés, référencés depuis `patrick/live/explain.py` et `tests/test_explain.py`.
+réels mesurés, référencés depuis `patrick/live/explain.py` et `tests/live/test_explain.py`.
 
 ### Où les valeurs SHAP existaient déjà — et pourquoi elles ne sont pas réutilisées
 

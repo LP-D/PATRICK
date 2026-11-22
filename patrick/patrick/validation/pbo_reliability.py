@@ -9,7 +9,7 @@ interpretable on its own.
 This module is NOT a modification of `compute_pbo` -- this file neither
 imports nor touches `pbo.py`: it provides a complementary diagnostic,
 computed separately. `_combination_outcomes` deliberately reproduces
-`compute_pbo`'s per-combination logic (`tests/test_pbo_reliability.py`
+`compute_pbo`'s per-combination logic (`tests/validation/test_pbo_reliability.py`
 verifies that the PBO recomputed here matches `compute_pbo`'s EXACTLY --
 an anti-drift guard in case one changes without the other).
 

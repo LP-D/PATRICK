@@ -8,7 +8,7 @@ soit comme entree de nav (`NavEntry.url`), soit comme route enfant d'une
 entree (`NavEntry.child_routes`, page parametree non listee dans la nav :
 detail d'un run, fiche cible...). Toute autre route GET doit correspondre a
 `NON_PAGE_PREFIXES`/`NON_PAGE_ROUTES` (API JSON, fichiers, redirects).
-`tests/test_nav_registry.py::test_no_orphan_page_route` echoue sinon.
+`tests/webapp/test_nav_registry.py::test_no_orphan_page_route` echoue sinon.
 
 Aucune logique de nav ailleurs : le template itere `nav_sections(path)`
 (expose en global Jinja par `app.py`), rien d'autre.

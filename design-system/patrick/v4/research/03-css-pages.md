@@ -116,7 +116,7 @@ Zéro occurrence du jeton dans les gabarits, les scripts et les `.py`, et aucun 
 
 | Sélecteur(s) | Lignes | Preuve |
 |---|---|---|
-| `nav.breadcrumb` + 4 descendants | 1836–1848 | hors CSS : commentaire `i18n.py:448` et clé inutilisée `breadcrumb_aria` (`i18n/legacy.py:380`), aucune classe ; `tests/test_ui_shell.py:69-71` interdit `class="breadcrumb"` |
+| `nav.breadcrumb` + 4 descendants | 1836–1848 | hors CSS : commentaire `i18n.py:448` et clé inutilisée `breadcrumb_aria` (`i18n/legacy.py:380`), aucune classe ; `tests/webapp/test_ui_shell.py:69-71` interdit `class="breadcrumb"` |
 | `.history-model-actions` (+ `form`, `input`) | 1524–1526 | 0 |
 | `.asset-panel-symbol` | 1987 | 0 (la macro `asset_panel` ne l'émet pas) |
 | `.sim-title`, `.sim-grid`, `.sim-panel-*`, `.sim-empty`, `.sim-graph-*`, `body[data-sim-loaded]`, `#sim-{equity,drawdown,dist}-canvas`, `#sim-{metrics,trades}-table`, `#sim-trades-download`, `.metric-row`, `.metric-help` | 2008–2076, 2145–2147 | 0 ; `simulate.html` est un ticket d'ordre ; `simulate.js` ne contient aucun `sim-` (en-tête l. 1-6). Seul `.sim-guard` (2032) vit (`feature_drift.js:31,63`) |
@@ -144,7 +144,7 @@ Volume mort ≈ 100 lignes, ≈ 6 % de la plage.
 9. **Couleurs de sens en décor** (contraire à MASTER l. 25) : `.kind-alpha` en `--pos` (2467), `.cmp-s1/-s2` (2485), `.kb-level-1/-2`, `cls-sig-warning` pour une baisse (`app.py:1879-1882`).
 10. **En-têtes trompeurs** : « /launch », « /commodities, /macro », « /simulate », « Exploration » ; préfixes `adv-` et `kind-` à double sens.
 11. **Couplages fragiles** : marges négatives de `.launch-bar` (1405) = padding de `.dash-panel` (1365) ; `nth-child` de `.history-table-cls/-rl` (2241-2262, 2301-2309) liés à l'ordre des colonnes de `runs.html` ; styles par id (2396, 2404, 2649, 2743).
-12. **Test rouge sur `main`** : `tests/test_ui_shell.py::test_templates_keep_only_data_driven_inline_styles` échoue à cause de `knowledge_hub.html:22,69` (relancé : `1 failed`).
+12. **Test rouge sur `main`** : `tests/webapp/test_ui_shell.py::test_templates_keep_only_data_driven_inline_styles` échoue à cause de `knowledge_hub.html:22,69` (relancé : `1 failed`).
 
 ## 8. Contrat à ne pas casser
 

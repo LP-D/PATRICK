@@ -15,7 +15,7 @@ de correction dédiée (voir « Résolus » ci-dessous).
 Cause confirmée : fixture à date absolue `2018-01-01`. Corrigé en remplaçant
 par `_OLD_ENOUGH_START`, une date calculée relativement à l'exécution
 (`pd.Timestamp.today() - 30 ans`, marge de 10 ans au-delà du seuil de 20 ans
-testé) — `patrick/tests/test_data_quality.py`. Voir l'historique git de ce
+testé) — `patrick/tests/data/test_data_quality.py`. Voir l'historique git de ce
 fichier / le commit associé sur la PR #41 pour le diff exact.
 
 ### 2. `test_data_quality.py::test_data_quality_disabled_restores_pre_p6_5_behavior` — résolu 2026-08-08
@@ -165,7 +165,7 @@ concaténées, en plus ancien -- sans le cache (`conn`/`snapshot_id`,
 migration 0015) ni l'instrumentation de profilage (P1) ajoutés depuis aux
 deux fonctions séparées. Supprimée, ainsi que `_VOL_MODEL_BUILDERS` (dict
 de fusion qui n'existait que pour l'alimenter). Les 3 tests de
-`tests/test_features_robustness.py` qui l'utilisaient (régression zero-
+`tests/features/test_features_robustness.py` qui l'utilisaient (régression zero-
 crossing/infini, cf. en-tête du fichier) ont été portés sur un helper de
 test local qui appelle les deux fonctions séparées et concatène -- la
 couverture réelle (le bug historique testé) est préservée, seul le point
@@ -296,7 +296,7 @@ Parcours complet du dépôt (références cherchées dans le code, les tests, le
 
 ## Validité statistique mesurée sur des marches aléatoires — 2026-10-20
 
-`patrick/tests/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
+`patrick/tests/pipeline/test_null_world_validity.py` (marqueur `validity`, hebdomadaire : `.github/workflows/validity.yml`) fait tourner le
 pipeline complet sur 12 marches aléatoires indépendantes (walk-forward 6 plis, holdout de 12 mois, horizon 5) et sur 3 mondes à
 signal (contrôle positif). Résultats du 2026-10-19 :
 
@@ -312,7 +312,7 @@ signal (contrôle positif). Résultats du 2026-10-19 :
   du holdout et la taille est gonflée. La famille BH est protégée dans les deux cas : elle ne lit que le sens « meilleur ». Pour
   trancher : un monde où modèle et baseline ont la même perte espérée par construction (deux prédicteurs indépendants du même
   bruit), ou beaucoup plus de mondes.
-  **Tranché le 2026-11-02** (`tests/test_dm_equal_loss_world.py`, ADR 0014) : dans un monde à pertes égales par construction, le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5
+  **Tranché le 2026-11-02** (`tests/validation/test_dm_equal_loss_world.py`, ADR 0014) : dans un monde à pertes égales par construction, le DM bilatéral rejette 4,3 à 5,8 % du temps à h <= 5
   (~8 % à 15 blocs, h = 30, ce que dit déjà le seuil de 15 blocs). La taille du test n'est donc pas en cause à h = 5 (lecture (b) écartée) ; reste la lecture (a) : le modèle
   choisi sur du bruit coûte de la variance face à sa baseline. Probabilité de >= 3 rejets sur 12 mondes à 5,5 % : ~2,7 %.
 - **Faible puissance du DM** : sur les 3 mondes à signal, aucune p-value « meilleur » < 5 % malgré un Sharpe holdout de 2 à 9 (240

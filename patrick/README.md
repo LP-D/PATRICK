@@ -233,7 +233,7 @@ methodological guarantees and their measured effect are in [`METHODOLOGY.md`](..
   during development, in about 17 minutes serially or about 5 with `pytest -n 5` (pytest-xdist; every test has
   its own database, caches and data root, see `tests/conftest.py`); `pytest -m slow` (full pipeline runs, worker subprocess, EGARCH, webapp smoke) before a
   commit/push or in CI.
-  The `run_pipeline` golden master (`tests/test_run_pipeline_golden.py`) is
+  The `run_pipeline` golden master (`tests/pipeline/test_run_pipeline_golden.py`) is
   bit-exact only in the pinned CI environment that generated it: on another
   machine it is skipped, use a local golden (`PATRICK_GOLDEN_DIR`, see the
   test's docstring); regenerate the CI one by pushing a `golden-regen/<name>`

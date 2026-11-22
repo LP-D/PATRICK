@@ -3,7 +3,7 @@ sprints suivants doivent reproduire à l'identique.
 
 Chaque artefact est écrit en pleine précision (CSV/JSON) et résumé par un
 digest sur sa forme normalisée (flottants arrondis à 10 décimales, comme
-`tests/test_run_pipeline_golden.py`). Deux runs sont « identiques » ssi tous
+`tests/pipeline/test_run_pipeline_golden.py`). Deux runs sont « identiques » ssi tous
 leurs digests coïncident (`compare_baselines`).
 
 Ce qui N'EST PAS disponible (documenté dans le rapport, non reconstruit) :

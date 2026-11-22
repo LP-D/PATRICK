@@ -211,7 +211,7 @@ depuis le conteneur de développement (tableau ci-dessous). 39/39 acceptés ; le
   ^TYX (nouveau groupe « Taux US (indices CBOE) »), PL=F, PA=F, HO=F, RB=F (nouveau groupe
   « Matières premières (compléments) »). Première date servie par Yahoo relevée ci-dessous.
 - Une seule source de vérité : chaque candidat feature est un symbole vérifié de l'univers étendu
-  (`tests/test_universe_reduction.py`). L'univers de features par défaut ne change pas ; l'univers
+  (`tests/data/test_universe_reduction.py`). L'univers de features par défaut ne change pas ; l'univers
   « étendu » reste un choix explicite du formulaire, à coupler avec la réduction par clustering.
 
 ### Détail

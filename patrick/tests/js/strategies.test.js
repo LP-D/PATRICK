@@ -1,5 +1,5 @@
 // Tests des fonctions pures du laboratoire de stratégies (static/strategies.js) : description des règles, grille, CSV, description d'étude.
-// Lancé par tests/test_strategies_page.py ; sans DOM.
+// Lancé par tests/webapp/test_strategies_page.py ; sans DOM.
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");

@@ -1,6 +1,6 @@
 # ADR 0008 — Méthode d'évaluation 2
 
-Date : 2026-10-28 · Statut : acceptée · Code : `config/schema.py` (`ValidationConfig.method_version`), `config/defaults.py` (`CURRENT_METHOD_VERSION`), `features/target.py` (`TargetSpec`, `METHOD_1`, `METHOD_2`, `spec_for`, `regime_series`, `non_flat_mask`), `features/alpha_target.py`, `pipeline/engine.py` (`_dm_losses`, `_dm_against_baselines`, `_placebo_lag`, masques d'entraînement, `_config_hash`, `_selector_config_hash`), `selection/shap_select.py`, `tracking/export.py`, `tracking/db.py` (`save_dm_result(loss=)`, `save_placebo`), `tracking/stats.py` (famille BH), migrations 0046 et 0047 · Tests : `tests/test_method_v2.py`
+Date : 2026-10-28 · Statut : acceptée · Code : `config/schema.py` (`ValidationConfig.method_version`), `config/defaults.py` (`CURRENT_METHOD_VERSION`), `features/target.py` (`TargetSpec`, `METHOD_1`, `METHOD_2`, `spec_for`, `regime_series`, `non_flat_mask`), `features/alpha_target.py`, `pipeline/engine.py` (`_dm_losses`, `_dm_against_baselines`, `_placebo_lag`, masques d'entraînement, `_config_hash`, `_selector_config_hash`), `selection/shap_select.py`, `tracking/export.py`, `tracking/db.py` (`save_dm_result(loss=)`, `save_placebo`), `tracking/stats.py` (famille BH), migrations 0046 et 0047 · Tests : `tests/pipeline/test_method_v2.py`
 
 ## Contexte
 
