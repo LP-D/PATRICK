@@ -3645,3 +3645,41 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .pl-cal-total { font-weight: 700; border: 1px solid var(--line); }
 .pl-cal-total.is-neg { color: var(--neg); }
 .pl-cal-empty { background: transparent; }
+
+/* ---- Épingles (barre latérale), puce « machine », étoile et aide des raccourcis (2026-11-23) ---- */
+.sidebar-pins { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.sidebar-pins-title { display: flex; align-items: center; gap: 6px; cursor: default; }
+.sidebar-pins-title::before { display: none; }
+.sidebar-pins-title .icon { color: var(--warn); }
+.nav-pin { position: relative; }
+.nav-pin a { padding-right: 28px; }
+.nav-pin-remove {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: var(--text-3);
+  font: 600 14px/1 var(--font, inherit); cursor: pointer; opacity: 0; transition: opacity 120ms var(--ease-out);
+}
+.nav-pin:hover .nav-pin-remove, .nav-pin-remove:focus-visible { opacity: 1; }
+.nav-pin-remove:hover { background: var(--surface-3); color: var(--neg); }
+html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
+.pin-toggle[aria-pressed="true"] { color: var(--warn); }
+.pin-toggle[aria-pressed="true"] svg path { fill: currentColor; }
+.machine-chip {
+  display: inline-flex; align-items: center; flex-shrink: 1; min-width: 0; gap: 6px; max-width: 280px; height: 30px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-2);
+  font: 500 var(--fs-xs)/1 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none;
+}
+.machine-chip:hover { color: var(--text); border-color: var(--line-strong); }
+.machine-chip .icon { flex: none; color: var(--pos); }
+.machine-chip.is-paused .icon { color: var(--warn); }
+.machine-chip-text { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1200px) { .machine-chip { max-width: 34px; padding: 0 9px; } .machine-chip-text { display: none; } }
+.kbd-help { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-start; justify-content: center; padding: 14vh 16px 16px;
+  background: var(--overlay); backdrop-filter: blur(3px); }
+.kbd-help[hidden] { display: none; }
+.kbd-help-panel { width: min(440px, 100%); padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-xl); }
+.kbd-help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.kbd-help-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-md); }
+.kbd-help-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
+.kbd-help-list dt { display: flex; gap: 4px; align-items: center; }
+.kbd-help-list dd { margin: 0; color: var(--text-2); }

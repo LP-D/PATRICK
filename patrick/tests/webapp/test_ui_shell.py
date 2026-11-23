@@ -106,3 +106,15 @@ def test_templates_keep_only_data_driven_inline_styles():
     inline = {p.name: p.read_text(encoding="utf-8").count('style="') for p in root.glob("*.html")}
     # knowledge_hub.html : --share (hauteur d'une marche) et --heat (intensité d'une case) sont calculés à partir des nombres de notions
     assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1, "knowledge_hub.html": 2}
+
+
+def test_shell_offers_pins_machine_chip_and_shortcut_help(client):
+    page = client.get("/placements").text
+    assert 'id="pin-toggle"' in page and 'aria-pressed="false"' in page
+    assert 'id="sidebar-pins"' in page and 'id="pins-list"' in page
+    assert 'id="machine-chip"' in page and 'id="kbd-help"' in page
+    i18n = json.loads(re.search(r'<script id="i18n-data" type="application/json">(.*?)</script>', page, re.S).group(1))
+    for key in ("pin_add", "pin_remove", "pins_title", "recent_title", "chip_queue", "dur_short_h"):
+        assert i18n.get(key), key
+    shell = (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")
+    assert "patrick-pins" in shell and "patrick-recent" in shell and "/api/run-state" in shell
