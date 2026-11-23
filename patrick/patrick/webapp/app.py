@@ -1106,9 +1106,11 @@ def run_state():
     `/runs/{run_id}/status` (progress/logs of a specific run)."""
     run_manager.recover_interrupted_runs()               # un worker disparu (PC éteint) : job remis en file, worker relancé
     active = run_manager.active_run()
+    queue = run_manager.queued_runs()
     return {
         "active_run": active,
-        "queue": run_manager.queued_runs(),
+        "queue": queue,
+        "queue_eta": run_manager.queue_eta(active, queue),   # temps pour vider toute la file (hors veille et pause)
     }
 
 

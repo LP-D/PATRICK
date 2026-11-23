@@ -1678,6 +1678,9 @@ legend {
   vertical-align: 1px;
 }
 .machine-idle { margin: 0; color: var(--text-3); font-size: var(--fs-base); }
+/* Temps pour vider la file, à côté du titre ; durée attendue de chaque run en file. */
+.machine-eta { margin-left: 4px; color: var(--text-2); font: 500 var(--fs-sm)/1.4 var(--mono); letter-spacing: 0; text-transform: none; }
+.queue-eta { color: var(--text-3); font: 500 var(--fs-xs)/1.5 var(--mono); font-variant-numeric: tabular-nums; }
 .run-name-line { margin: 0 0 8px; font-family: var(--mono); font-size: var(--fs-md); font-weight: 600; }
 .log-tail {
   max-height: 320px;

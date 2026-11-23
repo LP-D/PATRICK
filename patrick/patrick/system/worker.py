@@ -33,6 +33,7 @@ from patrick.storage import cache_eviction
 from patrick.system import priority
 from patrick.system.keep_awake import keep_awake
 from patrick.tracking import db as trackdb
+from patrick.system import awake_clock
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import prediction_archive
 
@@ -88,9 +89,17 @@ class _HeartbeatThread(threading.Thread):
 
     def run(self) -> None:
         conn = trackdb.connect(self._db_path)
+        # Veille du PC : entre deux battements, l'horloge murale a avancé bien plus que l'horloge « éveillée » (`system/awake_clock.py`).
+        # La période est consignée dans `machine_idle` : le chronomètre du run et les moyennes par étape ne la comptent pas.
+        wall, awake = time.time(), awake_clock.awake_seconds()
         try:
             while not self._stopped.wait(_HEARTBEAT_INTERVAL_S):
+                now_wall, now_awake = time.time(), awake_clock.awake_seconds()
+                slept = awake_clock.suspended_between(wall, awake, now_wall, now_awake)
+                wall, awake = now_wall, now_awake
                 try:
+                    if slept:
+                        jobs_db.record_suspension(conn, now_wall - slept, now_wall)
                     jobs_db.write_heartbeat(conn, self._pid)
                 except sqlite3.Error as exc:
                     print(f"[WORKER] heartbeat not written: {exc}", file=sys.stderr)
@@ -182,6 +191,7 @@ class _ProgressCapture:
         self._buffer = ""
         self._log_lines: list[str] = []
         self._phase = first_phase
+        self._phase_started = time.time()      # début de l'étape en cours (epoch) : `job_phase_timing` au changement d'étape
         self._progress_done = 0
         self._last_flush = 0.0
 
@@ -203,7 +213,9 @@ class _ProgressCapture:
         self._log_lines.append(line)
         for marker, phase in self._markers:
             if marker in line:
-                self._phase = phase
+                if phase != self._phase:
+                    self._close_phase()
+                    self._phase = phase
                 break
         if self._progress_re is not None:
             m = self._progress_re.search(line)
@@ -231,7 +243,17 @@ class _ProgressCapture:
             # two workers mid-run). The next flush retries.
             self._out.write(f"[WORKER] progress not saved ({exc}), will retry\n")
 
+    def _close_phase(self) -> None:
+        """Consigne l'étape qui se termine (moyennes par étape de `tracking/eta.py`) ; une base occupée n'interrompt jamais le calcul."""
+        now = time.time()
+        try:
+            jobs_db.record_job_phase(self._conn, self._job_id, self._phase, self._phase_started, now)
+        except sqlite3.Error as exc:
+            self._out.write(f"[WORKER] phase timing not saved ({exc})\n")
+        self._phase_started = now
+
     def final_flush(self) -> None:
+        self._close_phase()
         self._flush(time.monotonic())
 
 
