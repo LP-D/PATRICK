@@ -1282,7 +1282,8 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
                    page: int = Query(default=1, ge=1), vides: int = Query(default=0, ge=0, le=1),
                    started_after: date | None = None, started_before: date | None = None,
                    min_duration_s: float | None = Query(default=None, ge=0),
-                   max_duration_s: float | None = Query(default=None, ge=0)):
+                   max_duration_s: float | None = Query(default=None, ge=0),
+                   ordre: str | None = None, mesure: str | None = None):
     """Phase 7.1 — full run-history explorer.
 
     Deux vues sur la même page : la liste des runs (défaut) et, avec `vue=analyses`, les analyses transverses (carte cible × horizon, scores
@@ -1321,6 +1322,9 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         kind_counts = {"directional": sum(1 for r in classif_scope if r.get("kind") == "directional"),
                        "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha")}
         kind = kind if kind in kind_counts and family != "rl" else None
+        ordre = ordre if ordre in HISTORY_ORDERS else None
+        mesure = mesure if mesure in HISTORY_MEASURES else HISTORY_DEFAULT_MEASURE
+        n_unscored = 0
         scope_runs = [r for f in scope for r in by_family[f]]
         algorithm_options = sorted({model for run in scope_runs for model in _run_algorithms(run)})
         sections, filtered_classif, filtered_rl = [], [], []
@@ -1332,6 +1336,9 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
                 by_family[fam], kind=kind, target=target, status=status, scheme=scheme, algo=algo, q=q,
                 started_after=started_after, started_before=started_before,
                 min_duration_s=min_duration_s, max_duration_s=max_duration_s)
+            if ordre:                       # classement : les meilleurs (ou les pires) modèles d'abord, runs sans la mesure écartés
+                runs, unscored = _rank_history_runs(conn, runs, fam, ordre, mesure)
+                n_unscored += unscored
             total = len(runs)
             if family:                      # une seule famille : paginée
                 page = min(page, max(1, -(-total // HISTORY_PAGE_SIZE)))
@@ -1366,7 +1373,8 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         params = {"family": family, "kind": kind, "target": target, "status": status, "scheme": scheme, "q": q, "algo": algo,
                   "started_after": started_after.isoformat() if started_after else None,
                   "started_before": started_before.isoformat() if started_before else None,
-                  "min_duration_s": min_duration_s, "max_duration_s": max_duration_s, "vides": 1 if vides else None}
+                  "min_duration_s": min_duration_s, "max_duration_s": max_duration_s, "vides": 1 if vides else None,
+                  "ordre": ordre, "mesure": mesure if ordre and mesure != HISTORY_DEFAULT_MEASURE else None}
         params.update(override)
         query = urlencode({k: v for k, v in params.items() if v not in (None, "")})
         return "/runs?" + query if query else "/runs"
@@ -1402,9 +1410,35 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
          "filter_min_duration_s": min_duration_s if min_duration_s is not None else "",
          "filter_max_duration_s": max_duration_s if max_duration_s is not None else "",
          "filter_vides": 1 if vides else "",
+         "filter_ordre": ordre or "", "filter_mesure": mesure, "history_measures": HISTORY_MEASURES, "n_unscored": n_unscored,
          "algorithms": algorithm_options,
          **_i18n_context(request)},
     )
+
+
+# Classement de l'Historique (« les meilleurs / les pires modèles ») : la mesure de tri d'un run ML ou DL est celle de son meilleur essai,
+# sur la période de contrôle finale par défaut (jamais vue pour choisir ni régler le modèle : la mesure la moins flatteuse) ; un run RL est
+# classé sur son Sharpe hors échantillon (walk-forward), la seule mesure commune à tous.
+HISTORY_ORDERS = ("best", "worst")
+HISTORY_MEASURES = {"auc_holdout": ("holdout", "AUC_dir"), "auc_test": ("test", "AUC_dir"), "f1_holdout": ("holdout", "F1_dir"),
+                    "mcc_holdout": ("holdout", "MCC_4cls")}
+HISTORY_DEFAULT_MEASURE = "auc_holdout"
+
+
+def _rank_history_runs(conn, runs: list[dict], family: str, ordre: str, mesure: str) -> tuple[list[dict], int]:
+    """`(runs triés, nombre de runs écartés faute de mesure)`. Une seule passe groupée sur les runs filtrés (~2 s pour 4 000 runs), faite
+    seulement quand un classement est demandé : la liste par défaut reste sur l'index léger."""
+    if family == "rl":
+        scores = {r["run_id"]: r.get("sharpe") for r in runs}
+    else:
+        ids = [r["run_id"] for r in runs]
+        best = trackdb.best_trials(conn, ids)
+        headline = trackdb.batch_best_metrics(conn, ids, best_trial_by_run=best)
+        split, key = HISTORY_MEASURES[mesure]
+        scores = {run_id: (headline.get(run_id, {}).get(split) or {}).get(key) for run_id in ids}
+    scored = [r for r in runs if isinstance(scores.get(r["run_id"]), (int, float)) and scores[r["run_id"]] == scores[r["run_id"]]]
+    scored.sort(key=lambda r: scores[r["run_id"]], reverse=(ordre == "best"))
+    return scored, len(runs) - len(scored)
 
 
 def _rl_history_rows() -> list[dict]:

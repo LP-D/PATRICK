@@ -6,15 +6,224 @@
     "use strict";
 
     // ------------------------------------------------------------------ fonctions pures
-    var CRITERIA = ["wf_sharpe", "sharpe", "cagr", "vol"];
+    var CRITERIA = ["wf_sharpe", "sharpe", "cagr", "vol", "sortino", "mdd", "div_ratio"];
+
+    function finiteOr(v, fallback) { return v === null || v === undefined || !isFinite(v) ? fallback : v; }
 
     function criterionValue(pf, crit) {
         var wf = pf.walk_forward && pf.walk_forward.sharpe;
+        var m = pf.metrics || {};
         if (crit === "wf_sharpe") return (wf === null || wf === undefined) ? -Infinity : wf;
-        if (crit === "sharpe") return pf.metrics.sharpe;
-        if (crit === "cagr") return pf.metrics.cagr;
-        if (crit === "vol") return -pf.metrics.vol;
+        if (crit === "sharpe") return m.sharpe;
+        if (crit === "cagr") return m.cagr;
+        if (crit === "vol") return -m.vol;
+        if (crit === "sortino") return finiteOr(m.sortino, -Infinity);
+        if (crit === "mdd") return finiteOr(m.max_dd_daily, finiteOr(m.max_dd_monthly, -Infinity));      // la baisse la moins profonde
+        if (crit === "div_ratio") return finiteOr(m.div_ratio, -Infinity);
         return -Infinity;
+    }
+
+    // Toutes les allocations d'une fenêtre et d'un plafond, triées de la meilleure à la moins bonne selon un critère (tri stable).
+    function rankBy(portfolios, windowId, cap, crit) {
+        var capKey = function (c) { return c === null || c === undefined || c >= 1 ? 1 : c; };
+        return portfolios.filter(function (pf) { return pf.window === windowId && capKey(pf.cap) === capKey(cap); })
+            .map(function (pf, i) { return { pf: pf, i: i, v: criterionValue(pf, crit), weak: crit === "wf_sharpe" && !!(pf.walk_forward && pf.walk_forward.peu_fiable) }; })
+            .sort(function (a, b) { return (a.weak - b.weak) || (b.v - a.v) || (a.i - b.i); })
+            .map(function (x) { return x.pf; });
+    }
+
+    // ---- statistiques des rendements mensuels (distribution, loi normale, quantiles)
+    function returnsFromGrowth(values) {
+        var out = [];
+        for (var i = 1; i < (values || []).length; i++) {
+            if (isFinite(values[i]) && isFinite(values[i - 1]) && values[i - 1] !== 0) out.push(values[i] / values[i - 1] - 1);
+        }
+        return out;
+    }
+
+    // Quantile à interpolation linéaire (méthode par défaut de numpy) d'un tableau TRIÉ.
+    function quantile(sorted, q) {
+        if (!sorted.length) return NaN;
+        var pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+    }
+
+    // Moments et test de normalité de Jarque-Bera (khi-deux à 2 degrés de liberté : p = exp(-JB/2)). `kurt` = aplatissement en excès.
+    function moments(xs) {
+        var n = xs.length;
+        if (n < 3) return { n: n, mean: NaN, sd: NaN, skew: NaN, kurt: NaN, jb: NaN, jb_p: NaN };
+        var mean = xs.reduce(function (a, b) { return a + b; }, 0) / n;
+        var m2 = 0, m3 = 0, m4 = 0;
+        xs.forEach(function (x) { var d = x - mean; m2 += d * d; m3 += d * d * d; m4 += d * d * d * d; });
+        m2 /= n; m3 /= n; m4 /= n;
+        var skew = m2 > 0 ? m3 / Math.pow(m2, 1.5) : 0, kurt = m2 > 0 ? m4 / (m2 * m2) - 3 : 0;
+        var jb = n / 6 * (skew * skew + kurt * kurt / 4);
+        return { n: n, mean: mean, sd: Math.sqrt(m2 * n / (n - 1)), skew: skew, kurt: kurt, jb: jb, jb_p: Math.exp(-jb / 2) };
+    }
+
+    function normPdf(x, mean, sd) {
+        if (!(sd > 0)) return 0;
+        var z = (x - mean) / sd;
+        return Math.exp(-0.5 * z * z) / (sd * Math.sqrt(2 * Math.PI));
+    }
+
+    // Inverse de la loi normale centrée réduite (approximation rationnelle d'Acklam, erreur relative < 1,2e-9).
+    function normInv(p) {
+        if (p <= 0) return -Infinity;
+        if (p >= 1) return Infinity;
+        var a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.3577518672690, -30.66479806614716, 2.506628277459239];
+        var b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+        var c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+        var d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+        var q, r;
+        if (p < 0.02425) {
+            q = Math.sqrt(-2 * Math.log(p));
+            return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+        }
+        if (p > 1 - 0.02425) return -normInv(1 - p);
+        q = p - 0.5; r = q * q;
+        return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+    }
+
+    function histogram(xs, bins) {
+        var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs);
+        if (!xs.length || !isFinite(lo)) return { edges: [], counts: [] };
+        if (hi <= lo) { lo -= 0.005; hi += 0.005; }
+        var k = bins || Math.max(8, Math.min(40, Math.round(Math.sqrt(xs.length) * 1.6)));
+        var w = (hi - lo) / k, edges = [], counts = [];
+        for (var i = 0; i <= k; i++) edges.push(lo + w * i);
+        for (i = 0; i < k; i++) counts.push(0);
+        xs.forEach(function (x) { counts[Math.min(k - 1, Math.max(0, Math.floor((x - lo) / w)))] += 1; });
+        return { edges: edges, counts: counts };
+    }
+
+    // Rendements mensuels rangés année × mois (`dates` = fins de mois ISO, une de plus que de rendements : la base 100 du départ).
+    function monthlyTable(dates, rets) {
+        var years = {}, order = [];
+        rets.forEach(function (r, i) {
+            var d = String(dates[i + 1] || ""), y = parseInt(d.slice(0, 4), 10), m = parseInt(d.slice(5, 7), 10) - 1;
+            if (!isFinite(y) || m < 0 || m > 11) return;
+            if (!years[y]) { years[y] = { year: y, months: [null, null, null, null, null, null, null, null, null, null, null, null] }; order.push(y); }
+            years[y].months[m] = r;
+        });
+        return order.sort().map(function (y) {
+            var row = years[y], prod = 1, n = 0;
+            row.months.forEach(function (r) { if (r !== null) { prod *= 1 + r; n += 1; } });
+            row.total = prod - 1;
+            row.partial = n < 12;
+            return row;
+        });
+    }
+
+    // Rendement et volatilité annualisée glissants sur `win` mois.
+    function rolling(rets, win) {
+        var ret = [], vol = [];
+        for (var i = 0; i < rets.length; i++) {
+            if (i + 1 < win) { ret.push(null); vol.push(null); continue; }
+            var slice = rets.slice(i + 1 - win, i + 1), prod = 1;
+            slice.forEach(function (r) { prod *= 1 + r; });
+            var m = moments(slice);
+            ret.push(Math.pow(prod, 12 / win) - 1);
+            vol.push(m.sd * Math.sqrt(12));
+        }
+        return { ret: ret, vol: vol };
+    }
+
+    // Histogramme + loi normale de même moyenne et même écart-type + un trait par quantile (SVG, chaîne échappée).
+    // o = {edges, counts, mean, sd, quantiles: [{q, v}], marks: [{v, label, kind}], fmt: fn(v) -> texte, width, height}
+    function distSvg(o) {
+        var width = o.width || 760, height = o.height || 260;
+        if (!o.edges || o.edges.length < 2) return "";
+        var L = 44, R = 14, T = 22, B = 30, W = width - L - R, H = height - T - B;
+        var x0 = o.edges[0], x1 = o.edges[o.edges.length - 1], total = o.counts.reduce(function (a, b) { return a + b; }, 0) || 1;
+        var binW = (x1 - x0) / o.counts.length;
+        var dens = o.counts.map(function (c) { return c / total / binW; });
+        var curve = [];
+        for (var i = 0; i <= 80; i++) { var xv = x0 + (x1 - x0) * i / 80; curve.push([xv, normPdf(xv, o.mean, o.sd)]); }
+        var yMax = Math.max(Math.max.apply(null, dens), Math.max.apply(null, curve.map(function (p) { return p[1]; }))) * 1.08 || 1;
+        function X(v) { return (L + (v - x0) / ((x1 - x0) || 1) * W).toFixed(1); }
+        function Y(v) { return (T + (1 - v / yMax) * H).toFixed(1); }
+        var fmtv = o.fmt || function (v) { return (v * 100).toFixed(1) + " %"; };
+        var out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height + '" class="pl-dist" role="img">'];
+        out.push('<line class="pl-sc-grid" x1="' + L + '" x2="' + (L + W) + '" y1="' + Y(0) + '" y2="' + Y(0) + '"/>');
+        dens.forEach(function (dv, j) {
+            var a = o.edges[j], b = o.edges[j + 1];
+            out.push('<rect class="pl-dist-bar" x="' + X(a) + '" y="' + Y(dv) + '" width="' + Math.max(0.5, parseFloat(X(b)) - parseFloat(X(a)) - 1).toFixed(1) +
+                     '" height="' + (parseFloat(Y(0)) - parseFloat(Y(dv))).toFixed(1) + '"><title>' + esc(fmtv(a) + " → " + fmtv(b) + " : " + o.counts[j]) + "</title></rect>");
+        });
+        if (o.sd > 0) out.push('<polyline class="pl-dist-normal" points="' + curve.map(function (p) { return X(p[0]) + "," + Y(p[1]); }).join(" ") + '"/>');
+        (o.quantiles || []).forEach(function (q, k) {
+            if (!isFinite(q.v) || q.v < x0 || q.v > x1) return;
+            var cx = X(q.v), main = q.q === 0.5;
+            out.push('<line class="pl-dist-q' + (main ? " is-median" : "") + '" x1="' + cx + '" x2="' + cx + '" y1="' + T + '" y2="' + Y(0) + '"/>');
+            out.push('<text class="pl-dist-qlabel" x="' + cx + '" y="' + (T - 6 + (k % 2) * 0) + '" text-anchor="middle">P' + Math.round(q.q * 100) + "</text>");
+        });
+        (o.marks || []).forEach(function (mk) {
+            if (!isFinite(mk.v) || mk.v < x0 || mk.v > x1) return;
+            var cx = X(mk.v);
+            out.push('<line class="pl-dist-mark pl-dist-' + esc(mk.kind || "mark") + '" x1="' + cx + '" x2="' + cx + '" y1="' + T + '" y2="' + Y(0) + '"><title>' + esc(mk.label) + "</title></line>");
+        });
+        for (i = 0; i <= 4; i++) {
+            var tv = x0 + (x1 - x0) * i / 4;
+            out.push('<text class="pl-sc-tick" x="' + X(tv) + '" y="' + (T + H + 18) + '" text-anchor="middle">' + esc(fmtv(tv)) + "</text>");
+        }
+        out.push("</svg>");
+        return out.join("");
+    }
+
+    // Diagramme quantile-quantile : quantiles observés (y) contre ceux de la loi normale ajustée (x) ; la droite y = x est la normalité.
+    function qqSvg(xs, width, height) {
+        width = width || 360; height = height || 260;
+        if (xs.length < 5) return "";
+        var s = xs.slice().sort(function (a, b) { return a - b; }), m = moments(xs);
+        var pts = s.map(function (v, i) { return [m.mean + m.sd * normInv((i + 0.5) / s.length), v]; });
+        var all = pts.reduce(function (acc, p) { return acc.concat(p); }, []);
+        var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), pad = (hi - lo) * 0.05 || 0.01;
+        lo -= pad; hi += pad;
+        var L = 44, R = 10, T = 10, B = 30, W = width - L - R, H = height - T - B;
+        function X(v) { return (L + (v - lo) / (hi - lo) * W).toFixed(1); }
+        function Y(v) { return (T + (1 - (v - lo) / (hi - lo)) * H).toFixed(1); }
+        var out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height + '" class="pl-qq" role="img">'];
+        for (var i = 0; i <= 4; i++) {
+            var v = lo + (hi - lo) * i / 4;
+            out.push('<line class="pl-sc-grid" x1="' + L + '" x2="' + (L + W) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/>');
+            out.push('<text class="pl-sc-tick" x="' + (L - 5) + '" y="' + Y(v) + '" text-anchor="end" dominant-baseline="middle">' + (v * 100).toFixed(1) + "</text>");
+            out.push('<text class="pl-sc-tick" x="' + X(v) + '" y="' + (T + H + 18) + '" text-anchor="middle">' + (v * 100).toFixed(1) + "</text>");
+        }
+        out.push('<line class="pl-qq-ref" x1="' + X(lo) + '" y1="' + Y(lo) + '" x2="' + X(hi) + '" y2="' + Y(hi) + '"/>');
+        pts.forEach(function (p) { out.push('<circle class="pl-qq-pt" cx="' + X(p[0]) + '" cy="' + Y(p[1]) + '" r="2.6"/>'); });
+        out.push("</svg>");
+        return out.join("");
+    }
+
+    // Barres verticales (rendements annuels du portefeuille et du 1/N, moyenne en trait) : rows = [{label, a, b}] en fractions.
+    function barsSvg(rows, width, height, meanA) {
+        width = width || 760; height = height || 220;
+        if (!rows.length) return "";
+        var vals = rows.reduce(function (acc, r) { return acc.concat([r.a, r.b].filter(function (v) { return isFinite(v); })); }, [0]);
+        var lo = Math.min(0, Math.min.apply(null, vals)) * 1.12, hi = Math.max(0, Math.max.apply(null, vals)) * 1.12 || 0.01;
+        var L = 44, R = 10, T = 10, B = 26, W = width - L - R, H = height - T - B, slot = W / rows.length, bw = Math.max(2, slot * 0.36);
+        function Y(v) { return (T + (1 - (v - lo) / ((hi - lo) || 1)) * H).toFixed(1); }
+        var out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height + '" class="pl-bars" role="img">'];
+        for (var i = 0; i <= 4; i++) {
+            var v = lo + (hi - lo) * i / 4;
+            out.push('<line class="pl-sc-grid" x1="' + L + '" x2="' + (L + W) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/>');
+            out.push('<text class="pl-sc-tick" x="' + (L - 5) + '" y="' + Y(v) + '" text-anchor="end" dominant-baseline="middle">' + (v * 100).toFixed(0) + " %</text>");
+        }
+        rows.forEach(function (r, k) {
+            var x = L + slot * k + slot / 2;
+            [["a", r.a, x - bw], ["b", r.b, x]].forEach(function (spec) {
+                if (!isFinite(spec[1])) return;
+                var y = parseFloat(Y(Math.max(spec[1], 0))), y0 = parseFloat(Y(Math.min(spec[1], 0)));
+                out.push('<rect class="pl-bar-' + spec[0] + (spec[1] < 0 ? " is-neg" : "") + '" x="' + spec[2].toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+                         '" height="' + Math.max(0.5, y0 - y).toFixed(1) + '"><title>' + esc(r.label) + " : " + (spec[1] * 100).toFixed(1) + " %</title></rect>");
+            });
+            if (rows.length <= 24 || k % Math.ceil(rows.length / 24) === 0) out.push('<text class="pl-sc-tick" x="' + x.toFixed(1) + '" y="' + (T + H + 16) + '" text-anchor="middle">' + esc(r.label) + "</text>");
+        });
+        out.push('<line class="pl-sc-grid pl-zero" x1="' + L + '" x2="' + (L + W) + '" y1="' + Y(0) + '" y2="' + Y(0) + '"/>');
+        if (isFinite(meanA)) out.push('<line class="pl-bars-mean" x1="' + L + '" x2="' + (L + W) + '" y1="' + Y(meanA) + '" y2="' + Y(meanA) + '"/>');
+        out.push("</svg>");
+        return out.join("");
     }
 
     // La meilleure allocation d'une fenêtre selon un critère, parmi celles dont la volatilité ne dépasse pas `maxVol` (null = sans limite).
@@ -85,8 +294,10 @@
             out.push('<circle class="pl-sc-fund" cx="' + X(q.vol) + '" cy="' + Y(q.ret) + '" r="4"><title>' + esc(q.label) + " · " + (q.vol * 100).toFixed(1) + " % / " + (q.ret * 100).toFixed(1) + " %</title></circle>");
         });
         data.marks.forEach(function (q) {
-            var cx = X(q.vol), cy = Y(q.ret);
-            out.push('<g class="pl-sc-mark pl-sc-' + esc(q.kind) + '"><circle cx="' + cx + '" cy="' + cy + '" r="7"/><text x="' + (parseFloat(cx) + 10) + '" y="' + cy + '" dominant-baseline="middle">' + esc(q.label) + "</text></g>");
+            var cx = X(q.vol), cy = Y(q.ret), small = q.kind === "pf";
+            out.push('<g class="pl-sc-mark pl-sc-' + esc(q.kind) + '"><circle cx="' + cx + '" cy="' + cy + '" r="' + (small ? 4.5 : 7) + '"><title>' + esc(q.label) + " · " +
+                     (q.vol * 100).toFixed(1) + " % / " + (q.ret * 100).toFixed(1) + ' %</title></circle><text x="' + (parseFloat(cx) + (small ? 7 : 10)) + '" y="' + cy +
+                     '" dominant-baseline="middle">' + esc(q.label) + "</text></g>");
         });
         out.push("</svg>");
         return out.join("");
@@ -97,8 +308,10 @@
         return String(text || "").split(/\r?\n/).filter(function (line) { return /^\s*\d{4}\s*[;:,=\t ]\s*[-+]?\d+(?:[.,]\d+)?\s*%?\s*$/.test(line); }).length;
     }
 
-    var api = { CRITERIA: CRITERIA, criterionValue: criterionValue, pickBest: pickBest, toCsv: toCsv, corrIntensity: corrIntensity, maxVolOf: maxVolOf,
-                scatterSvg: scatterSvg, esc: esc, countRateLines: countRateLines };
+    var api = { CRITERIA: CRITERIA, criterionValue: criterionValue, pickBest: pickBest, rankBy: rankBy, toCsv: toCsv, corrIntensity: corrIntensity,
+                maxVolOf: maxVolOf, scatterSvg: scatterSvg, esc: esc, countRateLines: countRateLines, returnsFromGrowth: returnsFromGrowth,
+                quantile: quantile, moments: moments, normPdf: normPdf, normInv: normInv, histogram: histogram, monthlyTable: monthlyTable,
+                rolling: rolling, distSvg: distSvg, qqSvg: qqSvg, barsSvg: barsSvg };
     if (typeof module === "object" && module.exports) module.exports = api;
     root.PatrickPlacements = api;
 
@@ -157,7 +370,7 @@
     try { state.id = (JSON.parse(root.localStorage.getItem(STORE_KEY) || "{}") || {}).id || null; } catch (e) { state.id = null; }
     function remember() { try { root.localStorage.setItem(STORE_KEY, JSON.stringify({ id: state.id })); } catch (e) { /* stockage indisponible */ } }
 
-    var OBJ_KEYS = ["max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity", "equal"];
+    var OBJ_KEYS = ["mv_prudent", "mv_balanced", "mv_dynamic", "max_sharpe", "min_vol", "max_diversification", "risk_parity", "max_sortino", "max_return", "equal"];
     var ENV_FIELDS = [["entry_fee", "%"], ["mgmt_fee", "%"], ["abond_rate", "%"], ["abond_cap", "€"], ["abond_csg", "%"], ["euro_ps", "%"], ["ps_exit", "%"],
                       ["ir_before", "%"], ["ir_after", "%"], ["years_threshold", "ans"], ["allowance", "€"], ["tmi_in", "%"], ["tmi_out", "%"], ["lock_years", "ans"]];
     var METHOD_KEYS = ["bootstrap blocs 6 mois", "bootstrap i.i.d.", "bootstrap stationnaire", "GARCH résidus", "Monte Carlo μ incertain"];
@@ -165,6 +378,8 @@
     var PALETTE = ["--ra-c1", "--ra-c2", "--ra-c3", "--ra-c4", "--ra-c5", "--ra-c6", "--ra-c7", "--ra-c8"];
 
     function objectiveName(o) { return t("pl_obj_" + o); }
+    // Axe des éventails mensuels : « an N » aux années pleines, « N mois » entre deux (bulle de survol comprise).
+    function monthLabel(i) { return i === 0 ? "0" : i % 12 === 0 ? t("pl_fan_year", { n: i / 12 }) : t("pl_fan_month", { n: i }); }
     function capName(cap) { return cap === null || cap === undefined || cap >= 1 ? t("pl_cap_none") : Math.round(cap * 100) + " %"; }
     function windowName(w) { return t("pl_window_value", { d: w.start, m: w.months }); }
 
@@ -452,7 +667,8 @@
     function metricsGrid(pf) {
         var m = pf.metrics;
         var rows = [["pl_m_cagr", pct(m.cagr)], ["pl_m_vol", pct(m.vol)], ["pl_m_sharpe", num(m.sharpe)], ["pl_m_sortino", num(m.sortino)],
-                    ["pl_m_mdd", pct(m.max_dd_daily)], ["pl_m_worst12", pct(m.worst_12m)], ["pl_m_var5", pct(m.var5)]];
+                    ["pl_m_mdd", pct(m.max_dd_daily)], ["pl_m_worst12", pct(m.worst_12m)], ["pl_m_var5", pct(m.var5)],
+                    ["pl_m_div", num(m.div_ratio)], ["pl_m_effn", num(m.eff_n, 1)]];
         return h("dl", { class: "pl-metrics" }, rows.reduce(function (acc, r) { return acc.concat([h("dt", { text: t(r[0]) }), h("dd", { text: r[1] })]); }, []));
     }
 
@@ -505,10 +721,11 @@
         var fan = pf.fan && pf.fan[state.sel.centering];
         var host = h("div", { class: "pl-chart", role: "img", "aria-label": t("pl_fan_h") });
         if (!fan) return host;
-        var xs = [0].concat(fan.annees);
+        var monthly = fan.step === "month";
+        var xs = [0].concat(monthly ? fan.mois : fan.annees);
         function vals(k) { return [0].concat(fan[k].map(function (v) { return v * 100; })); }
         root.setTimeout(function () {
-            paintChart(host, { type: "line", xKind: "index", xs: xs, xLabel: function (i) { return i === 0 ? "0" : t("pl_fan_year", { n: i }); }, height: 240, legend: true, markers: false, finance: false, zoomable: false,
+            paintChart(host, { type: "line", xKind: "index", xs: xs, xLabel: monthly ? monthLabel : function (i) { return i === 0 ? "0" : t("pl_fan_year", { n: i }); }, height: 240, legend: true, markers: false, finance: false, zoomable: false,
                 series: [{ name: "P5", color: "--neg", width: 1.6, values: vals("p05") }, { name: "P25", color: "--text-3", width: 1.2, dash: "4 3", values: vals("p25") },
                          { name: "P50", color: "--brand", width: 2.6, values: vals("p50") }, { name: "P75", color: "--text-3", width: 1.2, dash: "4 3", values: vals("p75") },
                          { name: "P95", color: "--pos", width: 1.6, values: vals("p95") }],
@@ -517,14 +734,169 @@
         return host;
     }
 
+    // Couleur stable d'un support (mêmes couleurs dans toutes les barres empilées) : palette des graphiques, puis teintes espacées.
+    function fundColor(r, key) {
+        var keys = r.funds.map(function (f) { return f.key; }).concat(r.cash ? [r.cash.key] : []);
+        var i = keys.indexOf(key);
+        if (i < 0) i = keys.length;
+        if (r.cash && key === r.cash.key) return "var(--text-3)";
+        return i < PALETTE.length ? "var(" + PALETTE[i] + ")" : "hsl(" + Math.round((i * 137.508) % 360) + " 55% 55%)";
+    }
+
+    function svgBox(svg, cls, label) {
+        var box = h("div", { class: "pl-svg-box " + (cls || ""), role: "img", "aria-label": label || "" });
+        box.innerHTML = svg;
+        return box;
+    }
+
+    // ---- 3 a. toutes les ventilations proposées, comparées d'un coup d'œil (barres empilées à 100 %), triées selon le critère choisi
+    function proposalsSection(r) {
+        var sel = state.sel;
+        var caps = [];
+        r.portfolios.forEach(function (pf) { var c = pf.cap === null || pf.cap === undefined ? 1 : pf.cap; if (caps.indexOf(c) < 0) caps.push(c); });
+        caps.sort(function (a, b) { return b - a; });
+        var winSel = h("select", { class: "pl-input", "aria-label": t("pl_window"), onchange: function (e) { sel.window = e.target.value; sel.pid = null; renderResult(); } },
+            r.windows.map(function (w) { return h("option", { value: w.id, selected: w.id === sel.window, text: windowName(w) }); }));
+        var capSel = h("select", { class: "pl-input", "aria-label": t("pl_col_cap"), onchange: function (e) { sel.cap = parseFloat(e.target.value); sel.pid = null; renderResult(); } },
+            caps.map(function (c) { return h("option", { value: String(c), selected: c === sel.cap, text: capName(c) }); }));
+        var critSel = h("select", { class: "pl-input", "aria-label": t("pl_criterion"), onchange: function (e) { sel.crit = e.target.value; sel.pid = null; renderResult(); } },
+            CRITERIA.map(function (c) { return h("option", { value: c, selected: c === sel.crit, text: t("pl_crit_" + c) }); }));
+        var ranked = rankBy(r.portfolios, sel.window, sel.cap, sel.crit);
+        var used = {};
+        ranked.forEach(function (pf) { pf.weights.forEach(function (w) { used[w.key] = w.label; }); });
+        var head = h("tr", {}, [t("pl_col_obj"), t("pl_col_alloc"), t("pl_m_cagr"), t("pl_m_vol"), t("pl_m_sharpe"), t("pl_col_wf"), t("pl_m_mdd"), t("pl_m_div")]
+            .map(function (c, i) { return h("th", { class: i > 1 ? "n" : "", text: c }); }));
+        var rows = ranked.map(function (pf, rank) {
+            var wf = pf.walk_forward || {}, m = pf.metrics || {};
+            var bar = h("div", { class: "pl-stack", role: "img", "aria-label": pf.weights.map(function (w) { return w.label + " " + Math.round(w.weight * 100) + " %"; }).join(", ") },
+                pf.weights.map(function (w) {
+                    return h("span", { class: "pl-stack-seg", style: "width:" + (w.weight * 100).toFixed(2) + "%;background:" + fundColor(r, w.key),
+                                       title: w.label + " · " + pct(w.weight) }, [w.weight >= 0.12 ? Math.round(w.weight * 100) + " %" : ""]);
+                }));
+            var isOn = pf.id === state.chosenId;
+            return h("tr", { class: "pl-pick" + (isOn ? " is-on" : ""), tabindex: "0", "data-pid": pf.id,
+                             onclick: function () { state.sel.pid = pf.id; state.sel.window = pf.window; renderResult(); var d = doc.getElementById("pl-best"); if (d) d.scrollIntoView({ behavior: "smooth", block: "start" }); },
+                             onkeydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } } }, [
+                h("td", { class: "pl-prop-name" }, [rank === 0 ? h("span", { class: "pl-star", title: t("pl_best_by", { c: t("pl_crit_" + sel.crit) }), text: "★ " }) : null, objectiveName(pf.objective)]),
+                h("td", { class: "pl-prop-bar" }, [bar]),
+                h("td", { class: "n", text: pct(m.cagr) }), h("td", { class: "n", text: pct(m.vol) }), h("td", { class: "n", text: num(m.sharpe) }),
+                h("td", { class: "n" + (wf.peu_fiable ? " pl-weak" : ""), title: wf.peu_fiable ? t("pl_wf_unreliable") : "", text: wf.sharpe === null || wf.sharpe === undefined ? "—" : num(wf.sharpe) }),
+                h("td", { class: "n", text: pct(finiteOr(m.max_dd_daily, m.max_dd_monthly)) }), h("td", { class: "n", text: num(m.div_ratio) })]);
+        });
+        var legend = h("ul", { class: "pl-legend" }, Object.keys(used).map(function (k) {
+            return h("li", {}, [h("span", { class: "pl-swatch", style: "background:" + fundColor(r, k) }), used[k]]);
+        }));
+        return h("div", { class: "card pl-card", id: "pl-proposals" }, [
+            h("h3", { text: t("pl_prop_h") }), hint(t("pl_prop_hint")),
+            h("div", { class: "pl-row" }, [h("label", { class: "pl-label" }, [t("pl_window"), winSel]), h("label", { class: "pl-label" }, [t("pl_col_cap"), capSel]),
+                h("label", { class: "pl-label" }, [t("pl_sort_by"), critSel])]),
+            ranked.length ? h("div", { class: "table-scroll" }, [h("table", { class: "data-table pl-table pl-proposals" }, [h("thead", {}, [head]), h("tbody", {}, rows)])]) : hint(t("pl_no_match")),
+            legend]);
+    }
+
+    // ---- 3 c. les rendements mensuels du portefeuille : distribution et loi normale, quantiles, Q-Q, calendrier, années, glissant
+    function returnsBlock(pf, r) {
+        var ch = r.charts[pf.window];
+        var growth = ch && ch.portfolios[pf.id];
+        if (!growth) return null;
+        var rets = returnsFromGrowth(growth);
+        if (rets.length < 6) return null;
+        var sorted = rets.slice().sort(function (a, b) { return a - b; });
+        var m = moments(rets);
+        var QS = [0.05, 0.25, 0.5, 0.75, 0.95];
+        var hist = histogram(rets);
+        var dist = distSvg({ edges: hist.edges, counts: hist.counts, mean: m.mean, sd: m.sd, width: 760, height: 250,
+                             quantiles: QS.map(function (q) { return { q: q, v: quantile(sorted, q) }; }),
+                             marks: [{ v: 0, label: "0 %", kind: "zero" }] });
+        var normalQ = QS.map(function (q) { return m.mean + m.sd * normInv(q); });
+        var qTable = h("table", { class: "data-table pl-qtable" }, [
+            h("thead", {}, [h("tr", {}, [""].concat(QS.map(function (q) { return "P" + Math.round(q * 100); })).map(function (c, i) { return h("th", { class: i ? "n" : "", text: c }); }))]),
+            h("tbody", {}, [
+                h("tr", {}, [h("td", { text: t("pl_q_observed") })].concat(QS.map(function (q) { return h("td", { class: "n", text: pct(quantile(sorted, q), 2) }); }))),
+                h("tr", {}, [h("td", { text: t("pl_q_normal") })].concat(normalQ.map(function (v) { return h("td", { class: "n", text: pct(v, 2) }); })))])]);
+        var normalVerdict = m.jb_p < 0.05 ? t("pl_jb_reject", { p: num(m.jb_p, 3) }) : t("pl_jb_ok", { p: num(m.jb_p, 3) });
+        var facts = h("dl", { class: "pl-metrics" }, [
+            ["pl_m_mean_m", pct(m.mean, 2)], ["pl_m_sd_m", pct(m.sd, 2)], ["pl_m_skew", num(m.skew)], ["pl_m_kurt", num(m.kurt)],
+            ["pl_m_best_m", pct(sorted[sorted.length - 1], 1)], ["pl_m_worst_m", pct(sorted[0], 1)],
+            ["pl_m_pos_m", pct(rets.filter(function (x) { return x > 0; }).length / rets.length, 0)]]
+            .reduce(function (acc, x) { return acc.concat([h("dt", { text: t(x[0]) }), h("dd", { text: x[1] })]); }, []));
+
+        // calendrier année × mois
+        var table = monthlyTable(ch.dates, rets);
+        var MONTHS = t("pl_months_short").split(",");
+        var cal = h("table", { class: "pl-cal" }, [
+            h("thead", {}, [h("tr", {}, [h("th", { text: "" })].concat(MONTHS.map(function (mo) { return h("th", { text: mo }); })).concat([h("th", { text: t("pl_year_col") })]))]),
+            h("tbody", {}, table.map(function (row) {
+                return h("tr", {}, [h("th", { text: String(row.year) })].concat(row.months.map(function (v) {
+                    return v === null ? h("td", { class: "pl-cal-empty" }) :
+                        h("td", { class: "pl-cal-cell " + (v < 0 ? "is-neg" : "is-pos"), style: "--v:" + Math.min(1, Math.abs(v) / 0.06).toFixed(2), text: fmt(v * 100, 1) });
+                })).concat([h("td", { class: "pl-cal-total " + (row.total < 0 ? "is-neg" : "is-pos"), title: row.partial ? t("pl_year_partial") : "", text: fmt(row.total * 100, 1) + (row.partial ? "*" : "") })]));
+            }))]);
+
+        // années : portefeuille contre 1/N
+        var eqRets = returnsFromGrowth(ch.one_over_n || []);
+        var eqTable = monthlyTable(ch.dates, eqRets);
+        var eqByYear = {};
+        eqTable.forEach(function (row) { eqByYear[row.year] = row.total; });
+        var full = table.filter(function (row) { return !row.partial; });
+        var meanYear = full.length ? full.reduce(function (a, row) { return a + row.total; }, 0) / full.length : NaN;
+        var bars = barsSvg(table.map(function (row) { return { label: String(row.year) + (row.partial ? "*" : ""), a: row.total, b: eqByYear[row.year] }; }), 760, 220, meanYear);
+
+        // glissant 12 mois
+        var roll = rolling(rets, 12);
+        var rollHost = h("div", { class: "pl-chart", role: "img", "aria-label": t("pl_roll_h") });
+        var xs = ch.dates.slice(1).map(function (d) { return Date.parse(d); });
+        root.setTimeout(function () {
+            paintChart(rollHost, { type: "line", xKind: "time", xs: xs, height: 210, legend: true, markers: false, finance: false,
+                series: [{ name: t("pl_roll_ret"), color: "--brand", width: 2, values: roll.ret.map(function (v) { return v === null ? null : v * 100; }) },
+                         { name: t("pl_roll_vol"), color: "--info", width: 1.6, values: roll.vol.map(function (v) { return v === null ? null : v * 100; }) }],
+                hlines: [{ y: 0, label: "", color: "--text-3" }],
+                yFmt: function (v, d) { return fmt(v, d) + " %"; }, tipFmt: function (v) { return fmt(v, 1) + " %"; } });
+        }, 0);
+
+        return h("div", { class: "pl-returns" }, [
+            h("h4", { text: t("pl_dist_h", { n: rets.length }) }),
+            svgBox(dist, "pl-dist-box", t("pl_dist_h", { n: rets.length })),
+            h("p", { class: "pl-dist-legend hint", "data-keep": "" }, [h("span", { class: "pl-key pl-key-bar" }), t("pl_dist_key_bars"), h("span", { class: "pl-key pl-key-normal" }), t("pl_dist_key_normal"),
+                h("span", { class: "pl-key pl-key-q" }), t("pl_dist_key_q")]),
+            h("div", { class: "pl-grid pl-grid-2" }, [
+                h("div", {}, [h("div", { class: "table-scroll" }, [qTable]), facts, hint(normalVerdict)]),
+                h("div", {}, [h("h5", { text: t("pl_qq_h") }), svgBox(qqSvg(rets, 360, 250), "pl-qq-box", t("pl_qq_h")), hint(t("pl_qq_note"))])]),
+            h("h4", { text: t("pl_cal_h") }), h("div", { class: "table-scroll" }, [cal]),
+            h("h4", { text: t("pl_years_h") }), svgBox(bars, "pl-bars-box", t("pl_years_h")),
+            h("p", { class: "pl-dist-legend hint", "data-keep": "" }, [h("span", { class: "pl-key pl-key-a" }), t("pl_portfolio"), h("span", { class: "pl-key pl-key-b" }), t("pl_one_n"),
+                h("span", { class: "pl-key pl-key-mean" }), t("pl_years_mean", { v: pct(meanYear) })]),
+            h("h4", { text: t("pl_roll_h") }), rollHost]);
+    }
+
+    // ---- 3 d. valeur finale simulée de l'épargne : histogramme, loi normale ajustée, traits des quantiles, objectif
+    function finalDistBlock(pf, r) {
+        var pr = pf.projection && (pf.projection[state.sel.centering] || pf.projection.prudent);
+        var d = pr && pr.dist_net;
+        if (!d || !d.edges || d.edges.length < 2) return null;
+        var c = r.contributions || {};
+        var QS = [["p05", 0.05], ["p25", 0.25], ["p50", 0.5], ["p75", 0.75], ["p95", 0.95]];
+        var marks = [{ v: pr.invested, label: t("pl_sav_invested") + " " + eur(pr.invested), kind: "invested" }];
+        if (c.goal) marks.push({ v: c.goal, label: t("pl_goal_line") + " " + eur(c.goal), kind: "goal" });
+        var svg = distSvg({ edges: d.edges, counts: d.counts, mean: d.mean, sd: d.std, width: 760, height: 240, fmt: function (v) { return eur(v); },
+                            quantiles: QS.map(function (q) { return { q: q[1], v: d.q[q[0]] }; }), marks: marks });
+        return h("div", {}, [h("h4", { text: t("pl_final_h", { y: r.params.horizon_years, n: d.n }) }), svgBox(svg, "pl-dist-box", t("pl_final_h", { y: r.params.horizon_years, n: d.n })),
+            h("p", { class: "pl-dist-legend hint", "data-keep": "" }, [h("span", { class: "pl-key pl-key-bar" }), t("pl_dist_key_paths"), h("span", { class: "pl-key pl-key-normal" }), t("pl_dist_key_normal"),
+                h("span", { class: "pl-key pl-key-q" }), t("pl_dist_key_q"), h("span", { class: "pl-key pl-key-invested" }), t("pl_sav_invested"),
+                c.goal ? h("span", { class: "pl-key pl-key-goal" }) : null, c.goal ? t("pl_goal_line") : null]),
+            hint(t("pl_final_note"))]);
+    }
+
     function portfolioDetail(pf, r) {
         var years = r.params.horizon_years;
         return h("div", { class: "pl-detail" }, [
             h("div", { class: "pl-detail-head" }, [h("h3", { text: objectiveName(pf.objective) + " · " + t("pl_col_cap") + " " + capName(pf.cap) })]),
             h("div", { class: "pl-grid pl-grid-2" }, [h("div", {}, [weightsBlock(pf)]), h("div", {}, [metricsGrid(pf), h("h4", { text: t("pl_wf_h") }), walkForwardBlock(pf)])]),
             pf.projection ? savingsBlock(pf, r) : null,
+            pf.projection ? finalDistBlock(pf, r) : null,
             scenarioBlock(pf, r.params.amount, years),
             h("h4", { text: t("pl_fan_h") }), fanChart(pf, years),
+            returnsBlock(pf, r),
             pf.replay ? replayBlock(pf, r) : null,
             pf.risk ? riskBlock(pf, r) : null]);
     }
@@ -552,7 +924,7 @@
         var xs = pr.fan.p50.map(function (_v, i) { return i; });
         root.setTimeout(function () {
             if (!root.PatrickPlot) return;
-            root.PatrickPlot.create(host, { type: "line", xKind: "index", xs: xs, xLabel: function (i) { return i === 0 ? "0" : t("pl_fan_year", { n: i }); }, height: 240, legend: true, markers: false, finance: false, zoomable: false,
+            root.PatrickPlot.create(host, { type: "line", xKind: "index", xs: xs, xLabel: pr.fan_step === "month" ? monthLabel : function (i) { return i === 0 ? "0" : t("pl_fan_year", { n: i }); }, height: 240, legend: true, markers: false, finance: false, zoomable: false,
                 series: [{ name: "P5", color: "--neg", width: 1.5, values: pr.fan.p05 }, { name: "P25", color: "--text-3", width: 1.1, dash: "4 3", values: pr.fan.p25 },
                          { name: "P50", color: "--brand", width: 2.6, values: pr.fan.p50 }, { name: "P75", color: "--text-3", width: 1.1, dash: "4 3", values: pr.fan.p75 },
                          { name: "P95", color: "--pos", width: 1.5, values: pr.fan.p95 }],
@@ -591,6 +963,9 @@
         if (!ch || !ch.frontier || !ch.frontier.points.length) return null;
         var fr = ch.frontier;
         var marks = [];
+        rankBy(r.portfolios, state.sel.window, state.sel.cap, state.sel.crit).forEach(function (pf) {
+            if (pf.point && (!chosen || pf.id !== chosen.id)) marks.push({ label: t("pl_objs_" + pf.objective), vol: pf.point.vol, ret: pf.point.ret, kind: "pf" });
+        });
         if (chosen && chosen.point) marks.push({ label: t("pl_mark_chosen"), vol: chosen.point.vol, ret: chosen.point.ret, kind: "chosen" });
         if (fr.current) marks.push({ label: t("pl_mark_current"), vol: fr.current.vol, ret: fr.current.ret, kind: "current" });
         var svg = scatterSvg({ funds: fr.funds.map(function (f) { return { label: labelOf(r, f.key), vol: f.vol, ret: f.ret }; }), line: fr.points, marks: marks }, 760, 340);
@@ -632,25 +1007,34 @@
                 }))])]), hint(t("pl_envcmp_note"))]);
     }
 
+    // Le portefeuille par défaut : le meilleur de la fenêtre et du plafond choisis selon le critère, sous la limite de volatilité.
+    function defaultPick(r) {
+        var sel = state.sel;
+        var capKey = function (c) { return c === null || c === undefined || c >= 1 ? 1 : c; };
+        var pool = r.portfolios.filter(function (pf) { return capKey(pf.cap) === capKey(sel.cap); });
+        return pickBest(pool, sel.window, sel.crit, sel.maxVol) || pickBest(r.portfolios, sel.window, sel.crit, sel.maxVol);
+    }
+
+    function chosenPortfolio(r) {
+        var picked = defaultPick(r);
+        var chosen = state.sel.pid ? r.portfolios.filter(function (p) { return p.id === state.sel.pid; })[0] : null;
+        return chosen || picked;
+    }
+
+    // ---- 3 b. le détail de l'allocation retenue (clic sur une ligne des ventilations, sinon la meilleure selon le critère)
     function bestSection(r) {
         var sel = state.sel;
-        var winSel = h("select", { class: "pl-input", "aria-label": t("pl_window"), onchange: function (e) { sel.window = e.target.value; sel.pid = null; sel.maxVol = null; renderResult(); } },
-            r.windows.map(function (w) { return h("option", { value: w.id, selected: w.id === sel.window, text: windowName(w) }); }));
-        var critSel = h("select", { class: "pl-input", "aria-label": t("pl_criterion"), onchange: function (e) { sel.crit = e.target.value; sel.pid = null; renderResult(); } },
-            CRITERIA.map(function (c) { return h("option", { value: c, selected: c === sel.crit, text: t("pl_crit_" + c) }); }));
         var top = maxVolOf(r.portfolios, sel.window);
         var volValue = sel.maxVol === null ? top : sel.maxVol;
         var volLabel = h("output", { class: "pl-out", text: sel.maxVol === null ? t("pl_maxvol_any") : pct(sel.maxVol) });
         var vol = h("input", { type: "range", class: "pl-range", min: "0", max: String(Math.ceil(top * 1000) / 1000), step: "0.001", value: String(volValue), "aria-label": t("pl_maxvol"),
             oninput: function (e) { var v = parseFloat(e.target.value); sel.maxVol = v >= top - 1e-9 ? null : v; sel.pid = null; volLabel.textContent = sel.maxVol === null ? t("pl_maxvol_any") : pct(sel.maxVol); },
             onchange: function () { renderResult(); } });
-        var picked = pickBest(r.portfolios, sel.window, sel.crit, sel.maxVol);
-        var chosen = sel.pid ? r.portfolios.filter(function (p) { return p.id === sel.pid; })[0] : picked;
-        return h("div", { class: "card pl-card" }, [
+        var chosen = chosenPortfolio(r);
+        return h("div", { class: "card pl-card", id: "pl-best" }, [
             h("h3", { text: t("pl_best_h") }),
-            h("div", { class: "pl-row" }, [h("label", { class: "pl-label" }, [t("pl_window"), winSel]), h("label", { class: "pl-label" }, [t("pl_criterion"), critSel]),
-                h("label", { class: "pl-label" }, [t("pl_maxvol"), h("span", { class: "pl-range-row" }, [vol, volLabel])])]),
-            picked ? portfolioDetail(chosen || picked, r) : hint(t("pl_no_match"))]);
+            h("div", { class: "pl-row" }, [h("label", { class: "pl-label" }, [t("pl_maxvol"), h("span", { class: "pl-range-row" }, [vol, volLabel])])]),
+            chosen ? portfolioDetail(chosen, r) : hint(t("pl_no_match"))]);
     }
 
     function allocationsTable(r) {
@@ -734,17 +1118,23 @@
         if (!r || state.creating) return;
         var sel = state.sel;
         if (!sel.window || !r.windows.some(function (w) { return w.id === sel.window; })) sel.window = r.windows[r.windows.length - 1].id;
-        var picked = pickBest(r.portfolios, sel.window, sel.crit, sel.maxVol);
-        var chosen = sel.pid ? r.portfolios.filter(function (p) { return p.id === sel.pid; })[0] : picked;
+        var caps = r.portfolios.map(function (pf) { return pf.cap === null || pf.cap === undefined ? 1 : pf.cap; });
+        if (sel.cap === undefined || sel.cap === null || caps.indexOf(sel.cap) < 0) sel.cap = caps.length ? Math.max.apply(null, caps) : 1;
+        var chosen = chosenPortfolio(r);
+        state.chosenId = chosen ? chosen.id : null;
+        var scrollY = root.scrollY;
         var box = clear(els.resultBody);
         box.appendChild(hint(t("pl_generated", { d: r.generated_at.replace("T", " ").slice(0, 16), c: r.last_common })));
         if (r.warnings && r.warnings.length) box.appendChild(h("ul", { class: "pl-warnings" }, r.warnings.map(function (w) { return h("li", { text: w }); })));
+        // D'abord toutes les ventilations proposées (comparées, triées selon le critère), puis le détail de celle qu'on regarde.
+        box.appendChild(proposalsSection(r));
         box.appendChild(bestSection(r));
-        [currentSection(r, chosen || picked), frontierSection(r, chosen || picked), envelopeSection(r)].forEach(function (sec) { if (sec) box.appendChild(sec); });
-        var growth = growthSection(r, chosen || picked);
+        [frontierSection(r, chosen), currentSection(r, chosen), envelopeSection(r)].forEach(function (sec) { if (sec) box.appendChild(sec); });
+        var growth = growthSection(r, chosen);
         if (growth) box.appendChild(h("div", { class: "card pl-card" }, [growth]));
         box.appendChild(allocationsTable(r));
         box.appendChild(statsSection(r));
+        root.scrollTo(0, scrollY);           // re-rendu (tri, plafond, fenêtre) : la page ne saute pas
     }
 
     function render() { dataPanel(); profilePanel(); runPanel(); renderResult(); }

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.placements import jobs, loader, optimize, scenarios, service, stats, store
+from patrick.placements import envelopes, jobs, loader, optimize, projection, scenarios, service, stats, store
 from patrick.tracking import db
 from patrick.webapp.app import app
 
@@ -177,10 +177,43 @@ def test_unreliable_garch_is_masked_not_shown():
     assert out["bootstrap blocs 6 mois"]["prudent"] is not None
 
 
-def test_fan_has_one_point_per_year():
+def test_fan_has_one_point_per_month():
     fan = scenarios.fan(_panel()["alpha_actions"], 4, None, n=1000)
-    assert fan["annees"] == [1, 2, 3, 4] and all(len(fan[f"p{q:02d}"]) == 4 for q in scenarios.QUANTILES)
+    assert fan["step"] == "month" and fan["mois"] == list(range(1, 49))
+    assert all(len(fan[f"p{q:02d}"]) == 48 for q in scenarios.QUANTILES)
     assert fan["p05"][-1] < fan["p50"][-1] < fan["p95"][-1]
+    assert fan["p05"][11] < fan["p05"][0] or fan["p95"][11] > fan["p95"][0]          # l'éventail s'ouvre mois après mois
+
+
+def test_markowitz_profiles_take_less_risk_as_risk_aversion_grows():
+    R = _panel()
+    cash = "monetaire_euro"
+    vols = {}
+    for name in ("mv_prudent", "mv_balanced", "mv_dynamic"):
+        w = optimize.clean_weights(optimize.OPTIMIZERS[name](R, cash, 1.0))
+        assert abs(w.sum() - 1) < 1e-9 and (w >= -1e-9).all()
+        vols[name] = optimize.evaluate(w, R, cash, R)["vol"]
+    assert vols["mv_prudent"] <= vols["mv_balanced"] + 1e-9 <= vols["mv_dynamic"] + 2e-9
+
+
+def test_max_diversification_beats_equal_weight_on_diversification_ratio():
+    R = _panel()
+    cash = "monetaire_euro"
+    w_div = optimize.clean_weights(optimize.opt_max_diversification(R, cash, 1.0))
+    w_eq = optimize.clean_weights(optimize.opt_equal(R, cash, 1.0))
+    m_div, m_eq = optimize.evaluate(w_div, R, cash, R), optimize.evaluate(w_eq, R, cash, R)
+    assert m_div["div_ratio"] >= m_eq["div_ratio"] - 1e-6
+    assert 1.0 <= m_div["eff_n"] <= len(R.columns)
+
+
+def test_projection_fan_is_monthly_and_distribution_has_quantiles():
+    R = _panel()
+    w = optimize.clean_weights(optimize.opt_equal(R, "monetaire_euro", 1.0))
+    pr = projection.project(R, w, [], envelopes.normalise("none"), {"initial": 10000, "monthly": 100, "yearly": 0, "growth": 0, "goal": 0}, 3, n=500)
+    assert pr["fan_step"] == "month" and len(pr["fan"]["p50"]) == 3 * 12 + 1
+    d = pr["dist_net"]
+    assert sum(d["counts"]) == 500 and len(d["edges"]) == len(d["counts"]) + 1
+    assert d["q"]["p05"] < d["q"]["p50"] < d["q"]["p95"] and d["std"] > 0
 
 
 # ------------------------------------------------------------------ analyse complète

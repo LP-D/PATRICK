@@ -429,3 +429,38 @@ def test_the_target_page_marks_the_champion_runs_on_the_drift_chart(tmp_path, mo
     page = TestClient(app).get("/targets/%5EVIX").text
     assert 'window.DRIFT_CHAMPIONS = ["run1"]' in page
     assert "vlines" in TestClient(app).get("/static/drift.js").text
+
+
+def _seed_ranked(tmp_path, monkeypatch) -> None:
+    """Trois runs ML terminés aux AUC de contrôle final 0,58 / 0,49 / 0,53, un quatrième sans contrôle final."""
+    monkeypatch.setenv("PATRICK_DB_PATH", str(tmp_path / "patrick.db"))
+    conn = db.connect(str(tmp_path / "patrick.db"))
+    db.upsert_snapshot(conn, "snapR", "hashR", None, None, None)
+    for run_id, auc in (("good", 0.58), ("bad", 0.49), ("mid", 0.53), ("nohold", None)):
+        config = default_config_dict()
+        config["name"] = f"rank_{run_id}"
+        config["objective"].update({"target_symbol": "^VIX", "horizons": [5], "regimes": ["GLOBAL"]})
+        config["models"]["algos"] = ["RandomForest"]
+        db.create_run(conn, run_id, "^VIX", 5, "snapR", json.dumps(config), f"h{run_id}", "sha", 42)
+        trial_id = db.create_trial(conn, run_id, "GLOBAL", "RandomForest", "none", 8, "shap")
+        db.mark_best_trial(conn, trial_id)
+        db.add_fold_metrics(conn, trial_id, 1, "test", {"F1_dir": 0.55, "AUC_dir": 0.6})
+        if auc is not None:
+            db.add_fold_metrics(conn, trial_id, 0, "holdout", {"F1_dir": 0.5, "AUC_dir": auc})
+        db.finish_run(conn, run_id, status="done", n_trials=1)
+    conn.close()
+
+
+def test_history_can_list_best_or_worst_models_first(tmp_path, monkeypatch):
+    _seed_ranked(tmp_path, monkeypatch)
+    client = TestClient(app)
+    best = client.get("/runs?family=ml&ordre=best").text
+    assert best.index("rank_good") < best.index("rank_mid") < best.index("rank_bad")
+    assert "rank_nohold" not in best and "1 run(s) sans cette mesure" in best
+    worst = client.get("/runs?family=ml&ordre=worst").text
+    assert worst.index("rank_bad") < worst.index("rank_mid") < worst.index("rank_good")
+    # la mesure « test » classe aussi le run sans contrôle final
+    by_test = client.get("/runs?family=ml&ordre=best&mesure=auc_test").text
+    assert "rank_nohold" in by_test
+    # une valeur inconnue revient à l'ordre chronologique, sans erreur
+    assert client.get("/runs?family=ml&ordre=n_importe").status_code == 200

@@ -36,7 +36,7 @@ MIN_WINDOW_MONTHS = 36
 RECENT_MIN_MONTHS = 72         # fenêtre récente par défaut : 5 ans d'apprentissage + au moins 1 an de test
 STALE_DAYS = 60
 MAX_WINDOWS = 3
-RESULT_VERSION = 2
+RESULT_VERSION = 3          # 3 : éventails mensuels, distributions simulées, objectifs de Markowitz (2026-11-23)
 MAX_HORIZON = 40
 PROJECTION_PATHS = 3000
 

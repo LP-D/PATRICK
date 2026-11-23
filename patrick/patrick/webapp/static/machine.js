@@ -89,9 +89,9 @@
         var sameDay = end.toDateString() === new Date().toDateString();
         var clock = end.toLocaleTimeString(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit" });
         if (!sameDay) clock = end.toLocaleDateString(document.documentElement.lang || undefined, { weekday: "short" }) + " " + clock;
-        var text = " · " + fmtStr(tr("queue_eta", "≈ {d} to finish everything"), { d: shortDuration(total) })
-            + " (" + fmtStr(tr("queue_eta_end", "done around {time}"), { time: clock }) + ")";
-        if (info.unknown) text += " " + fmtStr(tr("queue_eta_unknown", "+ {n} without estimate"), { n: info.unknown });
+        var text = fmtStr(tr("queue_eta", "≈ {d} to finish everything"), { d: shortDuration(total) })
+            + " · " + fmtStr(tr("queue_eta_end", "done around {time}"), { time: clock });
+        if (info.unknown) text += " · " + fmtStr(tr("queue_eta_unknown", "+ {n} without estimate"), { n: info.unknown });
         etaBadge.textContent = text;
         etaBadge.hidden = false;
     }

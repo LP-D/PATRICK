@@ -101,6 +101,23 @@
             {% endfor %}
         </select>
     </label>
+    {# Classement : les meilleurs ou les pires modèles d'abord (mesure du meilleur essai ; Sharpe hors échantillon pour le RL). #}
+    <label>{{ t('hist_order') }}
+        <select name="ordre" onchange="this.form.submit()">
+            <option value="">{{ t('hist_order_recent') }}</option>
+            <option value="best" {% if filter_ordre == "best" %}selected{% endif %}>{{ t('hist_order_best') }}</option>
+            <option value="worst" {% if filter_ordre == "worst" %}selected{% endif %}>{{ t('hist_order_worst') }}</option>
+        </select>
+    </label>
+    {% if filter_family != 'rl' %}
+    <label>{{ t('hist_measure') }}
+        <select name="mesure" onchange="this.form.submit()"{% if not filter_ordre %} disabled{% endif %}>
+            {% for key in history_measures %}
+            <option value="{{ key }}" {% if key == filter_mesure %}selected{% endif %}>{{ t('hist_measure_' ~ key) }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    {% endif %}
     <button type="submit">{{ t('rl_filter_submit') }}</button>
     <a class="btn-secondary" href="/runs{{ '?family=' ~ filter_family if filter_family else '' }}">{{ t('rn_clear') }}</a>
     <details class="filter-more"{% if filter_started_after or filter_started_before or filter_min_duration_s != '' or filter_max_duration_s != '' %} open{% endif %}>
@@ -121,6 +138,13 @@
         </div>
     </details>
 </form>
+
+{% if filter_ordre %}
+<p class="scope-line history-ranking" data-keep>
+    <b>{{ t('hist_ranking_' ~ filter_ordre) }}</b>
+    <span class="scope-rel">{{ t('hist_ranking_rel', m=t('hist_measure_' ~ filter_mesure)) }}{% if n_unscored %} · {{ t('hist_ranking_unscored', n=n_unscored) }}{% endif %}</span>
+</p>
+{% endif %}
 
 {# Runs vides : échoués ou arrêtés avant le moindre essai, rien à lire ; masqués par défaut pour alléger la liste. #}
 {% if n_empty %}
