@@ -134,6 +134,11 @@ def validate_config(config: dict) -> dict:
         if not isinstance(config["managed"], dict):
             raise store.FundError("managed invalide : objet attendu")
         out["managed"] = config["managed"]
+    if config.get("combo_log") is not None:
+        if signal["mode"] != "combo":
+            raise store.FundError("combo_log : réservé au mode combo")
+        from patrick.fund import combo
+        out["combo_log"] = combo.check_log(config["combo_log"])
     return out
 
 
@@ -185,14 +190,20 @@ def _date(value, name: str) -> str:
 
 def _validate_signal(config: dict) -> dict:
     """`score` (défaut) : l'ancien score à seuils. `direction` : le sens vient de la classe prédite, la confiance
-    (`y_proba` de cette classe) n'intervient que comme plancher `min_confidence`."""
+    (`y_proba` de cette classe) n'intervient que comme plancher `min_confidence`. `combo` (fonds de test combinés, `fund/combo.py`) : le sens
+    du modèle croisé avec d'autres sources (agent RL, volatilité prévue, modèle de l'indice de volatilité, coût de l'aller-retour)."""
     signal = config.get("signal")
     if signal is None:
         return {"mode": "score"}
-    if not isinstance(signal, dict) or signal.get("mode") not in ("score", "direction"):
-        raise store.FundError("signal invalide : mode « score » ou « direction » attendu")
+    if not isinstance(signal, dict) or signal.get("mode") not in ("score", "direction", "combo"):
+        raise store.FundError("signal invalide : mode « score », « direction » ou « combo » attendu")
     if signal["mode"] == "score":
         return {"mode": "score"}
+    if signal["mode"] == "combo":
+        from patrick.fund import combo
+        if (config.get("hold") or {}).get("mode") != "horizon":
+            raise store.FundError("mode combo : sortie à l'horizon requise (hold.mode = horizon)")
+        return combo.check_signal(signal)
     confidence = _float(signal.get("min_confidence", 0.0), "min_confidence")
     if not 0.0 <= confidence < 1.0:
         raise store.FundError("min_confidence doit être entre 0 (inclus) et 1 (exclu)")
@@ -270,7 +281,7 @@ NO_P_UP = ("ce modèle n'a pas de P(hausse) enregistrée (essai antérieur à la
 
 
 def decide_directional(signals: pd.Series, allow_short: bool, sessions: int | None,
-                       retired_on: str | None = None) -> list[dict]:
+                       retired_on: str | None = None, strong: dict | None = None, weights: dict | None = None) -> list[dict]:
     """Machine à états sur des signaux +1 (long) / -1 (short) / 0 (neutre) indexés par jour de signal.
 
     `sessions` : sortie à l'horizon. La position ouverte à l'exécution d'un signal (jour suivant) est fermée `sessions`
@@ -280,16 +291,23 @@ def decide_directional(signals: pd.Series, allow_short: bool, sessions: int | No
     ou opposé la ferme). `retired_on` : les signaux postérieurs sont ignorés (les positions ouvertes s'éteignent à
     leur échéance).
 
+    `strong` (mode combo, jour -> bool) : seul un signal « fort » ouvre une position ; un signal faible de même sens la renouvelle, un signal
+    faible opposé la ferme sans rouvrir. `weights` (jour -> fraction ou None) : taille de l'ouverture, portée par l'événement (`weight`).
+
     Chaque événement : `signal` (jour du signal, ou l'échéance pour une fermeture à l'horizon), `requested` (jour
-    d'exécution demandé), `action`, `side`, `reason` (`signal` | `horizon`), `score` (None)."""
+    d'exécution demandé), `action`, `side`, `reason` (`signal` | `horizon`), `score` (None), et `weight` quand `weights` est donné."""
     retired = pd.Timestamp(retired_on) if retired_on else None
     out: list[dict] = []
     side: str | None = None
     expiry: pd.Timestamp | None = None
 
-    def event(signal_day: pd.Timestamp, requested: pd.Timestamp, action: str, direction: str, reason: str) -> dict:
-        return {"signal": signal_day.date().isoformat(), "requested": requested.date().isoformat(), "action": action,
-                "side": direction, "reason": reason, "score": None}
+    def event(signal_day: pd.Timestamp, requested: pd.Timestamp, action: str, direction: str, reason: str,
+              weight: float | None = None) -> dict:
+        out = {"signal": signal_day.date().isoformat(), "requested": requested.date().isoformat(), "action": action,
+               "side": direction, "reason": reason, "score": None}
+        if weights is not None:
+            out["weight"] = weight
+        return out
 
     def due(requested: pd.Timestamp) -> pd.Timestamp | None:
         return None if sessions is None else requested + pd.offsets.BDay(sessions)
@@ -312,8 +330,8 @@ def decide_directional(signals: pd.Series, allow_short: bool, sessions: int | No
                 continue                                                   # neutre : l'échéance décide
             out.append(event(ts, requested, "close", side, "signal"))
             side, expiry = None, None
-        if side is None and want is not None and (want == "long" or allow_short):
-            out.append(event(ts, requested, "open", want, "signal"))
+        if side is None and want is not None and (want == "long" or allow_short) and (strong is None or strong.get(ts, True)):
+            out.append(event(ts, requested, "open", want, "signal", (weights or {}).get(ts)))
             side, expiry = want, due(requested)
     if side is not None and expiry is not None:
         out.append(event(expiry, expiry, "close", side, "horizon"))
@@ -682,6 +700,8 @@ def plan(conn: sqlite3.Connection, rule: dict) -> list[dict]:
             scaling = cfg.get("scale_by_score")
             if scaling and sig["score"] is not None:
                 request.update(scaled_sizing(sizing, inst["kind"], conviction_weight(sig["score"], scaling["saturation"], scaling["floor"])))
+            elif sig.get("weight") is not None:                     # mode combo : taille selon conviction, volatilité prévue et régime
+                request.update(scaled_sizing(sizing, inst["kind"], sig["weight"]))
             else:
                 request.update(sizing)
             if hedged:
@@ -703,6 +723,9 @@ def plan(conn: sqlite3.Connection, rule: dict) -> list[dict]:
 def _events(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
     """Événements d'une règle : `signal` / `requested` (ISO), `action`, `side`, `score`. Les règles à seuils et à tenue
     « signal » gardent l'hystérésis d'origine ; toutes les autres passent par la machine directionnelle."""
+    if cfg["signal"]["mode"] == "combo":
+        from patrick.fund import combo
+        return combo.events(conn, cfg)
     if cfg["signal"]["mode"] == "score" and cfg["hold"]["mode"] == "signal":
         scores = load_scores(conn, cfg)
         if cfg.get("since"):
@@ -846,4 +869,7 @@ def apply(conn: sqlite3.Connection, rule_id: str, today: dt.date | None = None) 
             continue
         if item["action"] == "open":
             unopened.add(req["position_id"])
+    if rule["config"]["signal"]["mode"] == "combo":
+        from patrick.fund import combo
+        result["frozen"] = combo.freeze(conn, rule, today)         # les séances passées ne se recalculeront plus jamais
     return result

@@ -50,7 +50,7 @@
     }
     function reload(id) { window.location.href = "/fonds" + (id ? "?strategy=" + encodeURIComponent(id) : ""); }
 
-    /* ---- graphique : valeur contre capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
+    /* ---- graphique : valeur nette, valeur avant frais (pointillés) et capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
     function drawChart() {
         var host = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
         if (!host || !dataEl) return;
@@ -58,7 +58,9 @@
         var eur = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
         P.create(host, {
             type: "line", xKind: "time", xs: pts.map(function (p) { return P.parseDate(p.t); }),
-            series: [{ name: labels.nav || "", values: pts.map(function (p) { return p.nav; }), color: "--brand", width: 2 }],
+            series: [{ name: labels.nav || "", values: pts.map(function (p) { return p.nav; }), color: "--brand", width: 2 }]
+                .concat(pts.length && pts[0].gross != null ? [{ name: labels.gross || "", values: pts.map(function (p) { return p.gross; }),
+                                                               color: "--text-2", width: 1.5, dash: [4, 3] }] : []),
             hlines: [{ y: data.capital, color: "--text-3", dash: [5, 4], label: labels.capital }],
             yFmt: function (v) { return eur.format(v); }, ranges: true, title: host.getAttribute("aria-label") || "", height: 260,
         });

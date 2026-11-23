@@ -2550,6 +2550,15 @@ a.visually-hidden[href="#main"]:focus {
 .fund-category { margin-top: var(--space-lg); }
 .fund-category-title { margin: 0 0 var(--space-xs); }
 .fund-group-title { margin: var(--space-md) 0 var(--space-xs); }
+/* synthèse séparée par catégorie et lecture avant / après frais (ADR 0029) */
+.fund-summary { margin-top: var(--space-md); }
+.fund-summary-table th[scope="row"] { text-align: left; font-weight: 600; }
+.fund-summary-sub th[scope="row"] { padding-left: var(--space-lg); font-weight: 400; color: var(--text-2); }
+.fund-group-total { margin: 0 0 var(--space-xs); }
+.fund-edge { white-space: nowrap; }
+.fund-edge-kept { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 40%, transparent); }
+.fund-edge-eaten { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.fund-edge-no_edge { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 40%, transparent); }
 .fund-real-rules { margin: 0 0 var(--space-md); padding-left: var(--space-lg); color: var(--text-2); }
 .fund-row:hover, .fund-row.is-selected { background: var(--surface-2); }
 .fund-row:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }

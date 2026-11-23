@@ -187,12 +187,16 @@ def test_each_family_has_its_own_names_wrapper_capital_and_short_rule(conn):
 
     assert {f: r["name"] for f, r in rows.items()} == {
         "systematic": "Systematic Actions France", "cto": "CTO Actions France", "pea": "PEA Actions France"}
-    for family, wrapper, short, capital in (("systematic", "CTO", True, 10_000_000), ("cto", "CTO", False, 10_000_000),
-                                            ("pea", "PEA", False, store.PEA_DEPOSIT_CAP_EUR)):
+    # Systematic = fonds quant d'étude ; CTO et PEA = fonds reproductibles par un particulier (ADR 0029) : 5 000 €, 1 € par ordre, 200 € au moins
+    for family, wrapper, short, capital, category, fee, minimum in (
+            ("systematic", "CTO", True, 10_000_000, "quant", None, None),
+            ("cto", "CTO", False, 5_000, "real", 1.0, 200.0),
+            ("pea", "PEA", False, 5_000, "real", 1.0, 200.0)):
         strategy = store.get_strategy(conn, rows[family]["strategy_id"])
         settings = store.get_autopilot(conn, rows[family]["strategy_id"])["settings"]
-        assert (strategy["wrapper"], strategy["initial_capital"], strategy["category"]) == (wrapper, capital, "quant")
+        assert (strategy["wrapper"], strategy["initial_capital"], strategy["category"], strategy["fee_flat"]) == (wrapper, capital, category, fee)
         assert settings["allow_short"] is short and settings["groups"] == list(asset_classes.CLASSES["Actions France"])
+        assert settings["min_position"] == minimum
     assert len(store.list_strategies(conn)) == 3                    # aucune gamme ne reprend la stratégie d'une autre
 
 
