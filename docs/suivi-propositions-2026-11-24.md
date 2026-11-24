@@ -48,7 +48,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B1 | Suite lente partielle sur les PR | fait (PR 97 : job `pr-pinned-golden`, 8 min 44 sur sa propre PR) |
 | B2 | Régénération du fichier figé sans poste local | fait (PR 97 : `constraints-regen.yml`) |
 | B3 | Supprimer la branche après fusion (réglage GitHub) | fait (réglage du dépôt activé le 24/11 ; vérifié : la branche du lot 1 a disparu seule après fusion) |
-| B4 | Tests de mutation : renforcer `dsr` et `diebold_mariano` | à faire |
+| B4 | Tests de mutation : renforcer `dsr` et `diebold_mariano` | fait en partie (lot 3 : `tests/validation/test_dsr_dm_reference.py`, valeurs exactes contre une réimplémentation indépendante) ; taux de mutants tués à remesurer au prochain passage mensuel de `mutation.yml` |
 | B5 | Remplacer les `except Exception` larges | fait (lot 2 : les 21 replis silencieux journalisés ; les 113 autres laissaient déjà une trace) |
 | B6 | Découper `webapp/app.py` | à faire |
 | B7 | Découper `pipeline/engine.py` | à faire |
@@ -60,8 +60,8 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B13 | Optuna en parallèle | à faire |
 | B14 | Élagage Optuna plus agressif | à faire |
 | B15 | Moins de sélections CPCV distinctes | à faire |
-| B16 | DM sur la log-loss | à faire |
-| B17 | Seuils CPCV par combinaison | à faire |
+| B16 | DM sur la log-loss | fait (lot 3 : `dm_logloss`, migration 0057 `dm_logloss_result`) |
+| B17 | Seuils CPCV par combinaison | fait (lot 3, avec C8) |
 | B18 | Contrats à terme continus ajustés des sauts d'échéance | à faire |
 | B19 | `ANALYZE` automatique en fin de job | à faire |
 | B20 | /fonds plus rapide | à faire |
@@ -70,7 +70,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B23 | graphify à jour | en cours (lot 1, local) |
 | B24 | Mesurer le cache de téléchargement | à faire |
 | B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |
-| B26 | Suivi de la calibration en réel | à faire |
+| B26 | Suivi de la calibration en réel | fait (lot 3 : `validation/calibration_drift.py`, « dégradée » au-delà de deux erreurs-types ; affichage au lot 6) |
 | B27 | Tâche de nuit sans limite de durée | à toi (réinstaller la tâche, ADR 0014) |
 | B28 | Éviction du cache de variables pendant la nuit | à faire |
 | B29 | Supprimer le worktree `PATRICK-wt-fonds` | fait (24/11) |
@@ -82,15 +82,15 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 |---|---|---|
 | C1 | Verrou du pilote entre processus | fait (lot 2 : `system/interprocess_lock.py`, verrou de plage d'octets libéré si le processus meurt, `CycleBusy` après 1 h) |
 | C2 | La nuit ne dépend plus de la fenêtre PATRICK | fait en partie (lot 2) : cause du 21/11 non établie (code 1 sans trace : arrêt de l'extérieur) ; la nuit journalise désormais fin et plantages (faulthandler), relance une fois la phase des fonds si son marqueur manque, et la fermeture de la fenêtre ne lance plus de publication concurrente |
-| C3 | Rendement nul : même traitement à l'entraînement et en réel | en cours (lot 3) |
+| C3 | Rendement nul : même traitement à l'entraînement et en réel | fait (lot 3 : `validation.drop_stale_returns`, vrai pour un run neuf, hors empreinte quand faux ; l'évaluation ne compte plus un cours figé que le réel ne juge pas) |
 | C4 | Contrôle des champions suspects sur l'AUC | fait (lot 2 : même règle `suspect_reason` des deux côtés, AUC de direction ajoutée) |
-| C5 | Biais du gagnant du duel | à faire |
-| C6 | Choix de la meilleure classe de fonds corrigé | à faire |
-| C7 | Stratégies de fonds dans `trial_registry` | à faire |
-| C8 | Fuite légère des seuils CPCV | à faire |
+| C5 | Biais du gagnant du duel | fait (lot 3 : `validation/winner_bias.py`, AUC du holdout moins le gain attendu du meilleur des k runs qui l'ont lu ; affichage au lot 6) |
+| C6 | Choix de la meilleure classe de fonds corrigé | déjà fait (ADR 0014 : le Sharpe déflaté d'une stratégie compte au moins les classes comparées par la Synthèse, `fund/kpis.deflation_trials`) |
+| C7 | Stratégies de fonds dans `trial_registry` | déjà fait (ADR 0010 : modèles retenus inscrits au registre `fund_selection:<stratégie>` ; stratégies comptées dans la déflation) |
+| C8 | Fuite légère des seuils CPCV | fait (lot 3 : `validation.cpcv_thresholds_per_combo`, seuils et régimes ajustés sur l'entraînement de chaque combinaison) |
 | C9 | `config_hash` indépendant du dossier de sortie | vérifié, rien à changer : `patrick resume` relit la config enregistrée (même dossier, même empreinte) et le dossier par défaut `runs` est commun à tous les runs ; retirer le dossier de l'empreinte changerait celle de TOUS les runs existants (reprises, golden) |
 | C10 | Remplacer les 46 champions de change suspects | à toi (runs du worker) |
-| C11 | 6E=F et DXY dans la règle d'alignement | à faire |
+| C11 | 6E=F et DXY dans la règle d'alignement | vérifié, rien à changer : l'ADR 0007 dit que 6E=F et le DXY ont un vrai cours de clôture, donc pas concernés par la règle 2 (mauvaise lecture de ma part) |
 | C12 | Placebo des champions à F1 > 0,74 inexpliqués | à toi (runs du worker) |
 | C13 | Heures des résultats Yahoo | déjà fait (`earnings/exchanges.classify_timing` reconvertit depuis New York, `earnings/schedule.py` repère le 11:00 provisoire) |
 | C14 | Anciens runs d'avant la fuite signalés | reporté au lot 6 : badge visible « avant le garde anti-fuite (09/10) » sans exclusion (exclure retirerait d'un coup des centaines de modèles des fonds) |
@@ -105,7 +105,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | C23 | Tâche NewsRefresh | à toi |
 | C24 | Purge de l'ancienne fixture dans l'historique Git public | décision (réécriture d'historique, force-push) |
 | C25 | Branche distante `fix/ci-pydantic-floor` | fait (24/11) |
-| C26 | Écart holdout / réel sur le change | en cours (lot 3 : `patrick audit fx-gap`) ; mesure du 24/11 : règle 1 = 72,0 % holdout contre 55,0 % réel (11 runs), règle 2 = aucun run n'a encore 20 jugements réels |
+| C26 | Écart holdout / réel sur le change | fait (lot 3 : `patrick audit fx-gap`) ; 24/11 : règle 1 = 72,0 % holdout contre 55,0 % réel (11 runs, déjà marqués suspects) ; règle 2 à relancer quand ses runs auront 20 jugements réels |
 | C27 | Seuil de jour plat en multiple de la volatilité | déjà fait (méthode 2, ADR 0008 : jour plat si |r| < 0,25 × volatilité × racine(h)) |
 | C28 | `except Exception: pass` de `text/fulltext.py` journalisés | fait (lot 2) |
 | C29 | `method_version` par défaut | fait (lot 2) : vrai défaut, tout run neuf était forcé à la méthode 2, la méthode 3 de l'ADR 0011 était inatteignable |
