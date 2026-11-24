@@ -54,25 +54,25 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B7 | Découper `pipeline/engine.py` | à faire |
 | B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | à faire |
 | B9 | Découper `patrick.css` | à faire |
-| B10 | Sélection SHAP une fois par (données, pli) | à faire |
-| B11 | Pools paramétriques par pli en parallèle | à faire |
-| B12 | Cache des plis préparés | à faire |
-| B13 | Optuna en parallèle | à faire |
-| B14 | Élagage Optuna plus agressif | à faire |
-| B15 | Moins de sélections CPCV distinctes | à faire |
+| B10 | Sélection SHAP une fois par (données, pli) | fait (lot 4 : `shap_order`, un seul pilote SHAP pour toute la grille de N, sélections identiques ; méthode shap seulement) |
+| B11 | Pools paramétriques par pli en parallèle | déjà fait (`features/parametric_parallel.py`, `PATRICK_PARAMETRIC_JOBS`, réglage de la page « Lancer ») |
+| B12 | Cache des plis préparés | écarté : gain direct mesuré faible (NEXT_STEPS, Sprint 2) |
+| B13 | Optuna en parallèle | écarté : des essais Optuna en parallèle ne sont plus reproductibles (golden), et le réglage pèse de moins en moins (ADR 0014) |
+| B14 | Élagage Optuna plus agressif | à décider : changerait les champions (méthodologique, NEXT_STEPS « ne pas mélanger ») ; 39 essais sur 80 déjà élagués |
+| B15 | Moins de sélections CPCV distinctes | à décider : changerait les résultats CPCV (méthodologique) |
 | B16 | DM sur la log-loss | fait (lot 3 : `dm_logloss`, migration 0057 `dm_logloss_result`) |
 | B17 | Seuils CPCV par combinaison | fait (lot 3, avec C8) |
 | B18 | Contrats à terme continus ajustés des sauts d'échéance | à faire |
-| B19 | `ANALYZE` automatique en fin de job | à faire |
+| B19 | `ANALYZE` automatique en fin de job | fait (lot 4 : `PRAGMA optimize` borné en fin de job ; `ensure_planner_stats` faisait déjà le premier ANALYZE) |
 | B20 | /fonds plus rapide | à faire |
 | B21 | pytest-xdist dans la CI rapide | déjà fait (`-n auto` dans `tests.yml`) |
 | B22 | Vérification des types (pyright) | à faire |
 | B23 | graphify à jour | en cours (lot 1, local) |
-| B24 | Mesurer le cache de téléchargement | à faire |
+| B24 | Mesurer le cache de téléchargement | fait (lot 4 : mesuré sur 20 journaux de worker, 93 % en cache, 6 % téléchargés, 0,82 h en tout : pas un goulot) |
 | B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |
 | B26 | Suivi de la calibration en réel | fait (lot 3 : `validation/calibration_drift.py`, « dégradée » au-delà de deux erreurs-types ; affichage au lot 6) |
 | B27 | Tâche de nuit sans limite de durée | à toi (réinstaller la tâche, ADR 0014) |
-| B28 | Éviction du cache de variables pendant la nuit | à faire |
+| B28 | Éviction du cache de variables pendant la nuit | déjà fait (`daily_predict` évince le cache de variables à chaque exécution et dès que le disque passe sous le seuil) |
 | B29 | Supprimer le worktree `PATRICK-wt-fonds` | fait (24/11) |
 | B30 | KNOWN_ISSUES à jour | fait (PR 97) |
 
