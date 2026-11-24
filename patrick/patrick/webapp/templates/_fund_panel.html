@@ -290,6 +290,11 @@
           {% for m in ('trailing', 'har') %}<option value="{{ m }}"{% if (autopilot.settings.vol_model or 'trailing') == m %} selected{% endif %}>{{ t('fund_auto_vol_' ~ m) }}</option>{% endfor %}
         </select>
       </label>
+      <label>{{ t('fund_auto_weighting') }}
+        <select name="weighting" data-auto-field>
+          {% for m in ('inverse_vol', 'risk_parity') %}<option value="{{ m }}"{% if (autopilot.settings.weighting or 'inverse_vol') == m %} selected{% endif %}>{{ t('fund_auto_w_' ~ m) }}</option>{% endfor %}
+        </select>
+      </label>
       {% if s.wrapper != 'PEA' %}
       <label class="check"><input type="checkbox" name="allow_short" data-auto-field{% if autopilot.settings.allow_short %} checked{% endif %}> {{ t('fund_auto_short') }}</label>
       {% endif %}
