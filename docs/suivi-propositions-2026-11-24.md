@@ -70,7 +70,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B23 | graphify à jour | en cours (lot 1, local) |
 | B24 | Mesurer le cache de téléchargement | fait (lot 4 : mesuré sur 20 journaux de worker, 93 % en cache, 6 % téléchargés, 0,82 h en tout : pas un goulot) |
 | B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |
-| B26 | Suivi de la calibration en réel | fait (lot 3 : `validation/calibration_drift.py`, « dégradée » au-delà de deux erreurs-types ; affichage au lot 6) |
+| B26 | Suivi de la calibration en réel | fait (lot 3 calcul, lot 6 bandeau) |
 | B27 | Tâche de nuit sans limite de durée | à toi (réinstaller la tâche, ADR 0014) |
 | B28 | Éviction du cache de variables pendant la nuit | déjà fait (`daily_predict` évince le cache de variables à chaque exécution et dès que le disque passe sous le seuil) |
 | B29 | Supprimer le worktree `PATRICK-wt-fonds` | fait (24/11) |
@@ -84,7 +84,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | C2 | La nuit ne dépend plus de la fenêtre PATRICK | fait en partie (lot 2) : cause du 21/11 non établie (code 1 sans trace : arrêt de l'extérieur) ; la nuit journalise désormais fin et plantages (faulthandler), relance une fois la phase des fonds si son marqueur manque, et la fermeture de la fenêtre ne lance plus de publication concurrente |
 | C3 | Rendement nul : même traitement à l'entraînement et en réel | fait (lot 3 : `validation.drop_stale_returns`, vrai pour un run neuf, hors empreinte quand faux ; l'évaluation ne compte plus un cours figé que le réel ne juge pas) |
 | C4 | Contrôle des champions suspects sur l'AUC | fait (lot 2 : même règle `suspect_reason` des deux côtés, AUC de direction ajoutée) |
-| C5 | Biais du gagnant du duel | fait (lot 3 : `validation/winner_bias.py`, AUC du holdout moins le gain attendu du meilleur des k runs qui l'ont lu ; affichage au lot 6) |
+| C5 | Biais du gagnant du duel | fait (lot 3 calcul, lot 6 bandeau) |
 | C6 | Choix de la meilleure classe de fonds corrigé | déjà fait (ADR 0014 : le Sharpe déflaté d'une stratégie compte au moins les classes comparées par la Synthèse, `fund/kpis.deflation_trials`) |
 | C7 | Stratégies de fonds dans `trial_registry` | déjà fait (ADR 0010 : modèles retenus inscrits au registre `fund_selection:<stratégie>` ; stratégies comptées dans la déflation) |
 | C8 | Fuite légère des seuils CPCV | fait (lot 3 : `validation.cpcv_thresholds_per_combo`, seuils et régimes ajustés sur l'entraînement de chaque combinaison) |
@@ -93,7 +93,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | C11 | 6E=F et DXY dans la règle d'alignement | vérifié, rien à changer : l'ADR 0007 dit que 6E=F et le DXY ont un vrai cours de clôture, donc pas concernés par la règle 2 (mauvaise lecture de ma part) |
 | C12 | Placebo des champions à F1 > 0,74 inexpliqués | à toi (runs du worker) |
 | C13 | Heures des résultats Yahoo | déjà fait (`earnings/exchanges.classify_timing` reconvertit depuis New York, `earnings/schedule.py` repère le 11:00 provisoire) |
-| C14 | Anciens runs d'avant la fuite signalés | reporté au lot 6 : badge visible « avant le garde anti-fuite (09/10) » sans exclusion (exclure retirerait d'un coup des centaines de modèles des fonds) |
+| C14 | Anciens runs d'avant la fuite signalés | fait (lot 6 : bandeau « avant le garde anti-fuite » sur la page d'un run, sans exclusion) |
 | C15 | `test_webapp_smoke` sous charge | fait (lot 2 : xfail avec la mesure si les processeurs étaient saturés, échec sinon) |
 | C16 | Erreur « disk I/O » des tests lents sous charge | non reproduit : aucun nom de test dans la note du 31/10 ; à reprendre à la prochaine occurrence |
 | C17 | Audit des formulaires partiels | vérifié, rien à changer : préférences, réglages des placements, correction d'ordre et renommage fusionnent déjà ; seul le pilote avait le défaut (corrigé le 29/10 par `overlay`) |
@@ -115,33 +115,33 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 
 | # | Proposition | Statut |
 |---|---|---|
-| D1 | Page d'un run en une seule page | à faire |
-| D2 | Fiabilité à côté de P(hausse) | à faire |
-| D3 | Annotations (lignes verticales) sur les graphiques | à faire |
-| D4 | Curseur synchronisé entre graphiques | à faire |
+| D1 | Page d'un run en une seule page | en partie : l'onglet Analyse rassemble déjà les 18 sections d'un run sur une page avec sommaire ; fusionner l'onglet Détail (contrôles, journal) reste à décider |
+| D2 | Fiabilité à côté de P(hausse) | fait (lot 6 : Brier skill au holdout dans la bulle d'une prédiction) |
+| D3 | Annotations (lignes verticales) sur les graphiques | fait (lot 6 : changements de champion et publications de résultats sur la courbe de la page d'un actif) |
+| D4 | Curseur synchronisé entre graphiques | fait en partie (lot 6 : courbe d'un fonds et sa perte depuis le plus haut partagent leur réticule) |
 | D5 | Petits multiples par classe d'actifs | à faire |
-| D6 | Holdout et réel côte à côte | à faire |
-| D7 | Badge « biais du gagnant » | à faire |
+| D6 | Holdout et réel côte à côte | déjà fait (tableau test / holdout / réel côte à côte de l'aperçu d'un run, section holdout_live) |
+| D7 | Badge « biais du gagnant » | fait (lot 6 : bandeau du biais du gagnant) |
 | D8 | Volatilité séparée des directions | à faire |
-| D9 | Diagramme de fiabilité | à faire |
+| D9 | Diagramme de fiabilité | déjà fait (section « calibration » de l'analyse d'un run) |
 | D10 | Carte de chaleur cible × horizon | à faire |
-| D11 | P&L avant / après frais superposés | à faire |
-| D12 | Drawdown sous chaque fonds | à faire |
-| D13 | Navigation réduite | à faire |
-| D14 | Contrastes clair / sombre (WCAG AA) | à faire |
+| D11 | P&L avant / après frais superposés | déjà fait (graphique d'un fonds : valeur nette et valeur avant frais en pointillés) |
+| D12 | Drawdown sous chaque fonds | fait (lot 6) |
+| D13 | Navigation réduite | déjà fait (barre latérale en dossiers repliables, 22/11) |
+| D14 | Contrastes clair / sombre (WCAG AA) | fait (lot 6 : contraste AA vérifié, pire cas 4,65 et 5,03, test de non-régression) |
 | D15 | Tableaux larges en cartes sous 640 px | à faire |
-| D16 | Colonnes et en-têtes figés | à faire |
-| D17 | Blocs de chargement | à faire |
-| D18 | Dates relatives | à faire |
-| D19 | Flèches ▲▼ en plus des couleurs | à faire |
-| D20 | Accueil : 3 chiffres clés | à faire |
-| D21 | État de la nuit dans la barre du haut | à faire |
-| D22 | Deux fonds sur un même graphique | à faire |
-| D23 | Export PNG / CSV des graphiques | à faire |
-| D24 | Panneau des raccourcis clavier | à faire |
-| D25 | Survol des métriques relié au dictionnaire | à faire |
-| D26 | Frise des champions | à faire |
-| D27 | File d'attente en frise | à faire |
-| D28 | Page « Nuit » | à faire |
-| D29 | Écart réel / holdout par champion | à faire |
-| D30 | Mise en page pour l'impression | à faire |
+| D16 | Colonnes et en-têtes figés | déjà fait (`.table-scroll th` collant) |
+| D17 | Blocs de chargement | déjà fait (`lazy_block` affiche des lignes squelettes) |
+| D18 | Dates relatives | fait (lot 6 : listes de runs) |
+| D19 | Flèches ▲▼ en plus des couleurs | déjà fait (flèches ▲▼ des prédictions et du bandeau, signes des montants) |
+| D20 | Accueil : 3 chiffres clés | déjà fait (chiffres clés en tête de la Synthèse) |
+| D21 | État de la nuit dans la barre du haut | fait (lot 6 : puce « nuit » visible seulement en cas de problème) ; sur ton vrai journal : nuit du 23/11 partielle, synchronisation en échec |
+| D22 | Deux fonds sur un même graphique | fait (lot 6 : « Comparer avec », base 100) |
+| D23 | Export PNG / CSV des graphiques | fait (lot 6 : PNG et CSV sur chaque graphique du moteur commun ; l'analyse d'un run avait déjà son PNG) |
+| D24 | Panneau des raccourcis clavier | déjà fait (touche « ? ») |
+| D25 | Survol des métriques relié au dictionnaire | déjà fait (glossaire au survol, `glossary.js`) |
+| D26 | Frise des champions | fait (lot 6) |
+| D27 | File d'attente en frise | fait (lot 6) |
+| D28 | Page « Nuit » | fait (lot 6 : section « Dernière nuit » de la page Santé) |
+| D29 | Écart réel / holdout par champion | fait (lot 6 : section de /reel) |
+| D30 | Mise en page pour l'impression | fait (lot 6) |
