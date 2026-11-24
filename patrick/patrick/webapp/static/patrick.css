@@ -556,7 +556,13 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
 .topbar-crumbs a:hover { color: var(--text); text-decoration: underline; }
 .topbar-crumbs > a:last-child { pointer-events: none; }      /* la page courante n'est pas un lien */
 .topbar-crumbs .icon { flex: none; color: var(--text-3); }
-.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* Barre pleine (1024-1200 px, puce machine allongée par un run, anglais…) : le fil passe en dernier. Les actions cèdent d'abord
+   (libellés de la loupe et de la puce repliés, voir plus bas) ; puis la catégorie et les parents du fil, jusqu'à « C… » (jamais un
+   chevron orphelin) ; la page courante en dernier. Facteurs de 10 000 = céder (presque) entièrement avant l'autre ; points de
+   suspension, jamais de texte sous les boutons. Avec de la place (1440 px), rien ne bouge. */
+.topbar-crumbs > span { overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs > :is(span, a):not(:last-child) { flex-shrink: 10000; min-width: 2em; }
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 10000; }
 
 .icon-btn {
   display: inline-grid;
@@ -580,7 +586,8 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
   align-items: center;
   gap: 8px;
   height: var(--control-h);
-  min-width: 280px;
+  /* plus de plancher à 280 px (il écrasait le fil à 1024 px) : le libellé suffit à lui donner sa largeur, 334 px en français, 291 en
+     anglais */
   padding: 0 6px 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -594,7 +601,19 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
 }
 .search-trigger .icon { color: var(--brand); }
 .search-trigger:hover { border-color: var(--brand); color: var(--text-2); }
-.search-trigger .kbd { margin-left: auto; }
+.search-trigger .kbd { flex: none; margin-left: auto; white-space: nowrap; }
+/* Libellé replié sur une seule ligne visible (points de suspension) au lieu d'un texte insécable : sa largeur naturelle ne change pas,
+   mais sa largeur minimale tombe à son premier mot (« Rechercher… »), ce qui laisse la loupe céder sa place au fil. Masqué sous
+   1080 px, rail ouvert : la place va au fil, l'icône et Ctrl K suffisent à reconnaître la loupe. */
+.search-trigger .search-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+@media (max-width: 1079px) { :root:not([data-sidebar="collapsed"]) .search-trigger .search-label { display: none; } }
 /* Menu « Plus d'actions » : n'existe qu'à 640 px et moins (voir plus bas). Au-delà, l'enveloppe s'efface (`display: contents`) et ses
    boutons restent des éléments de la barre, dans le même ordre ; le bouton qui l'ouvre est masqué. */
 .topbar-more { display: contents; }
@@ -2325,7 +2344,6 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   .topbar { padding: 0 16px; }
   .search-trigger { min-width: 0; }
   .search-trigger .search-label, .search-trigger .kbd { display: none; }
-  .topbar-crumbs > span { overflow: hidden; text-overflow: ellipsis; }   /* fil serré : points de suspension, jamais sous les boutons */
   .main-content { padding: 20px 16px 48px; }
   .station-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .dash-settings, .station-side { grid-column: 1; grid-row: auto; }
@@ -3741,7 +3759,11 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .machine-chip:hover { color: var(--text); border-color: var(--line-strong); }
 .machine-chip .icon { flex: none; color: var(--pos); }
 .machine-chip.is-paused .icon { color: var(--warn); }
-.machine-chip-text { overflow: hidden; text-overflow: ellipsis; }
+/* Comme le libellé de la loupe : une ligne visible, repliée plutôt qu'insécable, pour que la puce rétrécisse avant le fil. */
+.machine-chip-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1;
+  min-width: 0; overflow: hidden; white-space: normal;
+}
 @media (max-width: 1200px) { .machine-chip { max-width: 34px; padding: 0 9px; } .machine-chip-text { display: none; } }
 .kbd-help { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-start; justify-content: center; padding: 14vh 16px 16px;
   background: var(--overlay); backdrop-filter: blur(3px); }

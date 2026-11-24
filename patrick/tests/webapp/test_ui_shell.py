@@ -138,3 +138,18 @@ def test_topbar_groups_secondary_buttons_in_an_overflow_menu(client):
     assert re.search(r"\.topbar-more\s*\{\s*display:\s*contents", css)
     assert "#nav-vocabulary, #nav-settings, #nav-diagnostics { display: none; }" not in css   # plus aucun bouton retiré sans recours
     assert "topbar-more-btn" in (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")
+
+
+def test_topbar_trail_keeps_its_room_on_a_narrow_desktop():
+    """1024 px, rail ouvert : la loupe gardait 280 px et le fil de localisation tombait à 1 px, son texte passant sous la puce. Les
+    libellés de la loupe et de la puce se replient (une ligne visible) et les actions cèdent leur place avant le fil."""
+    css = (BASE_DIR / "static" / "patrick.css").read_text(encoding="utf-8")
+
+    def rule(selector: str) -> str:
+        start = css.index("\n" + selector + " {")
+        return css[start:css.index("}", start)]
+
+    assert "min-width" not in rule(".search-trigger")
+    assert "flex-shrink: 10000" in rule(".topbar-actions")
+    for selector in (".search-trigger .search-label", ".machine-chip-text"):
+        assert "-webkit-line-clamp: 1" in rule(selector) and "min-width: 0" in rule(selector), selector
