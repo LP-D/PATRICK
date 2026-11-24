@@ -595,6 +595,10 @@ h1, h2, h3, h4 { letter-spacing: -0.015em; }
 .search-trigger .icon { color: var(--brand); }
 .search-trigger:hover { border-color: var(--brand); color: var(--text-2); }
 .search-trigger .kbd { margin-left: auto; }
+/* Menu « Plus d'actions » : n'existe qu'à 640 px et moins (voir plus bas). Au-delà, l'enveloppe s'efface (`display: contents`) et ses
+   boutons restent des éléments de la barre, dans le même ordre ; le bouton qui l'ouvre est masqué. */
+.topbar-more { display: contents; }
+.topbar-more-btn { display: none; }
 
 .kbd {
   display: inline-flex;
@@ -2321,6 +2325,7 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   .topbar { padding: 0 16px; }
   .search-trigger { min-width: 0; }
   .search-trigger .search-label, .search-trigger .kbd { display: none; }
+  .topbar-crumbs > span { overflow: hidden; text-overflow: ellipsis; }   /* fil serré : points de suspension, jamais sous les boutons */
   .main-content { padding: 20px 16px 48px; }
   .station-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .dash-settings, .station-side { grid-column: 1; grid-row: auto; }
@@ -2328,11 +2333,66 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   .asset-panel-grid { grid-template-columns: 1fr; }
 }
 
+/* Barre du haut ≤ 640 px (WCAG 2.2, 1.4.10 « Reflow ») : tous ses boutons ne tiennent plus sur une ligne (à 320 px elle débordait de
+   36 px). Vocabulaire, Réglages, Santé, Diagnostics, la cloche et le thème passent dans le menu « Plus d'actions » ; l'épingle, la loupe
+   (palette) et la puce machine restent visibles. Libellé visible de chaque ligne = son aria-label (traduit, et tenu à jour par les
+   scripts pour la cloche). Le fil ne garde que la page courante. */
+@media (max-width: 640px) {
+  .topbar-crumbs > :not(:last-child) { display: none; }
+  .topbar-more-btn { display: inline-grid; }
+  .topbar-more-btn[aria-expanded="true"] { background: var(--surface-2); color: var(--text); border-color: var(--line); }
+  .topbar-more {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 16px;
+    z-index: 60;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    width: max-content;
+    min-width: 200px;
+    max-width: calc(100vw - 32px);
+    padding: 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    scale: var(--pop-scale);
+    /* Menu déroulant : il part du bouton « … » (coin haut droit) et y retourne ; sortie plus courte que l'entrée. */
+    transform-origin: calc(100% - 22px) 0;
+    transition: opacity var(--dur-menu-out) var(--ease-exit), scale var(--dur-menu-out) var(--ease-exit), display var(--dur-menu-out) allow-discrete;
+  }
+  .topbar-more.is-open {
+    display: flex;
+    opacity: 1;
+    scale: 1;
+    transition: opacity var(--dur-menu) var(--ease-enter), scale var(--dur-menu) var(--ease-enter), display var(--dur-menu) allow-discrete;
+  }
+  @starting-style { .topbar-more.is-open { opacity: 0; scale: var(--pop-scale); } }
+  .topbar-more > .icon-btn {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    justify-items: start;
+    align-items: center;
+    column-gap: 10px;
+    width: 100%;
+    height: auto;
+    padding: 6px 10px;
+    font-size: var(--fs-sm);
+    line-height: 1.3;
+    text-align: left;
+    text-decoration: none;
+  }
+  .topbar-more > .icon-btn > * { justify-self: center; }
+  .topbar-more > .icon-btn::after { content: attr(aria-label); grid-area: 1 / 2; }
+  .topbar-more > .icon-btn[aria-current="page"] { color: var(--text); background: var(--surface-2); }
+  :root .topbar-more > .icon-btn:not(:disabled):active { scale: none; }   /* une ligne pleine largeur ne se tasse pas à l'appui */
+}
+
 @media (max-width: 480px) {
   .metric-grid { grid-template-columns: 1fr 1fr; }      /* le tableau d'affichage reste joint (filets de 1 px) */
-  /* barre du haut : à 320 px, six boutons de 44 px débordaient de 56 px. Vocabulaire, Réglages et Diagnostics restent dans la palette
-     de commandes (loupe), toujours visible. */
-  #nav-vocabulary, #nav-settings, #nav-diagnostics { display: none; }
+  .topbar { gap: 8px; }
   .topbar-actions { gap: 4px; }
   .metric-value { font-size: var(--fs-lg); }
   .filter-bar { flex-direction: column; align-items: stretch; }
@@ -3252,7 +3312,7 @@ body:not(.has-stats-bar-open) .main-content { padding-bottom: 56px; }
 .to-top:hover { border-color: var(--brand); color: var(--brand); }
 .to-top:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
-  .to-top, .mega-panel, .btn-arrow::after, .mega-caret { transition: none; animation: none; }
+  .to-top, .mega-panel, .topbar-more, .topbar-more.is-open, .btn-arrow::after, .mega-caret { transition: none; animation: none; }
 }
 
 /* ============ Mouvement (ADR 0024) ============
@@ -3322,7 +3382,7 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 
 /* Geste au clavier : jamais d'animation pour ce qu'un raccourci, Entrée ou Échap ouvre ou ferme (motion.js tient
    `<html data-input>` à jour dès la touche ou le clic). */
-:root[data-input="keyboard"] :is(.glossary-popover, .help-pop, .pred-pop, .mega-panel, .mega-col, .mega-feature, .cmdk, .cmdk-panel, .cmdk-list > li, dialog.modal, .history-dialog),
+:root[data-input="keyboard"] :is(.glossary-popover, .help-pop, .pred-pop, .mega-panel, .topbar-more, .mega-col, .mega-feature, .cmdk, .cmdk-panel, .cmdk-list > li, dialog.modal, .history-dialog),
 :root[data-input="keyboard"] :is(dialog.modal, .history-dialog)::backdrop {
   transition-duration: 0s !important;
   animation-duration: 0s !important;
