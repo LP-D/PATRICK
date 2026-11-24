@@ -58,8 +58,11 @@ class RLData:
         return len(self.dates)
 
 
-def build_rl_data(raw: pd.DataFrame, config: RLRunConfig, target_col: str, base_pool_builder=None) -> RLData:
-    """`base_pool_builder(raw, run_config, target_col)` : injectable pour les tests (défaut : `build_base_feature_pool`)."""
+def build_rl_data(raw: pd.DataFrame, config: RLRunConfig, target_col: str, base_pool_builder=None, keep_last: bool = False) -> RLData:
+    """`base_pool_builder(raw, run_config, target_col)` : injectable pour les tests (défaut : `build_base_feature_pool`).
+
+    `keep_last` (positions live, `rl/live.py`) : la dernière date, dont le rendement suivant n'est pas encore connu, est gardée avec un rendement
+    nul. Il ne sert qu'au compte de résultat de l'environnement ; la décision de l'agent ne lit que les variables et sa position."""
     if target_col not in raw.columns:
         raise RLDataError(f"Colonne cible absente des données : {target_col}")
     price = pd.to_numeric(raw[target_col], errors="coerce").dropna()
@@ -89,8 +92,12 @@ def build_rl_data(raw: pd.DataFrame, config: RLRunConfig, target_col: str, base_
         raise RLDataError("Aucune date n'a assez de variables renseignées.")
     feats = feats.loc[first:]
     price = price.loc[first:]
-    fwd = (price.shift(-1) / price - 1.0).iloc[:-1]
-    feats = feats.iloc[:-1]
+    fwd = price.shift(-1) / price - 1.0
+    if keep_last:
+        fwd = fwd.fillna(0.0)
+    else:
+        fwd = fwd.iloc[:-1]
+        feats = feats.iloc[:-1]
     if len(fwd) < D.RL_MIN_ROWS:
         raise RLDataError(f"Après les fenêtres de calcul des variables il reste {len(fwd)} dates : il en faut au moins {D.RL_MIN_ROWS}.")
     if feats.shape[1] > 400:

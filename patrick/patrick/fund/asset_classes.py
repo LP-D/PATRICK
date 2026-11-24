@@ -5,9 +5,13 @@ nom `<gamme> <classe>`) une stratégie par classe et y active le pilote automati
 (1 jour par défaut) ; `setup_tiers` fait de même avec une stratégie par niveau de preuve (`<gamme> Diebold-Mariano`...). La série
 macro FRED n'est dans aucune classe : elle n'est pas négociable.
 
-Trois gammes (`FAMILIES`) : `Systematic` (CTO, vente à découvert en CFD, tout l'univers), `CTO` (achat seulement : actions et ETF au
-comptant, le reste en CFD à l'achat) et `PEA` (achat seulement, au comptant, actions de l'UE/EEE cotées en euro : `fund/envelopes.py`,
-capital au plus le plafond de versements). Une gamme ne reprend jamais la stratégie d'une autre : le préfixe du nom les sépare.
+Trois gammes (`FAMILIES`), dans deux catégories qui ne se mélangent pas (ADR 0030) :
+- `Systematic` : fonds quant d'étude (catégorie `quant`) : CTO, vente à découvert en CFD, tout l'univers, capital virtuel de 10 M€, frais estimés ;
+- `CTO` et `PEA` : fonds reproductibles par un particulier (catégorie `real`) : achat seulement, 5 000 € chacun, 1 € par ordre tout compris, position
+  minimale de 200 € (un compte de cette taille ne finance pas tous les signaux). CTO : actions et ETF au comptant, le reste en CFD à l'achat ;
+  PEA : au comptant, actions de l'UE/EEE cotées en euro (`fund/envelopes.py`).
+Une gamme ne reprend jamais la stratégie d'une autre : le préfixe du nom les sépare. Une stratégie reprise sans ordre prend les conditions de sa
+gamme (catégorie, frais, capital) ; avec des ordres, seule la catégorie suit (`store.set_terms`).
 """
 from __future__ import annotations
 
@@ -49,8 +53,9 @@ TIER_STRATEGIES = {"dm": "Diebold-Mariano", "bh": "Benjamini-Hochberg"}
 
 @dataclass(frozen=True)
 class Family:
-    """Une gamme de fonds : préfixe des noms, enveloppe, vente à découvert, capital par défaut, classes proposées et périmètre des
-    stratégies par preuve (`scope`, groupes de l'univers ; None : tout l'univers)."""
+    """Une gamme de fonds : préfixe des noms, enveloppe, vente à découvert, capital par défaut, classes proposées, périmètre des
+    stratégies par preuve (`scope`, groupes de l'univers ; None : tout l'univers), catégorie (`quant` ou `real`), frais forfaitaires par ordre
+    (None : frais estimés) et taille minimale d'une position (None : aucune)."""
     key: str
     prefix: str
     wrapper: str
@@ -58,16 +63,22 @@ class Family:
     capital: float
     classes: dict[str, tuple[str, ...]]
     scope: tuple[str, ...] | None
+    category: str = "quant"
+    fee_flat: float | None = None
+    min_position: float | None = None
 
 
 # Le PEA ne détient que des actions de l'UE/EEE en euro : deux classes, la France et le reste de l'Europe éligible (sans le Royaume-Uni).
 PEA_CLASSES = {"Actions France": CLASSES["Actions France"],
                "Actions Europe": tuple(g for g in envelopes.PEA_GROUPS if g not in CLASSES["Actions France"])}
 
+# CTO et PEA : ce qu'un particulier peut reproduire (5 000 €, 1 € par ordre, 200 € au moins par position), comme les fonds « tous signaux »
+# de `real_funds`. Systematic : le laboratoire quant (10 M€ virtuels, vente à découvert, frais estimés).
+_RETAIL = {"category": "real", "fee_flat": envelopes.REAL_FLAT_FEE, "min_position": envelopes.REAL_MIN_POSITION}
 FAMILIES = {
     "systematic": Family("systematic", "Systematic", "CTO", True, 10_000_000, CLASSES, None),
-    "cto": Family("cto", "CTO", "CTO", False, 10_000_000, CLASSES, None),
-    "pea": Family("pea", "PEA", "PEA", False, store.PEA_DEPOSIT_CAP_EUR, PEA_CLASSES, envelopes.PEA_GROUPS),
+    "cto": Family("cto", "CTO", "CTO", False, envelopes.REAL_CAPITAL, CLASSES, None, **_RETAIL),
+    "pea": Family("pea", "PEA", "PEA", False, envelopes.REAL_CAPITAL, PEA_CLASSES, envelopes.PEA_GROUPS, **_RETAIL),
 }
 
 
@@ -114,9 +125,9 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
         if only and asset_class not in only:
             continue
         settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": fam.allow_short,
-                    "horizons": list(horizons), "groups": list(groups)}
+                    "horizons": list(horizons), "groups": list(groups), "min_position": fam.min_position}
         row = _provision(conn, name=strategy_name(asset_class, family), settings=settings, capital=capital, wrapper=fam.wrapper,
-                         today=today, dry_run=dry_run)
+                         today=today, dry_run=dry_run, category=fam.category, fee_flat=fam.fee_flat)
         out.append({"class": asset_class, **row})
     return out
 
@@ -124,11 +135,15 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
 def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: float, wrapper: str, today: dt.date,
                dry_run: bool, category: str = "quant", fee_flat: float | None = None) -> dict:
     """Retrouve (par son nom) ou crée la stratégie `name` et y active le pilote avec `settings` ; `dry_run` : rien n'est écrit.
-    `category` et `fee_flat` ne servent qu'à la création (une stratégie reprise garde les siens, mais doit être de la même catégorie).
+    Une stratégie reprise SANS ordre prend la catégorie, les frais (`fee_flat`) et le capital demandés (une gamme qui change de conditions, ADR 0030) ;
+    avec des ordres, elle garde frais et capital, et une catégorie différente est refusée (ce n'est pas une stratégie de cette gamme).
     Renvoie `name`, `strategy_id` (None si elle n'existe pas encore), `created`, `capital_changed`, `candidates`."""
     existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}
-    if name in existing and store.get_strategy(conn, existing[name])["category"] != category:
-        raise store.FundError(f"une stratégie « {name} » existe déjà et n'est pas de la catégorie {category!r} : la renommer ou la supprimer d'abord")
+    if name in existing:
+        current = store.get_strategy(conn, existing[name])
+        has_orders = conn.execute("SELECT 1 FROM fund_order WHERE strategy_id = ? LIMIT 1", (current["strategy_id"],)).fetchone() is not None
+        if current["category"] != category and has_orders:
+            raise store.FundError(f"une stratégie « {name} » existe déjà et n'est pas de la catégorie {category!r} : la renommer ou la supprimer d'abord")
     policy = autopilot.Settings.from_dict(settings)
     chosen = selection.select_models(conn, policy.selection, today)["selected"]
     row = {"name": name, "strategy_id": existing.get(name), "created": False, "capital_changed": False,
@@ -142,12 +157,13 @@ def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: 
         if row["strategy_id"] is None:
             row["strategy_id"] = store.create_strategy(conn, name, wrapper, capital, today.isoformat(), category=category, fee_flat=fee_flat)
             row["created"] = True
-        elif abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - float(capital)) > 0.005:
-            try:                                  # une stratégie reprise sans ordre prend le capital demandé
-                store.set_initial_capital(conn, row["strategy_id"], capital)
-                row["capital_changed"] = True
+        else:
+            before = float(store.get_strategy(conn, row["strategy_id"])["initial_capital"])
+            try:                                  # une stratégie reprise sans ordre prend les conditions de sa gamme
+                store.set_terms(conn, row["strategy_id"], category=category, fee_flat=fee_flat, initial_capital=capital)
             except store.FundError:
-                pass                              # avec des ordres, son capital reste celui qu'elle a
+                pass                              # avec des ordres, frais et capital restent ceux qu'elle a (la catégorie est déjà la bonne)
+            row["capital_changed"] = abs(float(store.get_strategy(conn, row["strategy_id"])["initial_capital"]) - before) > 0.005
         autopilot.configure(conn, row["strategy_id"], settings)
     return row
 
@@ -168,8 +184,8 @@ def setup_tiers(conn: sqlite3.Connection, *, today: dt.date | None = None, tiers
     out = []
     for tier in tiers:
         settings = {"tier": tier, "gross": gross, "max_models": max_models, "allow_short": fam.allow_short,
-                    "horizons": list(horizons), "groups": list(fam.scope) if fam.scope else None}
+                    "horizons": list(horizons), "groups": list(fam.scope) if fam.scope else None, "min_position": fam.min_position}
         row = _provision(conn, name=tier_strategy_name(tier, family), settings=settings, capital=capital, wrapper=fam.wrapper,
-                         today=today, dry_run=dry_run)
+                         today=today, dry_run=dry_run, category=fam.category, fee_flat=fam.fee_flat)
         out.append({"tier": tier, **row})
     return out

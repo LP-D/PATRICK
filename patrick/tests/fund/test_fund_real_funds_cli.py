@@ -36,7 +36,7 @@ def _run(runner, *args, code=0):
 def test_without_create_it_only_previews(runner):
     out = _run(runner)
 
-    assert "Aperçu (rien n'est écrit)" in out and "Systematic PEA" in out and "Systematic CTO" in out and "à créer" in out
+    assert "Aperçu (rien n'est écrit)" in out and "PEA Tous signaux" in out and "CTO Tous signaux" in out and "à créer" in out
     conn = trackdb.connect()
     assert store.list_strategies(conn) == []
 
@@ -48,7 +48,7 @@ def test_create_makes_both_funds_then_reuses_them(runner):
     assert first.count("créé") == 2 and second.count("repris") == 2
     conn = trackdb.connect()
     funds = {s["name"]: s for s in store.list_strategies(conn)}
-    assert set(funds) == {"Systematic PEA", "Systematic CTO"}
+    assert set(funds) == {"PEA Tous signaux", "CTO Tous signaux"}
     assert all(f["category"] == "real" and f["fee_flat"] == 1.0 and f["initial_capital"] == 5_000 for f in funds.values())
 
 
@@ -57,7 +57,7 @@ def test_options_change_the_capital_the_fee_and_the_set_of_funds(runner):
 
     conn = trackdb.connect()
     (fund,) = store.list_strategies(conn)
-    assert (fund["name"], fund["initial_capital"], fund["fee_flat"]) == ("Systematic PEA", 3_000, 0.5)
+    assert (fund["name"], fund["initial_capital"], fund["fee_flat"]) == ("PEA Tous signaux", 3_000, 0.5)
     settings = store.get_autopilot(conn, fund["strategy_id"])["settings"]
     assert settings["min_position"] is None and settings["max_models"] is None
 

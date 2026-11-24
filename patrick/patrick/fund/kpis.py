@@ -1,4 +1,10 @@
-"""KPI d'une stratégie à partir du résultat du moteur (spec §10)."""
+"""KPI d'une stratégie à partir du résultat du moteur (spec §10).
+
+Performance avant frais (ADR 0030) : la valeur qu'aurait la stratégie sans ses coûts de mise en œuvre, frais de transaction (commission, spread,
+change) et financement des CFD. Elle sépare deux échecs qui se ressemblent en net : un signal qui gagne mais dont les frais mangent le gain, et un
+signal qui ne gagne rien même gratuit. Les dividendes restent dedans : ils font partie du rendement de l'actif. Approximation assumée : les tailles
+des positions sont celles qui ont été réellement prises (frais déduits du montant investi), pas celles d'un compte sans frais.
+"""
 from __future__ import annotations
 
 import math
@@ -14,6 +20,32 @@ def _num(value) -> float | None:
         return None
     value = float(value)
     return value if math.isfinite(value) else None
+
+
+EDGE_VERDICTS = ("none", "no_edge", "eaten", "kept")
+
+
+def gross_nav(daily: pd.DataFrame) -> pd.Series:
+    """Valeur avant frais, jour par jour : la valeur nette plus les frais et le financement cumulés (le financement payé est positif)."""
+    if daily.empty:
+        return pd.Series(dtype=float)
+    costs = [daily[c] for c in ("fees_cum", "financing_cum") if c in daily]   # une série sans frais (tests, anciennes sorties) : la valeur nette
+    return daily["nav"] + sum(costs) if costs else daily["nav"].copy()
+
+
+def edge_verdict(gross_pnl: float, net_pnl: float, has_orders: bool) -> str:
+    """`none` (aucun ordre : rien à dire), `no_edge` (même sans frais la stratégie perd ou fait zéro), `eaten` (gain avant frais, perte ou rien
+    après : les frais mangent l'avantage), `kept` (gain après frais)."""
+    if not has_orders:
+        return "none"
+    if gross_pnl <= 0:
+        return "no_edge"
+    return "kept" if net_pnl > 0 else "eaten"
+
+
+def _weekday_returns(nav: pd.Series) -> pd.Series:
+    nav = nav[nav.index.dayofweek < 5] if len(nav) else nav
+    return nav.pct_change().dropna() if len(nav) > 1 else pd.Series(dtype=float)
 
 
 def compute(strategy: dict, result: SimResult) -> dict:
@@ -35,7 +67,19 @@ def compute(strategy: dict, result: SimResult) -> dict:
     max_dd = simmetrics.max_drawdown(daily["nav"])[0] if len(daily) > 1 else float("nan")
     gross = float(last.get("gross_exposure", 0.0))
     net = float(last.get("net_exposure", 0.0))
-    return {
+    fees, financing = float(last.get("fees_cum", 0.0)), float(last.get("financing_cum", 0.0))
+    costs = fees + financing
+    gross_pnl = pnl + costs
+    gross_returns = _weekday_returns(gross_nav(daily))
+    before_fees = {
+        "gross_pnl": gross_pnl, "gross_pnl_pct": gross_pnl / capital, "costs": costs,
+        "gross_sharpe": _num(simmetrics.sharpe_ratio(gross_returns)) if len(gross_returns) else None,
+        # part du gain avant frais que les frais emportent (None sans gain avant frais : il n'y a rien à manger)
+        "costs_share": costs / gross_pnl if gross_pnl > 0 else None,
+        "edge_verdict": edge_verdict(gross_pnl, pnl, bool(positions)),
+        "n_sessions": int((daily.index.dayofweek < 5).sum()) if len(daily) else 0,
+    }
+    return {**before_fees,
         "nav": nav, "capital": capital, "pnl": pnl, "pnl_pct": pnl / capital,
         "realized": sum(p["realized"] for p in positions),
         "latent": sum(p["latent"] for p in open_positions),
@@ -79,10 +123,12 @@ def deflated(daily: pd.DataFrame, n_trials: int) -> dict | None:
     return {"dsr": _num(out["dsr"]), "benchmark_sr": _num(out["benchmark_sr"]), "sr": _num(out["sr"]), "n_trials": out["n_trials"], "n_obs": out["n_obs"]}
 
 
-def series_points(daily: pd.DataFrame, columns=("nav", "cash")) -> list[dict]:
+def series_points(daily: pd.DataFrame, columns=("nav", "cash", "gross")) -> list[dict]:
+    """Points du graphique d'une stratégie : valeur nette, liquidités et valeur avant frais (`gross`)."""
     if daily.empty:
         return []
+    frame = daily.assign(gross=gross_nav(daily)) if "gross" in columns else daily
     out = []
-    for day, row in daily.iterrows():
-        out.append({"t": day.date().isoformat(), **{c: round(float(row[c]), 4) for c in columns}})
+    for day, row in frame.iterrows():
+        out.append({"t": day.date().isoformat(), **{c: round(float(row[c]), 4) for c in columns if c in frame}})
     return out

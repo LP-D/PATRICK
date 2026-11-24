@@ -26,6 +26,9 @@ import pandas as pd
 from patrick.config import universe_extension as UX
 from patrick.data.session_calendar import classify_asset_class
 from patrick.fund import (
+    combo as combo_mod,
+)
+from patrick.fund import (
     envelopes,
     insight,
     instruments,
@@ -66,6 +69,7 @@ class Settings:
     max_class_share: float = 1.0                     # part maximale de l'exposition brute sur une même classe d'actifs (1 = sans plafond)
     max_drawdown: float | None = None                # repli sous le plus haut au-delà duquel le pilote n'ouvre plus rien (None = sans arrêt)
     min_position: float | None = None                # € : taille minimale d'une position ; les modèles les moins bien classés qui n'y atteignent pas sont écartés (None = aucune)
+    combo: dict | None = None                        # fonds de test combiné (`fund/combo.py`) : {rl, vol, cost_multiple} ; None = signal de direction brut
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Settings:
@@ -96,12 +100,13 @@ class Settings:
             if minimum <= 0:
                 raise store.FundError("min_position invalide : montant strictement positif attendu, ou vide")
         return cls(selection=selection.Policy.from_dict(raw), gross=gross, allow_short=allow_short,
-                   min_confidence=confidence, max_class_share=share, max_drawdown=drawdown, min_position=minimum)
+                   min_confidence=confidence, max_class_share=share, max_drawdown=drawdown, min_position=minimum,
+                   combo=combo_mod.check_settings(raw.get("combo")))
 
     def to_dict(self) -> dict:
         return {**self.selection.to_dict(), "gross": self.gross, "allow_short": self.allow_short,
                 "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown,
-                "min_position": self.min_position}
+                "min_position": self.min_position, "combo": self.combo}
 
 
 def _number(value, name: str) -> float:
@@ -259,11 +264,20 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
             sizing = {"amount": round(notional, 2)}
         selected.append({**{k: v for k, v in model.items() if k != "unit_notional"}, "weight": weight,
                          "notional": notional, "sizing": sizing})
+    combo_summary = None
+    if settings.combo and selected:
+        # Fonds combiné : chaque règle reçoit les sources disponibles pour sa cible (agent RL crédible, modèle de l'indice de volatilité de sa
+        # classe), le coût de son aller-retour et les statistiques de son signal (`fund/combo.py`).
+        ctx = combo_mod.plan_context(conn, settings.combo)
+        for model in selected:
+            model["combo"] = combo_mod.rule_signal(conn, model, strategy, settings.combo, ctx)
+        combo_summary = {"rl": sum(1 for m in selected if m["combo"]["rl"]), "regime": sum(1 for m in selected if m["combo"]["regime"]),
+                         "n": len(selected)}
     counts: dict[str, int] = {}
     for cell in excluded:
         counts[cell["code"]] = counts.get(cell["code"], 0) + 1
     return {"settings": settings.to_dict(), "n_cells": chosen["n_cells"], "capital": capital, "gross": settings.gross,
-            "selected": selected, "excluded": excluded,
+            "selected": selected, "excluded": excluded, "combo": combo_summary,
             "excluded_summary": [{"code": code, "label": selection.LABELS.get(code) or LABELS[code], "n": n}
                                  for code, n in counts.items()]}
 
@@ -296,8 +310,9 @@ def status(conn: sqlite3.Connection, strategy_id: str, rules: list[dict] | None 
 # --------------------------------------------------------------------------- cycle
 
 def _rule_config(model: dict, settings: Settings, since: str) -> dict:
+    signal = model.get("combo") or {"mode": "direction", "min_confidence": settings.min_confidence}
     return {"trial_id": model["trial_id"], "segment": "live", "allow_short": model["allow_short"],
-            "signal": {"mode": "direction", "min_confidence": settings.min_confidence},
+            "signal": signal,
             "hold": {"mode": "horizon", "sessions": model["horizon"]},
             "instrument": model["instrument"], "sizing": model["sizing"], "since": since,
             "managed": {"by": MANAGER, "target": model["target"], "horizon": model["horizon"]}}
@@ -305,9 +320,13 @@ def _rule_config(model: dict, settings: Settings, since: str) -> dict:
 
 def _signature(cfg: dict) -> tuple:
     """Ce qui fait le comportement d'une règle : si cela change, on ne la réécrit pas, on en commence une autre."""
-    instrument = cfg["instrument"]
+    instrument, signal = cfg["instrument"], cfg["signal"]
+    sources = None
+    if signal.get("mode") == "combo":                    # un agent RL, un modèle de régime ou un multiple de coût différents changent les décisions
+        sources = ((signal.get("rl") or {}).get("job_id"), bool(signal.get("vol")), (signal.get("regime") or {}).get("trial_id"),
+                   signal.get("cost_multiple"))
     return (cfg["trial_id"], instrument["kind"], instrument["symbol"].upper(), bool(cfg["allow_short"]),
-            cfg["signal"].get("min_confidence", 0.0), cfg["hold"].get("sessions"))
+            signal.get("min_confidence", 0.0), cfg["hold"].get("sessions"), signal.get("mode"), sources)
 
 
 def managed_rules(conn: sqlite3.Connection, strategy_id: str) -> list[dict]:
@@ -432,12 +451,15 @@ def _run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None) -> d
     return report
 
 
-def run_all(conn: sqlite3.Connection, today: dt.date | None = None) -> list[dict]:
-    """Un cycle pour chaque stratégie active dont le pilote est activé. Une erreur n'arrête pas les autres."""
+def run_all(conn: sqlite3.Connection, today: dt.date | None = None, needs_rl: bool | None = None) -> list[dict]:
+    """Un cycle pour chaque stratégie active dont le pilote est activé. Une erreur n'arrête pas les autres. `needs_rl` : True = seulement les fonds
+    combinés qui lisent un agent RL (à lancer après `rl.live.refresh`), False = tous les autres, None = tous."""
     out: list[dict] = []
     for strategy in store.list_strategies(conn):
         stored = store.get_autopilot(conn, strategy["strategy_id"])
         if not stored or not stored.get("enabled"):
+            continue
+        if needs_rl is not None and combo_mod.needs_rl(stored) != needs_rl:
             continue
         try:
             out.append({"strategy_id": strategy["strategy_id"], **run(conn, strategy["strategy_id"], today)})

@@ -186,8 +186,9 @@ def test_classes_and_tiers_take_a_family_with_its_wrapper_its_capital_and_its_cl
     made = {s["name"]: s for s in store.list_strategies(conn)}
     cto_settings = store.get_autopilot(conn, made["CTO Diebold-Mariano"]["strategy_id"])["settings"]
     conn.close()
-    assert (made["PEA Actions France"]["wrapper"], made["PEA Actions France"]["initial_capital"]) == ("PEA", store.PEA_DEPOSIT_CAP_EUR)
-    assert (made["CTO Diebold-Mariano"]["wrapper"], made["CTO Diebold-Mariano"]["initial_capital"]) == ("CTO", 10_000_000)
+    assert (made["PEA Actions France"]["wrapper"], made["PEA Actions France"]["initial_capital"]) == ("PEA", 5_000)          # reproductible (ADR 0030)
+    assert (made["CTO Diebold-Mariano"]["wrapper"], made["CTO Diebold-Mariano"]["initial_capital"], made["CTO Diebold-Mariano"]["category"]) == (
+        "CTO", 5_000, "real")
     assert cto_settings["allow_short"] is False
 
 

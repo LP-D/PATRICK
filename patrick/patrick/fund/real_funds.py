@@ -1,6 +1,7 @@
 """Fonds « réels » : un PEA et un CTO fictifs d'un particulier qui suivent tous les signaux (ADR 0026).
 
-Deux stratégies en pilote automatique (`Systematic PEA`, `Systematic CTO`), de catégorie `real` : capital de 5 000 €, frais de 1 € par ordre
+Deux stratégies en pilote automatique (`PEA Tous signaux`, `CTO Tous signaux` ; `Systematic PEA` et `Systematic CTO` avant l'ADR 0030, renommées
+à la reprise : « Systematic » désigne désormais la gamme quant, avec vente à découvert), de catégorie `real` : capital de 5 000 €, frais de 1 € par ordre
 tout compris (`fee_flat`), niveau de sélection `auc` (tous les modèles dont l'AUC de direction du holdout dépasse le hasard, ceux qui passent
 en plus la correction de Benjamini-Hochberg et le test de Diebold-Mariano en tête), taille minimale d'une position (`REAL_MIN_POSITION`) pour que
 les frais forfaitaires ne rongent pas des positions de quelques euros. Le PEA est borné aux actions de l'UE/EEE en euro, à l'achat
@@ -24,7 +25,19 @@ DEFAULTS = {"capital": envelopes.REAL_CAPITAL, "fee_flat": envelopes.REAL_FLAT_F
 
 
 def fund_name(kind: str) -> str:
+    return f"{kind} Tous signaux"
+
+
+def legacy_name(kind: str) -> str:
+    """Nom d'avant l'ADR 0030 : une stratégie de ce nom, de catégorie `real`, est reprise et renommée."""
     return f"Systematic {kind}"
+
+
+def _rename_legacy(conn: sqlite3.Connection, kind: str) -> None:
+    names = {s["name"]: s for s in store.list_strategies(conn)}
+    old = names.get(legacy_name(kind))
+    if fund_name(kind) not in names and old is not None and old["category"] == "real":
+        store.update_strategy(conn, old["strategy_id"], name=fund_name(kind))
 
 
 def pilot_settings(kind: str, *, tier: str = "auc", gross: float = 1.0, max_models: int | None = envelopes.REAL_MAX_MODELS,
@@ -53,6 +66,8 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
     for kind in KINDS:
         if only and kind not in only:
             continue
+        if not dry_run:
+            _rename_legacy(conn, kind)
         row = asset_classes._provision(
             conn, name=fund_name(kind), wrapper=kind, capital=capital, today=today, dry_run=dry_run, category="real", fee_flat=fee_flat,
             settings=pilot_settings(kind, tier=tier, gross=gross, max_models=max_models, min_position=min_position))

@@ -27,7 +27,7 @@ def _auc(conn, trial_id: int, value: float) -> None:
 def test_setup_creates_the_pea_and_the_cto_with_their_envelope_fees_and_pilot(conn):
     rows = real_funds.setup(conn, today=TODAY)
 
-    assert [(r["kind"], r["name"], r["created"]) for r in rows] == [("PEA", "Systematic PEA", True), ("CTO", "Systematic CTO", True)]
+    assert [(r["kind"], r["name"], r["created"]) for r in rows] == [("PEA", "PEA Tous signaux", True), ("CTO", "CTO Tous signaux", True)]
     pea, cto = (store.get_strategy(conn, r["strategy_id"]) for r in rows)
     for fund, wrapper in ((pea, "PEA"), (cto, "CTO")):
         assert fund["wrapper"] == wrapper and fund["category"] == "real" and fund["fee_flat"] == 1.0
@@ -59,7 +59,7 @@ def test_setup_can_make_a_single_fund_and_dry_run_writes_nothing(conn, monkeypat
 
     assert [(r["kind"], r["strategy_id"]) for r in preview] == [("PEA", None), ("CTO", None)]
     assert [r["candidates"] for r in preview] == [1, 2]                  # le PEA ne cherche que des actions européennes
-    assert [r["kind"] for r in only_cto] == ["CTO"] and [s["name"] for s in store.list_strategies(conn)] == ["Systematic CTO"]
+    assert [r["kind"] for r in only_cto] == ["CTO"] and [s["name"] for s in store.list_strategies(conn)] == ["CTO Tous signaux"]
 
 
 def test_setup_validates_everything_before_writing_anything(conn):
@@ -71,11 +71,25 @@ def test_setup_validates_everything_before_writing_anything(conn):
 
 
 def test_setup_refuses_to_take_over_a_quant_fund_of_the_same_name(conn):
-    store.create_strategy(conn, "Systematic PEA", "PEA", 100_000, "2026-01-05")
+    traded = store.create_strategy(conn, "PEA Tous signaux", "PEA", 100_000, "2026-01-05")
+    store.insert_order(conn, {"strategy_id": traded, "position_id": "pos_0000000001", "ts": "2026-01-07", "action": "open",
+                              "instrument_kind": "equity", "symbol": "MC.PA", "side": "long", "quantity": 1.0, "price": 700.0,
+                              "price_source": "market", "currency": "EUR", "fx_rate": 1.0, "fees": 1.0, "fees_source": "estimated",
+                              "fee_seed": 7, "spec": {}, "note": None})           # un fonds qui a tradé ne change plus de catégorie
 
     with pytest.raises(store.FundError, match="existe déjà"):
         real_funds.setup(conn, today=TODAY)
     assert [s["category"] for s in store.list_strategies(conn)] == ["quant"]
+
+
+def test_a_quant_fund_named_like_the_old_every_signal_fund_is_left_alone(conn):
+    """Seul un ancien fonds reproductible « Systematic CTO / PEA » est renommé (ADR 0030) : un fonds quant de ce nom garde son nom et sa catégorie."""
+    quant = store.create_strategy(conn, "Systematic PEA", "PEA", 100_000, "2026-01-05")
+
+    rows = real_funds.setup(conn, today=TODAY, only=["PEA"])
+
+    assert rows[0]["name"] == "PEA Tous signaux" and rows[0]["strategy_id"] != quant
+    assert (store.get_strategy(conn, quant)["name"], store.get_strategy(conn, quant)["category"]) == ("Systematic PEA", "quant")
 
 
 def test_setup_counts_the_selected_models_as_trials_like_the_other_funds(conn, monkeypatch):
@@ -86,7 +100,7 @@ def test_setup_counts_the_selected_models_as_trials_like_the_other_funds(conn, m
     real_funds.setup(conn, today=TODAY, only=["PEA"])
 
     rows = conn.execute("SELECT target, horizon, source, n_trials, detail FROM trial_registry WHERE detail LIKE 'fund_selection:%'").fetchall()
-    assert rows == [("MC.PA", 1, "simulation", 1, "fund_selection:Systematic PEA")]
+    assert rows == [("MC.PA", 1, "simulation", 1, "fund_selection:PEA Tous signaux")]
 
 
 def test_a_cycle_trades_the_signals_of_the_pea_with_one_euro_per_order(conn, monkeypatch):

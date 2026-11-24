@@ -442,8 +442,9 @@ REFRESH_CHECK_SECONDS = 30 * 60
 
 def _fund_cells(db_path: str | None = None) -> set[tuple[str, int]]:
     """Les (cible, horizon) dont un fonds a besoin du signal du jour : les modèles que le pilote automatique de chaque stratégie
-    retiendrait (sélection sans la limite de fraîcheur : c'est justement le signal à renouveler) et ceux des règles saisies à la main."""
-    from patrick.fund import autopilot, selection, store
+    retiendrait (sélection sans la limite de fraîcheur : c'est justement le signal à renouveler), ceux des règles saisies à la main et ceux
+    que les fonds combinés lisent sans les trader (modèles des indices de volatilité, `fund/combo.py`)."""
+    from patrick.fund import autopilot, combo, selection, store
 
     conn = trackdb.connect(db_path)
     try:
@@ -459,6 +460,7 @@ def _fund_cells(db_path: str | None = None) -> set[tuple[str, int]]:
                                "WHERE trial.trial_id = ?", (trial_id,)).fetchone() if trial_id else None
             if row:
                 cells.add((row[0], row[1]))
+        cells |= combo.auxiliary_cells(conn)
         return cells
     finally:
         conn.close()
@@ -481,8 +483,12 @@ def run_autopilots(db_path: str | None = None) -> list[dict]:
     """Un cycle du pilote automatique des fonds pour chaque stratégie activée : sélection des modèles, règles, ordres
     échus. Avant lui, les règles saisies à la main qui suivent le champion passent au nouveau champion (un meilleur modèle
     entraîné entre-temps). À lancer APRÈS les prédictions du jour (il lit leurs signaux). Une erreur sur une stratégie est
-    dans son compte rendu, jamais levée ; l'appelant protège le reste."""
-    from patrick.fund import autopilot, systematic
+    dans son compte rendu, jamais levée ; l'appelant protège le reste.
+
+    Les fonds combinés qui lisent un agent RL passent en dernier : leurs agents sont d'abord rejoués sur les données du jour (`rl/live.py`,
+    quelques dizaines de secondes par agent), pour que les autres fonds n'attendent pas ce calcul."""
+    from patrick.fund import autopilot, combo, systematic
+    from patrick.rl import live as rl_live
 
     conn = trackdb.connect(db_path)
     try:
@@ -495,7 +501,14 @@ def run_autopilots(db_path: str | None = None) -> list[dict]:
                                 rolled["retired"], rolled["created"], rolled["trial_id"], rolled.get("purged_orders", 0))
         except Exception:
             logger.exception("suivi du champion en échec")        # n'empêche pas le cycle du pilote
-        reports = autopilot.run_all(conn)
+        reports = autopilot.run_all(conn, needs_rl=False)
+        try:
+            jobs = combo.rl_jobs_needed(conn)
+            for done in rl_live.refresh(conn, jobs):
+                logger.info("agent RL %s : %s (%s position(s) écrite(s))", done["job_id"], done["status"], done.get("written", 0))
+        except Exception:
+            logger.exception("positions live des agents RL en échec")   # les fonds combinés tournent quand même, sans l'avis du RL du jour
+        reports += autopilot.run_all(conn, needs_rl=True)
     finally:
         conn.close()
     for report in reports:

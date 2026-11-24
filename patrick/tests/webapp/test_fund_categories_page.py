@@ -104,10 +104,10 @@ def test_the_overview_shows_one_section_per_category_and_the_filter_keeps_one(cl
     quant = client.get("/fragments/fund-overview?categorie=quant").text
 
     assert both.count('class="fund-category"') == 2 and both.index('data-category="quant"') < both.index('data-category="real"')
-    assert real.count('class="fund-category"') == 1 and 'data-category="real"' in real and "Systematic PEA" in real and "Quant A" not in real
-    assert quant.count('class="fund-category"') == 1 and "Quant A" in quant and "Systematic CTO" not in quant
+    assert real.count('class="fund-category"') == 1 and 'data-category="real"' in real and "PEA Tous signaux" in real and "Quant A" not in real
+    assert quant.count('class="fund-category"') == 1 and "Quant A" in quant and "CTO Tous signaux" not in quant
     assert real.count('class="fund-row') == 2 and 'data-wrapper="PEA"' in real and 'data-wrapper="CTO"' in real
-    assert "Fonds réels" in real and "Fonds quant" in quant
+    assert "Fonds reproductibles CTO / PEA" in real and "Fonds quant" in quant
     assert _plain(real).count("1,00 € / ordre") >= 2                                 # le forfait est visible sur chaque ligne d'un fonds réel
 
 
@@ -120,12 +120,13 @@ def test_a_filter_that_keeps_nothing_says_so_and_offers_the_way_back(client):
 
 
 def test_the_real_funds_listing_ignores_a_quant_strategy_that_has_the_same_name(client):
-    fs.make_strategy(client, "Systematic PEA", wrapper="PEA", initial_capital=50_000)
+    traded = fs.make_strategy(client, "PEA Tous signaux", wrapper="PEA", initial_capital=50_000)
+    fs.place(client, traded)
 
     funds = client.get("/api/fund/real").json()["funds"]
 
     assert [(f["kind"], f["strategy_id"]) for f in funds] == [("PEA", None), ("CTO", None)]
-    assert client.post("/api/fund/real", json={}).status_code == 400            # le nom est pris par un fonds quant : refus, pas de reprise
+    assert client.post("/api/fund/real", json={}).status_code == 400            # le nom est pris par un fonds quant qui a tradé : refus
 
 
 def test_the_overview_is_available_in_english(client):
@@ -133,7 +134,7 @@ def test_the_overview_is_available_in_english(client):
 
     html = client.get("/fragments/fund-overview?lang=en").text
 
-    assert "Real funds" in html and "/ order" in html and "Fonds réels" not in html
+    assert "Reproducible CTO / PEA funds" in html and "/ order" in html and "Fonds reproductibles" not in html
 
 
 def test_the_panel_of_a_real_fund_shows_its_category_fee_and_pilot_settings(client):
@@ -143,7 +144,7 @@ def test_the_panel_of_a_real_fund_shows_its_category_fee_and_pilot_settings(clie
 
     panel = client.get(f"/api/fund/strategies/{pea_id}/panel").text
 
-    assert "1,00 € / ordre" in _plain(panel) and ">réel<" in panel
+    assert "1,00 € / ordre" in _plain(panel) and ">reproductible<" in panel
     assert 'name="min_position"' in panel and 'value="200"' in panel
     assert re.search(r'<option value="auc" selected>', panel) and 'name="allow_short"' not in panel         # un PEA n'a pas de vente à découvert
 

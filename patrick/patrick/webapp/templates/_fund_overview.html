@@ -1,12 +1,17 @@
-{# Fragment de /fonds (`/fragments/fund-overview`, chargé par lazy.js après l'affichage de la page) : total, répartition et
-   tableau des stratégies, une section par catégorie (quant, réel). C'est la partie qui calcule la valeur de chaque stratégie (cotations, moteur de simulation : 3 à 5 s) ; le
-   cadre de la page, le panneau de détail et les listes qui ne dépendent pas des cotations restent dans fonds.html.
-   `strategies` / `fund` = `fund.service.overview`. Les clics sont gérés par `static/fonds.js` (délégation sur #fund-overview). #}
+{# Fragment de /fonds (`/fragments/fund-overview`, chargé par lazy.js après l'affichage de la page) : synthèse par catégorie, puis une section par
+   catégorie (quant, reproductibles, test) avec ses totaux, sa répartition et ses stratégies. C'est la partie qui calcule la valeur de chaque stratégie
+   (cotations, moteur de simulation : 3 à 5 s) ; le cadre de la page, le panneau de détail et les listes qui ne dépendent pas des cotations restent
+   dans fonds.html. `strategies` / `fund` / `categories` = `fund.service.overview`. Les clics sont gérés par `static/fonds.js` (délégation sur
+   #fund-overview). #}
 {% from "_components.html" import metric, empty_state %}
 {% include "_snapshot_line.html" %}
 {% if strategies %}
-{# Une section par catégorie (`categories` = fund.service.overview, ADR 0026) : fonds quant, puis fonds réels (PEA, CTO). Les totaux et les parts sont
-   ceux de la catégorie : un capital virtuel de 10 M€ et un fonds réel de 5 000 € ne se somment pas. #}
+{# Une section par catégorie (`categories` = fund.service.overview, ADR 0026, 0029) : fonds quant, fonds reproductibles (CTO, PEA), fonds de test.
+   Les totaux et les parts sont ceux de la catégorie (et de l'enveloppe) : un capital virtuel de 10 M€ et un fonds de 5 000 € ne se somment pas,
+   d'où l'absence de total général. « Avant frais » = P&L net + frais de transaction + financement (`fund/kpis.py`). #}
+{% macro verdict_tag(v) %}{% if v and v != 'none' %}<span class="tag fund-edge fund-edge-{{ v }}" title="{{ t('fund_edge_' ~ v ~ '_hint') }}">{{ t('fund_edge_' ~ v) }}</span>{% elif v == 'none' %}<span class="hint">{{ t('fund_edge_none') }}</span>{% endif %}{% endmacro %}
+{% macro signed(value, pct_value) %}<span class="{{ 'pos' if value >= 0 else 'neg' }}">{{ value | eur }} · {{ pct_value | pct(1, true) }}</span>{% endmacro %}
+
 {% macro strategy_table(group_strategies) %}
 <div class="table-scroll">
   <table class="data-table fund-table">
@@ -16,9 +21,10 @@
         <th>{{ t('fund_col_wrapper') }}</th>
         <th class="num pk-mono">{{ t('fund_col_nav') }}</th>
         <th class="num pk-mono">{{ t('fund_col_pnl') }}</th>
+        <th class="num pk-mono">{{ t('fund_col_gross') }}</th>
+        <th>{{ t('fund_col_verdict') }}</th>
         <th class="num pk-mono">{{ t('fund_col_exposure') }}</th>
         <th class="num pk-mono">{{ t('fund_col_leverage') }}</th>
-        <th class="num pk-mono">{{ t('fund_col_margin') }}</th>
         <th class="num pk-mono">{{ t('fund_col_positions') }}</th>
         <th><span class="visually-hidden">{{ t('fund_col_actions') }}</span></th>
       </tr>
@@ -30,10 +36,11 @@
         <td>{{ s.strategy.name }}</td>
         <td><span class="tag">{{ s.strategy.wrapper }}</span>{% if s.strategy.fee_flat is not none %} <span class="tag" title="{{ t('fund_flat_fee_hint') }}">{{ t('fund_flat_fee', fee=(s.strategy.fee_flat | eur)) }}</span>{% endif %}</td>
         <td class="num pk-mono">{{ k.nav | eur }}</td>
-        <td class="num pk-mono"><span class="{{ 'pos' if k.pnl >= 0 else 'neg' }}">{{ k.pnl | eur }} · {{ k.pnl_pct | pct(1, true) }}</span></td>
+        <td class="num pk-mono">{{ signed(k.pnl, k.pnl_pct) }}</td>
+        <td class="num pk-mono">{{ signed(k.gross_pnl, k.gross_pnl_pct) }}</td>
+        <td>{{ verdict_tag(k.edge_verdict) }}</td>
         <td class="num pk-mono">{{ k.gross_exposure_pct | pct(0) }}</td>
         <td class="num pk-mono">{{ k.leverage | qty }}×</td>
-        <td class="num pk-mono">{{ k.margin_used | eur(0) }}</td>
         <td class="num pk-mono">{{ k.n_open_positions }}</td>
         <td class="fund-actions">
           <button type="button" class="btn-ghost" data-act="delete-strategy" data-strategy-id="{{ s.strategy.strategy_id }}"
@@ -47,10 +54,53 @@
 </div>
 {% endmacro %}
 
+{% macro summary_row(label, f, cls='') %}
+<tr class="{{ cls }}">
+  <th scope="row">{{ label }}</th>
+  <td class="num pk-mono">{{ f.n_strategies }}</td>
+  <td class="num pk-mono">{{ f.capital | eur(0) }}</td>
+  <td class="num pk-mono">{{ f.nav | eur(0) }}</td>
+  <td class="num pk-mono">{{ signed(f.pnl, f.pnl_pct) }}</td>
+  <td class="num pk-mono">{{ signed(f.gross_pnl, f.gross_pnl_pct) }}</td>
+  <td class="num pk-mono">{{ f.costs | eur(0) }}</td>
+  <td>{{ verdict_tag(f.edge_verdict) }}</td>
+</tr>
+{% endmacro %}
+
 {% if not categories %}
 {# le filtre `?categorie=` ne garde aucune stratégie : on le dit, avec le moyen de revenir à tout #}
 {{ empty_state(t('fund_cat_empty'), t('fund_cat_empty_hint'), '/fonds', t('fund_cat_all')) }}
+{% else %}
+<section class="card fund-summary" aria-labelledby="fund-summary-title">
+  <div class="card-head"><h2 id="fund-summary-title">{{ t('fund_summary_title') }}</h2></div>
+  <p class="hint">{{ t('fund_summary_hint') }}</p>
+  <div class="table-scroll">
+    <table class="data-table fund-summary-table">
+      <thead>
+        <tr>
+          <th>{{ t('fund_col_category') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_n') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_capital') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_nav') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_pnl') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_gross') }}</th>
+          <th class="num pk-mono">{{ t('fund_col_costs') }}</th>
+          <th>{{ t('fund_col_verdict') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in categories %}
+        {{ summary_row(t('fund_cat_' ~ c.category), c.fund, 'fund-summary-cat') }}
+        {% if c.groups | length > 1 or c.groups[0].wrapper %}{% for g in c.groups %}
+        {{ summary_row(t('fund_grp_' ~ (g.wrapper | lower)), g.fund, 'fund-summary-sub') }}
+        {% endfor %}{% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endif %}
+
 {% for c in categories %}
 <section class="fund-category" id="fund-cat-{{ c.category }}" data-category="{{ c.category }}" aria-labelledby="fund-cat-title-{{ c.category }}">
   <h2 class="fund-category-title" id="fund-cat-title-{{ c.category }}">{{ t('fund_cat_' ~ c.category) }}</h2>
@@ -59,7 +109,10 @@
     {{ metric(t('fund_total_nav'), c.fund.nav | eur, t('fund_total_nav_hint', n=c.fund.n_strategies), "neutral") }}
     {{ metric(t('fund_total_capital'), c.fund.capital | eur, t('fund_total_capital_hint'), "neutral") }}
     {{ metric(t('fund_total_pnl'), c.fund.pnl | eur, c.fund.pnl_pct | pct(1, true), "neutral") }}
+    {{ metric(t('fund_total_gross'), c.fund.gross_pnl | eur, t('fund_total_gross_hint', pct=(c.fund.gross_pnl_pct | pct(1, true)), costs=(c.fund.costs | eur)), "neutral") }}
+    {{ metric(t('fund_total_costs'), c.fund.costs | eur, t('fund_total_costs_hint', fees=(c.fund.fees | eur), financing=(c.fund.financing | eur)), "neutral") }}
   </div>
+  <p class="hint fund-verdicts">{{ t('fund_edge_verdicts', kept=c.fund.verdicts.kept, eaten=c.fund.verdicts.eaten, no_edge=c.fund.verdicts.no_edge) }}</p>
 
   <section class="card" aria-labelledby="fund-share-title-{{ c.category }}">
     <div class="card-head"><h3 id="fund-share-title-{{ c.category }}">{{ t('fund_breakdown_title') }}</h3></div>
@@ -77,7 +130,8 @@
   <section class="card" aria-labelledby="fund-table-title-{{ c.category }}">
     <div class="card-head"><h3 id="fund-table-title-{{ c.category }}">{{ t('fund_strategies_title') }}</h3></div>
     {% for g in c.groups %}
-    {% if g.wrapper %}<h4 class="fund-group-title" data-wrapper="{{ g.wrapper }}">{{ t('fund_grp_' ~ (g.wrapper | lower)) }} <span class="hint">({{ g.strategies | length }})</span></h4>{% endif %}
+    {% if g.wrapper %}<h4 class="fund-group-title" data-wrapper="{{ g.wrapper }}">{{ t('fund_grp_' ~ (g.wrapper | lower)) }} <span class="hint">({{ g.strategies | length }})</span></h4>
+    <p class="hint pk-mono fund-group-total">{{ t('fund_group_subtotal', capital=(g.fund.capital | eur(0)), nav=(g.fund.nav | eur(0)), pnl=(g.fund.pnl | eur), gross=(g.fund.gross_pnl | eur)) }}</p>{% endif %}
     {{ strategy_table(g.strategies) }}
     {% endfor %}
     <p class="table-footer">{{ t('fund_table_footer') }}</p>

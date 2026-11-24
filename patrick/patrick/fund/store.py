@@ -14,7 +14,10 @@ from patrick.core.clock import utc_today
 from patrick.wealth.ledger import PEA_DEPOSIT_CAP_EUR
 
 WRAPPERS = ("PEA", "CTO")
-CATEGORIES = ("quant", "real")        # fonds fictifs d'étude (capital virtuel) / fonds fictifs « réels » (PEA et CTO d'un particulier), ADR 0026
+# Catégories d'une stratégie (ADR 0026, 0029) : `quant` = fonds d'étude (capital virtuel de 10 M€, vente à découvert, frais estimés) ; `real` = fonds
+# reproductibles par un particulier (CTO ou PEA de 5 000 €, achat seulement, frais forfaitaires par ordre) ; `lab` = fonds de test qui combinent
+# plusieurs sources de signal (ML/DL, RL, modèles de volatilité : `fund/combo.py`). Les totaux ne se somment jamais d'une catégorie à l'autre.
+CATEGORIES = ("quant", "real", "lab")
 MAX_FLAT_FEE = 100.0                  # € par ordre : au-delà, c'est une faute de saisie
 ACTIONS = ("open", "increase", "reduce", "close", "modify")
 INSTRUMENT_KINDS = ("equity", "etf", "future", "cfd")
@@ -106,6 +109,32 @@ def _check_capital(initial_capital, wrapper: str) -> float:
         raise FundError(f"PEA : capital {capital:,.0f} € > plafond de versements {PEA_DEPOSIT_CAP_EUR:,.0f} €"
                         .replace(",", " "))
     return capital
+
+
+def set_terms(conn: sqlite3.Connection, strategy_id: str, *, category: str, fee_flat, initial_capital) -> bool:
+    """Aligne une stratégie sur les conditions de sa gamme (catégorie, frais forfaitaires, capital). Sans ordre, tout change ; avec des ordres,
+    seule la catégorie peut changer (frais et capital font l'historique : le changer réécrirait le passé). Renvoie True si quelque chose a changé,
+    `FundError` si des ordres empêchent d'appliquer les frais ou le capital demandés."""
+    strategy = get_strategy(conn, strategy_id)
+    if strategy is None:
+        raise FundError("stratégie introuvable")
+    if category not in CATEGORIES:
+        raise FundError(f"catégorie inconnue : {category!r} ({CATEGORIES})")
+    flat = check_flat_fee(fee_flat)
+    capital = _check_capital(initial_capital, strategy["wrapper"])
+    same_fee = (flat is None and strategy["fee_flat"] is None) or (
+        flat is not None and strategy["fee_flat"] is not None and abs(float(strategy["fee_flat"]) - flat) < 1e-9)
+    same_capital = abs(float(strategy["initial_capital"]) - capital) < 0.005
+    if strategy["category"] == category and same_fee and same_capital:
+        return False
+    has_orders = conn.execute("SELECT 1 FROM fund_order WHERE strategy_id = ? LIMIT 1", (strategy_id,)).fetchone() is not None
+    if has_orders and not (same_fee and same_capital):
+        raise FundError(f"« {strategy['name']} » a déjà des ordres : ses frais et son capital sont figés (la supprimer ou la renommer d'abord)")
+    with conn:
+        conn.execute("UPDATE fund_strategy SET category = ?, fee_flat = ?, initial_capital = ? WHERE strategy_id = ?",
+                     (category, flat, capital, strategy_id))
+        touch_strategy(conn, strategy_id)
+    return True
 
 
 def set_initial_capital(conn: sqlite3.Connection, strategy_id: str, initial_capital) -> None:

@@ -1449,8 +1449,9 @@ def fund_real_setup_cmd(
     gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
-    """Les deux fonds réels (ADR 0026) : `Systematic PEA` et `Systematic CTO`, 5 000 € et 1 € par ordre, qui suivent tous les signaux.
-    Le PEA ne prend que des actions de l'UE/EEE en euro, à l'achat ; le CTO prend tout l'univers, à l'achat seulement."""
+    """Les deux fonds reproductibles « tous signaux » (ADR 0026, 0029) : `PEA Tous signaux` et `CTO Tous signaux` (anciennement `Systematic PEA`
+    et `Systematic CTO`, renommés au passage), 5 000 € et 1 € par ordre. Le PEA ne prend que des actions de l'UE/EEE en euro, à l'achat ; le CTO
+    prend tout l'univers, à l'achat seulement."""
     from patrick.fund import real_funds
     from patrick.fund import store as fund_store
 
@@ -1467,6 +1468,64 @@ def fund_real_setup_cmd(
     for r in rows:
         state = "créé" if r["created"] else ("repris" + (", capital mis à jour" if r["capital_changed"] else "") if r["strategy_id"] else "à créer")
         typer.echo(f"  {r['name']:<20} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
+
+
+@fund_app.command(name="combo-setup")
+def fund_combo_setup_cmd(
+    create: bool = typer.Option(False, "--create", help="Crée (ou reprend) les fonds combinés et active leur pilote ; sans cette option : aperçu"),
+    only: list[str] = typer.Option(None, "--only", help="Seulement ce fonds : reference, rl, vol ou full (répétable ; défaut : les quatre)"),  # noqa: B008 -- liste : valeur par défaut de typer
+    capital: float = typer.Option(10_000_000.0, "--capital", help="Capital virtuel de chaque fonds, en euros"),
+    tier: str = typer.Option("auc", "--tier", help="Niveau de sélection des modèles (défaut auc)"),
+    horizon: list[int] = typer.Option([1], "--horizon", help="Horizon en jours (répétable ; défaut : 1)"),  # noqa: B008
+    max_models: int = typer.Option(100, "--max-models", help="Nombre maximal de modèles par fonds (0 : aucun plafond)"),
+    gross: float = typer.Option(1.0, "--gross", help="Exposition brute en fraction du capital"),
+    cost_multiple: float = typer.Option(1.0, "--cost-multiple", help="Le gain attendu doit valoir ce multiple de l'aller-retour (fonds « volatilité »)"),
+    today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
+) -> None:
+    """Les quatre fonds de test combinés (ADR 0030) : `Combiné Référence` (signaux bruts), `Combiné ML + RL` (l'agent RL doit être d'accord),
+    `Combiné ML + volatilité` (taille selon la volatilité prévue, régime de l'indice de volatilité, filtre de coût) et `Combiné ML + RL +
+    volatilité`. Mêmes modèles, mêmes conditions : seul l'ingrédient change."""
+    from patrick.fund import combo
+    from patrick.fund import store as fund_store
+
+    conn = trackdb.connect()
+    try:
+        rows = combo.setup(conn, today=_fund_day(today), only=only or None, capital=capital, tier=tier, horizons=tuple(horizon),
+                           max_models=max_models or None, gross=gross, cost_multiple=cost_multiple, dry_run=not create)
+    except fund_store.FundError as exc:
+        typer.echo(f"Refusé : {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        conn.close()
+    typer.echo(("Fonds combinés" if create else "Aperçu (rien n'est écrit)") + f" — niveau {tier}, horizon(s) {', '.join(map(str, horizon))} :")
+    for r in rows:
+        state = "créé" if r["created"] else ("repris" + (", capital mis à jour" if r["capital_changed"] else "") if r["strategy_id"] else "à créer")
+        typer.echo(f"  {r['name']:<30} {r['candidates']:>3} modèle(s) candidat(s)  {state}  {r['strategy_id'] or ''}")
+
+
+@fund_app.command(name="rl-live")
+def fund_rl_live_cmd(
+    job: list[str] = typer.Option(None, "--job", help="Seulement ce run RL (répétable ; défaut : les agents dont un fonds combiné a besoin)"),  # noqa: B008
+) -> None:
+    """Rejoue les agents RL des fonds combinés sur les données du jour et enregistre leurs nouvelles positions (`rl/live.py`). Une position
+    déjà enregistrée n'est jamais réécrite. La nuit le fait d'elle-même avant le cycle des fonds combinés."""
+    from patrick.fund import combo
+    from patrick.rl import live as rl_live
+
+    conn = trackdb.connect()
+    try:
+        jobs = list(job) if job else combo.rl_jobs_needed(conn)
+        if not jobs:
+            typer.echo("Aucun agent RL à rejouer : aucun fonds combiné « RL » actif, ou aucun agent crédible sur leurs cibles.")
+            return
+        done = rl_live.refresh(conn, jobs)
+    finally:
+        conn.close()
+    labels = {"ok": "à jour", "gated": "replié sur acheter-garder (pas d'avis)", "drift": "écart avec le run d'origine : ignoré",
+              "error": "erreur", "no_models": "modèles introuvables", "missing": "run introuvable ou supprimé"}
+    for d in done:
+        detail = f" ({d['detail']})" if d.get("detail") else ""
+        typer.echo(f"  {d['job_id']} : {labels.get(d['status'], d['status'])}, {d.get('written', 0)} position(s) écrite(s){detail}")
 
 
 @fund_app.command(name="rule-roll")

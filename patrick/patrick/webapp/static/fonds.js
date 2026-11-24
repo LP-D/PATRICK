@@ -50,7 +50,7 @@
     }
     function reload(id) { window.location.href = "/fonds" + (id ? "?strategy=" + encodeURIComponent(id) : ""); }
 
-    /* ---- graphique : valeur contre capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
+    /* ---- graphique : valeur nette, valeur avant frais (pointillés) et capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
     function drawChart() {
         var host = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
         if (!host || !dataEl) return;
@@ -58,7 +58,9 @@
         var eur = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
         P.create(host, {
             type: "line", xKind: "time", xs: pts.map(function (p) { return P.parseDate(p.t); }),
-            series: [{ name: labels.nav || "", values: pts.map(function (p) { return p.nav; }), color: "--brand", width: 2 }],
+            series: [{ name: labels.nav || "", values: pts.map(function (p) { return p.nav; }), color: "--brand", width: 2 }]
+                .concat(pts.length && pts[0].gross != null ? [{ name: labels.gross || "", values: pts.map(function (p) { return p.gross; }),
+                                                               color: "--text-2", width: 1.5, dash: [4, 3] }] : []),
             hlines: [{ y: data.capital, color: "--text-3", dash: [5, 4], label: labels.capital }],
             yFmt: function (v) { return eur.format(v); }, ranges: true, title: host.getAttribute("aria-label") || "", height: 260,
         });
@@ -353,7 +355,8 @@
         }
     }
 
-    /* ---- carte de création : la gamme choisit le bloc (simulation ou fonds réels), les classes proposées et le capital par défaut ---- */
+    /* ---- carte de création : la gamme choisit le bloc (simulation, fonds reproductibles « tous signaux » ou fonds combinés), les classes
+       proposées et le capital par défaut ---- */
     var classes = document.getElementById("fund-classes");
     var family = document.getElementById("fund-family");
     function applySplit() {
@@ -361,17 +364,17 @@
         classes.querySelectorAll("[data-split]").forEach(function (el) { el.hidden = el.getAttribute("data-split") !== mode; });
     }
     function applyFamily() {
-        var key = family.value, real = key === "real";
+        var key = family.value, block = (key === "real" || key === "combo") ? key : "quant";
         document.querySelectorAll("[data-create-block]").forEach(function (el) {
-            el.hidden = (el.getAttribute("data-create-block") === "real") !== real;
+            el.hidden = el.getAttribute("data-create-block") !== block;
         });
         document.querySelectorAll("[data-family-rule]").forEach(function (el) { el.hidden = el.getAttribute("data-family-rule") !== key; });
-        if (real) return;
+        if (block !== "quant") return;
         classes.querySelectorAll("[data-families]").forEach(function (el) {
             el.hidden = el.getAttribute("data-families").split(" ").indexOf(key) < 0;
         });
         var capital = classes.querySelector("[name='capital']"), wanted = family.selectedOptions[0].getAttribute("data-capital");
-        if (capital && wanted) capital.value = wanted;           // 10 M€ d'étude, le plafond de versements pour un PEA
+        if (capital && wanted) capital.value = wanted;           // 10 M€ d'étude, 5 000 € pour un CTO ou un PEA reproductible
     }
     if (family && classes) {
         family.addEventListener("change", applyFamily);
@@ -456,6 +459,56 @@
                 var text = fill(btn.getAttribute("data-done"), { created: created, reused: done.rows.length - created });
                 say(done.cycle_started ? text + " " + btn.getAttribute("data-cycle") : text, "info");
                 setTimeout(function () { window.location.href = "/fonds?categorie=real"; }, 1500);
+            } catch (err) {
+                say((err.blocking || [err.message]).join(" · "), "error");
+                setBusy(btn, false);
+            }
+        });
+    }
+
+    /* ---- fonds de test combinés : variantes cochées et réglages ; aperçu = une ligne par fonds (textContent, jamais de HTML) ---- */
+    var comboBlock = document.getElementById("fund-combo");
+    function comboOptions() {
+        var out = { only: [] };
+        comboBlock.querySelectorAll("[data-combo-field]").forEach(function (el) {
+            if (el.name === "only") { if (el.checked) out.only.push(el.value); }
+            else if (el.type === "checkbox") out[el.name] = el.checked;
+            else if (el.name === "horizons") {
+                out.horizons = el.value.split(",").map(function (h) { return Number(h.trim()); }).filter(function (h) { return h > 0; });
+            }
+            else if (el.name === "tier") out.tier = el.value;
+            else out[el.name] = el.value.trim() === "" ? null : Number(el.value);
+        });
+        return out;
+    }
+    if (comboBlock) {
+        comboBlock.addEventListener("click", async function (e) {
+            var btn = e.target.closest("[data-act='combo-preview'], [data-act='combo-create']");
+            if (!btn || btn.disabled) return;
+            setBusy(btn, true);
+            try {
+                var preview = btn.getAttribute("data-act") === "combo-preview";
+                var options = comboOptions();
+                if (preview) { options.dry_run = true; options.run = false; }
+                var done = await call("/api/fund/combo", "POST", options);
+                if (preview) {
+                    var list = comboBlock.querySelector("[data-combo-result]");
+                    list.textContent = "";
+                    done.rows.forEach(function (r) {
+                        var li = document.createElement("li");
+                        li.textContent = fill(btn.getAttribute("data-line"), {
+                            name: r.name, n: r.candidates,
+                            state: r.strategy_id ? btn.getAttribute("data-existing") : btn.getAttribute("data-new") });
+                        list.appendChild(li);
+                    });
+                    list.hidden = false;
+                    setBusy(btn, false);
+                    return;
+                }
+                var created = done.rows.filter(function (r) { return r.created; }).length;
+                var text = fill(btn.getAttribute("data-done"), { created: created, reused: done.rows.length - created });
+                say(done.cycle_started ? text + " " + btn.getAttribute("data-cycle") : text, "info");
+                setTimeout(function () { window.location.href = "/fonds?categorie=lab"; }, 1500);
             } catch (err) {
                 say((err.blocking || [err.message]).join(" · "), "error");
                 setBusy(btn, false);
