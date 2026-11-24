@@ -51,6 +51,12 @@ LIVE_STRINGS: dict[str, dict[str, str]] = {
     "lb_horizon_days": _s("{h} j", "{h} d"),
     "lb_too_few": _s("Pas assez de prédictions jugées (moins de 30 par ligne).", "Not enough judged predictions (fewer than 30 per row)."),
     "lb_s_bias": _s("Biais de direction : seuil recalé (mesure seule)", "Direction bias: re-centred threshold (measurement only)"),
+    "lb_s_gap": _s("Écart réel / holdout par champion", "Live / holdout gap by champion"),
+    "lb_h_gap": _s("Exactitude directionnelle en réel contre celle du holdout du même modèle, le réel le plus en dessous d'abord. * : le holdout sort de l'intervalle à 95 % du réel.", "Live directional accuracy against the same model's holdout, worst live first. *: the holdout lies outside the live 95% interval."),
+    "lb_c_live": _s("Réel", "Live"),
+    "lb_c_holdout": _s("Holdout", "Holdout"),
+    "lb_c_gap": _s("Écart", "Gap"),
+    "lb_c_model": _s("Modèle", "Model"),
     "lb_h_bias": _s("Chaque semaine, par classe d'actifs, le seuil sur P(hausse) est celui qui aurait annoncé, sur les semaines passées, autant de "
                     "hausses qu'il s'en est produit. Aucun signal n'est modifié : c'est ce que ce réglage AURAIT donné sur les mêmes prédictions.",
                     "Each week, per asset class, the threshold on P(up) is the one that would have announced, over past weeks, as many rises as "

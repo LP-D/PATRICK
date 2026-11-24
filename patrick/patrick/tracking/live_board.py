@@ -141,6 +141,45 @@ def _consensus(conn: sqlite3.Connection, champions: dict[int, dict], today: dt.d
     return out
 
 
+def _holdout_accuracy(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """`{trial_id: (bonnes directions, lignes)}` du holdout (4 classes : hausse = classe >= 2)."""
+    out: dict[int, tuple[int, int]] = {}
+    ids = sorted(trial_ids)
+    for start in range(0, len(ids), _CHUNK):
+        chunk = ids[start:start + _CHUNK]
+        for trial_id, hits, n in conn.execute(
+                "SELECT trial_id, SUM(CASE WHEN (y_pred >= 2) = (y_true >= 2) THEN 1 ELSE 0 END), COUNT(*) "
+                "FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+                f"WHERE trial_id IN ({','.join('?' for _ in chunk)}) AND split = 'holdout' AND y_true IS NOT NULL AND y_pred IS NOT NULL "
+                "GROUP BY trial_id", chunk):
+            out[int(trial_id)] = (int(hits or 0), int(n))
+    return out
+
+
+def _gaps(conn: sqlite3.Connection, judged: list[dict], champions: dict[int, dict]) -> list[dict]:
+    """D29 : par champion d'au moins `MIN_GROUP` jugements réels, exactitude directionnelle réelle contre celle de son holdout. Trié par
+    écart (le réel le plus en dessous du holdout d'abord) : un écart durable signale une fuite, un régime qui a changé, ou un holdout chanceux."""
+    by_trial: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    for row in judged:
+        acc = by_trial[row["trial_id"]]
+        acc[0] += row["hit"]
+        acc[1] += 1
+    hold = _holdout_accuracy(conn, [t for t, (_h, n) in by_trial.items() if n >= MIN_GROUP])
+    out = []
+    for trial_id, (hits, n) in by_trial.items():
+        if n < MIN_GROUP or trial_id not in hold or not hold[trial_id][1]:
+            continue
+        h_hits, h_n = hold[trial_id]
+        live_rate, hold_rate = hits / n, h_hits / h_n
+        meta = champions[trial_id]
+        ci = wilson(hits, n)
+        out.append({"target": meta["target"], "symbol": meta["symbol"], "horizon": meta["horizon"], "algo": meta["algo"], "n": n,
+                    "live_rate": live_rate, "holdout_rate": hold_rate, "holdout_n": h_n, "gap": live_rate - hold_rate,
+                    # le holdout est hors de l'intervalle à 95 % du réel : l'écart n'est probablement pas du hasard
+                    "significant": bool(ci and not ci[0] <= hold_rate <= ci[1])})
+    return sorted(out, key=lambda r: r["gap"])
+
+
 def board(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
     """Tout ce que la page `/reel` affiche. `judged` : effectif total ; chaque tableau ne garde que les lignes d'au moins `MIN_GROUP`
     jugements (les semaines sont toutes gardées)."""
@@ -150,7 +189,7 @@ def board(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
     for trial_id, ts, y_pred, y_true, p_up in _rows(conn, list(champions), "y_true IS NOT NULL"):
         meta = champions[trial_id]
         up, pred_up = int(float(y_true) >= 0.5), int(round(y_pred) >= 2)
-        judged.append({**meta, "week": _week(ts), "up": up, "pred_up": pred_up, "hit": int(up == pred_up), "p_up": p_up})
+        judged.append({**meta, "trial_id": trial_id, "week": _week(ts), "up": up, "pred_up": pred_up, "hit": int(up == pred_up), "p_up": p_up})
 
     def table(key, keep_all: bool = False) -> list[dict]:
         rows = [r for r in _group(judged, key) if keep_all or r["n"] >= MIN_GROUP]
@@ -161,4 +200,4 @@ def board(conn: sqlite3.Connection, today: dt.date | None = None) -> dict:
             "total": total[0] if total else _stat(0, 0, 0, 0),
             "by_week": table(lambda r: r["week"], keep_all=True), "by_class": table(lambda r: r["asset_class"]),
             "by_horizon": sorted(table(lambda r: r["horizon"]), key=lambda r: r["key"]), "by_algo": table(lambda r: r["algo"]),
-            "bias": _bias_shadow(judged), "consensus": _consensus(conn, champions, today)}
+            "bias": _bias_shadow(judged), "consensus": _consensus(conn, champions, today), "gaps": _gaps(conn, judged, champions)}
