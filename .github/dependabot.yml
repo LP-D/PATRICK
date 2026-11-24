@@ -3,6 +3,9 @@
 #   - pip : les dépendances déclarées dans patrick/pyproject.toml. La suite lente de la CI les fige par
 #     .github/constraints-py311.txt (uv pip compile) : une PR de dépendance ne vaut que si ce fichier est régénéré
 #     avec elle (voir l'en-tête du fichier), puis le golden master via une branche `golden-regen/*`.
+#     `increase-if-necessary` : un plancher (`pydantic>=2.13.5`) n'est relevé que si la nouvelle version en sort. Sans ce réglage,
+#     la PR 94 (24/11) a relevé pydantic au-dessus de la version figée : suite lente impossible à installer, `stable` bloquée.
+#     `tests/repo/test_dependency_floors.py` (suite rapide, donc dès la PR) refuse un plancher que le fichier figé ne satisfait pas.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -12,6 +15,7 @@ updates:
     open-pull-requests-limit: 3
   - package-ecosystem: "pip"
     directory: "/patrick"
+    versioning-strategy: increase-if-necessary
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
