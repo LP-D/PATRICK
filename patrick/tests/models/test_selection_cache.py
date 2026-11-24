@@ -30,17 +30,19 @@ def _synthetic_xy(n_rows=300, n_cols=30, seed=0):
 
 @pytest.fixture
 def counting_select_features(monkeypatch):
-    """Wraps the REAL select_features() (still does real work, not a stub)
-    so a call count can be asserted without the test only proving a mock
-    was invoked -- S6's identity check needs the real computation anyway."""
+    """Counts the SQLite cache MISSES of `_select` (each one computes, then saves, a selection) while the real computation still runs --
+    S6's identity check needs it. Since 2026-11-24 the shap method computes the full ranking once per training set in memory
+    (`engine._SHAP_ORDERS`, B10) and cuts it to N, so `select_features` is no longer the place where a miss shows up : the save is.
+    The in-memory ranking is cleared first, so every test starts cold."""
     calls = {"n": 0}
-    original = engine_module.select_features
+    original = engine_module.trackdb.save_cached_selection
+    engine_module._SHAP_ORDERS.clear()
 
     def _wrapped(*args, **kwargs):
         calls["n"] += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(engine_module, "select_features", _wrapped)
+    monkeypatch.setattr(engine_module.trackdb, "save_cached_selection", _wrapped)
     return calls
 
 
