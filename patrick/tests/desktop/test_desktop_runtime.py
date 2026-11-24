@@ -169,3 +169,15 @@ def test_kill_process_tree_spares_the_training_worker_and_what_it_launched(tmp_p
         for pid in (*found.values(), proc.pid):
             with contextlib.suppress(psutil.NoSuchProcess):
                 psutil.Process(pid).kill()
+
+
+def test_nightly_running_detects_the_night_task_and_its_passes(monkeypatch):
+    monkeypatch.setattr(psutil, "process_iter", _fake_processes(
+        {"cmdline": ["python.exe", "-m", "patrick.cli", "serve"]}, {"cmdline": None}))
+    assert runtime.nightly_running() is False
+    monkeypatch.setattr(psutil, "process_iter", _fake_processes(
+        {"cmdline": ["python.exe", r"C:\x\scripts\daily_predict.py", "--funds-only"]}))
+    assert runtime.nightly_running() is True
+    monkeypatch.setattr(psutil, "process_iter", _fake_processes(
+        {"cmdline": ["powershell.exe", "-File", r"C:\x\scripts\nightly_run.ps1"]}))
+    assert runtime.nightly_running() is True

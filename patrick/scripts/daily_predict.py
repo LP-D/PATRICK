@@ -41,6 +41,9 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime as dt
+import faulthandler
+import json
 import logging
 import os
 import sys
@@ -133,6 +136,15 @@ def _configure_logging(log_file: str | None) -> None:
         handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                         handlers=handlers, force=True)
+    if log_file:
+        # Un arrêt brutal (plantage d'une extension C) écrit sa pile dans le journal. Le 21/11, la phase `--funds-only` s'est arrêtée au
+        # milieu d'une prédiction sans aucune trace (code 1) : la prochaine fois, le journal dira au moins si Python a fini lui-même.
+        global _FAULT_LOG
+        _FAULT_LOG = open(log_file, "a", encoding="utf-8")  # noqa: SIM115 -- tenu ouvert jusqu'à la fin du processus
+        faulthandler.enable(_FAULT_LOG)
+
+
+_FAULT_LOG = None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,9 +180,13 @@ def main(argv: list[str] | None = None) -> int:
                       help="Seulement les prédictions utiles aux fonds, puis leur cycle de pilote automatique (pas le reste, pas la dérive).")
     only.add_argument("--skip-funds", action="store_true",
                       help="Seulement les prédictions que les fonds n'utilisent pas (leur cycle a déjà eu lieu : il ne se relance pas).")
+    parser.add_argument("--funds-stamp", default=None,
+                        help="Fichier écrit quand le cycle des fonds est allé au bout (jour du cycle, en JSON). La tâche de nuit le lit pour "
+                             "relancer une fois une phase `--funds-only` interrompue avant le cycle.")
     args = parser.parse_args(argv)
 
     _configure_logging(args.log_file)
+    logger.info("début (pid %d) : %s", os.getpid(), " ".join(argv if argv is not None else sys.argv[1:]))
 
     if args.base_dir:
         base_dir = os.path.abspath(args.base_dir)
@@ -203,6 +219,15 @@ def main(argv: list[str] | None = None) -> int:
     refresh_predictions_snapshot(args.db_path, background=False)   # le tableau de /predictions est prêt le matin, calculé ici et non à l'ouverture de la page
     trim_feature_cache()                                  # une fois par exécution : le cache de variables ne dépend plus de la fin d'un entraînement
     return code
+
+
+def _write_funds_stamp(path: str | None) -> None:
+    """Le cycle des fonds est allé au bout : la tâche de nuit ne relancera pas la phase des fonds."""
+    if not path:
+        return
+    now = dt.datetime.now().astimezone()                # jour LOCAL : celui que la tâche de nuit compare (Get-Date)
+    with contextlib.suppress(OSError), open(path, "w", encoding="utf-8") as f:
+        json.dump({"day": now.date().isoformat(), "at": now.isoformat(timespec="seconds"), "pid": os.getpid()}, f)
 
 
 def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandidate]) -> int:
@@ -239,6 +264,8 @@ def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandid
                              f"{report['selected']} modèle(s), {report['placed']} ordre(s) placé(s), {report['pending']} en attente."))
             except Exception:
                 logger.exception("AUTOPILOT FAIL")           # n'arrête rien et ne change pas le code de sortie
+            else:
+                _write_funds_stamp(args.funds_stamp)
         if args.funds_only:
             return 1 if summary.failures else 0
         if other is None and (rest or args.skip_funds):
@@ -264,5 +291,20 @@ def _predict_and_report(args: argparse.Namespace, candidates: list[PredictCandid
     return 1 if summary.failures else 0
 
 
+def _main_logged() -> int:
+    code = 1
+    try:
+        code = main()
+        return code
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        raise
+    except BaseException:
+        logger.exception("arrêt sur exception")
+        raise
+    finally:
+        logger.info("fin (pid %d) : code %s", os.getpid(), code)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_main_logged())

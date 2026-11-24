@@ -12,6 +12,8 @@ same number of rows the outer walk-forward removes (`inner_cv_gap`).
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import optuna
 from sklearn.model_selection import TimeSeriesSplit
@@ -21,6 +23,8 @@ from patrick.models.registry import get_classifier
 from patrick.models.samplers import get_sampler
 from patrick.pipeline import pause
 from patrick.validation.metrics import metrics
+
+logger = logging.getLogger(__name__)
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -34,7 +38,8 @@ def safe_resample(sampler_name: str, seed: int, X: np.ndarray, y: np.ndarray) ->
     in both places."""
     try:
         return get_sampler(sampler_name, seed).fit_resample(X, y)
-    except Exception:  # noqa: BLE001 -- imblearn samplers raise various errors on small classes; documented raw fallback
+    except Exception as exc:  # noqa: BLE001 -- imblearn samplers raise various errors on small classes; documented raw fallback
+        logger.debug("imblearn samplers raise various errors on small classes; documented raw fallback : %s: %s", type(exc).__name__, exc)
         return X, y
 
 

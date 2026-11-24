@@ -198,6 +198,18 @@ def worker_running() -> bool:
     return False
 
 
+NIGHTLY_MARKERS = ("daily_predict.py", "nightly_run.ps1")
+
+
+def nightly_running() -> bool:
+    """La tâche de nuit (`nightly_run.ps1`, ou l'une de ses passes `daily_predict.py`) tourne-t-elle ?"""
+    for proc in psutil.process_iter(["cmdline"]):
+        cmd = proc.info.get("cmdline") or []
+        if any(marker in arg for arg in cmd for marker in NIGHTLY_MARKERS):
+            return True
+    return False
+
+
 # --- fenêtre ----------------------------------------------------------------------------------------------------
 
 def browser_candidates() -> list[Path]:

@@ -110,4 +110,8 @@ def suspect_reason(metrics: dict | None) -> str | None:
     auc = _finite(metrics.get("AUC_ovr_4cls"))
     if auc is not None and auc >= SUSPECT_AUC:
         return f"AUC {auc:.2f} ≥ {SUSPECT_AUC:.2f}"
+    # L'AUC de direction est le critère de sélection depuis l'ADR 0013 : une fuite qui classe sans trancher la dépasse avant le F1.
+    auc_dir = _finite(metrics.get("AUC_dir"))
+    if auc_dir is not None and auc_dir >= SUSPECT_AUC:
+        return f"AUC_dir {auc_dir:.2f} ≥ {SUSPECT_AUC:.2f}"
     return None

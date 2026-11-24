@@ -6,6 +6,7 @@ universe for a full run -- here we want a fast response for a single symbol.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import time
 
@@ -16,6 +17,8 @@ import yfinance as yf
 from patrick.core.clock import utc_today
 from patrick.data.sources import fred_source
 from patrick.data.sources.fred_source import FRED_API_KEY_ENV
+
+logger = logging.getLogger(__name__)
 
 PERIOD_DAYS = {"1mo": 30, "3mo": 90, "6mo": 182, "1y": 365, "5y": 365 * 5, "max": None}
 
@@ -99,7 +102,8 @@ def _publisher_name(candidate):
 def latest_news(symbol: str, limit: int = 6) -> list[dict]:
     try:
         items = yf.Ticker(symbol).news or []
-    except Exception:  # noqa: BLE001 -- provider boundary: no news is a valid answer
+    except Exception as exc:  # noqa: BLE001 -- provider boundary: no news is a valid answer
+        logger.info("provider boundary: no news is a valid answer : %s: %s", type(exc).__name__, exc)
         return []
 
     out = []

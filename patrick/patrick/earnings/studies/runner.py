@@ -21,6 +21,8 @@ from patrick.earnings.studies import base
 from patrick.earnings.studies.base import REGISTRY, Ctx
 from patrick.validation.fdr import benjamini_hochberg
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger(__name__)
 
 
@@ -35,7 +37,8 @@ def data_version(ctx: Ctx, study: base.Study) -> str:
     if "news" in study.needs:
         try:
             version += f"|news{ctx.conn.execute('SELECT COUNT(*) FROM news_item').fetchone()[0]}"
-        except Exception:  # noqa: BLE001 -- base sans table de news : version sans elle
+        except Exception as exc:  # noqa: BLE001 -- base sans table de news : version sans elle
+            logger.debug("base sans table de news : version sans elle : %s: %s", type(exc).__name__, exc)
             version += "|news0"
     return version
 

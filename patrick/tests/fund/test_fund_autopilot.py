@@ -361,6 +361,23 @@ def test_run_refuses_a_disabled_or_unconfigured_autopilot(conn, world):
         autopilot.run(conn, sid, DAY0)
 
 
+def test_a_cycle_held_by_another_process_is_not_run_twice(conn, world):
+    """L'application, la nuit et la CLI sont trois processus : un cycle tenu par l'un n'est pas refait en même temps par l'autre."""
+    from lock_support import Holder
+
+    from patrick.system import interprocess_lock as il
+
+    world.cell("AAPL", 3, live=AAPL_SIGNALS)
+    sid = _strategy(conn)
+    autopilot.configure(conn, sid, {})
+    with Holder(il.sqlite_file(conn) + ".autopilot.lock"):
+        with pytest.raises(autopilot.CycleBusy, match="autre processus"):
+            autopilot.run(conn, sid, DAY0, lock_timeout_s=0)
+        assert not autopilot.managed_rules(conn, sid)          # rien posé pendant que l'autre tient le cycle
+    autopilot.run(conn, sid, DAY0)                              # libéré : le cycle passe
+    assert autopilot.managed_rules(conn, sid)
+
+
 def test_the_last_run_summary_is_stored_with_the_settings(conn, world):
     world.cell("AAPL", 3, live=AAPL_SIGNALS)
     sid = _strategy(conn)

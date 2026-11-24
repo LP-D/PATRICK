@@ -59,6 +59,8 @@ class Env:
         mp.setattr(update, "apply", self._update)
         mp.setattr(launcher, "run_sync", self._sync)
         mp.setattr(launcher, "start_push_background", lambda: self.events.append("push"))
+        self.nightly = False
+        mp.setattr(runtime, "nightly_running", lambda: self.nightly)
         mp.setattr(launcher, "restart_launcher", lambda: self.events.append("restart_launcher"))
         self.counts = iter([])
         mp.setattr(runtime, "window_count", lambda: next(self.counts, 0))
@@ -142,6 +144,16 @@ def test_normal_launch_runs_every_step_in_order(env, tmp_path):
     assert launcher.run(rep) == 0
     assert env.events == ["update", "sync:pull", "start_server", "open_window:app", "stop_server", "push"]
     assert rep.errors == []
+
+
+def test_closing_the_window_during_the_night_leaves_the_publication_to_the_night(env, tmp_path):
+    """Le 21/11, la phase des fonds de la nuit s'est arrêtée 11 s après une publication lancée à la fermeture de la fenêtre."""
+    configure(tmp_path)
+    env.nightly = True
+    assert launcher.run(FakeReporter()) == 0
+    assert "stop_server" in env.events and "push" not in env.events
+    log = (runtime.log_dir() / "launcher.log").read_text(encoding="utf-8")
+    assert "publication laissée à la nuit" in log
 
 
 def test_launch_records_what_happened_for_the_settings_page(env, tmp_path):

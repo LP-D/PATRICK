@@ -10,6 +10,7 @@ import contextlib
 import hashlib
 import html
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -130,6 +131,8 @@ from patrick.webapp.routes import (
 from patrick.webapp.routes import (
     workbench as workbench_routes,
 )
+
+logger = logging.getLogger(__name__)
 
 # feature/ticker-stats-panel: the two DEFAULT_TARGET_GROUPS keys backing
 # `/commodities` and `/macro` -- named once here rather than re-typed at
@@ -2810,7 +2813,8 @@ def run_advice_fragment(request: Request, run_id: str):
     conn = trackdb.connect()
     try:
         advice = retrain_advisor.advise_run(conn, run_id, history=data_health.history_depths())
-    except Exception:  # noqa: BLE001 -- le conseil ne doit jamais faire échouer la page du run
+    except Exception as exc:  # noqa: BLE001 -- le conseil ne doit jamais faire échouer la page du run
+        logger.warning("le conseil ne doit jamais faire échouer la page du run : %s: %s", type(exc).__name__, exc)
         advice = None
     finally:
         conn.close()

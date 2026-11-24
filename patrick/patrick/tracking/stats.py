@@ -12,6 +12,7 @@ import pandas as pd
 from patrick.config.defaults import DESCRIPTIVE_HORIZONS
 from patrick.config.target_label import is_alpha_label
 from patrick.core.numeric import is_nan
+from patrick.validation.diebold_mariano import one_sided_better_p
 from patrick.validation.fdr import benjamini_hochberg
 from patrick.validation.pbo import compute_pbo
 from patrick.validation.pbo_reliability import pbo_reliability
@@ -228,7 +229,7 @@ def fdr_across_targets(conn: sqlite3.Connection, alpha: float = 0.10,
             continue
         p = float(p_value)
         if one_sided:
-            p = p / 2 if (dm_stat is not None and not is_nan(dm_stat) and dm_stat < 0) else 1 - p / 2
+            p = one_sided_better_p(p, dm_stat)
         # Méthode 2 (ADR 0008) : le test porte sur la DIRECTION. Une cible qui en a un l'utilise seul ; une cible qui n'a que des p-values
         # sur les 4 classes (méthode 1, biaisées vers le rejet pour une baseline qui prédit toujours la même classe) les garde, faute de mieux.
         (per_target if loss == "direction" else legacy_loss).setdefault(target, []).append(p)

@@ -1,6 +1,7 @@
 """Estimation probabilistique et petit échantillon (§3.L), modèle prédictif en panel (§5) et score composite (§4)."""
 from __future__ import annotations
 
+import logging
 import warnings
 
 import numpy as np
@@ -20,6 +21,8 @@ from patrick.earnings.studies.base import (
     study,
     table,
 )
+
+logger = logging.getLogger(__name__)
 
 N_MIN_MODEL = 60
 
@@ -84,7 +87,8 @@ def l_quantile(ctx: Ctx, p: dict) -> dict:
         try:
             fit = sm.QuantReg(y[y.notna()].to_numpy(), sm.add_constant(X, has_constant="add")).fit(q=t, max_iter=500)
             coefs[t] = fit.params[1:]
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 -- régression quantile qui ne converge pas : coefficients vides, pas d'étude en erreur
+            logger.warning("régression quantile %s non ajustée, coefficients vides : %s: %s", t, type(exc).__name__, exc)
             coefs[t] = np.full(len(model.AMP_FEATURES), np.nan)
     coef_rows = [[f, float(coefs[0.5][i]), float(coefs[0.9][i])] for i, f in enumerate(model.AMP_FEATURES)]
     return ok([table("Quantiles prédits, hors échantillon (walk-forward purgé)", ["Quantile", "N test", "Couverture observée", "Perte pinball (modèle)",
