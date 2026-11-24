@@ -285,6 +285,11 @@
       <label>{{ t('fund_auto_dd_stop') }}
         <input type="number" name="max_drawdown" min="1" max="90" step="1" value="{{ ((autopilot.settings.max_drawdown * 100) | round(0) | int) if autopilot.settings.max_drawdown is not none else '' }}" placeholder="{{ t('fund_auto_dd_none') }}" data-auto-field>
       </label>
+      <label>{{ t('fund_auto_vol_model') }}
+        <select name="vol_model" data-auto-field>
+          {% for m in ('trailing', 'har') %}<option value="{{ m }}"{% if (autopilot.settings.vol_model or 'trailing') == m %} selected{% endif %}>{{ t('fund_auto_vol_' ~ m) }}</option>{% endfor %}
+        </select>
+      </label>
       {% if s.wrapper != 'PEA' %}
       <label class="check"><input type="checkbox" name="allow_short" data-auto-field{% if autopilot.settings.allow_short %} checked{% endif %}> {{ t('fund_auto_short') }}</label>
       {% endif %}

@@ -47,6 +47,7 @@ logger = logging.getLogger("patrick.fund.autopilot")
 MANAGER = "autopilot"
 MAX_GROSS = 2.0
 VOL_WINDOW = 60                  # séances de la volatilité qui pondère les cibles
+VOL_MODELS = ("trailing", "har")  # volatilité glissante, ou prévision HAR du lendemain (`fund/vol_forecast.py`, A1)
 SIZING_TOLERANCE = 0.10          # une taille ne change que si le budget a bougé de plus de 10 %
 
 LABELS = {
@@ -72,6 +73,7 @@ class Settings:
     max_drawdown: float | None = None                # repli sous le plus haut au-delà duquel le pilote n'ouvre plus rien (None = sans arrêt)
     min_position: float | None = None                # € : taille minimale d'une position ; les modèles les moins bien classés qui n'y atteignent pas sont écartés (None = aucune)
     combo: dict | None = None                        # fonds de test combiné (`fund/combo.py`) : {rl, vol, cost_multiple} ; None = signal de direction brut
+    vol_model: str = "trailing"                      # volatilité qui dimensionne : « trailing » (60 séances) ou « har » (prévision HAR, A1)
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> Settings:
@@ -101,14 +103,17 @@ class Settings:
             minimum = _number(minimum, "min_position")
             if minimum <= 0:
                 raise store.FundError("min_position invalide : montant strictement positif attendu, ou vide")
+        vol_model = raw.get("vol_model", base.vol_model)
+        if vol_model not in VOL_MODELS:
+            raise store.FundError(f"vol_model invalide : {', '.join(VOL_MODELS)} attendu")
         return cls(selection=selection.Policy.from_dict(raw), gross=gross, allow_short=allow_short,
                    min_confidence=confidence, max_class_share=share, max_drawdown=drawdown, min_position=minimum,
-                   combo=combo_mod.check_settings(raw.get("combo")))
+                   combo=combo_mod.check_settings(raw.get("combo")), vol_model=vol_model)
 
     def to_dict(self) -> dict:
         return {**self.selection.to_dict(), "gross": self.gross, "allow_short": self.allow_short,
                 "min_confidence": self.min_confidence, "max_class_share": self.max_class_share, "max_drawdown": self.max_drawdown,
-                "min_position": self.min_position, "combo": self.combo}
+                "min_position": self.min_position, "combo": self.combo, "vol_model": self.vol_model}
 
 
 def _number(value, name: str) -> float:
@@ -169,11 +174,17 @@ def _instrument_for(symbol: str, wrapper: str, settings: Settings, groups: dict[
     return {"kind": "cfd", "symbol": sym, "spec": {}}, settings.allow_short, None
 
 
-def _volatility(conn: sqlite3.Connection, symbol: str, today: dt.date) -> float | None:
-    """σ des rendements des `VOL_WINDOW` dernières séances connues à `today` (jamais le futur), ou None sans cotation."""
+def _volatility(conn: sqlite3.Connection, symbol: str, today: dt.date, model: str = "trailing") -> float | None:
+    """σ des rendements des `VOL_WINDOW` dernières séances connues à `today` (jamais le futur), ou None sans cotation. `model="har"` : la
+    volatilité PRÉVUE pour le lendemain par un HAR-RV (`fund/vol_forecast.py`), repli sur la glissante si l'historique ne suffit pas."""
     df = prices.ensure_bars(conn, symbol).df
     if df is None or df.empty:
         return None
+    if model == "har":
+        from patrick.fund import vol_forecast
+        forecast = vol_forecast.har_sigma(df, pd.Timestamp(today))
+        if forecast and math.isfinite(forecast["sigma"]) and forecast["sigma"] > 0:
+            return forecast["sigma"]
     close = df["close"].dropna()
     close = close[close.index <= pd.Timestamp(today)]
     vol = float(close.pct_change().dropna().tail(VOL_WINDOW).std()) if len(close) > 2 else float("nan")
@@ -232,7 +243,7 @@ def build_plan(conn: sqlite3.Connection, strategy: dict, settings: Settings, tod
         if instrument is None:
             _reject(excluded, model, why)
             continue
-        vol = _volatility(conn, model["target"], today)
+        vol = _volatility(conn, model["target"], today, settings.vol_model)
         unit = _unit_notional(conn, strategy["strategy_id"], instrument["symbol"], today) if instrument["kind"] == "cfd" else None
         if vol is None or (instrument["kind"] == "cfd" and unit is None):
             _reject(excluded, model, "no_quotes")

@@ -1,0 +1,16 @@
+{# Volatilité prévue (A1, D8, `fund/vol_forecast.py`) : une taille de position, jamais une direction -- section à part des signaux. #}
+{% from "_components.html" import metric %}
+{% macro pct(v, d=1) %}{% if v is none %}—{% else %}{{ (('%.' ~ d ~ 'f') | format(v * 100)) | replace('.', ',' if lang == 'fr' else '.') }} %{% endif %}{% endmacro %}
+{% if not vf %}
+<p class="hint">{{ t('vf_none') }}</p>
+{% else %}
+<div class="metric-grid">
+  {{ metric(t('vf_next'), pct(vf.sigma, 2), t('vf_annual', v=pct(vf.sigma * 15.8745, 1)), 'neutral') }}
+  {{ metric(t('vf_trailing'), pct(vf.trailing, 2), t('vf_annual', v=pct((vf.trailing or 0) * 15.8745, 1)), 'neutral') }}
+  {% if vf.eval and vf.eval.skill is not none %}
+  {{ metric(t('vf_skill'), (('%+.1f' | format(100 * vf.eval.skill)) | replace('.', ',' if lang == 'fr' else '.')) ~ ' %', t('vf_skill_sub', n=vf.eval.n),
+            'ok' if vf.eval.skill > 0 else 'warning') }}
+  {% endif %}
+</div>
+<p class="hint">{{ t('vf_hint', proxy=t('vf_proxy_gk') if vf.ohlc else t('vf_proxy_r2'), date=vf.as_of) }}</p>
+{% endif %}

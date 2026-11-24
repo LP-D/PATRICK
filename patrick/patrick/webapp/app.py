@@ -2226,6 +2226,29 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
     return None
 
 
+@app.get("/fragments/vol-forecast/{symbol}")
+def vol_forecast_fragment(request: Request, symbol: str):
+    """Volatilité prévue d'un actif (A1, D8) : HAR-RV du lendemain contre la volatilité glissante, jugés en QLIKE. Une TAILLE de position,
+    jamais une direction : affichée à part des signaux."""
+    import pandas as pd
+
+    from patrick.fund import vol_forecast
+    source = forms.TARGET_SOURCE_BY_SYMBOL.get(symbol)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    hist = market_data.price_history(symbol, source, "5y")
+    out = None
+    if hist.get("closes"):
+        df = pd.DataFrame({"close": hist["closes"]}, index=pd.to_datetime(hist["dates"]))
+        for key, col in (("opens", "open"), ("highs", "high"), ("lows", "low")):
+            if hist.get(key) and len(hist[key]) == len(df):
+                df[col] = pd.to_numeric(pd.Series(hist[key], index=df.index), errors="coerce")
+        forecast = vol_forecast.har_sigma(df)
+        if forecast:
+            out = {**forecast, "eval": vol_forecast.evaluate(df), "ohlc": {"open", "high", "low"}.issubset(df.columns)}
+    return templates.TemplateResponse(request, "_vol_forecast.html", {**_i18n_context(request), "vf": out})
+
+
 @app.get("/fragments/pooled-heatmap")
 def pooled_heatmap_fragment(request: Request):
     """Carte de chaleur cible x horizon de l'AUC regroupée (D10), sur la Synthèse : où est le signal, en un coup d'oeil."""
