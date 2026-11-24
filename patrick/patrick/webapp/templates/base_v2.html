@@ -192,16 +192,21 @@ script below (no flash), otherwise the OS preference applies.
                     <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
                         {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') }}</span><span class="kbd">Ctrl K</span>
                     </button>
-                    {% for u in utility_links(request.url.path) %}
-                    {% set u_label = t(u.label_key) if (t and u.label_key) else u.label %}
-                    <a class="icon-btn" href="{{ u.url }}" id="nav-{{ u.slug }}" title="{{ u_label }}" aria-label="{{ u_label }}" {% if u.active %}aria-current="page"{% endif %}>{{ nav_icon(u.slug) }}</a>
-                    {% endfor %}
-                    <button type="button" class="icon-btn notify-toggle" id="notify-toggle" aria-pressed="false" aria-label="{{ t('nt_toggle_off') }}" title="{{ t('nt_toggle_off') }}">
-                        <span class="icon-bell-on" hidden>{{ icon('bell') }}</span><span class="icon-bell-off">{{ icon('bell-off') }}</span>
-                    </button>
-                    <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') }}" title="{{ t('theme_toggle') }}">
-                        <span class="icon-moon">{{ icon('moon') }}</span><span class="icon-sun">{{ icon('sun') }}</span>
-                    </button>
+                    {# ≤ 480 px : la barre déborderait (WCAG 1.4.10, 320 px) ; ces boutons passent dans le menu « Plus d'actions » (shell.js), libellés
+                       visibles tirés de leur aria-label. Au-delà, l'enveloppe est `display: contents` : barre, ordre et tabulation inchangés. #}
+                    <button type="button" class="icon-btn topbar-more-btn" id="topbar-more-btn" aria-expanded="false" aria-controls="topbar-more" aria-label="{{ t('topbar_more') }}" title="{{ t('topbar_more') }}">{{ icon('more') }}</button>
+                    <div class="topbar-more" id="topbar-more">
+                        {% for u in utility_links(request.url.path) %}
+                        {% set u_label = t(u.label_key) if (t and u.label_key) else u.label %}
+                        <a class="icon-btn" href="{{ u.url }}" id="nav-{{ u.slug }}" title="{{ u_label }}" aria-label="{{ u_label }}" {% if u.active %}aria-current="page"{% endif %}>{{ nav_icon(u.slug) }}</a>
+                        {% endfor %}
+                        <button type="button" class="icon-btn notify-toggle" id="notify-toggle" aria-pressed="false" aria-label="{{ t('nt_toggle_off') }}" title="{{ t('nt_toggle_off') }}">
+                            <span class="icon-bell-on" hidden>{{ icon('bell') }}</span><span class="icon-bell-off">{{ icon('bell-off') }}</span>
+                        </button>
+                        <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="{{ t('theme_toggle') }}" title="{{ t('theme_toggle') }}">
+                            <span class="icon-moon">{{ icon('moon') }}</span><span class="icon-sun">{{ icon('sun') }}</span>
+                        </button>
+                    </div>
                 </div>
             </header>
 

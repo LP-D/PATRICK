@@ -374,6 +374,37 @@
         });
     }
 
+    /* ---- Menu « Plus d'actions » (barre du haut, ≤ 640 px) ----
+       Même bouton à bascule que le menu en blocs : clic, ↓ pour y entrer, Échap (le focus revient au bouton), clic en dehors, sortie
+       du focus. Au-delà de 640 px le bouton est masqué et l'enveloppe en `display: contents` : la classe `is-open` n'y change rien. */
+    var moreBtn = document.getElementById("topbar-more-btn");
+    var morePanel = document.getElementById("topbar-more");
+    if (moreBtn && morePanel) {
+        var inMore = function (el) { return !!el && (moreBtn.contains(el) || morePanel.contains(el)); };
+        var moreOpen = function () { return moreBtn.getAttribute("aria-expanded") === "true"; };
+        var setMore = function (open, focusBack) {
+            moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+            morePanel.classList.toggle("is-open", open);
+            if (!open && focusBack) moreBtn.focus();
+        };
+        moreBtn.addEventListener("click", function () { setMore(!moreOpen()); });
+        moreBtn.addEventListener("keydown", function (e) {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMore(true);
+                var first = morePanel.querySelector("a[href], button");
+                if (first) first.focus();
+            }
+        });
+        document.addEventListener("pointerdown", function (e) { if (moreOpen() && !inMore(e.target)) setMore(false); });
+        [moreBtn, morePanel].forEach(function (el) {
+            el.addEventListener("focusout", function (e) { if (moreOpen() && e.relatedTarget && !inMore(e.relatedTarget)) setMore(false); });
+            el.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && moreOpen()) { e.stopPropagation(); setMore(false, true); }
+            });
+        });
+    }
+
     /* ---- Retour en haut ----
        Le bouton apparaît après un écran de défilement ; respecte « réduire les animations ». */
     var toTop = document.getElementById("to-top");

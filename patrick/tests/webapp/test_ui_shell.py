@@ -118,3 +118,38 @@ def test_shell_offers_pins_machine_chip_and_shortcut_help(client):
         assert i18n.get(key), key
     shell = (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")
     assert "patrick-pins" in shell and "patrick-recent" in shell and "/api/run-state" in shell
+
+
+# ---------------------------------------------------------------- barre du haut à 320 px (WCAG 2.2, critère 1.4.10 « Reflow »)
+def test_topbar_groups_secondary_buttons_in_an_overflow_menu(client):
+    """≤ 480 px : Vocabulaire, Réglages, Santé, Diagnostics, la cloche et le thème passent dans le menu « Plus d'actions » (la barre
+    débordait de 36 px à 320 px). Au-delà, l'enveloppe est `display: contents` : la barre reste identique."""
+    page = client.get("/").text
+    bar = page[page.index('<div class="topbar-actions">'):page.index("</header>")]
+    btn = re.search(r'<button[^>]*id="topbar-more-btn"[^>]*>', bar).group(0)
+    assert 'aria-expanded="false"' in btn and 'aria-controls="topbar-more"' in btn and 'aria-label="' in btn
+    menu = bar[bar.index('id="topbar-more"'):]
+    for hook in ('id="nav-vocabulary"', 'id="nav-settings"', 'id="nav-health"', 'id="nav-diagnostics"', 'id="notify-toggle"',
+                 'id="theme-toggle"'):
+        assert hook in menu, hook
+    # la palette (loupe) et l'épingle restent dans la barre, avant le bouton du menu
+    assert bar.index('id="pin-toggle"') < bar.index('id="cmdk-open"') < bar.index('id="topbar-more-btn"')
+    css = (BASE_DIR / "static" / "patrick.css").read_text(encoding="utf-8")
+    assert re.search(r"\.topbar-more\s*\{\s*display:\s*contents", css)
+    assert "#nav-vocabulary, #nav-settings, #nav-diagnostics { display: none; }" not in css   # plus aucun bouton retiré sans recours
+    assert "topbar-more-btn" in (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")
+
+
+def test_topbar_trail_keeps_its_room_on_a_narrow_desktop():
+    """1024 px, rail ouvert : la loupe gardait 280 px et le fil de localisation tombait à 1 px, son texte passant sous la puce. Les
+    libellés de la loupe et de la puce se replient (une ligne visible) et les actions cèdent leur place avant le fil."""
+    css = (BASE_DIR / "static" / "patrick.css").read_text(encoding="utf-8")
+
+    def rule(selector: str) -> str:
+        start = css.index("\n" + selector + " {")
+        return css[start:css.index("}", start)]
+
+    assert "min-width" not in rule(".search-trigger")
+    assert "flex-shrink: 10000" in rule(".topbar-actions")
+    for selector in (".search-trigger .search-label", ".machine-chip-text"):
+        assert "-webkit-line-clamp: 1" in rule(selector) and "min-width: 0" in rule(selector), selector

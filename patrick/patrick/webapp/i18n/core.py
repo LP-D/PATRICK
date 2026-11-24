@@ -497,6 +497,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "brand_tagline": {"fr": "Station de recherche quantitative", "en": "Quant research station"},
     "sidebar_toggle": {"fr": "Réduire / déplier la navigation", "en": "Collapse / expand navigation"},
     "nav_open": {"fr": "Ouvrir la navigation", "en": "Open navigation"},
+    "topbar_more": {"fr": "Plus d'actions", "en": "More actions"},
     "theme_toggle": {"fr": "Basculer thème clair / sombre", "en": "Toggle light / dark theme"},
     "cmdk_title": {"fr": "Navigation rapide", "en": "Quick navigation"},
     # Boîte de confirmation partagée (base_v2.html / static/confirm.js) : remplace window.confirm.
