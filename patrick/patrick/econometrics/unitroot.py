@@ -5,10 +5,13 @@ Les deux familles de tests ont des hypothèses nulles OPPOSÉES : ADF/PP/DF-GLS 
 suppose la stationnarité (rejeter = non stationnaire). Ne conclure que lorsqu'elles s'accordent."""
 from __future__ import annotations
 
+import logging
 import warnings
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 MIN_OBS = 30
 ALPHA = 0.05
@@ -32,7 +35,8 @@ def cross_verdict(adf_p: float | None, kpss_p: float | None, alpha: float = ALPH
 def _summary(res, null: str, alpha: float) -> dict:
     try:
         crit = {str(k): float(v) for k, v in res.critical_values.items()}
-    except Exception:  # noqa: BLE001 -- certaines versions n'exposent pas les valeurs critiques : on les omet, jamais le test
+    except Exception as exc:  # noqa: BLE001 -- certaines versions n'exposent pas les valeurs critiques : on les omet, jamais le test
+        logger.debug("certaines versions n'exposent pas les valeurs critiques : on les omet, jamais le test : %s: %s", type(exc).__name__, exc)
         crit = {}
     return {"stat": float(res.stat), "pvalue": float(res.pvalue), "lags": int(res.lags), "nobs": int(res.nobs), "null": null,
             "reject": bool(res.pvalue < alpha), "critical_values": crit}

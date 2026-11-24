@@ -25,6 +25,7 @@ champion that stays in title.
 from __future__ import annotations
 
 import inspect
+import logging
 import math
 import time
 import traceback
@@ -34,6 +35,8 @@ from patrick.pipeline import engine
 from patrick.tracking import champions, relaunch_stats
 from patrick.tracking import db as trackdb
 from patrick.validation import metric_panel, suspicion
+
+logger = logging.getLogger(__name__)
 
 RULE = metric_panel.RULES[metric_panel.CRITERION_AUC_BRIER]
 
@@ -252,7 +255,8 @@ def _job_of(st, horizon: int) -> str | None:
     try:
         row = st.conn.execute("SELECT job_id FROM run WHERE run_id = ?", (st.run_ids[horizon],)).fetchone()
         return row[0] if row else None
-    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+    except Exception as exc:  # noqa: BLE001 -- mesure : jamais bloquante
+        logger.debug("mesure : jamais bloquante : %s: %s", type(exc).__name__, exc)
         return None
 
 

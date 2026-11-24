@@ -10,11 +10,14 @@ Lecture seule, sauf `log_replacement` (une ligne de journal).
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import random
 import sqlite3
 
 from patrick.data.session_calendar import classify_asset_class
 from patrick.fund import engine, prices, service, store, systematic
+
+logger = logging.getLogger(__name__)
 
 MANUAL = "manual"
 COIN_SEEDS = 8               # tirages du témoin « pile ou face » (leur moyenne)
@@ -110,7 +113,8 @@ def rule_pnl(conn: sqlite3.Connection, strategy_id: str, rule_id: str, today: dt
         return None
     try:
         snapshot = service.strategy_snapshot(conn, strategy, today)
-    except Exception:  # noqa: BLE001 -- cotations indisponibles : le journal note le remplacement sans montant
+    except Exception as exc:  # noqa: BLE001 -- cotations indisponibles : le journal note le remplacement sans montant
+        logger.info("cotations indisponibles : le journal note le remplacement sans montant : %s: %s", type(exc).__name__, exc)
         return None
     owner = _position_rules(snapshot["orders"])
     return sum(float(p["pnl"] or 0.0) for p in snapshot["positions"] if owner.get(p["position_id"]) == rule_id)

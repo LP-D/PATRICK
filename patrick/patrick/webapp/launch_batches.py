@@ -179,7 +179,8 @@ def note_relaunch(job_id: str, parent_run_id: str, key: str, source: str) -> Non
 
     try:
         conn = trackdb.connect()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 -- mesure seulement : une base inaccessible n'empêche jamais un lancement
+        logger.warning("origine du lancement non enregistrée (base inaccessible) : %s: %s", type(exc).__name__, exc)
         return
     try:
         relaunch_stats.record_relaunch(conn, job_id, parent_run_id, key, source)

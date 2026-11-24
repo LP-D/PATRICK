@@ -6,6 +6,7 @@ deux minutes ; au-delà du budget, la taille est donnée comme partielle."""
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import platform
 import re
@@ -19,6 +20,8 @@ from pathlib import Path
 import psutil
 
 from patrick.core import paths
+
+logger = logging.getLogger(__name__)
 
 SIZE_BUDGET_S = 6.0
 SIZE_TTL_S = 120.0
@@ -123,7 +126,8 @@ def _version() -> str | None:
     try:
         from importlib.metadata import version
         return version("patrick")
-    except Exception:  # noqa: BLE001 -- paquet non installé en mode éditable : version inconnue, pas une erreur
+    except Exception as exc:  # noqa: BLE001 -- paquet non installé en mode éditable : version inconnue, pas une erreur
+        logger.debug("paquet non installé en mode éditable : version inconnue, pas une erreur : %s: %s", type(exc).__name__, exc)
         return None
 
 
