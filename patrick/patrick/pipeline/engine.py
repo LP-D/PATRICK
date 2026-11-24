@@ -86,6 +86,7 @@ from patrick.features.interactions import (
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import non_flat_mask
 from patrick.models import calibration as calibration_lib
+from patrick.models import value as value_lib
 from patrick.models import deep as deep_module
 from patrick.models import registry
 from patrick.models.registry import get_classifier
@@ -582,6 +583,31 @@ class FoldData:
     # Column names of X_tr/X_te: the run's feature pool, minus the features
     # of the series this fold's universe reduction dropped (`_FoldUniverse`).
     feature_names: list[str] | None = None
+    # Objectif « valeur exacte » : rendements à l'horizon des lignes d'entraînement et de test, bornes de classe du test.
+    value: ValueData | None = None
+
+
+@dataclass
+class ValueData:
+    """Ce qu'un modèle de valeur exacte (`models/value.py`) lit en plus des classes : rendements à l'horizon (train, test), bornes
+    q25 / q75 de chaque ligne de test (son régime) et le trou à laisser avant les erreurs hors échantillon (l'horizon)."""
+    r_tr: np.ndarray
+    r_te: np.ndarray
+    lo_te: np.ndarray
+    hi_te: np.ndarray
+    gap: int = 0
+
+
+def _value_data(config: RunConfig, target_series: pd.Series, tr_mask: np.ndarray, te_mask: np.ndarray, horizon: int) -> ValueData | None:
+    """Les rendements et bornes des lignes retenues, pour un run de valeur exacte seulement (`None` sinon)."""
+    if config.objective.task != "value":
+        return None
+    ret, bounds = target_series.attrs.get("ret"), target_series.attrs.get("bounds")
+    if ret is None or bounds is None:
+        raise ValueError("objectif « valeur exacte » : la cible n'a pas de rendements attachés (features/target.py)")
+    r = ret.reindex(target_series.index).to_numpy(dtype=float)
+    b = bounds.reindex(target_series.index)
+    return ValueData(r[tr_mask], r[te_mask], b["lo"].to_numpy(dtype=float)[te_mask], b["hi"].to_numpy(dtype=float)[te_mask], int(horizon))
 
 
 class _FoldContext:
@@ -708,7 +734,8 @@ class _FoldContext:
 
         return FoldData(X_tr, y_tr, X_te, y_te, str(cut_date.date()), str(nxt_date.date()),
                          test_dates, baselines, baseline_predictions,
-                         sample_weight, ind_matrix, effective_n, feature_names)
+                         sample_weight, ind_matrix, effective_n, feature_names,
+                         value=_value_data(cfg, target_series, tr_mask, te_mask, horizon))
 
 
 def _selector_config_hash(config: RunConfig, n_feat: int, seed: int) -> str:
@@ -840,8 +867,12 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
                    sampler_name: str, algo: str, seed: int, calibration: bool = False,
                    sample_weight: np.ndarray | None = None, ind_matrix: np.ndarray | None = None,
                    uniqueness_weights_enabled: bool = True, calibration_method: str = "isotonic",
-                   calibration_gap: int = 0, **algo_overrides):
+                   calibration_gap: int = 0, value: ValueData | None = None, **algo_overrides):
     """Returns (metrics_dict, y_pred, predicted_confidence, p_up).
+
+    `value` (objectif « valeur exacte ») : le modèle est un régresseur du rendement à l'horizon (`models/value.py`), ses
+    probabilités de classes viennent de ses erreurs hors échantillon ; mêmes sorties, plus les mesures `IC`, `R2_oos`, `MAE`, `RMSE`,
+    `Hit_sign`. Ni rééchantillonnage ni calibration isotone (la distribution des erreurs en tient lieu).
     `predicted_confidence` (probability of the predicted class, one value per
     test row) feeds `prediction.y_proba`; `p_up` (P(slight up) + P(strong
     up), roadmap bloc 3) feeds `prediction.p_up` and the `Brier_up` /
@@ -877,6 +908,9 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
     pause.checkpoint()
     apply_uniqueness = (uniqueness_weights_enabled and sampler_name == "none"
                          and sample_weight is not None)
+    if value is not None:
+        return _fit_eval_value(X_tr, y_tr, X_te, y_te, value, algo, seed,
+                               sample_weight if apply_uniqueness else None, algo_overrides)
     resample = safe_resample
     if algo == registry.STACK_ALGO:
         # « Stacking » coupe l'entraînement par le temps et rééchantillonne lui-même ses lignes d'ajustement : un rééchantillonnage en
@@ -949,6 +983,26 @@ def _fit_eval_full(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: n
         met["ECE_up"] = calibration_lib.expected_calibration_error(p_up, y_up)
         # AUC de direction (sans seuil) et F1 de la décision tirée de P(hausse), centrée sur les prédictions récentes : `validation/direction.py`
         met.update(direction_lib.direction_metrics(y_up, p_up))
+    return met, y_pred, confidence, p_up
+
+
+def _fit_eval_value(X_tr: np.ndarray, y_tr: np.ndarray, X_te: np.ndarray, y_te: np.ndarray, value: ValueData, algo: str,
+                    seed: int, sample_weight: np.ndarray | None, algo_overrides: dict):
+    """Branche « valeur exacte » de `_fit_eval_full` : mêmes sorties (mesures, classe prédite, confiance, P(hausse))."""
+    model = value_lib.ValueModel(algo, seed=seed, params=dict(algo_overrides)).fit(
+        X_tr, y_tr, value.r_tr, sample_weight=sample_weight, gap=value.gap)
+    r_hat = model.predict_value(X_te)
+    proba = value_lib.class_proba(r_hat, model.residuals_, value.lo_te, value.hi_te)
+    best = np.argmax(proba, axis=1)
+    y_pred = value_lib.CLASSES[best]
+    confidence = proba[np.arange(len(best)), best]
+    p_up = proba[:, 2] + proba[:, 3]
+    met = metrics(y_te, y_pred, y_proba=align_proba(proba, list(value_lib.CLASSES)))
+    y_up = np.isin(np.asarray(y_te), calibration_lib.UP_CLASSES).astype(float)
+    met["Brier_up"] = calibration_lib.brier_score(p_up, y_up)
+    met["ECE_up"] = calibration_lib.expected_calibration_error(p_up, y_up)
+    met.update(direction_lib.direction_metrics(y_up, p_up))
+    met.update({k: v for k, v in value_lib.value_metrics(value.r_te, r_hat).items() if v is not None})
     return met, y_pred, confidence, p_up
 
 
@@ -1038,7 +1092,7 @@ def _evaluate_holdout(conn, snapshot_id: str, pool_builder: _FoldPoolBuilder, ta
     met, y_pred, confidence, p_up = _fit_eval_full(
         X_tr[:, cols], y_tr, X_te[:, cols], y_te, sampler_name, algo, seed,
         calibration=config.models.calibration, calibration_method=config.models.calibration_method,
-        calibration_gap=horizon, **best_params)
+        calibration_gap=horizon, value=_value_data(config, target_series, tr_mask, te_mask, horizon), **best_params)
     trackdb.record_holdout_access(
         conn, config.objective.run_label(), horizon, purpose, run_id=run_id,
         holdout_start=str(holdout_start_date.date()), holdout_end=str(all_dates_full[-1].date()), n_rows=len(y_te))
@@ -1189,7 +1243,7 @@ def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cf
         cols = _select(conn, ctx.target_col, horizon, snapshot_id, ctx.config, fd.X_tr, fd.y_tr, n_feat, seed)
         _, y_pred, _ = _fit_eval(fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te,
                                   sampler_name, algo, seed,
-                                  calibration=ctx.config.models.calibration, **best_params)
+                                  calibration=ctx.config.models.calibration, value=fd.value, **best_params)
         print("  [WARN] Diebold-Mariano on the last walk-forward fold (no holdout evaluation): "
               "selection-biased, excluded from the cross-target BH family.")
         dms = _dm_against_baselines(fd.y_te, y_pred, fd.baseline_predictions, class_name, horizon, loss)
@@ -1219,7 +1273,9 @@ def _require_alpha_columns(raw: pd.DataFrame, config: RunConfig) -> None:
 
 def _criterion(config: RunConfig) -> str:
     """Critère qui classe les candidats de ce run : celui de la configuration en walk-forward ; le schéma CPCV agrège des F1 par chemin
-    de test (`F1_dir` = leur médiane) et garde `F1_dir`."""
+    de test (`F1_dir` = leur médiane) et garde `F1_dir` -- sauf la valeur exacte, toujours classée sur son propre critère."""
+    if config.objective.task == "value":
+        return config.selection.criterion if config.selection.criterion in ("IC", "R2_oos") else "IC"
     return config.selection.criterion if config.validation.scheme == "walkforward" else "F1_dir"
 
 
@@ -1236,6 +1292,9 @@ def _config_hash(config: RunConfig) -> str:
     # toute autre cible (et tout run d'avant le champ) garde son hachage.
     if not session_rule_tag(config.objective.target_symbol, config.objective.target_source, config.objective.session_rule):
         obj_exclude.add("session_rule")
+    # Idem pour l'objectif : un modèle de direction (tout run d'avant le champ) garde son hachage.
+    if config.objective.task == "direction":
+        obj_exclude.add("task")
     exclude: dict = {"objective": obj_exclude} if obj_exclude else {}
     # Idem pour les réseaux de neurones (`models.deep`) : absent de tout run de machine learning, donc hors du hachage tant qu'il est `None`.
     if config.models.deep is None:
@@ -1713,6 +1772,8 @@ def _scan_walkforward_fold(st: _RunState, horizon: int, run_id: str, k: int, reg
     fit_kwargs = {"calibration": config.models.calibration, "calibration_method": config.models.calibration_method,
                   "calibration_gap": horizon, "sample_weight": fd.sample_weight, "ind_matrix": fd.ind_matrix,
                   "uniqueness_weights_enabled": config.sampling.uniqueness_weights}
+    if fd.value is not None:
+        fit_kwargs["value"] = fd.value
     if config.models.deep is not None and any(a in D.ALL_DL_ALGOS for a in config.models.algos):
         fit_kwargs["deep"] = config.models.deep.model_dump()          # les processus de calcul parallèle ne partagent pas l'état du parent
     if config.models.stacking:
@@ -2034,6 +2095,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
     try:
         best_params, best_cv = tune_config(
             fd.X_tr[:, cols], fd.y_tr, algo, sampler_name, n_trials=config.tuning.n_trials,
+            r=fd.value.r_tr if fd.value is not None else None,
             cv_splits=config.tuning.cv_splits, seed=st.seed, storage_path=optuna_storage_path,
             study_name=study_name, bounds=config.tuning.optuna_bounds, horizon=horizon,
             embargo_bars=config.validation.embargo_bars, purge=config.validation.purge,
@@ -2063,7 +2125,7 @@ def _tune_one(st: _RunState, cfg: dict, optuna_storage_path: str) -> None:
             fd.X_tr[:, cols], fd.y_tr, fd.X_te[:, cols], fd.y_te, sampler_name, algo, st.seed,
             calibration=config.models.calibration, calibration_method=config.models.calibration_method,
             calibration_gap=horizon, sample_weight=fd.sample_weight, ind_matrix=fd.ind_matrix,
-            uniqueness_weights_enabled=config.sampling.uniqueness_weights, **best_params)
+            uniqueness_weights_enabled=config.sampling.uniqueness_weights, value=fd.value, **best_params)
         st.tuned_rows.append({"horizon": horizon, "fold": k + 1, "regime": regime, "N": n_feat,
                               "sampler": sampler_name, "algo": algo, "best_params": str(best_params),
                               "effective_n_train": fd.effective_n, "test_start": fd.test_start,

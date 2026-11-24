@@ -133,7 +133,8 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
                  storage_path: str | None = None, study_name: str | None = None,
                  bounds: dict | None = None, horizon: int = 1,
                  embargo_bars: int | None = None, purge: bool = False,
-                 embargo_enabled: bool = True, registry=None, criterion: str = "F1_dir") -> tuple[dict, float]:
+                 embargo_enabled: bool = True, registry=None, criterion: str = "F1_dir",
+                 r: np.ndarray | None = None) -> tuple[dict, float]:
     """`storage_path`/`study_name` (Phase 3.2, `patrick resume`): persists
     the study in a dedicated SQLite file (`optuna.db`, never `patrick.db` —
     Optuna's internal schema changes between versions, must not be coupled
@@ -172,6 +173,19 @@ def tune_config(X: np.ndarray, y: np.ndarray, algo: str, sampler_name: str,
             pause.checkpoint()
             X_tr, X_va = X[tr_idx], X[va_idx]
             y_tr, y_va = y[tr_idx], y[va_idx]
+            if r is not None:
+                # Objectif « valeur exacte » : régresseur nu (la distribution des erreurs ne change pas le classement), noté sur
+                # l'IC ou le R² hors échantillon du bloc de validation.
+                from patrick.models import value as value_lib
+                reg = value_lib.get_regressor(algo, seed=seed, **params)
+                reg.fit(X_tr, r[tr_idx])
+                vm = value_lib.value_metrics(r[va_idx], np.asarray(reg.predict(X_va)).ravel())
+                key = criterion if criterion in ("IC", "R2_oos") else "IC"
+                scores.append(vm[key] if vm[key] is not None else 0.0)
+                trial.report(float(np.mean(scores)), i)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+                continue
             Xr, yr = safe_resample(sampler_name, seed, X_tr, y_tr)
             clf = get_classifier(algo, seed=seed, **params)
             clf.fit(Xr, yr)

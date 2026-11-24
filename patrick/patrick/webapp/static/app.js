@@ -1159,6 +1159,22 @@
     sync();
 })();
 
+/* Page « Lancer » : le critère de la valeur exacte n'apparaît que pour cet objectif ; l'empilement et les sur-échantillonneurs
+   n'existent pas pour un régresseur (le serveur refuse l'empilement et ne garde que « none »). */
+(function () {
+    "use strict";
+    var task = document.getElementById("task"), field = document.getElementById("value-criterion-field");
+    if (!task || !field) return;
+    function sync() {
+        var value = task.value === "value";
+        field.hidden = !value;
+        var stack = document.querySelector('input[name="stacking"]');
+        if (stack) { if (value) stack.checked = false; stack.disabled = value; }
+    }
+    task.addEventListener("change", sync);
+    sync();
+})();
+
 /* Page « Lancer » : grise les cibles dont l'historique est plus court que « Historique minimum (années) ». La première
    date connue de chaque cible est posée par le serveur (`data-first`) : aucun appel réseau, et le grisé suit la valeur
    saisie en direct. La validation qui fait foi reste côté serveur (`forms.build_config_dict`). */

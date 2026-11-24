@@ -370,3 +370,127 @@ def build_deep_classifier(arch: str, seed: int = 42, **params) -> DeepClassifier
     for key in ("hidden_size", "n_layers", "lookback", "epochs", "batch_size", "patience", "n_seeds", "n_heads", "kernel_size", "threads"):
         merged[key] = int(merged[key])
     return DeepClassifier(arch=arch, seed=seed, **merged)
+
+
+class DeepRegressor(DeepClassifier):
+    """Réseau de neurones qui prédit une VALEUR (le rendement à l'horizon : objectif « valeur exacte », `models/value.py`). Mêmes
+    architectures, même fenêtre, même arrêt précoce et mêmes graines que `DeepClassifier` ; une seule sortie, perte de Huber sur la
+    cible centrée-réduite (un rendement extrême ne tire pas tout l'apprentissage), prédiction remise à l'échelle et moyennée sur les graines."""
+
+    def fit(self, X, y, sample_weight=None):
+        torch = require_torch()
+        nn = torch.nn
+        if int(self.threads) != torch.get_num_threads():
+            torch.set_num_threads(int(self.threads))
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64).ravel()
+        if len(X) != len(y):
+            raise ValueError("X et y n'ont pas le même nombre de lignes")
+        n, d = X.shape
+        self.classes_ = np.array([0])                       # une sortie (les réseaux sont construits avec k = len(classes_))
+        X = np.nan_to_num(X, nan=0.0, posinf=CLIP, neginf=-CLIP)
+        y = np.nan_to_num(y, nan=0.0)
+        self.mu_ = X.mean(axis=0)
+        sd = X.std(axis=0)
+        self.sd_ = np.where(sd < 1e-8, 1.0, sd)
+        self.y_mu_, self.y_sd_ = float(y.mean()), float(y.std()) or 1.0
+        ys = ((y - self.y_mu_) / self.y_sd_).astype(np.float32)
+        self.n_features_in_ = d
+        Xs = self._standardize(X)
+        length = self.window
+        self.context_ = Xs[-(length - 1):].copy() if length > 1 else np.empty((0, d), dtype=np.float32)
+        if self.needs_history:
+            padded = np.vstack([np.repeat(Xs[:1], length - 1, axis=0), Xs])
+            inputs = self._windows(padded, length)
+        else:
+            inputs = Xs
+        n_val = round(n * float(self.val_fraction)) if int(self.patience) > 0 else 0
+        if n_val < MIN_VAL_ROWS or n - n_val < MIN_FIT_ROWS:
+            n_val = 0
+        n_tr = n - n_val
+        sw = np.ones(n) if sample_weight is None else np.asarray(sample_weight, dtype=float).ravel()
+        sw = np.where(np.isfinite(sw) & (sw > 0), sw, 0.0)
+        sw = sw / max(float(sw[:n_tr].mean()), 1e-12)
+        device = self._device(torch)
+        loss_fn = nn.HuberLoss(reduction="none", delta=1.0)
+
+        self.state_, self.epochs_run_ = [], []
+        for s in range(int(self.n_seeds)):
+            torch.manual_seed(int(self.seed) + s)
+            rng = np.random.default_rng(int(self.seed) + s)
+            net = self._make_net(torch, d, 1).to(device)
+            opt = torch.optim.AdamW(net.parameters(), lr=float(self.learning_rate), weight_decay=float(self.weight_decay))
+            tr_idx = np.arange(n_tr)
+            best, best_state, bad, ran = math.inf, None, 0, 0
+            for _epoch in range(int(self.epochs)):
+                net.train()
+                order = rng.permutation(tr_idx)
+                for start in range(0, n_tr, int(self.batch_size)):
+                    b = order[start:start + int(self.batch_size)]
+                    if len(b) < 2:
+                        continue
+                    xb = torch.from_numpy(np.ascontiguousarray(inputs[b])).to(device)
+                    yb = torch.from_numpy(ys[b]).to(device)
+                    wb = torch.from_numpy(sw[b].astype(np.float32)).to(device)
+                    opt.zero_grad(set_to_none=True)
+                    loss = (loss_fn(net(xb).squeeze(-1), yb) * wb).mean()
+                    loss.backward()
+                    if float(self.grad_clip) > 0:
+                        nn.utils.clip_grad_norm_(net.parameters(), float(self.grad_clip))
+                    opt.step()
+                ran += 1
+                if n_val:
+                    net.eval()
+                    with torch.no_grad():
+                        xv = torch.from_numpy(np.ascontiguousarray(inputs[n_tr:])).to(device)
+                        yv = torch.from_numpy(ys[n_tr:]).to(device)
+                        wv = torch.from_numpy(sw[n_tr:].astype(np.float32)).to(device)
+                        val = float((loss_fn(net(xv).squeeze(-1), yv) * wv).mean())
+                    if val < best - 1e-5:
+                        best, bad = val, 0
+                        best_state = {kk: v.detach().cpu().clone() for kk, v in net.state_dict().items()}
+                    else:
+                        bad += 1
+                        if bad >= int(self.patience):
+                            break
+            if best_state is not None:
+                net.load_state_dict(best_state)
+            self.state_.append({kk: v.detach().cpu().numpy().copy() for kk, v in net.state_dict().items()})
+            self.epochs_run_.append(ran)
+        self._nets = None
+        return self
+
+    def predict(self, X, context: str = "train"):
+        torch = require_torch()
+        if int(self.threads) != torch.get_num_threads():
+            torch.set_num_threads(int(self.threads))
+        X = np.asarray(X, dtype=np.float64)
+        if X.ndim != 2 or X.shape[1] != self.n_features_in_:
+            raise ValueError(f"X doit avoir {self.n_features_in_} colonnes")
+        inputs = self._input(self._standardize(X), context)
+        device = self._device(torch)
+        nets = self._networks(torch, device)
+        out = np.zeros(len(X), dtype=np.float64)
+        with torch.no_grad():
+            for start in range(0, len(X), 2048):
+                xb = torch.from_numpy(np.ascontiguousarray(inputs[start:start + 2048])).to(device)
+                p = sum(net(xb).squeeze(-1) for net in nets) / len(nets)
+                out[start:start + 2048] = p.cpu().numpy()
+        return self.y_mu_ + self.y_sd_ * out
+
+    def predict_proba(self, X, context: str = "train"):          # noqa: ARG002 -- un régresseur n'a pas de classes
+        raise AttributeError("DeepRegressor prédit une valeur : voir models/value.py pour les probabilités de classes")
+
+
+def build_deep_regressor(arch: str, seed: int = 42, **params) -> DeepRegressor:
+    """Comme `build_deep_classifier` ; `class_weight` est sans objet (ignoré)."""
+    if arch not in DL_ALGOS:
+        raise ValueError(f"Algorithme neuronal inconnu : '{arch}' (attendu : {DL_ALGOS})")
+    params = {k: v for k, v in params.items() if k != "class_weight"}
+    unknown = set(params) - set(D.DEFAULT_DEEP)
+    if unknown:
+        raise ValueError(f"Réglage(s) neuronal(aux) inconnu(s) : {sorted(unknown)}")
+    merged = {**D.DEFAULT_DEEP, **params}
+    for key in ("hidden_size", "n_layers", "lookback", "epochs", "batch_size", "patience", "n_seeds", "n_heads", "kernel_size", "threads"):
+        merged[key] = int(merged[key])
+    return DeepRegressor(arch=arch, seed=seed, **merged)

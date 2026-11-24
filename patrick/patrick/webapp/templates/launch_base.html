@@ -103,6 +103,23 @@
                 <p class="hint">{{ t('benchmark_hint') }}</p>
             </label>
 
+            {# Objectif du modèle : direction (classes) ou valeur exacte du rendement (régression, propres champions). Comme pour
+               l'alpha, les réglages propres à la valeur exacte n'apparaissent que quand elle est choisie (app.js). #}
+            <label>{{ t('field_task') }}
+                <select name="task" id="task">
+                    <option value="direction" {% if view.task != 'value' %}selected{% endif %}>{{ t('task_direction') }}</option>
+                    <option value="value" {% if view.task == 'value' %}selected{% endif %}>{{ t('task_value') }}</option>
+                </select>
+                <p class="hint">{{ t('task_hint') }}</p>
+            </label>
+            <label id="value-criterion-field"{% if view.task != 'value' %} hidden{% endif %}>{{ t('field_value_criterion') }}
+                <select name="value_criterion">
+                    <option value="IC" {% if view.value_criterion != 'R2_oos' %}selected{% endif %}>{{ t('value_criterion_ic') }}</option>
+                    <option value="R2_oos" {% if view.value_criterion == 'R2_oos' %}selected{% endif %}>{{ t('value_criterion_r2') }}</option>
+                </select>
+                <p class="hint">{{ t('value_criterion_hint') }}</p>
+            </label>
+
             <label>{{ t('field_horizons') }}
                 {# Phase 1 (feature/expanded-horizons) : la liste propose
                    toujours TOUTES les valeurs (courtes + moderees 15/20/30j +

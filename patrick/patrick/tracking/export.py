@@ -121,10 +121,21 @@ def export_best_model(pool, target_col: str, feature_pool: list[str], config: Ru
     X_n = X[:, cols]
     feat_names = [feature_pool[c] for c in cols]
 
-    Xr, yr = (X_n, y) if algo == STACK_ALGO else safe_resample(sampler_name, seed, X_n, y)
-    clf = get_classifier(algo, seed=seed, **_stack_overrides(algo, sampler_name, horizon, best_params))
-    clf.fit(Xr, yr)
-    calibrator, calibration_meta = _fit_live_calibrator(config, X_n, y, sampler_name, seed, algo, best_params, horizon, clf)
+    if config.objective.task == "value":
+        # Valeur exacte : régresseur + distribution de ses erreurs hors échantillon (`models/value.py`) ; ses probabilités de classes
+        # en tiennent lieu de calibrateur.
+        from patrick.models import value as value_lib
+
+        r_all = target_series.attrs["ret"].reindex(idx).to_numpy(dtype=float)[sel]
+        clf = value_lib.ValueModel(algo, seed=seed, params=dict(best_params)).fit(X_n, y, r_all, gap=horizon)
+        calibrator, calibration_meta = None, None
+        if getattr(clf.model_, "is_deep", False) or algo in D.ALL_DL_ALGOS:
+            best_params = {**{k: v for k, v in clf.model_.get_params().items() if k in D.DEFAULT_DEEP}, **best_params}
+    else:
+        Xr, yr = (X_n, y) if algo == STACK_ALGO else safe_resample(sampler_name, seed, X_n, y)
+        clf = get_classifier(algo, seed=seed, **_stack_overrides(algo, sampler_name, horizon, best_params))
+        clf.fit(Xr, yr)
+        calibrator, calibration_meta = _fit_live_calibrator(config, X_n, y, sampler_name, seed, algo, best_params, horizon, clf)
     if algo == STACK_ALGO:
         # Panel d'empilement consigné (N, algorithmes) : un champion rejoué plus tard depuis un autre run (duel) retrouve le SIEN.
         best_params = {"stack": clf.settings(), **best_params}

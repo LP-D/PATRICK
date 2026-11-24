@@ -144,6 +144,11 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     )
     if spec.keep_flat:
         target.attrs["flat"] = flat_all.reindex(target.index).fillna(False)
+    # Objectif « valeur exacte » (`models/value.py`) : le rendement à l'horizon lui-même, et les bornes de classe (q25, q75) de chaque
+    # ligne (celles de son régime), qui changent un rendement prédit en probabilités des 4 classes. Mêmes lignes que la cible.
+    target.attrs["ret"] = ret.astype(float)
+    bounds = [thr.get(reg, thr["GLOBAL"]) for reg in reg_r.reindex(ret.index).fillna("GLOBAL")]
+    target.attrs["bounds"] = pd.DataFrame(bounds, index=ret.index, columns=["lo", "hi"], dtype=float)
     return target, reg_r, thr
 
 

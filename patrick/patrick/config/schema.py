@@ -52,16 +52,22 @@ class ObjectiveConfig(BaseModel):
     target_kind: Literal["raw", "alpha"] = "raw"
     benchmark: str | None = None
     benchmark_source: Literal["auto", "manual"] | None = None
+    # Objectif du modèle (2026-11-24) : "direction" = la classe du rendement à l'horizon (4 classes, comportement historique) ;
+    # "value" = la VALEUR exacte de ce rendement (régression, `models/value.py`), dont le modèle déduit aussi les probabilités des 4
+    # classes par la distribution de ses erreurs hors échantillon : tout l'aval (prédictions, baselines, Diebold-Mariano, duels, live)
+    # reste commun, et le run a ses propres champions (étiquette `symbole__val`, `config/target_label.py`).
+    task: Literal["direction", "value"] = "direction"
 
     def run_label(self) -> str:
-        """Étiquette de cible de ce run en base (`run.target`) : le symbole, ou `symbole__alpha_benchmark`
-        (voir `config/target_label.py`)."""
-        return run_label(self.target_symbol, self.target_kind, self.benchmark)
+        """Étiquette de cible de ce run en base (`run.target`) : le symbole, ou `symbole__alpha_benchmark`, suivi de `__val` pour
+        un modèle de valeur exacte (voir `config/target_label.py`)."""
+        return run_label(self.target_symbol, self.target_kind, self.benchmark, self.task)
 
     def raw_cache_key(self) -> str:
         """Clé du snapshot de données de ce run dans le data lake. Une cible alpha a la sienne : le snapshot brut
-        `raw_<cible>` ne contient pas le benchmark, et lui servir ce cache donnerait un run sans benchmark."""
-        return f"raw_{self.run_label()}"
+        `raw_<cible>` ne contient pas le benchmark, et lui servir ce cache donnerait un run sans benchmark. L'objectif
+        (direction ou valeur exacte) n'y entre pas : mêmes données."""
+        return f"raw_{run_label(self.target_symbol, self.target_kind, self.benchmark)}"
 
 
 class UniverseConfig(BaseModel):
@@ -271,7 +277,9 @@ class SelectionConfig(BaseModel):
     # comparés le classement par F1 en validation croisée prédit à peine le holdout (corrélation de rang +0,11) contre +0,37 pour l'AUC
     # de direction (`validation/direction.py`). Walk-forward seulement : le schéma CPCV agrège des F1 par chemin et garde `F1_dir`. Un
     # run enregistré avant le champ est relu avec `F1_dir` (`RunConfig.from_stored_json`) et son hachage ne change pas.
-    criterion: Literal["F1_dir", "AUC_dir"] = "AUC_dir"
+    # Objectif « valeur exacte » : `IC` (corrélation de rang entre rendement prédit et réalisé, défaut) ou `R2_oos` (part de l'erreur
+    # quadratique gagnée sur la prévision « rendement nul ») ; un critère de direction y est remplacé par `IC` (`engine._criterion`).
+    criterion: Literal["F1_dir", "AUC_dir", "IC", "R2_oos"] = "AUC_dir"
 
 
 class SamplerConfig(BaseModel):
@@ -453,6 +461,22 @@ class RunConfig(BaseModel):
                                  "sur-échantillonneur réordonne et synthétise des lignes")
             if self.validation.scheme == "cpcv":
                 raise ValueError(f"les modèles à fenêtre ({', '.join(sorted(sequence))}) ne tournent pas en CPCV (lignes non contiguës)")
+        return self
+
+    @model_validator(mode="after")
+    def _check_value_task(self):
+        """Valeur exacte : un régresseur n'a pas de classes à rééquilibrer (sampler « none » seulement) et l'empilement est un
+        méta-classifieur ; les critères IC / R² hors échantillon n'existent que pour cet objectif."""
+        if self.objective.task != "value":
+            if self.selection.criterion in ("IC", "R2_oos"):
+                raise ValueError("les critères IC et R² hors échantillon sont ceux de l'objectif « valeur exacte »")
+            return self
+        if any(name != "none" for name in self.sampler.candidates):
+            self.sampler.candidates = ["none"]
+        if self.validation.scheme == "cpcv":
+            raise ValueError("l'objectif « valeur exacte » se valide en walk-forward (pas en CPCV)")
+        if self.models.stacking:
+            raise ValueError("l'empilement n'existe pas pour l'objectif « valeur exacte » (méta-classifieur)")
         return self
 
     @model_validator(mode="after")

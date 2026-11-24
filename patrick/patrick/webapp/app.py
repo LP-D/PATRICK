@@ -1320,7 +1320,8 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
         # Ils n'existent que pour le ML et le DL (une stratégie RL n'a pas de cible directionnelle ou alpha).
         classif_scope = [r for f in scope if f != "rl" for r in by_family[f]]
         kind_counts = {"directional": sum(1 for r in classif_scope if r.get("kind") == "directional"),
-                       "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha")}
+                       "alpha": sum(1 for r in classif_scope if r.get("kind") == "alpha"),
+                       "value": sum(1 for r in classif_scope if r.get("kind") == "value")}
         kind = kind if kind in kind_counts and family != "rl" else None
         ordre = ordre if ordre in HISTORY_ORDERS else None
         mesure = mesure if mesure in HISTORY_MEASURES else HISTORY_DEFAULT_MEASURE
@@ -1421,7 +1422,7 @@ def runs_explorer(request: Request, target: str | None = None, status: str | Non
 # classé sur son Sharpe hors échantillon (walk-forward), la seule mesure commune à tous.
 HISTORY_ORDERS = ("best", "worst")
 HISTORY_MEASURES = {"auc_holdout": ("holdout", "AUC_dir"), "auc_test": ("test", "AUC_dir"), "f1_holdout": ("holdout", "F1_dir"),
-                    "mcc_holdout": ("holdout", "MCC_4cls")}
+                    "mcc_holdout": ("holdout", "MCC_4cls"), "ic_holdout": ("holdout", "IC"), "r2_holdout": ("holdout", "R2_oos")}
 HISTORY_DEFAULT_MEASURE = "auc_holdout"
 
 
@@ -2227,12 +2228,13 @@ def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trac
     conn = trackdb.connect()
     try:
         champions = asset_view.champions_by_horizon(conn, symbol)
+        values = asset_view.value_champions(conn, symbol)
     finally:
         conn.close()
-    horizons = [h for h in overview["horizons"] if cells.get(h, {}).get("direction") or h in champions]
+    horizons = sorted({h for h in overview["horizons"] if cells.get(h, {}).get("direction") or h in champions} | set(values))
     return templates.TemplateResponse(
         request, "_asset_signals.html",
-        {"symbol": symbol, "cells": cells, "horizons": horizons, "champions": champions,
+        {"symbol": symbol, "cells": cells, "horizons": horizons, "champions": champions, "values": values,
          "live_hit_rate_warning_threshold": trackhistory.LIVE_HIT_RATE_WARNING_THRESHOLD,
          "dm_significance_alpha": dm_alpha, **_i18n_context(request)},
     )

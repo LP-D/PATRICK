@@ -286,6 +286,18 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
             else:
                 row_values = full_pool.loc[[t], feature_names].values
             X_sel = finite_scaled(scale_selected(scaler, finite_features(row_values, "live"), sel_idx), "live")
+            is_value = getattr(model, "is_value_model", False)
+            y_value = None
+            if is_value:
+                # Valeur exacte : les probabilités de classes se lisent avec les bornes du régime DU JOUR (jamais celles du futur).
+                try:
+                    if alpha_forward is not None:
+                        lo_v, hi_v = _alpha_live_thresholds(raw, config, target_col, t, horizon)
+                    else:
+                        lo_v, hi_v = live_class_thresholds(series.loc[:t].dropna(), horizon, config.objective.flat_thr, spec=spec_for(config))
+                    model.bounds_ = (float(lo_v), float(hi_v))
+                except Exception:
+                    logger.exception("live thresholds failed for %s at %s (value model keeps its training bounds)", target_col, t)
             if getattr(model, "needs_history", False):
                 # Réseau à fenêtre : il lit les `lookback` dernières lignes réelles, pas une ligne isolée. Les barres de rattrapage
                 # (lignes reconstituées « à la date t ») n'ont pas d'historique reconstitué : elles sont sautées, jamais approximées.
@@ -300,10 +312,14 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                     continue
                 proba_row = model.predict_proba(X_hist, context="none")[-1]
                 pred_class = int(model.classes_[int(np.argmax(proba_row))])
+                if is_value:
+                    y_value = float(model.predict_value(X_hist, context="none")[-1])
             else:
                 # `ravel` : CatBoost renvoie (n, 1), et NumPy 2.x refuse int() sur un tableau de dimension 1.
                 pred_class = int(np.asarray(model.predict(X_sel)).ravel()[0])
                 proba_row = model.predict_proba(X_sel)[0]
+                if is_value:
+                    y_value = float(model.predict_value(X_sel)[0])
                 if calibrator is not None:
                     cal_row = calibrator.predict_proba(X_sel)[0]
                     cal_classes = [int(c) for c in calibrator.classes_]
@@ -319,7 +335,8 @@ def predict_live(run_id: str, db_path: str | None = None, store: DataStore | Non
                 p_up_calibrated = True
             trackdb.add_predictions(conn, best["trial_id"], fold_index=0, split="live",
                                      ts=[str(t)], y_true=[None], y_pred=[pred_class],
-                                     y_proba=[confidence], p_up=[p_up], p_up_calibrated=p_up_calibrated or None)
+                                     y_proba=[confidence], p_up=[p_up], p_up_calibrated=p_up_calibrated or None,
+                                     y_value=[y_value] if y_value is not None else None)
             try:
                 if alpha_forward is not None:
                     lo, hi = _alpha_live_thresholds(raw, config, target_col, t, horizon)

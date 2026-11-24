@@ -135,11 +135,11 @@ def signatures(cfg: dict) -> tuple[str, str, str]:
         "features": [sorted(feat.get("families") or []), sorted(feat.get("vol_models") or []), feat.get("pool_prefilter"),
                      feat.get("interact_top_base"), feat.get("interact_top_pairs"), feat.get("interact_final_n"),
                      feat.get("enable_guida_features"), feat.get("enable_fundamentals_features"), feat.get("enable_equity_context_features")],
-        "horizons": n_horizons, "regimes": len(obj.get("regimes") or []), "target_kind": obj.get("target_kind"),
+        "horizons": n_horizons, "regimes": len(obj.get("regimes") or []), "target_kind": obj.get("target_kind"), "task": obj.get("task"),
         "universe": [len(uni.get("yf_tickers") or []), len(uni.get("fred_series") or {}), uni.get("start_date")],
         "sampler": cfg.get("sampler"), "sampling": cfg.get("sampling"),
     }
-    near = [family, algos, tuned, trials, n_horizons]
+    near = [family, algos, tuned, trials, n_horizons, obj.get("task", "direction")]
     return f"{family}:" + _digest(exact), f"{family}:n:" + _digest(near), family
 
 

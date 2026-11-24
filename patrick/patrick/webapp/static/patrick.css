@@ -2653,6 +2653,7 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .kind-badge { display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill); font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em; }
 .kind-badge.kind-directional { background: var(--brand-soft); color: var(--brand); }
 .kind-badge.kind-alpha { background: var(--pos-soft); color: var(--pos); }
+.kind-badge.kind-value { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
 .tag-partial { background: var(--warn-soft, var(--surface-2)); color: var(--warn, var(--text-2)); }
 
 /* ---- /predictions : vue « Par horizon » (avantage live par classe et horizon) ------------------------------------- */
