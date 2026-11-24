@@ -24,7 +24,13 @@ from fastapi.exception_handlers import (
     http_exception_handler as default_http_exception_handler,
 )
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
@@ -2224,6 +2230,21 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
                           "kind": overview["kind"], "n_alpha": overview["n_alpha"]}
                 return _refresh_time_dependent(single, utc_now())
     return None
+
+
+@app.get("/api/export/patrick.xlsx")
+def export_xlsx():
+    """Classeur Excel (A25) : dernières prédictions des champions, champions, fonds. Lecture seule."""
+    from patrick.fund import service
+    from patrick.webapp import excel_export
+    conn = trackdb.connect()
+    try:
+        data = excel_export.workbook_bytes(conn, service.current_date())
+    finally:
+        conn.close()
+    name = f"patrick-{utc_today().isoformat()}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @app.get("/fragments/vol-forecast/{symbol}")
