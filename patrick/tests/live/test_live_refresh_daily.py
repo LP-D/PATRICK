@@ -138,7 +138,7 @@ def test_run_autopilots_first_rolls_the_following_rules_to_the_champion(monkeypa
 
     live_refresh.run_autopilots(db_path)
 
-    assert order == ["roll", "autopilot rl=False", "autopilot rl=True"]      # les fonds combinés « RL » après le rejeu de leurs agents (ADR 0029)
+    assert order == ["roll", "autopilot rl=False", "autopilot rl=True"]      # les fonds combinés « RL » après le rejeu de leurs agents (ADR 0030)
 
 
 def test_a_failing_champion_roll_never_stops_the_autopilot_cycle(monkeypatch, tmp_path):

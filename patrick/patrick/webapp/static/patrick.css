@@ -1678,6 +1678,11 @@ legend {
   vertical-align: 1px;
 }
 .machine-idle { margin: 0; color: var(--text-3); font-size: var(--fs-base); }
+/* Temps pour vider la file, à côté du titre ; durée attendue de chaque run en file. */
+.dash-machine .dash-panel-title { flex-wrap: wrap; row-gap: 2px; }
+.machine-eta { display: block; flex-basis: 100%; margin-top: 2px; color: var(--text-2); font: 500 var(--fs-sm)/1.4 var(--mono); letter-spacing: 0;
+  text-transform: none; }
+.queue-eta { color: var(--text-3); font: 500 var(--fs-xs)/1.5 var(--mono); font-variant-numeric: tabular-nums; }
 .run-name-line { margin: 0 0 8px; font-family: var(--mono); font-size: var(--fs-md); font-weight: 600; }
 .log-tail {
   max-height: 320px;
@@ -2550,7 +2555,7 @@ a.visually-hidden[href="#main"]:focus {
 .fund-category { margin-top: var(--space-lg); }
 .fund-category-title { margin: 0 0 var(--space-xs); }
 .fund-group-title { margin: var(--space-md) 0 var(--space-xs); }
-/* synthèse séparée par catégorie et lecture avant / après frais (ADR 0029) */
+/* synthèse séparée par catégorie et lecture avant / après frais (ADR 0030) */
 .fund-summary { margin-top: var(--space-md); }
 .fund-summary-table th[scope="row"] { text-align: left; font-weight: 600; }
 .fund-summary-sub th[scope="row"] { padding-left: var(--space-lg); font-weight: 400; color: var(--text-2); }
@@ -2657,6 +2662,7 @@ select option.target-short { color: var(--text-3); opacity: .55; font-style: ita
 .kind-badge { display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill); font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em; }
 .kind-badge.kind-directional { background: var(--brand-soft); color: var(--brand); }
 .kind-badge.kind-alpha { background: var(--pos-soft); color: var(--pos); }
+.kind-badge.kind-value { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
 .tag-partial { background: var(--warn-soft, var(--surface-2)); color: var(--warn, var(--text-2)); }
 
 /* ---- /predictions : vue « Par horizon » (avantage live par classe et horizon) ------------------------------------- */
@@ -3587,3 +3593,103 @@ details.adv[open] > :not(summary) { animation: reveal-in var(--dur-reveal) var(-
 .pl-sc-mark text { fill: var(--text); font-size: 12px; font-weight: 600; }
 .pl-sc-chosen circle { fill: var(--brand); }
 .pl-sc-current circle { fill: var(--warn); }
+.pl-sc-pf circle { fill: var(--info); opacity: .85; }
+.pl-sc-pf text { fill: var(--text-2); font-size: 10.5px; font-weight: 500; }
+
+/* Ventilations proposées : une barre empilée à 100 % par allocation, couleurs stables par support. */
+.pl-proposals td { vertical-align: middle; }
+.pl-prop-name { white-space: nowrap; font-weight: 500; }
+.pl-prop-bar { min-width: 240px; width: 40%; }
+.pl-star { color: var(--warn); }
+.pl-stack { display: flex; height: 20px; border-radius: 4px; overflow: hidden; background: var(--surface-3); }
+.pl-stack-seg { display: flex; align-items: center; justify-content: center; min-width: 1px; color: #fff; font: 600 10px/1 var(--mono);
+  text-shadow: 0 0 2px rgba(0, 0, 0, .55); border-right: 1px solid var(--surface); white-space: nowrap; overflow: hidden; }
+.pl-stack-seg:last-child { border-right: 0; }
+.pl-weak { color: var(--text-3); }
+.pl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; padding: 0; list-style: none; font-size: var(--fs-sm); color: var(--text-2); }
+.pl-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.pl-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
+/* Distributions (histogramme, loi normale, quantiles), Q-Q, barres annuelles. */
+.pl-svg-box { width: 100%; overflow-x: auto; }
+.pl-svg-box svg { width: 100%; height: auto; display: block; }
+.pl-dist-box svg { max-width: 900px; }
+.pl-qq-box svg { max-width: 420px; }
+.pl-dist-bar { fill: color-mix(in srgb, var(--brand) 45%, transparent); }
+.pl-dist-bar:hover { fill: color-mix(in srgb, var(--brand) 70%, transparent); }
+.pl-dist-normal { fill: none; stroke: var(--warn); stroke-width: 2; }
+.pl-dist-q { stroke: var(--text-2); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.pl-dist-q.is-median { stroke: var(--text); stroke-width: 1.8; stroke-dasharray: none; }
+.pl-dist-qlabel { fill: var(--text-2); font: 600 10.5px var(--mono); }
+.pl-dist-mark { stroke-width: 2; }
+.pl-dist-zero { stroke: var(--text-3); stroke-width: 1; }
+.pl-dist-invested { stroke: var(--info); }
+.pl-dist-goal { stroke: var(--pos); }
+.pl-qq-ref { stroke: var(--warn); stroke-width: 1.5; }
+.pl-qq-pt { fill: var(--brand); opacity: .8; }
+.pl-bar-a { fill: var(--brand); }
+.pl-bar-b { fill: var(--text-3); opacity: .65; }
+.pl-bar-a.is-neg { fill: var(--neg); }
+.pl-bars-mean { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.pl-zero { stroke-dasharray: none; stroke: var(--text-3); }
+.pl-dist-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.pl-key { display: inline-block; width: 14px; height: 10px; margin-left: 8px; vertical-align: middle; }
+.pl-key:first-child { margin-left: 0; }
+.pl-key-bar { background: color-mix(in srgb, var(--brand) 45%, transparent); }
+.pl-key-normal { height: 0; border-top: 2px solid var(--warn); }
+.pl-key-q { height: 10px; width: 0; border-left: 2px dashed var(--text-2); }
+.pl-key-invested { height: 10px; width: 0; border-left: 2px solid var(--info); }
+.pl-key-goal { height: 10px; width: 0; border-left: 2px solid var(--pos); }
+.pl-key-a { background: var(--brand); }
+.pl-key-b { background: var(--text-3); opacity: .65; }
+.pl-key-mean { height: 0; border-top: 2px dashed var(--warn); }
+.pl-qtable td, .pl-qtable th { padding: 4px 8px; }
+
+/* Calendrier des rendements mensuels (année × mois). */
+.pl-cal { border-collapse: separate; border-spacing: 2px; font: 500 var(--fs-xs)/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+.pl-cal th { color: var(--text-3); font-weight: 500; padding: 2px 6px; text-align: center; }
+.pl-cal tbody th { text-align: right; }
+.pl-cal-cell, .pl-cal-total { min-width: 42px; padding: 3px 5px; text-align: right; border-radius: 3px; color: var(--text); }
+.pl-cal-cell.is-pos { background: color-mix(in srgb, var(--pos) calc(var(--v) * 55%), transparent); }
+.pl-cal-cell.is-neg { background: color-mix(in srgb, var(--neg) calc(var(--v) * 55%), transparent); }
+.pl-cal-total { font-weight: 700; border: 1px solid var(--line); }
+.pl-cal-total.is-neg { color: var(--neg); }
+.pl-cal-empty { background: transparent; }
+
+/* ---- Épingles (barre latérale), puce « machine », étoile et aide des raccourcis (2026-11-23) ---- */
+.sidebar-pins { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.sidebar-pins-title { display: flex; align-items: center; gap: 6px; cursor: default; }
+.sidebar-pins-title::before { display: none; }
+.sidebar-pins-title .icon { color: var(--warn); }
+.nav-pin { position: relative; }
+.nav-pin a { padding-right: 28px; }
+.nav-pin-remove {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border: 0; border-radius: 4px; background: transparent; color: var(--text-3);
+  font: 600 14px/1 var(--font, inherit); cursor: pointer; opacity: 0; transition: opacity 120ms var(--ease-out);
+}
+.nav-pin:hover .nav-pin-remove, .nav-pin-remove:focus-visible { opacity: 1; }
+.nav-pin-remove:hover { background: var(--surface-3); color: var(--neg); }
+html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
+.pin-toggle[aria-pressed="true"] { color: var(--warn); }
+.pin-toggle[aria-pressed="true"] svg path { fill: currentColor; }
+.machine-chip {
+  display: inline-flex; align-items: center; flex-shrink: 1; min-width: 0; gap: 6px; max-width: 280px; height: 30px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-2);
+  font: 500 var(--fs-xs)/1 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none;
+}
+.machine-chip:hover { color: var(--text); border-color: var(--line-strong); }
+.machine-chip .icon { flex: none; color: var(--pos); }
+.machine-chip.is-paused .icon { color: var(--warn); }
+.machine-chip-text { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1200px) { .machine-chip { max-width: 34px; padding: 0 9px; } .machine-chip-text { display: none; } }
+.kbd-help { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-start; justify-content: center; padding: 14vh 16px 16px;
+  background: var(--overlay); backdrop-filter: blur(3px); }
+.kbd-help[hidden] { display: none; }
+.kbd-help-panel { width: min(440px, 100%); padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-xl); }
+.kbd-help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.kbd-help-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-md); }
+.kbd-help-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
+.kbd-help-list dt { display: flex; gap: 4px; align-items: center; }
+.kbd-help-list dd { margin: 0; color: var(--text-2); }

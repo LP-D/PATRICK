@@ -157,7 +157,7 @@ def test_the_page_has_one_creation_card_with_every_family_and_the_pea_classes_ma
     card = html.split('id="fund-create"', 1)[1].split("</details>", 1)[0]
     family = card.split('<select name="family" id="fund-family">', 1)[1].split("</select>", 1)[0]
     assert re.findall(r'<option value="(\w+)"', family) == ["systematic", "cto", "pea", "real", "combo"]
-    assert 'data-capital="5000"' in family and 'data-capital="10000000"' in family            # reproductible : 5 000 € (ADR 0029)
+    assert 'data-capital="5000"' in family and 'data-capital="10000000"' in family            # reproductible : 5 000 € (ADR 0030)
     assert 'id="fund-classes"' in card and 'id="fund-real"' in card and 'data-act="real-create"' in card       # les fonds réels dans la même carte
     assert 'name="split"' in card and 'value="tiers"' in card and 'name="tier_pick" value="dm"' in card
     assert 'data-families="systematic cto pea"><input type="checkbox" name="class" value="Actions France"' in card
@@ -201,7 +201,7 @@ def test_the_split_by_evidence_creates_one_strategy_per_tier_in_the_family(clien
 
 
 
-# --- fonds de test combinés (ADR 0029) : un bloc de la même carte, une route -------------------------------------------------------
+# --- fonds de test combinés (ADR 0030) : un bloc de la même carte, une route -------------------------------------------------------
 
 
 def test_the_creation_card_has_a_combined_funds_block_with_the_four_variants(client):

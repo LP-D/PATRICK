@@ -295,7 +295,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_family_rule_pea_cap": _s("Capital au plus le plafond de versements du PEA ({cap}).", "Capital at most the PEA deposit cap ({cap})."),
     "fund_split": _s("Découpage", "Split"),
 
-    # /fonds : synthèse séparée par catégorie et performance avant frais (ADR 0029)
+    # /fonds : synthèse séparée par catégorie et performance avant frais (ADR 0030)
     "fund_summary_title": _s("Synthèse par catégorie", "Summary by category"),
     "fund_summary_hint": _s("Pas de total général : 10 M€ virtuels et 5 000 € reproductibles ne s'additionnent pas.",
                             "No grand total: €10M of virtual capital and €5,000 reproducible accounts do not add up."),
@@ -529,7 +529,7 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_real_min": _s("Position minimale (€)", "Minimum position (€)"),
     "fund_real_create": _s("Créer ou reprendre les deux fonds", "Create or reuse both funds"),
 
-    # /fonds : création des fonds de test combinés (fund/combo.py, ADR 0029)
+    # /fonds : création des fonds de test combinés (fund/combo.py, ADR 0030)
     "fund_combo_hint": _s(
         "Quatre fonds, mêmes modèles, mêmes conditions (CTO, {capital} virtuels, vente à découvert par CFD) : seul l'ingrédient change. "
         "Chacun se compare à « Référence ».",

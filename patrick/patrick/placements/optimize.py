@@ -1,10 +1,18 @@
 """Portefeuilles optimaux et validation walk-forward (port des sections 4 du notebook PEE).
 
-Quatre objectifs, chacun avec ou sans plafond par fonds (hors monétaire) :
+Objectifs, chacun avec ou sans plafond par fonds (hors monétaire) :
 - `max_return`  : maximise le rendement annualisé composé ;
-- `max_sharpe`  : portefeuille tangent, 100 % investi en fonds risqués (Sharpe face au monétaire) ;
-- `min_vol`     : minimise la volatilité ;
-- `max_sortino` : maximise le Sortino (volatilité à la baisse seulement).
+- `max_sharpe`  : portefeuille tangent de Markowitz, 100 % investi en fonds risqués (Sharpe face au monétaire) ;
+- `min_vol`     : minimise la volatilité (portefeuille de variance minimale de Markowitz) ;
+- `max_sortino` : maximise le Sortino (volatilité à la baisse seulement) ;
+- `risk_parity` : chaque support apporte la même part du risque ; `equal` : 1/N ;
+- `mv_prudent` / `mv_balanced` / `mv_dynamic` : trois points de la frontière efficiente de Markowitz, monétaire compris -- le rendement
+  espéré maximal sous une volatilité cible placée à 25 / 50 / 75 % du chemin entre le portefeuille de variance minimale et celui de
+  rendement maximal. Une aversion au risque fixe (λ) donnait souvent deux profils identiques, collés au coin « rendement maximal » ; une
+  volatilité cible les garde distincts quelles que soient les données. La covariance est rétrécie (Ledoit-Wolf) : sur une soixantaine de
+  mois et une quinzaine de fonds, la matrice d'échantillon exagère les corrélations extrêmes et l'optimiseur s'y engouffre ;
+- `max_diversification` : maximise le ratio de diversification (Choueifaty) Σ wᵢσᵢ / σ_portefeuille -- l'objectif qui exploite le plus
+  directement les corrélations faibles entre supports.
 L'optimisation est un SLSQP à départs multiples (25 départs : un seul départ s'arrête souvent dans un minimum local sur 15 fonds corrélés).
 
 Un portefeuille optimisé sur tout l'historique est « trop beau » par construction. `walk_forward` le juge honnêtement : on réoptimise chaque
@@ -21,8 +29,11 @@ from scipy.optimize import minimize
 
 from patrick.placements.stats import FREQ
 
-OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity", "equal")
-DEFAULT_OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity")
+OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity", "equal",
+              "mv_prudent", "mv_balanced", "mv_dynamic", "max_diversification")
+DEFAULT_OBJECTIVES = ("max_return", "max_sharpe", "min_vol", "max_sortino", "risk_parity",
+                      "mv_prudent", "mv_balanced", "mv_dynamic", "max_diversification")
+RISK_LEVELS = {"mv_prudent": 0.25, "mv_balanced": 0.50, "mv_dynamic": 0.75}       # fraction du chemin volatilité min -> volatilité du rendement max
 N_STARTS = 25
 WEIGHT_TOLERANCE = 1e-8
 
@@ -171,6 +182,51 @@ def opt_risk_parity(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STA
     return _assemble(R, risky, w, cash, floor, scale)
 
 
+def shrunk_cov(X: pd.DataFrame) -> np.ndarray:
+    """Covariance annualisée rétrécie vers une cible diagonale (Ledoit et Wolf, 2004) : moins de poids aux corrélations d'échantillon
+    extrêmes, que l'optimiseur exploiterait comme des certitudes."""
+    from sklearn.covariance import LedoitWolf
+
+    values = X.to_numpy(dtype=float)
+    if len(values) < 3:
+        return np.cov(values, rowvar=False).reshape(values.shape[1], values.shape[1]) * FREQ
+    return LedoitWolf().fit(values).covariance_ * FREQ
+
+
+def _mean_variance(level: float) -> Callable[..., pd.Series]:
+    def opt(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+        cols = list(R.columns)
+        mu = R.mean().to_numpy() * FREQ
+        C = shrunk_cov(R)
+        bnds, cons = _bounds(cols, cash, cap, bounds), _groups(cols, groups)
+        # Problèmes convexes (variance minimale, rendement maximal, rendement maximal sous plafond de variance) : deux départs suffisent.
+        starts = min(k, 2)
+        w_min = _multistart(lambda w: w @ C @ w, len(cols), bnds, k=starts, constraints=cons)
+        w_max = _multistart(lambda w: -(w @ mu), len(cols), bnds, k=starts, constraints=cons)
+        v_min, v_max = float(np.sqrt(max(w_min @ C @ w_min, 0))), float(np.sqrt(max(w_max @ C @ w_max, 0)))
+        if v_max <= v_min + 1e-9:
+            return pd.Series(w_min, index=cols)
+        target = v_min + level * (v_max - v_min)
+        cap_var = {"type": "ineq", "fun": lambda w, t=target: t * t - w @ C @ w}
+        try:
+            w = _multistart(lambda w: -(w @ mu), len(cols), bnds, k=starts, constraints=[*cons, cap_var])
+        except ValueError:
+            w = w_min + level * (w_max - w_min)          # repli : mélange des deux extrémités (admissible : contraintes linéaires)
+        return pd.Series(w, index=cols)
+
+    opt.__doc__ = f"Frontière efficiente de Markowitz : rendement maximal à {level:.0%} du chemin volatilité minimale -> maximale."
+    return opt
+
+
+def opt_max_diversification(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
+    """Diversification maximale (Choueifaty et Coignard, 2008) : maximise Σ wᵢσᵢ / σ_p sur les supports risqués."""
+    risky, floor, scale, bnds, cons = _risky_setup(R, cash, cap, bounds, groups)
+    C = shrunk_cov(R[risky])
+    sig = np.sqrt(np.clip(np.diag(C), 1e-14, None))
+    w = _multistart(lambda w: -(w @ sig) / np.sqrt(max(w @ C @ w, 1e-14)), len(risky), bnds, k=min(k, 8), constraints=cons)
+    return _assemble(R, risky, w, cash, floor, scale)
+
+
 def opt_equal(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, bounds: dict | None = None, groups: list | None = None) -> pd.Series:
     """1/N sur les supports risqués (la référence naïve, souvent difficile à battre hors échantillon), part minimale du monétaire respectée."""
     risky = _risky(R, cash)
@@ -184,6 +240,8 @@ def opt_equal(R: pd.DataFrame, cash: str, cap: float = 1.0, k: int = N_STARTS, b
 OPTIMIZERS: dict[str, Callable[..., pd.Series]] = {
     "max_return": opt_max_return, "max_sharpe": opt_max_sharpe, "min_vol": opt_min_vol, "max_sortino": opt_max_sortino,
     "risk_parity": opt_risk_parity, "equal": opt_equal,
+    **{name: _mean_variance(level) for name, level in RISK_LEVELS.items()},
+    "max_diversification": opt_max_diversification,
 }
 
 
@@ -214,7 +272,13 @@ def evaluate(w: pd.Series, R: pd.DataFrame, cash: str, daily: pd.DataFrame) -> d
     roll12 = (1 + p).rolling(12).apply(np.prod, raw=True) - 1
     downside = np.minimum(e, 0)
     q05 = p.quantile(0.05)
+    # Effet des corrélations : ratio de diversification (> 1 dès que les supports ne bougent pas ensemble) et nombre effectif de supports.
+    sig = R[w.index].std().to_numpy()
+    port_sd = float(p.std())
+    div_ratio = float(w.to_numpy() @ sig / port_sd) if port_sd > 0 else float("nan")
     return {
+        "div_ratio": div_ratio, "eff_n": float(1.0 / (w.to_numpy() ** 2).sum()),
+        "skew": float(p.skew()), "kurt": float(p.kurt()),
         "cagr": cagr(p), "vol": float(p.std() * np.sqrt(FREQ)),
         "sharpe": float(e.mean() / max(e.std(), 1e-12) * np.sqrt(FREQ)),
         "sortino": float(e.mean() / max(np.sqrt(np.mean(downside ** 2)), 1e-12) * np.sqrt(FREQ)),

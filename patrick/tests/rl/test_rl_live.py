@@ -1,4 +1,4 @@
-"""Positions live d'un agent RL (ADR 0029) : rejeu du dernier pli sur les données du jour. Faux modèle, fausses données : ni réseau ni PyTorch."""
+"""Positions live d'un agent RL (ADR 0030) : rejeu du dernier pli sur les données du jour. Faux modèle, fausses données : ni réseau ni PyTorch."""
 from __future__ import annotations
 
 import datetime as dt

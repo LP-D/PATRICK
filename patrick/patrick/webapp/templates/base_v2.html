@@ -75,6 +75,11 @@ script below (no flash), otherwise the OS preference applies.
                 </span>
             </div>
             <nav class="sidebar-nav" id="sidebar-tree" aria-label="{{ t('nav_home') if t else 'Navigation' }}">
+                {# Épingles : pages épinglées dans CE navigateur (étoile de la barre du haut ou touche « p »), remplies par shell.js. #}
+                <div class="sidebar-nav-group sidebar-pins" id="sidebar-pins" role="group" aria-labelledby="nav-pins-title" hidden>
+                    <span class="sidebar-nav-heading sidebar-pins-title" id="nav-pins-title">{{ icon('star', 12) }} {{ t('pins_title') }}</span>
+                    <ul class="nav-tree" id="pins-list"></ul>
+                </div>
                 {% for section in sections %}
                 <div class="sidebar-nav-group" role="group" aria-labelledby="nav-cat-{{ section.key }}" data-nav-key="{{ section.key }}"{% if section.entries | selectattr('active') | list %} data-has-active{% endif %}>
                     <button type="button" class="sidebar-nav-heading" id="nav-cat-{{ section.key }}" aria-expanded="true" aria-controls="nav-list-{{ section.key }}">{{ t(section.label_key) if t else section.label }}</button>
@@ -181,6 +186,9 @@ script below (no flash), otherwise the OS preference applies.
                     {% endif %}
                 </div>
                 <div class="topbar-actions">
+                    {# Puce « machine » : run en cours, avancement, temps pour vider la file (shell.js, toutes les pages). #}
+                    <a class="machine-chip" id="machine-chip" href="/ml#machine-card" hidden>{{ icon('cpu', 14) }}<span class="machine-chip-text"></span></a>
+                    <button type="button" class="icon-btn pin-toggle" id="pin-toggle" aria-pressed="false" aria-label="{{ t('pin_add') }} (P)" title="{{ t('pin_add') }} (P)">{{ icon('star') }}</button>
                     <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
                         {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') }}</span><span class="kbd">Ctrl K</span>
                     </button>
@@ -290,6 +298,21 @@ script below (no flash), otherwise the OS preference applies.
     <script id="glossary-data" type="application/json">{{ glossary | default({}) | tojson }}</script>
     <script id="glossary-labels" type="application/json">{{ glossary_labels | default({}) | tojson }}</script>
     <button type="button" class="to-top" id="to-top" aria-label="{{ t('to_top') }}" title="{{ t('to_top') }}" hidden>{{ icon('arrow-up', 18) }}</button>
+    {# Aide des raccourcis clavier (« ? »). #}
+    <div class="kbd-help" id="kbd-help" role="dialog" aria-modal="true" aria-labelledby="kbd-help-title" hidden>
+        <div class="kbd-help-panel">
+            <div class="kbd-help-head"><h2 id="kbd-help-title">{{ icon('keyboard', 16) }} {{ t('kbd_title') }}</h2>
+                <button type="button" class="icon-btn" data-kbd-close aria-label="{{ t('kbd_close') }}">{{ icon('close', 16) }}</button></div>
+            <dl class="kbd-help-list">
+                <dt><span class="kbd">Ctrl K</span> <span class="kbd">/</span></dt><dd>{{ t('kbd_search') }}</dd>
+                <dt><span class="kbd">P</span></dt><dd>{{ t('kbd_pin') }}</dd>
+                <dt><span class="kbd">[</span></dt><dd>{{ t('kbd_sidebar') }}</dd>
+                <dt><span class="kbd">T</span></dt><dd>{{ t('kbd_theme') }}</dd>
+                <dt><span class="kbd">?</span></dt><dd>{{ t('kbd_help') }}</dd>
+                <dt><span class="kbd">Esc</span></dt><dd>{{ t('kbd_close') }}</dd>
+            </dl>
+        </div>
+    </div>
     <script src="{{ asset('confirm.js') }}"></script>
     <script src="{{ asset('shell.js') }}"></script>
     <script src="{{ asset('motion.js') }}" defer></script>

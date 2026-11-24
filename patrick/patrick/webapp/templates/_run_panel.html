@@ -8,7 +8,7 @@
     <div class="rp-title">
         <strong>{{ (r.name or r.run_id) | safe }}</strong>
         <span class="rp-sub">{{ r.target | iname }} · {{ r.horizon | hlabel }}
-            · <span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></span>
+            · <span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_value') if r.kind == 'value' else t('kind_directional') }}</span></span>
     </div>
     <button type="button" class="icon-btn rp-remove" data-rp-remove="{{ r.run_id }}" aria-label="{{ t('rp_remove') }}" title="{{ t('rp_remove') }}">{{ icon('close', 14) }}</button>
 </header>
@@ -16,6 +16,12 @@
 {% if r.suspect %}<p class="banner banner-error rp-banner">{{ t('suspect_banner_title') }} {{ t('suspect_banner_body', reason=r.suspect) }}</p>{% endif %}
 {{ headline_metrics(headline, m_labels) }}
 <dl class="rp-grid">
+    {% if r.kind == 'value' %}
+    {# Valeur exacte : ses mesures propres (meilleur essai) ; > 0 = mieux que « rendement nul » pour le R², que le hasard pour l'IC. #}
+    <div><dt>{{ t('rp_value_ic') }}</dt><dd class="pk-mono">{{ '%.3f' | format(r.value_ic) if r.value_ic is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rp_value_ic_holdout') }}</dt><dd class="pk-mono {{ ('pos' if r.holdout_ic > 0 else 'neg') if r.holdout_ic is not none else '' }}">{{ '%.3f' | format(r.holdout_ic) if r.holdout_ic is not none else '—' }}</dd></div>
+    <div><dt>{{ t('rp_value_r2_holdout') }}</dt><dd class="pk-mono {{ ('pos' if r.holdout_r2 > 0 else 'neg') if r.holdout_r2 is not none else '' }}">{{ '%+.3f' | format(r.holdout_r2) if r.holdout_r2 is not none else '—' }}</dd></div>
+    {% endif %}
     <div><dt>{{ t('dq_col_status') }}</dt><dd>{{ r.status_label or r.status }}</dd></div>
     <div><dt>{{ t('rp_scheme') }}</dt><dd>{{ 'CPCV' if r.scheme == 'cpcv' else 'walk-forward' }}</dd></div>
     <div><dt>{{ t('rp_persistence') }}</dt><dd class="pk-mono">{{ '%.3f' | format(r.benchmark_mcc) if r.benchmark_mcc is not none else '—' }}</dd></div>

@@ -43,7 +43,7 @@ def recentre_shift(port: np.ndarray, target_annual: float | None) -> float:
 
 
 def simulate(port_paths: np.ndarray, euro_paths: np.ndarray, euro_share: float, env: dict, contrib: dict, months: int,
-             charge_fees: bool = True) -> dict:
+             charge_fees: bool = True, track_quantiles: bool = False) -> dict:
     """Trajectoires de capital (vectorisées sur les chemins). `port_paths` : rendements mensuels du portefeuille ; `euro_paths` : la part de ce
     rendement qui vient du fonds en euros (pour ses prélèvements sociaux annuels)."""
     n = port_paths.shape[0]
@@ -59,6 +59,7 @@ def simulate(port_paths: np.ndarray, euro_paths: np.ndarray, euro_share: float, 
     ps_paid = np.zeros(n)
     cap_left = cap
     yearly_values = []
+    monthly_q = []                     # quantiles du capital à la fin de chaque mois (éventail mensuel)
 
     def deposit(amount: float):
         nonlocal invested, abond_total, cap_left, W
@@ -96,7 +97,10 @@ def simulate(port_paths: np.ndarray, euro_paths: np.ndarray, euro_share: float, 
             deposit(contrib["yearly"] * growth ** year)
             cap_left = cap
             yearly_values.append(W.copy())
-    return {"W": W, "invested": invested, "abond": abond_total, "fees": fees, "taxed": taxed, "ps_paid": ps_paid, "yearly": yearly_values}
+        if track_quantiles:
+            monthly_q.append(np.percentile(W, QUANTILES))
+    return {"W": W, "invested": invested, "abond": abond_total, "fees": fees, "taxed": taxed, "ps_paid": ps_paid, "yearly": yearly_values,
+            "monthly_q": monthly_q}
 
 
 def _q(x: np.ndarray) -> dict:
@@ -116,7 +120,7 @@ def project(panel: pd.DataFrame, w: pd.Series, euro_keys: list[str], env: dict, 
     shift = recentre_shift(port, target_annual)
     port_paths = (1 + port[idx]) * math.exp(shift) - 1
     euro_paths = euro[idx]
-    sim = simulate(port_paths, euro_paths, euro_share, env, contrib, months)
+    sim = simulate(port_paths, euro_paths, euro_share, env, contrib, months, track_quantiles=True)
     free = simulate(port_paths, euro_paths, euro_share, env, contrib, months, charge_fees=False)
     W = sim["W"]
     base = sim["invested"] + sim["abond"]
@@ -124,15 +128,33 @@ def project(panel: pd.DataFrame, w: pd.Series, euro_keys: list[str], env: dict, 
     taxes = np.array([envelopes.exit_tax(g, sim["invested"], years, env, t, couple)["total"] for g, t in zip(gains, sim["taxed"])])
     net = W - taxes
     goal = contrib.get("goal") or 0.0
-    fan = {f"p{q:02d}": [float(contrib["initial"])] + [float(np.percentile(v, q)) for v in sim["yearly"]] for q in QUANTILES}
+    # Éventail MENSUEL (un point par mois, plus précis que la fin de chaque année) ; `fan_step` le dit aux lecteurs.
+    fan = {f"p{q:02d}": [float(contrib["initial"])] + [round(float(row[i]), 2) for row in sim["monthly_q"]] for i, q in enumerate(QUANTILES)}
     saving = sim["invested"] * env["tmi_in"] / 100 if env.get("deductible") else 0.0
     return {
         "years": years, "invested": sim["invested"], "abondement": sim["abond"], "gross": _q(W), "net": _q(net),
         "taxes_median": float(np.median(taxes)), "fees_median": float(np.median(sim["fees"])), "euro_ps_median": float(np.median(sim["ps_paid"])),
         "fee_drag_median": float(np.median(free["W"]) - np.median(W)), "prob_goal": float((net >= goal).mean()) if goal > 0 else None,
         "prob_loss": float((net < sim["invested"]).mean()), "tax_saving_entry": saving,
-        "net_irr_median": irr_constant(contrib, years, float(np.median(net))), "fan": fan, "centering": "prudent" if target_annual is not None else "historique",
+        "net_irr_median": irr_constant(contrib, years, float(np.median(net))), "fan": fan, "fan_step": "month",
+        "centering": "prudent" if target_annual is not None else "historique",
+        "dist_net": distribution(net),
     }
+
+
+def distribution(x: np.ndarray, bins: int = 36) -> dict:
+    """Histogramme d'une distribution simulée (bornes aux centiles 0,5 et 99,5 : quelques chemins extrêmes écraseraient le reste), avec
+    moyenne et écart-type pour superposer la loi normale de même moyenne et même écart-type, et les quantiles à tracer en traits."""
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    if len(x) < 2:
+        return {"edges": [], "counts": [], "mean": None, "std": None, "n": len(x), "q": {}}
+    lo, hi = np.percentile(x, [0.5, 99.5])
+    if hi <= lo:
+        hi = lo + 1.0
+    counts, edges = np.histogram(np.clip(x, lo, hi), bins=bins, range=(lo, hi))
+    return {"edges": [float(e) for e in edges], "counts": [int(c) for c in counts], "mean": float(x.mean()), "std": float(x.std(ddof=1)),
+            "n": len(x), "q": {f"p{q:02d}": float(np.percentile(x, q)) for q in QUANTILES}}
 
 
 def irr_constant(contrib: dict, years: int, final: float) -> float | None:

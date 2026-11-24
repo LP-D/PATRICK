@@ -83,7 +83,7 @@ def test_setup_refuses_to_take_over_a_quant_fund_of_the_same_name(conn):
 
 
 def test_a_quant_fund_named_like_the_old_every_signal_fund_is_left_alone(conn):
-    """Seul un ancien fonds reproductible « Systematic CTO / PEA » est renommé (ADR 0029) : un fonds quant de ce nom garde son nom et sa catégorie."""
+    """Seul un ancien fonds reproductible « Systematic CTO / PEA » est renommé (ADR 0030) : un fonds quant de ce nom garde son nom et sa catégorie."""
     quant = store.create_strategy(conn, "Systematic PEA", "PEA", 100_000, "2026-01-05")
 
     rows = real_funds.setup(conn, today=TODAY, only=["PEA"])

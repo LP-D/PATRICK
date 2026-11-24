@@ -23,7 +23,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 from patrick.config.defaults import ALL_DL_ALGOS
-from patrick.config.target_label import ALPHA_SEP
+from patrick.config.target_label import ALPHA_SEP, VALUE_SUFFIX
 from patrick.core import paths
 from patrick.core.numeric import is_nan
 from patrick.tracking import class_balance
@@ -1050,7 +1050,7 @@ def batch_best_f1_dir(conn: sqlite3.Connection, run_ids: list[str],
 
 # Le panneau d'un modèle (ADR 0023, `validation/metric_panel.py`), puis l'AUC à 4 classes et le F1 : ces deux-là ne s'affichent plus dans
 # les aperçus mais servent encore à repérer un score impossible (`suspicion.suspect_reason`).
-HEADLINE_METRICS = (*metric_panel.PANEL_KEYS, "AUC_ovr_4cls", "F1_dir")
+HEADLINE_METRICS = (*metric_panel.PANEL_KEYS, "AUC_ovr_4cls", "F1_dir", "IC", "R2_oos", "MAE")   # les trois dernières : valeur exacte
 
 
 def batch_best_metrics(conn: sqlite3.Connection, run_ids: list[str], metrics: tuple[str, ...] = HEADLINE_METRICS,
@@ -1177,7 +1177,8 @@ def list_run_index(conn: sqlite3.Connection, include_archived: bool = False, run
             "started_at": started_at, "finished_at": finished_at, "n_trials": n_trials, "error": error,
             "name": name if isinstance(name, str) else None, "scheme": scheme if isinstance(scheme, str) else "walkforward",
             "algorithms": algos, "family": run_family({"models": {"algos": algos}}),
-            "kind": "alpha" if ALPHA_SEP in (target or "") else "directional",
+            # valeur exacte d'abord (une cible alpha peut l'être aussi : elle est rangée avec les valeurs exactes, sa propre catégorie)
+            "kind": "value" if (target or "").endswith(VALUE_SUFFIX) else "alpha" if ALPHA_SEP in (target or "") else "directional",
             "has_trials": bool(has_trials), "empty": status == "failed" and not has_trials,
         })
     return out
@@ -1226,6 +1227,8 @@ def enrich_runs(conn: sqlite3.Connection, index_rows: list[dict], with_balance: 
             "suspect": (suspicion.suspect_reason(holdout_m) or suspicion.suspect_reason(test_m)
                         or suspicion.alignment_reason(target, cfg)),
             "best_auc": test_m.get("AUC_ovr_4cls"), "holdout_auc": holdout_m.get("AUC_ovr_4cls"),
+            # valeur exacte : IC et R² hors échantillon (test, contrôle final), None pour un modèle de direction
+            "value_ic": test_m.get("IC"), "holdout_ic": holdout_m.get("IC"), "holdout_r2": holdout_m.get("R2_oos"),
             "panel": metric_panel.panel(test_m), "holdout_panel": metric_panel.panel(holdout_m),
             "holdout_f1_dir": holdout_m.get("F1_dir"),
             "config_json": config_json,
@@ -1509,7 +1512,7 @@ def add_baseline_metrics(conn: sqlite3.Connection, run_id: str, baseline: str,
 
 def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, split: str,
                      ts: list[str], y_true, y_pred, y_proba=None, path_id: int = -1, p_up=None,
-                     p_up_calibrated: bool | None = None) -> None:
+                     p_up_calibrated: bool | None = None, y_value=None) -> None:
     """`y_true` can contain `None` (Phase 4.6, `split='live'`: the prediction
     is written BEFORE the outcome is known) -- stored as NULL rather than
     crashing on `float(None)`, backfilled later by
@@ -1541,6 +1544,10 @@ def add_predictions(conn: sqlite3.Connection, trial_id: int, fold_index: int, sp
             "y_pred, y_proba, path_id, p_up, p_up_calibrated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
+        if y_value is not None:
+            # Valeur exacte (migration 0055) : rendement prédit, écrit à part pour laisser l'insertion commune inchangée.
+            conn.executemany("UPDATE prediction SET y_value = ? WHERE trial_id = ? AND ts = ? AND path_id = ?",
+                             [(_f(v), trial_id, str(t), path_id) for t, v in zip(ts, y_value)])
     if split == "live":
         # Journal chaîné (migration 0040) : le signal est scellé AVANT son issue, le premier écrit gagne. Une erreur du journal n'empêche pas la prédiction.
         from patrick.tracking import journal

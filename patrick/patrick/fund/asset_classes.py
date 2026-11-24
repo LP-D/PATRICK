@@ -5,7 +5,7 @@ nom `<gamme> <classe>`) une stratégie par classe et y active le pilote automati
 (1 jour par défaut) ; `setup_tiers` fait de même avec une stratégie par niveau de preuve (`<gamme> Diebold-Mariano`...). La série
 macro FRED n'est dans aucune classe : elle n'est pas négociable.
 
-Trois gammes (`FAMILIES`), dans deux catégories qui ne se mélangent pas (ADR 0029) :
+Trois gammes (`FAMILIES`), dans deux catégories qui ne se mélangent pas (ADR 0030) :
 - `Systematic` : fonds quant d'étude (catégorie `quant`) : CTO, vente à découvert en CFD, tout l'univers, capital virtuel de 10 M€, frais estimés ;
 - `CTO` et `PEA` : fonds reproductibles par un particulier (catégorie `real`) : achat seulement, 5 000 € chacun, 1 € par ordre tout compris, position
   minimale de 200 € (un compte de cette taille ne finance pas tous les signaux). CTO : actions et ETF au comptant, le reste en CFD à l'achat ;
@@ -135,7 +135,7 @@ def setup(conn: sqlite3.Connection, *, today: dt.date | None = None, only: list[
 def _provision(conn: sqlite3.Connection, *, name: str, settings: dict, capital: float, wrapper: str, today: dt.date,
                dry_run: bool, category: str = "quant", fee_flat: float | None = None) -> dict:
     """Retrouve (par son nom) ou crée la stratégie `name` et y active le pilote avec `settings` ; `dry_run` : rien n'est écrit.
-    Une stratégie reprise SANS ordre prend la catégorie, les frais (`fee_flat`) et le capital demandés (une gamme qui change de conditions, ADR 0029) ;
+    Une stratégie reprise SANS ordre prend la catégorie, les frais (`fee_flat`) et le capital demandés (une gamme qui change de conditions, ADR 0030) ;
     avec des ordres, elle garde frais et capital, et une catégorie différente est refusée (ce n'est pas une stratégie de cette gamme).
     Renvoie `name`, `strategy_id` (None si elle n'existe pas encore), `created`, `capital_changed`, `candidates`."""
     existing = {s["name"]: s["strategy_id"] for s in store.list_strategies(conn)}

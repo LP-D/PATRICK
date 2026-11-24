@@ -111,6 +111,10 @@ def finish_job(conn: sqlite3.Connection, job_id: str, status: str,
             "result_json = ?, error = ?, pause_requested = 0 WHERE job_id = ?",
             (status, result_json, error, job_id),
         )
+        try:
+            _close_pauses(conn, job_id)
+        except sqlite3.OperationalError:
+            pass
         if status == "error":
             # Une exception de pipeline laissait ses lignes `run` « running » : indélébiles (« Cannot delete a running run ») jusqu'au prochain
             # démarrage de worker et une heure d'âge.
@@ -198,12 +202,66 @@ def active_job(conn: sqlite3.Connection) -> dict | None:
 
 
 def set_job_paused(conn: sqlite3.Connection, job_id: str, paused: bool) -> bool:
+    """Pause / reprise d'un job en cours. La période de pause est consignée dans `machine_idle` (ouverte ici, refermée à la reprise ou à la
+    fin du job) : le chronomètre du run et les durées moyennes par étape ne comptent pas le temps passé en pause."""
     with conn:
         cur = conn.execute(
             "UPDATE job SET pause_requested = ? WHERE job_id = ? AND status = 'running'",
             (int(paused), job_id),
         )
+        if cur.rowcount == 1:
+            try:
+                if paused:
+                    open_pause = conn.execute("SELECT 1 FROM machine_idle WHERE job_id = ? AND reason = 'pause' AND ended_at IS NULL",
+                                              (job_id,)).fetchone()
+                    if open_pause is None:
+                        conn.execute("INSERT INTO machine_idle (started_at, reason, job_id) VALUES (datetime('now'), 'pause', ?)", (job_id,))
+                else:
+                    _close_pauses(conn, job_id)
+            except sqlite3.OperationalError:
+                pass                                         # base pas encore migrée (0054) : la pause marche, seul le décompte manque
     return cur.rowcount == 1
+
+
+def _close_pauses(conn: sqlite3.Connection, job_id: str) -> None:
+    conn.execute("UPDATE machine_idle SET ended_at = datetime('now') WHERE job_id = ? AND reason = 'pause' AND ended_at IS NULL", (job_id,))
+
+
+def close_job_pauses(conn: sqlite3.Connection, job_id: str) -> None:
+    """Referme une pause restée ouverte (job terminé, arrêté ou repris par un autre worker)."""
+    try:
+        with conn:
+            _close_pauses(conn, job_id)
+    except sqlite3.OperationalError:
+        pass
+
+
+def _utc(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def record_suspension(conn: sqlite3.Connection, started_at: float, ended_at: float, job_id: str | None = None) -> None:
+    """Veille ou hibernation détectée par le fil de battement du worker (`system/awake_clock.py`), bornes en secondes epoch."""
+    if ended_at <= started_at:
+        return
+    try:
+        with conn:
+            conn.execute("INSERT INTO machine_idle (started_at, ended_at, reason, job_id) VALUES (?, ?, 'sleep', ?)",
+                         (_utc(started_at), _utc(ended_at), job_id))
+    except sqlite3.OperationalError:
+        pass
+
+
+def record_job_phase(conn: sqlite3.Connection, job_id: str, phase: str, started_at: float, finished_at: float) -> None:
+    """Une étape terminée d'un job (vocabulaire de `job.phase`), bornes en secondes epoch : alimente les moyennes par étape (`tracking/eta.py`)."""
+    if not phase or finished_at < started_at:
+        return
+    try:
+        with conn:
+            conn.execute("INSERT INTO job_phase_timing (job_id, phase, started_at, finished_at) VALUES (?, ?, ?, ?)",
+                         (job_id, phase, _utc(started_at), _utc(finished_at)))
+    except sqlite3.OperationalError:
+        pass
 
 
 def _forget_unrun_relaunches(conn: sqlite3.Connection) -> None:
@@ -252,6 +310,10 @@ def finish_user_stopped_job(conn: sqlite3.Connection, job_id: str) -> bool:
             (USER_STOPPED_ERROR, job_id),
         )
         if cur.rowcount:
+            try:
+                _close_pauses(conn, job_id)
+            except sqlite3.OperationalError:
+                pass
             conn.execute(
                 "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ?, "
                 "n_trials = (SELECT COUNT(*) FROM trial WHERE trial.run_id = run.run_id) "
@@ -363,6 +425,10 @@ def recover_interrupted_jobs(conn: sqlite3.Connection, max_resumes: int = MAX_AU
                     "UPDATE run SET status = 'failed', finished_at = datetime('now'), error = ? WHERE job_id = ? AND status = 'running'",
                     (INTERRUPTED_RUN_ERROR, job_id),
                 )
+                try:
+                    _close_pauses(conn, job_id)
+                except sqlite3.OperationalError:
+                    pass
                 out[bucket].append(job_id)
     return out
 

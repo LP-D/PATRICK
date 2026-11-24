@@ -1,4 +1,4 @@
-"""Performance avant frais, catégories séparées et conditions des gammes (ADR 0029). Aucun réseau."""
+"""Performance avant frais, catégories séparées et conditions des gammes (ADR 0030). Aucun réseau."""
 from __future__ import annotations
 
 import datetime as dt

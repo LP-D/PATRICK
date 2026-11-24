@@ -47,8 +47,11 @@ BRIER_TOLERANCE = 0.005
 CRITERION_AUC_BRIER = "AUC_dir+Brier_up"
 CRITERION_AUC = "AUC_dir"
 CRITERION_MCC = "MCC_4cls"
+CRITERION_IC = "IC"
 
 RULES = {
+    CRITERION_IC: ("exact-value models: IC (rank correlation of predicted vs realised return) strictly greater on the same holdout, both "
+                   "configurations retrained on the same pre-holdout data; tie -> the champion stays"),
     CRITERION_AUC_BRIER: (f"AUC_dir strictly greater on the same holdout AND Brier_up at most {BRIER_TOLERANCE} above the champion's, "
                           "both configurations retrained on the same pre-holdout data; tie or doubt -> the champion stays"),
     CRITERION_AUC: ("AUC_dir strictly greater on the same holdout (a side has no Brier_up), both configurations retrained on the same "
@@ -101,6 +104,13 @@ def duel_verdict(challenger: dict | None, champion: dict | None) -> dict | None:
     permet de les comparer (aucune mesure commune). `reason` : `better` (le challenger gagne), `auc_not_better`, `brier_worse`,
     `mcc_not_better`. `*_score` : la mesure qui classe (AUC_dir, ou MCC_4cls en dernier recours), pour les journaux et `duel_outcome`."""
     chal, champ = panel(challenger), panel(champion)
+    ic_c, ic_k = value(challenger, "IC"), value(champion, "IC")
+    if ic_c is not None and ic_k is not None:
+        # Catégorie « valeur exacte » (étiquette `__val`) : le meilleur modèle est celui qui ordonne le mieux les rendements, ML ou DL.
+        wins = ic_c > ic_k
+        return {"criterion": CRITERION_IC, "rule": RULES[CRITERION_IC], "winner": "challenger" if wins else "champion",
+                "reason": "better" if wins else "ic_not_better", "challenger": chal, "champion": champ,
+                "challenger_score": ic_c, "champion_score": ic_k}
     auc_c, auc_k = chal["AUC_dir"], champ["AUC_dir"]
     brier_c, brier_k = chal["Brier_up"], champ["Brier_up"]
     if auc_c is not None and auc_k is not None:

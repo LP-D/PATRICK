@@ -21,7 +21,7 @@
 {% for v in snap.violations %}<div class="banner banner-error">{{ v }}</div>{% endfor %}
 {% if snap.alert_days %}<div class="banner banner-warning">{{ t('fund_alert_margin', n=snap.alert_days | length, first=snap.alert_days[0]) }}</div>{% endif %}
 
-{# Lecture avant / après frais (ADR 0029) : un signal qui gagne mais que les frais ruinent ne se corrige pas comme un signal qui ne gagne rien. #}
+{# Lecture avant / après frais (ADR 0030) : un signal qui gagne mais que les frais ruinent ne se corrige pas comme un signal qui ne gagne rien. #}
 {% if k.edge_verdict and k.edge_verdict != 'none' %}
 <div class="banner {{ 'banner-info' if k.edge_verdict == 'kept' else 'banner-warning' }} fund-edge-line" data-keep data-edge="{{ k.edge_verdict }}">
   {% if k.edge_verdict == 'no_edge' %}{{ t('fund_edge_line_no_edge', gross=(k.gross_pnl | eur), n=k.n_sessions) }}

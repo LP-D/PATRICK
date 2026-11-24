@@ -1482,7 +1482,7 @@ def fund_combo_setup_cmd(
     cost_multiple: float = typer.Option(1.0, "--cost-multiple", help="Le gain attendu doit valoir ce multiple de l'aller-retour (fonds « volatilité »)"),
     today: str = typer.Option(None, "--today", help="Date AAAA-MM-JJ (défaut : aujourd'hui)"),
 ) -> None:
-    """Les quatre fonds de test combinés (ADR 0029) : `Combiné Référence` (signaux bruts), `Combiné ML + RL` (l'agent RL doit être d'accord),
+    """Les quatre fonds de test combinés (ADR 0030) : `Combiné Référence` (signaux bruts), `Combiné ML + RL` (l'agent RL doit être d'accord),
     `Combiné ML + volatilité` (taille selon la volatilité prévue, régime de l'indice de volatilité, filtre de coût) et `Combiné ML + RL +
     volatilité`. Mêmes modèles, mêmes conditions : seul l'ingrédient change."""
     from patrick.fund import combo

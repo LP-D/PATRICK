@@ -209,7 +209,7 @@ def register(app: FastAPI, templates, context) -> None:
             "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **_view_ctx(data), **ctx})
 
     def _category(value: str | None) -> str | None:
-        """Filtre `?categorie=` de /fonds : `quant`, `real` ou `lab` (ADR 0029) ; toute autre valeur (ou rien) = toutes les catégories."""
+        """Filtre `?categorie=` de /fonds : `quant`, `real` ou `lab` (ADR 0030) ; toute autre valeur (ou rien) = toutes les catégories."""
         return value if value in store.CATEGORIES else None
 
     @app.get("/fonds")
@@ -613,7 +613,7 @@ def register(app: FastAPI, templates, context) -> None:
             autopilot.start_cycles([r["strategy_id"] for r in rows])
         return {"rows": rows, "cycle_started": bool(start)}
 
-    # ------------------------------------------------- fonds de test combinés : ML/DL croisé avec le RL et la volatilité (ADR 0029)
+    # ------------------------------------------------- fonds de test combinés : ML/DL croisé avec le RL et la volatilité (ADR 0030)
 
     def _combo_options(raw: dict) -> dict:
         """Réglages d'une création des fonds combinés (`only`, `capital`, `tier`, `horizons`, `max_models`, `gross`, `cost_multiple`, `run`,

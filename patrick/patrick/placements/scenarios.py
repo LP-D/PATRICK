@@ -178,12 +178,14 @@ def summary(ann: np.ndarray, months: int) -> dict:
 
 
 def fan(p: pd.Series, years: int, target_cagr: float | None, n: int = N_SIMS, seed: int = 1) -> dict:
-    """Éventail de valeur cumulée année par année (bootstrap par blocs) : quantiles du rendement cumulé en fin de chaque année 1..`years`."""
-    paths = block_bootstrap_paths(p, years * 12, 6, n, seed, target_cagr)
+    """Éventail de valeur cumulée MOIS PAR MOIS (bootstrap par blocs) : quantiles du rendement cumulé à la fin de chaque mois 1..12·`years`
+    (une courbe par quantile, plus fine qu'un point par an). `annees` reste pour les lecteurs d'un résultat ancien."""
+    months = years * 12
+    paths = block_bootstrap_paths(p, months, 6, n, seed, target_cagr)
     growth = np.cumprod(1 + paths, axis=1) - 1
-    marks = [12 * y - 1 for y in range(1, years + 1)]
-    return {"annees": list(range(1, years + 1)),
-            **{f"p{q:02d}": [float(np.percentile(growth[:, m], q)) for m in marks] for q in QUANTILES}}
+    qs = np.percentile(growth, QUANTILES, axis=0)
+    return {"step": "month", "mois": list(range(1, months + 1)), "annees": list(range(1, years + 1)),
+            **{f"p{q:02d}": [round(float(v), 5) for v in qs[i]] for i, q in enumerate(QUANTILES)}}      # 5 décimales : résultat JSON léger
 
 
 def run_methods(p: pd.Series, months: int, target: float, methods: list[str], n: int = N_SIMS) -> tuple[dict, dict | None]:

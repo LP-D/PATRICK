@@ -1,4 +1,4 @@
-"""Fonds de test combinés (ADR 0029) : ML/DL croisé avec l'agent RL et la volatilité avant de trader. Aucun réseau."""
+"""Fonds de test combinés (ADR 0030) : ML/DL croisé avec l'agent RL et la volatilité avant de trader. Aucun réseau."""
 from __future__ import annotations
 
 import datetime as dt

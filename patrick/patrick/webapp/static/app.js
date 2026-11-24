@@ -402,6 +402,15 @@
                     confidence === "moderate" ? "rough" : "preliminary"),
             };
             let renderedStatus = fmtStr(statusText, params);
+            // Estimation tirée des runs passés (moyenne par étape à réglages identiques, hors veille et pauses : `tracking/eta.py`).
+            if (data.eta_basis && data.eta_basis !== "progress" && data.eta_n) {
+                const histParams = Object.assign({}, params, { n: data.eta_n, basis: tr("eta_basis_" + data.eta_basis, data.eta_basis) });
+                renderedStatus = data.eta_overdue
+                    ? fmtStr(tr("status_running_overdue", "{phase} — {pct}% · elapsed: {elapsed} · longer than the average of {n} run(s) ({basis})"), histParams)
+                    : remaining !== null
+                        ? fmtStr(tr("status_running_hist", "{phase} — {pct}% · elapsed: {elapsed} · about {remaining} left (average of {n} run(s), {basis})"), histParams)
+                        : renderedStatus;
+            }
             if (data.phase === "scan" && done > 0 && !progressWatch.warned &&
                 Date.now() - progressWatch.since >= progressStallThresholdMs) {
                 renderedStatus += " " + tr(
@@ -1147,6 +1156,22 @@
     if (!kind || !field) return;
     function sync() { field.hidden = kind.value !== "alpha"; }
     kind.addEventListener("change", sync);
+    sync();
+})();
+
+/* Page « Lancer » : le critère de la valeur exacte n'apparaît que pour cet objectif ; l'empilement et les sur-échantillonneurs
+   n'existent pas pour un régresseur (le serveur refuse l'empilement et ne garde que « none »). */
+(function () {
+    "use strict";
+    var task = document.getElementById("task"), field = document.getElementById("value-criterion-field");
+    if (!task || !field) return;
+    function sync() {
+        var value = task.value === "value";
+        field.hidden = !value;
+        var stack = document.querySelector('input[name="stacking"]');
+        if (stack) { if (value) stack.checked = false; stack.disabled = value; }
+    }
+    task.addEventListener("change", sync);
     sync();
 })();
 

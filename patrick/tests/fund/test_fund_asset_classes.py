@@ -187,7 +187,7 @@ def test_each_family_has_its_own_names_wrapper_capital_and_short_rule(conn):
 
     assert {f: r["name"] for f, r in rows.items()} == {
         "systematic": "Systematic Actions France", "cto": "CTO Actions France", "pea": "PEA Actions France"}
-    # Systematic = fonds quant d'étude ; CTO et PEA = fonds reproductibles par un particulier (ADR 0029) : 5 000 €, 1 € par ordre, 200 € au moins
+    # Systematic = fonds quant d'étude ; CTO et PEA = fonds reproductibles par un particulier (ADR 0030) : 5 000 €, 1 € par ordre, 200 € au moins
     for family, wrapper, short, capital, category, fee, minimum in (
             ("systematic", "CTO", True, 10_000_000, "quant", None, None),
             ("cto", "CTO", False, 5_000, "real", 1.0, 200.0),

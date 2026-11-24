@@ -1,4 +1,4 @@
-"""Positions « live » d'un agent RL (ADR 0029) : ce que l'agent du dernier pli d'un run ferait chaque jour depuis la fin de sa fenêtre hors
+"""Positions « live » d'un agent RL (ADR 0030) : ce que l'agent du dernier pli d'un run ferait chaque jour depuis la fin de sa fenêtre hors
 échantillon.
 
 Un run RL (`rl/run.py`) s'arrête à la dernière date connue à son lancement. Pour qu'un fonds de test combine son avis avec les signaux ML

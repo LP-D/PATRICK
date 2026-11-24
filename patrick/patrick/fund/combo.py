@@ -1,4 +1,4 @@
-"""Fonds de test combinés (ADR 0029) : au lieu de trader chaque signal ML/DL tel quel, combiner plusieurs sources avant de décider.
+"""Fonds de test combinés (ADR 0030) : au lieu de trader chaque signal ML/DL tel quel, combiner plusieurs sources avant de décider.
 
 Quatre fonds, mêmes signaux, mêmes conditions (CTO, 10 M€ virtuels, vente à découvert par CFD, frais estimés), un seul ingrédient qui change :
 

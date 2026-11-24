@@ -3,7 +3,9 @@
    `/api/run-state` ; rien ne dépend du contexte de la page. Les identifiants (`queue-*`) sont ceux que les pages et leurs tests
    connaissaient déjà. #}
 <section class="dash-panel dash-machine" id="machine-card" aria-labelledby="machine-title">
-    <h2 id="machine-title" class="dash-panel-title">{{ t('machine_title') }}</h2>
+    {# À côté du titre : le temps pour vider toute la file (reste du run en cours + durée attendue de chaque run en file, `queue_eta` de
+       `/api/run-state`), rempli par machine.js ; masqué quand il n'y a rien à estimer. #}
+    <h2 id="machine-title" class="dash-panel-title">{{ t('machine_title') }}<span id="machine-eta" class="machine-eta" title="{{ t('queue_eta_tip') }}" hidden></span></h2>
     <div class="dash-panel-body">
         <p id="machine-idle" class="machine-idle" data-keep>{{ t('machine_idle') }}</p>
 

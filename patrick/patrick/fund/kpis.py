@@ -1,6 +1,6 @@
 """KPI d'une stratégie à partir du résultat du moteur (spec §10).
 
-Performance avant frais (ADR 0029) : la valeur qu'aurait la stratégie sans ses coûts de mise en œuvre, frais de transaction (commission, spread,
+Performance avant frais (ADR 0030) : la valeur qu'aurait la stratégie sans ses coûts de mise en œuvre, frais de transaction (commission, spread,
 change) et financement des CFD. Elle sépare deux échecs qui se ressemblent en net : un signal qui gagne mais dont les frais mangent le gain, et un
 signal qui ne gagne rien même gratuit. Les dividendes restent dedans : ils font partie du rendement de l'actif. Approximation assumée : les tailles
 des positions sont celles qui ont été réellement prises (frais déduits du montant investi), pas celles d'un compte sans frais.

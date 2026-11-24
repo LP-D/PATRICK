@@ -1,9 +1,9 @@
-# ADR 0029 — Fonds quant, fonds reproductibles de 5 000 €, performance avant frais et fonds de test combinés
+# ADR 0030 — Fonds quant, fonds reproductibles de 5 000 €, performance avant frais et fonds de test combinés
 
 Date : 2026-11-24. Statut : acceptée. Code : `fund/store.py` (`CATEGORIES`, `set_terms`), `fund/asset_classes.py` (`Family.category`, `fee_flat`,
 `min_position`, `_provision`), `fund/real_funds.py` (`fund_name`, `_rename_legacy`), `fund/kpis.py` (`gross_nav`, `edge_verdict`), `fund/service.py`
 (`_totals`, `overview`), `fund/combo.py` (nouveau), `fund/systematic.py` (mode `combo`, `decide_directional(strong, weights)`), `fund/autopilot.py`
-(`Settings.combo`, `run_all(needs_rl)`), `rl/live.py` (nouveau), `live/refresh.py`, migration `0054_rl_live_position.sql`, `webapp/templates/fonds.html`,
+(`Settings.combo`, `run_all(needs_rl)`), `rl/live.py` (nouveau), `live/refresh.py`, migration `0056_rl_live_position.sql`, `webapp/templates/fonds.html`,
 `_fund_overview.html`, `_fund_panel.html`, `webapp/static/fonds.js`, `cli.py` (`fund combo-setup`, `fund rl-live`).
 Tests : `tests/fund/test_fund_before_fees.py`, `tests/fund/test_fund_combo.py`, `tests/rl/test_rl_live.py`, et les tests des gammes mis à jour.
 

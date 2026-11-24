@@ -14,6 +14,7 @@ import json
 import os
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ from patrick.config import defaults as D
 from patrick.config.schema import RunConfig
 from patrick.config.targets import refuse_non_target
 from patrick.tracking import db as trackdb
+from patrick.tracking import eta
 from patrick.tracking import jobs as jobs_db
 from patrick.webapp import forms
 
@@ -142,14 +144,73 @@ def _job_identity(config_json: str | None) -> tuple[str | None, str | None, str]
     return cfg.get("name"), target, kind
 
 
-def _job_view(job: dict, queue_position: int | None) -> dict:
+# Confiance affichée de l'estimation tirée de l'historique : « moderate » à partir de quelques runs aux réglages identiques.
+_ETA_SOLID_N = 3
+
+
+def _eta_context(conn) -> tuple:
+    """(historique, périodes sans calcul, instant) lus UNE fois pour toute une file : la carte est relue toutes les 4 s."""
+    now = time.time()
+    try:
+        return eta.history(conn), eta.load_idle(conn, now), now
+    except sqlite3.Error:
+        return None, [], now
+
+
+def _timing(job: dict, conn, ctx: tuple | None = None) -> dict:
+    """Chronomètre et estimation d'un job, en temps ACTIF (hors veille du PC et hors pause, `tracking/eta.py`).
+
+    - run en cours : `elapsed_s` actif, `estimated_remaining_s` d'après la moyenne par étape des runs aux réglages identiques (sinon proches,
+      sinon de la même famille) ; à défaut d'historique, l'ancienne extrapolation sur l'avancement du balayage ;
+    - run en file : `estimated_duration_s`, la durée attendue du run entier ;
+    - `eta_basis` (exact | near | family | progress), `eta_n` (runs passés comparables), `eta_overdue` (plus long que d'habitude)."""
+    out = {"elapsed_s": _elapsed_s(job), "estimated_remaining_s": None, "eta_confidence": None, "estimated_duration_s": None,
+           "eta_basis": None, "eta_n": None, "eta_overdue": False}
+    if conn is None:
+        return out
+    hist, idle, now = ctx if ctx is not None else _eta_context(conn)
+    try:
+        cfg = json.loads(job["config_json"])
+    except (TypeError, ValueError):
+        return out
+    if not isinstance(cfg, dict) or hist is None:
+        return out
+    estimate = hist.estimate(cfg)
+    if estimate is not None:
+        out.update(eta_basis=estimate.basis, eta_n=estimate.n)
+    if job["status"] == "queued":
+        out["estimated_duration_s"] = round(estimate.total_s) if estimate is not None else None
+        return out
+    start = eta.parse_utc(job["started_at"]) or eta.parse_utc(job["created_at"])
+    end = eta.parse_utc(job["finished_at"]) or now
+    if start is None:
+        return out
+    active = eta.active_seconds(start, end, idle)
+    out["elapsed_s"] = active
+    if job["status"] != "running":
+        return out
+    if estimate is not None:
+        spent = eta.phase_elapsed(conn, job["job_id"], start, job["phase"], now, idle)
+        remaining, overdue = eta.remaining_seconds(estimate, job["phase"], active, spent)
+        out.update(estimated_remaining_s=round(remaining), eta_overdue=overdue,
+                   eta_confidence="moderate" if estimate.basis == "exact" and estimate.n >= _ETA_SOLID_N else "low")
+    return out
+
+
+def _job_view(job: dict, queue_position: int | None, conn=None, ctx: tuple | None = None) -> dict:
     name, target, kind = _job_identity(job["config_json"])
     paused = job["status"] == "running" and bool(job.get("pause_requested"))
     progress_total = max(0, int(job["progress_total"] or 0))
     progress_done = max(0, int(job["progress_done"] or 0))
     if progress_total:
         progress_done = min(progress_done, progress_total)
-    elapsed_s = _elapsed_s(job)
+    timing = _timing(job, conn, ctx)
+    elapsed_s = timing["elapsed_s"]
+    if timing["estimated_remaining_s"] is None and job["status"] == "running":
+        timing["estimated_remaining_s"] = _estimated_remaining_s(elapsed_s, progress_done, progress_total)
+        timing["eta_confidence"] = _eta_confidence(progress_done, progress_total)
+        if timing["estimated_remaining_s"] is not None:
+            timing["eta_basis"] = "progress"
     return {
         "id": job["job_id"],
         "name": name,
@@ -161,9 +222,7 @@ def _job_view(job: dict, queue_position: int | None) -> dict:
         "progress": {"done": progress_done, "total": progress_total},
         "log_tail": job["log_tail"],
         "error": job["error"],
-        "elapsed_s": elapsed_s,
-        "estimated_remaining_s": _estimated_remaining_s(elapsed_s, progress_done, progress_total),
-        "eta_confidence": _eta_confidence(progress_done, progress_total),
+        **timing,
         "queue_position": queue_position,
     }
 
@@ -182,10 +241,11 @@ def start_run(config: RunConfig) -> dict:
         queue_ids = jobs_db.list_queued_job_ids(conn)
         queue_position = queue_ids.index(job_id) + 1 if job_id in queue_ids else None
         job = jobs_db.get_job(conn, job_id)
+        view = _job_view(job, queue_position, conn)
     finally:
         conn.close()
     ensure_worker_running()
-    return _job_view(job, queue_position)
+    return view
 
 
 def get_run(run_id: str) -> dict | None:
@@ -198,7 +258,7 @@ def get_run(run_id: str) -> dict | None:
         if job["status"] == "queued":
             queue_ids = jobs_db.list_queued_job_ids(conn)
             queue_position = queue_ids.index(run_id) + 1 if run_id in queue_ids else None
-        return _job_view(job, queue_position)
+        return _job_view(job, queue_position, conn)
     finally:
         conn.close()
 
@@ -271,7 +331,7 @@ def active_run() -> dict | None:
     conn = _connect()
     try:
         job = jobs_db.active_job(conn)
-        return _job_view(job, None) if job else None
+        return _job_view(job, None, conn) if job else None
     finally:
         conn.close()
 
@@ -280,14 +340,34 @@ def queued_runs() -> list[dict]:
     conn = _connect()
     try:
         ids = jobs_db.list_queued_job_ids(conn)
+        ctx = _eta_context(conn) if ids else None
         views = []
         for pos, job_id in enumerate(ids, start=1):
             job = jobs_db.get_job(conn, job_id)
             if job is not None:
-                views.append(_job_view(job, pos))
+                views.append(_job_view(job, pos, conn, ctx))
         return views
     finally:
         conn.close()
+
+
+def queue_eta(active: dict | None, queue: list[dict]) -> dict:
+    """Temps pour vider toute la file : reste du run en cours + durée attendue de chaque run en file (vues de `_job_view`). `unknown` :
+    runs sans aucun run comparable terminé (non comptés dans `total_s`)."""
+    total, unknown, known = 0.0, 0, 0
+    if active is not None:
+        if active.get("estimated_remaining_s") is not None:
+            total += active["estimated_remaining_s"]
+            known += 1
+        else:
+            unknown += 1
+    for job in queue:
+        if job.get("estimated_duration_s") is not None:
+            total += job["estimated_duration_s"]
+            known += 1
+        else:
+            unknown += 1
+    return {"total_s": round(total) if known else None, "unknown": unknown, "n": known + unknown}
 
 
 def set_active_run_paused(job_id: str, paused: bool) -> dict | None:
@@ -300,7 +380,7 @@ def set_active_run_paused(job_id: str, paused: bool) -> dict | None:
                       and not jobs_db.worker_process_alive(job["worker_pid"], job["started_at"]))
         if not orphan and jobs_db.set_job_paused(conn, job_id, paused):
             job = jobs_db.get_job(conn, job_id)
-            return _job_view(job, None) if job else None
+            return _job_view(job, None, conn) if job else None
     finally:
         conn.close()
     if orphan:

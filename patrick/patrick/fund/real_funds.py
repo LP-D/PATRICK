@@ -1,6 +1,6 @@
 """Fonds « réels » : un PEA et un CTO fictifs d'un particulier qui suivent tous les signaux (ADR 0026).
 
-Deux stratégies en pilote automatique (`PEA Tous signaux`, `CTO Tous signaux` ; `Systematic PEA` et `Systematic CTO` avant l'ADR 0029, renommées
+Deux stratégies en pilote automatique (`PEA Tous signaux`, `CTO Tous signaux` ; `Systematic PEA` et `Systematic CTO` avant l'ADR 0030, renommées
 à la reprise : « Systematic » désigne désormais la gamme quant, avec vente à découvert), de catégorie `real` : capital de 5 000 €, frais de 1 € par ordre
 tout compris (`fee_flat`), niveau de sélection `auc` (tous les modèles dont l'AUC de direction du holdout dépasse le hasard, ceux qui passent
 en plus la correction de Benjamini-Hochberg et le test de Diebold-Mariano en tête), taille minimale d'une position (`REAL_MIN_POSITION`) pour que
@@ -29,7 +29,7 @@ def fund_name(kind: str) -> str:
 
 
 def legacy_name(kind: str) -> str:
-    """Nom d'avant l'ADR 0029 : une stratégie de ce nom, de catégorie `real`, est reprise et renommée."""
+    """Nom d'avant l'ADR 0030 : une stratégie de ce nom, de catégorie `real`, est reprise et renommée."""
     return f"Systematic {kind}"
 
 
