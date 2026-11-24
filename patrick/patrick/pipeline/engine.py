@@ -1310,8 +1310,14 @@ def _config_hash(config: RunConfig) -> str:
     if selection_exclude:
         exclude["selection"] = selection_exclude
     # Idem pour la version de méthode : un run de méthode 1 (tout run d'avant le champ) garde son hachage.
+    validation_exclude = set()
     if config.validation.method_version < 2:
-        exclude["validation"] = {"method_version"}
+        validation_exclude.add("method_version")
+    # Idem pour l'exclusion des cours figés : hors du hachage tant qu'elle est fausse (tout run d'avant le champ).
+    if not config.validation.drop_stale_returns:
+        validation_exclude.add("drop_stale_returns")
+    if validation_exclude:
+        exclude["validation"] = validation_exclude
     # Idem pour les features de contexte des actions : sans effet sur une cible qui n'est pas une action, et absentes de tout run d'avant
     # le champ ; seul un run d'action qui les active les porte dans son hachage.
     if not (config.features.enable_equity_context_features and is_equity_symbol(config.objective.target_symbol)):
@@ -2414,6 +2420,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # écrite dans la config pour que le live, l'explication et la reprise la rejouent (ADR 0007).
         config.objective.session_rule = CURRENT_SESSION_RULE
         config.validation.method_version = D.CURRENT_METHOD_VERSION
+        config.validation.drop_stale_returns = True
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)

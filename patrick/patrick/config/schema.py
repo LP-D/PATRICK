@@ -212,6 +212,10 @@ class ValidationConfig(BaseModel):
     # DIRECTION, SHAP classé sur les lignes les plus RÉCENTES, régimes par volatilité réalisée, jours plats retirés de
     # l'entraînement mais gardés dans l'évaluation. Un run neuf reçoit la version courante dans `run_pipeline`.
     method_version: int = 1
+    # Rendement EXACTEMENT nul à l'horizon (cours figé : source en panne, dernière valeur recopiée) : le réel ne le juge pas
+    # (`live/predict._realised_outcome`) ; avec `drop_stale_returns`, l'évaluation non plus (même population que le réel, ADR 0008).
+    # Faux pour tout run enregistré avant le champ (relu tel quel, hachage inchangé) ; vrai pour un run neuf (`run_pipeline`).
+    drop_stale_returns: bool = False
     # Correction report, D3: fold-size guard that already existed (verified,
     # not added) -- `_FoldContext.prepare`/`_evaluate_holdout` exclude (now
     # with an explicit warning, see `pipeline/engine.py`) any fold below this

@@ -14,6 +14,7 @@ from patrick.analysis import frames
 from patrick.analysis import stats_core as sc
 from patrick.analysis.context import Ctx, iso
 from patrick.analysis.sec_predict import _scores
+from patrick.validation import winner_bias
 
 
 # ----------------------------------------------------------------------------------------------------------- aperçu
@@ -50,7 +51,11 @@ def overview(ctx: Ctx) -> dict:
             name = (json.loads(r[3]) or {}).get("name")
         siblings.append({"run_id": r[0], "started_at": r[1], "status": r[2], "name": name or r[0]})
     reads = trackstats.holdout_reads(conn, run["target"], fr.horizon)
-    return {"run": {**{k: run[k] for k in ("run_id", "target", "horizon", "status", "started_at", "finished_at", "snapshot_id",
+    # Biais du gagnant (ADR 0005) : l'AUC holdout d'un essai retenu est celle du meilleur des runs qui ont lu ce holdout.
+    hold = heads.get("holdout") or {}
+    winner = winner_bias.deflated_auc(hold.get("auc"), int(hold.get("n") or 0), fr.horizon, float(hold.get("base_up") or 0),
+                                      int(reads.get("n_runs") or 1))
+    return {"winner_bias": winner, "run": {**{k: run[k] for k in ("run_id", "target", "horizon", "status", "started_at", "finished_at", "snapshot_id",
                                            "config_hash", "git_sha", "seed", "n_trials")}, "name": _run_name(cfg, run)},
             "trial": {"trial_id": trial["trial_id"], "algo": trial["algo"], "sampler": trial["sampler"], "n_features": trial["n_features"],
                       "selector": trial["selector"], "regime": trial["regime"], "category": trial.get("category"), "params": params,

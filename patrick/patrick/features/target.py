@@ -5,7 +5,7 @@ hardcoded to the VIX.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -25,10 +25,13 @@ class TargetSpec:
     - `regime_basis` : `"level"` = terciles du NIVEAU du prix (héritage du VIX : pour une action en tendance presque tout le test
       tombe en « STRESS ») ; `"volatility"` = terciles de la volatilité réalisée sur 60 jours (connue à la date, ajustée sur le train).
     - `keep_flat` : les jours plats restent dans les lignes étiquetées (le jeu d'évaluation est celui du live, qui juge tous les
-      jours) ; ils sont écartés de l'ENTRAÎNEMENT et de l'ajustement des seuils par `target.attrs["flat"]`."""
+      jours) ; ils sont écartés de l'ENTRAÎNEMENT et de l'ajustement des seuils par `target.attrs["flat"]`.
+    - `drop_stale` : avec `keep_flat`, un rendement EXACTEMENT nul (cours figé) sort aussi des lignes évaluées : le réel ne le juge pas
+      (`live/predict._realised_outcome`), l'évaluation ne doit pas le compter « hausse faible »."""
     flat_vol_mult: float | None = None
     regime_basis: str = "level"
     keep_flat: bool = False
+    drop_stale: bool = False
 
 
 METHOD_1 = TargetSpec()
@@ -43,9 +46,10 @@ def spec_for(config) -> TargetSpec:
     from patrick.data.session_calendar import untradable_kind
 
     obj = config.objective
+    drop_stale = bool(getattr(config.validation, "drop_stale_returns", False))
     if untradable_kind(obj.target_symbol, obj.target_source) == "volatility":
-        return TargetSpec(METHOD_2.flat_vol_mult, "level", True)
-    return METHOD_2
+        return TargetSpec(METHOD_2.flat_vol_mult, "level", True, drop_stale)
+    return replace(METHOD_2, drop_stale=True) if drop_stale else METHOD_2
 
 
 def trailing_volatility(s: pd.Series) -> pd.Series:
@@ -112,7 +116,10 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     ret_all = ret.dropna()
     flat_all = flat.reindex(ret_all.index).fillna(False)
     ret_fit = ret_all.loc[~flat_all]          # les seuils et l'entraînement ne voient jamais les jours plats
-    ret = ret_all if spec.keep_flat else ret_fit
+    if spec.keep_flat:
+        ret = ret_all.loc[ret_all != 0] if spec.drop_stale else ret_all
+    else:
+        ret = ret_fit
     reg_r = regime.reindex(ret.index)
 
     safe_fit_idx = max(split_idx - horizon, 0)

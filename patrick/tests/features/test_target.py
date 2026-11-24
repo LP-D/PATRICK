@@ -49,3 +49,34 @@ def test_classify_return_matches_build_target_boundaries():
     assert classify_return(-0.005, "GLOBAL", thr) == 1
     assert classify_return(0.005, "GLOBAL", thr) == 2
     assert classify_return(0.02, "GLOBAL", thr) == 3
+
+
+def test_a_frozen_price_is_not_evaluated_when_the_spec_drops_stale_returns():
+    """Rendement EXACTEMENT nul (cours figé) : le réel ne le juge pas (`live/predict._realised_outcome`) ; avec `drop_stale`, l'évaluation
+    de la méthode 2 ne le compte plus « hausse faible ». Sans, il reste (runs d'avant le champ)."""
+    from dataclasses import replace
+
+    from patrick.features.target import METHOD_2
+
+    rng = np.random.default_rng(4)
+    prices = pd.Series(100 * np.exp(np.cumsum(rng.normal(0, 0.01, 400))), index=pd.bdate_range("2024-01-01", periods=400))
+    prices.iloc[200:203] = prices.iloc[199]                       # trois jours figés : deux rendements à 1 jour exactement nuls
+    frozen = [prices.index[199], prices.index[200], prices.index[201]]
+
+    kept, _, _ = build_target(prices, 1, 300, spec=METHOD_2)
+    dropped, _, _ = build_target(prices, 1, 300, spec=replace(METHOD_2, drop_stale=True))
+
+    assert all(d in kept.index for d in frozen)
+    assert not any(d in dropped.index for d in frozen)
+    assert len(kept) - len(dropped) == 3
+    assert dropped.attrs["flat"].index.equals(dropped.index)
+
+
+def test_spec_for_follows_the_stored_flag():
+    from patrick.config.schema import RunConfig
+    from patrick.features.target import spec_for
+
+    base = {"name": "t", "objective": {"target_symbol": "AAPL"}, "validation": {"method_version": 2}}
+    assert spec_for(RunConfig.model_validate(base)).drop_stale is False
+    base["validation"]["drop_stale_returns"] = True
+    assert spec_for(RunConfig.model_validate(base)).drop_stale is True

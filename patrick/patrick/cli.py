@@ -442,6 +442,31 @@ def audit_signal_cmd(
         typer.echo(f"  q={row['q_value']:.3f}  AUC {row['auc']:.3f}  {row['target']} h={row['horizon']}  ({row['n_runs']} run(s))")
 
 
+@audit_app.command(name="fx-gap")
+def audit_fx_gap_cmd(
+    horizon: int = typer.Option(1, "--horizon", help="Horizon des runs de change comparés"),
+    min_live: int = typer.Option(20, "--min-live", help="Jugements réels minimum pour qu'un run compte"),
+) -> None:
+    """Écart entre l'exactitude directionnelle du holdout et celle du réel des cibles de change, par règle d'alignement (ADR 0007). Lecture
+    seule. La règle 1 montrait 15 points d'écart ; la règle 2 doit le ramener à l'ordre de grandeur des autres classes."""
+    from patrick.audit.fx_gap import fx_gap
+    from patrick.tracking import db as trackdb
+
+    conn = trackdb.connect()
+    try:
+        report = fx_gap(conn, horizon=horizon, min_live=min_live)
+    finally:
+        conn.close()
+    if not report["rules"]:
+        typer.echo("[FX] aucun run de change terminé à cet horizon.")
+    for rule, r in report["rules"].items():
+        if not r["runs"]:
+            typer.echo(f"[FX] règle {rule} : aucun run avec au moins {min_live} jugements réels ({r['too_young']} trop jeune(s)).")
+            continue
+        typer.echo(f"[FX] règle {rule} : {r['runs']} run(s), holdout {r['holdout_acc']:.1%} (n={r['holdout_n']}), "
+                   f"réel {r['live_acc']:.1%} (n={r['live_n']}), écart {r['gap_points']:+.1f} points ; {r['too_young']} trop jeune(s).")
+
+
 @audit_app.command(name="panel-backfill")
 def audit_panel_backfill_cmd(
     limit: int = typer.Option(0, "--limit", help="Nombre maximal d'essais traités (0 = tous)"),

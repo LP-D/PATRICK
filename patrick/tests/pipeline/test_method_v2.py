@@ -341,3 +341,26 @@ def test_dm_brier_result_is_stored_per_run(tmp_path):
     assert trackdb.get_dm_brier(conn, "a1") == {"baseline": "train_up_rate", "brier_model": 0.21, "brier_baseline": 0.25,
                                                 "dm_stat": -2.1, "p_value": 0.04, "n_obs": 300}
     conn.close()
+
+
+def test_dropping_frozen_prices_is_off_for_stored_runs_on_for_new_ones_and_hashed_only_when_on(monkeypatch):
+    one = _config(2)
+    stored = json.loads(one.model_dump_json())
+    del stored["validation"]["drop_stale_returns"]
+    assert engine._config_hash(RunConfig.model_validate_json(json.dumps(stored))) == engine._config_hash(one)    # faux : hors hachage
+    on = _config(2)
+    on.validation.drop_stale_returns = True
+    assert engine._config_hash(on) != engine._config_hash(one)
+
+    def spy(objective, *args, **kwargs):
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(engine, "ingest", spy)
+    monkeypatch.setattr(engine, "load_snapshot", lambda objective, *a, **k: spy(objective))
+    seen = []
+    for snapshot_id in (None, "snap-1"):
+        cfg = _config(2)
+        with pytest.raises(RuntimeError, match="stop"):
+            engine.run_pipeline(cfg, snapshot_id=snapshot_id)
+        seen.append(cfg.validation.drop_stale_returns)
+    assert seen == [True, False]                       # un run neuf l'active ; une reprise garde la règle de son enregistrement
