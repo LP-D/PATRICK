@@ -63,7 +63,24 @@
                                                                color: "--text-2", width: 1.5, dash: [4, 3] }] : []),
             hlines: [{ y: data.capital, color: "--text-3", dash: [5, 4], label: labels.capital }],
             yFmt: function (v) { return eur.format(v); }, ranges: true, title: host.getAttribute("aria-label") || "", height: 260,
+            sync: "fund-chart",
         });
+        // D12 (24/11) : perte depuis le plus haut de la valeur nette, sous la courbe, même réticule (`sync`).
+        var ddHost = document.getElementById("fund-chart-dd");
+        if (ddHost && pts.length > 1) {
+            var peak = -Infinity, dd = pts.map(function (p) {
+                if (p.nav == null || !isFinite(p.nav)) return null;
+                peak = Math.max(peak, p.nav);
+                return peak > 0 ? p.nav / peak - 1 : null;
+            });
+            var pctFmt = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "percent", maximumFractionDigits: 1 });
+            P.create(ddHost, {
+                type: "line", xKind: "time", xs: pts.map(function (p) { return P.parseDate(p.t); }),
+                series: [{ name: labels.drawdown || "", values: dd, color: "--neg", width: 1.5 }],
+                yFmt: function (v) { return pctFmt.format(v); }, title: ddHost.getAttribute("aria-label") || "", height: 120,
+                finance: true, area: true, sync: "fund-chart",
+            });
+        }
     }
 
     /* ---- panneau ---- */

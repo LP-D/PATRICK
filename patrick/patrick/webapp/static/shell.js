@@ -645,7 +645,7 @@
             for (var i = 0; i < REL_UNITS.length; i++) {
                 if (abs >= REL_UNITS[i][1]) { text = rtf.format(Math.round(secs / REL_UNITS[i][1]), REL_UNITS[i][0]); break; }
             }
-            el.textContent = text || rtf.format(0, "minute");
+            el.textContent = text || rtf.format(0, "second");       // moins d'une minute : « maintenant »
             if (!el.dataset.exact) {
                 el.dataset.exact = "1";
                 el.title = new Date(t).toLocaleString(lang);

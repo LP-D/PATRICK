@@ -470,7 +470,7 @@
                 });
                 lastTags.sort(function (a, b) { return a.y - b.y; });
                 for (var q = 1; q < lastTags.length; q++) if (lastTags[q].ty === undefined && lastTags[q].y - (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) < 19) lastTags[q].ty = (lastTags[q - 1].ty !== undefined ? lastTags[q - 1].ty : lastTags[q - 1].y) + 19;
-                lastTags.forEach(function (tg) { chip(ctx, (o.tipFmt || valFmt)(tg.v), W - padR + 3, tg.ty !== undefined ? tg.ty : tg.y, tg.col, inkFor(tg.col), "left"); });
+                lastTags.forEach(function (tg) { chip(ctx, (o.tipFmt || o.yFmt || valFmt)(tg.v), W - padR + 3, tg.ty !== undefined ? tg.ty : tg.y, tg.col, inkFor(tg.col), "left"); });
             }
             geo = { padL: padL, padR: padR, padT: padT, pw: pw, ph: ph, hit: fullH, X: X, Y: Y, vx0: vx0, vx1: vx1, lo: lo, hi: hi, yFmt: yFmt, ch: ch, trendCol: trendCol, candle: candle, vol: volOn };
             setAria(ye);
