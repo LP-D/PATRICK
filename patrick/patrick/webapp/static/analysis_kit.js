@@ -426,8 +426,14 @@
     }
     /* Notes du serveur : `code` ou `code:détail` ; le texte vient de la clé `ra_note_<code>` (le détail est affiché tel quel). */
     function noteText(n) {
+        // « code:détail » ; un détail « a|b|c » donne aussi {d1}, {d2}, {d3}, et un nombre décimal y est mis au format de la langue.
         var i = String(n).indexOf(":"), code = i < 0 ? String(n) : String(n).slice(0, i), detail = i < 0 ? "" : String(n).slice(i + 1);
-        var key = "ra_note_" + code, text = T(key, { d: detail });
+        var vars = { d: detail };
+        detail.split("|").forEach(function (part, k) {
+            var m = /^-?\d+\.(\d+)$/.exec(part);
+            vars["d" + (k + 1)] = m ? num(parseFloat(part), m[1].length) : part;
+        });
+        var key = "ra_note_" + code, text = T(key, vars);
         return text === key ? String(n) : text;
     }
     function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); return node; }

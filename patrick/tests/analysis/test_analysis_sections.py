@@ -262,3 +262,19 @@ def test_regimes_unavailable_without_levels(tmp_path, monkeypatch):
     out = registry.build(conn, info["run_id"], "regimes", {}, db_key="hmm0")
     assert out["available"] is False and out["reason"] == "no_returns"
     registry.clear_cache()
+
+
+def test_overview_flags_a_run_trained_before_the_leak_guard(seeded):
+    """C14 : un run sans alignement version >= 1 (avant le 09/10/2026) porte une note visible, sans être exclu de rien."""
+    conn, info = seeded
+    out = build(conn, info, "overview")
+    assert "pre_leak_guard" in out["notes"]
+    assert "winner_bias" in out and "calibration_drift" in out
+
+
+def test_pre_leak_guard_notice_reads_the_alignment_version():
+    from patrick.validation import suspicion
+    assert suspicion.pre_leak_guard_notice({"objective": {}}) == "pre_leak_guard"
+    assert suspicion.pre_leak_guard_notice({"objective": {"alignment": {"version": 0}}}) == "pre_leak_guard"
+    assert suspicion.pre_leak_guard_notice({"objective": {"alignment": {"version": 1}}}) is None
+    assert suspicion.pre_leak_guard_notice(None) is None
