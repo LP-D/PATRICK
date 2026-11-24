@@ -80,3 +80,22 @@ def test_spec_for_follows_the_stored_flag():
     assert spec_for(RunConfig.model_validate(base)).drop_stale is False
     base["validation"]["drop_stale_returns"] = True
     assert spec_for(RunConfig.model_validate(base)).drop_stale is True
+
+
+def test_thresholds_and_regimes_can_be_fitted_on_scattered_training_dates():
+    """CPCV : l'entraînement d'une combinaison est le complément de groupes de test dispersés. Les seuils de classe et les terciles de régime
+    se calent alors sur ces seules dates, jamais sur un groupe qui sera son test (avant le 24/11 : groupe 0 pour toutes)."""
+    from patrick.features.target import METHOD_2, regime_series
+
+    rng = np.random.default_rng(9)
+    n = 600
+    calm, wild = rng.normal(0, 0.005, n // 2), rng.normal(0, 0.03, n // 2)
+    prices = pd.Series(100 * np.exp(np.cumsum(np.concatenate([calm, wild]))), index=pd.bdate_range("2023-01-02", periods=n))
+    fit_dates = prices.index[: n // 2 - 5]                           # entraînement = moitié calme seulement
+
+    _, _, thr_fit = build_target(prices, 1, 10, spec=METHOD_2, fit_dates=fit_dates)
+    _, _, thr_all = build_target(prices, 1, n, spec=METHOD_2)
+    assert abs(thr_fit["GLOBAL"][1]) < abs(thr_all["GLOBAL"][1]) / 2   # les seuils ignorent la moitié agitée, hors entraînement
+
+    regimes = regime_series(prices, 10, METHOD_2, fit_dates=fit_dates)
+    assert (regimes.iloc[n // 2 + 70:] == "STRESS").mean() > 0.9        # calé sur le calme : l'agitation qui suit est « STRESS »

@@ -1198,6 +1198,31 @@ def dm_brier(y_true, p_up, train_up_rate: float, horizon: int) -> dict | None:
             "dm_stat": dm["dm_stat"], "p_value": dm["p_value"], "n_obs": dm["n_obs"]}
 
 
+LOGLOSS_EPS = 1e-6           # P(hausse) bornée à [eps, 1 - eps] : une probabilité de 0 ou 1 ferait une perte infinie
+
+
+def dm_logloss(y_true, p_up, train_up_rate: float, horizon: int) -> dict | None:
+    """Diebold-Mariano sur la LOG-LOSS de P(hausse) contre la même baseline constante que `dm_brier` (taux de hausse de l'entraînement).
+    Plus sévère que le Brier pour une probabilité confiante et fausse. `None` sans probabilité ou sans ligne exploitable."""
+    if p_up is None or train_up_rate is None:
+        return None
+    y = (np.asarray(y_true, dtype=float).ravel() >= 2).astype(float)
+    p = np.asarray(p_up, dtype=float).ravel()
+    if len(p) != len(y):
+        return None
+    ok = np.isfinite(p)
+    if ok.sum() < 10:
+        return None
+    pm = np.clip(p[ok], LOGLOSS_EPS, 1 - LOGLOSS_EPS)
+    pb = float(np.clip(float(train_up_rate), LOGLOSS_EPS, 1 - LOGLOSS_EPS))
+    yy = y[ok]
+    loss_model = -(yy * np.log(pm) + (1 - yy) * np.log(1 - pm))
+    loss_base = -(yy * np.log(pb) + (1 - yy) * np.log(1 - pb))
+    dm = diebold_mariano(loss_model, loss_base, h=horizon)
+    return {"baseline": "train_up_rate", "logloss_model": float(loss_model.mean()), "logloss_baseline": float(loss_base.mean()),
+            "dm_stat": dm["dm_stat"], "p_value": dm["p_value"], "n_obs": dm["n_obs"]}
+
+
 def _evaluate_diebold_mariano(conn, snapshot_id: str, ctx: _FoldContext, best_cfg: dict,
                                last_fold: int, seed: int, holdout_eval: dict | None = None) -> dict | None:
     """DM (Phase 2.5) between the winning config and TWO baselines (Phase
@@ -1316,6 +1341,8 @@ def _config_hash(config: RunConfig) -> str:
     # Idem pour l'exclusion des cours figés : hors du hachage tant qu'elle est fausse (tout run d'avant le champ).
     if not config.validation.drop_stale_returns:
         validation_exclude.add("drop_stale_returns")
+    if not config.validation.cpcv_thresholds_per_combo:
+        validation_exclude.add("cpcv_thresholds_per_combo")
     if validation_exclude:
         exclude["validation"] = validation_exclude
     # Idem pour les features de contexte des actions : sans effet sur une cible qui n'est pas une action, et absentes de tout run d'avant
@@ -1377,8 +1404,9 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
     Interaction formulas (when the "interactions" family is on): discovered
     per combination on its training bars (`_cpcv_interaction_formulas`) --
     they used to be discovered once on group 0, a TEST group of 6 combinations
-    out of 21 (audit 2026-10-19). Still shared, as a documented approximation:
-    the class thresholds / regimes of `run_target`, fitted on group 0 only.
+    out of 21 (audit 2026-10-19). Class thresholds / regimes of `run_target`: fitted per
+    combination on its training dates too when `validation.cpcv_thresholds_per_combo` (every new
+    run since 2026-11-24); runs stored before keep the group-0 fit they were made with.
 
     Universe reduction (`universe`, when enabled): decided per combination
     on `split.train_mask` -- the non-contiguous train complement, purged
@@ -1446,14 +1474,26 @@ def _run_cpcv_scan(raw: pd.DataFrame, config: RunConfig, base_pool: pd.DataFrame
         X_all = _finite_features(X_pool_df.values, f"CPCV (h={horizon}d)")
         y_all = target_series.values.astype(int)
         train_ok = non_flat_mask(target_series)
+        # Seuils et régimes de chaque combinaison ajustés sur SES dates d'entraînement (purgées, sous embargo) : jamais sur un groupe qui
+        # sera son test. Mêmes lignes que la cible partagée (les jours plats ne dépendent pas de l'ajustement), étiquettes propres.
+        combo_labels: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        if config.validation.cpcv_thresholds_per_combo:
+            for ci, combo in enumerate(combos):
+                fit_split = cpcv_module.build_split(groups, combo, horizon, embargo_bars=config.validation.embargo_bars)
+                t_c, r_c, _ = run_target(full_pool, config, target_col, horizon, groups[0][1] + 1,
+                                         fit_dates=all_dates[fit_split.train_mask])
+                combo_labels[ci] = (t_c.reindex(idx).to_numpy().astype(int), r_c.reindex(idx).fillna("NORMAL").to_numpy())
 
         for regime in config.objective.regimes:
             regime_sel = (reg_al == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
 
             def prep_combo(ci, combo, horizon=horizon, regime=regime, idx=idx, regime_sel=regime_sel,
-                           y_all=y_all, X_all=X_all, train_ok=train_ok):
+                           y_all=y_all, X_all=X_all, train_ok=train_ok, combo_labels=combo_labels):
                 """Masks, train/test labels and scaled matrices of one CPCV combination
                 (None when excluded for too few rows)."""
+                if ci in combo_labels:
+                    y_all, reg_c = combo_labels[ci]
+                    regime_sel = (reg_c == regime) if regime != "GLOBAL" else np.ones(len(idx), dtype=bool)
                 split = cpcv_module.build_split(groups, combo, horizon,
                                                  embargo_bars=config.validation.embargo_bars)
                 train_dates = set(all_dates[split.train_mask])
@@ -2341,7 +2381,8 @@ def _final_diebold_mariano(st: _RunState, final_best: dict, holdout_eval: dict |
 
 
 def _final_dm_brier(st: _RunState, final_best: dict, holdout_eval: dict | None) -> None:
-    """DM sur le Brier de P(hausse) (ADR 0010), enregistré dans `dm_brier_result` ; un diagnostic de plus, jamais un échec de run."""
+    """DM sur le Brier (ADR 0010) et sur la log-loss de P(hausse), enregistrés dans `dm_brier_result` / `dm_logloss_result` ; des diagnostics
+    de plus, jamais un échec de run."""
     if holdout_eval is None or not st.is_walkforward:
         return
     try:
@@ -2351,6 +2392,11 @@ def _final_dm_brier(st: _RunState, final_best: dict, holdout_eval: dict | None) 
             trackdb.save_dm_brier(st.conn, st.run_ids[horizon], result)
             print(f"  [DM-BRIER] h={horizon}d : Brier {result['brier_model']:.4f} contre {result['brier_baseline']:.4f} "
                   f"(taux de hausse de l'entraînement), p = {result['p_value']}")
+        result = dm_logloss(holdout_eval["y_true"], holdout_eval.get("p_up"), holdout_eval.get("train_up_rate"), horizon)
+        if result is not None:
+            trackdb.save_dm_logloss(st.conn, st.run_ids[horizon], result)
+            print(f"  [DM-LOGLOSS] h={horizon}d : log-loss {result['logloss_model']:.4f} contre {result['logloss_baseline']:.4f}, "
+                  f"p = {result['p_value']}")
     except Exception:  # noqa: BLE001 -- diagnostic : il ne doit jamais empêcher un run de se terminer
         traceback.print_exc()
 
@@ -2421,6 +2467,7 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         config.objective.session_rule = CURRENT_SESSION_RULE
         config.validation.method_version = D.CURRENT_METHOD_VERSION
         config.validation.drop_stale_returns = True
+        config.validation.cpcv_thresholds_per_combo = True
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)

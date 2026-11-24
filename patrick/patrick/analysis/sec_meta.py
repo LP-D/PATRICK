@@ -14,7 +14,7 @@ from patrick.analysis import frames
 from patrick.analysis import stats_core as sc
 from patrick.analysis.context import Ctx, iso
 from patrick.analysis.sec_predict import _scores
-from patrick.validation import winner_bias
+from patrick.validation import calibration_drift, winner_bias
 
 
 # ----------------------------------------------------------------------------------------------------------- aperçu
@@ -55,7 +55,12 @@ def overview(ctx: Ctx) -> dict:
     hold = heads.get("holdout") or {}
     winner = winner_bias.deflated_auc(hold.get("auc"), int(hold.get("n") or 0), fr.horizon, float(hold.get("base_up") or 0),
                                       int(reads.get("n_runs") or 1))
-    return {"winner_bias": winner, "run": {**{k: run[k] for k in ("run_id", "target", "horizon", "status", "started_at", "finished_at", "snapshot_id",
+    # Dérive de la calibration : Brier des signaux réels jugés contre celui du holdout (deux erreurs-types).
+    calib = None
+    if len(live) and hold.get("brier") is not None:
+        calib = calibration_drift.calibration_drift(live["p_up"].to_numpy(dtype=float), (live["ut"].to_numpy(dtype=float) >= 0.5).astype(float),
+                                                    hold.get("brier"), fr.horizon)
+    return {"winner_bias": winner, "calibration_drift": calib, "run": {**{k: run[k] for k in ("run_id", "target", "horizon", "status", "started_at", "finished_at", "snapshot_id",
                                            "config_hash", "git_sha", "seed", "n_trials")}, "name": _run_name(cfg, run)},
             "trial": {"trial_id": trial["trial_id"], "algo": trial["algo"], "sampler": trial["sampler"], "n_features": trial["n_features"],
                       "selector": trial["selector"], "regime": trial["regime"], "category": trial.get("category"), "params": params,

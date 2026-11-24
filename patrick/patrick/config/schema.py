@@ -216,6 +216,10 @@ class ValidationConfig(BaseModel):
     # (`live/predict._realised_outcome`) ; avec `drop_stale_returns`, l'évaluation non plus (même population que le réel, ADR 0008).
     # Faux pour tout run enregistré avant le champ (relu tel quel, hachage inchangé) ; vrai pour un run neuf (`run_pipeline`).
     drop_stale_returns: bool = False
+    # CPCV : seuils de classe et régimes ajustés sur l'entraînement de CHAQUE combinaison (complément purgé de ses groupes de test),
+    # au lieu du seul groupe 0, groupe de test de 6 combinaisons sur 21 (ADR 0004, approximation documentée jusqu'au 24/11).
+    # Faux pour tout run enregistré (relu tel quel, hors hachage), vrai pour un run neuf.
+    cpcv_thresholds_per_combo: bool = False
     # Correction report, D3: fold-size guard that already existed (verified,
     # not added) -- `_FoldContext.prepare`/`_evaluate_holdout` exclude (now
     # with an explicit warning, see `pipeline/engine.py`) any fold below this

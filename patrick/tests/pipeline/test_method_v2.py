@@ -364,3 +364,39 @@ def test_dropping_frozen_prices_is_off_for_stored_runs_on_for_new_ones_and_hashe
             engine.run_pipeline(cfg, snapshot_id=snapshot_id)
         seen.append(cfg.validation.drop_stale_returns)
     assert seen == [True, False]                       # un run neuf l'active ; une reprise garde la règle de son enregistrement
+
+
+def test_cpcv_per_combination_thresholds_are_off_for_stored_runs_and_hashed_only_when_on():
+    one = _config(2)
+    stored = json.loads(one.model_dump_json())
+    del stored["validation"]["cpcv_thresholds_per_combo"]
+    assert engine._config_hash(RunConfig.model_validate_json(json.dumps(stored))) == engine._config_hash(one)
+    on = _config(2)
+    on.validation.cpcv_thresholds_per_combo = True
+    assert engine._config_hash(on) != engine._config_hash(one)
+
+
+# --------------------------------------------------------------------------- DM sur la log-loss (24/11)
+
+def test_dm_on_the_log_loss_punishes_confident_mistakes_harder_than_the_brier():
+    rng = np.random.default_rng(5)
+    n = 600
+    signal = rng.normal(size=n)
+    y_class = np.where(signal + rng.normal(scale=1.0, size=n) > 0, 3, 0)
+    base = float(np.mean(y_class >= 2))
+    good = engine.dm_logloss(y_class, 1 / (1 + np.exp(-1.2 * signal)), base, 1)
+    assert good["logloss_model"] < good["logloss_baseline"] and good["dm_stat"] < 0 and good["p_value"] < 0.01
+    # informé mais beaucoup trop sûr de lui : la log-loss le punit (probabilités bornées, jamais une perte infinie)
+    p_over = np.where(signal > 0, 0.999999, 0.000001)
+    over = engine.dm_logloss(y_class, p_over, base, 1)
+    assert np.isfinite(over["logloss_model"]) and over["logloss_model"] > over["logloss_baseline"]
+    assert engine.dm_logloss([0, 3], None, 0.5, 1) is None
+
+
+def test_dm_logloss_result_is_stored_per_run(tmp_path):
+    conn = trackdb.connect(str(tmp_path / "p.db"))
+    trackdb.upsert_snapshot(conn, "s", "h", None, None, None)
+    trackdb.create_run(conn, "r1", target="AAPL", horizon=1, snapshot_id="s", config_json="{}", config_hash="c", git_sha="g", seed=1)
+    trackdb.save_dm_logloss(conn, "r1", {"baseline": "train_up_rate", "logloss_model": 0.68, "logloss_baseline": 0.69,
+                                         "dm_stat": -1.2, "p_value": 0.23, "n_obs": 250})
+    assert trackdb.get_dm_logloss(conn, "r1")["p_value"] == 0.23 and trackdb.get_dm_logloss(conn, "r2") is None
