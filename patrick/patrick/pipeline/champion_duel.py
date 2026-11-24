@@ -96,10 +96,11 @@ def _describe(side_run_id: str, trial_id: int, cfg: dict, evaluation: dict | Non
 
 
 def _replace_suspect_champion(st, target: str, horizon: int, run_id: str, trial_id: int, champion: dict,
-                              chal_f1: float | None, champ_f1: float | None) -> dict:
+                              chal_f1: float | None, champ_f1: float | None, reason: str | None = None) -> dict:
     """Le titulaire affiche un score impossible (fuite de données) : il ne peut pas servir de référence, le challenger sain
     lui succède sans duel."""
     duel = {"rule": "champion suspect (score au-delà du plausible, voir validation/suspicion.py) : remplacé sans duel",
+            "reason": reason or (f"F1_dir {champ_f1:.2f}" if champ_f1 is not None else None),
             "challenger": {"run_id": run_id, "trial_id": trial_id, "f1_dir": chal_f1},
             "champion": {"run_id": champion["run_id"], "trial_id": champion["trial_id"],
                          "f1_dir": champ_f1},
@@ -187,8 +188,10 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     if not _evaluable(champ_eval):
         return {"decision": "not_compared", "why": "champion configuration not evaluable on this holdout",
                 "champion": champion["run_id"]}
-    if suspicion.f1_suspect(champ_f1):
-        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1)
+    # Même règle que pour le challenger (`suspect_reason` : F1, AUC à 4 classes, AUC de direction), pas le seul F1.
+    champ_reason = suspicion.suspect_reason((champ_eval or {}).get("metrics"))
+    if champ_reason:
+        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1, champ_reason)
 
     verdict = metric_panel.duel_verdict(chal_eval.get("metrics"), champ_eval.get("metrics"))
     if verdict is None:
