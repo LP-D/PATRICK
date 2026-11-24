@@ -66,8 +66,9 @@ def _resolve(name: str) -> Callable[..., Any]:
     n'est jamais instrumenté : un wrapper de profilage n'est pas sérialisable)."""
     from patrick.pipeline import engine
     from patrick.selection.registry import select_features
+    from patrick.selection.shap_select import shap_order
     return {"fit_eval_full": engine._fit_eval_full, "fit_eval": engine._fit_eval,
-            "select_features": select_features}[name]
+            "select_features": select_features, "shap_order": shap_order}[name]
 
 
 def _dispatch(name: str, args: tuple, kwargs: dict) -> Any:

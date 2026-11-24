@@ -14,6 +14,15 @@ def shap_rank(X_tr: np.ndarray, y_tr: np.ndarray, pool_names: list[str], top_n: 
               prefilter: int, shap_sample: int = 500, seed: int = 42, recent: bool = False) -> list[int]:
     """`recent` (méthode 2, ADR 0008) : l'importance est mesurée sur les `shap_sample` lignes les plus RÉCENTES de l'entraînement.
     Avec une fenêtre croissante, les premières lignes datent de 2000-2002 : elles ne disent rien du régime actuel."""
+    return list(shap_order(X_tr, y_tr, prefilter, shap_sample=shap_sample, seed=seed, recent=recent)[:top_n])
+
+
+def shap_order(X_tr: np.ndarray, y_tr: np.ndarray, prefilter: int, shap_sample: int = 500, seed: int = 42,
+               recent: bool = False) -> np.ndarray:
+    """Classement COMPLET des variables du pool (indices, de la plus importante à la moins importante). Le modèle pilote et les valeurs
+    SHAP ne dépendent pas de N : la sélection des N meilleures est exactement le début de ce classement (`rank_top` est un ordre total),
+    donc une grille de N tailles se calcule avec UN seul pilote au lieu de N (NEXT_STEPS : la sélection SHAP pesait 28 % du temps en
+    walk-forward, 48 % en CPCV)."""
     keep = prefilter_pool(X_tr, y_tr, prefilter, seed)
     Xk = X_tr[:, keep]
     pilot = XGBClassifier(n_estimators=80, max_depth=4, learning_rate=0.1,
@@ -31,5 +40,5 @@ def shap_rank(X_tr: np.ndarray, y_tr: np.ndarray, pool_names: list[str], top_n: 
         arr = sv.mean(axis=tuple(ax for ax in range(sv.ndim) if ax != feat_axes[0]))
     else:
         arr = np.asarray(pilot.feature_importances_)
-    order = rank_top(arr, top_n)
-    return list(keep[order])
+    order = rank_top(arr, len(arr))
+    return np.asarray(keep)[order]

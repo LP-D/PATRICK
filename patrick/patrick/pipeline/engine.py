@@ -101,6 +101,7 @@ from patrick.pipeline.leaderboard import Leaderboard
 from patrick.selection import universe_reduction
 from patrick.selection._common import RANKING_VERSION
 from patrick.selection.registry import select_features
+from patrick.selection.shap_select import shap_order
 from patrick.selection.stability import feature_selection_stability
 from patrick.tracking import db as trackdb
 from patrick.tracking import history as trackhistory
@@ -774,6 +775,28 @@ def _xy_data_hash(X_tr: np.ndarray, y_tr: np.ndarray) -> str:
     return h.hexdigest()
 
 
+# Classement SHAP complet d'un jeu d'entraînement, par (empreinte de X et y, réglages du sélecteur sans N) : la sélection des N meilleures en
+# est exactement le début (`selection.shap_select.shap_order`), donc la grille de N d'un même pli ne refait plus N fois le modèle pilote.
+# Mémoire du processus seulement (le cache SQLite garde, lui, chaque sélection par N comme avant), bornée aux derniers jeux vus.
+_SHAP_ORDERS: dict[tuple[str, str], np.ndarray] = {}
+_SHAP_ORDERS_MAX = 256
+
+
+def _shap_order_key(config: RunConfig, seed: int, data_hash: str) -> tuple[str, str]:
+    return data_hash, _selector_config_hash(config, 0, seed)
+
+
+def _remember_shap_order(key: tuple[str, str], order: np.ndarray) -> None:
+    if key not in _SHAP_ORDERS and len(_SHAP_ORDERS) >= _SHAP_ORDERS_MAX:
+        _SHAP_ORDERS.pop(next(iter(_SHAP_ORDERS)))
+    _SHAP_ORDERS[key] = order
+
+
+def _shap_order_args(config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, seed: int) -> tuple[tuple, dict]:
+    return ((X_tr, y_tr, config.features.pool_prefilter),
+            {"shap_sample": config.selection.shap_sample, "seed": seed, "recent": config.validation.method_version >= 2})
+
+
 def _select(conn, target: str, horizon: int, snapshot_id: str,
             config: RunConfig, X_tr: np.ndarray, y_tr: np.ndarray, n_feat: int, seed: int) -> list[int]:
     pause.checkpoint()
@@ -782,10 +805,19 @@ def _select(conn, target: str, horizon: int, snapshot_id: str,
     cached = trackdb.get_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash)
     if cached is not None:
         return cached
-    cols = [int(c) for c in select_features(config.selection.method, X_tr, y_tr, n_feat,
-                                             config.features.pool_prefilter, seed=seed,
-                                             shap_sample=config.selection.shap_sample,
-                                             shap_recent=config.validation.method_version >= 2)]
+    if config.selection.method == "shap":
+        key = _shap_order_key(config, seed, data_hash)
+        order = _SHAP_ORDERS.get(key)
+        if order is None:
+            args, kwargs = _shap_order_args(config, X_tr, y_tr, seed)
+            order = shap_order(*args, **kwargs)
+            _remember_shap_order(key, order)
+        cols = [int(c) for c in order[:n_feat]]
+    else:
+        cols = [int(c) for c in select_features(config.selection.method, X_tr, y_tr, n_feat,
+                                                 config.features.pool_prefilter, seed=seed,
+                                                 shap_sample=config.selection.shap_sample,
+                                                 shap_recent=config.validation.method_version >= 2)]
     trackdb.save_cached_selection(conn, target, horizon, snapshot_id, data_hash, selector_hash, cols)
     return cols
 
@@ -809,12 +841,22 @@ def _select_batch(conn, target: str, horizon: int, snapshot_id: str, config: Run
             found[key] = cached
         elif all(keys[j] != key for j in todo):
             todo.append(i)
-    tasks = [("select_features", (config.selection.method, items[i][0], items[i][1], items[i][2],
-                                config.features.pool_prefilter),
-              {"seed": seed, "shap_sample": config.selection.shap_sample,
-               "shap_recent": config.validation.method_version >= 2}) for i in todo]
-    for i, cols in zip(todo, parallel.run_ordered(tasks, jobs), strict=True):
-        cols = [int(c) for c in cols]
+    if config.selection.method == "shap":
+        # Un classement complet par jeu d'entraînement distinct (et pas par N), calculé dans les processus ; chaque N en est le début.
+        order_keys = [_shap_order_key(config, seed, keys[i][0]) for i in todo]
+        missing = list(dict.fromkeys(k for k in order_keys if k not in _SHAP_ORDERS))
+        first_item = {k: todo[order_keys.index(k)] for k in missing}
+        tasks = [("shap_order", *_shap_order_args(config, items[first_item[k]][0], items[first_item[k]][1], seed)) for k in missing]
+        for k, order in zip(missing, parallel.run_ordered(tasks, jobs), strict=True):
+            _remember_shap_order(k, np.asarray(order))
+        computed = [[int(c) for c in _SHAP_ORDERS[k][:items[i][2]]] for i, k in zip(todo, order_keys, strict=True)]
+    else:
+        tasks = [("select_features", (config.selection.method, items[i][0], items[i][1], items[i][2],
+                                    config.features.pool_prefilter),
+                  {"seed": seed, "shap_sample": config.selection.shap_sample,
+                   "shap_recent": config.validation.method_version >= 2}) for i in todo]
+        computed = [[int(c) for c in cols] for cols in parallel.run_ordered(tasks, jobs)]
+    for i, cols in zip(todo, computed, strict=True):
         trackdb.save_cached_selection(conn, target, horizon, snapshot_id, keys[i][0], keys[i][1], cols)
         found[keys[i]] = cols
     return [found[k] for k in keys]
