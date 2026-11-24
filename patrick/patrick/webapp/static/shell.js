@@ -417,4 +417,185 @@
         window.addEventListener("scroll", function () { if (!pending) { pending = true; window.requestAnimationFrame(mark); } }, { passive: true });
         mark();
     });
+
+    /* ---- Épingles et pages récentes (2026-11-23) ----
+       N'importe quelle page s'épingle (étoile de la barre du haut ou touche « p ») : fiche d'un actif, run, page d'analyse... avec ses
+       paramètres d'adresse. Les épingles s'affichent en tête de la barre latérale et de la palette Ctrl K ; les dernières pages visitées
+       aussi, dans la palette. Rangées dans ce navigateur (localStorage) : une commodité, pas une donnée. */
+    var PINS_KEY = "patrick-pins", RECENT_KEY = "patrick-recent", RECENT_MAX = 8, PINS_MAX = 30;
+    function T(key, fallback) { return (window.I18N && window.I18N[key]) || fallback; }
+    function readList(key) {
+        try { var v = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(v) ? v.filter(function (x) { return x && typeof x.url === "string"; }) : []; }
+        catch (e) { return []; }
+    }
+    function here() { return window.location.pathname + window.location.search; }
+    function pageTitle() {
+        var crumb = document.querySelector(".topbar-crumbs .crumb-current") || document.querySelector(".topbar-crumbs .crumb-entry:last-of-type");
+        var h1 = document.querySelector("main h1");
+        var title = (h1 && h1.textContent.trim()) || (crumb && crumb.textContent.trim()) || document.title.replace(/^PATRICK\s*[—-]\s*/, "");
+        return title.replace(/\s+/g, " ").slice(0, 80);
+    }
+    function isPinned(url) { return readList(PINS_KEY).some(function (p) { return p.url === url; }); }
+    function setPins(list) { store(PINS_KEY, JSON.stringify(list.slice(0, PINS_MAX))); renderPins(); syncPinButton(); }
+    function togglePin(url, title) {
+        var pins = readList(PINS_KEY);
+        var idx = pins.findIndex(function (p) { return p.url === url; });
+        if (idx >= 0) pins.splice(idx, 1); else pins.unshift({ url: url, title: title || url });
+        setPins(pins);
+    }
+
+    var pinBtn = document.getElementById("pin-toggle");
+    function syncPinButton() {
+        if (!pinBtn) return;
+        var on = isPinned(here());
+        pinBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        var label = on ? T("pin_remove", "Unpin this page") : T("pin_add", "Pin this page");
+        pinBtn.setAttribute("aria-label", label + " (P)");
+        pinBtn.title = label + " (P)";
+    }
+    if (pinBtn) pinBtn.addEventListener("click", function () { togglePin(here(), pageTitle()); });
+
+    var pinsBox = document.getElementById("sidebar-pins"), pinsList = document.getElementById("pins-list");
+    function renderPins() {
+        if (!pinsBox || !pinsList) return;
+        var pins = readList(PINS_KEY), cur = here();
+        pinsList.textContent = "";
+        pins.forEach(function (p) {
+            var li = document.createElement("li");
+            li.className = "nav-leaf nav-pin";
+            var a = document.createElement("a");
+            a.href = p.url;
+            a.title = p.title;
+            if (p.url === cur) a.setAttribute("aria-current", "page");
+            var label = document.createElement("span");
+            label.className = "nav-label";
+            label.textContent = p.title;
+            a.appendChild(label);
+            var rm = document.createElement("button");
+            rm.type = "button";
+            rm.className = "nav-pin-remove";
+            rm.setAttribute("aria-label", T("pin_remove", "Unpin") + " : " + p.title);
+            rm.title = T("pin_remove", "Unpin");
+            rm.textContent = "×";
+            rm.addEventListener("click", function (e) { e.preventDefault(); togglePin(p.url); });
+            li.appendChild(a);
+            li.appendChild(rm);
+            pinsList.appendChild(li);
+        });
+        pinsBox.hidden = !pins.length;
+    }
+
+    // Page récente : notée à chaque affichage (la page courante en tête, sans doublon).
+    (function noteRecent() {
+        if (document.documentElement.hasAttribute("data-embed")) return;            // volet de /split : pas une visite
+        var url = here();
+        var recent = readList(RECENT_KEY).filter(function (r) { return r.url !== url; });
+        recent.unshift({ url: url, title: pageTitle() });
+        store(RECENT_KEY, JSON.stringify(recent.slice(0, RECENT_MAX)));
+    })();
+
+    // Palette Ctrl K : épingles puis pages récentes en tête quand rien n'est tapé ; les épingles restent cherchables.
+    if (typeof render === "function" && list) {
+        var baseItems = items.slice();
+        var refreshPaletteItems = function () {
+            var known = {};
+            baseItems.forEach(function (it) { known[it.url] = it; });
+            var pins = readList(PINS_KEY).map(function (p) {
+                return { url: p.url, label: p.title, group: T("pins_title", "Pinned"), slug: (known[p.url] || {}).slug || "pin", hint: p.url, pin: true,
+                         dup: !!known[p.url] };
+            });
+            var cur = here();
+            var recents = readList(RECENT_KEY).filter(function (r) { return r.url !== cur; }).slice(0, 5).map(function (r) {
+                return { url: r.url, label: r.title, group: T("recent_title", "Recent"), slug: (known[r.url] || {}).slug || "recent", hint: r.url, recent: true };
+            });
+            items.length = 0;
+            pins.concat(recents, baseItems).forEach(function (it) { items.push(it); });
+        };
+        var baseScore = score;
+        score = function (item, q) {
+            if (item.recent && q) return 0;                                   // en recherche : les pages, pas l'historique de navigation
+            if (item.pin && q) return item.dup ? 0 : baseScore(item, q) + 0.25;   // la page est déjà dans la liste ; sinon l'épingle passe devant
+            return baseScore(item, q);
+        };
+        if (trigger) trigger.addEventListener("click", refreshPaletteItems, true);
+        document.addEventListener("keydown", function (e) { if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) refreshPaletteItems(); }, true);
+        document.addEventListener("keydown", function (e) {
+            var tag = (e.target && e.target.tagName) || "";
+            if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) refreshPaletteItems();
+        }, true);
+    }
+
+    /* ---- Raccourcis clavier : « ? » les liste, « p » épingle, « [ » replie la barre latérale, « t » change de thème ---- */
+    var kbdHelp = document.getElementById("kbd-help");
+    function setKbdHelp(open) {
+        if (!kbdHelp) return;
+        kbdHelp.hidden = !open;
+        if (open) { var c = kbdHelp.querySelector("button"); if (c) c.focus(); }
+    }
+    if (kbdHelp) {
+        kbdHelp.addEventListener("click", function (e) { if (e.target === kbdHelp || e.target.closest("[data-kbd-close]")) setKbdHelp(false); });
+    }
+    document.addEventListener("keydown", function (e) {
+        var tag = (e.target && e.target.tagName) || "";
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable) || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (dialog && !dialog.hidden) return;
+        if (e.key === "Escape") { setKbdHelp(false); return; }
+        if (e.key === "?") { e.preventDefault(); setKbdHelp(kbdHelp && kbdHelp.hidden); }
+        else if (e.key === "p" || e.key === "P") { e.preventDefault(); togglePin(here(), pageTitle()); }
+        else if (e.key === "[") { var sb = document.getElementById("sidebar-toggle"); if (sb && sb.offsetParent !== null) { e.preventDefault(); sb.click(); } }
+        else if (e.key === "t" || e.key === "T") { var th = document.getElementById("theme-toggle"); if (th) { e.preventDefault(); th.click(); } }
+    });
+
+    /* ---- Puce « machine » de la barre du haut, sur toutes les pages : run en cours, avancement, temps pour vider la file ----
+       Sur /ml, /dl et /rl la carte « File d'attente » lit déjà l'état : on s'y abonne au lieu de le relire. Ailleurs, une lecture toutes
+       les 20 s, seulement quand l'onglet est visible. */
+    var chip = document.getElementById("machine-chip");
+    function shortDur(seconds) {
+        var min = Math.round(Math.max(0, seconds || 0) / 60);
+        if (min < 1) return T("dur_short_lt", "< 1 min");
+        if (min < 60) return T("dur_short_min", "{m} min").replace("{m}", min);
+        var hh = Math.floor(min / 60), mm = min % 60;
+        if (hh >= 48) return T("dur_short_d", "{d} d {h} h").replace("{d}", Math.floor(hh / 24)).replace("{h}", hh % 24);
+        return T("dur_short_h", "{h} h {m}").replace("{h}", hh).replace("{m}", (mm < 10 ? "0" : "") + mm);
+    }
+    function renderChip(state) {
+        if (!chip) return;
+        var active = state && (state.active_run || state.active), queue = (state && state.queue) || [], eta = state && state.queue_eta;
+        if (!active && !queue.length) { chip.hidden = true; return; }
+        var parts = [];
+        if (active) {
+            var done = (active.progress && active.progress.done) || 0, total = (active.progress && active.progress.total) || 0;
+            parts.push((active.status === "paused" ? "❚❚ " : "▶ ") + (active.name || "") + (total ? " · " + Math.round(100 * done / total) + " %" : ""));
+            chip.href = active.kind === "rl" ? "/rl#machine-card" : active.kind === "dl" ? "/dl#machine-card" : "/ml#machine-card";
+        } else {
+            chip.href = "/ml#machine-card";
+        }
+        if (queue.length) parts.push(T("chip_queue", "queue {n}").replace("{n}", queue.length));
+        if (eta && eta.total_s) parts.push("≈ " + shortDur(eta.total_s));
+        var text = chip.querySelector(".machine-chip-text");
+        if (text) text.textContent = parts.join(" · ");
+        chip.title = T("chip_title", "Training machine: current run, queue and time to finish everything");
+        chip.classList.toggle("is-paused", !!(active && active.status === "paused"));
+        chip.hidden = false;
+    }
+    if (chip) {
+        if (window.PatrickMachine) {
+            window.PatrickMachine.subscribe(function (s) {
+                // la carte ne publie que { active, queue } : l'estimation de la file vient du dernier état complet lu
+                renderChip({ active_run: s.active, queue: s.queue, queue_eta: lastChipState && lastChipState.queue_eta });
+            });
+        }
+        var lastChipState = null;
+        var readChip = function () {
+            if (document.hidden) return;
+            fetch("/api/run-state", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (s) { if (s) { lastChipState = s; renderChip(s); } }).catch(function () { /* hors ligne : la puce garde son état */ });
+        };
+        readChip();
+        window.setInterval(readChip, window.PatrickMachine ? 60000 : 20000);
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) readChip(); });
+    }
+
+    renderPins();
+    syncPinButton();
 })();

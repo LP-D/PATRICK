@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 
 from patrick.config import defaults as D
 from patrick.config import universe_extension as UX
-from patrick.config.target_label import is_alpha_label, split_run_label
+from patrick.config.target_label import is_alpha_label, is_value_label, split_run_label
 from patrick.core.clock import utc_today
 from patrick.fund import store
 from patrick.simulate import engine as sim_engine
@@ -184,6 +184,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
     if policy.groups:
         group_of = {sym: group for group, items in UX.all_target_groups().items() for sym, _ in items}
         champions = [c for c in champions if group_of.get(split_run_label(c[0])[0]) in policy.groups]
+    champions = [c for c in champions if not is_value_label(c[0])]
     run_ids = sorted({c[2] for c in champions})
     metrics = {}
     for chunk in _chunks(run_ids):

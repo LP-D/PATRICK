@@ -29,7 +29,7 @@ def test_a_machine_learning_config_hash_never_sees_the_deep_block(monkeypatch):
     assert payload == base.model_dump_json(exclude={"models": {"deep"}, "validation": {"method_version"},
                                                     "features": {"enable_equity_context_features"},
                                                     "objective": {"benchmark", "benchmark_source", "target_kind",
-                                                                  "leak_guard", "alignment", "session_rule"}}).encode()
+                                                                  "leak_guard", "alignment", "session_rule", "task"}}).encode()
 
 
 def test_a_deep_config_hash_includes_its_settings_and_differs_from_the_ml_one(monkeypatch):

@@ -59,6 +59,26 @@ def champions_by_horizon(conn: sqlite3.Connection, symbol: str) -> dict[int, dic
     return {c["horizon"]: {**c, "holdout_panel": panels.get(c["trial_id"])} for c in mine}
 
 
+def value_champions(conn: sqlite3.Connection, symbol: str) -> dict[int, dict]:
+    """Les champions « valeur exacte » de `symbol` (étiquette `symbole__val`) et leur dernière prévision live :
+    `{horizon: {run_id, algo, y_value, p_up, ts, ic}}` -- `y_value` = rendement prévu à l'horizon, `ic` = IC du contrôle final."""
+    from patrick.config.target_label import run_label
+
+    label = run_label(symbol, task="value")
+    out: dict[int, dict] = {}
+    for c in trackchampions.list_champions(conn):
+        if c["target"] != label:
+            continue
+        row = conn.execute("SELECT ts, y_value, p_up FROM prediction WHERE trial_id = ? AND split = 'live' AND y_value IS NOT NULL "
+                           "ORDER BY ts DESC LIMIT 1", (c["trial_id"],)).fetchone()
+        ic = conn.execute("SELECT AVG(value) FROM fold_metric WHERE trial_id = ? AND split = 'holdout' AND metric = 'IC'",
+                          (c["trial_id"],)).fetchone()
+        out[int(c["horizon"])] = {"run_id": c["run_id"], "algo": c["algo"], "ts": row[0] if row else None,
+                                  "y_value": row[1] if row else None, "p_up": row[2] if row else None,
+                                  "ic": ic[0] if ic and ic[0] is not None else None}
+    return out
+
+
 def market_context(symbol: str) -> dict | None:
     """Le contexte de marché des features d'une action (`config/equity_context.py`) : indice de sa place, référence mondiale, composite
     zone euro et région. `None` pour tout autre actif."""

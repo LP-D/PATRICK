@@ -26,6 +26,20 @@ UI_STRINGS: dict[str, dict[str, str]] = {
     "nav_cat_desc_patrimoine": _s("Comptes, mouvements et risque de votre patrimoine, réel ou fictif.",
                                   "Accounts, movements and risk of your wealth, real or paper."),
     "to_top": _s("Retour en haut de la page", "Back to top"),
+    # --- épingles, pages récentes, puce « machine », raccourcis clavier (2026-11-23)
+    "pin_add": _s("Épingler cette page", "Pin this page"),
+    "pin_remove": _s("Retirer des épingles", "Unpin"),
+    "pins_title": _s("Épinglés", "Pinned"),
+    "recent_title": _s("Pages récentes", "Recent pages"),
+    "chip_queue": _s("file {n}", "queue {n}"),
+    "chip_title": _s("Machine d'entraînement : run en cours, file d'attente et temps pour tout finir", "Training machine: current run, queue and time to finish everything"),
+    "kbd_title": _s("Raccourcis clavier", "Keyboard shortcuts"),
+    "kbd_search": _s("Chercher une page ou un actif", "Search a page or an asset"),
+    "kbd_pin": _s("Épingler la page (ou la retirer)", "Pin the page (or unpin it)"),
+    "kbd_sidebar": _s("Replier ou déplier la barre latérale", "Collapse or expand the sidebar"),
+    "kbd_theme": _s("Thème clair ou sombre", "Light or dark theme"),
+    "kbd_help": _s("Afficher cette aide", "Show this help"),
+    "kbd_close": _s("Fermer", "Close"),
     "dt_empty": _s("Aucune donnée.", "No data."),
     "sparkline_aria": _s("tendance", "trend"),
     "pred_live_reliability": _s("Fiabilité live", "Live reliability"),
@@ -102,4 +116,5 @@ UI_STRINGS: dict[str, dict[str, str]] = {
     "js_w_to_save": _s("à enregistrer", "to save"),
 }
 
-UI_JS_KEYS: tuple[str, ...] = (*(k for k in UI_STRINGS if k.startswith("js_")), "day_suffix")
+UI_JS_KEYS: tuple[str, ...] = (*(k for k in UI_STRINGS if k.startswith("js_")), "day_suffix", "pin_add", "pin_remove", "pins_title", "recent_title",
+                               "chip_queue", "chip_title")

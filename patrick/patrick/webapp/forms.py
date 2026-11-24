@@ -476,6 +476,22 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             except BenchmarkError as exc:
                 errors.append(f"« Benchmark » : {exc}")
 
+    # Objectif du modèle (2026-11-24) : la direction (classes, défaut) ou la valeur exacte du rendement à l'horizon (régression,
+    # `models/value.py`), qui a ses propres champions. Valeur exacte : critère IC ou R² hors échantillon, walk-forward, sans empilement.
+    task = (form.get("task") or "direction").strip()
+    value_criterion = (form.get("value_criterion") or "IC").strip()
+    if task not in ("direction", "value"):
+        errors.append("« Objectif du modèle » : choix invalide.")
+        task = "direction"
+    if task == "value":
+        if value_criterion not in ("IC", "R2_oos"):
+            errors.append("« Critère de la valeur exacte » : choix invalide.")
+            value_criterion = "IC"
+        if _checked(form, "stacking"):
+            errors.append("« Objectif du modèle » : l'empilement n'existe pas pour la valeur exacte (décochez « Stacking »).")
+        if (form.get("validation_scheme") or form.get("scheme") or "walkforward") == "cpcv":
+            errors.append("« Objectif du modèle » : la valeur exacte se valide en walk-forward (pas en CPCV).")
+
     # Per-fold correlation-clustering reduction (selection/universe_reduction.py):
     # empty = disabled (the default, never a silent filter); aggressive values
     # are accepted -- the pipeline warns, the form does not refuse.
@@ -668,6 +684,7 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "regimes": regimes,
             **({"target_kind": "alpha", **({"benchmark": typed_benchmark} if typed_benchmark else {})}
                if target_kind == "alpha" else {}),
+            **({"task": "value"} if task == "value" else {}),
         },
         "universe": {
             "yf_tickers": yf_tickers,
@@ -718,8 +735,9 @@ def build_config_dict(form, *, target_symbol: str, name: str) -> tuple[dict, lis
             "screening_mode": "total_window" if _checked(form, "staged_screening") else "exhaustive",
             "screening_finalists_per_group": screening_finalists,
             "track_stability": _checked(form, "track_stability"),
+            **({"criterion": value_criterion} if task == "value" else {}),
         },
-        "sampler": {"candidates": sampler_candidates},
+        "sampler": {"candidates": ["none"] if task == "value" else sampler_candidates},
         "sampling": {"uniqueness_weights": _checked(form, "uniqueness_weights")},
         "models": {
             "algos": algos,
@@ -754,6 +772,8 @@ def to_view(cfg: dict) -> dict:
         "name": cfg.get("name", ""),
         "target_symbol": obj.get("target_symbol", ""),
         "target_kind": obj.get("target_kind", "raw"),
+        "task": obj.get("task", "direction"),
+        "value_criterion": sel.get("criterion") if sel.get("criterion") in ("IC", "R2_oos") else "IC",
         # benchmark saisi à la main seulement : un benchmark déterminé automatiquement se redétermine au relancement
         "benchmark": (obj.get("benchmark") or "") if obj.get("benchmark_source") == "manual" else "",
         # A list of ints, not the old joined string: the form field is now a

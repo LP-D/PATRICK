@@ -30,6 +30,7 @@
     var queueList = $("queue-list");
     var queueToggle = $("queue-toggle");
     var clearQueueBtn = $("clear-queue-btn");
+    var etaBadge = $("machine-eta");
 
     var state = { active: null, queue: [] };
     var activeJobId = null;
@@ -65,6 +66,36 @@
         pauseBtn.textContent = paused ? tr("run_resume", "Resume") : tr("run_pause", "Pause");
     }
 
+    // --- durées : forme courte (« 6 h 20 », « 42 min ») pour la carte, où la place manque ---
+    function shortDuration(seconds) {
+        var sec = Math.max(0, Math.round(seconds || 0));
+        if (sec < 60) return tr("dur_short_lt", "< 1 min");
+        var min = Math.round(sec / 60);
+        if (min < 60) return fmtStr(tr("dur_short_min", "{m} min"), { m: min });
+        var h = Math.floor(min / 60), m = min % 60;
+        if (h >= 48) return fmtStr(tr("dur_short_d", "{d} d {h} h"), { d: Math.floor(h / 24), h: h % 24 });
+        return fmtStr(tr("dur_short_h", "{h} h {m}"), { h: h, m: (m < 10 ? "0" : "") + m });
+    }
+    function basisLabel(basis) {
+        return tr("eta_basis_" + basis, basis);
+    }
+
+    // Temps pour vider toute la file, à côté du titre : reste du run en cours + durée attendue de chaque run en file (`queue_eta`).
+    function renderEta(info) {
+        if (!etaBadge) return;
+        var total = info && info.total_s;
+        if (total === null || total === undefined || !info.n) { etaBadge.hidden = true; etaBadge.textContent = ""; return; }
+        var end = new Date(Date.now() + total * 1000);
+        var sameDay = end.toDateString() === new Date().toDateString();
+        var clock = end.toLocaleTimeString(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit" });
+        if (!sameDay) clock = end.toLocaleDateString(document.documentElement.lang || undefined, { weekday: "short" }) + " " + clock;
+        var text = fmtStr(tr("queue_eta", "≈ {d} to finish everything"), { d: shortDuration(total) })
+            + " · " + fmtStr(tr("queue_eta_end", "done around {time}"), { time: clock });
+        if (info.unknown) text += " · " + fmtStr(tr("queue_eta_unknown", "+ {n} without estimate"), { n: info.unknown });
+        etaBadge.textContent = text;
+        etaBadge.hidden = false;
+    }
+
     // --- file d'attente : liste déroulante, réordonnable ---
 
     function setQueueOpen(open) {
@@ -96,6 +127,14 @@
             kind.dataset.kind = job.kind;
             kind.textContent = job.kind.toUpperCase();
             name.append(" ", kind);
+        }
+
+        if (job.estimated_duration_s !== null && job.estimated_duration_s !== undefined) {
+            var dur = document.createElement("span");
+            dur.className = "queue-eta";
+            dur.textContent = "≈ " + shortDuration(job.estimated_duration_s);
+            dur.title = fmtStr(tr("queue_item_eta_tip", "Average of {n} past run(s), {basis}"), { n: job.eta_n, basis: basisLabel(job.eta_basis) });
+            name.append(" ", dur);
         }
 
         var actions = document.createElement("span");
@@ -133,7 +172,7 @@
         queueSummary.textContent = fmtStr(tr("queue_summary", "{n} run(s) queued · next: {next}"),
             { n: queue.length, next: queue[0].name || queue[0].id });
 
-        var signature = queue.map(function (q) { return q.id + ":" + q.name; }).join("|");
+        var signature = queue.map(function (q) { return q.id + ":" + q.name + ":" + (q.estimated_duration_s || ""); }).join("|");
         if (signature === queueSignature || queueDragging) return;
         queueSignature = signature;
         var scrollTop = queueList.scrollTop;
@@ -156,6 +195,7 @@
         received = true;
         renderControls(state.active);
         renderQueue(state.queue);
+        renderEta(data.queue_eta);
         publish();
     }
 

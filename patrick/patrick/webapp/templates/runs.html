@@ -37,8 +37,9 @@
     <a href="/runs{{ '?family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if not filter_kind %} active{% endif %}">{{ t('kind_all') }}</a>
     <a href="/runs?kind=directional{{ '&family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if filter_kind == 'directional' %} active{% endif %}">{{ t('kind_directional') }} <span class="kind-count">{{ kind_counts.directional }}</span></a>
     <a href="/runs?kind=alpha{{ '&family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if filter_kind == 'alpha' %} active{% endif %}">{{ t('kind_alpha') }} <span class="kind-count">{{ kind_counts.alpha }}</span></a>
+    <a href="/runs?kind=value{{ '&family=' ~ filter_family if filter_family else '' }}" class="kind-tab{% if filter_kind == 'value' %} active{% endif %}">{{ t('kind_value') }} <span class="kind-count">{{ kind_counts.value }}</span></a>
 </nav>
-{% if filter_kind == 'alpha' %}<p class="hint kind-hint">{{ t('kind_alpha_hint') }}</p>{% elif filter_kind == 'directional' %}<p class="hint kind-hint">{{ t('kind_directional_hint') }}</p>{% endif %}
+{% if filter_kind == 'alpha' %}<p class="hint kind-hint">{{ t('kind_alpha_hint') }}</p>{% elif filter_kind == 'directional' %}<p class="hint kind-hint">{{ t('kind_directional_hint') }}</p>{% elif filter_kind == 'value' %}<p class="hint kind-hint">{{ t('kind_value_hint') }}</p>{% endif %}
 {% endif %}
 
 {# Portée LOCALE, même règle que sur `/universe` : le bandeau porte le verdict
@@ -101,6 +102,23 @@
             {% endfor %}
         </select>
     </label>
+    {# Classement : les meilleurs ou les pires modèles d'abord (mesure du meilleur essai ; Sharpe hors échantillon pour le RL). #}
+    <label>{{ t('hist_order') }}
+        <select name="ordre" onchange="this.form.submit()">
+            <option value="">{{ t('hist_order_recent') }}</option>
+            <option value="best" {% if filter_ordre == "best" %}selected{% endif %}>{{ t('hist_order_best') }}</option>
+            <option value="worst" {% if filter_ordre == "worst" %}selected{% endif %}>{{ t('hist_order_worst') }}</option>
+        </select>
+    </label>
+    {% if filter_family != 'rl' %}
+    <label>{{ t('hist_measure') }}
+        <select name="mesure" onchange="this.form.submit()"{% if not filter_ordre %} disabled{% endif %}>
+            {% for key in history_measures %}
+            <option value="{{ key }}" {% if key == filter_mesure %}selected{% endif %}>{{ t('hist_measure_' ~ key) }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    {% endif %}
     <button type="submit">{{ t('rl_filter_submit') }}</button>
     <a class="btn-secondary" href="/runs{{ '?family=' ~ filter_family if filter_family else '' }}">{{ t('rn_clear') }}</a>
     <details class="filter-more"{% if filter_started_after or filter_started_before or filter_min_duration_s != '' or filter_max_duration_s != '' %} open{% endif %}>
@@ -121,6 +139,13 @@
         </div>
     </details>
 </form>
+
+{% if filter_ordre %}
+<p class="scope-line history-ranking" data-keep>
+    <b>{{ t('hist_ranking_' ~ filter_ordre) }}</b>
+    <span class="scope-rel">{{ t('hist_ranking_rel', m=t('hist_measure_' ~ filter_mesure)) }}{% if n_unscored %} · {{ t('hist_ranking_unscored', n=n_unscored) }}{% endif %}</span>
+</p>
+{% endif %}
 
 {# Runs vides : échoués ou arrêtés avant le moindre essai, rien à lire ; masqués par défaut pour alléger la liste. #}
 {% if n_empty %}
@@ -237,7 +262,7 @@
         <tr class="history-row" data-run-id="{{ r.run_id }}" tabindex="0">
             <td class="hc-check">{% if not locked %}<input type="checkbox" class="compare-run-checkbox" form="compare-runs-form" name="run_ids" value="{{ r.run_id }}" aria-label="{{ t('rn_select_aria', r=r.run_id) }}">{% endif %}</td>
             <td class="hc-name" title="{{ r.run_id }}">{{ (r.name or r.run_id) | safe }}{% if r.partial %} <span class="tag tag-partial" title="{{ t('hist_partial_tip') }}">{{ t('hist_partial_tag') }}</span>{% endif %}{% if r.suspect %} <span class="tag tag-suspect" title="{{ t('suspect_banner_body', reason=r.suspect) }}">{{ t('suspect_tag') }}</span>{% endif %}</td>
-            <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_directional') }}</span></td>
+            <td><span class="kind-badge kind-{{ r.kind }}">{{ t('kind_alpha') if r.kind == 'alpha' else t('kind_value') if r.kind == 'value' else t('kind_directional') }}</span></td>
             <td title="{{ r.target }}">{{ r.target | iname }}</td>
             <td>{{ r.horizon | hlabel }}</td>
             <td>{{ status_badge(shown_status, state) }}</td>

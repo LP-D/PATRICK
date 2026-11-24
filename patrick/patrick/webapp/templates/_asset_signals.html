@@ -11,6 +11,7 @@
     <thead><tr>
         <th>{{ t('col_horizon') }}</th><th>{{ t('as_col_signal') }}</th><th>{{ t('as_col_champion') }}</th>
         <th class="num">{{ t('as_col_live') }}</th><th class="num">{{ t('as_col_dm') }}</th>
+        {% if values %}<th class="num" title="{{ t('as_col_value_tip') }}">{{ t('as_col_value') }}</th>{% endif %}
     </tr></thead>
     <tbody>
     {% for h in horizons %}{% set c = cells.get(h) %}{% set ch = champions.get(h) %}
@@ -24,6 +25,11 @@
         <td class="num pk-mono">{% if c and c.live_hit_rate is not none %}{{ '%.0f' | format(c.live_hit_rate * 100) }} %
             <span class="hint">({{ c.live_hit_rate_n }})</span>{% else %}<span class="na">—</span>{% endif %}</td>
         <td class="num pk-mono">{% if c and c.dm_p_value is not none %}{{ '%.3f' | format(c.dm_p_value) }}{% else %}<span class="na">—</span>{% endif %}</td>
+        {% if values %}{% set v = values.get(h) %}
+        <td class="num pk-mono">{% if v and v.y_value is not none %}<a href="/runs/{{ v.run_id }}/detail" class="{{ 'pos' if v.y_value > 0 else 'neg' }}">{{ '%+.2f' | format(v.y_value * 100) }} %</a>
+            <span class="hint">{{ t('as_value_line', algo=v.algo or '—', ic=('%.2f' | format(v.ic)) if v.ic is not none else '—') }}</span>
+            {% elif v %}<a href="/runs/{{ v.run_id }}/detail" class="hint">{{ t('as_value_pending') }}</a>{% else %}<span class="na">—</span>{% endif %}</td>
+        {% endif %}
     </tr>
     {% endfor %}
     </tbody>
