@@ -49,6 +49,9 @@
             "ok" if k.deflated.dsr >= 0.95 else "warning") }}
   {% endif %}
   {{ metric(t('fund_kpi_dd'), k.max_drawdown | pct(1), t('fund_hint_dd'), "neutral") }}
+  {% if k.tail %}
+  {{ metric(t('fund_kpi_var'), k.tail.var_evt | pct(2), t('fund_hint_var', hist=k.tail.var_hist | pct(2), es=(k.tail.es_evt | pct(2)) if k.tail.es_evt is not none else '—', n=k.tail.n_tail), "neutral") }}
+  {% endif %}
   {{ metric(t('fund_kpi_gross'), k.gross_exposure_pct | pct(0), t('fund_hint_gross'), "neutral") }}
   {{ metric(t('fund_kpi_net'), k.net_exposure_pct | pct(0), t('fund_hint_net'), "neutral") }}
   {{ metric(t('fund_kpi_leverage'), (k.leverage | qty) ~ '×', t('fund_hint_leverage'), "neutral") }}

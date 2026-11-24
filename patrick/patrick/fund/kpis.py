@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pandas as pd
 
 from patrick.fund.engine import SimResult
@@ -46,6 +47,34 @@ def edge_verdict(gross_pnl: float, net_pnl: float, has_orders: bool) -> str:
 def _weekday_returns(nav: pd.Series) -> pd.Series:
     nav = nav[nav.index.dayofweek < 5] if len(nav) else nav
     return nav.pct_change().dropna() if len(nav) > 1 else pd.Series(dtype=float)
+
+
+TAIL_LEVEL = 0.99
+TAIL_THRESHOLD_Q = 0.90          # pertes au-delà de leur 90e centile : la queue ajustée par la loi de Pareto généralisée
+TAIL_MIN_RETURNS = 250
+
+
+def tail_risk(returns: pd.Series, level: float = TAIL_LEVEL) -> dict | None:
+    """A19 (24/11) : VaR et perte moyenne au-delà (ES) d'une journée, à `level`, par la théorie des valeurs extrêmes (pics au-delà d'un seuil,
+    loi de Pareto généralisée sur les pertes au-delà de leur 90e centile, McNeil et Frey 2000), à côté de la VaR historique. La VaR historique
+    à 99 % sur 250 jours repose sur 2 ou 3 observations ; la GPD extrapole la queue. Pertes en fraction de la valeur (positives). None sous
+    `TAIL_MIN_RETURNS` rendements ou si la queue est vide."""
+    from scipy import stats
+
+    losses = -pd.Series(returns, dtype=float).dropna()
+    n = len(losses)
+    if n < TAIL_MIN_RETURNS:
+        return None
+    u = float(losses.quantile(TAIL_THRESHOLD_Q))
+    excess = (losses[losses > u] - u).to_numpy()
+    if len(excess) < 15 or not np.isfinite(excess).all() or excess.max() <= 0:
+        return None
+    xi, _loc, beta = stats.genpareto.fit(excess, floc=0.0)
+    p_u = len(excess) / n
+    var = u + beta / xi * (((1 - level) / p_u) ** (-xi) - 1) if abs(xi) > 1e-6 else u - beta * np.log((1 - level) / p_u)
+    es = (var + beta - xi * u) / (1 - xi) if xi < 1 else float("nan")
+    return {"level": level, "var_hist": float(losses.quantile(level)), "var_evt": float(var), "es_evt": float(es) if np.isfinite(es) else None,
+            "xi": float(xi), "n": n, "n_tail": len(excess)}
 
 
 def compute(strategy: dict, result: SimResult) -> dict:
@@ -96,6 +125,7 @@ def compute(strategy: dict, result: SimResult) -> dict:
         "buying_power": float(last.get("buying_power", capital)),
         "cash": float(last.get("cash", capital)),
         "n_open_positions": len(open_positions),
+        "tail": tail_risk(returns),
     }
 
 
