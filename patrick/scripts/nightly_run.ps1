@@ -126,6 +126,7 @@ if (-not $DryRun -and -not (Funds-Cycle-Done)) {
     Step "predictions utiles aux fonds et pilote automatique (reprise)" $FundsArgs
 }
 Step "sauvegarde"   @((Join-Path $RepoDir "scripts\backup_db.py"))
+Step "verification de la sauvegarde" @("-m", "patrick.cli", "storage", "verify-backup")
 Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")
 Step "autres predictions" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--skip-funds")
