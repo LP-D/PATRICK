@@ -114,3 +114,12 @@ assert.deepEqual(K.peersOf({ g: [me, live] }, "autre", me), [], "un autre groupe
 assert.deepEqual(K.peersOf({ g: [me, live] }, undefined, me), [], "sans groupe, rien n'est partagé");
 
 console.log("chart_kit : tous les tests passent");
+
+// ---- D23 : export CSV (union des abscisses, cellule vide sans valeur, dates ISO, échappement)
+{
+    const t0 = Date.UTC(2026, 0, 5), t1 = t0 + DAY, t2 = t0 + 2 * DAY;
+    const csv = K.seriesCsv([{ name: "Prix", xs: [t0, t1, t2], ys: [1.5, null, 2] }, { name: 'Brut, "net"', xs: [t1, t2], ys: [3, 4] }], true);
+    assert.equal(csv, 'date,Prix,"Brut, ""net"""\n2026-01-05,1.5,\n2026-01-06,,3\n2026-01-07,2,4\n');
+    assert.equal(K.seriesCsv([{ name: "", xs: [0, 1], ys: [5, 6] }], false, ["janv.", "févr."]), "x,serie_1\njanv.,5\nfévr.,6\n");
+}
+console.log("chart_kit export CSV : ok");

@@ -11,6 +11,8 @@ CHART_STRINGS: dict[str, dict[str, str]] = {
     "chart_zoom_in": _s("Zoom avant", "Zoom in"),
     "chart_zoom_out": _s("Zoom arrière", "Zoom out"),
     "chart_reset": _s("Vue initiale", "Reset zoom"),
+    "chart_export_png": _s("Image (PNG)", "Image (PNG)"),
+    "chart_export_csv": _s("Données (CSV)", "Data (CSV)"),
     "chart_hint": _s("Glisser pour zoomer · double-clic : vue initiale", "Drag to zoom · double-click to reset"),
     "chart_empty": _s("Aucune donnée à tracer.", "No data to plot."),
     "chart_aria": _s(
