@@ -354,9 +354,16 @@ Python 3.10 retiré, tests de propriétés (Hypothesis) des découpeurs, règle 
   164/233, dsr 113/211, embargo 12/14, fdr 84/100, pbo 79/112, purge 39/52. Un survivant n'est pas toujours un défaut (message,
   valeur par défaut, mutant équivalent), mais **dsr (54 %)** et **diebold_mariano (70 %)** sont les moins protégés. Rien n'a été
   fait des survivants. Lancer : pousser une branche `mutation-check/<nom>` (quelques minutes), ou « Run workflow » dans l'onglet
-  Actions ; le résultat est dans les annotations et le résumé de l'exécution.
+  Actions ; le résultat est dans les annotations et le résumé de l'exécution. Depuis le 2026-11-24, il tourne aussi seul le 1er de
+  chaque mois.
 - **Licence** : tous droits réservés, dite explicitement dans `LICENSE` (décision du 2026-10-20) ; aucune licence libre. À rouvrir si le projet doit être partagé ou réutilisé.
 - **Dépendances** : le seul verrou est `.github/constraints-py311.txt` (suite lente de la CI, Linux, Python 3.11) ; pas de verrou pour
   Windows / Python 3.12+. Dependabot propose des mises à jour d'actions et de dépendances, jamais fusionnées sans lecture.
+  **Mis à jour le 2026-11-24** : deux PR Dependabot (71 le 10/11, 94 le 24/11) ont relevé le plancher de pydantic au-dessus de la version
+  figée ; vertes en PR (la suite lente ne tournait qu'au push sur main), elles ont cassé main et bloqué `stable`. Depuis la PR 96 :
+  `tests/repo/test_dependency_floors.py` dans la suite rapide (plancher accepté par la version figée, toute dépendance base/dev/web figée),
+  `versioning-strategy: increase-if-necessary` pour pip, et le job `pr-pinned-golden` de `tests.yml` refait l'installation épinglée, le
+  golden master et le test de fumée du pipeline sur chaque PR. `constraints-regen.yml` régénère le fichier figé sur une branche depuis
+  l'onglet Actions.
 - **Causes non étudiées de la CI rouge d'octobre** : les causes du 8 au 16/10 (hors golden et test du diagnostic holdout,
   élucidés) n'ont pas toutes été étudiées (délais de tests web sous charge, suite rapide sous Python 3.10).

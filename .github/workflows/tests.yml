@@ -89,6 +89,33 @@ jobs:
       - name: Run slow test suite
         run: pytest patrick/tests/ -q -m "slow"
 
+  pr-pinned-golden:
+    # Avant-goût de la suite lente sur chaque PR : la suite lente complète ne tourne qu'au push sur main, donc une PR
+    # pouvait passer verte puis casser main (24/11, PR 94 : plancher pydantic au-dessus de la version figée, installation
+    # épinglée impossible, `stable` bloquée). Ce job refait l'installation épinglée, puis le golden master et le test de
+    # fumée du pipeline, dans le même environnement numérique que la suite lente (garder les deux en phase).
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    env:
+      OPENBLAS_CORETYPE: Haswell
+      NPY_ENABLE_CPU_FEATURES: X86_V3
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (pinned)
+        run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
+
+      - name: Numeric environment
+        run: python .github/scripts/numeric_env.py
+
+      - name: Golden master and pipeline smoke
+        run: pytest patrick/tests/pipeline/test_run_pipeline_golden.py patrick/tests/pipeline/test_pipeline_smoke.py -q -m "slow"
+
   promote:
     # Les PC installés suivent la branche `stable` (patrick/desktop/update.py), jamais `main` : elle avance sur le
     # commit qui vient de passer TOUTES les vérifications (2 versions de Python pour la suite rapide + la suite lente).
