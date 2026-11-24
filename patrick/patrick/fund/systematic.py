@@ -36,6 +36,7 @@ from patrick.fund import instruments, prices, service, store
 from patrick.simulate import engine as sim_engine
 from patrick.tracking import db as trackdb
 from patrick.validation import suspicion
+from patrick.validation.diebold_mariano import one_sided_better_p
 
 EQUITY_KINDS = ("equity", "etf")
 NOTE_PREFIX = "auto"
@@ -587,8 +588,8 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
     meilleur essai du dernier run terminé ; jamais un horizon descriptif ; au moins un signal. Les champions d'abord.
 
     `segments` : segments qui ont des signaux ; `pup_segments` : ceux dont TOUTES les lignes portent une P(hausse) (seuls
-    utilisables avec des seuils ; le mode « direction » n'en a pas besoin) ; `dm_p` : p de Diebold-Mariano du run (None si
-    absent) ; `instrument_hint` : action/ETF au comptant ou CFD sur la cible. Un modèle d'alpha (`kind == "alpha"`) se trade
+    utilisables avec des seuils ; le mode « direction » n'en a pas besoin) ; `dm_p` : p unilatérale de Diebold-Mariano du run sur le holdout (None si
+    absente) ; `instrument_hint` : action/ETF au comptant ou CFD sur la cible. Un modèle d'alpha (`kind == "alpha"`) se trade
     en paire couverte contre son benchmark."""
     descriptive = sorted(D.DESCRIPTIVE_HORIZONS)
     rows = conn.execute(
@@ -612,8 +613,10 @@ def available_models(conn: sqlite3.Connection, limit: int = 5000) -> list[dict]:
     for chunk in _chunks(run_ids):
         headline.update(trackdb.batch_best_metrics(conn, chunk))
         marks = ",".join("?" for _ in chunk)
-        dm_p.update(dict(conn.execute(f"SELECT run_id, p_value FROM dm_result WHERE kind = 'class_specific' "
-                                      f"AND run_id IN ({marks})", chunk).fetchall()))
+        # p UNILATÉRALE « le modèle fait mieux », holdout seulement : comme la sélection des fonds et la famille BH (ADR 0003).
+        for run_id, dm_stat, p_value, sample in conn.execute(
+                f"SELECT run_id, dm_stat, p_value, sample FROM dm_result WHERE kind = 'class_specific' AND run_id IN ({marks})", chunk):
+            dm_p[run_id] = one_sided_better_p(p_value, dm_stat) if sample == "holdout" else None
     groups = {sym: group for group, items in UX.all_target_groups().items() for sym, _ in items}
     legacy_alignment = trackdb.alignment_reasons(conn, run_ids)
     out = []

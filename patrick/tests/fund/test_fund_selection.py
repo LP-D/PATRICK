@@ -26,7 +26,8 @@ class World:
             "n_bh_significant": sum(1 for v in self.bh.values() if v[0])})
 
     def cell(self, target: str, horizon: int = 5, *, live: tuple | list | None = ("2026-10-15", 3, 0.6), suffix: str = "", dm_p: float | None = 0.01,
-             bh: tuple[bool, float] = (True, 0.02), f1: float | None = None, champion=True) -> int:
+             bh: tuple[bool, float] = (True, 0.02), f1: float | None = None, champion=True, dm_stat: float = -2.0,
+             dm_sample: str = "holdout") -> int:
         conn = self.conn
         run_id = f"run_{target}_{horizon}{suffix}".replace("^", "")
         trackdb.create_run(conn, run_id, target=target, horizon=horizon, snapshot_id="snap1", config_json="{}",
@@ -38,8 +39,10 @@ class World:
             conn.execute("INSERT INTO prediction (trial_id, ts, split, y_true, y_pred, y_proba) VALUES (?, ?, 'live', NULL, ?, ?)",
                          (trial_id, row[0], row[1], row[2]))
         if dm_p is not None:
-            conn.execute("INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value) VALUES (?, 'class_specific', 'persistence', 2.0, ?)",
-                         (run_id, dm_p))
+            # `dm_p` = p UNILATÉRALE « le modèle fait mieux » voulue ; la base stocke la bilatérale (2 p quand dm_stat < 0).
+            two_sided = min(1.0, 2 * dm_p) if dm_stat < 0 else dm_p
+            conn.execute("INSERT INTO dm_result (run_id, kind, baseline, dm_stat, p_value, sample) VALUES (?, 'class_specific', 'persistence', ?, ?, ?)",
+                         (run_id, dm_stat, two_sided, dm_sample))
         if f1 is not None:
             conn.execute("INSERT INTO fold_metric (trial_id, fold_index, split, metric, value) VALUES (?, 0, 'holdout', 'F1_dir', ?)",
                          (trial_id, f1))
@@ -81,6 +84,27 @@ def test_strict_keeps_only_cells_with_all_the_evidence_ranked_by_dm_p_value(conn
     best = out["selected"][0]
     assert best["dm_p"] == 0.001 and best["bh_p"] == 0.02 and best["last_signal"] == {"ts": "2026-10-15", "direction": "UP"}
     assert best["trial_id"] and best["run_id"] == "run_BBB_1" and best["algo"] == "XGBoost"
+
+
+def test_a_model_significantly_worse_than_its_baseline_is_not_dm_evidence(conn, world):
+    """La p de `dm_result` est bilatérale : lue telle quelle, un modèle nettement MOINS BON que sa référence passait le niveau `dm`."""
+    world.cell("BAD", 5, dm_p=0.001, dm_stat=2.5, bh=(False, 0.9))
+    world.cell("GOOD", 5, dm_p=0.01, bh=(False, 0.9))
+
+    out = selection.select_models(conn, selection.Policy(tier="dm"), today=TODAY)
+
+    assert [m["target"] for m in out["selected"]] == ["GOOD"]
+    details = {c["target"]: c["detail"] for c in out["excluded_cells"] if c["code"] == "dm"}
+    assert "moins bien que sa référence" in details["BAD"]
+
+
+def test_a_dm_test_on_the_last_walk_forward_fold_is_not_evidence(conn, world):
+    world.cell("WF", 5, dm_p=0.001, dm_sample="last_wf_fold", bh=(False, 0.9))
+
+    out = selection.select_models(conn, selection.Policy(tier="dm"), today=TODAY)
+
+    assert out["selected"] == []
+    assert "dernier pli" in out["excluded_cells"][0]["detail"]
 
 
 def test_the_large_tier_ignores_the_multiple_testing_evidence(conn, world):

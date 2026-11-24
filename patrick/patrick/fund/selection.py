@@ -31,6 +31,7 @@ from patrick.tracking import history as trackhistory
 from patrick.tracking import live_record
 from patrick.tracking import stats as trackstats
 from patrick.validation import suspicion
+from patrick.validation.diebold_mariano import one_sided_better_p
 
 TIERS = ("strict", "large", "dm", "bh", "auc")
 BH_TIERS = ("strict", "bh")            # niveaux qui exigent la correction de Benjamini-Hochberg (cible)
@@ -157,13 +158,24 @@ def _latest_live(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, st
 
 
 def _dm_results(conn: sqlite3.Connection, run_ids: list[str]) -> dict[str, dict]:
+    """Test de Diebold-Mariano de chaque run, lu comme la famille BH le lit (ADR 0003) : `p_value` = p UNILATÉRALE « le modèle fait mieux
+    que sa baseline », calculée sur le holdout seulement. La p stockée est bilatérale : prise telle quelle (jusqu'au 24/11), un modèle
+    significativement MOINS BON passait le niveau `dm`. Un test du dernier pli de walk-forward (données qui ont servi à choisir le modèle,
+    biaisées vers la significativité) n'est pas une preuve : `p_value` None et `reason` le dit."""
     out: dict[str, dict] = {}
     for chunk in _chunks(run_ids):
         marks = ",".join("?" for _ in chunk)
-        for run_id, p_value, sample in conn.execute(
-                f"SELECT run_id, p_value, sample FROM dm_result WHERE kind = 'class_specific' "
+        for run_id, dm_stat, p_value, sample in conn.execute(
+                f"SELECT run_id, dm_stat, p_value, sample FROM dm_result WHERE kind = 'class_specific' "
                 f"AND run_id IN ({marks})", chunk):
-            out[run_id] = {"p_value": p_value, "sample": sample}
+            on_holdout = sample == "holdout"
+            p_better = one_sided_better_p(p_value, dm_stat) if on_holdout else None
+            reason = None
+            if not on_holdout:
+                reason = "test de Diebold-Mariano calculé sur le dernier pli (données de sélection), pas sur le holdout"
+            elif p_better is not None and dm_stat is not None and not math.isnan(dm_stat) and dm_stat > 0:
+                reason = f"le modèle fait moins bien que sa référence (Diebold-Mariano, p bilatérale = {_p(p_value)})"
+            out[run_id] = {"p_value": p_better, "p_two_sided": p_value, "dm_stat": dm_stat, "sample": sample, "reason": reason}
     return out
 
 
@@ -241,7 +253,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
                 elif policy.tier in DM_TIERS and (dm_row is None or dm_row["p_value"] is None
                                                   or dm_row["p_value"] >= policy.alpha_dm):
                     reject(target, horizon, "dm", "pas de test de Diebold-Mariano" if dm_row is None
-                           else f"test de Diebold-Mariano non concluant (p = {_p(dm_row['p_value'])})")
+                           else dm_row["reason"] or f"test de Diebold-Mariano non concluant (p = {_p(dm_row['p_value'])})")
                 else:
                     selected.append({"target": target, "horizon": horizon, "trial_id": trial_id, "run_id": run_id,
                                      "algo": algo, "last_signal": {"ts": str(last_ts)[:10], "direction": None},
