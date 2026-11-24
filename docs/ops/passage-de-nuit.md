@@ -12,7 +12,10 @@ Tâche Windows `Patrick-Nightly` (`patrick/scripts/schtasks_nightly.ps1`), qui l
 4. `scripts/daily_predict.py --funds-only` : seulement les prédictions dont un fonds a besoin (modèles retenus par un pilote
    automatique ou suivis par une règle manuelle ; environ 3 h), puis le **cycle du pilote automatique des fonds** (sélection, règles,
    ordres). Les ~2 000 prédictions de tous les modèles durent une douzaine d'heures : sans ce découpage, la nuit était interrompue
-   avant le cycle (aucun cycle des 27, 28 et 29/10) et avant la sauvegarde et la synchro ;
+   avant le cycle (aucun cycle des 27, 28 et 29/10) et avant la sauvegarde et la synchro. Depuis l'ADR 0029, les prédictions des fonds
+   comprennent les modèles des indices de volatilité lus par les fonds combinés « volatilité », et le cycle passe en deux temps : les fonds
+   qui ne lisent pas d'agent RL, puis le rejeu des agents RL utiles (`rl/live.py`, quelques dizaines de secondes par agent) et les fonds
+   combinés « RL » ;
 5. sauvegarde de la base (`scripts/backup_db.py`), synchronisation OneDrive (`patrick sync auto`) ;
 6. `scripts/daily_predict.py --skip-funds` : les autres prédictions, le jugement des anciennes et la dérive, en dernier ;
 7. remet le PC en veille prolongée.

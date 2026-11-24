@@ -134,11 +134,11 @@ def test_run_autopilots_first_rolls_the_following_rules_to_the_champion(monkeypa
     db.connect(db_path).close()
     order: list[str] = []
     monkeypatch.setattr(systematic, "roll_to_champions", lambda conn, today=None: order.append("roll") or [])
-    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None: order.append("autopilot") or [])
+    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None, needs_rl=None: order.append(f"autopilot rl={needs_rl}") or [])
 
     live_refresh.run_autopilots(db_path)
 
-    assert order == ["roll", "autopilot"]
+    assert order == ["roll", "autopilot rl=False", "autopilot rl=True"]      # les fonds combinés « RL » après le rejeu de leurs agents (ADR 0029)
 
 
 def test_a_failing_champion_roll_never_stops_the_autopilot_cycle(monkeypatch, tmp_path):
@@ -152,11 +152,30 @@ def test_a_failing_champion_roll_never_stops_the_autopilot_cycle(monkeypatch, tm
     def boom(conn, today=None):
         raise RuntimeError("base verrouillée")
     monkeypatch.setattr(systematic, "roll_to_champions", boom)
-    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None: ran.append("autopilot") or [])
+    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None, needs_rl=None: ran.append("autopilot") or [])
 
     live_refresh.run_autopilots(db_path)
 
-    assert ran == ["autopilot"]
+    assert ran == ["autopilot", "autopilot"]
+
+
+def test_a_failing_rl_replay_never_stops_the_combined_funds_cycle(monkeypatch, tmp_path):
+    from patrick.fund import autopilot, combo, systematic
+    from patrick.tracking import db
+
+    db_path = str(tmp_path / "p.db")
+    db.connect(db_path).close()
+    ran: list = []
+
+    def boom(conn):
+        raise RuntimeError("agent illisible")
+    monkeypatch.setattr(systematic, "roll_to_champions", lambda conn, today=None: [])
+    monkeypatch.setattr(combo, "rl_jobs_needed", boom)
+    monkeypatch.setattr(autopilot, "run_all", lambda conn, today=None, needs_rl=None: ran.append(needs_rl) or [])
+
+    live_refresh.run_autopilots(db_path)
+
+    assert ran == [False, True]
 
 
 # --- les modèles dont les fonds ont besoin passent en premier : leur cycle ne dépend pas des ~2 000 autres prédictions -----------
