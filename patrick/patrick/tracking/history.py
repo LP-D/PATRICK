@@ -881,6 +881,31 @@ def latest_predictions_by_target_and_horizon(conn: sqlite3.Connection, targets: 
             # Cours de départ du signal tel que le modèle l'a vu (migration 0034), None = inconnu.
             "ref_price": ref_price,
         }
+    skill = holdout_brier_skill(conn, [c["trial_id"] for c in out.values()])
+    for cell in out.values():
+        cell["reliability"] = skill.get(cell["trial_id"])          # D2 : fiabilité de P(hausse), à côté de la confiance
+    return out
+
+
+RELIABILITY_MIN_ROWS = 30
+
+
+def holdout_brier_skill(conn: sqlite3.Connection, trial_ids: list[int]) -> dict[int, dict]:
+    """D2 (24/11) : fiabilité des probabilités de chaque essai au holdout. Brier skill = 1 - Brier / (p(1 - p)), p = taux de hausse du
+    holdout : > 0, les probabilités en disent plus que le taux de base ; < 0, moins (une P(hausse) affichée à lire avec prudence).
+    `{trial_id: {"skill", "brier", "n"}}`, essais d'au moins `RELIABILITY_MIN_ROWS` lignes avec P(hausse) seulement."""
+    out: dict[int, dict] = {}
+    ids = sorted({int(t) for t in trial_ids if t is not None})
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        for trial_id, brier, base, n in conn.execute(
+                "SELECT trial_id, AVG((p_up - (y_true >= 2)) * (p_up - (y_true >= 2))), AVG(y_true >= 2), COUNT(*) "
+                "FROM prediction INDEXED BY sqlite_autoindex_prediction_1 "
+                f"WHERE trial_id IN ({','.join('?' for _ in chunk)}) AND split = 'holdout' AND p_up IS NOT NULL AND y_true IS NOT NULL "
+                "GROUP BY trial_id", chunk):
+            if n < RELIABILITY_MIN_ROWS or base is None or not 0 < base < 1:
+                continue
+            out[int(trial_id)] = {"skill": round(1 - brier / (base * (1 - base)), 4), "brier": round(brier, 4), "n": int(n)}
     return out
 
 

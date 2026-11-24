@@ -19,6 +19,7 @@
 <dl class="pop-grid">
 {% if s %}
 <dt>{{ _t('pb_direction') }}</dt><dd>{{ _t.tx(s[0]) }}{% if c.confidence is not none %} · {{ _t('pb_confidence') }} {{ '%.2f' | format(c.confidence) }}<br><span class="hint">{{ _t('pb_conf_help') }}</span>{% endif %}</dd>
+{% if c.reliability %}<dt>{{ _t('pb_reliability') }}</dt><dd class="{{ 'pos' if c.reliability.skill > 0 else 'neg' }}">{{ '%+.1f' | format(100 * c.reliability.skill) }} %<br><span class="hint">{{ _t('pb_reliability_good' if c.reliability.skill > 0 else 'pb_reliability_bad', n=c.reliability.n) }}</span></dd>{% endif %}
 {# Date seule : l'heure `00:00:00` d'un signal de clôture n'apporte rien. #}
 {% set ts = c.ts | string %}
 <dt>{{ _t('pb_last') }}</dt><dd>{{ ts[:10] }}{% if ts[11:16] and ts[11:16] != '00:00' %} {{ ts[11:16] }}{% endif %}</dd>
