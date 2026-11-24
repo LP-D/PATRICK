@@ -2450,6 +2450,8 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   @page { margin: 14mm; }
 }
 
+.fund-compare { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--fs-xs); color: var(--text-2); }
+
 /* D26 : frise des champions d'un actif (une ligne par règne, barre proportionnelle à sa durée) */
 .ch-h { margin: 12px 0 6px; font-size: var(--fs-sm); }
 .ch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

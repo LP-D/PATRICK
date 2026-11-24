@@ -51,10 +51,61 @@
     function reload(id) { window.location.href = "/fonds" + (id ? "?strategy=" + encodeURIComponent(id) : ""); }
 
     /* ---- graphique : valeur nette, valeur avant frais (pointillés) et capital (moteur commun chart_kit.js : zoom, périodes, infobulle, thème) ---- */
+    /* D22 : deux fonds en base 100 au premier jour où les deux ont une valeur (capitaux différents : seules les trajectoires se comparent). */
+    function rebase(a, b) {
+        var bm = {};
+        b.forEach(function (p) { if (p.nav != null) bm[p.t] = p.nav; });
+        var start = null;
+        for (var i = 0; i < a.length; i++) { if (a[i].nav != null && bm[a[i].t] != null) { start = a[i].t; break; } }
+        if (!start) return null;
+        var a0 = a.filter(function (p) { return p.t === start; })[0].nav, b0 = bm[start];
+        var days = a.filter(function (p) { return p.t >= start; }).map(function (p) { return p.t; });
+        return { days: days,
+                 a: days.map(function (t) { var p = a.filter(function (q) { return q.t === t; })[0]; return p && p.nav != null ? 100 * p.nav / a0 : null; }),
+                 b: days.map(function (t) { return bm[t] != null ? 100 * bm[t] / b0 : null; }) };
+    }
+    function setupCompare(data) {
+        var sel = document.getElementById("fund-compare-select");
+        if (!sel || sel.dataset.ready) return;
+        sel.dataset.ready = "1";
+        // Le tableau des fonds arrive en différé (bloc chargé après la page) : la liste se remplit dès qu'il est là, et à la prise de focus.
+        function fill() {
+            var have = {};
+            Array.prototype.forEach.call(sel.options, function (o) { have[o.value] = true; });
+            rows().forEach(function (r) {
+                var id = r.getAttribute("data-strategy-id");
+                if (!id || id === sel.getAttribute("data-self") || have[id]) return;
+                var o = document.createElement("option");
+                o.value = id; o.textContent = (r.querySelector("td") || r).textContent.trim();
+                sel.appendChild(o);
+            });
+        }
+        fill();
+        sel.addEventListener("focus", fill);
+        document.addEventListener("patrick:content", fill);
+        sel.addEventListener("change", function () {
+            if (!sel.value) { drawChart(); return; }
+            fetch("/api/fund/strategies/" + encodeURIComponent(sel.value) + "/series").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (other) {
+                    var reb = rebase(data.series || [], other.series || []), host = document.getElementById("fund-chart"), P = window.PatrickPlot;
+                    if (!reb || !host) return;
+                    var self = (rows().filter(function (r) { return r.getAttribute("data-strategy-id") === sel.getAttribute("data-self"); })[0] || {});
+                    P.create(host, {
+                        type: "line", xKind: "time", xs: reb.days.map(P.parseDate),
+                        series: [{ name: (self.querySelector ? self.querySelector("td").textContent.trim() : ""), values: reb.a, color: "--brand", width: 2 },
+                                 { name: other.name, values: reb.b, color: "--text-2", width: 1.6, dash: [5, 3] }],
+                        hlines: [{ y: 100, color: "--text-3", dash: [5, 4], label: (data.labels || {}).rebased }],
+                        ranges: true, title: host.getAttribute("aria-label") || "", height: 260, sync: "fund-chart",
+                    });
+                }).catch(function () { sel.value = ""; });
+        });
+    }
+
     function drawChart() {
         var host = document.getElementById("fund-chart"), dataEl = document.getElementById("fund-chart-data");
         if (!host || !dataEl) return;
         var data = JSON.parse(dataEl.textContent), pts = data.series || [], labels = data.labels || {}, P = window.PatrickPlot;
+        setupCompare(data);
         var eur = new Intl.NumberFormat(document.documentElement.lang || "fr", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
         P.create(host, {
             type: "line", xKind: "time", xs: pts.map(function (p) { return P.parseDate(p.t); }),

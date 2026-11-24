@@ -281,6 +281,17 @@ def register(app: FastAPI, templates, context) -> None:
         return templates.TemplateResponse(request, "_fund_panel.html", {
             "snap": snap, "rules": manual, "autopilot": auto, "insight": seen, "today": today.isoformat(), **context(request)})
 
+    @app.get("/api/fund/strategies/{strategy_id}/series")
+    def api_strategy_series(strategy_id: str):
+        """Valeur nette quotidienne d'une stratégie (D22 : la superposer à une autre sur le graphique de /fonds, en base 100)."""
+        today = service.current_date()
+
+        def run(conn):
+            strategy = _require_strategy(conn, strategy_id)
+            snap = service.strategy_snapshot(conn, strategy, today)
+            return {"strategy_id": strategy_id, "name": strategy["name"], "series": [{"t": p["t"], "nav": p.get("nav")} for p in snap["series"]]}
+        return _call(run)
+
     @app.get("/api/fund/strategies/{strategy_id}/rule-form")
     def api_rule_form(request: Request, strategy_id: str):
         """Fragment HTML du formulaire « Nouvelle règle » (tous les modèles) : le panneau le charge à part, car la liste des
