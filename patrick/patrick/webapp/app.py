@@ -1102,6 +1102,13 @@ def relaunch_run(run_id: str):
     return RedirectResponse(f"/runs/{job_view['id']}", status_code=303)
 
 
+@app.get("/api/night-status")
+def night_status_api():
+    """État de la dernière tâche de nuit (D21) : la barre du haut ne montre une puce que si elle a échoué, été partielle ou manquée."""
+    from patrick.system import night_status
+    return night_status.night_status()
+
+
 @app.get("/api/run-state")
 def run_state():
     """Lightweight aggregated state (active run + queue) — periodic JS-side

@@ -3773,6 +3773,8 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .machine-chip:hover { color: var(--text); border-color: var(--line-strong); }
 .machine-chip .icon { flex: none; color: var(--pos); }
 .machine-chip.is-paused .icon { color: var(--warn); }
+.night-chip .icon { color: var(--warn); }                     /* D21 : nuit partielle */
+.night-chip.is-alert .icon { color: var(--neg); }              /* fonds non faits, ou nuit manquée */
 /* Comme le libellé de la loupe : une ligne visible, repliée plutôt qu'insécable, pour que la puce rétrécisse avant le fil. */
 .machine-chip-text {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1;

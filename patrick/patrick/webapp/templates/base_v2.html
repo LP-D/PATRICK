@@ -188,6 +188,8 @@ script below (no flash), otherwise the OS preference applies.
                 <div class="topbar-actions">
                     {# Puce « machine » : run en cours, avancement, temps pour vider la file (shell.js, toutes les pages). #}
                     <a class="machine-chip" id="machine-chip" href="/ml#machine-card" hidden>{{ icon('cpu', 14) }}<span class="machine-chip-text"></span></a>
+                    {# Puce « nuit » (D21) : seulement si la dernière tâche de nuit a échoué, été partielle ou manquée (shell.js, /api/night-status). #}
+                    <a class="machine-chip night-chip" id="night-chip" href="/sante#nuit" hidden>{{ icon('moon', 14) }}<span class="machine-chip-text"></span></a>
                     <button type="button" class="icon-btn pin-toggle" id="pin-toggle" aria-pressed="false" aria-label="{{ t('pin_add') }} (P)" title="{{ t('pin_add') }} (P)">{{ icon('star') }}</button>
                     <button type="button" class="search-trigger" id="cmdk-open" aria-haspopup="dialog" aria-controls="cmdk">
                         {{ icon('search', 15) }}<span class="search-label">{{ t('cmdk_placeholder') }}</span><span class="kbd">Ctrl K</span>

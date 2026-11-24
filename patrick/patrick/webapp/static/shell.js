@@ -627,6 +627,26 @@
         document.addEventListener("visibilitychange", function () { if (!document.hidden) readChip(); });
     }
 
+    /* ---- Puce « nuit » (D21) : visible seulement quand la dernière tâche de nuit a échoué, été partielle ou manquée. Lue au chargement
+       puis toutes les 10 minutes (la nuit ne change pas plus vite). ---- */
+    var nightChip = document.getElementById("night-chip");
+    function readNight() {
+        if (!nightChip || document.hidden) return;
+        fetch("/api/night-status", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (n) {
+            var label = n && { failed: T("night_chip_failed", "Night: funds not done"), partial: T("night_chip_partial", "Night: partial"),
+                               missed: T("night_chip_missed", "Night: missed") }[n.status];
+            if (!label) { nightChip.hidden = true; return; }
+            nightChip.querySelector(".machine-chip-text").textContent = label;
+            nightChip.title = T("night_chip_title", "Last night task started {start}; failed steps: {steps}")
+                .replace("{start}", (n.started || "?").replace("T", " "))
+                .replace("{steps}", (n.failed_steps && n.failed_steps.length) ? n.failed_steps.join(", ") : T("night_chip_none", "none"));
+            nightChip.classList.toggle("is-alert", n.status === "failed" || n.status === "missed");
+            nightChip.hidden = false;
+        }).catch(function () { /* hors ligne : la puce garde son état */ });
+    }
+    readNight();
+    window.setInterval(readNight, 600000);
+
     renderPins();
     syncPinButton();
 
