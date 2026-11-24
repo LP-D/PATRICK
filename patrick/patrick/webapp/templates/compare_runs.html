@@ -1,5 +1,5 @@
 {% extends "base_v2.html" %}
-{% from "_components.html" import crumb %}
+{% from "_components.html" import crumb, rel_time %}
 {% block title %}PATRICK — {{ t('cmp_title') }}{% endblock %}
 
 {% block crumb_trail %}{{ crumb(t('cmp_crumb')) }}{% endblock %}
@@ -35,7 +35,7 @@
         <tr><th>{{ t('cmp_samplers') }}</th>{% for run in runs %}<td>{{ run.samplers | join(', ') if run.samplers else '—' }}</td>{% endfor %}</tr>
         <tr><th>{{ t('rd_profile') }}</th>{% for run in runs %}<td>{{ t('prof_' ~ run.profile ~ '_name') if run.profile else t('rd_profile_custom') }}</td>{% endfor %}</tr>
         <tr><th>{{ t('rd_method') }}</th>{% for run in runs %}<td>{{ run.method }}</td>{% endfor %}</tr>
-        <tr><th>{{ t('cmp_started') }}</th>{% for run in runs %}<td>{{ run.started_at or '—' }}</td>{% endfor %}</tr>
+        <tr><th>{{ t('cmp_started') }}</th>{% for run in runs %}<td>{{ rel_time(run.started_at) }}</td>{% endfor %}</tr>
     </tbody>
 </table>
 </div>

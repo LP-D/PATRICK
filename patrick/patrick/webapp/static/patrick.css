@@ -2434,6 +2434,20 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   .sidebar, .topbar, .ticker, .cmdk, .launch-bar { display: none !important; }
   .app-shell { display: block; }
   .card, .metric { box-shadow: none; animation: none; break-inside: avoid; }
+  /* D30 (24/11) : papier blanc, texte noir, rien d'interactif, tableaux qui se coupent entre deux lignes, titres jamais seuls en bas de page */
+  :root { color-scheme: light; }
+  html, body, .main, .card, .metric { background: #fff !important; color: #000 !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  button, .btn, .help-q, .help-pop, .popover, .glossary-popover, [role="tooltip"], .lazy-skeleton, .skip-link, .ra-png { display: none !important; }
+  a { color: inherit !important; text-decoration: underline; }
+  h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+  table { break-inside: auto; }
+  tr, figure, svg, .chart { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }                  /* en-tête répété sur chaque page */
+  .table-scroll, .table-wrap { overflow: visible !important; max-height: none !important; }
+  .table-scroll th { position: static; }
+  svg, img, canvas { max-width: 100% !important; height: auto; }
+  @page { margin: 14mm; }
 }
 
 /* ============ Utility (last: state class must win the cascade) ============ */

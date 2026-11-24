@@ -629,4 +629,30 @@
 
     renderPins();
     syncPinButton();
+
+    /* ---- Dates relatives (D18) : <time class="rel-time" datetime="…Z"> -> « il y a 3 h », date exacte locale au survol.
+       Refait toutes les minutes (les fragments chargés plus tard sont pris au passage suivant). ---- */
+    var REL_UNITS = [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]];
+    function relTimes() {
+        if (!window.Intl || !Intl.RelativeTimeFormat) return;
+        var lang = root.getAttribute("lang") || "fr";
+        var rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+        var now = Date.now();
+        document.querySelectorAll("time.rel-time[datetime]").forEach(function (el) {
+            var t = Date.parse(el.getAttribute("datetime"));
+            if (isNaN(t)) return;
+            var secs = (t - now) / 1000, abs = Math.abs(secs), text = null;
+            for (var i = 0; i < REL_UNITS.length; i++) {
+                if (abs >= REL_UNITS[i][1]) { text = rtf.format(Math.round(secs / REL_UNITS[i][1]), REL_UNITS[i][0]); break; }
+            }
+            el.textContent = text || rtf.format(0, "minute");
+            if (!el.dataset.exact) {
+                el.dataset.exact = "1";
+                el.title = new Date(t).toLocaleString(lang);
+            }
+        });
+    }
+    relTimes();
+    window.setInterval(relTimes, 60000);
+    document.addEventListener("patrick:content", relTimes);           // fragment chargé par lazy.js
 })();
