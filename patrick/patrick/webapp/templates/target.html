@@ -32,7 +32,7 @@
 </nav>
 
 {# Cours, graphique zoomable et statistiques : le même panneau que les pages de classes d'actifs (asset_stats.js), rempli après l'affichage. #}
-<section id="marche" class="asset-hero">{{ asset_panel(target, target | iname, fiche.slug) }}</section>
+<section id="marche" class="asset-hero">{{ asset_panel(target, target | iname, fiche.slug, events=true) }}</section>
 
 {% if fiche.context %}
 <section id="contexte" class="card">

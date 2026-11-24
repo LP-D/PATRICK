@@ -2630,8 +2630,11 @@ def asset_stats_api(
     zscore_window: int = asset_stats.ZSCORE_WINDOW,
     ma_windows: str | None = None,
     long_windows_bars: str | None = None,
+    events: bool = False,
 ):
-    """feature/ticker-stats-panel: fetched client-side, once per panel, by
+    """`events=1` (page d'un actif, D3) : ajoute les changements de champion et les publications de résultats à poser sur la courbe.
+
+    feature/ticker-stats-panel: fetched client-side, once per panel, by
     `asset_stats.js`. Same data-access path as `/api/preview/{symbol}`
     (`forms.TARGET_SOURCE_BY_SYMBOL` -> `market_data.price_history`) --
     `asset_stats.compute_stats` only adds the display-stats layer on top,
@@ -2676,12 +2679,20 @@ def asset_stats_api(
         if fred_periodicity(symbol) in ("monthly", "quarterly"):
             period = "max"
     series = market_data.price_history(symbol, source, period)
-    return asset_stats.compute_stats(
+    stats = asset_stats.compute_stats(
         series,
         zscore_window=zscore_window,
         ma_windows=ma_windows_list,
         long_windows_bars=long_windows_list,
     )
+    if events:
+        from patrick.tracking import asset_events
+        conn = trackdb.connect()
+        try:
+            stats["events"] = asset_events.events(conn, symbol)
+        finally:
+            conn.close()
+    return stats
 
 
 @app.get("/targets/{ticker}")
