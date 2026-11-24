@@ -8,6 +8,8 @@
     <h2 id="machine-title" class="dash-panel-title">{{ t('machine_title') }}<span id="machine-eta" class="machine-eta" title="{{ t('queue_eta_tip') }}" hidden></span></h2>
     <div class="dash-panel-body">
         <p id="machine-idle" class="machine-idle" data-keep>{{ t('machine_idle') }}</p>
+        {# D27 : frise de la file -- reste du run en cours, puis chaque run en file, largeur = durée estimée (machine.js). #}
+        <div id="queue-frise" class="queue-frise" role="img" aria-label="{{ t('queue_frise_aria') }}" hidden></div>
 
         {# File d'attente en liste déroulante, repliée par défaut : déployée en permanence, une file de plusieurs dizaines de runs
            repoussait tout le reste de la page hors de l'écran. #}

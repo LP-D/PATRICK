@@ -2452,6 +2452,12 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
 
 .fund-compare { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--fs-xs); color: var(--text-2); }
 
+/* D27 : frise de la file d'attente (segments proportionnels à la durée estimée) */
+.queue-frise { display: flex; gap: 2px; height: 10px; margin: 8px 0 4px; border-radius: var(--radius-pill); overflow: hidden; }
+.queue-seg { flex: none; background: color-mix(in srgb, var(--brand) 45%, transparent); }
+.queue-seg.is-active { background: var(--brand); }
+.queue-seg.is-unknown { background: repeating-linear-gradient(45deg, var(--line), var(--line) 3px, transparent 3px, transparent 6px); }
+
 /* D26 : frise des champions d'un actif (une ligne par règne, barre proportionnelle à sa durée) */
 .ch-h { margin: 12px 0 6px; font-size: var(--fs-sm); }
 .ch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
