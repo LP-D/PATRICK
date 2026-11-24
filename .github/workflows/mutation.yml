@@ -8,6 +8,7 @@ name: mutation
 #   (ex. patrick.validation.fdr.*) ; vide = tous les modules statistiques (long).
 # - Sans `gh` ni interface : pousser une branche `mutation-check/<nom>` lance le tout (quelques minutes : les modules
 #   statistiques sont petits et leurs tests rapides).
+# - Automatiquement le 1er de chaque mois (06:00 UTC) : la dérive du taux de mutants tués se voit sans y penser.
 # Le résultat sort en annotation et dans le résumé de l'exécution (patrick/scripts/mutation_summary.py), pas seulement
 # dans le journal (illisible sans compte GitHub).
 on:
@@ -19,6 +20,8 @@ on:
         default: ""
   push:
     branches: ["mutation-check/**"]
+  schedule:
+    - cron: "0 6 1 * *"
 
 jobs:
   mutmut:

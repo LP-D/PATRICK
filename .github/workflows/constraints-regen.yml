@@ -1,0 +1,51 @@
+name: constraints-regen
+
+# Régénère .github/constraints-py311.txt (versions figées de la suite lente) sur une branche, sans poste local :
+# onglet Actions > constraints-regen > Run workflow, choisir la branche (« Use workflow from ») et, si besoin, les paquets
+# à monter (« upgrade », ex. `pydantic pydantic-core`). Les autres versions figées sont gardées (uv réutilise le fichier).
+# Utile pour une PR de dépendance (Dependabot ou autre) : `tests/repo/test_dependency_floors.py` refuse un plancher que
+# le fichier figé ne satisfait pas. Le commit est poussé avec le jeton du workflow, qui ne relance PAS la CI : fermer puis
+# rouvrir la PR (ou pousser un commit vide) pour la relancer. Monter une version peut déplacer le golden master : le
+# régénérer ensuite par une branche `golden-regen/<nom>` (golden-regen.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      upgrade:
+        description: "Paquets à monter, séparés par des espaces (vide = seulement ajouter ce qui manque)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Regenerate the pinned constraints
+        env:
+          UPGRADE: ${{ inputs.upgrade }}
+        run: |
+          pip install uv
+          args=""
+          for p in $UPGRADE; do args="$args --upgrade-package $p"; done
+          # Même commande que l'en-tête du fichier (garder les deux en phase).
+          uv pip compile --python-version 3.11 --python-platform x86_64-manylinux_2_28 --extra dev --extra web \
+            patrick/pyproject.toml -o .github/constraints-py311.txt $args
+          git diff --stat
+
+      - name: Commit to the branch
+        env:
+          UPGRADE: ${{ inputs.upgrade }}        # par variable, jamais interpolé dans le script (injection)
+        run: |
+          if git diff --quiet; then echo "Rien à changer : le fichier figé est déjà à jour."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(deps): régénère constraints-py311.txt (upgrade: ${UPGRADE:-aucun})"
+          git push

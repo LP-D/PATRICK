@@ -18,6 +18,7 @@ Ce dossier centralise la documentation du projet PATRICK. Les documents à jour 
 - [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) — limitations, code mort traité, plomberie volontaire.
 - [CONTRIBUTING.md](../CONTRIBUTING.md) et [ways-of-working.md](ways-of-working.md) — contribuer, méthode de travail.
 - [NEXT_STEPS.md](NEXT_STEPS.md) — suite de l'optimisation des runs (sprints de performance).
+- [suivi-propositions-2026-11-24.md](suivi-propositions-2026-11-24.md) — suivi des 120 propositions du 24/11 (fonctionnalités, améliorations, corrections, affichage), lot par lot.
 
 ## Exploitation (`docs/ops/`)
 
