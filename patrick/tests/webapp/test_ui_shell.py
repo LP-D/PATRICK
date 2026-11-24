@@ -113,7 +113,7 @@ def test_shell_offers_pins_machine_chip_and_shortcut_help(client):
     assert 'id="pin-toggle"' in page and 'aria-pressed="false"' in page
     assert 'id="sidebar-pins"' in page and 'id="pins-list"' in page
     assert 'id="machine-chip"' in page and 'id="kbd-help"' in page
-    i18n = json.loads(re.search(r'<script id="i18n-data" type="application/json">(.*?)</script>', page, re.S).group(1))
+    i18n = json.loads(re.search(r'<script id="i18n-data" type="application/json">(.*?)</script>', page, re.DOTALL).group(1))
     for key in ("pin_add", "pin_remove", "pins_title", "recent_title", "chip_queue", "dur_short_h"):
         assert i18n.get(key), key
     shell = (BASE_DIR / "static" / "shell.js").read_text(encoding="utf-8")

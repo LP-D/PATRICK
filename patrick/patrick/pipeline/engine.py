@@ -86,9 +86,9 @@ from patrick.features.interactions import (
 from patrick.features.sanitize import finite_features, finite_scaled
 from patrick.features.target import non_flat_mask
 from patrick.models import calibration as calibration_lib
-from patrick.models import value as value_lib
 from patrick.models import deep as deep_module
 from patrick.models import registry
+from patrick.models import value as value_lib
 from patrick.models.registry import get_classifier
 from patrick.models.sequential_forest import SequentialBootstrapRandomForestClassifier
 from patrick.models.uniqueness import (

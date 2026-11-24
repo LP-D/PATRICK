@@ -478,7 +478,7 @@ class DeepRegressor(DeepClassifier):
                 out[start:start + 2048] = p.cpu().numpy()
         return self.y_mu_ + self.y_sd_ * out
 
-    def predict_proba(self, X, context: str = "train"):          # noqa: ARG002 -- un régresseur n'a pas de classes
+    def predict_proba(self, X, context: str = "train"):
         raise AttributeError("DeepRegressor prédit une valeur : voir models/value.py pour les probabilités de classes")
 
 

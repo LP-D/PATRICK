@@ -148,13 +148,13 @@ def distribution(x: np.ndarray, bins: int = 36) -> dict:
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
     if len(x) < 2:
-        return {"edges": [], "counts": [], "mean": None, "std": None, "n": int(len(x)), "q": {}}
+        return {"edges": [], "counts": [], "mean": None, "std": None, "n": len(x), "q": {}}
     lo, hi = np.percentile(x, [0.5, 99.5])
     if hi <= lo:
         hi = lo + 1.0
     counts, edges = np.histogram(np.clip(x, lo, hi), bins=bins, range=(lo, hi))
     return {"edges": [float(e) for e in edges], "counts": [int(c) for c in counts], "mean": float(x.mean()), "std": float(x.std(ddof=1)),
-            "n": int(len(x)), "q": {f"p{q:02d}": float(np.percentile(x, q)) for q in QUANTILES}}
+            "n": len(x), "q": {f"p{q:02d}": float(np.percentile(x, q)) for q in QUANTILES}}
 
 
 def irr_constant(contrib: dict, years: int, final: float) -> float | None:

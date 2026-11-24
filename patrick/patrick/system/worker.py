@@ -30,10 +30,9 @@ from patrick.features import pool_cache
 from patrick.pipeline import pause
 from patrick.pipeline.engine import run_pipeline
 from patrick.storage import cache_eviction
-from patrick.system import priority
+from patrick.system import awake_clock, priority
 from patrick.system.keep_awake import keep_awake
 from patrick.tracking import db as trackdb
-from patrick.system import awake_clock
 from patrick.tracking import jobs as jobs_db
 from patrick.tracking import prediction_archive
 

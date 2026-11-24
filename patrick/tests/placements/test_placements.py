@@ -10,7 +10,17 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from patrick.placements import envelopes, jobs, loader, optimize, projection, scenarios, service, stats, store
+from patrick.placements import (
+    envelopes,
+    jobs,
+    loader,
+    optimize,
+    projection,
+    scenarios,
+    service,
+    stats,
+    store,
+)
 from patrick.tracking import db
 from patrick.webapp.app import app
 
@@ -359,7 +369,6 @@ def test_only_one_analysis_runs_per_dataset(data_root, monkeypatch):
 
 
 # ------------------------------------------------------------------ page générale : enveloppes, épargne réelle, contraintes
-from patrick.placements import envelopes, projection
 from patrick.tabular import detect
 
 
