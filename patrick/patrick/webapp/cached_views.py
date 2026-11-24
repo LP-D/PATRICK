@@ -117,7 +117,8 @@ def _portfolio(db_path, key, progress: Progress) -> dict:
         conn.close()
     try:
         hrp = trackhrp.hrp_overview()
-    except Exception:  # noqa: BLE001 -- le panneau HRP échoue vers un panneau vide, jamais vers une page en erreur
+    except Exception as exc:  # noqa: BLE001 -- le panneau HRP échoue vers un panneau vide, jamais vers une page en erreur
+        logger.warning("le panneau HRP échoue vers un panneau vide, jamais vers une page en erreur : %s: %s", type(exc).__name__, exc)
         hrp = {"weights": None, "skipped": [], "as_of": None, "n_assets": 0}
     return {"overview": overview, "hrp": hrp}
 
@@ -129,7 +130,8 @@ def _portfolio_bl(db_path, key, progress: Progress) -> dict:
     conn = connect(db_path)
     try:
         overview = trackbl.bl_overview(conn, key)
-    except Exception:  # noqa: BLE001 -- un échec de calcul devient un panneau vide
+    except Exception as exc:  # noqa: BLE001 -- un échec de calcul devient un panneau vide
+        logger.warning("un échec de calcul devient un panneau vide : %s: %s", type(exc).__name__, exc)
         overview = {"n_assets": 0, "n_views": 0}
     finally:
         conn.close()

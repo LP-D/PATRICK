@@ -25,6 +25,7 @@ champion that stays in title.
 from __future__ import annotations
 
 import inspect
+import logging
 import math
 import time
 import traceback
@@ -34,6 +35,8 @@ from patrick.pipeline import engine
 from patrick.tracking import champions, relaunch_stats
 from patrick.tracking import db as trackdb
 from patrick.validation import metric_panel, suspicion
+
+logger = logging.getLogger(__name__)
 
 RULE = metric_panel.RULES[metric_panel.CRITERION_AUC_BRIER]
 
@@ -96,10 +99,11 @@ def _describe(side_run_id: str, trial_id: int, cfg: dict, evaluation: dict | Non
 
 
 def _replace_suspect_champion(st, target: str, horizon: int, run_id: str, trial_id: int, champion: dict,
-                              chal_f1: float | None, champ_f1: float | None) -> dict:
+                              chal_f1: float | None, champ_f1: float | None, reason: str | None = None) -> dict:
     """Le titulaire affiche un score impossible (fuite de données) : il ne peut pas servir de référence, le challenger sain
     lui succède sans duel."""
     duel = {"rule": "champion suspect (score au-delà du plausible, voir validation/suspicion.py) : remplacé sans duel",
+            "reason": reason or (f"F1_dir {champ_f1:.2f}" if champ_f1 is not None else None),
             "challenger": {"run_id": run_id, "trial_id": trial_id, "f1_dir": chal_f1},
             "champion": {"run_id": champion["run_id"], "trial_id": champion["trial_id"],
                          "f1_dir": champ_f1},
@@ -187,8 +191,10 @@ def _duel_one(st, horizon: int, best_h: dict, trial_id: int, known_eval: dict | 
     if not _evaluable(champ_eval):
         return {"decision": "not_compared", "why": "champion configuration not evaluable on this holdout",
                 "champion": champion["run_id"]}
-    if suspicion.f1_suspect(champ_f1):
-        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1)
+    # Même règle que pour le challenger (`suspect_reason` : F1, AUC à 4 classes, AUC de direction), pas le seul F1.
+    champ_reason = suspicion.suspect_reason((champ_eval or {}).get("metrics"))
+    if champ_reason:
+        return _replace_suspect_champion(st, target, horizon, run_id, trial_id, champion, chal_f1, champ_f1, champ_reason)
 
     verdict = metric_panel.duel_verdict(chal_eval.get("metrics"), champ_eval.get("metrics"))
     if verdict is None:
@@ -249,7 +255,8 @@ def _job_of(st, horizon: int) -> str | None:
     try:
         row = st.conn.execute("SELECT job_id FROM run WHERE run_id = ?", (st.run_ids[horizon],)).fetchone()
         return row[0] if row else None
-    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+    except Exception as exc:  # noqa: BLE001 -- mesure : jamais bloquante
+        logger.debug("mesure : jamais bloquante : %s: %s", type(exc).__name__, exc)
         return None
 
 

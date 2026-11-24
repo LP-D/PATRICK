@@ -31,6 +31,8 @@ from patrick.config.target_label import split_run_label
 from patrick.core import paths
 from patrick.webapp.i18n import core as i18n
 
+logger = logging.getLogger(__name__)
+
 log = logging.getLogger("patrick.instruments")
 
 # Genre -> clé i18n du mot placé devant le nom (société et ETF : aucun).
@@ -111,7 +113,8 @@ def _run_worker() -> None:
             symbol = _pending.pop()
         try:
             found = _fetch_name(symbol)
-        except Exception:  # noqa: BLE001 -- frontière fournisseur : un échec ne casse jamais un affichage
+        except Exception as exc:  # noqa: BLE001 -- frontière fournisseur : un échec ne casse jamais un affichage
+            logger.info("frontière fournisseur : un échec ne casse jamais un affichage : %s: %s", type(exc).__name__, exc)
             found = None
         if found:
             with _lock:

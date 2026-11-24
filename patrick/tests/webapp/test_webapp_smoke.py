@@ -156,7 +156,18 @@ def _to_formdata(d: dict) -> FormData:
     return FormData(pairs)
 
 
+# Au-delà de ce taux d'occupation moyen des processeurs pendant l'attente, un délai dépassé est attribué à la machine, pas au code
+# (KNOWN_ISSUES : 235 s sans même commencer les essais, charge 19 sur 4 coeurs, aucun processus de test concurrent).
+SATURATED_CPU_PERCENT = 90.0
+
+
 def _wait_for_status(client, run_id, *, not_in: set[str], deadline_s: float) -> dict:
+    """Attend que le run quitte les statuts `not_in`. Délai dépassé sur une machine saturée (occupation moyenne des processeurs
+    >= `SATURATED_CPU_PERCENT` pendant l'attente, mesurée) : `xfail` avec la mesure, au lieu d'un échec qui accuserait le code.
+    Sur une machine disponible, le délai reste un échec. Ne JAMAIS allonger le délai à l'aveugle (règle du projet)."""
+    import psutil
+
+    psutil.cpu_percent(None)                       # amorce : la mesure suivante couvre toute l'attente
     deadline = time.time() + deadline_s
     status = None
     while time.time() < deadline:
@@ -165,7 +176,11 @@ def _wait_for_status(client, run_id, *, not_in: set[str], deadline_s: float) -> 
             return status
         time.sleep(0.5)
     assert status is not None, "aucune réponse du serveur"
-    raise AssertionError(f"délai dépassé, statut encore {status['status']!r}: {status}")
+    busy = psutil.cpu_percent(None)
+    if busy >= SATURATED_CPU_PERCENT:
+        pytest.xfail(f"machine saturée ({busy:.0f} % des processeurs occupés pendant {deadline_s:.0f} s) : délai non imputable au code, "
+                     f"statut encore {status['status']!r}")
+    raise AssertionError(f"délai dépassé ({busy:.0f} % des processeurs occupés), statut encore {status['status']!r}: {status}")
 
 
 def test_run_via_web_form_end_to_end(tmp_path):
@@ -372,3 +387,22 @@ def test_no_spawned_worker_outlives_its_test():
         pytest.skip("no worker spawned in this session -- run the whole module")
     alive = [proc.pid for proc in _SPAWNED_WORKERS if proc.poll() is None]
     assert alive == [], f"{len(alive)} worker(s) still running after their test: {alive}"
+
+
+class _StuckClient:
+    """Un serveur dont le run ne quitte jamais « running »."""
+
+    def get(self, url):
+        return type("R", (), {"json": staticmethod(lambda: {"status": "running"})})()
+
+
+@pytest.mark.parametrize(("busy", "outcome"), [(97.0, "xfail"), (20.0, "fail")])
+def test_a_timeout_is_blamed_on_the_machine_only_when_it_was_measured_saturated(monkeypatch, busy, outcome):
+    import psutil
+    from _pytest.outcomes import XFailed
+
+    monkeypatch.setattr(psutil, "cpu_percent", lambda interval=None: busy)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    expected = XFailed if outcome == "xfail" else AssertionError
+    with pytest.raises(expected, match="processeurs occupés"):
+        _wait_for_status(_StuckClient(), "r1", not_in={"running"}, deadline_s=0.05)

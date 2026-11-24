@@ -25,10 +25,14 @@ feature datee (`features/equity_fundamentals.py`) :
 """
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 import yfinance as yf
 
 from patrick.storage.cache_manager import LocalCache
+
+logger = logging.getLogger(__name__)
 
 FUNDAMENTALS_COLUMNS = ["fiscalDateEnding", "metric", "value"]
 
@@ -56,7 +60,8 @@ def fetch_fundamentals(symbol: str) -> pd.DataFrame:
 
     try:
         stmt = yf.Ticker(symbol).quarterly_income_stmt
-    except Exception:  # noqa: BLE001 -- provider boundary (yfinance scraping raises arbitrary errors)
+    except Exception as exc:  # noqa: BLE001 -- provider boundary (yfinance scraping raises arbitrary errors)
+        logger.info("provider boundary (yfinance scraping raises arbitrary errors) : %s: %s", type(exc).__name__, exc)
         return _empty()
 
     if stmt is None or stmt.empty:

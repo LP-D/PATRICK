@@ -9,6 +9,7 @@ dernier cours (au plus 5 séances) et ne bouge pas ce jour-là.
 """
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 
@@ -17,6 +18,8 @@ import pandas as pd
 
 from patrick.strategylab import events as events_mod
 from patrick.strategylab.indicators import Market
+
+logger = logging.getLogger(__name__)
 
 FIELDS = ("open", "high", "low", "close", "volume")
 YAHOO_START = "1990-01-01"
@@ -56,7 +59,8 @@ def yahoo(symbol: str) -> pd.DataFrame | None:
     from patrick.data.sources.yfinance_source import download_ohlc
     try:
         raw = download_ohlc(symbol, YAHOO_START)
-    except Exception:  # noqa: BLE001 -- fournisseur externe : un symbole en échec est écarté et signalé, pas fatal
+    except Exception as exc:  # noqa: BLE001 -- fournisseur externe : un symbole en échec est écarté et signalé, pas fatal
+        logger.info("fournisseur externe : un symbole en échec est écarté et signalé, pas fatal : %s: %s", type(exc).__name__, exc)
         return None
     return normalise(raw)
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 import ctypes
 import errno
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -27,6 +28,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from patrick.core import paths, settings
+
+logger = logging.getLogger(__name__)
 
 KEY_MAX_GB = "feature_cache_shared_max_gb"
 DEFAULT_MAX_GB = 150.0
@@ -79,7 +82,8 @@ def available_memory_bytes() -> int:
         import psutil
 
         return int(psutil.virtual_memory().available)
-    except Exception:                         # noqa: BLE001 -- une mesure qui échoue ne doit jamais arrêter une copie
+    except Exception as exc:                         # noqa: BLE001 -- une mesure qui échoue ne doit jamais arrêter une copie
+        logger.debug("une mesure qui échoue ne doit jamais arrêter une copie : %s: %s", type(exc).__name__, exc)
         return 1 << 62
 
 

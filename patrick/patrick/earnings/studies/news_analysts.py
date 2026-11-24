@@ -10,6 +10,7 @@ Règles de fuite d'information :
 """
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 
@@ -32,6 +33,8 @@ from patrick.earnings.studies.base import (
     unavailable,
 )
 
+logger = logging.getLogger(__name__)
+
 MIN_ARTICLES = 1
 PRE_DAYS = 7
 BASE_WINDOWS = 8
@@ -49,7 +52,8 @@ def _news_frame(ctx: Ctx) -> pd.DataFrame | None:
     from patrick.text import store as tstore
     try:
         items = tstore.load_items(ctx.conn, max_lag_hours=service.MAX_LAG_HOURS)
-    except Exception:  # noqa: BLE001 -- base sans magasin de news
+    except Exception as exc:  # noqa: BLE001 -- base sans magasin de news
+        logger.debug("base sans magasin de news : %s: %s", type(exc).__name__, exc)
         ctx.memo["news"] = None
         return None
     if items.empty:

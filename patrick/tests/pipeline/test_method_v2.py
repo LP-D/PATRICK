@@ -261,6 +261,19 @@ def test_a_new_run_gets_method_two_and_a_resume_keeps_its_own(monkeypatch):
     assert seen == [D.CURRENT_METHOD_VERSION, 1]
 
 
+def test_a_new_run_that_asks_for_a_later_method_keeps_it(monkeypatch):
+    """L'ADR 0011 dit « essayer avec `validation.method_version: 3` » : un run neuf était pourtant forcé à la méthode courante (2), la
+    méthode 3 était inatteignable par `run_pipeline`. Un run neuf prend AU MOINS la méthode courante."""
+    def spy(objective, *args, **kwargs):
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(engine, "ingest", spy)
+    cfg = _config(3)
+    with pytest.raises(RuntimeError, match="stop"):
+        engine.run_pipeline(cfg, snapshot_id=None)
+    assert cfg.validation.method_version == 3
+
+
 def test_a_stored_config_without_the_field_reads_as_method_one():
     data = json.loads(_config(2).model_dump_json())
     del data["validation"]["method_version"]

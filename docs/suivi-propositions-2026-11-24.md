@@ -45,11 +45,11 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 
 | # | Proposition | Statut |
 |---|---|---|
-| B1 | Suite lente partielle sur les PR | en cours (lot 1 : job `pr-pinned-golden`) |
-| B2 | Régénération du fichier figé sans poste local | en cours (lot 1 : `constraints-regen.yml`) |
-| B3 | Supprimer la branche après fusion (réglage GitHub) | en cours (lot 1) |
+| B1 | Suite lente partielle sur les PR | fait (PR 97 : job `pr-pinned-golden`, 8 min 44 sur sa propre PR) |
+| B2 | Régénération du fichier figé sans poste local | fait (PR 97 : `constraints-regen.yml`) |
+| B3 | Supprimer la branche après fusion (réglage GitHub) | fait (réglage du dépôt activé le 24/11 ; vérifié : la branche du lot 1 a disparu seule après fusion) |
 | B4 | Tests de mutation : renforcer `dsr` et `diebold_mariano` | à faire |
-| B5 | Remplacer les `except Exception` larges | à faire |
+| B5 | Remplacer les `except Exception` larges | fait (lot 2 : les 21 replis silencieux journalisés ; les 113 autres laissaient déjà une trace) |
 | B6 | Découper `webapp/app.py` | à faire |
 | B7 | Découper `pipeline/engine.py` | à faire |
 | B8 | Séparer lecture / écriture dans `tracking/db.py` et `history.py` | à faire |
@@ -69,34 +69,34 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B22 | Vérification des types (pyright) | à faire |
 | B23 | graphify à jour | en cours (lot 1, local) |
 | B24 | Mesurer le cache de téléchargement | à faire |
-| B25 | Tests de mutation mensuels | en cours (lot 1 : `schedule` dans `mutation.yml`) |
+| B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |
 | B26 | Suivi de la calibration en réel | à faire |
 | B27 | Tâche de nuit sans limite de durée | à toi (réinstaller la tâche, ADR 0014) |
 | B28 | Éviction du cache de variables pendant la nuit | à faire |
-| B29 | Supprimer le worktree `PATRICK-wt-fonds` | en cours (lot 1, local) |
-| B30 | KNOWN_ISSUES à jour | en cours (lot 1) |
+| B29 | Supprimer le worktree `PATRICK-wt-fonds` | fait (24/11) |
+| B30 | KNOWN_ISSUES à jour | fait (PR 97) |
 
 ## C. Corrections
 
 | # | Proposition | Statut |
 |---|---|---|
-| C1 | Verrou du pilote entre processus | à faire |
-| C2 | La nuit ne dépend plus de la fenêtre PATRICK | à faire |
-| C3 | Rendement nul : même traitement à l'entraînement et en réel | à faire |
-| C4 | Contrôle des champions suspects sur l'AUC | à faire |
+| C1 | Verrou du pilote entre processus | fait (lot 2 : `system/interprocess_lock.py`, verrou de plage d'octets libéré si le processus meurt, `CycleBusy` après 1 h) |
+| C2 | La nuit ne dépend plus de la fenêtre PATRICK | fait en partie (lot 2) : cause du 21/11 non établie (code 1 sans trace : arrêt de l'extérieur) ; la nuit journalise désormais fin et plantages (faulthandler), relance une fois la phase des fonds si son marqueur manque, et la fermeture de la fenêtre ne lance plus de publication concurrente |
+| C3 | Rendement nul : même traitement à l'entraînement et en réel | en cours (lot 3) |
+| C4 | Contrôle des champions suspects sur l'AUC | fait (lot 2 : même règle `suspect_reason` des deux côtés, AUC de direction ajoutée) |
 | C5 | Biais du gagnant du duel | à faire |
 | C6 | Choix de la meilleure classe de fonds corrigé | à faire |
 | C7 | Stratégies de fonds dans `trial_registry` | à faire |
 | C8 | Fuite légère des seuils CPCV | à faire |
-| C9 | `config_hash` indépendant du dossier de sortie | à faire |
+| C9 | `config_hash` indépendant du dossier de sortie | vérifié, rien à changer : `patrick resume` relit la config enregistrée (même dossier, même empreinte) et le dossier par défaut `runs` est commun à tous les runs ; retirer le dossier de l'empreinte changerait celle de TOUS les runs existants (reprises, golden) |
 | C10 | Remplacer les 46 champions de change suspects | à toi (runs du worker) |
 | C11 | 6E=F et DXY dans la règle d'alignement | à faire |
 | C12 | Placebo des champions à F1 > 0,74 inexpliqués | à toi (runs du worker) |
-| C13 | Heures des résultats Yahoo | à faire |
-| C14 | Anciens runs d'avant la fuite signalés | à faire |
-| C15 | `test_webapp_smoke` sous charge | à faire |
-| C16 | Erreur « disk I/O » des tests lents sous charge | à faire |
-| C17 | Audit des formulaires partiels | à faire |
+| C13 | Heures des résultats Yahoo | déjà fait (`earnings/exchanges.classify_timing` reconvertit depuis New York, `earnings/schedule.py` repère le 11:00 provisoire) |
+| C14 | Anciens runs d'avant la fuite signalés | reporté au lot 6 : badge visible « avant le garde anti-fuite (09/10) » sans exclusion (exclure retirerait d'un coup des centaines de modèles des fonds) |
+| C15 | `test_webapp_smoke` sous charge | fait (lot 2 : xfail avec la mesure si les processeurs étaient saturés, échec sinon) |
+| C16 | Erreur « disk I/O » des tests lents sous charge | non reproduit : aucun nom de test dans la note du 31/10 ; à reprendre à la prochaine occurrence |
+| C17 | Audit des formulaires partiels | vérifié, rien à changer : préférences, réglages des placements, correction d'ordre et renommage fusionnent déjà ; seul le pilote avait le défaut (corrigé le 29/10 par `overlay`) |
 | C18 | PR 95 (barre du haut à 320 px) | fait (PR 95, autre session, 24/11) |
 | C19 | Dossier principal à jour, serve + worker relancés | à toi |
 | C20 | Créer les fonds combinés | à toi (`fund combo-setup --create` après relance) |
@@ -104,12 +104,12 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | C22 | Python ≥ 3.11 sur l'autre PC | à toi |
 | C23 | Tâche NewsRefresh | à toi |
 | C24 | Purge de l'ancienne fixture dans l'historique Git public | décision (réécriture d'historique, force-push) |
-| C25 | Branche distante `fix/ci-pydantic-floor` | en cours (lot 1) |
-| C26 | Écart holdout / réel sur le change | à faire |
-| C27 | Seuil de jour plat en multiple de la volatilité | à faire |
-| C28 | `except Exception: pass` de `text/fulltext.py` journalisés | à faire |
-| C29 | `method_version` par défaut | à faire |
-| C30 | Lecture de `dm_result.p_value` (bilatérale) | à faire |
+| C25 | Branche distante `fix/ci-pydantic-floor` | fait (24/11) |
+| C26 | Écart holdout / réel sur le change | en cours (lot 3 : `patrick audit fx-gap`) ; mesure du 24/11 : règle 1 = 72,0 % holdout contre 55,0 % réel (11 runs), règle 2 = aucun run n'a encore 20 jugements réels |
+| C27 | Seuil de jour plat en multiple de la volatilité | déjà fait (méthode 2, ADR 0008 : jour plat si |r| < 0,25 × volatilité × racine(h)) |
+| C28 | `except Exception: pass` de `text/fulltext.py` journalisés | fait (lot 2) |
+| C29 | `method_version` par défaut | fait (lot 2) : vrai défaut, tout run neuf était forcé à la méthode 2, la méthode 3 de l'ADR 0011 était inatteignable |
+| C30 | Lecture de `dm_result.p_value` (bilatérale) | fait (lot 2) : vrai défaut, la sélection des fonds lisait la p bilatérale (un modèle nettement PIRE passait le niveau `dm`) et acceptait un test du dernier pli ; corrigé aussi dans la liste des modèles proposés |
 
 ## D. Affichage
 

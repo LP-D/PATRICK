@@ -55,6 +55,20 @@ def _long_run_variance(d: np.ndarray, h: int) -> tuple[float, str]:
     return float(gamma[0] + 2 * (weights * gamma[1:]).sum()), "bartlett"
 
 
+def one_sided_better_p(p_value, dm_stat) -> float | None:
+    """p-value UNILATÉRALE « le modèle fait mieux que sa baseline », à partir de la p bilatérale stockée dans `dm_result` (ADR 0003).
+
+    `dm_stat < 0` = le modèle a la perte la plus basse : p / 2 ; sinon 1 - p / 2. Lire la p bilatérale telle quelle fait passer un modèle
+    SIGNIFICATIVEMENT MOINS BON pour une preuve. None si la p-value manque (non testable)."""
+    if p_value is None:
+        return None
+    p = float(p_value)
+    if np.isnan(p):                                   # non testable
+        return None
+    better = dm_stat is not None and not np.isnan(float(dm_stat)) and float(dm_stat) < 0
+    return p / 2 if better else 1 - p / 2
+
+
 def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 1) -> dict:
     """`loss_a`: candidate model's loss, `loss_b`: comparison baseline's loss,
     aligned observation by observation (same order, same length). `h`:

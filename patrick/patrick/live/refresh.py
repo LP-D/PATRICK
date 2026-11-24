@@ -211,7 +211,8 @@ def _stop_for_low_space(free_bytes_fn, floor: int, remaining: int) -> str | None
     evicted = trim_feature_cache()
     try:
         free_after = free_bytes_fn()
-    except Exception:  # noqa: BLE001 -- idem
+    except Exception as exc:  # noqa: BLE001 -- idem
+        logger.debug("espace libre non remesuré après l'éviction : %s: %s", type(exc).__name__, exc)
         free_after = free
     if free_after >= floor:
         logger.info("Disque : %s libres après l'éviction, les prédictions continuent.", _gb(free_after))
@@ -227,7 +228,8 @@ def _open_failure_tracker(db_path: str | None):
     """Connexion qui sert à noter les échecs ; `None` si la base est inaccessible (la mesure ne doit jamais empêcher une prédiction)."""
     try:
         return trackdb.connect(db_path)
-    except Exception:  # noqa: BLE001 -- mesure : jamais bloquante
+    except Exception as exc:  # noqa: BLE001 -- mesure : jamais bloquante
+        logger.debug("suivi des échecs de prédiction indisponible : %s: %s", type(exc).__name__, exc)
         return None
 
 

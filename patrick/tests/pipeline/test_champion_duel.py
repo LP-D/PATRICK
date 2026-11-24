@@ -355,6 +355,24 @@ def test_a_suspect_champion_is_replaced_by_a_sane_challenger_even_if_it_scores_l
     assert [(a["run_id"], a["role"]) for a in champions.list_archive(setup.conn)] == [("champ_run", "replaced_champion")]
 
 
+def test_a_champion_whose_auc_alone_is_implausible_is_replaced_too(setup):
+    """Le challenger était jugé sur F1 ET AUC (`suspect_reason`), le champion rejoué sur le seul F1 : une AUC de 0,95 avec un F1 ordinaire
+    (fuite qui classe sans trancher) gardait le titre. Même règle des deux côtés depuis le 24/11."""
+    setup.scores["ChampAlgo"] = 0.55
+    setup.aucs["ChampAlgo"] = 0.95
+    setup.scores["ChalAlgo"] = 0.52
+    d = _duel(setup)
+    assert d["decision"] == "challenger_wins" and d["why"] == "suspect champion"
+    duel = json.loads(champions.list_archive(setup.conn)[0]["duel_json"])
+    assert "AUC" in duel["reason"]
+
+
+def test_suspect_reason_reads_the_direction_auc_used_for_selection():
+    from patrick.validation import suspicion
+    assert suspicion.suspect_reason({"F1_dir": 0.55, "AUC_dir": 0.93}) == "AUC_dir 0.93 ≥ 0.85"
+    assert suspicion.suspect_reason({"F1_dir": 0.55, "AUC_dir": 0.60}) is None
+
+
 def test_an_explicit_suspect_champion_is_replaced_without_re_evaluating_it(setup):
     champions.promote(setup.conn, "^TEST", H, "champ_run", setup.champ_tid, reason="first", holdout_f1_dir=0.99)
     setup.scores["ChalAlgo"] = 0.51

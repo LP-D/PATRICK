@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -15,6 +16,8 @@ from patrick.analysis import stats_core as sc
 from patrick.analysis.context import Ctx, iso
 from patrick.analysis.sec_predict import _scores
 from patrick.validation import calibration_drift, winner_bias
+
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------------------------------------------- aperçu
@@ -206,7 +209,8 @@ def _native_importance(trial: dict) -> dict | None:
             warnings.simplefilter("ignore")                       # modèle enregistré avec une autre version de scikit-learn
             bundle = joblib.load(path)
         model, names = bundle.get("model"), list(bundle.get("feature_names") or [])
-    except Exception:  # noqa: BLE001 -- fichier d'un autre environnement (bibliothèque absente, version) : section simplement vide
+    except Exception as exc:  # noqa: BLE001 -- fichier d'un autre environnement (bibliothèque absente, version) : section simplement vide
+        logger.debug("fichier d'un autre environnement (bibliothèque absente, version) : section simplement vide : %s: %s", type(exc).__name__, exc)
         return None
     imp = getattr(model, "feature_importances_", None)
     if imp is None and hasattr(model, "coef_"):

@@ -21,6 +21,7 @@ Activation : `PATRICK_SCAN_JOBS=<n>` ou réglage de la page « Lancer »
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -29,6 +30,8 @@ from joblib import Parallel, delayed, parallel_config
 
 from patrick.core import settings
 from patrick.system.resource_budget import cap_workers
+
+logger = logging.getLogger(__name__)
 
 ENV_JOBS = "PATRICK_SCAN_JOBS"
 
@@ -53,7 +56,8 @@ def _blas_threads() -> int | None:
         counts = [lib["num_threads"] for lib in threadpoolctl.threadpool_info()
                   if lib.get("user_api") == "blas"]
         return max(counts) if counts else None
-    except Exception:  # noqa: BLE001 -- purely informational; falls back to joblib's default
+    except Exception as exc:  # noqa: BLE001 -- purely informational; falls back to joblib's default
+        logger.debug("purely informational; falls back to joblib's default : %s: %s", type(exc).__name__, exc)
         return None
 
 
