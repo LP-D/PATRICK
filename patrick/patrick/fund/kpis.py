@@ -29,7 +29,8 @@ def gross_nav(daily: pd.DataFrame) -> pd.Series:
     """Valeur avant frais, jour par jour : la valeur nette plus les frais et le financement cumulés (le financement payé est positif)."""
     if daily.empty:
         return pd.Series(dtype=float)
-    return daily["nav"] + daily["fees_cum"] + daily["financing_cum"]
+    costs = [daily[c] for c in ("fees_cum", "financing_cum") if c in daily]   # une série sans frais (tests, anciennes sorties) : la valeur nette
+    return daily["nav"] + sum(costs) if costs else daily["nav"].copy()
 
 
 def edge_verdict(gross_pnl: float, net_pnl: float, has_orders: bool) -> str:
@@ -126,7 +127,7 @@ def series_points(daily: pd.DataFrame, columns=("nav", "cash", "gross")) -> list
     """Points du graphique d'une stratégie : valeur nette, liquidités et valeur avant frais (`gross`)."""
     if daily.empty:
         return []
-    frame = daily.assign(gross=gross_nav(daily)) if "gross" in columns and "fees_cum" in daily else daily
+    frame = daily.assign(gross=gross_nav(daily)) if "gross" in columns else daily
     out = []
     for day, row in frame.iterrows():
         out.append({"t": day.date().isoformat(), **{c: round(float(row[c]), 4) for c in columns if c in frame}})

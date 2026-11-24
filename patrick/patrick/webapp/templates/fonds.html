@@ -39,7 +39,8 @@
 {# Création des fonds : une seule carte (ADR 0028). La gamme fixe l'enveloppe et ses règles (fund/asset_classes.FAMILIES) : Systematic (CTO, vente
    à découvert en CFD), CTO (achat seulement), PEA (achat seulement, actions de l'UE/EEE en euro, plafond de versements) ; le découpage : une
    stratégie par classe d'actifs ou une par preuve statistique. La gamme « Réels » : le PEA et le CTO de 5 000 €, 1 € par ordre (fund/real_funds.py,
-   ADR 0026). fonds.js ne montre que le bloc et les classes de la gamme choisie ; aperçu = fragment rendu serveur. #}
+   ADR 0026). La gamme « combo » : les quatre fonds de test combinés (fund/combo.py, ADR 0029). fonds.js ne montre que le bloc et les classes de la
+   gamme choisie ; aperçu des classes = fragment rendu serveur, aperçu des fonds combinés = lignes de texte (textContent). #}
 <details class="card fund-create" id="fund-create">
   <summary>{{ t('fund_create_title') }}</summary>
   <p class="hint">{{ t('fund_create_hint') }}</p>
@@ -51,14 +52,17 @@
           <option value="cto" data-capital="{{ families.cto.capital | int }}">{{ t('fund_family_cto') }}</option>
           <option value="pea" data-capital="{{ families.pea.capital | int }}">{{ t('fund_family_pea') }}</option>
           <option value="real">{{ t('fund_family_real') }}</option>
+          <option value="combo">{{ t('fund_family_combo') }}</option>
         </select>
       </label>
     </div>
     <ul class="fund-real-rules">
       <li data-family-rule="systematic">{{ t('fund_family_rule_systematic') }}</li>
       <li data-family-rule="cto" hidden>{{ t('fund_family_rule_cto') }}</li>
+      <li data-family-rule="cto" hidden>{{ t('fund_family_rule_retail') }}</li>
       <li data-family-rule="pea" hidden>{{ t('fund_real_rule_pea') }}</li>
-      <li data-family-rule="pea" hidden>{{ t('fund_family_rule_pea_cap', cap=(families.pea.capital | eur(0))) }}</li>
+      <li data-family-rule="pea" hidden>{{ t('fund_family_rule_retail') }}</li>
+      <li data-family-rule="pea" hidden>{{ t('fund_family_rule_pea_cap', cap=(pea_cap | eur(0))) }}</li>
     </ul>
   </div>
 
@@ -133,6 +137,49 @@
         <button type="button" class="btn" data-act="real-create"
                 data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_real_create') }}</button>
       </div>
+    </div>
+  </div>
+
+  <div id="fund-combo" class="fund-real" data-create-block="combo" hidden>
+    <p class="hint">{{ t('fund_combo_hint', capital=(combo_defaults.capital | eur(0))) }}</p>
+    <ul class="fund-real-rules">
+      <li>{{ t('fund_combo_rule_rl') }}</li>
+      <li>{{ t('fund_combo_rule_vol') }}</li>
+      <li>{{ t('fund_combo_rule_frozen') }}</li>
+    </ul>
+    {% if combo_existing %}
+    <p class="hint">{{ t('fund_real_existing') }}
+      {% for s in combo_existing %}<a href="/fonds?categorie=lab&amp;strategy={{ s.strategy_id | urlencode }}">{{ s.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+    <div class="form fund-inline-form">
+      <fieldset class="fund-cls-list">
+        <legend>{{ t('fund_combo_variants') }}</legend>
+        {% for key in combo_variants %}
+        <label class="fund-check"><input type="checkbox" name="only" value="{{ key }}" data-combo-field checked> {{ t('fund_combo_variant_' ~ key) }}</label>
+        {% endfor %}
+      </fieldset>
+      <div class="subgrid">
+        <label>{{ t('fund_cls_horizons') }} <input type="text" name="horizons" value="{{ combo_defaults.horizons | join(', ') }}" data-combo-field></label>
+        <label>{{ t('fund_auto_tier') }}
+          <select name="tier" data-combo-field>
+            {% for tier in ('auc', 'large', 'strict', 'dm', 'bh') %}
+            <option value="{{ tier }}"{% if combo_defaults.tier == tier %} selected{% endif %}>{{ t('fund_auto_tier_' ~ tier) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>{{ t('fund_cls_capital') }} <input type="number" name="capital" min="1000" step="1000" value="{{ combo_defaults.capital | int }}" data-combo-field></label>
+        <label>{{ t('fund_auto_max') }} <input type="number" name="max_models" min="1" max="5000" step="1" value="{{ combo_defaults.max_models or '' }}" placeholder="{{ t('fund_auto_max_none') }}" data-combo-field></label>
+        <label>{{ t('fund_combo_cost_multiple') }} <input type="number" name="cost_multiple" min="0" max="10" step="0.1" value="{{ combo_defaults.cost_multiple }}" data-combo-field></label>
+        <label class="fund-check"><input type="checkbox" name="run" data-combo-field checked> {{ t('fund_cls_run_now') }}</label>
+      </div>
+      <div class="fund-actions">
+        <button type="button" class="btn-ghost" data-act="combo-preview"
+                data-line="{{ t('fund_combo_preview_line', name='{name}', n='{n}', state='{state}') }}"
+                data-new="{{ t('fund_combo_state_new') }}" data-existing="{{ t('fund_combo_state_existing') }}">{{ t('fund_cls_preview') }}</button>
+        <button type="button" class="btn" data-act="combo-create"
+                data-done="{{ t('fund_cls_done', created='{created}', reused='{reused}') }}" data-cycle="{{ t('fund_cls_cycle') }}">{{ t('fund_combo_create') }}</button>
+      </div>
+      <ul class="fund-cls-result" data-combo-result hidden aria-live="polite"></ul>
       <div class="fund-real-result" data-real-result hidden aria-live="polite"></div>
     </div>
   </div>

@@ -156,8 +156,8 @@ def test_the_page_has_one_creation_card_with_every_family_and_the_pea_classes_ma
 
     card = html.split('id="fund-create"', 1)[1].split("</details>", 1)[0]
     family = card.split('<select name="family" id="fund-family">', 1)[1].split("</select>", 1)[0]
-    assert re.findall(r'<option value="(\w+)"', family) == ["systematic", "cto", "pea", "real"]
-    assert 'data-capital="150000"' in family and 'data-capital="10000000"' in family
+    assert re.findall(r'<option value="(\w+)"', family) == ["systematic", "cto", "pea", "real", "combo"]
+    assert 'data-capital="5000"' in family and 'data-capital="10000000"' in family            # reproductible : 5 000 € (ADR 0029)
     assert 'id="fund-classes"' in card and 'id="fund-real"' in card and 'data-act="real-create"' in card       # les fonds réels dans la même carte
     assert 'name="split"' in card and 'value="tiers"' in card and 'name="tier_pick" value="dm"' in card
     assert 'data-families="systematic cto pea"><input type="checkbox" name="class" value="Actions France"' in card
@@ -169,7 +169,7 @@ def test_the_classes_api_lists_the_classes_of_a_family(client):
     body = client.get("/api/fund/asset-classes?family=pea").json()
 
     assert [c["name"] for c in body["classes"]] == ["Actions France", "Actions Europe"]
-    assert body["families"]["pea"] == {"prefix": "PEA", "wrapper": "PEA", "allow_short": False, "capital": store.PEA_DEPOSIT_CAP_EUR,
+    assert body["families"]["pea"] == {"prefix": "PEA", "wrapper": "PEA", "allow_short": False, "capital": 5_000,
                                        "classes": ["Actions France", "Actions Europe"]}
     assert client.get("/api/fund/asset-classes?family=AV").status_code == 400
 
@@ -182,7 +182,8 @@ def test_create_follows_the_family_with_its_capital_and_its_short_rule(client, w
     assert out.status_code == 200, out.text
     made = strategies()
     assert set(made) == {"PEA Actions France", "PEA Actions Europe"}
-    assert made["PEA Actions France"]["wrapper"] == "PEA" and made["PEA Actions France"]["initial_capital"] == store.PEA_DEPOSIT_CAP_EUR
+    assert made["PEA Actions France"]["wrapper"] == "PEA" and made["PEA Actions France"]["initial_capital"] == 5_000
+    assert (made["PEA Actions France"]["category"], made["PEA Actions France"]["fee_flat"]) == ("real", 1.0)
 
 
 def test_the_split_by_evidence_creates_one_strategy_per_tier_in_the_family(client, world, monkeypatch):
@@ -198,3 +199,35 @@ def test_the_split_by_evidence_creates_one_strategy_per_tier_in_the_family(clien
     conn.close()
     assert (settings["tier"], settings["allow_short"], settings["groups"]) == ("dm", False, None)
 
+
+
+# --- fonds de test combinés (ADR 0029) : un bloc de la même carte, une route -------------------------------------------------------
+
+
+def test_the_creation_card_has_a_combined_funds_block_with_the_four_variants(client):
+    html = client.get("/fonds").text
+
+    block = html.split('id="fund-combo"', 1)[1].split('data-combo-result', 1)[0]
+    assert 'data-create-block="combo"' in html.split('id="fund-combo"', 1)[0][-200:] + block[:80]
+    assert re.findall(r'name="only" value="(\w+)"', block) == ["reference", "rl", "vol", "full"]
+    assert 'data-act="combo-preview"' in block and 'data-act="combo-create"' in block and 'name="cost_multiple"' in block
+    assert 'value="10000000"' in block
+
+
+def test_the_combo_api_previews_then_creates_the_four_lab_funds(client, world, monkeypatch):
+    monkeypatch.setattr(autopilot, "start_cycles", lambda ids, db_path=None: None)
+
+    preview = client.post("/api/fund/combo", json={"dry_run": True}).json()
+    out = client.post("/api/fund/combo", json={"only": ["reference", "vol"], "run": False, "cost_multiple": 2})
+
+    assert [(r["variant"], r["strategy_id"]) for r in preview["rows"]] == [("reference", None), ("rl", None), ("vol", None), ("full", None)]
+    assert strategies().keys() == {"Combiné Référence", "Combiné ML + volatilité"}
+    assert out.status_code == 200, out.text
+    made = strategies()["Combiné ML + volatilité"]
+    assert (made["category"], made["wrapper"], made["initial_capital"]) == ("lab", "CTO", 10_000_000)
+    conn = trackdb.connect()
+    settings = store.get_autopilot(conn, made["strategy_id"])["settings"]
+    conn.close()
+    assert settings["combo"] == {"rl": False, "vol": True, "cost_multiple": 2.0} and settings["allow_short"] is True
+    assert client.post("/api/fund/combo", json={"only": []}).status_code == 400
+    assert client.post("/api/fund/combo", json={"only": ["magie"]}).status_code == 400

@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from patrick.fund import (
     asset_classes,
     autopilot,
+    combo,
     envelopes,
     insight,
     instruments,
@@ -208,7 +209,7 @@ def register(app: FastAPI, templates, context) -> None:
             "ticker_bank": ticker_bank(ctx.get("group_labels") or {}), **_view_ctx(data), **ctx})
 
     def _category(value: str | None) -> str | None:
-        """Filtre `?categorie=` de /fonds : `quant` ou `real` ; toute autre valeur (ou rien) = toutes les catégories."""
+        """Filtre `?categorie=` de /fonds : `quant`, `real` ou `lab` (ADR 0029) ; toute autre valeur (ou rien) = toutes les catégories."""
         return value if value in store.CATEGORIES else None
 
     @app.get("/fonds")
@@ -216,17 +217,23 @@ def register(app: FastAPI, templates, context) -> None:
         """Le cadre seul (titre, panneau, listes sans cotations) : la valeur de chaque stratégie se calcule en 3 à 5 s sur la vraie
         base ; elle arrive par `/fragments/fund-overview` après l'affichage. Seules les stratégies archivées, une lecture de table,
         se lisent ici."""
+        every_signal = {real_funds.fund_name(k) for k in real_funds.KINDS}
+        combo_names = {v["name"] for v in combo.VARIANTS.values()}
+
         def run(conn):
             every = store.list_strategies(conn, include_archived=True)
-            return [s for s in every if s["archived"]], [s for s in every if s["category"] == "real" and not s["archived"]]
-        archived, real_existing = _call(run)
+            live = [s for s in every if not s["archived"]]
+            return ([s for s in every if s["archived"]], [s for s in live if s["category"] == "real" and s["name"] in every_signal],
+                    [s for s in live if s["category"] == "lab" and s["name"] in combo_names])
+        archived, real_existing, combo_existing = _call(run)
         return templates.TemplateResponse(request, "fonds.html", {
             "selected_id": strategy, "archived": archived, "class_names": list(asset_classes.CLASSES),
             "class_families": {name: [f.key for f in asset_classes.FAMILIES.values() if name in f.classes] for name in asset_classes.CLASSES},
             "families": asset_classes.FAMILIES,
             "class_defaults": asset_classes.DEFAULTS, "category": _category(categorie), "categories": store.CATEGORIES,
             "real_existing": real_existing, "real_defaults": real_funds.DEFAULTS, "pea_groups": envelopes.PEA_GROUPS,
-            **context(request)})
+            "pea_cap": store.PEA_DEPOSIT_CAP_EUR, "combo_existing": combo_existing, "combo_defaults": combo.DEFAULTS,
+            "combo_variants": list(combo.VARIANTS), **context(request)})
 
     @app.get("/fragments/fund-overview")
     def fund_overview_fragment(request: Request, strategy: str | None = None, categorie: str | None = None):
@@ -601,6 +608,39 @@ def register(app: FastAPI, templates, context) -> None:
             options = _real_options(body)
             start = options.pop("run")
             return real_funds.setup(conn, today=service.current_date(), **options), start and not options["dry_run"]
+        rows, start = await run_in_threadpool(_call, run)
+        if start:
+            autopilot.start_cycles([r["strategy_id"] for r in rows])
+        return {"rows": rows, "cycle_started": bool(start)}
+
+    # ------------------------------------------------- fonds de test combinés : ML/DL croisé avec le RL et la volatilité (ADR 0029)
+
+    def _combo_options(raw: dict) -> dict:
+        """Réglages d'une création des fonds combinés (`only`, `capital`, `tier`, `horizons`, `max_models`, `gross`, `cost_multiple`, `run`,
+        `dry_run`), les absents prenant `combo.DEFAULTS`. La validation fine est celle de `combo.setup`."""
+        merged = {**combo.DEFAULTS, **{k: v for k, v in raw.items() if k in (*combo.DEFAULTS, "only", "run", "dry_run")}}
+        only = merged.get("only")
+        if only is not None and (not isinstance(only, list) or not all(isinstance(k, str) for k in only)):
+            raise store.FundError("only invalide : liste de fonds (reference, rl, vol, full) attendue")
+        if only == []:
+            raise store.FundError("aucun fonds combiné coché")
+        horizons = merged["horizons"]
+        if not isinstance(horizons, list) or not horizons or not all(isinstance(h, int) and not isinstance(h, bool) and h > 0 for h in horizons):
+            raise store.FundError("horizons invalides : liste d'entiers positifs attendue")
+        return {"only": only, "capital": merged["capital"], "tier": merged["tier"], "horizons": tuple(horizons),
+                "max_models": merged["max_models"], "gross": merged["gross"], "cost_multiple": merged["cost_multiple"],
+                "run": bool(merged.get("run")), "dry_run": bool(merged.get("dry_run"))}
+
+    @app.post("/api/fund/combo")
+    async def api_combo_create(request: Request):
+        """Crée (ou reprend) les fonds de test combinés en pilote automatique, puis, si `run`, un premier cycle en arrière-plan.
+        `dry_run` : rien n'est écrit, seuls les modèles candidats sont comptés."""
+        body = await _json_body(request)
+
+        def run(conn):
+            options = _combo_options(body)
+            start = options.pop("run")
+            return combo.setup(conn, today=service.current_date(), **options), start and not options["dry_run"]
         rows, start = await run_in_threadpool(_call, run)
         if start:
             autopilot.start_cycles([r["strategy_id"] for r in rows])

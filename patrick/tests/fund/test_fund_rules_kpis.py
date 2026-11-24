@@ -135,7 +135,7 @@ def test_kpis_of_a_strategy_without_orders_are_neutral_and_json_safe():
 def test_series_points_are_rounded_and_dated():
     res = _result([100.0] * 10)
     pts = kpis.series_points(res.daily)
-    assert pts[0] == {"t": "2026-01-05", "nav": 100000.0, "cash": 100000.0} and len(pts) == 10
+    assert pts[0] == {"t": "2026-01-05", "nav": 100000.0, "cash": 100000.0, "gross": 100000.0} and len(pts) == 10   # gross : avant frais
     assert kpis.series_points(pd.DataFrame()) == []
 
 

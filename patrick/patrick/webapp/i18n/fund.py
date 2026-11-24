@@ -320,10 +320,11 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_edge_kept_hint": _s("Gain après frais.", "Gain after costs."),
     "fund_edge_verdicts": _s("{kept} conservé(s) · {eaten} mangé(s) par les frais · {no_edge} sans avantage",
                              "{kept} kept · {eaten} eaten by costs · {no_edge} without edge"),
-    "fund_kpi_gross": _s("P&L avant frais", "P&L before costs"),
-    "fund_hint_gross": _s("Sans frais de transaction ni financement des CFD (dividendes compris).", "Without transaction fees or CFD financing (dividends included)."),
-    "fund_kpi_gross_sharpe": _s("Sharpe avant frais", "Sharpe before costs"),
-    "fund_hint_gross_sharpe": _s("Même calcul que le Sharpe, sur la valeur avant frais.", "Same computation as the Sharpe, on the value before costs."),
+    "fund_kpi_before_fees": _s("P&L avant frais", "P&L before costs"),
+    "fund_hint_before_fees": _s("Sans frais de transaction ni financement des CFD (dividendes compris).",
+                                "Without transaction fees or CFD financing (dividends included)."),
+    "fund_kpi_before_fees_sharpe": _s("Sharpe avant frais", "Sharpe before costs"),
+    "fund_hint_before_fees_sharpe": _s("Même calcul que le Sharpe, sur la valeur avant frais.", "Same computation as the Sharpe, on the value before costs."),
     "fund_kpi_costs": _s("Frais + financement", "Fees + financing"),
     "fund_hint_costs": _s("Ce que la mise en œuvre a coûté : l'écart entre avant frais et net.", "What implementation cost: the gap between before costs and net."),
     "fund_edge_line_no_edge": _s(
@@ -527,6 +528,35 @@ FUND_STRINGS: dict[str, dict[str, str]] = {
     "fund_real_fee": _s("Frais par ordre (€)", "Fee per order (€)"),
     "fund_real_min": _s("Position minimale (€)", "Minimum position (€)"),
     "fund_real_create": _s("Créer ou reprendre les deux fonds", "Create or reuse both funds"),
+
+    # /fonds : création des fonds de test combinés (fund/combo.py, ADR 0029)
+    "fund_combo_hint": _s(
+        "Quatre fonds, mêmes modèles, mêmes conditions (CTO, {capital} virtuels, vente à découvert par CFD) : seul l'ingrédient change. "
+        "Chacun se compare à « Référence ».",
+        "Four funds, same models, same terms (CTO, {capital} virtual, short selling through CFDs): only the ingredient changes. "
+        "Each one is compared with “Reference”."),
+    "fund_combo_variants": _s("Fonds", "Funds"),
+    "fund_combo_variant_reference": _s("Référence : les signaux bruts, taille fixe (le témoin)", "Reference: raw signals, fixed size (the control)"),
+    "fund_combo_variant_rl": _s("ML + RL : l'agent RL de la cible doit être d'accord, sinon pas de position",
+                                "ML + RL: the target's RL agent must agree, otherwise no position"),
+    "fund_combo_variant_vol": _s("ML + volatilité : taille selon la volatilité prévue et le régime, ouverture si le gain paie les frais",
+                                 "ML + volatility: size from forecast volatility and regime, open only if the gain pays the costs"),
+    "fund_combo_variant_full": _s("ML + RL + volatilité : les deux", "ML + RL + volatility: both"),
+    "fund_combo_rule_rl": _s(
+        "Agent RL : le meilleur run crédible de la cible (moteur 2, bat acheter-garder, décalage non suspect), rejoué chaque nuit. "
+        "Sans agent crédible, le signal ML passe seul.",
+        "RL agent: the target's best credible run (engine 2, beats buy-and-hold, delay not suspect), replayed every night. "
+        "Without a credible agent, the ML signal goes through alone."),
+    "fund_combo_rule_vol": _s(
+        "Volatilité : prévision RiskMetrics de l'actif, modèle de l'indice de volatilité de sa classe (VIX, OVX, GVZ, MOVE), coût de l'aller-retour.",
+        "Volatility: RiskMetrics forecast of the asset, model of its class's volatility index (VIX, OVX, GVZ, MOVE), round-trip cost."),
+    "fund_combo_rule_frozen": _s("Chaque décision est figée une fois la séance passée : le passé d'un fonds ne change jamais.",
+                                 "Each decision is frozen once the session is over: a fund's past never changes."),
+    "fund_combo_cost_multiple": _s("Gain attendu ≥ frais ×", "Expected gain ≥ costs ×"),
+    "fund_combo_create": _s("Créer ou reprendre les fonds combinés", "Create or reuse the combined funds"),
+    "fund_combo_preview_line": _s("{name} : {n} modèle(s) candidat(s), {state}", "{name}: {n} candidate model(s), {state}"),
+    "fund_combo_state_new": _s("à créer", "to create"),
+    "fund_combo_state_existing": _s("déjà créé", "already created"),
     "fund_auto_tier_auc": _s("Tous les signaux : AUC de direction au-dessus du hasard (testés en premier)",
                              "Every signal: direction AUC above chance (tested ones first)"),
     "fund_auto_min_position": _s("Position minimale (€)", "Minimum position (€)"),
