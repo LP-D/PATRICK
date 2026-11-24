@@ -2413,7 +2413,8 @@ def run_pipeline(config: RunConfig, store: DataStore | None = None,
         # Run neuf (une reprise rejoue la règle de son enregistrement) : règle d'alignement des séances d'aujourd'hui,
         # écrite dans la config pour que le live, l'explication et la reprise la rejouent (ADR 0007).
         config.objective.session_rule = CURRENT_SESSION_RULE
-        config.validation.method_version = D.CURRENT_METHOD_VERSION
+        # Au moins la méthode courante ; une méthode plus récente demandée explicitement (la 3, codée non activée, ADR 0011) est gardée.
+        config.validation.method_version = max(config.validation.method_version, D.CURRENT_METHOD_VERSION)
     t0 = time.time()
     _reset_calibration_skips()
     _prepare_deep_models(config)

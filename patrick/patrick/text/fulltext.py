@@ -16,6 +16,7 @@ gardé (on ne prend pas toute la page : menus et bandeaux fausseraient le ton).
 """
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 import time
@@ -23,6 +24,8 @@ import urllib.parse
 from html.parser import HTMLParser
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 MAX_CHARS = 150_000
 MAX_ATTEMPTS = 3
@@ -111,8 +114,8 @@ def extract_text(html: str, max_chars: int = MAX_CHARS) -> str:
     try:
         parser.feed(html or "")
         parser.close()
-    except Exception:  # noqa: BLE001, S110 -- HTML malformé : on garde ce qui a été lu avant l'erreur
-        pass
+    except Exception as exc:  # noqa: BLE001 -- HTML malformé : on garde ce qui a été lu avant l'erreur
+        logger.debug("HTML malformé, texte gardé jusqu'à l'erreur : %s: %s", type(exc).__name__, exc)
     for kind in _PRIORITY:
         raw = "".join(parser.parts[kind])
         text = _clean(raw)
@@ -200,8 +203,8 @@ def fetch_bodies(conn: sqlite3.Connection, feeds, fetch, now=None, limit: int = 
                 sleep(pause_s)
                 try:
                     text = extract_text(fetch(link)) or text
-                except Exception:  # noqa: BLE001, S110 -- le communiqué seul reste exploitable
-                    pass
+                except Exception as exc:  # noqa: BLE001 -- le communiqué seul reste exploitable
+                    logger.info("procès-verbal illisible (%s), communiqué seul gardé : %s: %s", link, type(exc).__name__, exc)
         except Exception as exc:  # noqa: BLE001 -- frontière réseau : une page illisible n'arrête pas la collecte
             _save(conn, item_id, stamp, "failed", None, attempts=attempts, error=str(exc)[:200])
             counts["failed"] += 1
