@@ -25,9 +25,11 @@ Ordre proposé (par gain attendu, hypothèses à confirmer) :
 
 1. **Pools paramétriques par fold** (≈ 32 % WF, ≈ 7 % CPCV) : construction parallélisée de façon déterministe par (ticker, modèle, fold), avec `fit_end_idx`/`test_end_idx` inchangés, nombre de threads BLAS/OpenMP contrôlé, configuration résolue passée complète aux workers ; clé de cache = celle de `pool_cache` (aucun `id()`).
 2. **Sélection SHAP** (≈ 28 % WF, ≈ 48 % CPCV) : le cache SQLite existant ne couvre que les répétitions exactes (40/70 en WF). Piste exacte : calculer le classement une fois par (données d'entraînement, graine) et en déduire les N de la grille (seulement si `select_features` est un préfixe du même classement : à vérifier par test, sinon méthodologique).
+   **Fait le 2026-11-24 (exact)** : le pilote et les valeurs SHAP ne dépendent pas de N ; `selection.shap_select.shap_order` calcule le classement complet une fois par jeu d'entraînement et chaque N en prend le début (`engine._SHAP_ORDERS`, aussi en parallèle). Sélections identiques à l'ancien calcul (test `tests/pipeline/test_shap_order_once.py`).
 3. **`holdout_diagnostic` / `final_holdout` / tuning** : réutiliser les `FoldData` déjà préparés (PreparedFoldCache en mémoire, clé = (horizon, fold, régime, config)). Gain direct faible (≈ 2 s de temps propre pour `prepare`) mais évite de reconstruire/re-normaliser ; à faire APRÈS le point 1.
 4. **Batching SQLite** : 1150 commits ≈ 3 s → gain négligeable à cette échelle, à reconsidérer sur un run réel.
 5. **Cache de téléchargement** : non mesuré au Sprint 1 (données synthétiques hors ligne) ; à mesurer sur un vrai run avant toute décision.
+   **Mesuré le 2026-11-24** sur les journaux de 20 workers réels (588 ingestions) : 93 % des snapshots viennent du cache, 1 % du cache local (lignes manquantes seulement), 6 % sont téléchargés (médiane 43 s, 90e centile 354 s, 0,82 h en tout). Le cache fonctionne : le téléchargement n'est pas un goulot, rien à optimiser ici.
 
 ## Idées hors Sprint 2 (méthodologiques, ne pas mélanger)
 

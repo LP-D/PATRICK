@@ -474,6 +474,25 @@ def _tidy_storage(conn, job_id: str) -> None:
                   "(le fichier de la base ne rétrécit que par `patrick storage vacuum`).")
     except Exception as exc:  # noqa: BLE001 -- idem : jamais d'échec du worker pour de l'entretien
         print(f"[CACHE] éviction du cache de volatilité non faite : {type(exc).__name__}: {exc}")
+    refresh_planner_stats(conn)
+
+
+PLANNER_ANALYSIS_LIMIT = 400
+
+
+def refresh_planner_stats(conn) -> bool:
+    """Statistiques du planificateur SQLite tenues à jour à chaque fin de job : `ensure_planner_stats` ne les calcule qu'une fois (base
+    sans `sqlite_stat1`), mais un job ajoute des dizaines de milliers de lignes et des statistiques périmées ramènent les mauvais plans
+    (190 s au lieu de 0,03 s le 07/11). `PRAGMA optimize` ne ré-analyse que les tables qui ont beaucoup changé, échantillonnées à
+    `PLANNER_ANALYSIS_LIMIT` lignes par index : une fraction de seconde, jamais un VACUUM ni une suppression. Ne fait jamais échouer le worker."""
+    try:
+        conn.execute(f"PRAGMA analysis_limit = {PLANNER_ANALYSIS_LIMIT}")
+        conn.execute("PRAGMA optimize")
+        conn.execute("PRAGMA analysis_limit = 0")
+        return True
+    except sqlite3.Error as exc:
+        print(f"[DB] statistiques du planificateur non rafraîchies : {type(exc).__name__}: {exc}")
+        return False
 
 
 def run_worker_loop(poll_interval: float = 1.0, idle_timeout: float = 600.0) -> None:

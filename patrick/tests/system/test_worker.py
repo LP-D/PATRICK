@@ -122,3 +122,4 @@ def test_real_worker_subprocess_survives_without_web_server(tmp_path):
     job = jobs_db.get_job(conn, job_id)
     conn.close()
     assert job["status"] == "done", (job, proc.stdout, proc.stderr)
+
