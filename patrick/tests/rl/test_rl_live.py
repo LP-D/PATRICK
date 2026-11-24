@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
 import json
 
 import numpy as np
@@ -10,6 +11,9 @@ import pytest
 
 from patrick.rl import live
 from patrick.rl.data import RLData
+
+# Le rejeu passe par `rl/env.py` (traduction action -> position), qui importe gymnasium : extra optionnel, absent de la CI rapide.
+needs_gym = pytest.mark.skipif(importlib.util.find_spec("gymnasium") is None, reason="gymnasium non installé (extra optionnel rl)")
 
 DATES = pd.bdate_range("2025-01-01", periods=300)
 TRAIN, FIT_END, TEST, END = DATES[0], DATES[150], DATES[200], DATES[260]   # le run s'arrête le 260e jour ; la suite est « live »
@@ -53,6 +57,7 @@ def _compute(job, model=None):
     return live.compute(job, build_data=_data, load_model=lambda path: model or Model())
 
 
+@needs_gym
 def test_the_last_fold_agent_is_replayed_after_the_run_and_its_position_is_scaled_by_the_leverage(tmp_path):
     res = _compute(_job(tmp_path))
 
@@ -70,6 +75,7 @@ def test_a_gated_fold_has_no_opinion_and_nothing_is_replayed(tmp_path):
     assert res.status == "gated" and res.positions.empty
 
 
+@needs_gym
 def test_a_replay_that_no_longer_finds_the_original_positions_is_discarded(tmp_path):
     res = _compute(_job(tmp_path, oos_position=0.0))                  # le run était à plat, le rejeu est acheteur : le monde a changé
 
@@ -81,6 +87,7 @@ def test_missing_features_or_models_stop_the_replay(tmp_path):
     assert _compute(_job(tmp_path, models=False)).status == "no_models"
 
 
+@needs_gym
 def test_the_replay_reads_the_features_of_the_fold_and_holds_between_two_decisions(tmp_path):
     res = _compute(_job(tmp_path, oos_file=False), model=Model(low=0))       # à plat quand f1 (mise à l'échelle) est négative ; sans fichier hors
                                                                              # échantillon, pas de contrôle d'accord
@@ -108,16 +115,29 @@ def test_direction_of_a_position(position, direction):
     assert live.direction(position) == direction
 
 
+def _insert_job(conn, job_id: str, job: dict) -> None:
+    conn.execute("INSERT INTO job (job_id, config_json, status, phase, result_json) VALUES (?, ?, 'done', 'done', ?)",
+                 (job_id, json.dumps(job["config"]), json.dumps(job["result"])))
+    conn.commit()
+
+
 def test_refresh_reports_each_agent_and_an_error_never_stops_the_others(conn, tmp_path):
-    job = _job(tmp_path)
-    conn.execute("INSERT INTO job (job_id, config_json, status, phase, result_json) VALUES ('job_rl', ?, 'done', 'done', ?)",
-                 (json.dumps(job["config"]), json.dumps(job["result"])))
+    _insert_job(conn, "job_gated", _job(tmp_path, gated=True))
     conn.execute("INSERT INTO job (job_id, config_json, status, phase, result_json) VALUES ('job_bad', '{}', 'done', 'done', '{\"folds\": [{}]}')")
     conn.execute("INSERT INTO job (job_id, config_json, status, phase, result_json) VALUES ('job_gone', '{}', 'done', 'deleted', '{}')")
     conn.commit()
 
-    out = live.refresh(conn, ["job_bad", "job_rl", "job_gone", "job_rl"], today=dt.date(2026, 1, 16), build_data=_data,
+    out = live.refresh(conn, ["job_bad", "job_gated", "job_gone", "job_gated"], today=dt.date(2026, 1, 16), build_data=_data,
                        load_model=lambda p: Model())
 
-    assert [(o["job_id"], o["status"]) for o in out] == [("job_bad", "error"), ("job_rl", "ok"), ("job_gone", "missing")]
-    assert out[1]["written"] == len(DATES) - 261 and len(live.positions(conn, "job_rl")) == len(DATES) - 261
+    assert [(o["job_id"], o["status"]) for o in out] == [("job_bad", "error"), ("job_gated", "gated"), ("job_gone", "missing")]
+    assert out[1]["written"] == 0 and live.positions(conn, "job_gated").empty
+
+
+@needs_gym
+def test_refresh_writes_the_live_positions_of_a_replayed_agent(conn, tmp_path):
+    _insert_job(conn, "job_rl", _job(tmp_path))
+
+    (done,) = live.refresh(conn, ["job_rl"], today=dt.date(2026, 1, 16), build_data=_data, load_model=lambda p: Model())
+
+    assert done["status"] == "ok" and done["written"] == len(DATES) - 261 and len(live.positions(conn, "job_rl")) == len(DATES) - 261
