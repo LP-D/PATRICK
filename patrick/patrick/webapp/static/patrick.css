@@ -2452,6 +2452,11 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
 
 .fund-compare { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: var(--fs-xs); color: var(--text-2); }
 
+/* D10 : carte de chaleur de l'AUC regroupée (--heat de 0 à 1, contour = significatif après BH) */
+.ph-cell { background: color-mix(in srgb, var(--brand) calc(var(--heat, 0) * 55%), transparent); font-variant-numeric: tabular-nums; }
+.ph-cell.is-sig { outline: 2px solid var(--pos); outline-offset: -2px; font-weight: 600; }
+.ph-cell.is-empty { color: var(--text-3); }
+
 /* D27 : frise de la file d'attente (segments proportionnels à la durée estimée) */
 .queue-frise { display: flex; gap: 2px; height: 10px; margin: 8px 0 4px; border-radius: var(--radius-pill); overflow: hidden; }
 .queue-seg { flex: none; background: color-mix(in srgb, var(--brand) 45%, transparent); }

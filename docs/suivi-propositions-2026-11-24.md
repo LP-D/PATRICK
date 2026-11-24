@@ -119,17 +119,17 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | D2 | Fiabilité à côté de P(hausse) | fait (lot 6 : Brier skill au holdout dans la bulle d'une prédiction) |
 | D3 | Annotations (lignes verticales) sur les graphiques | fait (lot 6 : changements de champion et publications de résultats sur la courbe de la page d'un actif) |
 | D4 | Curseur synchronisé entre graphiques | fait en partie (lot 6 : courbe d'un fonds et sa perte depuis le plus haut partagent leur réticule) |
-| D5 | Petits multiples par classe d'actifs | à faire |
+| D5 | Petits multiples par classe d'actifs | déjà fait de fait (pages de classes d'actifs : un panneau avec graphique par actif) |
 | D6 | Holdout et réel côte à côte | déjà fait (tableau test / holdout / réel côte à côte de l'aperçu d'un run, section holdout_live) |
 | D7 | Badge « biais du gagnant » | fait (lot 6 : bandeau du biais du gagnant) |
-| D8 | Volatilité séparée des directions | à faire |
+| D8 | Volatilité séparée des directions | à faire avec A1 (la prévision de volatilité s'affichera à part, jamais dans un classement de directions) |
 | D9 | Diagramme de fiabilité | déjà fait (section « calibration » de l'analyse d'un run) |
-| D10 | Carte de chaleur cible × horizon | à faire |
+| D10 | Carte de chaleur cible × horizon | fait (lot 6 : carte de chaleur cible × horizon de l'AUC regroupée sur la Synthèse) |
 | D11 | P&L avant / après frais superposés | déjà fait (graphique d'un fonds : valeur nette et valeur avant frais en pointillés) |
 | D12 | Drawdown sous chaque fonds | fait (lot 6) |
 | D13 | Navigation réduite | déjà fait (barre latérale en dossiers repliables, 22/11) |
 | D14 | Contrastes clair / sombre (WCAG AA) | fait (lot 6 : contraste AA vérifié, pire cas 4,65 et 5,03, test de non-régression) |
-| D15 | Tableaux larges en cartes sous 640 px | à faire |
+| D15 | Tableaux larges en cartes sous 640 px | écarté pour l'instant : les tableaux larges défilent horizontalement dans `.table-scroll` (reflow WCAG respecté à 320 px) ; les transformer en cartes changerait toutes les pages |
 | D16 | Colonnes et en-têtes figés | déjà fait (`.table-scroll th` collant) |
 | D17 | Blocs de chargement | déjà fait (`lazy_block` affiche des lignes squelettes) |
 | D18 | Dates relatives | fait (lot 6 : listes de runs) |

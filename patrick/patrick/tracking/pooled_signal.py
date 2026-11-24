@@ -114,3 +114,24 @@ def summary(conn: sqlite3.Connection) -> dict | None:
         return None
     return {"n_tested": sum(1 for r in rows if r["p_value"] is not None), "n_significant": sum(1 for r in rows if r["significant"]),
             "alpha": ALPHA, "computed_at": rows[0]["computed_at"], "classes": class_summary(rows)}
+
+
+HEATMAP_MAX_TARGETS = 40
+
+
+def heatmap(rows: list[dict], max_targets: int = HEATMAP_MAX_TARGETS) -> dict:
+    """D10 (24/11) : grille cible x horizon de l'AUC regroupée. Les cibles qui ont au moins une paire significative (BH) d'abord, puis les
+    plus fortes AUC, au plus `max_targets` ; classées par classe d'actifs. `{"horizons", "rows": [{"target", "class", "cells": {h: row}}]}`."""
+    by_target: dict[str, dict[int, dict]] = {}
+    for r in rows:
+        by_target.setdefault(r["target"], {})[int(r["horizon"])] = r
+    def rank(item):
+        cells = item[1].values()
+        best = max((c["auc"] or 0.0) for c in cells)
+        return (not any(c["significant"] for c in cells), -best)
+    kept = sorted(by_target.items(), key=rank)[:max_targets]
+    horizons = sorted({h for _t, cells in kept for h in cells})
+    out = [{"target": t, "class": classify_asset_class(t.split("__alpha_")[0]), "cells": cells} for t, cells in kept]
+    out.sort(key=lambda r: (r["class"], r["target"]))
+    return {"horizons": horizons, "rows": out, "n_targets": len(by_target)}
+

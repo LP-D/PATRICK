@@ -2226,6 +2226,18 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
     return None
 
 
+@app.get("/fragments/pooled-heatmap")
+def pooled_heatmap_fragment(request: Request):
+    """Carte de chaleur cible x horizon de l'AUC regroupée (D10), sur la Synthèse : où est le signal, en un coup d'oeil."""
+    from patrick.tracking import pooled_signal
+    conn = trackdb.connect()
+    try:
+        grid = pooled_signal.heatmap(pooled_signal.load(conn))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "_pooled_heatmap.html", {**_i18n_context(request), "grid": grid})
+
+
 @app.get("/fragments/champion-history/{symbol}")
 def champion_history_fragment(request: Request, symbol: str):
     """Frise des champions d'un actif (D26) : qui a tenu le titre à chaque horizon, de quand à quand. Chargé après l'affichage."""

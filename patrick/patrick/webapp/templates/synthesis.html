@@ -105,6 +105,12 @@
 {{ data_table([t('home_col_class'), t('cls_kpi_targets'), t('cls_kpi_trained'), t('cls_kpi_alpha'), t('cls_kpi_champions'), t('cls_kpi_short')], crows, num_cols=[1, 2, 3, 4]) }}
 </section>
 
+{# ---- D10 : où est le signal (AUC regroupée cible x horizon) ---- #}
+<section class="card" id="carte-signal">
+<h2>{{ t('ph_title') }}</h2>
+{{ lazy_block('/fragments/pooled-heatmap', 6, t('sb_loading'), t('lazy_retry')) }}
+</section>
+
 {# ---- Détail : chargé après l'affichage (6 s sur la vraie base) ---- #}
 {{ lazy_block('/fragments/home?fdr_alpha=' ~ fdr_alpha, 8, t('sb_loading'), t('lazy_retry')) }}
 

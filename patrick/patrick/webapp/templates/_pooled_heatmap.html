@@ -1,0 +1,24 @@
+{# Carte de chaleur de l'AUC regroupée (D10, `tracking/pooled_signal.heatmap`) : intensité = AUC au-dessus de 0,5 (pleine à 0,65), contour = significatif après BH. #}
+{% if not grid.rows %}
+<p class="hint">{{ t('ph_none') }}</p>
+{% else %}
+<div class="table-scroll">
+<table class="data-table ph-grid">
+  <thead><tr><th>{{ t('ph_target') }}</th>{% for h in grid.horizons %}<th class="n">{{ h | hlabel }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for r in grid.rows %}
+  <tr>
+    <td><a href="/targets/{{ r.target | urlencode }}" title="{{ r.target }}">{{ r.target | iname }}</a> <span class="hint">{{ t('mkt_' ~ r.class) }}</span></td>
+    {% for h in grid.horizons %}{% set c = r.cells.get(h) %}
+    {% if c and c.auc is not none %}
+    {% set heat = ((c.auc - 0.5) / 0.15) | float %}{% set heat = [[heat, 0.0] | max, 1.0] | min %}
+    <td class="n ph-cell{{ ' is-sig' if c.significant else '' }}" style="--heat: {{ '%.2f' | format(heat) }}" title="{{ t('ph_cell_title', auc='%.3f' | format(c.auc), q=('%.3f' | format(c.q_value)) if c.q_value is not none else '—', n=c.n_runs) }}">{{ '%.3f' | format(c.auc) }}</td>
+    {% else %}<td class="n ph-cell is-empty">—</td>{% endif %}
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="hint">{{ t('ph_hint', shown=grid.rows | length, total=grid.n_targets) }}</p>
+{% endif %}
