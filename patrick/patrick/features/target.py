@@ -5,7 +5,7 @@ hardcoded to the VIX.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -25,10 +25,13 @@ class TargetSpec:
     - `regime_basis` : `"level"` = terciles du NIVEAU du prix (héritage du VIX : pour une action en tendance presque tout le test
       tombe en « STRESS ») ; `"volatility"` = terciles de la volatilité réalisée sur 60 jours (connue à la date, ajustée sur le train).
     - `keep_flat` : les jours plats restent dans les lignes étiquetées (le jeu d'évaluation est celui du live, qui juge tous les
-      jours) ; ils sont écartés de l'ENTRAÎNEMENT et de l'ajustement des seuils par `target.attrs["flat"]`."""
+      jours) ; ils sont écartés de l'ENTRAÎNEMENT et de l'ajustement des seuils par `target.attrs["flat"]`.
+    - `drop_stale` : avec `keep_flat`, un rendement EXACTEMENT nul (cours figé) sort aussi des lignes évaluées : le réel ne le juge pas
+      (`live/predict._realised_outcome`), l'évaluation ne doit pas le compter « hausse faible »."""
     flat_vol_mult: float | None = None
     regime_basis: str = "level"
     keep_flat: bool = False
+    drop_stale: bool = False
 
 
 METHOD_1 = TargetSpec()
@@ -43,9 +46,10 @@ def spec_for(config) -> TargetSpec:
     from patrick.data.session_calendar import untradable_kind
 
     obj = config.objective
+    drop_stale = bool(getattr(config.validation, "drop_stale_returns", False))
     if untradable_kind(obj.target_symbol, obj.target_source) == "volatility":
-        return TargetSpec(METHOD_2.flat_vol_mult, "level", True)
-    return METHOD_2
+        return TargetSpec(METHOD_2.flat_vol_mult, "level", True, drop_stale)
+    return replace(METHOD_2, drop_stale=True) if drop_stale else METHOD_2
 
 
 def trailing_volatility(s: pd.Series) -> pd.Series:
@@ -64,10 +68,11 @@ def non_flat_mask(target: pd.Series) -> np.ndarray:
     return ~flat.reindex(target.index).fillna(False).to_numpy(dtype=bool)
 
 
-def regime_series(s: pd.Series, split_idx: int, spec: TargetSpec = METHOD_1) -> pd.Series:
-    """CALM / NORMAL / STRESS de chaque date ; seuils (terciles) ajustés sur `s[:split_idx]` seulement."""
+def regime_series(s: pd.Series, split_idx: int, spec: TargetSpec = METHOD_1, fit_dates: pd.Index | None = None) -> pd.Series:
+    """CALM / NORMAL / STRESS de chaque date ; seuils (terciles) ajustés sur `s[:split_idx]` seulement, ou sur les seules dates
+    `fit_dates` quand l'entraînement n'est pas un préfixe (CPCV : complément de groupes de test dispersés)."""
     basis = trailing_volatility(s) if spec.regime_basis == "volatility" else s
-    basis_tr = basis.iloc[:split_idx]
+    basis_tr = basis.loc[basis.index.isin(fit_dates)] if fit_dates is not None else basis.iloc[:split_idx]
     calm_thr = basis_tr.quantile(0.33)
     stress_thr = basis_tr.quantile(0.67)
     regime = pd.Series("NORMAL", index=s.index)
@@ -78,7 +83,7 @@ def regime_series(s: pd.Series, split_idx: int, spec: TargetSpec = METHOD_1) -> 
 
 def build_target(series: pd.Series, horizon: int, split_idx: int,
                   flat_thr: float = 0.003, ret: pd.Series | None = None,
-                  spec: TargetSpec = METHOD_1) -> tuple[pd.Series, pd.Series, dict]:
+                  spec: TargetSpec = METHOD_1, fit_dates: pd.Index | None = None) -> tuple[pd.Series, pd.Series, dict]:
     """Returns (target, regime_by_date, thresholds_by_regime). Regime
     thresholds (CALM/NORMAL/STRESS, 33%/67% quantiles of the level) and
     classification thresholds (25%/75% quantiles of the return, per regime)
@@ -100,9 +105,13 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     built train ROWS, not on the threshold computation itself) -- detected
     by the future-corruption test (`tests/pipeline/test_leakage.py`). `ret_tr`
     therefore also excludes these last `horizon` points: only label windows
-    entirely before `cut_date` contribute to the threshold fit."""
+    entirely before `cut_date` contribute to the threshold fit.
+
+    `fit_dates` (CPCV, audit 2026-10-19) : l'entraînement n'est pas un préfixe mais le complément, purgé et sous embargo, des groupes
+    de test d'une combinaison (`validation/cpcv.build_split`). Les seuils de classe et les régimes sont alors ajustés sur ces seules
+    dates (la purge de `build_split` écarte déjà les fenêtres de label qui touchent un groupe de test) ; `split_idx` est ignoré."""
     s = series.ffill().bfill()
-    regime = regime_series(s, split_idx, spec)
+    regime = regime_series(s, split_idx, spec, fit_dates)
 
     ret = (s.shift(-horizon) / s) - 1 if ret is None else ret.reindex(s.index)
     if spec.flat_vol_mult is None:
@@ -112,12 +121,18 @@ def build_target(series: pd.Series, horizon: int, split_idx: int,
     ret_all = ret.dropna()
     flat_all = flat.reindex(ret_all.index).fillna(False)
     ret_fit = ret_all.loc[~flat_all]          # les seuils et l'entraînement ne voient jamais les jours plats
-    ret = ret_all if spec.keep_flat else ret_fit
+    if spec.keep_flat:
+        ret = ret_all.loc[ret_all != 0] if spec.drop_stale else ret_all
+    else:
+        ret = ret_fit
     reg_r = regime.reindex(ret.index)
 
-    safe_fit_idx = max(split_idx - horizon, 0)
-    safe_fit_cut_date = s.index[safe_fit_idx]
-    ret_tr = ret_fit.loc[ret_fit.index < safe_fit_cut_date]
+    if fit_dates is not None:
+        ret_tr = ret_fit.loc[ret_fit.index.isin(fit_dates)]
+    else:
+        safe_fit_idx = max(split_idx - horizon, 0)
+        safe_fit_cut_date = s.index[safe_fit_idx]
+        ret_tr = ret_fit.loc[ret_fit.index < safe_fit_cut_date]
     reg_tr = regime.reindex(ret_tr.index)
 
     thr = {}
