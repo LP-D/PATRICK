@@ -110,7 +110,21 @@ Step "resultats instantanes" @("-m", "patrick.cli", "earnings", "snapshot")
 # puis sauvegarde et synchro, et seulement apres le reste (une nuit interrompue ne laisse plus les fonds sans cycle).
 $Predict = Join-Path $RepoDir "scripts\daily_predict.py"
 $PredictLog = Join-Path $RepoDir "runs\daily_predict.log"
-Step "predictions utiles aux fonds et pilote automatique" @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--funds-only")
+# Le 21/11 cette phase s'est arretee au milieu d'une prediction, sans trace (code 1), avant le cycle des fonds. daily_predict.py ecrit le
+# marqueur ci-dessous quand le cycle est alle au bout ; s'il manque ou date d'un autre jour, la phase est relancee UNE fois (le cycle est
+# idempotent, les ordres deja passes ne sont pas refaits).
+$FundsStamp = Join-Path $RepoDir "runs\funds-cycle.json"
+function Funds-Cycle-Done {
+    if (-not (Test-Path $FundsStamp)) { return $false }
+    try { return ((Get-Content $FundsStamp -Raw | ConvertFrom-Json).day -eq (Get-Date -Format "yyyy-MM-dd")) } catch { return $false }
+}
+if (-not $DryRun) { Remove-Item $FundsStamp -ErrorAction SilentlyContinue }
+$FundsArgs = @($Predict, "--base-dir", $RepoDir, "--log-file", $PredictLog, "--funds-only", "--funds-stamp", $FundsStamp)
+Step "predictions utiles aux fonds et pilote automatique" $FundsArgs
+if (-not $DryRun -and -not (Funds-Cycle-Done)) {
+    Log "   cycle des fonds non atteint : reprise unique de la phase"
+    Step "predictions utiles aux fonds et pilote automatique (reprise)" $FundsArgs
+}
 Step "sauvegarde"   @((Join-Path $RepoDir "scripts\backup_db.py"))
 Step "signaux regroupes" @("-m", "patrick.cli", "audit", "signal")
 Step "synchronisation" @("-m", "patrick.cli", "sync", "auto")

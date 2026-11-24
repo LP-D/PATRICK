@@ -14,6 +14,7 @@ reste. Les règles saisies à la main ne sont jamais touchées.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import logging
 import math
@@ -38,6 +39,7 @@ from patrick.fund import (
     store,
     systematic,
 )
+from patrick.system import interprocess_lock
 from patrick.tracking import db as trackdb
 
 logger = logging.getLogger("patrick.fund.autopilot")
@@ -353,12 +355,34 @@ def _purge_previous_models(conn: sqlite3.Connection, strategy_id: str, key: tupl
 
 
 _RUN_LOCK = threading.Lock()        # un seul cycle à la fois dans ce processus : deux cycles simultanés doubleraient les ordres
+# Et un seul entre processus : l'application, la nuit (`daily_predict.py`) et la CLI tournent chacune dans le leur. Le verrou est un
+# fichier à côté de la base (libéré par le système si le processus meurt). Un cycle attend celui d'un autre processus (idempotent,
+# il retrouve alors les règles déjà posées) au plus `CYCLE_LOCK_TIMEOUT_S`, puis renonce avec `CycleBusy`.
+CYCLE_LOCK_TIMEOUT_S = 3600.0
 
 
-def run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None) -> dict:
+class CycleBusy(store.FundError):
+    """Un autre processus tient le cycle du pilote au-delà du délai d'attente."""
+
+
+@contextlib.contextmanager
+def _cycle_lock(conn: sqlite3.Connection, timeout_s: float):
+    db = interprocess_lock.sqlite_file(conn)
+    if db is None:                                   # base en mémoire (tests) : propre à ce processus
+        yield
+        return
+    try:
+        with interprocess_lock.file_lock(db + ".autopilot.lock", timeout_s=timeout_s):
+            yield
+    except interprocess_lock.LockTimeout as exc:
+        raise CycleBusy(f"un autre processus fait déjà le cycle des fonds ({exc})") from exc
+
+
+def run(conn: sqlite3.Connection, strategy_id: str, today: dt.date | None = None, *,
+        lock_timeout_s: float = CYCLE_LOCK_TIMEOUT_S) -> dict:
     """Un cycle : sélectionner, ajuster les règles du pilote, appliquer chacune. Idempotent. Rend le compte rendu et
-    l'enregistre (`last_run`) avec les réglages."""
-    with _RUN_LOCK:
+    l'enregistre (`last_run`) avec les réglages. Un seul cycle à la fois, dans ce processus comme entre processus."""
+    with _RUN_LOCK, _cycle_lock(conn, lock_timeout_s):
         return _run(conn, strategy_id, today)
 
 

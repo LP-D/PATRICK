@@ -276,8 +276,13 @@ def run(rep: Reporter, *, skip_update: bool = False) -> int:
             runtime.stop_server(port)
             log("fenêtre fermée : serveur arrêté")
             if sync.configured_folder() and prefs.get_bool(prefs.KEY_SYNC_ON_CLOSE):
-                with contextlib.suppress(OSError):
-                    start_push_background()
+                # Pendant la nuit, pas de publication concurrente : la tâche de nuit publie elle-même après la phase des fonds, et le
+                # 21/11 cette phase s'est arrêtée 11 s après une publication lancée à la fermeture (cause non établie).
+                if runtime.nightly_running():
+                    log("fenêtre fermée pendant la tâche de nuit : publication laissée à la nuit")
+                else:
+                    with contextlib.suppress(OSError):
+                        start_push_background()
         return 0
     finally:
         instance.release()

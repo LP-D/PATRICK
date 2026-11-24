@@ -359,6 +359,27 @@ def test_funds_only_stops_after_the_fund_cycle(tmp_path, monkeypatch):
     assert events == [("predictions", ["AAA"]), "autopilot"]                      # ni le reste, ni la dérive
 
 
+def test_the_funds_stamp_is_written_only_when_the_fund_cycle_completed(tmp_path, monkeypatch):
+    """La tâche de nuit relance une fois la phase des fonds si ce marqueur manque (phase interrompue avant le cycle, 21/11)."""
+    import datetime as dt
+    import json
+
+    mod, db_path, _events = _two_batches(tmp_path, monkeypatch)
+    stamp = tmp_path / "funds-cycle.json"
+
+    assert mod.main(["--db-path", db_path, "--funds-only", "--funds-stamp", str(stamp)]) == 0
+    written = json.loads(stamp.read_text(encoding="utf-8"))
+    assert written["day"] == dt.datetime.now().astimezone().date().isoformat() and written["pid"] > 0
+
+    stamp.unlink()
+
+    def failing(path=None):
+        raise RuntimeError("boum")
+    monkeypatch.setattr(mod, "run_autopilots", failing)
+    mod.main(["--db-path", db_path, "--funds-only", "--funds-stamp", str(stamp)])
+    assert not stamp.exists()                                                     # cycle en échec : pas de marqueur
+
+
 def test_skip_funds_predicts_only_the_rest_without_a_fund_cycle(tmp_path, monkeypatch):
     mod, db_path, events = _two_batches(tmp_path, monkeypatch)
 
