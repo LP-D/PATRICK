@@ -2226,6 +2226,22 @@ def _asset_overview_from_snapshot(symbol: str) -> dict | None:
     return None
 
 
+@app.get("/fragments/champion-history/{symbol}")
+def champion_history_fragment(request: Request, symbol: str):
+    """Frise des champions d'un actif (D26) : qui a tenu le titre à chaque horizon, de quand à quand. Chargé après l'affichage."""
+    from patrick.tracking import champion_history
+    if symbol not in forms.TARGET_SOURCE_BY_SYMBOL:
+        raise HTTPException(status_code=404, detail="Cible inconnue")
+    conn = trackdb.connect()
+    try:
+        by_horizon = champion_history.history(conn, symbol)
+    finally:
+        conn.close()
+    longest = max((r["days"] or 0 for reigns in by_horizon.values() for r in reigns), default=0)
+    return templates.TemplateResponse(request, "_champion_history.html",
+                                      {**_i18n_context(request), "by_horizon": by_horizon, "longest": max(longest, 1)})
+
+
 @app.get("/fragments/asset-signals/{symbol}")
 def asset_signals_fragment(request: Request, symbol: str, dm_alpha: float = trackhistory.DM_SIGNIFICANCE_ALPHA):
     """Fiche d'un actif : ses signaux du jour, un par horizon (même cellule et même bulle que `/predictions`), avec le champion de

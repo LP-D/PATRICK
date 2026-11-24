@@ -2450,6 +2450,14 @@ dialog.modal h2 { margin: 0 0 16px; font-size: var(--fs-lg); font-weight: 650; }
   @page { margin: 14mm; }
 }
 
+/* D26 : frise des champions d'un actif (une ligne par règne, barre proportionnelle à sa durée) */
+.ch-h { margin: 12px 0 6px; font-size: var(--fs-sm); }
+.ch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ch-reign { position: relative; padding: 4px 8px; border-radius: var(--radius); font-size: var(--fs-xs); overflow: hidden; }
+.ch-bar { position: absolute; inset: 0 auto 0 0; width: var(--w, 0%); background: color-mix(in srgb, var(--text-3) 18%, transparent); }
+.ch-reign.is-current .ch-bar { background: color-mix(in srgb, var(--brand) 22%, transparent); }
+.ch-text { position: relative; }
+
 /* ============ Utility (last: state class must win the cascade) ============ */
 
 .visually-hidden {

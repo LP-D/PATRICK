@@ -105,7 +105,9 @@ def test_templates_keep_only_data_driven_inline_styles():
     root = pathlib.Path(__file__).resolve().parents[2] / "patrick" / "webapp" / "templates"
     inline = {p.name: p.read_text(encoding="utf-8").count('style="') for p in root.glob("*.html")}
     # knowledge_hub.html : --share (hauteur d'une marche) et --heat (intensité d'une case) sont calculés à partir des nombres de notions
-    assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1, "knowledge_hub.html": 2}
+    # _champion_history.html : --w (longueur de la barre d'un règne) est sa durée rapportée au plus long règne de l'actif (D26)
+    assert {k: v for k, v in inline.items() if v} == {"_fund_overview.html": 1, "analysis.html": 1, "knowledge_hub.html": 2,
+                                                      "_champion_history.html": 1}
 
 
 def test_shell_offers_pins_machine_chip_and_shortcut_help(client):
