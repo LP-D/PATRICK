@@ -324,7 +324,7 @@ def _remaining(conn, strategy, orders, position_id, today) -> float:
 
 def _evaluate(conn: sqlite3.Connection, prep: dict, today: dt.date) -> tuple[rules.Check, engine.SimResult, list[str]]:
     strategy, orders, cand = prep["strategy"], prep["orders"], prep["candidate"]
-    market, notes = prices.build_market(conn, orders + [cand], strategy["base_currency"])
+    market, notes = prices.build_market(conn, orders + [cand], strategy["base_currency"], opened_on=strategy.get("opened_on"))
     check, result = rules.validate(strategy, orders, cand, market, today)
     return check, result, notes
 
@@ -451,7 +451,7 @@ def _classes_compared(conn: sqlite3.Connection) -> int:
 def strategy_snapshot(conn: sqlite3.Connection, strategy: dict, today: dt.date | None = None) -> dict:
     today = _today(today)
     orders = store.list_orders(conn, strategy["strategy_id"])
-    market, notes = prices.build_market(conn, orders, strategy["base_currency"])
+    market, notes = prices.build_market(conn, orders, strategy["base_currency"], opened_on=strategy.get("opened_on"))
     result = engine.simulate(strategy, orders, market, end=today)
     strategy_kpis = kpis.compute(strategy, result)
     # Sharpe déflaté : la stratégie a été choisie parmi toutes celles du fonds (archivées comprises) et parmi les classes d'actifs classées par la Synthèse
@@ -490,10 +490,11 @@ def overview(conn: sqlite3.Connection, today: dt.date | None = None, on_step=Non
     `groups` (les stratégies, par enveloppe pour les fonds reproductibles, chacune avec son sous-total `fund` ; un seul groupe `wrapper = None`
     pour les fonds quant et les fonds de test). `on_step(i)` (facultatif) est appelée avant chaque stratégie."""
     snaps = []
-    for index, strategy in enumerate(store.list_strategies(conn)):
-        if on_step is not None:
-            on_step(index)          # avancement du calcul (barre de chargement de /fonds et /simulate) : la stratégie `index` commence
-        snaps.append(strategy_snapshot(conn, strategy, today))
+    with prices.bars_memo():        # B20 : un symbole commun à plusieurs stratégies n'est lu qu'une fois
+        for index, strategy in enumerate(store.list_strategies(conn)):
+            if on_step is not None:
+                on_step(index)      # avancement du calcul (barre de chargement de /fonds et /simulate) : la stratégie `index` commence
+            snaps.append(strategy_snapshot(conn, strategy, today))
     total = _totals(snaps)
     categories = []
     for category in store.CATEGORIES:

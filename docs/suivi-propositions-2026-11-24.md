@@ -19,7 +19,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |
 | A8 | Valorisation d'entreprise (multiples, puis DCF) | fait (lot 7b : `analysis/valuation.py`, section « Valorisation » de la fiche des actions : multiples, DCF inversé, DCF à hypothèse choisie et table de sensibilité ; taux sans risque de la devise ; données Yahoo du jour, jamais en entraînement) |
 | A9 | Dimensionnement par bandit après frais | déjà fait (ADR 0015 : bandit LinUCB et Kelly ridge mesurés après frais sur 459 champions ; moins bons que le seuil fixe, non adoptés) |
-| A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
+| A10 | RL : A2C / SAC / DQN comparés à PPO | à toi (le moteur RL propose déjà PPO, A2C, DQN et SAC sur /rl ; la comparaison demande des runs du worker, puis la vue de comparaison RL) |
 | A11 | Brancher `research/phase9.py` sur les fonds | fait en partie (lot 7b : `fund/regime.py`, régime de marché de phase9 (VIX, S&P 500) affiché sur /fonds avec ses déclencheurs ; pas de modulation de l'exposition, non mesurée) |
 | A12 | Ordres limite et exécutions partielles | fait (lot 7c : `fund/limit_orders.py`, migration 0059 : ordres limite à validité, exécutés sur les séances suivantes au prix de la limite ou de l'ouverture, tranches d'au plus 10 % du volume ; résolus chaque nuit avant les cycles ; champ « Prix limite » du ticket, liste et annulation dans le panneau) |
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
@@ -64,7 +64,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B17 | Seuils CPCV par combinaison | fait (lot 3, avec C8) |
 | B18 | Contrats à terme continus ajustés des sauts d'échéance | à faire |
 | B19 | `ANALYZE` automatique en fin de job | fait (lot 4 : `PRAGMA optimize` borné en fin de job ; `ensure_planner_stats` faisait déjà le premier ANALYZE) |
-| B20 | /fonds plus rapide | à faire |
+| B20 | /fonds plus rapide | fait (lot 9 : aperçu de /fonds de 40-48 s à 12,7 s sur une copie des vraies données, dont ~4 s d'import de scipy payé une fois : cotations lues depuis l'ouverture moins 60 jours au lieu de 2000, une lecture par symbole par calcul d'ensemble, dates lues avec leur format, test scalaire dans la boucle de simulation ; résultats identiques vérifiés) |
 | B21 | pytest-xdist dans la CI rapide | déjà fait (`-n auto` dans `tests.yml`) |
 | B22 | Vérification des types (pyright) | à faire |
 | B23 | graphify à jour | en cours (lot 1, local) |

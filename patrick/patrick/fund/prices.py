@@ -7,6 +7,8 @@ au cash par le moteur), ajustées des fractionnements.
 `download_bars` est une fonction de module : les tests la remplacent."""
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime as dt
 import os
 import sqlite3
@@ -89,14 +91,35 @@ def save_bars(conn: sqlite3.Connection, symbol: str, df: pd.DataFrame, raw_curre
             "refreshed_at = excluded.refreshed_at", (symbol, currency, stamp))
 
 
-def load_bars(conn: sqlite3.Connection, symbol: str) -> pd.DataFrame | None:
+def load_bars(conn: sqlite3.Connection, symbol: str, since: str | None = None) -> pd.DataFrame | None:
+    """Barres stockées de `symbol` (depuis `since` inclus, AAAA-MM-JJ, si donné : un fonds n'a pas besoin de l'historique depuis 2000)."""
     rows = conn.execute("SELECT day, open, high, low, close, volume, dividend, split FROM fund_price "
-                        "WHERE symbol = ? ORDER BY day", (symbol,)).fetchall()
+                        "WHERE symbol = ? AND day >= ? ORDER BY day", (symbol, since or "")).fetchall()
     if not rows:
         return None
     df = pd.DataFrame(rows, columns=["day", *BAR_COLUMNS])
-    df.index = pd.DatetimeIndex(pd.to_datetime(df.pop("day")))
+    days = df.pop("day")
+    try:                                    # B20 : format explicite, plusieurs fois plus rapide que l'inférence (dates AAAA-MM-JJ en base)
+        index = pd.to_datetime(days, format="%Y-%m-%d")
+    except ValueError:
+        index = pd.to_datetime(days)
+    df.index = pd.DatetimeIndex(index)
     return df
+
+
+# B20 : le temps d'un calcul d'ensemble (aperçu de /fonds), chaque symbole n'est lu (et rafraîchi) qu'une fois, même s'il sert à
+# plusieurs stratégies (change, ETF communs). Propre au fil d'exécution (variable de contexte) ; les barres ne sont jamais modifiées sur
+# place par le moteur, elles se partagent sans copie.
+_BARS_MEMO: contextvars.ContextVar[dict | None] = contextvars.ContextVar("fund_bars_memo", default=None)
+
+
+@contextlib.contextmanager
+def bars_memo():
+    token = _BARS_MEMO.set({})
+    try:
+        yield
+    finally:
+        _BARS_MEMO.reset(token)
 
 
 def get_meta(conn: sqlite3.Connection, symbol: str) -> dict | None:
@@ -112,11 +135,22 @@ class BarsResult:
 
 
 def ensure_bars(conn: sqlite3.Connection, symbol: str, *, max_age_hours: float = MAX_AGE_HOURS,
-                now: dt.datetime | None = None) -> BarsResult:
+                now: dt.datetime | None = None, since: str | None = None) -> BarsResult:
     """Rafraîchit `symbol` si la dernière actualisation a plus de `max_age_hours`.
-    Hors ligne ou symbole retiré : on sert ce qui est stocké."""
+    Hors ligne ou symbole retiré : on sert ce qui est stocké. Dans un `bars_memo()`, une seule lecture par symbole."""
+    memo = _BARS_MEMO.get()
+    if memo is None:
+        return _ensure_bars(conn, symbol, max_age_hours=max_age_hours, now=now, since=since)
+    key = (symbol, max_age_hours, since)
+    if key not in memo:
+        memo[key] = _ensure_bars(conn, symbol, max_age_hours=max_age_hours, now=now, since=since)
+    return memo[key]
+
+
+def _ensure_bars(conn: sqlite3.Connection, symbol: str, *, max_age_hours: float, now: dt.datetime | None,
+                 since: str | None = None) -> BarsResult:
     now = now or dt.datetime.now(dt.UTC)
-    stored, meta = load_bars(conn, symbol), get_meta(conn, symbol)
+    stored, meta = load_bars(conn, symbol, since), get_meta(conn, symbol)
     if stored is not None and meta and meta["refreshed_at"]:
         age = now - dt.datetime.strptime(meta["refreshed_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.UTC)
         if age < dt.timedelta(hours=max_age_hours):
@@ -139,7 +173,7 @@ def ensure_bars(conn: sqlite3.Connection, symbol: str, *, max_age_hours: float =
             if full is not None and not full.empty:
                 fetched, raw_ccy, replace = full, full_ccy or raw_ccy, True
         save_bars(conn, symbol, fetched, raw_ccy, now, replace=replace)
-        return BarsResult(load_bars(conn, symbol), get_meta(conn, symbol)["currency"], "fresh")
+        return BarsResult(load_bars(conn, symbol, since), get_meta(conn, symbol)["currency"], "fresh")
     if stored is not None:
         return BarsResult(stored, meta["currency"] if meta else None, "stored")
     return BarsResult(None, None, "missing")
@@ -157,9 +191,9 @@ def fx_symbol(base: str, currency: str) -> str:
     return f"{base}{currency}=X"
 
 
-def fx_series(conn: sqlite3.Connection, base: str, currency: str) -> pd.Series | None:
+def fx_series(conn: sqlite3.Connection, base: str, currency: str, since: str | None = None) -> pd.Series | None:
     """Unités de `base` par unité de `currency` (inverse du cours Yahoo EURUSD=X)."""
-    res = ensure_bars(conn, fx_symbol(base, currency))
+    res = ensure_bars(conn, fx_symbol(base, currency), since=since)
     if res.df is None or res.df.empty:
         return None
     return (1.0 / res.df["close"]).rename(currency)
@@ -215,18 +249,34 @@ def reference_rates(currencies: set[str]) -> tuple[dict[str, float], list[str]]:
     return rates, notes
 
 
+SINCE_MARGIN_DAYS = 60
+
+
+def history_start(orders: list[dict], opened_on=None) -> str | None:
+    """Première date de cotation utile pour rejouer `orders` (B20) : la plus ancienne de l'ouverture et du premier ordre, moins
+    `SINCE_MARGIN_DAYS` (jours fériés, dernière clôture avant l'ouverture), ramenée au 1er du mois pour que les stratégies proches
+    partagent la même lecture. None : tout l'historique."""
+    dates = [pd.Timestamp(o["ts"]) for o in orders if o.get("ts")]
+    if opened_on:
+        dates.append(pd.Timestamp(opened_on))
+    if not dates:
+        return None
+    return (min(dates) - pd.Timedelta(days=SINCE_MARGIN_DAYS)).replace(day=1).date().isoformat()
+
+
 def build_market(conn: sqlite3.Connection, orders: list[dict], base: str = "EUR",
-                 with_rates: bool = True) -> tuple[MarketData, list[str]]:
-    """Données de marché pour rejouer `orders` : barres de chaque symbole, change de
+                 with_rates: bool = True, opened_on=None) -> tuple[MarketData, list[str]]:
+    """Données de marché pour rejouer `orders` : barres de chaque symbole (depuis `history_start`), change de
     chaque devise étrangère, taux de référence des devises des CFD."""
     market = MarketData(base_currency=base)
+    since = history_start(orders, opened_on)
     notes: list[str] = []
     currencies: set[str] = set()
     cfd_currencies: set[str] = set()
     for o in orders:
         sym = o["symbol"]
         if sym not in market.bars:
-            res = ensure_bars(conn, sym)
+            res = ensure_bars(conn, sym, since=since)
             if res.df is None:
                 notes.append(f"{sym} : aucune cotation disponible")
                 continue
@@ -237,7 +287,7 @@ def build_market(conn: sqlite3.Connection, orders: list[dict], base: str = "EUR"
         if o["instrument_kind"] == "cfd":
             cfd_currencies.add(o["currency"])
     for ccy in sorted(currencies - {base}):
-        s = fx_series(conn, base, ccy)
+        s = fx_series(conn, base, ccy, since=since)
         if s is None:
             notes.append(f"change {base}/{ccy} indisponible")
         else:
