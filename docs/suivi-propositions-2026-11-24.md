@@ -62,11 +62,11 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | B15 | Moins de sélections CPCV distinctes | à décider : changerait les résultats CPCV (méthodologique) |
 | B16 | DM sur la log-loss | fait (lot 3 : `dm_logloss`, migration 0057 `dm_logloss_result`) |
 | B17 | Seuils CPCV par combinaison | fait (lot 3, avec C8) |
-| B18 | Contrats à terme continus ajustés des sauts d'échéance | à faire |
+| B18 | Contrats à terme continus ajustés des sauts d'échéance | écarté : bloqué par les données. Un ajustement des sauts d'échéance exige les contrats individuels, échus compris ; Yahoo n'en sert aucun historique (vérifié le 25/11 : CLZ25, ESZ25, ESH26, GCG26 vides). Prérequis inchangé : `docs/modelisation/chantiers-lointains.md` §3 ; l'avis « contrat continu non ajusté » reste affiché |
 | B19 | `ANALYZE` automatique en fin de job | fait (lot 4 : `PRAGMA optimize` borné en fin de job ; `ensure_planner_stats` faisait déjà le premier ANALYZE) |
 | B20 | /fonds plus rapide | fait (lot 9 : aperçu de /fonds de 40-48 s à 12,7 s sur une copie des vraies données, dont ~4 s d'import de scipy payé une fois : cotations lues depuis l'ouverture moins 60 jours au lieu de 2000, une lecture par symbole par calcul d'ensemble, dates lues avec leur format, test scalaire dans la boucle de simulation ; résultats identiques vérifiés) |
 | B21 | pytest-xdist dans la CI rapide | déjà fait (`-n auto` dans `tests.yml`) |
-| B22 | Vérification des types (pyright) | à faire |
+| B22 | Vérification des types (pyright) | fait (lot 9 : `patrick/pyrightconfig.json`, cliquet sur les 248 fichiers déjà sans erreur en mode standard (sur 474 ; 2 658 erreurs ailleurs), tâche « types » de la CI hors conditions de `stable`, test qui vérifie que les fichiers listés existent) |
 | B23 | graphify à jour | en cours (lot 1, local) |
 | B24 | Mesurer le cache de téléchargement | fait (lot 4 : mesuré sur 20 journaux de worker, 93 % en cache, 6 % téléchargés, 0,82 h en tout : pas un goulot) |
 | B25 | Tests de mutation mensuels | fait (PR 97 : 1er du mois, 06:00 UTC) |
