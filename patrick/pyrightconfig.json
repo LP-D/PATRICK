@@ -1,6 +1,6 @@
 // Vérification des types (B22, 2026-11-25) : cliquet. Seuls les fichiers déjà sans erreur en mode standard sont listés ;
 // une erreur nouvelle dans l'un d'eux fait échouer la tâche « types » de la CI. Un fichier corrigé s'ajoute à la liste,
-// jamais l'inverse. Lancer localement depuis patrick/ : python -m pyright
+// jamais l'inverse. Plateforme Windows (celle de PATRICK) même sur la CI Linux. Lancer localement depuis patrick/ : python -m pyright
 {
   "include": [
     "patrick/__init__.py",
@@ -253,6 +253,7 @@
     "patrick/webapp/view_cache.py"
   ],
   "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
   "typeCheckingMode": "standard",
   "reportMissingImports": "warning",
   "reportMissingModuleSource": "none"
