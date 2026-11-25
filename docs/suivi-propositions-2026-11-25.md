@@ -14,10 +14,10 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 
 | # | Proposition | Statut |
 |---|---|---|
-| AM1 | Journaux au lieu de `print()` | à faire (lot 2) |
+| AM1 | Journaux au lieu de `print()` | rien à changer : les `print()` du pipeline, du worker et de l'ingestion sont le protocole de progression que le worker capture et lit (étiquettes `[SCAN]`, `[CACHE]`…, `system/worker.py`) ; les passer par `logging` casserait le suivi des jobs |
 | AM2 | Un seul module de métriques de performance | fait (lot 1 : `core/perf.py` : 252/365 jours, écart à la baisse ; simulateur, laboratoire, placements, risque et `stats_core` s'y rattachent) |
-| AM3 | Préchauffage au démarrage de serve | à faire (lot 4) |
-| AM4 | Cache des blocs lourds par version de base | à faire (lot 4) |
+| AM3 | Préchauffage au démarrage de serve | déjà fait : `cached_views.warm_async()` calcule les vues lourdes (dont /fonds et l'import de scipy) 20 s après le démarrage du serveur |
+| AM4 | Cache des blocs lourds par version de base | déjà fait : `webapp/cached_views.py` garde chaque vue lourde et la recalcule en tâche de fond quand la base bouge (`memo.fingerprint`) |
 | AM5 | Table `prediction` dans une base séparée | à faire (lot 4) |
 | AM6 | Compression zstd | à faire (lot 4) |
 | AM7 | Éviction du cache de variables selon le coût | à faire (lot 4) |
@@ -27,22 +27,22 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | AM11 | Spreads calibrés sur les vrais bid/ask | à faire (lot 7) |
 | AM12 | Intervalles de confiance sur AUC et F1 | à faire (lot 6) |
 | AM13 | Recherche Ctrl K élargie | à faire (lot 9) |
-| AM14 | Cliquet pyright sur les modules d'argent | à faire (lot 2) |
-| AM15 | Liste blanche testée des requêtes SQL assemblées | à faire (lot 2) |
-| AM16 | Tests de propriété sur la fiscalité et les frais | à faire (lot 3) |
-| AM17 | Non-régression visuelle en CI | à faire (lot 3) |
-| AM18 | Audit d'accessibilité automatique | à faire (lot 3) |
-| AM19 | Budget de temps par page en CI | à faire (lot 3) |
-| AM20 | CI plus rapide avec uv | à faire (lot 3) |
-| AM21 | Dependabot sur les versions figées | à faire (lot 3) |
-| AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | à faire (lot 5) |
+| AM14 | Cliquet pyright sur les modules d'argent | fait (lots 2-3 : `fund/selection.py`, `core/perf.py`, `tracking/run_queries.py` ajoutés au cliquet pyright ; le reste des modules d'argent compte 316 erreurs, surtout des annotations de pandas) |
+| AM15 | Liste blanche testée des requêtes SQL assemblées | fait (lots 2-3 : les constructeurs relus filtrent déjà leurs noms ; liste fermée ajoutée aux ordres limite ; `tests/repo/test_sql_builders.py` refuse tout nouveau constructeur non relu) |
+| AM16 | Tests de propriété sur la fiscalité et les frais | fait (lots 2-3 : `tests/placements/test_tax_fee_properties.py`, hypothesis : impôt jamais négatif, jamais au-delà du gain hors PER, couple et durée jamais pénalisants, frais positifs et croissants, forfait exclusif) |
+| AM17 | Non-régression visuelle en CI | fait (lots 2-3 : tâche de CI `pages-screenshots`, 12 pages à 1280 et 375 px sur la base de démonstration, artefact + rapport console / défilement horizontal ; informative) |
+| AM18 | Audit d'accessibilité automatique | fait (lots 2-3 : `tests/repo/test_pages_quality.py` sur toutes les pages de la navigation ; 5 manques corrigés : recherche Ctrl K, bouton de confirmation vide, bouton de la file, recherche du vocabulaire) |
+| AM19 | Budget de temps par page en CI | fait (lots 2-3 : même test, 12 s par page cadre + blocs ; /sante = 3,4 s en local) |
+| AM20 | CI plus rapide avec uv | fait (lots 2-3 : suite rapide et vérification des types installées par uv ; les tâches à environnement figé gardent pip) |
+| AM21 | Dependabot sur les versions figées | déjà fait : `.github/dependabot.yml` (pip et actions, chaque semaine) ; le fichier figé se régénère par `constraints-regen.yml` (B2) |
+| AM22 | Fusionner `feat/sync-en-clair` (ADR 0020) | déjà fait : ADR 0020 fusionnée le 13/11 (PR 72) ; la branche distante restante est un reste |
 | AM23 | Rotation des journaux | à faire (lot 5) |
 | AM24 | Couverture anglaise mesurée | à faire (lot 9) |
 | AM25 | Erreurs de formulaire sur le champ concerné | à faire (lot 9) |
 | AM26 | Phases de nuit indépendantes en parallèle | à faire (lot 5) |
 | AM27 | Route `/healthz` | à faire (lot 5) |
-| AM28 | graphify à jour automatiquement | à faire (lot 3) |
-| AM29 | Index des ADR généré et vérifié en CI | à faire (lot 3) |
+| AM28 | graphify à jour automatiquement | fait (lots 2-3 : crochet `.githooks/post-merge`, `graphify update .` en arrière-plan après un `git pull`) |
+| AM29 | Index des ADR généré et vérifié en CI | fait (lots 2-3 : `tests/repo/test_adr_index.py` : numéros uniques et continus, chaque ADR une fois dans l'index ; 8 statuts « à fusionner » périmés corrigés) |
 | AM30 | Durée de chaque étape d'un run | à faire (lot 5 ; `run_phase_timing` existe déjà, migration 0016) |
 
 ## Corrections (CO)
@@ -66,16 +66,16 @@ plus de 100 Go) ; aucune empreinte de run ni golden ne change sans le dire ; auc
 | CO15 | Nombre de runs ayant lu le holdout ignoré | fait (lot 1 : colonne « Lectures » des garde-fous) |
 | CO16 | 56 `zip()` sans `strict=` | fait (lot 1 : `strict=True` pour l'alignement de données, `strict=False` explicite pour les lignes de base et l'affichage) |
 | CO17 | Causes d'erreur perdues | fait (lot 1 : `from None` sur les sorties de la CLI ; `logger.exception` pour l'échec de sauvegarde ; l'autre message est sans trace voulue) |
-| CO18 | 25 variables de boucle réaffectées | à faire (lot 2) |
-| CO19 | Nettoyage (variables inutilisées, `noqa` obsolètes) | à faire (lot 2) |
+| CO18 | 25 variables de boucle réaffectées | rien à changer : les 25 réaffectations relues sont des normalisations voulues (`token = token.strip()`…) |
+| CO19 | Nettoyage (variables inutilisées, `noqa` obsolètes) | fait (lots 2-3 : 4 variables de boucle inutilisées renommées ; les `noqa` signalés en mode isolé documentent des règles volontairement non activées) |
 | CO20 | Option fantôme `enable_fundamentals_features` | rien à changer : `features/equity_fundamentals.py` fait partie de l'empreinte du cache de variables et retirer le champ changerait l'empreinte des runs |
 | CO21 | Copies de travail orphelines | fait (25/11 : `PATRICK-wt-lot9` et `PATRICK-wt-topbar` supprimées, branches fusionnées effacées) |
-| CO22 | 9 tests sautés ou en échec attendu | à faire (lot 3) |
+| CO22 | 9 tests sautés ou en échec attendu | rien à changer : tous les sauts dépendent de l'environnement (Windows, Node, gymnasium, git) ; le test au tirage fixe du simulateur tourne bien |
 | CO23 | Synchronisation en échec la nuit du 23/11 | à faire (lot 5) |
 | CO24 | Protection automatique de l'aperçu | à faire (lot 5) |
 | CO25 | Décisions des banques centrales lues dans les titres | à faire (lot 8) |
 | CO26 | Jours de changement d'échéance des contrats à terme | à faire (lot 6) |
-| CO27 | Erreurs pyright « valeur peut-être absente » | à faire (lot 2) |
+| CO27 | Erreurs pyright « valeur peut-être absente » | fait en partie (lots 2-3 : accès à None gardés dans les ordres limite, le transfert de mouvements et la sélection des fonds ; reste du bruit d'annotations pandas) |
 | CO28 | Lecture DM de la sélection des fonds | déjà fait (`fund/selection._dm_evidence` lit la p unilatérale ; `test_a_model_significantly_worse_than_its_baseline_is_not_dm_evidence`) |
 | CO29 | Verdict RL sans correction du nombre d'essais | fait (lot 1 : seuil de Šidák sur `stats.n_trials`) |
 | CO30 | Dates brutes sur la fiche d'un actif | fait (lot 1 : dates relatives, date exacte au survol) |

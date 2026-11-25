@@ -229,6 +229,7 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
             scores = metrics.get(run_id, {})
             suspect = suspicion.suspect_reason(scores.get("holdout")) or suspicion.suspect_reason(scores.get("test"))
             last_ts = latest_live.get(trial_id)
+            auc = (scores.get("holdout") or {}).get("AUC_dir")
             if suspect:
                 reject(target, horizon, "suspect", f"score suspect : {suspect}".replace(".", ","))
             elif last_ts is None:
@@ -239,9 +240,9 @@ def select_models(conn: sqlite3.Connection, policy: Policy | None = None, today:
                 judged, hits = realised[trial_id]
                 reject(target, horizon, "live", f"{hits} bonne(s) direction(s) sur {judged} prédictions réelles jugées "
                                                  f"({hits / judged:.0%})".replace(".", ","))
-            elif policy.tier in AUC_TIERS and (auc := scores.get("holdout", {}).get("AUC_dir")) is None:
+            elif policy.tier in AUC_TIERS and auc is None:
                 reject(target, horizon, "no_auc")
-            elif policy.tier in AUC_TIERS and auc <= policy.auc_floor:
+            elif policy.tier in AUC_TIERS and auc is not None and auc <= policy.auc_floor:
                 reject(target, horizon, "auc", f"AUC de direction du holdout : {auc:.3f} (seuil {policy.auc_floor:.2f})".replace(".", ","))
             else:
                 evidence = fdr.get(target, {})

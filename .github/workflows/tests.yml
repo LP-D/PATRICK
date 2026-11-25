@@ -24,7 +24,10 @@ jobs:
 
       - name: Install dependencies
         # annotate-failures : chaque test en échec devient une annotation lisible sans ouvrir le journal.
-        run: pip install -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
+        # AM20 (25/11) : uv installe les dépendances bien plus vite que pip ; les tâches à environnement figé (golden) gardent pip.
+        run: |
+          python -m pip install "uv>=0.8,<1"
+          uv pip install --system -e "./patrick[dev,web]" pytest-github-actions-annotate-failures==0.4.2
 
       - name: Lint (ruff)
         # Bloquant depuis le lot 2 de l'audit (2026-09-22). Dette soldée le
@@ -130,11 +133,43 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies (pinned) and pyright
-        run: pip install -c .github/constraints-py311.txt -e "./patrick[dev,web]" pyright==1.1.414
+        run: |
+          python -m pip install "uv>=0.8,<1"
+          uv pip install --system -c .github/constraints-py311.txt -e "./patrick[dev,web]" pyright==1.1.414
 
       - name: Pyright
         working-directory: patrick
         run: pyright
+
+  pages-screenshots:
+    # AM17 (25/11) : captures des pages principales (1280 et 375 px) sur la base de démonstration, publiées comme artefact de la PR,
+    # avec un rapport (erreurs de console, défilement horizontal). Informatif : n'empêche jamais une fusion.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (uv) and Playwright
+        run: |
+          python -m pip install "uv>=0.8,<1"
+          uv pip install --system -e "./patrick[web]" playwright==1.49.1
+          python -m playwright install --with-deps chromium
+
+      - name: Screenshots
+        run: python .github/scripts/page_screenshots.py captures
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: captures-des-pages
+          path: captures/
+          retention-days: 14
 
   promote:
     # Les PC installés suivent la branche `stable` (patrick/desktop/update.py), jamais `main` : elle avance sur le

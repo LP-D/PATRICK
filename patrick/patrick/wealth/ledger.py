@@ -240,6 +240,8 @@ def transfer_movement(conn: sqlite3.Connection, movement_id: int, target_account
     if mv is None:
         raise LedgerError(f"mouvement introuvable : {movement_id}")
     src, dst = get_account(conn, mv["account_id"]), get_account(conn, target_account_id)
+    if src is None:                                   # CO27 : compte d'origine supprimé entre-temps
+        raise LedgerError(f"compte introuvable : {mv['account_id']}")
     if dst is None:
         raise LedgerError(f"compte introuvable : {target_account_id}")
     if src["account_id"] == dst["account_id"]:

@@ -239,7 +239,7 @@ script below (no flash), otherwise the OS preference applies.
         <div class="cmdk-panel">
             <div class="cmdk-input-row">
                 {{ icon('search', 18) }}
-                <input class="cmdk-input" id="cmdk-input" type="text" autocomplete="off" spellcheck="false"
+                <input class="cmdk-input" id="cmdk-input" type="text" autocomplete="off" spellcheck="false" aria-label="{{ t('cmdk_placeholder') }}"
                        role="combobox" aria-expanded="true" aria-controls="cmdk-list"
                        placeholder="{{ t('cmdk_placeholder') }}">
                 <span class="kbd">Esc</span>
@@ -299,7 +299,7 @@ script below (no flash), otherwise the OS preference applies.
             <p id="confirm-message"></p>
             <div class="row row-end">
                 <button type="button" class="btn-secondary" data-close-dialog autofocus>{{ t('confirm_cancel') if t else 'Annuler' }}</button>
-                <button type="submit" class="btn" id="confirm-ok" data-default-label="{{ t('confirm_ok') if t else 'Confirmer' }}"></button>
+                <button type="submit" class="btn" id="confirm-ok" data-default-label="{{ t('confirm_ok') if t else 'Confirmer' }}">{{ t('confirm_ok') if t else 'Confirmer' }}</button>
             </div>
         </form>
     </dialog>

@@ -796,6 +796,7 @@ PAGES_STRINGS: dict[str, dict[str, str]] = {
     "home_no_runs": _s("Aucun run pour l'instant.", "No run yet."),
     "home_full_history": _s("Historique complet", "Full history"),
     "lazy_retry": _s("Réessayer", "Retry"),
+    "queue_toggle_aria": _s("Afficher ou masquer la file d'attente", "Show or hide the queue"),
     "lazy_error": _s("Ce bloc n'a pas pu être chargé.", "This block could not be loaded."),
     "lazy_stale": _s("Le serveur est plus ancien que cette page : relancez « patrick serve ».", "The server is older than this page: restart “patrick serve”."),
     "lazy_timeout": _s("Le serveur ne répond pas (base occupée ?).", "The server is not answering (database busy?)."),

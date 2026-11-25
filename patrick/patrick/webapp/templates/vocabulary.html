@@ -7,7 +7,7 @@
 <p class="hint" data-keep>{{ t('kb_legacy_page') }} <a href="/connaissances/dictionnaire">{{ t('kb_open_full_dictionary') }} →</a></p>
 
 <div class="vocab-tools">
-    <input type="search" id="vocab-search" class="vocab-search" placeholder="{{ t('vocab_search') }}" autocomplete="off" aria-controls="vocab-body">
+    <input type="search" id="vocab-search" class="vocab-search" aria-label="{{ t('vocab_search') }}" placeholder="{{ t('vocab_search') }}" autocomplete="off" aria-controls="vocab-body">
     <span class="hint" id="vocab-count" role="status" aria-live="polite" data-template="{{ t('vocab_count') }}" data-total="{{ n_terms }}">{{ t('vocab_count', n=n_terms, total=n_terms) }}</span>
 </div>
 <nav class="vocab-chips" aria-label="{{ t('vocab_title') }}">
