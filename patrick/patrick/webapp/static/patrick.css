@@ -3812,3 +3812,7 @@ html[data-sidebar="collapsed"] .sidebar-pins { display: none; }
 .kbd-help-list { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
 .kbd-help-list dt { display: flex; gap: 4px; align-items: center; }
 .kbd-help-list dd { margin: 0; color: var(--text-2); }
+
+/* A11 : régime de marché sur /fonds (une ligne de contexte) */
+.fund-regime { margin: 4px 0 12px; }
+.fund-regime-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin: 0; }

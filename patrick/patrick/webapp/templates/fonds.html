@@ -22,6 +22,9 @@
 
 <div id="fund-flash" class="banner hidden" role="status"></div>
 
+{# A11 : régime de marché observé (VIX, S&P 500), contexte seulement : le pilote n'en tient pas compte. #}
+<div class="fund-regime">{{ lazy_block('/fragments/market-regime', 1, t('sb_loading'), t('lazy_retry')) }}</div>
+
 {# Classification (ADR 0026) : fonds quant (fonds fictifs d'étude) / fonds réels (PEA et CTO d'un particulier). Filtre côté serveur : `?categorie=`. #}
 <nav class="exp-tabs fund-cat-tabs" aria-label="{{ t('fund_cat_nav') }}">
   <a role="tab" href="/fonds" aria-selected="{{ 'true' if not category else 'false' }}">{{ t('fund_cat_all') }}</a>

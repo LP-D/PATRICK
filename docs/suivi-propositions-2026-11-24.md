@@ -15,12 +15,12 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A3 | Variables GJR / APARCH / HAR dans le ML (option hors empreinte) | à faire |
 | A4 | Variables texte (ton banques centrales / actualités) dans l'entraînement | à faire |
 | A5 | Volatilité intrajournalière (Parkinson, Garman-Klass) | fait (lot 7 : variance de Garman-Klass ramenée à l'échelle clôture à clôture, dans la prévision HAR) |
-| A6 | Carry trade | à faire |
+| A6 | Carry trade | déjà fait (ADR 0015 : carry de change mesuré sur 7 devises 2000-2025, Sharpe 0,17-0,18, Sharpe déflaté 0,64 ; non adopté, à rouvrir sur un fait nouveau) |
 | A7 | Cible alpha contre l'indice de référence | déjà fait (`features/alpha_target.py`, cibles `target_kind = alpha` contre un indice de référence) |
 | A8 | Valorisation d'entreprise (multiples, puis DCF) | à faire |
-| A9 | Dimensionnement par bandit après frais | à faire |
+| A9 | Dimensionnement par bandit après frais | déjà fait (ADR 0015 : bandit LinUCB et Kelly ridge mesurés après frais sur 459 champions ; moins bons que le seuil fixe, non adoptés) |
 | A10 | RL : A2C / SAC / DQN comparés à PPO | à faire |
-| A11 | Brancher `research/phase9.py` sur les fonds | à faire |
+| A11 | Brancher `research/phase9.py` sur les fonds | fait en partie (lot 7b : `fund/regime.py`, régime de marché de phase9 (VIX, S&P 500) affiché sur /fonds avec ses déclencheurs ; pas de modulation de l'exposition, non mesurée) |
 | A12 | Ordres limite et exécutions partielles | à faire |
 | A13 | Ordres manuels sur un fonds | déjà fait (saisie d'un ordre ou d'une position à la main : « Nouvelle position », `/api/fund/strategies/{id}/orders`) ; « 0 ordre manuel » était un constat d'usage |
 | A14 | Reprise d'un run au niveau du scan | à faire |
@@ -33,7 +33,7 @@ Léon ou calcul long du worker, commande donnée) · **décision** (irréversibl
 | A21 | Pipeline complet sur marches aléatoires | déjà fait (`tests/pipeline/test_null_world_validity.py`, `validity.yml` hebdomadaire) |
 | A22 | Ablation de Kalman (runs appariés) | à toi (runs du worker ; protocole ADR 0009) |
 | A23 | Monte-Carlo sur /placements | déjà fait (`placements/projection.py` : milliers de trajectoires par bootstrap par blocs, quantiles et distribution) |
-| A24 | Import de relevés de courtier (CSV) | à faire |
+| A24 | Import de relevés de courtier (CSV) | déjà fait (`wealth/importer.py` : import CSV tolérant des relevés de courtier, glisser-déposer sur /patrimoine et /mouvements) |
 | A25 | Export Excel en un clic | fait (lot 7 : `/api/export/patrick.xlsx`, liens sur /predictions et /fonds) |
 | A26 | Page vitrine d'un fonds (HTML sans données personnelles) | fait (lot 7 : page vitrine HTML autonome, pourcentages seulement) |
 | A27 | Questions en langage naturel sur un run (`llm_guard`) | à faire |

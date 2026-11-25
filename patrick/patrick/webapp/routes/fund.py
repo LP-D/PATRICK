@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -248,6 +249,23 @@ def register(app: FastAPI, templates, context) -> None:
         return templates.TemplateResponse(request, "_fund_overview.html", {
             "strategies": data["strategies"], "fund": data["fund"], "categories": shown, "selected_id": strategy,
             **_view_ctx(snap), **context(request)})
+
+    _regime_cache: dict = {}
+
+    @app.get("/fragments/market-regime")
+    def market_regime_fragment(request: Request):
+        """A11 : régime de marché du jour (classification de `research/phase9.py`), en contexte sur /fonds ; gardé 30 min."""
+        from patrick.fund import regime
+
+        now = time.monotonic()
+        if "at" not in _regime_cache or now - _regime_cache["at"] > 1800:
+            try:
+                value = regime.current()
+            except Exception as exc:  # noqa: BLE001 -- frontière fournisseur : un bandeau de contexte ne casse jamais la page
+                log.info("régime de marché indisponible : %s: %s", type(exc).__name__, exc)
+                value = None
+            _regime_cache.update(at=now, value=value)
+        return templates.TemplateResponse(request, "_market_regime.html", {"regime": _regime_cache["value"], **context(request)})
 
     @app.get("/patrimoine-simulation")
     def legacy_wealth_simulation_page():

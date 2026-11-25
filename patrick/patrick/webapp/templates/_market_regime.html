@@ -1,0 +1,14 @@
+{# Fragment `/fragments/market-regime` (A11) : régime de marché observé du jour (`fund/regime.py`, classification de research/phase9.py).
+   Contexte seulement : le pilote des fonds ne module pas l'exposition selon le régime (non mesuré). #}
+{% if regime %}
+{% set cls = {'CALM': 'exp-chip-ok', 'NORMAL': '', 'STRESS': 'exp-chip-warn', 'CRASH': 'exp-chip-neg'}[regime.label] %}
+<p class="fund-regime-line">
+  {{ t('regime_title') }} : <span class="exp-chip {{ cls }}">{{ t('regime_' ~ (regime.label | lower)) }}</span>
+  <span class="pk-mono">{{ t('regime_detail', vix=('%.1f' | format(regime.vix) | replace('.', ',')), pct=('%.0f' | format(regime.vix_pct)), ret=(regime.ret20 | pct(1)), vol=(regime.vol20 | pct(0)), n=regime.days_in_regime) }}</span>
+  {% if regime.triggers %}{% set names = [] %}{% for k in regime.triggers %}{% set _ = names.append(t('regime_tr_' ~ k)) %}{% endfor %}
+  <span class="hint">{{ t('regime_triggers', what=(names | join(', '))) }}</span>{% endif %}
+  <span class="hint">{{ t('regime_hint', day=regime.day) }}</span>
+</p>
+{% else %}
+<p class="hint">{{ t('regime_unavailable') }}</p>
+{% endif %}
